@@ -1,0 +1,97 @@
+name: Build Cloud Binaries
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to upload assets to (optional)
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+            platform: darwin-arm64
+            archive: tar.gz
+          - os: macos-13
+            target: x86_64-apple-darwin
+            platform: darwin-x64
+            archive: tar.gz
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x64
+            archive: tar.gz
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            platform: linux-arm64
+            archive: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: win32-x64
+            archive: zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux cross toolchain
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Build cloud CLI
+        working-directory: native/nexus-cloud
+        run: cargo build --release --package cli --target ${{ matrix.target }}
+
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          set -euo pipefail
+          ROOT="$GITHUB_WORKSPACE"
+          BIN_DIR="$ROOT/native/nexus-cloud/target/${{ matrix.target }}/release"
+          OUT_DIR="$ROOT/.cloud-binaries/${{ matrix.platform }}"
+          mkdir -p "$OUT_DIR"
+          cp "$BIN_DIR/cli" "$OUT_DIR/nexus-cloud-rs"
+          chmod +x "$OUT_DIR/nexus-cloud-rs"
+          tar -C "$OUT_DIR" -czf "$ROOT/nexus-cloud-rs-${{ matrix.platform }}.tar.gz" nexus-cloud-rs
+
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $root = $env:GITHUB_WORKSPACE
+          $binDir = Join-Path $root "native/nexus-cloud/target/${{ matrix.target }}/release"
+          $outDir = Join-Path $root ".cloud-binaries/${{ matrix.platform }}"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          Copy-Item (Join-Path $binDir "cli.exe") (Join-Path $outDir "nexus-cloud-rs.exe") -Force
+          $zipPath = Join-Path $root "nexus-cloud-rs-${{ matrix.platform }}.zip"
+          Compress-Archive -Path (Join-Path $outDir "nexus-cloud-rs.exe") -DestinationPath $zipPath -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-cloud-rs-${{ matrix.platform }}
+          path: nexus-cloud-rs-${{ matrix.platform }}.${{ matrix.archive }}
+
+      - name: Upload to release
+        if: github.event_name == 'release' || github.event.inputs.tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          files: nexus-cloud-rs-${{ matrix.platform }}.${{ matrix.archive }}
+          tag_name: ${{ github.event.inputs.tag || github.event.release.tag_name }}

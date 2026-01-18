@@ -1,0 +1,12 @@
+[submodule "nexus-cli"]
+	path = nexus-cli
+	url = https://github.com/Napageneral/nexus.git
+[submodule "nexus-cloud"]
+	path = nexus-cloud
+	url = https://github.com/Napageneral/nexus-cloud.git
+[submodule "nexus-website"]
+	path = nexus-website
+	url = https://github.com/Napageneral/nexus-website.git
+[submodule "nexus-collab"]
+	path = nexus-collab
+	url = https://github.com/Napageneral/nexus-collab.git
