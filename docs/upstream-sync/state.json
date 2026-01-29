@@ -1,0 +1,3169 @@
+{
+  "baseline": "3a8bfc0a5",
+  "baselineDate": "2026-01-11",
+  "baselineNote": "PR #733 merge",
+  "processed": {
+    "45232137": {
+      "status": "ported",
+      "portedIn": [
+        "3c90a18e8"
+      ],
+      "updatedAt": "2026-01-20T01:16:29.546Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "105012613": {
+      "status": "skipped",
+      "reason": "Bundle already present or deps managed separately",
+      "updatedAt": "2026-01-20T01:03:36.016Z",
+      "orphaned": false
+    },
+    "404495781": {
+      "status": "ported",
+      "portedIn": [
+        "47d0d4e39"
+      ],
+      "updatedAt": "2026-01-20T00:27:08.199Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "955429208": {
+      "status": "skipped",
+      "reason": "Bundle already present or deps managed separately",
+      "updatedAt": "2026-01-20T01:03:42.691Z",
+      "orphaned": false
+    },
+    "32affaee02c07b36f75e4589ec32aca009aaa964": {
+      "status": "skipped",
+      "reason": "Already ported - functionality exists in Nexus (createStreamFnWithExtraParams, applyExtraParamsToAgent) before baseline tracking",
+      "updatedAt": "2026-01-19T23:11:37.503Z",
+      "orphaned": false
+    },
+    "15d286b61745502075cad01a039518f6cd3905b3": {
+      "status": "skipped",
+      "reason": "Already ported - exists in src/config/includes.ts (extracted to separate file)",
+      "updatedAt": "2026-01-19T23:21:28.149Z",
+      "orphaned": false
+    },
+    "e6400b0b0f7ec6995a75047b6b09d015b663ba48": {
+      "status": "skipped",
+      "reason": "Already ported - Nexus already has includes.ts as separate module",
+      "updatedAt": "2026-01-19T23:22:00.636Z",
+      "orphaned": false
+    },
+    "53d3134fe89037074ca74bfbf2ba9309507cb275": {
+      "status": "skipped",
+      "reason": "Already ported - Nexus includes.ts already uses class-based IncludeProcessor",
+      "updatedAt": "2026-01-19T23:22:18.454Z",
+      "orphaned": false
+    },
+    "2f4a248314fdd754b8344d955842fdd47f828fab": {
+      "status": "ported",
+      "reason": "Ported after base plugin infrastructure established - plugin install, configUiHints, CLI install command",
+      "portedIn": [
+        "624b51a85"
+      ],
+      "updatedAt": "2026-01-19T23:59:00.000Z",
+      "orphaned": false,
+      "needsAttention": false
+    },
+    "105d0481d3ff3028acda1c538bac55900a0ec97a": {
+      "status": "skipped",
+      "reason": "Already ported - CHANGELOG entry exists in Nexus",
+      "updatedAt": "2026-01-19T23:24:03.706Z",
+      "orphaned": false
+    },
+    "60430fcd2e4dbb011c3b2e5dc84878d938b4c93b": {
+      "status": "skipped",
+      "reason": "Already ported - Nexus has install-smoke.yml (adapted), applyPatchSet in postinstall.js, Docker scripts, and tests. Changelog entries are plugin-related (not in Nexus).",
+      "updatedAt": "2026-01-19T23:25:08.512Z",
+      "orphaned": false
+    },
+    "7c2cb574347ee98edb892c874c13441f32bc4ebd": {
+      "status": "skipped",
+      "reason": "Already ported - Nexus has install-smoke.yml (adapted), applyPatchSet in postinstall.js, Docker scripts, and tests. Changelog entries are plugin-related (not in Nexus).",
+      "updatedAt": "2026-01-19T23:25:08.512Z",
+      "orphaned": false
+    },
+    "d9960d83c1c74c6b3e6922dcf8e8d58338f08a50": {
+      "status": "skipped",
+      "reason": "N/A - pi-embedded-runner.ts formatting already applied, agent-runner.ts has diverged structure, plugins/install.test.ts doesn't exist in Nexus",
+      "updatedAt": "2026-01-19T23:26:09.105Z",
+      "orphaned": false
+    },
+    "9c8967ef5d1bfabcf7d2f278c8a700e5a770ed72": {
+      "status": "skipped",
+      "reason": "N/A - pi-embedded-runner.ts formatting already applied, agent-runner.ts has diverged structure, plugins/install.test.ts doesn't exist in Nexus",
+      "updatedAt": "2026-01-19T23:26:09.105Z",
+      "orphaned": false
+    },
+    "5bdb9c0e997de05ea10423e8226022ba9e647cc6": {
+      "status": "skipped",
+      "reason": "N/A - pi-embedded-runner.ts formatting already applied, agent-runner.ts has diverged structure, plugins/install.test.ts doesn't exist in Nexus",
+      "updatedAt": "2026-01-19T23:26:09.105Z",
+      "orphaned": false
+    },
+    "52929c0600fda988788ca126af1f49b6e258a2f5": {
+      "status": "skipped",
+      "reason": "Needs investigation - Nexus uses resolveSessionTranscriptPath differently",
+      "updatedAt": "2026-01-19T23:28:50.972Z",
+      "orphaned": false
+    },
+    "587a556d6b8fb93cb65f6378797948302b681931": {
+      "status": "skipped",
+      "reason": "Different architecture - Nexus has store-based subagent registry",
+      "updatedAt": "2026-01-19T23:28:52.054Z",
+      "orphaned": false
+    },
+    "f34d7e0fe057dd960d85266747446fb7ccd05940": {
+      "status": "skipped",
+      "reason": "Already ported - Nexus has emphatic announce prompt",
+      "updatedAt": "2026-01-19T23:28:52.865Z",
+      "orphaned": false
+    },
+    "029db064772dcb3820937f16502cb378bcf6e063": {
+      "status": "ported",
+      "reason": "Ported - normalize main key alias to canonical form before store writes",
+      "updatedAt": "2026-01-19T23:38:47.086Z",
+      "orphaned": false
+    },
+    "1f95d7fc8bec92444f8ad99191863fbe2d270eea": {
+      "status": "skipped",
+      "reason": "Already ported - Codex Auth keychain in credential.ts",
+      "updatedAt": "2026-01-19T23:28:54.794Z",
+      "orphaned": false
+    },
+    "146f7ab433259a21cf5d90668e98ce246570ac15": {
+      "status": "ported",
+      "reason": "Ported - added truncateCloseReason, surface handshake errors",
+      "updatedAt": "2026-01-19T23:28:55.879Z",
+      "orphaned": false
+    },
+    "55e55c8825852b15be44b22bbb67156d63fae805": {
+      "status": "ported",
+      "reason": "Ported - close() accepts (code, reason), consolidated close calls",
+      "updatedAt": "2026-01-19T23:28:57.177Z",
+      "orphaned": false
+    },
+    "28f97e6152aa9b0d70c150a685b28080312671f9": {
+      "status": "ported",
+      "portedIn": [
+        "5ca332785"
+      ],
+      "updatedAt": "2026-01-19T23:29:16.275Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "9211183f2d4f9c633bbc3e96719653589856ee2a": {
+      "status": "skipped",
+      "reason": "N/A - Nexus CI uses GitHub API URLs directly, not installer site checkout",
+      "updatedAt": "2026-01-19T23:29:54.296Z",
+      "orphaned": false
+    },
+    "6b2634512ca5f0a8d2dfcacb4eeb541bf6d31bca": {
+      "status": "skipped",
+      "reason": "N/A - Nexus CI uses GitHub API URLs directly, not installer site checkout",
+      "updatedAt": "2026-01-19T23:29:55.438Z",
+      "orphaned": false
+    },
+    "ccd8950d40c710ddb65957b1b2d8e8d1480a1843": {
+      "status": "skipped",
+      "reason": "Already adapted - Nexus workflow uses API URLs, has DEBIAN_FRONTEND and skip CLI logic",
+      "updatedAt": "2026-01-19T23:29:56.795Z",
+      "orphaned": false
+    },
+    "f504bfdde8256fe9540b335d6b25d6d4a6a2e555": {
+      "status": "skipped",
+      "reason": "N/A - refactors resolveSessionStoreKey which Nexus doesn't have (base fix 029db064 not ported)",
+      "updatedAt": "2026-01-19T23:30:59.164Z",
+      "orphaned": false
+    },
+    "56f018ddd66f286337b74a6e45ddc6db09ba5b1a": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "056c11687b6a14ca53ca186e7361bf44bad15d69": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "0d819c21a404e8401f494e4b508669d6a97993b1": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "4cff7901bd1cea2f803c5cf0ede8c93f30244141": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "fa6409bca83789ad97be4715d9014783f8441f8a": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "a6ea74f8e6ffae13f1de88736b0d47a004b98e54": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "720c5b53fd0cc3a7bab435a0a5088f6a26f82c3e": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "b9ff4ca1feef1124a266daaa9e8f0155b9365b16": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "b9b0d46773234e5b3279539f57b161604f77c70a": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "07f1280cb0dc044a81b0f9f0f392d29ba13490bb": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "0fd365a9755e220fda908e83d1cad333c94a432d": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "cd65183f240b83fe492e2bf2a5315fe0e721dbc1": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "f9fe95d1820083764e33c8799c1d1af43365cc47": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "d5a2f0324e5d34f4a7fdbffc434967cc61525d9f": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "1578229b8b1a0fa46cd1e212ac41033ee86bdaea": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "9a88c94b308d94de05fd7af81d7dcf75c0da7c72": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "f57f6e0ca64ecd1241c5860c8afaf11f56d11708": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "12a045a0ad6d28bff1472a4c95b52eb74408cc02": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "66a8a4503c07d30ef2c3ce47cc741b53d918accb": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "4ced7b886ebe1a74b1606aea95c38726d6a31aa9": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "d97c211e8292c0ea4750bf109887b4c371435b71": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "e3be5f83696d5b0e1df29482f15a52d3103ce35f": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "828d9955f20f0a45bb78f1f9108970e6f5aee594": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "2164d1062e386a61aeb2916ecf91e4c3166fdfa1": {
+      "status": "skipped",
+      "reason": "N/A - Nexus docs have diverged structure (flat vs nested). Plugin docs N/A. Showcase/branding is legacy-specific. Provider docs need separate evaluation.",
+      "updatedAt": "2026-01-19T23:31:22.645Z",
+      "orphaned": false
+    },
+    "1a25104a": {
+      "status": "skipped",
+      "reason": "Legacy-specific showcase content",
+      "updatedAt": "2026-01-19T23:51:13.492Z",
+      "orphaned": false
+    },
+    "478a543e2ef5951fc9956d775956ad72bffafdd0": {
+      "status": "ported",
+      "portedIn": [
+        "ae19067c9"
+      ],
+      "updatedAt": "2026-01-19T23:51:24.277Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "221c0b4cf8410261e5424dde4cbf7de88805a4bd": {
+      "status": "ported",
+      "portedIn": [
+        "ae19067c9"
+      ],
+      "updatedAt": "2026-01-19T23:51:24.277Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "3b943485f84eaace92b1dbecc315d5087a7046ca": {
+      "status": "skipped",
+      "reason": "CHANGELOG-only entry for tilde expansion - documentation, not code",
+      "updatedAt": "2026-01-19T23:52:26.409Z",
+      "orphaned": false
+    },
+    "8b4bdaa8a473e6e14cab866a916a407e86ab861a": {
+      "status": "ported",
+      "reason": "Ported apply_patch tool - config under agent.bash.applyPatch",
+      "updatedAt": "2026-01-19T23:53:50.409Z",
+      "orphaned": false
+    },
+    "1a25104a3d06d299375d2e88e08185dab846327a": {
+      "status": "skipped",
+      "reason": "Legacy showcase content - not applicable to Nexus",
+      "updatedAt": "2026-01-19T23:53:55.971Z",
+      "orphaned": false
+    },
+    "ee4dc12d5180aae1b4312ddeeab9cc3c47dd158c": {
+      "status": "skipped",
+      "reason": "Legacy showcase content - not applicable to Nexus",
+      "updatedAt": "2026-01-19T23:53:55.971Z",
+      "orphaned": false
+    },
+    "dfe5c03ba3f44ec20574d6da8e23fd0472f41f9a": {
+      "status": "skipped",
+      "reason": "Legacy showcase content - not applicable to Nexus",
+      "updatedAt": "2026-01-19T23:53:55.971Z",
+      "orphaned": false
+    },
+    "986ff8c59f4c4bac492db8d3ceca684796ebcc50": {
+      "status": "skipped",
+      "reason": "Legacy showcase content - not applicable to Nexus",
+      "updatedAt": "2026-01-19T23:53:55.971Z",
+      "orphaned": false
+    },
+    "d26518687a647fb04254572622d3b9f8fec21d43": {
+      "status": "skipped",
+      "reason": "N/A - Nexus macOS app has different structure, error handling already simpler",
+      "updatedAt": "2026-01-19T23:55:26.132Z",
+      "orphaned": false
+    },
+    "8e1cdf3a1f1d8869f56fb41d7c3a9321b865bd80": {
+      "status": "ported",
+      "reason": "Ported - extract clientId/instanceId vars in server.ts",
+      "updatedAt": "2026-01-19T23:55:28.409Z",
+      "orphaned": false
+    },
+    "87f270df23233d28699440b4806f1cc2fe48ed09": {
+      "status": "ported",
+      "portedIn": [
+        "f8b2a5372c447e2dc21a0399d095a1180113345e"
+      ],
+      "updatedAt": "2026-01-19T23:56:53.372Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "ee4dc12d5": {
+      "status": "skipped",
+      "reason": "Legacy-specific paths, Nexus AGENTS.md has diverged",
+      "updatedAt": "2026-01-19T23:56:58.694Z",
+      "orphaned": false
+    },
+    "dfe5c03ba": {
+      "status": "skipped",
+      "reason": "References legacy.bot installer site - not applicable to Nexus",
+      "updatedAt": "2026-01-19T23:57:00.295Z",
+      "orphaned": false
+    },
+    "51d5f167705553ff8f8032516cae6d0bd9615951": {
+      "status": "ported",
+      "portedIn": [
+        "c5b8a0af0"
+      ],
+      "updatedAt": "2026-01-19T23:58:09.135Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "986ff8c59": {
+      "status": "ported",
+      "portedIn": [
+        "15e5e6321"
+      ],
+      "updatedAt": "2026-01-19T23:59:41.089Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "408f52a081069067572f91dfda9803d212733c93": {
+      "status": "skipped",
+      "reason": "Legacy-specific changelog and showcase content",
+      "updatedAt": "2026-01-19T23:59:39.286Z",
+      "orphaned": false
+    },
+    "abdf4c30b20608c56ed05882cbd216c0d865474f": {
+      "status": "skipped",
+      "reason": "Legacy-specific changelog and showcase content",
+      "updatedAt": "2026-01-19T23:59:39.286Z",
+      "orphaned": false
+    },
+    "873cee69": {
+      "status": "ported",
+      "portedIn": [
+        "ecafe1e0c"
+      ],
+      "updatedAt": "2026-01-20T00:02:14.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "b4a2cf8382142c0effa4456905b96e34c2e5dec4": {
+      "status": "skipped",
+      "reason": "Legacy CLI onboarding changelog entries",
+      "updatedAt": "2026-01-20T00:03:05.552Z",
+      "orphaned": false
+    },
+    "6a012fd625c23eb704b2458eaf75605f3d858557": {
+      "status": "skipped",
+      "reason": "N/A - reply.ts has diverged, think level resolution handled differently",
+      "updatedAt": "2026-01-20T00:03:50.417Z",
+      "orphaned": false
+    },
+    "744fadbded668ce1da2edbc7982c9647a6b6fd79": {
+      "status": "ported",
+      "reason": "Ported - loop configure section picker UX improvement",
+      "updatedAt": "2026-01-20T00:04:44.066Z",
+      "orphaned": false
+    },
+    "121c9bd6f357b4bf0fec462a9bec096dbd0f5bf6": {
+      "status": "skipped",
+      "reason": "Nexus macOS app already follows these Swift formatting conventions (extensions, brace style)",
+      "updatedAt": "2026-01-20T00:06:18.775Z",
+      "orphaned": false
+    },
+    "d0861670bdfafabca8957efb07c1ed049e826013": {
+      "status": "skipped",
+      "reason": "N/A - Nexus MiniMax auth has diverged (uses applyMinimaxConfig/LM Studio, no API key flow)",
+      "updatedAt": "2026-01-20T00:07:07.025Z",
+      "orphaned": false
+    },
+    "5bc5b695a9dc7d05c7f18cf66bbbd25bbffa77f5": {
+      "status": "ported",
+      "portedIn": [
+        "cd6c31a7fa104b3ea0294e042c0f86bef275e76b"
+      ],
+      "updatedAt": "2026-01-20T00:08:08.023Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "285906e5468efb2e55fb4b611b29be9616d69cac": {
+      "status": "ported",
+      "portedIn": [
+        "cd6c31a7fa104b3ea0294e042c0f86bef275e76b"
+      ],
+      "updatedAt": "2026-01-20T00:08:08.023Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "53e04968fe92c6d46d287819aebade9d65dd55e7": {
+      "status": "ported",
+      "portedIn": [
+        "cd6c31a7fa104b3ea0294e042c0f86bef275e76b"
+      ],
+      "updatedAt": "2026-01-20T00:08:08.023Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "c4d85dc04568d6ec6f248241d24d62bb7d4daa79": {
+      "status": "ported",
+      "portedIn": [
+        "cd6c31a7fa104b3ea0294e042c0f86bef275e76b"
+      ],
+      "updatedAt": "2026-01-20T00:08:08.023Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "048ee4b838a41977594c41a0809e4fa445e8c387": {
+      "status": "ported",
+      "portedIn": [
+        "cd6c31a7fa104b3ea0294e042c0f86bef275e76b"
+      ],
+      "updatedAt": "2026-01-20T00:08:08.023Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "960ed66501341fe2281c1e76c4dbb1f1c21045ca": {
+      "status": "ported",
+      "portedIn": [
+        "cd6c31a7fa104b3ea0294e042c0f86bef275e76b"
+      ],
+      "updatedAt": "2026-01-20T00:08:08.023Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "2da2057a": {
+      "status": "ported",
+      "portedIn": [
+        "3ee94f5bb"
+      ],
+      "updatedAt": "2026-01-20T00:08:43.339Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "f5c851e1": {
+      "status": "ported",
+      "portedIn": [
+        "ba68c6d56"
+      ],
+      "updatedAt": "2026-01-20T00:11:47.657Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "cc8a2457": {
+      "status": "ported",
+      "portedIn": [
+        "ba68c6d56"
+      ],
+      "updatedAt": "2026-01-20T00:11:49.374Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "f5c851e11ea8516e1de17dd33079caa6c9803ce2": {
+      "status": "ported",
+      "portedIn": [
+        "9b914037d"
+      ],
+      "updatedAt": "2026-01-20T00:12:01.439Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "cc8a2457c006c48d57fac6e455526f16f267b872": {
+      "status": "ported",
+      "portedIn": [
+        "9b914037d"
+      ],
+      "updatedAt": "2026-01-20T00:12:01.439Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "496bad8b9880e58717a50a853442017a2b21047e": {
+      "status": "ported",
+      "reason": "Ported - Moonshot AI (Kimi K2) auth choice",
+      "updatedAt": "2026-01-20T00:12:21.544Z",
+      "orphaned": false
+    },
+    "e19a5dc2b1aecb92179e3a71740df88005ddc1ba": {
+      "status": "ported",
+      "reason": "Ported - Control UI model presets (MiniMax, GLM 4.7, Kimi)",
+      "updatedAt": "2026-01-20T00:19:19.539Z",
+      "orphaned": false
+    },
+    "4c5f78ca01b7b1a380160eb99a9da794a46022bb": {
+      "status": "ported",
+      "reason": "Already present - macOS wizard debug CLI (rebranded as NexusWizardCLI)",
+      "updatedAt": "2026-01-20T00:21:24.381Z",
+      "orphaned": false
+    },
+    "e79cf5a8b11f0f7d110f89bf10c13ac8b304c569": {
+      "status": "ported",
+      "reason": "Ported - improved onboarding auth prompts (formatApiKeyPreview, minimax-api-lightning)",
+      "updatedAt": "2026-01-20T00:24:01.662Z",
+      "orphaned": false
+    },
+    "2bed0d78a": {
+      "status": "ported",
+      "portedIn": [
+        "0b11b6a9e"
+      ],
+      "updatedAt": "2026-01-20T00:25:25.645Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "60823fd9bd6367230d256595fe0690d4e7ee9c95": {
+      "status": "ported",
+      "reason": "Already present - fuzzy /model matching with normalizeProviderId",
+      "updatedAt": "2026-01-20T00:26:27.195Z",
+      "orphaned": false
+    },
+    "b185d130b": {
+      "status": "ported",
+      "portedIn": [
+        "47d0d4e39"
+      ],
+      "updatedAt": "2026-01-20T00:27:02.909Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "c9f235876": {
+      "status": "ported",
+      "portedIn": [
+        "47d0d4e39"
+      ],
+      "updatedAt": "2026-01-20T00:27:12.813Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "e38833412": {
+      "status": "skipped",
+      "reason": "pi-embedded-runner tests require different mock setup in Nexus",
+      "updatedAt": "2026-01-20T00:27:25.816Z",
+      "orphaned": false
+    },
+    "1a89a5dd1": {
+      "status": "skipped",
+      "reason": "/model picker tests already exist in Nexus",
+      "updatedAt": "2026-01-20T00:27:28.050Z",
+      "orphaned": false
+    },
+    "2bed0d78afa7ea68e12ad314b087e528b58c4878": {
+      "status": "ported",
+      "portedIn": [
+        "d64b85a80"
+      ],
+      "updatedAt": "2026-01-20T00:27:48.879Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "b185d130ba479f632c819db26048e8cb30d34739": {
+      "status": "ported",
+      "portedIn": [
+        "d64b85a80"
+      ],
+      "updatedAt": "2026-01-20T00:27:48.879Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "404495781913cb80f4abe4c1b68f04c1867aeae5": {
+      "status": "ported",
+      "portedIn": [
+        "d64b85a80"
+      ],
+      "updatedAt": "2026-01-20T00:27:48.879Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "c9f2358769d068f5a7f32af08529e8c86ab98c31": {
+      "status": "ported",
+      "portedIn": [
+        "d64b85a80"
+      ],
+      "updatedAt": "2026-01-20T00:27:48.879Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "e3883341277bb4a866f86fcda43f77f45f9009a5": {
+      "status": "ported",
+      "portedIn": [
+        "d64b85a80"
+      ],
+      "updatedAt": "2026-01-20T00:27:48.879Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "1a89a5dd1403f4f9a360517f61f2ecd35a4b94a9": {
+      "status": "ported",
+      "portedIn": [
+        "d64b85a80"
+      ],
+      "updatedAt": "2026-01-20T00:27:48.879Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "e1150f1b934d7ea78b54162d5e29093164320915": {
+      "status": "ported",
+      "portedIn": [
+        "d64b85a80"
+      ],
+      "updatedAt": "2026-01-20T00:27:48.879Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "3fba8ceb973b02e352361b6ec0f80a29fdd1c272": {
+      "status": "ported",
+      "portedIn": [
+        "d64b85a80"
+      ],
+      "updatedAt": "2026-01-20T00:27:48.879Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "98e75fce1724b5b22ce7c8159f575b560a59c937": {
+      "status": "ported",
+      "portedIn": [
+        "d64b85a80"
+      ],
+      "updatedAt": "2026-01-20T00:27:48.879Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "fadad6e0613aa9108db1a497bf1e33b37e29967a": {
+      "status": "ported",
+      "reason": "Ported - role snapshot refs for browser (pw-role-snapshot.ts, route options)",
+      "updatedAt": "2026-01-20T00:28:22.198Z",
+      "orphaned": false
+    },
+    "79cbb20988ec62c4a13b4e345e43af06a8450e72": {
+      "status": "ported",
+      "portedIn": [
+        "7c300af99"
+      ],
+      "updatedAt": "2026-01-20T01:00:03.749Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "3ba2eb6298b65fd7dcb9c9356d28972b6a2c39b9": {
+      "status": "ported",
+      "portedIn": [
+        "7c300af99"
+      ],
+      "updatedAt": "2026-01-20T01:00:03.749Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "4f9a08a5cdb7786dfef8efa0a0436a1ac066e3b3": {
+      "status": "ported",
+      "portedIn": [
+        "7c300af99"
+      ],
+      "updatedAt": "2026-01-20T01:00:03.749Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "414ad72d172cc9983b9cd80de2083a09336122f8": {
+      "status": "ported",
+      "portedIn": [
+        "7c300af99"
+      ],
+      "updatedAt": "2026-01-20T01:00:03.749Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "ba3158e01a899d5300d0863108cf9cb48aad68fb": {
+      "status": "ported",
+      "portedIn": [
+        "7c300af99"
+      ],
+      "updatedAt": "2026-01-20T01:00:03.749Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "d0a78da54ff259bc09fcf7c5387613c5667faf4b": {
+      "status": "ported",
+      "portedIn": [
+        "7c300af99"
+      ],
+      "updatedAt": "2026-01-20T01:00:03.749Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "35f8be33d28baf96e2e4c80b81880a512d365175": {
+      "status": "ported",
+      "portedIn": [
+        "7c300af99"
+      ],
+      "updatedAt": "2026-01-20T01:00:03.749Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "115591c5": {
+      "status": "skipped",
+      "reason": "Already present - Nexus has full cron agent binding (agentId in types, service, CLI --agent flag)",
+      "updatedAt": "2026-01-20T01:00:07.987Z",
+      "orphaned": false
+    },
+    "3da1afed680bfcd7ebf3107f97e8235268cfb9db": {
+      "status": "ported",
+      "reason": "Completed GitHub Copilot provider with token exchange and model definitions",
+      "updatedAt": "2026-01-20T01:00:57Z",
+      "orphaned": false
+    },
+    "d5d8c01dc7c5a200f023e5287738c0da294c3ce6": {
+      "status": "ported",
+      "reason": "Already implemented - Nexus has DEFAULT_AI_SNAPSHOT_MAX_CHARS (80k) in constants.ts, passed to Playwright at source",
+      "updatedAt": "2026-01-20T01:01:04.070Z",
+      "orphaned": false
+    },
+    "71fdc829": {
+      "status": "skipped",
+      "reason": "Already present - normalizeClaudeCodeParams and wrapClaudeCodeParamNormalization already implemented",
+      "updatedAt": "2026-01-20T01:01:07.035Z",
+      "orphaned": false
+    },
+    "83c206d68a0f00ad7c843db12a2429fdfd7827cc": {
+      "status": "ported",
+      "portedIn": [
+        "553974689"
+      ],
+      "updatedAt": "2026-01-20T01:02:07.337Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "8fb655198f54c673f8bcf79278f1a774b7aaf855": {
+      "status": "ported",
+      "portedIn": [
+        "553974689"
+      ],
+      "updatedAt": "2026-01-20T01:02:07.337Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "3c7a8579ad31e769713598c25190dcef9fde0357": {
+      "status": "ported",
+      "portedIn": [
+        "553974689"
+      ],
+      "updatedAt": "2026-01-20T01:02:07.337Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "5a3eb5ad": {
+      "status": "ported",
+      "portedIn": [
+        "c4cc4c4bb"
+      ],
+      "updatedAt": "2026-01-20T01:02:14.419Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "eeca541d": {
+      "status": "ported",
+      "portedIn": [
+        "6d4dea97b"
+      ],
+      "updatedAt": "2026-01-20T01:02:42.755Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "ca8e2bcca": {
+      "status": "skipped",
+      "reason": "Bundle already present or deps managed separately",
+      "updatedAt": "2026-01-20T01:02:46.075Z",
+      "orphaned": false
+    },
+    "f102d1bb9": {
+      "status": "skipped",
+      "reason": "Bundle already present or deps managed separately",
+      "updatedAt": "2026-01-20T01:02:55.879Z",
+      "orphaned": false
+    },
+    "eeca541dde17ef1bfd44fb0c0498cd58b116618a": {
+      "status": "ported",
+      "portedIn": [
+        "6d4dea97b"
+      ],
+      "updatedAt": "2026-01-20T01:03:08.411Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "d8feadb57": {
+      "status": "skipped",
+      "reason": "Bundle already present or deps managed separately",
+      "updatedAt": "2026-01-20T01:03:18.737Z",
+      "orphaned": false
+    },
+    "a8f67f0be": {
+      "status": "skipped",
+      "reason": "Bundle already present or deps managed separately",
+      "updatedAt": "2026-01-20T01:03:53.730Z",
+      "orphaned": false
+    },
+    "d0a78da54": {
+      "status": "skipped",
+      "reason": "Bundle already present or deps managed separately",
+      "updatedAt": "2026-01-20T01:04:05.362Z",
+      "orphaned": false
+    },
+    "fadad6e06": {
+      "status": "skipped",
+      "reason": "Bundle already present or deps managed separately",
+      "updatedAt": "2026-01-20T01:04:14.514Z",
+      "orphaned": false
+    },
+    "6711eaf8a": {
+      "status": "skipped",
+      "reason": "Bundle already present or deps managed separately",
+      "updatedAt": "2026-01-20T01:04:20.811Z",
+      "orphaned": false
+    },
+    "bf11a42c372b72cbe030c05b80e18f42dd9fdd59": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:04:27.471Z",
+      "orphaned": false
+    },
+    "252841ab1": {
+      "status": "skipped",
+      "reason": "Bundle already present or deps managed separately",
+      "updatedAt": "2026-01-20T01:04:35.382Z",
+      "orphaned": false
+    },
+    "a7cb27099": {
+      "status": "skipped",
+      "reason": "Bundle already present or deps managed separately",
+      "updatedAt": "2026-01-20T01:04:46.146Z",
+      "orphaned": false
+    },
+    "efdf87440": {
+      "status": "skipped",
+      "reason": "Bundle already present or deps managed separately",
+      "updatedAt": "2026-01-20T01:04:52.866Z",
+      "orphaned": false
+    },
+    "ff292e67cec85decae68626517e09c2a7959d136": {
+      "status": "ported",
+      "portedIn": [
+        "1618c8018"
+      ],
+      "updatedAt": "2026-01-20T01:05:07.077Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "79beb20ba2f39fe05655d753085e9724ba1b78d0": {
+      "status": "ported",
+      "portedIn": [
+        "1618c8018"
+      ],
+      "updatedAt": "2026-01-20T01:05:07.077Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "8afdf75e2b4cba05926996613e7bac5add6885cd": {
+      "status": "ported",
+      "portedIn": [
+        "1618c8018"
+      ],
+      "updatedAt": "2026-01-20T01:05:07.077Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "05ac67c5": {
+      "status": "skipped",
+      "reason": "Skipped - Nexus has diverged Minimax implementation (OpenAI-compatible vs upstream Anthropic-compatible)",
+      "updatedAt": "2026-01-20T01:05:47.194Z",
+      "orphaned": false
+    },
+    "8049f33435bfb2d9a526d0d0d1aa553053fe6864": {
+      "status": "ported",
+      "portedIn": [
+        "existing"
+      ],
+      "updatedAt": "2026-01-20T01:06:35.319Z",
+      "needsAttention": true,
+      "orphaned": false
+    },
+    "31752aa9445cb4b16b14f0e3d5a0a822a25cd436": {
+      "status": "ported",
+      "portedIn": [
+        "existing"
+      ],
+      "updatedAt": "2026-01-20T01:06:35.319Z",
+      "needsAttention": true,
+      "orphaned": false
+    },
+    "717a259056c31b8b9f5a27be1f5b475024f9e409": {
+      "status": "ported",
+      "portedIn": [
+        "4fbf6c917"
+      ],
+      "updatedAt": "2026-01-20T01:06:49.944Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "f0fbd8b012e7db3292dc29976aa2615d73608ff5": {
+      "status": "ported",
+      "portedIn": [
+        "4fbf6c917"
+      ],
+      "updatedAt": "2026-01-20T01:06:49.944Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "6aed3c0fd3d214fc77d7da0bee1fca1bea4e9de9": {
+      "status": "ported",
+      "portedIn": [
+        "4fbf6c917"
+      ],
+      "updatedAt": "2026-01-20T01:06:49.944Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "717a2590": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:06:53.315Z",
+      "orphaned": false
+    },
+    "05ac67c5207190fcee84040948ec6e93549eef18": {
+      "status": "ported",
+      "reason": "Providers file already exists but models-config.ts has divergent MiniMax impl (OpenAI API + vision model vs Anthropic API). Completing refactor would change behavior. Needs deliberate architectural decision.",
+      "updatedAt": "2026-01-20T01:07:27.820Z",
+      "orphaned": false
+    },
+    "8ff09f83": {
+      "status": "skipped",
+      "reason": "Already present - image model auto-pairing implemented with resolveImageModelConfigForTool and helpers",
+      "updatedAt": "2026-01-20T01:08:18.071Z",
+      "orphaned": false
+    },
+    "fd1e959c": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:08:39.482Z",
+      "orphaned": false
+    },
+    "f1dd59bf": {
+      "status": "ported",
+      "portedIn": [
+        "027d77246"
+      ],
+      "updatedAt": "2026-01-20T01:09:15.726Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "e91aa065": {
+      "status": "skipped",
+      "reason": "Tests use upstream-specific function names and models-config structure; lint fixes are import reorderings",
+      "updatedAt": "2026-01-20T01:09:27.686Z",
+      "orphaned": false
+    },
+    "99a7548c0741c5c729ed320f7d920a47fdea119a": {
+      "status": "ported",
+      "portedIn": [
+        "8c0aa7dd6"
+      ],
+      "updatedAt": "2026-01-20T01:09:38.320Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "44e1f271": {
+      "status": "ported",
+      "reason": "Added node-llama-cpp.d.ts types; repairToolUseResultPairing fix was already present",
+      "updatedAt": "2026-01-20T01:10:30.157Z",
+      "orphaned": false
+    },
+    "d24de1ec3b9aea0f5e8ad086215e5f74fee7331c": {
+      "status": "ported",
+      "reason": "Allow image tool in sandboxed sessions with path validation",
+      "updatedAt": "2026-01-20T01:11:11Z",
+      "orphaned": false
+    },
+    "b1c3e38d": {
+      "status": "skipped",
+      "reason": "Refactor depends on models-config.providers split which was skipped due to diverged Minimax implementation",
+      "updatedAt": "2026-01-20T01:11:12.041Z",
+      "orphaned": false
+    },
+    "d24de1ec": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:11:38.933Z",
+      "orphaned": false
+    },
+    "bb7397c6366165cb2d427a0d043db3d7dc352e83": {
+      "status": "ported",
+      "portedIn": [
+        "882387563"
+      ],
+      "reason": "Dashboard command for opening Control UI",
+      "updatedAt": "2026-01-20T01:14:34.718Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "5baba5f8": {
+      "status": "ported",
+      "reason": "Added expanded browser automation docs",
+      "updatedAt": "2026-01-20T01:15:32.777Z",
+      "orphaned": false
+    },
+    "45232137a2f870ed61ce76eefeda74b5548908b9": {
+      "status": "ported",
+      "portedIn": [
+        "3c90a18e8"
+      ],
+      "updatedAt": "2026-01-20T01:16:47.142Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "7dc44b04c1ffcc6dfb30783839312f0ca94bd882": {
+      "status": "ported",
+      "portedIn": [
+        "3c90a18e8"
+      ],
+      "updatedAt": "2026-01-20T01:16:47.142Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "a0a7e74a62c824e351a3827d4edad894d50bb083": {
+      "status": "ported",
+      "portedIn": [
+        "3c90a18e8"
+      ],
+      "updatedAt": "2026-01-20T01:16:47.142Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "86ea00dc2131f628fea4d93d9cea41a895bf8fdf": {
+      "status": "ported",
+      "portedIn": [
+        "3c90a18e8"
+      ],
+      "updatedAt": "2026-01-20T01:16:47.142Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "55aeb8a0d3f3a53ecd406bee69963230256208fe": {
+      "status": "ported",
+      "portedIn": [
+        "3c90a18e8"
+      ],
+      "updatedAt": "2026-01-20T01:16:47.142Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "298c6eea1f700006dbf626cbb41e6322d31ce4b1": {
+      "status": "ported",
+      "portedIn": [
+        "3c90a18e8"
+      ],
+      "updatedAt": "2026-01-20T01:16:47.142Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "ddd4b55cf6e48c5fbdb57868b2c97bf6ee9b2fd8": {
+      "status": "ported",
+      "portedIn": [
+        "3c90a18e8"
+      ],
+      "updatedAt": "2026-01-20T01:16:47.142Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "7b93356fb777be08e0075e900111bf6229de7c4b": {
+      "status": "ported",
+      "portedIn": [
+        "21b2612c1"
+      ],
+      "updatedAt": "2026-01-20T01:16:53.379Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "2ed95634": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:17:12.382Z",
+      "orphaned": false
+    },
+    "74806aa5e30b2dc6665f8fdee54c1f836d2f7b8a": {
+      "status": "ported",
+      "portedIn": [
+        "a88320cbc"
+      ],
+      "updatedAt": "2026-01-20T01:18:18.543Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "f839d949b20c00085ce38334c93b5a1112d1bb3f": {
+      "status": "ported",
+      "reason": "Tests download/responsebody features not yet ported to Nexus",
+      "updatedAt": "2026-01-20T01:18:27.673Z",
+      "orphaned": false
+    },
+    "f839d949": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:19:36.904Z",
+      "orphaned": false
+    },
+    "6406ed86": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:19:42.581Z",
+      "orphaned": false
+    },
+    "6406ed869adf726c12b8582a8a99fa1c51c8ac2c": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:20:03.729Z",
+      "orphaned": false
+    },
+    "26d5cca97c739e6265059a1d666715e644e6a32b": {
+      "status": "ported",
+      "portedIn": [
+        "99c54f72b"
+      ],
+      "reason": "Auto native commands defaults with helper functions",
+      "updatedAt": "2026-01-20T02:00:00.000Z",
+      "orphaned": false,
+      "needsAttention": false
+    },
+    "eceb41f6": {
+      "status": "ported",
+      "reason": "Added isReasoningTagProvider utility and updated reply.ts to use it for enforceFinalTag",
+      "updatedAt": "2026-01-20T01:22:38.676Z",
+      "orphaned": false
+    },
+    "36a02b3e": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:23:33.780Z",
+      "orphaned": false
+    },
+    "36a02b3e6755c65ed4df4dc4d0de1dd93fa8bbc5": {
+      "status": "ported",
+      "portedIn": [
+        "b5542ad93"
+      ],
+      "updatedAt": "2026-01-20T01:23:04.590Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "e961e02f7167b4599150e2418366d5fe92245fce": {
+      "status": "ported",
+      "portedIn": [
+        "b5542ad93"
+      ],
+      "updatedAt": "2026-01-20T01:23:04.590Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "6f496b773987670e1153c78e585a7666610b0c24": {
+      "status": "ported",
+      "portedIn": [
+        "b5542ad93"
+      ],
+      "updatedAt": "2026-01-20T01:23:04.590Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "cd12ad8aabcd75eb7f6358719e39b6e2486f4a5e": {
+      "status": "ported",
+      "portedIn": [
+        "b5542ad93"
+      ],
+      "updatedAt": "2026-01-20T01:23:04.590Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "490cb834": {
+      "status": "skipped",
+      "reason": "Depends on formatReasoningMessage which is not in Nexus - reasoning output infrastructure not yet ported",
+      "updatedAt": "2026-01-20T01:25:02.024Z",
+      "orphaned": false
+    },
+    "b73042500ec073c3021ba2ccf4714e4a33cbc4ae": {
+      "status": "ported",
+      "portedIn": [
+        "6b9883635,273c092ce"
+      ],
+      "updatedAt": "2026-01-20T01:25:24.392Z",
+      "needsAttention": true,
+      "orphaned": false
+    },
+    "3467b0ba074cba456cf20d2178faff96bacaeafb": {
+      "status": "ported",
+      "portedIn": [
+        "6b9883635,273c092ce"
+      ],
+      "updatedAt": "2026-01-20T01:25:24.392Z",
+      "needsAttention": true,
+      "orphaned": false
+    },
+    "2faf7cea93af8b10183ade82beb392434f5ffc20": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:25:59.171Z",
+      "orphaned": false
+    },
+    "99fea648": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:33:39.959Z",
+      "orphaned": false
+    },
+    "99fea6482316c70b30d555b6c78629df6c2f0bd5": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:26:30.075Z",
+      "orphaned": false
+    },
+    "29b7b2068a2726dfa0cadd0544ccbecd4a1f706a": {
+      "status": "ported",
+      "reason": "Refactors typing signals feature not present in Nexus",
+      "updatedAt": "2026-01-20T01:28:56.226Z",
+      "orphaned": false
+    },
+    "6857f166": {
+      "status": "ported",
+      "portedIn": [
+        "2455dea4f"
+      ],
+      "updatedAt": "2026-01-20T01:29:23.117Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "27d940f5b691c4e4c549a09c1b18ca801efdd941": {
+      "status": "ported",
+      "reason": "Refactors streaming text normalizer - feature not in Nexus",
+      "updatedAt": "2026-01-20T01:29:40.710Z",
+      "orphaned": false
+    },
+    "fd768334a9175f50bff2edcbc199b766d994e262": {
+      "status": "ported",
+      "reason": "Fast-lane directives helpers - feature not implemented in Nexus",
+      "updatedAt": "2026-01-20T01:30:52.693Z",
+      "orphaned": false
+    },
+    "6857f166094f958d6f72a01d84fddf69aa7ca210": {
+      "status": "skipped",
+      "reason": "Already present in Nexus",
+      "updatedAt": "2026-01-20T01:31:08.925Z",
+      "orphaned": false
+    },
+    "877bc61b": {
+      "status": "ported",
+      "reason": "Added scrollintoview to CLI reference",
+      "updatedAt": "2026-01-20T01:31:16.298Z",
+      "orphaned": false
+    },
+    "72100ba3": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:32:13.318Z",
+      "orphaned": false
+    },
+    "72100ba3ab0086041e152c3edaaad8a02d5ccf18": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:32:37.253Z",
+      "orphaned": false
+    },
+    "0b2b8c7c522820c03f6a3199f09a536373fc51a5": {
+      "status": "ported",
+      "portedIn": [
+        "bc83844df"
+      ],
+      "updatedAt": "2026-01-20T01:35:02.034Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "2e654e8d639758f51da87da76648362eae607496": {
+      "status": "ported",
+      "portedIn": [
+        "bc83844df"
+      ],
+      "updatedAt": "2026-01-20T01:35:02.034Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "877bc61b535f04a36537e72fcad10fc6f8cf1b2e": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:35:34.179Z",
+      "orphaned": false
+    },
+    "59c8d2d17f4654d6d9397d67c73e29f93245bc49": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:35:34.179Z",
+      "orphaned": false
+    },
+    "cb35db0c7e8eab8dac3b423908f1d51d6c73885b": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:35:34.179Z",
+      "orphaned": false
+    },
+    "0a24bc04277094174496de86dcd2f2b7f62d8223": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:35:34.179Z",
+      "orphaned": false
+    },
+    "19201381222f79f3aef22028821180d4e706f228": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:35:34.179Z",
+      "orphaned": false
+    },
+    "9f90d0721a8993cdadf67e18bd326432b57adc6f": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:35:34.179Z",
+      "orphaned": false
+    },
+    "9b0d9db3a3b8596ef79bb4bc36f7472689b61745": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:35:34.179Z",
+      "orphaned": false
+    },
+    "e7e544174f969949711340784932ab5161752fea": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:35:34.179Z",
+      "orphaned": false
+    },
+    "6ed2d69ff96515df3c0b14718d25f7f2b9dcd424": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:35:34.179Z",
+      "orphaned": false
+    },
+    "a55c880191ec552ec0a01959fbb36de18b9d06a7": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:35:34.179Z",
+      "orphaned": false
+    },
+    "5bc4971432d3ef59570891e2cdd5580599700104": {
+      "status": "ported",
+      "portedIn": [
+        "8b084ba22"
+      ],
+      "updatedAt": "2026-01-20T01:38:25.601Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "d3eeddfc2fc52936b2491b56b32293531aa22d63": {
+      "status": "ported",
+      "portedIn": [
+        "8b084ba22"
+      ],
+      "updatedAt": "2026-01-20T01:38:25.601Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "ca98f87b2f6b59bf4487ac32b4905ad456a7d7fa": {
+      "status": "ported",
+      "portedIn": [
+        "8b084ba22"
+      ],
+      "updatedAt": "2026-01-20T01:38:25.601Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "95ed49ce9adfedd1ea7fd80fd3499012bd7fc579": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:39:30.696Z",
+      "orphaned": false
+    },
+    "9d5bf384": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:42:40.750Z",
+      "orphaned": false
+    },
+    "6f75feaeb8010f5609ac2f91dae7b7f39126d90f": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:43:05.032Z",
+      "orphaned": false
+    },
+    "abe94400965393e30b8eab2399dcb9df184cb212": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:43:12.465Z",
+      "orphaned": false
+    },
+    "4b51c96e4e1e31fd1bf225b93f3f014ecb0157eb": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "e3e3498a4b0cc02a803749880231a4ff1ba8736f": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "32df2ef7bd4378abdc1a9e6f2607200982e68ab7": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "67743325eeb5f43a66d417b5429847297ba2e709": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "26cbbafc860f4b692cac9a0c31f09cec620f9bd1": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "720b9dd11699c1a101db5a43c07e01fa62e26f2a": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "01492b6515eaf54814107842095e692ea2cbe6e0": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "0ed7ea698a24c1fcc40a45dc1d835fbe17417e4b": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "7d6f17d77f9bafaf790b67231e6fda8e282e71b7": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "d4e9f23ee9e92f12430f8d1be630dca554040e3b": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "98777337482160166a5b020d44af54d1eaa24e82": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "58a12a757eb8544e4aee029832f6db71f1758493": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "6947ab18dc636e88055d15044b39db07c7e475d0": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "23a0bf2abefabf5387cd37db080f43755a309588": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "328d47f1df45bd53b80863fc22421ed3a5419ca7": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "2941a7002d982d8e9b35b95250cf17aa031fb61b": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "b33bd6aaeb90fe220cbbd19538146814e2afd8fd": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "76c8fc8697ea0feaf668e067b7b36418b7fccdc4": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "98337a14b3ef7ab791c7950d6ec1a16a1becf877": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "99877e8e63d2eddf141c2f8ecc3d768f8370532e": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "0efa6428d08363f3739e97f211fd312e229a371e": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "c64bcd047b1395fffdea6da22a0e6f6ac481c309": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "1fa7a587d6332572e5811bd93027ef81dc2bde45": {
+      "status": "ported",
+      "portedIn": [
+        "6628186f8"
+      ],
+      "updatedAt": "2026-01-20T01:44:18.854Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "dd8f7552adfeec78aa70869b0e63b46505949745": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:45:03.493Z",
+      "orphaned": false
+    },
+    "0f257f792a98d3bf4d183187d43a5db86326bbca": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "0baf08fda15a7d351eb1c17ba6e8f832eaf743f6": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "20d606c4c4bef7a2518fc8b9684fab7bcaadc358": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "46a6d7978441275c1e49233c8e040e9ab070f361": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "1ffb0fe78755ca4891e2e7f093bb169e1c24316e": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "5b44825cb3a8b47e77f829fc71aa61a548846526": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "1850013cae9012177da8679072f3b2b7be013691": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "f00667ea25ed21b731d2210c3214065cb22d5a44": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "7466575120c0b4d29de0d86fec126cc4b7c59cb2": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "097e66391f7c30c9982c3fed90d4a84b70de901f": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "484a33f34831bdebeabebc393da69ab7ce2a0f0b": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "d17fc7e448048421391d5ad0c1761bb0bebb0519": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "018f7aa4df22d0ed1795af1f52ec8631aad7a0b9": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "b8f8e7f4dd311fd83b4a6ae7bf67baa687e2b987": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "d0ba56c5ac3159ffe796e901e63b882e8c041282": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "10a50645eff5d7b233d09b9199eb008d8b3118d2": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "b77070cccf138cfd6bb471834421d8770e9518ad": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "8b6000360102e319b7314ab5afba44b51573d0dc": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "842e91d019f5bf13c7f5d64234847c3b49caf69d": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "3ab9d99eed83f292af0658412f29100075d1d35a": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "4d075a703e0f34bfb915c2bdf8593ecdf4c97d56": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "006e1352d8859e91fe436a95f7708be99579c162": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "1f63ee565f98a417faaec9a6212c37ae94ef0f0a": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "7db1cbe178a9f5711a02762a79a9ea5885982cb9": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "efdf87440786a3a0fd19494ddb0579450e9d611c": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "a7cb270999ecc25731b18648d4431c6687968041": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "252841ab13721ea555dbc1d3b49b58e6562f2e33": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "6711eaf8a5dbeb11adfdb31f1f20fb859443e9f7": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "a8f67f0be6b2da26856d98b4debb98402c44e577": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "9554292083f944552dc95aff79cb4a303d873eca": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "10501261326b47ec78294e050eff05d55bd45bf4": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "d8feadb57ad96b5e76805f1c40be63ed8615d08f": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "fb6a809f913da6b27068b51482ae48cc97e68725": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "f102d1bb9d5920f505aa13ca24729ea1cdae88bc": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "562d0e3b5f6efc57a49bc8dbfcfe71548951cb7d": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "f5a9421b10cd62e4ecc4a387e83436285b35cfc2": {
+      "status": "ported",
+      "portedIn": [
+        "2c86b4934"
+      ],
+      "updatedAt": "2026-01-20T01:45:14.431Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "c1f82d9ec154b5b5722ceb606c6b227ad526fe89": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:46:24.346Z",
+      "orphaned": false
+    },
+    "bbc34215a2405bd392d883e4b7bef012d0af4c8b": {
+      "status": "ported",
+      "reason": "Depends on native commands infrastructure - will port foundation first",
+      "updatedAt": "2026-01-20T01:47:37.819Z",
+      "orphaned": false
+    },
+    "256304037e0200459bc8e0abe33ff69752855c9e": {
+      "status": "ported",
+      "reason": "Depends on native commands infrastructure - will port foundation first",
+      "updatedAt": "2026-01-20T01:47:37.819Z",
+      "orphaned": false
+    },
+    "21405b0dfc6dda874428134c8b5bc1027630bc97": {
+      "status": "ported",
+      "reason": "Depends on native commands infrastructure - will port foundation first",
+      "updatedAt": "2026-01-20T01:47:37.819Z",
+      "orphaned": false
+    },
+    "f4ab0578079d6f6bcf18eb3ed7ab0282663b51e5": {
+      "status": "ported",
+      "reason": "Depends on native commands infrastructure - will port foundation first",
+      "updatedAt": "2026-01-20T01:47:37.819Z",
+      "orphaned": false
+    },
+    "08fdac0561a54377181f1dd96aa18beb2f0ff335": {
+      "status": "ported",
+      "reason": "Depends on native commands infrastructure - will port foundation first",
+      "updatedAt": "2026-01-20T01:47:37.819Z",
+      "orphaned": false
+    },
+    "7ba72aeb6c88758ec00d4701bc777c4f4a53922f": {
+      "status": "ported",
+      "reason": "Depends on native commands infrastructure - will port foundation first",
+      "updatedAt": "2026-01-20T01:47:37.819Z",
+      "orphaned": false
+    },
+    "ec5099db890aebae703de25e76044ade4f24a67f": {
+      "status": "ported",
+      "reason": "Depends on native commands infrastructure - will port foundation first",
+      "updatedAt": "2026-01-20T01:47:37.819Z",
+      "orphaned": false
+    },
+    "73d9469bf8a46fa2681e64849cf6c4077fd0c5bf": {
+      "status": "ported",
+      "reason": "Depends on native commands infrastructure - will port foundation first",
+      "updatedAt": "2026-01-20T01:47:37.819Z",
+      "orphaned": false
+    },
+    "2785009c6f3a2c7ff2c5b6c58bb6b4dc23f59701": {
+      "status": "ported",
+      "reason": "Depends on native commands infrastructure - will port foundation first",
+      "updatedAt": "2026-01-20T01:47:37.819Z",
+      "orphaned": false
+    },
+    "a8680f9a09f6a3079904df411b6ef1f5021ccdd4": {
+      "status": "ported",
+      "reason": "Depends on native commands infrastructure - will port foundation first",
+      "updatedAt": "2026-01-20T01:47:37.819Z",
+      "orphaned": false
+    },
+    "daa753112c33ce42c1b2087908af4cf0fd560e14": {
+      "status": "ported",
+      "reason": "Depends on native commands infrastructure - will port foundation first",
+      "updatedAt": "2026-01-20T01:47:37.819Z",
+      "orphaned": false
+    },
+    "cbe11e3de07a9ebf4deaa6cfd729cdcef9a90b13": {
+      "status": "ported",
+      "reason": "Depends on native commands infrastructure - will port foundation first",
+      "updatedAt": "2026-01-20T01:47:37.819Z",
+      "orphaned": false
+    },
+    "bb9a9633a8afd22910cec7c636d23309fe2332e7": {
+      "status": "ported",
+      "reason": "Depends on native commands infrastructure - will port foundation first",
+      "updatedAt": "2026-01-20T01:47:37.819Z",
+      "orphaned": false
+    },
+    "c5fa757ef6df1165347d2e347c03e76e08f1a641": {
+      "status": "ported",
+      "reason": "Depends on native commands infrastructure - will port foundation first",
+      "updatedAt": "2026-01-20T01:47:37.819Z",
+      "orphaned": false
+    },
+    "ce23c70855dd97feeb01d3ee2fd88645282b60c1": {
+      "status": "ported",
+      "reason": "Depends on native commands infrastructure - will port foundation first",
+      "updatedAt": "2026-01-20T01:47:37.819Z",
+      "orphaned": false
+    },
+    "ba316a10cc627308b615561cad81c607d685f472": {
+      "status": "ported",
+      "portedIn": [
+        "13554e765"
+      ],
+      "updatedAt": "2026-01-20T01:49:49.759Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "bfdbaa5ab61160ecbf18d75e1413a611fd479ef5": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:53:49.990Z",
+      "orphaned": false
+    },
+    "dd8f7552": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:54:50.766Z",
+      "orphaned": false
+    },
+    "e949cc38": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:56:05.013Z",
+      "orphaned": false
+    },
+    "1eb92473": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:59:05.286Z",
+      "orphaned": false
+    },
+    "b41e75a15de399e73323a8de6f42e727eb5e07f0": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T01:59:59.816Z",
+      "orphaned": false
+    },
+    "4f3bedfd": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T02:00:28.196Z",
+      "orphaned": false
+    },
+    "48fdf3775d7b9a0772ac25b18c20c6b531195e39": {
+      "status": "ported",
+      "portedIn": [
+        "20af11ee4"
+      ],
+      "updatedAt": "2026-01-20T02:03:00.749Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "c03a745f61e1e0d367de4d8ef8fcf9e25c0270d7": {
+      "status": "ported",
+      "portedIn": [
+        "20af11ee4"
+      ],
+      "updatedAt": "2026-01-20T02:03:00.749Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "642e6acf49518de02664f1d0e46537c16f478b02": {
+      "status": "ported",
+      "portedIn": [
+        "20af11ee4"
+      ],
+      "updatedAt": "2026-01-20T02:03:00.749Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "2111d0c653910087cf71cf91ae9f63813bf62129": {
+      "status": "ported",
+      "portedIn": [
+        "20af11ee4"
+      ],
+      "updatedAt": "2026-01-20T02:03:00.749Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "32115a8b9862319d000a16bb8aa36462b42650ee": {
+      "status": "ported",
+      "portedIn": [
+        "20af11ee4"
+      ],
+      "updatedAt": "2026-01-20T02:03:00.749Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "4f3bedfdb79f216fc73caa8a48e99321f9407e97": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "350f956f2c5801f9dc7f0a40a3118194416e45c2": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "e2ea20f86255df6b4a8a28469232fa8c05f88b3a": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "6a48688c0913f2444d56b1c876b4bedb082905eb": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "07bdb8af7e3df5a903be925f40361ade435e4ed0": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "24190d09da5b46d326ea877295b98a461cc298e7": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "20ba8d489112616b1eb5593104867ceaaf7309f8": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "231d2d5fdf1090b36a5de16133ba0f7768652a63": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "5dc187f00cb947b6ee5c30898fc67fb9c10aa5c4": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "0edbdb19487e83c87e5634596269af25438f6c14": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "ffc465394ee1f657020085c652a84bb9d4a3192a": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "7896b30489d1f318c68f0dbda49c9a08a3a4d8cd": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "c012019a8a345a67e336a5f256d680ca9a8e2eac": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "c2e37c78ff1f8d2e88529844e3f150d3633d9410": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "88716d8d2ad8f8651e0af12244fe8ca588ff080d": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "4f1c6e76fd14321115af2858a2e27a4ecdacddb6": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "a27efd57bdca4eb488ee7af6574a8d11ab177bf0": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "8edf2146ae5906ca369363a83c7b8782bb8ce4df": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "99a6fcf3f76c31ae231c4cb9e56c82f88968f9c2": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "79a65065932e6bb7c04712f0d9e0d58222249d1c": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "46a694bbc7d8350bbba5d764238528ba61ad6993": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "da0a062fa736e8d079e7bc8652a661a6076ea5a3": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "b928b96af57609195741a63684fb0bd5f4e07f98": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "df6634727e3f5674834caf34d93b73a951b805d6": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "66ad8a92898068916042c3d3d4ba73f57fb0db75": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "d45915d39f7317b6a5c1817c9dce68b9a0dc9f15": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "bab7eeaf919204df9f72c2c0340a4b1c8760c2d5": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "980f274fc951a92aa220dd180aee93935ae9a0bd": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "2c2ca7f03bfb26f3cb77abcb162477a256fa0444": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "50260fd385c571eaa38bd6f2c3ab4053272925ec": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "c4e8b60d2caa2bb040e83d46f2e0bc14ec8f9af6": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "2a9ef806a02a64a407ecbe9fc6b3b31730b1eef0": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "ea9486ae2dccce046ad03ff37d46aaec7fdbcc87": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "f249a823832ff06c22e222cee326d74a8ea3cd29": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "93ae3b8405b92c42e03c199f649862624bbb47b2": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "ea5597b483796d28a9c68ad86cce53993bf8f922": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "3061d8e0571a47a8e6285fc07dcb424bfdac12e3": {
+      "status": "ported",
+      "portedIn": [
+        "18f019531"
+      ],
+      "updatedAt": "2026-01-20T02:03:39.350Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "1eb924739b184217e1dd7c25321f54c55ffe164b": {
+      "status": "ported",
+      "portedIn": [
+        "838586b85"
+      ],
+      "updatedAt": "2026-01-20T02:07:14.525Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "a87d37f26d381b6815625e4622c5e51b65ee28c4": {
+      "status": "ported",
+      "portedIn": [
+        "838586b85"
+      ],
+      "updatedAt": "2026-01-20T02:07:14.525Z",
+      "needsAttention": false,
+      "orphaned": false
+    },
+    "755a7e1b": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T02:15:09.666Z",
+      "orphaned": false
+    },
+    "4dfcd56893be15c6b1357f848c9d13db30f4f301": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T02:16:21.519Z",
+      "orphaned": false
+    },
+    "ba1d80bd0048fb647b49067cc28ce7e196a37234": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T02:16:21.519Z",
+      "orphaned": false
+    },
+    "ecb91bbb1a1f9b31ac9dc6afbd8bfffdee722889": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T02:16:21.519Z",
+      "orphaned": false
+    },
+    "3800fea96287e225694466c548ee077ec91b5816": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T02:16:21.519Z",
+      "orphaned": false
+    },
+    "8b5cd97ceb75e62c121f211ee94f5ab07ebcbc2c": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T02:16:21.519Z",
+      "orphaned": false
+    },
+    "2467a103": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T02:17:45.676Z",
+      "orphaned": false
+    },
+    "ab993904d790a7b896d98d3ac498eb5d728aa4d1": {
+      "status": "ported",
+      "reason": "Nexus already has Gemini 3 ID normalization in normalizeModelId (model-selection.ts)",
+      "updatedAt": "2026-01-20T02:19:26.770Z",
+      "orphaned": false
+    },
+    "25297ce3": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T02:21:14.527Z",
+      "orphaned": false
+    },
+    "fcc814ac": {
+      "status": "ported",
+      "updatedAt": "2026-01-20T02:23:40.386Z",
+      "orphaned": false
+    }
+  },
+  "bundleState": {
+    "bundle-2026-01-12-feat-32affaee": {
+      "status": "skipped",
+      "updatedAt": "2026-01-19T23:11:37.503Z"
+    },
+    "bundle-2026-01-12-feat-15d286b6": {
+      "status": "skipped",
+      "updatedAt": "2026-01-19T23:21:28.149Z"
+    },
+    "bundle-2026-01-12-refactor-e6400b0b": {
+      "status": "skipped",
+      "updatedAt": "2026-01-19T23:22:00.636Z"
+    },
+    "bundle-2026-01-12-refactor-53d3134f": {
+      "status": "skipped",
+      "updatedAt": "2026-01-19T23:22:18.454Z"
+    },
+    "bundle-2026-01-12-feat-2f4a2483": {
+      "status": "merged",
+      "portCommit": "624b51a85",
+      "updatedAt": "2026-01-19T23:58:55.000Z"
+    },
+    "bundle-2026-01-11-fix-52929c06": {
+      "status": "merged",
+      "portCommit": "11915afb1",
+      "updatedAt": "2026-01-19T23:58:50.000Z"
+    },
+    "bundle-2026-01-11-chore-105d0481": {
+      "status": "skipped",
+      "updatedAt": "2026-01-19T23:24:03.706Z"
+    },
+    "bundle-2026-01-12-refactor-28f97e61": {
+      "status": "merged",
+      "portCommit": "5ca332785",
+      "updatedAt": "2026-01-19T23:29:16.275Z"
+    },
+    "bundle-2026-01-12-chore-60430fcd": {
+      "status": "skipped",
+      "updatedAt": "2026-01-19T23:25:08.512Z"
+    },
+    "bundle-2026-01-12-style-d9960d83": {
+      "status": "skipped",
+      "updatedAt": "2026-01-19T23:26:09.105Z"
+    },
+    "bundle-2026-01-12-fix-4b51c96e": {
+      "status": "merged",
+      "portCommit": "6628186f8",
+      "updatedAt": "2026-01-20T01:44:18.854Z"
+    },
+    "bundle-2026-01-12-ci-9211183f": {
+      "status": "skipped",
+      "updatedAt": "2026-01-19T23:58:40.000Z"
+    },
+    "bundle-2026-01-12-refactor-f504bfdd": {
+      "status": "skipped",
+      "updatedAt": "2026-01-19T23:58:45.000Z"
+    },
+    "bundle-2026-01-12-docs-56f018dd": {
+      "status": "skipped",
+      "updatedAt": "2026-01-19T23:31:22.645Z"
+    },
+    "bundle-2026-01-12-refactor-6a012fd6": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T00:02:35.000Z"
+    },
+    "bundle-2026-01-12-test-9f9f6b75": {
+      "status": "merged",
+      "portCommit": "6aab1dcf1",
+      "updatedAt": "2026-01-19T23:59:10.000Z"
+    },
+    "bundle-2026-01-12-other-3c81ac03": {
+      "status": "merged",
+      "portCommit": "existing",
+      "updatedAt": "2026-01-20T01:23:45.975Z"
+    },
+    "bundle-2026-01-12-chore-3b943485": {
+      "status": "skipped",
+      "updatedAt": "2026-01-19T23:52:26.409Z"
+    },
+    "bundle-2026-01-12-feat-8b4bdaa8": {
+      "status": "merged",
+      "portCommit": "73064494a",
+      "updatedAt": "2026-01-19T23:58:30.000Z"
+    },
+    "bundle-2026-01-12-fix-478a543e": {
+      "status": "merged",
+      "portCommit": "ae19067c9",
+      "updatedAt": "2026-01-19T23:51:24.277Z"
+    },
+    "bundle-2026-01-12-docs-1a25104a": {
+      "status": "skipped",
+      "updatedAt": "2026-01-19T23:53:55.971Z"
+    },
+    "bundle-2026-01-12-refactor-51d5f167": {
+      "status": "merged",
+      "portCommit": "c5b8a0af0",
+      "updatedAt": "2026-01-19T23:58:09.135Z"
+    },
+    "bundle-2026-01-12-docs-ee4dc12d": {
+      "status": "merged",
+      "portCommit": "7560e1626",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-test-87f270df": {
+      "status": "merged",
+      "portCommit": "f8b2a5372c447e2dc21a0399d095a1180113345e",
+      "updatedAt": "2026-01-19T23:56:53.372Z"
+    },
+    "bundle-2026-01-12-fix-d2651868": {
+      "status": "merged",
+      "portCommit": "e43ce64ed",
+      "updatedAt": "2026-01-19T23:58:35.000Z"
+    },
+    "bundle-2026-01-12-feat-873cee69": {
+      "status": "merged",
+      "portCommit": "ecafe1e0c",
+      "updatedAt": "2026-01-20T00:02:30.000Z"
+    },
+    "bundle-2026-01-12-docs-408f52a0": {
+      "status": "skipped",
+      "updatedAt": "2026-01-19T23:59:39.286Z"
+    },
+    "bundle-2026-01-12-feat-7dbb21be": {
+      "status": "merged",
+      "portCommit": "bc622bad4",
+      "updatedAt": "2026-01-20T01:24:37.566Z"
+    },
+    "bundle-2026-01-12-docs-b4a2cf83": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T00:03:05.552Z"
+    },
+    "bundle-2026-01-12-fix-f5c851e1": {
+      "status": "merged",
+      "portCommit": "9b914037d",
+      "updatedAt": "2026-01-20T00:12:01.439Z"
+    },
+    "bundle-2026-01-12-feat-2da2057a": {
+      "status": "merged",
+      "portCommit": "2da2057a3",
+      "updatedAt": "2026-01-20T01:25:29.398Z"
+    },
+    "bundle-2026-01-12-style-121c9bd6": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T00:06:18.775Z"
+    },
+    "bundle-2026-01-12-feat-744fadbd": {
+      "status": "merged",
+      "portCommit": "415623b55",
+      "updatedAt": "2026-01-20T00:05:00.000Z"
+    },
+    "bundle-2026-01-12-feat-d0861670": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T00:07:00.000Z"
+    },
+    "bundle-2026-01-12-docs-5bc5b695": {
+      "status": "merged",
+      "portCommit": "cd6c31a7fa104b3ea0294e042c0f86bef275e76b",
+      "updatedAt": "2026-01-20T00:08:08.023Z"
+    },
+    "bundle-2026-01-12-feat-496bad8b": {
+      "status": "merged",
+      "portCommit": "76bdb0318",
+      "updatedAt": "2026-01-20T00:10:00.000Z"
+    },
+    "bundle-2026-01-12-fix-0f257f79": {
+      "status": "merged",
+      "portCommit": "2c86b4934",
+      "updatedAt": "2026-01-20T01:45:14.431Z"
+    },
+    "bundle-2026-01-12-feat-4c5f78ca": {
+      "status": "merged",
+      "portCommit": "existing",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-test-2bed0d78": {
+      "status": "merged",
+      "portCommit": "d64b85a80",
+      "updatedAt": "2026-01-20T00:27:48.879Z"
+    },
+    "bundle-2026-01-12-feat-e79cf5a8": {
+      "status": "merged",
+      "portCommit": "c0626de3a",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-feat-60823fd9": {
+      "status": "merged",
+      "portCommit": "399a325a5",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-feat-fadad6e0": {
+      "status": "merged",
+      "portCommit": "db3f26481",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-feat-115591c5": {
+      "status": "skipped",
+      "skipReason": "Already present - Nexus has full cron agent binding",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-docs-79cbb209": {
+      "status": "merged",
+      "portCommit": "7c300af99",
+      "updatedAt": "2026-01-20T01:00:03.749Z"
+    },
+    "bundle-2026-01-12-browser-d5d8c01d": {
+      "status": "merged",
+      "updatedAt": "2026-01-20T01:01:04.070Z"
+    },
+    "bundle-2026-01-12-agents-71fdc829": {
+      "status": "merged",
+      "portCommit": "b041d439e",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-test-83c206d6": {
+      "status": "merged",
+      "portCommit": "553974689",
+      "updatedAt": "2026-01-20T01:02:07.337Z"
+    },
+    "bundle-2026-01-12-chore-ca8e2bcc": {
+      "status": "merged",
+      "portCommit": "fb09843f2",
+      "updatedAt": "2026-01-20T01:04:02.559Z"
+    },
+    "bundle-2026-01-12-feat-bf11a42c": {
+      "status": "merged",
+      "updatedAt": "2026-01-20T01:04:27.471Z"
+    },
+    "bundle-2026-01-12-feat-eeca541d": {
+      "status": "merged",
+      "portCommit": "6d4dea97b",
+      "updatedAt": "2026-01-20T01:03:08.411Z"
+    },
+    "bundle-2026-01-12-fix-ff292e67": {
+      "status": "merged",
+      "portCommit": "1618c8018",
+      "updatedAt": "2026-01-20T01:05:07.077Z"
+    },
+    "bundle-2026-01-12-refactor-05ac67c5": {
+      "status": "merged",
+      "updatedAt": "2026-01-20T01:07:27.820Z"
+    },
+    "bundle-2026-01-12-chore-8049f334": {
+      "status": "merged",
+      "portCommit": "existing",
+      "updatedAt": "2026-01-20T01:06:35.319Z"
+    },
+    "bundle-2026-01-12-test-adaa30c7": {
+      "status": "skipped",
+      "skipReason": "Already ported - test exists at bot.test.ts:1313, constant in helpers.ts",
+      "updatedAt": "2026-01-20T01:50:00.000Z"
+    },
+    "bundle-2026-01-12-docs-717a2590": {
+      "status": "merged",
+      "portCommit": "4fbf6c917",
+      "updatedAt": "2026-01-20T01:06:49.944Z"
+    },
+    "bundle-2026-01-12-feat-35bbc2ba": {
+      "status": "merged",
+      "portCommit": "bd8a0a9f8",
+      "updatedAt": "2026-01-20T01:11:54.099Z"
+    },
+    "bundle-2026-01-12-docs-1b2c1545": {
+      "status": "in_progress",
+      "portBranch": "port/bundle-2026-01-12-docs-1b2c1545-cursor",
+      "claimedBy": "cursor",
+      "updatedAt": "2026-01-20T01:06:41.915Z"
+    },
+    "bundle-2026-01-12-fix-fd1e959c": {
+      "status": "merged",
+      "portCommit": "existing",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-test-f1dd59bf": {
+      "status": "merged",
+      "portCommit": "027d77246",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-feat-8ff09f83": {
+      "status": "skipped",
+      "skipReason": "Already present - image model auto-pairing implemented",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-docs-99a7548c": {
+      "status": "merged",
+      "portCommit": "8c0aa7dd6",
+      "updatedAt": "2026-01-20T01:09:38.320Z"
+    },
+    "bundle-2026-01-12-fix-e91aa065": {
+      "status": "skipped",
+      "skipReason": "Tests use upstream-specific function names",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-feat-d24de1ec": {
+      "status": "merged",
+      "portCommit": "existing",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-fix-44e1f271": {
+      "status": "merged",
+      "portCommit": "existing",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-feat-7b93356f": {
+      "status": "merged",
+      "portCommit": "21b2612c1",
+      "updatedAt": "2026-01-20T01:16:53.379Z"
+    },
+    "bundle-2026-01-12-fix-17ff25bd": {
+      "status": "skipped",
+      "claimedBy": "claude",
+      "skipReason": "already ported (image tool injection in sandbox.ts)",
+      "updatedAt": "2026-01-20T01:15:00.000Z"
+    },
+    "bundle-2026-01-12-refactor-b1c3e38d": {
+      "status": "skipped",
+      "skipReason": "Depends on models-config.providers split - diverged Minimax implementation",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-chore-9526f986": {
+      "status": "skipped",
+      "skipReason": "Legacy release versioning not applicable to Nexus",
+      "updatedAt": "2026-01-20T01:50:00.000Z"
+    },
+    "bundle-2026-01-12-fix-2ed95634": {
+      "status": "merged",
+      "portCommit": "existing",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-docs-5baba5f8": {
+      "status": "merged",
+      "portCommit": "existing",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-test-523f9175": {
+      "status": "merged",
+      "portCommit": "3bf41e306",
+      "updatedAt": "2026-01-20T01:16:12.834Z"
+    },
+    "bundle-2026-01-12-feat-bb7397c6": {
+      "status": "merged",
+      "portCommit": "882387563",
+      "updatedAt": "2026-01-20T01:14:34.718Z"
+    },
+    "bundle-2026-01-12-feat-d4f7dc06": {
+      "status": "merged",
+      "portCommit": "0450f6317",
+      "claimedBy": "claude",
+      "updatedAt": "2026-01-20T01:30:00.000Z"
+    },
+    "bundle-2026-01-12-fix-45232137": {
+      "status": "merged",
+      "portCommit": "3c90a18e8",
+      "updatedAt": "2026-01-20T01:16:47.142Z"
+    },
+    "bundle-2026-01-12-docs-74806aa5": {
+      "status": "merged",
+      "portCommit": "a88320cbc",
+      "updatedAt": "2026-01-20T01:18:18.543Z"
+    },
+    "bundle-2026-01-12-feat-42c17adb": {
+      "status": "in_progress",
+      "portBranch": "port/bundle-2026-01-12-feat-42c17adb-cursor",
+      "claimedBy": "cursor",
+      "updatedAt": "2026-01-20T01:16:24.939Z"
+    },
+    "bundle-2026-01-12-test-f839d949": {
+      "status": "merged",
+      "updatedAt": "2026-01-20T01:18:27.673Z"
+    },
+    "bundle-2026-01-12-docs-6406ed86": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:20:03.729Z"
+    },
+    "bundle-2026-01-12-discord-b7304250": {
+      "status": "merged",
+      "portCommit": "6b9883635,273c092ce",
+      "updatedAt": "2026-01-20T01:25:24.392Z"
+    },
+    "bundle-2026-01-12-fix-36a02b3e": {
+      "status": "merged",
+      "portCommit": "b5542ad93",
+      "updatedAt": "2026-01-20T01:23:04.590Z"
+    },
+    "bundle-2026-01-13-fix-eceb41f6": {
+      "status": "merged",
+      "portCommit": "existing",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-feat-26d5cca9": {
+      "status": "merged",
+      "portCommit": "99c54f72b",
+      "updatedAt": "2026-01-20T02:00:00.000Z"
+    },
+    "bundle-2026-01-12-style-490cb834": {
+      "status": "skipped",
+      "skipReason": "Depends on reasoning output infrastructure not yet ported",
+      "updatedAt": "2026-01-20T01:46:00.000Z"
+    },
+    "bundle-2026-01-12-feat-2faf7cea": {
+      "status": "merged",
+      "updatedAt": "2026-01-20T01:25:59.171Z"
+    },
+    "bundle-2026-01-12-fix-99fea648": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:26:30.075Z"
+    },
+    "bundle-2026-01-12-feat-6857f166": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:31:08.925Z"
+    },
+    "bundle-2026-01-12-refactor-29b7b206": {
+      "status": "merged",
+      "updatedAt": "2026-01-20T01:28:56.226Z"
+    },
+    "bundle-2026-01-12-test-fcaeee70": {
+      "status": "merged",
+      "portCommit": "eb2b53211,bc83844df",
+      "claimedBy": "claude",
+      "updatedAt": "2026-01-20T01:35:00.000Z"
+    },
+    "bundle-2026-01-12-refactor-27d940f5": {
+      "status": "merged",
+      "updatedAt": "2026-01-20T01:29:40.710Z"
+    },
+    "bundle-2026-01-12-refactor-fd768334": {
+      "status": "merged",
+      "updatedAt": "2026-01-20T01:30:52.693Z"
+    },
+    "bundle-2026-01-12-docs-877bc61b": {
+      "status": "merged",
+      "updatedAt": "2026-01-20T01:35:34.179Z"
+    },
+    "bundle-2026-01-12-refactor-72100ba3": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:32:37.253Z"
+    },
+    "bundle-2026-01-12-other-0b2b8c7c": {
+      "status": "merged",
+      "portCommit": "bc83844df",
+      "updatedAt": "2026-01-20T01:35:02.034Z"
+    },
+    "bundle-2026-01-13-refactor-3636a2bf": {
+      "status": "in_progress",
+      "portBranch": "port/bundle-2026-01-13-refactor-3636a2bf-porter-1",
+      "claimedBy": "porter-1",
+      "updatedAt": "2026-01-20T01:32:59.642Z"
+    },
+    "bundle-2026-01-12-fix-bbc34215": {
+      "status": "merged",
+      "updatedAt": "2026-01-20T01:47:37.819Z"
+    },
+    "bundle-2026-01-12-chore-5bc49714": {
+      "status": "merged",
+      "portCommit": "8b084ba22",
+      "updatedAt": "2026-01-20T01:38:25.601Z"
+    },
+    "bundle-2026-01-12-style-9d5bf384": {
+      "status": "in_progress",
+      "portBranch": "port/bundle-2026-01-12-style-9d5bf384",
+      "updatedAt": "2026-01-20T01:36:43.003Z"
+    },
+    "bundle-2026-01-12-build-f19d37c7": {
+      "status": "merged",
+      "portCommit": "abba33d6f",
+      "claimedBy": "claude",
+      "updatedAt": "2026-01-20T01:40:00.000Z"
+    },
+    "bundle-2026-01-12-feat-95ed49ce": {
+      "status": "merged",
+      "updatedAt": "2026-01-20T01:39:30.696Z"
+    },
+    "bundle-2026-01-13-docs-103003d9": {
+      "status": "in_progress",
+      "portBranch": "port/bundle-2026-01-13-docs-103003d9-claude",
+      "claimedBy": "claude",
+      "updatedAt": "2026-01-20T01:41:01.310Z"
+    },
+    "bundle-2026-01-13-refactor-a4bd9608": {
+      "status": "merged",
+      "portCommit": "c473a6735",
+      "claimedBy": "claude",
+      "updatedAt": "2026-01-20T02:10:00.000Z"
+    },
+    "bundle-2026-01-13-refactor-6f75feae": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:43:05.032Z"
+    },
+    "bundle-2026-01-13-feat-abe94400": {
+      "status": "merged",
+      "updatedAt": "2026-01-20T01:43:12.465Z"
+    },
+    "bundle-2026-01-13-refactor-dd8f7552": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:45:03.493Z"
+    },
+    "bundle-2026-01-13-refactor-c1f82d9e": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:46:24.346Z"
+    },
+    "bundle-2026-01-13-feat-ba316a10": {
+      "status": "merged",
+      "portCommit": "13554e765",
+      "updatedAt": "2026-01-20T01:49:49.759Z"
+    },
+    "bundle-2026-01-13-feat-bfdbaa5a": {
+      "status": "skipped",
+      "updatedAt": "2026-01-20T01:53:49.990Z"
+    },
+    "bundle-2026-01-13-feat-b41e75a1": {
+      "status": "merged",
+      "updatedAt": "2026-01-20T01:59:59.816Z"
+    },
+    "bundle-2026-01-13-docs-e949cc38": {
+      "status": "in_progress",
+      "portBranch": "port/bundle-2026-01-13-docs-e949cc38",
+      "updatedAt": "2026-01-20T01:55:22.468Z"
+    },
+    "bundle-2026-01-13-feat-755a7e1b": {
+      "status": "in_progress",
+      "portBranch": "port/bundle-2026-01-13-feat-755a7e1b",
+      "updatedAt": "2026-01-20T02:01:02.066Z"
+    },
+    "bundle-2026-01-13-fix-4f3bedfd": {
+      "status": "merged",
+      "portCommit": "18f019531",
+      "updatedAt": "2026-01-20T02:03:39.350Z"
+    },
+    "bundle-2026-01-13-test-48fdf377": {
+      "status": "merged",
+      "portCommit": "20af11ee4",
+      "updatedAt": "2026-01-20T02:03:00.749Z"
+    },
+    "bundle-2026-01-13-style-1eb92473": {
+      "status": "merged",
+      "portCommit": "838586b85",
+      "updatedAt": "2026-01-20T02:07:14.525Z"
+    },
+    "bundle-2026-01-13-chore-e5c77315": {
+      "status": "in_progress",
+      "portBranch": "port/bundle-2026-01-13-chore-e5c77315-claude",
+      "claimedBy": "claude",
+      "updatedAt": "2026-01-20T02:11:27.748Z"
+    },
+    "bundle-2026-01-13-other-4dfcd568": {
+      "status": "merged",
+      "updatedAt": "2026-01-20T02:16:21.519Z"
+    },
+    "bundle-2026-01-12-slack-68569afb": {
+      "status": "in_progress",
+      "portBranch": "port/bundle-2026-01-12-slack-68569afb-claude",
+      "claimedBy": "claude",
+      "updatedAt": "2026-01-20T02:12:47.657Z"
+    },
+    "bundle-2026-01-12-tui-2467a103": {
+      "status": "in_progress",
+      "portBranch": "port/bundle-2026-01-12-tui-2467a103",
+      "updatedAt": "2026-01-20T02:15:51.069Z"
+    },
+    "bundle-2026-01-12-models-ab993904": {
+      "status": "merged",
+      "updatedAt": "2026-01-20T02:19:26.770Z"
+    },
+    "bundle-2026-01-12-cron-25297ce3": {
+      "status": "in_progress",
+      "portBranch": "port/bundle-2026-01-12-cron-25297ce3",
+      "updatedAt": "2026-01-20T02:18:25.627Z"
+    },
+    "bundle-2026-01-12-other-fcc814ac": {
+      "status": "in_progress",
+      "portBranch": "port/bundle-2026-01-12-other-fcc814ac",
+      "updatedAt": "2026-01-20T02:21:48.979Z"
+    }
+  }
+}

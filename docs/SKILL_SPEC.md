@@ -11,6 +11,7 @@ Every `SKILL.md` should include YAML frontmatter:
 ---
 name: vercel
 description: Deploy and manage web applications on Vercel.
+version: 1.0.0
 homepage: https://vercel.com/docs/cli
 metadata: {"nexus":{"type":"tool","provides":["vercel"],"requires":{"bins":["vercel"],"credentials":["vercel"]}}}
 ---
@@ -22,10 +23,12 @@ metadata: {"nexus":{"type":"tool","provides":["vercel"],"requires":{"bins":["ver
 - `metadata.nexus.type` — `tool` | `connector` | `guide`
 
 ### Recommended fields
+- `version` — semantic version for hub-managed updates
 - `homepage` — primary docs URL
 - `metadata.nexus.provides` — list of capability IDs
 - `metadata.nexus.requires` — dependencies (see below)
 - `metadata.nexus.install` — install options (brew, npm, etc.)
+ - `metadata.nexus.hubSlug` — optional hub slug (if not inferable from skill name)
 
 ### Requires Schema
 ```
