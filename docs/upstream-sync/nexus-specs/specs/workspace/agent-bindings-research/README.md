@@ -13,12 +13,14 @@ This folder contains research and design documents for Nexus agent context injec
 
 ## Harness Support Matrix
 
-| Harness | Instructions | Lifecycle Hooks | Recommendation |
-|---------|-------------|-----------------|----------------|
-| **Cursor** | `AGENTS.md` | ✅ Full (`sessionStart`) | ✅ Recommended |
-| **Claude Code** | `CLAUDE.md` | ✅ Full (`SessionStart`) | ✅ Recommended |
-| **OpenCode** | `AGENTS.md` | ✅ Plugin-based | ✅ Recommended |
-| **Codex** | `AGENTS.md` | ❌ None | ⚠️ Not recommended |
+| Harness | Instructions | Lifecycle Hooks | Support |
+|---------|-------------|-----------------|---------|
+| **Cursor** | `AGENTS.md` | ✅ Full (`sessionStart`) | ✅ Supported |
+| **Claude Code** | `CLAUDE.md` | ✅ Full (`SessionStart`) | ✅ Supported |
+| **OpenCode** | `AGENTS.md` | ✅ Plugin-based | ✅ Supported |
+| **Codex** | `AGENTS.md` | ❌ None | ⛔ Not supported |
+
+> **Authoritative spec:** See [`../AGENT_BINDINGS.md`](../AGENT_BINDINGS.md) for the complete binding specification.
 
 ## Key Concepts
 
@@ -53,11 +55,34 @@ This folder contains research and design documents for Nexus agent context injec
     └── plugins/nexus-bootstrap.ts    # Native plugin
 ```
 
-## Next Steps
+## Reference Templates
 
-- [ ] Implement `nexus bindings create` CLI command
-- [ ] Integrate with AIX for auto-detection of top harnesses
-- [ ] Create binding templates in `specs/workspace/reference/`
+The [`reference/`](./reference/) folder contains actual template files:
+
+```
+reference/
+├── cursor/
+│   ├── hooks.json
+│   └── nexus-session-start.js
+├── claude-code/
+│   └── settings.json
+├── opencode/
+│   └── nexus-bootstrap.ts
+└── codex/
+    └── README.md (limitations documentation)
+```
+
+## Next Steps (Implementation)
+
+- [ ] Implement `nexus bindings detect` — AIX query for harness usage
+- [ ] Implement `nexus bindings list` — Filesystem scan for existing bindings
+- [ ] Implement `nexus bindings create <harness>` — Copy templates to workspace
+- [ ] Implement `nexus bindings verify` — Check binding integrity
+- [ ] Implement `nexus bindings refresh` — Regenerate from templates
+- [ ] Implement `nexus bindings remove` — Delete binding files
+- [ ] Test bindings in each harness
+
+**CLI spec complete:** See [`../AGENT_BINDINGS.md`](../AGENT_BINDINGS.md) and [`../../cli/COMMANDS.md`](../../cli/COMMANDS.md)
 
 ## References
 

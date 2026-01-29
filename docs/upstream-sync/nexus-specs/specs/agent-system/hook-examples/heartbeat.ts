@@ -3,8 +3,8 @@
  * @description System heartbeat that fires on interval (replaces upstream heartbeat)
  * @mode persistent
  * 
- * This is a scheduled hook that doesn't depend on incoming events.
- * It fires based on time elapsed since last firing.
+ * This hook fires based on time elapsed since last firing.
+ * Timer tick events (1/minute) ensure it evaluates even in quiet periods.
  */
 
 export default async function(ctx: HookContext): Promise<HookResult> {
@@ -45,14 +45,10 @@ export default async function(ctx: HookContext): Promise<HookResult> {
   return {
     fire: true,
     routing: { 
-      mode: 'persona'  // Default persona handles heartbeats
+      mode: 'persona'
     },
     context: {
-      prompt: 'HEARTBEAT',
-      extracted: {
-        minutes_since_last: Math.round(elapsed / (1000 * 60)),
-        local_time: now.toLocaleTimeString()
-      }
+      prompt: 'HEARTBEAT'
     }
   };
 }

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "matcher": "startup|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".cursor/hooks/nexus-session-start.js"
+          }
+        ]
+      }
+    ]
+  }
+}

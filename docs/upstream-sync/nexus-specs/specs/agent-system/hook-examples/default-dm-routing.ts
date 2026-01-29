@@ -4,10 +4,7 @@
  * @mode persistent
  * 
  * This is the simplest possible hook - pure passthrough.
- * It ensures every DM gets handled by the default agent.
- * 
- * More specific hooks (like work-whatsapp-routing) fire in parallel.
- * The broker handles deduplication if the same event triggers multiple agents.
+ * Ensures every DM gets handled. No LLM, no database.
  */
 
 export default async function(ctx: HookContext): Promise<HookResult> {
@@ -23,7 +20,7 @@ export default async function(ctx: HookContext): Promise<HookResult> {
     return { fire: false };
   }
   
-  // Only messaging channels (not webhooks, timers, etc.)
+  // Only messaging channels
   const MESSAGING_CHANNELS = ['discord', 'telegram', 'whatsapp', 'imessage', 'sms'];
   if (!MESSAGING_CHANNELS.includes(event.channel)) {
     return { fire: false };
@@ -33,8 +30,8 @@ export default async function(ctx: HookContext): Promise<HookResult> {
   return {
     fire: true,
     routing: { 
-      mode: 'session',  // Use session for conversation continuity
-      // No agent_id specified = use default persona
+      mode: 'session'
+      // No agent_id = use default persona
     },
     context: {
       include_thread: true

@@ -378,21 +378,29 @@ agent:{agentId}:{type}:{context}
  * @description What this hook does
  * @mode persistent | one-shot
  */
+import Database from 'better-sqlite3';
+
 export default async function(ctx: HookContext): Promise<HookResult> {
-  const { event, mnemonic, llm, now, hook } = ctx;
+  const { event, dbPath, search, llm, now, hook } = ctx;
   
   // Fast exit for non-matching
   if (event.channel !== 'imessage') return { fire: false };
   
-  // Optional: query mnemonic
-  const history = await mnemonic.query({ ... });
+  // Optional: query mnemonic via SQL
+  const db = new Database(dbPath, { readonly: true });
+  const history = db.prepare('SELECT * FROM events WHERE ...').all();
+  db.close();
   
-  // Optional: LLM evaluation
-  const analysis = await llm.classify({ ... });
+  // Optional: semantic search
+  const similar = await search("relevant query", { limit: 5 });
+  
+  // Optional: LLM evaluation (always gemini-3-flash-preview)
+  const response = await llm("Is this X? Return JSON.", { json: true });
+  const analysis = JSON.parse(response);
   
   return {
     fire: true,
-    routing: { persona: 'atlas' },
+    routing: { agent_id: 'atlas' },
     context: { prompt: '...', extracted: analysis },
     disable_hook: false  // true for one-shot
   };
@@ -429,6 +437,53 @@ export default async function(ctx: HookContext): Promise<HookResult> {
 | `steer-backlog` | Try steer, queue if fails | Process queue |
 | `queue` | Simple queue | Process FIFO |
 | `interrupt` | Abort active run | Run new message |
+
+### 7.1 Session Pointer Management
+
+When multiple messages queue for a session, the broker must process them **serially** and update the session pointer after each turn to prevent stale routing:
+
+```
+WRONG (parallel routing creates unintended forks):
+  Session "main" → Turn X
+  Route msg1 to X → creates Turn Y
+  Route msg2 to X → creates Turn Z  ← Should have routed to Y!
+
+CORRECT (serial with pointer update):
+  Session "main" → Turn X
+  Route msg1 to X → creates Turn Y → Update session → Turn Y
+  Route msg2 to Y → creates Turn Z → Update session → Turn Z
+```
+
+**Key invariants:**
+1. **One message at a time per session** — Processing lock prevents parallel execution
+2. **Fresh lookup each message** — Always read session pointer from DB, never cache
+3. **Update after completion** — Pointer moves only after turn finishes
+4. **Session table is source of truth** — Route via session lookup, not cached turn IDs
+
+### 7.2 Explicit Forking
+
+To intentionally fork from a turn that already has children:
+
+```typescript
+async forkFromTurn(turnId: string, message: Message): Promise<Session> {
+  const newSessionLabel = `fork-${uuid()}`;
+  
+  // Create session pointing to fork point
+  await db.createSession({ label: newSessionLabel, threadId: turnId });
+  
+  // Route message - creates new turn as child of turnId
+  await this.routeToSession(newSessionLabel, message);
+  
+  return db.getSession(newSessionLabel);
+}
+```
+
+**Result:** New turn created as **child** of the fork point (not a duplicate). Multiple sessions can fork from the same turn.
+
+```
+Turn A → Turn B → Turn X → Turn Y (session "main")
+                  └──→ Turn Z (session "fork-abc" - forked from X)
+```
 
 ---
 

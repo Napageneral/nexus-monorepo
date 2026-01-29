@@ -87,15 +87,40 @@ After establishing identity, the agent silently detects:
 
 ### 5. Agent Bindings (Auto-created for top 2 harnesses)
 
-Based on `aix` detection, the agent automatically creates bindings for the user's top 2 most-used agent harnesses.
+Agent detects harnesses via AIX and creates bindings for top 2 supported harnesses.
+
+```bash
+# Agent runs:
+nexus bindings detect --json
+
+# Parses result, identifies top 2 supported harnesses, then:
+nexus bindings create cursor
+nexus bindings create claude-code
+```
 
 **Agent:** "I see you use Cursor and Claude Code most. I've set up bindings so they connect to Nexus. Want me to set up others?"
 
-Creates automatically for top 2:
-- **Cursor:** `.cursor/rules`, `.cursor/hooks.json`, `.cursor/hooks/nexus-session-start.js`
-- **Claude Code:** `CLAUDE.md`
-- **Codex:** `CODEX.md`, `.codex/`
-- etc.
+**Supported harnesses:**
+- **Cursor:** `.cursor/hooks.json`, `.cursor/hooks/nexus-session-start.js`
+- **Claude Code:** `CLAUDE.md`, `.claude/settings.json`
+- **OpenCode:** `.opencode/plugins/nexus-bootstrap.ts`
+
+**Not supported:**
+- **Codex:** No lifecycle hooks — cannot inject or refresh context
+
+**If AIX not available:**
+
+```
+Agent: "To auto-detect your preferred coding assistants, I need AIX installed.
+
+        Install with: brew install Napageneral/tap/aix
+        Then run: aix init && aix sync --all
+
+        Or tell me which harnesses you use and I'll set them up:
+        - Cursor
+        - Claude Code  
+        - OpenCode"
+```
 
 **User must open `~/nexus/` as workspace root for bindings to work.**
 
@@ -172,8 +197,10 @@ To create additional agents, the user opens `~/nexus/` in their agent harness an
 ### Detection Tools
 
 - **Credentials:** `nexus credential scan --deep` discovers env vars and imports CLI credentials
-- **Harnesses:** `aix` tool (skill/tool) detects installed agent harnesses and ranks by usage frequency
-- **Bindings:** Auto-created for top 2 harnesses, no user prompt required
+- **Harnesses:** `nexus bindings detect` queries AIX for harness usage, returns ranked list
+- **Bindings:** `nexus bindings create <harness>` creates files from templates
+- **Supported:** Cursor, Claude Code, OpenCode
+- **Not supported:** Codex (no lifecycle hooks)
 
 ### Channels
 

@@ -91,6 +91,15 @@ nexus
 │   └── set <key> <value>           # Set a config value
 │
 ├── init [workspace]                # Create new workspace
+│
+├── bindings                        # Harness bindings (Cursor, Claude Code, etc.)
+│   ├── detect                      # Detect harnesses via AIX
+│   ├── list                        # Show binding status
+│   ├── create <harness>            # Create binding
+│   ├── verify [harness]            # Verify bindings
+│   ├── refresh [harness]           # Regenerate bindings
+│   └── remove <harness>            # Remove binding
+│
 ├── login                           # Sign in to Nexus (Hub + Cloud)
 ├── dashboard                       # Open Control UI
 ├── update                          # Update nexus CLI
@@ -975,6 +984,136 @@ Diagnostic checks for troubleshooting Nexus installation and configuration.
 
 ---
 
+## Bindings Commands
+
+Harness bindings connect external AI coding assistants (Cursor, Claude Code, OpenCode) to Nexus.
+
+> **Note:** These are **harness bindings** (IDE integrations), not to be confused with **routing bindings** (message routing config in `routing.bindings`).
+
+### `nexus bindings detect`
+
+**Implementation:** TODO
+
+Detect installed harnesses via AIX, ranked by usage frequency.
+
+**Requires:** AIX (`aix` binary and `~/.aix/aix.db`)
+
+```bash
+nexus bindings detect
+nexus bindings detect --json
+```
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Output as JSON |
+
+**Output:**
+
+```
+Detected Harnesses (via AIX)
+
+  1. cursor        847 sessions    (supported ✅)
+  2. claude-code   312 sessions    (supported ✅)
+  3. opencode       45 sessions    (supported ✅)
+  4. codex          12 sessions    (not supported ⛔)
+
+Recommendation: Create bindings for cursor and claude-code
+```
+
+---
+
+### `nexus bindings list`
+
+**Implementation:** TODO
+
+Show current binding status by scanning filesystem.
+
+```bash
+nexus bindings list
+nexus bindings list --json
+```
+
+**Output:**
+
+```
+Harness Bindings
+
+  ✅ cursor        .cursor/hooks.json, .cursor/hooks/nexus-session-start.js
+  ✅ claude-code   CLAUDE.md, .claude/settings.json
+  ❌ opencode      Not configured
+  ⛔ codex         Not supported (no hooks available)
+```
+
+---
+
+### `nexus bindings create <harness>`
+
+**Implementation:** TODO
+
+Create binding files for a specific harness.
+
+```bash
+nexus bindings create cursor
+nexus bindings create claude-code
+nexus bindings create opencode
+nexus bindings create codex        # Returns error (not supported)
+```
+
+**Supported harnesses:** `cursor`, `claude-code`, `opencode`
+
+| Option | Description |
+|--------|-------------|
+| `--force` | Overwrite existing files |
+
+---
+
+### `nexus bindings verify [harness]`
+
+**Implementation:** TODO
+
+Verify binding files exist and are correctly configured.
+
+```bash
+nexus bindings verify              # Verify all
+nexus bindings verify cursor       # Verify specific
+```
+
+---
+
+### `nexus bindings refresh [harness]`
+
+**Implementation:** TODO
+
+Regenerate binding files from latest templates.
+
+```bash
+nexus bindings refresh             # Refresh all
+nexus bindings refresh cursor      # Refresh specific
+```
+
+---
+
+### `nexus bindings remove <harness>`
+
+**Implementation:** TODO
+
+Remove binding files for a harness.
+
+```bash
+nexus bindings remove cursor
+nexus bindings remove --force cursor    # Skip confirmation
+```
+
+| Option | Description |
+|--------|-------------|
+| `--force` | Skip confirmation prompt |
+
+---
+
+**Full specification:** See `specs/workspace/AGENT_BINDINGS.md`
+
+---
+
 ## Not Implemented
 
 These commands are referenced in documentation or discussions but **do not exist** in the codebase.
@@ -983,11 +1122,10 @@ These commands are referenced in documentation or discussions but **do not exist
 |---------|--------|-------|
 | `nexus context` | **Not implemented** | No code exists. Closest: `nexus identity` |
 | `nexus generate` | **Not implemented** | `claudeMdCommand` exists but not as "generate" |
-| `nexus bindings` | **Not implemented** | Config-only via `routing.bindings` in config file |
 
-### Agent Bindings (Config Only)
+### Message Routing Bindings (Config Only)
 
-Agent bindings exist in the config schema but have no CLI management:
+Message routing bindings (which agent handles which channel) exist in the config schema but have no CLI management:
 
 ```typescript
 // From src/config/types.ts
@@ -1006,7 +1144,7 @@ bindings?: Array<{
 }>;
 ```
 
-To add bindings CLI, would need to implement `nexus bindings list/add/remove` that reads/writes the `routing.bindings` array in config.
+This is separate from harness bindings. To add routing bindings CLI, would need to implement `nexus routing bindings list/add/remove` that reads/writes the `routing.bindings` array in config.
 
 ---
 

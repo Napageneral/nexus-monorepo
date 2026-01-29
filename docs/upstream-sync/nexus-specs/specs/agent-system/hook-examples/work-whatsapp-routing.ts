@@ -3,7 +3,7 @@
  * @description Routes messages from work contact to work persona
  * @mode persistent
  * 
- * Pure deterministic routing - no LLM calls.
+ * Pure deterministic routing - no LLM calls, no database queries.
  * This is the fastest type of hook.
  */
 
@@ -11,7 +11,7 @@ export default async function(ctx: HookContext): Promise<HookResult> {
   const { event } = ctx;
   
   // ─────────────────────────────────────────────────────────────────────────
-  // Pure deterministic matching - no async calls needed
+  // Pure deterministic matching - no external calls
   // ─────────────────────────────────────────────────────────────────────────
   
   // Channel check
@@ -38,11 +38,11 @@ export default async function(ctx: HookContext): Promise<HookResult> {
     fire: true,
     routing: { 
       mode: 'session',
-      target: `whatsapp:${WORK_CONTACT}`,  // Session key
+      target: `whatsapp:${WORK_CONTACT}`,
       agent_id: 'work'
     },
     context: {
-      include_thread: true  // Pull in conversation history
+      include_thread: true
     }
   };
 }

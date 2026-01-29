@@ -1,7 +1,7 @@
 # Event System Design
 
-**Status:** DESIGN IN PROGRESS  
-**Last Updated:** 2026-01-27  
+**Status:** DESIGN COMPLETE  
+**Last Updated:** 2026-01-29  
 **Related:** ONTOLOGY.md, BROKER.md, SESSION_FORMAT.md
 
 ---
@@ -273,16 +273,30 @@ interface Hook {
 
 ### 8.2 Hook Context (What Scripts Receive)
 
+Following the **Bitter Truth** principle: minimal abstractions, maximum power.
+
 ```typescript
 interface HookContext {
   // The event being evaluated
   event: MnemonicEvent;
   
-  // Mnemonic access for querying history, other events
-  mnemonic: MnemonicClient;
+  // Direct database path — use any SQLite client (better-sqlite3, etc.)
+  dbPath: string;
   
-  // LLM access for intelligent evaluation
-  llm: LLMClient;  // Default model: claude-sonnet-4-5 (overridable per call)
+  // Semantic search (embeds query internally, returns event IDs + scores)
+  search(query: string, options?: {
+    channels?: string[];
+    since?: number;
+    until?: number;
+    limit?: number;
+  }): Promise<{ eventId: string; score: number }[]>;
+  
+  // LLM call — always gemini-3-flash-preview, no model choice
+  llm(prompt: string, options?: {
+    system?: string;
+    json?: boolean;
+    max_tokens?: number;
+  }): Promise<string>;
   
   // Timing
   now: Date;
@@ -297,6 +311,13 @@ interface HookContext {
   };
 }
 ```
+
+**Design rationale:**
+- `dbPath` — Agents use SQLite directly. No wrapper. Full power.
+- `search()` — Semantic search handles embedding internally. Returns IDs, agents fetch details via SQL.
+- `llm()` — One model (`gemini-3-flash-preview`), no choice. Prevents model selection mistakes.
+
+The skill doc provides schema reference and example patterns, not API abstractions.
 
 ### 8.3 Hook Result (What Scripts Return)
 
@@ -349,7 +370,7 @@ interface HookInvocation {
   llm_tokens_in: number;       // Total input tokens
   llm_tokens_out: number;      // Total output tokens
   llm_cost_usd?: number;       // Estimated cost
-  mnemonic_queries: number;    // How many mnemonic queries
+  search_calls: number;        // How many semantic searches
   
   // Error tracking
   error?: string;              // Error message if failed
@@ -393,25 +414,25 @@ interface HookHealth {
 - Success in half-open → circuit closes
 - Failure in half-open → circuit stays open, reset timer
 
-### 8.6 Default LLM Configuration
+### 8.6 LLM Configuration
 
-Hooks get a smart default LLM so agents don't have to specify:
+Hooks use a single LLM model with no choice: **`gemini-3-flash-preview`**
 
 ```typescript
-// System default (configurable in nexus config)
-const DEFAULT_HOOK_LLM = 'claude-sonnet-4-5';  // or 'gemini-2.0-flash'
+// In hook scripts:
+const response = await llm("Is this a 2FA request? Answer yes or no.");
 
-// In hook scripts, agents can just call:
-const result = await llm.classify({ prompt: '...', messages });
-// Uses default model
-
-// Or override when needed:
-const result = await llm.classify({ 
-  prompt: '...', 
-  messages,
-  model: 'claude-3-5-haiku'  // Faster/cheaper for simple tasks
+// With options:
+const response = await llm("Extract the service name. Return JSON.", { 
+  json: true 
 });
 ```
+
+**Why no model choice?**
+- Agents always pick the worst model when given options
+- Gemini 3 Flash is fast, capable, and cost-effective
+- Removes a decision point that adds no value
+- If we need to change the default, we change it system-wide
 
 ---
 
@@ -739,18 +760,31 @@ Key features:
 
 ---
 
-## 16. Open Questions / Decisions Made
+## 16. Decisions Made
 
-### Decided
+### Core Decisions
 
-| Question | Decision |
-|----------|----------|
-| Hook schema | Scripts (TypeScript) — maximum flexibility |
-| Hook storage | Files (hooks/*.ts) + DB sync for metadata/metrics |
-| Default LLM | claude-sonnet-4-5 (overridable per call) |
-| Self-disabling | `disable_hook: true` in HookResult |
-| Evaluation | ALL hooks in parallel on every event |
-| Multiple matches | Fire all (no mutual exclusion) |
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| Hook schema | Scripts (TypeScript) | Maximum flexibility, agents write code |
+| Hook storage | Files (hooks/*.ts) + DB sync | Easy to edit, version, debug |
+| Runtime | **Bun** | Fast startup (~2ms), native TS |
+| LLM model | **gemini-3-flash-preview** (no choice) | Prevents bad model selection |
+| Mnemonic API | **dbPath + search()** | SQL is primary interface, search handles embeddings |
+| Self-disabling | `disable_hook: true` in HookResult | One-shot hooks clean up after themselves |
+| Evaluation | ALL hooks in parallel | Fire all matches, no mutual exclusion |
+| Scheduled hooks | Timer tick events (1/minute) | Guarantees evaluation even in quiet periods |
+
+### Bitter Truth Alignment
+
+Following the principle: "Every abstraction is a liability."
+
+| What we provide | What we don't provide |
+|-----------------|----------------------|
+| `dbPath` — direct SQLite access | Query builder methods |
+| `search()` — semantic search | Separate `embed()` API |
+| `llm()` — single model, one function | Model selection, structured extract/classify helpers |
+| Schema docs + examples | API abstractions |
 
 ### Deferred
 
@@ -760,13 +794,6 @@ Key features:
 | Session Format | DEFER | Depends on SESSION_FORMAT.md completion |
 | Hook Locations | DEFER | Start with `event` only, add pre/post-agent later |
 | Hook Permissions | DEFER | Start permissive, add scoping if needed |
-
-### To Resolve
-
-1. **Runtime environment** — Deno? Node? Bun? (Likely Bun for speed)
-2. **Mnemonic client API** — Exact query interface
-3. **LLM client API** — Exact classify/extract interface
-4. **Scheduled-only hooks** — Do they need a separate timer event source?
 
 ---
 

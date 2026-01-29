@@ -322,6 +322,110 @@ async send(message: AgentMessage, queueMode?: QueueMode): Promise<void> {
 }
 ```
 
+### 5.3 Session Pointer Management (Critical for Correct Routing)
+
+**Problem:** When multiple messages queue for a session, naive parallel routing creates unintended forks.
+
+```
+WRONG (stale routing):
+  Session "main" → Turn X
+  Route msg1 to X → creates Turn Y
+  Route msg2 to X → creates Turn Z  ← WRONG! Should route to Y
+  Route msg3 to X → creates Turn W  ← WRONG! Should route to Z
+  
+  Result: X → Y, X → Z, X → W (three forks!)
+```
+
+**Solution:** Process queue serially, update session pointer after each turn:
+
+```typescript
+class AgentBroker {
+  // Per-session processing lock
+  private processing = new Set<string>();
+  
+  async processSessionQueue(sessionLabel: string): Promise<void> {
+    // Prevent parallel processing of same session
+    if (this.processing.has(sessionLabel)) return;
+    this.processing.add(sessionLabel);
+    
+    try {
+      while (this.hasQueuedMessages(sessionLabel)) {
+        const message = this.dequeueMessage(sessionLabel);
+        
+        // CRITICAL: Fresh lookup each iteration
+        const session = await this.db.getSession(sessionLabel);
+        const currentHeadTurnId = session.threadId;
+        
+        // Create new turn as child of current head
+        const newTurn = await this.createTurn({
+          parentTurnId: currentHeadTurnId,
+          message: message,
+          sessionKey: session.sessionKey,
+        });
+        
+        // Wait for agent to complete response
+        await this.waitForTurnCompletion(newTurn.id);
+        
+        // CRITICAL: Update session pointer AFTER turn completes
+        await this.db.updateSession(sessionLabel, {
+          threadId: newTurn.id,
+          updatedAt: Date.now(),
+        });
+      }
+    } finally {
+      this.processing.delete(sessionLabel);
+    }
+  }
+}
+```
+
+**Key Invariants:**
+1. **One message at a time per session** — `processing` Set prevents parallel execution
+2. **Fresh lookup each message** — Never cache `threadId`, always read from session table
+3. **Update after completion** — Session pointer moves only after turn finishes
+4. **Session table is source of truth** — All routing goes through session lookup
+
+### 5.4 Explicit Forking
+
+To intentionally fork from a turn that already has children (e.g., resuming from a historical context):
+
+```typescript
+async forkFromTurn(turnId: string, initialMessage: AgentMessage): Promise<Session> {
+  // Verify the turn exists
+  const turn = await this.db.getTurn(turnId);
+  if (!turn) throw new Error(`Turn not found: ${turnId}`);
+  
+  // Create new session label
+  const newSessionLabel = `fork-${uuid()}`;
+  
+  // Create session pointing to the fork point
+  await this.db.createSession({
+    label: newSessionLabel,
+    threadId: turnId,  // Points to existing turn (the fork point)
+    createdAt: Date.now(),
+  });
+  
+  // Route the initial message - this creates the first turn of the fork
+  // The new turn will have parentTurnId = turnId
+  await this.routeToSession(newSessionLabel, initialMessage);
+  
+  return this.db.getSession(newSessionLabel);
+}
+```
+
+**Result:** A new turn is created as a **child** of the fork point, not a duplicate:
+
+```
+Before fork:
+  Turn A → Turn B → Turn X → Turn Y (existing, session "main" points here)
+
+After forkFromTurn(X, msg):
+  Turn A → Turn B → Turn X → Turn Y (session "main")
+                    └──→ Turn Z (NEW, session "fork-abc" points here)
+```
+
+Multiple sessions can fork from the same turn. The turn tree grows, session pointers track active heads.
+
 ### 5.3 State Synchronization
 
 Agent state derived from upstream's tracking:

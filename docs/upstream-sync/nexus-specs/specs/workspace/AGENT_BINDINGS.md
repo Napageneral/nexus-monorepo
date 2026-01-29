@@ -1,87 +1,294 @@
 # Agent Bindings Specification
 
-**Status:** ALIGNED WITH WORKSPACE_SYSTEM.md (partial — deep dive needed)  
-**Last Updated:** 2026-01-27
+**Status:** COMPLETE  
+**Last Updated:** 2026-01-29
 
 ---
 
 ## Overview
 
-**Agent bindings** are the IDE and AI assistant integrations that connect external harnesses to Nexus. Each binding configures a specific harness to work with the Nexus workspace.
+**Agent bindings** connect external AI coding harnesses (Cursor, Claude Code, OpenCode, Codex) to the Nexus workspace. Each binding configures a harness to:
+
+1. Read Nexus instructions (`AGENTS.md` or `CLAUDE.md`)
+2. Inject dynamic context (identity, memory) at session start
+3. Re-inject context after compaction
 
 **Key Principles:**
+
 1. **Nexus is the source of truth** — Bindings point to Nexus, not the other way around
 2. **Workspace root required** — User must open `~/nexus/` as workspace root
-3. **Auto-creation for top 2** — During onboarding, bindings are auto-created for user's top 2 harnesses
-4. **Binding parity** — All bindings should provide equivalent context to agents
+3. **Auto-creation for top 2** — During onboarding, bindings are auto-created for user's most-used harnesses
+4. **Dynamic detection** — No persistent binding state; scan filesystem each time
 
 ---
 
-## Supported Bindings
+## Harness Support Matrix
 
-| Binding | Command | Auto-Created | Status |
-|---------|---------|--------------|--------|
-| **Cursor** | `nexus bindings cursor` | ✅ If top 2 | ✅ Fully spec'd |
-| **Claude Code** | `nexus bindings claude-code` | ✅ If top 2 | ⚠️ Needs detail |
-| **Codex** | `nexus bindings codex` | ✅ If top 2 | ⚠️ Needs research |
-| **OpenCode** | `nexus bindings opencode` | On request | ⚠️ Needs research |
-| **Aider** | `nexus bindings aider` | On request | ⚠️ Needs research |
-| **Droid** | `nexus bindings droid` | On request | ❌ Needs research |
-| **Amp** | `nexus bindings amp` | On request | ❌ Needs research |
-| **Nexus Bot** | (internal) | N/A | ⚠️ Needs spec |
+| Harness | Instructions | Lifecycle Hooks | Context Injection | Recommendation |
+|---------|-------------|-----------------|-------------------|----------------|
+| **Cursor** | `AGENTS.md` | ✅ `sessionStart` (startup + compact) | `additional_context` output | ✅ Recommended |
+| **Claude Code** | `CLAUDE.md` | ✅ `SessionStart` (startup + compact) | `additional_context` output | ✅ Recommended |
+| **OpenCode** | `AGENTS.md` | ✅ Plugin system | `experimental.chat.system.transform` | ✅ Recommended |
+| **Codex** | `AGENTS.md` | ❌ None | N/A | ⛔ Not supported |
+
+> **Codex Limitation:** Codex has no lifecycle hook system. Context cannot be dynamically injected or refreshed after compaction. Codex is **not supported** for Nexus workflows.
 
 ---
 
 ## CLI Commands
 
+### Command Tree
+
+```
+nexus bindings
+├── detect                    # Detect installed harnesses via AIX
+├── list                      # Show current binding status
+├── create <harness>          # Create binding for harness
+├── verify [harness]          # Verify bindings are correctly configured
+├── refresh [harness]         # Regenerate binding files
+└── remove <harness>          # Remove binding
+```
+
+### `nexus bindings detect`
+
+Detect which harnesses the user has, ranked by usage frequency.
+
+**Requires:** AIX (`aix` binary and `~/.aix/aix.db`)
+
 ```bash
-nexus bindings list                  # Show configured bindings
-nexus bindings cursor                # Create/update Cursor binding
-nexus bindings claude-code           # Create/update Claude Code binding
-nexus bindings codex                 # Create/update Codex binding
-nexus bindings remove <harness>      # Remove binding
-nexus bindings refresh               # Regenerate all bindings
+nexus bindings detect
+nexus bindings detect --json
+```
+
+**How it works:**
+
+1. Checks if `aix` binary exists
+2. Checks if `~/.aix/aix.db` exists
+3. Queries AIX database for session counts by harness
+4. Returns harnesses sorted by usage
+
+**Output (human):**
+
+```
+Detected Harnesses (via AIX)
+
+  1. cursor        847 sessions    (supported ✅)
+  2. claude-code   312 sessions    (supported ✅)
+  3. opencode       45 sessions    (supported ✅)
+  4. codex          12 sessions    (not supported ⛔)
+
+Recommendation: Create bindings for cursor and claude-code
+```
+
+**Output (JSON):**
+
+```json
+{
+  "detected": [
+    { "harness": "cursor", "sessions": 847, "supported": true },
+    { "harness": "claude-code", "sessions": 312, "supported": true },
+    { "harness": "opencode", "sessions": 45, "supported": true },
+    { "harness": "codex", "sessions": 12, "supported": false }
+  ],
+  "recommended": ["cursor", "claude-code"]
+}
+```
+
+**Error (AIX not available):**
+
+```
+Error: AIX is required for harness detection.
+
+Install AIX:
+  brew install Napageneral/tap/aix
+
+Then sync your sessions:
+  aix init
+  aix sync --all
+```
+
+**AIX Query:**
+
+```sql
+SELECT source, COUNT(*) as session_count
+FROM sessions 
+WHERE source IN ('cursor', 'claude-code', 'opencode', 'codex')
+GROUP BY source 
+ORDER BY session_count DESC;
 ```
 
 ---
 
-## Cursor Binding
+### `nexus bindings list`
 
-### What It Creates
+Show current binding status by scanning the filesystem.
+
+```bash
+nexus bindings list
+nexus bindings list --json
+```
+
+**Output:**
+
+```
+Harness Bindings
+
+  ✅ cursor        .cursor/hooks.json, .cursor/hooks/nexus-session-start.js
+  ✅ claude-code   CLAUDE.md, .claude/settings.json
+  ❌ opencode      Not configured
+  ⛔ codex         Not supported (no hooks available)
+```
+
+**Detection logic:**
+
+| Harness | Files checked |
+|---------|---------------|
+| Cursor | `.cursor/hooks.json`, `.cursor/hooks/nexus-session-start.js` |
+| Claude Code | `CLAUDE.md`, `.claude/settings.json` |
+| OpenCode | `.opencode/plugins/nexus-bootstrap.ts` |
+| Codex | N/A (not supported) |
+
+---
+
+### `nexus bindings create <harness>`
+
+Create binding files for a specific harness.
+
+```bash
+nexus bindings create cursor
+nexus bindings create claude-code
+nexus bindings create opencode
+nexus bindings create codex        # Returns error
+```
+
+**Supported harnesses:** `cursor`, `claude-code`, `opencode`
+
+**Behavior:**
+
+- Creates all required files from templates
+- Idempotent — won't overwrite existing files unless `--force`
+- Makes hook scripts executable
+- Validates templates exist
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--force` | Overwrite existing files |
+
+**Output (success):**
+
+```
+Creating Cursor binding...
+
+  ✓ Created .cursor/hooks.json
+  ✓ Created .cursor/hooks/nexus-session-start.js
+  ✓ Made nexus-session-start.js executable
+  ✓ Verified AGENTS.md exists
+
+Cursor binding created successfully.
+Open ~/nexus/ in Cursor to use Nexus.
+```
+
+**Output (codex):**
+
+```
+Error: Codex is not supported.
+
+Codex does not have a lifecycle hook system. Context cannot be 
+dynamically injected or refreshed after compaction.
+
+Recommended alternatives:
+  - Cursor: nexus bindings create cursor
+  - Claude Code: nexus bindings create claude-code
+  - OpenCode: nexus bindings create opencode
+```
+
+---
+
+### `nexus bindings verify [harness]`
+
+Verify that binding files exist and are correctly configured.
+
+```bash
+nexus bindings verify              # Verify all
+nexus bindings verify cursor       # Verify specific
+```
+
+**Checks:**
+
+| Check | Description |
+|-------|-------------|
+| Files exist | All required files present |
+| Script executable | Hook scripts have execute permission |
+| JSON valid | Config files parse correctly |
+| AGENTS.md exists | Instructions file present |
+
+**Output:**
+
+```
+Verifying Cursor binding...
+
+  ✓ .cursor/hooks.json exists and is valid JSON
+  ✓ .cursor/hooks/nexus-session-start.js exists
+  ✓ nexus-session-start.js is executable
+  ✓ AGENTS.md exists
+
+Cursor binding is correctly configured.
+```
+
+---
+
+### `nexus bindings refresh [harness]`
+
+Regenerate binding files from latest templates.
+
+```bash
+nexus bindings refresh             # Refresh all
+nexus bindings refresh cursor      # Refresh specific
+```
+
+**Use cases:**
+
+- Template updates after `nexus update`
+- Corrupted or manually edited files
+- CLAUDE.md regeneration with current skills/capabilities
+
+---
+
+### `nexus bindings remove <harness>`
+
+Remove binding files for a harness.
+
+```bash
+nexus bindings remove cursor
+nexus bindings remove --force cursor    # Skip confirmation
+```
+
+**Behavior:**
+
+- Prompts for confirmation (unless `--force`)
+- Removes all binding files for that harness
+- Does NOT remove `AGENTS.md` (shared across harnesses)
+
+---
+
+## Binding Specifications
+
+### 1. Cursor Binding
+
+#### Files Created
 
 ```
 ~/nexus/
+├── AGENTS.md                         # Instructions (already exists)
 └── .cursor/
-    ├── rules                        # Static rules file
-    ├── hooks.json                   # Session hook registration
+    ├── hooks.json                    # Hook configuration
     └── hooks/
-        └── nexus-session-start.js   # Context injection script
+        └── nexus-session-start.js    # Context injection script
 ```
 
-### Files Detail
-
-#### `.cursor/rules`
-
-Static rules file that points to AGENTS.md:
-
-```markdown
-# Nexus Workspace - Cursor Configuration
-
-This workspace uses Nexus. Follow the root `AGENTS.md` file for all protocols.
-
-## Cursor-Specific
-
-- Run `nexus status` first
-- Cursor sessionStart hook injects identity context (see `.cursor/hooks.json`)
-- Use the Shell tool for `nexus` commands
-- Skill definitions live in `~/nexus/skills/`
-- Skill state and usage logs live in `~/nexus/state/skills/`
-- Read `~/nexus/AGENTS.md` for full instructions
-```
-
-#### `.cursor/hooks.json`
-
-Hook registration:
+#### hooks.json
 
 ```json
 {
@@ -89,287 +296,355 @@ Hook registration:
   "hooks": {
     "sessionStart": [
       {
-        "command": "node .cursor/hooks/nexus-session-start.js"
+        "matcher": "startup|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".cursor/hooks/nexus-session-start.js"
+          }
+        ]
       }
     ]
   }
 }
 ```
 
-#### `.cursor/hooks/nexus-session-start.js`
+**Key details:**
 
-Session start hook script that:
-1. Reads JSON payload from stdin (includes `workspace_roots`)
-2. Runs `nexus status --json` to get identity info
-3. Reads identity files (IDENTITY.md, SOUL.md, MEMORY.md)
-4. Reads daily memory logs (today + yesterday)
-5. Outputs JSON with `additional_context` for Cursor to inject
+- `matcher: "startup|compact"` — runs on fresh session AND after compaction
+- Hook script path is relative to workspace root
+
+#### nexus-session-start.js
+
+Node.js script that injects Nexus context into the session.
+
+**Behavior:**
+
+1. Reads JSON payload from stdin (includes workspace info)
+2. Resolves workspace root (walks up looking for markers)
+3. Runs `nexus status --json` to get current state
+4. Reads identity files (agent IDENTITY.md, SOUL.md, user IDENTITY.md)
+5. Reads daily memory logs (today + yesterday)
+6. Outputs JSON with `additional_context` and `env`
 
 **Output format:**
+
 ```json
 {
   "continue": true,
   "additional_context": "# Nexus Session Bootstrap\n\n## Agent Identity\n...",
   "env": {
     "NEXUS_ROOT": "/Users/example/nexus",
-    "NEXUS_STATE_DIR": "/Users/example/nexus/state"
+    "NEXUS_STATE_DIR": "/Users/example/nexus/state",
+    "NEXUS_AGENT_ID": "atlas"
   }
 }
 ```
 
-### How It Works
+**Context sections injected:**
 
-1. User opens `~/nexus/` in Cursor
-2. Cursor reads `.cursor/rules` — sees it's a Nexus workspace
-3. Session start triggers `nexus-session-start.js` via hooks.json
-4. Script runs `nexus status --json`, reads identity files
-5. Context injected into session via `additional_context`
-6. Agent reads AGENTS.md and has full identity context
+| Section | Source | Purpose |
+|---------|--------|---------|
+| Status | `nexus status --json` | Agent name, capabilities |
+| Bootstrap prompt | `status.bootstrap.prompt` | If identity not established |
+| Agent Identity | `state/agents/{name}/IDENTITY.md` | Name, emoji, vibe |
+| Agent Soul | `state/agents/{name}/SOUL.md` | Persona, boundaries |
+| User Identity | `state/user/IDENTITY.md` | User profile |
+| Daily Memory (today) | `home/memory/YYYY-MM-DD.md` | Today's context |
+| Daily Memory (yesterday) | `home/memory/YYYY-MM-DD.md` | Yesterday's context |
 
-### Context Injection
-
-The session hook injects:
-
-| Section | Source | Limit |
-|---------|--------|-------|
-| Status | `nexus status --json` | N/A |
-| Bootstrap Prompt | `status.bootstrap.prompt` | N/A |
-| Agent Identity | `state/agents/{name}/IDENTITY.md` | 120k chars |
-| Agent Soul | `state/agents/{name}/SOUL.md` | 120k chars |
-| Agent Memory | `state/agents/{name}/MEMORY.md` | 120k chars |
-| User Identity | `state/user/IDENTITY.md` | 120k chars |
-| Daily Memory (today) | `home/memory/YYYY-MM-DD.md` | 40k chars |
-| Daily Memory (yesterday) | `home/memory/YYYY-MM-DD.md` | 40k chars |
+**Template location:** `agent-bindings-research/reference/cursor/`
 
 ---
 
-## Claude Code Binding
+### 2. Claude Code Binding
 
-### What It Creates
+#### Files Created
 
 ```
 ~/nexus/
-└── CLAUDE.md
+├── CLAUDE.md                         # Instructions (identical to AGENTS.md)
+└── .claude/
+    └── settings.json                 # Hook configuration
 ```
 
-### CLAUDE.md Content
+#### CLAUDE.md
 
-Generated file containing:
-- Workspace overview
-- All skill metadata and documentation
-- Nexus CLI reference
-- Agent identity information
-- User identity information
-- Current capability status
+Identical content to `AGENTS.md`. Claude Code reads `CLAUDE.md` from workspace root.
 
-### Generation
+**Note:** We maintain both files with identical content. `nexus bindings create claude-code` copies the AGENTS.md content to CLAUDE.md.
 
-```bash
-nexus bindings claude-code          # Create/regenerate
+#### settings.json
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".cursor/hooks/nexus-session-start.js"
+          }
+        ]
+      }
+    ]
+  }
+}
 ```
 
-### When to Regenerate
+**Key details:**
 
-- Skills change (install, update, remove)
-- Identity changes
-- Capability status changes significantly
+- Reuses the same hook script as Cursor (`.cursor/hooks/nexus-session-start.js`)
+- Hook event name is `SessionStart` (PascalCase, unlike Cursor's camelCase)
+- Same matcher pattern for startup and compact
 
-**TODO:** Add watcher or automatic regeneration trigger.
+**Template location:** `agent-bindings-research/reference/claude-code/`
 
 ---
 
-## Codex Binding
+### 3. OpenCode Binding
 
-### What It Creates
+#### Files Created
 
 ```
 ~/nexus/
-├── CODEX.md                        # Codex instructions
-└── .codex/
-    └── (config files TBD)
+├── AGENTS.md                         # Instructions (already exists)
+└── .opencode/
+    └── plugins/
+        └── nexus-bootstrap.ts        # Native TypeScript plugin
 ```
 
-**TODO:** Research Codex file format and config options.
+#### nexus-bootstrap.ts
+
+Native OpenCode plugin using experimental hooks.
+
+**Key hooks:**
+
+| Hook | When | Purpose |
+|------|------|---------|
+| `experimental.chat.system.transform` | Before every LLM call | Injects context into system prompt |
+| `experimental.session.compacting` | During compaction | Ensures context survives compaction |
+
+**Behavior:**
+
+1. Builds context by running `nexus status --json`
+2. Reads identity files (agent, user)
+3. Reads daily memory logs
+4. Injects into system prompt via `output.system.push()`
+
+**Key advantage:** OpenCode's `system.transform` hook fires on **every LLM call**, meaning context is always fresh — not just on session start.
+
+**Note:** These hooks are marked `experimental` and may change in future OpenCode versions.
+
+**Template location:** `agent-bindings-research/reference/opencode/`
 
 ---
 
-## Other Bindings
+### 4. Codex Binding
 
-**TODO:** Deep dive needed for each harness:
+**⛔ Not Supported**
 
-| Harness | Config Location | File Format | Hook System |
-|---------|-----------------|-------------|-------------|
-| OpenCode | `.opencode/` | TBD | TBD |
-| Aider | `.aider/` | YAML | TBD |
-| Droid | TBD | TBD | TBD |
-| Amp | TBD | TBD | TBD |
+Codex (OpenAI) does not have a lifecycle hook system:
 
----
+- ❌ No session start hook
+- ❌ No post-compaction hook
+- ❌ No plugin system
 
-## Binding Parity
+**Workaround (not recommended):**
 
-All bindings should provide equivalent context to agents. This is critical for consistent agent behavior across harnesses.
+Codex reads `AGENTS.md` at workspace root, but:
+- Context cannot be dynamically refreshed
+- Identity and memory are not injected
+- After compaction, Nexus awareness is lost
 
-### Required Context
-
-Every binding must inject:
-
-| Context | Required | Notes |
-|---------|----------|-------|
-| AGENTS.md behavior | ✅ Yes | System behavior, safety rules |
-| Agent identity | ✅ Yes | Name, emoji, vibe |
-| Agent soul | ✅ Yes | Persona, boundaries |
-| User identity | ✅ Yes | Name, timezone, preferences |
-| Capability status | ⭐ Recommended | What's active, needs-setup |
-| Daily memory | ⭐ Recommended | Today + yesterday logs |
-| Bootstrap prompt | ⭐ Recommended | If bootstrap needed |
-
-### Parity Matrix
-
-| Context | Cursor | Claude Code | Codex | Others |
-|---------|--------|-------------|-------|--------|
-| AGENTS.md | Via rules | Inline | TBD | TBD |
-| Agent identity | Hook | Inline | TBD | TBD |
-| Agent soul | Hook | Inline | TBD | TBD |
-| User identity | Hook | Inline | TBD | TBD |
-| Capability status | Hook | Inline | TBD | TBD |
-| Daily memory | Hook | Manual | TBD | TBD |
-| Bootstrap prompt | Hook | Manual | TBD | TBD |
-
-### Mechanisms
-
-| Mechanism | Harnesses | How It Works |
-|-----------|-----------|--------------|
-| **Session hooks** | Cursor | Script runs at session start, injects context |
-| **Inline files** | Claude Code, Codex | All context baked into single file |
-| **Rules files** | Cursor | Static rules pointing to AGENTS.md |
-| **Config files** | Various | Harness-specific configuration |
+**Recommendation:** Use Cursor, Claude Code, or OpenCode instead.
 
 ---
 
-## Nexus Bot Bindings
+## Context Injection Comparison
 
-The Nexus bot (running via gateway) also needs context injection. This is handled differently since it's not an IDE harness.
+| Aspect | Cursor | Claude Code | OpenCode | Codex |
+|--------|--------|-------------|----------|-------|
+| Instructions file | `AGENTS.md` | `CLAUDE.md` | `AGENTS.md` | `AGENTS.md` |
+| Hook trigger | Session start, after compact | Session start, after compact | Every LLM call | None |
+| Context injection | `additional_context` | `additional_context` | `system.push()` | N/A |
+| Script language | Node.js | Node.js (shared) | TypeScript | N/A |
+| Config format | JSON | JSON | TypeScript module | N/A |
 
-**TODO:** Spec how gateway agent gets context — this belongs in `specs/agent-system/`.
+**Context freshness ranking:**
+
+1. **OpenCode** (best) — refreshes on every LLM call
+2. **Cursor / Claude Code** — refreshes on session start and after compaction
+3. **Codex** — static only, no refresh
 
 ---
 
-## Auto-Creation During Onboarding
+## AIX Integration
 
-### Detection
+### What is AIX?
 
-Uses `aix` tool to detect:
-1. Which harnesses are installed
-2. Which harnesses have recent usage (sessions, transcripts)
-3. Ranking by frequency of use
+AIX is a standalone Go CLI tool that aggregates AI session data from multiple harnesses into a SQLite database (`~/.aix/aix.db`).
 
-### Auto-Creation
-
-Top 2 harnesses get bindings automatically:
-
-```
-Agent: "I see you use Cursor and Claude Code most. I've set up 
-        bindings so they connect to Nexus. Want me to set up others?"
-```
-
-### Manual Creation
-
-For other harnesses:
+**Installation:**
 
 ```bash
-nexus bindings opencode
-nexus bindings aider
+brew install Napageneral/tap/aix
+```
+
+**Setup:**
+
+```bash
+aix init
+aix sync --all
+```
+
+### How Detection Works
+
+1. `nexus bindings detect` checks for AIX availability
+2. Queries the `sessions` table for harness usage
+3. Returns harnesses sorted by session count
+4. Filters to supported harnesses only
+
+**Database location:** `~/.aix/aix.db`
+
+**Query:**
+
+```sql
+SELECT source, COUNT(*) as session_count
+FROM sessions 
+WHERE source IN ('cursor', 'claude-code', 'opencode', 'codex')
+GROUP BY source 
+ORDER BY session_count DESC;
+```
+
+### No Fallback Without AIX
+
+If AIX is not installed or initialized, `nexus bindings detect` returns an error with installation instructions. There is no fallback detection mechanism.
+
+**Rationale:**
+- AIX provides accurate usage data
+- Binary/directory detection is unreliable
+- Better to require proper setup than give misleading results
+
+---
+
+## Onboarding Integration
+
+### Flow
+
+During onboarding (Phase 5 in WORKSPACE_SYSTEM.md), the agent:
+
+```
+1. Runs credential scan:
+   nexus credential scan --deep --import --yes
+
+2. Detects harnesses:
+   nexus bindings detect --json
+
+3. Parses result, identifies top 2 supported harnesses
+
+4. Creates bindings for top 2:
+   nexus bindings create cursor
+   nexus bindings create claude-code
+
+5. Informs user:
+   "I see you use Cursor and Claude Code most. I've set up bindings 
+    so they connect to Nexus. Want me to set up others?"
+```
+
+### Error Handling
+
+If AIX is not available during onboarding:
+
+```
+Agent: "To auto-detect your preferred coding assistants, I need AIX installed.
+
+        Install with: brew install Napageneral/tap/aix
+        Then run: aix init && aix sync --all
+
+        Or tell me which harnesses you use and I'll set them up:
+        - Cursor
+        - Claude Code  
+        - OpenCode"
 ```
 
 ---
 
-## Implementation Notes
-
-### Workspace Root Requirement
+## Workspace Root Requirement
 
 **Bindings only work when `~/nexus/` is opened as the workspace root.**
 
 This is intentional:
 - Cursor reads `.cursor/` from workspace root
-- Claude Code reads `CLAUDE.md` from workspace root
-- Other harnesses have similar requirements
+- Claude Code reads `CLAUDE.md` and `.claude/` from workspace root
+- OpenCode reads `.opencode/` from workspace root
 
 If user opens a subdirectory (e.g., `~/nexus/home/projects/foo/`), bindings won't load.
 
-**Recommendation:** Document this clearly in AGENTS.md and during onboarding.
+**Documentation:** This is explained in AGENTS.md and during onboarding.
 
-### Multi-Profile Support
+---
+
+## Multi-Profile Support
 
 When `NEXUS_PROFILE=work`:
 - Root is `~/nexus-work/`
 - Each profile has its own bindings
-- The `nexus-session-start.js` script handles profile resolution
+- Hook scripts handle profile resolution via environment variables
 
 ---
 
-## Deep Dive: Harness File Formats
+## Templates Reference
 
-**TODO:** This section needs research into each harness's configuration system.
+All binding templates live in:
 
-### Questions to Answer
+```
+specs/workspace/agent-bindings-research/reference/
+├── cursor/
+│   ├── hooks.json
+│   └── nexus-session-start.js
+├── claude-code/
+│   └── settings.json
+├── opencode/
+│   └── nexus-bootstrap.ts
+└── codex/
+    └── README.md                     # Limitations documentation
+```
 
-For each harness:
-1. What config files does it read?
-2. What file format (JSON, YAML, TOML, MD)?
-3. Does it support session hooks? If so, how?
-4. Does it support rules/instructions files?
-5. Does it support workspace-level config?
-6. How does it handle context injection?
-
-### Research Needed
-
-| Harness | Config Location | File Format | Hook System | Context Injection |
-|---------|-----------------|-------------|-------------|-------------------|
-| Cursor | `.cursor/` | JSON, MD | sessionStart hook | `additional_context` |
-| Claude Code | `CLAUDE.md` | Markdown | None (file-based) | Inline in file |
-| Codex | `.codex/` | JSON? | TBD | TBD |
-| OpenCode | `.opencode/` | TOML? | TBD | TBD |
-| Aider | `.aider/`, `.aider.conf.yml` | YAML | None | `--read` flag? |
-| Droid | TBD | TBD | TBD | TBD |
-| Amp | TBD | TBD | TBD | TBD |
+The `nexus bindings create` command copies these templates to the workspace.
 
 ---
 
-## Templates
+## Implementation Checklist
 
-All binding templates live in `reference/`:
-
-```
-reference/cursor/
-├── rules
-├── hooks.json
-└── hooks/
-    └── nexus-session-start.js
-```
-
-**TODO:** Add templates for other harnesses as they're spec'd.
+| Component | Status |
+|-----------|--------|
+| CLI: `nexus bindings detect` | TODO |
+| CLI: `nexus bindings list` | TODO |
+| CLI: `nexus bindings create` | TODO |
+| CLI: `nexus bindings verify` | TODO |
+| CLI: `nexus bindings refresh` | TODO |
+| CLI: `nexus bindings remove` | TODO |
+| Template: Cursor hooks.json | ✅ Complete |
+| Template: Cursor nexus-session-start.js | ✅ Complete |
+| Template: Claude Code settings.json | ✅ Complete |
+| Template: OpenCode nexus-bootstrap.ts | ✅ Complete |
+| AIX integration | TODO |
 
 ---
 
 ## Related Specifications
 
-- **WORKSPACE_SYSTEM.md** — Authoritative workspace spec
-- **specs/credentials/CREDENTIAL_SYSTEM.md** — Credential detection
-- **specs/agent-system/** — Gateway and Nexus bot context injection
+| Spec | Relationship |
+|------|--------------|
+| `WORKSPACE_SYSTEM.md` | Authoritative workspace spec, defines onboarding flow |
+| `ONBOARDING.md` | Onboarding details, references binding creation |
+| `agent-bindings-research/` | Deep research folder with harness mechanisms |
+| `agent-bindings-research/04-NEXUS_BINDING_SPEC.md` | Detailed binding design |
+| `specs/cli/COMMANDS.md` | CLI command reference (add bindings commands) |
 
 ---
 
-## Open Work
-
-| Item | Status | Priority |
-|------|--------|----------|
-| Claude Code CLAUDE.md generation | Needs implementation | High |
-| Codex binding research | Not started | Medium |
-| OpenCode binding research | Not started | Medium |
-| Aider binding research | Not started | Low |
-| Droid binding research | Not started | Low |
-| Amp binding research | Not started | Low |
-| Nexus bot context injection | Needs spec (agent-system) | High |
-| Auto-regeneration triggers | Needs design | Medium |
-| aix harness detection integration | Needs spec | High |
+*This document specifies the agent bindings system. For implementation details, see the research folder at `agent-bindings-research/`.*

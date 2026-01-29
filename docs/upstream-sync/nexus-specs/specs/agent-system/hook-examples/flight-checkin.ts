@@ -3,12 +3,13 @@
  * @description Detects airline check-in emails and auto-checks in
  * @mode persistent
  * 
- * Hybrid pattern: deterministic pre-filter + LLM extraction.
- * Demonstrates scheduled+conditional combination.
+ * Hybrid pattern: deterministic pre-filter + LLM extraction + database dedup.
  */
 
+import Database from 'better-sqlite3';
+
 export default async function(ctx: HookContext): Promise<HookResult> {
-  const { event, llm, mnemonic } = ctx;
+  const { event, dbPath, llm } = ctx;
   
   // ─────────────────────────────────────────────────────────────────────────
   // PHASE 1: Deterministic pre-filter (fast, no LLM cost)
@@ -24,7 +25,7 @@ export default async function(ctx: HookContext): Promise<HookResult> {
     return { fire: false };
   }
   
-  // Quick keyword check before LLM (avoid LLM calls for unrelated emails)
+  // Quick keyword check before LLM
   const content = event.content.toLowerCase();
   const subject = (event.metadata?.subject || '').toLowerCase();
   
@@ -47,38 +48,32 @@ export default async function(ctx: HookContext): Promise<HookResult> {
   // PHASE 2: LLM extraction
   // ─────────────────────────────────────────────────────────────────────────
   
-  const analysis = await llm.extract({
-    prompt: `Analyze this email. Is it a flight check-in notification (telling the user they can now check in for their flight)?
+  const response = await llm(`Analyze this email. Is it a flight check-in notification (telling the user they can now check in for their flight)?
 
 If yes, extract:
 - Airline name
 - Flight number
 - Departure date/time
-- Check-in deadline (if mentioned)
 - Check-in URL (if present)
 
-Important: This is about CHECK-IN notifications, not booking confirmations or other flight emails.`,
-    content: event.content,
-    metadata: {
-      subject: event.metadata?.subject,
-      from: event.sender_id
-    },
-    schema: {
-      is_checkin_notification: 'boolean',
-      airline: 'string | null',
-      flight_number: 'string | null',
-      departure_time: 'string | null',  // ISO 8601
-      checkin_deadline: 'string | null',
-      checkin_url: 'string | null',
-      confidence: 'high | medium | low'
-    }
-  });
+Important: This is about CHECK-IN notifications, not booking confirmations.
+
+Email subject: ${event.metadata?.subject}
+Email from: ${event.sender_id}
+Email content: ${event.content.substring(0, 2000)}
+
+Return JSON: {
+  "is_checkin": true/false,
+  "airline": "name or null",
+  "flight_number": "number or null",
+  "departure": "ISO datetime or null",
+  "checkin_url": "URL or null",
+  "confidence": "high/medium/low"
+}`, { json: true });
   
-  if (!analysis.is_checkin_notification) {
-    return { fire: false };
-  }
+  const analysis = JSON.parse(response);
   
-  if (analysis.confidence === 'low') {
+  if (!analysis.is_checkin || analysis.confidence === 'low') {
     return { fire: false };
   }
   
@@ -86,17 +81,20 @@ Important: This is about CHECK-IN notifications, not booking confirmations or ot
   // PHASE 3: Check if already handled (avoid duplicate check-ins)
   // ─────────────────────────────────────────────────────────────────────────
   
-  // Look for recent agent responses about this flight
   if (analysis.flight_number) {
-    const recentResponses = await mnemonic.query({
-      channel: 'agent',
-      content_contains: analysis.flight_number,
-      since: Date.now() - (24 * 60 * 60 * 1000),  // Last 24 hours
-      direction: 'sent'
-    });
+    const db = new Database(dbPath, { readonly: true });
     
-    if (recentResponses.length > 0) {
-      // Already handled this flight
+    const recentHandled = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM events e
+      WHERE e.channel = 'agent'
+        AND e.content LIKE ?
+        AND e.timestamp > ?
+    `).get(`%${analysis.flight_number}%`, Date.now() - 24 * 60 * 60 * 1000);
+    
+    db.close();
+    
+    if (recentHandled.count > 0) {
       return { fire: false };
     }
   }
@@ -116,7 +114,7 @@ Important: This is about CHECK-IN notifications, not booking confirmations or ot
 
 Airline: ${analysis.airline}
 Flight: ${analysis.flight_number}
-Departure: ${analysis.departure_time}
+Departure: ${analysis.departure}
 ${analysis.checkin_url ? `Check-in URL: ${analysis.checkin_url}` : ''}
 
 Steps:
@@ -125,8 +123,7 @@ Steps:
 3. Get the boarding pass
 4. Text Tyler the confirmation and any seat assignment
 
-If there are seat selection options, choose window seat if available.`,
-      extracted: analysis
+If there are seat selection options, choose window seat if available.`
     }
   };
 }

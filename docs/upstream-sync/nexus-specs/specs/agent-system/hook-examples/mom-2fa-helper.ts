@@ -7,8 +7,10 @@
  * fires an agent to check email and text them back the code.
  */
 
+import Database from 'better-sqlite3';
+
 export default async function(ctx: HookContext): Promise<HookResult> {
-  const { event, llm } = ctx;
+  const { event, dbPath, llm } = ctx;
   
   // ─────────────────────────────────────────────────────────────────────────
   // PHASE 1: Fast exits (no LLM cost for non-matching events)
@@ -24,85 +26,84 @@ export default async function(ctx: HookContext): Promise<HookResult> {
     return { fire: false };
   }
   
-  // Only from family
-  const FAMILY_CONTACTS = ['mom', 'dad', 'sister'];
-  if (!FAMILY_CONTACTS.includes(event.sender_id)) {
-    return { fire: false };
-  }
-  
   // Skip if message is too short (unlikely to be a 2FA request)
   if (event.content.length < 10) {
     return { fire: false };
   }
   
   // ─────────────────────────────────────────────────────────────────────────
-  // PHASE 2: LLM classification
+  // PHASE 2: Check if sender is family
   // ─────────────────────────────────────────────────────────────────────────
   
-  const analysis = await llm.extract({
-    prompt: `Is this message asking for help with a verification code, login code, 2FA code, or authentication code?
-    
-    Examples of YES:
-    - "Can you check your email for a code?"
-    - "I need the 6 digit code they sent"  
-    - "What's the Amazon verification code?"
-    - "Help me log in to Netflix"
-    
-    Examples of NO:
-    - "How are you?"
-    - "Did you see that code in the movie?"
-    - "The dress code is casual"
-    
-    If yes, extract the service name if mentioned.`,
-    content: event.content,
-    schema: {
-      is_2fa_request: 'boolean',
-      confidence: 'high | medium | low',
-      service_name: 'string | null',
-      urgency: 'low | medium | high'
-    }
-  });
+  const db = new Database(dbPath, { readonly: true });
   
-  if (!analysis.is_2fa_request) {
+  const sender = db.prepare(`
+    SELECT p.canonical_name
+    FROM event_participants ep
+    JOIN person_contact_links pcl ON pcl.contact_id = ep.contact_id
+    JOIN persons p ON p.id = pcl.person_id
+    WHERE ep.event_id = ? AND ep.role = 'sender'
+  `).get(event.id);
+  
+  db.close();
+  
+  const FAMILY = ['Mom', 'Dad'];
+  if (!sender || !FAMILY.some(f => sender.canonical_name.includes(f))) {
+    return { fire: false };
+  }
+  
+  // ─────────────────────────────────────────────────────────────────────────
+  // PHASE 3: LLM classification
+  // ─────────────────────────────────────────────────────────────────────────
+  
+  const response = await llm(`Is this message asking for help with a verification code, login code, 2FA code, or authentication code?
+
+Examples of YES:
+- "Can you check your email for a code?"
+- "I need the 6 digit code they sent"  
+- "What's the Amazon verification code?"
+- "Help me log in to Netflix"
+
+Examples of NO:
+- "How are you?"
+- "Did you see that code in the movie?"
+- "The dress code is casual"
+
+Message: "${event.content}"
+
+Return JSON: {"is_2fa": true/false, "service": "service name or null", "confidence": "high/medium/low"}`, { json: true });
+  
+  const result = JSON.parse(response);
+  
+  if (!result.is_2fa) {
     return { fire: false };
   }
   
   // Low confidence? Skip to avoid false positives
-  if (analysis.confidence === 'low') {
+  if (result.confidence === 'low') {
     return { fire: false };
   }
   
   // ─────────────────────────────────────────────────────────────────────────
-  // PHASE 3: Fire the helper agent
+  // PHASE 4: Fire the helper agent
   // ─────────────────────────────────────────────────────────────────────────
-  
-  const senderName = event.metadata?.sender_name || event.sender_id;
-  const serviceName = analysis.service_name || 'the requested service';
   
   return {
     fire: true,
     routing: { 
       mode: 'persona', 
-      agent_id: 'browser-agent'  // Agent with email + browser access
+      agent_id: 'browser-agent'
     },
     context: {
-      prompt: `${senderName} needs help with a 2FA code for ${serviceName}.
+      prompt: `${sender.canonical_name} needs help with a 2FA code for ${result.service || 'unknown service'}.
 
-1. Check Tyler's email for recent verification codes from ${serviceName}
+1. Check Tyler's email for recent verification codes from ${result.service || 'the service'}
 2. Find the most recent code (usually 6 digits)
-3. Text it back to ${senderName} at the number they texted from
+3. Text it back to ${sender.canonical_name}
 
 Original message: "${event.content}"
 
-Be helpful and friendly. If you can't find the code, text them back and let them know.`,
-      extracted: {
-        sender: senderName,
-        sender_id: event.sender_id,
-        service: analysis.service_name,
-        original_message: event.content,
-        urgency: analysis.urgency
-      },
-      include_thread: false  // No need for thread history
+Be helpful and friendly. If you can't find the code, text them back and let them know.`
     }
   };
 }
