@@ -63,7 +63,7 @@ Automated script to rebrand clawdbot → nexus. Re-run after each upstream sync.
 
 ## Script Location
 
-`scripts/rebrand.sh`
+`docs/upstream-sync/rebrand-nexus.sh`
 
 ---
 
@@ -71,7 +71,7 @@ Automated script to rebrand clawdbot → nexus. Re-run after each upstream sync.
 
 ```bash
 # After cloning fresh from upstream
-./scripts/rebrand.sh
+./docs/upstream-sync/rebrand-nexus.sh
 
 # Verify
 pnpm install
@@ -85,7 +85,7 @@ pnpm test
 
 1. `git fetch upstream`
 2. `git merge upstream/main`
-3. `./scripts/rebrand.sh`
+3. `./docs/upstream-sync/rebrand-nexus.sh`
 4. `pnpm test`
 5. If tests pass, commit
 

@@ -13,6 +13,7 @@ docs as the umbrella-level narrative that ties the repos together.
 - `ROADMAP.md` — Dogfood → launch plan aligned to priorities.
 - `IDEAS.md` — Idea backlog + tasks to triage later.
 - `SKILL_SPEC.md` — Local skill spec and CLI/hub alignment.
+- `upstream-sync/` — Upstream tracking, bulk sync plans, and rebrand tooling (`upstream-sync/rebrand-nexus.sh`).
 
 ## Source Material (Repo-Level)
 
