@@ -8,7 +8,7 @@
  */
 
 export default async function(ctx: HookContext): Promise<HookResult> {
-  const { event, llm, mnemonic } = ctx;
+  const { event, llm, cortex } = ctx;
   
   // ─────────────────────────────────────────────────────────────────────────
   // PHASE 1: Deterministic pre-filter (fast, no LLM cost)
@@ -88,7 +88,7 @@ Important: This is about CHECK-IN notifications, not booking confirmations or ot
   
   // Look for recent agent responses about this flight
   if (analysis.flight_number) {
-    const recentResponses = await mnemonic.query({
+    const recentResponses = await cortex.query({
       channel: 'agent',
       content_contains: analysis.flight_number,
       since: Date.now() - (24 * 60 * 60 * 1000),  // Last 24 hours

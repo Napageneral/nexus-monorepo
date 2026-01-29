@@ -14,7 +14,7 @@
 | 2. Workspace | Init, structure, bootstrap, agent bindings | Low — additive |
 | 3. Agent System | Broker, MWP, triggers, sessions | HIGH — core changes |
 | 4. Skills | Schema, CLI, hub, content | Low — additive |
-| 5. Memory | REMOVAL + Cortex replacement | Medium — deletion |
+| 5. Memory | REMOVAL + Mnemonic replacement | Medium — deletion |
 | 6. Cloud | Nexus Cloud sync service | Low — new feature |
 | 7. Collab | Multi-user collaboration | Low — new feature |
 | 8. CLI & Capabilities | `nexus` CLI, capability abstraction, credentials | N/A — entirely new |
@@ -91,8 +91,8 @@ vs Upstream:
 | IDENTITY.md (user) | No | Yes | User profile |
 | BOOTSTRAP.md | Yes (deleted after) | Yes (kept as template) | First-run ritual |
 | HEARTBEAT.md | Yes | Yes (optional) | Heartbeat checklist |
-| MEMORY.md | Yes | **REMOVED** | Replaced by Cortex |
-| memory/ | Yes | **REMOVED** | Replaced by Cortex |
+| MEMORY.md | Yes | **REMOVED** | Replaced by Mnemonic |
+| memory/ | Yes | **REMOVED** | Replaced by Mnemonic |
 
 ### 2.4 Access Plane Bindings
 
@@ -185,7 +185,7 @@ vs Upstream:
 
 ### 3.4 Session Storage + Forking
 
-**Concept:** Prepare for smart forking via cortex.
+**Concept:** Prepare for smart forking via mnemonic.
 
 | Aspect | Upstream | Nexus |
 |--------|----------|-------|
@@ -196,7 +196,7 @@ vs Upstream:
 **Key Decisions:**
 - Keep upstream's JSONL format (aix compatible)
 - Add `forks.json` for pointer-based forking
-- Future: migrate to SQLite when cortex ready
+- Future: migrate to SQLite when mnemonic ready
 
 **Spec:** `specs/agent-system/SESSION_FORMAT.md`
 
@@ -298,9 +298,9 @@ nexus skills update                  # Update managed skills
 
 **Status:** DECISION MADE
 
-**Spec:** `specs/memory/CORTEX_INTEGRATION.md`
+**Spec:** `specs/memory/MNEMONIC_INTEGRATION.md`
 
-### Decision: Remove Upstream Memory, Replace with Cortex
+### Decision: Remove Upstream Memory, Replace with Mnemonic
 
 **What We Remove:**
 - `MEMORY.md` file-based memory
@@ -311,14 +311,14 @@ nexus skills update                  # Update managed skills
 - Memory config section
 
 **What Replaces It:**
-- Cortex ingests ALL agent turns automatically
+- Mnemonic ingests ALL agent turns automatically
 - Entity extraction + knowledge graph
 - BM25 + vector search over ALL history
-- `cortex_query` tool replaces `memory_search`
+- `mnemonic_query` tool replaces `memory_search`
 
 **Why:**
 
-| Aspect | Upstream | Cortex |
+| Aspect | Upstream | Mnemonic |
 |--------|----------|--------|
 | Agent burden | Must write to MEMORY.md | Zero — auto-captured |
 | Cross-agent | Per-agent isolation | Unified knowledge |
@@ -331,7 +331,7 @@ nexus skills update                  # Update managed skills
 - Remove memory/ directory creation
 - Keep HEARTBEAT.md (optional) — convert to trigger system later
 
-**Stub Strategy:** Implement `cortex_query` as no-op until Cortex is ready.
+**Stub Strategy:** Implement `mnemonic_query` as no-op until Mnemonic is ready.
 
 ---
 
@@ -432,7 +432,7 @@ Capability (abstract)  →  Provider (concrete)
 
 ### Phase 2: Memory Removal (Medium Risk)
 5. Remove upstream memory system
-6. Stub `cortex_query` tool
+6. Stub `mnemonic_query` tool
 7. Update workspace bootstrap
 
 ### Phase 3: CLI & Capabilities (New)
@@ -460,7 +460,7 @@ Capability (abstract)  →  Provider (concrete)
 
 | Question | Status | Notes |
 |----------|--------|-------|
-| Cortex timeline | OPEN | When is `cortex_query` ready? |
+| Mnemonic timeline | OPEN | When is `mnemonic_query` ready? |
 | Trigger scheduler ownership | DECIDED | Part of Agent Broker initially |
 | Skills priority | OPEN | Can skills wait until after agent system? |
 | SQLite vs JSONL for sessions | DECIDED | Hybrid (JSONL + fork metadata), SQLite later |

@@ -1,8 +1,15 @@
 # Unified Triggers Specification
 
-**Status:** DESIGN SPEC  
+**Status:** SUPERSEDED  
+**Superseded By:** [EVENT_SYSTEM_DESIGN.md](./EVENT_SYSTEM_DESIGN.md)  
 **Work Item:** WI-3 (Agent Orchestration)  
 **Last Updated:** 2026-01-22
+
+> **Note:** This document contains the original upstream analysis. The design has evolved significantly into the **Hook-based Event System** documented in EVENT_SYSTEM_DESIGN.md. Key changes:
+> - "Triggers" are now "Hooks" — scripts that evaluate events
+> - Mnemonic (formerly Cortex) is the unified event layer
+> - All event sources normalize through adapters
+> - Hooks are arbitrary TypeScript code, not config-driven rules
 
 ---
 

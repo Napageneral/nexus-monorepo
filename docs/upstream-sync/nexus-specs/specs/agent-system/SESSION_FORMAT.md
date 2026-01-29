@@ -143,7 +143,7 @@ See upstream: `docs/reference/session-management-compaction.md`
 **Critical:** The summary IS persisted. This enables:
 - Full history reconstruction (all messages + compaction markers)
 - Forking from any point (you know what was summarized)
-- aix/cortex can trace the complete conversation
+- aix/mnemonic can trace the complete conversation
 
 ---
 
@@ -388,8 +388,216 @@ for _, backup := range backups {
 
 **No custom archives/summary.md:**
 - Upstream's `.bak.{timestamp}` archives preserve full history
-- aix/cortex handles search externally
+- aix/mnemonic handles search externally
 - LLM summaries written inline to JSONL
+
+---
+
+## Rich Metadata Requirements (Lessons from Cursor/AIX)
+
+Based on comprehensive analysis of Cursor's storage format, Nexus sessions should capture equivalent richness to enable:
+- Full fidelity archival in AIX/Mnemonic
+- Smart forking with relevant context retrieval
+- Subagent tracking and replay
+- Tool call analysis
+
+### Message-Level Metadata (JSONL entries)
+
+Beyond basic pi-coding-agent fields, Nexus should capture:
+
+```typescript
+interface NexusMessageEntry {
+  // Standard pi-coding-agent fields
+  type: 'user' | 'assistant';
+  timestamp: string;
+  sessionId: string;
+  uuid: string;
+  message: {
+    role: 'user' | 'assistant';
+    content: ContentBlock[];
+    model?: string;
+  };
+  
+  // Extended fields (Cursor parity)
+  parentId?: string;              // Previous message for tree structure
+  checkpointId?: string;          // Fork point identifier
+  
+  // Context at time of message
+  context?: {
+    fileSelections?: FileSelection[];    // Files in context
+    folderSelections?: string[];
+    mentions?: Mention[];
+    recentLocations?: LocationRef[];
+  };
+  
+  // For assistant messages
+  isAgentic?: boolean;            // Was this in agentic mode?
+  isPlanExecution?: boolean;      // Part of a plan execution?
+  
+  // Tool tracking
+  toolCalls?: ToolCall[];         // Tools invoked in this message
+  toolResult?: ToolResult;        // If this is a tool result message
+  
+  // Token tracking (per-message)
+  tokenCount?: {
+    inputTokens?: number;
+    outputTokens?: number;
+  };
+  
+  // Rules/prompts active
+  activeRules?: string[];         // Which AGENTS.md/rules were active
+}
+
+interface ToolCall {
+  id: string;                     // Unique tool call ID
+  name: string;                   // Tool name (e.g., "Shell", "Read", "task_v2")
+  params: Record<string, any>;    // Tool parameters
+  status?: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  result?: any;                   // Tool result (when available)
+  
+  // For subagent dispatch (task_v2)
+  childSessionId?: string;        // Links to spawned subagent session
+}
+```
+
+### Session-Level Metadata (sessions.json)
+
+Extended SessionEntry for full context:
+
+```typescript
+interface NexusSessionEntry {
+  // Standard fields (upstream)
+  sessionId: string;
+  updatedAt: number;
+  sessionFile?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  contextTokens?: number;
+  compactionCount?: number;
+  model?: string;
+  modelProvider?: string;
+  origin?: SessionOrigin;
+  queueMode?: QueueMode;
+  systemPromptReport?: SystemPromptReport;
+  skillsSnapshot?: SkillsSnapshot;
+  
+  // Extended fields (Cursor parity)
+  project?: string;               // Project/workspace path
+  isAgentic?: boolean;            // Session-level agentic mode
+  
+  // Subagent tracking
+  parentSessionId?: string;       // If this is a subagent
+  parentMessageId?: string;       // Message that dispatched this subagent
+  toolCallId?: string;            // Tool call that created this subagent
+  taskDescription?: string;       // What the subagent was asked to do
+  taskStatus?: 'pending' | 'running' | 'completed' | 'failed';
+  isSubagent?: boolean;
+  
+  // Context limits
+  contextTokenLimit?: number;     // Max context size
+  contextTokensUsed?: number;     // Current usage
+  
+  // Fork tracking
+  forkedFromSessionId?: string;   // If forked from another session
+  forkedFromTurnId?: string;      // Specific turn forked from
+  hasChildren?: boolean;          // Has this session been forked?
+}
+```
+
+### Turn Tracking
+
+Turns should be computable from the JSONL but can also be tracked explicitly:
+
+```typescript
+interface TurnMarker {
+  type: 'turn';
+  id: string;                     // Turn ID = final assistant message UUID
+  parentTurnId?: string;          // Previous turn
+  queryMessageIds: string[];      // Input message UUIDs
+  responseMessageId: string;      // Assistant response UUID
+  timestamp: number;
+  toolCallCount: number;
+  model?: string;
+}
+```
+
+### Subagent Session Format
+
+When a Nexus agent dispatches a subagent (worker agent), the child session should:
+
+1. **Be a separate JSONL file** (or embedded in parent, configurable)
+2. **Link back to parent** via `parentSessionId`, `parentMessageId`, `toolCallId`
+3. **Have its own turns** tracked independently
+4. **Return result** to parent via tool result message
+
+```jsonl
+{"type":"session","id":"child-abc","timestamp":"...","parentSessionId":"parent-xyz","parentMessageId":"msg-123","toolCallId":"task_abc"}
+{"type":"user","timestamp":"...","sessionId":"child-abc","uuid":"child-msg-1","message":{"role":"user","content":[{"type":"text","text":"Explore the codebase..."}]}}
+{"type":"assistant","timestamp":"...","sessionId":"child-abc","uuid":"child-msg-2","message":{"role":"assistant","content":[...]}}
+```
+
+---
+
+## AIX/Mnemonic Integration
+
+### How Nexus Sessions Flow to Mnemonic
+
+```
+Nexus Agent System
+       │
+       ▼
+~/nexus/state/sessions/{id}.jsonl
+       │
+       ▼ (aix sync --source nexus)
+       │
+      AIX (full fidelity capture)
+       │
+       ├─► aix-events adapter → Mnemonic Events Ledger
+       │   (trimmed turns: user message + final response)
+       │
+       └─► aix-agents adapter → Mnemonic Agents Ledger
+           (full sessions, messages, turns, tool_calls)
+```
+
+### Field Mapping: Nexus → AIX → Mnemonic
+
+| Nexus Session Field | AIX sessions | Mnemonic agent_sessions |
+|---------------------|--------------|-------------------------|
+| sessionId | id | id |
+| model | model | model |
+| project | project | project |
+| parentSessionId | parent_session_id | parent_session_id |
+| parentMessageId | parent_message_id | parent_message_id |
+| toolCallId | tool_call_id | tool_call_id |
+| taskDescription | task_description | task_description |
+| taskStatus | task_status | task_status |
+| isSubagent | is_subagent | is_subagent |
+| contextTokenLimit | context_token_limit | context_token_limit |
+| contextTokensUsed | context_tokens_used | context_tokens_used |
+| isAgentic | is_agentic | is_agentic |
+
+| Nexus Message Field | AIX messages | Mnemonic agent_messages |
+|---------------------|--------------|-------------------------|
+| uuid | id | id |
+| sessionId | session_id | session_id |
+| message.role | role | role |
+| message.content | content | content |
+| timestamp | timestamp | timestamp |
+| checkpointId | checkpoint_id | checkpoint_id |
+| isAgentic | is_agentic | is_agentic |
+| isPlanExecution | is_plan_execution | is_plan_execution |
+| context | context_json | context_json |
+| activeRules | cursor_rules_json | cursor_rules_json |
+
+| Nexus ToolCall | AIX tool_calls | Mnemonic agent_tool_calls |
+|----------------|----------------|---------------------------|
+| id | id | id |
+| name | tool_name | tool_name |
+| params | params_json | params_json |
+| result | result_json | result_json |
+| status | status | status |
+| childSessionId | child_session_id | child_session_id |
 
 ---
 
@@ -402,7 +610,19 @@ for _, backup := range backups {
 - [ ] Verify compaction creates `.bak` archives
 - [ ] All SessionEntry metadata (origin, tokens, model) works unchanged
 
-### For aix (COMPLETE)
+### For Nexus Agent System (Extended Metadata)
+- [ ] Add `parentId` to message entries for tree structure
+- [ ] Add `checkpointId` for fork tracking
+- [ ] Add `context` object with file selections, mentions
+- [ ] Add `toolCalls` array to assistant messages
+- [ ] Add `isAgentic`, `isPlanExecution` flags
+- [ ] Add `tokenCount` per message
+- [ ] Add `activeRules` tracking
+- [ ] Extend SessionEntry with subagent fields
+- [ ] Extend SessionEntry with context limits
+- [ ] Implement turn markers (optional but recommended)
+
+### For AIX (COMPLETE)
 - [x] Create `pi_agent.go` - unified adapter for pi-coding-agent format
 - [x] Add `NewClawdbotParser()` - points to `~/.clawdbot/sessions/`
 - [x] Add `NewNexusParser()` - points to `~/nexus/state/sessions/`
@@ -411,13 +631,19 @@ for _, backup := range backups {
 - [x] Scan and parse `.bak.*` files for compaction history (via `WithBackups(true)`)
 - [x] Add tests for both sources (`pi_agent_test.go`)
 - [x] Wire into sync command (`aix sync --source clawdbot` / `aix sync --source nexus`)
-- [ ] Pipe to cortex via aix's existing infrastructure (future)
+- [ ] Parse extended Nexus metadata (context, toolCalls, subagent fields)
+- [ ] Pipe to Mnemonic via adapters
 
-### For Cortex (Future)
-- [ ] Unified session search across all sources (cursor, claude-code, clawdbot, nexus)
+### For Mnemonic
+- [ ] Rename cortex → mnemonic
+- [ ] Add Agents ledger tables
+- [ ] Implement aix-events adapter (trimmed turns)
+- [ ] Implement aix-agents adapter (full fidelity)
+- [ ] Unified session search across all sources (cursor, codex, nexus, clawdbot)
 - [ ] Timeline view showing all agent activity
 - [ ] Token usage analytics from SessionEntry data
 - [ ] Origin-based filtering (show only telegram sessions, etc.)
+- [ ] Smart forking with context retrieval
 
 ---
 
@@ -430,16 +656,58 @@ for _, backup := range backups {
 - `src/config/types.agent-defaults.ts` - AgentCompactionConfig
 - `src/gateway/session-utils.fs.ts` - `archiveFileOnDisk()` function
 
-**aix (Template Files):**
-- `internal/sync/claude_code.go` - Reference adapter (pi-coding-agent JSONL parser)
-- `internal/sync/cursor.go` - Rich metadata extraction example
+**AIX Files:**
+- `internal/sync/cursor_db.go` - Cursor parser (rich metadata extraction reference)
+- `internal/sync/pi_agent.go` - Pi-coding-agent adapter (clawdbot/nexus)
 - `internal/models/session.go` - Session/Message models
-- `internal/db/schema.sql` - Database schema
+- `internal/db/schema.sql` - Full schema with turns, tool_calls
+- `docs/AIX_FULL_INGESTION_SPEC.md` - Complete ingestion specification
+- `docs/AIX_MNEMONIC_PIPELINE.md` - How AIX feeds into Mnemonic
 
-**New aix Files (Created):**
-- `internal/sync/pi_agent.go` - Unified pi-coding-agent adapter
-  - `NewClawdbotParser()` / `NewNexusParser()` constructors
-  - `WithBackups(true)` to include compaction archives
-  - Parses JSONL transcripts + `sessions.json` metadata
-- `internal/sync/pi_agent_test.go` - Comprehensive tests
-- `cmd/aix/main.go` - Added `clawdbot` and `nexus` sources to sync command
+**Mnemonic Files:**
+- `docs/MNEMONIC_ARCHITECTURE.md` - Unified memory system architecture
+- `internal/adapters/aix.go` - Current AIX adapter (to be split into aix-events, aix-agents)
+- `internal/db/schema.sql` - Core + Events + Agents ledger schemas
+
+**Nexus Specs:**
+- `specs/agent-system/ONTOLOGY.md` - Turn, Thread, Session definitions
+- `specs/agent-system/SESSION_FORMAT.md` - This document
+
+---
+
+## Summary: The Full Picture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Nexus Agent System                          │
+│                                                                 │
+│  Cursor  ──┐                                                    │
+│  Codex   ──┼──► AIX (capture) ──► Mnemonic (memory)            │
+│  Nexus   ──┤         │                   │                      │
+│  Clawdbot──┘         │                   ├─► Events Ledger      │
+│                      │                   │   (trimmed turns)    │
+│              Full fidelity               │                      │
+│              sessions, msgs,             └─► Agents Ledger      │
+│              turns, tool_calls               (full fidelity)    │
+│                                                                 │
+│  Nexus sessions stored in:                                      │
+│  ~/nexus/state/sessions/{id}.jsonl                             │
+│                                                                 │
+│  With rich metadata matching Cursor's depth:                    │
+│  - Message context (files, mentions, rules)                     │
+│  - Tool calls with params/results                               │
+│  - Subagent dispatch tracking                                   │
+│  - Turn boundaries                                              │
+│  - Checkpoint/fork support                                      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key insight:** By capturing the same richness as Cursor in Nexus sessions, we enable:
+1. Unified search across ALL agent sources in Mnemonic
+2. Smart forking with context from any past conversation
+3. Full replay/analysis of any session
+4. Subagent relationship tracking
+
+---
+
+*This document defines the session format for Nexus agent system. See ONTOLOGY.md for the underlying data model and MNEMONIC_ARCHITECTURE.md for how sessions flow into the unified memory system.*

@@ -137,7 +137,7 @@ sessionKey = `agent:${agentId}:${provider}:group:${groupId}`
 
 **Upstream memory system:** `src/memory/`
 
-Nexus is replacing this with Cortex. Key files to understand the old system:
+Nexus is replacing this with Mnemonic. Key files to understand the old system:
 - `src/memory/store.ts` — Vector store interface
 - `src/memory/flush.ts` — Pre-compaction memory flush
 

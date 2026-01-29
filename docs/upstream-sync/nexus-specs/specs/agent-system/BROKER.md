@@ -15,9 +15,9 @@ This spec defines a **thin multi-agent routing layer** that adds Manager-Worker 
 ### Two Routing Modes (Future)
 
 1. **Explicit Routing (v1)** — Direct MA ↔ WA communication with `from`/`to` addressing
-2. **Smart Routing (v2)** — Cortex-powered semantic routing to best checkpoint (A/B testable)
+2. **Smart Routing (v2)** — Mnemonic-powered semantic routing to best checkpoint (A/B testable)
 
-This spec focuses on v1 (explicit routing). Smart routing integrates with cortex and will be added as an alternative routing strategy.
+This spec focuses on v1 (explicit routing). Smart routing integrates with mnemonic and will be added as an alternative routing strategy.
 
 ---
 
@@ -402,19 +402,19 @@ Instead of explicit `send(to: "worker-id", msg)`, the system can intelligently r
 // Explicit routing (v1)
 broker.send({ from: "manager", to: "code-worker", content: "Review auth module" });
 
-// Smart routing (v2 — via cortex)
-const route = await cortex.route("Review the authentication module for security issues");
+// Smart routing (v2 — via mnemonic)
+const route = await mnemonic.route("Review the authentication module for security issues");
 // Returns: { segmentId: "seg-123", checkpoint: {...}, confidence: 0.87 }
 
 // Then fork from that checkpoint
 broker.forkFrom(route.checkpoint, { content: "Continue: Review auth module" });
 ```
 
-### 7.2 How Smart Routing Works (cortex)
+### 7.2 How Smart Routing Works (mnemonic)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      cortex route "task"                        │
+│                      mnemonic route "task"                      │
 └─────────────────────────────────┬───────────────────────────────┘
                                   │
                                   ▼
@@ -450,7 +450,7 @@ interface AgentBroker {
   // === Smart Routing (v2) ===
   
   /**
-   * Route to best checkpoint using cortex.
+   * Route to best checkpoint using mnemonic.
    * Returns routing decision with confidence.
    */
   routeSmart(task: string): Promise<SmartRouteResult>;
@@ -491,7 +491,7 @@ interface Checkpoint {
 | Discovery / exploration | Smart |
 | A/B testing effectiveness | Both |
 
-**Start with explicit.** Add smart routing when cortex's routing decision logic is ready. A/B test to compare.
+**Start with explicit.** Add smart routing when mnemonic's routing decision logic is ready. A/B test to compare.
 
 ---
 
@@ -517,12 +517,12 @@ interface Checkpoint {
 
 ### Phase 3: Smart Routing (v2)
 
-1. **cortex integration** via `cortex route` API
+1. **mnemonic integration** via `mnemonic route` API
 2. **`routeSmart()` method** returning checkpoint candidates
 3. **`forkFrom()` method** to resume from checkpoint
 4. **A/B routing mode** (`explicit` | `smart` | `hybrid`)
 
-**Requires:** cortex routing decision logic (scoring, thresholds)
+**Requires:** mnemonic routing decision logic (scoring, thresholds)
 
 ---
 
@@ -583,7 +583,7 @@ If porting from `control-plane/broker/broker.ts`:
 | 2026-01-22 | Use upstream `interrupt` queue mode | Already handles stop-and-redirect |
 | 2026-01-22 | SQLite for durability | Simple, packageable with broker library |
 | 2026-01-22 | Adopt upstream steering | Use `scheduleFollowupDrain` |
-| 2026-01-22 | Two routing modes | Explicit first, smart (cortex) later, A/B testable |
+| 2026-01-22 | Two routing modes | Explicit first, smart (mnemonic) later, A/B testable |
 
 ---
 

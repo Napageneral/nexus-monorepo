@@ -59,7 +59,7 @@ A **session** is a persistent conversation context between an agent and a user/s
 ```
 
 **What IS shared across sessions:**
-- MEMORY.md (vector-searchable knowledge) — *being replaced by Cortex*
+- MEMORY.md (vector-searchable knowledge) — *being replaced by Mnemonic*
 - Tools and capabilities (same agent config)
 - System prompt (AGENTS.md)
 - Workspace files
@@ -70,7 +70,7 @@ A **session** is a persistent conversation context between an agent and a user/s
 
 **Cross-session communication:**
 - `sessions_send(sessionKey, message)` — explicitly send to another session
-- Cortex (future) — unified search across all session history
+- Mnemonic (future) — unified search across all session history
 
 #### Session Key Format
 
@@ -114,23 +114,36 @@ Session (persistent)
 
 ### Turn
 
-A **turn** is a single message exchange (user → assistant or system → assistant).
+A **turn** is a query + response exchange. **The key addressable unit.**
 
-| Turn Type | Description |
+| Attribute | Description |
 |-----------|-------------|
-| **User turn** | User message prompts agent response |
-| **System turn** | System event (heartbeat, cron, trigger) prompts agent response |
-| **Tool turn** | Agent uses tool, receives result (sub-turn within a run) |
+| **Turn ID** | Same as the final assistant message ID |
+| **Query messages** | Input: one or more messages (user, trigger, agent, system injection) |
+| **Response message** | Output: the assistant's complete response |
+| **Tool calls** | Tools invoked during this turn (part of the turn, not separate turns) |
 
-**Runs contain one or more turns.** Multi-turn runs happen when agents use tools iteratively.
+**Key principles:**
+- A turn completes when the assistant finishes responding to the query
+- A turn can be initiated by: user, trigger, agent message, webhook, cron, event — anything
+- Multiple input messages can be grouped into one turn (e.g., user sends several messages before assistant responds)
+- Tool calls are **part of a turn**, not separate turns — they occur during the assistant's response generation
+- Turn ID = final assistant message ID (clean, unambiguous)
+
+**Runs contain one or more turns.** A single run typically contains one turn, but can contain multiple turns if the agent uses tools iteratively and continues responding.
 
 ```
 Run (single invocation)
-├── User turn: "Fix the bug in auth.ts"
-├── Tool turn: Read file
-├── Tool turn: Edit file
-├── Tool turn: Run tests
-└── Assistant turn: "Fixed. The issue was..."
+└── Turn: 
+    ├── Query: "Fix the bug in auth.ts"
+    ├── [Agent thinking]
+    ├── Tool call: Read file
+    ├── Tool result: [file contents]
+    ├── Tool call: Edit file
+    ├── Tool result: [edit confirmation]
+    ├── Tool call: Run tests
+    ├── Tool result: [test output]
+    └── Response: "Fixed. The issue was..."
 ```
 
 ### Agent
@@ -354,7 +367,7 @@ type SessionEntry = {
 | **aix** | Session analysis/indexing tool |
 | **Broker** | Agent message routing layer |
 | **Compaction** | Context window management (truncation or summarization) |
-| **Cortex** | Memory/search system (replacing upstream MEMORY.md) |
+| **Mnemonic** | Memory/search system (replacing upstream MEMORY.md) |
 | **Gateway** | HTTP server managing agent sessions |
 | **MWP** | Manager-Worker Pattern |
 | **JSONL** | JSON Lines format for transcripts |

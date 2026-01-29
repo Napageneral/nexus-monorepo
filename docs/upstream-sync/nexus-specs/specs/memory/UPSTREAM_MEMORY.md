@@ -589,9 +589,9 @@ From `src/cli/memory-cli.ts`:
 
 ### What Replaces It
 
-**Cortex** — An automatic knowledge capture system:
+**Mnemonic** — An automatic knowledge capture system:
 
-| Upstream Memory | Cortex |
+| Upstream Memory | Mnemonic |
 |-----------------|--------|
 | Agent writes to `MEMORY.md` | Agent just talks |
 | Manual file indexing | Automatic turn ingestion |
@@ -602,24 +602,24 @@ From `src/cli/memory-cli.ts`:
 
 ### Stub Strategy
 
-Until Cortex is ready:
+Until Mnemonic is ready:
 
 1. **Remove** memory system code from Nexus fork
-2. **Stub** `cortex_query` tool that returns empty results or basic search
+2. **Stub** `mnemonic_query` tool that returns empty results or basic search
 3. **Remove** `MEMORY.md` from workspace bootstrap
-4. **Update** docs to explain Cortex replacement
+4. **Update** docs to explain Mnemonic replacement
 
 ### Tool Mapping
 
 | Upstream Tool | Nexus Replacement |
 |---------------|-------------------|
-| `memory_search` | `cortex_query` (stub → full Cortex) |
-| `memory_get` | Removed (cortex returns full context) |
+| `memory_search` | `mnemonic_query` (stub → full Mnemonic) |
+| `memory_get` | Removed (mnemonic returns full context) |
 
 ---
 
 ## See Also
 
 - **[README.md](./README.md)** — Memory lane overview and decision summary
-- **[CORTEX_INTEGRATION.md](./CORTEX_INTEGRATION.md)** — Nexus-specific integration details (TODO)
-- **[MIGRATION.md](./MIGRATION.md)** — Conversion from upstream memory to Cortex (TODO)
+- **[MNEMONIC_INTEGRATION.md](./MNEMONIC_INTEGRATION.md)** — Nexus-specific integration details (TODO)
+- **[MIGRATION.md](./MIGRATION.md)** — Conversion from upstream memory to Mnemonic (TODO)

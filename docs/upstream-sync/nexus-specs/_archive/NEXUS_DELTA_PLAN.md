@@ -21,7 +21,7 @@ This document consolidates all behavioral differences between Nexus and upstream
 
 ## Bundle 5: Memory System (REMOVAL)
 
-**Decision:** Remove upstream memory system entirely, replace with Cortex.
+**Decision:** Remove upstream memory system entirely, replace with Mnemonic.
 
 **What we're removing:**
 - `MEMORY.md` file-based memory
@@ -33,14 +33,14 @@ This document consolidates all behavioral differences between Nexus and upstream
 - Memory plugin system (`memory-core`, `memory-lancedb`)
 
 **What replaces it:**
-- Cortex ingests ALL agent turns automatically
+- Mnemonic ingests ALL agent turns automatically
 - Entity extraction + knowledge graph
 - BM25 + vector search over ALL history
 - Graph traversal for relationship queries
 - Bi-temporal tracking for fact evolution
 
 **Why:**
-| Aspect | Upstream | Cortex |
+| Aspect | Upstream | Mnemonic |
 |--------|----------|--------|
 | Agent burden | Must write to MEMORY.md | Zero — auto-captured |
 | Cross-agent | Per-agent isolation | Unified knowledge |
@@ -61,7 +61,7 @@ This document consolidates all behavioral differences between Nexus and upstream
 - Remove `memory/` directory creation
 - Keep `HEARTBEAT.md` → but convert to trigger system (see Bundle 3)
 
-**Integration point:** Cortex provides `cortex_query` tool that replaces `memory_search`.
+**Integration point:** Mnemonic provides `mnemonic_query` tool that replaces `memory_search`.
 
 ---
 
@@ -134,8 +134,8 @@ Nexus:
 | `IDENTITY.md` | Agent identity | ❌ No | Add |
 | `BOOTSTRAP.md` | Session context | ✅ Yes | Keep in state/, not workspace |
 | `HEARTBEAT.md` | Heartbeat instructions | ✅ Yes | **REMOVE** — replaced by triggers |
-| `MEMORY.md` | Memory storage | ✅ Yes | **REMOVE** — replaced by Cortex |
-| `memory/` | Daily logs | ✅ Yes | **REMOVE** — replaced by Cortex |
+| `MEMORY.md` | Memory storage | ✅ Yes | **REMOVE** — replaced by Mnemonic |
+| `memory/` | Daily logs | ✅ Yes | **REMOVE** — replaced by Mnemonic |
 
 **Trigger system replaces HEARTBEAT.md:**
 - Remove heartbeat content from AGENTS.md
@@ -365,7 +365,7 @@ Read logic:
 
 This maintains upstream compatibility while enabling forking.
 
-**Future:** Migrate to SQLite when cortex is ready.
+**Future:** Migrate to SQLite when mnemonic is ready.
 
 ### 3.6 Two Routing Modes
 
@@ -382,7 +382,7 @@ This maintains upstream compatibility while enabling forking.
 │  • Deterministic: you know exactly where it goes                    │
 │  • Good for: MA → WA delegation, structured workflows               │
 │                                                                      │
-│  SMART ROUTING (v2 — add later via cortex)                          │
+│  SMART ROUTING (v2 — add later via mnemonic)                         │
 │  ──────────────────────────────────────────                         │
 │  • System finds best match: route("fix auth bug") → checkpoint      │
 │  • Uses: semantic search + facets + quality signals                 │
@@ -399,7 +399,7 @@ broker.send({ from: "manager", to: "code-worker", content: "Review auth module" 
 
 **Smart routing interface (future):**
 ```typescript
-const route = await cortex.route("Review auth module for security issues");
+const route = await mnemonic.route("Review auth module for security issues");
 // Returns: { segmentId: "seg-123", checkpoint: {...}, confidence: 0.87 }
 broker.forkFrom(route.checkpoint, { content: "Continue review" });
 ```
@@ -485,7 +485,7 @@ Custom nexus skills (not in upstream):
 
 ### Phase 2: Memory Removal (Medium Risk)
 4. Remove upstream memory system from codebase
-5. Stub `cortex_query` tool for future integration
+5. Stub `mnemonic_query` tool for future integration
 6. Update workspace bootstrap (no memory files)
 
 ### Phase 3: Skills (Low Risk)
@@ -515,7 +515,7 @@ Custom nexus skills (not in upstream):
 | Human readable | Rich queries |
 | Simple | Complex migration |
 
-**Recommendation:** Start with hybrid (JSONL + fork metadata), migrate to SQLite when cortex is ready.
+**Recommendation:** Start with hybrid (JSONL + fork metadata), migrate to SQLite when mnemonic is ready.
 
 ### Q2: How to handle upstream updates?
 
@@ -534,17 +534,17 @@ Custom nexus skills (not in upstream):
 3. Mid-task communication via `sessions_send`
 4. Skip: triggers unification, smart forking
 
-### Q4: Cortex integration timeline?
+### Q4: Mnemonic integration timeline?
 
 **Dependencies:**
-- Cortex must be ready before memory removal is complete
-- Need `cortex_query` tool that provides:
+- Mnemonic must be ready before memory removal is complete
+- Need `mnemonic_query` tool that provides:
   - Text search (replaces `memory_search`)
   - Entity queries ("who is X?")
   - Relationship traversal ("who does X know?")
   - Temporal queries ("where did X work in 2024?")
 
-**Stub strategy:** Implement `cortex_query` as a no-op or basic search until Cortex is ready.
+**Stub strategy:** Implement `mnemonic_query` as a no-op or basic search until Mnemonic is ready.
 
 ### Q5: Trigger scheduler ownership?
 
@@ -573,5 +573,5 @@ Custom nexus skills (not in upstream):
 - `NEXUS_FORK_WORKPLAN.md` — Work items (consolidated into this)
 
 ### External References
-- `/Users/tyler/nexus/home/projects/cortex/docs/MEMORY_SYSTEM_SPEC.md` — Cortex memory design
+- `/Users/tyler/nexus/home/projects/cortex/docs/MEMORY_SYSTEM_SPEC.md` — Mnemonic memory design (project being renamed from "cortex" to "mnemonic")
 - `/Users/tyler/nexus/home/projects/magic-toolbox/agentkit/triggers/` — Trigger system reference

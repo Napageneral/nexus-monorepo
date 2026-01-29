@@ -16,7 +16,7 @@
 | **2. Workspace** | Init, bootstrap, structure | SPEC IN PROGRESS | `WORKSPACE_INIT_SPEC.md` |
 | **3. Agent System** | Broker, MWP, triggers, sessions | DESIGN NEEDED | See below |
 | **4. Skills** | Storage, taxonomy, hub | SPEC NEEDED | `SKILLS_TAXONOMY_SPEC.md` |
-| **5. Memory** | Remove upstream, Cortex integration | DECISION MADE | — |
+| **5. Memory** | Remove upstream, Mnemonic integration | DECISION MADE | — |
 
 ### Specs Status
 
@@ -119,7 +119,7 @@ bca132f28 INIT-1 - Add nexus init command
 **Q1: How do runs/sessions/turns relate?**
 - **Run** = Single invocation (user message → agent response)
 - **Session** = Container for multiple runs (one JSONL file)
-- **Turn** = aix/cortex terminology for a run
+- **Turn** = aix/mnemonic terminology for a run
 
 **Q2: How does forking work with JSONL?**
 
@@ -207,7 +207,7 @@ Decision: Keep upstream's structure. Subagent runs.json tracks spawn relationshi
 
 **Status:** DECISION MADE
 
-**Decision:** Remove upstream memory system entirely, replace with Cortex.
+**Decision:** Remove upstream memory system entirely, replace with Mnemonic.
 
 ### What We Remove
 
@@ -224,9 +224,9 @@ Decision: Keep upstream's structure. Subagent runs.json tracks spawn relationshi
 
 ### What Replaces It
 
-| Upstream | Cortex |
-|----------|--------|
-| `memory_search` tool | `cortex_query` tool |
+| Upstream | Mnemonic |
+|----------|----------|
+| `memory_search` tool | `mnemonic_query` tool |
 | MEMORY.md file-based | Automatic turn ingestion |
 | Per-agent isolation | Unified knowledge graph |
 | Text chunks only | Entities + relationships |
@@ -236,7 +236,7 @@ Decision: Keep upstream's structure. Subagent runs.json tracks spawn relationshi
 | Item | Description | Status |
 |------|-------------|--------|
 | 5.1 | Remove memory system from codebase | TODO |
-| 5.2 | Stub `cortex_query` tool | TODO |
+| 5.2 | Stub `mnemonic_query` tool | TODO |
 | 5.3 | Update workspace bootstrap (no memory files) | TODO |
 | 5.4 | Remove HEARTBEAT.md (→ triggers) | TODO |
 
@@ -277,7 +277,7 @@ Decision: Keep upstream's structure. Subagent runs.json tracks spawn relationshi
 - [ ] Set up project structure
 - [ ] Remove memory system from codebase
 - [ ] Update bootstrap files (no MEMORY.md, HEARTBEAT.md)
-- [ ] Stub `cortex_query` tool
+- [ ] Stub `mnemonic_query` tool
 
 ### Phase 3: Skills (Bundle 4)
 - [ ] Write `SKILLS_TAXONOMY_SPEC.md`
@@ -301,13 +301,13 @@ Decision: Keep upstream's structure. Subagent runs.json tracks spawn relationshi
 2. **`SKILLS_TAXONOMY_SPEC.md`** — Define taxonomy, hub system, no bundled skills
 
 ### Questions Resolved
-- ✅ Memory: Remove upstream, replace with Cortex
+- ✅ Memory: Remove upstream, replace with Mnemonic
 - ✅ Heartbeat: Remove from AGENTS.md, replace with triggers
 - ✅ Skills: Single location, taxonomy subdirs, hub-based packs
 
 ### Open Questions
 1. **Trigger scheduler ownership:** Part of broker or separate service?
-2. **Cortex timeline:** When is `cortex_query` ready?
+2. **Mnemonic timeline:** When is `mnemonic_query` ready?
 3. **Skills priority:** Can skills wait until after agent system?
 
 ---

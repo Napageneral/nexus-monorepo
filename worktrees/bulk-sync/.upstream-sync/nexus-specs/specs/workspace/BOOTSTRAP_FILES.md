@@ -56,7 +56,7 @@ First-run ritual template. Used during agent onboarding conversation to establis
 
 **Template:** `reference/BOOTSTRAP.md`
 
-**Note:** Memory is handled by Mnemonic, not markdown files. The BOOTSTRAP.md template does not reference MEMORY.md.
+**Note:** Memory is handled by Cortex, not markdown files. The BOOTSTRAP.md template does not reference MEMORY.md.
 
 ---
 
@@ -82,7 +82,7 @@ Agent's persona, boundaries, and behavior guidelines.
 
 **Template:** `reference/SOUL.md`
 
-**Note:** Memory is handled by Mnemonic, not markdown files. The SOUL.md template does not reference MEMORY.md.
+**Note:** Memory is handled by Cortex, not markdown files. The SOUL.md template does not reference MEMORY.md.
 
 ### User IDENTITY.md
 
@@ -193,9 +193,9 @@ Add project-specific items here as needed.
 
 **Status:** NOT USED in Nexus
 
-**Reason:** Memory is handled by Mnemonic, not markdown files.
+**Reason:** Memory is handled by Cortex, not markdown files.
 
-Upstream clawdbot uses `MEMORY.md` for agent memory. Nexus replaces this with the Mnemonic memory system. Templates (BOOTSTRAP.md, SOUL.md) do not reference MEMORY.md.
+Upstream clawdbot uses `MEMORY.md` for agent memory. Nexus replaces this with the Cortex memory system. Templates (BOOTSTRAP.md, SOUL.md) do not reference MEMORY.md.
 
 ---
 
@@ -204,7 +204,7 @@ Upstream clawdbot uses `MEMORY.md` for agent memory. Nexus replaces this with th
 | Upstream File | Nexus Status | Notes |
 |---------------|--------------|-------|
 | `TOOLS.md` | Not used | Handled via `nexus skill` CLI |
-| `MEMORY.md` | Not used | Handled by Mnemonic |
+| `MEMORY.md` | Not used | Handled by Cortex |
 | `USER.md` | Renamed | Now `state/user/IDENTITY.md` |
 | `.gitignore` | Not created | No default git init |
 

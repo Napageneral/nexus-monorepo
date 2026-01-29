@@ -25,13 +25,13 @@ This folder contains example hooks demonstrating common patterns. These examples
  */
 
 export default async function(ctx: HookContext): Promise<HookResult> {
-  const { event, mnemonic, llm, now, hook } = ctx;
+  const { event, cortex, llm, now, hook } = ctx;
   
   // 1. Fast exits for non-matching events
   if (event.channel !== 'imessage') return { fire: false };
   
-  // 2. Optional: Query mnemonic for more context
-  const history = await mnemonic.query({ ... });
+  // 2. Optional: Query cortex for more context
+  const history = await cortex.query({ ... });
   
   // 3. Optional: LLM evaluation
   const analysis = await llm.classify({ ... });
@@ -49,7 +49,7 @@ export default async function(ctx: HookContext): Promise<HookResult> {
 
 1. **Exit early** — Check cheap conditions first (channel, sender) before expensive operations
 2. **Use default LLM** — It's already optimized; only override for specific needs
-3. **Batch mnemonic queries** — One query with good filters beats multiple small queries
+3. **Batch cortex queries** — One query with good filters beats multiple small queries
 4. **Keep scripts focused** — One hook, one job; compose via multiple hooks if needed
 
 ### Testing Hooks

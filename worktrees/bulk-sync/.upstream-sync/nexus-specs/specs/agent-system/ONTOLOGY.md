@@ -356,7 +356,7 @@ function routeToPersona(personaId: string, message: Message): Turn {
 
 // Smart routing (find best thread via content matching)
 function routeSmart(message: Message): Turn {
-  const bestThread = mnemonic.findBestThread(message.content);
+  const bestThread = cortex.findBestThread(message.content);
   return routeToThread({ threadId: bestThread.id }, message);
 }
 ```
@@ -368,7 +368,7 @@ function routeSmart(message: Message): Turn {
 | **Thread** | Thread ID | Direct routing to that turn's cumulative context |
 | **Session** | Session label | Resolves to session's current thread head |
 | **Persona** | Persona ID | Resolves to persona's main session |
-| **Smart** | Just content | Mnemonic finds best matching thread |
+| **Smart** | Just content | Cortex finds best matching thread |
 
 **All resolve to thread ID.** Thread routing is the primitive.
 

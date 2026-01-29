@@ -8,15 +8,15 @@
 
 ## Executive Summary
 
-This document captures the key architectural decisions from our design session on the unified event system. The core insight: **Mnemonic becomes the universal event layer** that sits on top of the Agent Broker, providing event sourcing, normalization, storage, and hook evaluation for ALL events flowing through the system.
+This document captures the key architectural decisions from our design session on the unified event system. The core insight: **Cortex becomes the universal event layer** that sits on top of the Agent Broker, providing event sourcing, normalization, storage, and hook evaluation for ALL events flowing through the system.
 
 ---
 
-## 1. The Big Picture: Mnemonic as Event Layer
+## 1. The Big Picture: Cortex as Event Layer
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│                          MNEMONIC EVENT LAYER                                 │
+│                          CORTEX EVENT LAYER                                   │
 │                                                                               │
 │  ┌─────────────────────────────────────────────────────────────────────────┐ │
 │  │                        EVENT SOURCES (Adapters)                          │ │
@@ -52,7 +52,7 @@ This document captures the key architectural decisions from our design session o
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                            AGENT BROKER LAYER                                 │
 │                                                                               │
-│  • Context Assembly (thread history, mnemonic context, system prompt)        │
+│  • Context Assembly (thread history, cortex context, system prompt)          │
 │  • Session Management (lookup, state tracking, history)                       │
 │  • Queue Management (steer, followup, collect, debouncing)                   │
 │  • Agent Execution                                                            │
@@ -70,13 +70,13 @@ We refined terminology throughout the discussion:
 
 | Term | Definition | NOT This |
 |------|------------|----------|
-| **Event** | Any normalized message in Mnemonic (from any source) | Raw platform message |
+| **Event** | Any normalized message in Cortex (from any source) | Raw platform message |
 | **Hook** | Script that evaluates events and may fire actions | A simple rule |
-| **Adapter** | Ingests from a source, normalizes to Mnemonic events | The source itself |
+| **Adapter** | Ingests from a source, normalizes to Cortex events | The source itself |
 
 ### Everything is an Event
 
-ALL of these become Mnemonic events:
+ALL of these become Cortex events:
 - User DMs on Discord/Telegram/WhatsApp
 - iMessages and SMS
 - Emails from Gmail
@@ -113,7 +113,7 @@ Just as we have inbound adapters for event sourcing, we need outbound adapters f
 │  │  • Capture response from agent                                      │    │
 │  │  • Determine delivery target (from hook routing)                    │    │
 │  │  • Update session state (tokens, model, timestamps)                 │    │
-│  │  • Store response as Mnemonic event (closes the loop!)              │    │
+│  │  • Store response as Cortex event (closes the loop!)                │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 │       │                                                                      │
 │       ▼                                                                      │
@@ -132,7 +132,7 @@ Just as we have inbound adapters for event sourcing, we need outbound adapters f
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Key insight:** Responses also become Mnemonic events, enabling:
+**Key insight:** Responses also become Cortex events, enabling:
 - Full audit trail of all activity
 - Search/analysis of agent responses
 - Hooks that match on agent responses (meta!)
@@ -204,13 +204,13 @@ From our investigation:
 | **Telegram** | Bot API | 4000 chars, markdown, media groups |
 | **WhatsApp** | Baileys socket | PTT audio, polls, read receipts |
 
-Each provider needs both an **inbound adapter** (for Mnemonic) and an **outbound adapter** (for responses).
+Each provider needs both an **inbound adapter** (for Cortex) and an **outbound adapter** (for responses).
 
 ---
 
-## 7. Mnemonic Adapter Pattern
+## 7. Cortex Adapter Pattern
 
-From our investigation of existing Mnemonic adapters:
+From our investigation of existing Cortex adapters:
 
 ```go
 type Adapter interface {
@@ -276,10 +276,10 @@ interface Hook {
 ```typescript
 interface HookContext {
   // The event being evaluated
-  event: MnemonicEvent;
+  event: CortexEvent;
   
-  // Mnemonic access for querying history, other events
-  mnemonic: MnemonicClient;
+  // Cortex access for querying history, other events
+  cortex: CortexClient;
   
   // LLM access for intelligent evaluation
   llm: LLMClient;  // Default model: claude-sonnet-4-5 (overridable per call)
@@ -333,7 +333,7 @@ Every hook execution is logged for observability:
 interface HookInvocation {
   id: string;                  // UUID
   hook_id: string;             // FK to Hook
-  event_id: string;            // FK to Mnemonic event
+  event_id: string;            // FK to Cortex event
   
   // Timing
   started_at: number;          // Unix ms
@@ -349,7 +349,7 @@ interface HookInvocation {
   llm_tokens_in: number;       // Total input tokens
   llm_tokens_out: number;      // Total output tokens
   llm_cost_usd?: number;       // Estimated cost
-  mnemonic_queries: number;    // How many mnemonic queries
+  cortex_queries: number;      // How many cortex queries
   
   // Error tracking
   error?: string;              // Error message if failed
@@ -466,7 +466,7 @@ hooks/foo.ts  ──────────────────►  hooks t
  */
 
 export default async function(ctx: HookContext): Promise<HookResult> {
-  const { event, mnemonic, llm, now, hook } = ctx;
+  const { event, cortex, llm, now, hook } = ctx;
   
   // Your logic here
   
@@ -577,7 +577,7 @@ export default async function(ctx: HookContext): Promise<HookResult> {
 ### Flow
 
 ```
-Event arrives in Mnemonic
+Event arrives in Cortex
         │
         ▼
 Store in events table
@@ -628,11 +628,11 @@ This architecture mirrors real-time ad exchange systems:
 | Ad Exchange | Nexus Event System |
 |-------------|-------------------|
 | Bid requests from publishers | Events from adapters |
-| Request normalization | Mnemonic event normalization |
+| Request normalization | Cortex event normalization |
 | Campaign targeting rules | Hooks (scripts) |
 | Ad candidate retrieval | Context assembly |
 | Real-time bidding (RTB) | Agent invocation |
-| Ad serving + tracking | Response delivery + Mnemonic storage |
+| Ad serving + tracking | Response delivery + Cortex storage |
 | Frequency capping | Queue debouncing |
 | Budget pacing | Circuit breakers |
 
@@ -650,7 +650,7 @@ The upstream gateway is doing too much. We need to factor it into:
 - Provider management (starting/stopping platform connections)
 - Webhook HTTP endpoints
 
-### Should Move to Mnemonic Event Layer
+### Should Move to Cortex Event Layer
 - Event ingestion and normalization
 - Hook storage and evaluation
 
@@ -665,7 +665,7 @@ The upstream gateway is doing too much. We need to factor it into:
 
 ## 14. Agent Broker Layer (Brief)
 
-The Agent Broker is the execution layer below Mnemonic. Key components:
+The Agent Broker is the execution layer below Cortex. Key components:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -675,7 +675,7 @@ The Agent Broker is the execution layer below Mnemonic. Key components:
 │  │                     CONTEXT ASSEMBLY (Plugin)                           │ │
 │  │                                                                          │ │
 │  │  • Thread history retrieval                                             │ │
-│  │  • Mnemonic context injection                                           │ │
+│  │  • Cortex context injection                                             │ │
 │  │  • System prompt construction                                           │ │
 │  │  • Tool availability                                                    │ │
 │  │                                                                          │ │
@@ -702,7 +702,7 @@ The Agent Broker is the execution layer below Mnemonic. Key components:
 │  │                     RESPONSE HANDLING                                    │ │
 │  │                                                                          │ │
 │  │  • Capture agent response                                               │ │
-│  │  • Store as Mnemonic event                                              │ │
+│  │  • Store as Cortex event                                                │ │
 │  │  • Route to outbound adapter                                            │ │
 │  └─────────────────────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -764,7 +764,7 @@ Key features:
 ### To Resolve
 
 1. **Runtime environment** — Deno? Node? Bun? (Likely Bun for speed)
-2. **Mnemonic client API** — Exact query interface
+2. **Cortex client API** — Exact query interface
 3. **LLM client API** — Exact classify/extract interface
 4. **Scheduled-only hooks** — Do they need a separate timer event source?
 
@@ -774,9 +774,9 @@ Key features:
 
 | Term | Definition |
 |------|------------|
-| **Event** | Normalized message in Mnemonic (from any source) |
+| **Event** | Normalized message in Cortex (from any source) |
 | **Hook** | Script that evaluates events and may fire actions |
-| **Adapter (Inbound)** | Ingests from source, normalizes to Mnemonic events |
+| **Adapter (Inbound)** | Ingests from source, normalizes to Cortex events |
 | **Adapter (Outbound)** | Formats and delivers responses to platforms |
 | **Event Handler** | Deprecated term — use "Hook" instead |
 | **Trigger** | Deprecated term — use "Hook" instead |
@@ -804,7 +804,7 @@ Complexity ranges from simple deterministic (top) to sophisticated hybrid (botto
 
 ## 19. References
 
-- **Mnemonic:** `~/nexus/home/projects/cortex/` — Unified event schema and adapters (project being renamed from "cortex" to "mnemonic")
+- **Cortex:** `~/nexus/home/projects/cortex/` — Unified event schema and adapters
 - **OpenPoke:** `~/nexus/home/projects/openpoke-ref/` — Clean trigger implementation
 - **Magic-Toolbox:** `~/nexus/home/projects/magic-toolbox/agentkit/triggers/` — Another trigger reference
 - **Upstream Clawdbot:** `~/nexus/home/projects/nexus/worktrees/bulk-sync-ref/` — Gateway, routing, providers

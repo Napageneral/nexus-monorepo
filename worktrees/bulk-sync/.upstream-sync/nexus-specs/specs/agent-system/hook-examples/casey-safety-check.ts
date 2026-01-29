@@ -8,7 +8,7 @@
  */
 
 export default async function(ctx: HookContext): Promise<HookResult> {
-  const { event, mnemonic, llm, now, hook } = ctx;
+  const { event, cortex, llm, now, hook } = ctx;
   
   // Configuration (set when hook was created)
   const TRIGGER_TIME = new Date("2026-01-28T03:00:00-06:00");
@@ -24,10 +24,10 @@ export default async function(ctx: HookContext): Promise<HookResult> {
   }
   
   // ─────────────────────────────────────────────────────────────────────────
-  // PHASE 2: Query mnemonic for Casey's messages since hook creation
+  // PHASE 2: Query cortex for Casey's messages since hook creation
   // ─────────────────────────────────────────────────────────────────────────
   
-  const caseyMessages = await mnemonic.query({
+  const caseyMessages = await cortex.query({
     channel: ['imessage', 'sms'],
     participant: CASEY_CONTACT,
     since: hook.created_at,

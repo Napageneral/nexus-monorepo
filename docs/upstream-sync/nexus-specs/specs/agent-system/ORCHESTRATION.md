@@ -75,7 +75,7 @@ The Agent Broker is the message routing layer that enables:
 2. **Nested delegation allowed**: WAs can spawn their own sub-workers (upstream forbids this — we remove that restriction).
 3. **Bidirectional communication**: WAs can message back mid-task, not just at completion.
 4. **Unified triggers**: Cron/heartbeat/webhooks/file events all route through Agent Broker.
-5. **Session = Persistent Worker**: With smart forking (cortex), any session history constitutes a resumable worker.
+5. **Session = Persistent Worker**: With smart forking (mnemonic), any session history constitutes a resumable worker.
 
 ---
 
@@ -400,7 +400,7 @@ Agent Broker adds:
 
 Every agent session is persisted. Any persisted session can be resumed with its full context. There is no concept of "ephemeral" agents. Even a WA spawned for a single task has a persistent session that can be resumed if needed.
 
-This aligns with the cortex smart-forking model where any session history can become a resumable worker.
+This aligns with the mnemonic smart-forking model where any session history can become a resumable worker.
 
 ---
 
@@ -619,7 +619,7 @@ If upstream can fulfill this interface, we use their implementation. If not, we 
 |------|----------|-----------|
 | 2026-01-22 | Adopt "Manager-Worker Pattern" naming | MA manages + delegates, clearer than "Router" |
 | 2026-01-22 | Use "Agent Broker" (not ActiveMessageBroker) | Cleaner name |
-| 2026-01-22 | All agents persistent | No ephemeral agents, aligns with cortex |
+| 2026-01-22 | All agents persistent | No ephemeral agents, aligns with mnemonic |
 | 2026-01-22 | Allow nested spawning | Remove upstream restriction, track depth |
 | 2026-01-22 | Mid-task communication is critical | Enables status queries, clarification |
 | 2026-01-22 | Unified trigger abstraction | All triggers → broker → session |

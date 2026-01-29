@@ -7,9 +7,9 @@
 
 ## Executive Summary
 
-Upstream clawdbot uses a file-based memory system (`MEMORY.md`, `memory/*.md`) that agents must actively write to. We're **removing this entirely** and replacing with **Cortex** — an automatic knowledge capture system.
+Upstream clawdbot uses a file-based memory system (`MEMORY.md`, `memory/*.md`) that agents must actively write to. We're **removing this entirely** and replacing with **Mnemonic** — an automatic knowledge capture system.
 
-**Key Insight:** Agents shouldn't have to "remember" to write memories. Cortex captures everything automatically from conversation history.
+**Key Insight:** Agents shouldn't have to "remember" to write memories. Mnemonic captures everything automatically from conversation history.
 
 ---
 
@@ -18,8 +18,8 @@ Upstream clawdbot uses a file-based memory system (`MEMORY.md`, `memory/*.md`) t
 | Spec | Status | Description |
 |------|--------|-------------|
 | `UPSTREAM_MEMORY.md` | ✅ COMPLETE | Detailed upstream memory architecture |
-| `CORTEX_INTEGRATION.md` | TODO | How cortex_query replaces memory_search |
-| `MIGRATION.md` | TODO | Conversion from upstream memory to Cortex |
+| `MNEMONIC_INTEGRATION.md` | TODO | How mnemonic_query replaces memory_search |
+| `MIGRATION.md` | TODO | Conversion from upstream memory to Mnemonic |
 
 ---
 
@@ -117,7 +117,7 @@ memory_search("how does auth work?")
 
 ---
 
-## Decision: Remove Upstream Memory, Replace with Cortex
+## Decision: Remove Upstream Memory, Replace with Mnemonic
 
 ### What We Remove
 
@@ -133,9 +133,9 @@ memory_search("how does auth work?")
 
 ### What Replaces It
 
-| Upstream | Cortex |
-|----------|--------|
-| `memory_search` tool | `cortex_query` tool |
+| Upstream | Mnemonic |
+|----------|----------|
+| `memory_search` tool | `mnemonic_query` tool |
 | MEMORY.md file-based | Automatic turn ingestion |
 | Per-agent isolation | Unified knowledge graph |
 | Text chunks only | Entities + relationships |
@@ -144,8 +144,8 @@ memory_search("how does auth work?")
 ### Architecture Comparison
 
 ```
-UPSTREAM MEMORY                    CORTEX
-═══════════════                    ══════
+UPSTREAM MEMORY                    MNEMONIC
+═══════════════                    ════════
 
 Agent writes to                    Agent just talks
 MEMORY.md                          │
@@ -166,9 +166,9 @@ returned                           │
                                + Temporal Query
 ```
 
-### Why Cortex is Better
+### Why Mnemonic is Better
 
-| Aspect | Upstream | Cortex |
+| Aspect | Upstream | Mnemonic |
 |--------|----------|--------|
 | Agent burden | Must write to MEMORY.md | Zero — auto-captured |
 | Cross-agent | Per-agent isolation | Unified knowledge |
@@ -184,17 +184,17 @@ returned                           │
 
 ### Stub Strategy
 
-Until Cortex is ready:
-1. Implement `cortex_query` as no-op or basic search
+Until Mnemonic is ready:
+1. Implement `mnemonic_query` as no-op or basic search
 2. Remove memory system from codebase
 3. Update workspace bootstrap (no MEMORY.md)
 
 ### Integration Point
 
 ```typescript
-// Tool: cortex_query
+// Tool: mnemonic_query
 {
-  name: "cortex_query",
+  name: "mnemonic_query",
   description: "Search knowledge graph for information",
   parameters: {
     query: { type: "string", description: "Natural language query" },
@@ -207,14 +207,14 @@ Until Cortex is ready:
 
 ## Dependencies
 
-- Cortex must be ready before full integration
+- Mnemonic must be ready before full integration
 - aix adapters already support clawdbot/nexus session ingestion
 
 ---
 
-## Cortex Capabilities (for reference)
+## Mnemonic Capabilities (for reference)
 
-When complete, Cortex provides:
+When complete, Mnemonic provides:
 
 | Capability | Description |
 |------------|-------------|
@@ -225,24 +225,24 @@ When complete, Cortex provides:
 | **Contradiction handling** | Auto-invalidates stale facts |
 | **Cross-session search** | Search ALL session history |
 
-**Cortex Query Types:**
+**Mnemonic Query Types:**
 
 ```typescript
 // Text search (replaces memory_search)
-cortex_query({ query: "what did Tyler say about auth?" })
+mnemonic_query({ query: "what did Tyler say about auth?" })
 
 // Entity queries
-cortex_query({ entity: "Tyler", type: "person" })
+mnemonic_query({ entity: "Tyler", type: "person" })
 
 // Relationship traversal
-cortex_query({ subject: "Tyler", predicate: "works_at" })
+mnemonic_query({ subject: "Tyler", predicate: "works_at" })
 
 // Temporal queries
-cortex_query({ query: "Tyler's job", asOf: "2024-06-01" })
+mnemonic_query({ query: "Tyler's job", asOf: "2024-06-01" })
 ```
 
-**Separate Cortex Spec:** See `~/nexus/home/projects/cortex/docs/MEMORY_SYSTEM_SPEC.md` for full Cortex design.
+**Separate Mnemonic Spec:** See `~/nexus/home/projects/cortex/docs/MEMORY_SYSTEM_SPEC.md` for full Mnemonic design (project being renamed from "cortex" to "mnemonic").
 
 ---
 
-*See CORTEX_INTEGRATION.md for Nexus-specific integration details (to be written).*
+*See MNEMONIC_INTEGRATION.md for Nexus-specific integration details (to be written).*
