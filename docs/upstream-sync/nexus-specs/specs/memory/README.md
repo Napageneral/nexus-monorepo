@@ -7,9 +7,9 @@
 
 ## Executive Summary
 
-Upstream clawdbot uses a file-based memory system (`MEMORY.md`, `memory/*.md`) that agents must actively write to. We're **removing this entirely** and replacing with **Mnemonic** — an automatic knowledge capture system.
+Upstream clawdbot uses a file-based memory system (`MEMORY.md`, `memory/*.md`) that agents must actively write to. We're **removing this entirely** and replacing with **Ledger + Index** — an automatic knowledge capture system where the Broker writes to the Ledger (primary data) and the Index derives knowledge from it.
 
-**Key Insight:** Agents shouldn't have to "remember" to write memories. Mnemonic captures everything automatically from conversation history.
+**Key Insight:** Agents shouldn't have to "remember" to write memories. The Nexus Broker writes agent turns directly to the Agent Ledger (in `nexus.db`), and the Index layer derives knowledge from this primary data automatically.
 
 ---
 
@@ -98,7 +98,7 @@ memory_search("how does auth work?")
 |--------|--------------|-------|
 | `MEMORY.md` | ✅ Yes | Primary memory file |
 | `memory/*.md` | ✅ Yes | Memory log files |
-| Session JSONL | ⚠️ Optional | If configured |
+| Session transcripts | ⚠️ Optional | JSONL only for external harnesses |
 | Project files | ❌ No | Not indexed |
 
 ### Memory Tool (Upstream)
@@ -117,7 +117,7 @@ memory_search("how does auth work?")
 
 ---
 
-## Decision: Remove Upstream Memory, Replace with Mnemonic
+## Decision: Remove Upstream Memory, Replace with Ledger + Index
 
 ### What We Remove
 
@@ -133,50 +133,53 @@ memory_search("how does auth work?")
 
 ### What Replaces It
 
-| Upstream | Mnemonic |
-|----------|----------|
-| `memory_search` tool | `mnemonic_query` tool |
-| MEMORY.md file-based | Automatic turn ingestion |
-| Per-agent isolation | Unified knowledge graph |
-| Text chunks only | Entities + relationships |
+| Upstream | Nexus (Ledger + Index) |
+|----------|------------------------|
+| `memory_search` tool | `index_query` tool |
+| MEMORY.md file-based | Broker writes directly to Agent Ledger |
+| Per-agent isolation | Unified knowledge graph (Index) |
+| Text chunks only | Entities + relationships (derived in Index) |
 | No temporal tracking | Bi-temporal bounds |
 
 ### Architecture Comparison
 
 ```
-UPSTREAM MEMORY                    MNEMONIC
-═══════════════                    ════════
+UPSTREAM MEMORY                    NEXUS (LEDGER + INDEX)
+═══════════════                    ══════════════════════
 
 Agent writes to                    Agent just talks
 MEMORY.md                          │
     │                              ▼
-    ▼                          Automatic
-Manual file                    Turn Ingestion
+    ▼                          Broker writes to
+Manual file                    Agent Ledger (nexus.db)
 indexing                           │
     │                              ▼
-    ▼                          Entity Extraction
-BM25 + Vector                  + Relationship Graph
-Search                             │
-    │                              ▼
-    ▼                          Knowledge Graph
-Text chunks                    + Bi-temporal Facts
-returned                           │
+    ▼                          Index derives:
+BM25 + Vector                  Entity Extraction
+Search                         + Relationship Graph
+    │                              │
+    ▼                              ▼
+Text chunks                    Knowledge Graph (Index)
+returned                       + Bi-temporal Facts
+                                   │
                                    ▼
                                Graph + Vector
                                + Temporal Query
 ```
 
-### Why Mnemonic is Better
+**Note:** Session JSONL files (`~/nexus/state/sessions/`) are no longer used for Nexus-native sessions. The Broker writes directly to `nexus.db`. JSONL is only used for ingesting external harness transcripts via AIX adapters.
 
-| Aspect | Upstream | Mnemonic |
-|--------|----------|--------|
-| Agent burden | Must write to MEMORY.md | Zero — auto-captured |
-| Cross-agent | Per-agent isolation | Unified knowledge |
-| Relationships | None | Full knowledge graph |
+### Why Ledger + Index is Better
+
+| Aspect | Upstream | Ledger + Index |
+|--------|----------|----------------|
+| Agent burden | Must write to MEMORY.md | Zero — Broker captures turns |
+| Cross-agent | Per-agent isolation | Unified knowledge (Index) |
+| Relationships | None | Full knowledge graph (Index) |
 | Temporal | None | Bi-temporal bounds |
 | Contradiction | None | Auto-invalidates stale facts |
-| What's searchable | Explicit memories | All conversations |
-| Entity tracking | None | Automatic extraction |
+| What's searchable | Explicit memories | All conversations (Ledger) |
+| Entity tracking | None | Automatic extraction (Index) |
 
 ---
 
@@ -184,18 +187,18 @@ returned                           │
 
 ### Stub Strategy
 
-Until Mnemonic is ready:
-1. Implement `mnemonic_query` as no-op or basic search
+Until the Index layer is ready:
+1. Implement `index_query` as no-op or basic search
 2. Remove memory system from codebase
 3. Update workspace bootstrap (no MEMORY.md)
 
 ### Integration Point
 
 ```typescript
-// Tool: mnemonic_query
+// Tool: index_query
 {
-  name: "mnemonic_query",
-  description: "Search knowledge graph for information",
+  name: "index_query",
+  description: "Search knowledge graph for information (derived from Ledger)",
   parameters: {
     query: { type: "string", description: "Natural language query" },
     filters: { type: "object", description: "Optional filters (entity, time range)" }
@@ -207,42 +210,43 @@ Until Mnemonic is ready:
 
 ## Dependencies
 
-- Mnemonic must be ready before full integration
-- aix adapters already support clawdbot/nexus session ingestion
+- Index layer must be ready before full integration
+- Broker writes to Agent Ledger (primary data layer)
+- AIX adapters support ingesting external harness transcripts (JSONL) into Ledger
 
 ---
 
-## Mnemonic Capabilities (for reference)
+## Index Capabilities (for reference)
 
-When complete, Mnemonic provides:
+When complete, the Index layer provides (derived from Ledger data):
 
 | Capability | Description |
 |------------|-------------|
-| **Auto-capture** | All agent turns ingested automatically |
-| **Entity extraction** | People, places, projects extracted as entities |
-| **Knowledge graph** | Relationships between entities |
+| **Auto-capture** | Broker writes all agent turns to Ledger automatically |
+| **Entity extraction** | People, places, projects extracted as entities (Index) |
+| **Knowledge graph** | Relationships between entities (Index) |
 | **Bi-temporal tracking** | When facts were true + when we learned them |
 | **Contradiction handling** | Auto-invalidates stale facts |
-| **Cross-session search** | Search ALL session history |
+| **Cross-session search** | Search ALL session history (Ledger) |
 
-**Mnemonic Query Types:**
+**Index Query Types:**
 
 ```typescript
 // Text search (replaces memory_search)
-mnemonic_query({ query: "what did Tyler say about auth?" })
+index_query({ query: "what did Tyler say about auth?" })
 
 // Entity queries
-mnemonic_query({ entity: "Tyler", type: "person" })
+index_query({ entity: "Tyler", type: "person" })
 
 // Relationship traversal
-mnemonic_query({ subject: "Tyler", predicate: "works_at" })
+index_query({ subject: "Tyler", predicate: "works_at" })
 
 // Temporal queries
-mnemonic_query({ query: "Tyler's job", asOf: "2024-06-01" })
+index_query({ query: "Tyler's job", asOf: "2024-06-01" })
 ```
 
-**Separate Mnemonic Spec:** See `~/nexus/home/projects/cortex/docs/MEMORY_SYSTEM_SPEC.md` for full Mnemonic design (project being renamed from "cortex" to "mnemonic").
+**Architecture Note:** The Ledger stores primary event data (agent turns, messages). The Index is a derived layer that extracts entities, relationships, and facts from Ledger data. This separation ensures the source of truth (Ledger) remains clean while enabling rich queries via Index.
 
 ---
 
-*See MNEMONIC_INTEGRATION.md for Nexus-specific integration details (to be written).*
+*See INDEX_INTEGRATION.md for Nexus-specific integration details (to be written).*

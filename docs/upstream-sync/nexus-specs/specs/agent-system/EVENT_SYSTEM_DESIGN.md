@@ -8,15 +8,15 @@
 
 ## Executive Summary
 
-This document captures the key architectural decisions from our design session on the unified event system. The core insight: **Mnemonic becomes the universal event layer** that sits on top of the Agent Broker, providing event sourcing, normalization, storage, and hook evaluation for ALL events flowing through the system.
+This document captures the key architectural decisions from our design session on the unified event system. The core insight: **The Event Ledger becomes the universal event layer** that sits on top of the Agent Broker, providing event sourcing, normalization, storage, and hook evaluation for ALL events flowing through the system.
 
 ---
 
-## 1. The Big Picture: Mnemonic as Event Layer
+## 1. The Big Picture: Event Ledger
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│                          MNEMONIC EVENT LAYER                                 │
+│                            EVENT LEDGER                                       │
 │                                                                               │
 │  ┌─────────────────────────────────────────────────────────────────────────┐ │
 │  │                        EVENT SOURCES (Adapters)                          │ │
@@ -52,7 +52,7 @@ This document captures the key architectural decisions from our design session o
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                            AGENT BROKER LAYER                                 │
 │                                                                               │
-│  • Context Assembly (thread history, mnemonic context, system prompt)        │
+│  • Context Assembly (thread history, index context, system prompt)           │
 │  • Session Management (lookup, state tracking, history)                       │
 │  • Queue Management (steer, followup, collect, debouncing)                   │
 │  • Agent Execution                                                            │
@@ -70,13 +70,13 @@ We refined terminology throughout the discussion:
 
 | Term | Definition | NOT This |
 |------|------------|----------|
-| **Event** | Any normalized message in Mnemonic (from any source) | Raw platform message |
+| **Event** | Any normalized message in the Ledger (from any source) | Raw platform message |
 | **Hook** | Script that evaluates events and may fire actions | A simple rule |
-| **Adapter** | Ingests from a source, normalizes to Mnemonic events | The source itself |
+| **Adapter** | Ingests from a source, normalizes to Ledger events | The source itself |
 
 ### Everything is an Event
 
-ALL of these become Mnemonic events:
+ALL of these become Ledger events:
 - User DMs on Discord/Telegram/WhatsApp
 - iMessages and SMS
 - Emails from Gmail
@@ -113,7 +113,7 @@ Just as we have inbound adapters for event sourcing, we need outbound adapters f
 │  │  • Capture response from agent                                      │    │
 │  │  • Determine delivery target (from hook routing)                    │    │
 │  │  • Update session state (tokens, model, timestamps)                 │    │
-│  │  • Store response as Mnemonic event (closes the loop!)              │    │
+│  │  • Store response as Ledger event (closes the loop!)                │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 │       │                                                                      │
 │       ▼                                                                      │
@@ -132,7 +132,7 @@ Just as we have inbound adapters for event sourcing, we need outbound adapters f
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Key insight:** Responses also become Mnemonic events, enabling:
+**Key insight:** Responses also become Ledger events, enabling:
 - Full audit trail of all activity
 - Search/analysis of agent responses
 - Hooks that match on agent responses (meta!)
@@ -208,9 +208,9 @@ Each provider needs both an **inbound adapter** (for Mnemonic) and an **outbound
 
 ---
 
-## 7. Mnemonic Adapter Pattern
+## 7. Ledger Adapter Pattern
 
-From our investigation of existing Mnemonic adapters:
+From our investigation of existing Ledger adapters:
 
 ```go
 type Adapter interface {
@@ -487,7 +487,7 @@ hooks/foo.ts  ──────────────────►  hooks t
  */
 
 export default async function(ctx: HookContext): Promise<HookResult> {
-  const { event, mnemonic, llm, now, hook } = ctx;
+  const { event, llm, now, hook } = ctx;
   
   // Your logic here
   
@@ -598,7 +598,7 @@ export default async function(ctx: HookContext): Promise<HookResult> {
 ### Flow
 
 ```
-Event arrives in Mnemonic
+Event arrives in Event Ledger
         │
         ▼
 Store in events table
@@ -671,7 +671,7 @@ The upstream gateway is doing too much. We need to factor it into:
 - Provider management (starting/stopping platform connections)
 - Webhook HTTP endpoints
 
-### Should Move to Mnemonic Event Layer
+### Should Move to Event Ledger
 - Event ingestion and normalization
 - Hook storage and evaluation
 
@@ -686,7 +686,7 @@ The upstream gateway is doing too much. We need to factor it into:
 
 ## 14. Agent Broker Layer (Brief)
 
-The Agent Broker is the execution layer below Mnemonic. Key components:
+The Agent Broker is the execution layer below the Event Ledger. Key components:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -696,7 +696,7 @@ The Agent Broker is the execution layer below Mnemonic. Key components:
 │  │                     CONTEXT ASSEMBLY (Plugin)                           │ │
 │  │                                                                          │ │
 │  │  • Thread history retrieval                                             │ │
-│  │  • Mnemonic context injection                                           │ │
+│  │  • Index context injection                                              │ │
 │  │  • System prompt construction                                           │ │
 │  │  • Tool availability                                                    │ │
 │  │                                                                          │ │
@@ -801,9 +801,9 @@ Following the principle: "Every abstraction is a liability."
 
 | Term | Definition |
 |------|------------|
-| **Event** | Normalized message in Mnemonic (from any source) |
+| **Event** | Normalized message in the Ledger (from any source) |
 | **Hook** | Script that evaluates events and may fire actions |
-| **Adapter (Inbound)** | Ingests from source, normalizes to Mnemonic events |
+| **Adapter (Inbound)** | Ingests from source, normalizes to Ledger events |
 | **Adapter (Outbound)** | Formats and delivers responses to platforms |
 | **Event Handler** | Deprecated term — use "Hook" instead |
 | **Trigger** | Deprecated term — use "Hook" instead |
@@ -831,7 +831,7 @@ Complexity ranges from simple deterministic (top) to sophisticated hybrid (botto
 
 ## 19. References
 
-- **Mnemonic:** `~/nexus/home/projects/cortex/` — Unified event schema and adapters (project being renamed from "cortex" to "mnemonic")
+- **Mnemonic (historical):** `~/nexus/home/projects/cortex/` — Legacy project name, now split into Ledger (primary event storage) and Index (derived knowledge layer)
 - **OpenPoke:** `~/nexus/home/projects/openpoke-ref/` — Clean trigger implementation
 - **Magic-Toolbox:** `~/nexus/home/projects/magic-toolbox/agentkit/triggers/` — Another trigger reference
 - **Upstream Clawdbot:** `~/nexus/home/projects/nexus/worktrees/bulk-sync-ref/` — Gateway, routing, providers

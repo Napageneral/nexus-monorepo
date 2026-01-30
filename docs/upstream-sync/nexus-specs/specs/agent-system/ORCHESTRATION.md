@@ -1,8 +1,10 @@
 # Agent Orchestration Architecture Spec
 
-**Status:** DESIGN DISCUSSION  
+**Status:** SUPERSEDED  
 **Work Item:** WI-3  
 **Last Updated:** 2026-01-22
+
+> **⚠️ Deprecation Notice:** This document has been superseded by UNIFIED_ARCHITECTURE.md and EVENT_SYSTEM_DESIGN.md. The concepts here informed the final design, but readers should consult the current specs for the authoritative architecture.
 
 ---
 

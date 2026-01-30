@@ -19,11 +19,13 @@
 | `ONTOLOGY.md` | ✅ Canonical | Data model (Message, Turn, Thread, Session, Persona, Compaction) |
 | `COMPACTION.md` | ✅ New | Compaction as special turn type, context management |
 | `ROUTING_HOOKS.md` | ✅ New | Routing hooks, permission system, identity-based access control |
+| `HOOK_BROKER_INTERFACE.md` | ✅ New | Interface between Hook Evaluator and Agent Broker |
+| `HOOK_SERVICE.md` | ✅ Current | Hook registration, lifecycle, CLI commands |
 | `EVENT_SYSTEM_DESIGN.md` | ✅ Current | Event layer, hooks, adapters |
 | `SESSION_FORMAT.md` | ⚠️ Needs Revision | JSONL format — needs update for Nexus divergence from upstream |
 | `TERMINOLOGY.md` | ✅ Aligned | Canonical terminology (aligned with ONTOLOGY) |
 | `upstream/UPSTREAM_AGENT_SYSTEM.md` | ✅ Reference | Detailed upstream moltbot reference |
-| `BROKER.md` | ⚠️ Needs Update | Routing interface — needs ONTOLOGY alignment |
+| `BROKER.md` | ⚠️ Needs Update | Routing interface — needs direct ledger writes |
 | `ORCHESTRATION.md` | ⚠️ Outdated | Predates EVENT_SYSTEM_DESIGN; see UNIFIED_ARCHITECTURE |
 | `UNIFIED_TRIGGERS.md` | ❌ Superseded | Now part of EVENT_SYSTEM_DESIGN hooks |
 | `hook-examples/` | ✅ Done | Hook patterns (deterministic, LLM, scheduled, hybrid) |
@@ -37,6 +39,9 @@
 | **Data Model** | Message → Turn → Thread → Session | Git-like Merkle tree structure |
 | **Compaction** | Special turn type (`turnType: 'compaction'`) | Maintains tree structure, enables full history traversal |
 | **Events vs Agents Ledger** | Separate ledgers | External events persist forever; agent sessions subject to compaction |
+| **Broker Writes to Ledger** | Direct writes, no JSONL files | Avoids sync loops, faster than file-based approach |
+| **AIX Scope** | External harnesses only | Cursor/Codex/Claude → AIX → ledger; Nexus Broker → ledger direct |
+| **Hook → Broker Interface** | `HookResult` → `BrokerDispatch` via Event Handler | Clean translation layer |
 | **Routing Hierarchy** | Thread (bedrock) → Session → Persona | Each layer abstracts the one below |
 | **Routing Hooks** | Return `{ persona, session, permissions, deliveryContext }` | Identity-based access control |
 | **Smart Routing** | Boolean modifier on any routing level | Uses Mnemonic to find best target |
@@ -50,7 +55,7 @@
 | **All agents persistent** | Yes | No ephemeral agents |
 | **Nested spawning** | Allowed | Remove upstream restriction, track depth (default: 3) |
 | **Queue modes** | Use upstream's | steer, followup, collect, interrupt |
-| **Durability** | SQLite backing store | Survives restarts |
+| **Durability** | SQLite backing store (`nexus.db`) | Single database, survives restarts |
 
 ---
 
@@ -76,28 +81,27 @@ External Sources → Mnemonic Event Layer → Hook Evaluation → Agent Broker �
 |------|--------|-------|
 | **Compaction in ONTOLOGY** | ✅ Done | Compaction is a special turn type. See `COMPACTION.md` and updated `ONTOLOGY.md`. |
 | **Routing Hooks** | ✅ Done | Identity-based routing with permissions. See `ROUTING_HOOKS.md`. |
+| **Hook → Broker Interface** | ✅ Done | Unified HookResult schema, BrokerDispatch, Event Handler translation. See `HOOK_BROKER_INTERFACE.md`. |
+| **Events vs Agents Ledger Split** | ✅ Done | Captured in `HOOK_BROKER_INTERFACE.md` Section 7. Broker writes directly to Agent Ledger. |
 
 ### Ready for Spec Work
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Hook → Broker Interface | TODO | How routing decisions become broker calls. |
 | Response Formatting | TODO | See detailed notes below. |
 | Routing vs Hooks | TODO | Whether to split declarative routing rules from programmatic hooks. Captured in `ROUTING_HOOKS.md`. |
-| Events vs Agents Ledger Split | TODO | Broker writes directly to ledgers. Captured in discussion notes below. |
+| BROKER.md Update | TODO | Update to show direct ledger writes, remove JSONL file references. |
 
 ### Deferred
 
 | Item | Status | Notes |
 |------|--------|-------|
 | Persona Management | DEFERRED | Storage in workspace (`~/nexus/state/agents/{personaId}/`). IDENTITY.md, SOUL.md. Session isolation per persona. How WA inherits MA persona. |
-| Ledger Integration | DEFERRED | Broker writes directly to Mnemonic Agents Ledger. Schema alignment. Naming (ledgers, broker, memory system as separate components). |
-| SESSION_FORMAT.md Revision | DEFERRED | Needs update for Nexus divergence — broker writes to ledger, not files. |
+| SESSION_FORMAT.md Revision | DEFERRED | Needs update — Nexus doesn't use JSONL files, broker writes directly to ledger. May deprecate. |
 | Context Assembly Details | TODO | Event/session context injection spec |
 | Agent-to-Agent Flow | TODO | Full MA ↔ WA details |
 | Error Handling | TODO | Failures, recovery paths |
 | Smart Forking | DEFERRED | Algorithm design after core is stable |
-| BROKER.md Update | TODO | Align with ONTOLOGY routing model |
 
 ---
 
@@ -154,7 +158,7 @@ See `ROUTING_HOOKS.md` for full spec with examples:
 
 **Open question (deferred):** Whether to split declarative routing rules from programmatic hooks.
 
-### Events vs Agents Ledger Split — IN PROGRESS
+### Events vs Agents Ledger Split — RESOLVED
 
 **Upstream model:** Channel events → Session logs → Compaction → History compressed
 
@@ -166,10 +170,12 @@ See `ROUTING_HOOKS.md` for full spec with examples:
 
 **Key insight:** Separating these gives full history in Events while managing context in Agents.
 
-**Still needs spec:**
-- Broker writes directly to Agents Ledger (not files → AIX → ledger)
-- Naming: separate concerns (ledgers, broker, memory/analysis system)
-- Schema alignment between what broker writes and Mnemonic agents tables
+**Captured in:** `HOOK_BROKER_INTERFACE.md` Section 7 (Ledger Integration).
+
+**Key decisions:**
+- Broker writes directly to Agent Ledger (no JSONL files for Nexus sessions)
+- AIX only ingests from external harnesses (Cursor, Codex, Claude Code)
+- Single database `nexus.db` contains both ledgers + index
 
 ### Upstream Session Key Investigation
 

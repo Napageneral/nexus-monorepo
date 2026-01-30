@@ -641,10 +641,10 @@ The `nexus bindings create` command copies these templates to the workspace.
 |------|--------------|
 | `WORKSPACE_SYSTEM.md` | Authoritative workspace spec, defines onboarding flow |
 | `ONBOARDING.md` | Onboarding details, references binding creation |
-| `agent-bindings-research/` | Deep research folder with harness mechanisms |
-| `agent-bindings-research/04-NEXUS_BINDING_SPEC.md` | Detailed binding design |
+| `agent-bindings-research/` | Supporting research and evidence for this spec |
+| `agent-bindings-research/reference/` | Authoritative template files for each harness |
 | `specs/cli/COMMANDS.md` | CLI command reference (add bindings commands) |
 
 ---
 
-*This document specifies the agent bindings system. For implementation details, see the research folder at `agent-bindings-research/`.*
+*This is the authoritative spec for agent bindings. The `agent-bindings-research/` folder contains supporting research, design rationale, and template reference files that informed this specification.*
