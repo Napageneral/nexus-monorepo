@@ -1,62 +1,47 @@
 /**
  * @name Mom 2FA Helper
- * @description Automatically helps family members with 2FA codes
+ * @description Automatically helps mom with 2FA codes
  * @mode persistent
  * 
- * When mom or dad texts asking for help with a login code, this hook
- * fires an agent to check email and text them back the code.
+ * When mom texts asking for help with a login code, this hook
+ * fires an agent to check email and text her back the code.
  */
 
-import Database from 'better-sqlite3';
+import { Hook, HookContext, HookResult } from '../types';
 
-export default async function(ctx: HookContext): Promise<HookResult> {
-  const { event, dbPath, llm } = ctx;
+export const hook: Hook = {
+  name: 'mom-2fa-helper',
+  description: 'Automatically helps mom with 2FA codes',
+  mode: 'persistent',
   
   // ─────────────────────────────────────────────────────────────────────────
-  // PHASE 1: Fast exits (no LLM cost for non-matching events)
+  // TRIGGERS: When should this hook be invoked?
+  // The hook system checks these BEFORE calling the handler.
   // ─────────────────────────────────────────────────────────────────────────
-  
-  // Only iMessage/SMS
-  if (!['imessage', 'sms'].includes(event.channel)) {
-    return { fire: false };
-  }
-  
-  // Only incoming messages
-  if (event.direction !== 'received') {
-    return { fire: false };
-  }
-  
-  // Skip if message is too short (unlikely to be a 2FA request)
-  if (event.content.length < 10) {
-    return { fire: false };
-  }
+  triggers: {
+    // Match against ACL-resolved principal
+    principal: {
+      name: 'Mom'  // Matches ctx.principal.name from ACL resolution
+      // Could also use: relationship: 'family', entity_id: 'abc123'
+    },
+    // Match against event properties
+    event: {
+      channels: ['imessage', 'sms'],
+      direction: 'received'
+    }
+  },
   
   // ─────────────────────────────────────────────────────────────────────────
-  // PHASE 2: Check if sender is family
+  // HANDLER: Content analysis (we already know WHO sent it)
+  // Only runs if triggers matched.
   // ─────────────────────────────────────────────────────────────────────────
-  
-  const db = new Database(dbPath, { readonly: true });
-  
-  const sender = db.prepare(`
-    SELECT p.canonical_name
-    FROM event_participants ep
-    JOIN person_contact_links pcl ON pcl.contact_id = ep.contact_id
-    JOIN persons p ON p.id = pcl.person_id
-    WHERE ep.event_id = ? AND ep.role = 'sender'
-  `).get(event.id);
-  
-  db.close();
-  
-  const FAMILY = ['Mom', 'Dad'];
-  if (!sender || !FAMILY.some(f => sender.canonical_name.includes(f))) {
-    return { fire: false };
-  }
-  
-  // ─────────────────────────────────────────────────────────────────────────
-  // PHASE 3: LLM classification
-  // ─────────────────────────────────────────────────────────────────────────
-  
-  const response = await llm(`Is this message asking for help with a verification code, login code, 2FA code, or authentication code?
+  handler: async (ctx: HookContext): Promise<HookResult> => {
+    const { event, llm, principal } = ctx;
+    
+    // Principal is already resolved by ACL - we know it's mom
+    // Just analyze the CONTENT to decide if this is a 2FA request
+    
+    const response = await llm(`Is this message asking for help with a verification code, login code, 2FA code, or authentication code?
 
 Examples of YES:
 - "Can you check your email for a code?"
@@ -72,38 +57,31 @@ Examples of NO:
 Message: "${event.content}"
 
 Return JSON: {"is_2fa": true/false, "service": "service name or null", "confidence": "high/medium/low"}`, { json: true });
-  
-  const result = JSON.parse(response);
-  
-  if (!result.is_2fa) {
-    return { fire: false };
-  }
-  
-  // Low confidence? Skip to avoid false positives
-  if (result.confidence === 'low') {
-    return { fire: false };
-  }
-  
-  // ─────────────────────────────────────────────────────────────────────────
-  // PHASE 4: Fire the helper agent
-  // ─────────────────────────────────────────────────────────────────────────
-  
-  return {
-    fire: true,
-    routing: { 
-      mode: 'persona', 
-      agent_id: 'browser-agent'
-    },
-    context: {
-      prompt: `${sender.canonical_name} needs help with a 2FA code for ${result.service || 'unknown service'}.
+    
+    const result = JSON.parse(response);
+    
+    if (!result.is_2fa || result.confidence === 'low') {
+      return { fire: false };
+    }
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // FIRE: Dispatch agent with context
+    // ─────────────────────────────────────────────────────────────────────────
+    
+    return {
+      fire: true,
+      agent: 'browser-agent',
+      context: {
+        prompt: `${principal.name} needs help with a 2FA code for ${result.service || 'unknown service'}.
 
 1. Check Tyler's email for recent verification codes from ${result.service || 'the service'}
 2. Find the most recent code (usually 6 digits)
-3. Text it back to ${sender.canonical_name}
+3. Text it back to ${principal.name}
 
 Original message: "${event.content}"
 
 Be helpful and friendly. If you can't find the code, text them back and let them know.`
-    }
-  };
-}
+      }
+    };
+  }
+};

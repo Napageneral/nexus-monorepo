@@ -1,0 +1,71 @@
+# Core ACL Policies
+#
+# These are the essential policies that ship with Nexus.
+# Start restrictive, loosen as needed.
+
+policies:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # OWNER ACCESS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  - name: owner-full-access
+    description: Owner (the user) gets unrestricted access everywhere
+    
+    match:
+      principal:
+        is_user: true
+    
+    effect: allow
+    
+    permissions:
+      tools: "*"
+      credentials: "*"
+      data: full
+    
+    session:
+      persona: atlas
+      key: main  # All owner DMs collapse to main session
+    
+    priority: 100
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # BLOCKING
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  - name: block-unknown
+    description: Block messages from senders not in contacts
+    
+    match:
+      principal:
+        unknown: true
+    
+    effect: deny
+    
+    priority: 10
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # GROUP CHAT RESTRICTIONS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  - name: group-chat-restrictions
+    description: Everyone gets restricted permissions in group chats
+    
+    match:
+      conditions:
+        - peer_kind: group
+    
+    effect: allow
+    
+    permissions:
+      tools:
+        allow: [web_search, weather, read_file]
+        deny: [shell, send_email, read_messages, credentials_*]
+      credentials: []
+      data: none  # Never expose private data in groups
+    
+    session:
+      persona: atlas
+      key: "{channel}:group:{peer_id}"
+    
+    priority: 90  # High - overrides most personal rules

@@ -33,16 +33,16 @@ Nexus is a unified personal AI system. This document describes how all component
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                                  NEXUS                                       │
 │                                                                             │
-│   ┌──────────┐     ┌──────────────┐     ┌───────────────┐     ┌──────────┐ │
-│   │ ADAPTERS │────►│ EVENT LEDGER │────►│ EVENT HANDLER │────►│  BROKER  │ │
-│   │          │     │              │     │   (Hooks)     │     │          │ │
-│   │ • AIX    │     │ • events     │     │               │     │ Routes   │ │
-│   │ • iMsg   │     │ • threads    │     │ Evaluates     │     │ queues   │ │
-│   │ • Gmail  │     │ • persons    │     │ fires hooks   │     │ executes │ │
-│   │ • Discord│     │              │     │               │     │          │ │
-│   └──────────┘     └──────┬───────┘     └───────────────┘     └────┬─────┘ │
-│                           │                                        │       │
-│                           │                                        ▼       │
+│   ┌──────────┐     ┌──────────────┐     ┌───────┐     ┌───────┐ ┌────────┐ │
+│   │ ADAPTERS │────►│ EVENT LEDGER │────►│  ACL  │────►│ HOOKS │►│ BROKER │ │
+│   │          │     │              │     │       │     │       │ │        │ │
+│   │ • AIX    │     │ • events     │     │Policies│    │Scripts│ │ Routes │ │
+│   │ • iMsg   │     │ • threads    │     │ WHO?  │     │ WHAT? │ │ queues │ │
+│   │ • Gmail  │     │ • persons    │     │Grants │     │ HOW?  │ │executes│ │
+│   │ • Discord│     │              │     │       │     │       │ │        │ │
+│   └──────────┘     └──────┬───────┘     └───────┘     └───────┘ └───┬────┘ │
+│                           │                                         │      │
+│                           │                                         ▼      │
 │                           │                              ┌──────────────┐  │
 │                           │                              │ AGENT LEDGER │  │
 │                           │                              │              │  │
@@ -71,8 +71,10 @@ Nexus is a unified personal AI system. This document describes how all component
 ### 1.2 Data Flow Summary
 
 ```
-Adapters → Event Ledger → Event Handler → Broker → Agent Ledger
-                │                           ↑            │
+Adapters → Event Ledger → ACL → Hooks → Broker → Agent Ledger
+                │          │                ↑            │
+                │          │                │            │
+                │          └─ Identity resolution via persons table
                 │                           │            │
                 └───────► Index ◄───────────┴────────────┘
                         (derived)
@@ -166,24 +168,55 @@ Agent session data written directly by the Broker.
 
 **Critical design decision:** The Broker writes directly to the Agent Ledger. There are no intermediate JSONL files for Nexus agent sessions. This avoids sync loops (see Section 3).
 
-### 2.4 Event Handler (Hooks)
+### 2.4 Access Control Layer (ACL)
 
-TypeScript scripts that evaluate events and determine routing.
+Declarative policies that determine WHO can access the system, WHAT permissions they have, and WHERE messages route.
+
+**Two-layer system:**
+1. **ACL (policies)** — Declarative YAML, runs first, determines identity + permissions + session
+2. **Hooks (scripts)** — Programmatic TypeScript, runs after ACL allows, handles content-based logic
+
+```yaml
+# Example ACL policy
+- name: partner-access
+  match:
+    principal:
+      relationship: partner
+  effect: allow
+  permissions:
+    tools:
+      allow: [web_search, calendar_read]
+      deny: [shell, send_email]
+  session:
+    persona: atlas
+    key: "partner:{principal.name}"
+```
+
+**Key features:**
+- Identity resolution via ledger's `persons` table
+- Priority-based policy evaluation (deny overrides allow)
+- Dynamic permission grants with approval workflow
+- Full audit logging
+
+**See:** `specs/acl/` for full ACL specification.
+
+### 2.5 Hooks
+
+TypeScript scripts that evaluate event content and trigger actions.
 
 ```typescript
 interface HookResult {
   fire: boolean;
-  routing?: { persona?: string; session?: string; thread?: string };
   context?: { prompt?: string; extracted?: Record<string, any> };
   disable_hook?: boolean;
 }
 ```
 
-**Evaluation:** ALL enabled hooks run in parallel for each event. Multiple can fire.
+**Evaluation:** Hooks run AFTER ACL allows. All enabled hooks run in parallel.
 
 **See:** `specs/agent-system/EVENT_SYSTEM_DESIGN.md` for full hook specification.
 
-### 2.5 Broker
+### 2.6 Broker
 
 Routes messages to agents, manages session lifecycle, executes agent runs.
 
@@ -446,15 +479,25 @@ Core data model for agent conversations:
 | **specs/cli/** | ✅ Current | CLI commands and behavior |
 | **specs/skills/** | ✅ Current | Skills system |
 | **specs/credentials/** | ✅ Current | Credential system |
+| **specs/acl/** | ✅ New | Access control system (policies, grants, audit) |
 
 ### Agent System
 | Document | Status | Description |
 |----------|--------|-------------|
 | **UNIFIED_ARCHITECTURE.md** | ✅ Canonical | Agent system architecture diagram |
-| **ONTOLOGY.md** | ✅ Canonical | Data model (Message, Turn, Thread, Session) |
+| **ONTOLOGY.md** | ✅ Canonical | Data model (Message, Turn, Thread, Session, Compaction) |
+| **COMPACTION.md** | ✅ New | Compaction as special turn type |
 | **EVENT_SYSTEM_DESIGN.md** | ✅ Current | Event layer, hooks, adapters |
-| **BROKER.md** | ✅ Current | Broker routing and queue management |
+| **BROKER.md** | ⚠️ Update needed | Needs ACL dispatch interface |
 | **SESSION_FORMAT.md** | ⚠️ Update needed | Reflects direct ledger writes |
+
+### Access Control System (NEW)
+| Document | Status | Description |
+|----------|--------|-------------|
+| **ACCESS_CONTROL_SYSTEM.md** | ✅ New | Unified ACL overview |
+| **POLICIES.md** | ✅ New | Policy schema and examples |
+| **GRANTS.md** | ✅ New | Dynamic permission grants |
+| **AUDIT.md** | ✅ New | Audit logging |
 
 ### Memory/Index System
 | Document | Status | Description |

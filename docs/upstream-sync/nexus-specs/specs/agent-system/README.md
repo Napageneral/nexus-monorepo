@@ -18,17 +18,30 @@
 | **`UNIFIED_ARCHITECTURE.md`** | ✅ Canonical | **START HERE** — Unified architecture diagram, how pieces fit together |
 | `ONTOLOGY.md` | ✅ Canonical | Data model (Message, Turn, Thread, Session, Persona, Compaction) |
 | `COMPACTION.md` | ✅ New | Compaction as special turn type, context management |
-| `ROUTING_HOOKS.md` | ✅ New | Routing hooks, permission system, identity-based access control |
-| `HOOK_BROKER_INTERFACE.md` | ✅ New | Interface between Hook Evaluator and Agent Broker |
-| `HOOK_SERVICE.md` | ✅ Current | Hook registration, lifecycle, CLI commands |
 | `EVENT_SYSTEM_DESIGN.md` | ✅ Current | Event layer, hooks, adapters |
 | `SESSION_FORMAT.md` | ⚠️ Needs Revision | JSONL format — needs update for Nexus divergence from upstream |
 | `TERMINOLOGY.md` | ✅ Aligned | Canonical terminology (aligned with ONTOLOGY) |
 | `upstream/UPSTREAM_AGENT_SYSTEM.md` | ✅ Reference | Detailed upstream moltbot reference |
-| `BROKER.md` | ⚠️ Needs Update | Routing interface — needs direct ledger writes |
+| `BROKER.md` | ⚠️ Needs Update | Routing interface — needs ACL + ONTOLOGY alignment |
 | `ORCHESTRATION.md` | ⚠️ Outdated | Predates EVENT_SYSTEM_DESIGN; see UNIFIED_ARCHITECTURE |
+| `ROUTING_HOOKS.md` | ⚠️ Superseded | **Replaced by `../acl/` specs** — see note below |
 | `UNIFIED_TRIGGERS.md` | ❌ Superseded | Now part of EVENT_SYSTEM_DESIGN hooks |
 | `hook-examples/` | ✅ Done | Hook patterns (deterministic, LLM, scheduled, hybrid) |
+
+### Access Control System (NEW)
+
+The identity/permissions/routing system has been extracted to its own spec folder:
+
+**[`../acl/`](../acl/)** — Access Control Layer specs
+
+| Spec | Description |
+|------|-------------|
+| `ACCESS_CONTROL_SYSTEM.md` | Unified overview — start here |
+| `POLICIES.md` | Policy schema, examples, evaluation |
+| `GRANTS.md` | Dynamic permissions and approval workflows |
+| `AUDIT.md` | Audit logging |
+
+**Key decision:** ACL (declarative policies) runs BEFORE hooks (programmatic scripts). This separates WHO from WHAT/HOW.
 
 ---
 
@@ -39,23 +52,23 @@
 | **Data Model** | Message → Turn → Thread → Session | Git-like Merkle tree structure |
 | **Compaction** | Special turn type (`turnType: 'compaction'`) | Maintains tree structure, enables full history traversal |
 | **Events vs Agents Ledger** | Separate ledgers | External events persist forever; agent sessions subject to compaction |
-| **Broker Writes to Ledger** | Direct writes, no JSONL files | Avoids sync loops, faster than file-based approach |
-| **AIX Scope** | External harnesses only | Cursor/Codex/Claude → AIX → ledger; Nexus Broker → ledger direct |
-| **Hook → Broker Interface** | `HookResult` → `BrokerDispatch` via Event Handler | Clean translation layer |
+| **ACL vs Hooks** | Separate layers (ACL → Hooks → Broker) | WHO (declarative) vs WHAT/HOW (programmatic) |
+| **ACL Policies** | YAML, identity-based, priority-ordered | GUI-friendly, ties into ledger's people table |
+| **Permission Grants** | Dynamic, approval-based, temporary | Enables privilege escalation with owner approval |
 | **Routing Hierarchy** | Thread (bedrock) → Session → Persona | Each layer abstracts the one below |
-| **Routing Hooks** | Return `{ persona, session, permissions, deliveryContext }` | Identity-based access control |
-| **Smart Routing** | Boolean modifier on any routing level | Uses Mnemonic to find best target |
+| **Smart Routing** | Boolean modifier on any routing level | Uses Index to find best target |
 | **Turn Definition** | Query + all agent activity until response completes | Tool calls are part of turn, not separate |
 | **Session** | Thread with childless head | Active threads only; stable label → current thread head |
-| **Persona** | Identity + Permissions | Does NOT include model config (that's per-turn) |
-| **Event Layer** | Event layer sits above Broker | All events normalized, hooks evaluated, then routed to Broker |
+| **Persona** | Identity (not permissions — ACL handles that) | SOUL.md, IDENTITY.md, accounts |
+| **Event Layer** | Event layer sits above Broker | All events normalized, ACL evaluated, hooks run, then routed to Broker |
 | **Timer Events** | 60s synthetic events | Timer adapter fires for cron hook evaluation |
 | **Agent-to-Agent** | Direct through Broker | Not via Event Layer |
+| **WA Permissions** | Inherit from triggering context | Cannot exceed MA permissions |
 | **Naming** | Manager-Worker Pattern (MWP) | Clear roles |
 | **All agents persistent** | Yes | No ephemeral agents |
 | **Nested spawning** | Allowed | Remove upstream restriction, track depth (default: 3) |
 | **Queue modes** | Use upstream's | steer, followup, collect, interrupt |
-| **Durability** | SQLite backing store (`nexus.db`) | Single database, survives restarts |
+| **Durability** | SQLite backing store | Survives restarts |
 
 ---
 
@@ -80,28 +93,30 @@ External Sources → Mnemonic Event Layer → Hook Evaluation → Agent Broker �
 | Item | Status | Notes |
 |------|--------|-------|
 | **Compaction in ONTOLOGY** | ✅ Done | Compaction is a special turn type. See `COMPACTION.md` and updated `ONTOLOGY.md`. |
-| **Routing Hooks** | ✅ Done | Identity-based routing with permissions. See `ROUTING_HOOKS.md`. |
-| **Hook → Broker Interface** | ✅ Done | Unified HookResult schema, BrokerDispatch, Event Handler translation. See `HOOK_BROKER_INTERFACE.md`. |
-| **Events vs Agents Ledger Split** | ✅ Done | Captured in `HOOK_BROKER_INTERFACE.md` Section 7. Broker writes directly to Agent Ledger. |
+| **ACL vs Hooks Split** | ✅ Done | Declarative ACL policies run before programmatic hooks. See `../acl/`. |
+| **ACL System Design** | ✅ Done | Principals, policies, grants, audit. See `../acl/ACCESS_CONTROL_SYSTEM.md`. |
+| **Routing Hooks → ACL** | ✅ Superseded | `ROUTING_HOOKS.md` replaced by `../acl/POLICIES.md`. |
 
 ### Ready for Spec Work
 
 | Item | Status | Notes |
 |------|--------|-------|
+| ACL → Broker Interface | TODO | How ACL dispatch becomes broker calls (now clearer with ACL defined). |
 | Response Formatting | TODO | See detailed notes below. |
-| Routing vs Hooks | TODO | Whether to split declarative routing rules from programmatic hooks. Captured in `ROUTING_HOOKS.md`. |
-| BROKER.md Update | TODO | Update to show direct ledger writes, remove JSONL file references. |
+| Events vs Agents Ledger Split | TODO | Broker writes directly to ledgers. |
 
 ### Deferred
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Persona Management | DEFERRED | Storage in workspace (`~/nexus/state/agents/{personaId}/`). IDENTITY.md, SOUL.md. Session isolation per persona. How WA inherits MA persona. |
-| SESSION_FORMAT.md Revision | DEFERRED | Needs update — Nexus doesn't use JSONL files, broker writes directly to ledger. May deprecate. |
+| Persona Management | DEFERRED | Storage, accounts, relationship to ACL. Personas tracked like people in ledger? |
+| Ledger Integration | DEFERRED | Broker writes directly to Agents Ledger. Schema alignment. |
+| SESSION_FORMAT.md Revision | DEFERRED | Needs update for Nexus divergence. |
 | Context Assembly Details | TODO | Event/session context injection spec |
-| Agent-to-Agent Flow | TODO | Full MA ↔ WA details |
+| Agent-to-Agent Flow | TODO | Full MA ↔ WA details, permission inheritance |
 | Error Handling | TODO | Failures, recovery paths |
 | Smart Forking | DEFERRED | Algorithm design after core is stable |
+| BROKER.md Update | TODO | Align with ACL dispatch interface |
 
 ---
 
@@ -145,20 +160,27 @@ See `COMPACTION.md` for full spec. Key points:
 - Full history preserved (compaction doesn't delete, just marks context boundary)
 - Second compaction summarizes first compaction's summary (recursive)
 
-### Routing + Permissions — RESOLVED
+### Routing + Permissions — RESOLVED (ACL System)
 
-**Decision:** Routing hooks return `{ persona, session, permissions, deliveryContext }`.
+**Decision:** Split into declarative ACL policies (WHO) and programmatic hooks (WHAT/HOW).
 
-See `ROUTING_HOOKS.md` for full spec with examples:
-- Owner gets full access
-- Family members get restricted permissions (no email, no credentials)
-- Group chats isolated per group with group-level permissions
-- Unknown senders get minimal permissions
-- Can integrate with Mnemonic contacts for identity management
+See `../acl/` for full spec:
+- **ACL Layer** runs first — declarative YAML policies
+- **Hooks Layer** runs after — programmatic TypeScript scripts
+- ACL determines: principal, permissions, session
+- Hooks determine: pattern matching, actions, context enrichment
 
-**Open question (deferred):** Whether to split declarative routing rules from programmatic hooks.
+Key capabilities:
+- Owner gets full access (policy: `owner-full-access`)
+- Family members get restricted permissions (policy: `family-access`)
+- Group chats isolated with group-level permissions (policy: `group-chat-restrictions`)
+- Unknown senders blocked or minimal (policy: `block-unknown`)
+- Dynamic permission grants with owner approval (see `GRANTS.md`)
+- Full audit logging (see `AUDIT.md`)
 
-### Events vs Agents Ledger Split — RESOLVED
+**Ties into ledger:** ACL policies query `persons` table for identity resolution.
+
+### Events vs Agents Ledger Split — IN PROGRESS
 
 **Upstream model:** Channel events → Session logs → Compaction → History compressed
 
@@ -170,12 +192,10 @@ See `ROUTING_HOOKS.md` for full spec with examples:
 
 **Key insight:** Separating these gives full history in Events while managing context in Agents.
 
-**Captured in:** `HOOK_BROKER_INTERFACE.md` Section 7 (Ledger Integration).
-
-**Key decisions:**
-- Broker writes directly to Agent Ledger (no JSONL files for Nexus sessions)
-- AIX only ingests from external harnesses (Cursor, Codex, Claude Code)
-- Single database `nexus.db` contains both ledgers + index
+**Still needs spec:**
+- Broker writes directly to Agents Ledger (not files → AIX → ledger)
+- Naming: separate concerns (ledgers, broker, memory/analysis system)
+- Schema alignment between what broker writes and Mnemonic agents tables
 
 ### Upstream Session Key Investigation
 
