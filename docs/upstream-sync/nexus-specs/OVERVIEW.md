@@ -1,6 +1,6 @@
-# Nexus vs Clawdbot: Complete Feature Delta
+# Nexus vs Openclaw: Complete Feature Delta
 
-**Purpose:** Single source of truth for ALL differences between Nexus and upstream clawdbot.
+**Purpose:** Single source of truth for ALL differences between Nexus and upstream openclaw.
 
 **Last Updated:** 2026-01-22
 
@@ -24,6 +24,8 @@
 ## Lane 1: Branding
 
 **Status:** ✅ DONE (script created)
+
+**Upstream note:** Repo renamed to **openclaw** (formerly moltbot/clawdbot). Core identifiers in code still include CLAWDBOT_* in many places; the branding script normalizes openclaw/moltbot/clawdbot → nexus.
 
 **What Changes:**
 - `clawdbot` → `nexus` everywhere

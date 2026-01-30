@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# rebrand-nexus.sh - Complete moltbot/clawdbot → nexus rebrand (one-shot)
+# rebrand-nexus.sh - Complete openclaw/moltbot/clawdbot → nexus rebrand (one-shot)
 #
-# This script performs a COMPLETE rebrand of moltbot/clawdbot to nexus.
+# This script performs a COMPLETE rebrand of openclaw/moltbot/clawdbot to nexus.
 # It must handle everything automatically with zero manual intervention.
 # After running: pnpm install && pnpm build && pnpm test must pass.
 
@@ -42,7 +42,7 @@ apply_replacements() {
 }
 
 # ============================================================================
-# PHASE 1: Rename files containing clawdbot/moltbot (basenames only)
+# PHASE 1: Rename files containing openclaw/moltbot/clawdbot (basenames only)
 # ============================================================================
 echo "[Phase 1] Renaming files..."
 
@@ -67,6 +67,9 @@ rename_files "*clawdbot*" "clawdbot" "nexus"
 rename_files "*Clawdbot*" "Clawdbot" "Nexus"
 rename_files "*moltbot*" "moltbot" "nexus"
 rename_files "*Moltbot*" "Moltbot" "Nexus"
+rename_files "*openclaw*" "openclaw" "nexus"
+rename_files "*Openclaw*" "Openclaw" "Nexus"
+rename_files "*OPENCLAW*" "OPENCLAW" "NEXUS"
 
 echo "  Done renaming files"
 
@@ -80,10 +83,13 @@ list_files > "$FILE_LIST"
 
 apply_replacements "Moltbot" "Nexus" "$FILE_LIST"
 apply_replacements "Clawdbot" "Nexus" "$FILE_LIST"
+apply_replacements "Openclaw" "Nexus" "$FILE_LIST"
 apply_replacements "moltbot" "nexus" "$FILE_LIST"
 apply_replacements "clawdbot" "nexus" "$FILE_LIST"
+apply_replacements "openclaw" "nexus" "$FILE_LIST"
 apply_replacements "MOLTBOT_" "NEXUS_" "$FILE_LIST"
 apply_replacements "CLAWDBOT_" "NEXUS_" "$FILE_LIST"
+apply_replacements "OPENCLAW_" "NEXUS_" "$FILE_LIST"
 
 # Fix path strings: ~/.nexus → ~/nexus/state (including prefixes)
 apply_replacements "~/.nexus/" "~/nexus/state/" "$FILE_LIST"

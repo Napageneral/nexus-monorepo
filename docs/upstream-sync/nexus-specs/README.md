@@ -1,6 +1,6 @@
 # Nexus Fork Specifications
 
-**Purpose:** Consolidated specs for the Nexus fork of clawdbot.
+**Purpose:** Consolidated specs for the Nexus fork of openclaw (formerly moltbot/clawdbot).
 
 **Last Updated:** 2026-01-27
 
@@ -50,7 +50,7 @@ The `UNIFIED_SYSTEM.md` document explains the key integrations:
 ### For Understanding the System
 
 1. **Start here:** `specs/UNIFIED_SYSTEM.md` — how everything fits together
-2. **Then:** `OVERVIEW.md` — what makes nexus different from clawdbot
+2. **Then:** `OVERVIEW.md` — what makes nexus different from openclaw
 3. **Detailed specs:** Individual lane specs as needed
 
 ### For Implementation

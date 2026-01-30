@@ -7,7 +7,7 @@
 
 ## Overview
 
-Automated script to rebrand clawdbot → nexus. Re-run after each upstream sync.
+Automated script to rebrand **openclaw** (formerly moltbot/clawdbot) → nexus. Re-run after each upstream sync.
 
 ---
 
@@ -17,9 +17,11 @@ Automated script to rebrand clawdbot → nexus. Re-run after each upstream sync.
 
 | Original | Branded |
 |----------|---------|
-| `clawdbot` (package name) | `nexus` |
-| `clawdbot` (binary) | `nexus` |
+| `openclaw` (package name) | `nexus` |
+| `openclaw` (binary) | `nexus` |
 | Repository URLs | Updated to nexus repo |
+
+**Note:** Upstream still ships legacy clawdbot/moltbot strings; the script replaces **openclaw**, **moltbot**, and **clawdbot** identifiers.
 
 ### Environment Variables
 
@@ -32,6 +34,8 @@ Automated script to rebrand clawdbot → nexus. Re-run after each upstream sync.
 | `CLAWDBOT_OAUTH_DIR` | `NEXUS_OAUTH_DIR` | Yes |
 
 **Strategy:** NEXUS_* is primary, CLAWDBOT_* fallback for migration.
+
+**Note:** Script also normalizes OPENCLAW_* and MOLTBOT_* tokens to NEXUS_*.
 
 ### Paths
 

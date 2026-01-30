@@ -1,6 +1,6 @@
-# Fresh Fork Plan: Nexus from Moltbot
+# Fresh Fork Plan: Nexus from Openclaw
 
-**Goal:** Start fresh from moltbot HEAD, apply automated branding, graft unique nexus features.
+**Goal:** Start fresh from openclaw HEAD, apply automated branding, graft unique nexus features.
 
 **Created:** 2026-01-21  
 **Updated:** 2026-01-28 (migrated from worktrees to standalone repos)
@@ -12,7 +12,7 @@
 | Repo | Location | Purpose |
 |------|----------|---------|
 | **nexus-cli** | `~/nexus/home/projects/nexus/nexus-cli` | Your fork (downstream) |
-| **moltbot** | `~/nexus/home/projects/moltbot` | Upstream (always pull latest) |
+| **openclaw** | `~/nexus/home/projects/openclaw` | Upstream (always pull latest) |
 
 ---
 
@@ -20,7 +20,7 @@
 
 Instead of porting upstream changes INTO a diverged nexus codebase, we:
 
-1. **Fork fresh** from current moltbot HEAD
+1. **Fork fresh** from current openclaw HEAD
 2. **Apply branding** via automated, re-runnable script
 3. **Graft unique features** — the 63 nexus-specific commits
 4. **Ongoing sync** — merge upstream, re-run branding script
@@ -35,7 +35,7 @@ Instead of porting upstream changes INTO a diverged nexus codebase, we:
 |--------|-------------|
 | `61206b8ab` | First nexus commit: "T1-BASELINE - Verify all existing tests pass" |
 | `053bb76bb` | Current nexus-cli HEAD (where bundle porting started) |
-| moltbot main | Always pull latest from `~/nexus/home/projects/moltbot` |
+| openclaw main | Always pull latest from `~/nexus/home/projects/openclaw` |
 
 ### Your 63 Unique Commits
 
@@ -163,11 +163,11 @@ Create `scripts/rebrand.sh` that:
 ### Step 1: Set Up Fresh Fork
 
 ```bash
-# You already have moltbot locally
-cd ~/nexus/home/projects/moltbot
+# You already have openclaw locally
+cd ~/nexus/home/projects/openclaw
 git pull origin main  # Get latest
 
-# Create a fresh nexus branch from moltbot
+# Create a fresh nexus branch from openclaw
 git checkout -b nexus-fresh
 
 # Add your fork remote
@@ -204,8 +204,8 @@ git cherry-pick <commit>...
 cd ~/nexus/home/projects/nexus/nexus-cli
 git format-patch 61206b8ab..053bb76bb --stdout > ~/nexus/home/projects/nexus/upstream-sync/nexus-features.patch
 
-# Review and apply in moltbot
-cd ~/nexus/home/projects/moltbot
+# Review and apply in openclaw
+cd ~/nexus/home/projects/openclaw
 git apply --check ~/nexus/home/projects/nexus/upstream-sync/nexus-features.patch
 ```
 
@@ -214,7 +214,7 @@ git apply --check ~/nexus/home/projects/nexus/upstream-sync/nexus-features.patch
 ```bash
 # .github/workflows/upstream-sync.yml
 # Weekly job that:
-# 1. git fetch upstream (moltbot)
+# 1. git fetch upstream (openclaw)
 # 2. git merge upstream/main
 # 3. ./scripts/rebrand.sh
 # 4. pnpm test
@@ -250,7 +250,7 @@ git apply --check ~/nexus/home/projects/nexus/upstream-sync/nexus-features.patch
 | Repo | Location | Branch |
 |------|----------|--------|
 | **nexus-cli** | `~/nexus/home/projects/nexus/nexus-cli` | `main` @ `053bb76bb` |
-| **moltbot** | `~/nexus/home/projects/moltbot` | `main` (pull for latest) |
+| **openclaw** | `~/nexus/home/projects/openclaw` | `main` (pull for latest) |
 
 ### Key Commands
 
@@ -265,12 +265,12 @@ git log --oneline 93564e35b..e52136b2a
 # Diff your unique work vs baseline
 git diff 61206b8ab^..053bb76bb -- src/
 
-# See what moltbot looks like now
-cd ~/nexus/home/projects/moltbot
+# See what openclaw looks like now
+cd ~/nexus/home/projects/openclaw
 git log --oneline main | head -20
 
-# Compare nexus-cli to moltbot
-diff <(ls ~/nexus/home/projects/nexus/nexus-cli/src/) <(ls ~/nexus/home/projects/moltbot/src/)
+# Compare nexus-cli to openclaw
+diff <(ls ~/nexus/home/projects/nexus/nexus-cli/src/) <(ls ~/nexus/home/projects/openclaw/src/)
 ```
 
 ---
@@ -280,7 +280,7 @@ diff <(ls ~/nexus/home/projects/nexus/nexus-cli/src/) <(ls ~/nexus/home/projects
 1. [ ] **Validate this plan** — does it capture your intent?
 2. [ ] **Decide what ODU features to keep** — the 63 commits have a lot of architecture
 3. [ ] **Start branding script** — use RENAME commits as reference
-4. [ ] **Fork fresh from moltbot** when ready to execute
+4. [ ] **Fork fresh from openclaw** when ready to execute
 
 ---
 
