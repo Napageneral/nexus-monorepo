@@ -50,7 +50,7 @@ rename_files() {
   local glob="$1"
   local from="$2"
   local to="$3"
-  rg --files -g "$glob" -g "!scripts/rebrand-nexus.sh" | while IFS= read -r file; do
+  while IFS= read -r file; do
     local dir
     local base
     local newbase
@@ -60,7 +60,7 @@ rename_files() {
     if [[ "$base" != "$newbase" ]]; then
       mv "$file" "$dir/$newbase"
     fi
-  done
+  done < <(rg --files -g "$glob" -g "!scripts/rebrand-nexus.sh" || true)
 }
 
 rename_files "*clawdbot*" "clawdbot" "nexus"
@@ -72,6 +72,70 @@ rename_files "*Openclaw*" "Openclaw" "Nexus"
 rename_files "*OPENCLAW*" "OPENCLAW" "NEXUS"
 
 echo "  Done renaming files"
+
+# ============================================================================
+# PHASE 1B: Rename directories containing openclaw/moltbot/clawdbot
+# ============================================================================
+echo "[Phase 1b] Renaming directories..."
+
+node <<'NODE'
+const fs = require("fs");
+const path = require("path");
+
+const root = process.cwd();
+const skip = new Set([
+  ".git",
+  "node_modules",
+  "dist",
+  "build",
+  ".next",
+  ".turbo",
+  ".cache",
+  ".venv",
+]);
+const replacements = [
+  { from: "clawdbot", to: "nexus" },
+  { from: "Clawdbot", to: "Nexus" },
+  { from: "moltbot", to: "nexus" },
+  { from: "Moltbot", to: "Nexus" },
+  { from: "moldbot", to: "nexus" },
+  { from: "Moldbot", to: "Nexus" },
+  { from: "openclaw", to: "nexus" },
+  { from: "Openclaw", to: "Nexus" },
+  { from: "OpenClaw", to: "Nexus" },
+  { from: "OPENCLAW", to: "NEXUS" },
+];
+
+const dirs = [];
+function walk(dir) {
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (skip.has(entry.name)) continue;
+    const full = path.join(dir, entry.name);
+    walk(full);
+    dirs.push(full);
+  }
+}
+
+walk(root);
+dirs.sort((a, b) => b.length - a.length);
+
+for (const dir of dirs) {
+  const base = path.basename(dir);
+  let next = base;
+  for (const { from, to } of replacements) {
+    next = next.split(from).join(to);
+  }
+  if (next === base) continue;
+  const target = path.join(path.dirname(dir), next);
+  if (!fs.existsSync(target)) {
+    fs.renameSync(dir, target);
+  }
+}
+NODE
+
+echo "  Done renaming directories"
 
 # ============================================================================
 # PHASE 2: Global replacements (code + tests + docs)
@@ -92,16 +156,16 @@ apply_replacements "CLAWDBOT_" "NEXUS_" "$FILE_LIST"
 apply_replacements "OPENCLAW_" "NEXUS_" "$FILE_LIST"
 
 # Fix path strings: ~/.nexus → ~/nexus/state (including prefixes)
-apply_replacements "~/.nexus/" "~/nexus/state/" "$FILE_LIST"
-apply_replacements "~/.nexus" "~/nexus/state" "$FILE_LIST"
-apply_replacements "/.nexus/" "/nexus/state/" "$FILE_LIST"
-apply_replacements "/.nexus" "/nexus/state" "$FILE_LIST"
-apply_replacements "\".nexus\"" "\"nexus/state\"" "$FILE_LIST"
+apply_replacements "~/\\.nexus/" "~/nexus/state/" "$FILE_LIST"
+apply_replacements "~/\\.nexus" "~/nexus/state" "$FILE_LIST"
+apply_replacements "/\\.nexus/" "/nexus/state/" "$FILE_LIST"
+apply_replacements "/\\.nexus" "/nexus/state" "$FILE_LIST"
+apply_replacements "\"\\.nexus\"" "\"nexus/state\"" "$FILE_LIST"
 apply_replacements "'\\.nexus'" "'nexus/state'" "$FILE_LIST"
-apply_replacements "\"/.nexus\"" "\"/nexus/state\"" "$FILE_LIST"
-apply_replacements "'/.nexus'" "'/nexus/state'" "$FILE_LIST"
-apply_replacements "\"~/.nexus\"" "\"~/nexus/state\"" "$FILE_LIST"
-apply_replacements "'~/.nexus'" "'~/nexus/state'" "$FILE_LIST"
+apply_replacements "\"/\\.nexus\"" "\"/nexus/state\"" "$FILE_LIST"
+apply_replacements "'/\\.nexus'" "'/nexus/state'" "$FILE_LIST"
+apply_replacements "\"~/\\.nexus\"" "\"~/nexus/state\"" "$FILE_LIST"
+apply_replacements "'~/\\.nexus'" "'~/nexus/state'" "$FILE_LIST"
 
 rm -f "$FILE_LIST"
 echo "  Done with global replacements"
@@ -197,7 +261,7 @@ if (fs.existsSync(nixConfigTest)) {
     "expect(STATE_DIR).toMatch(/nexus[\\\\/]state$/);",
   );
   data = data.replace(
-    "expect(CONFIG_PATH).toMatch(/\\.nexus[\\\\/nexus/state\\.json$/);",
+    "expect(CONFIG_PATH).toMatch(/\\.nexus[\\\\/]nexus\\.json$/);",
     "expect(CONFIG_PATH).toMatch(/nexus[\\\\/]state[\\\\/]nexus\\.json$/);",
   );
   data = data.replace(
@@ -254,20 +318,136 @@ if (fs.existsSync(stateMigrations)) {
 const legacyNamesPath = "src/compat/legacy-names.ts";
 if (fs.existsSync(legacyNamesPath)) {
   const content = [
-    'export const LEGACY_PROJECT_NAME = "moltbot" as const;',
+    'export const PROJECT_NAME = "nexus" as const;',
     "",
-    "export const LEGACY_MANIFEST_KEY = LEGACY_PROJECT_NAME;",
+    'export const LEGACY_PROJECT_NAMES = ["openclaw", "clawdbot", "moltbot", "moldbot"] as const;',
     "",
-    "export const LEGACY_PLUGIN_MANIFEST_FILENAME = `${LEGACY_PROJECT_NAME}.plugin.json` as const;",
+    "export const MANIFEST_KEY = PROJECT_NAME;",
     "",
-    "export const LEGACY_CANVAS_HANDLER_NAME = `${LEGACY_PROJECT_NAME}CanvasA2UIAction` as const;",
+    "export const LEGACY_MANIFEST_KEYS = LEGACY_PROJECT_NAMES;",
     "",
-    'export const LEGACY_MACOS_APP_SOURCES_DIR = "apps/macos/Sources/Moltbot" as const;',
+    'export const LEGACY_PLUGIN_MANIFEST_FILENAMES = ["openclaw.plugin.json", "clawdbot.plugin.json", "moltbot.plugin.json", "moldbot.plugin.json"] as const;',
+    "",
+    'export const LEGACY_CANVAS_HANDLER_NAMES = ["openclawCanvasA2UIAction", "clawdbotCanvasA2UIAction", "moltbotCanvasA2UIAction", "moldbotCanvasA2UIAction"] as const;',
     "",
     'export const MACOS_APP_SOURCES_DIR = "apps/macos/Sources/Nexus" as const;',
     "",
+    'export const LEGACY_MACOS_APP_SOURCES_DIRS = ["apps/macos/Sources/OpenClaw", "apps/macos/Sources/Clawdbot", "apps/macos/Sources/Moltbot", "apps/macos/Sources/Moldbot"] as const;',
+    "",
   ].join("\n");
   fs.writeFileSync(legacyNamesPath, content);
+}
+
+const mentionsPath = "src/auto-reply/reply/mentions.ts";
+if (fs.existsSync(mentionsPath)) {
+  let data = fs.readFileSync(mentionsPath, "utf8");
+  data = data.replace(
+    /export function normalizeMentionText\([\s\S]*?\n}\n/,
+    [
+      "export function normalizeMentionText(text: string): string {",
+      "  const cleaned = (text ?? \"\")",
+      "    .replace(/[\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u206f]/g, \"\")",
+      "    .toLowerCase();",
+      "  return cleaned.replace(/\\b(openclaw|clawdbot|moltbot|moldbot)\\b/g, \"nexus\");",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  fs.writeFileSync(mentionsPath, data);
+}
+
+const discordAllowListPath = "src/discord/monitor/allow-list.ts";
+if (fs.existsSync(discordAllowListPath)) {
+  let data = fs.readFileSync(discordAllowListPath, "utf8");
+  data = data.replace(
+    /export function normalizeDiscordSlug\([\s\S]*?\n}\n/,
+    [
+      "export function normalizeDiscordSlug(value: string) {",
+      "  return value",
+      "    .trim()",
+      "    .toLowerCase()",
+      "    .replace(/\\b(openclaw|clawdbot|moltbot|moldbot)\\b/g, \"nexus\")",
+      "    .replace(/^#/, \"\")",
+      "    .replace(/[^a-z0-9]+/g, \"-\")",
+      "    .replace(/^-+|-+$/g, \"\");",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  fs.writeFileSync(discordAllowListPath, data);
+}
+
+const doctorNotesPath = "src/commands/doctor-platform-notes.ts";
+if (fs.existsSync(doctorNotesPath)) {
+  let data = fs.readFileSync(doctorNotesPath, "utf8");
+  data = data.replace(
+    /const deprecatedLaunchctlEntries = \[[\s\S]*?\]\.filter\(\(entry\): entry is \[string, string\] => Boolean\(entry\[1\]\?\.trim\(\)\)\);\n/,
+    [
+      "const deprecatedLaunchctlEntries = [",
+      "  [\"OPENCLAW_GATEWAY_TOKEN\", await getenv(\"OPENCLAW_GATEWAY_TOKEN\")],",
+      "  [\"OPENCLAW_GATEWAY_PASSWORD\", await getenv(\"OPENCLAW_GATEWAY_PASSWORD\")],",
+      "  [\"MOLTBOT_GATEWAY_TOKEN\", await getenv(\"MOLTBOT_GATEWAY_TOKEN\")],",
+      "  [\"MOLTBOT_GATEWAY_PASSWORD\", await getenv(\"MOLTBOT_GATEWAY_PASSWORD\")],",
+      "  [\"CLAWDBOT_GATEWAY_TOKEN\", await getenv(\"CLAWDBOT_GATEWAY_TOKEN\")],",
+      "  [\"CLAWDBOT_GATEWAY_PASSWORD\", await getenv(\"CLAWDBOT_GATEWAY_PASSWORD\")],",
+      "].filter((entry): entry is [string, string] => Boolean(entry[1]?.trim()));",
+      "",
+    ].join("\n"),
+  );
+  data = data.replace(
+    /key\.startsWith\("NEXUS_"\) \|\| key\.startsWith\("NEXUS_"\)/,
+    'key.startsWith("OPENCLAW_") || key.startsWith("MOLTBOT_") || key.startsWith("CLAWDBOT_")',
+  );
+  fs.writeFileSync(doctorNotesPath, data);
+}
+
+const browserProfileTest = "src/browser/server.post-tabs-open-profile-unknown-returns-404.test.ts";
+if (fs.existsSync(browserProfileTest)) {
+  let data = fs.readFileSync(browserProfileTest, "utf8");
+  data = data.replace(
+    "/nexus/state/state is the default profile",
+    "// nexus is the default profile",
+  );
+  fs.writeFileSync(browserProfileTest, data);
+}
+
+if (fs.existsSync(nixConfigTest)) {
+  let data = fs.readFileSync(nixConfigTest, "utf8");
+  data = data.replace(
+    "expect(CONFIG_PATH).toMatch(/nexus[\\\\/]state[\\\\/nexus/state\\.json$/);",
+    "expect(CONFIG_PATH).toMatch(/nexus[\\\\/]state[\\\\/]nexus\\.json$/);",
+  );
+  fs.writeFileSync(nixConfigTest, data);
+}
+
+const slackMonitorTest = "src/slack/monitor.test.ts";
+if (fs.existsSync(slackMonitorTest)) {
+  let data = fs.readFileSync(slackMonitorTest, "utf8");
+  data = data.replace(
+    "expect(matcher.test(\"nexus/state\")).toBe(true);",
+    "expect(matcher.test(\"/nexus\")).toBe(true);",
+  );
+  fs.writeFileSync(slackMonitorTest, data);
+}
+
+const imessageMonitorTest = "src/imessage/monitor.skips-group-messages-without-mention-by-default.test.ts";
+if (fs.existsSync(imessageMonitorTest)) {
+  let data = fs.readFileSync(imessageMonitorTest, "utf8");
+  data = data.replace(
+    "mentionPatterns: [\"nexus/state\"]",
+    "mentionPatterns: [\"@nexus\"]",
+  );
+  fs.writeFileSync(imessageMonitorTest, data);
+}
+
+const doctorPlatformNotesTest = "src/commands/doctor-platform-notes.launchctl-env-overrides.test.ts";
+if (fs.existsSync(doctorPlatformNotesTest)) {
+  let data = fs.readFileSync(doctorPlatformNotesTest, "utf8");
+  data = data.replace(
+    "expect(getenv).toHaveBeenCalledTimes(6);",
+    "expect(getenv).toHaveBeenCalledTimes(8);",
+  );
+  fs.writeFileSync(doctorPlatformNotesTest, data);
 }
 NODE
 
@@ -326,10 +506,16 @@ if (fs.existsSync(path)) {
     /A2UI_APP_DIR="[^"]*"\n/,
     [
       'A2UI_APP_DIR="$ROOT_DIR/apps/shared/NexusKit/Tools/CanvasA2UI"',
-      'LEGACY_A2UI_APP_DIR="$ROOT_DIR/apps/shared/MoltbotKit/Tools/CanvasA2UI"',
-      'if [[ ! -d "$A2UI_APP_DIR" && -d "$LEGACY_A2UI_APP_DIR" ]]; then',
-      '  A2UI_APP_DIR="$LEGACY_A2UI_APP_DIR"',
-      'fi',
+      'LEGACY_A2UI_APP_DIRS=(',
+      '  "$ROOT_DIR/apps/shared/OpenClawKit/Tools/CanvasA2UI"',
+      '  "$ROOT_DIR/apps/shared/ClawdbotKit/Tools/CanvasA2UI"',
+      '  "$ROOT_DIR/apps/shared/MoltbotKit/Tools/CanvasA2UI"',
+      ')',
+      'for LEGACY_A2UI_APP_DIR in "${LEGACY_A2UI_APP_DIRS[@]}"; do',
+      '  if [[ ! -d "$A2UI_APP_DIR" && -d "$LEGACY_A2UI_APP_DIR" ]]; then',
+      '    A2UI_APP_DIR="$LEGACY_A2UI_APP_DIR"',
+      '  fi',
+      'done',
       "",
     ].join("\n"),
   );
@@ -432,31 +618,30 @@ cat > src/config/paths.ts << 'PATHS_EOF'
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { NexusConfig } from "./types.js";
+import type { OpenClawConfig } from "./types.js";
 
 export function resolveIsNixMode(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.NEXUS_NIX_MODE === "1" || env.MOLTBOT_NIX_MODE === "1" || env.CLAWDBOT_NIX_MODE === "1";
+  return (
+    env.NEXUS_NIX_MODE === "1" ||
+    env.OPENCLAW_NIX_MODE === "1" ||
+    env.MOLTBOT_NIX_MODE === "1" ||
+    env.CLAWDBOT_NIX_MODE === "1"
+  );
 }
 
 export const isNixMode = resolveIsNixMode();
 
+const LEGACY_STATE_DIRNAMES = [".openclaw", ".clawdbot", ".moltbot", ".moldbot"] as const;
 const NEW_STATE_DIRNAME = "nexus/state";
-const LEGACY_MOLTBOT_DIRNAME = ".moltbot";
-const LEGACY_CLAWDBOT_DIRNAME = ".clawdbot";
 const CONFIG_FILENAME = "nexus.json";
-const LEGACY_MOLTBOT_CONFIG = "moltbot.json";
-const LEGACY_CLAWDBOT_CONFIG = "clawdbot.json";
+const LEGACY_CONFIG_FILENAMES = ["openclaw.json", "clawdbot.json", "moltbot.json", "moldbot.json"] as const;
+
+function legacyStateDirs(homedir: () => string = os.homedir): string[] {
+  return LEGACY_STATE_DIRNAMES.map((dir) => path.join(homedir(), dir));
+}
 
 function newStateDir(homedir: () => string = os.homedir): string {
   return path.join(homedir(), NEW_STATE_DIRNAME);
-}
-
-function legacyMoltbotDir(homedir: () => string = os.homedir): string {
-  return path.join(homedir(), LEGACY_MOLTBOT_DIRNAME);
-}
-
-function legacyClawdbotDir(homedir: () => string = os.homedir): string {
-  return path.join(homedir(), LEGACY_CLAWDBOT_DIRNAME);
 }
 
 export function resolveNewStateDir(homedir: () => string = os.homedir): string {
@@ -464,7 +649,11 @@ export function resolveNewStateDir(homedir: () => string = os.homedir): string {
 }
 
 export function resolveLegacyStateDir(homedir: () => string = os.homedir): string {
-  return legacyMoltbotDir(homedir);
+  return legacyStateDirs(homedir)[0] ?? newStateDir(homedir);
+}
+
+export function resolveLegacyStateDirs(homedir: () => string = os.homedir): string[] {
+  return legacyStateDirs(homedir);
 }
 
 function resolveUserPath(input: string): string {
@@ -482,16 +671,24 @@ export function resolveStateDir(
   homedir: () => string = os.homedir,
 ): string {
   const override =
-    env.NEXUS_STATE_DIR?.trim() || env.MOLTBOT_STATE_DIR?.trim() || env.CLAWDBOT_STATE_DIR?.trim();
+    env.NEXUS_STATE_DIR?.trim() ||
+    env.OPENCLAW_STATE_DIR?.trim() ||
+    env.CLAWDBOT_STATE_DIR?.trim() ||
+    env.MOLTBOT_STATE_DIR?.trim();
   if (override) return resolveUserPath(override);
 
   const nexusDir = newStateDir(homedir);
-  const moltbotDir = legacyMoltbotDir(homedir);
-  const clawdbotDir = legacyClawdbotDir(homedir);
+  const legacyDirs = legacyStateDirs(homedir);
 
   if (fs.existsSync(nexusDir)) return nexusDir;
-  if (fs.existsSync(moltbotDir)) return moltbotDir;
-  if (fs.existsSync(clawdbotDir)) return clawdbotDir;
+  const existingLegacy = legacyDirs.find((dir) => {
+    try {
+      return fs.existsSync(dir);
+    } catch {
+      return false;
+    }
+  });
+  if (existingLegacy) return existingLegacy;
 
   return nexusDir;
 }
@@ -504,8 +701,9 @@ export function resolveCanonicalConfigPath(
 ): string {
   const override =
     env.NEXUS_CONFIG_PATH?.trim() ||
-    env.MOLTBOT_CONFIG_PATH?.trim() ||
-    env.CLAWDBOT_CONFIG_PATH?.trim();
+    env.OPENCLAW_CONFIG_PATH?.trim() ||
+    env.CLAWDBOT_CONFIG_PATH?.trim() ||
+    env.MOLTBOT_CONFIG_PATH?.trim();
   if (override) return resolveUserPath(override);
   return path.join(stateDir, CONFIG_FILENAME);
 }
@@ -533,16 +731,19 @@ export function resolveConfigPath(
 ): string {
   const override =
     env.NEXUS_CONFIG_PATH?.trim() ||
-    env.MOLTBOT_CONFIG_PATH?.trim() ||
-    env.CLAWDBOT_CONFIG_PATH?.trim();
+    env.OPENCLAW_CONFIG_PATH?.trim() ||
+    env.CLAWDBOT_CONFIG_PATH?.trim() ||
+    env.MOLTBOT_CONFIG_PATH?.trim();
   if (override) return resolveUserPath(override);
 
   const stateOverride =
-    env.NEXUS_STATE_DIR?.trim() || env.MOLTBOT_STATE_DIR?.trim() || env.CLAWDBOT_STATE_DIR?.trim();
+    env.NEXUS_STATE_DIR?.trim() ||
+    env.OPENCLAW_STATE_DIR?.trim() ||
+    env.CLAWDBOT_STATE_DIR?.trim() ||
+    env.MOLTBOT_STATE_DIR?.trim();
   const candidates = [
     path.join(stateDir, CONFIG_FILENAME),
-    path.join(stateDir, LEGACY_MOLTBOT_CONFIG),
-    path.join(stateDir, LEGACY_CLAWDBOT_CONFIG),
+    ...LEGACY_CONFIG_FILENAMES.map((name) => path.join(stateDir, name)),
   ];
   const existing = candidates.find((c) => {
     try {
@@ -568,25 +769,26 @@ export function resolveDefaultConfigCandidates(
 ): string[] {
   const explicit =
     env.NEXUS_CONFIG_PATH?.trim() ||
-    env.MOLTBOT_CONFIG_PATH?.trim() ||
-    env.CLAWDBOT_CONFIG_PATH?.trim();
+    env.OPENCLAW_CONFIG_PATH?.trim() ||
+    env.CLAWDBOT_CONFIG_PATH?.trim() ||
+    env.MOLTBOT_CONFIG_PATH?.trim();
   if (explicit) return [resolveUserPath(explicit)];
 
   const candidates: string[] = [];
-  for (const envKey of ["NEXUS_STATE_DIR", "MOLTBOT_STATE_DIR", "CLAWDBOT_STATE_DIR"]) {
-    const override = env[envKey]?.trim();
-    if (override) {
-      const dir = resolveUserPath(override);
-      candidates.push(path.join(dir, CONFIG_FILENAME));
-      candidates.push(path.join(dir, LEGACY_MOLTBOT_CONFIG));
-      candidates.push(path.join(dir, LEGACY_CLAWDBOT_CONFIG));
-    }
+  const stateOverride =
+    env.NEXUS_STATE_DIR?.trim() ||
+    env.OPENCLAW_STATE_DIR?.trim() ||
+    env.CLAWDBOT_STATE_DIR?.trim() ||
+    env.MOLTBOT_STATE_DIR?.trim();
+  if (stateOverride) {
+    const dir = resolveUserPath(stateOverride);
+    candidates.push(path.join(dir, CONFIG_FILENAME));
+    candidates.push(...LEGACY_CONFIG_FILENAMES.map((name) => path.join(dir, name)));
   }
 
-  for (const dir of [newStateDir(homedir), legacyMoltbotDir(homedir), legacyClawdbotDir(homedir)]) {
+  for (const dir of [newStateDir(homedir), ...legacyStateDirs(homedir)]) {
     candidates.push(path.join(dir, CONFIG_FILENAME));
-    candidates.push(path.join(dir, LEGACY_MOLTBOT_CONFIG));
-    candidates.push(path.join(dir, LEGACY_CLAWDBOT_CONFIG));
+    candidates.push(...LEGACY_CONFIG_FILENAMES.map((name) => path.join(dir, name)));
   }
 
   return candidates;
@@ -609,8 +811,9 @@ export function resolveOAuthDir(
 ): string {
   const override =
     env.NEXUS_OAUTH_DIR?.trim() ||
-    env.MOLTBOT_OAUTH_DIR?.trim() ||
-    env.CLAWDBOT_OAUTH_DIR?.trim();
+    env.OPENCLAW_OAUTH_DIR?.trim() ||
+    env.CLAWDBOT_OAUTH_DIR?.trim() ||
+    env.MOLTBOT_OAUTH_DIR?.trim();
   if (override) return resolveUserPath(override);
   return path.join(stateDir, "credentials");
 }
@@ -623,13 +826,14 @@ export function resolveOAuthPath(
 }
 
 export function resolveGatewayPort(
-  cfg?: NexusConfig,
+  cfg?: OpenClawConfig,
   env: NodeJS.ProcessEnv = process.env,
 ): number {
   const envRaw =
     env.NEXUS_GATEWAY_PORT?.trim() ||
-    env.MOLTBOT_GATEWAY_PORT?.trim() ||
-    env.CLAWDBOT_GATEWAY_PORT?.trim();
+    env.OPENCLAW_GATEWAY_PORT?.trim() ||
+    env.CLAWDBOT_GATEWAY_PORT?.trim() ||
+    env.MOLTBOT_GATEWAY_PORT?.trim();
   if (envRaw) {
     const parsed = Number.parseInt(envRaw, 10);
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
