@@ -1,36 +1,282 @@
 # Unified System Specification
 
-**Status:** SPEC IN PROGRESS  
-**Last Updated:** 2026-01-27
+**Status:** CANONICAL REFERENCE  
+**Last Updated:** 2026-01-29
 
 ---
 
 ## Overview
 
-This document describes how the core Nexus systems integrate into a unified whole. It serves as the conceptual guide that ties together:
+Nexus is a unified personal AI system. This document describes how all components integrate into a coherent whole.
 
-- **CLI** — Agent orientation and capability discovery
-- **Credentials** — Secure secret storage with consumer-centric access control
-- **Skills** — Capability providers with dependency declarations
-- **Workspace** — File structure and identity management
+**Core Components:**
 
-**Core Philosophy:**
-
-| System | Upstream (Clawdbot) | Nexus |
-|--------|---------------------|-------|
-| **Primary focus** | Gateway-first | CLI and workspace-first |
-| **Agent independence** | Requires gateway | Gateway is optional addon |
-| **Configuration** | Single config file | Structured state directory |
-| **Credentials** | Raw secrets in JSON | Pointers to secure backends |
-| **Status tracking** | Per-skill | Unified cascade (credential → skill → capability) |
+| Component | Purpose |
+|-----------|---------|
+| **Workspace** | File structure, identity, configuration (`~/nexus/`) |
+| **Adapters** | Normalize external data into the Event Ledger |
+| **Ledgers** | Primary data stores (Event Ledger, Agent Ledger) |
+| **Event Handler** | Evaluates hooks against events, fires to Broker |
+| **Broker** | Routes messages, manages sessions, executes agents |
+| **Index** | Derived layer (episodes, facets, embeddings, search) |
+| **CLI** | Agent orientation and capability discovery |
+| **Skills** | Capability providers with dependency declarations |
+| **Credentials** | Secure secret storage with consumer-centric access |
 
 ---
 
-## 1. Service Name as Universal Linking Key
+## 1. System Architecture
 
-**The most important unification point.**
+### 1.1 Component Flow
 
-The **service name** is the primary key that links credentials, skills, and capabilities:
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                  NEXUS                                       │
+│                                                                             │
+│   ┌──────────┐     ┌──────────────┐     ┌───────────────┐     ┌──────────┐ │
+│   │ ADAPTERS │────►│ EVENT LEDGER │────►│ EVENT HANDLER │────►│  BROKER  │ │
+│   │          │     │              │     │   (Hooks)     │     │          │ │
+│   │ • AIX    │     │ • events     │     │               │     │ Routes   │ │
+│   │ • iMsg   │     │ • threads    │     │ Evaluates     │     │ queues   │ │
+│   │ • Gmail  │     │ • persons    │     │ fires hooks   │     │ executes │ │
+│   │ • Discord│     │              │     │               │     │          │ │
+│   └──────────┘     └──────┬───────┘     └───────────────┘     └────┬─────┘ │
+│                           │                                        │       │
+│                           │                                        ▼       │
+│                           │                              ┌──────────────┐  │
+│                           │                              │ AGENT LEDGER │  │
+│                           │                              │              │  │
+│                           │                              │ • sessions   │  │
+│                           │                              │ • turns      │  │
+│                           │                              │ • messages   │  │
+│                           │                              │ • tool_calls │  │
+│                           │                              └──────┬───────┘  │
+│                           │                                     │          │
+│                           │         ┌───────────────────────────┘          │
+│                           │         │                                      │
+│                           ▼         ▼                                      │
+│                     ┌─────────────────────┐                                │
+│                     │        INDEX        │                                │
+│                     │      (derived)      │                                │
+│                     │                     │                                │
+│                     │ • episodes          │◄──── Broker reads for          │
+│                     │ • facets            │      context & smart forking   │
+│                     │ • embeddings        │                                │
+│                     │ • search            │                                │
+│                     └─────────────────────┘                                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 1.2 Data Flow Summary
+
+```
+Adapters → Event Ledger → Event Handler → Broker → Agent Ledger
+                │                           ↑            │
+                │                           │            │
+                └───────► Index ◄───────────┴────────────┘
+                        (derived)
+```
+
+1. **Adapters** normalize external data → **Event Ledger**
+2. **Event Ledger** triggers **Event Handler** (hooks evaluation)
+3. **Event Handler** evaluates hooks, potentially reading from Event Ledger + Index
+4. Fired hooks route to **Broker** with routing instructions
+5. **Broker** manages session lifecycle, reads/writes **Agent Ledger**
+6. **Broker** reads from **Index** for context enrichment / smart forking
+7. **Index** continuously processes both ledgers → episodes → facets → embeddings
+
+### 1.3 Two-Layer Data Model
+
+| Layer | Purpose | Contents |
+|-------|---------|----------|
+| **Ledgers** (Layer 1) | Primary data, source of truth | Raw events, agent sessions/turns/messages |
+| **Index** (Layer 2) | Derived data, computed for access | Episodes, facets, embeddings, search |
+
+**Key insight:** Ledgers store what happened. Index makes it useful.
+
+---
+
+## 2. Component Definitions
+
+### 2.1 Workspace
+
+The `~/nexus/` directory structure containing all Nexus state and configuration.
+
+```
+~/nexus/
+├── AGENTS.md                 # System behavior (canonical)
+├── skills/                   # Skill definitions
+├── state/                    # Runtime state
+│   ├── nexus.db              # Unified database (ledgers + index)
+│   ├── user/IDENTITY.md      # User profile
+│   ├── agents/{name}/        # Agent identities
+│   ├── credentials/          # Credential pointers
+│   ├── hooks/                # Hook scripts (*.ts)
+│   └── skills/manifest.json  # Skill state
+└── home/                     # User's personal space
+```
+
+**Design decision:** Visible `state/` directory (not hidden) for transparency.
+
+### 2.2 Adapters
+
+Adapters normalize data from external sources into the Event Ledger.
+
+| Adapter | Source | Event ID Format |
+|---------|--------|-----------------|
+| `aix` | External AI harnesses (Cursor, Codex, Claude Code) | `aix:{session_id}:{message_id}` |
+| `imessage` | iMessage database | `imessage:{guid}` |
+| `gmail` | Gmail API | `gmail:{message_id}` |
+| `discord` | Discord WebSocket | `discord:{message_id}` |
+| `telegram` | Telegram Bot API | `telegram:{message_id}` |
+| `whatsapp` | Baileys WebSocket | `whatsapp:{message_id}` |
+| `timer` | Scheduled events | `timer:{timestamp}` |
+| `webhook` | HTTP webhooks | `webhook:{request_id}` |
+
+**Key pattern:** Deterministic event IDs enable idempotent sync.
+
+### 2.3 Ledgers
+
+Two ledgers store primary data in `nexus.db`:
+
+#### Event Ledger
+
+Normalized events from all external sources.
+
+| Table | Purpose |
+|-------|---------|
+| `events` | All normalized events (messages, emails, etc.) |
+| `threads` | Event groupings (conversations, email threads) |
+| `persons` | Contact/person entities |
+| `event_participants` | Event ↔ person links |
+| `event_state` | Per-event lifecycle state |
+| `event_tags` | Event ↔ tag associations |
+
+#### Agent Ledger
+
+Agent session data written directly by the Broker.
+
+| Table | Purpose |
+|-------|---------|
+| `agent_sessions` | Conversation containers with session pointers |
+| `agent_turns` | Query + response exchanges (tree structure) |
+| `agent_messages` | Individual messages within turns |
+| `agent_tool_calls` | Tool invocations with params/results |
+
+**Critical design decision:** The Broker writes directly to the Agent Ledger. There are no intermediate JSONL files for Nexus agent sessions. This avoids sync loops (see Section 3).
+
+### 2.4 Event Handler (Hooks)
+
+TypeScript scripts that evaluate events and determine routing.
+
+```typescript
+interface HookResult {
+  fire: boolean;
+  routing?: { persona?: string; session?: string; thread?: string };
+  context?: { prompt?: string; extracted?: Record<string, any> };
+  disable_hook?: boolean;
+}
+```
+
+**Evaluation:** ALL enabled hooks run in parallel for each event. Multiple can fire.
+
+**See:** `specs/agent-system/EVENT_SYSTEM_DESIGN.md` for full hook specification.
+
+### 2.5 Broker
+
+Routes messages to agents, manages session lifecycle, executes agent runs.
+
+**Responsibilities:**
+- Message routing (persona → session → thread resolution)
+- Queue management (steer, followup, collect, interrupt modes)
+- Session pointer management (prevent stale routing)
+- Agent execution (pi-agent invocation)
+- Direct writes to Agent Ledger
+
+**Key invariants for session routing:**
+1. Process queued messages serially (one at a time per session)
+2. Fresh lookup of session pointer before each message
+3. Update session pointer after turn completes
+4. Session table is source of truth
+
+**See:** `specs/agent-system/BROKER.md` for full broker specification.
+
+### 2.6 Index
+
+Derived layer that processes ledger data for intelligent access.
+
+| Component | Purpose |
+|-----------|---------|
+| **Episodes** | Chunks of ledger data grouped for analysis |
+| **Facets** | Extracted metadata (entities, topics, intent, sentiment) |
+| **Embeddings** | Vector representations for semantic search |
+| **Search** | Unified interface over embeddings |
+
+**Processing flow:**
+```
+Ledgers → Episode Creation → Analysis Runs → Facet Extraction → Embedding Generation
+```
+
+**Used by:**
+- Hooks (context for evaluation)
+- Broker (smart forking, context enrichment)
+- CLI (semantic search)
+
+---
+
+## 3. Critical Architecture Decisions
+
+### 3.1 Broker Writes Directly to Ledger (No File Loop)
+
+**Problem:** If the Broker wrote to JSONL files, and AIX synced from those files to the Ledger, smart forking would create duplication loops.
+
+```
+PROBLEMATIC (avoided):
+  Broker → JSONL → AIX → Ledger → Smart Fork → Broker → JSONL... (loop!)
+```
+
+**Solution:** The Broker writes directly to the Agent Ledger. AIX only ingests from *external* harnesses (Cursor, Codex, etc.), not from Nexus.
+
+```
+CORRECT:
+  External harnesses → AIX → Agent Ledger
+  Nexus Broker → Agent Ledger (direct, no AIX)
+  
+  Smart forking reads/writes same ledger. No loop.
+```
+
+### 3.2 Single Database
+
+All data lives in `~/nexus/state/nexus.db`:
+- Event Ledger tables
+- Agent Ledger tables
+- Index tables (episodes, facets, embeddings)
+
+**Rationale:** 
+- Simpler transactions across ledgers
+- Single backup target
+- Consistent query interface
+- SQLite handles the scale we need
+
+**Future consideration:** If performance requires, ledgers and index could be separate databases. The interface would remain the same.
+
+### 3.3 External vs Internal Agent Sessions
+
+| Source | Storage Path | Ingestion |
+|--------|--------------|-----------|
+| **Cursor** | `~/.cursor/...` (SQLite) | AIX → Agent Ledger |
+| **Codex** | `~/.codex/sessions/` (JSONL) | AIX → Agent Ledger |
+| **Claude Code** | `~/.claude/...` (JSONL) | AIX → Agent Ledger |
+| **Nexus Broker** | Agent Ledger (direct) | No ingestion needed |
+
+Nexus Broker is *not* an external harness. It writes directly to the ledger.
+
+---
+
+## 4. Service Name as Universal Linking Key
+
+The **service name** links credentials, skills, and capabilities:
 
 ```
 ┌─────────────┐         ┌─────────────┐         ┌─────────────┐
@@ -42,8 +288,6 @@ The **service name** is the primary key that links credentials, skills, and capa
 └─────────────┘         └─────────────┘         └─────────────┘
 ```
 
-### How It Works
-
 | Component | Uses Service Name For |
 |-----------|----------------------|
 | **Skill** | `requires.credentials: [google]` — declares dependency |
@@ -51,46 +295,11 @@ The **service name** is the primary key that links credentials, skills, and capa
 | **Connector** | `enables: [google]` — sets up credentials for service |
 | **Capability** | Derived from skill's `capabilities` field |
 
-### Service Name Conventions
-
-| Service | Description | Example Credentials |
-|---------|-------------|---------------------|
-| `google` | Google Workspace (Gmail, Calendar, Drive) | OAuth, API key |
-| `anthropic` | Anthropic Claude models | API key, OAuth (Claude CLI) |
-| `openai` | OpenAI models and APIs | API key |
-| `discord` | Discord platform | Bot token |
-| `github` | GitHub version control | OAuth, PAT |
-| `slack` | Slack messaging | Bot token, OAuth |
-
-### Skill → Credential Resolution
-
-When a skill declares `requires.credentials: [google]`:
-
-1. **Check existence** — Does ANY credential exist for service `google`?
-2. **Status determination** — If none exist, skill status = `needs-setup`
-3. **At runtime** — Agent can use any available account for that service
-
-```
-gog skill
-  requires.credentials: [google]
-         │
-         ▼
-Credential store lookup: service == "google"
-         │
-         ├─ Found: google/tnapathy@gmail.com  → skill status = ready
-         ├─ Found: google/work@company.com    → (also available)
-         └─ None found                        → skill status = needs-setup
-```
-
-**Key insight:** The skill requirement check only verifies *existence* of credentials. If the user has multiple Google accounts, the agent can choose which to use at runtime based on context.
-
 ---
 
-## 2. Status Cascade System
+## 5. Status Cascade System
 
-**Status flows from credentials through skills to capabilities.**
-
-This cascade is fundamental to how Nexus tracks what's working:
+Status flows from credentials through skills to capabilities:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -101,97 +310,91 @@ This cascade is fundamental to how Nexus tracks what's working:
 │                                                                      │
 │   ❌ broken    ──►   🔧 needs-setup  ──►   🔧 needs-setup          │
 │   ⭐ ready     ──►   ⭐ ready        ──►   ⭐ ready                 │
-│   ✅ active    ──►   ⭐ ready        ──►   ⭐ ready (if unused)     │
-│   ✅ active    ──►   ✅ active       ──►   ✅ active (if used)      │
-│                                                                      │
-│   📥 missing binary  ──►  📥 needs-install ──►  📥 needs-install   │
-│   ⛔ wrong platform  ──►  ⛔ unavailable   ──►  ⛔ unavailable      │
-│                                                                      │
+│   ✅ active    ──►   ✅ active       ──►   ✅ active               │
+│   📥 missing   ──►   📥 needs-install ──►  📥 needs-install        │
+│   ⛔ platform  ──►   ⛔ unavailable   ──►  ⛔ unavailable           │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-### Status Definitions
-
-| Status | Emoji | Credential | Skill | Capability |
-|--------|-------|------------|-------|------------|
-| `active` | ✅ | Configured + used | Ready + used | Available + used |
-| `ready` | ⭐ | Configured, never used | All deps met, never used | Provider ready, never used |
-| `needs-setup` | 🔧 | N/A | Missing credentials/config | Provider needs setup |
-| `needs-install` | 📥 | N/A | Missing binary | Provider needs install |
-| `unavailable` | ⛔ | N/A | Wrong platform | No provider for platform |
-| `broken` | ❌ | Verification failed | Credential broken | Provider broken |
-| `cooldown` | ⏳ | Rate limited | N/A | N/A |
-
-### Resolution Algorithm
-
-```typescript
-function resolveCapabilityStatus(capability: string): Status {
-  const providers = getSkillsProvidingCapability(capability);
-  
-  if (providers.length === 0) return "unavailable";
-  
-  // Best status wins
-  const statuses = providers.map(skill => resolveSkillStatus(skill));
-  
-  if (statuses.includes("active")) return "active";
-  if (statuses.includes("ready")) return "ready";
-  if (statuses.includes("needs-setup")) return "needs-setup";
-  if (statuses.includes("needs-install")) return "needs-install";
-  return "unavailable";
-}
-
-function resolveSkillStatus(skill: Skill): Status {
-  // Platform check
-  if (skill.platform && !skill.platform.includes(process.platform)) {
-    return "unavailable";
-  }
-  
-  // Binary check
-  const missingBins = skill.requires?.bins?.filter(b => !hasBinary(b));
-  if (missingBins?.length > 0) return "needs-install";
-  
-  // Credential check
-  const missingCreds = skill.requires?.credentials?.filter(s => !hasCredentialForService(s));
-  if (missingCreds?.length > 0) return "needs-setup";
-  
-  // Credential health check
-  const credStatuses = skill.requires?.credentials?.map(s => getCredentialStatus(s));
-  if (credStatuses?.includes("broken")) return "needs-setup";
-  
-  // Usage check
-  if (hasUsage(skill.name)) return "active";
-  
-  return "ready";
-}
-```
-
-### Why This Matters
-
-This cascade enables:
-
-1. **Single source of truth** — Fix a credential, skill and capability status update automatically
-2. **Clear guidance** — Status tells you exactly what action to take
-3. **Agent understanding** — Agents know what's possible without trial and error
-4. **Progressive onboarding** — Track journey from zero to full power
+| Status | Emoji | Meaning |
+|--------|-------|---------|
+| `active` | ✅ | Configured AND used |
+| `ready` | ⭐ | Configured, never used |
+| `needs-setup` | 🔧 | Missing credentials/config |
+| `needs-install` | 📥 | Missing binary |
+| `unavailable` | ⛔ | Wrong platform |
+| `broken` | ❌ | Verification failed |
 
 ---
 
-## 3. Consumer-Centric Access Control
+## 6. CLI Organization
 
-**Credentials are controlled at the consumer level, not the credential level.**
+### Primary Commands
 
-### Design Decision
+```
+nexus
+├── status              # Orientation: who am I, what can I do?
+├── capabilities        # Full capability map
+├── skills              # Skill operations
+│   ├── list
+│   ├── use <name>
+│   └── info <name>
+├── credential          # Credential management
+│   ├── list
+│   ├── add
+│   ├── verify <service>
+│   └── scan
+├── sync                # Adapter sync operations
+│   └── --source <adapter>
+├── search <query>      # Semantic search over Index
+└── config              # Configuration
+```
 
-| Approach | Location | Nexus Choice |
-|----------|----------|--------------|
-| Credential-level | Each credential has policy | ❌ Not used |
-| Consumer-level | Gateway/agent config defines access | ✅ **Used** |
+### Agent System Commands (Future)
 
-**Rationale:** It's more intuitive to configure "what can the Gateway access?" than "who can access this credential?"
+```
+nexus
+├── broker
+│   ├── start           # Start broker service
+│   ├── status          # Broker health
+│   └── route <target>  # Manual message routing
+├── ledger
+│   ├── migrate         # Run migrations
+│   └── stats           # Ledger statistics
+└── index
+    ├── reindex         # Rebuild index
+    └── search <query>  # Semantic search
+```
 
-### Access Configuration
+---
 
-**Location:** Gateway and agent configs, NOT credential files.
+## 7. Skills Taxonomy
+
+Skills are capability providers with dependency declarations.
+
+### Skill Types
+
+| Type | Purpose | Key Field |
+|------|---------|-----------|
+| **Tool** | Binary + docs | `capabilities: [...]` |
+| **Connector** | Sets up credentials | `enables: [...]` |
+| **Guide** | Pure documentation | `capabilities: [...]` |
+
+### Three-Layer Model
+
+```
+Domain (grouping)
+└── Capability (what you can access)
+    └── Service (who provides it)
+```
+
+**See:** `specs/skills/UNIFIED_SKILLS_OVERVIEW.md` for full skills specification.
+
+---
+
+## 8. Consumer-Centric Access Control
+
+Credentials are controlled at the consumer level, not the credential level.
 
 ```json
 // state/nexus/config.json
@@ -203,336 +406,106 @@ This cascade enables:
     }
   }
 }
-
-// state/agents/echo/config.json (per-agent override)
-{
-  "credentials": {
-    "level": 2,
-    "allowed": ["discord/echo-bot", "anthropic/*"]
-  }
-}
 ```
 
-### Security Levels
+| Level | Name | Default |
+|-------|------|---------|
+| 0 | Trust All | Allow everything |
+| 1 | Opt-Out | Allow, can block |
+| 2 | Opt-In | Deny, must allow |
+| 3 | Scoped | Deny + scope check |
 
-| Level | Name | Default | Requires |
-|-------|------|---------|----------|
-| 0 | Trust All | Allow everything | Nothing |
-| 1 | Opt-Out | Allow, can block | Block sensitive |
-| 2 | Opt-In | Deny, must allow | Allow each |
-| 3 | Scoped | Deny + scope check | Allow + scopes |
-
-**Default:** Level 1 (opt-out) — allows all user credentials, user blocks sensitive ones.
-
-### Source of Truth
-
-The **CREDENTIAL_SYSTEM.md** spec in `specs/credentials/` is the authoritative reference for credential access control. Other specs should reference it rather than duplicate.
+**See:** `specs/credentials/CREDENTIAL_SYSTEM.md` for full credential specification.
 
 ---
 
-## 4. Skills Taxonomy (High-Level)
+## 9. Agent System Ontology
 
-**Skills are capability providers.** They declare what they can do, what they need, and how to use them.
+Core data model for agent conversations:
 
-### Three-Layer Model
+| Concept | Definition | Analogy |
+|---------|------------|---------|
+| **Message** | Atomic content unit | File change |
+| **Turn** | Query + response exchange | Commit |
+| **Thread** | Turn + all ancestors | Branch history |
+| **Session** | Thread whose head has no children | Branch tip |
 
-```
-Domain (grouping)
-└── Capability (what you can access)
-    └── Service (who provides it)
-```
+**Key insight:** Turns form a tree. Sessions are pointers to active tips. Threads are computed (not stored).
 
-| Layer | Purpose | Examples |
-|-------|---------|----------|
-| **Domain** | Grouping for display and onboarding | communication, productivity, ai |
-| **Capability** | What kind of access | email, calendar, chat, llm |
-| **Service** | Credential linkage | google, discord, anthropic |
-
-**Key insight:** Domains organize capabilities for humans. Capabilities are what agents care about. Services link to credentials.
-
-### Capability Granularity
-
-**Capabilities are coarse, not fine-grained.**
-
-| Approach | Example | Nexus Choice |
-|----------|---------|--------------|
-| Fine-grained | `email-read`, `email-send`, `email-delete` | ❌ Not used |
-| Coarse | `email` | ✅ **Used** |
-
-**Rationale:** A skill either gives you email access or it doesn't. The skill itself handles read/write/delete. Coarse capabilities are simpler to reason about and match how credentials work (you don't get "half" OAuth access).
-
-### Skill Types
-
-| Type | Purpose | Key Field |
-|------|---------|-----------|
-| **Tool** | Binary + docs for using it | `capabilities: [...]` |
-| **Connector** | Sets up credentials for a service | `enables: [...]` |
-| **Guide** | Pure documentation, no external tool | `capabilities: [...]` |
-
-### Canonical SKILL.md Format
-
-```yaml
----
-name: gog
-description: Google Workspace CLI for email, calendar, and drive
-metadata:
-  nexus:
-    type: tool
-    capabilities: [email, calendar, contacts]
-    requires:
-      credentials: [google]
-      bins: [gog]
-    platform: [darwin, linux]
----
-```
-
-### Full Specification
-
-The skills system is documented in detail in:
-- **`specs/skills/UNIFIED_SKILLS_OVERVIEW.md`** — Start here for skills
-- **`specs/skills/TAXONOMY.md`** — Domain/capability/service definitions
-- **`specs/skills/HUB.md`** — Packs and hub integration
-- **`specs/skills/SKILL_CLI.md`** — CLI commands and manifest schema
+**See:** `specs/agent-system/ONTOLOGY.md` for full data model.
 
 ---
 
-## 5. CLI Organization
+## 10. Specification Index
 
-### Decision: Unified `nexus skills`
+### Core System
+| Document | Status | Description |
+|----------|--------|-------------|
+| **UNIFIED_SYSTEM.md** | ✅ Canonical | This document |
+| **specs/workspace/** | ✅ Current | Workspace structure, bindings |
+| **specs/cli/** | ✅ Current | CLI commands and behavior |
+| **specs/skills/** | ✅ Current | Skills system |
+| **specs/credentials/** | ✅ Current | Credential system |
 
-All skill operations are unified under `nexus skills`:
+### Agent System
+| Document | Status | Description |
+|----------|--------|-------------|
+| **UNIFIED_ARCHITECTURE.md** | ✅ Canonical | Agent system architecture diagram |
+| **ONTOLOGY.md** | ✅ Canonical | Data model (Message, Turn, Thread, Session) |
+| **EVENT_SYSTEM_DESIGN.md** | ✅ Current | Event layer, hooks, adapters |
+| **BROKER.md** | ✅ Current | Broker routing and queue management |
+| **SESSION_FORMAT.md** | ⚠️ Update needed | Reflects direct ledger writes |
 
-```
-nexus skills
-├── list                    # List installed skills
-├── use <name>              # Get SKILL.md for agent
-├── info <name>             # Detailed local info
-├── search <query>          # Search local + hub
-├── install <slug>          # Install from hub
-├── update <slug>           # Update from hub
-├── updates                 # Check for updates
-├── reset <name>            # Reset to hub version
-├── diff <name>             # Show local modifications
-├── verify <name>           # Check requirements
-└── scan                    # Regenerate manifest
-```
-
-**Rationale:**
-- Matches upstream approach (unified)
-- Simpler mental model
-- No confusion about `skill` vs `skills`
-
-**Full spec:** See `specs/skills/SKILL_CLI.md`
-
-### Related Commands
-
-| Command | Purpose | Notes |
-|---------|---------|-------|
-| `nexus credential` | Credential CRUD | ✅ Good |
-| `nexus gateway credentials` | Gateway access control | ✅ Separate concern |
-| `nexus capabilities` | Abstract goal mapping | ✅ Good |
-| `nexus status` | Orientation | ✅ Good |
+### Memory/Index System
+| Document | Status | Description |
+|----------|--------|-------------|
+| **mnemonic/MNEMONIC_ARCHITECTURE.md** | ⚠️ Rename | Needs update to "Index" terminology |
+| **mnemonic/AGENTS_LEDGER_FORKING.md** | ✅ Current | Forking behavior |
+| **aix/AIX_MNEMONIC_PIPELINE.md** | ⚠️ Update needed | Reflects external-only ingestion |
 
 ---
 
-## 6. Workspace Structure
+## 11. Open Items
 
-### Directory Layout
+### Terminology Updates Needed
 
-```
-~/nexus/                          # NEXUS_ROOT
-├── AGENTS.md                     # System behavior (canonical)
-├── skills/                       # Skill definitions
-│   ├── tools/
-│   ├── connectors/
-│   └── guides/
-├── state/                        # Runtime state (visible, not hidden)
-│   ├── nexus/config.json         # Main config
-│   ├── user/IDENTITY.md          # User profile
-│   ├── agents/{name}/            # Agent identity + config
-│   │   ├── IDENTITY.md
-│   │   ├── SOUL.md
-│   │   └── config.json           # Agent-specific config (access control)
-│   ├── credentials/              # Credential pointers
-│   │   ├── index.json
-│   │   └── {service}/{account}.json
-│   ├── skills/                   # Skill state
-│   │   └── manifest.json
-│   └── ...
-└── home/                         # User's personal space
-```
+| Old Term | New Term | Files to Update |
+|----------|----------|-----------------|
+| Mnemonic | Index | All mnemonic/ docs, EVENT_SYSTEM_DESIGN.md |
+| Core Ledger/Tables | Index | Schema files, architecture docs |
+| Memory | Index | Various references |
 
-### Key Design Decisions
+### Architecture Updates Needed
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| State visibility | `state/` not hidden | Transparency, discoverability |
-| Skills location | `skills/` at root | First-class, easy to browse |
-| Credentials | Pointers, not secrets | Security |
-| User space | `home/` directory | Clear separation from system |
+| Change | Files Affected |
+|--------|----------------|
+| Broker writes directly to ledger | SESSION_FORMAT.md, BROKER.md |
+| AIX only for external harnesses | AIX_MNEMONIC_PIPELINE.md |
+| Single nexus.db database | Schema files, workspace docs |
+| No ~/nexus/state/sessions/ | SESSION_FORMAT.md, workspace docs |
+
+### Pending Specifications
+
+| Topic | Status | Notes |
+|-------|--------|-------|
+| Smart forking algorithm | TODO | Scoring, context assembly |
+| Index pipeline details | TODO | Episode → facet → embedding flow |
+| Hook → Broker interface | TODO | How fired hooks become broker calls |
 
 ---
 
-## 7. Gateway as Optional Addon
-
-**Core Nexus works without Gateway. Gateway enables agent independence.**
-
-### Without Gateway
-
-| Works | Doesn't Work |
-|-------|--------------|
-| `nexus status` | Scheduled tasks |
-| `nexus skills use` | External messaging (Discord, Telegram) |
-| `nexus credential` | Heartbeat checks |
-| `nexus capabilities` | Background agent work |
-| Agent in IDE | Agent outside IDE |
-
-### With Gateway
-
-Gateway unlocks the "Agent Independence" stage:
-
-```
-┌───────────────────────────────────────────────────────────────────┐
-│                    AGENT INDEPENDENCE                              │
-│                    (Requires Gateway + LLM API)                    │
-│                                                                   │
-│  ┌─────────────────┐         ┌─────────────────┐                  │
-│  │ Agent Comms     │         │ Automation      │                  │
-│  │ Discord, Tele.  │         │ Cron, triggers  │                  │
-│  └─────────────────┘         └─────────────────┘                  │
-│                                                                   │
-│  Agent can reach you outside IDE, work while you sleep            │
-└───────────────────────────────────────────────────────────────────┘
-```
-
-### Conceptual Mapping
-
-| Upstream Concept | Nexus Equivalent |
-|------------------|------------------|
-| Gateway (central) | Optional addon for agent independence |
-| Channels | Access planes (agent communication) |
-| Config-first | Workspace + state first |
-
----
-
-## 8. Integration Points Summary
-
-### Credential → Skill
-
-```
-Skill declares: requires.credentials: [service]
-                         │
-                         ▼
-Credential store: service/{account}.json exists?
-                         │
-                         ├─ Yes → Skill can work
-                         └─ No  → Skill status = needs-setup
-```
-
-### Skill → Capability
-
-```
-Skill declares: capabilities: [email, calendar]
-                         │
-                         ▼
-Capability map: email → provided by skill X
-                         │
-                         ▼
-Capability status = best(provider skill statuses)
-```
-
-### Connector → Credential
-
-```
-Connector declares: enables: [google]
-                         │
-                         ▼
-User runs connector → Credential created for google
-                         │
-                         ▼
-Skills requiring google → now work
-```
-
-### CLI → State Files
-
-```
-nexus status → reads state/agents/{name}/IDENTITY.md
-                     state/credentials/index.json
-                     state/skills/manifest.json
-                         │
-                         ▼
-             Computes and displays unified status
-```
-
----
-
-## 9. Open Items (TODO)
-
-### Agent Bindings
-
-**Status:** Needs investigation
-
-Questions to resolve:
-- When are bindings triggered (session start, on-demand)?
-- How do generated files (CLAUDE.md) stay in sync with AGENTS.md?
-- What context does each binding inject?
-
-**Tracked in:** `specs/workspace/AGENT_BINDINGS.md`
-
-### Unified Triggers
-
-**Status:** Waiting on agent-system spec completion
-
-The trigger system replaces HEARTBEAT.md with:
-- Cron triggers (scheduled)
-- Event triggers (reactive)
-- Heartbeat triggers (periodic check-in)
-
-**Tracked in:** `specs/agent-system/UNIFIED_TRIGGERS.md`
-
-### skill vs skills CLI
-
-**Status:** ✅ Decided
-
-Unified under `nexus skills`. See `specs/skills/SKILL_CLI.md`.
-
----
-
-## 10. Reading Order
-
-For understanding the full system:
-
-1. **This document** — Unified system overview
-2. **`specs/skills/UNIFIED_SKILLS_OVERVIEW.md`** — Skills system deep-dive
-3. **`specs/credentials/CREDENTIAL_SYSTEM.md`** — Credential architecture
-4. **`specs/cli/COMMANDS.md`** — CLI command reference
-5. **`specs/workspace/PROJECT_STRUCTURE.md`** — File layout
-
-For skills specifically:
-- Start with `specs/skills/UNIFIED_SKILLS_OVERVIEW.md`
-- Then `specs/skills/TAXONOMY.md` for domain/capability/service definitions
-- Then `specs/skills/SKILL_CLI.md` for CLI and manifest details
-- Then `specs/skills/HUB.md` for packs and hub integration
-
-For other topics:
-- Onboarding → `specs/cli/ONBOARDING.md`
-- Upstream comparison → `specs/*/UPSTREAM_*.md` files
-- Agent system → `specs/agent-system/` (in progress)
-
----
-
-## Summary
+## 12. Summary
 
 | Principle | Description |
 |-----------|-------------|
+| **Adapters → Ledger → Broker** | Clean unidirectional data flow |
+| **Ledger + Index** | Primary data vs derived data separation |
+| **Direct ledger writes** | Broker writes to Agent Ledger, no file intermediary |
 | **Service as key** | Service name links credentials, skills, capabilities |
-| **Status cascade** | Credential status → skill status → capability status |
-| **Consumer access** | Gateway/agent configs control credential access |
-| **CLI-first** | Workspace and CLI work without gateway |
-| **Gateway as addon** | Enables agent independence, not required for core |
+| **Status cascade** | Credential → skill → capability status flow |
+| **Single database** | All state in `nexus.db` |
 | **Visible state** | `state/` directory is visible, not hidden |
-| **No plaintext secrets** | Credentials are pointers to secure backends |
 
 ---
 
-*This document is the conceptual guide to Nexus. For implementation details, see the individual spec files.*
+*This document is the canonical system overview. See individual spec files for implementation details.*

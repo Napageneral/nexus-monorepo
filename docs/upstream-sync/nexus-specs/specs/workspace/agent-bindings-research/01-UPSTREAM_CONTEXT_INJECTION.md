@@ -712,7 +712,7 @@ Current working directory: /Users/tyler/moltbot
 
 ### Memory Model
 - **Upstream:** `MEMORY.md` + `memory/YYYY-MM-DD.md` for daily logs
-- **Nexus fork:** Cortex will replace this (different approach)
+- **Nexus fork:** Index (derived layer) replaces this
 
 ### Content Truncation
 - **Upstream:** Files truncated at 20k chars (70% head, 20% tail)

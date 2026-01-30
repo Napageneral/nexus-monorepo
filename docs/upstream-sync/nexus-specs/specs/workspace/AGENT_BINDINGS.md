@@ -29,9 +29,9 @@
 | **Cursor** | `AGENTS.md` | ✅ `sessionStart` (startup + compact) | `additional_context` output | ✅ Recommended |
 | **Claude Code** | `CLAUDE.md` | ✅ `SessionStart` (startup + compact) | `additional_context` output | ✅ Recommended |
 | **OpenCode** | `AGENTS.md` | ✅ Plugin system | `experimental.chat.system.transform` | ✅ Recommended |
-| **Codex** | `AGENTS.md` | ❌ None | N/A | ⛔ Not supported |
+| **Codex** | `AGENTS.md` | ❌ None | N/A | ⚠️ Limited |
 
-> **Codex Limitation:** Codex has no lifecycle hook system. Context cannot be dynamically injected or refreshed after compaction. Codex is **not supported** for Nexus workflows.
+> **Codex Limitation:** Codex has no lifecycle hook system. Context cannot be dynamically injected or refreshed after compaction. Codex support is **limited** for Nexus workflows.
 
 ---
 
@@ -75,7 +75,7 @@ Detected Harnesses (via AIX)
   1. cursor        847 sessions    (supported ✅)
   2. claude-code   312 sessions    (supported ✅)
   3. opencode       45 sessions    (supported ✅)
-  4. codex          12 sessions    (not supported ⛔)
+  4. codex          12 sessions    (limited ⚠️)
 
 Recommendation: Create bindings for cursor and claude-code
 ```
@@ -136,7 +136,7 @@ Harness Bindings
   ✅ cursor        .cursor/hooks.json, .cursor/hooks/nexus-session-start.js
   ✅ claude-code   CLAUDE.md, .claude/settings.json
   ❌ opencode      Not configured
-  ⛔ codex         Not supported (no hooks available)
+  ⚠️ codex         Limited (no hooks available)
 ```
 
 **Detection logic:**
@@ -146,7 +146,7 @@ Harness Bindings
 | Cursor | `.cursor/hooks.json`, `.cursor/hooks/nexus-session-start.js` |
 | Claude Code | `CLAUDE.md`, `.claude/settings.json` |
 | OpenCode | `.opencode/plugins/nexus-bootstrap.ts` |
-| Codex | N/A (not supported) |
+| Codex | N/A (limited) |
 
 ---
 
@@ -193,7 +193,7 @@ Open ~/nexus/ in Cursor to use Nexus.
 **Output (codex):**
 
 ```
-Error: Codex is not supported.
+Error: Codex support is limited.
 
 Codex does not have a lifecycle hook system. Context cannot be 
 dynamically injected or refreshed after compaction.
@@ -444,7 +444,7 @@ Native OpenCode plugin using experimental hooks.
 
 ### 4. Codex Binding
 
-**⛔ Not Supported**
+**⚠️ Limited Support**
 
 Codex (OpenAI) does not have a lifecycle hook system:
 

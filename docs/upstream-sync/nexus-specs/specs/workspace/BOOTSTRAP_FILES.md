@@ -1,7 +1,7 @@
 # Bootstrap Files Specification
 
 **Status:** ALIGNED WITH WORKSPACE_SYSTEM.md  
-**Last Updated:** 2026-01-28
+**Last Updated:** 2026-01-29
 
 ---
 
@@ -33,17 +33,16 @@ The main system behavior document. Contains:
 - Cloud sync instructions
 - Safety rules
 - Social behavior guidelines
-- **Triggers** (proactive wake-ups) — simplified reference, NOT detailed heartbeat behavior
+- **Hooks** (proactive wake-ups) — simplified reference to the hooks system
 
 **Template:** `reference/AGENTS.md`
 
-**Important Change:** The detailed "Heartbeats" section with behavioral checklists has been moved to the **Unified Triggers** system. AGENTS.md now contains a simplified "Triggers" section that tells agents:
-- Triggers wake them for scheduled/event work
-- Check `HEARTBEAT.md` if woken by a heartbeat trigger
-- Use `create_trigger` to schedule future wake-ups
+**Important:** AGENTS.md references the **Hooks** system for proactive agent wake-ups. Agents can:
+- Register hooks via `nexus hooks register` to react to events
+- Check `HEARTBEAT.md` if woken by a heartbeat hook
 - Reply `HEARTBEAT_OK` if nothing needs attention
 
-See `specs/agent-system/UNIFIED_TRIGGERS.md` for the full trigger system spec.
+See `specs/agent-system/EVENT_SYSTEM_DESIGN.md` and `specs/agent-system/HOOK_SERVICE.md` for the full hooks system spec.
 
 ### BOOTSTRAP.md
 
@@ -56,7 +55,7 @@ First-run ritual template. Used during agent onboarding conversation to establis
 
 **Template:** `reference/BOOTSTRAP.md`
 
-**Note:** Memory is handled by Mnemonic, not markdown files. The BOOTSTRAP.md template does not reference MEMORY.md.
+**Note:** Memory is handled by the Index (derived layer), not markdown files. The BOOTSTRAP.md template does not reference MEMORY.md.
 
 ---
 
@@ -82,7 +81,7 @@ Agent's persona, boundaries, and behavior guidelines.
 
 **Template:** `reference/SOUL.md`
 
-**Note:** Memory is handled by Mnemonic, not markdown files. The SOUL.md template does not reference MEMORY.md.
+**Note:** Memory is handled by the Index (derived layer), not markdown files. The SOUL.md template does not reference MEMORY.md.
 
 ### User IDENTITY.md
 
@@ -146,15 +145,18 @@ Default gateway configuration.
 
 ## Agent Binding Templates
 
-Templates for IDE/harness bindings live in `reference/cursor/`:
+Harness binding templates live in `agent-bindings-research/reference/`:
 
-| Template | Purpose |
-|----------|---------|
-| `reference/cursor/rules` | Cursor rules file |
-| `reference/cursor/hooks.json` | Cursor hook registration |
-| `reference/cursor/hooks/nexus-session-start.js` | Cursor session hook script |
+| Harness | Templates |
+|---------|-----------|
+| Cursor | `cursor/hooks.json`, `cursor/nexus-session-start.js` |
+| Claude Code | `claude-code/settings.json` |
+| OpenCode | `opencode/nexus-bootstrap.ts` |
+| Codex | `codex/README.md` (not supported — limitations doc) |
 
-These are used when creating Cursor bindings via `nexus bindings cursor`. See `AGENT_BINDINGS.md` for details.
+These are used when creating bindings via `nexus bindings create <harness>`. See `AGENT_BINDINGS.md` for details.
+
+**Note:** The old `reference/cursor/` folder in this directory is deprecated. Use `agent-bindings-research/reference/` for authoritative templates.
 
 ---
 
@@ -166,9 +168,9 @@ These are used when creating Cursor bindings via `nexus bindings cursor`. See `A
 
 **Created by:** User (optional, not auto-created)
 
-**Purpose:** User-customizable checklist read by agents when woken by heartbeat triggers.
+**Purpose:** User-customizable checklist read by agents when woken by heartbeat hooks.
 
-**Relationship to Triggers:** The Unified Triggers system handles heartbeat scheduling. HEARTBEAT.md is just the checklist the agent reads when a heartbeat trigger fires. See `specs/agent-system/UNIFIED_TRIGGERS.md`.
+**Relationship to Hooks:** The hooks system handles heartbeat scheduling. HEARTBEAT.md is just the checklist the agent reads when a heartbeat hook fires. See `specs/agent-system/EVENT_SYSTEM_DESIGN.md`.
 
 **Template:**
 
@@ -193,9 +195,9 @@ Add project-specific items here as needed.
 
 **Status:** NOT USED in Nexus
 
-**Reason:** Memory is handled by Mnemonic, not markdown files.
+**Reason:** Memory is handled by the Index (derived layer), not markdown files.
 
-Upstream clawdbot uses `MEMORY.md` for agent memory. Nexus replaces this with the Mnemonic memory system. Templates (BOOTSTRAP.md, SOUL.md) do not reference MEMORY.md.
+Upstream clawdbot uses `MEMORY.md` for agent memory. Nexus replaces this with the Index system. Templates (BOOTSTRAP.md, SOUL.md) do not reference MEMORY.md.
 
 ---
 
@@ -203,8 +205,8 @@ Upstream clawdbot uses `MEMORY.md` for agent memory. Nexus replaces this with th
 
 | Upstream File | Nexus Status | Notes |
 |---------------|--------------|-------|
-| `TOOLS.md` | Not used | Handled via `nexus skill` CLI |
-| `MEMORY.md` | Not used | Handled by Mnemonic |
+| `TOOLS.md` | Not used | Handled via `nexus skills` CLI |
+| `MEMORY.md` | Not used | Handled by Index |
 | `USER.md` | Renamed | Now `state/user/IDENTITY.md` |
 | `.gitignore` | Not created | No default git init |
 
@@ -237,4 +239,5 @@ This allows:
 - **INIT.md** — File creation timing
 - **ONBOARDING.md** — Ritual flow
 - **AGENT_BINDINGS.md** — IDE/harness binding configurations
-- **specs/agent-system/UNIFIED_TRIGGERS.md** — Trigger system (replaces detailed heartbeat behavior)
+- **specs/agent-system/EVENT_SYSTEM_DESIGN.md** — Event system and hooks
+- **specs/agent-system/HOOK_SERVICE.md** — Hook registration and lifecycle

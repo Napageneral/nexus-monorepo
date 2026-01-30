@@ -431,7 +431,7 @@ Silent Detection Phase:
   1. Check if `aix` binary exists (which aix)
   2. Check if `~/.aix/aix.db` exists
   3. If yes: Query for top 2 harnesses by session count
-  4. If no: Fall back to binary/config directory detection
+  4. If no: AIX is required — cannot detect harnesses without it
        ↓
 Auto-create bindings for detected harnesses:
   - nexus bindings create --harness cursor
@@ -439,31 +439,6 @@ Auto-create bindings for detected harnesses:
        ↓
 Agent informs user: "I see you use Cursor and Claude Code most. 
 I've set up bindings so they connect to Nexus."
-```
-
-### Fallback Detection (No AIX)
-
-If AIX isn't installed or hasn't synced data:
-
-```typescript
-function detectHarnessesFallback(): string[] {
-  const harnesses: string[] = [];
-  
-  // Check for installed binaries
-  if (commandExists("cursor")) harnesses.push("cursor");
-  if (commandExists("claude")) harnesses.push("claude-code");
-  if (commandExists("opencode")) harnesses.push("opencode");
-  if (commandExists("codex")) harnesses.push("codex");
-  
-  // Check for config directories
-  if (existsSync(join(HOME, ".cursor"))) harnesses.push("cursor");
-  if (existsSync(join(HOME, ".claude"))) harnesses.push("claude-code");
-  if (existsSync(join(HOME, ".opencode"))) harnesses.push("opencode");
-  if (existsSync(join(HOME, ".codex"))) harnesses.push("codex");
-  
-  // Deduplicate and return
-  return [...new Set(harnesses)].slice(0, 2);
-}
 ```
 
 ### Storage Strategy
@@ -498,12 +473,8 @@ async function detectHarnessUsage(): Promise<HarnessUsage[]> {
   const aixDb = join(HOME, ".aix", "aix.db");
   
   if (!existsSync(aixDb)) {
-    // Fall back to binary/directory detection
-    return detectHarnessesFallback().map(h => ({
-      harness: h,
-      sessionCount: 0,
-      lastUsed: new Date(),
-    }));
+    // AIX is required — cannot detect harnesses without it
+    throw new Error("AIX database not found. Install AIX (brew install Napageneral/tap/aix) and sync session data before auto-detecting harnesses.");
   }
   
   // Query AIX database

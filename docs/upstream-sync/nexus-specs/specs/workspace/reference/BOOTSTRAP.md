@@ -1,3 +1,7 @@
+---
+summary: "First-run ritual template for new agents"
+created_during: "nexus init"
+---
 # BOOTSTRAP.md - Hello, World
 
 *You just woke up. Time to figure out who you are.*

@@ -1,7 +1,7 @@
 # Onboarding Specification
 
 **Status:** ALIGNED WITH WORKSPACE_SYSTEM.md  
-**Last Updated:** 2026-01-28
+**Last Updated:** 2026-01-29
 
 ---
 
@@ -10,8 +10,6 @@
 Onboarding is **entirely an agent conversation**, not a CLI wizard. After `nexus init`, when the user opens `~/nexus/` in their agent harness (Cursor, Claude Code, etc.), the agent reads `AGENTS.md`, detects no identity exists, reads `BOOTSTRAP.md`, and starts the conversation.
 
 **Philosophy:** Identity first, configuration later. Meet the agent before configuring the system.
-
-**Key Principle:** This is an agent conversation, not a CLI wizard. The user opens `~/nexus/` in their agent harness. The agent reads `AGENTS.md`, detects no identity exists, reads `BOOTSTRAP.md`, and starts the conversation.
 
 ---
 
@@ -65,7 +63,17 @@ After the conversation, the agent writes files:
 - Never create `agents/default/` directory
 - The `--agent` flag exists only for internal/testing purposes
 
-### 4. Silent Detection Phase
+### 4. Agent Runs `nexus status`
+
+After writing identity files, the agent runs `nexus status` to see current capabilities:
+
+```bash
+nexus status
+```
+
+This shows the agent what capabilities are available, their status (active, ready, needs-setup, etc.), and suggests next actions based on current state.
+
+### 5. Silent Detection Phase
 
 After establishing identity, the agent silently detects:
 
@@ -85,7 +93,7 @@ After establishing identity, the agent silently detects:
 
 **No prompts here** — detection is silent. Results inform the next step.
 
-### 5. Agent Bindings (Auto-created for top 2 harnesses)
+### 6. Agent Bindings (Auto-created for top 2 harnesses)
 
 Agent detects harnesses via AIX and creates bindings for top 2 supported harnesses.
 
@@ -124,7 +132,7 @@ Agent: "To auto-detect your preferred coding assistants, I need AIX installed.
 
 **User must open `~/nexus/` as workspace root for bindings to work.**
 
-### 6. Follow-up Tasks (Agent suggests)
+### 7. Follow-up Tasks (Agent suggests)
 
 **Agent:** "Here's what else we could set up when you're ready:"
 
@@ -134,7 +142,7 @@ Agent: "To auto-detect your preferred coding assistants, I need AIX installed.
 
 These are follow-up tasks, not part of core onboarding. Channel setup is documented in `specs/agent-system/GATEWAY.md`.
 
-### 7. Done
+### 8. Done
 
 **Agent:** "🧭 Atlas is ready! Run `nexus status` to see what I can do. Everything else uses reasonable defaults. Customize later with `nexus configure`."
 

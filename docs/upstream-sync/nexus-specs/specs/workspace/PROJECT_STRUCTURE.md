@@ -1,7 +1,7 @@
 # Project Structure Specification
 
 **Status:** ALIGNED WITH WORKSPACE_SYSTEM.md  
-**Last Updated:** 2026-01-28
+**Last Updated:** 2026-01-29
 
 ---
 
@@ -40,8 +40,20 @@ This document defines the canonical directory structure for a Nexus workspace.
 │   │       └── {account}.json
 │   └── gateway/
 │       └── config.json           # Gateway config
-└── home/                         # USER'S PERSONAL SPACE
-    └── (user content)
+├── home/                         # USER'S PERSONAL SPACE
+│   └── (user content)
+│
+├── .cursor/                      # Cursor binding (if configured)
+│   ├── hooks.json
+│   └── hooks/
+│       └── nexus-session-start.js
+│
+├── .claude/                      # Claude Code binding (if configured)
+│   └── settings.json
+│
+└── .opencode/                    # OpenCode binding (if configured)
+    └── plugins/
+        └── nexus-bootstrap.ts
 ```
 
 ---

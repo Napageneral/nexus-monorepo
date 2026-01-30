@@ -471,7 +471,7 @@ When the CLI scans skills, it computes checksums:
 
 | Aspect | Upstream (Clawdbot) | Nexus |
 |--------|---------------------|-------|
-| Hub CLI | External `clawdhub` tool | Built-in `nexus skill/pack` |
+| Hub CLI | External `clawdhub` tool | Built-in `nexus skills/pack` |
 | Tracking | `.clawdhub/lock.json` (external) | `state/skills/manifest.json` |
 | Modification detection | Content hash by external tool | Built-in checksum + `managedModified` flag |
 | Update checking | External tool only | Built-in `skill updates` with cached versions |

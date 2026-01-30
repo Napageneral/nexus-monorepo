@@ -75,6 +75,14 @@ interface Turn {
   
   // Tree structure
   hasChildren: boolean;     // Has this turn been forked from?
+  
+  // Compaction fields (see Compaction section below)
+  turnType: 'normal' | 'compaction';
+  summary?: string;                    // Compaction summary text
+  summarizedThroughTurnId?: string;    // Last turn included in summary
+  firstKeptTurnId?: string;            // First turn kept in context
+  tokensBefore?: number;               // Context before compaction
+  tokensAfter?: number;                // Context after compaction
 }
 ```
 
@@ -83,6 +91,7 @@ interface Turn {
 - A turn can be initiated by: user, trigger, agent message, webhook, cron, event — anything
 - Multiple input messages can be grouped into one turn (e.g., user sends several messages before assistant responds)
 - Turn ID = final assistant message ID (clean, unambiguous)
+- **Compaction turns** are special turns that summarize prior context (see Compaction section)
 
 ---
 
@@ -176,6 +185,50 @@ This is critical for routing — when multiple messages queue for a session, the
 
 - **Session head:** A turn with no children (active, routeable endpoint)
 - **Non-session head:** A turn that has been forked from (historical, still routeable)
+
+---
+
+### Compaction
+
+**A special turn that summarizes prior context.** Used to manage context window limits.
+
+```typescript
+// Compaction is a Turn with turnType = 'compaction'
+type CompactionTurn = Turn & {
+  turnType: 'compaction';
+  summary: string;                    // LLM-generated summary of prior turns
+  summarizedThroughTurnId: string;    // Last turn included in summary
+  firstKeptTurnId: string;            // First turn kept in fresh context
+  tokensBefore: number;               // Context size before compaction
+  tokensAfter: number;                // Context size after compaction
+};
+```
+
+**How compaction works:**
+
+```
+Before: Turn 1 → Turn 2 → Turn 3 → Turn 4 → Turn 5 (session head)
+
+Trigger: Context approaching limit. Summarize 1-3, keep 4-5.
+
+After:  Turn 1 → Turn 2 → Turn 3 → Turn 4 → Turn 5 → CompactionTurn (session head)
+                                                            ↑
+                                                  summary of 1-3
+                                                  kept: 4, 5
+```
+
+**Key properties:**
+
+1. **Compaction IS a turn** — Points to previous turn as parent, subsequent turns point to it
+2. **Summary includes prior summaries** — Second compaction summarizes first compaction's summary (recursive)
+3. **Full history preserved** — Compaction doesn't delete turns, just marks context boundary
+4. **Thread traversal works** — Can walk back through compactions to full history
+
+**Context assembly after compaction:**
+- Agent sees: `[Compaction summary] + [Kept turns] + [New query]`
+- Old turns still exist in Agents Ledger, just not in active context
+
+**See `COMPACTION.md` for full specification.**
 
 ---
 
@@ -435,7 +488,8 @@ For v1, only expose persona routing. Other modes are internal/future.
 
 - `TERMINOLOGY.md` — Quick reference for terms
 - `BROKER.md` — Agent Broker routing implementation
-- `UNIFIED_TRIGGERS.md` — Trigger system using this routing model
+- `EVENT_SYSTEM_DESIGN.md` — Event system and hooks
+- `ROUTING_HOOKS.md` — Hook routing and permissions
 - `UPSTREAM_AGENT_SYSTEM.md` — How upstream handles sessions
 
 ---

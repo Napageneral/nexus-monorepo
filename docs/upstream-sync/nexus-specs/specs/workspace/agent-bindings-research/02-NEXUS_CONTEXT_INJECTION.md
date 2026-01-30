@@ -40,7 +40,7 @@ The key insight: **Most context belongs at the workspace level** since external 
 │   ├── Nexus CLI reference                                                   │
 │   ├── Safety rules (external vs internal)                                   │
 │   ├── File path pointers                                                    │
-│   ├── Skills discovery ("nexus skill use <name>")                          │
+│   ├── Skills discovery ("nexus skills use <name>")                          │
 │   ├── Identity injection (SOUL.md, IDENTITY.md, USER IDENTITY.md)          │
 │   ├── Time/timezone                                                         │
 │   ├── Runtime info (OS, arch, model)                                       │
@@ -80,7 +80,7 @@ The key insight: **Most context belongs at the workspace level** since external 
 | **AGENTS.md** | Static workspace rules, CLI reference, safety | Always available |
 | **nexus status --json** | Dynamic status, capability state | On demand / hook |
 | **Session hook** | Identity files (SOUL, IDENTITY, USER) | Session start |
-| **nexus skill use** | Skill documentation | On demand |
+| **nexus skills use** | Skill documentation | On demand |
 
 ### AGENTS.md Content (Workspace Root)
 
@@ -94,8 +94,8 @@ Run `nexus status` to understand current state.
 
 ## Nexus CLI Reference
 - nexus status: Overall status, who you are, what's available
-- nexus skill use <name>: Get skill documentation
-- nexus skill list: List available skills
+- nexus skills use <name>: Get skill documentation
+- nexus skills list: List available skills
 - nexus credential list: List configured credentials
 - nexus credential verify <service>: Test a credential
 
@@ -256,7 +256,7 @@ Complete your task and report back.
 Workers get full tooling:
 - read, write, edit, bash
 - browser, canvas (if available)
-- Any skills they need (loaded on demand via nexus skill use)
+- Any skills they need (loaded on demand via nexus skills use)
 
 ### Task Instructions
 
@@ -318,9 +318,9 @@ External harnesses are **unified agents** — they handle both conversation and 
 | Dropped | Reason |
 |---------|--------|
 | TOOLS.md | Removed — local notes go in AGENTS.md or skills |
-| MEMORY.md | Replaced by Cortex memory system |
+| MEMORY.md | Replaced by Index (derived layer) |
 | HEARTBEAT.md | Handled differently in Nexus event system |
-| memory/YYYY-MM-DD.md | Replaced by Cortex |
+| memory/YYYY-MM-DD.md | Replaced by Index |
 | Heartbeat guidance | Event system handles this |
 | Self-update section | Unnecessary complexity |
 | Model aliases | Not defined in prompts |
@@ -390,8 +390,8 @@ return { continue: true, additional_context: context };
 ### Skills on Demand
 
 Skills are NOT injected in system prompts. Instead:
-1. Agent sees "use nexus skill use <name>" in AGENTS.md
-2. Agent calls `nexus skill use gog` when needed
+1. Agent sees "use nexus skills use <name>" in AGENTS.md
+2. Agent calls `nexus skills use gog` when needed
 3. Skill documentation returned for that session
 
 This keeps base context small and loads skills only when relevant.

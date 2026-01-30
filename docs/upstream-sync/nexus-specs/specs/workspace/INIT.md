@@ -1,7 +1,7 @@
 # Init Command Specification
 
 **Status:** ALIGNED WITH WORKSPACE_SYSTEM.md  
-**Last Updated:** 2026-01-28
+**Last Updated:** 2026-01-29
 
 ---
 
@@ -119,7 +119,7 @@ Safe to run multiple times:
 }
 ```
 
-### Triggers Bootstrap
+### Bootstrap Flow
 
 After init, when the user opens `~/nexus/` in their agent harness (Cursor, Claude Code, etc.), the agent reads `AGENTS.md`, detects no identity exists, reads `BOOTSTRAP.md`, and starts the bootstrap conversation.
 
@@ -196,6 +196,7 @@ Nexus initialized! Open ~/nexus/ in your AI assistant to begin.
 ## Related Specifications
 
 - **PROJECT_STRUCTURE.md** — Directory layout details
-- **ONBOARDING.md** — Identity ritual flow
+- **ONBOARDING.md** — Identity ritual flow (after init completes, see ONBOARDING.md for the agent-driven bootstrap conversation)
 - **BOOTSTRAP_FILES.md** — File templates and purposes
-- **specs/agent-system/UNIFIED_TRIGGERS.md** — Heartbeat/cron/event trigger system
+- **specs/agent-system/EVENT_SYSTEM_DESIGN.md** — Event system and hooks
+- **specs/agent-system/HOOK_SERVICE.md** — Hook registration and lifecycle

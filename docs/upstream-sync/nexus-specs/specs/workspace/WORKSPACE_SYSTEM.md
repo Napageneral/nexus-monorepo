@@ -1,7 +1,7 @@
 # Workspace System Specification
 
 **Status:** AUTHORITATIVE DOCUMENT  
-**Last Updated:** 2026-01-27
+**Last Updated:** 2026-01-29
 
 ---
 
@@ -85,7 +85,7 @@ This document is the **authoritative specification** for the Nexus workspace sys
 │  → Finds env vars (ANTHROPIC_API_KEY, GITHUB_TOKEN, etc.)                   │
 │  → Imports Claude CLI / Codex CLI credentials                               │
 │                                                                             │
-│  Agent uses: aix (skill/tool)                                               │
+│  Agent runs: nexus bindings detect --json (uses AIX internally)            │
 │  → Detects which agent harnesses user has (Cursor, Claude Code, etc.)       │
 │  → Detects which ones they use most frequently                              │
 │                                                                             │
@@ -183,11 +183,17 @@ This document is the **authoritative specification** for the Nexus workspace sys
 ├── home/                             # USER'S PERSONAL SPACE
 │   └── (user content, cloud-synced)
 │
-└── .cursor/                          # Cursor binding (if configured)
-    ├── rules
-    ├── hooks.json
-    └── hooks/
-        └── nexus-session-start.js
+├── .cursor/                          # Cursor binding (if configured)
+│   ├── hooks.json
+│   └── hooks/
+│       └── nexus-session-start.js
+│
+├── .claude/                          # Claude Code binding (if configured)
+│   └── settings.json
+│
+└── .opencode/                        # OpenCode binding (if configured)
+    └── plugins/
+        └── nexus-bootstrap.ts
 ```
 
 ### Key Design Decisions
@@ -479,7 +485,9 @@ All supported bindings inject:
 
 ## 6. Templates Reference
 
-All templates live in `specs/workspace/reference/`:
+### Bootstrap Templates
+
+Located in `specs/workspace/reference/`:
 
 | Template | Purpose |
 |----------|---------|
@@ -488,9 +496,19 @@ All templates live in `specs/workspace/reference/`:
 | `IDENTITY-agent.md` | Agent identity template |
 | `IDENTITY-user.md` | User identity template |
 | `SOUL.md` | Agent persona template |
-| `cursor/rules` | Cursor rules file |
-| `cursor/hooks.json` | Cursor hook registration |
-| `cursor/hooks/nexus-session-start.js` | Cursor session hook script |
+
+> **Note:** See `BOOTSTRAP_FILES.md` for detailed template purposes and usage.
+
+### Harness Binding Templates
+
+Located in `specs/workspace/agent-bindings-research/reference/`:
+
+| Harness | Files |
+|---------|-------|
+| Cursor | `cursor/hooks.json`, `cursor/nexus-session-start.js` |
+| Claude Code | `claude-code/settings.json` |
+| OpenCode | `opencode/nexus-bootstrap.ts` |
+| Codex | `codex/README.md` (limitations doc) |
 
 ---
 
@@ -522,7 +540,7 @@ Config is split by domain, not unified in one file:
 | `specs/cli/` | CLI commands referenced here |
 | `specs/credentials/` | Credential scan and import details |
 | `specs/skills/` | Skill taxonomy and hub |
-| `specs/agent-system/` | Gateway, channels, triggers |
+| `specs/agent-system/` | Gateway, channels, hooks, broker |
 | `specs/UNIFIED_SYSTEM.md` | Service name linking, status cascade |
 
 ---
