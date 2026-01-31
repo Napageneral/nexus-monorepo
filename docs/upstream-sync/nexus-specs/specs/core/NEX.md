@@ -518,15 +518,57 @@ nexus/
 
 ---
 
-## Open Questions
+## Resolved Design Questions
 
-1. **Timer events:** Should timer events (heartbeat, cron) go through the full pipeline, or have a separate path?
+### Timer Events
+Timer events (heartbeat, cron) are just another adapter source. They go through the full pipeline like any other event.
 
-2. **Agent-to-agent:** When MA spawns WA, does that create a new NexusRequest, or is it part of the same one?
+### Agent-to-Agent
+When MA spawns WA, it skips the NexusRequest flow and connects directly through Broker. The Broker still logs to the Event and Agent ledgers, but we don't run ACL/hooks for inter-agent communication. May revisit if needed.
 
-3. **Multi-response:** What if agent needs to send multiple messages? Multiple delivery stages? Or one delivery with multiple chunks?
+### Multi-Response
+The agent uses the `send message` tool, which routes through NEX to the appropriate out-adapter. The out-adapter handles chunking — the agent doesn't think about it. If the agent wants to send multiple messages (even across channels), they make multiple tool calls.
 
-4. **Streaming:** Should agent streaming updates go through plugins, or direct to adapter?
+### Streaming
+Agent streaming (token-by-token output, typing indicators) is handled by Broker/Agent directly to the adapter. NEX provides the delivery context at setup, but doesn't intercept streaming — that would be too slow. Final response is persisted after completion.
+
+Streaming flow:
+```
+Agent generates tokens
+    ↓
+Broker/pi-agent emits text_delta events
+    ↓
+Adapter receives (e.g., Telegram edits draft, typing indicator)
+    ↓
+On completion, full response written to ledger
+```
+
+---
+
+## Evolution from Mnemonic
+
+NEX is the evolution of the existing Mnemonic server. The Go infrastructure becomes the NEX foundation:
+
+```
+Current Mnemonic                    Becomes NEX
+────────────────                    ──────────────
+Go server                      →    NEX core
+Async job bus                  →    Powers hook parallelization
+Ledger stores                  →    Events/Agents/Identity/Nexus ledgers
+Analysis jobs                  →    Continue as background processing
+
+New in NEX:
+- Pipeline orchestration (Receive → ACL → Hooks → Broker → Agent → Deliver)
+- Plugin system (before/after hooks at each stage)
+- Adapter registry
+- NexusRequest data bus
+```
+
+This means:
+- We don't build a separate job queue — we use Mnemonic's existing bus
+- The async write pattern is already implemented
+- The ledger infrastructure exists
+- We add pipeline orchestration and plugins on top
 
 ---
 
