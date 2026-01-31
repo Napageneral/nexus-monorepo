@@ -1,8 +1,17 @@
 # OpenCode → Nexus Fork Mapping
 
-**Status:** PLANNING  
+**Status:** DECISIONS LOCKED (DROP section reviewed)  
 **Date:** January 30, 2026  
+**Last Updated:** January 30, 2026  
 **Purpose:** Detailed mapping of what happens to each OpenCode component
+
+---
+
+## Decision Log
+
+| Date | Section | Decision | Reasoning |
+|------|---------|----------|-----------|
+| 2026-01-30 | DROP | Reviewed all DROP items | See "DROP Decisions" section |
 
 ---
 
@@ -14,6 +23,41 @@
 | 🔴 **DROP** | Remove entirely |
 | 🟡 **REPLACE** | Replace with Nexus-specific implementation |
 | 🔵 **NEW** | Doesn't exist in OpenCode |
+| 📋 **TODO** | Needs deeper review later |
+
+---
+
+## DROP Decisions (Reviewed 2026-01-30)
+
+After thorough investigation of each item originally marked for DROP:
+
+### ✅ Confirmed DROP
+
+| Item | Reason |
+|------|--------|
+| `.opencode/` | Nexus uses `~/nexus/` workspace model |
+| `specs/` | We have our own `nexus-specs/` |
+| `sdks/vscode/` | VSCode extension not the Nexus model — Cursor integration is native |
+| `src/ide/` | IDE integration for VSCode extension — dropping with extension |
+| `themes/` | No TUI planned |
+
+### ✅ Changed to KEEP
+
+| Item | Original | New | Reasoning |
+|------|----------|-----|-----------|
+| `nix/` | DROP | 🟢 ADAPT | Already working in upstream, reproducible builds are valuable, keep it |
+| `packages/app/` | DROP | 🟢 ADAPT | Web UI has file tree, diff viewer, multi-session — good work to keep |
+| `packages/desktop/` | DROP | 🟢 ADAPT | Desktop app has auto-updater, deep linking — redesign later if needed |
+| `packages/enterprise/` | DROP | 🟢 ADAPT 📋 | Keep for now, TODO: review overlap with Nexus Cloud/Hub |
+| `infra/enterprise.ts` | DROP | 🟢 ADAPT 📋 | Keep for now, TODO: review |
+| `src/server/mdns.ts` | DROP | 🟢 ADAPT | Small, enables phone/tablet/multi-device access |
+
+### 📋 TODO: Deeper Review Needed
+
+| Item | What | When |
+|------|------|------|
+| `packages/enterprise/` | Review overlap with Nexus Cloud/Hub, SSO, central config | After initial fork |
+| `src/plugin/` | Plugin system vs Skills — need hybrid approach | See `specs/plugins/UPSTREAM_PLUGINS.md` |
 
 ---
 
@@ -23,14 +67,14 @@
 opencode/                           →  nexus/
 ├── .github/           🟢 ADAPT     →  .github/              (CI/CD adapted)
 ├── .opencode/         🔴 DROP      →  (Nexus uses ~/nexus/ workspace)
-├── infra/             🟢 ADAPT     →  infra/                (SST for hub/cloud/collab)
-├── nix/               🔴 DROP      →  (Not needed)
-├── packages/          🟢 ADAPT     →  packages/             (Structure changes)
+├── infra/             🟢 ADAPT     →  infra/                (SST for hub/cloud/collab/enterprise)
+├── nix/               🟢 ADAPT     →  nix/                  (Reproducible builds — already working)
+├── packages/          🟢 ADAPT     →  packages/             (Structure changes — see below)
 ├── patches/           🟢 ADAPT     →  patches/              (Keep relevant ones)
 ├── script/            🟢 ADAPT     →  scripts/              (Build/release)
-├── sdks/              🔴 DROP      →  (No VSCode extension for now)
+├── sdks/              🔴 DROP      →  (VSCode extension not Nexus model)
 ├── specs/             🔴 DROP      →  (We have nexus-specs/)
-├── themes/            🔴 DROP      →  (TUI themes not priority)
+├── themes/            🔴 DROP      →  (No TUI)
 ├── AGENTS.md          🟢 ADAPT     →  AGENTS.md             (Nexus agent docs)
 ├── package.json       🟢 ADAPT     →  package.json
 ├── turbo.json         🟢 ADAPT     →  turbo.json
@@ -179,18 +223,18 @@ packages/opencode/src/              →  packages/core/src/
 ### Other packages/
 
 ```
-packages/app/          🔴 DROP      →  (Web UI not priority for now)
-packages/desktop/      🔴 DROP      →  (Desktop app not priority)
+packages/app/          🟢 ADAPT     →  packages/app/         (Web UI — file tree, diff viewer, multi-session)
+packages/desktop/      🟢 ADAPT     →  packages/desktop/     (Desktop — auto-updater, deep linking; redesign later)
 packages/console/      🔴 DROP      →  (We have nexus-website/)
-packages/ui/           🔴 DROP      →  (No web UI)
+packages/ui/           🟢 ADAPT     →  packages/ui/          (Shared UI components — needed for app/desktop)
 packages/util/         🟢 ADAPT     →  packages/core/src/util/ (Merge in)
-packages/sdk/          🔴 DROP      →  (No external SDK for now)
-packages/plugin/       🔴 DROP      →  (Skills, not plugins)
+packages/sdk/          🟢 ADAPT     →  packages/sdk/         (Needed for app/desktop to connect to core)
+packages/plugin/       🟢 ADAPT 📋  →  packages/plugin/      (TODO: Review — hybrid with skills)
 packages/script/       🟢 ADAPT     →  scripts/              (Merge with root scripts/)
 packages/web/          🔴 DROP      →  (Docs site separate)
 packages/docs/         🔴 DROP      →  (Docs separate)
-packages/enterprise/   🔴 DROP      →  (No enterprise tier)
-packages/slack/        🔴 DROP      →  (Out-adapter if needed later)
+packages/enterprise/   🟢 ADAPT 📋  →  packages/enterprise/  (TODO: Review overlap with Nexus Cloud/Hub)
+packages/slack/        🟢 ADAPT     →  adapters/out/slack/   (Out-adapter)
 packages/function/     🟢 ADAPT     →  infra/                (Serverless functions)
 ```
 
@@ -271,6 +315,8 @@ packages/core/src/
 
 ### 🟢 ADAPT (Keep and Modify)
 
+**Core Engine:**
+
 | OpenCode | Nexus | Notes |
 |----------|-------|-------|
 | `bus/` | `bus/` | Same pattern, different events |
@@ -294,6 +340,31 @@ packages/core/src/
 | `session/llm.ts` | `agents/llm.ts` | LLM streaming |
 | `session/compaction.ts` | `agents/compaction.ts` | Context compaction |
 | `session/processor.ts` | `broker/executor.ts` | Agent execution loop |
+| `server/mdns.ts` | `server/mdns.ts` | Local network discovery (phone/tablet access) |
+
+**UI/Desktop (Keeping — redesign later if needed):**
+
+| OpenCode | Nexus | Notes |
+|----------|-------|-------|
+| `packages/app/` | `packages/app/` | Web UI — file tree, diff viewer, multi-session |
+| `packages/desktop/` | `packages/desktop/` | Desktop — auto-updater, deep linking |
+| `packages/ui/` | `packages/ui/` | Shared UI components |
+| `packages/sdk/` | `packages/sdk/` | SDK for app/desktop to connect to core |
+
+**Infrastructure:**
+
+| OpenCode | Nexus | Notes |
+|----------|-------|-------|
+| `nix/` | `nix/` | Reproducible builds — already working |
+| `packages/enterprise/` 📋 | `packages/enterprise/` | TODO: Review overlap with Nexus Cloud/Hub |
+| `packages/slack/` | `adapters/out/slack/` | Slack out-adapter |
+
+**Plugins (TODO: Needs deeper review):**
+
+| OpenCode | Nexus | Notes |
+|----------|-------|-------|
+| `packages/plugin/` 📋 | TBD | Hybrid with skills — see `specs/plugins/` |
+| `src/plugin/` 📋 | TBD | Plugin runtime — needs review |
 
 ### 🟡 REPLACE (New Implementation)
 
@@ -302,39 +373,28 @@ packages/core/src/
 | `storage/` | `ledgers/` | File-based → SQLite |
 | `session/` | `broker/` + `ledgers/agent/` | Sessions in ledger |
 | `permission/` | `event-handler/acl/` | Per-call → upfront ACL |
-| `plugin/` | `skills/` | Code plugins → markdown skills |
 | `config/` | `workspace/` | Different config model |
 | `project/` | `workspace/` | Different workspace model |
 | `server/` | `broker/` + `adapters/` | Split responsibilities |
 | `global/` | `workspace/paths.ts` | ~/nexus/ paths |
 | `auth/` | `credentials/` | Nexus credential system |
 
-### 🔴 DROP (Remove)
+### 🔴 DROP (Remove) — REVIEWED 2026-01-30
 
 | OpenCode | Reason |
 |----------|--------|
 | `acp/` | Agent Client Protocol not used |
-| `ide/` | IDE integration not needed |
+| `ide/` | IDE integration for VSCode extension — dropping with extension |
 | `question/` | Handled differently |
-| `plugin/codex.ts` | No Codex plugin |
-| `plugin/copilot.ts` | No Copilot plugin |
-| `server/mdns.ts` | mDNS not needed |
 | `session/message.ts` | Legacy, use v2 |
 | `permission/next.ts` | Subsumed by ACL |
-| `packages/app/` | No web UI for now |
-| `packages/desktop/` | No desktop app for now |
 | `packages/console/` | We have nexus-website |
-| `packages/ui/` | No web UI |
-| `packages/sdk/` | No external SDK |
-| `packages/plugin/` | Skills, not plugins |
 | `packages/web/` | Docs separate |
 | `packages/docs/` | Docs separate |
-| `packages/enterprise/` | No enterprise tier |
-| `packages/slack/` | Out-adapter later if needed |
-| `.opencode/` | Nexus uses ~/nexus/ |
-| `sdks/vscode/` | No VSCode extension |
-| `themes/` | TUI themes not priority |
-| `nix/` | Not needed |
+| `.opencode/` | Nexus uses ~/nexus/ workspace |
+| `sdks/vscode/` | VSCode extension not Nexus model — Cursor integration is native |
+| `themes/` | No TUI planned |
+| `specs/` | We have nexus-specs/ |
 
 ### 🔵 NEW (Nexus-Only)
 
@@ -356,11 +416,13 @@ packages/core/src/
 
 | Category | OpenCode Files | Nexus Files | Change |
 |----------|---------------|-------------|--------|
-| 🟢 ADAPT | ~150 | ~150 | Same |
+| 🟢 ADAPT | ~350 | ~350 | Same (includes app/desktop/ui/sdk/enterprise) |
 | 🟡 REPLACE | ~80 | ~60 | Fewer (consolidated) |
-| 🔴 DROP | ~200+ | 0 | Gone |
-| 🔵 NEW | 0 | ~100 | New |
-| **Total** | ~430+ | ~310 | Smaller, focused |
+| 🔴 DROP | ~80 | 0 | Gone (VSCode ext, console, docs, themes) |
+| 🔵 NEW | 0 | ~100 | New (ledgers, adapters, ACL, hooks) |
+| **Total** | ~510 | ~510 | Similar size, different focus |
+
+**Note:** Keeping web/desktop UI increases total but provides valuable functionality.
 
 ---
 

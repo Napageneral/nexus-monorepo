@@ -444,6 +444,18 @@ These specs are stable and don't need reconciliation work:
    - [ ] Wire Index to Broker
    - [ ] Complete AIX integration
 
+7. **Priority 7: Plugin System Review** 📋 NEW
+   - [ ] Review `specs/plugins/UPSTREAM_PLUGINS.md`
+   - [ ] Decide: adapt, extend, or redesign for Nexus
+   - [ ] Document hybrid approach (plugins + skills)
+   - [ ] Key: plugins do runtime hooks, skills do agent guidance
+
+8. **Priority 8: Enterprise Features Review** 📋 NEW
+   - [ ] Review overlap with Nexus Cloud
+   - [ ] Review overlap with Nexus Hub
+   - [ ] Evaluate: central config, SSO, self-hosted share
+   - [ ] Nexus ACL/ledgers already provide audit — leverage this
+
 ### Phase 2: Consolidation
 
 After completing Phase 1, consolidate the specs around the canonical component model:
@@ -481,6 +493,19 @@ specs/
 - Forking behavior is documented in mnemonic/AGENTS_LEDGER_FORKING.md
 - **ACL specs are comprehensive** — policies, grants, audit all spec'd
 - **Out-adapters are a blind spot** — need specification work
+- **Project structure reviewed** — see `specs/project-structure/FORK_MAPPING.md`
+- **DROP items reviewed 2026-01-30** — decisions locked in FORK_MAPPING.md
+
+---
+
+## Project Structure Docs
+
+| Document | Purpose |
+|----------|---------|
+| `specs/project-structure/UPSTREAM_STRUCTURE.md` | OpenCode codebase map |
+| `specs/project-structure/NEXUS_STRUCTURE.md` | Proposed Nexus structure |
+| `specs/project-structure/FORK_MAPPING.md` | What goes where, decisions |
+| `specs/plugins/UPSTREAM_PLUGINS.md` | Plugin system investigation |
 
 ---
 
