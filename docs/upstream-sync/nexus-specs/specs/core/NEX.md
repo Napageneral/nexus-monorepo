@@ -27,21 +27,36 @@ NEX is the central orchestrator for the Nexus system. It receives events from ad
 
 ## In-Process Architecture
 
-NEX is a single process. Stages like ACL, Hooks, Broker, and Deliver are **modules/functions**, not separate services. There are no network hops between stages.
+NEX is a single process. All stages are **functions**, not separate services. There are no network hops between stages.
 
 ```
 NEX Process (single binary)
-├── receive()      // stage 1 - create NexusRequest
-├── runACL()       // stage 2 - identity, permissions
-├── runHooks()     // stage 3 - trigger matching, context injection
-├── broker()       // stage 4 - agent selection, context assembly, execution
-├── deliver()      // stage 5 - format, chunk, send
-└── complete()     // stage 6 - finalize, trace
+├── receiveEvent()       // 1. Normalize event, create NexusRequest
+├── resolveIdentity()    // 2. WHO sent this? Lookup Identity Ledger
+├── resolveAccess()      // 3. WHAT can they do? Policies → permissions, base session
+├── executeTriggers()    // 4. Match triggers, execute hooks, may override session
+├── assembleContext()    // 5. Gather history, Mnemonic context, agent config, formatting
+├── runAgent()           // 6. Execute agent with assembled context
+├── deliverResponse()    // 7. Format, chunk, send via out-adapter
+└── finalize()           // 8. Write trace, emit to Mnemonic
 
 All function calls. No network hops.
 ```
 
-**Key clarification:** The "Broker" is not a separate service — it's a stage within NEX that handles agent selection, context assembly, and execution. When we say "NEX calls Broker," we mean NEX invokes a function, not a remote service.
+**Key insight:** Each stage name is a verb describing its action. No ambiguity about what happens where.
+
+### Stage Responsibilities
+
+| Stage | Input | Output | May Exit Pipeline? |
+|-------|-------|--------|-------------------|
+| `receiveEvent()` | AdapterEvent | NexusRequest created | No |
+| `resolveIdentity()` | NexusRequest | `principal.identity` populated | Yes (unknown sender) |
+| `resolveAccess()` | NexusRequest | `permissions`, `session` (base) | Yes (access denied) |
+| `executeTriggers()` | NexusRequest | `hooks.*`, `session` (final) | Yes (hook handles completely) |
+| `assembleContext()` | NexusRequest | `agent.context` assembled | No |
+| `runAgent()` | NexusRequest | `response.*` populated | No |
+| `deliverResponse()` | NexusRequest | `delivery_result` | No |
+| `finalize()` | NexusRequest | `pipeline` trace complete | No |
 
 ---
 
@@ -114,65 +129,76 @@ Both NEX and other components use the same library. NEX doesn't "own" the databa
 │                                      │ AdapterEvent                              │
 │                                      ▼                                           │
 │  ┌───────────────────────────────────────────────────────────────────────────┐  │
-│  │                          SYNC PIPELINE                                     │  │
+│  │                          SYNC PIPELINE (8 stages)                         │  │
 │  │                                                                            │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
-│  │  │ 1. RECEIVE                                                            │ │  │
+│  │  │ 1. receiveEvent()                                                     │ │  │
 │  │  │    • Create NexusRequest from AdapterEvent                           │ │  │
 │  │  │    • Populate: request_id, event_id, timestamp, event, delivery      │ │  │
 │  │  │    • Async: Write event to Events Ledger                             │ │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘ │  │
 │  │                                   │                                        │  │
-│  │                          [plugin: after_receive]                          │  │
+│  │                        [plugin: afterReceiveEvent]                        │  │
 │  │                                   │                                        │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
-│  │  │ 2. ACL                                                                │ │  │
-│  │  │    • Resolve sender identity from Identity Ledger                    │ │  │
-│  │  │    • Evaluate policies                                                │ │  │
-│  │  │    • Populate: principal, permissions, session                       │ │  │
+│  │  │ 2. resolveIdentity()                                                  │ │  │
+│  │  │    • WHO sent this?                                                   │ │  │
+│  │  │    • Lookup sender in Identity Ledger                                │ │  │
+│  │  │    • Populate: principal.identity                                    │ │  │
+│  │  │    • If unknown → may exit or create new identity                    │ │  │
+│  │  └──────────────────────────────────────────────────────────────────────┘ │  │
+│  │                                   │                                        │  │
+│  │                       [plugin: afterResolveIdentity]                      │  │
+│  │                                   │                                        │  │
+│  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
+│  │  │ 3. resolveAccess()                                                    │ │  │
+│  │  │    • WHAT can they do?                                                │ │  │
+│  │  │    • Evaluate ACL policies                                            │ │  │
+│  │  │    • Populate: principal.permissions, session (BASE)                 │ │  │
 │  │  │    • If denied → exit pipeline (async: write denial)                 │ │  │
 │  │  │    • Async: Write ACL result                                         │ │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘ │  │
 │  │                                   │                                        │  │
-│  │                          [plugin: after_acl]                              │  │
+│  │                        [plugin: afterResolveAccess]                       │  │
 │  │                                   │                                        │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
-│  │  │ 3. HOOKS                                                              │ │  │
+│  │  │ 4. executeTriggers()                                                  │ │  │
 │  │  │    • Match hooks against triggers (parallel)                         │ │  │
 │  │  │    • Execute matched hooks (parallel where independent)              │ │  │
-│  │  │    • Populate: hooks.evaluated, hooks.fired, hooks.context           │ │  │
+│  │  │    • May override session (smart routing)                            │ │  │
+│  │  │    • Populate: hooks.*, session (FINAL)                              │ │  │
 │  │  │    • If hook handles completely → exit pipeline                      │ │  │
 │  │  │    • Async: Write hooks result                                       │ │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘ │  │
 │  │                                   │                                        │  │
-│  │                          [plugin: after_hooks]                            │  │
+│  │                       [plugin: afterExecuteTriggers]                      │  │
 │  │                                   │                                        │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
-│  │  │ 4. BROKER                                                             │ │  │
-│  │  │    • Prepare agent execution context (parallel fetches):             │ │  │
+│  │  │ 5. assembleContext()                                                  │ │  │
+│  │  │    • Gather context for finalized session (parallel fetches):        │ │  │
 │  │  │      - Conversation history                                           │ │  │
 │  │  │      - Relevant context from Mnemonic                                │ │  │
 │  │  │      - Agent config (persona, model, tools)                          │ │  │
+│  │  │      - Channel formatting guidance                                    │ │  │
 │  │  │    • Create turn in Agents Ledger                                    │ │  │
-│  │  │    • Inject channel formatting guidance                              │ │  │
-│  │  │    • Populate: agent.agent_id, agent.turn_id, agent.thread_id        │ │  │
-│  │  │    • Async: Write broker prep                                        │ │  │
+│  │  │    • Populate: agent.context, agent.turn_id, agent.thread_id         │ │  │
+│  │  │    • Async: Write context prep                                       │ │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘ │  │
 │  │                                   │                                        │  │
-│  │                          [plugin: after_broker]                           │  │
+│  │                       [plugin: afterAssembleContext]                      │  │
 │  │                                   │                                        │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
-│  │  │ 5. AGENT                                                              │ │  │
-│  │  │    • Execute agent with prepared context                             │ │  │
-│  │  │    • Stream updates to Agents Ledger                                 │ │  │
+│  │  │ 6. runAgent()                                                         │ │  │
+│  │  │    • Execute agent with assembled context                            │ │  │
+│  │  │    • Streaming: tokens flow directly to adapter                      │ │  │
 │  │  │    • Populate: response.content, response.tool_calls, response.tokens │ │  │
 │  │  │    • Async: Write completion to Agents Ledger                        │ │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘ │  │
 │  │                                   │                                        │  │
-│  │                          [plugin: after_agent]                            │  │
+│  │                          [plugin: afterRunAgent]                          │  │
 │  │                                   │                                        │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
-│  │  │ 6. DELIVER                                                            │ │  │
+│  │  │ 7. deliverResponse()                                                  │ │  │
 │  │  │    • Format response for channel                                     │ │  │
 │  │  │    • Chunk if necessary                                               │ │  │
 │  │  │    • Send via out-adapter                                            │ │  │
@@ -180,16 +206,16 @@ Both NEX and other components use the same library. NEX doesn't "own" the databa
 │  │  │    • Async: Write response event to Events Ledger                    │ │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘ │  │
 │  │                                   │                                        │  │
-│  │                          [plugin: after_deliver]                          │  │
+│  │                       [plugin: afterDeliverResponse]                      │  │
 │  │                                   │                                        │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
-│  │  │ 7. COMPLETE                                                           │ │  │
+│  │  │ 8. finalize()                                                         │ │  │
 │  │  │    • Finalize NexusRequest                                           │ │  │
 │  │  │    • Async: Write full trace to Nexus Ledger                         │ │  │
 │  │  │    • Emit to Mnemonic for analysis                                   │ │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘ │  │
 │  │                                   │                                        │  │
-│  │                          [plugin: on_complete]                            │  │
+│  │                          [plugin: onFinalize]                             │  │
 │  │                                                                            │  │
 │  └───────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                  │
@@ -220,17 +246,40 @@ Both NEX and other components use the same library. NEX doesn't "own" the databa
 
 ## NexusRequest Lifecycle
 
-The `NexusRequest` is created at receive and populated through each stage:
+The `NexusRequest` is created at `receiveEvent()` and populated through each stage:
 
 | Stage | Fields Populated |
 |-------|------------------|
-| **Receive** | `request_id`, `event_id`, `timestamp`, `event`, `delivery` |
-| **ACL** | `principal`, `permissions`, `session` |
-| **Hooks** | `hooks.evaluated`, `hooks.fired`, `hooks.context` |
-| **Broker** | `agent.agent_id`, `agent.turn_id`, `agent.thread_id`, `agent.persona` |
-| **Agent** | `response.content`, `response.tool_calls`, `response.tokens` |
-| **Deliver** | `delivery_result` |
-| **Complete** | `pipeline` trace, final timestamps |
+| **receiveEvent()** | `request_id`, `event_id`, `timestamp`, `event`, `delivery` |
+| **resolveIdentity()** | `principal.identity` |
+| **resolveAccess()** | `principal.permissions`, `session` (base) |
+| **executeTriggers()** | `hooks.evaluated`, `hooks.fired`, `hooks.context`, `session` (final) |
+| **assembleContext()** | `agent.context`, `agent.turn_id`, `agent.thread_id`, `agent.persona` |
+| **runAgent()** | `response.content`, `response.tool_calls`, `response.tokens` |
+| **deliverResponse()** | `delivery_result` |
+| **finalize()** | `pipeline` trace, final timestamps |
+
+### Data Flow Visualization
+
+```
+receiveEvent()       → request.event populated
+                        │
+resolveIdentity()    → request.principal.identity populated
+                        │
+resolveAccess()      → request.principal.permissions
+                       request.session (BASE)
+                        │
+executeTriggers()    → request.session (FINAL - may be overridden by trigger)
+                       request.hooks.context (injected context)
+                        │
+assembleContext()    → request.agent.context (history, Mnemonic, config, formatting)
+                        │
+runAgent()           → request.response.* populated
+                        │
+deliverResponse()    → request.delivery_result
+                        │
+finalize()           → request.pipeline trace complete
+```
 
 See `NEXUS_REQUEST.md` for full schema.
 
@@ -243,10 +292,10 @@ See `NEXUS_REQUEST.md` for full schema.
 Each stage waits for the previous to complete:
 
 ```
-Receive → ACL → Hooks → Broker → Agent → Deliver → Complete
+receiveEvent → resolveIdentity → resolveAccess → executeTriggers → assembleContext → runAgent → deliverResponse → finalize
 ```
 
-All of these are sync because each depends on the output of the previous.
+All 8 stages are sync because each depends on the output of the previous.
 
 ### Async (Fire-and-Forget Writes)
 
@@ -325,15 +374,16 @@ interface NEXPlugin {
   name: string;
   priority?: number;  // Lower runs first (default: 100)
   
-  // Lifecycle hooks
-  afterReceive?(req: NexusRequest): Promise<void | 'skip'>;
-  afterACL?(req: NexusRequest): Promise<void | 'skip'>;
-  afterHooks?(req: NexusRequest): Promise<void | 'skip'>;
-  afterBroker?(req: NexusRequest): Promise<void | 'skip'>;
-  afterAgent?(req: NexusRequest): Promise<void | 'skip'>;
-  afterDeliver?(req: NexusRequest): Promise<void | 'skip'>;
+  // Lifecycle hooks (after each stage)
+  afterReceiveEvent?(req: NexusRequest): Promise<void | 'skip'>;
+  afterResolveIdentity?(req: NexusRequest): Promise<void | 'skip'>;
+  afterResolveAccess?(req: NexusRequest): Promise<void | 'skip'>;
+  afterExecuteTriggers?(req: NexusRequest): Promise<void | 'skip'>;
+  afterAssembleContext?(req: NexusRequest): Promise<void | 'skip'>;
+  afterRunAgent?(req: NexusRequest): Promise<void | 'skip'>;
+  afterDeliverResponse?(req: NexusRequest): Promise<void | 'skip'>;
   
-  onComplete?(req: NexusRequest): Promise<void>;
+  onFinalize?(req: NexusRequest): Promise<void>;
   onError?(req: NexusRequest, error: Error): Promise<void>;
 }
 ```
@@ -353,10 +403,10 @@ Plugins can:
 // Logging plugin
 const loggingPlugin: NEXPlugin = {
   name: 'logging',
-  afterReceive: async (req) => {
+  afterReceiveEvent: async (req) => {
     console.log(`[NEX] Received: ${req.event_id}`);
   },
-  onComplete: async (req) => {
+  onFinalize: async (req) => {
     console.log(`[NEX] Complete: ${req.request_id} in ${req.pipeline.duration_ms}ms`);
   },
 };
@@ -364,7 +414,7 @@ const loggingPlugin: NEXPlugin = {
 // Analytics plugin
 const analyticsPlugin: NEXPlugin = {
   name: 'analytics',
-  onComplete: async (req) => {
+  onFinalize: async (req) => {
     await analytics.track('request_complete', {
       channel: req.delivery.channel,
       persona: req.session.persona,
@@ -373,14 +423,22 @@ const analyticsPlugin: NEXPlugin = {
   },
 };
 
-// Custom ACL override plugin
-const customACLPlugin: NEXPlugin = {
-  name: 'custom-acl',
-  priority: 50,  // Run before default
-  afterReceive: async (req) => {
-    if (req.event.content.includes('ADMIN_OVERRIDE')) {
-      req.principal = { type: 'owner', name: 'Admin Override' };
-      return 'skip';  // Skip normal ACL
+// Identity enrichment plugin (runs after identity resolved, before access check)
+const enrichIdentityPlugin: NEXPlugin = {
+  name: 'enrich-identity',
+  afterResolveIdentity: async (req) => {
+    // Add extra context from external system
+    const profile = await crm.getProfile(req.principal.identity.email);
+    req.principal.identity.metadata = { ...req.principal.identity.metadata, crm: profile };
+  },
+};
+
+// Context injection plugin (runs after triggers, before context assembly)
+const urgentFlagPlugin: NEXPlugin = {
+  name: 'urgent-flag',
+  afterExecuteTriggers: async (req) => {
+    if (req.event.content.match(/urgent|asap|emergency/i)) {
+      req.hooks.context.priority = 'urgent';
     }
   },
 };
@@ -394,9 +452,10 @@ Agents can create plugins via a skill:
 // Agent writes this to plugins/my-custom-hook.ts
 export const plugin: NEXPlugin = {
   name: 'agent-created-hook',
-  afterHooks: async (req) => {
-    if (req.event.content.match(/urgent/i)) {
-      req.hooks.context.priority = 'urgent';
+  afterExecuteTriggers: async (req) => {
+    // Custom routing: if message mentions "code", route to CodeAgent
+    if (req.event.content.match(/code|programming|debug/i)) {
+      req.session = { ...req.session, persona: 'code-agent' };
     }
   },
 };
@@ -570,14 +629,15 @@ nexus/
 │   │   ├── discord.ts
 │   │   ├── webhook.ts
 │   │   └── timer.ts
-│   ├── stages/                 # Pipeline stages
-│   │   ├── receive.ts
-│   │   ├── acl.ts
-│   │   ├── hooks.ts
-│   │   ├── broker.ts
-│   │   ├── agent.ts
-│   │   ├── deliver.ts
-│   │   └── complete.ts
+│   ├── stages/                 # Pipeline stages (8 total)
+│   │   ├── receiveEvent.ts
+│   │   ├── resolveIdentity.ts
+│   │   ├── resolveAccess.ts
+│   │   ├── executeTriggers.ts
+│   │   ├── assembleContext.ts
+│   │   ├── runAgent.ts
+│   │   ├── deliverResponse.ts
+│   │   └── finalize.ts
 │   └── ledger/                 # Ledger write helpers
 │       ├── events.ts
 │       ├── agents.ts
@@ -627,8 +687,8 @@ Ledger stores                  →    Events/Agents/Identity/Nexus ledgers
 Analysis jobs                  →    Continue as background processing
 
 New in NEX:
-- Pipeline orchestration (Receive → ACL → Hooks → Broker → Agent → Deliver)
-- Plugin system (before/after hooks at each stage)
+- 8-stage pipeline (receiveEvent → resolveIdentity → resolveAccess → executeTriggers → assembleContext → runAgent → deliverResponse → finalize)
+- Plugin system (after hooks at each stage)
 - Adapter registry
 - NexusRequest data bus
 ```
