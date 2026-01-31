@@ -1,13 +1,13 @@
 # Core Spec
 
-**Status:** DESIGN IN PROGRESS  
+**Status:** ACTIVE  
 **Last Updated:** 2026-01-30
 
 ---
 
 ## Overview
 
-This folder contains the core data schemas and patterns that flow through the entire Nexus system. These are the foundational types that every other component uses.
+This folder contains the core data schemas and interfaces that flow through the entire Nexus system. These are the foundational types that every other component uses.
 
 ---
 
@@ -15,9 +15,9 @@ This folder contains the core data schemas and patterns that flow through the en
 
 | Spec | Status | Description |
 |------|--------|-------------|
-| `README.md` | This file | Overview |
-| `NEXUS_REQUEST.md` | TODO | The request bus that accumulates context through the pipeline |
-| `CHANNEL_CAPABILITIES.md` | TODO | Per-channel capabilities and limits |
+| **`INTERFACE_WORKPLAN.md`** | ✅ Active | **START HERE** — Tracks all 10 component interfaces |
+| `NEXUS_REQUEST.md` | ✅ Done | The data bus that accumulates context through pipeline |
+| `CHANNEL_CAPABILITIES.md` | — | Covered in `adapters/channels/` per-channel docs |
 
 ---
 

@@ -456,6 +456,12 @@ These specs are stable and don't need reconciliation work:
    - [ ] Evaluate: central config, SSO, self-hosted share
    - [ ] Nexus ACL/ledgers already provide audit — leverage this
 
+9. **Priority 9: Event Bus Integration** 📋 NEW
+   - [ ] Define Nexus bus event types (ledger, ACL, hooks, broker, adapters)
+   - [ ] Review all specs to ensure bus integration is planned
+   - [ ] Document bus → SSE streaming for UI
+   - [ ] Critical: Bus enables Event Ledger → Event Handler flow
+
 ### Phase 2: Consolidation
 
 After completing Phase 1, consolidate the specs around the canonical component model:

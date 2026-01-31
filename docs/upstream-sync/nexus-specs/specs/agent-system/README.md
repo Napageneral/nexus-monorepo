@@ -101,15 +101,15 @@ External Sources → Mnemonic Event Layer → Hook Evaluation → Agent Broker �
 
 | Item | Status | Notes |
 |------|--------|-------|
-| ACL → Broker Interface | TODO | How ACL dispatch becomes broker calls (now clearer with ACL defined). |
-| Response Formatting | TODO | See detailed notes below. |
+| ACL → Hooks → Broker Interface | TODO | See `../core/INTERFACE_WORKPLAN.md` for tracking. |
+| Response Formatting | ✅ RESOLVED | Turn-start context injection. See `../adapters/` docs. |
 | Events vs Agents Ledger Split | TODO | Broker writes directly to ledgers. |
 
 ### Deferred
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Persona Management | DEFERRED | Storage, accounts, relationship to ACL. Personas tracked like people in ledger? |
+| Persona Management | ✅ Resolved | Tracked in unified entities table. See `../acl/ACCESS_CONTROL_SYSTEM.md`. |
 | Ledger Integration | DEFERRED | Broker writes directly to Agents Ledger. Schema alignment. |
 | SESSION_FORMAT.md Revision | DEFERRED | Needs update for Nexus divergence. |
 | Context Assembly Details | TODO | Event/session context injection spec |
@@ -120,30 +120,22 @@ External Sources → Mnemonic Event Layer → Hook Evaluation → Agent Broker �
 
 ---
 
-## Response Formatting TODO
+## Response Formatting — RESOLVED
 
-**Context:** When agent responds, the delivery context (channel, thread, replyToId) determines how to format and deliver.
+**Decision:** Turn-start context injection based on channel.
 
-**Upstream approach:**
-- No explicit formatter tools in upstream
-- Outbound adapters handle platform-specific formatting:
-  - Discord: 2000 char limit, embeds, threads
-  - Telegram: 4000 chars, MarkdownV2
-  - WhatsApp: Baileys API, PTT audio
-- Agent knowledge via system prompt can include formatting guidance
+When a message arrives, the channel is known from the event. Before the agent turn starts, inject formatting guidance based on that channel into the turn context (via `prependContext` or equivalent).
 
-**Options for Nexus:**
-1. **Adapter-handled** — Outbound adapters format automatically based on channel
-2. **Formatter tool** — Agent can explicitly request rich formatting
-3. **System prompt injection** — Inject platform guidance based on delivery context
+**Key documents:**
+- `../adapters/upstream-reference/TOOL_HOOK_MECHANISM.md` — Decision and rationale
+- `../adapters/OUTBOUND_INTERFACE.md` — Adapter formatting responsibility
+- `../adapters/channels/` — Per-channel formatting rules
 
-**Questions to resolve:**
-- How does agent know which channel it's responding to?
-- Should formatting be automatic or agent-controlled?
-- How to handle message chunking for long responses?
-- Thread/reply handling per platform?
-
-**Spec needed:** Response formatting system design doc.
+**Summary:**
+- Agent receives channel via `NexusRequest.delivery.channel`
+- Agent receives capabilities via `NexusRequest.delivery.capabilities`
+- Detailed formatting rules injected at turn start based on channel
+- Adapters handle final formatting, chunking, delivery
 
 ---
 

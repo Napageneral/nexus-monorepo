@@ -12,6 +12,13 @@
 | Date | Section | Decision | Reasoning |
 |------|---------|----------|-----------|
 | 2026-01-30 | DROP | Reviewed all DROP items | See "DROP Decisions" section |
+| 2026-01-30 | ADAPT/REPLACE | Refined component placement | See "Refined Mapping" section |
+| 2026-01-30 | Bus | Critical integration point | Enables Event Ledger → Event Handler |
+| 2026-01-30 | Plugins | Keep Codex/Copilot | Bundle into credentials system |
+| 2026-01-30 | Worktree | DROP | Agents handle git worktrees natively |
+| 2026-01-30 | TUI | DROP | Confirmed no TUI |
+| 2026-01-30 | Share | Keep as tool | Session sharing feature |
+| 2026-01-30 | Scheduler | Keep | Lifecycle-aware timer management |
 
 ---
 
@@ -40,6 +47,9 @@ After thorough investigation of each item originally marked for DROP:
 | `sdks/vscode/` | VSCode extension not the Nexus model — Cursor integration is native |
 | `src/ide/` | IDE integration for VSCode extension — dropping with extension |
 | `themes/` | No TUI planned |
+| `cli/cmd/tui/` | No TUI — confirmed |
+| `worktree/` | Agents handle git worktrees natively |
+| `global/` | Replaced by Nexus `~/nexus/` workspace paths |
 
 ### ✅ Changed to KEEP
 
@@ -109,7 +119,7 @@ packages/opencode/src/              →  packages/core/src/
 │
 ├── cli/               🟢 ADAPT     →  (moves to packages/cli/)
 │   └── cmd/
-│       ├── tui/       🟢 ADAPT     →  packages/cli/src/tui/ (Optional TUI)
+│       ├── tui/       🔴 DROP      →  (No TUI — confirmed)
 │       ├── serve.ts   🟡 REPLACE   →  broker/server.ts      (Broker serves, not generic server)
 │       └── session.ts 🟡 REPLACE   →  broker/               (Session management in broker)
 │
@@ -128,7 +138,7 @@ packages/opencode/src/              →  packages/core/src/
 │
 ├── format/            🟢 ADAPT     →  format/               (Code formatting)
 │
-├── global/            🟡 REPLACE   →  workspace/paths.ts    (Nexus paths: ~/nexus/)
+├── global/            🔴 DROP      →  (Nexus uses ~/nexus/ — see workspace/paths.ts)
 │
 ├── id/                🟢 ADAPT     →  id/                   (ID generation)
 │
@@ -144,10 +154,10 @@ packages/opencode/src/              →  packages/core/src/
 │   ├── index.ts       🟡 REPLACE   →  acl/evaluate.ts       (Policy evaluation)
 │   └── next.ts        🔴 DROP      →  (Subsumed by ACL)
 │
-├── plugin/            🟡 REPLACE   →  skills/               (Skills, not plugins)
-│   ├── index.ts       🟡 REPLACE   →  skills/loader.ts
-│   ├── codex.ts       🔴 DROP      →  (Codex plugin not needed)
-│   └── copilot.ts     🔴 DROP      →  (Copilot plugin not needed)
+├── plugin/            🟢 ADAPT 📋  →  plugin/               (Keep plugin system — hybrid with skills)
+│   ├── index.ts       🟢 ADAPT     →  plugin/index.ts       (Plugin loader)
+│   ├── codex.ts       🟢 ADAPT     →  credentials/oauth/codex.ts   (Bundle into credentials)
+│   └── copilot.ts     🟢 ADAPT     →  credentials/oauth/copilot.ts (Bundle into credentials)
 │
 ├── project/           🟡 REPLACE   →  workspace/            (Nexus workspace model)
 │   ├── instance.ts    🟡 REPLACE   →  (Single workspace, not per-directory instances)
@@ -169,7 +179,7 @@ packages/opencode/src/              →  packages/core/src/
 ├── server/            🟡 REPLACE   →  broker/ + adapters/   (Split responsibilities)
 │   ├── server.ts      🟡 REPLACE   →  broker/server.ts      (Broker API)
 │   ├── event.ts       🟡 REPLACE   →  bus/sse.ts            (SSE streaming)
-│   ├── mdns.ts        🔴 DROP      →  (mDNS not needed)
+│   ├── mdns.ts        🟢 ADAPT     →  broker/server/mdns.ts (Local network discovery)
 │   └── routes/        🟡 REPLACE   →  broker/routes/        (Broker routes)
 │       ├── session.ts 🟡 REPLACE   →  broker/routes/session.ts
 │       ├── permission 🟡 REPLACE   →  (ACL, not permission routes)
@@ -180,16 +190,16 @@ packages/opencode/src/              →  packages/core/src/
 │   ├── processor.ts   🟢 ADAPT     →  broker/executor.ts    (Agent execution loop)
 │   ├── message.ts     🔴 DROP      →  (Legacy, use v2)
 │   ├── message-v2.ts  🟡 REPLACE   →  ledgers/agent/types.ts (Types only)
-│   ├── prompt.ts      🟢 ADAPT     →  agents/prompts/       (Prompt construction)
-│   ├── llm.ts         🟢 ADAPT     →  agents/llm.ts         (LLM streaming)
-│   ├── compaction.ts  🟢 ADAPT     →  agents/compaction.ts  (Context compaction)
-│   ├── summary.ts     🟢 ADAPT     →  agents/summary.ts     (Summarization)
+│   ├── prompt.ts      🟢 ADAPT     →  broker/prompts.ts     (Prompt construction)
+│   ├── llm.ts         🟢 ADAPT     →  broker/llm.ts         (LLM streaming)
+│   ├── compaction.ts  🟢 ADAPT     →  broker/compaction.ts  (Context compaction)
+│   ├── summary.ts     🟢 ADAPT     →  broker/summary.ts     (Summarization)
 │   ├── retry.ts       🟢 ADAPT     →  broker/retry.ts       (Retry logic)
 │   └── status.ts      🟢 ADAPT     →  broker/status.ts      (Status tracking)
 │
-├── share/             🟢 ADAPT     →  share/                (Session sharing)
+├── share/             🟢 ADAPT     →  tools/share/          (Session sharing tool — /share command)
 │
-├── shell/             🟢 ADAPT     →  shell/                (Shell integration)
+├── shell/             🟢 ADAPT     →  util/shell.ts         (Shell detection utility)
 │
 ├── skill/             🟢 ADAPT     →  skills/               (Skill loading)
 │
@@ -217,7 +227,7 @@ packages/opencode/src/              →  packages/core/src/
 │
 ├── util/              🟢 ADAPT     →  util/
 │
-└── worktree/          🟢 ADAPT     →  worktree/             (Git worktrees)
+└── worktree/          🔴 DROP      →  (Agents handle git worktrees natively)
 ```
 
 ### Other packages/
@@ -450,6 +460,104 @@ adapters/
 # - Could compile to binary, call from TS
 # - Or use FFI binding
 # - Or run as subprocess with JSON IPC
+```
+
+---
+
+## Critical Integration: Event Bus
+
+The **bus/** component is a critical integration point that enables our Event Ledger → Event Handler architecture.
+
+**What the bus provides:**
+- Pub/sub event system for decoupled communication
+- Type-safe events via Zod schemas
+- Instance-scoped and global event subscriptions
+- Automatic cleanup on disposal
+
+**Nexus bus events (to be defined):**
+
+| Category | Events |
+|----------|--------|
+| **Ledger** | `event.created`, `identity.updated`, `turn.created`, `turn.completed` |
+| **ACL** | `acl.decision`, `acl.grant.requested`, `acl.grant.approved` |
+| **Hooks** | `hook.fired`, `hook.context` |
+| **Broker** | `session.routed`, `agent.started`, `agent.completed` |
+| **Adapters** | `adapter.in.received`, `adapter.out.sent` |
+
+**Integration points:**
+- Event Ledger writes → publishes `event.created`
+- Event Handler subscribes → triggers ACL + hooks
+- Broker subscribes → receives `BrokerDispatch`
+- Out-Adapters subscribe → receive responses to send
+- Index subscribes → processes new ledger entries
+- UI subscribes via SSE → real-time updates
+
+**Action:** Review all specs to ensure bus integration is planned.
+
+---
+
+## Refined Component Placement
+
+After deep investigation, here's where components land in Nexus:
+
+### Broker (Agent Execution)
+```
+broker/
+├── broker.ts         # Main broker
+├── router.ts         # Session routing  
+├── executor.ts       # Agent execution loop (from session/processor.ts)
+├── llm.ts            # LLM streaming (from session/llm.ts)
+├── compaction.ts     # Context compaction (from session/compaction.ts)
+├── summary.ts        # Summarization (from session/summary.ts)
+├── prompts.ts        # Prompt construction (from session/prompt.ts)
+├── retry.ts          # Retry logic
+├── status.ts         # Status tracking
+├── sessions.ts       # Session management
+└── server/
+    ├── server.ts     # HTTP API
+    ├── routes/       # API routes
+    └── mdns.ts       # Local network discovery
+```
+
+### Credentials (with OAuth)
+```
+credentials/
+├── store.ts          # Credential storage
+├── backends/         # Keychain, 1Password, env, etc.
+├── access.ts         # Consumer-centric access
+└── oauth/            # OAuth flows (bundled from plugins)
+    ├── codex.ts      # OpenAI Codex/ChatGPT PKCE flow
+    └── copilot.ts    # GitHub Copilot device flow
+```
+
+### Tools (User-facing)
+```
+tools/
+├── registry.ts
+├── tool.ts
+├── builtin/          # Core tools
+│   ├── read.ts
+│   ├── write.ts
+│   ├── edit.ts
+│   ├── bash.ts
+│   ├── grep.ts
+│   └── ...
+├── share/            # Session sharing tool
+│   └── share.ts
+├── snapshot/         # File snapshot tool
+│   └── snapshot.ts
+└── skill.ts          # Skill tool
+```
+
+### Infrastructure (Used by tools/broker)
+```
+core/
+├── bus/              # Event pub/sub (CRITICAL)
+├── file/             # File operations, ripgrep, watcher
+├── pty/              # Pseudo-terminal sessions
+├── scheduler/        # Background task scheduling
+├── util/             # Utilities (including shell.ts)
+└── plugin/           # Plugin system (hybrid with skills)
 ```
 
 ---
