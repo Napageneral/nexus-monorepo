@@ -59,15 +59,15 @@ The Nexus Event Bus provides real-time pub/sub communication between system comp
 
 ## Design Decisions
 
-### 1. In-Memory Primary, Optional Durability
+### 1. In-Memory Primary, Optional Write-Through
 
 The bus is primarily in-memory for speed. Durability is handled by ledgers.
 
 ```typescript
-// Bus events are ephemeral
+// Bus events are ephemeral by default
 Bus.publish(Event.StreamingToken, { delta: "Hello" })
 // → Pushed to subscribers immediately
-// → NOT written to disk
+// → NOT written to disk (default)
 
 // Permanent data goes to ledgers
 await AgentLedger.appendContent(turnId, "Hello")
@@ -75,18 +75,54 @@ await AgentLedger.appendContent(turnId, "Hello")
 // → May trigger bus event for UI
 ```
 
+**Configuration:**
+
+```yaml
+# nex.yaml
+bus:
+  # Primary: always in-memory for real-time
+  mode: 'memory'  # 'memory' | 'write-through'
+  
+  # Optional: write-through to SQLite for audit/debug
+  write_through:
+    enabled: false           # Set true to enable
+    path: ./data/bus.db      # SQLite database
+    retention_days: 7        # Auto-cleanup old events
+    
+  # Optional: append-only log file (simpler than SQLite)
+  audit_log:
+    enabled: false
+    path: ./logs/bus-events.jsonl
+```
+
+**Modes:**
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| `memory` | In-memory only, no persistence | Default, fastest |
+| `write-through` | In-memory + async SQLite write | Debugging, audit |
+
+**Write-through schema:**
+
+```sql
+CREATE TABLE bus_events (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  id TEXT NOT NULL UNIQUE,
+  type TEXT NOT NULL,
+  properties_json TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX idx_bus_type ON bus_events(type);
+CREATE INDEX idx_bus_created ON bus_events(created_at);
+```
+
 **Rationale:**
 - Most bus events are transient (streaming tokens, status updates)
 - Permanent data should be in ledgers (single source of truth)
 - In-memory is fast (no I/O latency)
 - Crash recovery uses ledgers, not bus replay
-
-**Optional audit logging:**
-For debugging/analytics, bus events can be logged to a file (not queried, just appended):
-```
-bus:
-  audit_log: ./logs/bus-events.jsonl  # Optional, append-only
-```
+- Write-through is opt-in for debugging/audit when needed
 
 ### 2. No Instance Scoping
 
@@ -256,6 +292,41 @@ Bus.subscribeAll((event) => {
 | System | 3 |
 | LSP & Tools | 4 |
 | **Total** | **41** |
+
+---
+
+## Event Consumers
+
+Who subscribes to what:
+
+| Consumer | Events | Purpose |
+|----------|--------|---------|
+| **UI (SSE)** | All via `subscribeAll()` | Real-time updates, streaming |
+| **Format-on-save** | `file.edited` | Auto-format after tool writes |
+| **LSP** | `file.edited`, `file.watcher.changed` | Refresh diagnostics |
+| **Share sync** | `session.*`, `turn.*` | Sync to share server |
+| **Logging** | All via `subscribeAll()` | Debug logs |
+| **Analytics** | `nex.request.*`, `agent.*` | Metrics, latency tracking |
+| **Permission UI** | `permission.requested` | Show approval dialog |
+| **Agent executor** | `permission.resolved` | Unblock on user response |
+| **Tool registry** | `mcp.server.*`, `tools.*` | Update available tools |
+
+**Subscription patterns:**
+
+```typescript
+// UI: subscribe to everything, filter client-side
+Bus.subscribeAll((event) => sseStream.write(event))
+
+// Format-on-save: single event type
+Bus.subscribe(Event.File.Edited, async ({ path }) => {
+  await formatFile(path)
+})
+
+// Permission flow: request/response pair
+Bus.subscribe(Event.Permission.Resolved, ({ request_id, granted }) => {
+  pendingRequests.get(request_id)?.resolve(granted)
+})
+```
 
 ---
 

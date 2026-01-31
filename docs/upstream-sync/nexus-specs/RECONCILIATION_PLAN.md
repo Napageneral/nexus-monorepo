@@ -444,11 +444,15 @@ These specs are stable and don't need reconciliation work:
    - [ ] Wire Index to Broker
    - [ ] Complete AIX integration
 
-7. **Priority 7: Plugin System Review** 📋 NEW
-   - [ ] Review `specs/plugins/UPSTREAM_PLUGINS.md`
-   - [ ] Decide: adapt, extend, or redesign for Nexus
-   - [ ] Document hybrid approach (plugins + skills)
-   - [ ] Key: plugins do runtime hooks, skills do agent guidance
+7. **Priority 7: Plugin System Review** ✅ RESOLVED
+   - [x] Review `specs/plugins/UPSTREAM_PLUGINS.md` ✅
+   - [x] Decision: DROP OpenCode plugin system ✅
+   - [x] Replace with three abstractions:
+     - **NEX Plugins** — Pipeline stage hooks (afterReceive, afterACL, etc.)
+     - **Hooks** — Event-triggered automation (user/agent created)
+     - **Skills** — Agent guidance documents
+   - [x] Tool registration via `tools/dynamic/` + MCP — See `specs/tools/TOOL_REGISTRATION.md`
+   - [x] OAuth flows move to Credentials system (codex.ts, copilot.ts)
 
 8. **Priority 8: Enterprise Features Review** 📋 NEW
    - [ ] Review overlap with Nexus Cloud

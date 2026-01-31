@@ -19,6 +19,9 @@
 | 2026-01-30 | TUI | DROP | Confirmed no TUI |
 | 2026-01-30 | Share | Keep as tool | Session sharing feature |
 | 2026-01-30 | Scheduler | Keep | Lifecycle-aware timer management |
+| 2026-01-30 | OpenCode Plugins | DROP system | Replace with NEX plugins + Credentials + Tools |
+| 2026-01-30 | Bus | KEEP | OpenCode bus for real-time, in-memory + optional write-through |
+| 2026-01-30 | Tool Registration | Hybrid | tools/dynamic/ (hot-reload) + MCP servers |
 
 ---
 
@@ -154,10 +157,10 @@ packages/opencode/src/              →  packages/core/src/
 │   ├── index.ts       🟡 REPLACE   →  acl/evaluate.ts       (Policy evaluation)
 │   └── next.ts        🔴 DROP      →  (Subsumed by ACL)
 │
-├── plugin/            🟢 ADAPT 📋  →  plugin/               (Keep plugin system — hybrid with skills)
-│   ├── index.ts       🟢 ADAPT     →  plugin/index.ts       (Plugin loader)
-│   ├── codex.ts       🟢 ADAPT     →  credentials/oauth/codex.ts   (Bundle into credentials)
-│   └── copilot.ts     🟢 ADAPT     →  credentials/oauth/copilot.ts (Bundle into credentials)
+├── plugin/            🟡 REPLACE   →  (Split into NEX plugins + Credentials + Tools)
+│   ├── index.ts       🔴 DROP      →  (OpenCode plugin system not used)
+│   ├── codex.ts       🟢 ADAPT     →  credentials/oauth/codex.ts   (OAuth flow)
+│   └── copilot.ts     🟢 ADAPT     →  credentials/oauth/copilot.ts (OAuth flow)
 │
 ├── project/           🟡 REPLACE   →  workspace/            (Nexus workspace model)
 │   ├── instance.ts    🟡 REPLACE   →  (Single workspace, not per-directory instances)
