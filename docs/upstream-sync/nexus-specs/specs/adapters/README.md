@@ -20,11 +20,13 @@ This folder proposes **unified channel adapters** that handle both directions.
 
 | Spec | Status | Description |
 |------|--------|-------------|
-| `README.md` | This file | Architecture and design |
-| `CHANNEL_ADAPTER_INTERFACE.md` | TODO | Unified adapter interface |
-| `MESSAGE_TOOL.md` | TODO | How agents send messages |
+| `README.md` | This file | Architecture overview |
+| `OUT_ADAPTER_SYSTEM.md` | ✅ Done | Outbound adapters, message tool, formatting, tool hooks |
+| `IN_ADAPTER_SYSTEM.md` | ✅ Done | Inbound adapters, normalization, pipeline |
 | `upstream-reference/OPENCLAW_INBOUND.md` | ✅ Done | OpenClaw inbound patterns |
 | `upstream-reference/OPENCLAW_OUTBOUND.md` | ✅ Done | OpenClaw outbound patterns |
+
+**Start with `OUT_ADAPTER_SYSTEM.md`** — it covers message tool, formatting guides, tool hooks, and per-channel implementations.
 
 ---
 
