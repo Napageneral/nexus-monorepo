@@ -30,15 +30,15 @@ The Event Bus is the nervous system of Nexus. It enables:
 
 ---
 
-## Spec Documents (TODO)
+## Spec Documents
 
 | Document | Status | Description |
 |----------|--------|-------------|
-| `BUS_ARCHITECTURE.md` | 📋 TODO | Core bus design, pub/sub model |
-| `EVENT_TYPES.md` | 📋 TODO | Complete event catalog with schemas |
+| `BUS_ARCHITECTURE.md` | ✅ DONE | Core bus design, pub/sub model, 41 event types |
+| `EVENT_TYPES.md` | 📋 TODO | Detailed Zod schemas for each event |
 | `SUBSCRIBERS.md` | 📋 TODO | Who subscribes to what |
 | `SSE_STREAMING.md` | 📋 TODO | Server-sent events for UI |
-| `MNEMONIC_COMPARISON.md` | 📋 TODO | How mnemonic bus becomes Index |
+| `MNEMONIC_COMPARISON.md` | ❌ DROPPED | Mnemonic bus stays as audit log, OpenCode bus for real-time |
 
 ---
 
