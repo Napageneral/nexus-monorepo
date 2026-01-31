@@ -456,10 +456,15 @@ These specs are stable and don't need reconciliation work:
    - [ ] Evaluate: central config, SSO, self-hosted share
    - [ ] Nexus ACL/ledgers already provide audit — leverage this
 
-9. **Priority 9: Event Bus Integration** 📋 NEW
-   - [ ] Define Nexus bus event types (ledger, ACL, hooks, broker, adapters)
-   - [ ] Review all specs to ensure bus integration is planned
-   - [ ] Document bus → SSE streaming for UI
+9. **Priority 9: Event Bus Integration** 📋 NEW — See `specs/bus/README.md`
+   - [ ] Create `specs/bus/BUS_ARCHITECTURE.md` — Core bus design
+   - [ ] Create `specs/bus/EVENT_TYPES.md` — Complete event catalog with Zod schemas
+   - [ ] Create `specs/bus/SUBSCRIBERS.md` — Who subscribes to what
+   - [ ] Create `specs/bus/SSE_STREAMING.md` — Server-sent events for UI
+   - [ ] Create `specs/bus/MNEMONIC_COMPARISON.md` — How mnemonic bus evolves
+   - [ ] Review `agent-system/EVENT_SYSTEM_DESIGN.md` for overlap
+   - [ ] Define Nexus-specific event types (ledger, ACL, hooks, broker, adapters)
+   - [ ] Design subscriber registration API
    - [ ] Critical: Bus enables Event Ledger → Event Handler flow
 
 ### Phase 2: Consolidation

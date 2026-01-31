@@ -15,8 +15,9 @@ This folder contains the core data schemas and interfaces that flow through the 
 
 | Spec | Status | Description |
 |------|--------|-------------|
-| **`INTERFACE_WORKPLAN.md`** | ✅ Active | **START HERE** — Tracks all 10 component interfaces |
+| **`NEX.md`** | ✅ New | **START HERE** — Central orchestrator (Nexus Event Exchange) |
 | `NEXUS_REQUEST.md` | ✅ Done | The data bus that accumulates context through pipeline |
+| `INTERFACE_WORKPLAN.md` | ✅ Active | Tracks all component interfaces |
 | `CHANNEL_CAPABILITIES.md` | — | Covered in `adapters/channels/` per-channel docs |
 
 ---
