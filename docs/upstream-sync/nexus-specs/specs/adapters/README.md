@@ -21,8 +21,10 @@ Adapters are external tools (like `eve`, `gog`, `discord-cli`) that meet defined
 
 | Spec | Status | Description |
 |------|--------|-------------|
-| `ADAPTER_INTERFACES.md` | ✅ Done | Inbound/Outbound interface definitions |
-| `channels/` | In Progress | Per-channel specs (one file per platform) |
+| `ADAPTER_INTERFACES.md` | ✅ Done | Overview and design principles |
+| `INBOUND_INTERFACE.md` | ✅ Done | Receiving events, NexusEvent schema |
+| `OUTBOUND_INTERFACE.md` | ✅ Done | Delivery, formatting, chunking |
+| `channels/` | ✅ Done | Per-channel specs (9 channels) |
 
 ### Upstream Reference
 
@@ -88,26 +90,28 @@ Adapters create/consume `NexusRequest`:
 
 ## Channel Support
 
-### Porting from Upstream
-
-| Channel | Upstream Status | Nexus Tool | Priority |
-|---------|-----------------|------------|----------|
-| Discord | Full | `discord-cli` (TBD) | High |
-| Telegram | Full | `telegram-bot` (TBD) | High |
-| WhatsApp | Full | Baileys wrapper | High |
-| iMessage | Full | `eve` | High |
-| Signal | Full | `signal-cli` wrapper | Medium |
-| Slack | Full | `slack-cli` (TBD) | Medium |
-| Gmail | Hooks only | `gog` | High |
-| LINE | Full | TBD | Low |
-
 ### Per-Channel Specs
 
-See `channels/` folder for detailed specs per platform:
-- Capabilities and limits
-- Formatting rules
+See `channels/` folder. All channels from upstream are documented:
+
+| Channel | Upstream | Spec | Nexus Tool |
+|---------|----------|------|------------|
+| Discord | Full | `channels/discord.md` | TBD |
+| Telegram | Full | `channels/telegram.md` | TBD |
+| WhatsApp | Full | `channels/whatsapp.md` | Baileys |
+| iMessage | Full | `channels/imessage.md` | `eve` |
+| Signal | Full | `channels/signal.md` | signal-cli |
+| Slack | Full | `channels/slack.md` | TBD |
+| LINE | Full | `channels/line.md` | TBD |
+| Gmail | Hooks only | `channels/gmail.md` | `gog` |
+| Google Chat | Config only | `channels/googlechat.md` | — |
+| MS Teams | Config only | `channels/msteams.md` | — |
+
+Each spec includes:
+- Capabilities object
+- Formatting rules and limits
 - Media handling
-- Platform-specific features
+- Porting notes
 
 ---
 

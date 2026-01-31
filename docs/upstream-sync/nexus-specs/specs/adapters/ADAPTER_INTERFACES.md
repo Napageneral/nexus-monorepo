@@ -1,6 +1,6 @@
 # Adapter Interface Definitions
 
-**Status:** DESIGN IN PROGRESS  
+**Status:** DESIGN COMPLETE  
 **Last Updated:** 2026-01-30
 
 ---
@@ -13,6 +13,10 @@ Adapters connect Nexus to external platforms. We define two interfaces:
 2. **Outbound Adapter** — Delivers responses to platform with formatting
 
 A single tool (like `eve` for iMessage or `gog` for Gmail) can implement one or both interfaces.
+
+**Detailed specs:**
+- `INBOUND_INTERFACE.md` — Full inbound interface definition
+- `OUTBOUND_INTERFACE.md` — Full outbound interface definition
 
 ---
 

@@ -6,15 +6,21 @@ Per-channel documentation for adapters.
 
 ## Channels
 
-| Channel | Status | File |
-|---------|--------|------|
-| Discord | ✅ | `discord.md` |
-| Telegram | TODO | `telegram.md` |
-| WhatsApp | TODO | `whatsapp.md` |
-| iMessage | TODO | `imessage.md` |
-| Signal | TODO | `signal.md` |
-| Slack | TODO | `slack.md` |
-| Gmail | TODO | `gmail.md` |
+| Channel | Status | File | Upstream |
+|---------|--------|------|----------|
+| Discord | TODO | [`discord.md`](discord.md) | `src/discord/` |
+| Telegram | TODO | [`telegram.md`](telegram.md) | `src/telegram/` |
+| WhatsApp | TODO | [`whatsapp.md`](whatsapp.md) | `src/web/` |
+| iMessage | TODO | [`imessage.md`](imessage.md) | `src/imessage/` |
+| Signal | TODO | [`signal.md`](signal.md) | `src/signal/` |
+| Slack | TODO | `slack.md` | `src/slack/` |
+| LINE | TODO | `line.md` | `src/line/` |
+| Gmail | TODO | `gmail.md` | `src/hooks/gmail.ts` |
+
+### Status Legend
+- **TODO** — Spec written, adapter not built
+- **WIP** — Adapter in development
+- **Done** — Adapter complete and tested
 
 ---
 

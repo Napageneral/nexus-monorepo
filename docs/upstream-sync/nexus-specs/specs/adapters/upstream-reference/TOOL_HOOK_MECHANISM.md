@@ -230,16 +230,109 @@ async function beforeAgentStart(event, ctx) {
 
 ## Recommendation for Nexus
 
-**Short-term:** Use Option C (`before_agent_start` with `prependContext`) since it already works.
+**Short-term:** Use `before_agent_start` with `prependContext` since it already works.
 
-**Long-term:** Implement proper tool hook invocation with guidance injection for on-demand, per-tool-call context.
+Based on channel info available via `params.messageChannel` or `params.messageProvider`, inject channel-specific formatting guidance into the turn context.
+
+**Long-term:** Implement proper tool hook invocation:
+
+1. **Extend types in `types.ts`:**
+   ```typescript
+   export type PluginHookBeforeToolCallResult = {
+     params?: Record<string, unknown>;
+     block?: boolean;
+     blockReason?: string;
+     guidance?: string;  // NEW: Inject guidance to agent
+   };
+   
+   export type PluginHookToolContext = {
+     agentId?: string;
+     sessionKey?: string;
+     toolName: string;
+     channel?: string;   // NEW: Channel context
+   };
+   ```
+
+2. **Update merge function in `hooks.ts`:**
+   ```typescript
+   (acc, next) => ({
+     params: next.params ?? acc?.params,
+     block: next.block ?? acc?.block,
+     blockReason: next.blockReason ?? acc?.blockReason,
+     guidance: next.guidance ?? acc?.guidance,  // NEW
+   }),
+   ```
+
+3. **Create tool wrapper in `attempt.ts`:**
+   ```typescript
+   function wrapToolWithHooks(tool: AnyAgentTool, ctx: HookContext): AnyAgentTool {
+     return {
+       ...tool,
+       execute: async (toolCallId, params, signal, onUpdate) => {
+         // Call before hook
+         const hookResult = await runBeforeToolCall({
+           toolName: tool.name,
+           params,
+         }, {
+           ...ctx,
+           toolName: tool.name,
+         });
+         
+         if (hookResult?.block) {
+           return { error: hookResult.blockReason || 'Blocked by hook' };
+         }
+         
+         // TODO: Apply guidance somehow
+         // Option: Inject into system message
+         // Option: Return as part of tool result
+         
+         const modifiedParams = hookResult?.params ?? params;
+         return tool.execute(toolCallId, modifiedParams, signal, onUpdate);
+       },
+     };
+   }
+   ```
+
+4. **Wrap tools before `createAgentSession`** (around line 448 in `attempt.ts`)
+
+---
+
+## Channel Info Location
+
+Channel info is available before agent runs:
+
+1. **In `runEmbeddedAttempt` params** (line 141 in `attempt.ts`):
+   - `params.messageChannel`
+   - `params.messageProvider`
+
+2. **Normalized** (line 240):
+   ```typescript
+   const runtimeChannel = normalizeMessageChannel(
+     params.messageChannel ?? params.messageProvider
+   );
+   ```
+
+3. **In `before_agent_start` hook context** (line 699):
+   ```typescript
+   messageProvider: params.messageProvider ?? undefined,
+   ```
+
+This means we can:
+- Check channel in `before_agent_start` and inject guidance via `prependContext`
+- Pass channel to `before_tool_call` if we extend `PluginHookToolContext`
 
 ---
 
 ## Related Files (Upstream)
 
-- `src/plugins/types.ts` — Hook type definitions
-- `src/plugins/hooks.ts` — Hook runner
-- `src/agents/pi-tools.ts` — Tool creation
-- `src/agents/pi-tools.abort.ts` — Tool wrapping example
-- `src/agents/pi-embedded-runner/run/attempt.ts` — Agent session creation
+| File | Line | Content |
+|------|------|---------|
+| `src/plugins/types.ts` | 386-396 | `PluginHookBeforeToolCallEvent`, `PluginHookBeforeToolCallResult` |
+| `src/plugins/types.ts` | 380-384 | `PluginHookToolContext` |
+| `src/plugins/types.ts` | 319-322 | `PluginHookBeforeAgentStartResult` with `prependContext` |
+| `src/plugins/hooks.ts` | 284-298 | `runBeforeToolCall()` (defined but not called) |
+| `src/plugins/hooks.ts` | 179-195 | `before_agent_start` merging |
+| `src/agents/pi-embedded-runner/run/attempt.ts` | 141 | `messageChannel`/`messageProvider` params |
+| `src/agents/pi-embedded-runner/run/attempt.ts` | 240 | Channel normalization |
+| `src/agents/pi-embedded-runner/run/attempt.ts` | 448 | Where tools passed to `createAgentSession` |
+| `src/agents/pi-embedded-runner/run/attempt.ts` | 688-711 | `before_agent_start` invocation |
