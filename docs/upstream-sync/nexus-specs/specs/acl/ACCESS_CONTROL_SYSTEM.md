@@ -1,8 +1,8 @@
 # Access Control System
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-01-29  
-**Related:** agent-system/EVENT_SYSTEM_DESIGN.md, agent-system/BROKER.md
+**Last Updated:** 2026-01-30  
+**Related:** UNIFIED_SYSTEM.md, agent-system/EVENT_SYSTEM_DESIGN.md, agent-system/BROKER.md
 
 ---
 
@@ -98,27 +98,30 @@ Principals are WHO is making a request. They map to identities in your ledger.
 
 ### Identity Resolution
 
-When an event arrives, we resolve the sender:
+When an event arrives, we resolve the sender via the **Identity Ledger**:
 
 ```
 Event: { channel: "imessage", from: "+15551234567" }
                     │
                     ▼
-         ┌─────────────────────┐
-         │  Ledger Lookup      │
-         │                     │
-         │  SELECT * FROM      │
-         │  persons p          │
-         │  JOIN identities i  │
-         │  WHERE i.channel =  │
-         │  'imessage' AND     │
-         │  i.identifier =     │
-         │  '+15551234567'     │
-         └─────────────────────┘
+         ┌─────────────────────────┐
+         │  Identity Ledger Lookup │
+         │                         │
+         │  SELECT e.*, ei.*       │
+         │  FROM entities e        │
+         │  JOIN entity_identities │
+         │    ei ON e.id =         │
+         │    ei.entity_id         │
+         │  WHERE ei.channel =     │
+         │  'imessage' AND         │
+         │  ei.identifier =        │
+         │  '+15551234567'         │
+         └─────────────────────────┘
                     │
                     ▼
          Principal: {
-           person_id: "person_abc",
+           entity_id: "entity_abc",
+           type: "person",
            name: "Casey",
            is_user: false,
            relationship: "partner",
@@ -127,6 +130,8 @@ Event: { channel: "imessage", from: "+15551234567" }
 ```
 
 If no match: `Principal: { unknown: true }`
+
+**Note:** The Identity Ledger is conceptually separate from the Event Ledger. See `UNIFIED_SYSTEM.md` for the three-ledger model.
 
 ---
 
@@ -518,18 +523,20 @@ Event Ledger → Event Handler [ ACL → Hooks ] → Broker
 
 ---
 
-## Unified Entity Model
+## Identity Ledger Schema
 
-The people/contacts ledger extends to include personas:
+The Identity Ledger stores entities (persons and personas) with their contact identities:
 
 ```sql
+-- IDENTITY LEDGER
 entities (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL,           -- 'person' | 'persona'
   name TEXT,
   is_user INTEGER,              -- True for owner (person only)
   relationship TEXT,            -- family, partner, etc. (person only)
-  created_at INTEGER
+  created_at INTEGER,
+  updated_at INTEGER
 );
 
 entity_identities (
@@ -538,13 +545,23 @@ entity_identities (
   identifier TEXT,              -- +1234567, @atlas_bot
   account_id TEXT,              -- For personas: which bot account
   is_owned INTEGER DEFAULT 0,   -- True if entity OWNS this identity
-  PRIMARY KEY (channel, identifier)
+  PRIMARY KEY (channel, identifier),
+  FOREIGN KEY (entity_id) REFERENCES entities(id)
+);
+
+entity_tags (
+  entity_id TEXT,
+  tag TEXT,
+  PRIMARY KEY (entity_id, tag),
+  FOREIGN KEY (entity_id) REFERENCES entities(id)
 );
 ```
 
 **Key insight:** Personas are entities that OWN identities (bot accounts). People HAVE identities (contact info).
 
-Persona workspace files (`SOUL.md`, credentials, etc.) remain managed by Nexus workspace — the ledger only handles identity resolution for ACL routing.
+**Index enrichment:** The Index can learn relationships over time from conversation patterns and update the Identity Ledger.
+
+Persona workspace files (`SOUL.md`, credentials, etc.) remain managed by Nexus workspace — the Identity Ledger handles principal resolution for ACL routing.
 
 ---
 

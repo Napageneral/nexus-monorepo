@@ -1,0 +1,434 @@
+# OpenCode → Nexus Fork Mapping
+
+**Status:** PLANNING  
+**Date:** January 30, 2026  
+**Purpose:** Detailed mapping of what happens to each OpenCode component
+
+---
+
+## Legend
+
+| Symbol | Meaning |
+|--------|---------|
+| 🟢 **ADAPT** | Keep and modify for Nexus |
+| 🔴 **DROP** | Remove entirely |
+| 🟡 **REPLACE** | Replace with Nexus-specific implementation |
+| 🔵 **NEW** | Doesn't exist in OpenCode |
+
+---
+
+## Top-Level Mapping
+
+```
+opencode/                           →  nexus/
+├── .github/           🟢 ADAPT     →  .github/              (CI/CD adapted)
+├── .opencode/         🔴 DROP      →  (Nexus uses ~/nexus/ workspace)
+├── infra/             🟢 ADAPT     →  infra/                (SST for hub/cloud/collab)
+├── nix/               🔴 DROP      →  (Not needed)
+├── packages/          🟢 ADAPT     →  packages/             (Structure changes)
+├── patches/           🟢 ADAPT     →  patches/              (Keep relevant ones)
+├── script/            🟢 ADAPT     →  scripts/              (Build/release)
+├── sdks/              🔴 DROP      →  (No VSCode extension for now)
+├── specs/             🔴 DROP      →  (We have nexus-specs/)
+├── themes/            🔴 DROP      →  (TUI themes not priority)
+├── AGENTS.md          🟢 ADAPT     →  AGENTS.md             (Nexus agent docs)
+├── package.json       🟢 ADAPT     →  package.json
+├── turbo.json         🟢 ADAPT     →  turbo.json
+├── sst.config.ts      🟢 ADAPT     →  sst.config.ts
+└── tsconfig.json      🟢 ADAPT     →  tsconfig.json
+```
+
+---
+
+## packages/ Mapping
+
+### packages/opencode/ → packages/core/
+
+This is the main transformation. The core engine gets restructured around ledgers.
+
+```
+packages/opencode/src/              →  packages/core/src/
+
+├── acp/               🔴 DROP      →  (Agent Client Protocol - not used)
+│
+├── agent/             🟢 ADAPT     →  agents/
+│   └── prompts        🟢 ADAPT     →  agents/prompts/       (System prompts)
+│
+├── auth/              🟡 REPLACE   →  credentials/          (Nexus credential system)
+│
+├── bun/               🟢 ADAPT     →  bun/                  (Bun-specific utils)
+│
+├── bus/               🟢 ADAPT     →  bus/                  (Event bus, adapted events)
+│   ├── bus-event.ts   🟡 REPLACE   →  bus/events.ts         (Nexus event types)
+│   ├── global.ts      🟢 ADAPT     →  bus/global.ts
+│   └── index.ts       🟢 ADAPT     →  bus/bus.ts
+│
+├── cli/               🟢 ADAPT     →  (moves to packages/cli/)
+│   └── cmd/
+│       ├── tui/       🟢 ADAPT     →  packages/cli/src/tui/ (Optional TUI)
+│       ├── serve.ts   🟡 REPLACE   →  broker/server.ts      (Broker serves, not generic server)
+│       └── session.ts 🟡 REPLACE   →  broker/               (Session management in broker)
+│
+├── command/           🟢 ADAPT     →  cli/commands/         (Slash commands)
+│
+├── config/            🟡 REPLACE   →  workspace/config.ts   (Nexus workspace model)
+│   ├── config.ts      🟡 REPLACE   →  (Nexus hierarchical config)
+│   └── markdown.ts    🟢 ADAPT     →  workspace/markdown.ts (Markdown parsing)
+│
+├── file/              🟢 ADAPT     →  file/                 (File operations)
+│   ├── ignore.ts      🟢 ADAPT     →  file/ignore.ts
+│   ├── ripgrep.ts     🟢 ADAPT     →  file/ripgrep.ts
+│   └── watcher.ts     🟢 ADAPT     →  file/watcher.ts
+│
+├── flag/              🟢 ADAPT     →  flag/                 (Feature flags)
+│
+├── format/            🟢 ADAPT     →  format/               (Code formatting)
+│
+├── global/            🟡 REPLACE   →  workspace/paths.ts    (Nexus paths: ~/nexus/)
+│
+├── id/                🟢 ADAPT     →  id/                   (ID generation)
+│
+├── ide/               🔴 DROP      →  (IDE integration not needed)
+│
+├── installation/      🟡 REPLACE   →  workspace/install.ts  (Nexus installation)
+│
+├── lsp/               🟢 ADAPT     →  lsp/                  (LSP client/server)
+│
+├── mcp/               🟢 ADAPT     →  mcp/                  (Model Context Protocol)
+│
+├── permission/        🟡 REPLACE   →  event-handler/acl/    (ACL policies, not per-call)
+│   ├── index.ts       🟡 REPLACE   →  acl/evaluate.ts       (Policy evaluation)
+│   └── next.ts        🔴 DROP      →  (Subsumed by ACL)
+│
+├── plugin/            🟡 REPLACE   →  skills/               (Skills, not plugins)
+│   ├── index.ts       🟡 REPLACE   →  skills/loader.ts
+│   ├── codex.ts       🔴 DROP      →  (Codex plugin not needed)
+│   └── copilot.ts     🔴 DROP      →  (Copilot plugin not needed)
+│
+├── project/           🟡 REPLACE   →  workspace/            (Nexus workspace model)
+│   ├── instance.ts    🟡 REPLACE   →  (Single workspace, not per-directory instances)
+│   ├── project.ts     🟡 REPLACE   →  workspace/project.ts
+│   ├── state.ts       🟡 REPLACE   →  (State in ledgers, not memory)
+│   └── vcs.ts         🟢 ADAPT     →  workspace/vcs.ts      (Git integration)
+│
+├── provider/          🟢 ADAPT     →  provider/             (LLM providers)
+│   ├── provider.ts    🟢 ADAPT     →  provider/provider.ts
+│   ├── models.ts      🟢 ADAPT     →  provider/models.ts
+│   └── sdk/           🟢 ADAPT     →  provider/sdk/         (Provider SDKs)
+│
+├── pty/               🟢 ADAPT     →  pty/                  (Pseudo-terminal)
+│
+├── question/          🔴 DROP      →  (User questions handled differently)
+│
+├── scheduler/         🟢 ADAPT     →  scheduler/            (Task scheduling)
+│
+├── server/            🟡 REPLACE   →  broker/ + adapters/   (Split responsibilities)
+│   ├── server.ts      🟡 REPLACE   →  broker/server.ts      (Broker API)
+│   ├── event.ts       🟡 REPLACE   →  bus/sse.ts            (SSE streaming)
+│   ├── mdns.ts        🔴 DROP      →  (mDNS not needed)
+│   └── routes/        🟡 REPLACE   →  broker/routes/        (Broker routes)
+│       ├── session.ts 🟡 REPLACE   →  broker/routes/session.ts
+│       ├── permission 🟡 REPLACE   →  (ACL, not permission routes)
+│       └── ...        🟡 REPLACE   →  (Adapted for Nexus)
+│
+├── session/           🟡 REPLACE   →  broker/ + ledgers/agent/
+│   ├── index.ts       🟡 REPLACE   →  broker/sessions.ts    (Session management)
+│   ├── processor.ts   🟢 ADAPT     →  broker/executor.ts    (Agent execution loop)
+│   ├── message.ts     🔴 DROP      →  (Legacy, use v2)
+│   ├── message-v2.ts  🟡 REPLACE   →  ledgers/agent/types.ts (Types only)
+│   ├── prompt.ts      🟢 ADAPT     →  agents/prompts/       (Prompt construction)
+│   ├── llm.ts         🟢 ADAPT     →  agents/llm.ts         (LLM streaming)
+│   ├── compaction.ts  🟢 ADAPT     →  agents/compaction.ts  (Context compaction)
+│   ├── summary.ts     🟢 ADAPT     →  agents/summary.ts     (Summarization)
+│   ├── retry.ts       🟢 ADAPT     →  broker/retry.ts       (Retry logic)
+│   └── status.ts      🟢 ADAPT     →  broker/status.ts      (Status tracking)
+│
+├── share/             🟢 ADAPT     →  share/                (Session sharing)
+│
+├── shell/             🟢 ADAPT     →  shell/                (Shell integration)
+│
+├── skill/             🟢 ADAPT     →  skills/               (Skill loading)
+│
+├── snapshot/          🟢 ADAPT     →  snapshot/             (File snapshots)
+│
+├── storage/           🟡 REPLACE   →  ledgers/              (SQLite, not files)
+│   └── (all)          🟡 REPLACE   →  ledgers/db.ts + per-ledger modules
+│
+├── tool/              🟢 ADAPT     →  tools/
+│   ├── registry.ts    🟢 ADAPT     →  tools/registry.ts
+│   ├── tool.ts        🟢 ADAPT     →  tools/tool.ts
+│   ├── read.ts        🟢 ADAPT     →  tools/builtin/read.ts
+│   ├── write.ts       🟢 ADAPT     →  tools/builtin/write.ts
+│   ├── edit.ts        🟢 ADAPT     →  tools/builtin/edit.ts
+│   ├── bash.ts        🟢 ADAPT     →  tools/builtin/bash.ts
+│   ├── grep.ts        🟢 ADAPT     →  tools/builtin/grep.ts
+│   ├── glob.ts        🟢 ADAPT     →  tools/builtin/glob.ts
+│   ├── codesearch.ts  🟢 ADAPT     →  tools/builtin/codesearch.ts
+│   ├── websearch.ts   🟢 ADAPT     →  tools/builtin/websearch.ts
+│   ├── webfetch.ts    🟢 ADAPT     →  tools/builtin/webfetch.ts
+│   ├── lsp.ts         🟢 ADAPT     →  tools/builtin/lsp.ts
+│   ├── skill.ts       🟢 ADAPT     →  tools/skill.ts        (Skill tool)
+│   ├── plan.ts        🟢 ADAPT     →  tools/builtin/plan.ts (Plan mode)
+│   └── task.ts        🟢 ADAPT     →  tools/builtin/task.ts (Subagent)
+│
+├── util/              🟢 ADAPT     →  util/
+│
+└── worktree/          🟢 ADAPT     →  worktree/             (Git worktrees)
+```
+
+### Other packages/
+
+```
+packages/app/          🔴 DROP      →  (Web UI not priority for now)
+packages/desktop/      🔴 DROP      →  (Desktop app not priority)
+packages/console/      🔴 DROP      →  (We have nexus-website/)
+packages/ui/           🔴 DROP      →  (No web UI)
+packages/util/         🟢 ADAPT     →  packages/core/src/util/ (Merge in)
+packages/sdk/          🔴 DROP      →  (No external SDK for now)
+packages/plugin/       🔴 DROP      →  (Skills, not plugins)
+packages/script/       🟢 ADAPT     →  scripts/              (Merge with root scripts/)
+packages/web/          🔴 DROP      →  (Docs site separate)
+packages/docs/         🔴 DROP      →  (Docs separate)
+packages/enterprise/   🔴 DROP      →  (No enterprise tier)
+packages/slack/        🔴 DROP      →  (Out-adapter if needed later)
+packages/function/     🟢 ADAPT     →  infra/                (Serverless functions)
+```
+
+---
+
+## New Nexus Components (🔵 NEW)
+
+These don't exist in OpenCode and are built fresh:
+
+```
+packages/core/src/
+├── ledgers/                        🔵 NEW
+│   ├── schema.sql                  # Unified DDL
+│   ├── migrations/                 # Migrations
+│   ├── db.ts                       # SQLite connection
+│   ├── event/                      # Event Ledger
+│   │   ├── types.ts
+│   │   ├── write.ts
+│   │   └── read.ts
+│   ├── identity/                   # Identity Ledger
+│   │   ├── types.ts
+│   │   ├── resolve.ts              # Principal resolution
+│   │   └── enrich.ts               # Index enrichment
+│   └── agent/                      # Agent Ledger
+│       ├── types.ts
+│       ├── write.ts                # LedgerWrite interface
+│       └── read.ts
+│
+├── adapters/                       🔵 NEW
+│   ├── types.ts                    # NormalizedEvent, etc.
+│   ├── in/                         # In-Adapters
+│   │   ├── adapter.ts              # Interface
+│   │   ├── imessage/
+│   │   ├── gmail/
+│   │   ├── discord/
+│   │   ├── telegram/
+│   │   ├── whatsapp/
+│   │   ├── webhook/
+│   │   └── timer/
+│   └── out/                        # Out-Adapters
+│       ├── adapter.ts              # Interface
+│       ├── formatter.ts            # Platform formatting
+│       ├── discord/
+│       ├── telegram/
+│       └── email/
+│
+├── event-handler/                  🔵 NEW
+│   ├── handler.ts                  # Main handler
+│   ├── acl/                        # ACL system
+│   │   ├── policies.ts
+│   │   ├── evaluate.ts
+│   │   ├── grants.ts
+│   │   └── audit.ts
+│   ├── hooks/                      # Hook runtime
+│   │   ├── runtime.ts
+│   │   ├── loader.ts
+│   │   └── context.ts
+│   └── dispatch.ts                 # BrokerDispatch
+│
+├── index/                          🔵 NEW (from mnemonic)
+│   ├── episodes.ts
+│   ├── facets.ts
+│   ├── embeddings.ts
+│   └── search.ts
+│
+└── aix/                            🔵 NEW (bundled as tool/skill)
+    ├── sync/
+    │   ├── cursor.ts
+    │   ├── codex.ts
+    │   ├── claude.ts
+    │   └── clawdbot.ts
+    └── main.ts
+```
+
+---
+
+## Summary by Category
+
+### 🟢 ADAPT (Keep and Modify)
+
+| OpenCode | Nexus | Notes |
+|----------|-------|-------|
+| `bus/` | `bus/` | Same pattern, different events |
+| `tool/` | `tools/` | Same tools, minor adaptations |
+| `provider/` | `provider/` | LLM providers unchanged |
+| `lsp/` | `lsp/` | LSP client/server |
+| `mcp/` | `mcp/` | MCP integration |
+| `file/` | `file/` | File operations |
+| `format/` | `format/` | Code formatting |
+| `shell/` | `shell/` | Shell integration |
+| `pty/` | `pty/` | Pseudo-terminal |
+| `skill/` | `skills/` | Skill loading |
+| `share/` | `share/` | Session sharing |
+| `snapshot/` | `snapshot/` | File snapshots |
+| `worktree/` | `worktree/` | Git worktrees |
+| `id/` | `id/` | ID generation |
+| `flag/` | `flag/` | Feature flags |
+| `scheduler/` | `scheduler/` | Task scheduling |
+| `util/` | `util/` | Utilities |
+| `agent/prompts` | `agents/prompts/` | System prompts |
+| `session/llm.ts` | `agents/llm.ts` | LLM streaming |
+| `session/compaction.ts` | `agents/compaction.ts` | Context compaction |
+| `session/processor.ts` | `broker/executor.ts` | Agent execution loop |
+
+### 🟡 REPLACE (New Implementation)
+
+| OpenCode | Nexus | Notes |
+|----------|-------|-------|
+| `storage/` | `ledgers/` | File-based → SQLite |
+| `session/` | `broker/` + `ledgers/agent/` | Sessions in ledger |
+| `permission/` | `event-handler/acl/` | Per-call → upfront ACL |
+| `plugin/` | `skills/` | Code plugins → markdown skills |
+| `config/` | `workspace/` | Different config model |
+| `project/` | `workspace/` | Different workspace model |
+| `server/` | `broker/` + `adapters/` | Split responsibilities |
+| `global/` | `workspace/paths.ts` | ~/nexus/ paths |
+| `auth/` | `credentials/` | Nexus credential system |
+
+### 🔴 DROP (Remove)
+
+| OpenCode | Reason |
+|----------|--------|
+| `acp/` | Agent Client Protocol not used |
+| `ide/` | IDE integration not needed |
+| `question/` | Handled differently |
+| `plugin/codex.ts` | No Codex plugin |
+| `plugin/copilot.ts` | No Copilot plugin |
+| `server/mdns.ts` | mDNS not needed |
+| `session/message.ts` | Legacy, use v2 |
+| `permission/next.ts` | Subsumed by ACL |
+| `packages/app/` | No web UI for now |
+| `packages/desktop/` | No desktop app for now |
+| `packages/console/` | We have nexus-website |
+| `packages/ui/` | No web UI |
+| `packages/sdk/` | No external SDK |
+| `packages/plugin/` | Skills, not plugins |
+| `packages/web/` | Docs separate |
+| `packages/docs/` | Docs separate |
+| `packages/enterprise/` | No enterprise tier |
+| `packages/slack/` | Out-adapter later if needed |
+| `.opencode/` | Nexus uses ~/nexus/ |
+| `sdks/vscode/` | No VSCode extension |
+| `themes/` | TUI themes not priority |
+| `nix/` | Not needed |
+
+### 🔵 NEW (Nexus-Only)
+
+| Component | Purpose |
+|-----------|---------|
+| `ledgers/event/` | Event Ledger |
+| `ledgers/identity/` | Identity Ledger |
+| `ledgers/agent/` | Agent Ledger |
+| `adapters/in/` | In-Adapters (iMessage, Gmail, Discord, etc.) |
+| `adapters/out/` | Out-Adapters (response formatting) |
+| `event-handler/acl/` | ACL policy evaluation |
+| `event-handler/hooks/` | Hook runtime |
+| `index/` | Derived layer (from mnemonic) |
+| `aix/` | External harness sync (bundled) |
+
+---
+
+## File Count Estimate
+
+| Category | OpenCode Files | Nexus Files | Change |
+|----------|---------------|-------------|--------|
+| 🟢 ADAPT | ~150 | ~150 | Same |
+| 🟡 REPLACE | ~80 | ~60 | Fewer (consolidated) |
+| 🔴 DROP | ~200+ | 0 | Gone |
+| 🔵 NEW | 0 | ~100 | New |
+| **Total** | ~430+ | ~310 | Smaller, focused |
+
+---
+
+## Adapter Language Support
+
+Per your request, adapters should support both TypeScript and Go:
+
+```
+adapters/
+├── interface.ts              # TypeScript interface definition
+├── in/
+│   ├── imessage/            # TS (native macOS access)
+│   ├── gmail/               # TS (API client)
+│   ├── discord/             # TS (discord.js)
+│   ├── telegram/            # TS (telegraf)
+│   ├── whatsapp/            # TS (baileys)
+│   ├── webhook/             # TS (HTTP handler)
+│   └── timer/               # TS (cron)
+└── out/
+    ├── discord/             # TS
+    ├── telegram/            # TS
+    └── email/               # TS
+
+# Go adapters (if needed for performance):
+# - Could compile to binary, call from TS
+# - Or use FFI binding
+# - Or run as subprocess with JSON IPC
+```
+
+---
+
+## Migration Order
+
+1. **Phase 1: Scaffold**
+   - Create monorepo structure
+   - Set up Bun + Turborepo
+   - Create package.json files
+
+2. **Phase 2: Core Adapt**
+   - Copy 🟢 ADAPT files from OpenCode
+   - Rename/restructure as needed
+   - Update imports
+
+3. **Phase 3: Ledgers**
+   - Implement `ledgers/` from mnemonic schema
+   - Wire up SQLite
+
+4. **Phase 4: Replace Session**
+   - Implement `broker/` using ledger writes
+   - Adapt `session/processor.ts` → `broker/executor.ts`
+
+5. **Phase 5: Event Handler**
+   - Implement ACL evaluation
+   - Implement hook runtime
+   - Wire to broker
+
+6. **Phase 6: Adapters**
+   - Implement in-adapters
+   - Implement out-adapters
+
+7. **Phase 7: Index**
+   - Bring mnemonic code
+   - Wire to all three ledgers
+
+8. **Phase 8: AIX**
+   - Bundle as tool/skill
+   - Wire to Agent Ledger
+
+---
+
+*This mapping is the source of truth for the fork. Update as decisions change.*

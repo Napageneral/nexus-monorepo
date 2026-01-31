@@ -1,7 +1,7 @@
 # Unified System Specification
 
 **Status:** CANONICAL REFERENCE  
-**Last Updated:** 2026-01-29
+**Last Updated:** 2026-01-30
 
 ---
 
@@ -30,72 +30,113 @@ Nexus is a unified personal AI system. This document describes how all component
 ### 1.1 Component Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                                  NEXUS                                       │
-│                                                                             │
-│   ┌──────────┐     ┌──────────────┐     ┌───────┐     ┌───────┐ ┌────────┐ │
-│   │ ADAPTERS │────►│ EVENT LEDGER │────►│  ACL  │────►│ HOOKS │►│ BROKER │ │
-│   │          │     │              │     │       │     │       │ │        │ │
-│   │ • AIX    │     │ • events     │     │Policies│    │Scripts│ │ Routes │ │
-│   │ • iMsg   │     │ • threads    │     │ WHO?  │     │ WHAT? │ │ queues │ │
-│   │ • Gmail  │     │ • persons    │     │Grants │     │ HOW?  │ │executes│ │
-│   │ • Discord│     │              │     │       │     │       │ │        │ │
-│   └──────────┘     └──────┬───────┘     └───────┘     └───────┘ └───┬────┘ │
-│                           │                                         │      │
-│                           │                                         ▼      │
-│                           │                              ┌──────────────┐  │
-│                           │                              │ AGENT LEDGER │  │
-│                           │                              │              │  │
-│                           │                              │ • sessions   │  │
-│                           │                              │ • turns      │  │
-│                           │                              │ • messages   │  │
-│                           │                              │ • tool_calls │  │
-│                           │                              └──────┬───────┘  │
-│                           │                                     │          │
-│                           │         ┌───────────────────────────┘          │
-│                           │         │                                      │
-│                           ▼         ▼                                      │
-│                     ┌─────────────────────┐                                │
-│                     │        INDEX        │                                │
-│                     │      (derived)      │                                │
-│                     │                     │                                │
-│                     │ • episodes          │◄──── Broker reads for          │
-│                     │ • facets            │      context & smart forking   │
-│                     │ • embeddings        │                                │
-│                     │ • search            │                                │
-│                     └─────────────────────┘                                │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                  NEXUS                                           │
+│                                                                                  │
+│   ┌──────────┐     ┌──────────────┐     ┌────────────────────────────────────┐  │
+│   │   IN-    │────►│ EVENT LEDGER │────►│          EVENT HANDLER             │  │
+│   │ ADAPTERS │     │              │     │                                    │  │
+│   │          │     │ • events     │     │  ┌────────────┐                   │  │
+│   │ • iMsg   │     │ • threads    │     │  │ ID LEDGER  │◄─── Index         │  │
+│   │ • Gmail  │     │              │     │  │            │     enrichment    │  │
+│   │ • Discord│     │              │     │  │ • entities │                   │  │
+│   │ • ...    │     │              │     │  │ • personas │                   │  │
+│   └──────────┘     └──────────────┘     │  └─────┬──────┘                   │  │
+│                                          │        │                          │  │
+│                                          │        ▼                          │  │
+│                                          │  ┌────────────┐                   │  │
+│                                          │  │    ACL     │                   │  │
+│                                          │  │  policies  │                   │  │
+│                                          │  │  + grants  │                   │  │
+│                                          │  └─────┬──────┘                   │  │
+│                                          │        │                          │  │
+│                                          │   ALLOW│DENY                      │  │
+│                                          │        │                          │  │
+│                                          │        ▼                          │  │
+│                                          │  ┌────────────┐                   │  │
+│                                          │  │ HOOK EVAL  │                   │  │
+│                                          │  │ (scripts)  │                   │  │
+│                                          │  └─────┬──────┘                   │  │
+│                                          └────────┼──────────────────────────┘  │
+│                                                   │                             │
+│                                                   ▼                             │
+│                                          ┌──────────────┐                       │
+│                                          │    BROKER    │                       │
+│                                          └───────┬──────┘                       │
+│                                                  │                              │
+│                     ┌────────────────────────────┼────────────────────────┐     │
+│                     ▼                            ▼                        ▼     │
+│              ┌────────────┐              ┌────────────┐           ┌──────────┐  │
+│              │     MA     │◄────────────►│    WAs     │           │   OUT-   │  │
+│              │            │              │            │──────────►│ ADAPTERS │  │
+│              └─────┬──────┘              └────────────┘           │          │  │
+│                    │                            │                 │ • Discord│  │
+│                    └────────────────────────────┼────────────────►│ • Telegram│ │
+│                                                 │                 │ • ...    │  │
+│                                                 ▼                 └──────────┘  │
+│                                          ┌──────────────┐                       │
+│                                          │ AGENT LEDGER │                       │
+│                                          │              │                       │
+│                                          │ • sessions   │                       │
+│                                          │ • turns      │                       │
+│                                          │ • messages   │                       │
+│                                          │ • tool_calls │                       │
+│                                          └──────┬───────┘                       │
+│                                                 │                               │
+│   ┌──────────────┐    ┌────────────┐            │                               │
+│   │ EVENT LEDGER │    │ ID LEDGER  │────────────┼───────────────┐               │
+│   └──────┬───────┘    └─────┬──────┘            │               │               │
+│          │                  │                   │               │               │
+│          └──────────────────┴───────────────────┼───────────────┤               │
+│                                                 ▼               ▼               │
+│                                          ┌─────────────────────────┐            │
+│                                          │         INDEX           │            │
+│                                          │       (derived)         │            │
+│                                          │                         │            │
+│                                          │ • episodes              │            │
+│                                          │ • facets                │            │
+│                                          │ • embeddings            │            │
+│                                          │ • search                │            │
+│                                          └─────────────────────────┘            │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 1.2 Data Flow Summary
 
 ```
-Adapters → Event Ledger → ACL → Hooks → Broker → Agent Ledger
-                │          │                ↑            │
-                │          │                │            │
-                │          └─ Identity resolution via persons table
-                │                           │            │
-                └───────► Index ◄───────────┴────────────┘
-                        (derived)
+In-Adapters → Event Ledger → [Id Ledger → ACL → Hooks] → Broker → Agent Ledger
+                   │              │                         │            │
+                   │              │                         ▼            │
+                   │              │                    Out-Adapters      │
+                   │              │                         │            │
+                   └──────────────┴─────────► Index ◄───────┴────────────┘
+                                            (derived)
 ```
 
-1. **Adapters** normalize external data → **Event Ledger**
-2. **Event Ledger** triggers **Event Handler** (hooks evaluation)
-3. **Event Handler** evaluates hooks, potentially reading from Event Ledger + Index
-4. Fired hooks route to **Broker** with routing instructions
-5. **Broker** manages session lifecycle, reads/writes **Agent Ledger**
-6. **Broker** reads from **Index** for context enrichment / smart forking
-7. **Index** continuously processes both ledgers → episodes → facets → embeddings
+1. **In-Adapters** normalize external data → **Event Ledger**
+2. **Event Handler** resolves identity via **Identity Ledger**
+3. **ACL** evaluates policies against resolved principal
+4. If allowed, **Hooks** evaluate content-based logic
+5. Fired hooks route to **Broker** with routing instructions + permissions
+6. **Broker** manages session lifecycle, reads/writes **Agent Ledger**
+7. **Agents** (MA/WAs) execute and send responses via **Out-Adapters**
+8. **Index** continuously processes all three ledgers → episodes → facets → embeddings
 
-### 1.3 Two-Layer Data Model
+### 1.3 Three-Ledger Model
+
+| Ledger | Purpose | Contents |
+|--------|---------|----------|
+| **Event Ledger** | What happened | Raw events, threads |
+| **Identity Ledger** | Who is involved | Entities (persons, personas), identities, relationships |
+| **Agent Ledger** | AI conversation state | Sessions, turns, messages, tool_calls |
+
+**Plus the derived layer:**
 
 | Layer | Purpose | Contents |
 |-------|---------|----------|
-| **Ledgers** (Layer 1) | Primary data, source of truth | Raw events, agent sessions/turns/messages |
-| **Index** (Layer 2) | Derived data, computed for access | Episodes, facets, embeddings, search |
+| **Index** | Computed for access | Episodes, facets, embeddings, search |
 
-**Key insight:** Ledgers store what happened. Index makes it useful.
+**Key insight:** The three ledgers are the source of truth. The Index makes them useful.
 
 ---
 
@@ -140,7 +181,7 @@ Adapters normalize data from external sources into the Event Ledger.
 
 ### 2.3 Ledgers
 
-Two ledgers store primary data in `nexus.db`:
+Three conceptual ledgers store primary data in `nexus.db`:
 
 #### Event Ledger
 
@@ -150,10 +191,32 @@ Normalized events from all external sources.
 |-------|---------|
 | `events` | All normalized events (messages, emails, etc.) |
 | `threads` | Event groupings (conversations, email threads) |
-| `persons` | Contact/person entities |
-| `event_participants` | Event ↔ person links |
+| `event_participants` | Event ↔ entity links |
 | `event_state` | Per-event lifecycle state |
 | `event_tags` | Event ↔ tag associations |
+
+#### Identity Ledger
+
+Who is involved — the principal resolution layer for ACL.
+
+| Table | Purpose |
+|-------|---------|
+| `entities` | Persons and personas (type: 'person' \| 'persona') |
+| `entity_identities` | Contact handles/accounts per entity |
+| `entity_tags` | Custom tagging for entities |
+
+**Key distinction:**
+- **Persons** HAVE identities (contact info discovered from messages)
+- **Personas** OWN identities (bot accounts they control)
+
+The Identity Ledger is queried by ACL during principal resolution:
+```sql
+SELECT e.*, ei.* FROM entities e
+JOIN entity_identities ei ON e.id = ei.entity_id
+WHERE ei.channel = 'imessage' AND ei.identifier = '+15551234567'
+```
+
+**Index enrichment:** The Index can feed back into Identity Ledger — learning relationships over time from conversation patterns.
 
 #### Agent Ledger
 
@@ -193,14 +256,35 @@ Declarative policies that determine WHO can access the system, WHAT permissions 
 ```
 
 **Key features:**
-- Identity resolution via ledger's `persons` table
+- Identity resolution via **Identity Ledger** (entities + entity_identities tables)
 - Priority-based policy evaluation (deny overrides allow)
 - Dynamic permission grants with approval workflow
 - Full audit logging
 
 **See:** `specs/acl/` for full ACL specification.
 
-### 2.5 Hooks
+### 2.5 Out-Adapters
+
+Format and deliver agent responses to external platforms.
+
+| Adapter | Delivery Method | Key Constraints |
+|---------|-----------------|-----------------|
+| Discord | REST API | 2000 char limit, embeds, threads |
+| Telegram | Bot API | 4000 chars, markdown, media groups |
+| WhatsApp | Baileys socket | PTT audio, polls, read receipts |
+| Slack | Blocks API | Threads, reactions |
+| Email | SMTP | MIME, threading headers |
+
+**Response flow:**
+1. Agent completes turn → response captured
+2. Broker determines delivery target from original event context
+3. Out-Adapter formats response per platform rules
+4. Response sent to platform
+5. **Response becomes an event** in Event Ledger (closes the loop)
+
+**See:** `specs/adapters/OUT_ADAPTERS.md` (TODO) for full specification.
+
+### 2.6 Hooks
 
 TypeScript scripts that evaluate event content and trigger actions.
 
@@ -216,7 +300,7 @@ interface HookResult {
 
 **See:** `specs/agent-system/EVENT_SYSTEM_DESIGN.md` for full hook specification.
 
-### 2.6 Broker
+### 2.7 Broker
 
 Routes messages to agents, manages session lifecycle, executes agent runs.
 
@@ -235,7 +319,7 @@ Routes messages to agents, manages session lifecycle, executes agent runs.
 
 **See:** `specs/agent-system/BROKER.md` for full broker specification.
 
-### 2.6 Index
+### 2.8 Index
 
 Derived layer that processes ledger data for intelligent access.
 
@@ -469,7 +553,444 @@ Core data model for agent conversations:
 
 ---
 
-## 10. Specification Index
+## 10. Component Interfaces
+
+This section defines the contracts between components. Each interface specifies what data flows, in what format, and who is responsible for what.
+
+### 10.1 Interface Map
+
+```
+┌───────────────┐                           ┌──────────────────────────────────────┐
+│  IN-ADAPTERS  │──── (1) NormalizedEvent ─►│           EVENT LEDGER               │
+└───────────────┘                           └──────────────────┬───────────────────┘
+                                                               │
+                                                     (2) EventTrigger
+                                                               │
+                                                               ▼
+                                            ┌──────────────────────────────────────┐
+                                            │           EVENT HANDLER              │
+                                            │                                      │
+                                            │  ┌─────────────┐                     │
+                                            │  │ ID LEDGER   │◄─(8)─ Index writes  │
+                                            │  └──────┬──────┘                     │
+                                            │         │                            │
+                                            │  (3) IdentityLookup                  │
+                                            │         │                            │
+                                            │         ▼                            │
+                                            │  ┌─────────────┐                     │
+                                            │  │     ACL     │                     │
+                                            │  └──────┬──────┘                     │
+                                            │         │                            │
+                                            │  (4) ACLResult                       │
+                                            │         │ (allow/deny + permissions) │
+                                            │         ▼                            │
+                                            │  ┌─────────────┐                     │
+                                            │  │ HOOK EVAL   │                     │
+                                            │  └──────┬──────┘                     │
+                                            │         │                            │
+                                            └─────────┼────────────────────────────┘
+                                                      │
+                                            (5) BrokerDispatch
+                                                      │
+                                                      ▼
+                                            ┌──────────────────┐
+                                            │      BROKER      │
+                                            └────────┬─────────┘
+                                                     │
+                         ┌───────────────────────────┼───────────────────────────┐
+                         │                           │                           │
+               (6) AgentInvoke               (7) LedgerWrite             (9) OutAdapterSend
+                         │                           │                           │
+                         ▼                           ▼                           ▼
+                  ┌────────────┐            ┌──────────────┐            ┌──────────────┐
+                  │   AGENTS   │            │ AGENT LEDGER │            │ OUT-ADAPTERS │
+                  │  (MA/WAs)  │            └──────────────┘            └──────┬───────┘
+                  └─────┬──────┘                                               │
+                        │                                                      │
+                        └──────────────────────────────────────────────────────┤
+                                                                               │
+                                                               (10) ResponseEvent
+                                                                               │
+                                                                               ▼
+                                                                      EVENT LEDGER
+                                                                      (closes loop)
+
+┌───────────────────────────────────────────────────────────────────────────────────┐
+│                                    INDEX                                           │
+│                                                                                   │
+│   Reads from: Event Ledger, Identity Ledger, Agent Ledger                         │
+│   Writes to: Identity Ledger (enrichment), Index tables (episodes, facets, etc.)  │
+│                                                                                   │
+│   Read by: Hooks (context), Broker (smart forking), CLI (search), Agents (RAG)    │
+└───────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 10.2 Interface Contracts
+
+#### (1) In-Adapter → Event Ledger: `NormalizedEvent`
+
+The adapter normalizes external data into a canonical event format.
+
+```typescript
+interface NormalizedEvent {
+  // Identity
+  id: string;                      // Deterministic: "{source}:{source_id}"
+  source: AdapterSource;           // 'imessage' | 'gmail' | 'discord' | ...
+  source_id: string;               // Original ID from source
+  
+  // Classification
+  type: EventType;                 // 'message' | 'email' | 'reaction' | ...
+  thread_id?: string;              // Thread grouping
+  
+  // Content
+  content: string;                 // Normalized text content
+  content_type: 'text' | 'html';
+  attachments?: Attachment[];
+  
+  // Participants
+  from: ParticipantRef;            // { channel, identifier }
+  to?: ParticipantRef[];
+  
+  // Timing
+  timestamp: number;               // Unix ms
+  
+  // Source-specific
+  metadata?: Record<string, any>;  // Platform-specific extras
+}
+```
+
+**Contract:**
+- Adapter MUST generate deterministic `id` (enables idempotent sync)
+- Adapter MUST normalize content to text (strip platform-specific formatting)
+- Adapter MUST provide `from` participant reference
+
+#### (2) Event Ledger → Event Handler: `EventTrigger`
+
+New events trigger the Event Handler (via DB trigger, polling, or push).
+
+```typescript
+interface EventTrigger {
+  event_id: string;
+  event: NormalizedEvent;          // Full event data
+  thread_context?: ThreadContext;  // Previous events in thread
+}
+```
+
+**Contract:**
+- Ledger MUST trigger handler for each new event
+- Ledger MAY batch triggers for efficiency
+- Handler MUST process each trigger exactly once (idempotent)
+
+#### (3) Event Handler (internal): `IdentityLookup`
+
+Handler queries Identity Ledger to resolve the sender.
+
+```typescript
+interface IdentityLookupRequest {
+  channel: string;                 // 'imessage', 'discord', etc.
+  identifier: string;              // '+15551234567', 'user#1234', etc.
+}
+
+interface IdentityLookupResult {
+  found: boolean;
+  entity?: {
+    id: string;
+    type: 'person' | 'persona';
+    name?: string;
+    is_user: boolean;
+    relationship?: string;
+    tags: string[];
+  };
+}
+```
+
+**Contract:**
+- Lookup MUST return `found: false` for unknown identifiers
+- Handler MUST proceed with `{ unknown: true }` principal if not found
+
+#### (4) Event Handler (internal): `ACLResult`
+
+ACL evaluates policies and returns access decision + permissions.
+
+```typescript
+interface ACLResult {
+  decision: 'allow' | 'deny';
+  
+  // Only present if allowed
+  principal?: Principal;
+  permissions?: {
+    tools: { allow: string[]; deny: string[] };
+    credentials: { allow: string[]; deny: string[] };
+    data: { allow: string[]; deny: string[] };
+  };
+  session?: {
+    persona: string;
+    key: string;
+    label?: string;
+  };
+  
+  // Audit
+  matched_policy?: string;
+  reason?: string;
+}
+```
+
+**Contract:**
+- ACL MUST return decision for every event
+- If `deny`, handler MUST NOT proceed to hooks or broker
+- If `allow`, handler MUST pass permissions to broker
+
+#### (5) Event Handler → Broker: `BrokerDispatch`
+
+Fired hooks dispatch to the Broker with routing and context.
+
+```typescript
+interface BrokerDispatch {
+  // Routing
+  persona: string;                 // Target agent persona
+  session_key: string;             // Session routing key
+  queue_mode: 'steer' | 'followup' | 'collect' | 'interrupt';
+  
+  // Original event
+  event_id: string;
+  event: NormalizedEvent;
+  
+  // Access control
+  principal: Principal;
+  permissions: Permissions;
+  
+  // Hook context
+  hook_context?: {
+    prompt?: string;               // System prompt injection
+    extracted?: Record<string, any>;
+  };
+  
+  // Reply target (for out-adapter)
+  reply_to?: {
+    channel: string;
+    thread_id?: string;
+    recipient?: ParticipantRef;
+  };
+}
+```
+
+**Contract:**
+- Hook MUST provide `persona` and `session_key` for routing
+- Hook MAY provide `hook_context` for prompt injection
+- Broker MUST respect `permissions` during agent execution
+
+#### (6) Broker → Agent: `AgentInvoke`
+
+Broker invokes the agent with session context and message.
+
+```typescript
+interface AgentInvoke {
+  // Session
+  session_id: string;
+  turn_id: string;                 // New turn being created
+  parent_turn_id?: string;         // Parent in tree (for forking)
+  
+  // Agent config
+  persona: string;
+  model_config: ModelConfig;
+  
+  // Message
+  messages: Message[];             // Conversation history
+  new_message: Message;            // The incoming message
+  
+  // Permissions (agent must respect)
+  permissions: Permissions;
+  
+  // Context from Index
+  context?: IndexContext;
+  
+  // Reply target
+  reply_to?: ReplyTarget;
+}
+```
+
+**Contract:**
+- Broker MUST provide conversation history (from Agent Ledger)
+- Agent MUST respect `permissions` (tool/credential access)
+- Agent MUST return structured response for ledger storage
+
+#### (7) Broker → Agent Ledger: `LedgerWrite`
+
+Broker writes session/turn/message data directly to Agent Ledger.
+
+```typescript
+// All writes are direct SQL inserts/updates
+interface TurnWrite {
+  id: string;
+  session_id: string;
+  parent_turn_id?: string;
+  started_at: number;
+  completed_at?: number;
+  status: 'pending' | 'streaming' | 'completed' | 'failed';
+}
+
+interface MessageWrite {
+  id: string;
+  turn_id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  created_at: number;
+}
+
+interface ToolCallWrite {
+  id: string;
+  turn_id: string;
+  tool_name: string;
+  parameters: string;              // JSON
+  result?: string;                 // JSON
+  started_at: number;
+  completed_at?: number;
+  status: 'pending' | 'completed' | 'failed';
+}
+```
+
+**Contract:**
+- Broker MUST write turn on start (status='pending')
+- Broker MUST update turn on completion
+- Broker MUST update session pointer after turn completes
+
+#### (8) Index → Identity Ledger: `IdentityEnrichment`
+
+Index can write back learned relationships to Identity Ledger.
+
+```typescript
+interface IdentityEnrichment {
+  entity_id: string;
+  
+  // Updates (all optional)
+  relationship?: string;           // Learned from conversation patterns
+  tags_add?: string[];
+  tags_remove?: string[];
+  
+  // New identities discovered
+  new_identities?: {
+    channel: string;
+    identifier: string;
+  }[];
+  
+  // Confidence
+  confidence: number;              // 0-1, for review thresholds
+  source: 'index_analysis';
+}
+```
+
+**Contract:**
+- Index SHOULD only write high-confidence enrichments
+- Index MUST NOT overwrite user-set values (relationship, name)
+- Low-confidence enrichments SHOULD queue for human review
+
+#### (9) Broker/Agent → Out-Adapter: `OutAdapterSend`
+
+Agent responses are formatted and sent via out-adapters.
+
+```typescript
+interface OutAdapterSend {
+  // Target
+  channel: string;                 // 'discord', 'telegram', etc.
+  thread_id?: string;
+  recipient?: ParticipantRef;
+  
+  // Content
+  content: string;                 // Markdown
+  attachments?: Attachment[];
+  
+  // Platform hints
+  format_hints?: {
+    use_embed?: boolean;           // Discord
+    use_blocks?: boolean;          // Slack
+    suppress_link_previews?: boolean;
+  };
+  
+  // Source (for event capture)
+  source_turn_id: string;
+  source_persona: string;
+}
+```
+
+**Contract:**
+- Out-Adapter MUST format content per platform rules
+- Out-Adapter MUST handle platform limits (truncation, splitting)
+- Out-Adapter MUST capture response as event (interface 10)
+
+#### (10) Out-Adapter → Event Ledger: `ResponseEvent`
+
+Sent responses become events in the ledger (closes the loop).
+
+```typescript
+interface ResponseEvent extends NormalizedEvent {
+  type: 'message';
+  source: 'nexus';                 // Self-generated
+  
+  // Link to originating turn
+  metadata: {
+    turn_id: string;
+    persona: string;
+    in_reply_to?: string;          // Original event_id
+  };
+}
+```
+
+**Contract:**
+- Out-Adapter MUST write response event after successful send
+- Response event MUST link to originating turn
+- This enables "what did the agent say?" queries
+
+### 10.3 Index Interfaces (Passive)
+
+The Index is primarily a passive consumer that reads from ledgers and is queried by other components.
+
+#### Index Reads From:
+
+| Ledger | What | Trigger |
+|--------|------|---------|
+| Event Ledger | New events | On insert (trigger/poll) |
+| Identity Ledger | Entity data | On demand (join) |
+| Agent Ledger | Turns, messages | On insert (trigger/poll) |
+
+#### Index Is Queried By:
+
+| Component | Query Type | Purpose |
+|-----------|------------|---------|
+| Hooks | Semantic search | Context for hook evaluation |
+| Broker | Smart forking | Find best fork point |
+| Broker | Context enrichment | RAG for agent context |
+| Agents | Tool calls | `index_search` tool |
+| CLI | `nexus search` | User semantic search |
+
+#### Index Query Interface:
+
+```typescript
+interface IndexQuery {
+  query: string;                   // Natural language or semantic
+  filters?: {
+    sources?: string[];            // Limit to adapters
+    time_range?: { start: number; end: number };
+    entity_ids?: string[];         // Limit to participants
+  };
+  limit?: number;
+  include_embeddings?: boolean;
+}
+
+interface IndexResult {
+  hits: {
+    episode_id: string;
+    score: number;
+    content_preview: string;
+    source_event_ids: string[];
+    facets: Facet[];
+  }[];
+  total_hits: number;
+}
+```
+
+---
+
+## 11. Specification Index
 
 ### Core System
 | Document | Status | Description |
@@ -508,7 +1029,7 @@ Core data model for agent conversations:
 
 ---
 
-## 11. Open Items
+## 12. Open Items
 
 ### Terminology Updates Needed
 
@@ -533,17 +1054,21 @@ Core data model for agent conversations:
 |-------|--------|-------|
 | Smart forking algorithm | TODO | Scoring, context assembly |
 | Index pipeline details | TODO | Episode → facet → embedding flow |
-| Hook → Broker interface | TODO | How fired hooks become broker calls |
+| Hook → Broker interface | ✅ Done | See Section 10.2 (5) BrokerDispatch |
 
 ---
 
-## 12. Summary
+## 13. Summary
 
 | Principle | Description |
 |-----------|-------------|
-| **Adapters → Ledger → Broker** | Clean unidirectional data flow |
-| **Ledger + Index** | Primary data vs derived data separation |
+| **Three-Ledger Model** | Event, Identity, Agent ledgers as primary data |
+
+| **In-Adapters → Ledgers → Broker → Out-Adapters** | Clean data flow |
+| **ACL before Hooks** | Declarative policies (WHO) before programmatic scripts (WHAT) |
 | **Direct ledger writes** | Broker writes to Agent Ledger, no file intermediary |
+| **Identity Ledger for principal resolution** | ACL queries Identity Ledger to resolve senders |
+| **Index enriches Identity** | Learned relationships feed back into Identity Ledger |
 | **Service as key** | Service name links credentials, skills, capabilities |
 | **Status cascade** | Credential → skill → capability status flow |
 | **Single database** | All state in `nexus.db` |

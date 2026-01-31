@@ -10,34 +10,101 @@
 
 This document tracks the work needed to align all Nexus specifications with the authoritative `UNIFIED_SYSTEM.md` architecture. The goal is a cohesive specification set that tells one consistent story.
 
+**Note:** The specs have grown large and unwieldy. After completing the remaining priority items, we should consolidate and reorganize around this canonical component model.
+
 ---
 
 ## Canonical Component Model
 
-The unified architecture has these components:
+The unified architecture with the **three-ledger model**:
 
 ```
-┌──────────┐     ┌──────────────┐     ┌───────────────┐     ┌──────────┐
-│ ADAPTERS │────►│ EVENT LEDGER │────►│ EVENT HANDLER │────►│  BROKER  │
-└──────────┘     └──────┬───────┘     │   (Hooks)     │     └────┬─────┘
-                        │             └───────────────┘          │
-                        │                                        ▼
-                        │                              ┌──────────────┐
-                        │                              │ AGENT LEDGER │
-                        │                              └──────┬───────┘
-                        │                                     │
-                        └───────────► INDEX ◄─────────────────┘
-                                    (derived)
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                  NEXUS                                           │
+│                                                                                  │
+│   ┌──────────┐     ┌──────────────┐     ┌────────────────────────────────────┐  │
+│   │   IN-    │────►│ EVENT LEDGER │────►│          EVENT HANDLER             │  │
+│   │ ADAPTERS │     │              │     │                                    │  │
+│   │          │     │ • events     │     │  ┌────────────┐                   │  │
+│   │ • iMsg   │     │ • threads    │     │  │ ID LEDGER  │◄─── Index         │  │
+│   │ • Gmail  │     │              │     │  │            │     enrichment    │  │
+│   │ • Discord│     │              │     │  │ • entities │                   │  │
+│   │ • ...    │     │              │     │  │ • personas │                   │  │
+│   └──────────┘     └──────────────┘     │  └─────┬──────┘                   │  │
+│                                          │        │                          │  │
+│                                          │        ▼                          │  │
+│                                          │  ┌────────────┐                   │  │
+│                                          │  │    ACL     │                   │  │
+│                                          │  │  policies  │                   │  │
+│                                          │  │  + grants  │                   │  │
+│                                          │  └─────┬──────┘                   │  │
+│                                          │        │                          │  │
+│                                          │   ALLOW│DENY                      │  │
+│                                          │        │                          │  │
+│                                          │        ▼                          │  │
+│                                          │  ┌────────────┐                   │  │
+│                                          │  │ HOOK EVAL  │                   │  │
+│                                          │  │ (scripts)  │                   │  │
+│                                          │  └─────┬──────┘                   │  │
+│                                          └────────┼──────────────────────────┘  │
+│                                                   │                             │
+│                                                   ▼                             │
+│                                          ┌──────────────┐                       │
+│                                          │    BROKER    │                       │
+│                                          └───────┬──────┘                       │
+│                                                  │                              │
+│                     ┌────────────────────────────┼────────────────────────┐     │
+│                     ▼                            ▼                        ▼     │
+│              ┌────────────┐              ┌────────────┐           ┌──────────┐  │
+│              │     MA     │◄────────────►│    WAs     │           │   OUT-   │  │
+│              │            │              │            │──────────►│ ADAPTERS │  │
+│              └─────┬──────┘              └────────────┘           │          │  │
+│                    │                            │                 │ • Discord│  │
+│                    └────────────────────────────┼────────────────►│ • Telegram│ │
+│                                                 │                 │ • ...    │  │
+│                                                 ▼                 └──────────┘  │
+│                                          ┌──────────────┐                       │
+│                                          │ AGENT LEDGER │                       │
+│                                          │              │                       │
+│                                          │ • sessions   │                       │
+│                                          │ • turns      │                       │
+│                                          │ • messages   │                       │
+│                                          │ • tool_calls │                       │
+│                                          └──────┬───────┘                       │
+│                                                 │                               │
+│   ┌──────────────┐                              │                               │
+│   │ EVENT LEDGER │──────────────────────────────┼───────────────┐               │
+│   └──────────────┘                              │               │               │
+│                                                 ▼               ▼               │
+│                                          ┌─────────────────────────┐            │
+│                                          │         INDEX           │            │
+│                                          │       (derived)         │            │
+│                                          │                         │            │
+│                                          │ • episodes              │            │
+│                                          │ • facets                │            │
+│                                          │ • embeddings            │            │
+│                                          │ • search                │            │
+│                                          └─────────────────────────┘            │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### The Three Ledgers
+
+| Ledger | Contents | Purpose |
+|--------|----------|---------|
+| **Event Ledger** | events, threads | What happened (normalized external data) |
+| **Identity Ledger** | entities, personas, identities | Who is involved (principal resolution for ACL) |
+| **Agent Ledger** | sessions, turns, messages, tool_calls | AI conversation state |
+
+### Other Core Components
 
 | Component | Purpose |
 |-----------|---------|
-| **Workspace** | `~/nexus/` structure, config, identity |
-| **Adapters** | Normalize external data → Event Ledger |
-| **Event Ledger** | Primary data: events, threads, persons |
-| **Agent Ledger** | Primary data: sessions, turns, messages, tool_calls |
-| **Event Handler** | Hook evaluation, fires to Broker |
+| **In-Adapters** | Normalize external data → Event Ledger |
+| **ACL** | Declarative policies determining WHO, WHAT permissions, WHERE routing |
+| **Hooks** | Programmatic scripts for content-based logic (runs after ACL allows) |
 | **Broker** | Routes messages, manages sessions, executes agents |
+| **Out-Adapters** | Format and deliver responses to platforms |
 | **Index** | Derived layer: episodes, facets, embeddings, search |
 
 ---
@@ -165,43 +232,110 @@ To fork from a turn that has children:
 
 ---
 
-## Priority 3: Persona Management + Routing
+## Priority 3: Persona Management + Routing ✅ RESOLVED
+
+**Status:** Resolved in previous session.
+
+The ACL system now handles persona/routing:
+- **Personas** — Tracked in Identity Ledger (entities table with type='persona')
+- **Routing** — ACL policies assign `session.persona` and `session.key`
+- **Permissions** — ACL policies define tool/credential/data access per principal
+
+**Key insight:** ACL runs FIRST (declarative policies), then hooks (programmatic scripts). ACL determines persona + session + permissions. Hooks handle content-based logic.
+
+**See:** `specs/acl/ACCESS_CONTROL_SYSTEM.md`
+
+---
+
+## Priority 4: Identity Ledger Formalization ✅ DONE
 
 ### The Change
 
-Clarify the relationship between:
-- **Personas** — Agent identities/configurations
-- **Routing Hooks** — Programmatic evaluation (TypeScript)
-- **Routing Rules** — Declarative config (potential future addition)
+Conceptually split out the **Identity Ledger** from the Event Ledger as shown in the whiteboard diagram.
 
-### Current Understanding
+### Status: Complete
 
-From ONTOLOGY.md, the routing hierarchy is:
+- ✅ `UNIFIED_SYSTEM.md` updated with three-ledger model
+- ✅ `acl/ACCESS_CONTROL_SYSTEM.md` references Identity Ledger for principal resolution
+- ✅ Identity Ledger schema documented
 
+### Identity Ledger Tables
+
+```sql
+-- IDENTITY LEDGER (conceptually separate)
+entities (id, type, name, is_user, relationship, ...)  -- 'person' | 'persona'
+entity_identities (entity_id, channel, identifier, account_id, is_owned)
+entity_tags (entity_id, tag)
+
+-- EVENT LEDGER references Identity via:
+event_participants (event_id, entity_id, role)
 ```
-Persona Routing (top)      → maps persona → main session
-    ↓
-Session Routing (middle)   → maps label → current thread head
-    ↓
-Turn/Thread Routing (base) → routes to specific turn ID
-```
 
-**Persona** = Identity + Permissions (decorates threads)
+**See:** `UNIFIED_SYSTEM.md` Section 2.3 for full schema.
 
-### Open Questions
+---
 
-- [ ] Do we need declarative routing rules, or are hooks sufficient?
-- [ ] Where is persona configuration stored? (`state/agents/{name}/` presumably)
-- [ ] How does the Broker resolve persona → session → turn?
-- [ ] How do personas inherit/share permissions?
+## Priority 5: Out-Adapters Specification
+
+### The Change
+
+Specify how responses are formatted and delivered to external platforms.
+
+### Current State
+
+**Blind spot.** We have detailed specs for in-adapters but out-adapters are under-specified.
+
+### What's Needed
+
+1. **Platform formatting** — Character limits, markdown support, threading
+2. **Delivery mechanism** — How Broker/Agents invoke out-adapters
+3. **Response capture** — Responses become events in Event Ledger (closes the loop)
+4. **Error handling** — Delivery failures, retries
+
+### Out-Adapters to Specify
+
+| Adapter | Key Constraints |
+|---------|-----------------|
+| Discord | 2000 char limit, embeds, threads |
+| Telegram | 4000 chars, markdown, media groups |
+| WhatsApp | Baileys API, PTT audio, polls |
+| Slack | Blocks, threads, reactions |
+| Email | MIME, threading headers |
+
+### Files to Create
+
+| File | Purpose |
+|------|---------|
+| `specs/adapters/OUT_ADAPTERS.md` | Unified out-adapter specification |
+| `specs/adapters/RESPONSE_FORMATTING.md` | Platform-specific formatting rules |
+
+---
+
+## Priority 6: Mnemonic → Index Migration
+
+### The Change
+
+Bring the mnemonic codebase into Nexus as the Index layer.
+
+### Current State
+
+- Mnemonic exists as separate project (`cortex/`)
+- Spec terminology updated (Mnemonic → Index)
+- Code migration not yet done
+
+### What's Needed
+
+1. **Rename** — `mnemonic/` → embedded in nexus or `nexus-index/`
+2. **Integration** — Wire Index to Broker for context/forking
+3. **Schema alignment** — Ensure Index tables match spec
+4. **AIX integration** — AIX feeds external harness data to Index
 
 ### Files to Update
 
 | File | Action |
 |------|--------|
-| `agent-system/ROUTING_HOOKS.md` | Clarify persona vs routing relationship |
-| `agent-system/ONTOLOGY.md` | Ensure persona is well-defined |
-| `agent-system/BROKER.md` | Document persona resolution |
+| `aix/AIX_MNEMONIC_PIPELINE.md` | Rename references, clarify external-only ingestion |
+| `mnemonic/MNEMONIC_ARCHITECTURE.md` | Rename to INDEX_ARCHITECTURE.md |
 
 ---
 
@@ -253,6 +387,12 @@ These specs are stable and don't need reconciliation work:
 | BROKER.md session pointer sections (5.3-5.4) | ✅ Done |
 | mnemonic/AGENTS_LEDGER_FORKING.md created | ✅ Done |
 | EVENT_SYSTEM_DESIGN.md terminology update | ✅ Done |
+| Three-Ledger Model (Event, Identity, Agent) | ✅ Done |
+| Component Interfaces (Section 10 in UNIFIED_SYSTEM.md) | ✅ Done |
+| ACL specs referencing Identity Ledger | ✅ Done |
+| Identity Ledger formalization | ✅ Done |
+| Upstream structure mapping | ✅ Done (specs/project-structure/UPSTREAM_STRUCTURE.md) |
+| Nexus structure proposal | ✅ Done (specs/project-structure/NEXUS_STRUCTURE.md) |
 | ORCHESTRATION.md marked superseded | ✅ Done |
 | memory/README.md updated | ✅ Done |
 | Status markers on complete specs | ✅ Done |
@@ -274,7 +414,9 @@ These specs are stable and don't need reconciliation work:
 
 ## Execution Order
 
-1. **Priority 1: Broker-Ledger Unification**
+### Phase 1: Specification Alignment
+
+1. **Priority 1: Broker-Ledger Unification** 🔴 HIGH
    - [ ] Update SESSION_FORMAT.md (major rewrite)
    - [ ] Update workspace docs to remove `state/sessions/`
    - [ ] Ensure BROKER.md ledger client section is complete
@@ -283,10 +425,51 @@ These specs are stable and don't need reconciliation work:
    - [x] Terminology sweep complete
    - [ ] Update aix/AIX_MNEMONIC_PIPELINE.md
 
-3. **Priority 3: Persona/Routing**
-   - [ ] Clarify persona storage and resolution
-   - [ ] Update ROUTING_HOOKS.md
-   - [ ] Update BROKER.md persona section
+3. **Priority 3: Persona/Routing** ✅ RESOLVED
+   - [x] ACL system handles persona/routing
+   - [x] See `specs/acl/`
+
+4. **Priority 4: Identity Ledger Formalization**
+   - [ ] Update UNIFIED_SYSTEM.md with three-ledger model
+   - [ ] Update ACL specs to reference Identity Ledger
+   - [ ] Document entity/identity schema
+
+5. **Priority 5: Out-Adapters Specification** 🔴 HIGH (blind spot)
+   - [ ] Create OUT_ADAPTERS.md
+   - [ ] Document platform formatting rules
+   - [ ] Document response → event loop
+
+6. **Priority 6: Mnemonic → Index Migration**
+   - [ ] Rename mnemonic references
+   - [ ] Wire Index to Broker
+   - [ ] Complete AIX integration
+
+### Phase 2: Consolidation
+
+After completing Phase 1, consolidate the specs around the canonical component model:
+
+| Current State | Target State |
+|---------------|--------------|
+| Many overlapping docs | One doc per component |
+| Historical terminology | Consistent three-ledger model |
+| Scattered examples | Examples with each component spec |
+
+**Target structure:**
+```
+specs/
+├── UNIFIED_SYSTEM.md           # Canonical overview (keep)
+├── adapters/                   # In + Out adapters
+├── ledgers/                    # Event, Identity, Agent ledgers
+├── acl/                        # Access control (keep)
+├── hooks/                      # Hook system
+├── broker/                     # Broker + routing
+├── agents/                     # MA/WA, ontology
+├── index/                      # Derived layer
+├── workspace/                  # File structure, bindings
+├── cli/                        # CLI commands
+├── skills/                     # Skills hub
+└── credentials/                # Credential system
+```
 
 ---
 
@@ -296,6 +479,8 @@ These specs are stable and don't need reconciliation work:
 - The `agent-bindings-research/` folder contains supporting research
 - Single database model (`nexus.db`) is confirmed
 - Forking behavior is documented in mnemonic/AGENTS_LEDGER_FORKING.md
+- **ACL specs are comprehensive** — policies, grants, audit all spec'd
+- **Out-adapters are a blind spot** — need specification work
 
 ---
 
