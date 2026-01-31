@@ -16,10 +16,79 @@ NEX is the central orchestrator for the Nexus system. It receives events from ad
 ## Design Principles
 
 1. **Central orchestration** — One place owns the pipeline, not a chain of services
-2. **Sync pipeline, async persistence** — Critical path is sync; ledger writes are async
-3. **Plugin-friendly** — Before/after hooks at each stage
-4. **Modular** — Each stage (ACL, Hooks, Broker, etc.) is a replaceable component
-5. **Observable** — Full trace of every request persisted
+2. **In-process stages** — All stages are functions in one process; no network hops
+3. **Sync pipeline, async persistence** — Critical path is sync; ledger writes are async
+4. **Plugin-friendly** — Before/after hooks at each stage
+5. **Modular** — Each stage (ACL, Hooks, Broker, etc.) is a replaceable component
+6. **Observable** — Full trace of every request persisted
+7. **Direct reads, orchestrated writes** — Reads go direct; request lifecycle writes go through NEX
+
+---
+
+## In-Process Architecture
+
+NEX is a single process. Stages like ACL, Hooks, Broker, and Deliver are **modules/functions**, not separate services. There are no network hops between stages.
+
+```
+NEX Process (single binary)
+├── receive()      // stage 1 - create NexusRequest
+├── runACL()       // stage 2 - identity, permissions
+├── runHooks()     // stage 3 - trigger matching, context injection
+├── broker()       // stage 4 - agent selection, context assembly, execution
+├── deliver()      // stage 5 - format, chunk, send
+└── complete()     // stage 6 - finalize, trace
+
+All function calls. No network hops.
+```
+
+**Key clarification:** The "Broker" is not a separate service — it's a stage within NEX that handles agent selection, context assembly, and execution. When we say "NEX calls Broker," we mean NEX invokes a function, not a remote service.
+
+---
+
+## Database Access Patterns
+
+**Principle:** NEX owns writes during request processing. Everything else accesses the database directly.
+
+### Hybrid Approach
+
+| Access Type | Route | Why |
+|-------------|-------|-----|
+| **NexusRequest lifecycle** | Through NEX | NEX orchestrates; writes are part of pipeline |
+| **Reads/queries** | Direct | No reason to add latency |
+| **Background jobs** | Direct | Independent work, not part of request |
+| **Analysis/indexing** | Direct | Mnemonic's existing pattern |
+
+### What This Means Concretely
+
+1. **Stages don't write to ledgers** — they return results to NEX, NEX writes
+2. **Broker doesn't write to Agents Ledger** — Broker executes agent, returns result, NEX writes
+3. **CLI reads directly** — no need to route queries through NEX
+4. **Mnemonic jobs write directly** — they're not part of a NexusRequest
+
+This isn't about routing — it's separation of concerns. The Broker's job is to execute agents. NEX's job is to orchestrate and maintain the audit trail.
+
+### Shared Database Library
+
+```go
+// nexus/db/ledgers.go
+package db
+
+type Ledgers struct {
+    Events  *EventsLedger
+    Agents  *AgentsLedger
+    Nexus   *NexusLedger  // NexusRequest storage
+}
+
+// Used by NEX for pipeline writes
+func (l *Ledgers) WriteAgentTurn(...)
+func (l *Ledgers) WriteEvent(...)
+
+// Used by CLI, analysis jobs, etc for queries
+func (l *Ledgers) QueryThreads(...)
+func (l *Ledgers) GetSession(...)
+```
+
+Both NEX and other components use the same library. NEX doesn't "own" the database — it owns the NexusRequest lifecycle.
 
 ---
 
