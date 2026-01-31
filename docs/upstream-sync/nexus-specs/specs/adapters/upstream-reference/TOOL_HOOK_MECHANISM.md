@@ -228,13 +228,32 @@ async function beforeAgentStart(event, ctx) {
 
 ---
 
-## Recommendation for Nexus
+## Nexus Decision
 
-**Short-term:** Use `before_agent_start` with `prependContext` since it already works.
+**Approach: Turn-start context injection**
 
-Based on channel info available via `params.messageChannel` or `params.messageProvider`, inject channel-specific formatting guidance into the turn context.
+Based on the channel in the inbound event, inject formatting guidance at turn start. This is simpler than tool hooks and uses existing patterns.
 
-**Long-term:** Implement proper tool hook invocation:
+```typescript
+// In NexusRequest pipeline, before agent execution
+if (request.delivery.channel) {
+  const guide = loadFormattingGuide(request.delivery.channel);
+  request.agent.prepend_context = guide;
+}
+```
+
+The `NexusRequest.delivery.capabilities` tells the agent what's supported, and the prepended context provides detailed formatting rules.
+
+**Why not tool hooks:**
+- `before_tool_call` exists but is NOT invoked in upstream
+- Would require wrapping all tools and extending types
+- Turn-start injection is simpler and sufficient
+
+---
+
+## Upstream Reference (Not Using)
+
+For reference, here's what would be needed to implement tool hooks:
 
 1. **Extend types in `types.ts`:**
    ```typescript
