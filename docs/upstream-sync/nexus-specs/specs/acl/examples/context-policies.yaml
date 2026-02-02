@@ -1,0 +1,94 @@
+# Context-Based Policies
+#
+# These policies apply based on channel, account, or time context.
+# They can override or augment relationship-based policies.
+
+policies:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # WORK CHANNEL CONTEXT
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  - name: work-slack-context
+    description: Work Slack gets work-scoped permissions
+    
+    match:
+      conditions:
+        - channel: slack
+          account: company-workspace
+    
+    effect: allow
+    
+    permissions:
+      tools:
+        allow: [web_search, github, jira, read_file, write_file]
+      credentials: [github, jira, slack]
+      data: work
+    
+    session:
+      persona: atlas
+      key: work
+    
+    priority: 85
+
+  - name: work-discord-context
+    description: Work Discord server gets work-scoped permissions
+    
+    match:
+      conditions:
+        - channel: discord
+          guild: "987654321"  # Work server guild ID
+    
+    effect: allow
+    
+    permissions:
+      tools:
+        allow: [web_search, github, read_file]
+      credentials: [github]
+      data: work
+    
+    session:
+      persona: atlas
+      key: work
+    
+    priority: 85
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # QUIET HOURS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  - name: quiet-hours
+    description: Queue non-owner messages during quiet hours
+    
+    match:
+      principal:
+        is_user: false  # Only applies to non-owners
+      conditions:
+        - time: "23:00-08:00"
+    
+    effect: allow  # Still allow, but modify behavior
+    
+    modifiers:
+      queue_mode: collect
+      delay_response: true
+    
+    priority: 95
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # WEEKEND MODE
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  - name: weekend-work-filter
+    description: Queue work messages on weekends
+    
+    match:
+      conditions:
+        - channel: slack
+          time: weekends
+    
+    effect: allow
+    
+    modifiers:
+      queue_mode: collect
+    
+    priority: 75

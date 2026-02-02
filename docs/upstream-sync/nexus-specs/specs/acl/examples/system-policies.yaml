@@ -1,0 +1,134 @@
+# System & Webhook Policies
+#
+# These policies handle non-human principals:
+# system events (timers, cron) and external webhooks.
+
+policies:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # TIMER / CRON EVENTS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  - name: system-timer-default
+    description: Default policy for timer tick events
+    
+    match:
+      principal:
+        system: true
+      conditions:
+        - event_type: timer
+    
+    effect: allow
+    
+    # Timer events trigger hook evaluation
+    # Hooks define their own scope
+    permissions:
+      tools: "*"
+      credentials: "*"
+      data: full
+    
+    priority: 50
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # TRUSTED HOOK POLICIES
+  # 
+  # Specific hooks can have scoped permissions
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  - name: hook-daily-backup
+    description: Daily backup hook - file access only
+    
+    match:
+      principal:
+        system: true
+      conditions:
+        - hook_id: daily-backup
+    
+    effect: allow
+    
+    permissions:
+      tools:
+        allow: [read_file, write_file]
+        deny: ["*"]
+      credentials: [google-drive]
+      data: full
+    
+    priority: 55
+
+  - name: hook-web-scraper
+    description: Web scraper hook - web only, no credentials
+    
+    match:
+      principal:
+        system: true
+      conditions:
+        - hook_id: web-scraper
+    
+    effect: allow
+    
+    permissions:
+      tools:
+        allow: [web_search]
+        deny: ["*"]
+      credentials: []
+      data: none
+    
+    priority: 55
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # WEBHOOKS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  - name: webhook-stripe
+    description: Stripe payment webhooks
+    
+    match:
+      principal:
+        webhook: stripe
+    
+    effect: allow
+    
+    permissions:
+      tools:
+        allow: [notify]
+        deny: ["*"]
+      credentials: []
+      data: none
+    
+    session:
+      persona: atlas
+      key: "webhook:stripe"
+    
+    priority: 60
+
+  - name: webhook-github
+    description: GitHub PR/issue webhooks
+    
+    match:
+      principal:
+        webhook: github
+    
+    effect: allow
+    
+    permissions:
+      tools:
+        allow: [notify, github]
+      credentials: [github]
+      data: none
+    
+    session:
+      persona: atlas
+      key: "webhook:github"
+    
+    priority: 60
+
+  - name: webhook-unknown
+    description: Block unknown webhook sources
+    
+    match:
+      principal:
+        webhook: "*"
+    
+    effect: deny
+    
+    priority: 5  # Catch-all for unrecognized webhooks

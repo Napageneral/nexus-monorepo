@@ -1,0 +1,109 @@
+# Relationship-Based Policies
+#
+# These policies grant access based on relationship to the owner.
+# Queries the `entities` table for relationship data.
+
+policies:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # PARTNER ACCESS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  - name: partner-access
+    description: Partner gets trusted but scoped access
+    
+    match:
+      principal:
+        relationship: partner
+    
+    effect: allow
+    
+    permissions:
+      tools:
+        allow: [web_search, weather, calendar_read, read_file, smart_home]
+        deny: [shell, send_email, read_messages, credentials_*]
+      credentials: []
+      data: restricted
+    
+    session:
+      persona: atlas
+      key: "partner:{principal.name}"
+    
+    priority: 80
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # FAMILY ACCESS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  - name: family-access
+    description: Family members get limited access
+    
+    match:
+      principal:
+        relationship: family
+    
+    effect: allow
+    
+    permissions:
+      tools:
+        allow: [web_search, weather]
+        deny: ["*"]
+      credentials: []
+      data: none
+    
+    session:
+      persona: atlas
+      key: "family:{principal.name}"
+    
+    priority: 70
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # WORK CONTACTS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  - name: work-contacts
+    description: Work contacts get work-scoped access
+    
+    match:
+      principal:
+        relationship: work
+    
+    effect: allow
+    
+    permissions:
+      tools:
+        allow: [web_search, calendar_read, read_file]
+        deny: [shell, send_email, credentials_*]
+      credentials: []
+      data: restricted
+    
+    session:
+      persona: atlas
+      key: "work:{principal.name}"
+    
+    priority: 65
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # FRIENDS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  - name: friends-access
+    description: Friends get basic access
+    
+    match:
+      principal:
+        relationship: friend
+    
+    effect: allow
+    
+    permissions:
+      tools:
+        allow: [web_search, weather]
+      credentials: []
+      data: none
+    
+    session:
+      persona: atlas
+      key: "friend:{principal.name}"
+    
+    priority: 60

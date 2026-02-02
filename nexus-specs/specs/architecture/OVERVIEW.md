@@ -121,7 +121,7 @@ Primary data stores:
 
 All ledgers live in `~/nexus/state/nexus.db` (SQLite).
 
-**See:** `ledgers/`
+**See:** `../data/ledgers/`
 
 ### Cortex (Derived Layer)
 
@@ -171,7 +171,7 @@ Connect Nexus to external platforms:
 
 Each adapter normalizes events to a canonical `NormalizedEvent` format.
 
-**See:** `adapters/`
+**See:** `../runtime/adapters/`
 
 ### IAM (Identity & Access Management)
 
@@ -181,7 +181,7 @@ Determines WHO can interact and WHAT they can do:
 - Assigns permissions and session routing
 - Logs all decisions for audit
 
-**See:** `iam/`
+**See:** `../runtime/iam/`
 
 ### Hooks Engine
 
@@ -192,7 +192,7 @@ Programmatic event handlers:
 - Execute TypeScript handlers in parallel
 - Can extract data, enrich context, or handle events entirely
 
-**See:** `hooks/`
+**See:** `../runtime/hooks/`
 
 ### Broker
 
@@ -202,7 +202,7 @@ Orchestrates agent execution:
 - Coordinates streaming to out-adapters
 - Writes directly to Agents Ledger
 
-**See:** `broker/`
+**See:** `../runtime/broker/`
 
 ### Out-Adapters
 
@@ -211,7 +211,7 @@ Format and deliver responses:
 - Message chunking if needed
 - Response becomes an event (closes the loop)
 
-**See:** `adapters/`
+**See:** `../runtime/adapters/`
 
 ---
 
@@ -287,26 +287,34 @@ Format and deliver responses:
 
 ---
 
-## Specification Index
+## Specification Organization
 
-### Core System
+Specs are organized into four conceptual layers:
+
+### Runtime Infrastructure (`runtime/`)
+
+*What happens when an event arrives.*
 
 | Folder | Status | Description |
 |--------|--------|-------------|
 | **nex/** | ✅ Current | NEX orchestrator, pipeline, interfaces |
-| **broker/** | ✅ Current | Agent sessions, turns, ontology |
+| **broker/** | ✅ Current | Agent sessions, turns, context assembly |
 | **iam/** | ✅ Current | Identity & Access Management (policies, grants, audit) |
 | **hooks/** | ✅ Current | Hooks Engine, event automation |
 | **adapters/** | ✅ Current | In/out adapters, channel specs |
 
-### Data Layer
+### Data Infrastructure (`data/`)
+
+*Where state lives.*
 
 | Folder | Status | Description |
 |--------|--------|-------------|
 | **ledgers/** | ✅ Current | System of Record schemas (Events, Agents, Identity) |
 | **cortex/** | ✅ Current | Derived layer (episodes, facets, embeddings) |
 
-### Supporting Systems
+### Agent Environment (`environment/`)
+
+*What agents see and interact with.*
 
 | Folder | Status | Description |
 |--------|--------|-------------|
@@ -315,25 +323,27 @@ Format and deliver responses:
 | **skills/** | ✅ Current | Skills hub, taxonomy |
 | **credentials/** | ✅ Current | Credential system |
 
-### Reference
+### Cloud Services (`services/`)
 
-| Folder | Status | Description |
-|--------|--------|-------------|
-| **project-structure/** | ✅ Current | Codebase layout, fork mapping |
-
-### Future / Placeholder
+*Optional platform features.*
 
 | Folder | Status | Description |
 |--------|--------|-------------|
 | **cloud/** | 📋 Placeholder | Encrypted sync service |
 | **collab/** | 📋 Placeholder | Multi-user collaboration |
 
+### Reference
+
+| Folder | Status | Description |
+|--------|--------|-------------|
+| **project-structure/** | ✅ Current | Codebase layout, fork mapping, branding |
+
 ---
 
 ## Related Documents
 
-- `nex/NEX.md` — Full NEX specification
-- `nex/NEXUS_REQUEST.md` — Data bus schema
-- `nex/INTERFACES.md` — Component interface contracts
-- `broker/UNIFIED_ARCHITECTURE.md` — Agent system architecture
-- `project-structure/FORK_MAPPING.md` — Openclaw → Nexus mapping
+- `../runtime/nex/NEX.md` — Full NEX specification
+- `../runtime/nex/NEXUS_REQUEST.md` — Data bus schema
+- `../runtime/nex/INTERFACES.md` — Component interface contracts
+- `../runtime/broker/OVERVIEW.md` — Agent system architecture
+- `../project-structure/FORK_MAPPING.md` — Openclaw → Nexus mapping
