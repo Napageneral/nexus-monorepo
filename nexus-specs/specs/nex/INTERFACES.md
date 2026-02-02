@@ -153,7 +153,7 @@ interface EventTrigger {
 
 ### (3) IAM (internal): `IdentityLookup`
 
-NEX queries Identity Ledger to resolve the sender.
+NEX queries Identity Graph to resolve the sender.
 
 ```typescript
 interface IdentityLookupRequest {
@@ -162,7 +162,24 @@ interface IdentityLookupRequest {
 }
 
 interface IdentityLookupResult {
-  found: boolean;
+  // Contact info (always present after first interaction)
+  contact: {
+    channel: string;
+    identifier: string;
+    first_seen: number;
+    last_seen: number;
+    message_count: number;
+    display_name?: string;         // From platform if available
+  };
+  
+  // Identity mapping (may or may not exist)
+  mapping?: {
+    entity_id: string;
+    mapping_type: 'confirmed' | 'inferred' | 'pending' | 'unknown';
+    confidence?: number;           // For inferred/pending
+  };
+  
+  // Resolved entity (only if mapping exists and is confirmed/inferred)
   entity?: {
     id: string;
     type: 'person' | 'persona';
@@ -175,8 +192,9 @@ interface IdentityLookupResult {
 ```
 
 **Contract:**
-- Lookup MUST return `found: false` for unknown identifiers
-- NEX MUST proceed with `{ unknown: true }` principal if not found
+- Lookup MUST upsert contact (update last_seen, message_count)
+- Lookup MUST return entity only if mapping_type is 'confirmed' or 'inferred'
+- NEX MUST proceed with unknown principal if no resolved entity
 
 ---
 

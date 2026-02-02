@@ -116,7 +116,7 @@ Primary data stores:
 |--------|---------|----------|
 | **Events** | What happened | All inbound/outbound events (permanent) |
 | **Agents** | AI conversations | Sessions, turns, messages, tool calls |
-| **Identity** | Who is involved | Entities, identities, relationships |
+| **Identity** | Who is involved | Contacts (hard facts) → Entities → Mappings (fuzzy) |
 | **Nexus** | Pipeline traces | NexusRequest lifecycle, timing, audit |
 
 All ledgers live in `~/nexus/state/nexus.db` (SQLite).

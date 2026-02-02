@@ -60,22 +60,25 @@ The permanent record of all agent conversations and actions.
 
 ## Identity Graph
 
-The registry of known entities and their identities across platforms.
+Three-layer system for managing **who** we interact with.
 
 **Schema:** See `IDENTITY_GRAPH.md`
 
-**Contents:**
-- Entities (people, personas, organizations)
-- Identities (phone numbers, email addresses, Discord handles)
-- Relationships (family, friend, work, etc.)
-- Identity mappings (which identity belongs to which entity)
+**The Three Layers:**
+
+| Layer | What It Is | Mutability |
+|-------|------------|------------|
+| **Contacts** | All unique (channel, identifier) pairs we've seen | Derived from events |
+| **Entities** | People, personas, organizations we know about | User-defined, mutable |
+| **Identity Mappings** | Links contacts → entities | Fuzzy (confirmed/inferred/pending) |
+
+**Key insight:** Contacts are hard facts derived from events. Entities are user-defined. The *mapping* between them is the fuzzy part.
 
 **Properties:**
-- Mutable (relationships change, new identities discovered)
-- Graph structure (entities are nodes, mappings are edges)
-- User can manually edit; Cortex can suggest enrichments
-
-**Note:** The Identity Graph sits between System of Record and Cortex. The entities themselves are primary data, but identity *resolution* (inferring that a new phone number belongs to an existing person) is derived/fuzzy and handled by Cortex.
+- Contacts are aggregated from Events Ledger (first_seen, last_seen, message_count)
+- Entities can exist without linked contacts (e.g., a persona not yet used)
+- Identity mappings have confidence levels (confirmed > inferred > pending > unknown)
+- Cortex can suggest mappings; user confirms
 
 ---
 
@@ -108,8 +111,6 @@ All stores reference each other via deterministic IDs:
 - Events reference entities via `from`/`to` participant refs
 - Turns reference events via `source_event_id`
 - Everything links back to the source of truth
-
----
 
 ---
 
