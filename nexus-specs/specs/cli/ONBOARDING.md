@@ -568,10 +568,10 @@ $ nexus quest start quick-path
 
 ## See Also
 
-- **[CLI Reference](./CLI_REFERENCE.md)** — `nexus status`, `nexus capabilities` commands
-- **[Capabilities Reference](./CAPABILITIES.md)** — Full provider mapping
-- **[State Architecture](./STATE.md)** — File paths and schemas
-- **[Agent Bindings](./AGENT_BINDINGS.md)** — Hooks, rules, bootstrap flow
+- `COMMANDS.md` — `nexus status`, `nexus capabilities` commands
+- `CAPABILITIES.md` — Full provider mapping
+- `../workspace/NEXUS_STRUCTURE.md` — File paths and schemas
+- `../workspace/AGENT_BINDINGS.md` — Hooks, rules, bootstrap flow
 
 ---
 

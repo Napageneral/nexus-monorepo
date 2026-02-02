@@ -17,7 +17,10 @@ The `nexus` CLI is a **new component** that doesn't exist in clawdbot upstream. 
 
 **Key Insight:** This is a primary reason for the fork. The CLI is the agent's interface to the Nexus ecosystem.
 
-**See also:** `specs/UNIFIED_SYSTEM.md` for how CLI integrates with credentials, skills, and workspace.
+**See also:** Related specs for how CLI integrates with other systems:
+- `../credentials/` — Credential management
+- `../skills/` — Skills system
+- `../workspace/` — Workspace structure
 
 ---
 

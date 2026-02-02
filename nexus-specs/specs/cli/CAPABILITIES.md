@@ -445,6 +445,6 @@ The deeper you go in the taxonomy, the more powerful ALL your capabilities becom
 
 ## See Also
 
-- **[Skills Specification](./SKILLS.md)** — How skills provide capabilities
-- **[CLI Reference](./CLI_REFERENCE.md)** — `nexus capabilities` command
-- **[Credentials System](./CREDENTIALS.md)** — How credentials enable capabilities
+- `../skills/` — Skills system (how skills provide capabilities)
+- `COMMANDS.md` — `nexus capabilities` command
+- `../credentials/CREDENTIAL_SYSTEM.md` — How credentials enable capabilities
