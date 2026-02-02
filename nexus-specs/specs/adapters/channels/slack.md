@@ -226,5 +226,5 @@ TBD: `slack-cli` using Slack Web API with Socket Mode.
 ---
 
 ## Related
-- `../upstream-reference/CHANNEL_INVENTORY.md` — Full upstream details
+- `../upstream/CHANNEL_INVENTORY.md` — Full upstream details
 - `../ADAPTER_INTERFACES.md` — Interface definitions

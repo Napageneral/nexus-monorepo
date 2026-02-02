@@ -30,10 +30,10 @@ Adapters are external tools (like `eve`, `gog`, `discord-cli`) that meet defined
 
 | Spec | Description |
 |------|-------------|
-| `upstream-reference/CHANNEL_INVENTORY.md` | All channels in OpenClaw |
-| `upstream-reference/TOOL_HOOK_MECHANISM.md` | How tool hooks work (and don't) |
-| `upstream-reference/OPENCLAW_INBOUND.md` | OpenClaw inbound patterns |
-| `upstream-reference/OPENCLAW_OUTBOUND.md` | OpenClaw outbound patterns |
+| `upstream/CHANNEL_INVENTORY.md` | All channels in OpenClaw |
+| `upstream/TOOL_HOOK_MECHANISM.md` | How tool hooks work (and don't) |
+| `upstream/OPENCLAW_INBOUND.md` | OpenClaw inbound patterns |
+| `upstream/OPENCLAW_OUTBOUND.md` | OpenClaw outbound patterns |
 
 ---
 
@@ -117,7 +117,7 @@ Each spec includes:
 
 ## Open Questions
 
-1. **Formatting guidance injection** — How to provide on-demand guidance when message tool is called? See `upstream-reference/TOOL_HOOK_MECHANISM.md`
+1. **Formatting guidance injection** — How to provide on-demand guidance when message tool is called? See `upstream/TOOL_HOOK_MECHANISM.md`
 
 2. **Tool CLI interface** — Standardize CLI args across adapter tools?
 
@@ -127,6 +127,6 @@ Each spec includes:
 
 ## Related Specs
 
-- `../core/NEXUS_REQUEST.md` — Request object adapters create/consume
-- `../iam/` — ACL processes events from adapters
-- `../agent-system/` — Broker routes to adapters
+- `../nex/NEXUS_REQUEST.md` — Request object adapters create/consume
+- `../iam/` — IAM processes events from adapters
+- `../broker/` — Broker routes to adapters

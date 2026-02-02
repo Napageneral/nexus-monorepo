@@ -234,6 +234,6 @@ gog gmail search "is:unread from:boss@company.com"
 ---
 
 ## Related
-- `../upstream-reference/CHANNEL_INVENTORY.md` — Upstream status
+- `../upstream/CHANNEL_INVENTORY.md` — Upstream status
 - `../ADAPTER_INTERFACES.md` — Interface definitions
 - `nexus skill use gog` — Full gog tool guide

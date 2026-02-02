@@ -277,7 +277,7 @@ For detailed guidance (Telegram HTML syntax, Discord embed structure), use one o
 2. **Tool hook** — Inject when message tool is called (requires extension)
 3. **Skill loading** — Agent loads formatting skill
 
-See `upstream-reference/TOOL_HOOK_MECHANISM.md` for implementation details.
+See `upstream/TOOL_HOOK_MECHANISM.md` for implementation details.
 
 ---
 
@@ -405,4 +405,4 @@ async function sendWithRetry(
 - `INBOUND_INTERFACE.md` — Event receiving interface
 - `ADAPTER_INTERFACES.md` — Combined overview
 - `channels/{channel}.md` — Per-channel specs
-- `upstream-reference/TOOL_HOOK_MECHANISM.md` — Hook details
+- `upstream/TOOL_HOOK_MECHANISM.md` — Hook details

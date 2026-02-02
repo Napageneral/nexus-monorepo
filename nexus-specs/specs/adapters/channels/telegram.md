@@ -212,5 +212,5 @@ TBD: `telegram-cli` wrapper or Grammy-based integration. Need to decide:
 ---
 
 ## Related
-- `../upstream-reference/CHANNEL_INVENTORY.md` — Full upstream details
+- `../upstream/CHANNEL_INVENTORY.md` — Full upstream details
 - `../ADAPTER_INTERFACES.md` — Interface definitions

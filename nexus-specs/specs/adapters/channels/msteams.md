@@ -238,7 +238,7 @@ Use **Incoming Webhooks** for one-way notifications:
 ---
 
 ## Related
-- `../upstream-reference/CHANNEL_INVENTORY.md` — Upstream status
+- `../upstream/CHANNEL_INVENTORY.md` — Upstream status
 - `../ADAPTER_INTERFACES.md` — Interface definitions
 - [Teams Bot Framework Docs](https://learn.microsoft.com/en-us/microsoftteams/platform/bots/what-are-bots)
 - [Adaptive Cards Designer](https://adaptivecards.io/designer/)

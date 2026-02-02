@@ -336,5 +336,5 @@ TBD: signal-cli wrapper. Need to:
 ---
 
 ## Related
-- `../upstream-reference/CHANNEL_INVENTORY.md` — Full upstream details
+- `../upstream/CHANNEL_INVENTORY.md` — Full upstream details
 - `../ADAPTER_INTERFACES.md` — Interface definitions

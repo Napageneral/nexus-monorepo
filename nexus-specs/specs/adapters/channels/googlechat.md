@@ -176,6 +176,6 @@ await chat.spaces.messages.create({
 ---
 
 ## Related
-- `../upstream-reference/CHANNEL_INVENTORY.md` — Upstream status
+- `../upstream/CHANNEL_INVENTORY.md` — Upstream status
 - `../ADAPTER_INTERFACES.md` — Interface definitions
 - [Google Chat API Docs](https://developers.google.com/chat/api/reference/rest)

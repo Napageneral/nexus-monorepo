@@ -297,6 +297,6 @@ LINE is not in the main channel registry in upstream but has a full implementati
 ---
 
 ## Related
-- `../upstream-reference/CHANNEL_INVENTORY.md` — Full upstream details
+- `../upstream/CHANNEL_INVENTORY.md` — Full upstream details
 - `../ADAPTER_INTERFACES.md` — Interface definitions
 - [LINE Messaging API Docs](https://developers.line.biz/en/docs/messaging-api/)

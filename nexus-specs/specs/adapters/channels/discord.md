@@ -149,5 +149,5 @@ TBD: `discord-cli` or integrate with existing Discord bot setup.
 ---
 
 ## Related
-- `../upstream-reference/OPENCLAW_OUTBOUND.md` — Full upstream details
+- `../upstream/OPENCLAW_OUTBOUND.md` — Full upstream details
 - `../ADAPTER_INTERFACES.md` — Interface definitions

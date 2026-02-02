@@ -271,7 +271,7 @@ How does the agent know detailed formatting rules (Telegram HTML syntax, Discord
 2. **Tool hook** — Inject guidance when message tool called (requires implementation)
 3. **Skill loading** — Agent loads skill for channel before formatting
 
-**See:** `upstream-reference/TOOL_HOOK_MECHANISM.md` for details.
+**See:** `upstream/TOOL_HOOK_MECHANISM.md` for details.
 
 ---
 
@@ -378,7 +378,7 @@ async function deliverResponse(request: NexusRequest, content: string) {
 
 ## Related Specs
 
-- `upstream-reference/CHANNEL_INVENTORY.md` — All upstream channels
-- `upstream-reference/TOOL_HOOK_MECHANISM.md` — Hook investigation
+- `upstream/CHANNEL_INVENTORY.md` — All upstream channels
+- `upstream/TOOL_HOOK_MECHANISM.md` — Hook investigation
 - `channels/{channel}.md` — Per-channel details
-- `../core/NEXUS_REQUEST.md` — Request object
+- `../nex/NEXUS_REQUEST.md` — Request object
