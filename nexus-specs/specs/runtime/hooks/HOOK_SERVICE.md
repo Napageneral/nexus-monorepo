@@ -2,7 +2,7 @@
 
 **Status:** DRAFT  
 **Last Updated:** 2026-01-29  
-**Related:** EVENT_SYSTEM_DESIGN.md, BROKER.md, ONTOLOGY.md
+**Related:** ../nex/EVENT_SYSTEM_DESIGN.md, ../broker/OVERVIEW.md, ../broker/DATA_MODEL.md
 
 ---
 
@@ -456,10 +456,10 @@ Agent says: "Done! I've set up a safety check for Casey."
 
 ## 8. References
 
-- **EVENT_SYSTEM_DESIGN.md** — Hook schema, HookContext, examples
+- **../nex/EVENT_SYSTEM_DESIGN.md** — Hook schema, HookContext, examples
 - **hook-examples/** — Example hooks and skill doc
-- **BROKER.md** — Agent dispatch and routing
-- **ONTOLOGY.md** — Thread, session, message primitives
+- **../broker/OVERVIEW.md** — Agent dispatch and routing
+- **../broker/DATA_MODEL.md** — Thread, session, message primitives
 
 ---
 

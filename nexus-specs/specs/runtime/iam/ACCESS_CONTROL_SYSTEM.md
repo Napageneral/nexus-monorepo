@@ -2,7 +2,7 @@
 
 **Status:** DESIGN SPEC  
 **Last Updated:** 2026-01-30  
-**Related:** UNIFIED_SYSTEM.md, agent-system/EVENT_SYSTEM_DESIGN.md, agent-system/BROKER.md
+**Related:** ../../OVERVIEW.md, ../nex/EVENT_SYSTEM_DESIGN.md, ../broker/OVERVIEW.md
 
 ---
 

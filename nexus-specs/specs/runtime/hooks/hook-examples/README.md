@@ -2,7 +2,7 @@
 
 This guide explains how to write hooks for the Nexus event system. Hooks work alongside the Access Control Layer (ACL) to determine WHAT content to react to and HOW to respond.
 
-**See also:** `/specs/iam/` for the Access Control Layer that handles WHO has access.
+**See also:** `../../iam/` for the Access Control Layer that handles WHO has access.
 
 ---
 

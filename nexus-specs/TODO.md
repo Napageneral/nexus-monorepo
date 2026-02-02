@@ -44,6 +44,22 @@ v2 feature, lower priority:
 
 ---
 
+## Environment Domain
+
+| TODO | Location | Priority | Notes |
+|------|----------|----------|-------|
+| **Hooks Skill** | `environment/capabilities/skills/guides/hooks/` | Medium | Create skill guide pointing to `runtime/hooks/` spec |
+| **Credential CLI** | `environment/capabilities/credentials/CREDENTIAL_CLI.md` | Low | Detailed credential CLI spec (if needed beyond COMMANDS.md) |
+
+### Hooks Skill
+
+The hook-examples/README.md in runtime/hooks is a skill guide for agents. Need to:
+- Create a proper skill in `skills/guides/hooks/SKILL.md`
+- Reference the runtime spec for full details
+- Provide quick-start patterns for agents
+
+---
+
 ## Other Domains
 
 *(Add TODOs from other spec folders as they're cleaned up)*

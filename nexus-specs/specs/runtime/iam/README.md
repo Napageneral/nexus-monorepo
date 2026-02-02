@@ -123,10 +123,10 @@ nexus acl audit stats
 
 | Spec | Relationship |
 |------|--------------|
-| **agent-system/BROKER.md** | ACL dispatches to Broker with permissions |
-| **agent-system/EVENT_SYSTEM_DESIGN.md** | Events flow through ACL before hooks |
-| **agent-system/HOOKS.md** | Hooks run after ACL allows |
-| **UNIFIED_SYSTEM.md** | ACL is a core component |
+| **../broker/OVERVIEW.md** | ACL dispatches to Broker with permissions |
+| **../nex/EVENT_SYSTEM_DESIGN.md** | Events flow through ACL before hooks |
+| **../hooks/HOOK_SERVICE.md** | Hooks run after ACL allows |
+| **../../OVERVIEW.md** | ACL is a core component |
 
 ---
 
