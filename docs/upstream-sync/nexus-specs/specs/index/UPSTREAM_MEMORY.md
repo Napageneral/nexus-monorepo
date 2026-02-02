@@ -589,32 +589,32 @@ From `src/cli/memory-cli.ts`:
 
 ### What Replaces It
 
-**Mnemonic** — An automatic knowledge capture system:
+**Ledger + Index** — An automatic knowledge capture system:
 
-| Upstream Memory | Mnemonic |
-|-----------------|--------|
+| Upstream Memory | Nexus (Ledger + Index) |
+|-----------------|------------------------|
 | Agent writes to `MEMORY.md` | Agent just talks |
-| Manual file indexing | Automatic turn ingestion |
-| BM25 + vector search | Graph + vector + temporal query |
-| Text chunks | Entities + relationships |
+| Manual file indexing | Broker writes to Agent Ledger automatically |
+| BM25 + vector search | Graph + vector + temporal query (Index) |
+| Text chunks | Entities + relationships (Index) |
 | No temporal bounds | Bi-temporal tracking |
-| Per-agent isolation | Unified knowledge graph |
+| Per-agent isolation | Unified knowledge graph (Index) |
 
 ### Stub Strategy
 
-Until Mnemonic is ready:
+Until Index layer is ready:
 
 1. **Remove** memory system code from Nexus fork
-2. **Stub** `mnemonic_query` tool that returns empty results or basic search
+2. **Stub** `index_query` tool that returns empty results or basic search
 3. **Remove** `MEMORY.md` from workspace bootstrap
-4. **Update** docs to explain Mnemonic replacement
+4. **Update** docs to explain Index replacement
 
 ### Tool Mapping
 
 | Upstream Tool | Nexus Replacement |
 |---------------|-------------------|
-| `memory_search` | `mnemonic_query` (stub → full Mnemonic) |
-| `memory_get` | Removed (mnemonic returns full context) |
+| `memory_search` | `index_query` (stub → full Index layer) |
+| `memory_get` | Removed (Index returns full context) |
 
 ---
 

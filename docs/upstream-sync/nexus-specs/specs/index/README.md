@@ -1,13 +1,13 @@
-# Memory System Specs
+# Index Layer Specs
 
 **Status:** DECISION MADE  
-**Conflict Risk:** Medium (removal)
+**Last Updated:** 2026-02-02
 
 ---
 
 ## Executive Summary
 
-Upstream clawdbot uses a file-based memory system (`MEMORY.md`, `memory/*.md`) that agents must actively write to. We're **removing this entirely** and replacing with **Ledger + Index** — an automatic knowledge capture system where the Broker writes to the Ledger (primary data) and the Index derives knowledge from it.
+Upstream clawdbot uses a file-based memory system (`MEMORY.md`, `memory/*.md`) that agents must actively write to. We've **removed this entirely** and replaced with **Ledger + Index** — an automatic knowledge capture system where the Broker writes to the Ledger (primary data) and the Index derives knowledge from it.
 
 **Key Insight:** Agents shouldn't have to "remember" to write memories. The Nexus Broker writes agent turns directly to the Agent Ledger (in `nexus.db`), and the Index layer derives knowledge from this primary data automatically.
 
@@ -17,9 +17,9 @@ Upstream clawdbot uses a file-based memory system (`MEMORY.md`, `memory/*.md`) t
 
 | Spec | Status | Description |
 |------|--------|-------------|
-| `UPSTREAM_MEMORY.md` | ✅ COMPLETE | Detailed upstream memory architecture |
-| `MNEMONIC_INTEGRATION.md` | TODO | How mnemonic_query replaces memory_search |
-| `MIGRATION.md` | TODO | Conversion from upstream memory to Mnemonic |
+| `UPSTREAM_MEMORY.md` | ✅ COMPLETE | Detailed upstream memory architecture (reference) |
+| `INDEX_INTEGRATION.md` | TODO | How `index_query` replaces `memory_search` |
+| `MIGRATION.md` | TODO | Conversion from upstream memory to Index |
 
 ---
 

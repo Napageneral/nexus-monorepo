@@ -1,13 +1,13 @@
-# Core Spec
+# NEX — Nexus Event Exchange
 
 **Status:** ACTIVE  
-**Last Updated:** 2026-01-30
+**Last Updated:** 2026-02-02
 
 ---
 
 ## Overview
 
-This folder contains the core data schemas and interfaces that flow through the entire Nexus system. These are the foundational types that every other component uses.
+This folder contains the NEX orchestrator specification and the core data schemas that flow through the Nexus system. NEX is the central event exchange — the 8-stage pipeline that processes all events from adapters through to agent execution and response delivery.
 
 ---
 
