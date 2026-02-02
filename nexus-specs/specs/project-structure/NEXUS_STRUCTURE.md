@@ -10,7 +10,7 @@
 
 1. **Ledger-centric** — Ledgers are the core, not file storage
 2. **Component isolation** — Each component maps to a clear module
-3. **Interface-driven** — Components communicate via defined interfaces (see UNIFIED_SYSTEM.md §10)
+3. **Interface-driven** — Components communicate via defined interfaces
 4. **Minimal runtime** — CLI-first, optional server for adapters
 5. **Skills not plugins** — Markdown docs + binaries, not code plugins
 

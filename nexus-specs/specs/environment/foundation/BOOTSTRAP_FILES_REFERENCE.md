@@ -145,7 +145,7 @@ Default gateway configuration.
 
 ## Agent Binding Templates
 
-Harness binding templates live in `agent-bindings-research/reference/`:
+Harness binding templates live in `harnesses/templates/`:
 
 | Harness | Templates |
 |---------|-----------|
@@ -154,9 +154,9 @@ Harness binding templates live in `agent-bindings-research/reference/`:
 | OpenCode | `opencode/nexus-bootstrap.ts` |
 | Codex | `codex/README.md` (not supported — limitations doc) |
 
-These are used when creating bindings via `nexus bindings create <harness>`. See `AGENT_BINDINGS.md` for details.
+These are used when creating bindings via `nexus bindings create <harness>`. See `harnesses/HARNESS_BINDINGS.md` for details.
 
-**Note:** The old `reference/cursor/` folder in this directory is deprecated. Use `agent-bindings-research/reference/` for authoritative templates.
+**Note:** Authoritative templates are in `harnesses/templates/`.
 
 ---
 
@@ -238,6 +238,6 @@ This allows:
 - **WORKSPACE_SYSTEM.md** — Authoritative spec (this document aligns with it)
 - **INIT.md** — File creation timing
 - **ONBOARDING.md** — Ritual flow
-- **AGENT_BINDINGS.md** — IDE/harness binding configurations
+- **harnesses/HARNESS_BINDINGS.md** — IDE/harness binding configurations
 - **specs/agent-system/EVENT_SYSTEM_DESIGN.md** — Event system and hooks
 - **specs/agent-system/HOOK_SERVICE.md** — Hook registration and lifecycle

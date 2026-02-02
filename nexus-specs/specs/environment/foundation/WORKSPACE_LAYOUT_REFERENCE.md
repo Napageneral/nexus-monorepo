@@ -109,7 +109,7 @@ Nexus Cloud syncs this directory (minus patterns in `home/.nexusignore`).
 | Config | `~/.clawdbot/clawdbot.json` | Split configs by domain | Clear separation of concerns |
 | Workspace | `~/clawd/` (flat) | `~/nexus/home/` (nested) | Clear separation |
 | Skills | n/a | `~/nexus/skills/` | Skills are first-class |
-| Sessions | `~/.clawdbot/sessions/` | `~/nexus/state/sessions/` (global) | Simpler, sessions reference agent by ID |
+| Sessions | `~/.clawdbot/sessions/` | `~/nexus/state/nexus.db` (Agents Ledger) | Structured queries, no file sprawl |
 
 ---
 
@@ -175,7 +175,7 @@ When `NEXUS_PROFILE=foo`:
 
 ### No Per-Agent Sessions
 
-**Decision:** Global `state/sessions/` only, not per-agent
+**Decision:** Sessions stored in `state/nexus.db` (Agents Ledger), not files
 
 **Rationale:**
 - Simpler structure
@@ -194,8 +194,8 @@ When `NEXUS_PROFILE=foo`:
 | User profile | `state/user/IDENTITY.md` |
 | Agent identity | `state/agents/{name}/IDENTITY.md` |
 | Agent persona | `state/agents/{name}/SOUL.md` |
-| Session transcripts | `state/sessions/{id}.jsonl` |
-| Session metadata | `state/sessions/sessions.json` |
+| Session data | `state/nexus.db` (Agents Ledger) |
+| Derived data | `state/cortex/{agentId}.db` |
 | Credentials | `state/credentials/{service}/{account}.json` |
 | Credential index | `state/credentials/index.json` |
 

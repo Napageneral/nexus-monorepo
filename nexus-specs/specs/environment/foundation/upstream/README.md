@@ -15,7 +15,7 @@ These documents capture how the upstream codebase works, not how Nexus should wo
 
 These documents are **reference only**. The authoritative Nexus specs are in the parent folder:
 - `WORKSPACE_SYSTEM.md` — Nexus workspace spec
-- `AGENT_BINDINGS.md` — Nexus harness bindings
+- `../harnesses/HARNESS_BINDINGS.md` — Nexus harness bindings
 - etc.
 
 ## Note on Drift

@@ -80,7 +80,7 @@ After establishing identity, the agent silently detects:
 1. **Credential scan:** `nexus credential scan --deep`
    - Discovers env vars (ANTHROPIC_API_KEY, etc.)
    - Imports Claude CLI / Codex CLI credentials
-   - See `specs/credentials/CREDENTIAL_SYSTEM.md` for details
+   - See `../capabilities/credentials/CREDENTIAL_SYSTEM.md` for details
 
 2. **Harness detection:** Uses `aix` tool (skill/tool)
    - Detects installed agent harnesses (Cursor, Claude Code, Codex, etc.)
@@ -246,8 +246,8 @@ Already onboarded → no action needed. Agent reads existing identity files.
 |------|--------------|
 | `WORKSPACE_SYSTEM.md` | Authoritative spec — this document aligns with it |
 | `BOOTSTRAP_FILES.md` | File templates used during onboarding |
-| `AGENT_BINDINGS.md` | Binding details for harnesses |
-| `specs/credentials/CREDENTIAL_SYSTEM.md` | Credential scan and import details |
+| `harnesses/HARNESS_BINDINGS.md` | Binding details for harnesses |
+| `../capabilities/credentials/CREDENTIAL_SYSTEM.md` | Credential scan and import details |
 | `specs/agent-system/GATEWAY.md` | Channel setup (follow-up, not onboarding) |
 
 ---

@@ -41,7 +41,7 @@ nexus init [--workspace <path>]
 | `~/nexus/state/` | Runtime state |
 | `~/nexus/state/agents/` | Agent identity files |
 | `~/nexus/state/user/` | User profile |
-| `~/nexus/state/sessions/` | Session transcripts |
+| `~/nexus/state/cortex/` | Derived data (per-agent) |
 | `~/nexus/state/credentials/` | Credential pointers |
 | `~/nexus/state/gateway/` | Gateway configuration |
 | `~/nexus/home/` | User's personal space |
@@ -181,7 +181,7 @@ Creating Nexus workspace at ~/nexus...
 ✓ Created ~/nexus/state/agents/BOOTSTRAP.md
 ✓ Created ~/nexus/state/agents/config.json
 ✓ Created ~/nexus/state/user/
-✓ Created ~/nexus/state/sessions/
+✓ Created ~/nexus/state/cortex/
 ✓ Created ~/nexus/state/credentials/
 ✓ Created ~/nexus/state/credentials/config.json
 ✓ Created ~/nexus/state/gateway/

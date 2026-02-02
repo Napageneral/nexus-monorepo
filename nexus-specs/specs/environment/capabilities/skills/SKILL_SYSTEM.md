@@ -18,7 +18,7 @@ This document ties together all skills-related specs and provides a single coher
 | `SKILL_CLI.md` | CLI commands, manifest schema, modification tracking | ✅ Complete |
 | `UPSTREAM_SKILLS.md` | Upstream reference | ✅ Complete |
 | `../cli/COMMANDS.md` | Full CLI reference | ✅ Updated |
-| `../cli/CAPABILITIES.md` | Capability → provider mapping | ✅ Updated |
+| `../CAPABILITIES.md` | Capability → provider mapping | ✅ Updated |
 
 ---
 
@@ -338,7 +338,7 @@ These are the canonical terms (specs are aligned, code alignment is separate wor
 - `TAXONOMY.md` — Domain/capability/service definitions
 - `HUB.md` — Pack definitions, hub storage
 - `SKILL_CLI.md` — Full CLI spec, manifest schema
-- `../UNIFIED_SYSTEM.md` — How skills integrate with credentials
+- `../OVERVIEW.md` — How skills integrate with credentials
 - `../credentials/CREDENTIAL_SYSTEM.md` — Credential storage and access
 
 ---

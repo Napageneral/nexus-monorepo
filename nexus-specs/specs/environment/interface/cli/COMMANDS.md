@@ -288,7 +288,7 @@ Suggest next actions based on local usage history.
 
 ## Skills Commands
 
-All skill operations are unified under `nexus skills`. See `specs/skills/SKILL_CLI.md` for complete specification.
+All skill operations are unified under `nexus skills`. See `../../capabilities/skills/SKILL_CLI.md` for complete specification.
 
 ### `nexus skills list`
 
@@ -1110,7 +1110,7 @@ nexus bindings remove --force cursor    # Skip confirmation
 
 ---
 
-**Full specification:** See `specs/workspace/AGENT_BINDINGS.md`
+**Full specification:** See `../../foundation/harnesses/HARNESS_BINDINGS.md`
 
 ---
 

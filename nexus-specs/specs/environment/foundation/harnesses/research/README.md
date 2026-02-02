@@ -20,7 +20,7 @@ This folder contains research and design documents for Nexus agent context injec
 | **OpenCode** | `AGENTS.md` | ✅ Plugin-based | ✅ Supported |
 | **Codex** | `AGENTS.md` | ❌ None | ⛔ Not supported |
 
-> **Authoritative spec:** See [`../AGENT_BINDINGS.md`](../AGENT_BINDINGS.md) for the complete binding specification.
+> **Authoritative spec:** See [`../HARNESS_BINDINGS.md`](../HARNESS_BINDINGS.md) for the complete binding specification.
 
 ## Key Concepts
 
@@ -82,7 +82,7 @@ reference/
 - [ ] Implement `nexus bindings remove` — Delete binding files
 - [ ] Test bindings in each harness
 
-**CLI spec complete:** See [`../AGENT_BINDINGS.md`](../AGENT_BINDINGS.md) and [`../../cli/COMMANDS.md`](../../cli/COMMANDS.md)
+**CLI spec complete:** See [`../HARNESS_BINDINGS.md`](../HARNESS_BINDINGS.md) and [`../../../interface/cli/COMMANDS.md`](../../../interface/cli/COMMANDS.md)
 
 ## References
 

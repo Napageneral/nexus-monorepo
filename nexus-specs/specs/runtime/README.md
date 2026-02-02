@@ -54,7 +54,7 @@ receiveEvent → resolveIdentity → resolveAccess → executeTriggers
 
 ## See Also
 
-- `../architecture/OVERVIEW.md` — System overview
+- `../OVERVIEW.md` — System overview
 - `../data/` — Where state lives (ledgers, cortex)
 - `../environment/` — Agent working context
 

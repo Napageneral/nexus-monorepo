@@ -570,8 +570,8 @@ $ nexus quest start quick-path
 
 - `COMMANDS.md` — `nexus status`, `nexus capabilities` commands
 - `CAPABILITIES.md` — Full provider mapping
-- `../workspace/NEXUS_STRUCTURE.md` — File paths and schemas
-- `../workspace/AGENT_BINDINGS.md` — Hooks, rules, bootstrap flow
+- `../../foundation/WORKSPACE_LAYOUT_REFERENCE.md` — Workspace file paths
+- `../../foundation/harnesses/HARNESS_BINDINGS.md` — Hooks, rules, bootstrap flow
 
 ---
 

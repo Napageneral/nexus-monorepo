@@ -13,7 +13,7 @@ This document is the **authoritative specification** for the Nexus workspace sys
 - `INIT.md` — Init command details
 - `PROJECT_STRUCTURE.md` — Directory layout
 - `BOOTSTRAP_FILES.md` — File templates
-- `AGENT_BINDINGS.md` — IDE/harness integrations
+- `harnesses/HARNESS_BINDINGS.md` — IDE/harness integrations
 - `ONBOARDING.md` — Bootstrap conversation flow
 
 ---
@@ -32,11 +32,11 @@ This document is the **authoritative specification** for the Nexus workspace sys
 │  ~/nexus/skills/connectors/            ~/nexus/state/gateway/config.json    │
 │  ~/nexus/skills/guides/                ~/nexus/state/agents/config.json     │
 │  ~/nexus/state/                        ~/nexus/state/credentials/config.json│
-│  ~/nexus/state/agents/                                                      │
+│  ~/nexus/state/agents/                 ~/nexus/state/nexus.db (System of Record)
 │  ~/nexus/state/user/                                                        │
-│  ~/nexus/state/sessions/                                                    │
 │  ~/nexus/state/credentials/                                                 │
 │  ~/nexus/state/gateway/                                                     │
+│  ~/nexus/state/cortex/                                                      │
 │  ~/nexus/home/                                                              │
 │                                                                             │
 │  Output: "Nexus initialized! Open ~/nexus/ in your AI assistant to begin." │
@@ -157,6 +157,13 @@ This document is the **authoritative specification** for the Nexus workspace sys
 │   └── guides/{name}/                # Pure documentation (filesystem, etc.)
 │
 ├── state/                            # All runtime state (visible, not hidden)
+│   ├── nexus.db                      # System of Record (SQLite)
+│   │                                 # Contains: Events, Agents, Identity, Nexus ledgers
+│   │                                 # Sessions/turns/messages stored here, not files
+│   │
+│   ├── cortex/                       # Derived data layer
+│   │   └── {agentId}.db              # Per-agent embeddings, episodes, analyses
+│   │
 │   ├── agents/
 │   │   ├── BOOTSTRAP.md              # First-run ritual template (permanent)
 │   │   ├── config.json               # Agent defaults config
@@ -166,10 +173,6 @@ This document is the **authoritative specification** for the Nexus workspace sys
 │   │
 │   ├── user/
 │   │   └── IDENTITY.md               # User profile
-│   │
-│   ├── sessions/
-│   │   ├── sessions.json             # Session metadata index
-│   │   └── {sessionId}.jsonl         # Session transcripts
 │   │
 │   ├── credentials/
 │   │   ├── config.json               # Credential system config
@@ -204,7 +207,8 @@ This document is the **authoritative specification** for the Nexus workspace sys
 | Config split | Per-domain config files | Clear separation of concerns |
 | User space | `home/` directory | Clear separation from system |
 | Skills location | `skills/` at root | First-class, easy to browse |
-| No per-agent sessions | Global `state/sessions/` | Simpler, sessions reference agent by ID |
+| Sessions in DB | `nexus.db` (Agents Ledger) | Structured queries, no file sprawl |
+| Cortex per-agent | `cortex/{agentId}.db` | Isolation, embeddings stay local |
 
 ### Environment Variables
 
@@ -216,6 +220,33 @@ This document is the **authoritative specification** for the Nexus workspace sys
 | `NEXUS_PROFILE` | Named profile | (none) |
 
 When `NEXUS_PROFILE=foo`, root becomes `~/nexus-foo/`.
+
+### Data Layer Integration
+
+The workspace includes the **System of Record** and **Derived Data Layer** from the runtime architecture:
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **System of Record** | `state/nexus.db` | SQLite with four ledgers |
+| **Cortex** | `state/cortex/{agentId}.db` | Per-agent derived data |
+
+**System of Record (nexus.db)** contains four ledgers:
+
+| Ledger | What It Stores |
+|--------|----------------|
+| **Events Ledger** | Raw incoming events from adapters |
+| **Agents Ledger** | Sessions, turns, messages, tool calls |
+| **Identity Graph** | Entities, aliases, memberships |
+| **Nexus Ledger** | Pipeline traces for observability |
+
+**Cortex** is the derived layer — built from ledger data:
+- **Episodes:** Summarized chunks for context retrieval
+- **Facets:** Structured observations about entities
+- **Embeddings:** Vector search over conversations
+
+> **Key insight:** Sessions are NOT stored as files. They're written to the Agents Ledger in `nexus.db`, enabling structured queries and avoiding file sprawl.
+
+See `specs/data/` for full ledger and cortex specifications.
 
 ---
 
@@ -239,9 +270,9 @@ nexus init [--workspace <path>]
 - `~/nexus/state/`
 - `~/nexus/state/agents/`
 - `~/nexus/state/user/`
-- `~/nexus/state/sessions/`
 - `~/nexus/state/credentials/`
 - `~/nexus/state/gateway/`
+- `~/nexus/state/cortex/`
 - `~/nexus/home/`
 
 **Files:**
@@ -356,7 +387,7 @@ After establishing identity, the agent:
 1. **Credential scan:** `nexus credential scan --deep`
    - Discovers env vars (ANTHROPIC_API_KEY, etc.)
    - Imports Claude CLI / Codex CLI credentials
-   - See `specs/credentials/CREDENTIAL_SYSTEM.md` for details
+   - See `../capabilities/credentials/CREDENTIAL_SYSTEM.md` for details
 
 2. **Harness detection:** Uses `aix` skill/tool
    - Detects installed agent harnesses (Cursor, Claude Code, Codex, etc.)
@@ -479,7 +510,7 @@ All supported bindings inject:
 | Daily memory | Hook | Hook | Plugin |
 | Post-compaction refresh | ✅ Yes | ✅ Yes | ✅ Yes |
 
-**Full specification:** See `AGENT_BINDINGS.md`
+**Full specification:** See `harnesses/HARNESS_BINDINGS.md`
 
 ---
 
@@ -487,7 +518,7 @@ All supported bindings inject:
 
 ### Bootstrap Templates
 
-Located in `specs/workspace/reference/`:
+Located in `bootstrap-templates/`:
 
 | Template | Purpose |
 |----------|---------|
@@ -501,7 +532,7 @@ Located in `specs/workspace/reference/`:
 
 ### Harness Binding Templates
 
-Located in `specs/workspace/agent-bindings-research/reference/`:
+Located in `harnesses/templates/`:
 
 | Harness | Files |
 |---------|-------|
@@ -537,11 +568,12 @@ Config is split by domain, not unified in one file:
 
 | Spec | Relationship |
 |------|--------------|
-| `specs/cli/` | CLI commands referenced here |
-| `specs/credentials/` | Credential scan and import details |
-| `specs/skills/` | Skill taxonomy and hub |
-| `specs/agent-system/` | Gateway, channels, hooks, broker |
-| `specs/UNIFIED_SYSTEM.md` | Service name linking, status cascade |
+| `../interface/cli/` | CLI commands |
+| `../capabilities/` | Skills, credentials, capability mapping |
+| `../../data/ledgers/` | System of Record (nexus.db schema) |
+| `../../data/cortex/` | Derived layer (embeddings, episodes) |
+| `../../runtime/` | NEX, adapters, broker, hooks |
+| `../OVERVIEW.md` | Environment overview |
 
 ---
 
@@ -549,7 +581,7 @@ Config is split by domain, not unified in one file:
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Harness bindings | ✅ COMPLETE | See `AGENT_BINDINGS.md` |
+| Harness bindings | ✅ COMPLETE | See `harnesses/HARNESS_BINDINGS.md` |
 | AIX integration | ✅ COMPLETE | `nexus bindings detect` |
 | Cursor binding | ✅ COMPLETE | Hooks + script templates |
 | Claude Code binding | ✅ COMPLETE | Settings + shared script |

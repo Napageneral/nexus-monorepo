@@ -353,7 +353,7 @@ Node.js script that injects Nexus context into the session.
 | Daily Memory (today) | `home/cortex/YYYY-MM-DD.md` | Today's context |
 | Daily Memory (yesterday) | `home/cortex/YYYY-MM-DD.md` | Yesterday's context |
 
-**Template location:** `agent-bindings-research/reference/cursor/`
+**Template location:** `templates/cursor/`
 
 ---
 
@@ -400,7 +400,7 @@ Identical content to `AGENTS.md`. Claude Code reads `CLAUDE.md` from workspace r
 - Hook event name is `SessionStart` (PascalCase, unlike Cursor's camelCase)
 - Same matcher pattern for startup and compact
 
-**Template location:** `agent-bindings-research/reference/claude-code/`
+**Template location:** `templates/claude-code/`
 
 ---
 
@@ -438,7 +438,7 @@ Native OpenCode plugin using experimental hooks.
 
 **Note:** These hooks are marked `experimental` and may change in future OpenCode versions.
 
-**Template location:** `agent-bindings-research/reference/opencode/`
+**Template location:** `templates/opencode/`
 
 ---
 
@@ -601,7 +601,7 @@ When `NEXUS_PROFILE=work`:
 All binding templates live in:
 
 ```
-specs/workspace/agent-bindings-research/reference/
+specs/environment/foundation/harnesses/templates/
 ├── cursor/
 │   ├── hooks.json
 │   └── nexus-session-start.js
@@ -641,10 +641,10 @@ The `nexus bindings create` command copies these templates to the workspace.
 |------|--------------|
 | `WORKSPACE_SYSTEM.md` | Authoritative workspace spec, defines onboarding flow |
 | `ONBOARDING.md` | Onboarding details, references binding creation |
-| `agent-bindings-research/` | Supporting research and evidence for this spec |
-| `agent-bindings-research/reference/` | Authoritative template files for each harness |
-| `specs/cli/COMMANDS.md` | CLI command reference (add bindings commands) |
+| `research/` | Supporting research and evidence for this spec |
+| `templates/` | Authoritative template files for each harness |
+| `../../interface/cli/COMMANDS.md` | CLI command reference (bindings commands) |
 
 ---
 
-*This is the authoritative spec for agent bindings. The `agent-bindings-research/` folder contains supporting research, design rationale, and template reference files that informed this specification.*
+*This is the authoritative spec for agent bindings. The `research/` folder contains supporting research and design rationale. The `templates/` folder contains the actual template files.*
