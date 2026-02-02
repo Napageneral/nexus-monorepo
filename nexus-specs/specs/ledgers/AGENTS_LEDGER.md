@@ -278,5 +278,5 @@ The Broker writes directly to the Agents Ledger — no intermediate JSONL files.
 
 - `README.md` — System of Record overview
 - `../broker/ONTOLOGY.md` — Session/Turn/Message concepts
-- `../broker/SESSION_FORMAT.md` — Session format details
+- `../broker/README.md` — Broker overview and routing
 - `../nex/INTERFACES.md` — LedgerWrite interface contract

@@ -1,13 +1,13 @@
-# Agent System Ontology
+# Agent System Data Model
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-01-22
+**Last Updated:** 2026-02-02
 
 ---
 
-## Executive Summary
+## Overview
 
-This document defines the precise terminology and data model for the Nexus agent system. Getting this right is foundational — everything else builds on these primitives.
+This document defines the core terminology and data model for the Nexus agent system. Getting this right is foundational — everything else builds on these primitives.
 
 **Core Insight:** Every turn creates a new addressable state. You can route to any turn, which implicitly includes all ancestor context. This is analogous to git's Merkle tree where commits are turns and branch histories are threads.
 
@@ -228,7 +228,7 @@ After:  Turn 1 → Turn 2 → Turn 3 → Turn 4 → Turn 5 → CompactionTurn (s
 - Agent sees: `[Compaction summary] + [Kept turns] + [New query]`
 - Old turns still exist in Agents Ledger, just not in active context
 
-**See `COMPACTION.md` for full specification.**
+**See `SESSION_LIFECYCLE.md` for implementation details.**
 
 ---
 
@@ -486,11 +486,12 @@ For v1, only expose persona routing. Other modes are internal/future.
 
 ## Related Documents
 
-- `TERMINOLOGY.md` — Quick reference for terms
-- `BROKER.md` — Agent Broker routing implementation
-- `EVENT_SYSTEM_DESIGN.md` — Event system and hooks
-- `ROUTING_HOOKS.md` — Hook routing and permissions
-- `UPSTREAM_AGENT_SYSTEM.md` — How upstream handles sessions
+- `OVERVIEW.md` — Broker overview
+- `SESSION_LIFECYCLE.md` — Session management, compaction implementation, forking
+- `AGENTS.md` — Manager-Worker Pattern
+- `CONTEXT_ASSEMBLY.md` — How context is built
+- `../ledgers/AGENTS_LEDGER.md` — Agents Ledger schema
+- `../iam/` — Identity and access management
 
 ---
 

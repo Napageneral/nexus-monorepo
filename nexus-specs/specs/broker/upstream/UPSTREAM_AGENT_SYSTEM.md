@@ -1295,4 +1295,80 @@ This prevents concurrent modifications to the same session transcript.
 
 ---
 
-*This document is a reference for Nexus fork development. It captures upstream clawdbot behavior as of commit `80c1edc3f` (v2026.1.21).*
+## Appendix D: Upstream vs Nexus Comparison Summary
+
+*Extracted from historical design analysis.*
+
+| Aspect | Upstream | Nexus Broker |
+|--------|----------|--------------|
+| Spawning | `sessions_spawn` tool | `send_message_to_agent` |
+| Run tracking | subagent-registry (JSON file) | Broker tracks in Agents Ledger |
+| Results | subagent-announce | Broker routes back to parent |
+| Queue modes | steer/followup/collect/interrupt | Same modes, durable in SQLite |
+| Mid-task communication | Not supported (completion only) | Native (anytime) |
+| Nested spawning | Forbidden | Allowed (depth limit) |
+| Session storage | `sessions.json` + JSONL transcripts | Agents Ledger (SQLite) |
+| Proactive triggers | Separate heartbeat + cron systems | Unified via NEX hooks |
+
+### Key Nexus Divergences
+
+1. **All agents persistent** — No ephemeral agents. Any session can be resumed.
+2. **Bidirectional communication** — Workers can message parent mid-task.
+3. **Nested spawning allowed** — Workers can spawn sub-workers (default depth: 3).
+4. **Direct ledger writes** — No JSONL transcripts, writes directly to Agents Ledger.
+5. **NEX-triggered** — Broker receives work from NEX pipeline, not direct channel adapters.
+
+---
+
+## Appendix E: Upstream Queue Implementation Details
+
+*Extracted from historical design analysis.*
+
+### Upstream Queue Storage
+
+```typescript
+// FOLLOWUP_QUEUES Map per session key
+export type FollowupQueueState = {
+  items: FollowupRun[];
+  draining: boolean;
+  lastEnqueuedAt: number;
+  mode: QueueMode;
+  debounceMs: number;          // Default: 1000
+  cap: number;                 // Default: 20
+  dropPolicy: QueueDropPolicy; // Default: "summarize"
+  droppedCount: number;
+  summaryLines: string[];      // Dropped item summaries
+  lastRun?: FollowupRun["run"];
+};
+
+export const FOLLOWUP_QUEUES = new Map<string, FollowupQueueState>();
+```
+
+### Upstream Session Mapping
+
+```typescript
+// AgentBroker maintains this mapping
+const agentToSession = new Map<string, string>();
+
+// Examples:
+// "manager" → "dm:user@default"
+// "code-worker" → "agent:code-worker:session-123"
+```
+
+### Upstream State Tracking
+
+```typescript
+// From pi-embedded-runner/runs.ts
+type EmbeddedPiQueueHandle = {
+  queueMessage: (text: string) => Promise<void>;
+  isStreaming: () => boolean;
+  isCompacting: () => boolean;
+  abort: () => void;
+};
+
+const ACTIVE_EMBEDDED_RUNS = new Map<string, EmbeddedPiQueueHandle>();
+```
+
+---
+
+*This document is a reference for Nexus development. It captures upstream openclaw behavior as of commit `80c1edc3f` (v2026.1.21).*
