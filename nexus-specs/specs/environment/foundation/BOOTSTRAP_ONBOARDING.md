@@ -140,7 +140,7 @@ Agent: "To auto-detect your preferred coding assistants, I need AIX installed.
 - **Skill packs** → `nexus skills install macos-essentials`
 - **Cloud sync** → `nexus-cloud setup`
 
-These are follow-up tasks, not part of core onboarding. Channel setup is documented in `specs/agent-system/GATEWAY.md`.
+These are follow-up tasks, not part of core onboarding. Channel setup is documented in `specs/runtime/adapters/`.
 
 ### 8. Done
 
@@ -212,7 +212,7 @@ To create additional agents, the user opens `~/nexus/` in their agent harness an
 
 ### Channels
 
-Channels are **NOT part of onboarding**. They are follow-up tasks handled by the gateway plugin. See `specs/agent-system/GATEWAY.md` for channel setup details.
+Channels are **NOT part of onboarding**. They are follow-up tasks handled by adapters. See `specs/runtime/adapters/` for channel setup details.
 
 ---
 
@@ -248,7 +248,7 @@ Already onboarded → no action needed. Agent reads existing identity files.
 | `BOOTSTRAP_FILES.md` | File templates used during onboarding |
 | `harnesses/HARNESS_BINDINGS.md` | Binding details for harnesses |
 | `../capabilities/credentials/CREDENTIAL_SYSTEM.md` | Credential scan and import details |
-| `specs/agent-system/GATEWAY.md` | Channel setup (follow-up, not onboarding) |
+| `specs/runtime/adapters/` | Channel setup (follow-up, not onboarding) |
 
 ---
 

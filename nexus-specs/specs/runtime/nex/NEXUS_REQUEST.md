@@ -494,4 +494,5 @@ This provides formatting guidance **on-demand** without bloating the system prom
 
 - `../adapters/` — Creates initial NexusRequest
 - `../iam/` — Adds identity context
-- `../agent-system/` — Broker and hooks process request
+- `../broker/` — Assembles context and executes agents
+- `automations/` — Automation system that evaluates triggers

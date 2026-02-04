@@ -44,19 +44,36 @@ v2 feature, lower priority:
 
 ---
 
+## NEX Domain
+
+| TODO | Location | Priority | Notes |
+|------|----------|----------|-------|
+| **Interface Alignment** | `nex/INTERFACES.md` | Medium | Align BrokerDispatch, AgentInvoke, OutAdapterSend with NexusRequest |
+| **Automation Skill** | `environment/capabilities/skills/guides/automations/` | Medium | Create skill guide for writing automations |
+| **LedgerClient Interface** | `nex/automations/` | Medium | Define the LedgerClient API for automation scripts |
+| **CortexClient Interface** | `nex/automations/` | Medium | Define the CortexClient API for semantic search |
+
+### Interface Alignment
+
+Three interfaces need updates to reference NexusRequest:
+- Interface 5 (BrokerDispatch): Should be `NexusRequest` flow
+- Interface 6 (AgentInvoke): Should pull from `NexusRequest.agent`
+- Interface 9 (OutAdapterSend): Should use `NexusRequest.delivery`
+
+### Automation Skill
+
+Create a skill in `skills/guides/automations/SKILL.md` that:
+- Explains how to write automations
+- References `runtime/nex/automations/AUTOMATION_SYSTEM.md`
+- Provides quick-start patterns for agents
+
+---
+
 ## Environment Domain
 
 | TODO | Location | Priority | Notes |
 |------|----------|----------|-------|
-| **Hooks Skill** | `environment/capabilities/skills/guides/hooks/` | Medium | Create skill guide pointing to `runtime/hooks/` spec |
 | **Credential CLI** | `environment/capabilities/credentials/CREDENTIAL_CLI.md` | Low | Detailed credential CLI spec (if needed beyond COMMANDS.md) |
-
-### Hooks Skill
-
-The hook-examples/README.md in runtime/hooks is a skill guide for agents. Need to:
-- Create a proper skill in `skills/guides/hooks/SKILL.md`
-- Reference the runtime spec for full details
-- Provide quick-start patterns for agents
 
 ---
 

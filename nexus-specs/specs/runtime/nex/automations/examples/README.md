@@ -1,8 +1,10 @@
-# Hook System Guide
+# Automation Examples
 
-This guide explains how to write hooks for the Nexus event system. Hooks work alongside the Access Control Layer (ACL) to determine WHAT content to react to and HOW to respond.
+This folder contains example automations for the Nexus automation system. Automations work alongside the Access Control Layer (ACL) to determine WHAT content to react to and HOW to respond.
 
-**See also:** `../../iam/` for the Access Control Layer that handles WHO has access.
+**See also:** 
+- `../AUTOMATION_SYSTEM.md` for the full automation specification
+- `../../../iam/` for the Access Control Layer that handles WHO has access
 
 ---
 

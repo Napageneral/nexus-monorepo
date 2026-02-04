@@ -192,7 +192,7 @@ Programmatic event handlers:
 - Execute TypeScript handlers in parallel
 - Can extract data, enrich context, or handle events entirely
 
-**See:** `../runtime/hooks/`
+**See:** `../runtime/nex/automations/`
 
 ### Broker
 
@@ -300,7 +300,7 @@ Specs are organized into four conceptual layers:
 | **nex/** | ✅ Current | NEX orchestrator, pipeline, interfaces |
 | **broker/** | ✅ Current | Agent sessions, turns, context assembly |
 | **iam/** | ✅ Current | Identity & Access Management (policies, grants, audit) |
-| **hooks/** | ✅ Current | Hooks Engine, event automation |
+| **nex/automations/** | ✅ Current | Automation system, event-triggered agent invocations |
 | **adapters/** | ✅ Current | In/out adapters, channel specs |
 
 ### Data Infrastructure (`data/`)

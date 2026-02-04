@@ -198,5 +198,5 @@ Nexus initialized! Open ~/nexus/ in your AI assistant to begin.
 - **PROJECT_STRUCTURE.md** — Directory layout details
 - **ONBOARDING.md** — Identity ritual flow (after init completes, see ONBOARDING.md for the agent-driven bootstrap conversation)
 - **BOOTSTRAP_FILES.md** — File templates and purposes
-- **specs/agent-system/EVENT_SYSTEM_DESIGN.md** — Event system and hooks
-- **specs/agent-system/HOOK_SERVICE.md** — Hook registration and lifecycle
+- **specs/runtime/nex/automations/AUTOMATION_SYSTEM.md** — Automation system
+- **specs/runtime/nex/PLUGINS.md** — NEX plugin system

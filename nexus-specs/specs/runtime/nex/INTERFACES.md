@@ -500,4 +500,4 @@ interface CortexResult {
 - **NEXUS_REQUEST.md** — Data bus schema
 - **../broker/** — Broker implementation
 - **../iam/** — IAM policies and grants
-- **../hooks/** — Hooks Engine specification
+- **automations/** — Automation system specification

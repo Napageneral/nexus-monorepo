@@ -2,7 +2,7 @@
 
 **Status:** DESIGN IN PROGRESS  
 **Last Updated:** 2026-01-30  
-**Related:** NEX.md, UNIFIED_SYSTEM.md, agent-system/EVENT_SYSTEM_DESIGN.md
+**Related:** NEX.md, ../../OVERVIEW.md, automations/AUTOMATION_SYSTEM.md
 
 ---
 
@@ -548,4 +548,4 @@ packages/core/src/
 
 ---
 
-*This spec defines the Nexus Event Bus. For event-triggered automation, see `agent-system/EVENT_SYSTEM_DESIGN.md` (Hooks).*
+*This spec defines the Nexus Event Bus. For event-triggered automation, see `automations/AUTOMATION_SYSTEM.md`.*

@@ -1,13 +1,13 @@
-# Core Spec
+# NEX — Nexus Event Exchange
 
 **Status:** ACTIVE  
-**Last Updated:** 2026-01-30
+**Last Updated:** 2026-02-04
 
 ---
 
 ## Overview
 
-This folder contains the core data schemas and interfaces that flow through the entire Nexus system. These are the foundational types that every other component uses.
+This folder contains the core NEX orchestrator specifications — the central pipeline that processes all events in Nexus.
 
 ---
 
@@ -15,10 +15,13 @@ This folder contains the core data schemas and interfaces that flow through the 
 
 | Spec | Status | Description |
 |------|--------|-------------|
-| **`NEX.md`** | ✅ New | **START HERE** — Central orchestrator (Nexus Event Exchange) |
-| `NEXUS_REQUEST.md` | ✅ Done | The data bus that accumulates context through pipeline |
-| `INTERFACE_WORKPLAN.md` | ✅ Active | Tracks all component interfaces |
-| `CHANNEL_CAPABILITIES.md` | — | Covered in `adapters/channels/` per-channel docs |
+| **`NEX.md`** | ✅ Complete | **START HERE** — Central orchestrator (8-stage pipeline) |
+| `NEXUS_REQUEST.md` | ✅ Complete | The data bus that accumulates context through pipeline |
+| `INTERFACES.md` | ✅ Complete | All component interface contracts |
+| `PLUGINS.md` | ✅ Complete | NEX plugin system (hook points) |
+| `STREAMING.md` | ✅ Complete | Token streaming flow |
+| `BUS_ARCHITECTURE.md` | ✅ Complete | Internal real-time pub/sub |
+| `automations/` | ✅ Complete | Automation system (proactive/reactive agent invocations) |
 
 ---
 
@@ -84,5 +87,5 @@ The complete `NexusRequest` (including all accumulated context) is persisted to 
 ## Related Specs
 
 - `../adapters/` — Channel adapters that populate delivery context
-- `../iam/` — ACL that populates identity context
-- `../agent-system/` — Broker and hooks that process the request
+- `../iam/` — IAM that resolves identity and permissions
+- `../broker/` — Broker that executes agents

@@ -89,4 +89,4 @@ reference/
 - Upstream moltbot: `~/nexus/home/projects/moltbot`
 - Pi-coding-agent: `~/nexus/home/projects/pi-mono/packages/coding-agent`
 - Nexus CLI: `~/nexus/home/projects/nexus/nexus-cli`
-- MWP Orchestration: `specs/agent-system/ORCHESTRATION.md`
+- MWP Orchestration: `specs/runtime/broker/ORCHESTRATION.md`

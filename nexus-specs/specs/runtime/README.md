@@ -25,7 +25,7 @@ Event → Adapters → NEX Pipeline → Broker → Adapters → External
 | `nex/` | Pipeline orchestrator — the 8-stage event processing pipeline |
 | `adapters/` | External connections — how Nexus talks to Discord, iMessage, etc. |
 | `iam/` | Identity & Access Management — who can do what |
-| `hooks/` | Programmatic event handlers — custom logic in the pipeline |
+| `nex/automations/` | Automation system — proactive/reactive agent invocations |
 | `broker/` | Agent execution — context assembly, routing, session management |
 
 ---

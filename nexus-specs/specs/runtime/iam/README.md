@@ -125,7 +125,7 @@ nexus acl audit stats
 |------|--------------|
 | **../broker/OVERVIEW.md** | ACL dispatches to Broker with permissions |
 | **../nex/EVENT_SYSTEM_DESIGN.md** | Events flow through ACL before hooks |
-| **../hooks/HOOK_SERVICE.md** | Hooks run after ACL allows |
+| **../nex/automations/AUTOMATION_SYSTEM.md** | Automations run after ACL allows |
 | **../../OVERVIEW.md** | ACL is a core component |
 
 ---

@@ -704,7 +704,8 @@ This means:
 ## Related Specs
 
 - `NEXUS_REQUEST.md` — The data bus schema
-- `INTERFACE_WORKPLAN.md` — Interface tracking
+- `PLUGINS.md` — NEX plugin system
+- `automations/` — Automation system
 - `../adapters/` — Adapter specifications
-- `../iam/` — ACL specifications
-- `../agent-system/` — Broker and agent specifications
+- `../iam/` — IAM specifications
+- `../broker/` — Broker and agent specifications

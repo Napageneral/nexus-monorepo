@@ -42,7 +42,7 @@ The main system behavior document. Contains:
 - Check `HEARTBEAT.md` if woken by a heartbeat hook
 - Reply `HEARTBEAT_OK` if nothing needs attention
 
-See `specs/agent-system/EVENT_SYSTEM_DESIGN.md` and `specs/agent-system/HOOK_SERVICE.md` for the full hooks system spec.
+See `specs/runtime/nex/automations/AUTOMATION_SYSTEM.md` for the full automation system spec.
 
 ### BOOTSTRAP.md
 
@@ -170,7 +170,7 @@ These are used when creating bindings via `nexus bindings create <harness>`. See
 
 **Purpose:** User-customizable checklist read by agents when woken by heartbeat hooks.
 
-**Relationship to Hooks:** The hooks system handles heartbeat scheduling. HEARTBEAT.md is just the checklist the agent reads when a heartbeat hook fires. See `specs/agent-system/EVENT_SYSTEM_DESIGN.md`.
+**Relationship to Automations:** The automation system handles heartbeat scheduling. HEARTBEAT.md is just the checklist the agent reads when a heartbeat automation fires. See `specs/runtime/nex/automations/AUTOMATION_SYSTEM.md`.
 
 **Template:**
 
@@ -239,5 +239,5 @@ This allows:
 - **INIT.md** — File creation timing
 - **ONBOARDING.md** — Ritual flow
 - **harnesses/HARNESS_BINDINGS.md** — IDE/harness binding configurations
-- **specs/agent-system/EVENT_SYSTEM_DESIGN.md** — Event system and hooks
-- **specs/agent-system/HOOK_SERVICE.md** — Hook registration and lifecycle
+- **specs/runtime/nex/automations/AUTOMATION_SYSTEM.md** — Automation system
+- **specs/runtime/nex/PLUGINS.md** — NEX plugin system
