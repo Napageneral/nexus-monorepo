@@ -508,16 +508,11 @@ $ nexus quest start quick-path
 
 ---
 
-## Capability Status Legend
+## Skill Status Legend
 
-| Emoji | Status | Meaning | Action |
-|-------|--------|---------|--------|
-| ✅ | `active` | Configured AND has been used | None - working |
-| ⭐ | `ready` | Configured but never used | Try it! |
-| 🔧 | `needs-setup` | Installed but needs credentials/config | Run setup |
-| 📥 | `needs-install` | Tool needs to be installed | Install first |
-| ⛔ | `unavailable` | Not available on this platform | N/A |
-| ❌ | `broken` | Was working, now failing | Troubleshoot |
+Skills have status indicating readiness. See `../interface/cli/COMMANDS.md` for the full legend.
+
+Quick reference: ✅ active · ⭐ ready · 🔧 needs-setup · 📥 needs-install · ⛔ unavailable · ❌ broken
 
 ---
 

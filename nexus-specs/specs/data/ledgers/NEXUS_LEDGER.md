@@ -45,7 +45,7 @@ CREATE TABLE nexus_requests (
     session_persona TEXT,             -- Target persona
     permissions TEXT,                 -- JSON: tools, credentials, data grants
     
-    -- Hooks (populated at executeTriggers)
+    -- Hooks (populated at runAutomations)
     hooks_matched TEXT,               -- JSON array of hook names that matched
     hooks_fired TEXT,                 -- JSON array of hooks that executed
     hooks_handled BOOLEAN,            -- Did a hook handle the event entirely?

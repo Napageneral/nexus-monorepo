@@ -1,10 +1,10 @@
 # Upstream Agent System Reference
 
 **Status:** REFERENCE DOCUMENT  
-**Upstream Version:** `80c1edc3f` (v2026.1.21)  
-**Last Updated:** 2026-01-22
+**Upstream Version:** `eab0a07f7` (v2026.2.3)  
+**Last Updated:** 2026-02-04
 
-This document captures the complete upstream clawdbot agent system architecture — subagents, sessions, queues, proactive triggers, agent lifecycle, and compaction.
+This document captures the complete upstream OpenClaw agent system architecture — subagents, sessions, queues, proactive triggers, agent lifecycle, and compaction.
 
 ---
 
@@ -24,11 +24,17 @@ const SessionsSpawnToolSchema = Type.Object({
   label: Type.Optional(Type.String()),                    // Optional: human-readable label
   agentId: Type.Optional(Type.String()),                  // Optional: target agent (cross-agent spawn)
   model: Type.Optional(Type.String()),                    // Optional: model override
-  thinking: Type.Optional(Type.String()),                 // Optional: thinking level override
+  thinking: Type.Optional(Type.String()),                 // Optional: thinking level override (v2026.2: inherits from config if not specified)
   runTimeoutSeconds: Type.Optional(Type.Number({ minimum: 0 })),  // Run timeout
   timeoutSeconds: Type.Optional(Type.Number({ minimum: 0 })),     // Back-compat alias
   cleanup: optionalStringEnum(["delete", "keep"] as const),       // Session cleanup policy
 });
+
+// v2026.2: Default thinking level resolution
+// Priority: tool param > agent-specific config > global config
+const resolvedThinkingDefaultRaw =
+  readStringParam(targetAgentConfig?.subagents ?? {}, "thinking") ??
+  readStringParam(cfg.agents?.defaults?.subagents ?? {}, "thinking");
 ```
 
 #### Return Value
@@ -51,7 +57,11 @@ export function createSessionsSpawnTool(opts?: {
   agentAccountId?: string;
   agentTo?: string;
   agentThreadId?: string | number;
+  agentGroupId?: string | null;        // v2026.2: Group context for tool policy
+  agentGroupChannel?: string | null;   // v2026.2: Group channel label
+  agentGroupSpace?: string | null;     // v2026.2: Group space (guild/team)
   sandboxed?: boolean;
+  requesterAgentIdOverride?: string;   // v2026.2: Explicit agent ID for cron/hook sessions
 }): AnyAgentTool
 ```
 
@@ -75,7 +85,7 @@ if (typeof requesterSessionKey === "string" && isSubagentSessionKey(requesterSes
 }
 ```
 
-**Detection Logic:** (`src/routing/session-key.ts`)
+**Detection Logic:** (`src/sessions/session-key-utils.ts`, re-exported from `src/routing/session-key.ts`)
 ```typescript
 export function isSubagentSessionKey(sessionKey: string | undefined | null): boolean {
   const raw = (sessionKey ?? "").trim();
@@ -83,6 +93,16 @@ export function isSubagentSessionKey(sessionKey: string | undefined | null): boo
   if (raw.toLowerCase().startsWith("subagent:")) return true;
   const parsed = parseAgentSessionKey(raw);
   return Boolean((parsed?.rest ?? "").toLowerCase().startsWith("subagent:"));
+}
+
+// v2026.2: ACP (Agent Control Protocol) session detection
+export function isAcpSessionKey(sessionKey: string | undefined | null): boolean {
+  const raw = (sessionKey ?? "").trim();
+  if (!raw) return false;
+  const normalized = raw.toLowerCase();
+  if (normalized.startsWith("acp:")) return true;
+  const parsed = parseAgentSessionKey(raw);
+  return Boolean((parsed?.rest ?? "").toLowerCase().startsWith("acp:"));
 }
 ```
 
@@ -198,7 +218,7 @@ listenerStop = onAgentEvent((evt) => {
 
 ```typescript
 export function resolveSubagentRegistryPath(): string {
-  return path.join(STATE_DIR_CLAWDBOT, "subagents", "runs.json");
+  return path.join(STATE_DIR_OPENCLAW, "subagents", "runs.json");
 }
 ```
 
@@ -243,16 +263,29 @@ export function buildSubagentSystemPrompt(params: {
   //
   // ## Rules
   // 1. **Stay focused** - Do your assigned task, nothing else
-  // 2. **Complete the task** - Your final message will be automatically reported
+  // 2. **Complete the task** - Your final message will be automatically reported to the main agent
   // 3. **Don't initiate** - No heartbeats, no proactive actions, no side quests
-  // 4. **Be ephemeral** - You may be terminated after task completion
+  // 4. **Be ephemeral** - You may be terminated after task completion. That's fine.
+  //
+  // ## Output Format
+  // When complete, your final response should include:
+  // - What you accomplished or found
+  // - Any relevant details the main agent should know
+  // - Keep it concise but informative
   //
   // ## What You DON'T Do
-  // - NO user conversations (main agent's job)
-  // - NO external messages unless explicitly tasked
+  // - NO user conversations (that's main agent's job)
+  // - NO external messages (email, tweets, etc.) unless explicitly tasked with a specific recipient/channel
   // - NO cron jobs or persistent state
   // - NO pretending to be the main agent
-  // - NO using the `message` tool directly
+  // - Only use the `message` tool when explicitly instructed to contact a specific external recipient;
+  //   otherwise return plain text and let the main agent deliver it
+  //
+  // ## Session Context
+  // - Label: {label}
+  // - Requester session: {requesterSessionKey}
+  // - Requester channel: {requesterOrigin.channel}
+  // - Your session: {childSessionKey}
 }
 ```
 
@@ -344,9 +377,11 @@ agent:{agentId}:{type}:{context}
 Examples:
 - Main DM: `agent:main:main`
 - Per-peer DM: `agent:main:dm:tyler`
+- Per-account-channel-peer DM: `agent:main:telegram:default:dm:tyler` (v2026.2)
 - Group: `agent:main:telegram:group:123456`
 - Channel/Room: `agent:main:discord:channel:987654`
 - Subagent: `agent:main:subagent:uuid`
+- ACP session: `agent:main:acp:{connectionId}` (v2026.2)
 - Cron: `cron:{jobId}`
 - Thread: `agent:main:telegram:group:123456:thread:789`
 
@@ -364,6 +399,9 @@ export function parseAgentSessionKey(sessionKey: string): ParsedAgentSessionKey 
 // Check if subagent session
 export function isSubagentSessionKey(sessionKey: string): boolean
 
+// v2026.2: Check if ACP (Agent Control Protocol) session
+export function isAcpSessionKey(sessionKey: string): boolean
+
 // Build main session key
 export function buildAgentMainSessionKey(params: { agentId: string; mainKey?: string }): string
 
@@ -372,10 +410,11 @@ export function buildAgentPeerSessionKey(params: {
   agentId: string;
   mainKey?: string;
   channel: string;
+  accountId?: string | null;
   peerKind?: "dm" | "group" | "channel" | null;
   peerId?: string | null;
   identityLinks?: Record<string, string[]>;
-  dmScope?: "main" | "per-peer" | "per-channel-peer";
+  dmScope?: "main" | "per-peer" | "per-channel-peer" | "per-account-channel-peer";  // v2026.2: Added per-account scope
 }): string
 
 // Extract parent for thread sessions
@@ -387,6 +426,7 @@ export function resolveThreadParentSessionKey(sessionKey: string): string | null
 DMs merge to main session by default (`dmScope: "main"`). Can be configured:
 - `per-peer`: `agent:main:dm:{peerId}`
 - `per-channel-peer`: `agent:main:{channel}:dm:{peerId}`
+- `per-account-channel-peer`: `agent:main:{channel}:{accountId}:dm:{peerId}` (v2026.2)
 
 #### Group Session Isolation
 
@@ -564,7 +604,7 @@ Subsequent lines: Entries with `id` and `parentId` (tree structure)
 #### On-Disk Locations
 
 ```
-~/.clawdbot/agents/<agentId>/sessions/
+~/.openclaw/agents/<agentId>/sessions/
 ├── sessions.json              # Key -> SessionEntry mapping
 ├── <sessionId>.jsonl          # Transcript files
 ├── <sessionId>-topic-<threadId>.jsonl  # Telegram topic transcripts
@@ -673,7 +713,7 @@ export type FollowupRun = {
     agentAccountId?: string;
     sessionFile: string;
     workspaceDir: string;
-    config: ClawdbotConfig;
+    config: OpenClawConfig;
     skillsSnapshot?: SkillSnapshot;
     provider: string;
     model: string;
@@ -774,7 +814,7 @@ export function scheduleFollowupDrain(
 
 ```typescript
 export function resolveQueueSettings(params: {
-  cfg: ClawdbotConfig;
+  cfg: OpenClawConfig;
   channel?: string;
   sessionEntry?: SessionEntry;
   inlineMode?: QueueMode;
@@ -857,7 +897,7 @@ type HeartbeatAgentState = {
 
 ```typescript
 export function startHeartbeatRunner(opts: {
-  cfg?: ClawdbotConfig;
+  cfg?: OpenClawConfig;
   runtime?: RuntimeEnv;
   abortSignal?: AbortSignal;
   runOnce?: typeof runHeartbeatOnce;
@@ -866,7 +906,7 @@ export function startHeartbeatRunner(opts: {
 }
 
 export async function runHeartbeatOnce(opts: {
-  cfg?: ClawdbotConfig;
+  cfg?: OpenClawConfig;
   agentId?: string;
   heartbeat?: HeartbeatConfig;
   reason?: string;
@@ -898,18 +938,28 @@ export function stripHeartbeatToken(
 
 ### 4.2 Cron System
 
-**Location:** `src/cron/types.ts`, `src/cron/isolated-agent/run.ts`
+**Location:** `src/cron/types.ts`, `src/cron/isolated-agent/run.ts`, `src/cron/delivery.ts`
 
 #### CronJob Type
 
 ```typescript
 export type CronSchedule =
-  | { kind: "at"; atMs: number }                    // One-time at timestamp
+  | { kind: "at"; at: string }                      // One-time at timestamp (v2026.2: string format)
   | { kind: "every"; everyMs: number; anchorMs?: number }  // Repeating interval
   | { kind: "cron"; expr: string; tz?: string };   // Cron expression
 
 export type CronSessionTarget = "main" | "isolated";
 export type CronWakeMode = "next-heartbeat" | "now";
+
+// v2026.2: New delivery mode system replaces legacy payload fields
+export type CronDeliveryMode = "none" | "announce";
+
+export type CronDelivery = {
+  mode: CronDeliveryMode;         // "none" = no delivery, "announce" = deliver output
+  channel?: CronMessageChannel;   // Target channel (or "last")
+  to?: string;                    // Target recipient
+  bestEffort?: boolean;           // Graceful failure handling
+};
 
 export type CronPayload =
   | { kind: "systemEvent"; text: string }
@@ -919,17 +969,13 @@ export type CronPayload =
       model?: string;
       thinking?: string;
       timeoutSeconds?: number;
-      deliver?: boolean;          // Explicit delivery toggle
+      allowUnsafeExternalContent?: boolean;  // v2026.2: Skip security wrapping for external hooks
+      // Legacy fields (deprecated, use delivery object instead)
+      deliver?: boolean;
       channel?: CronMessageChannel;
       to?: string;
       bestEffortDeliver?: boolean;
     };
-
-export type CronIsolation = {
-  postToMainPrefix?: string;
-  postToMainMode?: "summary" | "full";  // What to inject into main session
-  postToMainMaxChars?: number;          // Default: 8000
-};
 
 export type CronJobState = {
   nextRunAtMs?: number;
@@ -953,9 +999,29 @@ export type CronJob = {
   sessionTarget: CronSessionTarget;
   wakeMode: CronWakeMode;
   payload: CronPayload;
-  isolation?: CronIsolation;
+  delivery?: CronDelivery;        // v2026.2: New structured delivery config
   state: CronJobState;
 };
+```
+
+#### v2026.2: Delivery Plan Resolution
+
+**Location:** `src/cron/delivery.ts`
+
+```typescript
+export type CronDeliveryPlan = {
+  mode: CronDeliveryMode;
+  channel: CronMessageChannel;
+  to?: string;
+  source: "delivery" | "payload";  // Which config source was used
+  requested: boolean;              // Whether delivery is actually requested
+};
+
+export function resolveCronDeliveryPlan(job: CronJob): CronDeliveryPlan {
+  // Priority: delivery object > legacy payload fields
+  // If delivery.mode is set, use it directly
+  // Otherwise, derive from legacy payload.deliver + payload.to
+}
 ```
 
 #### Isolated Cron Sessions
@@ -964,7 +1030,7 @@ export type CronJob = {
 
 ```typescript
 export function resolveCronSession(params: {
-  cfg: ClawdbotConfig;
+  cfg: OpenClawConfig;
   sessionKey: string;
   nowMs: number;
   agentId: string;
@@ -975,10 +1041,27 @@ export function resolveCronSession(params: {
 }
 ```
 
-#### postToMainMode Options
+#### v2026.2: Isolated Job Delivery Behavior
 
-- `summary`: Small status line posted to main session
-- `full`: Full agent output (optionally truncated to `postToMainMaxChars`)
+When `delivery.mode === "announce"`:
+1. The `message` tool is **disabled** (`disableMessageTool: true`)
+2. Agent output is collected and delivered automatically
+3. Agent is instructed to return plain text summary
+4. Duplicate delivery via `message` tool is detected and skipped
+
+**Best-effort delivery:** When `delivery.bestEffort === true`:
+- Delivery failures log a warning but don't fail the job
+- Missing delivery targets are handled gracefully
+- Job returns `status: "ok"` even if delivery fails
+
+```typescript
+// From isolated-agent/run.ts
+runEmbeddedPiAgent({
+  // ...
+  requireExplicitMessageTarget: true,
+  disableMessageTool: deliveryRequested,  // v2026.2: Disable when auto-delivering
+});
+```
 
 ### 4.3 Trigger Routing
 
@@ -988,7 +1071,37 @@ export function resolveCronSession(params: {
 
 ## 5. Agent Lifecycle
 
-### 5.1 Active Run Tracking
+### 5.1 Session File Repair (v2026.2)
+
+**Location:** `src/agents/session-file-repair.ts`
+
+Before each agent run, the system attempts to repair malformed session transcript files.
+
+```typescript
+export async function repairSessionFileIfNeeded(params: {
+  sessionFile: string;
+  warn?: (message: string) => void;
+}): Promise<RepairReport>
+
+type RepairReport = {
+  repaired: boolean;
+  droppedLines: number;
+  backupPath?: string;
+  reason?: string;
+};
+```
+
+**Behavior:**
+1. Read session file and parse each line as JSON
+2. Drop lines that fail JSON parsing
+3. If header is valid and lines were dropped:
+   - Create backup at `{sessionFile}.bak-{pid}-{timestamp}`
+   - Rewrite file with valid entries only
+4. Log warning about dropped lines
+
+**Integration:** Called from `src/agents/pi-embedded-runner/run/attempt.ts` before session history is loaded.
+
+### 5.2 Active Run Tracking
 
 **Location:** `src/agents/pi-embedded-runner/runs.ts`
 
@@ -1004,7 +1117,7 @@ const ACTIVE_EMBEDDED_RUNS = new Map<string, EmbeddedPiQueueHandle>();
 const EMBEDDED_RUN_WAITERS = new Map<string, Set<EmbeddedRunWaiter>>();
 ```
 
-### 5.2 Run States
+### 5.3 Run States
 
 | State | Description | Detection |
 |-------|-------------|-----------|
@@ -1013,7 +1126,7 @@ const EMBEDDED_RUN_WAITERS = new Map<string, Set<EmbeddedRunWaiter>>();
 | **Compacting** | In compaction phase | `handle.isCompacting()` |
 | **Ended** | Run completed or aborted | Run removed from map |
 
-### 5.3 Key Functions
+### 5.4 Key Functions
 
 ```typescript
 // Register new run
@@ -1053,7 +1166,65 @@ export function waitForEmbeddedPiRunEnd(sessionId: string, timeoutMs = 15_000): 
 }
 ```
 
-### 5.4 Run Result Types
+### 5.5 Run Attempt Parameters (v2026.2 additions)
+
+**Location:** `src/agents/pi-embedded-runner/run/params.ts`, `run/types.ts`
+
+```typescript
+export type RunEmbeddedPiAgentParams = {
+  // Core session params
+  sessionId: string;
+  sessionKey?: string;
+  sessionFile: string;
+  workspaceDir: string;
+  agentDir?: string;
+  
+  // Messaging context
+  messageChannel?: string;
+  messageProvider?: string;
+  agentAccountId?: string;
+  messageTo?: string;
+  messageThreadId?: string | number;
+  
+  // v2026.2: Group context for tool policy resolution
+  groupId?: string | null;
+  groupChannel?: string | null;       // e.g. #general
+  groupSpace?: string | null;         // e.g. guild/team id
+  spawnedBy?: string | null;          // Parent session key for subagent policy inheritance
+  
+  // v2026.2: Sender metadata
+  senderId?: string | null;
+  senderName?: string | null;
+  senderUsername?: string | null;
+  senderE164?: string | null;
+  
+  // v2026.2: Slack auto-threading
+  currentChannelId?: string;
+  currentThreadTs?: string;
+  replyToMode?: "off" | "first" | "all";
+  hasRepliedRef?: { value: boolean };
+  
+  // v2026.2: Message tool control for cron/hook sessions
+  requireExplicitMessageTarget?: boolean;  // Require explicit to/channel in message tool
+  disableMessageTool?: boolean;            // Completely disable the message tool
+  
+  // Model/run configuration
+  prompt: string;
+  images?: ImageContent[];
+  provider?: string;
+  model?: string;
+  authProfileId?: string;
+  thinkLevel?: ThinkLevel;
+  verboseLevel?: VerboseLevel;
+  reasoningLevel?: ReasoningLevel;
+  timeoutMs: number;
+  runId: string;
+  
+  // ... callbacks and other params ...
+};
+```
+
+### 5.6 Run Result Types
 
 ```typescript
 export type EmbeddedPiAgentMeta = {
@@ -1093,7 +1264,7 @@ export type EmbeddedPiRunResult = {
   meta: EmbeddedPiRunMeta;
   didSendViaMessagingTool?: boolean;
   messagingToolSentTexts?: string[];
-  messagingToolSentTargets?: MessagingToolSend[];
+  messagingToolSentTargets?: MessagingToolSend[];  // v2026.2: Track explicit send targets
 };
 ```
 
@@ -1127,7 +1298,7 @@ export async function compactEmbeddedPiSession(params: {
   sessionFile: string;
   workspaceDir: string;
   agentDir?: string;
-  config?: ClawdbotConfig;
+  config?: OpenClawConfig;
   skillsSnapshot?: SkillSnapshot;
   provider?: string;
   model?: string;
@@ -1199,7 +1370,7 @@ Written to transcript as JSONL entry:
 }
 ```
 
-**Clawdbot Safety Floor:**
+**OpenClaw Safety Floor:**
 - If `reserveTokens < reserveTokensFloor`, bump it up
 - Default floor: `20000` tokens
 - Configurable via `agents.defaults.compaction.reserveTokensFloor`
@@ -1208,7 +1379,7 @@ Written to transcript as JSONL entry:
 
 **Location:** `src/auto-reply/reply/memory-flush.ts`
 
-Before compaction, Clawdbot can run a silent turn to persist memories:
+Before compaction, OpenClaw can run a silent turn to persist memories:
 
 ```yaml
 agents:
@@ -1279,7 +1450,7 @@ This prevents concurrent modifications to the same session transcript.
 | Subagent persistence | `src/agents/subagent-registry.store.ts` |
 | Subagent announce | `src/agents/subagent-announce.ts` |
 | Announce queue | `src/agents/subagent-announce-queue.ts` |
-| Session key utils | `src/routing/session-key.ts` |
+| Session key utils | `src/routing/session-key.ts` (re-exports from `src/sessions/session-key-utils.ts`) |
 | Session types | `src/config/sessions/types.ts` |
 | Queue types | `src/auto-reply/reply/queue/types.ts` |
 | Queue state | `src/auto-reply/reply/queue/state.ts` |
@@ -1288,10 +1459,15 @@ This prevents concurrent modifications to the same session transcript.
 | Heartbeat runner | `src/infra/heartbeat-runner.ts` |
 | Heartbeat utils | `src/auto-reply/heartbeat.ts` |
 | Cron types | `src/cron/types.ts` |
+| Cron delivery | `src/cron/delivery.ts` |
 | Cron isolated run | `src/cron/isolated-agent/run.ts` |
 | Run tracking | `src/agents/pi-embedded-runner/runs.ts` |
+| Run attempt params | `src/agents/pi-embedded-runner/run/params.ts` |
 | Compaction | `src/agents/pi-embedded-runner/compact.ts` |
 | Run types | `src/agents/pi-embedded-runner/types.ts` |
+| Session file repair | `src/agents/session-file-repair.ts` |
+| Transcript repair | `src/agents/session-transcript-repair.ts` |
+| Tool call sanitization | `src/agents/tool-call-id.ts` |
 
 ---
 
@@ -1371,4 +1547,49 @@ const ACTIVE_EMBEDDED_RUNS = new Map<string, EmbeddedPiQueueHandle>();
 
 ---
 
-*This document is a reference for Nexus development. It captures upstream openclaw behavior as of commit `80c1edc3f` (v2026.1.21).*
+## Appendix F: Changelog
+
+### v2026.2.3 (2026-02-04)
+
+**Cron System:**
+- New `CronDelivery` type with structured delivery configuration
+- Delivery modes: `none` (no delivery) and `announce` (auto-deliver output)
+- `bestEffort` flag for graceful failure handling
+- `disableMessageTool` when delivery is requested (prevents duplicate sends)
+- Legacy `payload.deliver`/`payload.to` fields deprecated but still supported
+
+**Subagent System:**
+- Default thinking level can now be configured:
+  - `agents.defaults.subagents.thinking` (global default)
+  - `agents.{agentId}.subagents.thinking` (per-agent override)
+- Thinking param in `sessions_spawn` overrides defaults
+- `sessions_spawn` tool now accepts group context opts: `agentGroupId`, `agentGroupChannel`, `agentGroupSpace`
+- New `requesterAgentIdOverride` for cron/hook sessions where session key parsing may not work
+- Updated subagent system prompt with clearer output format guidance and refined message tool usage rules
+
+**Session Management:**
+- New `repairSessionFileIfNeeded()` auto-repairs malformed JSONL transcripts
+- Creates backup before dropping malformed lines
+- Called before each agent run
+- New `isAcpSessionKey()` for ACP (Agent Control Protocol) session detection
+- New `per-account-channel-peer` dmScope option for fine-grained DM session routing
+
+**Run Parameters:**
+- New group context fields: `groupId`, `groupChannel`, `groupSpace`, `spawnedBy`
+- New sender metadata: `senderId`, `senderName`, `senderUsername`, `senderE164`
+- Slack auto-threading support: `currentChannelId`, `currentThreadTs`, `replyToMode`, `hasRepliedRef`
+
+**Tool System:**
+- `file_path` alias now passes validation in read/write tools
+- `web_fetch` maxChars cap is configurable
+- Enhanced tool call sanitization for Cloud Code Assist
+
+**Other:**
+- Cloudflare AI Gateway provider support
+- OpenRouter attribution headers
+- Before-tool-call hook wired into tool execution
+- Compaction safeguard respects context window tokens
+
+---
+
+*This document is a reference for Nexus development. It captures upstream OpenClaw behavior as of commit `eab0a07f7` (v2026.2.3).*

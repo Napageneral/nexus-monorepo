@@ -1,7 +1,7 @@
-# OpenCode Plugin System - Upstream Analysis
+# OpenCode Plugin System — Upstream Analysis
 
-> **Purpose:** Comprehensive analysis of OpenCode's plugin architecture to inform Nexus integration decisions.
-> **Last Updated:** 2026-01-30
+> **Purpose:** Comprehensive analysis of OpenCode's plugin architecture to inform Nexus integration decisions.  
+> **Last Updated:** 2026-02-04
 
 ---
 
@@ -9,15 +9,19 @@
 
 1. [Executive Summary](#executive-summary)
 2. [Plugin Architecture](#plugin-architecture)
-3. [All Available Hooks](#all-available-hooks)
-4. [Built-in Plugins](#built-in-plugins)
-5. [Plugin API](#plugin-api)
-6. [Plugin Configuration](#plugin-configuration)
-7. [Custom Tool Registration](#custom-tool-registration)
-8. [Auth Flows](#auth-flows)
-9. [Event System Integration](#event-system-integration)
-10. [Comparison with Nexus Skills](#comparison-with-nexus-skills)
-11. [Recommendations](#recommendations)
+3. [Plugin Discovery Cascade](#plugin-discovery-cascade)
+4. [Slot System](#slot-system)
+5. [All Available Hooks](#all-available-hooks)
+6. [Built-in Plugins](#built-in-plugins)
+7. [Plugin API](#plugin-api)
+8. [Plugin Configuration](#plugin-configuration)
+9. [Factory-Based Tools](#factory-based-tools)
+10. [Provider Registration](#provider-registration)
+11. [Custom Tool Registration](#custom-tool-registration)
+12. [Auth Flows](#auth-flows)
+13. [Event System Integration](#event-system-integration)
+14. [Comparison with Nexus Skills](#comparison-with-nexus-skills)
+15. [Recommendations](#recommendations)
 
 ---
 
@@ -119,6 +123,238 @@ for (let plugin of plugins) {
   }
 }
 ```
+
+---
+
+## Plugin Discovery Cascade
+
+Plugins are discovered from multiple sources with a defined priority order. Later sources override earlier ones for ID conflicts.
+
+### Discovery Order (Priority Low → High)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Plugin Discovery Order                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  1. BUNDLED      - Built-in plugins in OpenCode package         │
+│                    Lowest priority, can be overridden           │
+│                                                                  │
+│  2. GLOBAL       - ~/.opencode/extensions/                       │
+│                    User's global plugins                         │
+│                                                                  │
+│  3. WORKSPACE    - .opencode/extensions/ in workspace           │
+│                    Project-specific plugins                      │
+│                                                                  │
+│  4. CONFIG       - Extra paths from plugins.load.paths          │
+│                    Highest priority, explicit configuration      │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Discovery Sources
+
+| Origin | Location | Priority | Use Case |
+|--------|----------|----------|----------|
+| `bundled` | OpenCode package | Lowest | Default functionality |
+| `global` | `~/.opencode/extensions/` | Medium | User's personal plugins |
+| `workspace` | `.opencode/extensions/` | High | Project-specific |
+| `config` | `plugins.load.paths` | Highest | Explicit overrides |
+
+### Plugin Candidate Structure
+
+```typescript
+type PluginCandidate = {
+  idHint: string;           // Derived plugin ID (from dir/file name)
+  source: string;           // Absolute path to entry file
+  rootDir: string;          // Plugin root directory
+  origin: PluginOrigin;     // "bundled" | "global" | "workspace" | "config"
+  workspaceDir?: string;    // Workspace context
+  packageName?: string;     // From package.json
+  packageVersion?: string;  // From package.json
+  packageManifest?: OpenClawPackageManifest;
+};
+```
+
+### Supported Entry Files
+
+```
+plugin-directory/
+├── index.ts          # Primary entry
+├── index.js          # JavaScript alternative
+├── index.mjs         # ES modules
+├── index.cjs         # CommonJS
+└── package.json      # Optional: can specify entry point
+```
+
+Or standalone files:
+- `my-plugin.ts`
+- `my-plugin.js`
+- `my-plugin.mts`
+- `my-plugin.mjs`
+
+### Package.json Integration
+
+Plugins can define metadata in package.json:
+
+```json
+{
+  "name": "@myorg/my-plugin",
+  "version": "1.0.0",
+  "opencode": {
+    "extensions": ["./src/index.ts"],
+    "channel": {
+      "id": "my-channel",
+      "label": "My Channel"
+    },
+    "install": {
+      "npmSpec": "@myorg/my-plugin@latest"
+    }
+  }
+}
+```
+
+### Deduplication
+
+Later plugins with the same ID override earlier ones:
+
+```typescript
+function deduplicatePlugins(plugins: string[]): string[] {
+  const seenNames = new Set<string>();
+  const uniqueSpecifiers: string[] = [];
+  
+  // Process in reverse to keep later (higher priority)
+  for (const specifier of plugins.toReversed()) {
+    const name = getPluginName(specifier);
+    if (!seenNames.has(name)) {
+      seenNames.add(name);
+      uniqueSpecifiers.push(specifier);
+    }
+  }
+  
+  return uniqueSpecifiers.toReversed();
+}
+```
+
+---
+
+## Slot System
+
+Slots provide **exclusive capability selection** — only one plugin of a given "kind" can be active.
+
+### Concept
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Slot System                               │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Slot: "memory"                                                  │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                                                              ││
+│  │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     ││
+│  │   │ memory-core  │  │ memory-redis │  │ memory-custom│     ││
+│  │   │  (default)   │  │              │  │              │     ││
+│  │   └──────────────┘  └──────────────┘  └──────────────┘     ││
+│  │          ↑                                                   ││
+│  │          │                                                   ││
+│  │    Only ONE can be active at a time                         ││
+│  │                                                              ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Slot Types
+
+```typescript
+type PluginSlotKey = "memory";  // Currently only memory slot exists
+
+const SLOT_BY_KIND: Record<PluginKind, PluginSlotKey> = {
+  memory: "memory",
+};
+
+const DEFAULT_SLOT_BY_KEY: Record<PluginSlotKey, string> = {
+  memory: "memory-core",  // Default memory plugin
+};
+```
+
+### Slot Resolution Logic
+
+```typescript
+function resolveSlotWinner(
+  slot: PluginSlotKey,
+  config: PluginsConfig,
+  candidates: PluginCandidate[]
+): string | null {
+  // 1. Check explicit slot configuration
+  const explicitChoice = config.slots?.[slot];
+  
+  if (explicitChoice === "none") {
+    // Explicitly disabled
+    return null;
+  }
+  
+  if (explicitChoice) {
+    // Explicitly chosen plugin
+    return explicitChoice;
+  }
+  
+  // 2. Fall back to default
+  return DEFAULT_SLOT_BY_KEY[slot];
+}
+```
+
+### Configuration
+
+```yaml
+# Explicit slot selection
+plugins:
+  slots:
+    memory: "my-custom-memory"  # Use custom memory plugin
+
+# Disable slot entirely
+plugins:
+  slots:
+    memory: "none"  # No memory plugin
+
+# Default (omit to use default)
+plugins:
+  # memory-core is used automatically
+```
+
+### Slot Winner Selection
+
+When loading plugins:
+
+```typescript
+for (const candidate of candidates) {
+  const manifest = await loadManifest(candidate);
+  
+  if (manifest.kind) {
+    const slot = SLOT_BY_KIND[manifest.kind];
+    const winner = resolveSlotWinner(slot, config, candidates);
+    
+    if (candidate.id !== winner) {
+      // This plugin loses the slot battle
+      record.enabled = false;
+      record.status = "disabled";
+      record.disableReason = `Lost slot ${slot} to ${winner}`;
+    }
+  }
+}
+```
+
+### NEX Adaptation
+
+NEX could use slots for:
+
+| Slot | Purpose | Examples |
+|------|---------|----------|
+| `memory` | Long-term memory backend | Core, Redis, Vector DB |
+| `calendar` | Calendar provider | Google, Apple, Outlook |
+| `email` | Email provider | Gmail, Outlook, IMAP |
+| `identity` | Identity resolver | Local, LDAP, OAuth |
 
 ---
 
@@ -546,6 +782,336 @@ function deduplicatePlugins(plugins: string[]): string[] {
   
   return uniqueSpecifiers.toReversed()
 }
+```
+
+---
+
+## Factory-Based Tools
+
+OpenCode supports **factory pattern** for tools that adapt to runtime context. Instead of a static tool definition, you provide a function that receives context and returns a tool (or null).
+
+### Static vs Factory Tools
+
+| Pattern | When to Use | Registration |
+|---------|-------------|--------------|
+| **Static** | Tool doesn't need runtime context | Direct tool object |
+| **Factory** | Tool adapts to config, workspace, session | Function returning tool |
+
+### Factory Tool Interface
+
+```typescript
+type ToolFactory = (ctx: OpenClawPluginToolContext) => Tool | null;
+
+type OpenClawPluginToolContext = {
+  config: OpenClawConfig;
+  workspaceDir: string;
+  agentId: string;
+  sessionKey?: string;
+  permissions?: Record<string, boolean>;
+};
+```
+
+### Factory Tool Registration
+
+```typescript
+// Register a factory tool
+api.registerTool(
+  (ctx: OpenClawPluginToolContext) => {
+    // Check if tool should be available
+    if (!ctx.config?.myPlugin?.enabled) {
+      return null;  // Tool not available
+    }
+    
+    // Check workspace requirements
+    if (!fs.existsSync(path.join(ctx.workspaceDir, '.my-config'))) {
+      return null;  // Missing required config
+    }
+    
+    // Return context-aware tool
+    return {
+      name: "my_contextual_tool",
+      description: `Tool configured for ${ctx.agentId}`,
+      parameters: { type: "object", properties: { input: { type: "string" } } },
+      execute: async (args) => {
+        // Use ctx values in execution
+        const result = await processInWorkspace(ctx.workspaceDir, args.input);
+        return { result };
+      },
+    };
+  },
+  {
+    optional: true,           // Tool may not be available
+    names: ["my_contextual_tool"],  // Hint for name conflicts
+  }
+);
+```
+
+### Tool Resolution Flow
+
+```typescript
+function resolvePluginTools(params: {
+  context: OpenClawPluginToolContext;
+  existingToolNames?: Set<string>;
+  toolAllowlist?: string[];
+}): AnyAgentTool[] {
+  const tools: AnyAgentTool[] = [];
+  
+  for (const registration of pluginRegistry.tools) {
+    // Check for name conflicts
+    if (existingToolNames?.has(registration.name)) {
+      log.warn(`Skipping tool ${registration.name}: already exists`);
+      continue;
+    }
+    
+    let tool: Tool | null;
+    
+    if (typeof registration.toolOrFactory === 'function') {
+      // Factory: call with context
+      tool = registration.toolOrFactory(context);
+      if (!tool) continue;  // Factory returned null
+    } else {
+      // Static: use directly
+      tool = registration.toolOrFactory;
+    }
+    
+    // Apply allowlist filter for optional tools
+    if (registration.optional && toolAllowlist) {
+      if (!toolAllowlist.includes(tool.name)) {
+        continue;
+      }
+    }
+    
+    tools.push(tool);
+  }
+  
+  return tools;
+}
+```
+
+### Use Cases for Factory Tools
+
+| Use Case | Why Factory? |
+|----------|--------------|
+| **Config-dependent** | Tool only available if config flag set |
+| **Workspace-aware** | Tool behavior changes based on project |
+| **Permission-gated** | Tool availability based on user permissions |
+| **Dynamic description** | Tool description includes runtime values |
+| **Session-scoped** | Tool tied to specific session/agent |
+
+### Optional Tools with Allowlist
+
+Factory tools can be marked `optional: true`, meaning they're only included if explicitly allowed:
+
+```typescript
+api.registerTool(myExpensiveTool, { optional: true });
+
+// Later, when assembling tools:
+const tools = resolvePluginTools({
+  context,
+  toolAllowlist: ["my_expensive_tool"],  // Only include if listed
+});
+```
+
+This pattern enables:
+- Expensive tools only when requested
+- Per-agent tool filtering
+- Workspace-specific tool sets
+
+---
+
+## Provider Registration
+
+Plugins can register custom LLM providers with models, authentication methods, and custom request handling.
+
+### Provider Interface
+
+```typescript
+interface ProviderRegistration {
+  id: string;                    // Unique provider ID
+  label: string;                 // Display name
+  docsPath?: string;             // Documentation URL path
+  aliases?: string[];            // Alternative names
+  envVars?: string[];            // Environment variables for API key
+  
+  // Available models
+  models: Record<string, ModelSpec>;
+  
+  // Authentication methods
+  auth: AuthMethod[];
+  
+  // Optional: custom request handling
+  formatApiKey?: (credential: Credential) => string;
+  refreshOAuth?: (credential: OAuthCredential) => Promise<OAuthCredential>;
+  customFetch?: (url: string, opts: RequestInit) => Promise<Response>;
+}
+
+interface ModelSpec {
+  contextWindow: number;
+  pricing: {
+    input: number;   // Per million tokens
+    output: number;
+  };
+  vision?: boolean;
+  reasoning?: boolean;
+  aliases?: string[];
+}
+```
+
+### Provider Registration Example
+
+```typescript
+api.registerProvider({
+  id: "my-provider",
+  label: "My LLM Provider",
+  docsPath: "/docs/providers/my-provider",
+  aliases: ["myprovider", "mp"],
+  envVars: ["MY_PROVIDER_API_KEY"],
+  
+  models: {
+    "my-model-large": {
+      contextWindow: 128000,
+      pricing: { input: 10, output: 30 },
+      vision: true,
+    },
+    "my-model-small": {
+      contextWindow: 32000,
+      pricing: { input: 1, output: 3 },
+    },
+  },
+  
+  auth: [
+    {
+      id: "api_key",
+      label: "API Key",
+      kind: "api_key",
+      run: async (ctx) => {
+        const key = await ctx.prompter.text("Enter API key:");
+        return {
+          profiles: [{
+            profileId: "default",
+            credential: { type: "api_key", key }
+          }]
+        };
+      }
+    },
+    {
+      id: "oauth",
+      label: "OAuth Login",
+      kind: "oauth",
+      run: async (ctx) => {
+        // OAuth flow implementation
+        const { accessToken, refreshToken, expiresAt } = await doOAuthFlow();
+        return {
+          profiles: [{
+            profileId: ctx.accountEmail,
+            credential: {
+              type: "oauth",
+              access: accessToken,
+              refresh: refreshToken,
+              expires: expiresAt,
+            }
+          }]
+        };
+      }
+    }
+  ],
+  
+  formatApiKey: (cred) => cred.key,
+  
+  refreshOAuth: async (cred) => {
+    const newTokens = await refreshTokens(cred.refresh);
+    return { ...cred, ...newTokens };
+  },
+});
+```
+
+### Auth Method Types
+
+| Type | Description | Fields |
+|------|-------------|--------|
+| `api_key` | Simple API key | `key: string` |
+| `oauth` | OAuth 2.0 flow | `access, refresh, expires, accountId?` |
+| `device_code` | Device code flow | `access, refresh, expires, deviceId` |
+
+### Auth Method Interface
+
+```typescript
+interface AuthMethod {
+  id: string;
+  label: string;
+  kind: "api_key" | "oauth" | "device_code";
+  
+  // Optional prompts before auth
+  prompts?: Array<TextPrompt | SelectPrompt>;
+  
+  // Run auth flow
+  run: (ctx: AuthContext) => Promise<AuthResult>;
+}
+
+interface AuthContext {
+  prompter: {
+    text(message: string): Promise<string>;
+    select(message: string, options: Option[]): Promise<string>;
+    confirm(message: string): Promise<boolean>;
+  };
+  openBrowser(url: string): Promise<void>;
+  startLocalServer(port: number): LocalServer;
+}
+
+interface AuthResult {
+  profiles: Array<{
+    profileId: string;
+    credential: Credential;
+  }>;
+}
+```
+
+### Custom Fetch for Providers
+
+Providers can intercept and modify all API requests:
+
+```typescript
+api.registerProvider({
+  id: "custom-provider",
+  // ...
+  
+  customFetch: async (url, opts) => {
+    // Get current auth
+    const auth = await getAuth("custom-provider");
+    
+    // Refresh if expired
+    if (auth.expires < Date.now()) {
+      const newAuth = await refreshTokens(auth);
+      await saveAuth("custom-provider", newAuth);
+    }
+    
+    // Modify headers
+    const headers = new Headers(opts.headers);
+    headers.set("Authorization", `Bearer ${auth.access}`);
+    headers.set("X-Custom-Header", "value");
+    
+    // Optionally rewrite URL
+    const finalUrl = url.replace(
+      "api.openai.com",
+      "my-provider.com/v1"
+    );
+    
+    return fetch(finalUrl, { ...opts, headers });
+  }
+});
+```
+
+### Provider Discovery
+
+Registered providers appear in:
+- Model selection UI
+- `/model` command completions
+- Provider configuration screens
+
+```typescript
+// Query available providers
+const providers = await client.provider.list();
+// Returns all built-in + plugin-registered providers
 ```
 
 ---

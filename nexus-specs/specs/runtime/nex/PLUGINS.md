@@ -31,7 +31,7 @@ Event Arrives
 │  1. receiveEvent()         →  [afterReceiveEvent]                       │
 │  2. resolveIdentity()      →  [afterResolveIdentity]                    │
 │  3. resolveAccess()        →  [afterResolveAccess]                      │
-│  4. executeTriggers()      →  [afterExecuteTriggers]  ← AUTOMATIONS     │
+│  4. runAutomations()      →  [afterRunAutomations]  ← AUTOMATIONS     │
 │  5. assembleContext()      →  [afterAssembleContext]                    │
 │  6. runAgent()             →  [afterRunAgent]                           │
 │  7. deliverResponse()      →  [afterDeliverResponse]                    │
@@ -54,7 +54,7 @@ interface NEXPlugin {
   afterReceiveEvent?(req: NexusRequest): Promise<void | 'skip'>;
   afterResolveIdentity?(req: NexusRequest): Promise<void | 'skip'>;
   afterResolveAccess?(req: NexusRequest): Promise<void | 'skip'>;
-  afterExecuteTriggers?(req: NexusRequest): Promise<void | 'skip'>;
+  afterRunAutomations?(req: NexusRequest): Promise<void | 'skip'>;
   afterAssembleContext?(req: NexusRequest): Promise<void | 'skip'>;
   afterRunAgent?(req: NexusRequest): Promise<void | 'skip'>;
   afterDeliverResponse?(req: NexusRequest): Promise<void | 'skip'>;
@@ -145,7 +145,7 @@ const analyticsPlugin: NEXPlugin = {
 const urgentFlagPlugin: NEXPlugin = {
   name: 'urgent-flag',
   
-  afterExecuteTriggers: async (req) => {
+  afterRunAutomations: async (req) => {
     if (req.event.content.match(/urgent|asap|emergency/i)) {
       req.hooks.context.priority = 'urgent';
     }

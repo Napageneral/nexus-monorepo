@@ -35,7 +35,7 @@ Event → Adapters → NEX Pipeline → Broker → Adapters → External
 NEX (Nexus Event Exchange) is the central orchestrator:
 
 ```
-receiveEvent → resolveIdentity → resolveAccess → executeTriggers
+receiveEvent → resolveIdentity → resolveAccess → runAutomations
                                                         │
                                                         ▼
               finalize ← deliverResponse ← runAgent ← assembleContext
@@ -45,7 +45,7 @@ receiveEvent → resolveIdentity → resolveAccess → executeTriggers
 |-------|-------|
 | `receiveEvent` | Adapters |
 | `resolveIdentity`, `resolveAccess` | IAM |
-| `executeTriggers` | Hooks |
+| `runAutomations` | Hooks |
 | `assembleContext`, `runAgent` | Broker |
 | `deliverResponse` | NEX + Adapters |
 | `finalize` | NEX |

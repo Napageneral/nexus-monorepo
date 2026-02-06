@@ -30,9 +30,11 @@ This document defines the canonical directory structure for a Nexus workspace.
 │   │   └── {agent-name}/
 │   │       ├── IDENTITY.md       # Agent identity
 │   │       └── SOUL.md           # Persona & boundaries
-│   ├── sessions/                 # Global session transcripts
-│   │   ├── sessions.json         # Metadata index
-│   │   └── {sessionId}.jsonl    # Transcripts
+│   ├── nexus.db                  # System of Record (SQLite)
+│   │                             # Contains: Events, Agents, Identity, Nexus ledgers
+│   │                             # Sessions/turns/messages stored here, NOT files
+│   ├── cortex/                   # Derived data layer
+│   │   └── {agentId}.db          # Per-agent embeddings, episodes, analyses
 │   ├── credentials/
 │   │   ├── config.json           # Credential system config
 │   │   ├── index.json            # Fast lookup index
@@ -88,7 +90,8 @@ All runtime state. **Visible, not hidden** — transparency over obscurity.
 |--------------|---------|
 | `user/` | User identity and profile |
 | `agents/` | Agent identity files and config |
-| `sessions/` | Global session transcripts and metadata |
+| `nexus.db` | System of Record (all ledgers) |
+| `cortex/` | Derived data (embeddings, episodes) |
 | `credentials/` | Credential pointers (not raw secrets) and config |
 | `gateway/` | Gateway configuration |
 

@@ -520,6 +520,260 @@ if (needsFullReindex) {
 
 ---
 
+## 11.5 Memory Manager Internals
+
+### Sync Coordination
+
+The `MemoryIndexManager` uses dirty tracking to coordinate syncs:
+
+```typescript
+// From src/memory/manager.ts
+private dirty = false;                           // Memory files changed
+private sessionsDirty = false;                   // Sessions changed
+private sessionsDirtyFiles = new Set<string>();  // Which session files
+private sessionPendingFiles = new Set<string>(); // Pending processing
+private sessionDeltas = new Map<string, {        // Delta tracking
+  lastSize: number;
+  pendingBytes: number;
+  pendingMessages: number;
+}>();
+private syncing: Promise<void> | null = null;   // Sync lock
+```
+
+**Sync orchestration:**
+```typescript
+async sync(params?: { reason?: string; force?: boolean }): Promise<void> {
+  if (this.syncing) {
+    return this.syncing;  // Already syncing, return existing promise
+  }
+  this.syncing = this.runSync(params).finally(() => {
+    this.syncing = null;
+  });
+  return this.syncing;
+}
+```
+
+### Chunk Lifecycle
+
+1. **Indexing:** `indexFile()` reads content → chunks → embeds → stores in DB
+2. **Storage:** Chunks in `chunks` table, FTS in `chunks_fts`, vectors in `chunks_vec`
+3. **Cleanup:** Stale chunks removed when files change or are deleted
+
+### Dirty Tracking
+
+**Memory files:** File watcher marks `dirty = true` on add/change/unlink
+
+**Session files:** Delta-based tracking with debouncing:
+- Tracks file size and newline counts
+- Debounced processing (5s) via `SESSION_DIRTY_DEBOUNCE_MS`
+- Thresholds: `deltaBytes` and `deltaMessages` from config
+
+---
+
+## 11.6 Session Transcript Indexing Details
+
+### What Gets Indexed from Sessions
+
+Only `user` and `assistant` messages — tool calls are excluded:
+
+```typescript
+// From src/memory/session-files.ts
+if ((record as { type?: unknown }).type !== "message") continue;
+const message = (record as { message?: unknown }).message;
+if (message.role !== "user" && message.role !== "assistant") continue;
+```
+
+### Content Extraction
+
+```typescript
+function extractSessionText(content: unknown): string {
+  // Handle string content directly
+  if (typeof content === "string") return content;
+  
+  // For arrays, extract type: "text" blocks only
+  if (Array.isArray(content)) {
+    return content
+      .filter(block => block.type === "text")
+      .map(block => block.text)
+      .join("\n");
+  }
+  return "";
+}
+```
+
+### Formatting for Index
+
+Messages are formatted as labeled turns:
+
+```typescript
+// From buildSessionEntry()
+const formattedText = messages
+  .map(m => {
+    const label = m.role === "user" ? "User" : "Assistant";
+    return `${label}: ${redactSensitiveText(m.text)}`;
+  })
+  .join("\n\n");
+```
+
+### Chunking Differences
+
+- **Memory files:** Uses `chunkMarkdown()` — respects headers, paragraphs
+- **Session files:** Same chunking, but content is pre-formatted as "User: ...\nAssistant: ..."
+
+---
+
+## 11.7 Embedding Cache Details
+
+### Cache Key Format
+
+The cache uses a composite key:
+- `provider` — Embedding provider (openai, gemini, local)
+- `model` — Embedding model
+- `provider_key` — Includes baseUrl + headers (excluding auth)
+- `hash` — Content hash
+
+```typescript
+// From src/memory/manager.ts
+const cacheKey = {
+  provider: this.provider.id,
+  model: this.provider.model,
+  provider_key: computeProviderKey(this.provider),
+  hash: hashContent(text)
+};
+```
+
+### Eviction Strategy
+
+- **No TTL** — Entries persist until evicted
+- **LRU eviction** — When `maxEntries` exceeded, oldest by `updated_at` deleted
+
+```typescript
+async pruneEmbeddingCacheIfNeeded(): Promise<void> {
+  const count = db.prepare("SELECT COUNT(*) FROM embedding_cache").get();
+  if (count <= maxEntries) return;
+  
+  const toDelete = count - maxEntries;
+  db.prepare(`
+    DELETE FROM embedding_cache 
+    WHERE rowid IN (
+      SELECT rowid FROM embedding_cache 
+      ORDER BY updated_at ASC LIMIT ?
+    )
+  `).run(toDelete);
+}
+```
+
+---
+
+## 11.8 Pre-Compaction Memory Flush (CRITICAL)
+
+### Purpose
+
+Before auto-compaction, OpenClaw runs a **silent agentic turn** to let the model save durable memories. This preserves important context that would otherwise be lost in summarization.
+
+### Trigger Logic
+
+```typescript
+// From src/auto-reply/reply/memory-flush.ts
+function shouldRunMemoryFlush(params: {
+  entry?: Pick<SessionEntry, "totalTokens" | "compactionCount" | "memoryFlushCompactionCount">;
+  contextWindowTokens: number;
+  reserveTokensFloor: number;
+  softThresholdTokens: number;
+}): boolean {
+  // Calculate threshold
+  const threshold = contextWindowTokens - reserveTokensFloor - softThresholdTokens;
+  if (totalTokens < threshold) return false;
+  
+  // Don't run twice for same compaction count
+  const compactionCount = params.entry?.compactionCount ?? 0;
+  const lastFlushAt = params.entry?.memoryFlushCompactionCount;
+  if (typeof lastFlushAt === "number" && lastFlushAt === compactionCount) {
+    return false;
+  }
+  
+  return true;
+}
+```
+
+### Default Prompts
+
+**User prompt:**
+```typescript
+const DEFAULT_MEMORY_FLUSH_PROMPT = [
+  "Pre-compaction memory flush.",
+  "Store durable memories now (use memory/YYYY-MM-DD.md; create memory/ if needed).",
+  "If nothing to store, reply with NO_REPLY.",
+].join(" ");
+```
+
+**System prompt:**
+```typescript
+const DEFAULT_MEMORY_FLUSH_SYSTEM_PROMPT = [
+  "Pre-compaction memory flush turn.",
+  "The session is near auto-compaction; capture durable memories to disk.",
+  "You may reply, but usually NO_REPLY is correct.",
+].join(" ");
+```
+
+### Compaction Integration
+
+The memory flush listens for compaction events:
+
+```typescript
+// From src/auto-reply/reply/agent-runner-memory.ts
+onAgentEvent: (evt) => {
+  if (evt.stream === "compaction") {
+    const phase = typeof evt.data.phase === "string" ? evt.data.phase : "";
+    const willRetry = Boolean(evt.data.willRetry);
+    if (phase === "end" && !willRetry) {
+      memoryCompactionCompleted = true;
+    }
+  }
+}
+```
+
+After flush completes, `memoryFlushCompactionCount` is updated to prevent duplicate flushes.
+
+### Skipped When
+
+- Workspace is read-only (`workspaceAccess: "ro"` or `"none"`)
+- CLI provider (non-messaging)
+- Heartbeat messages
+- Already flushed in current compaction cycle
+
+---
+
+## 11.9 QMD (Quantum Memory Database)
+
+OpenClaw supports an alternative memory backend called QMD:
+
+### Implementation
+
+`src/memory/qmd-manager.ts` — `QmdMemoryManager` implements `MemorySearchManager`
+
+### Features
+
+- **Collection-based:** Maps collections to memory sources
+- **Session export:** Exports session transcripts to markdown for indexing
+- **CLI integration:** Spawns `qmd` CLI for operations
+- **Scope filtering:** Filters results by session key/channel/chat type
+
+### No Reranking
+
+QMD uses its native scoring — no additional reranking layer:
+```typescript
+// Results use entry.score directly from QMD query
+```
+
+### Update Strategy
+
+- **Debounced:** Skips if within `debounceMs` of last update
+- **Embedding interval:** Separate `embedIntervalMs` controls embedding frequency
+- **Boot/interval:** Runs on boot and at configured intervals
+
+---
+
 ## 12. Per-Agent Configuration
 
 Memory search supports per-agent overrides:
@@ -577,44 +831,62 @@ From `src/cli/memory-cli.ts`:
 
 ---
 
-## Decision: Nexus Removes This System
+## Decision: Nexus Replaces This System with Cortex
 
-### Why Remove
+### Why Replace
 
 1. **Agent burden** — Agents must actively write to `MEMORY.md`. They "forget" to remember.
 2. **Manual indexing** — Nothing is captured automatically from conversations.
 3. **Per-agent isolation** — No cross-agent knowledge sharing.
 4. **No relationships** — Text chunks only, no entity/relationship extraction.
 5. **No temporal tracking** — Can't query "what did we know at time X?".
+6. **Pre-compaction flush is a patch** — The memory flush mechanism exists because OpenClaw's memory is fragile. It's a workaround for a fundamental design issue.
 
 ### What Replaces It
 
-**Mnemonic** — An automatic knowledge capture system:
+**Cortex** — An automatic derived layer:
 
-| Upstream Memory | Mnemonic |
+| Upstream Memory | Cortex |
 |-----------------|--------|
 | Agent writes to `MEMORY.md` | Agent just talks |
 | Manual file indexing | Automatic turn ingestion |
 | BM25 + vector search | Graph + vector + temporal query |
-| Text chunks | Entities + relationships |
+| Text chunks | Episodes + facets + entities |
 | No temporal bounds | Bi-temporal tracking |
 | Per-agent isolation | Unified knowledge graph |
+| Pre-compaction flush | Not needed (all turns persist) |
+
+### Why Pre-Compaction Flush is NOT Ported
+
+OpenClaw needs the memory flush because:
+- Compaction discards old message content
+- File-based `MEMORY.md` is the only durable memory
+- Without flush, context is permanently lost
+
+Nexus doesn't need it because:
+- **All turns persist** in Agents Ledger forever
+- **Cortex derives** from the complete System of Record
+- **No live saving** required — nothing is ever lost
+- **Regenerable** — can rebuild Cortex when improved
+- **No cold start** — full history always available
+
+The pre-compaction flush is a patch for a fragile foundation. Nexus has a solid foundation.
 
 ### Stub Strategy
 
-Until Mnemonic is ready:
+Until Cortex is fully implemented:
 
 1. **Remove** memory system code from Nexus fork
-2. **Stub** `mnemonic_query` tool that returns empty results or basic search
+2. **Stub** `cortex_query` tool that returns empty results or basic search
 3. **Remove** `MEMORY.md` from workspace bootstrap
-4. **Update** docs to explain Mnemonic replacement
+4. **Update** docs to explain Cortex replacement
 
 ### Tool Mapping
 
 | Upstream Tool | Nexus Replacement |
 |---------------|-------------------|
-| `memory_search` | `mnemonic_query` (stub → full Mnemonic) |
-| `memory_get` | Removed (mnemonic returns full context) |
+| `memory_search` | `cortex_query` (stub → full Cortex) |
+| `memory_get` | Removed (cortex returns full context) |
 
 ---
 

@@ -40,7 +40,7 @@ Multiple providers can satisfy the same capability. The system tracks which are 
 
 ## Status System
 
-Each capability has a status indicating its readiness:
+Each **skill** (provider) has a status indicating its readiness. Capabilities inherit status from their providers — if any provider for a capability is active, the capability is active.
 
 | Emoji | Status | Meaning |
 |-------|--------|---------|

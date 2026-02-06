@@ -169,6 +169,46 @@ interface IdentityEnrichment {
 
 ---
 
+## Query Interface
+
+Cortex is queried by multiple components for semantic search and memory retrieval:
+
+| Consumer | Use Case |
+|----------|----------|
+| **Broker** | Context enrichment (future: auto-inject relevant memories into Layer 3) |
+| **Broker** | Smart routing (find best thread for a message) |
+| **Automations** | Semantic matching for event evaluation |
+| **Agents** | `cortex_search` tool (agent-initiated memory lookup) |
+| **CLI** | `nexus search` (user semantic search) |
+
+```typescript
+interface CortexQuery {
+  query: string;                   // Natural language or semantic
+  filters?: {
+    sources?: string[];            // Limit to adapters ('imessage', 'gmail', etc.)
+    time_range?: { start: number; end: number };
+    entity_ids?: string[];         // Limit to participants
+  };
+  limit?: number;
+  include_embeddings?: boolean;
+}
+
+interface CortexResult {
+  hits: {
+    episode_id: string;
+    score: number;
+    content_preview: string;
+    source_event_ids: string[];
+    facets: Facet[];
+  }[];
+  total_hits: number;
+}
+```
+
+**Note:** The exact transport (HTTP API, Unix socket, direct SQLite) between the TypeScript NEX process and the Go Cortex process is TBD. See `../../project-structure/LANGUAGE_DECISION.md` for the process boundary.
+
+---
+
 ## Documents
 
 | Spec | Status | Description |
@@ -180,5 +220,6 @@ interface IdentityEnrichment {
 ## Related
 
 - `../ledgers/` — System of Record (source data)
-- `../nex/INTERFACES.md` — CortexQuery interface contract
-- `../broker/` — Broker queries Cortex for context
+- `../../runtime/nex/NEXUS_REQUEST.md` — Pipeline lifecycle (Cortex feeds into stage 5)
+- `../../runtime/broker/CONTEXT_ASSEMBLY.md` — Cortex injection into agent context (Layer 3)
+- `../../runtime/broker/` — Broker queries Cortex for context

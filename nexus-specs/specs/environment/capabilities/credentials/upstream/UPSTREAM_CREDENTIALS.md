@@ -1,13 +1,18 @@
-# Upstream Clawdbot Credential System Analysis
+# Upstream OpenClaw Credential System Analysis
 
 **Status:** Reference Documentation  
+**Last Updated:** 2026-02-04  
 **Upstream Source:** `src/agents/auth-profiles/`, `src/agents/cli-credentials.ts`, `src/agents/model-auth.ts`
+
+> **See Also:** [CREDENTIALS_SYSTEM.md](../../../upstream/CREDENTIALS_SYSTEM.md) — Comprehensive system documentation
 
 ---
 
 ## Overview
 
-Upstream clawdbot uses a centralized `auth-profiles.json` file that stores credentials **directly** (including raw secrets). This contrasts with Nexus's pointer-based architecture where credentials are stored in secure backends (Keychain, 1Password, etc.) and Nexus only stores references.
+Upstream OpenClaw (formerly Clawdbot) uses a centralized `auth-profiles.json` file that stores credentials **directly** (including raw secrets). This contrasts with Nexus's pointer-based architecture where credentials are stored in secure backends (Keychain, 1Password, etc.) and Nexus only stores references.
+
+> **Note:** OpenClaw was previously called "Clawdbot". The codebase has been renamed.
 
 ---
 
@@ -16,7 +21,7 @@ Upstream clawdbot uses a centralized `auth-profiles.json` file that stores crede
 ### File Locations
 
 ```
-~/.clawdbot/
+~/.openclaw/
 ├── auth-profiles.json                    # Main credential store (secrets inline)
 ├── auth.json                             # Legacy (migrated to auth-profiles.json)
 ├── credentials/
@@ -29,9 +34,9 @@ Upstream clawdbot uses a centralized `auth-profiles.json` file that stores crede
 
 | Variable | Purpose |
 |----------|---------|
-| `CLAWDBOT_STATE_DIR` | Override state directory (default: `~/.clawdbot`) |
-| `CLAWDBOT_OAUTH_DIR` | Override OAuth directory |
-| `CLAWDBOT_CONFIG_PATH` | Override config file path |
+| `OPENCLAW_STATE_DIR` | Override state directory (default: `~/.openclaw`) |
+| `OPENCLAW_OAUTH_DIR` | Override OAuth directory |
+| `OPENCLAW_CONFIG_PATH` | Override config file path |
 
 ---
 
@@ -223,7 +228,7 @@ async function refreshOAuthTokenWithLock(params: {
 2. Check if token is still valid (race condition protection)
 3. Refresh token via provider-specific API
 4. Update store with new credentials
-5. **Sync back to Claude CLI** if profile is `anthropic:claude-cli`
+5. **Sync back to Claude CLI** if profile is `anthropic:claude-cli` (bidirectional sync)
 6. Release lock
 
 **Providers with refresh support:**
@@ -241,7 +246,7 @@ async function refreshOAuthTokenWithLock(params: {
 
 ```typescript
 function resolveAuthProfileOrder(params: {
-  cfg?: ClawdbotConfig;
+  cfg?: OpenClawConfig;
   store: AuthProfileStore;
   provider: string;
   preferredProfile?: string;
@@ -270,7 +275,7 @@ Cooldowns use exponential backoff based on `errorCount`.
 
 ## 8. CLI Commands
 
-### Via `clawdbot models auth`
+### Via `openclaw models auth`
 
 | Command | Description |
 |---------|-------------|
@@ -282,7 +287,7 @@ Cooldowns use exponential backoff based on `errorCount`.
 ### Login Flow
 
 ```bash
-clawdbot models auth login --provider anthropic
+openclaw models auth login --provider anthropic
 ```
 
 1. Lists available provider plugins

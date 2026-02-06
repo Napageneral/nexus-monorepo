@@ -34,7 +34,7 @@ NEX Process (single binary)
 ├── receiveEvent()       // 1. Normalize event, create NexusRequest
 ├── resolveIdentity()    // 2. WHO sent this? Lookup Identity Ledger
 ├── resolveAccess()      // 3. WHAT can they do? Policies → permissions, base session
-├── executeTriggers()    // 4. Match triggers, execute hooks, may override session
+├── runAutomations()    // 4. Match triggers, execute hooks, may override session
 ├── assembleContext()    // 5. Gather history, Cortex context, agent config, formatting
 ├── runAgent()           // 6. Execute agent with assembled context
 ├── deliverResponse()    // 7. Format, chunk, send via out-adapter
@@ -52,7 +52,7 @@ All function calls. No network hops.
 | `receiveEvent()` | AdapterEvent | NexusRequest created | No |
 | `resolveIdentity()` | NexusRequest | `principal.identity` populated | Yes (unknown sender) |
 | `resolveAccess()` | NexusRequest | `permissions`, `session` (base) | Yes (access denied) |
-| `executeTriggers()` | NexusRequest | `hooks.*`, `session` (final) | Yes (hook handles completely) |
+| `runAutomations()` | NexusRequest | `hooks.*`, `session` (final) | Yes (hook handles completely) |
 | `assembleContext()` | NexusRequest | `agent.context` assembled | No |
 | `runAgent()` | NexusRequest | `response.*` populated | No |
 | `deliverResponse()` | NexusRequest | `delivery_result` | No |
@@ -75,12 +75,12 @@ All function calls. No network hops.
 
 ### What This Means Concretely
 
-1. **Stages don't write to ledgers** — they return results to NEX, NEX writes
-2. **Broker doesn't write to Agents Ledger** — Broker executes agent, returns result, NEX writes
+1. **Most stages update NexusRequest, NEX coordinates** — stages return results, NEX maintains lifecycle
+2. **Broker writes to Agents Ledger directly** — it's part of the NEX process, just a logical separation
 3. **CLI reads directly** — no need to route queries through NEX
 4. **Cortex jobs write directly** — they're not part of a NexusRequest
 
-This isn't about routing — it's separation of concerns. The Broker's job is to execute agents. NEX's job is to orchestrate and maintain the audit trail.
+The Broker is a logical component within NEX, not a separate service. It can write to the Agents Ledger directly because it's all one process.
 
 ### Shared Database Library
 
@@ -162,7 +162,7 @@ Both NEX and other components use the same library. NEX doesn't "own" the databa
 │  │                        [plugin: afterResolveAccess]                       │  │
 │  │                                   │                                        │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
-│  │  │ 4. executeTriggers()                                                  │ │  │
+│  │  │ 4. runAutomations()                                                  │ │  │
 │  │  │    • Match hooks against triggers (parallel)                         │ │  │
 │  │  │    • Execute matched hooks (parallel where independent)              │ │  │
 │  │  │    • May override session (smart routing)                            │ │  │
@@ -171,7 +171,7 @@ Both NEX and other components use the same library. NEX doesn't "own" the databa
 │  │  │    • Async: Write hooks result                                       │ │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘ │  │
 │  │                                   │                                        │  │
-│  │                       [plugin: afterExecuteTriggers]                      │  │
+│  │                       [plugin: afterRunAutomations]                      │  │
 │  │                                   │                                        │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
 │  │  │ 5. assembleContext()                                                  │ │  │
@@ -253,7 +253,7 @@ The `NexusRequest` is created at `receiveEvent()` and populated through each sta
 | **receiveEvent()** | `request_id`, `event_id`, `timestamp`, `event`, `delivery` |
 | **resolveIdentity()** | `principal.identity` |
 | **resolveAccess()** | `principal.permissions`, `session` (base) |
-| **executeTriggers()** | `hooks.evaluated`, `hooks.fired`, `hooks.context`, `session` (final) |
+| **runAutomations()** | `hooks.evaluated`, `hooks.fired`, `hooks.context`, `session` (final) |
 | **assembleContext()** | `agent.context`, `agent.turn_id`, `agent.thread_id`, `agent.persona` |
 | **runAgent()** | `response.content`, `response.tool_calls`, `response.tokens` |
 | **deliverResponse()** | `delivery_result` |
@@ -269,7 +269,7 @@ resolveIdentity()    → request.principal.identity populated
 resolveAccess()      → request.principal.permissions
                        request.session (BASE)
                         │
-executeTriggers()    → request.session (FINAL - may be overridden by trigger)
+runAutomations()    → request.session (FINAL - may be overridden by trigger)
                        request.hooks.context (injected context)
                         │
 assembleContext()    → request.agent.context (history, Cortex, config, formatting)
@@ -292,7 +292,7 @@ See `NEXUS_REQUEST.md` for full schema.
 Each stage waits for the previous to complete:
 
 ```
-receiveEvent → resolveIdentity → resolveAccess → executeTriggers → assembleContext → runAgent → deliverResponse → finalize
+receiveEvent → resolveIdentity → resolveAccess → runAutomations → assembleContext → runAgent → deliverResponse → finalize
 ```
 
 All 8 stages are sync because each depends on the output of the previous.
@@ -378,7 +378,7 @@ interface NEXPlugin {
   afterReceiveEvent?(req: NexusRequest): Promise<void | 'skip'>;
   afterResolveIdentity?(req: NexusRequest): Promise<void | 'skip'>;
   afterResolveAccess?(req: NexusRequest): Promise<void | 'skip'>;
-  afterExecuteTriggers?(req: NexusRequest): Promise<void | 'skip'>;
+  afterRunAutomations?(req: NexusRequest): Promise<void | 'skip'>;
   afterAssembleContext?(req: NexusRequest): Promise<void | 'skip'>;
   afterRunAgent?(req: NexusRequest): Promise<void | 'skip'>;
   afterDeliverResponse?(req: NexusRequest): Promise<void | 'skip'>;
@@ -436,7 +436,7 @@ const enrichIdentityPlugin: NEXPlugin = {
 // Context injection plugin (runs after triggers, before context assembly)
 const urgentFlagPlugin: NEXPlugin = {
   name: 'urgent-flag',
-  afterExecuteTriggers: async (req) => {
+  afterRunAutomations: async (req) => {
     if (req.event.content.match(/urgent|asap|emergency/i)) {
       req.hooks.context.priority = 'urgent';
     }
@@ -452,7 +452,7 @@ Agents can create plugins via a skill:
 // Agent writes this to plugins/my-custom-hook.ts
 export const plugin: NEXPlugin = {
   name: 'agent-created-hook',
-  afterExecuteTriggers: async (req) => {
+  afterRunAutomations: async (req) => {
     // Custom routing: if message mentions "code", route to CodeAgent
     if (req.event.content.match(/code|programming|debug/i)) {
       req.session = { ...req.session, persona: 'code-agent' };
@@ -633,7 +633,7 @@ nexus/
 │   │   ├── receiveEvent.ts
 │   │   ├── resolveIdentity.ts
 │   │   ├── resolveAccess.ts
-│   │   ├── executeTriggers.ts
+│   │   ├── runAutomations.ts
 │   │   ├── assembleContext.ts
 │   │   ├── runAgent.ts
 │   │   ├── deliverResponse.ts
@@ -687,7 +687,7 @@ Ledger stores                  →    Events/Agents/Identity/Nexus ledgers
 Analysis jobs                  →    Continue as background processing
 
 New in NEX:
-- 8-stage pipeline (receiveEvent → resolveIdentity → resolveAccess → executeTriggers → assembleContext → runAgent → deliverResponse → finalize)
+- 8-stage pipeline (receiveEvent → resolveIdentity → resolveAccess → runAutomations → assembleContext → runAgent → deliverResponse → finalize)
 - Plugin system (after hooks at each stage)
 - Adapter registry
 - NexusRequest data bus

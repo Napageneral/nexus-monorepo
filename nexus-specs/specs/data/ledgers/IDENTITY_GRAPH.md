@@ -322,6 +322,92 @@ interface IdentityEnrichment {
 
 ---
 
+## Resolution Query (Pipeline Stage 2)
+
+During `resolveIdentity`, NEX queries the Identity Graph to resolve who sent an event. This is the core join across the three layers:
+
+```typescript
+interface IdentityLookupRequest {
+  channel: string;                 // 'imessage', 'discord', etc.
+  identifier: string;              // '+15551234567', 'user#1234', etc.
+}
+
+interface IdentityLookupResult {
+  // Contact info (always present after first interaction)
+  contact: {
+    channel: string;
+    identifier: string;
+    first_seen: number;
+    last_seen: number;
+    message_count: number;
+    display_name?: string;         // From platform if available
+  };
+  
+  // Identity mapping (may or may not exist)
+  mapping?: {
+    entity_id: string;
+    mapping_type: 'confirmed' | 'inferred' | 'pending' | 'unknown';
+    confidence?: number;           // For inferred/pending
+  };
+  
+  // Resolved entity (only if mapping exists and is confirmed/inferred)
+  entity?: {
+    id: string;
+    type: 'person' | 'persona';
+    name?: string;
+    is_user: boolean;
+    relationship?: string;
+    tags: string[];
+  };
+}
+```
+
+**Resolution algorithm:**
+1. Find contact: `SELECT * FROM contacts WHERE channel = ? AND identifier = ?`
+2. Upsert contact (update `last_seen`, increment `message_count`)
+3. Find mapping: `SELECT * FROM identity_mappings WHERE contact_channel = ? AND contact_identifier = ? AND status IN ('confirmed', 'inferred')`
+4. If mapping found, resolve entity: `SELECT * FROM entities WHERE id = ?`
+5. Return `IdentityLookupResult` — contact is always present, mapping and entity may be null
+
+**Contract:**
+- Lookup MUST upsert contact (update last_seen, message_count)
+- Lookup MUST return entity only if mapping_type is `confirmed` or `inferred`
+- NEX proceeds with `principal.type = 'unknown'` if no resolved entity
+
+---
+
+## Cortex Enrichment (Background)
+
+Cortex can write back learned relationships to the Identity Graph asynchronously (not part of the request pipeline):
+
+```typescript
+interface IdentityEnrichment {
+  entity_id: string;
+  
+  // Updates (all optional)
+  relationship?: string;           // Learned from conversation patterns
+  tags_add?: string[];
+  tags_remove?: string[];
+  
+  // New identities discovered
+  new_identities?: {
+    channel: string;
+    identifier: string;
+  }[];
+  
+  // Confidence
+  confidence: number;              // 0-1, for review thresholds
+  source: 'cortex_analysis';
+}
+```
+
+**Contract:**
+- Cortex SHOULD only write high-confidence enrichments
+- Cortex MUST NOT overwrite user-set values (relationship, name)
+- Low-confidence enrichments SHOULD queue for human review
+
+---
+
 ## Invariants
 
 1. **Unique contacts** — Each (channel, identifier) appears once in contacts table
@@ -336,6 +422,6 @@ interface IdentityEnrichment {
 
 - `README.md` — System of Record overview
 - `EVENTS_LEDGER.md` — Source of contact data
-- `../iam/` — IAM uses identity resolution for access control
+- `../../runtime/iam/` — IAM uses identity resolution for access control
 - `../cortex/` — Cortex proposes identity enrichments
-- `../nex/INTERFACES.md` — IdentityLookup interface contract
+- `../../runtime/nex/NEXUS_REQUEST.md` — Pipeline stage 2 (resolveIdentity) uses this

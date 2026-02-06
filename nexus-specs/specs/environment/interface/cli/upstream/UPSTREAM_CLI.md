@@ -1,13 +1,15 @@
-# Upstream Clawdbot CLI Reference
+# Upstream OpenClaw CLI Reference
 
 **Status:** REFERENCE DOCUMENT  
-**Last Updated:** 2026-01-26
+**Last Updated:** 2026-02-04
+
+> **Comprehensive Documentation:** See [`specs/environment/upstream/CLI_SYSTEM.md`](../../../upstream/CLI_SYSTEM.md) for the full CLI system documentation including architecture, all commands, implementation patterns, and detailed examples.
 
 ---
 
 ## Overview
 
-This document details the upstream clawdbot CLI for comparison with Nexus. Understanding what exists upstream helps identify what's new in Nexus vs what needs porting.
+This document summarizes the upstream OpenClaw CLI for quick comparison with Nexus. For detailed command reference and implementation patterns, see the comprehensive CLI_SYSTEM.md document.
 
 ---
 
@@ -250,4 +252,9 @@ Uses eager registration in `src/cli/program.ts` with explicit command registrati
 
 ---
 
-*This document helps identify what's new in Nexus vs what comes from upstream clawdbot.*
+## Related Documentation
+
+- **Full CLI System Reference:** [`specs/environment/upstream/CLI_SYSTEM.md`](../../../upstream/CLI_SYSTEM.md)
+- **Configuration System:** [`specs/runtime/upstream/CONFIGURATION.md`](../../../runtime/upstream/CONFIGURATION.md)
+
+*This document provides a summary for quick reference. See CLI_SYSTEM.md for complete architecture and implementation details.*

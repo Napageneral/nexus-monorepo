@@ -29,8 +29,8 @@ The primary data layer. Four ledgers:
 |--------|----------------|
 | **Events Ledger** | All inbound/outbound events |
 | **Agents Ledger** | Sessions, turns, messages, tool calls |
-| **Identity Graph** | Identities, relationships, aliases |
-| **Nexus Ledger** | System state, configuration, triggers |
+| **Identity Graph** | Contacts, entities, identity mappings |
+| **Nexus Ledger** | NexusRequest pipeline traces (debugging, audit) |
 
 **Key property:** Immutable. Events are appended, not modified.
 

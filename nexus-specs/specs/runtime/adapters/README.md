@@ -1,7 +1,7 @@
 # Adapters Spec
 
 **Status:** DESIGN IN PROGRESS  
-**Last Updated:** 2026-01-30
+**Last Updated:** 2026-02-06
 
 ---
 
@@ -21,7 +21,8 @@ Adapters are external tools (like `eve`, `gog`, `discord-cli`) that meet defined
 
 | Spec | Status | Description |
 |------|--------|-------------|
-| `ADAPTER_INTERFACES.md` | ✅ Done | Overview and design principles |
+| `ADAPTER_SYSTEM.md` | ✅ Done | **Operational system** — registration, accounts, lifecycle, process management, health, context integration |
+| `ADAPTER_INTERFACES.md` | ✅ Done | Data contracts overview and design principles |
 | `INBOUND_INTERFACE.md` | ✅ Done | Receiving events, NexusEvent schema |
 | `OUTBOUND_INTERFACE.md` | ✅ Done | Delivery, formatting, chunking |
 | `channels/` | ✅ Done | Per-channel specs (9 channels) |
@@ -39,7 +40,8 @@ Adapters are external tools (like `eve`, `gog`, `discord-cli`) that meet defined
 
 ## Quick Start
 
-**Read `ADAPTER_INTERFACES.md`** for the core interface definitions.
+**Read `ADAPTER_SYSTEM.md`** for the full operational system (registration, lifecycle, accounts).  
+**Read `ADAPTER_INTERFACES.md`** for data contracts (NexusEvent, DeliveryResult, ChannelCapabilities).
 
 ---
 
@@ -117,11 +119,13 @@ Each spec includes:
 
 ## Open Questions
 
-1. **Formatting guidance injection** — How to provide on-demand guidance when message tool is called? See `upstream/TOOL_HOOK_MECHANISM.md`
+1. **Formatting guidance injection** — Just-in-time guidance when message tool is called. Strategy defined in `ADAPTER_SYSTEM.md` (tool response hints). See `upstream/TOOL_HOOK_MECHANISM.md` for deeper investigation.
 
-2. **Tool CLI interface** — Standardize CLI args across adapter tools?
+2. **Webhook adapters** — Adapters that need to receive webhooks (Telegram, LINE) run their own HTTP server. NEX connects to them for health but doesn't manage the listener port.
 
-3. **Media handling** — Per-channel media limits and formats
+3. **Media handling** — Per-channel media limits and formats. See `channels/` for current specs.
+
+4. **Rate limiting** — Should NEX enforce outbound rate limits globally, or leave to adapters? Currently adapter-managed.
 
 ---
 

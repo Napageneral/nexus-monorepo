@@ -1,12 +1,16 @@
 # Upstream Skills System Reference
 
 **Status:** REFERENCE DOCUMENT  
-**Last Updated:** 2026-01-22  
-**Source:** Clawdbot upstream analysis
+**Last Updated:** 2026-02-04  
+**Source:** OpenClaw (formerly Clawdbot) upstream analysis
+
+> **See Also:** [SKILLS_SYSTEM.md](../../../upstream/SKILLS_SYSTEM.md) — Comprehensive system documentation
 
 ---
 
-This document captures the complete implementation of the skills system in upstream Clawdbot. It serves as the definitive reference for understanding how skills work and guiding Nexus fork development.
+This document captures the complete implementation of the skills system in upstream OpenClaw. It serves as the definitive reference for understanding how skills work and guiding Nexus fork development.
+
+> **Note:** OpenClaw was previously called "Clawdbot". The codebase has been renamed, but some legacy references may remain.
 
 ## Table of Contents
 
@@ -14,7 +18,7 @@ This document captures the complete implementation of the skills system in upstr
 2. [SKILL.md Format](#2-skillmd-format)
 3. [Skills Injection into Agent Context](#3-skills-injection-into-agent-context)
 4. [Skills Configuration](#4-skills-configuration)
-5. [ClawdHub (Skill Hub)](#5-clawdhub-skill-hub)
+5. [Skill Hub](#5-skill-hub)
 6. [Bundled Skills](#6-bundled-skills)
 7. [Skills CLI](#7-skills-cli)
 8. [Dependencies & Requirements](#8-dependencies--requirements)
@@ -40,6 +44,8 @@ const loadSkillEntries = (workspaceDir, opts) => {
   // Precedence: extra < bundled < managed < workspace
   // Later sources override earlier sources with same skill name
 }
+
+// NOTE: OpenClaw uses "openclaw" as the metadata key (previously "clawdbot")
 ```
 
 **Directory Precedence (lowest → highest):**
@@ -47,8 +53,8 @@ const loadSkillEntries = (workspaceDir, opts) => {
 | Priority | Source | Location | Description |
 |----------|--------|----------|-------------|
 | 1 (lowest) | Extra | `config.skills.load.extraDirs[]` | User-configured additional directories |
-| 2 | Bundled | `<packageRoot>/skills/` | Ships with Clawdbot |
-| 3 | Managed | `~/.clawdbot/skills/` | ClawdHub installed skills |
+| 2 | Bundled | `<packageRoot>/skills/` | Ships with OpenClaw |
+| 3 | Managed | `~/.openclaw/skills/` | Hub installed skills |
 | 4 (highest) | Workspace | `<workspaceDir>/skills/` | Per-workspace overrides |
 
 ### 1.2 Bundled Skills Directory Resolution
@@ -57,7 +63,7 @@ const loadSkillEntries = (workspaceDir, opts) => {
 // From src/agents/skills/bundled-dir.ts
 export function resolveBundledSkillsDir(): string | undefined {
   // 1. Environment override
-  const override = process.env.CLAWDBOT_BUNDLED_SKILLS_DIR?.trim();
+  const override = process.env.OPENCLAW_BUNDLED_SKILLS_DIR?.trim();
   if (override) return override;
 
   // 2. Compiled binary: sibling `skills/` next to executable
@@ -110,7 +116,7 @@ Skills directories are watched for changes with debounced refresh:
 // From src/agents/skills/refresh.ts
 export function ensureSkillsWatcher(params: { 
   workspaceDir: string; 
-  config?: ClawdbotConfig 
+  config?: OpenClawConfig 
 }) {
   const watchEnabled = params.config?.skills?.load?.watch !== false;
   const debounceMs = params.config?.skills?.load?.watchDebounceMs ?? 250;
@@ -147,7 +153,7 @@ name: skill-name                    # Required - unique identifier
 description: |                      # Required - triggers skill selection
   Brief description of what the skill does and when to use it.
 homepage: https://example.com       # Optional - tool homepage
-metadata: {"clawdbot": {...}}       # Optional - Clawdbot-specific metadata (JSON)
+metadata: {"openclaw": {...}}       # Optional - OpenClaw-specific metadata (JSON)
 ---
 
 # Skill Title
@@ -162,15 +168,15 @@ Instructions and documentation...
 | `name` | Yes | string | Unique skill identifier (lowercase, hyphens) |
 | `description` | Yes | string | Triggers skill selection - describe what & when |
 | `homepage` | No | string | URL to tool/documentation homepage |
-| `metadata` | No | JSON string | Clawdbot-specific metadata (see below) |
+| `metadata` | No | JSON string | OpenClaw-specific metadata (see below) |
 
-### 2.3 Clawdbot Metadata Schema
+### 2.3 OpenClaw Metadata Schema
 
-The `metadata` field contains a JSON object with a `clawdbot` key:
+The `metadata` field contains a JSON object with an `openclaw` key:
 
 ```typescript
 // From src/agents/skills/types.ts
-export type ClawdbotSkillMetadata = {
+export type OpenClawSkillMetadata = {
   always?: boolean;           // Always include, ignore requirements
   skillKey?: string;          // Override config key (defaults to name)
   primaryEnv?: string;        // Primary env var for API key
@@ -226,7 +232,7 @@ command-arg-mode: raw            # How to forward args (only "raw" supported)
 name: weather
 description: Get current weather and forecasts (no API key required).
 homepage: https://wttr.in/:help
-metadata: {"clawdbot":{"emoji":"🌤️","requires":{"bins":["curl"]}}}
+metadata: {"openclaw":{"emoji":"🌤️","requires":{"bins":["curl"]}}}
 ---
 
 # Weather
@@ -249,7 +255,7 @@ curl -s "wttr.in/London?format=3"
 name: gog
 description: Google Workspace CLI for Gmail, Calendar, Drive, Contacts, Sheets, and Docs.
 homepage: https://gogcli.sh
-metadata: {"clawdbot":{
+metadata: {"openclaw":{
   "emoji":"🎮",
   "requires":{"bins":["gog"]},
   "install":[{
@@ -270,7 +276,7 @@ metadata: {"clawdbot":{
 name: peekaboo
 description: Capture and automate macOS UI with the Peekaboo CLI.
 homepage: https://peekaboo.boo
-metadata: {"clawdbot":{
+metadata: {"openclaw":{
   "emoji":"👀",
   "os":["darwin"],
   "requires":{"bins":["peekaboo"]},
@@ -356,7 +362,7 @@ export function buildWorkspaceSkillSnapshot(workspaceDir, opts): SkillSnapshot {
     prompt,
     skills: eligible.map((entry) => ({
       name: entry.skill.name,
-      primaryEnv: entry.clawdbot?.primaryEnv,
+      primaryEnv: entry.metadata?.primaryEnv,
     })),
     resolvedSkills,
     version: opts?.snapshotVersion,
@@ -485,7 +491,7 @@ skills: z.object({
 ### 4.3 Example Configuration
 
 ```yaml
-# clawdbot.yaml
+# openclaw.yaml
 skills:
   allowBundled:
     - gog
@@ -528,7 +534,7 @@ skills: z.array(z.string()).optional()  // Only these skills available in this r
 // From src/agents/skills/config.ts
 export function shouldIncludeSkill(params: {
   entry: SkillEntry;
-  config?: ClawdbotConfig;
+  config?: OpenClawConfig;
   eligibility?: SkillEligibilityContext;
 }): boolean {
   const { entry, config, eligibility } = params;
@@ -545,7 +551,7 @@ export function shouldIncludeSkill(params: {
   if (osList.length > 0 && !osList.includes(process.platform)) return false;
   
   // Always-include override
-  if (entry.clawdbot?.always === true) return true;
+  if (entry.metadata?.always === true) return true;
 
   // Binary requirements
   for (const bin of requiredBins) {
@@ -563,7 +569,7 @@ export function shouldIncludeSkill(params: {
   for (const envName of requiredEnv) {
     if (!process.env[envName] && 
         !skillConfig?.env?.[envName] &&
-        !(skillConfig?.apiKey && entry.clawdbot?.primaryEnv === envName)) {
+        !(skillConfig?.apiKey && entry.metadata?.primaryEnv === envName)) {
       return false;
     }
   }
@@ -585,7 +591,7 @@ Skills can receive environment variables from config:
 // From src/agents/skills/env-overrides.ts
 export function applySkillEnvOverrides(params: { 
   skills: SkillEntry[]; 
-  config?: ClawdbotConfig 
+  config?: OpenClawConfig 
 }) {
   for (const entry of skills) {
     const skillConfig = resolveSkillConfig(config, skillKey);
@@ -600,7 +606,7 @@ export function applySkillEnvOverrides(params: {
     }
 
     // Apply apiKey to primaryEnv
-    const primaryEnv = entry.clawdbot?.primaryEnv;
+    const primaryEnv = entry.metadata?.primaryEnv;
     if (primaryEnv && skillConfig?.apiKey && !process.env[primaryEnv]) {
       process.env[primaryEnv] = skillConfig.apiKey;
     }
@@ -610,62 +616,40 @@ export function applySkillEnvOverrides(params: {
 
 ---
 
-## 5. ClawdHub (Skill Hub)
+## 5. Skill Hub
 
 ### 5.1 Overview
 
-ClawdHub is a skill distribution platform at https://clawdhub.com. Skills can be:
+OpenClaw supports a skill distribution hub. Skills can be:
 - Searched and discovered
 - Installed with version pinning
 - Updated with hash-based matching
 - Published by users
 
-### 5.2 ClawdHub CLI
+### 5.2 Hub CLI
 
 ```bash
-# Installation
-npm i -g clawdhub
-
-# Authentication (for publishing)
-clawdhub login
-clawdhub whoami
-
 # Search skills
-clawdhub search "postgres backups"
+openclaw skills search "postgres backups"
 
 # Install skills
-clawdhub install my-skill
-clawdhub install my-skill --version 1.2.3
+openclaw skills install my-skill
+openclaw skills install my-skill --version 1.2.3
 
 # Update skills
-clawdhub update my-skill
-clawdhub update my-skill --version 1.2.3
-clawdhub update --all
-clawdhub update my-skill --force
-clawdhub update --all --no-input --force
+openclaw skills update my-skill
+openclaw skills update --all
 
 # List installed skills
-clawdhub list
-
-# Publish skills
-clawdhub publish ./my-skill \
-  --slug my-skill \
-  --name "My Skill" \
-  --version 1.2.0 \
-  --changelog "Fixes + docs"
+openclaw skills list
 ```
 
 ### 5.3 Configuration
 
 ```bash
 # Environment variables
-CLAWDHUB_REGISTRY=https://clawdhub.com    # Override registry
-CLAWDHUB_WORKDIR=./skills                  # Override install directory
-
-# CLI flags
---registry <url>     # Override registry
---workdir <path>     # Override working directory
---dir <path>         # Override install directory
+OPENCLAW_SKILLS_REGISTRY=https://...    # Override registry
+OPENCLAW_SKILLS_DIR=./skills            # Override install directory
 ```
 
 ### 5.4 Update Mechanism
@@ -682,7 +666,7 @@ The update command uses content hashing to determine version matches:
 
 ### 6.1 Location
 
-Bundled skills ship with Clawdbot in the `skills/` directory at the repository root.
+Bundled skills ship with OpenClaw in the `skills/` directory at the repository root.
 
 ### 6.2 Available Bundled Skills
 
@@ -694,15 +678,15 @@ Bundled skills ship with Clawdbot in the `skills/` directory at the repository r
 | **Development** | coding-agent, github, tmux |
 | **Media** | camsnap, gifgrep, nano-pdf, openai-whisper, openai-whisper-api, peekaboo, songsee, spotify-player, video-frames |
 | **AI/ML** | gemini, nano-banana-pro, openai-image-gen, oracle, summarize |
-| **Utilities** | canvas, clawdhub, local-places, model-usage, openhue, session-logs, sherpa-onnx-tts, skill-creator, sonoscli, weather |
+| **Utilities** | canvas, clawhub, local-places, model-usage, openhue, session-logs, sherpa-onnx-tts, skill-creator, sonoscli, weather |
 | **Specialized** | bird, blogwatcher, eightctl, food-order, goplaces, himalaya, mcporter, ordercli, sag, voice-call |
 
 ### 6.3 Bundled vs User Skills
 
 | Aspect | Bundled | User (Managed/Workspace) |
 |--------|---------|--------------------------|
-| Location | `<package>/skills/` | `~/.clawdbot/skills/` or `<workspace>/skills/` |
-| Updates | With Clawdbot updates | Via ClawdHub or manual |
+| Location | `<package>/skills/` | `~/.openclaw/skills/` or `<workspace>/skills/` |
+| Updates | With OpenClaw updates | Via hub or manual |
 | Override | Can be overridden by user skills | Final precedence |
 | Allowlist | Subject to `config.skills.allowBundled` | Always allowed |
 
@@ -714,18 +698,18 @@ Bundled skills ship with Clawdbot in the `skills/` directory at the repository r
 
 ```bash
 # List all skills
-clawdbot skills list
-clawdbot skills list --json
-clawdbot skills list --eligible        # Only ready-to-use skills
-clawdbot skills list --verbose         # Include missing requirements
+openclaw skills list
+openclaw skills list --json
+openclaw skills list --eligible        # Only ready-to-use skills
+openclaw skills list --verbose         # Include missing requirements
 
 # Get skill info
-clawdbot skills info <name>
-clawdbot skills info <name> --json
+openclaw skills info <name>
+openclaw skills info <name> --json
 
 # Check skills status
-clawdbot skills check
-clawdbot skills check --json
+openclaw skills check
+openclaw skills check --json
 ```
 
 ### 7.2 List Output
@@ -735,13 +719,13 @@ Skills (12/45 ready)
 ┌──────────────┬────────────────────┬─────────────────────────────────────────┬──────────────────┐
 │ Status       │ Skill              │ Description                             │ Source           │
 ├──────────────┼────────────────────┼─────────────────────────────────────────┼──────────────────┤
-│ ✓ ready      │ 🌤️ weather         │ Get current weather and forecasts...    │ clawdbot-bundled │
-│ ✓ ready      │ 🎮 gog             │ Google Workspace CLI for Gmail...       │ clawdbot-bundled │
-│ ✗ missing    │ 👀 peekaboo        │ Capture and automate macOS UI...        │ clawdbot-bundled │
-│ ⏸ disabled   │ 📦 custom-skill    │ My custom skill                         │ clawdbot-workspace│
+│ ✓ ready      │ 🌤️ weather         │ Get current weather and forecasts...    │ openclaw-bundled │
+│ ✓ ready      │ 🎮 gog             │ Google Workspace CLI for Gmail...       │ openclaw-bundled │
+│ ✗ missing    │ 👀 peekaboo        │ Capture and automate macOS UI...        │ openclaw-bundled │
+│ ⏸ disabled   │ 📦 custom-skill    │ My custom skill                         │ openclaw-workspace│
 └──────────────┴────────────────────┴─────────────────────────────────────────┴──────────────────┘
 
-Tip: use `npx clawdhub` to search, install, and sync skills.
+Tip: use `openclaw skills` to search, install, and sync skills.
 ```
 
 ### 7.3 Info Output
@@ -752,7 +736,7 @@ Tip: use `npx clawdhub` to search, install, and sync skills.
 Capture and automate macOS UI with the Peekaboo CLI.
 
 Details:
-  Source: clawdbot-bundled
+  Source: openclaw-bundled
   Path: /path/to/skills/peekaboo/SKILL.md
   Homepage: https://peekaboo.boo
 
@@ -831,7 +815,7 @@ const DEFAULT_CONFIG_VALUES: Record<string, boolean> = {
   "browser.enabled": true,
 };
 
-export function isConfigPathTruthy(config: ClawdbotConfig | undefined, pathStr: string): boolean {
+export function isConfigPathTruthy(config: OpenClawConfig | undefined, pathStr: string): boolean {
   const value = resolveConfigPath(config, pathStr);
   if (value === undefined && pathStr in DEFAULT_CONFIG_VALUES) {
     return DEFAULT_CONFIG_VALUES[pathStr] === true;
@@ -937,7 +921,7 @@ async function installDownloadSpec(params: {
 
 ```typescript
 // From src/agents/skills.ts
-export function resolveSkillsInstallPreferences(config?: ClawdbotConfig) {
+export function resolveSkillsInstallPreferences(config?: OpenClawConfig) {
   return {
     preferBrew: config?.skills?.install?.preferBrew ?? true,
     nodeManager: config?.skills?.install?.nodeManager ?? "npm",
@@ -1038,11 +1022,11 @@ type Skill = {
   source: string;
 };
 
-// Clawdbot skill entry with metadata
+// OpenClaw skill entry with metadata
 type SkillEntry = {
   skill: Skill;
   frontmatter: ParsedSkillFrontmatter;
-  clawdbot?: ClawdbotSkillMetadata;
+  metadata?: OpenClawSkillMetadata;
   invocation?: SkillInvocationPolicy;
 };
 
@@ -1102,4 +1086,4 @@ type SkillSnapshot = {
 
 ---
 
-*This document provides a comprehensive reference for the upstream Clawdbot skills system. Use it to guide Nexus fork development and ensure compatibility with upstream conventions.*
+*This document provides a comprehensive reference for the upstream OpenClaw skills system. Use it to guide Nexus fork development and ensure compatibility with upstream conventions.*

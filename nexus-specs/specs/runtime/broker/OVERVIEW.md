@@ -1,7 +1,7 @@
 # Agent Broker Overview
 
 **Status:** SPEC IN PROGRESS  
-**Last Updated:** 2026-02-02
+**Last Updated:** 2026-02-06
 
 ---
 
@@ -11,10 +11,53 @@ The Agent Broker is responsible for:
 1. **Routing** — Resolving where messages go (sessions, threads, personas)
 2. **Context Assembly** — Building the full context for agent execution
 3. **Queue Management** — Handling message delivery modes and ordering
-4. **Agent Execution** — Running agents and managing their lifecycle
+4. **Agent Execution** — Wrapping pi-coding-agent with Nexus context
 5. **Ledger Writes** — Persisting sessions/turns to the Agents Ledger
 
 The Broker is invoked by NEX during the `assembleContext` and `runAgent` pipeline stages. It does not handle inbound events directly — that's NEX's job.
+
+---
+
+## Critical: Broker Wraps pi-coding-agent
+
+**The Broker does NOT reinvent agent execution.** It wraps `@mariozechner/pi-coding-agent` just like OpenClaw does.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              BROKER                                          │
+│                                                                              │
+│   1. BEFORE EXECUTION (Broker's primary job)                                │
+│      • Resolve routing → session/thread                                     │
+│      • Assemble context (workspace, persona, history, Cortex)               │
+│      • Build system prompt                                                   │
+│      • Prepare tool set (with IAM-based filtering)                          │
+│                                                                              │
+│   2. DURING EXECUTION (Delegate to pi-coding-agent)                         │
+│      • Call runEmbeddedPiAgent() with assembled context                     │
+│      • Stream responses back to NEX                                          │
+│      • Handle tool calls (pi-coding-agent manages this)                      │
+│                                                                              │
+│   3. AFTER EXECUTION (Broker's persistence job)                             │
+│      • Write turn to Agents Ledger (not JSONL)                              │
+│      • Update session pointer                                                │
+│      • Trigger compaction if needed                                          │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**What pi-coding-agent provides:**
+- Core agent loop (user message → LLM → tool calls → response)
+- Tool execution framework
+- Session/transcript management (we replace storage layer)
+- Streaming subscriptions
+- Compaction logic (we adapt for our data model)
+
+**What Broker adds:**
+- NEX integration (receives NexusRequest, returns AgentResponse)
+- SQLite-based persistence (Agents Ledger instead of JSONL)
+- Cortex context injection (semantic memory layer)
+- IAM-based tool filtering
+- Manager-Worker orchestration
 
 ---
 
@@ -36,7 +79,7 @@ The Broker:
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              NEX PIPELINE                                    │
 │                                                                              │
-│   ... → resolveAccess → executeTriggers → ┌─────────────────────────────┐   │
+│   ... → resolveAccess → runAutomations → ┌─────────────────────────────┐   │
 │                                           │       BROKER DOMAIN          │   │
 │                                           │  ┌────────────────────────┐  │   │
 │                                           │  │ assembleContext        │  │   │
@@ -182,17 +225,17 @@ Turn A → Turn B → Turn X → Turn Y (session "main")
 
 ## Context Assembly
 
-The Broker assembles context before agent execution:
+The Broker assembles context before agent execution from five conceptual layers, mapped to three physical layers optimized for LLM prompt caching:
 
-### Layers
+| Conceptual Layer | Physical Layer | Caching |
+|------------------|---------------|---------|
+| **Workspace** — AGENTS.md, rules, static runtime | System Prompt (static) | Full cache |
+| **Persona** — SOUL.md, IDENTITY.md, permissions | System Prompt (static) | Full cache |
+| **Session** — History from thread ancestry | Conversation History (incremental) | Prefix cache |
+| **Cortex** — Relevant context from derived layer | Current Event (dynamic) | Never cached |
+| **Event** — Triggering event, hook injections, user message | Current Event (dynamic) | Never cached |
 
-1. **Workspace Layer** — AGENTS.md, identity files, workspace rules
-2. **Persona Layer** — Agent identity (SOUL.md, IDENTITY.md), permissions
-3. **Session Layer** — History from thread ancestry (via Agents Ledger)
-4. **Cortex Layer** — Relevant context from derived layer (episodes, facets)
-5. **Event Layer** — The triggering event and any hook-injected context
-
-**TODO:** Detailed context assembly spec (see `workspace/agent-bindings-research/`)
+**See:** `CONTEXT_ASSEMBLY.md` for the full specification.
 
 ---
 
@@ -215,19 +258,22 @@ A **turn** completes when the assistant finishes responding. It includes:
 - All agent thinking
 - The final response
 
-**Turn ID = final assistant message ID.**
+**Turn ID is a ULID** — independent, unique, and sortable.
 
 Tool calls are **part of** a turn, not separate turns.
 
 ### Ledger Writes
 
 The Broker writes directly to the **Agents Ledger** (not JSONL files):
-- `agent_sessions` — Session metadata
-- `agent_turns` — Turn records with parent relationships
-- `agent_messages` — Individual messages
-- `agent_tool_calls` — Tool invocations and results
+- `sessions` — Named session pointers
+- `turns` — Turn records with parent relationships
+- `messages` — Individual messages (query + response)
+- `tool_calls` — Tool invocations and results
+- `compactions` — Rich compaction metadata (separate from turns)
+- `threads` — Pre-computed ancestry for fast routing
+- `session_history` — Session pointer movement log
 
-**See:** `ledgers/AGENTS_LEDGER.md`
+**See:** `../../data/ledgers/AGENTS_LEDGER.md`
 
 ---
 
@@ -257,15 +303,11 @@ This is a fast path that bypasses the NEX pipeline — no event storage, no hook
 | Document | Description |
 |----------|-------------|
 | **OVERVIEW.md** | This file — broker overview |
-| **DATA_MODEL.md** | Core data model (Message, Turn, Thread, Session, Persona) |
-| **AGENTS.md** | Manager-Worker Pattern (MWP), agent orchestration |
-| **SESSION_LIFECYCLE.md** | Session/turn management, ledger writes, compaction, forking |
-| **CONTEXT_ASSEMBLY.md** | How context is built before agent execution |
-| **QUEUE_MANAGEMENT.md** | Queue modes, storage, steering, delivery |
-| **INTERFACES.md** | NEX ↔ Broker, Broker ↔ Cortex contracts |
-| **STREAMING.md** | Streaming bridge: agent → broker → NEX → out-adapter |
-| **SMART_ROUTING.md** | Cortex-powered routing to best context |
-| **upstream/** | Upstream openclaw reference documentation |
+| **DATA_MODEL.md** | Ontology — conceptual definitions (Message, Turn, Thread, Session, Persona) |
+| **AGENT_ENGINE.md** | pi-coding-agent wrapper interface (in/out contracts, ledger mapping) |
+| **CONTEXT_ASSEMBLY.md** | How context is built before agent execution (5 conceptual → 3 physical layers) |
+| **STREAMING.md** | Redirect → `../STREAMING.md` (consolidated cross-cutting streaming spec) |
+| **upstream/** | Upstream OpenClaw reference documentation |
 
 ---
 

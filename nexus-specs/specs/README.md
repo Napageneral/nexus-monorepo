@@ -49,7 +49,7 @@ NEX processes events through 8 sequential stages. Each stage is a verb describin
 │  │   3. resolveAccess      WHAT can they do? Evaluate ACL policies         │    │
 │  │        ↓                Populate: permissions, session (base)           │    │
 │  │                                                                          │    │
-│  │   4. executeTriggers    Match and execute hooks (parallel)              │    │
+│  │   4. runAutomations    Match and execute hooks (parallel)              │    │
 │  │        ↓                Populate: hooks context, may handle event       │    │
 │  │                                                                          │    │
 │  │   5. assembleContext    Gather history from Cortex                      │    │
@@ -73,7 +73,7 @@ NEX processes events through 8 sequential stages. Each stage is a verb describin
 Each stage supports hooks that run after completion:
 
 ```
-afterReceiveEvent → afterResolveIdentity → afterResolveAccess → afterExecuteTriggers
+afterReceiveEvent → afterResolveIdentity → afterResolveAccess → afterRunAutomations
 → afterAssembleContext → afterRunAgent → afterDeliverResponse → onFinalize
 ```
 
@@ -90,7 +90,7 @@ The 8 pipeline stages map to 6 core components:
 | `receiveEvent` | **In-Adapters** | eve, gog, discord, telegram, timers, webhooks |
 | `resolveIdentity` | **IAM** | Identity resolution from Identity Ledger |
 | `resolveAccess` | **IAM** | ACL policy evaluation, permissions, session routing |
-| `executeTriggers` | **Hooks Engine** | Match triggers, execute hooks |
+| `runAutomations` | **Hooks Engine** | Match triggers, execute hooks |
 | `assembleContext` | **Broker** | Gather history, Cortex context, agent config |
 | `runAgent` | **Broker** | Execute agent with assembled context |
 | `deliverResponse` | **Out-Adapters** | Format and deliver to platforms |
@@ -147,7 +147,7 @@ Every event creates a `NexusRequest` object that flows through the pipeline, acc
 | `receiveEvent` | `event`, `delivery` (channel, thread, etc.) |
 | `resolveIdentity` | `principal.identity` (who sent this) |
 | `resolveAccess` | `permissions`, `session` (routing) |
-| `executeTriggers` | `hooks` (which fired, extracted context) |
+| `runAutomations` | `hooks` (which fired, extracted context) |
 | `assembleContext` | `agent` (turn_id, thread_id, context) |
 | `runAgent` | `response` (content, tool calls, tokens) |
 | `deliverResponse` | `delivery_result` (message IDs, success) |

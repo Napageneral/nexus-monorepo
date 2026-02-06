@@ -8,9 +8,24 @@
 
 ## Overview
 
-Automations are user/agent-created scripts that evaluate events and decide whether to invoke an agent. They plug into the NEX pipeline after IAM resolves identity/permissions.
+Automations are the most important type of **hook** in the NEX pipeline. They are user/agent-created scripts that evaluate incoming events and decide whether to invoke an agent, enrich context, or take some other action. Automations are how NEX handles both **reactive** and **proactive** event processing.
 
-**Key insight:** Automations are a specific use of the NEX plugin system. They hook into `afterResolveAccess` to evaluate triggers before context assembly.
+**Key insight:** Hooks are the general extensibility mechanism for the NEX pipeline — scripts that run at various pipeline stages. Automations are a specific, first-class type of hook that runs at the `runAutomations` stage, handling event-driven agent invocation.
+
+### Hook → Automation Hierarchy
+
+```
+Pipeline Hooks (general mechanism — scripts at any pipeline stage)
+├── Stage hooks: afterReceiveEvent, afterResolveIdentity, etc.
+│   (for logging, metrics, custom routing, etc.)
+│
+└── Automations (run at runAutomations stage — the primary hook type)
+    ├── Event-triggered (reactive: incoming message matches criteria → invoke agent)
+    ├── Timer-triggered (proactive: clock adapter emits tick → check conditions → maybe act)
+    └── One-shot (fire once, self-disable after execution)
+```
+
+See `../../hooks/HOOK_SERVICE.md` for the general hook mechanism that automations build on.
 
 ---
 
@@ -18,9 +33,10 @@ Automations are user/agent-created scripts that evaluate events and decide wheth
 
 | Term | Definition |
 |------|------------|
+| **Hooks** | General extensibility mechanism — scripts that run at NEX pipeline stages |
+| **Automations** | Primary hook type — evaluate events at `runAutomations` and decide agent invocation |
 | **External Events** | Messages from platforms (iMessage, Discord, etc.) normalized and stored in Events Ledger |
-| **Automations** | User/agent-created scripts that evaluate events and invoke agents |
-| **Hooks** | Injection points in the NEX pipeline (automations use one specific hook) |
+| **Proactive Events** | Timer/clock adapter emits periodic events; automations evaluate and may trigger agents |
 | **Bus Events** | Internal real-time pub/sub for UI streaming, file watchers, etc. |
 
 ---

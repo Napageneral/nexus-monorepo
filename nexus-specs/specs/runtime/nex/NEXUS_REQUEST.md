@@ -1,498 +1,804 @@
-# NexusRequest Specification
+# NexusRequest Lifecycle
 
-**Status:** DESIGN IN PROGRESS  
-**Last Updated:** 2026-01-30
+**Status:** DESIGN SPEC  
+**Last Updated:** 2026-02-06
 
 ---
 
 ## Overview
 
-The `NexusRequest` is the core data object that flows through the entire Nexus pipeline. Each stage accumulates its context onto this object, creating a complete trace of everything that happened for a given event.
+The `NexusRequest` is the data bus that flows through the entire NEX pipeline. Each of the 8 stages reads from it and writes to it, building up a complete trace of everything that happened for a given event.
 
 **Inspired by:** Ad exchange bid request patterns — a single object that accumulates context as it flows through the system.
 
----
-
-## Design Goals
-
-1. **Debuggable** — Full trace of what happened at each pipeline stage
-2. **Auditable** — Complete record persisted to Nexus Ledger
-3. **Contextual** — Agent sees everything accumulated so far
-4. **Cacheable** — Enables static system prompts by passing context per-turn
+**Design Goals:**
+1. **Progressive** — Fields are added stage by stage, never removed
+2. **Debuggable** — Full trace of every pipeline stage with timing
+3. **Auditable** — Complete record persisted to Nexus Ledger
+4. **Typed** — Each stage's contribution is a distinct, well-typed section
 
 ---
 
-## Pipeline Flow
+## The 8 Stages
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                         NEXUS REQUEST PIPELINE                                │
-│                                                                               │
-│  ┌─────────────┐                                                              │
-│  │   ADAPTER   │  Creates NexusRequest from platform event                   │
-│  │             │  + event_id, timestamp, content                              │
-│  │             │  + delivery context (channel, thread, reply_to)              │
-│  └──────┬──────┘                                                              │
-│         │                                                                     │
-│         ▼                                                                     │
-│  ┌─────────────┐                                                              │
-│  │    ACL      │  Resolves identity and permissions                          │
-│  │             │  + principal (who sent this)                                 │
-│  │             │  + permissions (what they can do)                            │
-│  │             │  + session (where it routes)                                 │
-│  └──────┬──────┘                                                              │
-│         │                                                                     │
-│         ▼                                                                     │
-│  ┌─────────────┐                                                              │
-│  │   HOOKS     │  Evaluates hooks, may enrich context                        │
-│  │             │  + fired_hooks (which hooks matched)                         │
-│  │             │  + hook_context (extracted data)                             │
-│  │             │  + agent override (if hook specifies)                        │
-│  └──────┬──────┘                                                              │
-│         │                                                                     │
-│         ▼                                                                     │
-│  ┌─────────────┐                                                              │
-│  │   BROKER    │  Prepares agent execution                                   │
-│  │             │  + agent_id, persona                                         │
-│  │             │  + turn_id, thread_id                                        │
-│  │             │  + context assembly                                          │
-│  └──────┬──────┘                                                              │
-│         │                                                                     │
-│         ▼                                                                     │
-│  ┌─────────────┐                                                              │
-│  │   AGENT     │  Executes agent, captures response                          │
-│  │             │  + response content                                          │
-│  │             │  + tool_calls made                                           │
-│  │             │  + tokens used                                               │
-│  └──────┬──────┘                                                              │
-│         │                                                                     │
-│         ▼                                                                     │
-│  ┌─────────────┐                                                              │
-│  │  DELIVERY   │  Sends response to platform                                 │
-│  │             │  + delivery_result                                           │
-│  │             │  + message_ids                                               │
-│  │             │  + chunks sent                                               │
-│  └──────┬──────┘                                                              │
-│         │                                                                     │
-│         ▼                                                                     │
-│  ┌─────────────┐                                                              │
-│  │   LEDGER    │  Persists complete request                                  │
-│  │             │  Events Ledger: inbound + outbound events                   │
-│  │             │  Agents Ledger: turn/session data                           │
-│  │             │  Nexus Ledger: full NexusRequest trace                      │
-│  └─────────────┘                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
+NexusRequest created ─────────────────────────────────────────────────
+  │
+  │  Stage 1: receiveEvent
+  │  ├─ Writes: request_id, event, delivery
+  │  └─ Side effect: write to Events Ledger (async)
+  │
+  │  Stage 2: resolveIdentity
+  │  ├─ Reads: delivery.sender_id, delivery.channel
+  │  ├─ Writes: principal
+  │  └─ May exit: unknown sender → deny policy
+  │
+  │  Stage 3: resolveAccess
+  │  ├─ Reads: principal, delivery (channel, peer_kind)
+  │  ├─ Writes: access (decision, permissions, session routing)
+  │  └─ May exit: access denied
+  │
+  │  Stage 4: runAutomations
+  │  ├─ Reads: event, principal, access
+  │  ├─ Writes: triggers (which fired, context enrichment, overrides)
+  │  └─ May exit: automation handles event completely
+  │
+  │  Stage 5: assembleContext
+  │  ├─ Reads: event, delivery, principal, access, triggers
+  │  ├─ Writes: agent (turn_id, model, token budget, context metadata)
+  │  └─ Side effect: builds AssembledContext (NOT stored on NexusRequest)
+  │
+  │  Stage 6: runAgent
+  │  ├─ Reads: (uses AssembledContext from stage 5, not NexusRequest directly)
+  │  ├─ Writes: response (content, tool_calls, usage, stop_reason)
+  │  └─ Side effects: streams to adapter, writes to Agents Ledger
+  │
+  │  Stage 7: deliverResponse
+  │  ├─ Reads: response, delivery
+  │  ├─ Writes: delivery_result (message_ids, success)
+  │  └─ Note: may be no-op if streaming already delivered
+  │
+  │  Stage 8: finalize
+  │  ├─ Writes: pipeline (timing trace), status
+  │  └─ Side effects: write to Nexus Ledger, emit outbound event to Events Ledger
+  │
+NexusRequest complete ────────────────────────────────────────────────
 ```
 
 ---
 
-## Schema
-
-### NexusRequest
+## Full Schema
 
 ```typescript
 interface NexusRequest {
-  // ─────────────────────────────────────────────────────────────────────────
-  // IDENTITY
-  // ─────────────────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════
+  // IDENTITY (immutable after creation)
+  // ═══════════════════════════════════════════════════════════════════
   
-  request_id: string;            // UUID for this request
-  event_id: string;              // Original event ID (adapter:source_id)
-  timestamp: number;             // Unix ms when event arrived
+  request_id: string;                // ULID — unique, sortable
+  created_at: number;                // Unix ms — when NEX received the event
   
-  // ─────────────────────────────────────────────────────────────────────────
-  // EVENT CONTEXT (from Adapter)
-  // ─────────────────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════
+  // STAGE 1: receiveEvent
+  // ═══════════════════════════════════════════════════════════════════
   
-  event: {
-    content: string;             // Message content
-    content_type: string;        // "text", "image", "audio", etc.
-    direction: 'received' | 'sent';
-    metadata?: Record<string, any>;
-  };
+  event: EventContext;
+  delivery: DeliveryContext;
   
-  // ─────────────────────────────────────────────────────────────────────────
-  // DELIVERY CONTEXT (from Adapter)
-  // ─────────────────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════
+  // STAGE 2: resolveIdentity
+  // ═══════════════════════════════════════════════════════════════════
   
-  delivery: {
-    channel: string;             // "discord", "telegram", "imessage", etc.
-    account_id?: string;         // Which bot account received this
-    thread_id?: string;          // Thread/topic ID
-    reply_to_id?: string;        // Message ID to reply to
-    peer_id: string;             // Who/where this came from
-    peer_kind: 'dm' | 'group' | 'channel';
-    
-    // Channel capabilities (for agent context)
-    capabilities: ChannelCapabilities;
-  };
+  principal?: PrincipalContext;       // null until stage 2 runs
   
-  // ─────────────────────────────────────────────────────────────────────────
-  // IDENTITY CONTEXT (from ACL)
-  // ─────────────────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════
+  // STAGE 3: resolveAccess
+  // ═══════════════════════════════════════════════════════════════════
   
-  principal: {
-    type: 'owner' | 'known' | 'unknown' | 'system' | 'webhook' | 'agent';
-    entity_id?: string;          // From entities table
-    name?: string;               // "Mom", "Casey", etc.
-    relationship?: string;       // "family", "partner", "work"
-  };
+  access?: AccessContext;             // null until stage 3 runs
   
-  permissions: {
-    tools: string[];             // Allowed tools
-    credentials: string[];       // Allowed credentials
-    data_access: 'none' | 'minimal' | 'contextual' | 'full';
-    personas: string[];          // Allowed personas
-    rate_limit?: number;
-  };
+  // ═══════════════════════════════════════════════════════════════════
+  // STAGE 4: runAutomations
+  // ═══════════════════════════════════════════════════════════════════
   
-  session: {
-    session_key: string;         // e.g., "atlas:dm:casey"
-    persona: string;             // Which persona handles this
-    thread_id?: string;          // If continuing a thread
-  };
+  triggers?: TriggerContext;          // null until stage 4 runs
   
-  // ─────────────────────────────────────────────────────────────────────────
-  // HOOK CONTEXT (from Hooks)
-  // ─────────────────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════
+  // STAGE 5: assembleContext
+  // ═══════════════════════════════════════════════════════════════════
   
-  hooks: {
-    evaluated: string[];         // All hooks that were evaluated
-    fired: string[];             // Hooks that returned fire: true
-    context?: Record<string, any>;  // Extracted data from hooks
-    agent_override?: string;     // If hook specified a different agent
-  };
+  agent?: AgentContext;               // null until stage 5 runs
   
-  // ─────────────────────────────────────────────────────────────────────────
-  // AGENT CONTEXT (from Broker)
-  // ─────────────────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════
+  // STAGE 6: runAgent
+  // ═══════════════════════════════════════════════════════════════════
   
-  agent: {
-    agent_id: string;
-    persona: string;
-    turn_id: string;
-    thread_id: string;
-    model: string;
-    
-    // What the agent received
-    system_prompt_hash?: string;  // For cache debugging
-    context_tokens?: number;
-  };
+  response?: ResponseContext;         // null until stage 6 completes
   
-  // ─────────────────────────────────────────────────────────────────────────
-  // RESPONSE (from Agent)
-  // ─────────────────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════
+  // STAGE 7: deliverResponse
+  // ═══════════════════════════════════════════════════════════════════
   
-  response?: {
-    content: string;
-    tool_calls: ToolCallRecord[];
-    tokens_in: number;
-    tokens_out: number;
-    latency_ms: number;
-    model: string;
-  };
+  delivery_result?: DeliveryResult;   // null until stage 7 runs
   
-  // ─────────────────────────────────────────────────────────────────────────
-  // DELIVERY RESULT (from Out-Adapter)
-  // ─────────────────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════
+  // STAGE 8: finalize
+  // ═══════════════════════════════════════════════════════════════════
   
-  delivery_result?: {
-    success: boolean;
-    message_ids: string[];       // Platform message IDs
-    chunks_sent: number;
-    error?: string;
-  };
+  pipeline: PipelineTrace[];          // Grows with each stage
+  status: RequestStatus;              // Final outcome
+}
+
+type RequestStatus =
+  | 'processing'                      // Pipeline in progress
+  | 'completed'                       // Normal completion
+  | 'denied'                          // ACL denied (exits at stage 2 or 3)
+  | 'handled_by_automation'           // Automation handled completely (exits at stage 4)
+  | 'failed';                         // Error at any stage
+```
+
+---
+
+## Stage 1: receiveEvent
+
+**Who:** Adapter Manager (receives JSONL from adapter process)  
+**What:** Creates NexusRequest from raw adapter event, writes to Events Ledger.
+
+### Writes
+
+```typescript
+interface EventContext {
+  // From adapter's JSONL output
+  event_id: string;                  // "{channel}:{source_id}" — globally unique
+  timestamp: number;                 // When the event occurred (Unix ms)
   
-  // ─────────────────────────────────────────────────────────────────────────
-  // PIPELINE TRACE (for debugging)
-  // ─────────────────────────────────────────────────────────────────────────
+  // Content
+  content: string;
+  content_type: 'text' | 'image' | 'audio' | 'video' | 'file';
+  attachments?: Attachment[];
   
-  pipeline: PipelineStep[];
+  // Platform metadata (adapter-specific, opaque to pipeline)
+  metadata?: Record<string, unknown>;
+}
+
+interface DeliveryContext {
+  // Where this came from and where the reply goes
+  channel: string;                   // "discord", "imessage", "gmail", etc.
+  account_id: string;                // Which adapter account received this
+  
+  // Sender
+  sender_id: string;                 // Platform-specific sender identifier
+  sender_name?: string;              // Display name if available
+  
+  // Conversation context
+  peer_id: string;                   // Chat/channel/user ID (reply target)
+  peer_kind: 'dm' | 'group' | 'channel';
+  thread_id?: string;                // Platform thread if applicable
+  reply_to_id?: string;              // Message being replied to
+  
+  // Channel capabilities (from adapter info, cached by Adapter Manager)
+  capabilities: ChannelCapabilities;
+  
+  // Available outbound channels (all active adapters — for agent context)
+  available_channels: AvailableChannel[];
+}
+
+interface AvailableChannel {
+  channel: string;
+  accounts: string[];
+  capabilities: ChannelCapabilities;
 }
 ```
 
-### Supporting Types
+### Side Effect
+
+```
+Events Ledger ← INSERT event (async, fire-and-forget)
+  - Idempotent via UNIQUE(source, source_id)
+  - Does not block the pipeline
+```
+
+### Pipeline Trace Entry
 
 ```typescript
-interface ChannelCapabilities {
-  text_limit: number;            // Discord: 2000, Telegram: 4096
-  caption_limit?: number;        // Telegram: 1024
-  supports_markdown: boolean;
-  supports_embeds: boolean;
-  supports_threads: boolean;
-  supports_reactions: boolean;
-  supports_polls: boolean;
-  supports_buttons: boolean;
-  supports_ptt: boolean;         // Push-to-talk audio
+{ stage: 'receiveEvent', timestamp: number, duration_ms: number }
+```
+
+---
+
+## Stage 2: resolveIdentity
+
+**Who:** IAM  
+**What:** Resolves WHO sent this event. Queries Identity Graph.
+
+### Reads
+
+- `delivery.channel` + `delivery.sender_id` — used to look up identity
+- `delivery.peer_kind` — context for system principals (timers, webhooks)
+
+### Writes
+
+```typescript
+interface PrincipalContext {
+  // Classification
+  type: 'owner' | 'known' | 'unknown' | 'system' | 'webhook' | 'agent';
+  
+  // Identity (from Identity Graph — may be null for unknown)
+  entity_id?: string;                // entities table primary key
+  name?: string;                     // "Mom", "Casey", "Tyler"
+  relationship?: string;             // "family", "partner", "work", "friend"
+  
+  // All known identities for this entity (for cross-channel awareness)
+  identities?: { channel: string; identifier: string }[];
+  
+  // For system/webhook principals
+  source?: string;                   // "timer", "stripe", "github"
+}
+```
+
+### May Exit
+
+If the sender is unknown and the default policy is deny, the pipeline exits here:
+
+```typescript
+if (principal.type === 'unknown' && defaultPolicy === 'deny') {
+  request.status = 'denied';
+  request.pipeline.push({ stage: 'resolveIdentity', ..., exit_reason: 'unknown_sender_denied' });
+  goto finalize;
+}
+```
+
+---
+
+## Stage 3: resolveAccess
+
+**Who:** IAM  
+**What:** Evaluates ACL policies to determine WHAT the sender can do and WHERE it routes.
+
+### Reads
+
+- `principal` — who is this?
+- `delivery.channel`, `delivery.peer_kind`, `delivery.account_id` — context conditions for policy matching
+
+### Writes
+
+```typescript
+interface AccessContext {
+  // The decision
+  decision: 'allow' | 'deny';
+  matched_policy?: string;           // Which policy matched (for audit)
+  
+  // Permissions (union of all matching allow policies)
+  permissions: {
+    tools: {
+      allow: string[];               // Whitelisted tools
+      deny: string[];                // Blacklisted tools (wins over allow)
+    };
+    credentials: string[];           // Allowed credential services
+    data_access: 'none' | 'minimal' | 'contextual' | 'full';
+  };
+  
+  // Session routing (from highest-priority matching policy)
+  routing: {
+    persona: string;                 // Which agent persona handles this
+    session_label: string;           // Session key for routing
+    queue_mode?: QueueMode;          // How to handle busy sessions
+  };
+  
+  // Rate limiting
+  rate_limited?: boolean;
+  rate_limit_remaining?: number;
 }
 
-interface ToolCallRecord {
+type QueueMode = 'steer' | 'followup' | 'collect' | 'steer-backlog' | 'queue' | 'interrupt';
+```
+
+### May Exit
+
+If access is denied:
+
+```typescript
+if (access.decision === 'deny') {
+  request.status = 'denied';
+  goto finalize;
+}
+```
+
+### Audit Side Effect
+
+```
+IAM Audit Log ← INSERT decision record
+  - principal, policy matched, decision, timestamp
+```
+
+---
+
+## Stage 4: runAutomations
+
+**Who:** Hook Engine (automations are the primary hook type here)  
+**What:** Evaluates registered automations against the event. May enrich context, override routing, or handle the event entirely.
+
+### Reads
+
+- `event` — content matching
+- `principal` — who-based triggers
+- `access.permissions` — what the sender can do (passed to automation context)
+- `access.routing.session_label` — current routing target
+
+### Writes
+
+```typescript
+interface TriggerContext {
+  // What was evaluated
+  automations_evaluated: string[];   // All automation IDs checked
+  automations_fired: string[];       // Automations that returned fire: true
+  
+  // Pipeline hooks (non-automation)
+  hooks_evaluated?: string[];        // Other pipeline hooks that ran
+  
+  // Context enrichment (merged into agent context)
+  enrichment?: Record<string, unknown>;
+  
+  // Routing overrides (automation can redirect)
+  routing_override?: {
+    persona?: string;                // Override persona
+    session_label?: string;          // Override session
+    agent?: string;                  // Override which agent
+  };
+  
+  // Complete handling (event fully handled by automation, skip agent)
+  handled?: boolean;
+  handled_by?: string;               // Automation ID that handled it
+  
+  // Automation-specific data (for debugging)
+  automation_results?: {
+    id: string;
+    fire: boolean;
+    duration_ms: number;
+    error?: string;
+  }[];
+}
+```
+
+### May Exit
+
+If an automation handles the event completely:
+
+```typescript
+if (triggers.handled) {
+  request.status = 'handled_by_automation';
+  // Automation may have sent a response directly or triggered a different agent
+  goto finalize;
+}
+```
+
+### Routing Merge
+
+If automations provide routing overrides, they're merged with ACL routing:
+
+```typescript
+const effectiveRouting = {
+  persona: triggers.routing_override?.persona ?? access.routing.persona,
+  session_label: triggers.routing_override?.session_label ?? access.routing.session_label,
+  queue_mode: access.routing.queue_mode ?? 'followup',
+};
+```
+
+---
+
+## Stage 5: assembleContext
+
+**Who:** Broker  
+**What:** Reads from NexusRequest to build the `AssembledContext` that the agent engine needs. This is the critical NexusRequest → AssembledContext mapping.
+
+### Reads (everything so far)
+
+| NexusRequest field | Used for |
+|---|---|
+| `event.content`, `event.attachments` | Current message (Layer 3: Event) |
+| `event.metadata` | Event-specific context injection |
+| `delivery.channel`, `delivery.capabilities` | Channel context for MA (Layer 3: Event) |
+| `delivery.available_channels` | Available channels for message tool (Layer 3: Event) |
+| `principal.name`, `principal.relationship` | Sender context for MA (Layer 3: Event) |
+| `access.permissions` | IAM-filtered tool set |
+| `access.routing.persona` | Which persona → which SOUL.md, IDENTITY.md (Layer 1: System Prompt) |
+| `access.routing.session_label` | Which session → which thread → conversation history (Layer 2: History) |
+| `triggers.enrichment` | Automation-enriched context (Layer 3: Event) |
+| `triggers.routing_override` | Overridden persona/session if applicable |
+
+### Produces (internal, NOT on NexusRequest)
+
+The Broker produces an `AssembledContext` object that goes to the agent engine. This is an **internal** object — it does NOT live on the NexusRequest. See `broker/AGENT_ENGINE.md` for the full type.
+
+```
+NexusRequest ──► Broker.assembleContext() ──► AssembledContext
+                                                  │
+                                                  ├── systemPrompt (Workspace + Persona layers)
+                                                  ├── history[] (Session layer from Agents Ledger)
+                                                  ├── currentMessage (Event + Cortex layers)
+                                                  ├── tools (IAM-filtered from access.permissions)
+                                                  ├── model, provider, modelConfig
+                                                  ├── tokenBudget
+                                                  └── metadata (session, turn, role — for ledger writes)
+```
+
+### Writes (metadata for trace)
+
+```typescript
+interface AgentContext {
+  // Agent identity
+  agent_id: string;                  // e.g., "atlas"
+  persona_id: string;                // e.g., "atlas"
+  role: 'manager' | 'worker' | 'unified';
+  
+  // Session/turn routing (resolved from access.routing + triggers.routing_override)
+  session_label: string;
+  parent_turn_id: string;            // Turn we're appending to
+  turn_id: string;                   // New turn ID (ULID, generated here)
+  
+  // Model
+  model: string;                     // e.g., "claude-sonnet-4-20250514"
+  provider: string;                  // e.g., "anthropic"
+  
+  // Token budget snapshot (what was the context budget at assembly time?)
+  token_budget: {
+    model_limit: number;             // Model's context window
+    system_prompt_tokens: number;    // Layer 1 estimate
+    history_tokens: number;          // Layer 2 from ledger
+    event_tokens: number;            // Layer 3 estimate
+    total_used: number;
+    remaining: number;
+  };
+  
+  // Context assembly metadata
+  system_prompt_hash: string;        // For cache hit debugging
+  history_turns_count: number;       // How many turns in history
+  compaction_applied: boolean;       // Was compaction needed?
+  
+  // Tools
+  toolset_name: string;              // Named toolset applied
+  tools_available: string[];         // After IAM filtering
+  permissions_snapshot: string[];    // Permissions at execution time
+}
+```
+
+### Side Effect: Proactive Compaction
+
+If the token budget doesn't fit, the Broker triggers compaction BEFORE sending to the agent:
+
+```
+Check budget → doesn't fit → triggerCompaction() → rebuild history → proceed
+```
+
+---
+
+## Stage 6: runAgent
+
+**Who:** Broker (delegates to Agent Engine / pi-coding-agent)  
+**What:** Executes the agent with the AssembledContext. Streams tokens to NEX. Writes to Agents Ledger after completion.
+
+### Reads
+
+- Uses `AssembledContext` (internal, from stage 5), not NexusRequest directly
+- The agent engine has no knowledge of NexusRequest
+
+### Writes
+
+```typescript
+interface ResponseContext {
+  // Content
+  content: string;                   // Final assistant message text
+  
+  // Tool calls
+  tool_calls: ToolCallSummary[];
+  
+  // Token usage
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    cached_input_tokens: number;
+    cache_write_tokens: number;
+    reasoning_tokens: number;
+    total_tokens: number;
+  };
+  
+  // Execution metadata
+  stop_reason: 'end_turn' | 'max_tokens' | 'timeout' | 'aborted' | 'error';
+  duration_ms: number;
+  
+  // Error (if failed)
+  error?: {
+    kind: string;                    // 'context_overflow', 'auth_failure', etc.
+    message: string;
+    retryable: boolean;
+  };
+  
+  // Compaction (if triggered during execution — reactive fallback)
+  compaction?: {
+    triggered: boolean;
+    turns_summarized: number;
+    tokens_saved: number;
+    trigger: 'context_limit' | 'overflow_recovery';
+  };
+  
+  // Subagent spawns
+  subagents_spawned?: {
+    session_label: string;
+    role: string;
+  }[];
+}
+
+interface ToolCallSummary {
   tool_call_id: string;
   tool_name: string;
-  params: Record<string, any>;
-  result?: any;
+  status: 'completed' | 'failed';
+  duration_ms: number;
+  spawned_session?: string;          // If tool spawned a subagent
+}
+```
+
+### Side Effects
+
+**Streaming:** During execution, the Broker emits `StreamEvent` objects to NEX via `BrokerStreamHandle`. NEX routes them to the adapter (or block pipeline). See `../STREAMING.md`.
+
+**Agents Ledger write:** After execution completes, the Broker writes the full `AgentResult` to the Agents Ledger in a single transaction:
+
+```
+Agents Ledger ← INSERT turn, messages, tool_calls, thread, session pointer update
+  - If compaction: also INSERT compactions record
+  - All in one transaction
+```
+
+---
+
+## Stage 7: deliverResponse
+
+**Who:** NEX + Adapter Manager  
+**What:** Ensures the response reached the user. May be a no-op if streaming already delivered.
+
+### Reads
+
+- `response.content` — what to deliver (if not already streamed)
+- `delivery.channel`, `delivery.account_id`, `delivery.peer_id` — where to deliver
+
+### Writes
+
+```typescript
+interface DeliveryResult {
+  success: boolean;
+  message_ids: string[];             // Platform message IDs
+  chunks_sent: number;               // How many blocks/messages
+  streamed: boolean;                 // Was this delivered via streaming?
   error?: string;
-  latency_ms: number;
 }
+```
 
-interface PipelineStep {
-  stage: 'adapter' | 'acl' | 'hooks' | 'broker' | 'agent' | 'delivery' | 'ledger';
-  timestamp: number;
-  latency_ms: number;
-  data?: Record<string, any>;    // Stage-specific debug data
-  error?: string;
-}
+### Delivery Paths
+
+```
+Was response streamed during stage 6?
+  │
+  YES → delivery_result = { success: true, streamed: true, message_ids: [from stream status] }
+  │
+  NO → NEX calls adapter send command
+       delivery_result = { success: ..., streamed: false, message_ids: [...] }
 ```
 
 ---
 
-## How Each Stage Uses NexusRequest
+## Stage 8: finalize
 
-### 1. Adapter (Creates)
+**Who:** NEX  
+**What:** Writes the complete pipeline trace, emits outbound event, sets final status.
 
-```typescript
-// In-adapter creates the initial request
-const request: NexusRequest = {
-  request_id: uuid(),
-  event_id: `${adapter}:${source_id}`,
-  timestamp: Date.now(),
-  
-  event: {
-    content: rawMessage.text,
-    content_type: 'text',
-    direction: 'received',
-  },
-  
-  delivery: {
-    channel: 'discord',
-    account_id: 'bot123',
-    thread_id: rawMessage.thread_id,
-    reply_to_id: rawMessage.id,
-    peer_id: rawMessage.channel_id,
-    peer_kind: rawMessage.is_dm ? 'dm' : 'group',
-    capabilities: DISCORD_CAPABILITIES,
-  },
-  
-  pipeline: [{
-    stage: 'adapter',
-    timestamp: Date.now(),
-    latency_ms: 0,
-  }],
-};
-```
-
-### 2. ACL (Adds identity)
+### Writes
 
 ```typescript
-// ACL resolves identity and adds to request
-request.principal = {
-  type: 'known',
-  entity_id: 'person_123',
-  name: 'Mom',
-  relationship: 'family',
-};
-
-request.permissions = evaluatePermissions(request.principal);
-request.session = resolveSession(request);
-
-request.pipeline.push({
-  stage: 'acl',
-  timestamp: Date.now(),
-  latency_ms: elapsed,
-});
-```
-
-### 3. Hooks (Adds hook context)
-
-```typescript
-// Hooks evaluate and add context
-request.hooks = {
-  evaluated: ['mom-2fa-helper', 'heartbeat', 'safety-check'],
-  fired: ['mom-2fa-helper'],
-  context: {
-    service: 'Amazon',
-    is_2fa: true,
-  },
-};
-
-request.pipeline.push({
-  stage: 'hooks',
-  timestamp: Date.now(),
-  latency_ms: elapsed,
-});
-```
-
-### 4. Broker (Adds agent context)
-
-```typescript
-// Broker prepares agent execution
-request.agent = {
-  agent_id: 'atlas',
-  persona: 'atlas',
-  turn_id: uuid(),
-  thread_id: resolveThread(request.session),
-  model: 'claude-sonnet-4',
-};
-
-request.pipeline.push({
-  stage: 'broker',
-  timestamp: Date.now(),
-  latency_ms: elapsed,
-});
-```
-
-### 5. Agent (Adds response)
-
-```typescript
-// Agent executes, broker captures response
-request.response = {
-  content: "Here's the Amazon 2FA code: 123456",
-  tool_calls: [],
-  tokens_in: 1500,
-  tokens_out: 50,
-  latency_ms: 2300,
-  model: 'claude-sonnet-4',
-};
-
-request.pipeline.push({
-  stage: 'agent',
-  timestamp: Date.now(),
-  latency_ms: elapsed,
-});
-```
-
-### 6. Delivery (Adds result)
-
-```typescript
-// Out-adapter delivers and records result
-request.delivery_result = {
-  success: true,
-  message_ids: ['discord:msg_789'],
-  chunks_sent: 1,
-};
-
-request.pipeline.push({
-  stage: 'delivery',
-  timestamp: Date.now(),
-  latency_ms: elapsed,
-});
-```
-
-### 7. Ledger (Persists)
-
-```typescript
-// Complete request persisted
-await nexusLedger.insert(request);
-await eventsLedger.insert(request.event);
-await agentsLedger.insertTurn(request.agent, request.response);
-
-request.pipeline.push({
-  stage: 'ledger',
-  timestamp: Date.now(),
-  latency_ms: elapsed,
-});
-```
-
----
-
-## Agent Context
-
-The agent receives a subset of NexusRequest in its turn context:
-
-```typescript
-// What the agent sees
-{
-  // The message
-  content: request.event.content,
-  
-  // Who sent it
-  sender: {
-    name: request.principal.name,
-    relationship: request.principal.relationship,
-  },
-  
-  // Where to respond
-  channel: request.delivery.channel,
-  capabilities: request.delivery.capabilities,
-  
-  // Their permissions
-  permissions: request.permissions,
-  
-  // Any hook-extracted context
-  context: request.hooks.context,
+interface PipelineTrace {
+  stage: string;                     // Stage name
+  started_at: number;                // Unix ms
+  duration_ms: number;               // How long this stage took
+  exit_reason?: string;              // If pipeline exited at this stage
+  error?: string;                    // If this stage errored
 }
 ```
 
-**Key:** This is passed per-turn, NOT in the system prompt. System prompt stays static and cacheable.
-
----
-
-## Tool Hooks for On-Demand Guidance
-
-When the agent calls the `message` tool, a `before_tool_call` hook can inject formatting guidance:
+### Final Status
 
 ```typescript
-// Tool hook for message tool
-async function beforeMessageTool(
-  event: ToolCallEvent,
-  request: NexusRequest,
-): Promise<ToolCallResult> {
-  const channel = request.delivery.channel;
-  const capabilities = request.delivery.capabilities;
-  
-  // Load channel-specific formatting skill
-  const formatGuide = await loadSkill(`channel-format-${channel}`);
-  
-  // Inject guidance into the tool call context
-  return {
-    params: {
-      ...event.params,
-      _formatting_guidance: formatGuide.summary,
-      _capabilities: capabilities,
-    },
-  };
-}
+// Determined by what happened during the pipeline
+if (stage2_denied || stage3_denied) → 'denied'
+if (stage4_handled)                 → 'handled_by_automation'
+if (any_stage_errored)              → 'failed'
+else                                → 'completed'
 ```
 
-This provides formatting guidance **on-demand** without bloating the system prompt.
+### Side Effects
+
+**Nexus Ledger:** The complete NexusRequest (all stages populated) is written as a trace record:
+
+```
+Nexus Ledger ← INSERT nex_traces (request_id, event_id, status, request_json, timing)
+```
+
+**Events Ledger (outbound):** If a response was generated and delivered, the outbound message is written as an event too (closes the loop):
+
+```
+Events Ledger ← INSERT outbound event
+  - source: 'nexus'
+  - direction: 'outbound'
+  - Links back to request_id
+```
 
 ---
 
-## Persistence
+## NexusRequest → AssembledContext Mapping
 
-### Events Ledger
-- Inbound event (the message received)
-- Outbound event (the response sent)
+This is the critical interface between NEX (pipeline) and Broker (agent execution).
 
-### Agents Ledger
-- Turn record (request + response as a turn)
-- Session state
+```
+┌──────────────────────────────────┐         ┌──────────────────────────────────┐
+│         NexusRequest              │         │        AssembledContext           │
+│                                   │         │                                  │
+│  event.content ──────────────────────────►  currentMessage.content            │
+│  event.attachments ──────────────────────►  currentMessage.attachments        │
+│  delivery.channel ───────────────────────►  currentMessage (channel context)  │
+│  delivery.capabilities ──────────────────►  currentMessage (channel context)  │
+│  principal.name/relationship ────────────►  currentMessage (sender context)   │
+│  triggers.enrichment ────────────────────►  currentMessage (enriched context) │
+│                                   │         │                                  │
+│  access.routing.persona ─────────────────►  systemPrompt (persona lookup)     │
+│  access.routing.session_label ───────────►  history (session → thread → turns)│
+│                                   │         │                                  │
+│  access.permissions.tools ───────────────►  tools (IAM-filtered)              │
+│  access.permissions.credentials ─────────►  (credential access during exec)   │
+│                                   │         │                                  │
+│  (from config/defaults) ─────────────────►  model, provider, modelConfig      │
+│  (computed) ─────────────────────────────►  tokenBudget                       │
+│  (generated) ────────────────────────────►  turn_id, run_id                   │
+│                                   │         │                                  │
+│  request_id ─────────────────────────────►  sourceEventId (metadata)          │
+│  access.routing.* ───────────────────────►  sessionLabel, role (metadata)     │
+└──────────────────────────────────┘         └──────────────────────────────────┘
+```
 
-### Nexus Ledger (NEW)
-- Complete `NexusRequest` with full pipeline trace
-- For debugging, audit, analytics
+**What the Broker adds that isn't on NexusRequest:**
+- System prompt (assembled from workspace files + persona files)
+- Conversation history (read from Agents Ledger)
+- Nexus environment snapshot (from CLI internals)
+- Token budget calculation
+- Parent turn resolution (from session pointer lookup)
+
+---
+
+## AgentResult → NexusRequest Mapping
+
+After agent execution, the Broker maps the `AgentResult` back onto the NexusRequest:
+
+```
+┌──────────────────────────────────┐         ┌──────────────────────────────────┐
+│          AgentResult              │         │   NexusRequest.response          │
+│                                   │         │                                  │
+│  messages (final assistant) ─────────────►  content                           │
+│  toolCalls ──────────────────────────────►  tool_calls (summarized)           │
+│  usage ──────────────────────────────────►  usage                             │
+│  stopReason ─────────────────────────────►  stop_reason                       │
+│  durationMs ─────────────────────────────►  duration_ms                       │
+│  error ──────────────────────────────────►  error                             │
+│  compaction ─────────────────────────────►  compaction                        │
+└──────────────────────────────────┘         └──────────────────────────────────┘
+```
+
+**Note:** The full `AgentResult` goes to the Agents Ledger (all messages, full tool call details). The NexusRequest.response is a **summary** for the pipeline trace, not the complete record.
+
+---
+
+## Early Exit Paths
+
+```
+Stage 2 exit (unknown sender denied):
+  principal: populated
+  access: null
+  triggers: null
+  agent: null
+  response: null
+  status: 'denied'
+
+Stage 3 exit (ACL denied):
+  principal: populated
+  access: { decision: 'deny', ... }
+  triggers: null
+  agent: null
+  response: null
+  status: 'denied'
+
+Stage 4 exit (automation handled):
+  principal: populated
+  access: populated
+  triggers: { handled: true, handled_by: '...' }
+  agent: null (or populated if automation invoked a different agent)
+  response: null (or populated if automation generated a response)
+  status: 'handled_by_automation'
+```
+
+---
+
+## Persistence Summary
+
+| When | Where | What |
+|------|-------|------|
+| Stage 1 (async) | Events Ledger | Inbound event |
+| Stage 3 | IAM Audit | ACL decision record |
+| Stage 6 (after exec) | Agents Ledger | Turn, messages, tool calls, thread, session pointer |
+| Stage 8 | Nexus Ledger | Complete NexusRequest trace |
+| Stage 8 | Events Ledger | Outbound event (response as event, closes the loop) |
+
+---
+
+## Nexus Ledger Schema
+
+The Nexus Ledger stores the complete NexusRequest for every pipeline execution:
+
+```sql
+CREATE TABLE nex_traces (
+    request_id TEXT PRIMARY KEY,
+    event_id TEXT NOT NULL,
+    
+    -- Outcome
+    status TEXT NOT NULL,                -- 'completed', 'denied', 'handled_by_automation', 'failed'
+    
+    -- Timing
+    created_at INTEGER NOT NULL,         -- Unix ms
+    completed_at INTEGER,                -- Unix ms
+    total_duration_ms INTEGER,
+    
+    -- The complete request (JSON)
+    request_json TEXT NOT NULL,          -- Full NexusRequest serialized
+    
+    -- Denormalized for fast queries
+    channel TEXT,                        -- delivery.channel
+    sender_entity_id TEXT,              -- principal.entity_id
+    agent_id TEXT,                      -- agent.agent_id
+    session_label TEXT,                 -- agent.session_label
+    turn_id TEXT,                       -- agent.turn_id
+    
+    -- Error (if failed)
+    error_stage TEXT,                   -- Which stage failed
+    error_message TEXT
+);
+
+CREATE INDEX idx_nex_traces_event ON nex_traces(event_id);
+CREATE INDEX idx_nex_traces_status ON nex_traces(status);
+CREATE INDEX idx_nex_traces_channel ON nex_traces(channel);
+CREATE INDEX idx_nex_traces_agent ON nex_traces(agent_id, session_label);
+CREATE INDEX idx_nex_traces_created ON nex_traces(created_at);
+```
 
 ---
 
 ## Open Questions
 
-1. **How much of NexusRequest does the agent see?**
-   - Full object? Curated subset? Depends on permissions?
+1. **Retention policy for nex_traces?** Full request JSON is large. Options: keep N days, keep last N per session, keep only non-completed (errors + denials).
 
-2. **Should response be mutable during delivery?**
-   - Chunking modifies content — does that update the request?
+2. **Response mutability during delivery?** If the adapter chunks the content, does that update `delivery_result.chunks_sent` or also `response.content`? (Proposal: content stays as-is, chunks_sent reflects what happened.)
 
-3. **How do we handle multiple responses?**
-   - Agent sends multiple messages — multiple delivery_results?
+3. **Multiple responses per request?** If the agent sends multiple messages (e.g., text + image), how is that captured? (Proposal: `response.content` is the primary response. Multiple delivery results captured as array.)
 
-4. **Retention policy for Nexus Ledger?**
-   - Full trace is large — how long do we keep?
+4. **Webhook/timer events that skip most stages?** Timer ticks may not need identity resolution. Should there be a fast path? (Proposal: system principals get pre-resolved identity, skip stage 2.)
 
 ---
 
-## Related Specs
+## Related Documents
 
-- `../adapters/` — Creates initial NexusRequest
-- `../iam/` — Adds identity context
-- `../broker/` — Assembles context and executes agents
-- `automations/` — Automation system that evaluates triggers
+- `NEX.md` — Pipeline architecture and stage definitions
+- `INTERFACES.md` — Component interface contracts (being aligned to this spec)
+- `../broker/AGENT_ENGINE.md` — AssembledContext and AgentResult types
+- `../broker/CONTEXT_ASSEMBLY.md` — How AssembledContext is built from NexusRequest
+- `../STREAMING.md` — StreamEvent protocol during stage 6
+- `../../data/ledgers/NEXUS_LEDGER.md` — Nexus Ledger schema (trace storage)
+- `../iam/ACCESS_CONTROL_SYSTEM.md` — ACL policies evaluated at stage 3
+- `../nex/automations/AUTOMATION_SYSTEM.md` — Automations evaluated at stage 4
+
+---
+
+*This document defines the NexusRequest lifecycle — the central data bus that ties the entire NEX pipeline together. Each stage's contribution is typed and traced.*

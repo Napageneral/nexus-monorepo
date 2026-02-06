@@ -184,8 +184,31 @@ interface Attachment {
 
 ---
 
+## Outbound Events (Closing the Loop)
+
+When NEX delivers a response, the outbound message is also written to this ledger as an event:
+
+```typescript
+// Outbound event fields
+{
+  source: 'nexus',                   // Self-generated
+  direction: 'outbound',
+  metadata: {
+    request_id: string,              // NexusRequest that produced this
+    turn_id: string,                 // Agents Ledger turn
+    persona: string,                 // Which persona responded
+    in_reply_to?: string,            // Original inbound event_id
+  }
+}
+```
+
+This enables "what did the agent say?" queries and complete audit trails.
+
+---
+
 ## Related Documents
 
 - `README.md` — System of Record overview
-- `../nex/INTERFACES.md` — NormalizedEvent interface contract
-- `../adapters/` — Adapter specifications per platform
+- `../../runtime/adapters/ADAPTER_INTERFACES.md` — NexusEvent schema (inbound)
+- `../../runtime/nex/NEXUS_REQUEST.md` — Pipeline lifecycle (stage 1 writes inbound, stage 8 writes outbound)
+- `../../runtime/adapters/` — Adapter specifications per platform

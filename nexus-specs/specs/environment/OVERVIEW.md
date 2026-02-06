@@ -154,14 +154,9 @@ Credential Status → Skill Status → Capability Status
 
 ## Status Legend
 
-| Emoji | Status | Meaning |
-|-------|--------|---------|
-| ✅ | `active` | Configured AND has been used |
-| ⭐ | `ready` | Configured but never used — try it! |
-| 🔧 | `needs-setup` | Installed but needs credentials/config |
-| 📥 | `needs-install` | Tool needs to be installed |
-| ⛔ | `unavailable` | Not available on this platform |
-| ❌ | `broken` | Was working, now failing |
+Skills have status indicating readiness. See `interface/cli/COMMANDS.md` for the full legend.
+
+Quick reference: ✅ active · ⭐ ready · 🔧 needs-setup · 📥 needs-install · ⛔ unavailable · ❌ broken
 
 ---
 

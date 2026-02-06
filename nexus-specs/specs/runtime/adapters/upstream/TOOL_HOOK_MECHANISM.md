@@ -1,357 +1,317 @@
 # Tool Hook Mechanism (Upstream)
 
 **Status:** Investigation Complete  
-**Last Updated:** 2026-01-30
+**Last Updated:** 2026-02-04  
+**Upstream Version:** v2026.2.3
 
 ---
 
 ## Summary
 
-**The `before_tool_call` hook exists but is NOT INVOKED anywhere in OpenClaw.**
+**UPDATE (v2026.2.2): `before_tool_call` is NOW INVOKED.**
 
-The infrastructure exists (types, runner, merging logic), but there is no call site that runs it before tool execution.
+OpenClaw now wraps all tools with the `before_tool_call` hook. This is a significant change from v2026.1.x where the hook infrastructure existed but was never called.
+
+Additionally, a new `tool_result_persist` hook has been added that allows modifying tool results before they're persisted to the session transcript.
+
+The `after_tool_call` hook is still defined but NOT invoked anywhere.
 
 ---
 
-## What Exists
+## What's Now Working
 
-### Hook Types
+### before_tool_call Hook - INVOKED ✅
+
+All tools are now wrapped with the before_tool_call hook via `pi-tools.ts`:
 
 ```typescript
-// src/plugins/types.ts
-
-export type PluginHookBeforeToolCallEvent = {
-  toolName: string;
-  params: Record<string, unknown>;
-};
-
-export type PluginHookBeforeToolCallResult = {
-  params?: Record<string, unknown>;  // Modify params
-  block?: boolean;                   // Block execution
-  blockReason?: string;              // Reason for blocking
-};
-
-export type PluginHookAfterToolCallEvent = {
-  toolName: string;
-  params: Record<string, unknown>;
-  result?: unknown;
-  error?: string;
-  durationMs?: number;
-};
+// src/agents/pi-tools.ts (lines 433-437)
+const withHooks = normalized.map((tool) =>
+  wrapToolWithBeforeToolCallHook(tool, {
+    agentId,
+    sessionKey: options?.sessionKey,
+  }),
+);
 ```
 
-### Hook Runner
+The hook wrapper is implemented in `pi-tools.before-tool-call.ts`:
 
 ```typescript
-// src/plugins/hooks.ts
+// src/agents/pi-tools.before-tool-call.ts (lines 19-65)
+export async function runBeforeToolCallHook(args: {
+  toolName: string;
+  params: unknown;
+  toolCallId?: string;
+  ctx?: HookContext;
+}): Promise<HookOutcome> {
+  const hookRunner = getGlobalHookRunner();
+  if (!hookRunner?.hasHooks("before_tool_call")) {
+    return { blocked: false, params: args.params };
+  }
 
-async function runBeforeToolCall(
-  event: PluginHookBeforeToolCallEvent,
-  ctx: PluginHookToolContext,
-): Promise<PluginHookBeforeToolCallResult | undefined> {
-  return runModifyingHook<"before_tool_call", PluginHookBeforeToolCallResult>(
-    "before_tool_call",
-    event,
-    ctx,
-    (acc, next) => ({
-      params: next.params ?? acc?.params,
-      block: next.block ?? acc?.block,
-      blockReason: next.blockReason ?? acc?.blockReason,
-    }),
-  );
+  const toolName = normalizeToolName(args.toolName || "tool");
+  const params = args.params;
+  try {
+    const normalizedParams = isPlainObject(params) ? params : {};
+    const hookResult = await hookRunner.runBeforeToolCall(
+      { toolName, params: normalizedParams },
+      { toolName, agentId: args.ctx?.agentId, sessionKey: args.ctx?.sessionKey },
+    );
+
+    if (hookResult?.block) {
+      return {
+        blocked: true,
+        reason: hookResult.blockReason || "Tool call blocked by plugin hook",
+      };
+    }
+
+    if (hookResult?.params && isPlainObject(hookResult.params)) {
+      if (isPlainObject(params)) {
+        return { blocked: false, params: { ...params, ...hookResult.params } };
+      }
+      return { blocked: false, params: hookResult.params };
+    }
+  } catch (err) {
+    log.warn(`before_tool_call hook failed: tool=${toolName} error=${String(err)}`);
+  }
+
+  return { blocked: false, params };
 }
 ```
 
-### Merging Behavior
+### Hook Capabilities
 
-- Hooks run sequentially (priority order)
-- Later hooks override earlier ones
-- Can modify `params`, set `block: true`, or provide `blockReason`
+The `before_tool_call` hook can now:
+- **Modify params**: Return `{ params: {...} }` to merge/override tool parameters
+- **Block execution**: Return `{ block: true, blockReason: "..." }` to prevent the tool from running
+- **No-op**: Return `undefined` or empty object to allow normal execution
 
 ---
 
-## What's Missing
+## New Hook: tool_result_persist ✅
 
-### No Invocation
+A new hook type allows modifying tool results before they're written to the session transcript.
 
-`runBeforeToolCall` is never called. Tool execution happens inside `pi-coding-agent`, which OpenClaw observes but does not intercept.
+### Types
 
 ```typescript
-// Tools are passed to createAgentSession
-({ session } = await createAgentSession({
-  // ...
-  tools: builtInTools,
-  customTools: allCustomTools,
-  // ...
-}));
+// src/plugins/types.ts (lines 405-427)
+export type PluginHookToolResultPersistContext = {
+  agentId?: string;
+  sessionKey?: string;
+  toolName?: string;
+  toolCallId?: string;
+};
+
+export type PluginHookToolResultPersistEvent = {
+  toolName?: string;
+  toolCallId?: string;
+  message: AgentMessage;
+  isSynthetic?: boolean;  // True when synthesized by guard/repair
+};
+
+export type PluginHookToolResultPersistResult = {
+  message?: AgentMessage;
+};
 ```
 
-OpenClaw receives `tool_execution_start` events AFTER execution begins.
+### Invocation
+
+```typescript
+// src/agents/session-tool-result-guard-wrapper.ts (lines 27-46)
+const transform = hookRunner?.hasHooks("tool_result_persist")
+  ? (message: any, meta: { toolCallId?: string; toolName?: string; isSynthetic?: boolean }) => {
+      const out = hookRunner.runToolResultPersist(
+        {
+          toolName: meta.toolName,
+          toolCallId: meta.toolCallId,
+          message,
+          isSynthetic: meta.isSynthetic,
+        },
+        {
+          agentId: opts?.agentId,
+          sessionKey: opts?.sessionKey,
+          toolName: meta.toolName,
+          toolCallId: meta.toolCallId,
+        },
+      );
+      return out?.message ?? message;
+    }
+  : undefined;
+```
+
+### Use Cases
+
+- Strip sensitive data from tool results before persistence
+- Compress large tool outputs
+- Add metadata to tool results
+- Filter out non-essential fields
+
+**Note:** This hook is synchronous (runs in hot path).
+
+---
+
+## What's Still Missing
+
+### after_tool_call - NOT INVOKED ❌
+
+The `after_tool_call` hook is defined in `hooks.ts` (lines 304-313) but is never called anywhere in the codebase.
+
+```typescript
+// src/plugins/hooks.ts (lines 308-313)
+async function runAfterToolCall(
+  event: PluginHookAfterToolCallEvent,
+  ctx: PluginHookToolContext,
+): Promise<void> {
+  return runVoidHook("after_tool_call", event, ctx);
+}
+```
+
+To fully implement after_tool_call, the tool wrapper would need to be extended:
+
+```typescript
+// Theoretical extension to pi-tools.before-tool-call.ts
+execute: async (toolCallId, params, signal, onUpdate) => {
+  const startTime = Date.now();
+  const outcome = await runBeforeToolCallHook({ toolName, params, toolCallId, ctx });
+  
+  if (outcome.blocked) {
+    throw new Error(outcome.reason);
+  }
+  
+  let result: unknown;
+  let error: string | undefined;
+  try {
+    result = await execute(toolCallId, outcome.params, signal, onUpdate);
+  } catch (err) {
+    error = String(err);
+    throw err;
+  } finally {
+    // NEW: Call after hook
+    await runAfterToolCall({
+      toolName,
+      params: outcome.params,
+      result,
+      error,
+      durationMs: Date.now() - startTime,
+    }, ctx);
+  }
+  
+  return result;
+}
+```
 
 ### No Guidance Injection
 
-The hook result can only:
+The hook result still cannot inject guidance text that the agent sees. The only options are:
 - Modify `params`
 - Block execution (`block: true`)
 - Provide `blockReason`
 
-There is NO field for injecting guidance text that the agent sees.
+---
+
+## Hook Types Summary
+
+| Hook | Status | Location | Purpose |
+|------|--------|----------|---------|
+| `before_tool_call` | ✅ INVOKED | `pi-tools.ts:433` | Block or modify tool params |
+| `after_tool_call` | ❌ NOT INVOKED | `hooks.ts:308` | Observe tool completion (unused) |
+| `tool_result_persist` | ✅ INVOKED | `session-tool-result-guard-wrapper.ts:30` | Modify results before persistence |
+| `before_agent_start` | ✅ INVOKED | `attempt.ts:716` | Inject context via `prependContext` |
 
 ---
 
-## What We Need for Nexus
+## Nexus Integration Strategy
 
-### 1. Invoke the Hook
+### Option 1: Use before_tool_call (Now Available)
 
-Wrap tools before passing to `createAgentSession`:
-
-```typescript
-function wrapToolWithHooks(tool: AnyAgentTool): AnyAgentTool {
-  return {
-    ...tool,
-    execute: async (toolCallId, params, signal, onUpdate) => {
-      // Call before hook
-      const hookResult = await runBeforeToolCall({
-        toolName: tool.name,
-        params,
-      });
-      
-      if (hookResult?.block) {
-        return { error: hookResult.blockReason || 'Blocked by hook' };
-      }
-      
-      const modifiedParams = hookResult?.params ?? params;
-      
-      // Execute tool
-      const result = await tool.execute(toolCallId, modifiedParams, signal, onUpdate);
-      
-      // Call after hook
-      await runAfterToolCall({
-        toolName: tool.name,
-        params: modifiedParams,
-        result,
-      });
-      
-      return result;
-    },
-  };
-}
-```
-
-### 2. Extend Hook Result for Guidance
+Register a `before_tool_call` hook to intercept tool calls:
 
 ```typescript
-export type PluginHookBeforeToolCallResult = {
-  params?: Record<string, unknown>;
-  block?: boolean;
-  blockReason?: string;
-  
-  // NEW: Guidance to show to agent
-  guidance?: string;
-  
-  // NEW: Should we pause and ask agent to reconsider?
-  requestReconsideration?: boolean;
-};
+api.on("before_tool_call", async (event, ctx) => {
+  if (event.toolName === "message") {
+    const channel = ctx.sessionKey?.split(":")[1];
+    // Could block or modify params based on channel
+    if (!isValidChannel(channel)) {
+      return { block: true, blockReason: "Invalid channel" };
+    }
+  }
+  return {};
+}, { priority: 100 });
 ```
 
-### 3. Inject Guidance into Context
+**Limitation:** Cannot inject guidance text to agent.
 
-When `guidance` is returned, inject it into the agent's context:
+### Option 2: Use tool_result_persist (New)
+
+Transform tool results to inject guidance for follow-up:
 
 ```typescript
-if (hookResult?.guidance) {
-  // Append guidance to the conversation
-  await appendToConversation({
-    role: 'system',
-    content: hookResult.guidance,
-  });
-}
+api.on("tool_result_persist", (event, ctx) => {
+  if (event.toolName === "message") {
+    // Add formatting reminder to result
+    const result = JSON.parse(event.message.content);
+    result.reminder = "Remember: Use bullet lists, not tables on this channel.";
+    return {
+      message: { ...event.message, content: JSON.stringify(result) },
+    };
+  }
+});
 ```
 
----
+**Limitation:** Guidance appears after tool execution, not before.
 
-## Alternative Approaches
+### Option 3: Use before_agent_start (Recommended)
 
-### Option A: Tool Description Injection
-
-Instead of hook-based guidance, dynamically build tool descriptions:
+Still the most effective approach for channel-specific guidance:
 
 ```typescript
-const messageTool = {
-  name: 'message',
-  description: buildMessageToolDescription(channel, capabilities),
-  // Description includes formatting guidance
-};
+api.on("before_agent_start", async (event, ctx) => {
+  const channel = ctx.messageProvider;
+  if (channel) {
+    const guide = loadFormattingGuide(channel);
+    return { prependContext: guide };
+  }
+  return {};
+});
 ```
 
-**Pros:** Simpler, no hook changes needed  
-**Cons:** Still in system prompt, affects caching
-
-### Option B: Skill Loading in Tool
-
-The tool itself loads a skill when executed:
-
-```typescript
-async function messageToolExecute(params) {
-  const channel = params.channel || currentChannel;
-  const skill = await loadSkill(`channel-format-${channel}`);
-  
-  // Return skill guidance as part of tool result
-  return {
-    result: await sendMessage(params),
-    guidance: skill.summary,
-  };
-}
-```
-
-**Pros:** On-demand, no hook changes  
-**Cons:** Guidance shown after, not before
-
-### Option C: Pre-Turn Context Injection
-
-Use the existing `before_agent_start` hook which CAN inject `prependContext`:
-
-```typescript
-// This hook exists and works
-async function beforeAgentStart(event, ctx) {
-  const channel = extractChannel(event);
-  const guide = await loadFormattingGuide(channel);
-  
-  return {
-    prependContext: guide.summary,
-  };
-}
-```
-
-**Pros:** Works with existing infrastructure  
+**Pros:** Works with existing infrastructure, guidance appears at turn start  
 **Cons:** Happens at turn start, not tool call
 
 ---
 
-## Nexus Decision
+## Related Files (Upstream v2026.2.3)
 
-**Approach: Turn-start context injection**
-
-Based on the channel in the inbound event, inject formatting guidance at turn start. This is simpler than tool hooks and uses existing patterns.
-
-```typescript
-// In NexusRequest pipeline, before agent execution
-if (request.delivery.channel) {
-  const guide = loadFormattingGuide(request.delivery.channel);
-  request.agent.prepend_context = guide;
-}
-```
-
-The `NexusRequest.delivery.capabilities` tells the agent what's supported, and the prepended context provides detailed formatting rules.
-
-**Why not tool hooks:**
-- `before_tool_call` exists but is NOT invoked in upstream
-- Would require wrapping all tools and extending types
-- Turn-start injection is simpler and sufficient
+| File | Lines | Content |
+|------|-------|---------|
+| `src/plugins/types.ts` | 384-394 | `PluginHookBeforeToolCallEvent`, `PluginHookBeforeToolCallResult` |
+| `src/plugins/types.ts` | 378-382 | `PluginHookToolContext` |
+| `src/plugins/types.ts` | 405-427 | `tool_result_persist` types (NEW) |
+| `src/plugins/hooks.ts` | 288-302 | `runBeforeToolCall()` runner |
+| `src/plugins/hooks.ts` | 308-313 | `runAfterToolCall()` (not invoked) |
+| `src/plugins/hooks.ts` | 325-372 | `runToolResultPersist()` (NEW, sync) |
+| `src/agents/pi-tools.before-tool-call.ts` | 19-65 | Hook invocation wrapper (NEW) |
+| `src/agents/pi-tools.before-tool-call.ts` | 67-91 | `wrapToolWithBeforeToolCallHook` (NEW) |
+| `src/agents/pi-tools.ts` | 433-437 | Tool wrapping with hooks |
+| `src/agents/pi-tool-definition-adapter.ts` | 141-146 | Client tool hook invocation |
+| `src/agents/session-tool-result-guard-wrapper.ts` | 27-46 | `tool_result_persist` invocation (NEW) |
+| `src/agents/pi-embedded-runner/run/attempt.ts` | 714-737 | `before_agent_start` invocation |
 
 ---
 
-## Upstream Reference (Not Using)
+## Changelog
 
-For reference, here's what would be needed to implement tool hooks:
+### 2026-02-04 (v2026.2.3)
+- Verified: no tool hook changes in v2026.2.3
+- `after_tool_call` remains defined but NOT invoked
+- All other findings from v2026.2.2 remain accurate
 
-1. **Extend types in `types.ts`:**
-   ```typescript
-   export type PluginHookBeforeToolCallResult = {
-     params?: Record<string, unknown>;
-     block?: boolean;
-     blockReason?: string;
-     guidance?: string;  // NEW: Inject guidance to agent
-   };
-   
-   export type PluginHookToolContext = {
-     agentId?: string;
-     sessionKey?: string;
-     toolName: string;
-     channel?: string;   // NEW: Channel context
-   };
-   ```
+### 2026-02-04 (v2026.2.2)
+- **MAJOR:** `before_tool_call` hook is now invoked for all tools
+- **NEW:** `tool_result_persist` hook for modifying results before persistence
+- Updated line numbers and file references
+- Added new integration strategies
 
-2. **Update merge function in `hooks.ts`:**
-   ```typescript
-   (acc, next) => ({
-     params: next.params ?? acc?.params,
-     block: next.block ?? acc?.block,
-     blockReason: next.blockReason ?? acc?.blockReason,
-     guidance: next.guidance ?? acc?.guidance,  // NEW
-   }),
-   ```
-
-3. **Create tool wrapper in `attempt.ts`:**
-   ```typescript
-   function wrapToolWithHooks(tool: AnyAgentTool, ctx: HookContext): AnyAgentTool {
-     return {
-       ...tool,
-       execute: async (toolCallId, params, signal, onUpdate) => {
-         // Call before hook
-         const hookResult = await runBeforeToolCall({
-           toolName: tool.name,
-           params,
-         }, {
-           ...ctx,
-           toolName: tool.name,
-         });
-         
-         if (hookResult?.block) {
-           return { error: hookResult.blockReason || 'Blocked by hook' };
-         }
-         
-         // TODO: Apply guidance somehow
-         // Option: Inject into system message
-         // Option: Return as part of tool result
-         
-         const modifiedParams = hookResult?.params ?? params;
-         return tool.execute(toolCallId, modifiedParams, signal, onUpdate);
-       },
-     };
-   }
-   ```
-
-4. **Wrap tools before `createAgentSession`** (around line 448 in `attempt.ts`)
-
----
-
-## Channel Info Location
-
-Channel info is available before agent runs:
-
-1. **In `runEmbeddedAttempt` params** (line 141 in `attempt.ts`):
-   - `params.messageChannel`
-   - `params.messageProvider`
-
-2. **Normalized** (line 240):
-   ```typescript
-   const runtimeChannel = normalizeMessageChannel(
-     params.messageChannel ?? params.messageProvider
-   );
-   ```
-
-3. **In `before_agent_start` hook context** (line 699):
-   ```typescript
-   messageProvider: params.messageProvider ?? undefined,
-   ```
-
-This means we can:
-- Check channel in `before_agent_start` and inject guidance via `prependContext`
-- Pass channel to `before_tool_call` if we extend `PluginHookToolContext`
-
----
-
-## Related Files (Upstream)
-
-| File | Line | Content |
-|------|------|---------|
-| `src/plugins/types.ts` | 386-396 | `PluginHookBeforeToolCallEvent`, `PluginHookBeforeToolCallResult` |
-| `src/plugins/types.ts` | 380-384 | `PluginHookToolContext` |
-| `src/plugins/types.ts` | 319-322 | `PluginHookBeforeAgentStartResult` with `prependContext` |
-| `src/plugins/hooks.ts` | 284-298 | `runBeforeToolCall()` (defined but not called) |
-| `src/plugins/hooks.ts` | 179-195 | `before_agent_start` merging |
-| `src/agents/pi-embedded-runner/run/attempt.ts` | 141 | `messageChannel`/`messageProvider` params |
-| `src/agents/pi-embedded-runner/run/attempt.ts` | 240 | Channel normalization |
-| `src/agents/pi-embedded-runner/run/attempt.ts` | 448 | Where tools passed to `createAgentSession` |
-| `src/agents/pi-embedded-runner/run/attempt.ts` | 688-711 | `before_agent_start` invocation |
+### 2026-01-30 (v2026.1.x)
+- Initial investigation: `before_tool_call` existed but was not invoked

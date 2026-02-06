@@ -111,12 +111,15 @@ eve monitor --account default --format jsonl
 
 ## Outbound Adapter Interface
 
-Delivers messages to a platform with appropriate formatting.
+Delivers messages to a platform with appropriate formatting. Supports two delivery modes: direct `send` for complete messages, and `stream` for real-time token delivery.
 
 ```typescript
 interface OutboundAdapter {
   // Identity
   channel: string;
+  
+  // Declared capabilities
+  supports: AdapterCapability[];     // Includes 'stream' if streaming supported
   
   // Capabilities (for agent context)
   capabilities: ChannelCapabilities;
@@ -125,9 +128,12 @@ interface OutboundAdapter {
   formatText(content: string): string;
   chunkText(content: string): string[];
   
-  // Delivery
+  // Delivery (complete messages)
   sendText(target: DeliveryTarget, text: string): Promise<DeliveryResult>;
   sendMedia(target: DeliveryTarget, media: MediaPayload): Promise<DeliveryResult>;
+  
+  // Streaming delivery (real-time tokens) — only if supports includes 'stream'
+  // Managed as a long-running process by NEX. See ADAPTER_SYSTEM.md for protocol.
   
   // Platform-specific actions (optional)
   react?(target: MessageTarget, emoji: string): Promise<void>;
@@ -141,16 +147,24 @@ What the channel supports:
 
 ```typescript
 interface ChannelCapabilities {
+  // Text limits
   text_limit: number;            // Max chars per message
   caption_limit?: number;        // Max chars for media caption
+  
+  // Formatting
   supports_markdown: boolean;
   markdown_flavor?: 'standard' | 'discord' | 'telegram_html' | 'slack';
+  
+  // Features
   supports_embeds: boolean;
   supports_threads: boolean;
   supports_reactions: boolean;
   supports_polls: boolean;
   supports_buttons: boolean;
   supports_ptt: boolean;         // Push-to-talk audio
+  
+  // Streaming (informational — actual support declared via 'stream' in adapter supports)
+  supports_streaming_edit: boolean;   // Can pseudo-stream by editing messages
 }
 ```
 
@@ -190,6 +204,31 @@ eve send --chat-id "+1234567890" --text "Hello from Nexus"
 # With chunking handled by eve
 eve send --chat-id "+1234567890" --text "$(cat long_message.txt)" --chunk
 ```
+
+### Streaming Types
+
+Types for the bidirectional `stream` protocol (JSONL on stdin/stdout):
+
+```typescript
+// NEX → Adapter (stdin)
+type StreamEvent =
+  | { type: 'stream_start'; runId: string; sessionLabel: string; target: DeliveryTarget }
+  | { type: 'token'; text: string }
+  | { type: 'tool_status'; toolName: string; toolCallId: string; status: 'started' | 'completed' | 'failed'; summary?: string }
+  | { type: 'reasoning'; text: string }
+  | { type: 'stream_end'; runId: string; final?: boolean }
+  | { type: 'stream_error'; error: string; partial: boolean };
+
+// Adapter → NEX (stdout)
+type AdapterStreamStatus =
+  | { type: 'message_created'; messageId: string }
+  | { type: 'message_updated'; messageId: string; chars: number }
+  | { type: 'message_sent'; messageId: string; final: boolean }
+  | { type: 'delivery_complete'; messageIds: string[] }
+  | { type: 'delivery_error'; error: string };
+```
+
+See `broker/STREAMING.md` for the full streaming architecture and `ADAPTER_SYSTEM.md` for the `stream` command protocol.
 
 ---
 
