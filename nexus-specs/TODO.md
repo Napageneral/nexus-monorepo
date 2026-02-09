@@ -1,6 +1,6 @@
 # Spec TODOs
 
-Tracking areas that need deep dives after the spec hierarchy is cleaned up.
+Tracking remaining spec work and implementation priorities.
 
 ---
 
@@ -20,313 +20,127 @@ Captured during full spec cohesion review:
 | **NexusRequest lifecycle** | Full 8-stage lifecycle, typed schema per stage, NexusRequest↔AssembledContext mappings, Nexus Ledger schema. |
 | **Sandbox not V1** | Agent execution isolation deferred to later phase. |
 | **Adapter System is canonical** | `ADAPTER_SYSTEM.md` is the source of truth for adapter operations. Other adapter docs align with it. |
+| **Session keys from ACL** | Entity-based for known senders, channel-based for unknown. ACL policies determine format. |
+| **Session aliases** | Promote channel-based → entity-based sessions via aliases. Don't merge turn trees. Cortex bridges history. |
+| **Eager session creation** | Sessions created at `assembleContext` (stage 5). Needed for queue lock before execution. |
+| **Interrupt for user→MA** | Default queue mode. New user message cancels current generation. |
+| **Compaction wraps pi-agent** | Trust upstream algorithm. We add proactive budget check + rich metadata capture. |
+| **nex/INTERFACES.md retired** | Useful bits distributed to IDENTITY_GRAPH, cortex/README, EVENTS_LEDGER. |
+| **NEX Daemon spec** | `nex/DAEMON.md` — process lifecycle, signals, health, CLI, crash recovery. |
 
 ---
 
-## Sprint Progress (2026-02-06)
+## Spec Completion Summary
 
-| # | TODO | Location | Status |
-|---|------|----------|--------|
-| 1 | ~~**Context Assembly**~~ | `broker/CONTEXT_ASSEMBLY.md` | ✅ Done |
-| 2 | ~~**Streaming**~~ | `runtime/STREAMING.md` (consolidated) | ✅ Done |
-| 3 | **Broker Interfaces** | `broker/INTERFACES.md` | ⏳ Pending |
-| 4 | ~~**Adapter Interfaces**~~ | `adapters/ADAPTER_INTERFACES.md` | ✅ Done |
-| 5 | ~~**Adapter State + Lifecycle**~~ | `adapters/ADAPTER_SYSTEM.md` | ✅ Done |
-| 6 | ~~**Agent Engine**~~ | `broker/AGENT_ENGINE.md` | ✅ Done |
-| 7 | ~~**Data Model Ontology**~~ | `broker/DATA_MODEL.md` | ✅ Done |
-| 8 | ~~**Spec Cohesion Review**~~ | All non-upstream docs | ✅ Done |
+### Core Architecture — DONE
 
----
+All high-priority specs are complete. The Nexus architecture is fully specced and ready for implementation.
 
-## Broker Domain
-
-| TODO | Location | Priority | Notes |
-|------|----------|----------|-------|
-| ~~**Interfaces**~~ | `broker/INTERFACES.md` | ~~High~~ | ✅ Largely covered — NexusRequest→AssembledContext mapping in `nex/NEXUS_REQUEST.md`. AgentResult→Ledger in `broker/AGENT_ENGINE.md`. Cortex query interface still TBD. |
-| ~~**Context Assembly**~~ | `broker/CONTEXT_ASSEMBLY.md` | ~~High~~ | ✅ Done — 5 conceptual → 3 physical layers, token budget, overflow |
-| ~~**Streaming**~~ | `runtime/STREAMING.md` | ~~Medium~~ | ✅ Done — Consolidated cross-cutting spec |
-| ~~**Agent Engine**~~ | `broker/AGENT_ENGINE.md` | ~~High~~ | ✅ Done — pi-coding-agent wrapper, AssembledContext → AgentResult |
-| **Session Lifecycle** | `broker/SESSION_LIFECYCLE.md` | High | Compaction triggers, forking rules, session creation/deletion. Referenced by many docs but doesn't exist. Port from upstream patterns. |
-| **Queue Management** | `broker/QUEUE_MANAGEMENT.md` | Medium | Port 6 queue modes from upstream. Think about relation to agent ledger session management. |
-| **Smart Routing** | `broker/SMART_ROUTING.md` | Low | Cortex-powered routing (v2 feature) |
-| **Gateway Bot Bindings** | `environment/foundation/WORKSPACE_SYSTEM.md` | Medium | How gateway agent gets context (not harness-based) |
-
-### Interfaces
-
-Define exact contracts — this is the key remaining broker gap:
-- NexusRequest → AssembledContext mapping (how does Broker extract what it needs?)
-- AgentResult → NexusRequest.response mapping (how do results decorate back?)
-- Broker → Cortex query interface (stub for now, needed for context injection)
-
-### Smart Routing
-
-v2 feature, lower priority:
-- Cortex integration for semantic routing
-- Confidence thresholds
-- A/B testing explicit vs smart routing
+| Area | Key Specs | Status |
+|------|-----------|--------|
+| **NEX Pipeline** | `nex/NEX.md`, `nex/NEXUS_REQUEST.md`, `nex/DAEMON.md` | ✅ |
+| **Plugins & Hooks** | `nex/PLUGINS.md`, `hooks/HOOK_SERVICE.md` | ✅ |
+| **Automations** | `nex/automations/AUTOMATION_SYSTEM.md` | ✅ |
+| **Event Bus** | `nex/BUS_ARCHITECTURE.md` | ✅ |
+| **Adapter System** | `adapters/ADAPTER_SYSTEM.md`, `ADAPTER_INTERFACES.md`, `ADAPTER_SDK.md` | ✅ |
+| **Channel Reviews** | `channels/*/UPSTREAM_REVIEW.md` (9 channels) | ✅ |
+| **Go Adapter SDK** | `nexus-adapter-sdk-go/` (built, compiles) | ✅ |
+| **Context Assembly** | `broker/CONTEXT_ASSEMBLY.md` | ✅ |
+| **Agent Engine** | `broker/AGENT_ENGINE.md` | ✅ |
+| **Session Lifecycle** | `broker/SESSION_LIFECYCLE.md` | ✅ |
+| **Streaming** | `runtime/STREAMING.md` (consolidated) | ✅ |
+| **Data Model** | `broker/DATA_MODEL.md` (ontology), `AGENTS_LEDGER.md` (impl) | ✅ |
+| **Ledgers** | `AGENTS_LEDGER.md`, `EVENTS_LEDGER.md`, `NEXUS_LEDGER.md`, `IDENTITY_GRAPH.md` | ✅ |
+| **IAM** | `iam/ACCESS_CONTROL_SYSTEM.md`, `POLICIES.md`, `GRANTS.md` | ✅ |
+| **Language Decision** | `project-structure/LANGUAGE_DECISION.md` | ✅ |
 
 ---
 
-## NEX Domain
+## Implementation Phase
 
-| TODO | Location | Priority | Notes |
-|------|----------|----------|-------|
-| **NEX Daemon Spec** | `nex/DAEMON.md` | High | Process lifecycle, adapter supervision, health endpoint, signals |
-| ~~**NexusRequest Lifecycle**~~ | `nex/NEXUS_REQUEST.md` | ~~High~~ | ✅ Done — 8-stage lifecycle, full schema, NexusRequest→AssembledContext mapping, persistence, Nexus Ledger schema |
-| **Interface Alignment** | `nex/INTERFACES.md` | High | OutAdapterSend must reflect external CLI adapter model. BrokerDispatch must show NexusRequest → AssembledContext mapping. |
-| **Config Hot-Reload** | `nex/CONFIG_RELOAD.md` | Medium | SIGUSR1 signal to daemon, selective reload |
-| **Unified Config Spec** | `environment/CONFIG.md` | Medium | Resolve config.json vs config.yaml inconsistency across docs |
-| **Model Catalog** | `broker/MODEL_CATALOG.md` | Medium | Provider/model registry, capability detection |
-| **Automation Skill** | `environment/capabilities/skills/guides/automations/` | Medium | Create skill guide for writing automations |
-| **LedgerClient Interface** | `nex/automations/` | Medium | Define the LedgerClient API for automation scripts |
-| **CortexClient Interface** | `nex/automations/` | Medium | Define the CortexClient API for semantic search |
-| ~~**RPC Interface**~~ | ~~`nex/RPC.md`~~ | ~~High~~ | ❌ Dropped for V1 — `nexus` CLI commands + signals sufficient. Minimal admin endpoint in daemon spec if needed. |
+### Active
 
-### NEX Daemon
+| Task | Location | Notes |
+|------|----------|-------|
+| **Eve Adapter** | `channels/imessage/EVE_ADAPTER_PLAN.md` | 🔄 First adapter — spec complete, implementing now |
 
-The NEX daemon is the core runtime process. It IS NEX — the persistent process that:
-- Spawns and supervises adapter monitor/stream processes
-- Receives JSONL events from adapters and feeds them into the pipeline
-- Manages health checks, restart backoff, adapter lifecycle
-- Runs the timer/cron adapter for heartbeats and scheduled events
+### Port Priorities
 
-Needs spec for:
-- Process startup sequence (which adapters, what order)
-- Signal handling (SIGTERM for shutdown, SIGUSR1 for reload)
-- Health endpoint (for doctor system)
-- Graceful shutdown (drain active runs, stop adapters)
-- `nexus daemon start/stop/status` CLI commands
+Pull latest OpenClaw upstream and begin porting, spec by spec:
 
-### NexusRequest Lifecycle
-
-The data bus lifecycle is the central integration point for the entire pipeline:
-
-```
-1. receiveEvent   → NexusRequest created (event, delivery)
-2. resolveIdentity → principal.identity populated
-3. resolveAccess   → permissions, session routing populated
-4. runAutomations → hooks/automations context populated
-5. assembleContext → Broker extracts from NexusRequest → builds AssembledContext
-6. runAgent        → AgentResult decorated back onto NexusRequest.response
-7. deliverResponse → delivery_result populated
-8. finalize        → pipeline trace populated → full NexusRequest written to Nexus Ledger
-```
-
-This lifecycle spec must define:
-- Exact NexusRequest schema at each stage
-- How Broker maps NexusRequest fields to AssembledContext
-- How AgentResult maps back to NexusRequest.response
-- When/how the trace gets persisted to Nexus Ledger
-
-### Config Hot-Reload
-
-Watch for config changes and apply:
-- File watcher on `config.yaml`
-- Diff detection
-- Selective reload (some changes require restart)
-- Broadcast to connected clients
-
-### Interface Alignment
-
-Three interfaces need updates to reference NexusRequest:
-- Interface 5 (BrokerDispatch): Should be `NexusRequest` flow
-- Interface 6 (AgentInvoke): Should pull from `NexusRequest.agent`
-- Interface 9 (OutAdapterSend): Should use `NexusRequest.delivery`
-
-### Automation Skill
-
-Create a skill in `skills/guides/automations/SKILL.md` that:
-- Explains how to write automations
-- References `runtime/nex/automations/AUTOMATION_SYSTEM.md`
-- Provides quick-start patterns for agents
+| Priority | What | Nexus Spec | Notes |
+|----------|------|------------|-------|
+| **P0** | Data layer (SQLite ledgers) | `data/ledgers/*.md` | Foundation — everything writes here |
+| **P0** | Agent engine (pi-coding-agent wrapper) | `broker/AGENT_ENGINE.md` | Core execution — need this to run agents |
+| **P0** | NEX pipeline (8 stages) | `nex/NEX.md`, `nex/NEXUS_REQUEST.md` | Central orchestrator |
+| **P0** | Adapter manager + Eve | `adapters/ADAPTER_SYSTEM.md` | First I/O channel |
+| **P1** | Context assembly | `broker/CONTEXT_ASSEMBLY.md` | Full context building |
+| **P1** | Session management | `broker/SESSION_LIFECYCLE.md` | Turn processing, queues, compaction |
+| **P1** | IAM (identity + ACL) | `iam/ACCESS_CONTROL_SYSTEM.md` | Who can do what |
+| **P1** | Event bus + SSE | `nex/BUS_ARCHITECTURE.md` | Real-time coordination |
+| **P1** | Daemon process | `nex/DAEMON.md` | Ties it all together |
+| **P2** | Streaming | `runtime/STREAMING.md` | Token-level delivery |
+| **P2** | Automations | `nex/automations/AUTOMATION_SYSTEM.md` | Proactive/reactive hooks |
+| **P2** | Cortex integration | `data/cortex/README.md` | Semantic memory layer |
 
 ---
 
-## Environment Domain
+## Remaining Spec Work
 
-| TODO | Location | Priority | Notes |
-|------|----------|----------|-------|
-| **Credential CLI** | `environment/capabilities/credentials/CREDENTIAL_CLI.md` | Low | Detailed credential CLI spec (if needed beyond COMMANDS.md) |
-| **CLI Bindings Implementation** | `interface/cli/COMMANDS.md` | Medium | Implement `nexus bindings` commands |
-| **Credential Verification** | `capabilities/credentials/` | Low | Verification protocols for credentials |
-| **Graceful Onboarding Degradation** | `foundation/BOOTSTRAP_ONBOARDING.md` | Low | Handle partial capability states |
+Small items to fill in during implementation — none are blocking.
 
----
-
-## Cortex / Mnemonic
-
-| TODO | Location | Priority | Notes |
-|------|----------|----------|-------|
-| **Port Mnemonic → Cortex** | `data/cortex/` | Medium | Rename and integrate existing Go implementation |
-| **Cortex Context Injection** | `broker/CONTEXT_ASSEMBLY.md` | Medium | Auto-inject relevant memories/context. Upstream uses `memory_search`/`memory_get` tools (agent-initiated). Nexus should do automatic injection based on event content. Deferred — get bones right first, add this later. |
-| **Cortex Query Interface** | `broker/INTERFACES.md` | Medium | Define `CortexQuery` / `CortexResult` types for Broker ↔ Cortex communication. Stub for now. |
-
----
-
-## IAM Domain
-
-| TODO | Location | Priority | Notes |
-|------|----------|----------|-------|
-| **Detailed Policy Examples** | `iam/examples/` | Low | More comprehensive policy examples |
+| TODO | Priority | Notes |
+|------|----------|-------|
+| **Automation Skill** | Medium | Create `skills/guides/automations/SKILL.md` so agents can write automations |
+| **LedgerClient Interface** | Medium | Define API surface for automation scripts to query ledgers |
+| **CortexClient Interface** | Medium | Define API surface for semantic search in automations |
+| **Model Catalog** | Low | Provider/model registry — figure out during Broker implementation |
+| **Config consistency** | Low | Ensure all docs say `nex.yaml` not `config.json` — quick pass |
+| **TS Adapter SDK** | Medium | `@nexus/adapter-sdk` npm package — after Eve proves the pattern |
 
 ---
 
 ## Upstream Investigations
 
-Deep dives needed into OpenClaw functionality for porting to Nexus.
+Deep dives into OpenClaw functionality. Important but not blocking V1.
 
 | TODO | Priority | Notes |
 |------|----------|-------|
-| **Gateway → NEX Adapter** | High | Investigate how OpenClaw gateway RPC translates to NEX adapter pattern. RPC as debugging interface. |
-| **Doctor System** | High | Port OpenClaw's self-healing diagnostics. Health checks, repairs, config validation. |
-| **Node Execution** | Medium | Multi-device orchestration — run commands on remote nodes, camera/screen capture. |
-| **Browser Automation** | High | Make browser first-class in Nexus runtime, not just a skill. Playwright integration. |
-| **Exec Approvals** | Medium | Human-in-the-loop approval queue. Check if IAM specs cover this or needs expansion. |
-| **Plugin System Analysis** | Medium | Understand OpenClaw plugin install mechanism. Map to NEX adapter install + hook script install. |
-| **Unified Message Send** | Low | Consider `nexus send` wrapper for all adapters. Convenience vs tool portability tradeoff. |
-
-### Gateway → NEX Adapter Investigation
-
-OpenClaw has WebSocket RPC for gateway control. Questions:
-- How does this map to NEX's adapter model?
-- Should RPC be a first-class adapter type?
-- What RPC methods are essential for debugging?
-
-### Doctor Investigation
-
-OpenClaw's doctor does:
-- Config validation and repair
-- Service health checks
-- Token generation
-- System service scanning
-- Automated fixes
-
-Need to spec equivalent for NEX.
-
-### Browser Automation Investigation (Major)
-
-**This is a significant subsystem requiring full redesign review before porting.**
-
-OpenClaw browser system includes:
-- Three targets: host, sandbox (Docker), node (remote)
-- CDP (Chrome DevTools Protocol) abstraction
-- Per-session isolated Docker containers
-- 16 tool actions (navigate, snapshot, screenshot, act, etc.)
-- 11 act kinds (click, type, press, hover, drag, fill, etc.)
-- Browser profiles for work/personal separation
-- VNC debugging for visual inspection
-- Node proxy for remote browser control
-
-Questions for Nexus:
-- Should browser be a first-class runtime subsystem or an adapter?
-- How does browser state persist across sessions?
-- What's the isolation model? (Docker required? Or host OK?)
-- How do sandbox containers get managed/cleaned up?
-- Integration with agent tools vs CLI access?
-- Security: How to prevent malicious navigation/scraping?
-
-**Recommendation:** Spin up focused agent session to review OpenClaw browser in depth before speccing Nexus equivalent.
-
-### Plugin System Analysis
-
-OpenClaw supports:
-- `openclaw plugins install <path-or-npm>`
-- Local, archive, npm sources
-- Plugin enable/disable
-- Plugin-contributed tools, hooks, channels, providers
-
-For Nexus, this could split into:
-- Adapter installation (new channel adapters)
-- Hook script installation (automation scripts)
-- Skill installation (already covered by hub)
-
----
-
-## Adapters Domain
-
-| TODO | Priority | Notes |
-|------|----------|-------|
-| ~~**Adapter Interface Spec**~~ | ~~High~~ | ✅ `adapters/ADAPTER_SYSTEM.md` — CLI protocol, registration, commands |
-| ~~**Adapter State Management**~~ | ~~High~~ | ✅ `adapters/ADAPTER_SYSTEM.md` — Config (desired) + DB (runtime) split |
-| ~~**Adapter Lifecycle**~~ | ~~High~~ | ✅ `adapters/ADAPTER_SYSTEM.md` — Start, stop, health, restart with backoff |
-| ~~**Inbound Event Contract**~~ | ~~High~~ | ✅ `adapters/INBOUND_INTERFACE.md` — NexusEvent JSONL schema |
-| ~~**Outbound Send Contract**~~ | ~~High~~ | ✅ `adapters/OUTBOUND_INTERFACE.md` + `ADAPTER_SYSTEM.md` — CLI send, formatting, delivery |
-| ~~**Adapter Registry**~~ | ~~Medium~~ | ✅ `adapters/ADAPTER_SYSTEM.md` — Registration, account discovery from credentials |
-| ~~**Adapter Visibility**~~ | ~~Medium~~ | ✅ `adapters/ADAPTER_SYSTEM.md` — Health monitoring, process supervision, DB state |
-| ~~**Channel Porting Guide**~~ | ~~Medium~~ | ✅ `adapters/ADAPTER_SDK.md` — SDK design, scaffold patterns, embed/wrap/greenfield |
-| ~~**Upstream Adapter Compatibility Review**~~ | ~~Medium~~ | ✅ `adapters/channels/*/UPSTREAM_REVIEW.md` — 9 channels reviewed (iMessage, Gmail, Discord, AIX, WhatsApp, Slack, Twitter, Voice, Calendar) |
-| ~~**Adapter SDK Design**~~ | ~~High~~ | ✅ `adapters/ADAPTER_SDK.md` — Go + TS SDKs, shared infrastructure |
-| ~~**Go Adapter SDK**~~ | ~~High~~ | ✅ Built: `~/nexus/home/projects/nexus/nexus-adapter-sdk-go/` — compiles, zero deps |
-| **Eve Adapter (first adapter)** | **High** | 🔄 Spec complete: `channels/imessage/EVE_ADAPTER_PLAN.md` — ready to implement |
-| **TS Adapter SDK** | Medium | Future: `@nexus/adapter-sdk` npm package for Discord, WhatsApp, Slack adapters |
-
----
-
-## Capabilities Expansion
-
-| TODO | Priority | Notes |
-|------|----------|-------|
-| **Capabilities Overview** | High | Flesh out `capabilities/CAPABILITIES.md` with full capability→provider mapping |
-| **CLI-Exposed Functionality** | High | Ensure all CLI functionality is specced in environment docs |
+| **Doctor System** | High | Self-healing diagnostics — health checks, repairs, config validation |
+| **Browser Automation** | High | Major subsystem — Playwright, CDP, container isolation. Needs full design review before porting. |
+| **Gateway → NEX Adapter** | Medium | How OpenClaw gateway RPC maps to NEX adapter pattern |
+| **Exec Approvals** | Medium | Human-in-the-loop approval queue. Check IAM spec coverage. |
+| **Plugin System Analysis** | Medium | Map OpenClaw plugin install to NEX adapter + hook install |
+| **Node Execution** | Low | Multi-device orchestration — future |
 
 ---
 
 ## Security & Infrastructure
 
-| TODO | Location | Priority | Notes |
-|------|----------|----------|-------|
-| **Adapter Input Validation** | `adapters/SECURITY.md` | Medium | Per-channel input sanitization patterns |
-| **Media Fetch Timeouts** | `adapters/SECURITY.md` | Medium | Timeout and size limits for media downloads |
-| **Rate Limiting** | `adapters/RATE_LIMITING.md` | Medium | Per-sender, per-channel rate limits |
-| **TLS Configuration** | `nex/TLS.md` | Medium | TLS 1.3 minimum for non-loopback |
-| **Health Check Exposure** | `nex/DAEMON.md` | Medium | What health endpoint exposes, auth requirements |
-| **Audit Logging** | `nex/AUDIT.md` | Medium | What gets logged, format, retention |
-| **Sandbox Spec** | `broker/SANDBOX.md` | Low (not V1) | Agent execution isolation model — deferred to later phase |
-
-### Adapter Security
-
-Each adapter should:
-- Validate all inbound data before emitting events
-- Timeout media fetches (images, files, voice)
-- Enforce size limits on downloads
-- Rate limit per sender to prevent abuse
-
-### TLS Configuration
-
-NEX daemon should:
-- Require TLS 1.3+ for non-loopback connections
-- Support custom certificates
-- Validate client certificates (optional)
-
-### Audit Logging
-
-What to log:
-- All IAM decisions (allow/deny)
-- All admin operations (config changes, session deletes)
-- All tool executions (especially elevated)
-- All adapter connect/disconnect events
-
-### Sandbox Spec (Major Gap)
-
-OpenClaw has Docker-based sandboxing for:
-- Browser containers (per-session isolation)
-- Code execution (agent tool sandboxing)
-
-Nexus needs to decide:
-- Is sandboxing required or optional?
-- Docker vs other isolation (Firecracker, gVisor, etc.)?
-- Per-session vs shared sandboxes?
-- What gets mounted (workspace, read-only vs read-write)?
-- How are sandbox containers managed/cleaned up?
-
----
-
-## Deferred
+Fill in as implementation reveals gaps. None blocking V1.
 
 | TODO | Priority | Notes |
 |------|----------|-------|
-| **Enterprise/Plugin Review** | Low | Review overlap with Nexus Cloud/Hub (FORK_MAPPING.md) |
+| **Adapter Input Validation** | Medium | Per-channel sanitization patterns |
+| **Rate Limiting** | Medium | Per-sender, per-channel limits |
+| **Audit Logging** | Medium | What gets logged, format, retention |
+| **TLS Configuration** | Low | TLS 1.3+ for non-loopback — matters when exposing externally |
+| **Sandbox Spec** | Low (not V1) | Agent execution isolation — deferred |
 
 ---
 
-*This file tracks spec work that needs deeper attention.*
+## Deferred / Dropped
+
+| Item | Reason |
+|------|--------|
+| ~~Queue Management standalone doc~~ | Covered in `SESSION_LIFECYCLE.md` |
+| ~~Config Hot-Reload standalone doc~~ | Covered in `DAEMON.md` |
+| ~~nex/INTERFACES.md~~ | Retired — distributed to home specs |
+| ~~RPC Interface~~ | Dropped for V1 — CLI + signals sufficient |
+| ~~Sandbox~~ | Not V1 |
+| ~~Smart Routing~~ | v2 feature |
+| Enterprise/Plugin Review | Low — review when Cloud/Hub becomes relevant |
+
+---
+
+*Architecture is specced. Time to build.*

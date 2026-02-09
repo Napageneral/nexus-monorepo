@@ -7,7 +7,7 @@
 
 ## What We're Doing
 
-Building the **first official Nexus adapter** by embedding the Adapter SDK into the `eve` project. Eve already has all the platform-specific logic for iMessage (reading chat.db, sending via AppleScript, polling for new messages). We're wiring that existing logic through the SDK to produce an adapter binary that speaks the Nexus adapter protocol.
+Building the **first official Nexus adapter** by embedding the Adapter SDK into the `eve` project. Eve already has a full ETL pipeline for iMessage — it reads from Apple's `chat.db`, normalizes content, resolves contacts via AddressBook, builds conversations, and writes to a processed warehouse database (`eve.db`). We're wiring that processed data through the SDK to produce an adapter binary that speaks the Nexus adapter protocol.
 
 This serves as the proof-of-concept for the entire adapter system: if eve-adapter works cleanly, the SDK design is validated and we can confidently build adapters for every other channel.
 
@@ -18,8 +18,22 @@ This serves as the proof-of-concept for the entire adapter system: if eve-adapte
 1. **Simplest adapter** — Single account, no credentials, no auth tokens, no network APIs.
 2. **You own it** — No fork needed, can modify freely.
 3. **Go** — Same language as the SDK, direct package import.
-4. **Public package** — `github.com/Napageneral/eve/imessage` is importable. Core logic is accessible without touching the monolith `cmd/eve/main.go`.
-5. **All capabilities exist** — Watch (monitor), send, messages (backfill), whoami (accounts) are all implemented. We're restructuring, not building from scratch.
+4. **Proven ETL pipeline** — `etl.FullSync()` handles all the hard stuff: AttributedBody decoding, content cleaning, handle normalization, AddressBook name resolution, incremental watermarks, conversation building.
+5. **All capabilities exist** — Sync (monitor/backfill), send (AppleScript), whoami (accounts). We're restructuring, not building from scratch.
+
+---
+
+## Data Flow
+
+The adapter uses eve's **warehouse path** — the battle-tested ETL pipeline:
+
+```
+chat.db (Apple) → etl.FullSync() → eve.db (warehouse) → adapter queries → NexusEvent JSONL
+```
+
+**Why not read chat.db directly?** The direct path has known problems. The warehouse ETL handles all the edge cases: AttributedBody decoding, content normalization, handle deduplication, AddressBook name hydration, Apple timestamp conversion, incremental watermarks, and more. We use the processed data.
+
+**Why not the Comms sync?** The `imessage/sync.go` Comms path was newer but had issues: dead code (no callers), no AddressBook hydration, double-query for membership events, buggy reaction participants, no watermark persistence. It has been removed from the codebase.
 
 ---
 
@@ -29,17 +43,27 @@ This serves as the proof-of-concept for the entire adapter system: if eve-adapte
 eve/
 ├── cmd/
 │   ├── eve/main.go              # Existing CLI (UNCHANGED)
-│   └── eve-adapter/main.go      # NEW — Adapter binary, single file
-├── imessage/                     # Existing public package (UNCHANGED)
+│   └── eve-adapter/main.go      # NEW — Adapter binary
+├── imessage/                     # Public package — chat.db access
 │   ├── chatdb.go                 # ChatDB, GetMessages, GetHandles, etc.
-│   ├── types.go                  # Message, Chat, Handle, Attachment, etc.
-│   ├── content.go                # Content normalization
-│   └── sync.go                   # Sync (not used by adapter)
-├── internal/                     # Existing internal packages (UNCHANGED)
+│   └── types.go                  # Message, Chat, Handle types
+├── internal/
+│   ├── config/                   # Config loading (EveDBPath, etc.)
+│   ├── etl/                      # ETL pipeline — FullSync, watermarks
+│   │   ├── sync.go               # FullSync() orchestrator
+│   │   ├── handles.go            # SyncHandles, AddressBook hydration
+│   │   ├── messages.go           # SyncMessages, content cleaning
+│   │   ├── reactions.go          # SyncReactions
+│   │   ├── attachments.go        # SyncAttachments
+│   │   ├── conversations.go      # BuildConversations
+│   │   ├── membership.go         # SyncMembershipEvents
+│   │   ├── watermark.go          # GetWatermark, SetWatermark
+│   │   └── content.go            # DecodeAttributedBody, CleanMessageContent
+│   └── ...
 └── go.mod                        # ADD: adapter-sdk-go dependency
 ```
 
-**Key principle:** We don't touch eve's existing code. The adapter is a new `cmd/` entry point that imports the public `imessage` package and the SDK. Eve's existing CLI (`eve watch`, `eve send`, etc.) continues to work exactly as before.
+**Key insight:** The adapter lives in `cmd/eve-adapter/` inside the eve repo, so it CAN import `internal/` packages. This gives it full access to the warehouse ETL pipeline and config. Eve's existing CLI stays untouched.
 
 The adapter binary compiles to `eve-adapter` and exposes the standard Nexus protocol:
 
@@ -67,7 +91,7 @@ require (
 replace github.com/nexus-project/adapter-sdk-go => ../../nexus-adapter-sdk-go
 ```
 
-The SDK has **zero external dependencies** (stdlib only), so this adds no transitive deps. The `imessage` package's dependency on `go-sqlite3` (CGo) is already in eve's go.mod.
+The SDK has **zero external dependencies** (stdlib only), so this adds no transitive deps. Eve's existing `go-sqlite3` dependency (CGo) handles all DB access.
 
 ### Build
 
@@ -123,55 +147,43 @@ func eveInfo() *nexadapter.AdapterInfo {
 
 ### `monitor` — Live Message Streaming
 
-**Strategy:** Custom monitor function (not PollMonitor). Eve's optimal cursor is `ROWID` (int64), not `time.Time`. A custom function is cleaner than forcing the time-based PollMonitor.
+**Strategy:** Periodically trigger `etl.FullSync()` to pull new data from chat.db into the warehouse, then query the warehouse for new messages since the last seen ID.
 
 **Data flow:**
 
 ```
-chat.db → GetMessages(sinceRowID) → resolve handles → convert to NexusEvent → emit JSONL
+each poll cycle:
+  1. etl.FullSync(chatDB, warehouseDB, watermark) → syncs chat.db → eve.db
+  2. Query: SELECT * FROM messages WHERE id > lastSeenID ORDER BY id
+  3. Convert each warehouse message → NexusEvent
+  4. Emit via emit(event)
+  5. Update lastSeenID
 ```
 
 **Implementation approach:**
 
-1. Open chat.db via `imessage.OpenChatDB()`
-2. Load handle map via `imessage.GetHandles()` → `map[int64]string` (ROWID → phone/email)
-3. Load chat map via `imessage.GetChats()` → `map[int64]Chat` (ROWID → Chat for style/group detection)
-4. Get initial cursor via `imessage.GetMaxMessageRowID()` (start from now, not history)
-5. Poll loop: every 500ms, call `imessage.GetMessages(lastRowID)`
-6. For each message, convert to NexusEvent using handle/chat maps
-7. Emit via `emit(event)`
-8. Update lastRowID
+1. Load config via `config.Load()` to get `EveDBPath`
+2. Open chat.db via `etl.OpenChatDB()` (same as `eve sync` does)
+3. Open warehouse DB (`eve.db`) for read/write
+4. Read current watermark via `etl.GetWatermark(warehouseDB, "chatdb", "message_rowid")`
+5. Poll loop (every 2 seconds):
+   a. Call `etl.FullSync(chatDB, warehouseDB, watermark)` — incremental, only new messages
+   b. Update watermark via `etl.SetWatermark()` with new `MaxMessageRowID`
+   c. Query warehouse for messages with `id > lastSeenMessageID`
+   d. Convert each to NexusEvent and emit
+   e. Update lastSeenMessageID
 
-**Why not use PollMonitor:** The SDK's `PollMonitor` uses `time.Time` cursors. Eve uses `ROWID` (monotonically increasing int64). Converting between them adds complexity with no benefit. A custom monitor function is ~30 lines.
+**Poll interval:** 2 seconds. The sync itself is fast for incremental updates (only processes new messages since watermark). This is less aggressive than `eve watch` (250ms) but appropriate for NEX — we're doing a full ETL sync each cycle, not just a raw SQL poll.
 
-**Handle/Chat resolution:**
+**Why 2s not 500ms:** Each poll triggers `etl.FullSync()` which does handle resolution, contact matching, content cleaning, etc. This is heavier than a raw chat.db query. 2 seconds balances responsiveness with efficiency.
 
-The `imessage.GetMessages()` function returns `Message` structs with `HandleID sql.NullInt64` (foreign key) and `ChatID int64`. We need the actual handle string (phone/email) and chat metadata (group vs DM). Solution:
-
-```go
-// Built once at monitor start, refreshed periodically
-handles, _ := chatDB.GetHandles()
-handleMap := make(map[int64]string) // ROWID → "+15551234567"
-for _, h := range handles {
-    handleMap[h.ROWID] = h.ID
-}
-
-chats, _ := chatDB.GetChats()
-chatMap := make(map[int64]imessage.Chat) // ROWID → Chat
-for _, c := range chats {
-    chatMap[c.ROWID] = c
-}
-```
-
-These maps should be refreshed periodically (new contacts/chats appear) — say every 60 seconds. Not every poll cycle.
-
-**Poll interval:** 500ms (faster than eve watch's default 250ms is unnecessary for NEX; slower reduces DB load while still being responsive enough for chat).
+**Contact/handle resolution is already done:** The warehouse's `messages` table has `sender_id` as a foreign key to `contacts`, where names are already resolved via AddressBook hydration. No handle maps needed in the adapter.
 
 ---
 
 ### `send` — Message Delivery
 
-**Strategy:** Replicate eve's AppleScript execution inline. The logic is ~15 lines.
+**Strategy:** Replicate eve's AppleScript execution inline. The logic is ~15 lines. This is unchanged from the direct path — sending doesn't involve the warehouse.
 
 **AppleScript for text:**
 
@@ -196,17 +208,7 @@ end tell
 
 Executed via `exec.CommandContext(ctx, "osascript", "-e", script)`.
 
-**Input mapping:**
-
-| SendRequest field | Usage |
-|------------------|-------|
-| `Target` | Recipient phone or email (e.g., `+14155551234`) |
-| `Text` | Message body |
-| `Media` | File path for attachment (optional) |
-| `ThreadID` | Ignored (iMessage doesn't support threads) |
-| `ReplyTo` | Ignored for now (tapback reply is different from text reply) |
-
-**Chunking:** iMessage has a ~4000 char soft limit but doesn't hard-reject longer messages (they get split by the OS). We'll use `SendWithChunking` with a 4000 char limit for clean splitting:
+**Chunking:** Uses `SendWithChunking` with a 4000 char limit:
 
 ```go
 func eveSend(ctx context.Context, req nexadapter.SendRequest) (*nexadapter.DeliveryResult, error) {
@@ -215,95 +217,92 @@ func eveSend(ctx context.Context, req nexadapter.SendRequest) (*nexadapter.Deliv
         if err != nil {
             return "", err
         }
-        // iMessage doesn't return message IDs from AppleScript
-        // Generate a synthetic one
         return fmt.Sprintf("imessage:sent:%d", time.Now().UnixNano()), nil
     }), nil
 }
 ```
 
-**Note:** AppleScript-based sending doesn't return a platform message ID. We generate a synthetic one. This is a known limitation of iMessage's AppleScript API.
+**Note:** AppleScript-based sending doesn't return a platform message ID. We generate synthetic IDs. This is a known limitation of iMessage's AppleScript API.
 
-**Security:** All user input is escaped before interpolation into AppleScript strings. The `escapeAppleScript()` function replaces `\` with `\\` and `"` with `\"`.
+**Security:** All user input is escaped before interpolation into AppleScript strings (`\` → `\\`, `"` → `\"`).
 
 ---
 
 ### `backfill` — Historical Events
 
-**Strategy:** Use `imessage.GetMessages(0)` to get all messages from the beginning, convert each to NexusEvent, filter by the `--since` date.
+**Strategy:** Trigger a full sync to ensure the warehouse is up to date, then query the warehouse for messages since the `--since` date.
 
 **Data flow:**
 
 ```
-chat.db → GetMessages(0) → filter by date → convert to NexusEvent → emit JSONL → exit 0
-```
-
-**Date filtering:** The `--since` flag is an ISO date. We convert to Apple nanosecond timestamp and could use a SQL WHERE clause. However, `imessage.GetMessages()` only takes a ROWID parameter, not a date.
-
-**Approach:**
-
-1. Find the approximate starting ROWID for the since date:
-   ```sql
-   SELECT COALESCE(MIN(ROWID), 0) FROM message 
-   WHERE date >= ?  -- Apple nanosecond timestamp
-   ```
-2. Call `chatDB.GetMessages(startRowID - 1)` to get all messages from that point
-3. Convert each to NexusEvent and emit
+1. etl.FullSync(chatDB, warehouseDB, 0)  // full sync if needed, or incremental
+2. Query: SELECT * FROM messages WHERE timestamp >= ? ORDER BY id
+3. Convert each → NexusEvent → emit JSONL
 4. Exit 0 when exhausted
-
-This is efficient — we don't scan messages we don't need.
-
-**Pagination:** For very large backlogs (100K+ messages), we should paginate to avoid loading everything into memory at once. Process in batches of 5000 ROWIDs:
-
-```go
-batchSize := int64(5000)
-cursor := startRowID - 1
-for {
-    msgs, err := chatDB.GetMessages(cursor)
-    // ... but GetMessages doesn't have a LIMIT ...
-}
 ```
 
-**Issue:** `imessage.GetMessages(sinceRowID)` returns ALL messages after the ROWID with no LIMIT. For backfill of large histories, this could be millions of rows.
+**Date filtering is trivial:** The warehouse `messages` table has a proper `timestamp` column (already converted from Apple nanoseconds). A simple `WHERE timestamp >= ?` does the job. No need to convert dates to Apple timestamps or estimate ROWIDs.
 
-**Solution:** Either:
-- a) Add a `GetMessagesBatch(sinceRowID, limit)` to the `imessage` package (requires modifying eve, but small change)
-- b) Use a custom SQL query for backfill that adds `LIMIT 5000`
-- c) Accept the memory hit for v1 (chat.db is typically <500K messages)
+**Pagination:** The warehouse query naturally supports LIMIT/OFFSET or cursor-based pagination:
 
-**Recommendation:** Option (c) for v1 prototype, option (a) for production. Most chat.db files are manageable in memory. Note this as a future optimization.
+```sql
+SELECT m.id, m.content, m.timestamp, m.is_from_me, m.guid, m.service_name,
+       m.reply_to_guid, m.chat_id, c.name as sender_name, ch.chat_identifier,
+       ch.is_group
+FROM messages m
+LEFT JOIN contacts c ON m.sender_id = c.id
+LEFT JOIN chats ch ON m.chat_id = ch.id
+WHERE m.timestamp >= ?
+ORDER BY m.id
+LIMIT 5000
+```
 
-**Idempotency:** NEX's Events Ledger has `UNIQUE(source, source_id)`. The `event_id` (`imessage:{GUID}`) is deterministic, so re-running backfill is safe — duplicates are ignored.
+Process in batches of 5000, advancing the cursor after each batch. Memory-safe for any history size.
+
+**Idempotency:** NEX's Events Ledger has `UNIQUE(source, source_id)`. The `event_id` (`imessage:{GUID}`) is deterministic, so re-running backfill is safe.
 
 ---
 
 ### `health` — Connection Status
 
-**Strategy:** Check if chat.db exists and is readable. Report last message timestamp.
+**Strategy:** Check both chat.db and eve.db are accessible. Report last message timestamp from the warehouse.
 
 ```go
 func eveHealth(ctx context.Context, account string) (*nexadapter.AdapterHealth, error) {
-    path := imessage.GetChatDBPath()
-    chatDB, err := imessage.OpenChatDB(path)
+    cfg := config.Load()
+
+    // Check chat.db
+    chatDBPath := etl.GetChatDBPath()
+    chatDB, err := etl.OpenChatDB(chatDBPath)
     if err != nil {
         return &nexadapter.AdapterHealth{
-            Connected: false,
-            Account:   "default",
-            Error:     fmt.Sprintf("cannot open chat.db: %v", err),
+            Connected: false, Account: "default",
+            Error: fmt.Sprintf("cannot open chat.db: %v", err),
         }, nil
     }
-    defer chatDB.Close()
+    chatDB.Close()
 
-    maxRowID, err := chatDB.GetMaxMessageRowID()
-    // Could also query latest message timestamp for last_event_at
+    // Check warehouse
+    warehouseDB, err := sql.Open("sqlite3", cfg.EveDBPath+"?mode=ro")
+    if err != nil {
+        return &nexadapter.AdapterHealth{
+            Connected: false, Account: "default",
+            Error: fmt.Sprintf("cannot open eve.db: %v", err),
+        }, nil
+    }
+    defer warehouseDB.Close()
+
+    // Get latest message timestamp
+    var lastTimestamp time.Time
+    warehouseDB.QueryRow("SELECT MAX(timestamp) FROM messages").Scan(&lastTimestamp)
 
     return &nexadapter.AdapterHealth{
         Connected:   true,
         Account:     "default",
-        LastEventAt: lastEventTimestamp, // Unix ms of most recent message
+        LastEventAt: lastTimestamp.UnixMilli(),
         Details: map[string]any{
-            "chat_db_path": path,
-            "max_rowid":    maxRowID,
+            "chat_db_path":    chatDBPath,
+            "warehouse_path":  cfg.EveDBPath,
         },
     }, nil
 }
@@ -313,7 +312,7 @@ func eveHealth(ctx context.Context, account string) (*nexadapter.AdapterHealth, 
 
 ### `accounts` — Account Discovery
 
-**Strategy:** Replicate `whoami` logic. Single account for iMessage.
+**Strategy:** Single account for iMessage. Use macOS `id -F` for display name.
 
 ```go
 func eveAccounts(ctx context.Context) ([]nexadapter.AdapterAccount, error) {
@@ -327,129 +326,92 @@ func eveAccounts(ctx context.Context) ([]nexadapter.AdapterAccount, error) {
 }
 ```
 
-iMessage is inherently single-account (tied to the macOS login), so this always returns one account.
-
 ---
 
 ## NexusEvent Mapping
 
-### eve `Message` → `NexusEvent`
+### Warehouse `messages` → `NexusEvent`
 
-| eve Message field | NexusEvent field | Transformation |
-|-------------------|-----------------|----------------|
-| `GUID` | `event_id` | `"imessage:" + GUID` |
-| `Date` | `timestamp` | Apple nanoseconds → Unix ms: `AppleEpoch.Add(Duration(Date)).UnixMilli()` |
-| `Text` (or `AttributedBody` decoded) | `content` | Use Text if present, fall back to decoding AttributedBody |
-| — | `content_type` | `"text"` (or `"image"`/`"file"` if attachment-only) |
+The warehouse has already done the heavy lifting — content is cleaned, senders are resolved to contact IDs with real names, timestamps are converted. The adapter query joins the relevant tables:
+
+```sql
+SELECT m.id, m.content, m.timestamp, m.is_from_me, m.guid,
+       m.service_name, m.reply_to_guid, m.chat_id,
+       c.name as sender_name,
+       ci.identifier as sender_identifier,
+       ch.chat_identifier, ch.is_group, ch.chat_name
+FROM messages m
+LEFT JOIN contacts c ON m.sender_id = c.id
+LEFT JOIN contact_identifiers ci ON c.id = ci.contact_id
+LEFT JOIN chats ch ON m.chat_id = ch.id
+WHERE m.id > ?
+ORDER BY m.id
+```
+
+| Warehouse column | NexusEvent field | Notes |
+|-----------------|-----------------|-------|
+| `m.guid` | `event_id` | `"imessage:" + guid` |
+| `m.timestamp` | `timestamp` | Already a proper timestamp, convert to Unix ms |
+| `m.content` | `content` | Already cleaned (AttributedBody decoded, non-printable stripped) |
+| — | `content_type` | `"text"` default |
 | — | `channel` | `"imessage"` (constant) |
 | — | `account_id` | `"default"` (constant) |
-| `HandleID` → handle map | `sender_id` | Look up `handleMap[HandleID]` → `"+15551234567"` or `"tyler@icloud.com"` |
-| — | `sender_name` | `""` (iMessage doesn't provide display names in chat.db — name resolution happens in NEX's Identity Graph) |
-| `ChatIdentifier` | `peer_id` | Direct: `"chat123456"` or `"+15551234567"` |
-| Chat.Style | `peer_kind` | `Style == 43` → `"group"`, else → `"dm"` |
-| `ReplyToGUID` | `reply_to_id` | `"imessage:" + ReplyToGUID` if non-null |
-| — | `thread_id` | `""` (iMessage doesn't have threads) |
-| `IsFromMe` | `metadata.is_from_me` | Boolean |
-| `ChatID` | `metadata.chat_id` | Integer |
-| `ServiceName` | `metadata.service` | `"iMessage"` or `"SMS"` |
-| `ROWID` | `metadata.rowid` | Integer (useful for debugging) |
+| `ci.identifier` | `sender_id` | Phone or email from contact_identifiers |
+| `c.name` | `sender_name` | Real name from AddressBook hydration |
+| `ch.chat_identifier` | `peer_id` | Chat identifier string |
+| `ch.is_group` | `peer_kind` | `true` → `"group"`, `false` → `"dm"` |
+| `m.reply_to_guid` | `reply_to_id` | `"imessage:" + reply_to_guid` if non-null |
+| `m.is_from_me` | `metadata.is_from_me` | Boolean |
+| `m.chat_id` | `metadata.chat_id` | Integer |
+| `m.service_name` | `metadata.service` | `"iMessage"` or `"SMS"` |
 
-### Apple Timestamp Conversion
+**Key advantage over direct path:** `sender_name` is available because the warehouse runs AddressBook hydration. The adapter gets real names for free.
 
-Eve's `imessage` package provides `AppleEpoch` and `AppleTimestampToUnix()`. For Unix milliseconds:
+### Conversion Function
 
 ```go
-func appleNanosToUnixMs(appleNanos int64) int64 {
-    t := imessage.AppleEpoch.Add(time.Duration(appleNanos) * time.Nanosecond)
-    return t.UnixMilli()
-}
-```
-
-### Content Resolution
-
-Eve's `Message.Text` can be null (sql.NullString) when the message uses `AttributedBody` (rich text, emoji, link previews). Eve's `content.go` has decoding logic. The adapter should:
-
-1. Use `Text.String` if `Text.Valid`
-2. Fall back to decoding `AttributedBody` if Text is null
-3. Use `""` if both are empty (attachment-only message)
-
-### IsFromMe Handling
-
-Messages where `IsFromMe == true` are outgoing messages from the user. For monitoring:
-- **Include them** — NEX needs to see outbound messages for context (the Events Ledger records everything).
-- Set `sender_id` to the user's own handle (from whoami/accounts).
-
-For backfill:
-- Same — include all messages regardless of direction.
-
----
-
-## Conversion Function
-
-The core of the adapter — one function that converts an `imessage.Message` to a `nexadapter.NexusEvent`:
-
-```go
-func convertMessage(
-    msg imessage.Message,
-    handleMap map[int64]string,
-    chatMap map[int64]imessage.Chat,
-    selfHandles []string, // from whoami: ["+17072876731", "tnapathy@gmail.com"]
-) nexadapter.NexusEvent {
-    // Resolve sender
-    senderID := ""
-    if msg.IsFromMe && len(selfHandles) > 0 {
-        senderID = selfHandles[0]
-    } else if msg.HandleID.Valid {
-        senderID = handleMap[msg.HandleID.Int64]
-    }
-
-    // Resolve peer kind from chat style
+func convertWarehouseMessage(row WarehouseMessage) nexadapter.NexusEvent {
     peerKind := "dm"
-    if chat, ok := chatMap[msg.ChatID]; ok {
-        if chat.Style == 43 {
-            peerKind = "group"
-        }
+    if row.IsGroup {
+        peerKind = "group"
     }
 
-    // Resolve content
-    content := ""
-    if msg.Text.Valid {
-        content = msg.Text.String
-    }
-    // TODO: AttributedBody fallback
-
-    // Build event
-    return nexadapter.NewEvent("imessage", "imessage:"+msg.GUID).
-        WithTimestampUnixMs(appleNanosToUnixMs(msg.Date)).
-        WithContent(content).
-        WithSender(senderID, "").
-        WithPeer(msg.ChatIdentifier, peerKind).
+    b := nexadapter.NewEvent("imessage", "imessage:"+row.GUID).
+        WithTimestampUnixMs(row.Timestamp.UnixMilli()).
+        WithContent(row.Content).
+        WithSender(row.SenderIdentifier, row.SenderName).
+        WithPeer(row.ChatIdentifier, peerKind).
         WithAccount("default").
-        WithReplyTo(nullStringToEventID(msg.ReplyToGUID)).
-        WithMetadata("rowid", msg.ROWID).
-        WithMetadata("is_from_me", msg.IsFromMe).
-        WithMetadata("chat_id", msg.ChatID).
-        WithMetadata("service", nullStringVal(msg.ServiceName)).
-        Build()
+        WithMetadata("is_from_me", row.IsFromMe).
+        WithMetadata("chat_id", row.ChatID).
+        WithMetadata("service", row.ServiceName)
+
+    if row.ReplyToGUID != "" {
+        b.WithReplyTo("imessage:" + row.ReplyToGUID)
+    }
+
+    return b.Build()
 }
 ```
+
+Much simpler than the direct path version — no handle maps, no chat style lookups, no Apple timestamp conversion. The warehouse did all that work already.
 
 ---
 
 ## Full File: `cmd/eve-adapter/main.go`
 
-The complete adapter is a single file. Estimated ~250 lines:
+The complete adapter is a single file. Estimated ~200 lines:
 
 ```
 main()                          ~10 lines  — Wire handlers into nexadapter.Run()
 eveInfo()                       ~30 lines  — Return static AdapterInfo
-eveMonitor()                    ~60 lines  — Poll loop with ROWID cursor
+eveMonitor()                    ~50 lines  — Sync + query warehouse loop
 eveSend()                       ~30 lines  — AppleScript execution + chunking
-eveBackfill()                   ~40 lines  — Paginated history emission
-eveHealth()                     ~20 lines  — chat.db accessibility check
+eveBackfill()                   ~35 lines  — Sync + paginated warehouse query
+eveHealth()                     ~20 lines  — Check chat.db + eve.db
 eveAccounts()                   ~10 lines  — Single default account
-convertMessage()                ~40 lines  — Message → NexusEvent mapping
-helpers (timestamp, escaping)   ~20 lines  — Apple time conversion, AppleScript escaping
+convertWarehouseMessage()       ~25 lines  — Warehouse row → NexusEvent
+helpers (escaping)              ~10 lines  — AppleScript escaping
 ```
 
 ---
@@ -469,26 +431,22 @@ eve-adapter info | jq .
 ```bash
 eve-adapter monitor --account default
 # Send yourself a test message via Messages.app
-# Should see NexusEvent JSONL appear on stdout
+# Should see NexusEvent JSONL appear on stdout within ~2 seconds
 ```
 
-**Expected:** JSONL events with valid `event_id`, `timestamp`, `content`, `sender_id`, `peer_id`, `peer_kind`.
+**Expected:** JSONL events with valid `event_id`, `timestamp`, `content`, `sender_id`, `sender_name`, `peer_id`, `peer_kind`.
 
 **Verify:**
-- New messages appear within ~500ms of being sent
+- New messages appear within ~2-3s of being sent (sync + query cycle)
+- `sender_name` contains real names (from AddressBook), not just phone numbers
 - `is_from_me` metadata correctly reflects direction
 - Group messages have `peer_kind: "group"`
 - DMs have `peer_kind: "dm"`
-- `sender_id` is a real phone number or email
+- Content is clean (no U+FFFC, no null bytes)
 
 ### 3. `eve-adapter send --account default --to "+1XXXXXXXXXX" --text "Hello from Nexus"`
 
 **Expected:** DeliveryResult JSON with `success: true`. Message appears in Messages.app.
-
-**Verify:**
-- Message actually arrives
-- Long messages get chunked correctly (test with >4000 chars)
-- Special characters (quotes, backslashes, emoji) are escaped properly
 
 ### 4. `eve-adapter backfill --account default --since 2026-02-01`
 
@@ -502,6 +460,7 @@ eve-adapter backfill --account default --since 2026-02-01 | head -20
 - No messages before the since date
 - `event_id` is deterministic (same GUID → same event_id)
 - Re-running produces identical output (idempotent)
+- Handles large histories without OOM (batched queries)
 
 ### 5. `eve-adapter health --account default`
 
@@ -511,42 +470,29 @@ eve-adapter backfill --account default --since 2026-02-01 | head -20
 
 **Expected:** `[{ "id": "default", "display_name": "Tyler Brandt", "status": "active" }]`
 
-### 7. Integration Test: NEX Pipeline Simulation
-
-```bash
-# Simulate what NEX does: read JSONL from monitor, validate each event
-eve-adapter monitor --account default | while read line; do
-    echo "$line" | jq -e '.event_id and .timestamp and .channel == "imessage"'
-done
-```
-
 ---
 
 ## Known Limitations
 
 ### No Platform Message IDs from Send
 
-AppleScript-based sending doesn't return the platform message ID. We generate synthetic IDs (`imessage:sent:<nanosecond_timestamp>`). This means:
-- NEX can't correlate outbound events with specific sent messages
-- Not a blocker — iMessage doesn't expose this to any API
+AppleScript-based sending doesn't return the platform message ID. We generate synthetic IDs (`imessage:sent:<nanosecond_timestamp>`). Not a blocker — iMessage doesn't expose this to any API.
 
 ### No Threaded Replies via Send
 
-iMessage supports reply-to (tapback and inline reply) but AppleScript can't target a specific message for reply. Send always creates a new message in the conversation.
+iMessage supports reply-to but AppleScript can't target a specific message. Send always creates a new message in the conversation.
 
-### AttributedBody Decoding
+### Monitor Latency
 
-Some messages have null `Text` and use `AttributedBody` (binary plist with NSAttributedString). Eve's `content.go` has decoding logic but it's not in the public `imessage` package. For v1, these messages will have empty `content`. Can be addressed by:
-- Moving content decoding into the `imessage` package, or
-- Importing the internal package (not possible without modification)
-
-### Backfill Memory
-
-`GetMessages(sinceROWID)` loads all matching messages at once. For very large backlogs this could use significant memory. Mitigation: add `GetMessagesBatch(sinceRowID, limit)` to the `imessage` package later.
+Monitor has ~2-3s latency (sync cycle + query) vs `eve watch`'s 250ms direct polling. Acceptable for NEX — the pipeline adds its own latency anyway.
 
 ### Single Account
 
-iMessage is inherently single-account per macOS user. The adapter always reports one `"default"` account. This is correct behavior, not a limitation to fix.
+iMessage is inherently single-account per macOS user. The adapter always reports one `"default"` account. This is correct behavior, not a limitation.
+
+### Requires `eve.db` Setup
+
+The adapter depends on the warehouse database existing. First-time users need to run `eve sync` at least once to initialize the warehouse before the adapter can monitor. After that, the adapter handles incremental syncing itself.
 
 ---
 
@@ -554,12 +500,10 @@ iMessage is inherently single-account per macOS user. The adapter always reports
 
 | Enhancement | What | When |
 |-------------|------|------|
-| **Reactions** | Emit tapback events as NexusEvent with `content_type: "reaction"` | After basic adapter works |
-| **Attachments** | Include attachment metadata in NexusEvent.attachments | After basic adapter works |
-| **AttributedBody** | Decode rich text content when Text is null | After basic adapter works |
-| **Group Actions** | Emit join/leave events as NexusEvent | Low priority |
-| **Batched Backfill** | Add LIMIT to GetMessages for memory-safe pagination | If needed |
-| **Contact Names** | Resolve sender phone/email → display name via Contacts.framework | After Identity Graph works |
+| **Reactions** | Query warehouse `reactions` table, emit as NexusEvent with `content_type: "reaction"` | After basic adapter works |
+| **Attachments** | Query warehouse `attachments` table, include in NexusEvent.attachments | After basic adapter works |
+| **Group Actions** | Query warehouse `membership_events` table, emit as NexusEvent | Low priority |
+| **Auto-init** | Run initial full sync if warehouse doesn't exist yet | Polish |
 
 ---
 
@@ -567,10 +511,10 @@ iMessage is inherently single-account per macOS user. The adapter always reports
 
 1. **Scaffold** — Create `cmd/eve-adapter/main.go`, add SDK dependency to go.mod
 2. **Info + Health + Accounts** — Simplest handlers, validates SDK wiring works
-3. **Convert function** — Message → NexusEvent mapping (core logic)
-4. **Monitor** — Poll loop with ROWID cursor, emit NexusEvents
+3. **Convert function** — Warehouse row → NexusEvent mapping
+4. **Monitor** — Sync + query loop with warehouse watermarks
 5. **Send** — AppleScript execution with chunking
-6. **Backfill** — Historical emission with date filtering
+6. **Backfill** — Sync + paginated warehouse query with date filter
 7. **Test end-to-end** — All 6 commands verified
 
 **Estimated effort:** ~2-3 hours for a working v1.
@@ -588,4 +532,4 @@ iMessage is inherently single-account per macOS user. The adapter always reports
 
 ---
 
-*Eve becomes the first official Nexus adapter. The pattern established here — embed SDK, wire existing logic, new binary entry point — is the template for every Go adapter that follows.*
+*Eve becomes the first official Nexus adapter. The pattern: embed SDK into existing tool, use the processed warehouse data, expose as standard protocol.*

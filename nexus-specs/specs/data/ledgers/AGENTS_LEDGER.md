@@ -360,6 +360,32 @@ This enables:
 
 ---
 
+### Session Aliases
+
+Maps alternative session keys to canonical sessions. Used for identity promotion (channel-based → entity-based) and identity merge scenarios.
+
+```sql
+CREATE TABLE session_aliases (
+    alias TEXT PRIMARY KEY,              -- The alternative session key
+    session_label TEXT NOT NULL,         -- The canonical session it resolves to
+    created_at INTEGER NOT NULL,
+    reason TEXT,                         -- 'identity_promotion' | 'identity_merge' | 'manual'
+    
+    FOREIGN KEY (session_label) REFERENCES sessions(label)
+);
+
+CREATE INDEX idx_session_aliases_target ON session_aliases(session_label);
+```
+
+This enables:
+- **Identity promotion:** Unknown sender gets entity-based key after identity resolution → alias to existing channel-based session
+- **Identity merge:** Two channel-based sessions discovered to be same entity → alias entity key to primary session
+- **Lookup order:** Direct session lookup → alias lookup → create new
+
+See `../../runtime/broker/SESSION_LIFECYCLE.md` for the full identity-session coupling design.
+
+---
+
 ### Auxiliary Tables
 
 Rich context capture at the message level for replay and analysis.

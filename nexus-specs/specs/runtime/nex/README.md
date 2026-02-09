@@ -16,10 +16,11 @@ This folder contains the core NEX orchestrator specifications — the central pi
 | Spec | Status | Description |
 |------|--------|-------------|
 | **`NEX.md`** | ✅ Complete | **START HERE** — Central orchestrator (8-stage pipeline) |
+| `DAEMON.md` | ✅ Complete | Process lifecycle — startup, signals, shutdown, supervision |
 | `NEXUS_REQUEST.md` | ✅ Complete | The data bus that accumulates context through pipeline |
-| `INTERFACES.md` | ✅ Complete | All component interface contracts |
+| `INTERFACES.md` | ⚠️ Retired | Distributed to home specs. See file for redirect table. |
 | `PLUGINS.md` | ✅ Complete | NEX plugin system (hook points) |
-| `STREAMING.md` | ✅ Complete | Token streaming flow |
+| `STREAMING.md` | ↪️ Redirect | Consolidated to `runtime/STREAMING.md` |
 | `BUS_ARCHITECTURE.md` | ✅ Complete | Internal real-time pub/sub |
 | `automations/` | ✅ Complete | Automation system (proactive/reactive agent invocations) |
 
