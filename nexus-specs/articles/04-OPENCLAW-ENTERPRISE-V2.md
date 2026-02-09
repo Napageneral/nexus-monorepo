@@ -35,6 +35,8 @@ The mechanism behind this is a persistent workspace where agents live and operat
 Sure. 
 But OpenClaw establishes clear patterns for what context to accumulate, where to store it, and how to retrieve it. That's the difference between "AI can read files" and a system that compounds.
 
+**The pattern to steal:** any AI system that gets better over time needs a persistent, structured context layer. Most don't have one. The ones that do often overcomplicate it. Give just enough structure to get the self-improvement cycle going, then get out of the way.
+
 ### 2. Access It From Anywhere
 
 Your AI shouldn't require you to go to it. It should meet you where you already are.
@@ -48,6 +50,8 @@ And it brings everything with it. The same accumulated context, the same capabil
 I'll be scrolling X between sets at the gym, see a cool post about AI, copy the tweet link, text it to my Clawbot: "figure out how to incorporate this into my projects." 
 10 minutes later it texts me back a link to a live deployed demo.
 
+**The pattern to steal:** a unified runtime that normalizes events from any source, enriches them with accumulated context, and routes to the right agent. Build this once and every new platform is trivial. Owning your runtime means you're never locked to a single model vendor.
+
 ### 3. It Runs On Its Own
 
 You wake up. Your clawbot checked your email overnight, found an airline check-in, used its browser to check you in, and texted you your seat and gate number. 
@@ -58,23 +62,17 @@ You didn't ask it to do any of this.
 
 OpenClaw calls it a **heartbeat**: every 30 minutes, the agent wakes up and looks for something useful to do. This only works because of the first two patterns — deep context means it knows what's actually useful, and multi-surface access means it can reach you with what it finds.
 
+**The pattern to steal:** automation is a liability until the agent understands you. Once it does, it becomes the whole point. Two modes matter — proactive (timer-based) and reactive (event-triggered) — and both need the accumulated context to be useful.
+
 ---
 
-## The Patterns Worth Stealing
-
-If you're wondering what these patterns look like outside of OpenClaw — in your own products, your own infrastructure — here are the takeaways:
-
-**Context & Capability Accumulation.** Any system that gets better over time needs a persistent, structured context layer. Most don't have one. The ones that do often overcomplicate it. The sweet spot: give just enough structure to get the self-improvement cycle going, then get out of the way.
-
-**A Unified Runtime.** A runtime that normalizes events from any source, enriches them with accumulated context, and routes them to the right agent. Build this once and every new platform is trivial. Bonus: owning your runtime means you're never locked to a single model vendor.
-
-**Autonomous Operation.** Two modes, both matter. **Proactive:** the agent wakes up on a timer, looks around, does useful work. **Reactive:** incoming events trigger action — a message, a webhook, an email — and the right agent handles it with the right context. Automation is a liability until the agent understands you. Once it does, both modes become force multipliers.
+So why isn't everyone using it?
 
 ## Why Using OpenClaw Is Stupid... Right Now
 
 Someone can email your ClawBot a carefully crafted prompt and it will comply — exfiltrate your data, drain your bank account, send it all back to the attacker. 
 The ClawHub (OpenClaw's community marketplace for sharing skills and scripts) is packed with malicious skills aiming to do the same thing silently. 
-One-click RCE vulnerability. 
+[One-click RCE vulnerability](https://www.cve.org/CVERecord?id=CVE-2026-25253). 
 Thousands of instances on the public internet with no auth, plaintext API keys. 
 Cisco called it "a security nightmare."
 
@@ -84,7 +82,7 @@ OpenClaw started as a personal chatbot.
 Each new capability was bolted on, and when the community exploded with thousands of commits a week, there was never time for the foundation to adjust to the emerging patterns. 
 Patches will come, but it's going to feel like patching up a block of swiss cheese. Enterprise needs rock solid foundations.
 
-## The Gaps And How To Fill Them
+## The Enterprise Gaps And How To Fill Them
 
 These gaps aren't just OpenClaw's problems. They're unsolved infrastructure problems that will define the next generation of AI platforms.
 
@@ -104,19 +102,15 @@ Approval workflows, audit logs, version-controlled policies — all downstream o
 
 Whoever nails identity and access control for AI agents owns the trust infrastructure for this entire ecosystem.
 
-### System of Record
+### Observability
 
-OpenClaw persists agent session transcripts, but everything that triggered the agent or happened around it fires and disappears.
+OpenClaw persists agent session transcripts, but everything that triggered the agent or happened around it fires and disappears. The emails, messages, webhooks, tool calls, permission decisions — gone.
 
-This is the raw facts layer. Every event that touches your system, stored immutably. Every message, email, webhook, tool call, permission decision. Append-only, never modified, never deleted. 
-The engineering challenge is real: normalizing wildly different data sources into a unified schema, building adapters, making it plug-and-play. But the payoff is enormous.
+What needs to be built: an immutable event store with a unified schema across every source. iMessages, emails, webhooks, tool calls — each has its own shape. Adapters that normalize all of it. A plug-and-play system where adding a new source is trivial. And a traceable request lifecycle layered on top so every event has a full pipeline trace.
 
-For compliance and auditing, this is non-negotiable. But the real value is forward-looking. With how fast models are improving, the insights extracted from your raw data today will pale in comparison to what will be possible six months from now. 
-If you let that data slip through your fingers in the meantime, there's no going back. 
+When your agent forwards a 2FA code to the wrong person because an identity mapping was stale, you query the trace and see exactly where resolution went wrong, which policy allowed it, and how long it took. One query, full root cause.
 
-The complete event record is the foundation everything else builds on. Identity resolves against it. 
-Access control audits against it. 
-Memory systems derive from it. 
+This same event store is the bedrock for memory. Models are improving at a staggering rate. The insights you can extract from raw data six months from now will dwarf what's possible today. If you let that data escape in the meantime, there's no going back. 
 
 ### Memory
 
@@ -132,14 +126,17 @@ And because there's no system of record underneath, you can't extract learnings 
 
 Build the SoR first. Build memory on top. When your extraction algorithms improve, reprocess the entire history. 
 
-### Making Sense of it All
+### Domain-Specific Intelligence
 
-Having access to data doesn't mean your agents understand it. You can give an agent access to every repo, every CRM record, every Slack channel in your company. But the context window is a tiny fraction of the total data, and that fraction shrinks every day relative to how much organizations produce.
+OpenClaw ships with 50+ skills and tools that each connect your agent to a new data source or extract insights in a new way. That's enough to be dangerous on day one. But having access to data doesn't mean your agents understand it.
 
-Every data source has its own idiosyncrasies, and each one demands domain-specific tooling to extract real value. A Salesforce instance has deal stages, contact hierarchies, activity timelines — an agent that understands those relationships can forecast churn before your sales team sees it. Slack has threading, channel context, reaction patterns — an agent that grasps conversational structure can surface decisions buried in noise. A 20-year-old Java monolith has implicit architecture, tribal knowledge encoded in naming conventions, and dependency chains that no one fully understands — an agent with a structural map of that codebase performs dramatically differently than one reading files blind.
+Every data source has its own idiosyncrasies. A Salesforce instance has deal stages, contact hierarchies, activity timelines — an agent that understands those relationships can forecast churn before your sales team sees it. A 20-year-old Java monolith has implicit architecture, tribal knowledge encoded in naming conventions, and dependency chains no one fully understands — an agent with a structural map of that codebase performs dramatically differently than one reading files blind.
 
-Each of these is a vertical unto itself. The tooling that makes an agent brilliant at navigating Salesforce data is completely different from the tooling that makes it brilliant at navigating legacy code. This is where the most companies by volume will exist, simply because the landscape is enormous and the depth in each niche is near-infinite.
+While agents can conjure something passable on demand, enterprises that want to stay competitive will need best-in-class tooling for each data source they depend on. Companies and products will be born that focus on a specific vertical and extract every last bit of insight from it. The tooling that makes an agent brilliant at navigating Salesforce is completely different from the tooling that makes it brilliant at navigating legacy code. This is where the most companies by volume will exist — enterprises will slot the best of each into their growing context and insight platforms built off these same patterns.
 
 ---
+
+You still might not be able to explain OpenClaw to your mom. But you should be able to explain to your team why these patterns matter, where the current implementation falls short, and what needs to be built to close the gap. The companies that build these patterns into reliable, trusted infrastructure will define how AI agents work for the next decade.
+
 
 *Tyler Brandt is the founder of [Intent Systems](https://www.intent-systems.com/), where he builds structured context maps for large legacy codebases. Previously, he built ad exchange infrastructure at Apple and Amazon. He's been using and dissecting OpenClaw daily since December 2025.*

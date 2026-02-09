@@ -1,7 +1,7 @@
 # Cortex (Derived Layer)
 
 **Status:** DESIGN COMPLETE  
-**Last Updated:** 2026-02-02
+**Last Updated:** 2026-02-09
 
 ---
 
@@ -40,7 +40,7 @@ The name "Cortex" reflects its role as the outer layer that handles higher-order
 
 ## What Replaces Upstream Memory
 
-Upstream clawdbot used a file-based memory system (`MEMORY.md`, `memory/*.md`) that agents must actively write to. We removed this entirely:
+Upstream openclaw used a file-based memory system (`MEMORY.md`, `memory/*.md`) that agents must actively write to. We removed this entirely:
 
 | Upstream | Nexus |
 |----------|-------|
@@ -65,7 +65,7 @@ Upstream clawdbot used a file-based memory system (`MEMORY.md`, `memory/*.md`) t
 │                                                              │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
 │  │   Events     │  │   Agents     │  │     Identity     │  │
-│  │   Ledger     │  │   Ledger     │  │      Graph       │  │
+│  │   Ledger     │  │   Ledger     │  │      Ledger      │  │
 │  └──────┬───────┘  └──────┬───────┘  └────────┬─────────┘  │
 └─────────┼─────────────────┼───────────────────┼────────────┘
           │                 │                   │
@@ -73,8 +73,8 @@ Upstream clawdbot used a file-based memory system (`MEMORY.md`, `memory/*.md`) t
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                        CORTEX                                │
-│                   (Derived Layer)                            │
+│                     CORTEX (Go process)                      │
+│                      (Derived Layer)                         │
 │                                                              │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
 │  │   Episodes   │  │    Facets    │  │    Embeddings    │  │
@@ -85,87 +85,10 @@ Upstream clawdbot used a file-based memory system (`MEMORY.md`, `memory/*.md`) t
 │  │                     Analyses                          │  │
 │  │  (patterns, relationships, temporal facts)            │  │
 │  └──────────────────────────────────────────────────────┘  │
+│                                                              │
+│  Storage: ~/nexus/state/cortex/{agentId}.db (per-agent)    │
 └─────────────────────────────────────────────────────────────┘
 ```
-
----
-
-## Cortex Query Interface
-
-```typescript
-interface CortexQuery {
-    query: string;                   // Natural language or semantic
-    filters?: {
-        sources?: string[];          // Limit to adapters
-        time_range?: { start: number; end: number };
-        entity_ids?: string[];       // Limit to participants
-    };
-    limit?: number;
-    include_embeddings?: boolean;
-}
-
-interface CortexResult {
-    hits: {
-        episode_id: string;
-        score: number;
-        content_preview: string;
-        source_event_ids: string[];
-        facets: Facet[];
-    }[];
-    total_hits: number;
-}
-```
-
----
-
-## Who Queries Cortex
-
-| Component | Query Type | Purpose |
-|-----------|------------|---------|
-| **Hooks** | Semantic search | Context for hook evaluation |
-| **Broker** | Smart forking | Find best fork point in turn tree |
-| **Broker** | Context enrichment | RAG for agent context |
-| **Agents** | Tool calls | `cortex_search` tool |
-| **CLI** | `nexus search` | User semantic search |
-
----
-
-## Cortex Writes
-
-Cortex primarily reads, but can propose enrichments to Identity Graph:
-
-```typescript
-interface IdentityEnrichment {
-    entity_id: string;
-    relationship?: string;           // Learned from patterns
-    tags_add?: string[];
-    new_identities?: {
-        channel: string;
-        identifier: string;
-    }[];
-    confidence: number;              // 0-1
-    source: 'cortex_analysis';
-}
-```
-
-**Rules:**
-- High confidence (>0.9): Auto-apply
-- Medium confidence (0.7-0.9): Queue for human review
-- Low confidence (<0.7): Log but don't add
-
----
-
-## Implementation Status
-
-| Component | Status |
-|-----------|--------|
-| Episodes | 📋 Planned |
-| Facets | 📋 Planned |
-| Embeddings | 📋 Planned |
-| Analyses | 📋 Planned |
-| `cortex_search` tool | 📋 Stub (returns empty) |
-
-**Stub strategy:** Until Cortex is fully implemented, `cortex_search` returns empty results. The system works without it; it just lacks the "understanding" layer.
 
 ---
 
@@ -175,7 +98,7 @@ Cortex is queried by multiple components for semantic search and memory retrieva
 
 | Consumer | Use Case |
 |----------|----------|
-| **Broker** | Context enrichment (future: auto-inject relevant memories into Layer 3) |
+| **Broker** | Context enrichment (auto-inject relevant memories into Layer 3) |
 | **Broker** | Smart routing (find best thread for a message) |
 | **Automations** | Semantic matching for event evaluation |
 | **Agents** | `cortex_search` tool (agent-initiated memory lookup) |
@@ -205,21 +128,55 @@ interface CortexResult {
 }
 ```
 
-**Note:** The exact transport (HTTP API, Unix socket, direct SQLite) between the TypeScript NEX process and the Go Cortex process is TBD. See `../../project-structure/LANGUAGE_DECISION.md` for the process boundary.
+**Note:** The exact transport (HTTP API, Unix socket, direct SQLite) between the TypeScript NEX process and the Go Cortex process is TBD. See `../../project-structure/LANGUAGE_DECISION.md` for the process boundary. See `CORTEX_NEX_MIGRATION.md` for integration details.
 
 ---
 
-## Documents
+## Cortex Writes
 
-| Spec | Status | Description |
-|------|--------|-------------|
-| `upstream/UPSTREAM_MEMORY.md` | ✅ Complete | Upstream memory architecture (removed) |
+Cortex primarily reads from ledgers, but can write enrichments to the Identity Ledger (Identity Graph):
+
+```typescript
+interface IdentityEnrichment {
+  entity_id: string;
+  relationship?: string;           // Learned from patterns
+  tags_add?: string[];
+  tags_remove?: string[];
+  new_identities?: {
+    channel: string;
+    identifier: string;
+  }[];
+  confidence: number;              // 0-1
+  source: 'cortex_analysis';
+}
+```
+
+**Confidence thresholds:**
+- High confidence (>0.9): Auto-apply to Identity Graph
+- Medium confidence (0.7-0.9): Queue for human review
+- Low confidence (<0.7): Log but don't apply
+
+---
+
+## Implementation Status
+
+| Component | Status |
+|-----------|--------|
+| Episodes | Planned |
+| Facets | Planned |
+| Embeddings | Planned |
+| Analyses | Planned |
+| `cortex_search` tool | Stub (returns empty) |
+
+**Stub strategy:** Until Cortex is fully implemented, `cortex_search` returns empty results. The system works without it; it just lacks the "understanding" layer. All data is written to ledgers regardless, so Cortex can analyze retroactively once implemented.
 
 ---
 
 ## Related
 
+- `CORTEX_NEX_MIGRATION.md` — Integration plan (how mnemonic becomes Cortex)
 - `../ledgers/` — System of Record (source data)
 - `../../runtime/nex/NEXUS_REQUEST.md` — Pipeline lifecycle (Cortex feeds into stage 5)
 - `../../runtime/broker/CONTEXT_ASSEMBLY.md` — Cortex injection into agent context (Layer 3)
 - `../../runtime/broker/` — Broker queries Cortex for context
+- `../../project-structure/LANGUAGE_DECISION.md` — TS/Go split rationale

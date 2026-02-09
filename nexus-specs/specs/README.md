@@ -35,7 +35,7 @@ NEX processes events through 8 sequential stages. Each stage is a verb describin
 │  │                                                                          │    │
 │  └────────────────────────────────────┬────────────────────────────────────┘    │
 │                                       │                                          │
-│                                       │ AdapterEvent                             │
+│                                       │ NexusEvent                               │
 │                                       ▼                                          │
 │  ┌─────────────────────────────────────────────────────────────────────────┐    │
 │  │                              PIPELINE                                    │    │
@@ -116,7 +116,7 @@ Primary data stores:
 |--------|---------|----------|
 | **Events** | What happened | All inbound/outbound events (permanent) |
 | **Agents** | AI conversations | Sessions, turns, messages, tool calls |
-| **Identity** | Who is involved | Contacts (hard facts) → Entities → Mappings (fuzzy) |
+| **Identity** | Who is involved | Identity Graph: Contacts (hard facts) → Entities → Mappings (fuzzy) |
 | **Nexus** | Pipeline traces | NexusRequest lifecycle, timing, audit |
 
 All ledgers live in `~/nexus/state/nexus.db` (SQLite).
@@ -146,8 +146,8 @@ Every event creates a `NexusRequest` object that flows through the pipeline, acc
 |-------|---------------------|
 | `receiveEvent` | `event`, `delivery` (channel, thread, etc.) |
 | `resolveIdentity` | `principal.identity` (who sent this) |
-| `resolveAccess` | `permissions`, `session` (routing) |
-| `runAutomations` | `hooks` (which fired, extracted context) |
+| `resolveAccess` | `access` (routing) |
+| `runAutomations` | `triggers` (which fired, extracted context) |
 | `assembleContext` | `agent` (turn_id, thread_id, context) |
 | `runAgent` | `response` (content, tool calls, tokens) |
 | `deliverResponse` | `delivery_result` (message IDs, success) |
@@ -169,7 +169,7 @@ Connect Nexus to external platforms:
 - **webhooks** — External services (Stripe, GitHub, etc.)
 - **aix** — IDE sessions (Cursor, Codex, Claude Code)
 
-Each adapter normalizes events to a canonical `NormalizedEvent` format.
+Each adapter normalizes events to a canonical `NexusEvent` format.
 
 **See:** `../runtime/adapters/`
 
@@ -283,7 +283,7 @@ Format and deliver responses:
 | **Single database** | SQLite (`nexus.db`) | Simpler transactions, single backup |
 | **IAM before Hooks** | Policies (WHO) before scripts (WHAT) | Security first |
 | **All agents persistent** | No ephemeral agents | Every session can be resumed |
-| **Nested spawning allowed** | WAs can spawn sub-WAs | Removed upstream restriction |
+| **Nested spawning allowed** | WAs (MA = Manager Agent, WA = Worker Agent) can spawn sub-WAs | Removed upstream restriction |
 
 ---
 
@@ -343,7 +343,6 @@ Specs are organized into four conceptual layers:
 ## Related Documents
 
 - `../runtime/nex/NEX.md` — Full NEX specification
-- `../runtime/nex/NEXUS_REQUEST.md` — Data bus schema
-- `../runtime/nex/INTERFACES.md` — Component interface contracts
+- `../runtime/nex/NEXUS_REQUEST.md` — Data bus schema (NexusRequest lifecycle)
 - `../runtime/broker/OVERVIEW.md` — Agent system architecture
 - `../project-structure/FORK_MAPPING.md` — Openclaw → Nexus mapping

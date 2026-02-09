@@ -338,7 +338,7 @@ These are the canonical terms (specs are aligned, code alignment is separate wor
 - `TAXONOMY.md` — Domain/capability/service definitions
 - `HUB.md` — Pack definitions, hub storage
 - `SKILL_CLI.md` — Full CLI spec, manifest schema
-- `../OVERVIEW.md` — How skills integrate with credentials
+- `../../OVERVIEW.md` — How skills integrate with credentials
 - `../credentials/CREDENTIAL_SYSTEM.md` — Credential storage and access
 
 ---

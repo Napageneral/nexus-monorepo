@@ -48,5 +48,5 @@ This folder documents the codebase structure — both the upstream openclaw proj
 
 ## Related
 
-- `../OVERVIEW.md` — High-level system architecture
+- `../README.md` — High-level system architecture
 - `../workspace/` — Runtime workspace structure (`~/nexus/`)

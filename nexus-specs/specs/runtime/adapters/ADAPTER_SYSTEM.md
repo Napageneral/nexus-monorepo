@@ -550,7 +550,7 @@ nexus adapter restart gog/tnapathy@gmail.com
 
 ### Config (Desired State)
 
-Lives in `config.yaml` (or `adapters.yaml`). Human-editable, version-controllable. Defines what should exist and how it should run.
+Lives in `nex.yaml`. Human-editable, version-controllable. Defines what should exist and how it should run.
 
 ```yaml
 adapters:
@@ -945,7 +945,7 @@ Channel capabilities and available channels are injected into event context duri
 
 ## Open Questions
 
-1. **Config location** — Single `config.yaml` with `adapters:` key, or separate `adapters.yaml`? Leaning toward `config.yaml` for simplicity.
+1. **Config location** — Resolved: adapter config lives in `nex.yaml` under the `adapters:` key.
 
 2. **Adapter updates** — How to handle adapter binary updates? Restart required? Hot-reload capabilities?
 

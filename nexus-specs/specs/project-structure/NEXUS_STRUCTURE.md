@@ -1,381 +1,316 @@
 # Nexus Project Structure
 
-**Status:** PROPOSAL  
-**Date:** January 30, 2026  
-**Purpose:** Define ideal project structure given our System of Record architecture
+**Status:** REFERENCE  
+**Updated:** 2026-02-09  
+**Purpose:** Define the project structure for the Nexus monorepo
 
 ---
 
 ## Design Principles
 
-1. **Ledger-centric** — Ledgers are the core, not file storage
-2. **Component isolation** — Each component maps to a clear module
-3. **Interface-driven** — Components communicate via defined interfaces
-4. **Minimal runtime** — CLI-first, optional server for adapters
+1. **Ledger-centric** — Four ledgers are the system of record; all state flows through them
+2. **Component isolation** — Each module maps to a clear responsibility boundary
+3. **Interface-driven** — Components communicate via defined interfaces and the event bus
+4. **Adapters are processes** — External CLI executables, not in-process objects
 5. **Skills not plugins** — Markdown docs + binaries, not code plugins
+6. **Cortex is separate** — Go process with its own lifecycle, communicates over IPC
 
 ---
 
-## Proposed Structure
+## Resolved Decisions
+
+| Decision | Resolution |
+|----------|------------|
+| **Language (core)** | TypeScript — NEX, Broker, CLI, adapters, IAM |
+| **Language (Cortex)** | Go — separate process, IPC to core |
+| **Runtime** | Bun |
+| **Package manager** | Bun workspaces + Turborepo |
+| **Monorepo** | Yes — single repo, workspace packages |
+| **TUI** | Dropped |
+| **Config file** | `nex.yaml` |
+| **Upstream fork** | openclaw |
+
+---
+
+## Terminology
+
+| Abbreviation | Term | Description |
+|--------------|------|-------------|
+| **NEX** | Nexus Event Exchange | The ingest pipeline — daemon, adapter manager, stages |
+| **MA** | Manager Agent | Top-level agent that owns a session; delegates to WAs, manages context |
+| **WA** | Worker Agent | Specialized agent spawned by an MA for a focused subtask |
+| **IAM** | Identity & Access Management | Policy evaluation, ACL grants, session routing, audit |
+| **Cortex** | Cortex | Derived intelligence layer — embeddings, episodes, facets, search |
+
+---
+
+## Monorepo Layout
 
 ```
 nexus/
-├── packages/
-│   ├── core/                    # Core engine (like opencode/packages/opencode)
-│   │   ├── src/
-│   │   │   ├── ledgers/         # System of Record
-│   │   │   │   ├── event/       # Event Ledger
-│   │   │   │   ├── identity/    # Identity Ledger
-│   │   │   │   ├── agent/       # Agent Ledger
-│   │   │   │   └── schema.sql   # Unified schema
-│   │   │   │
-│   │   │   ├── adapters/        # In/Out adapters
-│   │   │   │   ├── in/          # In-Adapters
-│   │   │   │   │   ├── imessage/
-│   │   │   │   │   ├── gmail/
-│   │   │   │   │   ├── discord/
-│   │   │   │   │   ├── telegram/
-│   │   │   │   │   ├── whatsapp/
-│   │   │   │   │   ├── webhook/
-│   │   │   │   │   └── timer/
-│   │   │   │   └── out/         # Out-Adapters
-│   │   │   │       ├── discord/
-│   │   │   │       ├── telegram/
-│   │   │   │       ├── slack/
-│   │   │   │       └── email/
-│   │   │   │
-│   │   │   ├── event-handler/   # Event Handler (ACL + Hooks)
-│   │   │   │   ├── iam/         # Policy evaluation
-│   │   │   │   ├── hooks/       # Hook runtime
-│   │   │   │   └── dispatch.ts  # BrokerDispatch interface
-│   │   │   │
-│   │   │   ├── broker/          # Agent Broker
-│   │   │   │   ├── router.ts    # Session routing
-│   │   │   │   ├── queue.ts     # Queue management
-│   │   │   │   ├── executor.ts  # Agent execution
-│   │   │   │   └── ledger-client.ts  # Direct ledger writes
-│   │   │   │
-│   │   │   ├── agents/          # Agent execution
-│   │   │   │   ├── manager.ts   # MA implementation
-│   │   │   │   ├── worker.ts    # WA implementation
-│   │   │   │   └── prompts/     # Prompt templates
-│   │   │   │
-│   │   │   ├── tools/           # Tool system
-│   │   │   │   ├── registry.ts
-│   │   │   │   ├── builtin/     # Built-in tools
-│   │   │   │   └── skill/       # Skill tool loader
-│   │   │   │
-│   │   │   ├── cortex/           # Cortex (derived layer)
-│   │   │   │   ├── episodes.ts
-│   │   │   │   ├── facets.ts
-│   │   │   │   ├── embeddings.ts
-│   │   │   │   └── search.ts
-│   │   │   │
-│   │   │   ├── credentials/     # Credential system
-│   │   │   │   ├── store.ts
-│   │   │   │   ├── backends/    # Keychain, 1Password, etc.
-│   │   │   │   └── access.ts    # Consumer-centric access
-│   │   │   │
-│   │   │   ├── skills/          # Skill management
-│   │   │   │   ├── loader.ts
-│   │   │   │   ├── hub.ts       # Hub client
-│   │   │   │   └── state.ts     # Skill state tracking
-│   │   │   │
-│   │   │   ├── workspace/       # Workspace management
-│   │   │   │   ├── init.ts
-│   │   │   │   ├── config.ts
-│   │   │   │   └── paths.ts
-│   │   │   │
-│   │   │   └── bus/             # Event bus (internal)
-│   │   │       ├── events.ts
-│   │   │       └── bus.ts
-│   │   │
-│   │   └── test/
+├── src/
+│   ├── nex/                        # NEX — Event Exchange (ingest pipeline)
+│   │   ├── daemon.ts               # Long-running NEX daemon process
+│   │   ├── pipeline.ts             # Event pipeline orchestration
+│   │   ├── stages/                 # Pipeline stages
+│   │   │   ├── normalize.ts        # Raw → NormalizedEvent
+│   │   │   ├── enrich.ts           # Identity resolution, metadata
+│   │   │   ├── evaluate.ts         # IAM policy check (calls into iam/)
+│   │   │   └── dispatch.ts         # Route to Broker or automation
+│   │   ├── adapters/               # Adapter Manager
+│   │   │   ├── manager.ts          # Lifecycle: discover, spawn, health-check
+│   │   │   ├── protocol.ts         # Adapter ↔ NEX wire protocol (stdin/stdout)
+│   │   │   └── registry.ts         # Installed adapter manifest
+│   │   └── plugins/                # Pipeline plugin hooks
+│   │       ├── loader.ts
+│   │       └── types.ts
 │   │
-│   ├── cli/                     # CLI package
-│   │   ├── src/
-│   │   │   ├── commands/
-│   │   │   │   ├── status.ts
-│   │   │   │   ├── capabilities.ts
-│   │   │   │   ├── skill/
-│   │   │   │   ├── credential/
-│   │   │   │   ├── sync.ts
-│   │   │   │   ├── search.ts
-│   │   │   │   └── config/
-│   │   │   ├── tui/             # Optional TUI (from upstream)
-│   │   │   └── main.ts
-│   │   └── bin/
+│   ├── broker/                     # Agent Broker (agent engine)
+│   │   ├── broker.ts               # Main broker — receives dispatches from NEX
+│   │   ├── router.ts               # Session routing (uses IAM ACL policies)
+│   │   ├── session.ts              # Session lifecycle management
+│   │   ├── queue.ts                # Queue modes (steer, followup, collect, interrupt)
+│   │   ├── executor.ts             # MA/WA execution orchestration
+│   │   ├── context.ts              # Context assembly (ledgers + Cortex)
+│   │   ├── agents/
+│   │   │   ├── manager.ts          # Manager Agent implementation
+│   │   │   ├── worker.ts           # Worker Agent implementation
+│   │   │   ├── llm.ts              # LLM streaming (from openclaw upstream)
+│   │   │   └── compaction.ts       # Context compaction
+│   │   ├── prompts/
+│   │   │   ├── system.ts           # System prompt construction
+│   │   │   └── templates/          # Prompt templates
+│   │   └── session-pointer.ts      # Session pointer management
 │   │
-│   ├── aix/                     # AIX (external harness ingestion)
-│   │   ├── src/
-│   │   │   ├── sync/
-│   │   │   │   ├── cursor.ts
-│   │   │   │   ├── codex.ts
-│   │   │   │   ├── claude.ts
-│   │   │   │   └── clawdbot.ts
-│   │   │   └── main.ts
-│   │   └── test/
+│   ├── iam/                        # Identity & Access Management
+│   │   ├── policies.ts             # Load/parse ACL policies from nex.yaml
+│   │   ├── evaluate.ts             # Policy evaluation engine
+│   │   ├── grants.ts               # Dynamic grants (runtime overrides)
+│   │   ├── resolve.ts              # Identity resolution (who is this participant?)
+│   │   ├── routing.ts              # Session routing rules (derived from ACL)
+│   │   └── audit.ts                # Audit log writes
 │   │
-│   └── cloud/                   # Nexus Cloud client
-│       ├── src/
-│       │   ├── sync.ts
-│       │   └── crypto.ts
-│       └── test/
+│   ├── hooks/                      # Hooks & Automations
+│   │   ├── runtime.ts              # Hook execution engine
+│   │   ├── loader.ts               # Load hooks from workspace
+│   │   ├── context.ts              # Hook context injection
+│   │   └── types.ts                # Hook definitions
+│   │
+│   ├── db/                         # Ledger Access Layer
+│   │   ├── connection.ts           # SQLite connection (Bun SQLite)
+│   │   ├── migrations/             # Migration files
+│   │   ├── schema.sql              # Unified DDL for all four ledgers
+│   │   ├── events/                 # Event Ledger queries
+│   │   │   ├── write.ts
+│   │   │   └── read.ts
+│   │   ├── agents/                 # Agent Ledger queries
+│   │   │   ├── write.ts
+│   │   │   └── read.ts
+│   │   ├── identity/               # Identity Ledger queries (includes Identity Graph)
+│   │   │   ├── write.ts
+│   │   │   ├── read.ts
+│   │   │   └── graph.ts            # Identity Graph traversal
+│   │   └── nexus/                  # Nexus Ledger queries (config, skills, workspace)
+│   │       ├── write.ts
+│   │       └── read.ts
+│   │
+│   ├── cli/                        # Nexus CLI
+│   │   ├── main.ts                 # Entry point
+│   │   └── commands/
+│   │       ├── status.ts
+│   │       ├── capabilities.ts
+│   │       ├── skill/
+│   │       ├── credential/
+│   │       ├── config/
+│   │       ├── sync.ts
+│   │       └── search.ts
+│   │
+│   ├── tools/                      # Tool System
+│   │   ├── registry.ts             # Tool registry
+│   │   ├── builtin/                # Built-in tools
+│   │   └── skill/                  # Skill-based tool loader
+│   │       └── loader.ts
+│   │
+│   ├── bus/                        # Event Bus
+│   │   ├── bus.ts                  # In-process event bus
+│   │   ├── events.ts               # Event type definitions
+│   │   └── sse.ts                  # SSE server for external consumers
+│   │
+│   ├── workspace/                  # Workspace Management
+│   │   ├── init.ts                 # Workspace initialization
+│   │   ├── config.ts               # nex.yaml parsing
+│   │   └── paths.ts                # Path resolution
+│   │
+│   ├── credentials/                # Credential System
+│   │   ├── store.ts
+│   │   ├── backends/               # Keychain, 1Password, env
+│   │   └── access.ts
+│   │
+│   ├── skills/                     # Skill Management
+│   │   ├── loader.ts
+│   │   ├── hub.ts                  # Hub client
+│   │   └── state.ts
+│   │
+│   └── aix/                        # AIX (external harness ingestion)
+│       ├── sync/
+│       │   ├── cursor.ts
+│       │   ├── codex.ts
+│       │   ├── claude.ts
+│       │   └── clawdbot.ts
+│       └── main.ts
 │
-├── infra/                       # Infrastructure (SST)
-│   ├── hub.ts                   # Skills Hub
-│   ├── cloud.ts                 # Nexus Cloud
-│   └── collab.ts                # Collaboration server
+├── cortex/                         # Cortex — SEPARATE Go PROCESS
+│   ├── go.mod
+│   ├── go.sum
+│   ├── main.go                     # Entry point, IPC server
+│   ├── episodes/                   # Episode extraction & retrieval
+│   ├── facets/                     # Facet extraction & storage
+│   ├── embeddings/                 # Embedding generation & vector search
+│   ├── search/                     # Unified search interface
+│   └── ipc/                        # IPC protocol (communicates with TS core)
 │
-├── scripts/                     # Build/release scripts
+├── adapters/                       # Adapter binaries (external CLI executables)
+│   ├── imessage/                   # Each adapter is a standalone CLI
+│   ├── discord/
+│   ├── telegram/
+│   ├── whatsapp/
+│   ├── gmail/
+│   ├── slack/
+│   ├── webhook/
+│   └── timer/
+│
+├── infra/                          # Infrastructure (SST)
+│   ├── hub.ts                      # Skills Hub
+│   ├── cloud.ts                    # Nexus Cloud
+│   └── collab.ts                   # Collaboration server
+│
+├── scripts/                        # Build/release scripts
 │   ├── build.ts
 │   ├── release.ts
 │   └── test.ts
 │
-├── specs/                       # Specifications (current nexus-specs)
+├── specs/                          # Specifications (current nexus-specs)
 │   └── ...
 │
-├── package.json                 # Workspace config
-├── turbo.json                   # Turborepo config
-├── tsconfig.json                # TS config
-└── AGENTS.md                    # Agent documentation
+├── nex.yaml                        # Nexus configuration
+├── package.json                    # Bun workspace config
+├── turbo.json                      # Turborepo config
+├── tsconfig.json                   # TypeScript config
+└── AGENTS.md                       # Agent documentation
 ```
 
 ---
 
-## Component Mapping
+## Four Ledgers
 
-### From OpenCode → Nexus
+All persistent state lives in four ledgers, accessed through `src/db/`.
 
-| OpenCode | Nexus | Notes |
-|----------|-------|-------|
-| `packages/opencode/src/session/` | `packages/core/src/broker/` + `ledgers/agent/` | Sessions become ledger entries |
-| `packages/opencode/src/tool/` | `packages/core/src/tools/` | Same tool system |
-| `packages/opencode/src/permission/` | `packages/core/src/event-handler/iam/` | Policy-based, not per-call |
-| `packages/opencode/src/bus/` | `packages/core/src/bus/` | Similar, different events |
-| `packages/opencode/src/config/` | `packages/core/src/workspace/` | Nexus workspace model |
-| `packages/opencode/src/plugin/` | `packages/core/src/skills/` | Markdown + binaries |
-| `packages/opencode/src/storage/` | `packages/core/src/ledgers/` | SQLite, not files |
-| `packages/opencode/src/server/` | `packages/core/src/broker/` (internal) | Broker is internal, adapters are external |
+| Ledger | Purpose | Key Tables |
+|--------|---------|------------|
+| **Events** | Every inbound/outbound event normalized and stored | `events`, `event_participants`, `event_metadata` |
+| **Agents** | Session lifecycle, turns, messages, tool calls | `sessions`, `turns`, `messages`, `tool_calls` |
+| **Identity** | Entities, identity resolution, and the **Identity Graph** | `entities`, `identities`, `identity_edges`, `identity_graph` |
+| **Nexus** | Workspace config, skill state, credentials, system metadata | `config`, `skill_state`, `credential_pointers` |
 
-### New Nexus Components
-
-| Component | Purpose | No OpenCode Equivalent |
-|-----------|---------|------------------------|
-| `ledgers/event/` | Event Ledger | ✓ |
-| `ledgers/identity/` | Identity Ledger | ✓ |
-| `adapters/in/` | In-Adapters | ✓ |
-| `adapters/out/` | Out-Adapters | ✓ |
-| `event-handler/` | ACL + Hooks | ✓ |
-| `cortex/` | Derived layer | ✓ (was Cortex) |
-| `aix/` | External harness sync | ✓ |
+The Identity Ledger contains the **Identity Graph** — a graph structure mapping relationships between entities, identities, and platform accounts. This is queried by IAM for identity resolution and by Cortex for relationship-aware search.
 
 ---
 
-## Core Package Details
+## Adapters
 
-### `ledgers/`
+Adapters are **external CLI executables**, not in-process modules. Each adapter is a standalone binary that communicates with NEX over a defined wire protocol (stdin/stdout JSON lines).
 
-All three ledgers in one module with shared schema:
+The **Adapter Manager** (`src/nex/adapters/manager.ts`) handles:
+- **Discovery** — scanning the `adapters/` directory for installed adapters
+- **Lifecycle** — spawning, health-checking, and restarting adapter processes
+- **Protocol** — marshalling NormalizedEvents between adapters and the pipeline
 
-```
-ledgers/
-├── schema.sql              # Unified DDL for all tables
-├── migrations/             # Migration files
-├── db.ts                   # Database connection
-├── event/
-│   ├── types.ts            # NormalizedEvent, EventTrigger
-│   ├── write.ts            # Insert events
-│   └── read.ts             # Query events
-├── identity/
-│   ├── types.ts            # Entity, Identity
-│   ├── resolve.ts          # IdentityLookup
-│   └── enrich.ts           # IdentityEnrichment
-└── agent/
-    ├── types.ts            # Session, Turn, Message, ToolCall
-    ├── write.ts            # LedgerWrite operations
-    └── read.ts             # Query sessions/turns
-```
-
-### `adapters/`
-
-Normalized in/out adapters:
+An adapter handles both ingest and delivery for its platform. There is no in/out split — a single Discord adapter both receives and sends Discord messages.
 
 ```
-adapters/
-├── types.ts                # NormalizedEvent, ParticipantRef
-├── in/
-│   ├── adapter.ts          # In-Adapter interface
-│   ├── imessage/
-│   │   ├── sync.ts         # Poll iMessage DB
-│   │   └── normalize.ts    # → NormalizedEvent
-│   ├── gmail/
-│   │   ├── client.ts       # Gmail API client
-│   │   └── normalize.ts
-│   └── discord/
-│       ├── gateway.ts      # Discord WebSocket
-│       └── normalize.ts
-└── out/
-    ├── adapter.ts          # Out-Adapter interface
-    ├── formatter.ts        # Platform formatting
-    ├── discord/
-    │   └── send.ts         # OutAdapterSend → Discord
-    └── telegram/
-        └── send.ts
-```
-
-### `event-handler/`
-
-The combined ACL + Hooks evaluation:
-
-```
-event-handler/
-├── handler.ts              # Main event handler
-├── iam/
-│   ├── policies.ts         # Load/parse policies
-│   ├── evaluate.ts         # Policy evaluation
-│   ├── grants.ts           # Dynamic grants
-│   └── audit.ts            # Audit logging
-├── hooks/
-│   ├── runtime.ts          # Hook execution (TypeScript)
-│   ├── loader.ts           # Load hooks from workspace
-│   └── context.ts          # Hook context injection
-└── dispatch.ts             # BrokerDispatch creation
-```
-
-### `broker/`
-
-Agent broker with ledger-direct writes:
-
-```
-broker/
-├── broker.ts               # Main broker
-├── router.ts               # Persona → Session → Turn routing
-├── queue.ts                # Queue modes (steer, followup, collect, interrupt)
-├── executor.ts             # Agent execution
-├── ledger-client.ts        # Direct Agent Ledger writes
-└── session-pointer.ts      # Session pointer management
-```
-
-### `agents/`
-
-MA/WA execution:
-
-```
-agents/
-├── manager.ts              # Manager Agent
-├── worker.ts               # Worker Agent
-├── llm.ts                  # LLM streaming (from upstream)
-├── prompts/
-│   ├── system.ts           # System prompt construction
-│   └── templates/          # Prompt templates
-└── compaction.ts           # Context compaction
+Adapter (CLI process)  ←stdin/stdout→  Adapter Manager  →  NEX Pipeline
 ```
 
 ---
 
 ## Key Architectural Decisions
 
-### 1. Single Core Package
+### 1. Forked from openclaw
 
-Unlike OpenCode's split packages (opencode, app, desktop, console), Nexus has one core package with optional CLI/TUI. This simplifies:
-- Dependency management
-- Interface contracts
-- Testing
+Nexus is forked from [openclaw](https://github.com/anthropics/openclaw). The core TypeScript patterns (LLM streaming, tool execution, bus) originate from openclaw and are adapted for Nexus's multi-agent, multi-platform architecture.
 
 ### 2. Ledger-Centric Storage
 
 ```
-OpenCode: Storage.set(["session", projectID, sessionID], data)
-Nexus:    db.insert(agent_sessions).values(session)
+openclaw:  Storage.set(["session", projectID, sessionID], data)
+nexus:     db.insert(agent_sessions).values(session)
 ```
 
-All state flows through ledgers. No file-based session storage.
+All state flows through the four ledgers. No file-based session storage.
 
-### 3. Event Handler = ACL + Hooks
+### 3. IAM Owns Routing
 
-Unlike OpenCode's permission system (per-call approval), Nexus evaluates ACL upfront:
+Session routing is determined by IAM policy evaluation, not hardcoded rules. When an event arrives:
 
 ```
-OpenCode: tool execution → permission.ask() → wait for approval
-Nexus:    event arrives → ACL evaluates → permissions passed to broker → tool respects permissions
+Event → NEX pipeline → IAM evaluates ACL policies → routing decision → Broker
 ```
 
-### 4. Adapters Are First-Class
+ACL policies in `nex.yaml` define which events reach which agents, with what permissions, and how sessions are routed (new session, existing session, queue mode).
 
-In OpenCode, external communication isn't structured. In Nexus:
-- **In-Adapters** normalize external data → Event Ledger
-- **Out-Adapters** format responses → external platforms
+### 4. Adapters Are External Processes
 
-### 5. AIX Is Separate
+Unlike openclaw where external communication isn't structured, Nexus adapters are standalone CLI executables:
+- Each adapter is a separate binary (can be any language)
+- Managed by the Adapter Manager (spawn, health-check, restart)
+- Communicate over stdin/stdout using a JSON-lines protocol
+- A single adapter handles both directions for its platform
 
-AIX syncs from external harnesses (Cursor, Codex, Claude Code). It's a separate package that feeds the Agent Ledger, not part of core.
+### 5. Cortex Is a Separate Go Process
 
----
+Cortex runs as a separate Go process, not embedded in the TypeScript core. It communicates with the core over IPC. This allows:
+- Independent deployment and scaling
+- Go's strengths for embedding generation and vector operations
+- Clean process boundary between hot path (TypeScript) and intelligence layer (Go)
 
-## Migration Strategy
+### 6. MA/WA Agent Hierarchy
 
-### Phase 1: Fork Core
-1. Fork `packages/opencode/` → `packages/core/`
-2. Remove: plugin system, storage (file-based)
-3. Add: ledgers, adapters, event-handler
-4. Adapt: session → broker, permission → ACL
+The Broker executes agents in a two-tier hierarchy:
+- **Manager Agent (MA)** — owns the session, receives the dispatch, manages context window, delegates subtasks
+- **Worker Agent (WA)** — spawned by an MA for focused subtasks, reports results back to the MA
 
-### Phase 2: Add Ledgers
-1. Bring mnemonic schema into `ledgers/schema.sql`
-2. Implement ledger read/write modules
-3. Wire broker to use ledger-client
+### 7. AIX Is Separate
 
-### Phase 3: Add Event Handler
-1. Implement ACL policy evaluation
-2. Port hooks from specs
-3. Wire event-handler to broker
-
-### Phase 4: Add Adapters
-1. Implement in-adapters (iMessage, Discord, etc.)
-2. Implement out-adapters (response formatting)
-3. Wire adapters to event-handler
-
-### Phase 5: Wire Cortex
-1. Bring Cortex/aix into nexus
-2. Wire Cortex to read from all three ledgers
-3. Wire Broker to query Cortex
+AIX syncs from external harnesses (Cursor, Codex, Claude Code). It feeds the Agent Ledger but is not part of the core pipeline.
 
 ---
 
-## Open Questions
+## Component Mapping from openclaw
 
-1. **Monorepo or Polyrepo?**
-   - Current: Monorepo (like OpenCode)
-   - Alternative: Separate repos for core, cli, cloud
-   - Recommendation: Start monorepo, split later if needed
+| openclaw | Nexus | Notes |
+|----------|-------|-------|
+| `src/session/` | `src/broker/` + `src/db/agents/` | Sessions become ledger entries |
+| `src/tool/` | `src/tools/` | Same tool system, extended |
+| `src/permission/` | `src/iam/` | Policy-based, not per-call approval |
+| `src/bus/` | `src/bus/` | Similar pattern, different event types |
+| `src/config/` | `src/workspace/` | Nexus workspace model, `nex.yaml` |
+| `src/plugin/` | `src/skills/` | Markdown + binaries, not code plugins |
+| `src/storage/` | `src/db/` | SQLite ledgers, not file storage |
+| `src/server/` | `src/nex/` + `src/broker/` | NEX is ingest, Broker is execution |
 
-2. **TypeScript or Go for Adapters?**
-   - Core: TypeScript (fork from OpenCode)
-   - Adapters: TypeScript (easier integration)
-   - AIX: Currently Go (could port or keep)
-   - Recommendation: TypeScript for now, optimize later
+### New Nexus Components (no openclaw equivalent)
 
-3. **Bun or Node?**
-   - OpenCode: Bun
-   - Nexus: Could use either
-   - Recommendation: Bun (faster, native TS)
-
-4. **Package Manager?**
-   - OpenCode: Bun workspaces
-   - Nexus: Same
-   - Recommendation: Bun workspaces + Turborepo
-
----
-
-## Next Steps
-
-1. [ ] Review this structure
-2. [ ] Decide on open questions
-3. [ ] Create actual package scaffolding
-4. [ ] Begin fork from OpenCode core
-5. [ ] Implement ledger layer
+| Component | Purpose |
+|-----------|---------|
+| `src/nex/` | Event ingest pipeline, adapter manager, daemon |
+| `src/iam/` | ACL policies, identity resolution, session routing |
+| `src/hooks/` | Automation hooks triggered by events |
+| `src/db/identity/` | Identity Ledger with Identity Graph |
+| `src/db/nexus/` | Nexus Ledger (workspace metadata) |
+| `src/aix/` | External harness sync |
+| `cortex/` | Go-based derived intelligence layer |
+| `adapters/` | External CLI adapter binaries |
 
 ---
 
-*This is a proposal. Review with Tyler before implementation.*
+*This document reflects the resolved architecture as of 2026-02-09.*

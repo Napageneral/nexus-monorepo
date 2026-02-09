@@ -136,7 +136,7 @@ MsgContext fields → NexusEvent fields:
 Replace `loadConfig()` with:
 - Account/token from Nexus credential system
 - Adapter-specific config (guild allowlists, DM policy, etc.)
-- Can be in adapter's own config file or Nexus `config.yaml`
+- Can be in adapter's own config file or Nexus `nex.yaml`
 
 ---
 

@@ -451,6 +451,94 @@ if (fs.existsSync(doctorPlatformNotesTest)) {
 }
 NODE
 
+// --- Fix state-dir-env.ts (OPENCLAW_HOME became duplicate NEXUS_STATE_DIR) ---
+const stateDirEnvPath = "src/test-helpers/state-dir-env.ts";
+if (fs.existsSync(stateDirEnvPath)) {
+  const content = [
+    'type StateDirEnvSnapshot = {',
+    '  nexusStateDir: string | undefined;',
+    '  nexusHome: string | undefined;',
+    '};',
+    '',
+    'export function snapshotStateDirEnv(): StateDirEnvSnapshot {',
+    '  return {',
+    '    nexusStateDir: process.env.NEXUS_STATE_DIR,',
+    '    nexusHome: process.env.NEXUS_HOME,',
+    '  };',
+    '}',
+    '',
+    'export function restoreStateDirEnv(snapshot: StateDirEnvSnapshot): void {',
+    '  if (snapshot.nexusStateDir === undefined) {',
+    '    delete process.env.NEXUS_STATE_DIR;',
+    '  } else {',
+    '    process.env.NEXUS_STATE_DIR = snapshot.nexusStateDir;',
+    '  }',
+    '  if (snapshot.nexusHome === undefined) {',
+    '    delete process.env.NEXUS_HOME;',
+    '  } else {',
+    '    process.env.NEXUS_HOME = snapshot.nexusHome;',
+    '  }',
+    '}',
+    '',
+    'export function setStateDirEnv(stateDir: string): void {',
+    '  process.env.NEXUS_STATE_DIR = stateDir;',
+    '  delete process.env.NEXUS_HOME;',
+    '}',
+    '',
+  ].join("\n");
+  fs.writeFileSync(stateDirEnvPath, content);
+}
+
+// --- Fix paths.ts: add NEXUS_HOME support via resolveRequiredHomeDir ---
+const pathsTs = "src/config/paths.ts";
+if (fs.existsSync(pathsTs)) {
+  let data = fs.readFileSync(pathsTs, "utf8");
+  // Add import for resolveRequiredHomeDir if missing
+  if (!data.includes("resolveRequiredHomeDir")) {
+    data = data.replace(
+      'import type { OpenClawConfig } from "./types.js";',
+      'import type { OpenClawConfig } from "./types.js";\nimport { resolveRequiredHomeDir } from "../infra/home-dir.js";',
+    );
+    // Add effectiveHomedir helper after resolveUserPath function
+    data = data.replace(
+      "export function resolveStateDir(",
+      [
+        "function effectiveHomedir(env: NodeJS.ProcessEnv, homedir: () => string): () => string {",
+        "  return () => resolveRequiredHomeDir(env, homedir);",
+        "}",
+        "",
+        "export function resolveStateDir(",
+      ].join("\n"),
+    );
+    // Use effectiveHomedir in resolveStateDir
+    data = data.replace(
+      /if \(override\) return resolveUserPath\(override\);\n\n  const nexusDir = newStateDir\(homedir\);\n  const legacyDirs = legacyStateDirs\(homedir\);/,
+      "if (override) return resolveUserPath(override);\n\n  const effective = effectiveHomedir(env, homedir);\n  const nexusDir = newStateDir(effective);\n  const legacyDirs = legacyStateDirs(effective);",
+    );
+  }
+  fs.writeFileSync(pathsTs, data);
+}
+
+// --- Fix profile.test.ts: .nexus-{profile} → nexus/state-{profile} ---
+const profileTestPath = "src/cli/profile.test.ts";
+if (fs.existsSync(profileTestPath)) {
+  let data = fs.readFileSync(profileTestPath, "utf8");
+  data = data.replace(/\.nexus-work/g, "nexus/state-work");
+  fs.writeFileSync(profileTestPath, data);
+}
+
+// --- Fix run-node.mjs: stale openclaw references ---
+const runNodePath = "scripts/run-node.mjs";
+if (fs.existsSync(runNodePath)) {
+  let data = fs.readFileSync(runNodePath, "utf8");
+  data = data.replace("env.OPENCLAW_FORCE_BUILD", "env.NEXUS_FORCE_BUILD");
+  data = data.replace("env.OPENCLAW_RUNNER_LOG", "env.NEXUS_RUNNER_LOG");
+  data = data.replace("[openclaw]", "[nexus]");
+  data = data.replace('"openclaw.mjs"', '"nexus.mjs"');
+  fs.writeFileSync(runNodePath, data);
+}
+NODE
+
 echo "  Done fixing regex/path edge cases"
 
 # ============================================================================

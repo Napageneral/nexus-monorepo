@@ -1,8 +1,8 @@
 # Nexus Event Bus Architecture
 
 **Status:** DESIGN IN PROGRESS  
-**Last Updated:** 2026-01-30  
-**Related:** NEX.md, ../../OVERVIEW.md, automations/AUTOMATION_SYSTEM.md
+**Last Updated:** 2026-02-09  
+**Related:** NEX.md, automations/AUTOMATION_SYSTEM.md
 
 ---
 
@@ -200,10 +200,10 @@ Bus.subscribeAll((event) => {
 
 | Event | Properties | Purpose |
 |-------|------------|---------|
-| `session.created` | `session_id`, `persona` | New session |
-| `session.updated` | `session_id`, `changes` | Session modified |
-| `turn.created` | `turn_id`, `session_id` | New turn started |
-| `turn.completed` | `turn_id`, `tokens` | Turn finished |
+| `session.created` | `session_label`, `persona` | New session |
+| `session.updated` | `session_label`, `changes` | Session modified |
+| `turn.created` | `turn_id`, `session_label` | New turn started |
+| `turn.completed` | `turn_id`, `usage` | Turn finished |
 
 ### Category 3: File & Workspace
 
@@ -444,7 +444,7 @@ The bus is **plumbing**. Hooks are **automation**.
 **NEX plugins CAN publish bus events:**
 ```typescript
 const analyticsPlugin: NEXPlugin = {
-  onComplete: async (req) => {
+  onFinalize: async (req) => {
     await Bus.publish(Event.Nex.RequestCompleted, {
       request_id: req.request_id,
       duration_ms: req.pipeline.duration_ms

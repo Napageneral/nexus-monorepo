@@ -54,7 +54,7 @@ receiveEvent → resolveIdentity → resolveAccess → runAutomations
 
 ## See Also
 
-- `../OVERVIEW.md` — System overview
+- `../README.md` — System overview
 - `../data/` — Where state lives (ledgers, cortex)
 - `../environment/` — Agent working context
 

@@ -245,7 +245,7 @@ Already onboarded → no action needed. Agent reads existing identity files.
 | Spec | Relationship |
 |------|--------------|
 | `WORKSPACE_SYSTEM.md` | Authoritative spec — this document aligns with it |
-| `BOOTSTRAP_FILES.md` | File templates used during onboarding |
+| `BOOTSTRAP_FILES_REFERENCE.md` | File templates used during onboarding |
 | `harnesses/HARNESS_BINDINGS.md` | Binding details for harnesses |
 | `../capabilities/credentials/CREDENTIAL_SYSTEM.md` | Credential scan and import details |
 | `specs/runtime/adapters/` | Channel setup (follow-up, not onboarding) |

@@ -322,7 +322,7 @@ Automations are stored as files in the workspace:
 └── ...
 ```
 
-The system watches this directory and syncs to a database table for runtime execution.
+Discovery is **CLI-based**, not file-watching. Agents register automations via `nexus automation register <filename>`, which validates the script and stores a record in the `automations` database table. The file system is where scripts live; the database is the source of truth for what's active.
 
 ---
 

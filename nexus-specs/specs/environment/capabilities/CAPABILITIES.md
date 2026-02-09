@@ -19,9 +19,9 @@ Capabilities are abstract goals. Providers are concrete implementations.
 
 ```
 Capability (abstract)  →  Provider (concrete)
-     email-read        →  gog + google-oauth
-     messaging-read    →  eve, imsg, wacli
-     chat-send         →  discord, slack
+     email             →  gog + google-oauth
+     messaging         →  eve, imsg, wacli
+     chat              →  discord, slack
      web-search        →  brave-search
 ```
 
@@ -83,8 +83,7 @@ Skills declare what they provide and require:
 name: gog
 type: tool
 capabilities:
-  - email-read
-  - email-send
+  - email
   - calendar
   - contacts
   - cloud-storage
@@ -114,7 +113,7 @@ platforms:
 When multiple skills provide the same capability:
 
 ```
-messaging-read:
+messaging:
   ├─ eve (darwin) → status: active
   ├─ imsg (darwin) → status: ready
   └─ wacli (all) → status: needs-setup
@@ -130,12 +129,9 @@ The capability's overall status is the "best" of its providers.
 
 | Capability | Description | Providers | Setup |
 |------------|-------------|-----------|-------|
-| `email-read` | Read emails | gog + google-oauth | OAuth |
-| `email-send` | Send emails | gog + google-oauth | OAuth |
-| `messaging-read` | Read SMS/iMessage/WhatsApp | imsg (darwin), eve (darwin), wacli | FDA / QR |
-| `messaging-send` | Send messages | imsg (darwin), wacli | FDA / QR |
-| `chat-read` | Read Discord/Slack | discord, slack | Bot token / OAuth |
-| `chat-send` | Send to Discord/Slack | discord, slack | Bot token / OAuth |
+| `email` | Read and send emails | gog + google-oauth | OAuth |
+| `messaging` | SMS/iMessage/WhatsApp messaging | imsg (darwin), eve (darwin), wacli | FDA / QR |
+| `chat` | Discord/Slack chat | discord, slack | Bot token / OAuth |
 | `contacts` | Address book access | gog + google-oauth | OAuth |
 | `voice` | Voice calls | (TBD) | — |
 
@@ -313,10 +309,9 @@ Output grouped by category with status indicators:
 
 ```
 🗣️ Communication
-  ✅ email-read         gog + google-oauth
-  ✅ email-send         gog + google-oauth
-  ⭐ messaging-read     eve
-  🔧 chat-send          discord (needs-setup)
+  ✅ email              gog + google-oauth
+  ⭐ messaging          eve
+  🔧 chat               discord (needs-setup)
 
 📋 Productivity
   ✅ calendar           gog + google-oauth
@@ -415,14 +410,14 @@ Capabilities unlock progressively through onboarding:
 When everything is configured, capabilities chain together:
 
 ```
-1. Email arrives about flight check-in    (email-read)
+1. Email arrives about flight check-in    (email)
 2. Agent reads it automatically           (llm-anthropic)
 3. Agent uses computer-use to check in    (gui-automation)
-4. Agent texts you: "Checked in! 14A"     (chat-send)
+4. Agent texts you: "Checked in! 14A"     (chat)
 5. Agent sets departure reminder          (scheduling)
 ```
 
-**Required capabilities:** email-read + llm + gui-automation + chat-send + scheduling
+**Required capabilities:** email + llm + gui-automation + chat + scheduling
 
 ---
 

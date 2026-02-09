@@ -307,7 +307,7 @@ packages/core/src/
 │   │   └── context.ts
 │   └── dispatch.ts                 # BrokerDispatch
 │
-├── index/                          🔵 NEW (from mnemonic)
+├── cortex/                         🔵 NEW (from mnemonic)
 │   ├── episodes.ts
 │   ├── facets.ts
 │   ├── embeddings.ts
@@ -420,7 +420,7 @@ packages/core/src/
 | `adapters/out/` | Out-Adapters (response formatting) |
 | `event-handler/iam/` | ACL policy evaluation |
 | `event-handler/hooks/` | Hook runtime |
-| `index/` | Derived layer (from mnemonic) |
+| `cortex/` | Derived layer (from mnemonic) |
 | `aix/` | External harness sync (bundled) |
 
 ---

@@ -10,11 +10,11 @@
 This document is the **authoritative specification** for the Nexus workspace system. It defines how initialization, onboarding, project structure, bootstrap files, and agent bindings work together.
 
 **Subordinate specs must align with this document:**
-- `INIT.md` — Init command details
-- `PROJECT_STRUCTURE.md` — Directory layout
-- `BOOTSTRAP_FILES.md` — File templates
+- `INIT_REFERENCE.md` — Init command details
+- `WORKSPACE_LAYOUT_REFERENCE.md` — Directory layout
+- `BOOTSTRAP_FILES_REFERENCE.md` — File templates
 - `harnesses/HARNESS_BINDINGS.md` — IDE/harness integrations
-- `ONBOARDING.md` — Bootstrap conversation flow
+- `BOOTSTRAP_ONBOARDING.md` — Bootstrap conversation flow
 
 ---
 
@@ -528,7 +528,7 @@ Located in `bootstrap-templates/`:
 | `IDENTITY-user.md` | User identity template |
 | `SOUL.md` | Agent persona template |
 
-> **Note:** See `BOOTSTRAP_FILES.md` for detailed template purposes and usage.
+> **Note:** See `BOOTSTRAP_FILES_REFERENCE.md` for detailed template purposes and usage.
 
 ### Harness Binding Templates
 

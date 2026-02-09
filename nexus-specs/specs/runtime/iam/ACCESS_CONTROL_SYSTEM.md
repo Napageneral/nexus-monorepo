@@ -131,7 +131,7 @@ Event: { channel: "imessage", from: "+15551234567" }
 
 If no match: `Principal: { unknown: true }`
 
-**Note:** The Identity Ledger is conceptually separate from the Event Ledger. See `../../OVERVIEW.md` for the System of Record.
+**Note:** The Identity Ledger is conceptually separate from the Event Ledger. See `../../README.md` for the System of Record.
 
 ---
 

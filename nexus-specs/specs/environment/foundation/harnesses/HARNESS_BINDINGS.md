@@ -640,7 +640,7 @@ The `nexus bindings create` command copies these templates to the workspace.
 | Spec | Relationship |
 |------|--------------|
 | `WORKSPACE_SYSTEM.md` | Authoritative workspace spec, defines onboarding flow |
-| `ONBOARDING.md` | Onboarding details, references binding creation |
+| `../BOOTSTRAP_ONBOARDING.md` | Onboarding details, references binding creation |
 | `research/` | Supporting research and evidence for this spec |
 | `templates/` | Authoritative template files for each harness |
 | `../../interface/cli/COMMANDS.md` | CLI command reference (bindings commands) |

@@ -7,6 +7,6 @@
 [submodule "nexus-website"]
 	path = nexus-website
 	url = https://github.com/Napageneral/nexus-website.git
-[submodule "nexus-collab"]
-	path = nexus-collab
-	url = https://github.com/Napageneral/nexus-collab.git
+[submodule "nex"]
+	path = nex
+	url = https://github.com/Napageneral/nex.git

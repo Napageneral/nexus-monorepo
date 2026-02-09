@@ -143,22 +143,19 @@ Smart routing is a **modifier**, not a separate routing mode:
 
 ## Session Keys
 
-Session keys provide stable identifiers for routing:
-
-```
-{type}:{agentId}:{context...}
-```
+Session keys are stable identifiers assigned by ACL policies during `resolveAccess` (stage 3). Format depends on sender type:
 
 ### Common Patterns
 
 | Pattern | Example | Description |
 |---------|---------|-------------|
-| Main session | `agent:main:main` | Default agent, main session |
-| DM (main scope) | `agent:main:main` | DMs collapse to main by default |
-| DM (per-peer) | `agent:main:dm:tyler` | Isolated DM per peer |
-| Group | `agent:main:telegram:group:123` | Isolated per group |
-| Worker | `agent:main:worker:uuid` | Spawned worker session |
-| Platform thread | `agent:main:telegram:group:123:thread:456` | Thread within group |
+| DM (entity-based) | `dm:{entity_id}` | Known sender, resolved via Identity Graph |
+| DM (channel-based) | `dm:{channel}:{sender_id}` | Unknown sender, channel-scoped |
+| Group | `group:{channel}:{peer_id}` | Group conversations |
+| Worker | `worker:{ulid}` | Spawned worker sessions |
+| System | `system:{purpose}` | System-triggered sessions (timers, etc.) |
+
+Session keys use **session aliases** for identity promotion — when a channel-based session gets linked to an entity, the old key becomes an alias pointing to the canonical entity-based key. See `SESSION_LIFECYCLE.md` for full details.
 
 ---
 

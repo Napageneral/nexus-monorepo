@@ -1,7 +1,7 @@
 # NEX — Nexus Event Exchange
 
-**Status:** DESIGN IN PROGRESS  
-**Last Updated:** 2026-01-30
+**Status:** DESIGN SPEC  
+**Last Updated:** 2026-02-09
 
 ---
 
@@ -19,44 +19,189 @@ NEX is the central orchestrator for the Nexus system. It receives events from ad
 2. **In-process stages** — All stages are functions in one process; no network hops
 3. **Sync pipeline, async persistence** — Critical path is sync; ledger writes are async
 4. **Plugin-friendly** — Before/after hooks at each stage
-5. **Modular** — Each stage (ACL, Hooks, Broker, etc.) is a replaceable component
-6. **Observable** — Full trace of every request persisted
+5. **Modular** — Each stage (IAM, Automations, Broker, etc.) is a replaceable component
+6. **Observable** — Full trace of every request persisted to Nexus Ledger
 7. **Direct reads, orchestrated writes** — Reads go direct; request lifecycle writes go through NEX
+8. **Adapters are external** — Adapters are CLI executables managed by the Adapter Manager, not in-process objects
 
 ---
 
 ## In-Process Architecture
 
-NEX is a single process. All stages are **functions**, not separate services. There are no network hops between stages.
+NEX is a single TypeScript process. All stages are **functions**, not separate services. There are no network hops between stages.
 
 ```
-NEX Process (single binary)
-├── receiveEvent()       // 1. Normalize event, create NexusRequest
-├── resolveIdentity()    // 2. WHO sent this? Lookup Identity Ledger
-├── resolveAccess()      // 3. WHAT can they do? Policies → permissions, base session
-├── runAutomations()    // 4. Match triggers, execute hooks, may override session
-├── assembleContext()    // 5. Gather history, Cortex context, agent config, formatting
-├── runAgent()           // 6. Execute agent with assembled context
+NEX Process (TypeScript)
+├── receiveEvent()       // 1. Normalize NexusEvent, create NexusRequest
+├── resolveIdentity()    // 2. WHO sent this? Query Identity Graph
+├── resolveAccess()      // 3. WHAT can they do? Policies → permissions, session routing
+├── runAutomations()     // 4. Match automations, execute hooks, may enrich or handle
+├── assembleContext()    // 5. Build AssembledContext (history, Cortex, config, formatting)
+├── runAgent()           // 6. Execute agent with assembled context (pi-coding-agent)
 ├── deliverResponse()    // 7. Format, chunk, send via out-adapter
-└── finalize()           // 8. Write trace, emit to Cortex
+└── finalize()           // 8. Write trace to Nexus Ledger, emit outbound event
 
 All function calls. No network hops.
 ```
 
-**Key insight:** Each stage name is a verb describing its action. No ambiguity about what happens where.
-
 ### Stage Responsibilities
 
-| Stage | Input | Output | May Exit Pipeline? |
-|-------|-------|--------|-------------------|
-| `receiveEvent()` | AdapterEvent | NexusRequest created | No |
-| `resolveIdentity()` | NexusRequest | `principal.identity` populated | Yes (unknown sender) |
-| `resolveAccess()` | NexusRequest | `permissions`, `session` (base) | Yes (access denied) |
-| `runAutomations()` | NexusRequest | `hooks.*`, `session` (final) | Yes (hook handles completely) |
-| `assembleContext()` | NexusRequest | `agent.context` assembled | No |
-| `runAgent()` | NexusRequest | `response.*` populated | No |
-| `deliverResponse()` | NexusRequest | `delivery_result` | No |
-| `finalize()` | NexusRequest | `pipeline` trace complete | No |
+| Stage | Input | Output on NexusRequest | May Exit Pipeline? |
+|-------|-------|------------------------|-------------------|
+| `receiveEvent()` | NexusEvent from adapter | `event`, `delivery` populated | No |
+| `resolveIdentity()` | NexusRequest | `principal` populated | Yes (unknown sender policy) |
+| `resolveAccess()` | NexusRequest | `access` populated (decision, permissions, routing) | Yes (access denied) |
+| `runAutomations()` | NexusRequest | `triggers` populated (automations fired, enrichment) | Yes (automation handles completely) |
+| `assembleContext()` | NexusRequest | `agent` populated (turn_id, model, token_budget); builds `AssembledContext` internally | No |
+| `runAgent()` | AssembledContext (from stage 5) | `response` populated (content, tool_calls, usage) | No |
+| `deliverResponse()` | NexusRequest | `delivery_result` populated | No |
+| `finalize()` | NexusRequest | `pipeline` trace complete, `status` set | No |
+
+See `NEXUS_REQUEST.md` for the full typed schema per stage.
+
+---
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                                      NEX                                          │
+│                           (Nexus Event Exchange)                                  │
+│                                                                                   │
+│  ADAPTER MANAGER ──────────────────────────────────────────────────────────┐    │
+│    │                                                                        │    │
+│    │  eve (iMessage)        — external CLI process                         │    │
+│    │  gog (Gmail)           — external CLI process                         │    │
+│    │  discord-cli           — external CLI process                         │    │
+│    │  telegram-bot          — external CLI process                         │    │
+│    │  clock (timer/cron)    — external CLI process                         │    │
+│    │  webhooks              — HTTP endpoint adapter                        │    │
+│    │  aix (IDE sessions)    — external CLI process                         │    │
+│    │                                                                        │    │
+│    │  All adapters normalize to NexusEvent and pipe via JSONL stdout       │    │
+│    │  See: adapters/ADAPTER_SYSTEM.md                                      │    │
+│    │                                                                        │    │
+│    └────────────────────────────────────────────────────────────────────────┘    │
+│                                      │                                            │
+│                                      │ NexusEvent (JSONL from adapter process)   │
+│                                      ▼                                            │
+│  ┌────────────────────────────────────────────────────────────────────────────┐  │
+│  │                          SYNC PIPELINE (8 stages)                          │  │
+│  │                                                                             │  │
+│  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
+│  │  │ 1. receiveEvent()                                                     │  │  │
+│  │  │    • Create NexusRequest from NexusEvent                             │  │  │
+│  │  │    • Populate: request_id, event, delivery                           │  │  │
+│  │  │    • Async: Write event to Events Ledger                             │  │  │
+│  │  └──────────────────────────────────────────────────────────────────────┘  │  │
+│  │                                   │                                         │  │
+│  │                        [plugin: afterReceiveEvent]                         │  │
+│  │                                   │                                         │  │
+│  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
+│  │  │ 2. resolveIdentity()                                                  │  │  │
+│  │  │    • WHO sent this?                                                   │  │  │
+│  │  │    • Query Identity Graph (contacts → mappings → entities)           │  │  │
+│  │  │    • Populate: principal (type, entity_id, identity details)         │  │  │
+│  │  │    • If unknown → may exit based on deny policy                      │  │  │
+│  │  └──────────────────────────────────────────────────────────────────────┘  │  │
+│  │                                   │                                         │  │
+│  │                       [plugin: afterResolveIdentity]                       │  │
+│  │                                   │                                         │  │
+│  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
+│  │  │ 3. resolveAccess()                                                    │  │  │
+│  │  │    • WHAT can they do?                                                │  │  │
+│  │  │    • Evaluate ACL policies against principal + conditions             │  │  │
+│  │  │    • Populate: access (decision, permissions, routing)               │  │  │
+│  │  │    • Routing includes: persona, session_label, queue_mode            │  │  │
+│  │  │    • If denied → exit pipeline (async: write denial to audit)        │  │  │
+│  │  └──────────────────────────────────────────────────────────────────────┘  │  │
+│  │                                   │                                         │  │
+│  │                        [plugin: afterResolveAccess]                        │  │
+│  │                                   │                                         │  │
+│  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
+│  │  │ 4. runAutomations()                                                   │  │  │
+│  │  │    • Match automations against event + principal + access            │  │  │
+│  │  │    • Execute matched automations (parallel where independent)        │  │  │
+│  │  │    • Populate: triggers (automations_fired, enrichment, overrides)   │  │  │
+│  │  │    • If automation handles completely → exit pipeline                 │  │  │
+│  │  └──────────────────────────────────────────────────────────────────────┘  │  │
+│  │                                   │                                         │  │
+│  │                       [plugin: afterRunAutomations]                        │  │
+│  │                                   │                                         │  │
+│  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
+│  │  │ 5. assembleContext()                                                   │  │  │
+│  │  │    • Gather context for finalized session (parallel fetches):         │  │  │
+│  │  │      - Conversation history from Agents Ledger                        │  │  │
+│  │  │      - Relevant context from Cortex (future)                         │  │  │
+│  │  │      - Agent config (persona, model, tools)                           │  │  │
+│  │  │      - Channel formatting guidance                                     │  │  │
+│  │  │    • Create/resume session, create turn in Agents Ledger             │  │  │
+│  │  │    • Build AssembledContext (internal to Broker, NOT on NexusRequest) │  │  │
+│  │  │    • Populate: agent (turn_id, session_label, model, token_budget)   │  │  │
+│  │  └──────────────────────────────────────────────────────────────────────┘  │  │
+│  │                                   │                                         │  │
+│  │                       [plugin: afterAssembleContext]                        │  │
+│  │                                   │                                         │  │
+│  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
+│  │  │ 6. runAgent()                                                          │  │  │
+│  │  │    • Execute pi-coding-agent with AssembledContext                     │  │  │
+│  │  │    • Streaming: tokens flow to adapter via BrokerStreamHandle         │  │  │
+│  │  │    • Populate: response (content, tool_calls, usage, stop_reason)    │  │  │
+│  │  │    • Writes completion to Agents Ledger                               │  │  │
+│  │  └──────────────────────────────────────────────────────────────────────┘  │  │
+│  │                                   │                                         │  │
+│  │                          [plugin: afterRunAgent]                            │  │
+│  │                                   │                                         │  │
+│  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
+│  │  │ 7. deliverResponse()                                                   │  │  │
+│  │  │    • Format response for target channel                               │  │  │
+│  │  │    • Chunk if necessary (respects channel text limits)                │  │  │
+│  │  │    • Send via adapter's `send` command                                │  │  │
+│  │  │    • Populate: delivery_result (message_ids, success)                │  │  │
+│  │  │    • Note: may be no-op if native streaming already delivered         │  │  │
+│  │  └──────────────────────────────────────────────────────────────────────┘  │  │
+│  │                                   │                                         │  │
+│  │                       [plugin: afterDeliverResponse]                       │  │
+│  │                                   │                                         │  │
+│  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
+│  │  │ 8. finalize()                                                          │  │  │
+│  │  │    • Finalize NexusRequest with pipeline trace + timing               │  │  │
+│  │  │    • Write full trace to Nexus Ledger                                 │  │  │
+│  │  │    • Write outbound event to Events Ledger                            │  │  │
+│  │  │    • Emit to Cortex for analysis (future)                             │  │  │
+│  │  └──────────────────────────────────────────────────────────────────────┘  │  │
+│  │                                   │                                         │  │
+│  │                          [plugin: onFinalize]                               │  │
+│  │                                                                             │  │
+│  └────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                   │
+│  LEDGERS (System of Record) ───────────────────────────────────────────────┐    │
+│    │                                                                        │    │
+│    │  Events Ledger      ← Inbound events, outbound responses              │    │
+│    │  Agents Ledger      ← Turns, sessions, messages, tool calls           │    │
+│    │  Identity Ledger    ← Contacts, entities, Identity Graph              │    │
+│    │  Nexus Ledger       ← Full NexusRequest traces                        │    │
+│    │                                                                        │    │
+│    │  All ledgers stored in ~/nexus/state/data/ (SQLite)                   │    │
+│    │                                                                        │    │
+│    └────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                   │
+│  CORTEX (async, derived layer — Go process) ────────────────────────────┐    │
+│    │                                                                        │    │
+│    │  Reads from ledgers → Produces structured knowledge                   │    │
+│    │                                                                        │    │
+│    │  Episode Store      ← Conversation episodes                           │    │
+│    │  Embedding Store    ← Semantic vectors                                │    │
+│    │  Facet Store        ← Extracted structured data                       │    │
+│    │  Analysis Store     ← Insights, patterns                              │    │
+│    │                                                                        │    │
+│    │  Stored per-agent: ~/nexus/state/cortex/{agentId}.db                  │    │
+│    │  Transport TBD: HTTP API, Unix socket, or direct SQLite               │    │
+│    │                                                                        │    │
+│    └────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                   │
+└───────────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -71,176 +216,36 @@ All function calls. No network hops.
 | **NexusRequest lifecycle** | Through NEX | NEX orchestrates; writes are part of pipeline |
 | **Reads/queries** | Direct | No reason to add latency |
 | **Background jobs** | Direct | Independent work, not part of request |
-| **Analysis/indexing** | Direct | Cortex's existing pattern |
+| **Cortex analysis** | Direct | Separate Go process, reads from ledgers |
 
 ### What This Means Concretely
 
-1. **Most stages update NexusRequest, NEX coordinates** — stages return results, NEX maintains lifecycle
+1. **Stages update NexusRequest, NEX coordinates** — stages return results, NEX maintains lifecycle
 2. **Broker writes to Agents Ledger directly** — it's part of the NEX process, just a logical separation
 3. **CLI reads directly** — no need to route queries through NEX
-4. **Cortex jobs write directly** — they're not part of a NexusRequest
-
-The Broker is a logical component within NEX, not a separate service. It can write to the Agents Ledger directly because it's all one process.
+4. **Cortex reads/writes directly** — separate Go process, accesses ledgers and its own cortex DBs
 
 ### Shared Database Library
 
-```go
-// nexus/db/ledgers.go
-package db
+```typescript
+// src/db/ledgers.ts
+import Database from 'better-sqlite3';
 
-type Ledgers struct {
-    Events  *EventsLedger
-    Agents  *AgentsLedger
-    Nexus   *NexusLedger  // NexusRequest storage
+interface Ledgers {
+  events: Database;    // Events Ledger
+  agents: Database;    // Agents Ledger
+  identity: Database;  // Identity Ledger (Identity Graph)
+  nexus: Database;     // Nexus Ledger (request traces)
 }
 
-// Used by NEX for pipeline writes
-func (l *Ledgers) WriteAgentTurn(...)
-func (l *Ledgers) WriteEvent(...)
-
-// Used by CLI, analysis jobs, etc for queries
-func (l *Ledgers) QueryThreads(...)
-func (l *Ledgers) GetSession(...)
+// Raw SQL queries — no ORM
+function writeEvent(db: Database, event: NexusEvent): void { /* ... */ }
+function writeTurn(db: Database, turn: TurnRecord): void { /* ... */ }
+function queryThreads(db: Database, sessionLabel: string): Thread[] { /* ... */ }
+function getSession(db: Database, label: string): Session | null { /* ... */ }
 ```
 
 Both NEX and other components use the same library. NEX doesn't "own" the database — it owns the NexusRequest lifecycle.
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                                      NEX                                         │
-│                           (Nexus Event Exchange)                                 │
-│                                                                                  │
-│  ADAPTERS ──────────────────────────────────────────────────────────────────┐   │
-│    │                                                                         │   │
-│    │  eve (iMessage)                                                        │   │
-│    │  gog (Gmail)                                                           │   │
-│    │  discord-cli                                                           │   │
-│    │  telegram-bot                                                          │   │
-│    │  webhooks (Stripe, GitHub, etc.)                                       │   │
-│    │  timers (cron)                                                         │   │
-│    │  aix (IDE sessions)                                                    │   │
-│    │                                                                         │   │
-│    └─────────────────────────────────────────────────────────────────────────┘   │
-│                                      │                                           │
-│                                      │ AdapterEvent                              │
-│                                      ▼                                           │
-│  ┌───────────────────────────────────────────────────────────────────────────┐  │
-│  │                          SYNC PIPELINE (8 stages)                         │  │
-│  │                                                                            │  │
-│  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
-│  │  │ 1. receiveEvent()                                                     │ │  │
-│  │  │    • Create NexusRequest from AdapterEvent                           │ │  │
-│  │  │    • Populate: request_id, event_id, timestamp, event, delivery      │ │  │
-│  │  │    • Async: Write event to Events Ledger                             │ │  │
-│  │  └──────────────────────────────────────────────────────────────────────┘ │  │
-│  │                                   │                                        │  │
-│  │                        [plugin: afterReceiveEvent]                        │  │
-│  │                                   │                                        │  │
-│  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
-│  │  │ 2. resolveIdentity()                                                  │ │  │
-│  │  │    • WHO sent this?                                                   │ │  │
-│  │  │    • Lookup sender in Identity Ledger                                │ │  │
-│  │  │    • Populate: principal.identity                                    │ │  │
-│  │  │    • If unknown → may exit or create new identity                    │ │  │
-│  │  └──────────────────────────────────────────────────────────────────────┘ │  │
-│  │                                   │                                        │  │
-│  │                       [plugin: afterResolveIdentity]                      │  │
-│  │                                   │                                        │  │
-│  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
-│  │  │ 3. resolveAccess()                                                    │ │  │
-│  │  │    • WHAT can they do?                                                │ │  │
-│  │  │    • Evaluate ACL policies                                            │ │  │
-│  │  │    • Populate: principal.permissions, session (BASE)                 │ │  │
-│  │  │    • If denied → exit pipeline (async: write denial)                 │ │  │
-│  │  │    • Async: Write ACL result                                         │ │  │
-│  │  └──────────────────────────────────────────────────────────────────────┘ │  │
-│  │                                   │                                        │  │
-│  │                        [plugin: afterResolveAccess]                       │  │
-│  │                                   │                                        │  │
-│  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
-│  │  │ 4. runAutomations()                                                  │ │  │
-│  │  │    • Match hooks against triggers (parallel)                         │ │  │
-│  │  │    • Execute matched hooks (parallel where independent)              │ │  │
-│  │  │    • May override session (smart routing)                            │ │  │
-│  │  │    • Populate: hooks.*, session (FINAL)                              │ │  │
-│  │  │    • If hook handles completely → exit pipeline                      │ │  │
-│  │  │    • Async: Write hooks result                                       │ │  │
-│  │  └──────────────────────────────────────────────────────────────────────┘ │  │
-│  │                                   │                                        │  │
-│  │                       [plugin: afterRunAutomations]                      │  │
-│  │                                   │                                        │  │
-│  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
-│  │  │ 5. assembleContext()                                                  │ │  │
-│  │  │    • Gather context for finalized session (parallel fetches):        │ │  │
-│  │  │      - Conversation history                                           │ │  │
-│  │  │      - Relevant context from Cortex                                │ │  │
-│  │  │      - Agent config (persona, model, tools)                          │ │  │
-│  │  │      - Channel formatting guidance                                    │ │  │
-│  │  │    • Create turn in Agents Ledger                                    │ │  │
-│  │  │    • Populate: agent.context, agent.turn_id, agent.thread_id         │ │  │
-│  │  │    • Async: Write context prep                                       │ │  │
-│  │  └──────────────────────────────────────────────────────────────────────┘ │  │
-│  │                                   │                                        │  │
-│  │                       [plugin: afterAssembleContext]                      │  │
-│  │                                   │                                        │  │
-│  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
-│  │  │ 6. runAgent()                                                         │ │  │
-│  │  │    • Execute agent with assembled context                            │ │  │
-│  │  │    • Streaming: tokens flow directly to adapter                      │ │  │
-│  │  │    • Populate: response.content, response.tool_calls, response.tokens │ │  │
-│  │  │    • Async: Write completion to Agents Ledger                        │ │  │
-│  │  └──────────────────────────────────────────────────────────────────────┘ │  │
-│  │                                   │                                        │  │
-│  │                          [plugin: afterRunAgent]                          │  │
-│  │                                   │                                        │  │
-│  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
-│  │  │ 7. deliverResponse()                                                  │ │  │
-│  │  │    • Format response for channel                                     │ │  │
-│  │  │    • Chunk if necessary                                               │ │  │
-│  │  │    • Send via out-adapter                                            │ │  │
-│  │  │    • Populate: delivery_result                                       │ │  │
-│  │  │    • Async: Write response event to Events Ledger                    │ │  │
-│  │  └──────────────────────────────────────────────────────────────────────┘ │  │
-│  │                                   │                                        │  │
-│  │                       [plugin: afterDeliverResponse]                      │  │
-│  │                                   │                                        │  │
-│  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
-│  │  │ 8. finalize()                                                         │ │  │
-│  │  │    • Finalize NexusRequest                                           │ │  │
-│  │  │    • Async: Write full trace to Nexus Ledger                         │ │  │
-│  │  │    • Emit to Cortex for analysis                                   │ │  │
-│  │  └──────────────────────────────────────────────────────────────────────┘ │  │
-│  │                                   │                                        │  │
-│  │                          [plugin: onFinalize]                             │  │
-│  │                                                                            │  │
-│  └───────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                  │
-│  LEDGERS (write targets) ───────────────────────────────────────────────────┐   │
-│    │                                                                         │   │
-│    │  Events Ledger      ← Inbound events, outbound responses               │   │
-│    │  Agents Ledger      ← Turns, sessions, tool calls                      │   │
-│    │  Identity Ledger    ← Entities, identities (read by ACL)               │   │
-│    │  Nexus Ledger       ← Full NexusRequest traces                         │   │
-│    │                                                                         │   │
-│    └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                  │
-│  CORTEX (async processing) ───────────────────────────────────────────────┐   │
-│    │                                                                         │   │
-│    │  NEX writes to ledgers → Cortex's bus picks up → Analysis jobs      │   │
-│    │                                                                         │   │
-│    │  Episode Store      ← Conversation episodes                            │   │
-│    │  Embedding Store    ← Semantic vectors                                 │   │
-│    │  Facet Store        ← Extracted structured data                        │   │
-│    │  Analysis Store     ← Insights, patterns                               │   │
-│    │                                                                         │   │
-│    └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                  │
-└──────────────────────────────────────────────────────────────────────────────────┘
-```
 
 ---
 
@@ -250,38 +255,16 @@ The `NexusRequest` is created at `receiveEvent()` and populated through each sta
 
 | Stage | Fields Populated |
 |-------|------------------|
-| **receiveEvent()** | `request_id`, `event_id`, `timestamp`, `event`, `delivery` |
-| **resolveIdentity()** | `principal.identity` |
-| **resolveAccess()** | `principal.permissions`, `session` (base) |
-| **runAutomations()** | `hooks.evaluated`, `hooks.fired`, `hooks.context`, `session` (final) |
-| **assembleContext()** | `agent.context`, `agent.turn_id`, `agent.thread_id`, `agent.persona` |
-| **runAgent()** | `response.content`, `response.tool_calls`, `response.tokens` |
-| **deliverResponse()** | `delivery_result` |
-| **finalize()** | `pipeline` trace, final timestamps |
+| **receiveEvent()** | `request_id`, `created_at`, `event`, `delivery` |
+| **resolveIdentity()** | `principal` (type, entity_id, display_name, is_user) |
+| **resolveAccess()** | `access` (decision, permissions, routing: persona, session_label, queue_mode) |
+| **runAutomations()** | `triggers` (automations_evaluated, automations_fired, enrichment, routing_override, handled) |
+| **assembleContext()** | `agent` (turn_id, session_label, model, provider, token_budget, role, persona_id) |
+| **runAgent()** | `response` (content, tool_calls, usage, stop_reason, compaction, subagents_spawned) |
+| **deliverResponse()** | `delivery_result` (success, message_ids, chunks_sent, error) |
+| **finalize()** | `pipeline` (stage timings trace), `status` (completed/failed/denied/handled_by_automation) |
 
-### Data Flow Visualization
-
-```
-receiveEvent()       → request.event populated
-                        │
-resolveIdentity()    → request.principal.identity populated
-                        │
-resolveAccess()      → request.principal.permissions
-                       request.session (BASE)
-                        │
-runAutomations()    → request.session (FINAL - may be overridden by trigger)
-                       request.hooks.context (injected context)
-                        │
-assembleContext()    → request.agent.context (history, Cortex, config, formatting)
-                        │
-runAgent()           → request.response.* populated
-                        │
-deliverResponse()    → request.delivery_result
-                        │
-finalize()           → request.pipeline trace complete
-```
-
-See `NEXUS_REQUEST.md` for full schema.
+See `NEXUS_REQUEST.md` for the complete typed schema.
 
 ---
 
@@ -302,16 +285,25 @@ All 8 stages are sync because each depends on the output of the previous.
 After each sync stage, we dispatch an async write to persist current state:
 
 ```typescript
-// Pseudo-code
-async function pipeline(event: AdapterEvent) {
+async function pipeline(event: NexusEvent): Promise<NexusRequest> {
   const req = createNexusRequest(event);
-  asyncWrite('events', req.event);           // Fire and forget
+  asyncWrite(ledgers.events, req.event);     // Fire and forget
   
-  const aclResult = await acl.evaluate(req);
-  Object.assign(req, aclResult);
-  asyncWrite('nex_trace', req);              // Fire and forget
+  await resolveIdentity(req);
+  asyncWrite(ledgers.nexus, req);            // Checkpoint
   
-  // ... etc
+  await resolveAccess(req);
+  if (req.access.decision === 'deny') {
+    return finalize(req, 'denied');
+  }
+  
+  await runAutomations(req);
+  if (req.triggers.handled) {
+    return finalize(req, 'handled_by_automation');
+  }
+  
+  // ... remaining stages
+  return finalize(req, 'completed');
 }
 ```
 
@@ -320,17 +312,26 @@ Benefits:
 - State is persisted at each step (crash recovery)
 - Writes can be batched/coalesced
 
-### Async (Background Processing)
+---
 
-NEX doesn't have its own job queue. It writes to ledgers, and Cortex's bus picks up the writes for analysis:
+## Streaming
+
+Agent streaming (token-by-token output) is coordinated through the BrokerStreamHandle. NEX sets up the delivery context and the Broker manages the stream lifecycle.
 
 ```
-NEX writes to Events Ledger
+Agent generates tokens
     ↓
-Cortex bus detects new row
+Broker emits StreamEvents (stream_start, token, tool_status, reasoning, stream_end)
     ↓
-Cortex runs analysis job (embedding, facet extraction, etc.)
+NEX routes StreamEvents based on adapter capability:
+    ├── Native streaming adapter → forward via adapter's `stream` command (bidirectional JSONL)
+    └── Non-streaming adapter → Block Pipeline coalesces tokens into chunks → `send` command
+    ↓
+On completion, full response written to Agents Ledger
+Outbound event written to Events Ledger
 ```
+
+See `../STREAMING.md` for the canonical streaming architecture spec.
 
 ---
 
@@ -338,20 +339,19 @@ Cortex runs analysis job (embedding, facet extraction, etc.)
 
 ### Within Stages
 
-**Hook Evaluation (parallel):**
+**Automation Evaluation (parallel):**
 ```typescript
-// All matching hooks evaluate in parallel
 const results = await Promise.all(
-  matchingHooks.map(h => h.evaluate(req))
+  matchingAutomations.map(a => a.evaluate(req))
 );
 ```
 
-**Broker Preparation (parallel):**
+**Context Assembly (parallel):**
 ```typescript
-const [history, context, config] = await Promise.all([
-  getConversationHistory(req.session.session_key),
+const [history, cortexContext, agentConfig] = await Promise.all([
+  getConversationHistory(req.access.routing.session_label),
   cortex.queryRelevantContext(req.event.content),
-  loadAgentConfig(req.session.persona),
+  loadAgentConfig(req.access.routing.persona),
 ]);
 ```
 
@@ -359,15 +359,52 @@ const [history, context, config] = await Promise.all([
 
 The main pipeline is sequential (each stage depends on previous).
 
-Background work can run in parallel with the main pipeline:
+Background work can run in parallel:
 - Async writes to ledgers
 - Emit to Cortex for analysis
+- Bus event notifications
+
+---
+
+## Adapters
+
+Adapters are **external CLI executables** managed by the Adapter Manager. They are NOT in-process objects.
+
+### Adapter Protocol
+
+Adapters implement a CLI protocol with standard commands:
+
+| Command | Purpose |
+|---------|---------|
+| `adapter info` | Report capabilities and channel metadata |
+| `adapter monitor` | Watch for events, emit JSONL to stdout |
+| `adapter send` | Deliver a message to a target |
+| `adapter stream` | Bidirectional JSONL for native streaming |
+| `adapter health` | Health check |
+| `adapter backfill` | Historical event import |
+
+### How NEX Receives Events
+
+```
+┌─────────────┐    JSONL stdout     ┌────────────────┐    NexusEvent    ┌───────────┐
+│ eve monitor │  ─────────────────► │ Adapter Manager │ ──────────────► │ NEX       │
+│  (process)  │                     │  (in NEX proc)  │                 │ Pipeline  │
+└─────────────┘                     └────────────────┘                  └───────────┘
+```
+
+The Adapter Manager:
+- Spawns adapter processes as children
+- Reads JSONL from their stdout (monitor mode)
+- Routes `NexusEvent` objects into the pipeline
+- Handles health monitoring, auto-restart, crash recovery
+
+See `../adapters/ADAPTER_SYSTEM.md` for the complete adapter specification.
 
 ---
 
 ## Plugin System
 
-### Plugin Interface
+Plugins attach to hook points throughout the pipeline. They can observe, modify, or short-circuit the request.
 
 ```typescript
 interface NEXPlugin {
@@ -388,143 +425,7 @@ interface NEXPlugin {
 }
 ```
 
-### Plugin Capabilities
-
-Plugins can:
-- **Read** the NexusRequest at any point
-- **Modify** the NexusRequest (add to `hooks.context`, adjust `permissions`, etc.)
-- **Skip** remaining pipeline (return `'skip'`)
-- **Log/observe** the flow
-- **Emit** to external systems
-
-### Example Plugins
-
-```typescript
-// Logging plugin
-const loggingPlugin: NEXPlugin = {
-  name: 'logging',
-  afterReceiveEvent: async (req) => {
-    console.log(`[NEX] Received: ${req.event_id}`);
-  },
-  onFinalize: async (req) => {
-    console.log(`[NEX] Complete: ${req.request_id} in ${req.pipeline.duration_ms}ms`);
-  },
-};
-
-// Analytics plugin
-const analyticsPlugin: NEXPlugin = {
-  name: 'analytics',
-  onFinalize: async (req) => {
-    await analytics.track('request_complete', {
-      channel: req.delivery.channel,
-      persona: req.session.persona,
-      duration_ms: req.pipeline.duration_ms,
-    });
-  },
-};
-
-// Identity enrichment plugin (runs after identity resolved, before access check)
-const enrichIdentityPlugin: NEXPlugin = {
-  name: 'enrich-identity',
-  afterResolveIdentity: async (req) => {
-    // Add extra context from external system
-    const profile = await crm.getProfile(req.principal.identity.email);
-    req.principal.identity.metadata = { ...req.principal.identity.metadata, crm: profile };
-  },
-};
-
-// Context injection plugin (runs after triggers, before context assembly)
-const urgentFlagPlugin: NEXPlugin = {
-  name: 'urgent-flag',
-  afterRunAutomations: async (req) => {
-    if (req.event.content.match(/urgent|asap|emergency/i)) {
-      req.hooks.context.priority = 'urgent';
-    }
-  },
-};
-```
-
-### Agent-Written Plugins
-
-Agents can create plugins via a skill:
-
-```typescript
-// Agent writes this to plugins/my-custom-hook.ts
-export const plugin: NEXPlugin = {
-  name: 'agent-created-hook',
-  afterRunAutomations: async (req) => {
-    // Custom routing: if message mentions "code", route to CodeAgent
-    if (req.event.content.match(/code|programming|debug/i)) {
-      req.session = { ...req.session, persona: 'code-agent' };
-    }
-  },
-};
-```
-
-NEX loads plugins from a directory on startup.
-
----
-
-## Adapters
-
-### Adapter Interface
-
-```typescript
-interface NEXAdapter {
-  name: string;
-  channel: string;
-  
-  // Inbound
-  start(): Promise<void>;
-  stop(): Promise<void>;
-  onEvent(callback: (event: AdapterEvent) => void): void;
-  
-  // Outbound (optional)
-  send?(target: DeliveryTarget, content: string): Promise<DeliveryResult>;
-}
-
-interface AdapterEvent {
-  channel: string;
-  source_id: string;
-  content: string;
-  content_type: string;
-  
-  // Sender
-  sender_id: string;
-  sender_name?: string;
-  
-  // Context
-  peer_id: string;
-  peer_kind: 'dm' | 'group' | 'channel';
-  thread_id?: string;
-  reply_to_id?: string;
-  
-  // Metadata
-  timestamp: number;
-  metadata?: Record<string, any>;
-}
-```
-
-### Adapter Types
-
-| Type | Examples | Connection |
-|------|----------|------------|
-| **CLI tools** | `eve`, `gog`, `discord-cli` | Subprocess, JSON lines |
-| **Daemons** | `telegram-bot`, `signal-cli` | Socket/gRPC |
-| **Webhooks** | Stripe, GitHub, Slack | HTTP server |
-| **Timers** | Cron, heartbeat | Internal scheduler |
-| **IDE** | `aix` | Local socket |
-
-### Adapter Registration
-
-```typescript
-// NEX startup
-nex.registerAdapter(new EveAdapter());
-nex.registerAdapter(new GogAdapter());
-nex.registerAdapter(new DiscordAdapter());
-nex.registerAdapter(new WebhookAdapter('/webhooks'));
-nex.registerAdapter(new TimerAdapter({ interval: 60_000 }));
-```
+See `PLUGINS.md` for the full plugin specification.
 
 ---
 
@@ -543,9 +444,10 @@ If any sync stage throws:
 try {
   await pipeline(event);
 } catch (error) {
-  await asyncWrite('nex_trace', { ...req, error: serializeError(error) });
+  req.status = 'failed';
+  req.pipeline.error = serializeError(error);
+  await writeFinalTrace(ledgers.nexus, req);
   await Promise.all(plugins.map(p => p.onError?.(req, error)));
-  throw error;  // Or return gracefully
 }
 ```
 
@@ -554,58 +456,50 @@ try {
 Fire-and-forget writes log errors but don't fail the pipeline:
 
 ```typescript
-function asyncWrite(ledger: string, data: any) {
-  writeToLedger(ledger, data).catch(err => {
-    console.error(`[NEX] Async write failed: ${err.message}`);
-    // Could retry, but don't block
+function asyncWrite(db: Database, query: string, params: any[]) {
+  db.exec(query, params).catch(err => {
+    logger.error('[NEX] Async write failed', { error: err.message });
   });
 }
-```
-
-### Retry Logic
-
-For transient errors (network, rate limits), stages can implement retry:
-
-```typescript
-const response = await retry(
-  () => agent.execute(req),
-  { maxAttempts: 3, backoff: 'exponential' }
-);
 ```
 
 ---
 
 ## Configuration
 
-### NEX Config
-
 ```yaml
 # nex.yaml
 pipeline:
   timeout_ms: 300000        # 5 min max per request
-  
-ledgers:
-  events: sqlite://./data/events.db
-  agents: sqlite://./data/agents.db
-  identity: sqlite://./data/identity.db
-  nexus: sqlite://./data/nexus.db
+
+data:
+  directory: ./data          # SQLite databases stored here
+  # Creates: events.db, agents.db, identity.db, nexus.db
 
 adapters:
-  - type: eve
+  - name: eve
     enabled: true
-  - type: gog
+  - name: gog
     enabled: true
-  - type: webhook
-    port: 8080
-    path: /webhooks
-  - type: timer
-    interval_ms: 60000
+  - name: clock
+    enabled: true
+    config:
+      heartbeat_interval_ms: 60000
+  - name: webhook
+    enabled: true
+    config:
+      port: 8080
+      path: /webhooks
 
 plugins:
   directory: ./plugins
   enabled:
     - logging
     - analytics
+
+http:
+  host: 127.0.0.1
+  port: 7400               # Health + SSE endpoint
 ```
 
 ---
@@ -613,23 +507,18 @@ plugins:
 ## Location in Codebase
 
 ```
-nexus/
+src/
 ├── nex/                        # NEX package
 │   ├── nex.ts                  # Main orchestrator
 │   ├── pipeline.ts             # Pipeline execution
 │   ├── request.ts              # NexusRequest type and helpers
+│   ├── daemon.ts               # Process lifecycle (PID, signals, startup)
+│   ├── config.ts               # nex.yaml schema (Zod)
 │   ├── plugins/                # Plugin system
 │   │   ├── loader.ts
 │   │   ├── types.ts
 │   │   └── builtin/            # Built-in plugins
-│   ├── adapters/               # Adapter implementations
-│   │   ├── types.ts
-│   │   ├── eve.ts
-│   │   ├── gog.ts
-│   │   ├── discord.ts
-│   │   ├── webhook.ts
-│   │   └── timer.ts
-│   ├── stages/                 # Pipeline stages (8 total)
+│   ├── stages/                 # Pipeline stages
 │   │   ├── receiveEvent.ts
 │   │   ├── resolveIdentity.ts
 │   │   ├── resolveAccess.ts
@@ -638,74 +527,48 @@ nexus/
 │   │   ├── runAgent.ts
 │   │   ├── deliverResponse.ts
 │   │   └── finalize.ts
-│   └── ledger/                 # Ledger write helpers
-│       ├── events.ts
-│       ├── agents.ts
-│       ├── identity.ts
-│       └── nexus.ts
+│   ├── adapters/               # Adapter Manager
+│   │   ├── manager.ts          # Spawn/supervise adapter processes
+│   │   ├── protocol.ts         # JSONL protocol handling
+│   │   └── types.ts            # NexusEvent, DeliveryResult
+│   ├── bus/                    # Event Bus
+│   │   ├── bus.ts              # Pub/sub API
+│   │   ├── events.ts           # Event type definitions (Zod)
+│   │   └── sse.ts              # SSE streaming endpoint
+│   └── db/                     # Ledger access
+│       ├── ledgers.ts          # Database connections
+│       ├── events.ts           # Events Ledger queries
+│       ├── agents.ts           # Agents Ledger queries
+│       ├── identity.ts         # Identity Graph queries
+│       └── nexus.ts            # Nexus Ledger queries
 ```
 
 ---
 
 ## Resolved Design Questions
 
-### Timer Events
-Timer events (heartbeat, cron) are just another adapter source. They go through the full pipeline like any other event.
+### Timer/Clock Events
+Clock events (heartbeat, cron, scheduled) come from the `clock` adapter — an external process like any other adapter. It emits timer events as `NexusEvent` objects that flow through the full pipeline. See the clock adapter spec for details.
 
 ### Agent-to-Agent
-When MA spawns WA, it skips the NexusRequest flow and connects directly through Broker. The Broker still logs to the Event and Agent ledgers, but we don't run ACL/hooks for inter-agent communication. May revisit if needed.
+When a Manager Agent (MA) spawns a Worker Agent (WA), the WA runs through the Broker's session system but bypasses the external NEX pipeline stages (identity, access, automations). The Broker still logs to the Agents Ledger. May revisit if inter-agent ACL is needed.
 
 ### Multi-Response
-The agent uses the `send message` tool, which routes through NEX to the appropriate out-adapter. The out-adapter handles chunking — the agent doesn't think about it. If the agent wants to send multiple messages (even across channels), they make multiple tool calls.
+The agent uses the `send message` tool, which routes through NEX to the appropriate out-adapter via its `send` command. The adapter handles chunking based on channel capabilities. Multiple tool calls = multiple messages.
 
-### Streaming
-Agent streaming (token-by-token output, typing indicators) is handled by Broker/Agent directly to the adapter. NEX provides the delivery context at setup, but doesn't intercept streaming — that would be too slow. Final response is persisted after completion.
-
-Streaming flow:
-```
-Agent generates tokens
-    ↓
-Broker/pi-agent emits text_delta events
-    ↓
-Adapter receives (e.g., Telegram edits draft, typing indicator)
-    ↓
-On completion, full response written to ledger
-```
-
----
-
-## Evolution from Cortex
-
-NEX is the evolution of the existing Cortex server. The Go infrastructure becomes the NEX foundation:
-
-```
-Current Cortex                    Becomes NEX
-────────────────                    ──────────────
-Go server                      →    NEX core
-Async job bus                  →    Powers hook parallelization
-Ledger stores                  →    Events/Agents/Identity/Nexus ledgers
-Analysis jobs                  →    Continue as background processing
-
-New in NEX:
-- 8-stage pipeline (receiveEvent → resolveIdentity → resolveAccess → runAutomations → assembleContext → runAgent → deliverResponse → finalize)
-- Plugin system (after hooks at each stage)
-- Adapter registry
-- NexusRequest data bus
-```
-
-This means:
-- We don't build a separate job queue — we use Cortex's existing bus
-- The async write pattern is already implemented
-- The ledger infrastructure exists
-- We add pipeline orchestration and plugins on top
+### Language Decision
+NEX core is **TypeScript** (Bun runtime). Cortex is **Go** (separate process). See `../../project-structure/LANGUAGE_DECISION.md`.
 
 ---
 
 ## Related Specs
 
-- `NEXUS_REQUEST.md` — The data bus schema
+- `NEXUS_REQUEST.md` — The data bus schema (canonical NexusRequest definition)
+- `DAEMON.md` — Process lifecycle, signals, startup sequence
 - `PLUGINS.md` — NEX plugin system
-- `automations/` — Automation system
-- `../adapters/` — Adapter specifications
-- `../iam/` — IAM specifications
+- `BUS_ARCHITECTURE.md` — Real-time event bus
+- `automations/AUTOMATION_SYSTEM.md` — Automation system
+- `../STREAMING.md` — Canonical streaming architecture
+- `../adapters/ADAPTER_SYSTEM.md` — Adapter system (canonical)
+- `../iam/ACCESS_CONTROL_SYSTEM.md` — IAM specifications
 - `../broker/` — Broker and agent specifications

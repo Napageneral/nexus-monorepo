@@ -449,8 +449,8 @@ Agent says: "Done! I've set up a safety check for Casey."
 | Question | Where |
 |----------|-------|
 | How does service receive events? | Cortex adapter spec |
-| How does Broker assemble context? | BROKER.md / Context Assembly spec |
-| Session state management? | SESSION_FORMAT.md |
+| How does Broker assemble context? | ../broker/CONTEXT_ASSEMBLY.md |
+| Session state management? | ../broker/SESSION_LIFECYCLE.md |
 | Outbound response adapters? | Response Adapter spec |
 
 ### Future Considerations

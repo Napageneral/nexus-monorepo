@@ -72,7 +72,7 @@ Identity Graph
 
 - `../runtime/` — How data is created (event processing)
 - `../environment/credentials/` — Secrets (special kind of data)
-- `../OVERVIEW.md` — System overview
+- `../README.md` — System overview
 
 ---
 

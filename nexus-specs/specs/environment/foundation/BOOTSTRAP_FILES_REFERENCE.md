@@ -236,8 +236,8 @@ This allows:
 ## Related Specifications
 
 - **WORKSPACE_SYSTEM.md** — Authoritative spec (this document aligns with it)
-- **INIT.md** — File creation timing
-- **ONBOARDING.md** — Ritual flow
+- **INIT_REFERENCE.md** — File creation timing
+- **BOOTSTRAP_ONBOARDING.md** — Ritual flow
 - **harnesses/HARNESS_BINDINGS.md** — IDE/harness binding configurations
 - **specs/runtime/nex/automations/AUTOMATION_SYSTEM.md** — Automation system
 - **specs/runtime/nex/PLUGINS.md** — NEX plugin system

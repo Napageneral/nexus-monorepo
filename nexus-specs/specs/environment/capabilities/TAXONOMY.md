@@ -303,7 +303,7 @@ type NexusSkillMetadata = {
   };
   
   // Platform restrictions
-  os?: string[];               // darwin, linux, win32
+  platform?: string[];         // darwin, linux, win32
   
   // Installation instructions
   install?: SkillInstallSpec[];

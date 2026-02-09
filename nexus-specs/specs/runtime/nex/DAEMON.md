@@ -89,7 +89,7 @@ On exit (clean or crash handler), the lockfile is removed.
 
 ### 2. Configuration
 
-Load from `nex.yaml` (or `config.yaml` with `nex:` key):
+Load from `nex.yaml`:
 
 ```yaml
 # nex.yaml

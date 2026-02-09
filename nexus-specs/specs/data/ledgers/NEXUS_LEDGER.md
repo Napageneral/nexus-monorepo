@@ -252,5 +252,5 @@ This keeps the ledger performant for recent debugging while preserving long-term
 ## Related Documents
 
 - `README.md` — System of Record overview
-- `../nex/NEXUS_REQUEST.md` — NexusRequest schema
-- `../nex/NEX.md` — Pipeline stages
+- `../../runtime/nex/NEXUS_REQUEST.md` — NexusRequest schema
+- `../../runtime/nex/NEX.md` — Pipeline stages

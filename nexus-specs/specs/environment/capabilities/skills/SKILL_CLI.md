@@ -396,7 +396,7 @@ type SkillManifestEntry = {
     credentials?: string[];           // Service names (e.g., ["google"])
     bins?: string[];                  // Required binaries
     anyBins?: string[];               // Any one of these binaries
-    os?: string[];                    // Platform restrictions
+    platform?: string[];              // Platform restrictions
   };
   
   // Connector-specific

@@ -204,5 +204,5 @@ When `NEXUS_PROFILE=foo`:
 
 ---
 
-*See INIT.md for how structure is created.*  
-*See BOOTSTRAP_FILES.md for file inventory.*
+*See INIT_REFERENCE.md for how structure is created.*  
+*See BOOTSTRAP_FILES_REFERENCE.md for file inventory.*

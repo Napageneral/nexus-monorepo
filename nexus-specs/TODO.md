@@ -4,29 +4,25 @@ Tracking remaining spec work and implementation priorities.
 
 ---
 
-## Recent Decisions (2026-02-06)
+## Recent Decisions
 
-Captured during full spec cohesion review:
+Captured during spec cohesion reviews:
 
-| Decision | Details |
-|----------|---------|
-| **Streaming consolidated** | Single spec at `runtime/STREAMING.md`. Broker and NEX streaming docs now redirect there. |
-| **DATA_MODEL.md → Ontology** | Refactored to conceptual reference. Implementation lives in `AGENTS_LEDGER.md`. |
-| **5 conceptual → 3 physical layers** | Context Assembly now documents both the 5-layer conceptual model AND the 3-layer physical model for LLM caching. |
-| **Hooks > Automations** | Hooks are the general mechanism. Automations are the primary hook type at `runAutomations`. Both docs updated. |
-| **Stage 4 renamed** | `executeTriggers` → `runAutomations` across all non-upstream docs. |
-| **8 stages confirmed** | Keeping `runAgent` and `deliverResponse` as separate stages for clarity. |
-| **Language: TS primary, Go for Cortex** | TypeScript for core (NEX, Broker, CLI, tools). Go for Cortex. See `project-structure/LANGUAGE_DECISION.md`. |
-| **NexusRequest lifecycle** | Full 8-stage lifecycle, typed schema per stage, NexusRequest↔AssembledContext mappings, Nexus Ledger schema. |
-| **Sandbox not V1** | Agent execution isolation deferred to later phase. |
-| **Adapter System is canonical** | `ADAPTER_SYSTEM.md` is the source of truth for adapter operations. Other adapter docs align with it. |
-| **Session keys from ACL** | Entity-based for known senders, channel-based for unknown. ACL policies determine format. |
-| **Session aliases** | Promote channel-based → entity-based sessions via aliases. Don't merge turn trees. Cortex bridges history. |
-| **Eager session creation** | Sessions created at `assembleContext` (stage 5). Needed for queue lock before execution. |
-| **Interrupt for user→MA** | Default queue mode. New user message cancels current generation. |
-| **Compaction wraps pi-agent** | Trust upstream algorithm. We add proactive budget check + rich metadata capture. |
-| **nex/INTERFACES.md retired** | Useful bits distributed to IDENTITY_GRAPH, cortex/README, EVENTS_LEDGER. |
-| **NEX Daemon spec** | `nex/DAEMON.md` — process lifecycle, signals, health, CLI, crash recovery. |
+| Decision | Date | Details |
+|----------|------|---------|
+| **Streaming consolidated** | 2026-02-06 | Single spec at `runtime/STREAMING.md`. Broker and NEX streaming docs redirect there. |
+| **DATA_MODEL.md → Ontology** | 2026-02-06 | Refactored to conceptual reference. Implementation lives in `AGENTS_LEDGER.md`. |
+| **5 conceptual → 3 physical layers** | 2026-02-06 | Context Assembly documents both models for LLM caching. |
+| **Hooks > Automations** | 2026-02-06 | Hooks are the general mechanism. Automations are the primary hook type at `runAutomations`. |
+| **Stage 4 renamed** | 2026-02-06 | `executeTriggers` → `runAutomations` across all non-upstream docs. |
+| **8 stages confirmed** | 2026-02-06 | Keeping `runAgent` and `deliverResponse` as separate stages for clarity. |
+| **Language: TS primary, Go for Cortex** | 2026-02-06 | TypeScript for core (NEX, Broker, CLI, tools). Go for Cortex. |
+| **NexusRequest lifecycle** | 2026-02-06 | Full 8-stage lifecycle, typed schema per stage, NexusRequest↔AssembledContext mappings. |
+| **Adapter System is canonical** | 2026-02-06 | `ADAPTER_SYSTEM.md` is source of truth. External CLI executables. |
+| **Session keys from ACL** | 2026-02-06 | Entity-based for known, channel-based for unknown. Aliases for promotion. |
+| **NEX Daemon spec** | 2026-02-06 | `nex/DAEMON.md` — process lifecycle, signals, health, CLI, crash recovery. |
+| **Spec consistency pass** | 2026-02-09 | Full audit and cleanup. NEX.md refreshed, config standardized to `nex.yaml`, cross-refs fixed, Cortex docs consolidated, NEXUS_STRUCTURE.md updated, capabilities coarsened, `platform` over `os`, `session_label` over `session_id`, `NexusEvent` over `AdapterEvent`, `triggers` over `hooks.*`, CLI-based automation registration, Events Ledger `direction` column added. |
+| **Upstream checkpoint** | 2026-02-09 | openclaw HEAD at `6397e53f3` (Feb 9, 2026). Key changes since baseline: `dm`→`direct` rename, compaction hardening, context overflow recovery, QMD memory backend. |
 
 ---
 
@@ -34,7 +30,7 @@ Captured during full spec cohesion review:
 
 ### Core Architecture — DONE
 
-All high-priority specs are complete. The Nexus architecture is fully specced and ready for implementation.
+All high-priority specs are complete and aligned. Ready for implementation.
 
 | Area | Key Specs | Status |
 |------|-----------|--------|
@@ -53,6 +49,7 @@ All high-priority specs are complete. The Nexus architecture is fully specced an
 | **Ledgers** | `AGENTS_LEDGER.md`, `EVENTS_LEDGER.md`, `NEXUS_LEDGER.md`, `IDENTITY_GRAPH.md` | ✅ |
 | **IAM** | `iam/ACCESS_CONTROL_SYSTEM.md`, `POLICIES.md`, `GRANTS.md` | ✅ |
 | **Language Decision** | `project-structure/LANGUAGE_DECISION.md` | ✅ |
+| **Cortex Integration** | `cortex/CORTEX_NEX_MIGRATION.md` (reworked as integration plan) | ✅ |
 
 ---
 
@@ -62,11 +59,16 @@ All high-priority specs are complete. The Nexus architecture is fully specced an
 
 | Task | Location | Notes |
 |------|----------|-------|
-| **Eve Adapter** | `channels/imessage/EVE_ADAPTER_PLAN.md` | 🔄 First adapter — spec complete, implementing now |
+| **Eve Adapter** | `channels/imessage/EVE_ADAPTER_PLAN.md` | First adapter — implementing now |
+
+### Next Steps
+
+1. **Fresh fork** from openclaw HEAD (`6397e53f3`) + branding script
+2. **Scaffold** — Set up Nexus project structure per `project-structure/NEXUS_STRUCTURE.md`
+3. **Map before/after** — Document exactly what files/folders exist before and after the transformation
+4. **Execute port** — Spec by spec, component by component (see priorities below)
 
 ### Port Priorities
-
-Pull latest OpenClaw upstream and begin porting, spec by spec:
 
 | Priority | What | Nexus Spec | Notes |
 |----------|------|------------|-------|
@@ -81,21 +83,21 @@ Pull latest OpenClaw upstream and begin porting, spec by spec:
 | **P1** | Daemon process | `nex/DAEMON.md` | Ties it all together |
 | **P2** | Streaming | `runtime/STREAMING.md` | Token-level delivery |
 | **P2** | Automations | `nex/automations/AUTOMATION_SYSTEM.md` | Proactive/reactive hooks |
-| **P2** | Cortex integration | `data/cortex/README.md` | Semantic memory layer |
+| **P2** | Cortex integration | `data/cortex/README.md` | Semantic memory layer (Go) |
 
 ---
 
 ## Remaining Spec Work
 
-Small items to fill in during implementation — none are blocking.
+Small items — none blocking implementation.
 
 | TODO | Priority | Notes |
 |------|----------|-------|
+| **Clock Adapter** | Medium | Timer/cron/scheduled events adapter — needs spec. Events flow through full pipeline. |
 | **Automation Skill** | Medium | Create `skills/guides/automations/SKILL.md` so agents can write automations |
 | **LedgerClient Interface** | Medium | Define API surface for automation scripts to query ledgers |
 | **CortexClient Interface** | Medium | Define API surface for semantic search in automations |
 | **Model Catalog** | Low | Provider/model registry — figure out during Broker implementation |
-| **Config consistency** | Low | Ensure all docs say `nex.yaml` not `config.json` — quick pass |
 | **TS Adapter SDK** | Medium | `@nexus/adapter-sdk` npm package — after Eve proves the pattern |
 
 ---
@@ -107,25 +109,11 @@ Deep dives into OpenClaw functionality. Important but not blocking V1.
 | TODO | Priority | Notes |
 |------|----------|-------|
 | **Doctor System** | High | Self-healing diagnostics — health checks, repairs, config validation |
-| **Browser Automation** | High | Major subsystem — Playwright, CDP, container isolation. Needs full design review before porting. |
+| **Browser Automation** | High | Playwright, CDP, container isolation. Full design review before porting. |
 | **Gateway → NEX Adapter** | Medium | How OpenClaw gateway RPC maps to NEX adapter pattern |
 | **Exec Approvals** | Medium | Human-in-the-loop approval queue. Check IAM spec coverage. |
 | **Plugin System Analysis** | Medium | Map OpenClaw plugin install to NEX adapter + hook install |
-| **Node Execution** | Low | Multi-device orchestration — future |
-
----
-
-## Security & Infrastructure
-
-Fill in as implementation reveals gaps. None blocking V1.
-
-| TODO | Priority | Notes |
-|------|----------|-------|
-| **Adapter Input Validation** | Medium | Per-channel sanitization patterns |
-| **Rate Limiting** | Medium | Per-sender, per-channel limits |
-| **Audit Logging** | Medium | What gets logged, format, retention |
-| **TLS Configuration** | Low | TLS 1.3+ for non-loopback — matters when exposing externally |
-| **Sandbox Spec** | Low (not V1) | Agent execution isolation — deferred |
+| **`dm` → `direct` rename** | Medium | Upstream renamed peer kind. Adopt in our session key formats. |
 
 ---
 
@@ -139,8 +127,9 @@ Fill in as implementation reveals gaps. None blocking V1.
 | ~~RPC Interface~~ | Dropped for V1 — CLI + signals sufficient |
 | ~~Sandbox~~ | Not V1 |
 | ~~Smart Routing~~ | v2 feature |
+| ~~Config consistency~~ | Done (2026-02-09) — all docs say `nex.yaml` |
 | Enterprise/Plugin Review | Low — review when Cloud/Hub becomes relevant |
 
 ---
 
-*Architecture is specced. Time to build.*
+*Specs are clean. Fork fresh, scaffold, build.*

@@ -40,7 +40,7 @@ Shared spaces for multi-user and multi-agent scenarios:
 ## See Also
 
 - `../environment/` — Local agent environment
-- `../OVERVIEW.md` — System overview
+- `../README.md` — System overview
 
 ---
 

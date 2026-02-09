@@ -24,6 +24,7 @@ CREATE TABLE events (
     
     -- Classification
     type TEXT NOT NULL,               -- 'message', 'email', 'reaction', etc.
+    direction TEXT NOT NULL DEFAULT 'inbound',  -- 'inbound' | 'outbound'
     thread_id TEXT,                   -- Thread/conversation grouping
     
     -- Content

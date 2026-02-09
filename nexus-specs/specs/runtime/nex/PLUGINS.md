@@ -1,7 +1,7 @@
 # NEX Plugin System
 
 **Status:** DESIGN COMPLETE  
-**Last Updated:** 2026-02-04  
+**Last Updated:** 2026-02-09  
 **Related:** NEX.md, automations/AUTOMATION_SYSTEM.md
 
 ---
@@ -31,7 +31,7 @@ Event Arrives
 │  1. receiveEvent()         →  [afterReceiveEvent]                       │
 │  2. resolveIdentity()      →  [afterResolveIdentity]                    │
 │  3. resolveAccess()        →  [afterResolveAccess]                      │
-│  4. runAutomations()      →  [afterRunAutomations]  ← AUTOMATIONS     │
+│  4. runAutomations()       →  [afterRunAutomations]  ← AUTOMATIONS     │
 │  5. assembleContext()      →  [afterAssembleContext]                    │
 │  6. runAgent()             →  [afterRunAgent]                           │
 │  7. deliverResponse()      →  [afterDeliverResponse]                    │
@@ -49,6 +49,7 @@ Event Arrives
 ```typescript
 interface NEXPlugin {
   name: string;
+  priority?: number;  // Lower runs first (default: 100)
   
   // Lifecycle hooks (after each stage)
   afterReceiveEvent?(req: NexusRequest): Promise<void | 'skip'>;
@@ -68,7 +69,7 @@ interface NEXPlugin {
 
 Plugins can:
 - **Read** the NexusRequest at any point
-- **Modify** the NexusRequest (add context, adjust permissions, etc.)
+- **Modify** the NexusRequest (add context, adjust routing, etc.)
 - **Skip** remaining pipeline (return `'skip'`)
 - **Log/observe** the flow
 - **Emit** bus events
@@ -81,13 +82,13 @@ Plugins can:
 |--------|------------|---------|
 | **Logging** | All | Log request flow for debugging |
 | **Analytics** | onFinalize | Track latency, token usage, costs |
-| **Automations** | afterResolveAccess | Evaluate automation triggers |
+| **Automations** | afterRunAutomations | Evaluate automation triggers (stage 4) |
 
 ---
 
 ## Automations
 
-Automations are a specific plugin pattern that plugs into the `afterResolveAccess` hook (after IAM resolves identity/permissions, before context assembly).
+Automations are a specific plugin pattern that plugs into the `runAutomations` stage (stage 4 — after IAM resolves identity/permissions, before context assembly).
 
 Automations:
 - Evaluate user/agent-created scripts against events
@@ -108,7 +109,7 @@ const loggingPlugin: NEXPlugin = {
   name: 'logging',
   
   afterReceiveEvent: async (req) => {
-    console.log(`[NEX] Received: ${req.event_id}`);
+    console.log(`[NEX] Received: ${req.event.event_id}`);
   },
   
   onFinalize: async (req) => {
@@ -130,10 +131,10 @@ const analyticsPlugin: NEXPlugin = {
   onFinalize: async (req) => {
     await analytics.track('request_complete', {
       channel: req.delivery.channel,
-      persona: req.session.persona,
+      persona: req.access?.routing.persona,
       duration_ms: req.pipeline.duration_ms,
-      tokens_in: req.response?.tokens_in,
-      tokens_out: req.response?.tokens_out,
+      input_tokens: req.response?.usage?.input_tokens,
+      output_tokens: req.response?.usage?.output_tokens,
     });
   },
 };
@@ -147,7 +148,10 @@ const urgentFlagPlugin: NEXPlugin = {
   
   afterRunAutomations: async (req) => {
     if (req.event.content.match(/urgent|asap|emergency/i)) {
-      req.hooks.context.priority = 'urgent';
+      req.triggers.enrichment = {
+        ...req.triggers.enrichment,
+        priority: 'urgent',
+      };
     }
   },
 };
@@ -173,5 +177,6 @@ plugins:
 ## Related Specs
 
 - `NEX.md` — Pipeline architecture
+- `NEXUS_REQUEST.md` — NexusRequest schema (field paths used in plugins)
 - `automations/AUTOMATION_SYSTEM.md` — Automation specification
 - `BUS_ARCHITECTURE.md` — Bus events plugins can emit

@@ -604,9 +604,9 @@ Mark a credential as broken or clear the broken flag.
 
 Without a subcommand, shows the config path and status.
 
-**Config Location:** `~/nexus/state/nexus/config.json`  
+**Config Location:** `~/nexus/nex.yaml`  
 **Override:** `NEXUS_CONFIG_PATH` env var  
-**Format:** JSON5 (comments allowed)
+**Format:** YAML
 
 ---
 
@@ -1192,9 +1192,9 @@ nexus capabilities --status needs-setup
 
 ### Config File Location
 
-**Path:** `~/nexus/state/nexus/config.json`  
+**Path:** `~/nexus/nex.yaml`  
 **Override:** `NEXUS_CONFIG_PATH` env var  
-**Format:** JSON5 (comments allowed)
+**Format:** YAML
 
 ### State Directory
 
@@ -1202,7 +1202,7 @@ nexus capabilities --status needs-setup
 **Override:** `NEXUS_STATE_DIR` env var
 
 **Contains:**
-- `nexus/config.json` - Main config
+- `nex.yaml` - Main config
 - `credentials/` - Credential records
 - `sessions/` - Session transcripts
 - `agents/` - Agent state (identities, memory)
