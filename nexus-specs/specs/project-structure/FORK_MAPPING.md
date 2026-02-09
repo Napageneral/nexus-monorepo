@@ -294,28 +294,80 @@ Adapt for `nexus` CLI. Many commands stay, some new ones added.
 
 Keep agent-facing commands. These become NEX tools/commands.
 
+### 🟢 ADAPT: `src/tools/` (from `src/agents/tools/` + `src/commands/`)
+
+Keep all builtin tools — these are the core agent capabilities:
+
+| Openclaw | Nexus Destination | Action |
+|----------|------------------|--------|
+| `agents/tools/` (directory) | `tools/` | 🟢 Move to top-level tools |
+| Tool: `read.ts` | `tools/builtin/read.ts` | 🟢 File reading |
+| Tool: `write.ts` | `tools/builtin/write.ts` | 🟢 File writing |
+| Tool: `edit.ts` | `tools/builtin/edit.ts` | 🟢 File editing |
+| Tool: `bash.ts` | `tools/builtin/bash.ts` | 🟢 Shell execution |
+| Tool: `grep.ts` | `tools/builtin/grep.ts` | 🟢 Ripgrep search |
+| Tool: `glob.ts` | `tools/builtin/glob.ts` | 🟢 File glob |
+| Tool: `codesearch.ts` | `tools/builtin/codesearch.ts` | 🟢 Semantic code search |
+| Tool: `websearch.ts` | `tools/builtin/websearch.ts` | 🟢 Web search |
+| Tool: `webfetch.ts` | `tools/builtin/webfetch.ts` | 🟢 URL fetching |
+| Tool: `lsp.ts` | `tools/builtin/lsp.ts` | 🟢 LSP diagnostics |
+| Tool: `plan.ts` | `tools/builtin/plan.ts` | 🟢 Plan mode |
+| Tool: `task.ts` | `tools/builtin/task.ts` | 🟢 Subagent spawning |
+| Tool: `browser-tool.ts` | `tools/builtin/browser.ts` | 🔶 DEFER (browser not V1) |
+| Tool: `discord-actions.ts` | `tools/builtin/discord-actions.ts` | 🟢 Discord-specific actions |
+| Tool: `web-search.ts` | `tools/builtin/web-search.ts` | 🟢 Web search provider |
+| `tool/registry.ts` | `tools/registry.ts` | 🟢 Tool registration |
+| `tool/tool.ts` | `tools/tool.ts` | 🟢 Base tool interface |
+| `tool/skill.ts` | `tools/skill.ts` | 🟢 Skill tool loader |
+| `share/` | `tools/share/` | 🟢 Session sharing tool |
+| `snapshot/` | `tools/snapshot/` | 🟢 File snapshot tool |
+
+### 🟡 REPLACE: Other Adapted Source Modules
+
+| Openclaw | Nexus Destination | Action | Notes |
+|----------|------------------|--------|-------|
+| `src/project/` | `config/workspace/` | 🟡 REPLACE | Nexus workspace model (single workspace, not per-directory) |
+| `src/project/instance.ts` | — | 🟡 REPLACE | Single workspace, not per-directory instances |
+| `src/project/project.ts` | `config/workspace/project.ts` | 🟡 | Project detection |
+| `src/project/state.ts` | — | 🟡 REPLACE | State in ledgers, not memory |
+| `src/project/vcs.ts` | `config/workspace/vcs.ts` | 🟢 | Git integration |
+| `src/installation/` | `config/install.ts` | 🟡 REPLACE | Nexus installation logic |
+| `src/auth/` | `config/credentials/` | 🟡 REPLACE | Nexus credential system |
+| `src/plugin/codex.ts` | `config/credentials/oauth/codex.ts` | 🟢 | OpenAI Codex/ChatGPT PKCE flow |
+| `src/plugin/copilot.ts` | `config/credentials/oauth/copilot.ts` | 🟢 | GitHub Copilot device flow |
+| `src/plugin/index.ts` | 🔴 DROP | | Openclaw plugin system not used |
+| `src/bun/` | keep | 🟢 ADAPT | Bun-specific utilities |
+| `src/file/` | keep | 🟢 ADAPT | File operations (ignore, ripgrep, watcher) |
+| `src/format/` | keep | 🟢 ADAPT | Code formatting |
+| `src/flag/` | keep | 🟢 ADAPT | Feature flags |
+| `src/id/` | keep | 🟢 ADAPT | ID generation |
+| `src/lsp/` | keep | 🟢 ADAPT | LSP client/server |
+| `src/mcp/` | keep | 🟢 ADAPT | Model Context Protocol |
+| `src/scheduler/` | keep | 🟢 ADAPT | Lifecycle-aware timer management |
+| `src/shell/` | keep as `utils/shell.ts` | 🟢 ADAPT | Shell detection utility |
+
 ### 🟢 ADAPT: Utility Modules
 
 These stay with minimal changes:
 
 | Module | Action | Notes |
 |--------|--------|-------|
-| `src/infra/` | 🟢 ADAPT | Infrastructure utils (home-dir, net, tls, format-time) |
+| `src/infra/` | 🟢 ADAPT | Infrastructure utils (home-dir, net, tls, format-time, outbound) |
 | `src/markdown/` | 🟢 ADAPT | Markdown processing |
 | `src/media/` | 🟢 ADAPT | Media handling |
-| `src/media-understanding/` | 🟢 ADAPT | Media transcription/analysis |
+| `src/media-understanding/` | 🟢 ADAPT | Media transcription/analysis (audio, image, video) |
 | `src/logging/` | 🟢 ADAPT | Logging infrastructure |
 | `src/terminal/` | 🟢 ADAPT | Terminal/PTY management |
 | `src/process/` | 🟢 ADAPT | Process management |
 | `src/security/` | 🟢 ADAPT | Security utilities |
 | `src/shared/` | 🟢 ADAPT | Shared utilities (text processing) |
 | `src/utils/` | 🟢 ADAPT | General utilities |
-| `src/compat/` | 🟢 ADAPT | Legacy compatibility |
+| `src/compat/` | 🟢 ADAPT | Legacy compatibility (env var fallbacks) |
 | `src/types/` | 🟢 ADAPT | Type definitions |
 | `src/link-understanding/` | 🟢 ADAPT | URL/link analysis |
 | `src/plugin-sdk/` | 🟢 ADAPT | Plugin SDK for extensions |
 | `src/scripts/` | 🟢 ADAPT | Build/utility scripts |
-| `src/test-helpers/` | 🟢 ADAPT | Test helpers (already fixed) |
+| `src/test-helpers/` | 🟢 ADAPT | Test helpers (already fixed for rebrand) |
 | `src/test-utils/` | 🟢 ADAPT | Test utilities |
 
 ---
@@ -406,19 +458,33 @@ Extensions become external CLI adapter processes per `ADAPTER_SYSTEM.md`. Each m
 
 | Openclaw | Nexus | Action |
 |----------|-------|--------|
+| `.github/` | 🟢 ADAPT | CI/CD adapted for Nexus |
 | `apps/` | 🔶 DEFER | iOS/Android/macOS apps — keep, not V1 |
 | `assets/` | 🟢 ADAPT | Static assets |
 | `docs/` | 🟢 ADAPT | Documentation |
 | `extensions/` | 🟢 ADAPT | External adapters (see above) |
 | `git-hooks/` | 🟢 ADAPT | Git hooks |
-| `packages/` | 🔴 DROP | Legacy package structure (`packages/nexus/`, `packages/moltbot/`) |
+| `infra/` | 🟢 ADAPT | SST infrastructure (hub/cloud/collab/enterprise) |
+| `nix/` | 🟢 ADAPT | Reproducible builds — already working upstream, keep |
+| `packages/app/` | 🟢 ADAPT | Web UI — file tree, diff viewer, multi-session (redesign later) |
+| `packages/desktop/` | 🟢 ADAPT | Desktop app — auto-updater, deep linking (redesign later) |
+| `packages/ui/` | 🟢 ADAPT | Shared UI components (needed for app/desktop) |
+| `packages/sdk/` | 🟢 ADAPT | SDK for app/desktop to connect to core |
+| `packages/plugin/` | 🟢 ADAPT 📋 | Plugin SDK — TODO: review hybrid with skills |
+| `packages/enterprise/` | 🟢 ADAPT 📋 | TODO: review overlap with Nexus Cloud/Hub |
+| `packages/function/` | 🟢 ADAPT | Serverless functions → infra/ |
+| `packages/console/` | 🔴 DROP | We have nexus-website |
+| `packages/web/` | 🔴 DROP | Docs site separate |
+| `packages/docs/` | 🔴 DROP | Docs separate |
+| `packages/nexus/` | 🔴 DROP | Legacy package name |
+| `packages/moltbot/` | 🔴 DROP | Legacy package name |
 | `patches/` | 🟢 ADAPT | Dependency patches |
 | `scripts/` | 🟢 ADAPT | Build/release scripts |
 | `skills/` | 🟢 ADAPT | Skill definitions (52 skills) |
 | `src/` | 🟡 TRANSFORM | See component-by-component above |
 | `Swabble/` | 🔶 DEFER | Swift package |
 | `test/` | 🟢 ADAPT | Integration tests |
-| `ui/` | 🔶 DEFER | Web UI — keep, not V1 critical |
+| `ui/` | 🟢 ADAPT | Web UI components |
 | `vendor/` | 🟢 ADAPT | Vendored dependencies |
 
 ---
