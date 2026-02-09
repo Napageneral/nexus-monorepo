@@ -1,27 +1,25 @@
 # Openclaw → Nexus Fork Mapping
 
-**Status:** DECISIONS LOCKED (DROP section reviewed)  
+**Status:** ALIGNED WITH SPECS  
 **Date:** January 30, 2026  
-**Last Updated:** January 30, 2026  
-**Purpose:** Detailed mapping of what happens to each Openclaw component
+**Last Updated:** 2026-02-09  
+**Purpose:** Authoritative mapping of every openclaw component to its Nexus destination
 
 ---
 
-## Decision Log
+## How to Read This Document
 
-| Date | Section | Decision | Reasoning |
-|------|---------|----------|-----------|
-| 2026-01-30 | DROP | Reviewed all DROP items | See "DROP Decisions" section |
-| 2026-01-30 | ADAPT/REPLACE | Refined component placement | See "Refined Mapping" section |
-| 2026-01-30 | Bus | Critical integration point | Enables Event Ledger → Event Handler |
-| 2026-01-30 | Plugins | Keep Codex/Copilot | Bundle into credentials system |
-| 2026-01-30 | Worktree | DROP | Agents handle git worktrees natively |
-| 2026-01-30 | TUI | DROP | Confirmed no TUI |
-| 2026-01-30 | Share | Keep as tool | Session sharing feature |
-| 2026-01-30 | Scheduler | Keep | Lifecycle-aware timer management |
-| 2026-01-30 | Openclaw Plugins | DROP system | Replace with NEX plugins + Credentials + Tools |
-| 2026-01-30 | Bus | KEEP | Openclaw bus for real-time, in-memory + optional write-through |
-| 2026-01-30 | Tool Registration | Hybrid | tools/dynamic/ (hot-reload) + MCP servers |
+Every directory in the openclaw codebase is listed with a decision and destination. This is the **execution guide** for the fork transformation. Agents should follow this document file-by-file.
+
+**Architecture references:**
+- `nex/NEX.md` — 8-stage pipeline, NexusRequest lifecycle
+- `nex/NEXUS_REQUEST.md` — Data bus schema
+- `nex/DAEMON.md` — Process lifecycle
+- `adapters/ADAPTER_SYSTEM.md` — External CLI adapter model
+- `broker/AGENT_ENGINE.md` — pi-coding-agent wrapper
+- `broker/SESSION_LIFECYCLE.md` — Session management
+- `data/ledgers/*.md` — System of Record schemas
+- `project-structure/NEXUS_STRUCTURE.md` — Target codebase layout
 
 ---
 
@@ -32,576 +30,474 @@
 | 🟢 **ADAPT** | Keep and modify for Nexus |
 | 🔴 **DROP** | Remove entirely |
 | 🟡 **REPLACE** | Replace with Nexus-specific implementation |
-| 🔵 **NEW** | Doesn't exist in Openclaw |
-| 📋 **TODO** | Needs deeper review later |
+| 🔵 **NEW** | Doesn't exist in openclaw — build from spec |
+| 🔶 **DEFER** | Keep for now, transform later (not V1 critical) |
 
 ---
 
-## DROP Decisions (Reviewed 2026-01-30)
-
-After thorough investigation of each item originally marked for DROP:
-
-### ✅ Confirmed DROP
-
-| Item | Reason |
-|------|--------|
-| `.opencode/` | Nexus uses `~/nexus/` workspace model |
-| `specs/` | We have our own `nexus-specs/` |
-| `sdks/vscode/` | VSCode extension not the Nexus model — Cursor integration is native |
-| `src/ide/` | IDE integration for VSCode extension — dropping with extension |
-| `themes/` | No TUI planned |
-| `cli/cmd/tui/` | No TUI — confirmed |
-| `worktree/` | Agents handle git worktrees natively |
-| `global/` | Replaced by Nexus `~/nexus/` workspace paths |
-
-### ✅ Changed to KEEP
-
-| Item | Original | New | Reasoning |
-|------|----------|-----|-----------|
-| `nix/` | DROP | 🟢 ADAPT | Already working in upstream, reproducible builds are valuable, keep it |
-| `packages/app/` | DROP | 🟢 ADAPT | Web UI has file tree, diff viewer, multi-session — good work to keep |
-| `packages/desktop/` | DROP | 🟢 ADAPT | Desktop app has auto-updater, deep linking — redesign later if needed |
-| `packages/enterprise/` | DROP | 🟢 ADAPT 📋 | Keep for now, TODO: review overlap with Nexus Cloud/Hub |
-| `infra/enterprise.ts` | DROP | 🟢 ADAPT 📋 | Keep for now, TODO: review |
-| `src/server/mdns.ts` | DROP | 🟢 ADAPT | Small, enables phone/tablet/multi-device access |
-
-### 📋 TODO: Deeper Review Needed
-
-| Item | What | When |
-|------|------|------|
-| `packages/enterprise/` | Review overlap with Nexus Cloud/Hub, SSO, central config | After initial fork |
-| `src/plugin/` | Plugin system vs Skills — need hybrid approach | See `specs/plugins/UPSTREAM_PLUGINS.md` |
-
----
-
-## Top-Level Mapping
+## Target Architecture Summary
 
 ```
-opencode/                           →  nexus/
-├── .github/           🟢 ADAPT     →  .github/              (CI/CD adapted)
-├── .opencode/         🔴 DROP      →  (Nexus uses ~/nexus/ workspace)
-├── infra/             🟢 ADAPT     →  infra/                (SST for hub/cloud/collab/enterprise)
-├── nix/               🟢 ADAPT     →  nix/                  (Reproducible builds — already working)
-├── packages/          🟢 ADAPT     →  packages/             (Structure changes — see below)
-├── patches/           🟢 ADAPT     →  patches/              (Keep relevant ones)
-├── script/            🟢 ADAPT     →  scripts/              (Build/release)
-├── sdks/              🔴 DROP      →  (VSCode extension not Nexus model)
-├── specs/             🔴 DROP      →  (We have nexus-specs/)
-├── themes/            🔴 DROP      →  (No TUI)
-├── AGENTS.md          🟢 ADAPT     →  AGENTS.md             (Nexus agent docs)
-├── package.json       🟢 ADAPT     →  package.json
-├── turbo.json         🟢 ADAPT     →  turbo.json
-├── sst.config.ts      🟢 ADAPT     →  sst.config.ts
-└── tsconfig.json      🟢 ADAPT     →  tsconfig.json
+nex/                              # The fork (Napageneral/nex)
+├── src/
+│   ├── nex/                      # 🔵 NEX orchestrator (central, NEW)
+│   │   ├── pipeline.ts           #    8-stage pipeline executor
+│   │   ├── request.ts            #    NexusRequest types (Zod)
+│   │   ├── daemon/               #    Process lifecycle, PID, signals
+│   │   ├── bus/                   #    Event bus + SSE (from openclaw bus/)
+│   │   ├── plugins/              #    NEX plugin system
+│   │   ├── adapters/             #    Adapter Manager (spawn/supervise)
+│   │   └── stages/               #    Stage implementations (8 files)
+│   │
+│   ├── broker/                   # 🟡 Agent execution (from agents/ + sessions/ + auto-reply/)
+│   │   ├── engine.ts             #    pi-coding-agent wrapper
+│   │   ├── context.ts            #    Context assembly (3 layers)
+│   │   ├── sessions/             #    Session lifecycle, queue, aliases
+│   │   ├── streaming.ts          #    BrokerStreamHandle
+│   │   └── compaction.ts         #    Compaction with metadata
+│   │
+│   ├── iam/                      # 🟡 Identity & Access (from routing/ + config/sessions/)
+│   │   ├── identity.ts           #    Identity Graph resolution
+│   │   ├── policies.ts           #    ACL policy evaluation (YAML)
+│   │   ├── grants.ts             #    Dynamic permissions
+│   │   └── audit.ts              #    Decision logging
+│   │
+│   ├── db/                       # 🔵 Data layer (NEW — replaces storage/)
+│   │   ├── ledgers.ts            #    SQLite connections
+│   │   ├── events.ts             #    Events Ledger (raw SQL)
+│   │   ├── agents.ts             #    Agents Ledger (raw SQL)
+│   │   ├── identity.ts           #    Identity Ledger (raw SQL)
+│   │   ├── nexus.ts              #    Nexus Ledger (raw SQL)
+│   │   └── migrations/           #    Schema versioning
+│   │
+│   ├── tools/                    # 🟢 Tool system (from agents/tools/ + commands/)
+│   ├── providers/                # 🟢 LLM providers (keep as-is)
+│   ├── config/                   # 🟢 Config system (adapt for nex.yaml)
+│   ├── cli/                      # 🟢 CLI commands (adapt)
+│   ├── gateway/                  # 🟢 HTTP server (adapt → NEX HTTP endpoint)
+│   ├── infra/                    # 🟢 Infrastructure utils (keep)
+│   └── ...                       #    (other adapted modules)
+│
+├── extensions/                   # External adapter processes (CLI executables)
+│   ├── imessage/                 #    Eve adapter
+│   ├── discord/                  #    Discord adapter
+│   ├── telegram/                 #    Telegram adapter
+│   └── ...
+│
+├── cortex/                       # 🔵 Go process (LATER — separate)
+├── skills/                       # 🟢 Skill definitions (adapt)
+└── ...
 ```
 
 ---
 
-## packages/ Mapping
+## src/ — Component-by-Component Mapping
 
-### packages/opencode/ → packages/core/
+### 🔵 NEW: `src/nex/` — NEX Orchestrator
 
-This is the main transformation. The core engine gets restructured around ledgers.
+This is the heart of Nexus and does NOT exist in openclaw. Build from specs.
 
-```
-packages/opencode/src/              →  packages/core/src/
+| New File/Dir | Spec | Source Material |
+|-------------|------|----------------|
+| `nex/pipeline.ts` | `nex/NEX.md` | New — 8-stage sync pipeline |
+| `nex/request.ts` | `nex/NEXUS_REQUEST.md` | New — NexusRequest + NexusEvent Zod schemas |
+| `nex/daemon/` | `nex/DAEMON.md` | Adapt from `src/daemon/` (PID lock, signals, startup) |
+| `nex/bus/` | `nex/BUS_ARCHITECTURE.md` | Adapt from openclaw bus — keep pub/sub, change event types |
+| `nex/plugins/` | `nex/PLUGINS.md` | New — NEXPlugin interface, loader, hook points |
+| `nex/adapters/manager.ts` | `adapters/ADAPTER_SYSTEM.md` | New — spawn/supervise external adapter processes |
+| `nex/adapters/protocol.ts` | `adapters/ADAPTER_SYSTEM.md` | New — JSONL CLI protocol handling |
+| `nex/stages/receiveEvent.ts` | `nex/NEX.md` | New — create NexusRequest from NexusEvent |
+| `nex/stages/resolveIdentity.ts` | `nex/NEX.md` | New — query Identity Graph |
+| `nex/stages/resolveAccess.ts` | `nex/NEX.md` | New — evaluate ACL policies |
+| `nex/stages/runAutomations.ts` | `nex/NEX.md` | New — match and execute automations |
+| `nex/stages/assembleContext.ts` | `nex/NEX.md` | Calls Broker's context assembly |
+| `nex/stages/runAgent.ts` | `nex/NEX.md` | Calls Broker's agent engine |
+| `nex/stages/deliverResponse.ts` | `nex/NEX.md` | Send via adapter's `send` command |
+| `nex/stages/finalize.ts` | `nex/NEX.md` | Write to Nexus Ledger, emit outbound event |
 
-├── acp/               🔴 DROP      →  (Agent Client Protocol - not used)
-│
-├── agent/             🟢 ADAPT     →  agents/
-│   └── prompts        🟢 ADAPT     →  agents/prompts/       (System prompts)
-│
-├── auth/              🟡 REPLACE   →  credentials/          (Nexus credential system)
-│
-├── bun/               🟢 ADAPT     →  bun/                  (Bun-specific utils)
-│
-├── bus/               🟢 ADAPT     →  bus/                  (Event bus, adapted events)
-│   ├── bus-event.ts   🟡 REPLACE   →  bus/events.ts         (Nexus event types)
-│   ├── global.ts      🟢 ADAPT     →  bus/global.ts
-│   └── index.ts       🟢 ADAPT     →  bus/bus.ts
-│
-├── cli/               🟢 ADAPT     →  (moves to packages/cli/)
-│   └── cmd/
-│       ├── tui/       🔴 DROP      →  (No TUI — confirmed)
-│       ├── serve.ts   🟡 REPLACE   →  broker/server.ts      (Broker serves, not generic server)
-│       └── session.ts 🟡 REPLACE   →  broker/               (Session management in broker)
-│
-├── command/           🟢 ADAPT     →  cli/commands/         (Slash commands)
-│
-├── config/            🟡 REPLACE   →  workspace/config.ts   (Nexus workspace model)
-│   ├── config.ts      🟡 REPLACE   →  (Nexus hierarchical config)
-│   └── markdown.ts    🟢 ADAPT     →  workspace/markdown.ts (Markdown parsing)
-│
-├── file/              🟢 ADAPT     →  file/                 (File operations)
-│   ├── ignore.ts      🟢 ADAPT     →  file/ignore.ts
-│   ├── ripgrep.ts     🟢 ADAPT     →  file/ripgrep.ts
-│   └── watcher.ts     🟢 ADAPT     →  file/watcher.ts
-│
-├── flag/              🟢 ADAPT     →  flag/                 (Feature flags)
-│
-├── format/            🟢 ADAPT     →  format/               (Code formatting)
-│
-├── global/            🔴 DROP      →  (Nexus uses ~/nexus/ — see workspace/paths.ts)
-│
-├── id/                🟢 ADAPT     →  id/                   (ID generation)
-│
-├── ide/               🔴 DROP      →  (IDE integration not needed)
-│
-├── installation/      🟡 REPLACE   →  workspace/install.ts  (Nexus installation)
-│
-├── lsp/               🟢 ADAPT     →  lsp/                  (LSP client/server)
-│
-├── mcp/               🟢 ADAPT     →  mcp/                  (Model Context Protocol)
-│
-├── permission/        🟡 REPLACE   →  event-handler/iam/    (ACL policies, not per-call)
-│   ├── index.ts       🟡 REPLACE   →  iam/evaluate.ts       (Policy evaluation)
-│   └── next.ts        🔴 DROP      →  (Subsumed by ACL)
-│
-├── plugin/            🟡 REPLACE   →  (Split into NEX plugins + Credentials + Tools)
-│   ├── index.ts       🔴 DROP      →  (Openclaw plugin system not used)
-│   ├── codex.ts       🟢 ADAPT     →  credentials/oauth/codex.ts   (OAuth flow)
-│   └── copilot.ts     🟢 ADAPT     →  credentials/oauth/copilot.ts (OAuth flow)
-│
-├── project/           🟡 REPLACE   →  workspace/            (Nexus workspace model)
-│   ├── instance.ts    🟡 REPLACE   →  (Single workspace, not per-directory instances)
-│   ├── project.ts     🟡 REPLACE   →  workspace/project.ts
-│   ├── state.ts       🟡 REPLACE   →  (State in ledgers, not memory)
-│   └── vcs.ts         🟢 ADAPT     →  workspace/vcs.ts      (Git integration)
-│
-├── provider/          🟢 ADAPT     →  provider/             (LLM providers)
-│   ├── provider.ts    🟢 ADAPT     →  provider/provider.ts
-│   ├── models.ts      🟢 ADAPT     →  provider/models.ts
-│   └── sdk/           🟢 ADAPT     →  provider/sdk/         (Provider SDKs)
-│
-├── pty/               🟢 ADAPT     →  pty/                  (Pseudo-terminal)
-│
-├── question/          🔴 DROP      →  (User questions handled differently)
-│
-├── scheduler/         🟢 ADAPT     →  scheduler/            (Task scheduling)
-│
-├── server/            🟡 REPLACE   →  broker/ + adapters/   (Split responsibilities)
-│   ├── server.ts      🟡 REPLACE   →  broker/server.ts      (Broker API)
-│   ├── event.ts       🟡 REPLACE   →  bus/sse.ts            (SSE streaming)
-│   ├── mdns.ts        🟢 ADAPT     →  broker/server/mdns.ts (Local network discovery)
-│   └── routes/        🟡 REPLACE   →  broker/routes/        (Broker routes)
-│       ├── session.ts 🟡 REPLACE   →  broker/routes/session.ts
-│       ├── permission 🟡 REPLACE   →  (ACL, not permission routes)
-│       └── ...        🟡 REPLACE   →  (Adapted for Nexus)
-│
-├── session/           🟡 REPLACE   →  broker/ + ledgers/agent/
-│   ├── index.ts       🟡 REPLACE   →  broker/sessions.ts    (Session management)
-│   ├── processor.ts   🟢 ADAPT     →  broker/executor.ts    (Agent execution loop)
-│   ├── message.ts     🔴 DROP      →  (Legacy, use v2)
-│   ├── message-v2.ts  🟡 REPLACE   →  ledgers/agent/types.ts (Types only)
-│   ├── prompt.ts      🟢 ADAPT     →  broker/prompts.ts     (Prompt construction)
-│   ├── llm.ts         🟢 ADAPT     →  broker/llm.ts         (LLM streaming)
-│   ├── compaction.ts  🟢 ADAPT     →  broker/compaction.ts  (Context compaction)
-│   ├── summary.ts     🟢 ADAPT     →  broker/summary.ts     (Summarization)
-│   ├── retry.ts       🟢 ADAPT     →  broker/retry.ts       (Retry logic)
-│   └── status.ts      🟢 ADAPT     →  broker/status.ts      (Status tracking)
-│
-├── share/             🟢 ADAPT     →  tools/share/          (Session sharing tool — /share command)
-│
-├── shell/             🟢 ADAPT     →  util/shell.ts         (Shell detection utility)
-│
-├── skill/             🟢 ADAPT     →  skills/               (Skill loading)
-│
-├── snapshot/          🟢 ADAPT     →  snapshot/             (File snapshots)
-│
-├── storage/           🟡 REPLACE   →  ledgers/              (SQLite, not files)
-│   └── (all)          🟡 REPLACE   →  ledgers/db.ts + per-ledger modules
-│
-├── tool/              🟢 ADAPT     →  tools/
-│   ├── registry.ts    🟢 ADAPT     →  tools/registry.ts
-│   ├── tool.ts        🟢 ADAPT     →  tools/tool.ts
-│   ├── read.ts        🟢 ADAPT     →  tools/builtin/read.ts
-│   ├── write.ts       🟢 ADAPT     →  tools/builtin/write.ts
-│   ├── edit.ts        🟢 ADAPT     →  tools/builtin/edit.ts
-│   ├── bash.ts        🟢 ADAPT     →  tools/builtin/bash.ts
-│   ├── grep.ts        🟢 ADAPT     →  tools/builtin/grep.ts
-│   ├── glob.ts        🟢 ADAPT     →  tools/builtin/glob.ts
-│   ├── codesearch.ts  🟢 ADAPT     →  tools/builtin/codesearch.ts
-│   ├── websearch.ts   🟢 ADAPT     →  tools/builtin/websearch.ts
-│   ├── webfetch.ts    🟢 ADAPT     →  tools/builtin/webfetch.ts
-│   ├── lsp.ts         🟢 ADAPT     →  tools/builtin/lsp.ts
-│   ├── skill.ts       🟢 ADAPT     →  tools/skill.ts        (Skill tool)
-│   ├── plan.ts        🟢 ADAPT     →  tools/builtin/plan.ts (Plan mode)
-│   └── task.ts        🟢 ADAPT     →  tools/builtin/task.ts (Subagent)
-│
-├── util/              🟢 ADAPT     →  util/
-│
-└── worktree/          🔴 DROP      →  (Agents handle git worktrees natively)
-```
+### 🔵 NEW: `src/db/` — Data Layer
 
-### Other packages/
+Replaces openclaw's file-based storage entirely. Build from ledger specs.
 
-```
-packages/app/          🟢 ADAPT     →  packages/app/         (Web UI — file tree, diff viewer, multi-session)
-packages/desktop/      🟢 ADAPT     →  packages/desktop/     (Desktop — auto-updater, deep linking; redesign later)
-packages/console/      🔴 DROP      →  (We have nexus-website/)
-packages/ui/           🟢 ADAPT     →  packages/ui/          (Shared UI components — needed for app/desktop)
-packages/util/         🟢 ADAPT     →  packages/core/src/util/ (Merge in)
-packages/sdk/          🟢 ADAPT     →  packages/sdk/         (Needed for app/desktop to connect to core)
-packages/plugin/       🟢 ADAPT 📋  →  packages/plugin/      (TODO: Review — hybrid with skills)
-packages/script/       🟢 ADAPT     →  scripts/              (Merge with root scripts/)
-packages/web/          🔴 DROP      →  (Docs site separate)
-packages/docs/         🔴 DROP      →  (Docs separate)
-packages/enterprise/   🟢 ADAPT 📋  →  packages/enterprise/  (TODO: Review overlap with Nexus Cloud/Hub)
-packages/slack/        🟢 ADAPT     →  adapters/out/slack/   (Out-adapter)
-packages/function/     🟢 ADAPT     →  infra/                (Serverless functions)
-```
+| New File | Spec | Notes |
+|----------|------|-------|
+| `db/ledgers.ts` | — | SQLite connections (better-sqlite3) |
+| `db/events.ts` | `data/ledgers/EVENTS_LEDGER.md` | Raw SQL queries — no ORM |
+| `db/agents.ts` | `data/ledgers/AGENTS_LEDGER.md` | Sessions, turns, messages, tool_calls, compactions |
+| `db/identity.ts` | `data/ledgers/IDENTITY_GRAPH.md` | Contacts, entities, mappings, aliases |
+| `db/nexus.ts` | `data/ledgers/NEXUS_LEDGER.md` | Pipeline traces |
+| `db/migrations/` | `nex/DAEMON.md` | schema_version table + migration runner |
+
+### 🟡 REPLACE: `src/broker/` — Agent Execution
+
+Built from multiple openclaw modules. The Broker wraps pi-coding-agent and writes to the Agents Ledger.
+
+| Nexus | From Openclaw | Spec | Notes |
+|-------|--------------|------|-------|
+| `broker/engine.ts` | `agents/pi-embedded-runner/` | `broker/AGENT_ENGINE.md` | Wrap `runEmbeddedPiAgent()`, return AgentResult |
+| `broker/context.ts` | `agents/pi-embedded-runner/history.ts`, prompt construction | `broker/CONTEXT_ASSEMBLY.md` | 3-layer context: system prompt, conversation history, current event |
+| `broker/sessions/` | `sessions/`, `routing/session-key.ts` | `broker/SESSION_LIFECYCLE.md` | Session create/resume, queue modes, aliases, serial execution |
+| `broker/streaming.ts` | `agents/pi-embedded-subscribe.tools.ts` | `runtime/STREAMING.md` | BrokerStreamHandle, StreamEvent protocol |
+| `broker/compaction.ts` | `sessions/` (compaction logic) | `broker/AGENT_ENGINE.md` | Wrap upstream compaction, add metadata table |
+| `broker/queue.ts` | `auto-reply/reply/` (queue management) | `broker/SESSION_LIFECYCLE.md` | 6 queue modes: steer, followup, collect, steer-backlog, queue, interrupt |
+
+### 🟡 REPLACE: `src/iam/` — Identity & Access Management
+
+New module replacing openclaw's per-call permission system.
+
+| Nexus | From Openclaw | Spec | Notes |
+|-------|--------------|------|-------|
+| `iam/identity.ts` | `routing/resolve-route.ts` | `data/ledgers/IDENTITY_GRAPH.md` | Query contacts → mappings → entities |
+| `iam/policies.ts` | (new) | `iam/ACCESS_CONTROL_SYSTEM.md`, `iam/POLICIES.md` | YAML policy evaluation, declarative |
+| `iam/grants.ts` | (new) | `iam/GRANTS.md` | Dynamic temporary permissions |
+| `iam/audit.ts` | (new) | `iam/AUDIT.md` | Decision logging to SQLite |
+| `iam/routing.ts` | `routing/bindings.ts` | `iam/ACCESS_CONTROL_SYSTEM.md` | Session key assignment from policies |
 
 ---
 
-## New Nexus Components (🔵 NEW)
+### 🟢 ADAPT: `src/agents/` — Agent Infrastructure
 
-These don't exist in Openclaw and are built fresh:
+Heavy adaptation. Core execution moves to `broker/`, but agent configuration, tools, and prompt infrastructure stays.
 
-```
-packages/core/src/
-├── ledgers/                        🔵 NEW
-│   ├── schema.sql                  # Unified DDL
-│   ├── migrations/                 # Migrations
-│   ├── db.ts                       # SQLite connection
-│   ├── event/                      # Event Ledger
-│   │   ├── types.ts
-│   │   ├── write.ts
-│   │   └── read.ts
-│   ├── identity/                   # Identity Ledger
-│   │   ├── types.ts
-│   │   ├── resolve.ts              # Principal resolution
-│   │   └── enrich.ts               # Index enrichment
-│   └── agent/                      # Agent Ledger
-│       ├── types.ts
-│       ├── write.ts                # LedgerWrite interface
-│       └── read.ts
-│
-├── adapters/                       🔵 NEW
-│   ├── types.ts                    # NormalizedEvent, etc.
-│   ├── in/                         # In-Adapters
-│   │   ├── adapter.ts              # Interface
-│   │   ├── imessage/
-│   │   ├── gmail/
-│   │   ├── discord/
-│   │   ├── telegram/
-│   │   ├── whatsapp/
-│   │   ├── webhook/
-│   │   └── timer/
-│   └── out/                        # Out-Adapters
-│       ├── adapter.ts              # Interface
-│       ├── formatter.ts            # Platform formatting
-│       ├── discord/
-│       ├── telegram/
-│       └── email/
-│
-├── event-handler/                  🔵 NEW
-│   ├── handler.ts                  # Main handler
-│   ├── iam/                        # ACL system
-│   │   ├── policies.ts
-│   │   ├── evaluate.ts
-│   │   ├── grants.ts
-│   │   └── audit.ts
-│   ├── hooks/                      # Hook runtime
-│   │   ├── runtime.ts
-│   │   ├── loader.ts
-│   │   └── context.ts
-│   └── dispatch.ts                 # BrokerDispatch
-│
-├── cortex/                         🔵 NEW (from mnemonic)
-│   ├── episodes.ts
-│   ├── facets.ts
-│   ├── embeddings.ts
-│   └── search.ts
-│
-└── aix/                            🔵 NEW (bundled as tool/skill)
-    ├── sync/
-    │   ├── cursor.ts
-    │   ├── codex.ts
-    │   ├── claude.ts
-    │   └── clawdbot.ts
-    └── main.ts
-```
+| Openclaw | Nexus Destination | Action |
+|----------|------------------|--------|
+| `agents/pi-embedded-runner/` | `broker/engine.ts` | 🟡 Core execution → Broker |
+| `agents/pi-embedded-helpers/` | `broker/` (helpers) | 🟡 Move to Broker |
+| `agents/pi-embedded-subscribe.tools.ts` | `broker/streaming.ts` | 🟡 Streaming → Broker |
+| `agents/pi-extensions/` | `broker/` | 🟡 Agent extensions → Broker |
+| `agents/tools/` | `tools/` | 🟢 Keep, move to top-level tools |
+| `agents/skills/` | `tools/skills/` | 🟢 Skill loading |
+| `agents/schema/` | `tools/schema/` | 🟢 Tool schemas |
+| `agents/identity.ts` | `iam/` or keep | 🟢 Agent identity config |
+| `agents/identity-file.ts` | keep | 🟢 Identity file management |
+| `agents/models-config.ts` | `config/` | 🟢 Model configuration |
+| `agents/cli-session.ts` | `broker/` | 🟡 CLI session handling → Broker |
+| `agents/tool-policy.ts` | `iam/` | 🟡 Tool policy → IAM |
+| `agents/usage.ts` | keep | 🟢 Token usage tracking |
+| `agents/auth-profiles/` | `config/` | 🟢 Auth profile management |
+| `agents/sandbox/` | 🔶 DEFER | Not V1 |
+| `agents/test-helpers/` | `test-helpers/` | 🟢 Keep |
+
+### 🟢 ADAPT: `src/auto-reply/` — Message Processing
+
+This is openclaw's event handling pipeline. Parts go to Broker (queue, processing), parts to NEX stages.
+
+| Openclaw | Nexus Destination | Action |
+|----------|------------------|--------|
+| `auto-reply/reply.ts` | `broker/queue.ts` | 🟡 Queue management → Broker |
+| `auto-reply/reply/` (subdirectory) | `broker/queue/` | 🟡 Queue modes, processing |
+| `auto-reply/envelope.ts` | `nex/stages/receiveEvent.ts` | 🟡 Event normalization → NEX stage 1 |
+| `auto-reply/heartbeat.ts` | Clock adapter responsibility | 🟡 → adapter |
+| `auto-reply/commands-registry.*` | `cli/commands/` | 🟢 Slash commands stay |
+| `auto-reply/group-activation.ts` | `iam/` or `nex/stages/` | 🟡 Group mention handling |
+| `auto-reply/send-policy.ts` | `broker/` | 🟡 Send policy → Broker |
+| `auto-reply/thinking.ts` | `broker/streaming.ts` | 🟡 Thinking indicators → streaming |
+| `auto-reply/inbound-debounce.ts` | `nex/adapters/` | 🟡 Debounce → Adapter Manager |
+| `auto-reply/model.ts` | `config/` | 🟢 Model selection |
+| `auto-reply/status.ts` | keep | 🟢 Status tracking |
+| `auto-reply/skill-commands.ts` | `cli/` | 🟢 Skill CLI commands |
+
+### 🟢 ADAPT: `src/sessions/` — Session Management
+
+Mostly moves to `broker/sessions/`.
+
+| Openclaw | Nexus Destination | Action |
+|----------|------------------|--------|
+| `sessions/session-key-utils.ts` | `broker/sessions/keys.ts` | 🟡 Session key utilities → Broker |
+| `sessions/session-label.ts` | `broker/sessions/` | 🟡 Labels → Broker |
+| `sessions/send-policy.ts` | `broker/` | 🟡 Send policy |
+| `sessions/level-overrides.ts` | `config/` | 🟢 Level config |
+| `sessions/model-overrides.ts` | `config/` | 🟢 Model config |
+| `sessions/transcript-events.ts` | `broker/` | 🟡 Transcript events → Broker |
+
+### 🟢 ADAPT: `src/routing/` — Routing
+
+Splits between IAM (identity resolution, session key assignment) and Broker (route execution).
+
+| Openclaw | Nexus Destination | Action |
+|----------|------------------|--------|
+| `routing/bindings.ts` | `iam/routing.ts` | 🟡 Bindings → IAM policies |
+| `routing/resolve-route.ts` | `iam/identity.ts` | 🟡 Route resolution → IAM |
+| `routing/session-key.ts` | `broker/sessions/keys.ts` | 🟡 Session key building → Broker |
+
+### 🟢 ADAPT: `src/daemon/` — Daemon Process
+
+Moves to `nex/daemon/`. Good upstream reference for PID management, launchd, systemd.
+
+| Openclaw | Nexus Destination | Action |
+|----------|------------------|--------|
+| `daemon/paths.ts` | `nex/daemon/paths.ts` | 🟢 PID file, log paths |
+| `daemon/service-runtime.ts` | `nex/daemon/runtime.ts` | 🟢 Service runtime management |
+| `daemon/launchd.ts` | `nex/daemon/launchd.ts` | 🟢 macOS launchd integration |
+| `daemon/systemd.ts` | `nex/daemon/systemd.ts` | 🟢 Linux systemd integration |
+| `daemon/schtasks.ts` | `nex/daemon/schtasks.ts` | 🟢 Windows scheduled tasks |
+| `daemon/inspect.ts` | `nex/daemon/inspect.ts` | 🟢 Daemon inspection |
+| `daemon/diagnostics.ts` | `nex/daemon/diagnostics.ts` | 🟢 Health diagnostics |
+| `daemon/constants.ts` | `nex/daemon/constants.ts` | 🟢 Daemon constants |
+| `daemon/node-service.ts` | `nex/daemon/node-service.ts` | 🟢 Node service management |
+
+### 🟢 ADAPT: `src/gateway/` — HTTP Server
+
+Becomes the NEX HTTP endpoint (health, SSE, eventually RPC).
+
+| Openclaw | Nexus Destination | Action |
+|----------|------------------|--------|
+| `gateway/server.ts` + `server/` | `gateway/` | 🟢 Adapt for NEX health + SSE endpoint |
+| `gateway/server-methods/` | `gateway/` | 🟢 Adapt API methods |
+| `gateway/protocol/` | `gateway/` | 🟢 Protocol definitions |
+| `gateway/session-utils.ts` | `broker/` or `gateway/` | 🟡 Session utils may split |
+| `gateway/chat-sanitize.ts` | keep | 🟢 Input sanitization |
+
+### 🟢 ADAPT: `src/hooks/` — Hook System
+
+Maps to `nex/plugins/` (pipeline hooks) and `nex/automations/` (user automations).
+
+| Openclaw | Nexus Destination | Action |
+|----------|------------------|--------|
+| `hooks/loader.ts` | `nex/plugins/loader.ts` | 🟡 Adapt for NEXPlugin interface |
+| `hooks/types.ts` | `nex/plugins/types.ts` | 🟡 New types |
+| `hooks/workspace.ts` | `nex/automations/` | 🟡 Workspace hooks → automations |
+| `hooks/bundled/` | `nex/plugins/builtin/` | 🟢 Adapt bundled hooks |
+| `hooks/install.ts` | `nex/plugins/` | 🟢 Plugin installation |
+| `hooks/gmail-ops.ts` | `nex/automations/` or skills | 🟡 Gmail hook → automation |
+
+### 🟢 ADAPT: `src/config/` — Configuration
+
+Keep and adapt for `nex.yaml`.
+
+| Openclaw | Nexus Destination | Action |
+|----------|------------------|--------|
+| `config/paths.ts` | keep (already rewritten) | 🟢 Already adapted |
+| `config/schema.ts` | Adapt for nex.yaml Zod schema | 🟡 New config structure |
+| `config/sessions/` | `broker/sessions/config.ts` | 🟡 Session config → Broker |
+| `config/channel-capabilities.ts` | keep | 🟢 Channel capability definitions |
+| `config/types.*.ts` | keep | 🟢 Type definitions |
+| `config/validation.ts` | keep | 🟢 Config validation |
+
+### 🟢 ADAPT: `src/providers/` — LLM Providers
+
+Keep as-is. Model catalog, provider SDKs, streaming.
+
+### 🟢 ADAPT: `src/cli/` — CLI Commands
+
+Adapt for `nexus` CLI. Many commands stay, some new ones added.
+
+| Openclaw | Nexus Destination | Action |
+|----------|------------------|--------|
+| `cli/daemon-cli/` | keep | 🟢 `nexus daemon start/stop/status` |
+| `cli/gateway-cli/` | keep | 🟢 Gateway management |
+| `cli/cron-cli/` | keep | 🟢 Cron job management |
+| `cli/program/` | keep | 🟢 CLI program setup |
+| `cli/browser-cli-actions-input/` | 🔶 DEFER | Browser not V1 |
+
+### 🟢 ADAPT: `src/commands/` — Slash Commands
+
+Keep agent-facing commands. These become NEX tools/commands.
+
+### 🟢 ADAPT: Utility Modules
+
+These stay with minimal changes:
+
+| Module | Action | Notes |
+|--------|--------|-------|
+| `src/infra/` | 🟢 ADAPT | Infrastructure utils (home-dir, net, tls, format-time) |
+| `src/markdown/` | 🟢 ADAPT | Markdown processing |
+| `src/media/` | 🟢 ADAPT | Media handling |
+| `src/media-understanding/` | 🟢 ADAPT | Media transcription/analysis |
+| `src/logging/` | 🟢 ADAPT | Logging infrastructure |
+| `src/terminal/` | 🟢 ADAPT | Terminal/PTY management |
+| `src/process/` | 🟢 ADAPT | Process management |
+| `src/security/` | 🟢 ADAPT | Security utilities |
+| `src/shared/` | 🟢 ADAPT | Shared utilities (text processing) |
+| `src/utils/` | 🟢 ADAPT | General utilities |
+| `src/compat/` | 🟢 ADAPT | Legacy compatibility |
+| `src/types/` | 🟢 ADAPT | Type definitions |
+| `src/link-understanding/` | 🟢 ADAPT | URL/link analysis |
+| `src/plugin-sdk/` | 🟢 ADAPT | Plugin SDK for extensions |
+| `src/scripts/` | 🟢 ADAPT | Build/utility scripts |
+| `src/test-helpers/` | 🟢 ADAPT | Test helpers (already fixed) |
+| `src/test-utils/` | 🟢 ADAPT | Test utilities |
 
 ---
 
-## Summary by Category
+### 🟡 REPLACE: Channel-Specific Source Directories
 
-### 🟢 ADAPT (Keep and Modify)
+Openclaw bundles channel handling in `src/`. Nexus moves these to `extensions/` as external adapter processes.
 
-**Core Engine:**
+| Openclaw src/ | Nexus | Action |
+|---------------|-------|--------|
+| `src/imessage/` | `extensions/imessage/` | 🟡 Merge with extension, external CLI |
+| `src/discord/` | `extensions/discord/` | 🟡 Merge with extension, external CLI |
+| `src/telegram/` | `extensions/telegram/` | 🟡 Merge with extension, external CLI |
+| `src/slack/` | `extensions/slack/` | 🟡 Merge with extension, external CLI |
+| `src/signal/` | `extensions/signal/` | 🟡 Merge with extension, external CLI |
+| `src/whatsapp/` | `extensions/whatsapp/` | 🟡 Merge with extension, external CLI |
+| `src/line/` | `extensions/line/` | 🟡 Merge with extension, external CLI |
+| `src/web/` | `gateway/` (web inbound) | 🟡 Web channel → gateway |
+| `src/channels/` | `nex/adapters/types.ts` + extensions | 🟡 Channel types → shared, impls → extensions |
+| `src/canvas-host/` | 🔶 DEFER | Canvas/A2UI not V1 |
 
-| Openclaw | Nexus | Notes |
-|----------|-------|-------|
-| `bus/` | `bus/` | Same pattern, different events |
-| `tool/` | `tools/` | Same tools, minor adaptations |
-| `provider/` | `provider/` | LLM providers unchanged |
-| `lsp/` | `lsp/` | LSP client/server |
-| `mcp/` | `mcp/` | MCP integration |
-| `file/` | `file/` | File operations |
-| `format/` | `format/` | Code formatting |
-| `shell/` | `shell/` | Shell integration |
-| `pty/` | `pty/` | Pseudo-terminal |
-| `skill/` | `skills/` | Skill loading |
-| `share/` | `share/` | Session sharing |
-| `snapshot/` | `snapshot/` | File snapshots |
-| `worktree/` | `worktree/` | Git worktrees |
-| `id/` | `id/` | ID generation |
-| `flag/` | `flag/` | Feature flags |
-| `scheduler/` | `scheduler/` | Task scheduling |
-| `util/` | `util/` | Utilities |
-| `agent/prompts` | `agents/prompts/` | System prompts |
-| `session/llm.ts` | `agents/llm.ts` | LLM streaming |
-| `session/compaction.ts` | `agents/compaction.ts` | Context compaction |
-| `session/processor.ts` | `broker/executor.ts` | Agent execution loop |
-| `server/mdns.ts` | `server/mdns.ts` | Local network discovery (phone/tablet access) |
-
-**UI/Desktop (Keeping — redesign later if needed):**
-
-| Openclaw | Nexus | Notes |
-|----------|-------|-------|
-| `packages/app/` | `packages/app/` | Web UI — file tree, diff viewer, multi-session |
-| `packages/desktop/` | `packages/desktop/` | Desktop — auto-updater, deep linking |
-| `packages/ui/` | `packages/ui/` | Shared UI components |
-| `packages/sdk/` | `packages/sdk/` | SDK for app/desktop to connect to core |
-
-**Infrastructure:**
-
-| Openclaw | Nexus | Notes |
-|----------|-------|-------|
-| `nix/` | `nix/` | Reproducible builds — already working |
-| `packages/enterprise/` 📋 | `packages/enterprise/` | TODO: Review overlap with Nexus Cloud/Hub |
-| `packages/slack/` | `adapters/out/slack/` | Slack out-adapter |
-
-**Plugins (TODO: Needs deeper review):**
-
-| Openclaw | Nexus | Notes |
-|----------|-------|-------|
-| `packages/plugin/` 📋 | TBD | Hybrid with skills — see `specs/plugins/` |
-| `src/plugin/` 📋 | TBD | Plugin runtime — needs review |
-
-### 🟡 REPLACE (New Implementation)
-
-| Openclaw | Nexus | Notes |
-|----------|-------|-------|
-| `storage/` | `ledgers/` | File-based → SQLite |
-| `session/` | `broker/` + `ledgers/agent/` | Sessions in ledger |
-| `permission/` | `event-handler/iam/` | Per-call → upfront ACL |
-| `config/` | `workspace/` | Different config model |
-| `project/` | `workspace/` | Different workspace model |
-| `server/` | `broker/` + `adapters/` | Split responsibilities |
-| `global/` | `workspace/paths.ts` | ~/nexus/ paths |
-| `auth/` | `credentials/` | Nexus credential system |
-
-### 🔴 DROP (Remove) — REVIEWED 2026-01-30
+### 🔴 DROP
 
 | Openclaw | Reason |
 |----------|--------|
-| `acp/` | Agent Client Protocol not used |
-| `ide/` | IDE integration for VSCode extension — dropping with extension |
-| `question/` | Handled differently |
-| `session/message.ts` | Legacy, use v2 |
-| `permission/next.ts` | Subsumed by ACL |
-| `packages/console/` | We have nexus-website |
-| `packages/web/` | Docs separate |
-| `packages/docs/` | Docs separate |
-| `.opencode/` | Nexus uses ~/nexus/ workspace |
-| `sdks/vscode/` | VSCode extension not Nexus model — Cursor integration is native |
-| `themes/` | No TUI planned |
-| `specs/` | We have nexus-specs/ |
+| `src/acp/` | Agent Client Protocol — not used |
+| `src/tui/` | No TUI — confirmed drop |
+| `src/memory/` | Replaced by Cortex (Go, separate process) |
+| `src/docs/` | Separate docs site |
+| `src/wizard/` | Onboarding wizard — different model |
+| `src/tts/` | Text-to-speech — not V1 |
+| `src/node-host/` | Multi-node execution — not V1 |
+| `src/pairing/` | Device pairing — not V1 |
+| `src/browser/` | Browser automation — not V1 (defer, complex) |
 
-### 🔵 NEW (Nexus-Only)
+### 🔶 DEFER (Keep in tree, transform later)
 
-| Component | Purpose |
-|-----------|---------|
-| `ledgers/event/` | Event Ledger |
-| `ledgers/identity/` | Identity Ledger |
-| `ledgers/agent/` | Agent Ledger |
-| `adapters/in/` | In-Adapters (iMessage, Gmail, Discord, etc.) |
-| `adapters/out/` | Out-Adapters (response formatting) |
-| `event-handler/iam/` | ACL policy evaluation |
-| `event-handler/hooks/` | Hook runtime |
-| `cortex/` | Derived layer (from mnemonic) |
-| `aix/` | External harness sync (bundled) |
-
----
-
-## File Count Estimate
-
-| Category | Openclaw Files | Nexus Files | Change |
-|----------|---------------|-------------|--------|
-| 🟢 ADAPT | ~350 | ~350 | Same (includes app/desktop/ui/sdk/enterprise) |
-| 🟡 REPLACE | ~80 | ~60 | Fewer (consolidated) |
-| 🔴 DROP | ~80 | 0 | Gone (VSCode ext, console, docs, themes) |
-| 🔵 NEW | 0 | ~100 | New (ledgers, adapters, ACL, hooks) |
-| **Total** | ~510 | ~510 | Similar size, different focus |
-
-**Note:** Keeping web/desktop UI increases total but provides valuable functionality.
-
----
-
-## Adapter Language Support
-
-Per your request, adapters should support both TypeScript and Go:
-
-```
-adapters/
-├── interface.ts              # TypeScript interface definition
-├── in/
-│   ├── imessage/            # TS (native macOS access)
-│   ├── gmail/               # TS (API client)
-│   ├── discord/             # TS (discord.js)
-│   ├── telegram/            # TS (telegraf)
-│   ├── whatsapp/            # TS (baileys)
-│   ├── webhook/             # TS (HTTP handler)
-│   └── timer/               # TS (cron)
-└── out/
-    ├── discord/             # TS
-    ├── telegram/            # TS
-    └── email/               # TS
-
-# Go adapters (if needed for performance):
-# - Could compile to binary, call from TS
-# - Or use FFI binding
-# - Or run as subprocess with JSON IPC
-```
-
----
-
-## Critical Integration: Event Bus
-
-The **bus/** component is a critical integration point that enables our Event Ledger → Event Handler architecture.
-
-**What the bus provides:**
-- Pub/sub event system for decoupled communication
-- Type-safe events via Zod schemas
-- Instance-scoped and global event subscriptions
-- Automatic cleanup on disposal
-
-**Nexus bus events (to be defined):**
-
-| Category | Events |
+| Openclaw | Reason |
 |----------|--------|
-| **Ledger** | `event.created`, `identity.updated`, `turn.created`, `turn.completed` |
-| **ACL** | `acl.decision`, `acl.grant.requested`, `acl.grant.approved` |
-| **Hooks** | `hook.fired`, `hook.context` |
-| **Broker** | `session.routed`, `agent.started`, `agent.completed` |
-| **Adapters** | `adapter.in.received`, `adapter.out.sent` |
-
-**Integration points:**
-- Event Ledger writes → publishes `event.created`
-- Event Handler subscribes → triggers ACL + hooks
-- Broker subscribes → receives `BrokerDispatch`
-- Out-Adapters subscribe → receive responses to send
-- Index subscribes → processes new ledger entries
-- UI subscribes via SSE → real-time updates
-
-**Action:** Review all specs to ensure bus integration is planned.
+| `src/cron/` | Cron system — keep as-is, eventually becomes clock adapter |
+| `src/plugins/` | Plugin runtime — keep, adapt to NEXPlugin model incrementally |
+| `src/macos/` | macOS system integration — keep for daemon |
 
 ---
 
-## Refined Component Placement
+## extensions/ — External Adapter Processes
 
-After deep investigation, here's where components land in Nexus:
+Extensions become external CLI adapter processes per `ADAPTER_SYSTEM.md`. Each must implement the adapter CLI protocol: `info`, `monitor`, `send`, `stream`, `health`.
 
-### Broker (Agent Execution)
-```
-broker/
-├── broker.ts         # Main broker
-├── router.ts         # Session routing  
-├── executor.ts       # Agent execution loop (from session/processor.ts)
-├── llm.ts            # LLM streaming (from session/llm.ts)
-├── compaction.ts     # Context compaction (from session/compaction.ts)
-├── summary.ts        # Summarization (from session/summary.ts)
-├── prompts.ts        # Prompt construction (from session/prompt.ts)
-├── retry.ts          # Retry logic
-├── status.ts         # Status tracking
-├── sessions.ts       # Session management
-└── server/
-    ├── server.ts     # HTTP API
-    ├── routes/       # API routes
-    └── mdns.ts       # Local network discovery
-```
+| Extension | Nexus Channel | Priority | Notes |
+|-----------|--------------|----------|-------|
+| `extensions/imessage/` | imessage | P0 | Eve adapter — first target |
+| `extensions/discord/` | discord | P1 | Discord adapter |
+| `extensions/telegram/` | telegram | P1 | Telegram adapter |
+| `extensions/slack/` | slack | P1 | Slack adapter |
+| `extensions/signal/` | signal | P2 | Signal adapter |
+| `extensions/whatsapp/` | whatsapp | P2 | WhatsApp adapter |
+| `extensions/bluebubbles/` | imessage-bb | P2 | BlueBubbles alternative |
+| `extensions/matrix/` | matrix | P2 | Matrix adapter |
+| `extensions/googlechat/` | googlechat | P2 | Google Chat |
+| `extensions/msteams/` | msteams | P2 | Microsoft Teams |
+| `extensions/feishu/` | feishu | Low | Feishu/Lark |
+| `extensions/line/` | line | Low | LINE messenger |
+| `extensions/nostr/` | nostr | Low | Nostr protocol |
+| `extensions/tlon/` | tlon | Low | Tlon/Urbit |
+| `extensions/zalo/` | zalo | Low | Zalo messenger |
+| `extensions/mattermost/` | mattermost | Low | Mattermost |
+| `extensions/nextcloud-talk/` | nextcloud | Low | Nextcloud Talk |
+| `extensions/twitch/` | twitch | Low | Twitch chat |
+| `extensions/copilot-proxy/` | — | 🟢 ADAPT | Copilot credential proxy |
+| `extensions/google-*-auth/` | — | 🟢 ADAPT | Google OAuth flows |
+| `extensions/memory-core/` | 🔴 DROP | Replaced by Cortex |
+| `extensions/memory-lancedb/` | 🔴 DROP | Replaced by Cortex |
+| `extensions/llm-task/` | 🔶 DEFER | LLM task runner |
+| `extensions/device-pair/` | 🔶 DEFER | Device pairing |
+| `extensions/phone-control/` | 🔶 DEFER | Phone control |
+| `extensions/diagnostics-otel/` | 🔶 DEFER | OpenTelemetry |
+| `extensions/lobster/` | 🔶 DEFER | Lobster extension |
+| `extensions/open-prose/` | 🔶 DEFER | Prose editing |
+| `extensions/talk-voice/` | 🔶 DEFER | Voice calls |
+| `extensions/voice-call/` | 🔶 DEFER | Voice calls |
 
-### Credentials (with OAuth)
-```
-credentials/
-├── store.ts          # Credential storage
-├── backends/         # Keychain, 1Password, env, etc.
-├── access.ts         # Consumer-centric access
-└── oauth/            # OAuth flows (bundled from plugins)
-    ├── codex.ts      # OpenAI Codex/ChatGPT PKCE flow
-    └── copilot.ts    # GitHub Copilot device flow
-```
-
-### Tools (User-facing)
-```
-tools/
-├── registry.ts
-├── tool.ts
-├── builtin/          # Core tools
-│   ├── read.ts
-│   ├── write.ts
-│   ├── edit.ts
-│   ├── bash.ts
-│   ├── grep.ts
-│   └── ...
-├── share/            # Session sharing tool
-│   └── share.ts
-├── snapshot/         # File snapshot tool
-│   └── snapshot.ts
-└── skill.ts          # Skill tool
-```
-
-### Infrastructure (Used by tools/broker)
-```
-core/
-├── bus/              # Event pub/sub (CRITICAL)
-├── file/             # File operations, ripgrep, watcher
-├── pty/              # Pseudo-terminal sessions
-├── scheduler/        # Background task scheduling
-├── util/             # Utilities (including shell.ts)
-└── plugin/           # Plugin system (hybrid with skills)
-```
+**Key transformation:** Each `extensions/{name}/` needs to implement the adapter CLI protocol. The Adapter Manager in `src/nex/adapters/manager.ts` spawns these as child processes, reads JSONL from stdout (monitor mode), and sends delivery requests via `send`/`stream` commands.
 
 ---
 
-## Migration Order
+## Top-Level Directories
 
-1. **Phase 1: Scaffold**
-   - Create monorepo structure
-   - Set up Bun + Turborepo
-   - Create package.json files
-
-2. **Phase 2: Core Adapt**
-   - Copy 🟢 ADAPT files from Openclaw
-   - Rename/restructure as needed
-   - Update imports
-
-3. **Phase 3: Ledgers**
-   - Implement `ledgers/` from mnemonic schema
-   - Wire up SQLite
-
-4. **Phase 4: Replace Session**
-   - Implement `broker/` using ledger writes
-   - Adapt `session/processor.ts` → `broker/executor.ts`
-
-5. **Phase 5: Event Handler**
-   - Implement ACL evaluation
-   - Implement hook runtime
-   - Wire to broker
-
-6. **Phase 6: Adapters**
-   - Implement in-adapters
-   - Implement out-adapters
-
-7. **Phase 7: Index**
-   - Bring mnemonic code
-   - Wire to all three ledgers
-
-8. **Phase 8: AIX**
-   - Bundle as tool/skill
-   - Wire to Agent Ledger
+| Openclaw | Nexus | Action |
+|----------|-------|--------|
+| `apps/` | 🔶 DEFER | iOS/Android/macOS apps — keep, not V1 |
+| `assets/` | 🟢 ADAPT | Static assets |
+| `docs/` | 🟢 ADAPT | Documentation |
+| `extensions/` | 🟢 ADAPT | External adapters (see above) |
+| `git-hooks/` | 🟢 ADAPT | Git hooks |
+| `packages/` | 🔴 DROP | Legacy package structure (`packages/nexus/`, `packages/moltbot/`) |
+| `patches/` | 🟢 ADAPT | Dependency patches |
+| `scripts/` | 🟢 ADAPT | Build/release scripts |
+| `skills/` | 🟢 ADAPT | Skill definitions (52 skills) |
+| `src/` | 🟡 TRANSFORM | See component-by-component above |
+| `Swabble/` | 🔶 DEFER | Swift package |
+| `test/` | 🟢 ADAPT | Integration tests |
+| `ui/` | 🔶 DEFER | Web UI — keep, not V1 critical |
+| `vendor/` | 🟢 ADAPT | Vendored dependencies |
 
 ---
 
-*This mapping is the source of truth for the fork. Update as decisions change.*
+## 🔵 NEW Components (Build from Specs)
+
+These don't exist in openclaw at all:
+
+| Component | Location | Spec | Priority |
+|-----------|----------|------|----------|
+| **NEX Pipeline** | `src/nex/pipeline.ts` | `nex/NEX.md` | P0 |
+| **NexusRequest types** | `src/nex/request.ts` | `nex/NEXUS_REQUEST.md` | P0 |
+| **Pipeline stages (8)** | `src/nex/stages/*.ts` | `nex/NEX.md` | P0 |
+| **Adapter Manager** | `src/nex/adapters/manager.ts` | `adapters/ADAPTER_SYSTEM.md` | P0 |
+| **Adapter CLI protocol** | `src/nex/adapters/protocol.ts` | `adapters/ADAPTER_SYSTEM.md` | P0 |
+| **Events Ledger** | `src/db/events.ts` | `data/ledgers/EVENTS_LEDGER.md` | P0 |
+| **Agents Ledger** | `src/db/agents.ts` | `data/ledgers/AGENTS_LEDGER.md` | P0 |
+| **Identity Ledger** | `src/db/identity.ts` | `data/ledgers/IDENTITY_GRAPH.md` | P0 |
+| **Nexus Ledger** | `src/db/nexus.ts` | `data/ledgers/NEXUS_LEDGER.md` | P0 |
+| **ACL Policy Engine** | `src/iam/policies.ts` | `iam/ACCESS_CONTROL_SYSTEM.md` | P1 |
+| **Grants System** | `src/iam/grants.ts` | `iam/GRANTS.md` | P1 |
+| **Audit Logger** | `src/iam/audit.ts` | `iam/AUDIT.md` | P1 |
+| **Automation System** | `src/nex/automations/` | `nex/automations/AUTOMATION_SYSTEM.md` | P2 |
+| **Clock Adapter** | `extensions/clock/` | (needs spec) | P1 |
+
+---
+
+## Execution Order
+
+Follows `FORK_PLAN.md` Step 1 (scaffold). The transformation proceeds in this order:
+
+### Wave 1: Create New Modules (no breakage)
+1. Create `src/db/` — ledger schemas and queries (pure new code)
+2. Create `src/nex/request.ts` — NexusRequest + NexusEvent Zod types
+3. Create `src/nex/pipeline.ts` — 8-stage executor with stubs
+4. Create `src/nex/stages/` — stub implementations
+5. Create `src/nex/adapters/` — Adapter Manager skeleton
+6. Create `src/iam/` — identity resolution + ACL policy engine
+
+### Wave 2: Move Existing Code
+7. Move `src/agents/pi-embedded-*` → `src/broker/engine.ts` (adapt)
+8. Move `src/sessions/` → `src/broker/sessions/` (adapt)
+9. Move `src/auto-reply/reply/` queue logic → `src/broker/queue.ts`
+10. Move `src/daemon/` → `src/nex/daemon/`
+11. Move `src/hooks/` → `src/nex/plugins/`
+12. Move `src/routing/` → split `src/iam/` + `src/broker/sessions/`
+
+### Wave 3: Wire Integration
+13. Wire pipeline stages to real implementations
+14. Replace file-based storage with ledger writes
+15. Wire Adapter Manager to extensions
+16. Wire NEX daemon startup sequence
+
+### Wave 4: Clean Up
+17. Drop `src/memory/`, `src/tui/`, `src/acp/`, other DROPs
+18. Drop `packages/` directory
+19. Update imports across all adapted files
+20. Verify all tests pass
+
+---
+
+## Critical Implementation Details to Preserve
+
+These upstream patterns are battle-tested and must be carried over carefully:
+
+| Pattern | Openclaw Location | Why It Matters |
+|---------|-------------------|----------------|
+| **Compaction with staged pruning** | `sessions/` + agents | Context overflow recovery |
+| **Failover between providers** | `providers/` | Model fallback on 400/500 errors |
+| **Tool call retry logic** | `agents/pi-embedded-runner/` | Graceful retry on transient failures |
+| **Streaming abort/steer** | `agents/pi-embedded-subscribe.tools.ts` | Mid-stream cancellation |
+| **Session key normalization** | `routing/session-key.ts` | Backward compat for `dm` → `direct` |
+| **Config hot-reload per-message** | `routing/bindings.ts` | Dynamic binding changes |
+| **Channel capability detection** | `config/channel-capabilities.ts` | Text limits, markdown support |
+| **Media handling pipeline** | `media/`, `media-understanding/` | Image/audio/video processing |
+| **Mention pattern matching** | `auto-reply/group-activation.ts` | Group chat @mentions |
+| **Inbound debounce** | `auto-reply/inbound-debounce.ts` | Rapid message coalescing |
+| **Legacy env var fallbacks** | `config/paths.ts` | OPENCLAW_*/MOLTBOT_*/CLAWDBOT_* support |
+
+---
+
+*This document is the execution guide for the fork. Every file in the openclaw codebase is accounted for. Follow it file-by-file.*
