@@ -43,11 +43,12 @@ All decisions captured in `specs/environment/foundation/WORKSPACE_LIFECYCLE.md`:
 - **Item 6 (credential scan):** External CLI auto-sync at runtime startup. Agent-driven env var scan during onboarding (MA dispatches worker). `BOOTSTRAP.md` template instructs MA to do this.
 - **Item 7 (default automations):** Ships memory-reader, memory-writer, command-logger, boot-md. Seeded at runtime startup. Workspaces at `state/workspace/{name}/`. Legacy `session-memory` and `soul-evil` dropped.
 
-### Bundle B: Runtime Routing (Items 3, 4) — PENDING
+### Bundle B: Runtime Routing (Items 3, 4) — RESOLVED
 
-**Theme:** How messages flow once the workspace is alive.
+All decisions captured in `specs/runtime/RUNTIME_ROUTING.md`:
 
-Items: 3 (session keys + routing), 4 (adapters-only runtime)
+- **Item 3 (session keys + routing):** Contacts table in `identity.db` maps `(channel, sender_id)` → `entity_id`. Every sender gets an entity from first contact (auto-created in cortex). Session keys are always entity-based: `dm:{canonical_entity_id}`. No `dm:{channel}:{sender_id}` fallback. Entity merges propagate to session aliases synchronously. Turn trees are never merged — memory bridges across sessions.
+- **Item 4 (adapters-only runtime):** Big-bang removal of legacy channels, gmail-watcher, cron. Adapter manager is the sole external ingest/delivery path. `chat.send` is a direct dispatch (not an adapter). Adapter config in `~/.nex.yaml`.
 
 ### Bundle C: Optional Runtime Surfaces (Item 5) — PENDING
 
@@ -246,6 +247,9 @@ Environment:
 - `specs/environment/foundation/BOOTSTRAP_FILES_REFERENCE.md`
 - `specs/environment/foundation/BOOTSTRAP_ONBOARDING.md`
 
+Runtime routing:
+- `specs/runtime/RUNTIME_ROUTING.md` **(primary, canonical for Bundle B)**
+
 Runtime:
 - `specs/runtime/nex/NEX.md`
 - `specs/runtime/nex/NEXUS_REQUEST.md`
@@ -270,4 +274,6 @@ Ledgers:
 - `specs/data/ledgers/NEXUS_LEDGER.md`
 
 Memory:
-- `specs/data/cortex/MEMORY_SYSTEM.md`
+- `specs/data/cortex/v2/MEMORY_SYSTEM_V2.md`
+- `specs/data/cortex/v2/UNIFIED_ENTITY_STORE.md`
+- `specs/data/cortex/v2/MEMORY_WRITER_V2.md`

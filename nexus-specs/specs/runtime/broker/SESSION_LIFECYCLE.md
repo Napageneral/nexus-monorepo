@@ -1,15 +1,16 @@
 # Session Lifecycle
 
-**Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-16
+**Status:** DESIGN SPEC
+**Last Updated:** 2026-02-17
+**Canonical routing spec:** `specs/runtime/RUNTIME_ROUTING.md`
 
 ---
 
 ## Overview
 
-This document defines the complete lifecycle of agent sessions — from creation through turn processing, compaction, forking, and identity-based promotion. It stitches together the session-related concepts defined across DATA_MODEL.md, AGENTS_LEDGER.md, CONTEXT_ASSEMBLY.md, and OVERVIEW.md into one coherent flow.
+This document defines the complete lifecycle of agent sessions — from creation through turn processing, compaction, forking, and entity-merge-driven session aliasing. It stitches together the session-related concepts defined across DATA_MODEL.md, AGENTS_LEDGER.md, CONTEXT_ASSEMBLY.md, and OVERVIEW.md into one coherent flow.
 
-**Key Insight:** Session keys are driven by identity resolution. Unknown senders get channel-based sessions. Known senders get entity-based sessions. The transition happens naturally as identities are resolved, with session aliases preserving history.
+**Key Insight:** Session keys are identity-driven from first contact. Every sender gets an entity on message one (via auto-entity-creation in the contacts table), so all DM sessions are entity-based from the start. When the memory-writer later discovers that two entities are the same person, entity merge propagates to session aliases — conversation history stays intact, memory bridges the knowledge gap.
 
 ---
 
@@ -17,60 +18,33 @@ This document defines the complete lifecycle of agent sessions — from creation
 
 ### Format
 
-Session keys are produced by ACL policies at stage 3 (`resolveAccess`). The format depends on the identity resolution level:
+Session keys are produced by `buildSessionKey()` at stage 3 (`resolveAccess`). Because every sender has an entity from first contact (via the contacts table + auto-entity-creation), all DM session keys are entity-based from the start.
 
-**Known sender (entity resolved):**
-```
-dm:{entity_id}                           # Entity-based DM (cross-channel)
-```
+| Scenario | Format | Example |
+|----------|--------|---------|
+| DM (any channel) | `dm:{canonical_entity_id}` | `dm:ent_002` |
+| Group/channel | `group:{channel}:{peer_id}` | `group:discord:general` |
+| Group thread | `group:{channel}:{peer_id}:thread:{id}` | `group:slack:eng:thread:ts123` |
+| Worker/subagent | `worker:{ulid}` | `worker:01HWXYZ...` |
+| System | `system:{purpose}` | `system:compaction` |
 
-**Unknown sender (no entity):**
-```
-dm:{channel}:{sender_id}                 # Channel-based DM (fallback)
-```
-
-**Groups (always channel-based):**
-```
-group:{channel}:{peer_id}                # Per-group session
-group:{channel}:{peer_id}:thread:{id}    # Per-thread within group (if platform supports)
-```
-
-**Subagents:**
-```
-worker:{ulid}                            # Spawned worker (unique per spawn)
-```
-
-**System:**
-```
-system:{purpose}                         # System sessions (heartbeat, maintenance)
-```
+There is no `dm:{channel}:{sender_id}` fallback format. See `../RUNTIME_ROUTING.md` for the full `buildSessionKey()` implementation.
 
 ### ACL Policy Examples
 
 ```yaml
-# Known sender → entity-based session
-- name: known-dm
+# DM → always entity-based (every sender has an entity from first contact)
+- name: dm-session
   match:
     principal:
-      type: known
+      type: [known, owner]
     delivery:
       peer_kind: dm
   session:
     key: "dm:{principal.entity_id}"
     persona: atlas
 
-# Unknown sender → channel-based session  
-- name: unknown-dm
-  match:
-    principal:
-      type: unknown
-    delivery:
-      peer_kind: dm
-  session:
-    key: "dm:{delivery.channel}:{delivery.sender_id}"
-    persona: atlas
-
-# Group chat → always channel-based
+# Group chat → channel-based
 - name: group-session
   match:
     delivery:
@@ -80,17 +54,33 @@ system:{purpose}                         # System sessions (heartbeat, maintenan
     persona: atlas
 ```
 
-### Identity Promotion
+> **Note:** The `unknown` principal type still exists for edge cases (missing sender_id, system errors), but it is not a normal routing state for DM sessions. See `../RUNTIME_ROUTING.md` for details.
 
-When a previously unknown sender's identity gets resolved, the session key format changes:
+### Progressive Identity Resolution
+
+Because every sender gets an entity from first contact, session keys are entity-based from day one. Identity evolves through **entity merges** and **session aliasing**, not through a format change:
 
 ```
-Day 1: Mom texts (unknown) → key: "dm:imessage:+15559876543"
-Day 3: Identity linked → entity_mom
-Day 5: Mom texts (known)  → key: "dm:entity_mom"
+Day 1: Mom texts from iMessage
+       → contact auto-created (imessage, +15559876543)
+       → entity auto-created: ent_001 (type=phone, name="imessage:+15559876543")
+       → session key: "dm:ent_001"
+
+Day 3: Memory-writer discovers real name ("that's my Mom, Sarah")
+       → creates person entity: ent_002 (type=person, name="Sarah")
+       → merges ent_001 into ent_002
+       → propagateMergeToSessions() creates alias: "dm:ent_002" → "dm:ent_001"
+       → future messages route via alias to existing session
+
+Day 7: Mom emails from mom@gmail.com
+       → contact auto-created (gmail, mom@gmail.com)
+       → entity auto-created: ent_003 (type=email)
+       → memory-writer recognizes same person → merges ent_003 into ent_002
+       → propagateMergeToSessions() creates alias: "dm:ent_003" → "dm:ent_001"
+       → all channels now converge on the same session
 ```
 
-The Broker handles this transition via **session aliases** (see Identity-Session Coupling below).
+The Broker handles merges via **session aliases** (see Identity-Session Coupling below). Turn trees are never merged — memory bridges knowledge across sessions.
 
 ---
 
@@ -132,43 +122,43 @@ VALUES (?, NULL, ?, ?, ?, ?, ?, 'active');
 
 ## Identity-Session Coupling
 
-### The Problem
+### Architecture
 
-Identity resolution is progressive. A sender might be unknown on first contact, then later linked to an entity. When this happens, the ACL produces a different session key (entity-based vs channel-based). We need to route to the existing conversation, not create a new one.
+Identity resolution uses two systems working at different speeds:
 
-### Solution: Session Aliases
+- **Contacts table** (`identity.db`): Pipeline-speed lookup. Maps `(channel, sender_id)` to an `entity_id`. Updated synchronously on every inbound message. Zero LLM, sub-millisecond.
+- **Entity store** (`cortex.db`): Knowledge-speed resolution. Entities with union-find (`merged_into` chains) handle progressive identity resolution. The memory-writer merges entities asynchronously as it learns who people are.
 
-When the Broker encounters a session key that doesn't exist, but finds a channel-based session for the same entity, it creates an alias:
+The pipeline crosses both databases on every message: contact lookup in `identity.db`, then merged_into chain walk in `cortex.db` to find the canonical entity. Both are local SQLite, no network hop.
 
-```
-Broker: lookup "dm:entity_mom" → not found
-Broker: search sessions WHERE persona_id = 'atlas' 
-        AND routing context matches entity_mom
-Found: "dm:imessage:+15559876543" (channel-based session for same entity)
-Action: INSERT alias "dm:entity_mom" → "dm:imessage:+15559876543"
-```
+### Session Aliases on Entity Merge
 
-Future lookups for "dm:entity_mom" resolve via the alias to the original session. Conversation history is preserved.
-
-### Multi-Channel Identity Merge
-
-When two channel-based sessions are discovered to belong to the same entity:
+When the memory-writer (or any agent) merges two entities, `propagateMergeToSessions()` is called **synchronously** from the merge operation. This function creates session aliases so that the new canonical session key resolves to the primary session.
 
 ```
-Session A: "dm:imessage:+15559876543"  (Mom on iMessage, 20 turns)
-Session B: "dm:gmail:mom@gmail.com"    (Mom on Gmail, 5 turns)
+Before merge:
+  dm:ent_001 (iMessage session, 20 turns about project planning)
+  dm:ent_003 (Gmail session, 5 turns about weekend plans)
 
-Identity merge: both map to entity_mom
+Memory-writer merges ent_001 and ent_003 → canonical ent_002
+
+propagateMergeToSessions() runs:
+  1. Find DM sessions: dm:ent_001 (20 turns), dm:ent_003 (5 turns)
+  2. Pick primary: dm:ent_001 (most turns)
+  3. Create alias: dm:ent_002 → dm:ent_001
+  4. Create alias: dm:ent_003 → dm:ent_001
+
+After merge:
+  Next message from Gmail:
+    Contact (gmail, mom@gmail.com) → ent_003 → merged_into → ent_002
+    Session key: dm:ent_002 → alias → dm:ent_001
+    Memory-reader finds facts from both conversations
+    Agent responds via Gmail adapter (outbound uses inbound delivery context)
 ```
 
-**Resolution:**
-1. Pick the session with more history as **primary** (Session A)
-2. Create alias: `"dm:entity_mom"` → `"dm:imessage:+15559876543"`
-3. Session B continues to exist with its history but stops receiving new messages
-4. All future messages from Mom (any channel) route to the primary session via alias
-5. Cortex provides cross-session context — the agent can discover "you talked to Mom on email too"
+**Turn trees are never merged.** Merging divergent conversation histories is lossy and complex. Non-primary sessions stop receiving new messages but their turn trees remain intact and queryable. Memory bridges the knowledge gap — facts extracted from all sessions are linked to the canonical entity and surfaced by the memory-reader.
 
-**We do NOT merge turn trees.** Merging divergent conversation histories is lossy and complex. The old sessions are preserved in the ledger. Cortex bridges them when relevant.
+See `../RUNTIME_ROUTING.md` for the full `propagateMergeToSessions()` implementation.
 
 ### Session Aliases Schema
 
@@ -177,7 +167,7 @@ CREATE TABLE session_aliases (
     alias TEXT PRIMARY KEY,              -- The alternative session key
     session_label TEXT NOT NULL,         -- The canonical session it resolves to
     created_at INTEGER NOT NULL,
-    reason TEXT,                         -- 'identity_promotion' | 'identity_merge' | 'manual'
+    reason TEXT,                         -- 'identity_merge' | 'manual'
     
     FOREIGN KEY (session_label) REFERENCES sessions(label)
 );
@@ -412,7 +402,7 @@ Turn A → Turn B → Turn X → Turn Y (session "main")
 ### When It Happens
 
 - **Explicit fork:** Agent or user wants to explore an alternative from a specific point
-- **Identity promotion:** Could technically be a fork, but we use aliases instead (see above)
+- **Entity merge:** Could technically be a fork, but we use aliases instead (see above)
 
 ### Dispatch Targeting Contract (Forward-Compatible)
 
@@ -529,7 +519,7 @@ This enables:
               │  Compaction when context is tight        │
               │                                          │
               │  May be forked → creates new session    │
-              │  May be aliased → identity promotion    │
+              │  May be aliased → entity merge           │
               │  May spawn subagents → child sessions   │
               └────────────────────────────────────────┘
 ```
@@ -538,6 +528,7 @@ This enables:
 
 ## Related Documents
 
+- `../RUNTIME_ROUTING.md` — Canonical routing spec: contacts, identity resolution, session key generation, entity merge propagation
 - `DATA_MODEL.md` — Ontology: Session, Turn, Thread, Compaction definitions
 - `OVERVIEW.md` — Broker architecture, routing hierarchy
 - `AGENT_ENGINE.md` — Agent execution, CompactionResult, subagent spawning

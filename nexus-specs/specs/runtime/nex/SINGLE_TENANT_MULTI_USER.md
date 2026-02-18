@@ -1,7 +1,7 @@
 # Single-Tenant, Multi-User Runtime
 
-**Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-17  
+**Status:** PARTIALLY IMPLEMENTED (control-plane IAM authz + password login)  
+**Last Updated:** 2026-02-18  
 **Related:** `CONTROL_PLANE.md`, `../iam/ACCESS_CONTROL_SYSTEM.md`, `../iam/POLICIES.md`, `../adapters/INTERNAL_ADAPTERS.md`, `../adapters/INBOUND_INTERFACE.md`
 
 ---
@@ -22,6 +22,29 @@ This spec defines:
 1. trust zones (control-plane vs ingress)
 2. the canonical identity model (Option 2: identity mapping via `(delivery.channel, delivery.sender_id)`)
 3. the concrete implementation changes required to support "hosted UI login -> per-user IAM" with no spoofing.
+
+---
+
+## Current Implementation Status (2026-02-18)
+
+Implemented in `nex`:
+
+- Control-plane IAM authorization via a centralized action/resource taxonomy (Option A, not `NexusEvent`).
+- WS dispatcher enforcement for `path=iam` methods + audit logging with first-class control-plane operation columns.
+- Control-plane HTTP `GET /health` + `GET /api/events/stream` are authenticated + IAM-authorized.
+- Password-based control-plane login (`POST /api/auth/login`) issuing DB-backed `auth_tokens` (audience `control-plane`).
+- Control-plane user management WS methods:
+  - `auth.users.list`
+  - `auth.users.create`
+  - `auth.users.setPassword`
+- System ingress channels reduced to the minimal internal set (`clock`, `boot`, `restart`).
+
+Still required (not yet implemented):
+
+- OIDC auth provider (pluggable AuthN backends beyond username/password).
+- First-class “customer ingress credential” issuance UX (API keys / webchat sessions) beyond the CLI (`nexus acl tokens create --audience ingress`).
+- Adapter ingress integrity hardening (daemon-stamped fields + adapter channel claims validation).
+- Customer sandbox enforcement verification (tool/credential/data enforcement tests and remaining enforcement gaps).
 
 ---
 
@@ -348,4 +371,3 @@ Needed:
    - nodes as separate principals vs nodes acting "on behalf of" a paired operator
 3. Customer identity model:
    - anonymous sessions vs always-authenticated customers vs hybrid
-

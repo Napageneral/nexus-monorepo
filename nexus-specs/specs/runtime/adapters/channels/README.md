@@ -63,6 +63,11 @@ channels/{channel}/
 └── UPSTREAM_REVIEW.md        # Gap analysis: upstream code vs adapter protocol
 ```
 
+Some channels also include additional design/migration docs, for example:
+
+- `ONBOARDING.md` (credential + account setup flow)
+- `POLICY_SURFACE.md` (what stays in adapter vs IAM vs Manager/automations)
+
 ### CHANNEL_SPEC.md
 
 Per-channel documentation: capabilities object, formatting rules, inbound event normalization, outbound delivery specifics, media handling, platform quirks.

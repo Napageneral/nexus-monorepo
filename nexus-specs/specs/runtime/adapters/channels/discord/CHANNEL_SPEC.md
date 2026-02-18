@@ -152,3 +152,4 @@ TBD: `discord-cli` or integrate with existing Discord bot setup.
 - `../upstream/OPENCLAW_OUTBOUND.md` — Full upstream details
 - `../ADAPTER_INTERFACES.md` — Interface definitions
 - `ONBOARDING.md` — Credential + account setup flow (credentials-first)
+- `POLICY_SURFACE.md` — What stays in adapter vs IAM vs Manager/automations (pairing, allowlists, mention gating)

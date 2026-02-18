@@ -4,6 +4,7 @@
 **Last Updated:** 2026-02-16
 **Supersedes:** ../../ledgers/IDENTITY_GRAPH.md, entities/entity_aliases/persons tables in ../MEMORY_SYSTEM.md
 **Related:** MEMORY_SYSTEM_V2.md, MEMORY_WRITER_V2.md
+**Routing integration:** specs/runtime/RUNTIME_ROUTING.md
 
 ---
 
@@ -146,6 +147,14 @@ UNION ALL
 SELECT * FROM entities WHERE id = $entity_id;
 ```
 
+### Session Propagation
+
+When `union(entity_a, entity_b)` executes, `propagateMergeToSessions()` **MUST** be called synchronously before the merge transaction completes. This function creates session aliases in `agents.db` so that routing can find active sessions for the newly-merged identity without re-querying cortex.
+
+If session propagation is skipped or deferred, inbound messages for the merged entity may fail to route to existing conversations until the next session lookup cache refresh.
+
+See `../../runtime/RUNTIME_ROUTING.md` for the full session-alias lifecycle and routing implications.
+
 ---
 
 ## How Everything is an Entity: Examples
@@ -258,11 +267,14 @@ Event arrives with deliveryContext:
     ...
   }
 
-1. Look up entity by normalized name matching sender_id:
-   SELECT * FROM entities WHERE normalized = '+15551234567';
+1. Contact lookup in identity.db (sub-millisecond, no LLM):
+   SELECT entity_id FROM contacts
+   WHERE channel = 'imessage' AND identifier = '+15551234567';
+   -> 'ent_001'
 
-2. Follow merged_into chain to canonical entity:
-   +15551234567 -> Mom (ent_002)
+2. Follow merged_into chain in cortex.db to canonical entity:
+   ent_001 (+15551234567) -> ent_002 (Mom)
+   -- Note: crosses database boundary (identity.db -> cortex.db)
 
 3. Look up tags for canonical entity:
    SELECT tag FROM entity_tags WHERE entity_id = 'ent_002';
@@ -292,13 +304,54 @@ The agent uses these fields to create entities with appropriate types and to pro
 
 ---
 
+## Contacts Integration
+
+### The contacts table (identity.db)
+
+A `contacts` table in `identity.db` maps `(channel, identifier)` to `entity_id` in the unified entity store. This is the pipeline-speed lookup for identity resolution -- sub-millisecond, no LLM involvement, pure key-value.
+
+```
+contacts (identity.db)
+  (channel, identifier) -> entity_id  -->  entities (cortex.db)
+                                              merged_into chain -> canonical root
+```
+
+### Auto-creation on inbound messages
+
+Every inbound message auto-creates two things:
+
+1. **A contact row** in `identity.db` -- `(channel, identifier)` keyed for fast routing lookup.
+2. **A delivery-sourced entity** in `cortex.db` -- with type set to the channel-specific handle type (e.g., `'discord_handle'`, `'phone'`, `'email'`) and `source = 'delivery'`.
+
+This happens at delivery time, before any LLM processing, ensuring that every sender has a routable identity from their first message.
+
+### Entity merges do NOT require updating contacts
+
+When entities merge via `union()`, the contact rows in `identity.db` are **not** updated. The `entity_id` in the contacts table may point to a non-canonical (merged) entity, but the union-find chain in `cortex.db` resolves to the canonical root. This means:
+
+- No write-amplification on merges -- contacts are write-once.
+- The resolution path is: `contacts.entity_id` -> follow `merged_into` chain -> canonical entity.
+- Path compression can shorten chains but is never required for correctness.
+
+### Memory-writer enrichment
+
+The memory-writer discovers delivery-sourced entities (`source = 'delivery'`), enriches them with context from conversations (real names, relationships, organizational affiliations), and merges them into `person` entities via the union-set. A phone number entity created by delivery becomes a child of a person entity once the agent resolves who it belongs to.
+
+### Contacts vs. conversational mentions
+
+**Contacts are only for actual delivery endpoints.** When a user says "my email is tyler@example.com" in conversation, the memory-writer creates an entity (type `'email'`, source `'inferred'`) but does **not** create a contact row. Contact rows are exclusively created by the delivery pipeline for senders/recipients that have actually exchanged messages through Nexus.
+
+This distinction matters: a contact means "we can route messages to/from this identifier." A conversational mention means "we know this identifier exists." Only the former participates in pipeline-speed routing.
+
+---
+
 ## What This Replaces
 
 | Previous System | What Happened |
 |----------------|---------------|
 | Identity Graph `contacts` table | Contacts are entities with type='phone'/'email'/etc. |
 | Identity Graph `entities` table | Merged into unified entities table |
-| Identity Graph `identity_mappings` table | Absorbed -- contacts as entities with merged_into pointing to canonical |
+| Identity Graph `identity_mappings` table | Replaced by direct `contacts.entity_id` link in identity.db. The separate mapping table with confidence/mapping_type columns is no longer needed -- progressive resolution is handled by entity merges in the union-set |
 | Identity Graph `entity_tags` table | Kept as-is |
 | Cortex `entities` table | Merged into unified entities table |
 | Cortex `entity_aliases` table | Aliases are entities with merged_into pointing to canonical |
@@ -316,3 +369,4 @@ The agent uses these fields to create entities with appropriate types and to pro
 - `MEMORY_SYSTEM_V2.md` -- Full memory architecture
 - `MEMORY_WRITER_V2.md` -- How entity resolution works in the retain flow
 - `../../ledgers/IDENTITY_GRAPH.md` -- Previous identity system (superseded)
+- `../../runtime/RUNTIME_ROUTING.md` -- Runtime routing and session resolution

@@ -3,7 +3,7 @@
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-16
 **Supersedes:** ../roles/MEMORY_WRITER.md
-**Related:** MEMORY_SYSTEM_V2.md, UNIFIED_ENTITY_STORE.md
+**Related:** MEMORY_SYSTEM_V2.md, UNIFIED_ENTITY_STORE.md, ../../runtime/RUNTIME_ROUTING.md
 
 ---
 
@@ -211,6 +211,63 @@ The last N events from the same thread/session. Gives the writer conversational 
 
 ---
 
+## Delivery-Sourced Entities and Contacts Contract
+
+The memory-writer must cooperate with the delivery pipeline and the contacts/routing system. This section defines the contract.
+
+### Delivery-Sourced Entities Exist in Cortex
+
+When a message arrives from a previously-unknown sender, the delivery pipeline auto-creates an entity in the unified entity store with:
+
+- `source = 'delivery'`
+- `type` = a channel-specific handle type (e.g., `discord_handle`, `phone`, `email`)
+- `name` = the raw handle (e.g., `tyler#1234`, `+15551234567`, `alice@example.com`)
+
+These entities are **sparse** -- they contain only the channel handle as a name. They have no facts, no observations, no enrichment. They exist so that the routing system can map a sender to a session immediately, before the memory-writer has ever seen a message from that sender.
+
+### Discovering and Enriching Delivery-Sourced Entities
+
+When extracting entities from a conversation, the memory-writer **must** check for existing delivery-sourced entities and prefer linking to them over creating new ones. Specifically:
+
+1. **Match on handle.** When the writer identifies an entity from a deliveryContext (e.g., `sender_id = "tyler#1234"` on a Discord channel), it should search the entity store for a delivery-sourced entity with a matching handle before creating a new entity. Use `recall(sender_id, scope=['entities'])` or equivalent.
+
+2. **Link facts to the existing entity.** If a delivery-sourced entity is found, all extracted facts about that sender should be linked to it via `link_fact_entity()`. Do not create a second entity for the same handle.
+
+3. **Promote to person on real-name discovery.** When the writer learns a real name for a handle (e.g., a Discord message says "Hey, I'm Tyler" or context makes it clear), the writer should:
+   - Create a new entity with `type = 'person'`, `source = 'inferred'`, `name = 'Tyler'`
+   - Merge the delivery-sourced handle entity into the new person entity via `propose_merge()` with high confidence
+   - The handle becomes an alias on the canonical person entity
+
+### Conversational Contact Discovery
+
+People mention contact information in conversation: "my email is abc@gmail.com", "you can reach me at 555-1234", "my Discord is coolgamer42". When the writer detects this:
+
+1. **Create an entity for the mentioned contact info.** For example:
+   - `create_entity(name="abc@gmail.com", type="email", source="inferred")`
+   - `create_entity(name="555-1234", type="phone", source="inferred")`
+
+2. **Merge into the sender's canonical entity.** The mentioned contact info belongs to the person who said it (or the person it was said about, from context). Use `propose_merge()` to merge the contact entity into their canonical entity.
+
+3. **Do NOT create a contact row in `identity.db`.** Contacts in the routing system are created only by actual delivery events (a real message arriving from that address). Conversationally-mentioned contact info enriches the cortex entity but does not create a routable contact. The delivery pipeline owns contact creation.
+
+### CRITICAL: Propagate Merges to Sessions
+
+**After every entity merge, the writer MUST call `propagateMergeToSessions()`.** This is not optional. Without this call, session routing breaks -- the old entity's sessions become orphaned, and messages from the merged handle will create new sessions instead of continuing existing ones.
+
+```
+propagateMergeToSessions(winnerId, loserId)
+    Synchronously creates session aliases in agents.db so that
+    all sessions previously associated with loserId are now
+    reachable via winnerId. This ensures routing continuity
+    after an entity merge.
+```
+
+This function lives in the runtime routing layer. See `../../runtime/RUNTIME_ROUTING.md` for the full function signature, behavior, and guarantees.
+
+The call must happen **synchronously** as part of the merge operation, not as a background job. If `propagateMergeToSessions()` fails, the merge itself should be rolled back or retried.
+
+---
+
 ## Self-Improvement
 
 The Memory-Writer meeseeks follows the standard meeseeks self-improvement pattern:
@@ -244,3 +301,4 @@ These persist across invocations, making the writer more effective over time.
 - `UNIFIED_ENTITY_STORE.md` -- Entity store details
 - `../roles/MEMORY_WRITER.md` -- Previous writer spec (superseded)
 - `../roles/MEMORY_READER.md` -- Reader spec (to be updated)
+- `../../runtime/RUNTIME_ROUTING.md` -- Runtime routing, `propagateMergeToSessions()`, session alias behavior

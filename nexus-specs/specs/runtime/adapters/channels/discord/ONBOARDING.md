@@ -109,15 +109,27 @@ Recommended default IAM stance for Discord:
 
 This policy should be expressed in IAM (not in adapter code).
 
-### Adapter Config (Optional)
+### Adapter Config (Optional, Non-Authoritative)
 
-Some Discord-specific knobs are easier/cheaper to enforce inside the adapter (pre-filtering), even though IAM is the true security boundary:
+Some Discord-specific knobs can be implemented as adapter-side pre-filtering for performance or cost reasons, but they MUST NOT be relied on for security or correctness.
 
-- `guild_allowlist` (optional): list of guild IDs the adapter will emit events for
-- `channel_allowlist` (optional): list of channel IDs allowed
-- `require_mention_in_guild_channels` (optional): ignore messages unless bot mentioned
+The long-term design is:
+
+- IAM decides `allow|deny|ask` (the security boundary).
+- Manager/automations decide "respond vs observe" behavior (mention gating, noise handling).
+- Adapter does I/O and normalization only.
+
+If adapter-side filtering is added, NEX MUST still enforce the same policy in IAM, and the adapter filtering must be treated as a best-effort optimization that can be disabled without changing system behavior.
+
+Examples of pre-filters (optional):
+
+- `include_guild_ids`: only emit events for these guild ids
+- `include_channel_ids`: only emit events for these channel ids
+- `drop_unmentioned_in_guild_channels`: only emit guild-channel events where `mentions_bot = true`
 
 If used, these settings live in `nex.yaml` under the adapter account config and are passed via runtime context injection.
+
+For the policy mapping, see `POLICY_SURFACE.md`.
 
 ---
 
@@ -130,4 +142,3 @@ Discord must preserve:
 - `delivery.reply_to_id` = message ID being replied to
 
 Outbound adapter must accept `--thread` and `--reply-to` and translate them to Discord API fields (`message_reference`, thread channel routing). See `OUTBOUND_TARGETING.md`.
-

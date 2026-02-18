@@ -9,35 +9,43 @@
 
 ## 1. Executive Summary
 
-Nexus is being migrated from a split TypeScript + Go architecture into a **single unified Go binary**. The current system runs a Node.js TypeScript process for the core runtime, agent orchestration, CLI, and control plane, with a separate Go process (`cortex`) for the derived knowledge layer. The migration unifies everything into one `nexus` binary.
+Nexus is being migrated from a split TypeScript + Go architecture into a **Go binary + pi-coding-agent RPC subprocess**. The current system runs a Node.js TypeScript process for the core runtime, agent orchestration, CLI, and control plane, with a separate Go process (`cortex`) for the derived knowledge layer. The migration moves everything except the LLM agent loop into a single `nexus` Go binary, with `pi-coding-agent` retained as an RPC subprocess for agent execution.
 
 ### Core Principles
 
 1. **Pure behavioral port** — no functionality is cut. Every feature, every edge case, every tool policy layer is preserved identically. The 6,995 existing tests serve as the behavioral specification.
-2. **Cortex becomes a library** — the cortex Go code moves from a subprocess communicating over HTTP to direct function calls within the same process.
-3. **Adapters stay external** — adapter processes (Eve, Telegram, Discord, etc.) remain separate binaries speaking the 7-command CLI protocol over stdin/stdout. The Go binary spawns and supervises them.
-4. **Swift apps are unchanged** — iOS/macOS apps continue to communicate over the same HTTP/WebSocket control plane endpoints.
-5. **The web UI stays JavaScript** — Lit web components are embedded via `go:embed` and served as static files.
+2. **pi-coding-agent stays as a dependency** — the `@mariozechner/pi-ai`, `@mariozechner/pi-agent-core`, and `@mariozechner/pi-coding-agent` packages are NOT ported to Go. They are invoked via pi-coding-agent's existing RPC mode (`pi --mode rpc`), communicating over JSON-lines on stdin/stdout. This preserves the upstream agent's full capabilities and reduces maintenance burden.
+3. **Cortex becomes a library** — the cortex Go code moves from a subprocess communicating over HTTP to direct function calls within the same process.
+4. **Adapters stay external** — adapter processes (Eve, Telegram, Discord, etc.) remain separate binaries speaking the 7-command CLI protocol over stdin/stdout. The Go binary spawns and supervises them.
+5. **Swift apps are unchanged** — iOS/macOS apps continue to communicate over the same HTTP/WebSocket control plane endpoints.
+6. **The web UI stays JavaScript** — Lit web components are embedded via `go:embed` and served as static files.
 
 ### What This Eliminates
 
-- Node.js runtime dependency (no nvm, no pnpm, no node_modules)
-- `@mariozechner/pi-ai`, `@mariozechner/pi-agent-core`, `@mariozechner/pi-coding-agent` npm packages
+- Node.js as the **primary** runtime (the main process is Go; Node.js only runs as a supervised subprocess for pi-coding-agent)
 - The cortex subprocess and its HTTP server on `:4317`
 - CortexSupervisor process management
-- The `commands/agent.ts` → `runEmbeddedPiAgent` bridge
-- Zod schemas (replaced by Go structs)
-- TypeBox runtime validation (replaced by Go's type system + `encoding/json`)
-- The SessionManager from pi-coding-agent (replaced by SQLite-backed session state)
+- The deep integration between Nexus TypeScript and pi-agent internals (`pi-embedded-runner`, `commands/agent.ts` bridge layers)
+- Zod schemas for pipeline/config (replaced by Go structs)
+- TypeBox runtime validation for pipeline/config (replaced by Go's type system + `encoding/json`)
+- The pnpm workspace, tsconfig, vitest config, and TypeScript build toolchain for the core runtime
+
+### What This Keeps (as pi-coding-agent RPC subprocess)
+
+- `@mariozechner/pi-ai` (19.8K compiled JS) — multi-provider LLM HTTP client
+- `@mariozechner/pi-agent-core` (969 compiled JS) — agent tool loop
+- `@mariozechner/pi-coding-agent` (30.9K compiled JS) — session management, tool definitions, skills, compaction, model resolution
+- Node.js runtime — required to run pi-coding-agent subprocess
+- The pi-coding-agent RPC protocol — JSON-lines over stdin/stdout, typed commands/responses/events
 
 ### What This Gains
 
-- Single ~28-30MB static binary
-- ~5-10x lower memory footprint (50-100MB → 15-30MB RSS)
-- Instant startup (vs 2-3 second Node.js bootstrap)
+- Go binary ~28-30MB + pi-coding-agent Node.js subprocess
 - Cortex operations become function calls (eliminates subprocess spawn + JSON serialization + HTTP roundtrip per meeseeks hook)
-- One SQLite connection pool, one process, one memory space
-- Distribution via `brew install nexus` or single binary download
+- One SQLite connection pool, one primary process, one memory space for the core runtime
+- Distribution via `brew install nexus` + `npm install -g @mariozechner/pi-coding-agent` (or bundled)
+- Instant startup for the Go runtime (vs 2-3 second Node.js bootstrap for the full TS app)
+- **~35K fewer lines of Go to write** compared to porting pi-agent (10K Go RPC client vs 40-50K Go full port)
 
 ---
 
@@ -62,25 +70,17 @@ nexus/
 │   │   ├── deliver.go              ← deliverResponse stage (adapter send/stream)
 │   │   └── finalize.go             ← finalize stage (ledger writes, metrics, cleanup)
 │   │
-│   ├── agent/                      ← LLM orchestration (replaces pi-* + src/agents/)
-│   │   ├── loop.go                 ← plan → tool → reflect → respond cycle
-│   │   ├── providers/              ← LLM API clients (one per provider)
-│   │   │   ├── anthropic.go        ← Anthropic Messages API
-│   │   │   ├── openai.go           ← OpenAI Chat Completions + Responses API
-│   │   │   ├── google.go           ← Google Gemini (AI Studio + Vertex)
-│   │   │   ├── bedrock.go          ← AWS Bedrock
-│   │   │   ├── azure.go            ← Azure OpenAI
-│   │   │   └── ollama.go           ← Ollama local models
-│   │   ├── streaming.go            ← SSE/streaming state machine
-│   │   ├── failover.go             ← 3-level provider failover
-│   │   ├── tools.go                ← tool execution + 9-layer policy filtering
+│   ├── agent/                      ← RPC client for pi-coding-agent subprocess
+│   │   ├── rpc.go                  ← spawn pi --mode rpc, JSON-line protocol client
+│   │   ├── rpc_types.go            ← Go structs mirroring pi RPC command/response/event types
+│   │   ├── session.go              ← session lifecycle (create, resume, compact, abort)
+│   │   ├── streaming.go            ← translate pi RPC events → Nexus streaming events
+│   │   ├── tools.go                ← Nexus tool registration + 9-layer policy filtering
 │   │   ├── tool_definitions.go     ← built-in tool definitions (read/write/edit/exec/etc)
-│   │   ├── auth.go                 ← auth profile rotation, API key management
-│   │   ├── models.go               ← model registry, catalog, selection
-│   │   ├── session.go              ← in-memory session state (replaces SessionManager)
-│   │   ├── compaction.go           ← context overflow compaction + summary generation
-│   │   ├── context_window.go       ← context window guard, token estimation
-│   │   └── usage.go                ← usage accumulation + normalization
+│   │   ├── auth.go                 ← auth profile rotation, API key injection into pi subprocess
+│   │   ├── models.go               ← model selection logic, passes model to pi via set_model RPC
+│   │   ├── failover.go             ← 3-level failover (auth profile → thinking level → model)
+│   │   └── usage.go                ← usage accumulation from pi RPC usage events
 │   │
 │   ├── broker/                     ← multi-agent orchestration
 │   │   ├── broker.go               ← manager/worker dispatch
@@ -170,6 +170,11 @@ nexus/
 ### 2.2 External Processes (NOT in the Go binary)
 
 ```
+pi-coding-agent                     ← Node.js RPC subprocess (KEPT AS DEPENDENCY)
+├── @mariozechner/pi-coding-agent   ← agent session, tools, skills, compaction, RPC server
+├── @mariozechner/pi-agent-core     ← agent tool loop (plan → tool → reflect → respond)
+└── @mariozechner/pi-ai             ← multi-provider LLM HTTP client (Anthropic, OpenAI, Google, etc.)
+
 adapters/                           ← each is its own repo/binary
 ├── eve/                            ← Go binary (already exists) — iMessage adapter
 ├── telegram-adapter/               ← standalone binary
@@ -187,6 +192,8 @@ extensions/                         ← optional standalone feature processes
 └── ...
 ```
 
+**pi-coding-agent** is spawned by the Go binary via `pi --mode rpc` and communicates over JSON-lines on stdin/stdout. It handles all LLM interaction, the agent tool loop, session management, compaction, and model resolution. The Go binary owns the pipeline, broker, tool policy, ledger writes, and streaming translation.
+
 All adapters speak the 7-command adapter protocol over stdin/stdout. Nexus spawns and supervises them via `internal/adapters/supervisor.go`.
 
 ### 2.3 Runtime View (End State)
@@ -196,12 +203,13 @@ $ nexus serve
 
 [nexus] Pipeline ready (8 stages)
 [nexus] Cortex initialized (3 ledgers, 847 entities, 12,431 episodes)
+[nexus] pi-coding-agent RPC subprocess ready (PID 42890)
 [nexus] Adapter supervisor started
 [nexus]   eve (iMessage) — healthy, PID 42891
 [nexus]   telegram — healthy, PID 42892
 [nexus] Control plane listening on :3284
 [nexus] Automations: 4 hooks loaded, 2 with circuit breakers
-[nexus] Agent system: anthropic (claude-sonnet-4) primary, openai fallback
+[nexus] Agent: pi-coding-agent via RPC, anthropic (claude-sonnet-4) primary, openai fallback
 [nexus] Ready.
 
 $ ls ~/nexus/state/
@@ -214,6 +222,49 @@ config.yaml         ← user configuration
 adapters/           ← adapter binaries
 workspaces/         ← agent workspaces
 ```
+
+### 2.4 Agent Call Chain (End State)
+
+```
+Go binary                                          Node.js subprocess
+─────────────────────────────────────────────────   ──────────────────────────────
+
+Pipeline stage 6 (runAgent)                         pi-coding-agent --mode rpc
+  │                                                   │
+  ├── Broker dispatch (manager/worker)                │
+  ├── Tool policy evaluation (9 layers)               │
+  ├── Auth profile selection                          │
+  ├── Model selection                                 │
+  │                                                   │
+  ├──── RPC: prompt(messages, config) ──────────────► │
+  │     (JSON-line on stdin)                          ├── LLM API call (pi-ai)
+  │                                                   ├── Agent loop (pi-agent-core)
+  │ ◄── RPC events (streaming tokens, tool calls) ── ├── Tool execution
+  │     (JSON-lines on stdout)                        ├── Session management
+  │                                                   ├── Compaction (if needed)
+  ├── Ledger writes (turns, messages, tool_calls)     │
+  ├── Streaming translation → SSE/WebSocket           │
+  ├── Usage accumulation                              │
+  │                                                   │
+  ├──── RPC: get_state / compact / abort ──────────► │
+  │                                                   │
+  └── Response assembly                               │
+```
+
+**What the Go binary owns (layers 1-2):**
+- Pipeline orchestration (`runAgent` stage) — ~3,187 TS → ~2K Go
+- Broker dispatch (manager/worker/session queue) — part of runAgent
+- Tool policy filtering (9 layers, tool groups)
+- Auth profile rotation and failover logic
+- Streaming event translation (pi RPC events → Nexus SSE events)
+- Ledger writes (turns, messages, tool_calls to agents.db)
+- CLI bridge (`nexus agent` command) — ~566 TS → ~400 Go
+
+**What pi-coding-agent owns (layers 3-6, kept as dependency):**
+- LLM HTTP client for all providers (~19.8K JS)
+- Agent tool loop: plan → tool → reflect → respond (~969 JS)
+- Session management, compaction, skills, model resolution (~30.9K JS)
+- Total: ~51.7K compiled JS — NOT ported
 
 ---
 
@@ -237,19 +288,25 @@ Total TypeScript: **322,069 LOC** (implementation) + **187,209 LOC** (tests) acr
 | `src/process/` | 5 | 513 | Child process spawning/supervision, command lanes |
 | **Total** | **248** | **62,157** | |
 
-#### Agent System — Pure Port into Go (~83K LOC → ~40-50K Go)
+#### Agent System — RPC Client + Broker (~14K LOC → ~8-10K Go)
 
-| Directory | Files | LOC | Description |
-|-----------|-------|-----|-------------|
-| `src/agents/` | 234 | 48,076 | pi-agent orchestration, tool system, streaming, failover, auth profiles, model selection |
-| `src/auto-reply/` | 121 | 21,218 | Reply pipeline wrapping agent execution |
-| `src/memory/` | 27 | 6,872 | Memory read/write, context retrieval |
-| `src/plugins/` | 29 | 5,778 | Plugin loading, execution sandboxing |
-| `src/providers/` | — | 411 | LLM provider configuration |
-| `src/plugin-sdk/` | — | 380 | Plugin SDK types |
-| **Total** | **411+** | **82,735** | |
+With pi-coding-agent kept as an RPC subprocess, only the Nexus-side orchestration layers need porting:
 
-**Critical: this is a PURE PORT. No functionality is cut. Every tool policy layer, every failover path, every streaming edge case must be preserved identically.**
+| Directory | Files | LOC | What Ports to Go | What Stays in pi |
+|-----------|-------|-----|------------------|-----------------|
+| `src/nex/stages/runAgent.ts` | 1 | 3,187 | Broker orchestration, ledger writes, streaming translation | — |
+| `src/commands/agent.ts` | 1 | 566 | CLI bridge → spawns pi RPC subprocess | — |
+| `src/agents/pi-embedded-runner/` | ~10 | 10,100 | RPC client (replaces deep integration) | Agent internals |
+| `src/agents/` (tool policy, auth, failover) | ~15 | ~3,500 | Tool policy, auth profiles, failover logic | LLM calls, tool loop |
+| **Ported to Go** | | **~14K** | **→ ~8-10K Go** | |
+| `src/agents/` (remaining) | ~220 | ~44K | — | Handled by pi-coding-agent |
+| `src/auto-reply/` | 121 | 21,218 | — | Reply pipeline stays in pi subprocess |
+| `src/memory/` | 27 | 6,872 | — | Memory hooks called by Go (cortex is Go) |
+| `src/plugins/` | 29 | 5,778 | — | Plugin execution stays in pi subprocess |
+
+**New Go code needed:** ~1.5K Go for the RPC client (spawn `pi --mode rpc`, JSON-line protocol, typed commands/responses/events).
+
+**Critical: tool policy filtering (9 layers), auth profile rotation, and failover logic MUST be preserved identically in the Go RPC client layer. The pi subprocess handles LLM interaction; Go handles access control and orchestration.**
 
 #### CLI/Config/Infra — Replicate in Go (~89K LOC → ~30-40K Go)
 
@@ -285,52 +342,117 @@ Total TypeScript: **322,069 LOC** (implementation) + **187,209 LOC** (tests) acr
 
 #### Summary
 
-| Bucket | TS LOC | Estimated Go LOC | Priority |
-|--------|--------|-----------------|----------|
-| Core Runtime | 62K | ~35-40K | P0 |
-| Agent System | 83K | ~40-50K | P0 |
-| CLI/Config/Infra | 89K | ~30-40K | P1 |
-| Cross-cutting | 12K | ~6-8K | P1 |
-| Cortex (already Go) | — (48K Go) | 48K (done) | ✅ |
-| **Total migration** | **~246K TS** | **~110-140K Go** | |
+| Bucket | TS LOC | Estimated Go LOC | Priority | Notes |
+|--------|--------|-----------------|----------|-------|
+| Core Runtime | 62K | ~35-40K | P0 | Full port |
+| Agent System (layers 1-3) | 14K | ~8-10K | P0 | RPC client + broker orchestration |
+| Agent RPC Client (new) | 0 | ~1.5K | P0 | Spawn pi, JSON-line protocol |
+| CLI/Config/Infra | 89K | ~30-40K | P1 | Full port |
+| Cross-cutting | 12K | ~6-8K | P1 | Security, cron, logging, markdown |
+| Cortex (already Go) | — (48K Go) | 0 (inline) | ✅ | Already Go, becomes library calls |
+| **Total to write** | **~177K TS** | **~81-100K Go** | | |
+| | | | | |
+| pi-* packages (kept) | ~51K JS | 0 | — | RPC subprocess, NOT ported |
+| Remaining agents/ code | ~69K TS | 0 | — | Handled by pi subprocess |
 
-### 3.2 External Dependencies to Replace
+**Compared to full port approach:** ~35K fewer lines of Go to write (~110-140K → ~81-100K). The pi-coding-agent's 51K JS of LLM client, agent loop, session management, compaction, and model resolution stays maintained upstream.
+
+### 3.2 External Dependencies
+
+#### Kept as Dependencies (NOT ported)
+
+| Package | Size | Role | Interaction |
+|---------|------|------|-------------|
+| `@mariozechner/pi-ai` | 19.8K JS | Multi-provider LLM HTTP client | Runs inside pi-coding-agent subprocess |
+| `@mariozechner/pi-agent-core` | 969 JS | Agent tool loop | Runs inside pi-coding-agent subprocess |
+| `@mariozechner/pi-coding-agent` | 30.9K JS | Session, tools, skills, compaction, RPC | Spawned via `pi --mode rpc`, JSON-lines on stdio |
+| Node.js runtime | — | Required to run pi-coding-agent | Subprocess only; Go binary is the primary process |
+
+#### Replaced in Go
 
 | TypeScript Dependency | Go Equivalent | Notes |
 |----------------------|---------------|-------|
-| `@mariozechner/pi-ai` (19.8K compiled JS) | `internal/agent/providers/` | 10 LLM providers, message format conversion, streaming |
-| `@mariozechner/pi-agent-core` (977 compiled JS) | `internal/agent/loop.go` | Agent loop: plan → tool → reflect → respond |
-| `@mariozechner/pi-coding-agent` (31K compiled JS) | `internal/agent/` (multiple files) | Session management, tool definitions, skills, compaction |
 | Commander.js | `github.com/spf13/cobra` | CLI framework |
 | Zod | Go struct tags + `encoding/json` | Schema validation |
 | better-sqlite3 / node:sqlite | `modernc.org/sqlite` or `mattn/go-sqlite3` | SQLite driver |
 | `@mariozechner/pi-tui` | `github.com/charmbracelet/bubbletea` (optional) | Terminal UI |
+| `pi-embedded-runner` (Nexus TS) | `internal/agent/rpc.go` | Deep integration → thin RPC client |
 
-### 3.3 pi-* Runtime Surface to Replicate
+### 3.3 pi-coding-agent RPC Protocol
 
-The TypeScript agent system uses these runtime functions from the pi-* packages. Each must have a Go equivalent:
+The Go binary communicates with pi-coding-agent via its built-in RPC mode. Invoked as:
 
-**From pi-ai (LLM client layer):**
-- `complete(context, model, messages, options)` — one-shot LLM completion
-- `completeSimple(model, messages, options)` — simplified completion
-- `streamSimple(model, messages, options)` — streaming completion
-- `streamOpenAIResponses(model, messages, options)` — OpenAI Responses API streaming
-- `getModel(provider, modelId)` — model lookup from registry
-- `getEnvApiKey(provider)` — API key from environment
-- `AssistantMessageEventStream` — streaming event types
-- `loginOpenAICodex()` — Codex auth flow
-- `convertMessages()`, `convertTools()` — Google format conversion
+```
+pi --mode rpc --provider <provider> --model <model>
+```
 
-**From pi-coding-agent (session/tool layer):**
-- `SessionManager.inMemory(workspaceDir)` — in-memory session state
-- `AuthStorage` — auth credential persistence
-- `ModelRegistry` — model catalog
-- `estimateTokens(text)` — token count estimation
-- `generateSummary(messages, model)` — compaction summary generation
-- `loadSkillsFromDir(dir)` — skill discovery
+Protocol: JSON-lines on stdin (commands) / stdout (responses + events).
 
-**From pi-agent-core (agent loop) — types only at runtime:**
-- `AgentTool`, `AgentToolResult`, `AgentMessage`, `StreamFn`, `ThinkingLevel`
+#### RPC Commands (Go → pi)
+
+| Command | Description | Key Fields |
+|---------|-------------|------------|
+| `prompt` | Send a prompt to the agent | `messages`, `tools`, `config` |
+| `steer` | Inject a steering message during execution | `message`, `images?` |
+| `follow_up` | Continue after a completed prompt | `message`, `images?` |
+| `abort` | Cancel the current agent execution | — |
+| `compact` | Trigger context compaction | — |
+| `set_model` | Change the active model/provider | `provider`, `model` |
+| `get_state` | Get current session state | — |
+| `get_messages` | Retrieve message history | — |
+| `get_tools` | List available tools | — |
+
+#### RPC Events (pi → Go)
+
+| Event | Description | Used For |
+|-------|-------------|----------|
+| `message` | Assistant message (partial or complete) | Streaming tokens → SSE |
+| `tool_call` | Tool invocation started | Tool status events |
+| `tool_result` | Tool execution completed | Tool status events |
+| `thinking` | Reasoning/thinking content | Reasoning stream |
+| `usage` | Token usage update | Usage accumulation |
+| `error` | Error occurred | Error handling, failover |
+| `idle` | Agent finished, waiting for next command | Turn completion |
+| `compaction` | Compaction occurred | Compaction ledger writes |
+
+#### Go RPC Client Interface
+
+```go
+// PiRPCClient manages a pi-coding-agent subprocess
+type PiRPCClient struct {
+    cmd      *exec.Cmd
+    stdin    io.WriteCloser
+    stdout   *bufio.Scanner
+    provider string
+    model    string
+}
+
+// Prompt sends a prompt and streams events back via callback
+func (c *PiRPCClient) Prompt(params PromptParams, onEvent func(RPCEvent)) error
+
+// Steer injects a steering message during execution
+func (c *PiRPCClient) Steer(message string, images []ImageContent) error
+
+// FollowUp continues after completion
+func (c *PiRPCClient) FollowUp(message string, images []ImageContent) error
+
+// Abort cancels current execution
+func (c *PiRPCClient) Abort() error
+
+// Compact triggers context compaction
+func (c *PiRPCClient) Compact() error
+
+// SetModel changes the active model
+func (c *PiRPCClient) SetModel(provider, model string) error
+
+// GetState returns current session state
+func (c *PiRPCClient) GetState() (*SessionState, error)
+
+// Close terminates the subprocess
+func (c *PiRPCClient) Close() error
+```
+
+This is approximately **~1.5K Go** — a thin protocol client, not a reimplementation of pi-coding-agent.
 
 ---
 
@@ -501,9 +623,20 @@ type StageRuntime struct {
 
 ### 4.4 Agent System Contract
 
-The agent loop must preserve identical behavior to `runEmbeddedPiAgent`:
+The agent system uses pi-coding-agent as an RPC subprocess. The Go binary handles orchestration (broker, tool policy, failover, streaming translation, ledger writes) while pi handles the actual LLM interaction and agent loop.
 
-**Input contract (50+ fields):**
+**Go-side orchestration contract (preserved from `runEmbeddedPiAgent`):**
+
+The Go `runAgent` stage receives an `AgentRunParams` and must:
+1. Evaluate tool policy (9 layers) to determine the allowed toolset
+2. Select auth profile and model based on config + failover state
+3. Spawn or reuse a pi-coding-agent RPC subprocess
+4. Send `prompt` RPC command with messages, tools, and config
+5. Translate incoming RPC events into Nexus streaming events + ledger writes
+6. Handle failover on errors (auth rotation → thinking fallback → model fallback)
+7. Accumulate usage from pi RPC `usage` events
+8. Return `AgentRunResult` when pi signals `idle`
+
 ```go
 type AgentRunParams struct {
     SessionID        string
@@ -521,13 +654,13 @@ type AgentRunParams struct {
     SenderName       string
     SenderIsOwner    bool
 
-    // Tool policy
+    // Tool policy (evaluated in Go, passed to pi as allowed tool list)
     ToolAllowlist    []string
     ToolDenylist     []string
     ClientTools      []ClientToolDefinition
     DisableTools     bool
 
-    // Model selection
+    // Model selection (Go selects, passes to pi via set_model RPC)
     Provider         string
     Model            string
     AuthProfileID    string
@@ -538,18 +671,16 @@ type AgentRunParams struct {
     RunID            string
     AbortSignal      context.Context
 
-    // Streaming callbacks
+    // Streaming callbacks (Go translates pi RPC events → these callbacks)
     OnPartialReply   func(payload ReplyPayload)
     OnBlockReply     func(payload BlockReplyPayload)
     OnReasoningStream func(payload ReplyPayload)
     OnToolResult     func(payload ReplyPayload)
     OnAgentEvent     func(evt AgentEvent)
-
-    // ... (full list in RunEmbeddedPiAgentParams)
 }
 ```
 
-**Output contract:**
+**Output contract (unchanged):**
 ```go
 type AgentRunResult struct {
     Payloads              []ReplyPayload
@@ -568,12 +699,12 @@ type ReplyPayload struct {
 }
 ```
 
-**Failover behavior (MUST be identical):**
-1. Auth profile rotation — cycle through configured auth profiles on auth errors
-2. Thinking level fallback — reduce thinking level on context overflow
-3. Model fallback — try fallback models from config on persistent failures
+**Failover behavior (MUST be identical, implemented in Go):**
+1. Auth profile rotation — cycle through configured auth profiles on auth errors (pi reports via `error` RPC event, Go rotates and sends `set_model` RPC)
+2. Thinking level fallback — reduce thinking level on context overflow (Go adjusts and re-sends `prompt` RPC)
+3. Model fallback — try fallback models from config on persistent failures (Go selects fallback, sends `set_model` RPC)
 
-**Failover reason classification:**
+**Failover reason classification (parsed from pi `error` events):**
 - `billing` — billing/quota errors
 - `rate_limit` — rate limit responses
 - `auth` — authentication failures
@@ -581,7 +712,7 @@ type ReplyPayload struct {
 - `format` — message format errors
 - `unknown` — unclassified errors
 
-**Tool policy filtering (9 layers, evaluated in order):**
+**Tool policy filtering (9 layers, evaluated in Go before passing tools to pi):**
 Tool groups that can be referenced in policies:
 - `group:memory` — memory_search, memory_get
 - `group:web` — web_search, web_fetch
@@ -593,6 +724,21 @@ Tool groups that can be referenced in policies:
 - `group:messaging` — message
 - `group:nodes` — nodes
 - `group:nexus` — superset of all nexus-specific tools
+
+**Responsibility split:**
+
+| Concern | Owner | Mechanism |
+|---------|-------|-----------|
+| Tool policy evaluation | Go | 9-layer filtering before prompt RPC |
+| Auth profile rotation | Go | Selects profile, injects API key into pi env |
+| Model selection + failover | Go | `set_model` RPC command |
+| LLM HTTP calls | pi-coding-agent | pi-ai multi-provider client |
+| Agent loop (plan/tool/reflect) | pi-coding-agent | pi-agent-core |
+| Session state | pi-coding-agent | In-memory SessionManager |
+| Compaction | pi-coding-agent | Triggered by Go via `compact` RPC or auto |
+| Streaming events | pi → Go | JSON-line events on stdout |
+| Ledger writes | Go | Translates pi events → agents.db writes |
+| Broker dispatch | Go | Manager/worker, session queue |
 
 ### 4.5 Streaming Contract
 
@@ -1217,32 +1363,49 @@ function evaluate(event, context) {
 
 ## 7. Migration Phasing
 
-### Phase 1: Core Runtime (Weeks 1-6)
+### Phase 1: Core Runtime + Agent RPC Client (Weeks 1-6)
 
-Port `internal/pipeline/`, `internal/db/`, `internal/iam/`, `internal/adapters/`, `internal/automations/`, `internal/config/`, `internal/server/`.
+Port `internal/pipeline/`, `internal/db/`, `internal/iam/`, `internal/adapters/`, `internal/automations/`, `internal/config/`, `internal/server/`, and `internal/agent/` (RPC client).
 
-**Interface boundary**: The Go binary runs the pipeline stages 1-5 and 7-8 natively. Stage 6 (runAgent) delegates to a **thin Node.js subprocess bridge** that calls `runEmbeddedPiAgent`. This allows the core runtime to go live while the agent system is being ported.
+**This phase produces a working Go binary** that runs all 8 pipeline stages natively. Stage 6 (runAgent) delegates to pi-coding-agent via the RPC protocol — this is the **permanent architecture**, not a temporary bridge.
 
-**Validation**: Port the 126 core runtime test files (nex/db/iam/hooks) as Go tests. All must pass with byte-identical SQLite output.
+Key deliverables:
+- 8-stage pipeline in Go
+- 4 SQLite ledgers (byte-compatible with existing TS databases)
+- Adapter supervisor (spawn/health/restart)
+- IAM policy evaluation
+- Automations runtime with goja for JS hooks
+- pi-coding-agent RPC client (~1.5K Go)
+- Broker (manager/worker dispatch, session queue)
+- Tool policy filtering (9 layers)
+- Auth profile rotation + failover logic
+- Streaming translation (pi RPC events → Nexus SSE events)
+- Control plane HTTP + WebSocket server
 
-### Phase 2: Agent System (Weeks 5-12, overlapping)
+**Validation**: Port the 126 core runtime test files (nex/db/iam/hooks) + the broker/runAgent orchestration tests as Go tests. All must pass with byte-identical SQLite output. Agent RPC tests mock the pi subprocess stdin/stdout.
 
-Port `internal/agent/` — the LLM orchestration loop, all providers, streaming, failover, tool execution, tool policy, auth profiles, model selection, compaction.
-
-**Validation**: Port the 342 agent system test files. Since all LLM calls are mocked in tests, these translate directly — mock the HTTP layer in Go tests and verify identical inputs/outputs.
-
-### Phase 3: CLI/Config/Infra (Weeks 10-16, overlapping)
+### Phase 2: CLI/Config/Infra (Weeks 5-10, overlapping)
 
 Port `internal/cli/`, `internal/config/`, `internal/daemon/`.
 
 **Validation**: Port the 214 CLI/config test files. Config parsing tests with temp directories translate cleanly.
 
-### Phase 4: Integration + Cortex Unification (Weeks 14-18)
+### Phase 3: Cortex Unification + Integration (Weeks 8-12, overlapping)
 
-- Remove the Node.js subprocess bridge from Phase 1
 - Move cortex from subprocess to `internal/cortex/` library calls
-- Full integration testing with real adapters
-- Playtesting
+- Eliminate the cortex HTTP server on `:4317` and CortexSupervisor
+- Full integration testing with real adapters + pi-coding-agent subprocess
+- End-to-end playtesting
+
+**Validation**: Integration tests with real SQLite databases, real adapter processes, and a real pi-coding-agent subprocess. Verify streaming, failover, compaction, and multi-session scenarios.
+
+### Timeline Comparison
+
+| Approach | Estimated Duration | Go LOC |
+|----------|-------------------|--------|
+| Full port (port pi-agent to Go) | 14-18 weeks | ~110-140K |
+| **RPC approach (keep pi-agent)** | **10-12 weeks** | **~81-100K** |
+| Savings | **4-6 weeks** | **~35K fewer lines** |
 
 ---
 
@@ -1251,15 +1414,17 @@ Port `internal/cli/`, `internal/config/`, `internal/daemon/`.
 | Subsystem | Test Files | Tests | Mock Usage | Migration Suitability |
 |-----------|-----------|-------|------------|----------------------|
 | Core Runtime (nex/db/iam/hooks) | 126 | ~2,100 | 37 use vi.mock, 89 use in-memory SQLite | Excellent — behavior tests on DB + pipeline |
-| Agent System (agents/auto-reply/memory) | 342 | ~3,500 | 173 use vi.mock (all LLM calls mocked) | Excellent — exact I/O contracts |
+| Agent Orchestration (broker/runAgent/tool policy) | ~40 | ~600 | Mocked LLM calls | Good — orchestration logic ports directly |
 | CLI/Config/Infra | 214 | ~1,200 | 150+ use vi.mock, temp dirs | Good — config parsing + command behavior |
-| **Total** | **682** | **~6,800** | | |
+| Agent Internals (stays in pi) | ~302 | ~2,900 | All LLM calls mocked | NOT ported — stays with pi-coding-agent |
+| **Total ported** | **~380** | **~3,900** | | |
 
 ### Coverage Gaps (known risks)
 
 - `src/sessions/` — 14% test ratio (1 test file for 7 impl files). Session resolution edge cases may not be captured.
-- `src/plugins/` — 27% test ratio. Plugin loading sandboxing behavior is under-tested.
-- Streaming state machine — complex state transitions may have untested edge cases.
+- RPC client — **new code with no existing tests**. Must write Go tests that mock pi-coding-agent stdin/stdout.
+- Streaming translation — the Go layer translating pi RPC events → Nexus SSE events needs thorough testing.
+- Failover logic — auth rotation + model fallback is reimplemented in Go; must match TS behavior exactly.
 
 ### Test Translation Strategy
 
@@ -1268,6 +1433,11 @@ TypeScript tests using `vi.mock()` → Go tests using interface mocks (no extern
 TypeScript tests using `DatabaseSync` with `:memory:` → Go tests using `modernc.org/sqlite` with `:memory:`.
 
 TypeScript tests using `vi.fn()` for callbacks → Go tests using function variables or test doubles.
+
+**New test categories needed (no TS equivalent):**
+- RPC client protocol tests (mock stdin/stdout, verify JSON-line serialization)
+- RPC event → streaming event translation tests
+- Pi subprocess lifecycle tests (spawn, health check, restart on crash)
 
 ---
 
@@ -1280,12 +1450,32 @@ TypeScript tests using `vi.fn()` for callbacks → Go tests using function varia
 | SQLite | `modernc.org/sqlite` (pure Go) or `github.com/mattn/go-sqlite3` (CGO) | Cortex currently uses mattn; consider unifying |
 | HTTP framework | `net/http` (stdlib) | No external framework needed |
 | WebSocket | `github.com/gorilla/websocket` or `nhooyr.io/websocket` | For control plane |
-| JS runtime | `github.com/nicholasgasior/goja` or `github.com/nicholasgasior/goja` | For automations hook scripts |
+| JS runtime | `github.com/dop251/goja` | For automations hook scripts |
 | UUID | `github.com/google/uuid` | Already used in cortex |
 | Structured logging | `log/slog` (stdlib) | |
 | Env loading | `github.com/joho/godotenv` | |
 | TUI (optional) | `github.com/charmbracelet/bubbletea` | If terminal UI desired |
 | Embed web UI | `embed` (stdlib) | `go:embed ui/dist` |
+
+### External Runtime Dependencies
+
+| Dependency | Required By | Notes |
+|-----------|-------------|-------|
+| **Node.js** (v22+) | pi-coding-agent subprocess | NOT bundled in Go binary. User must have Node.js installed. |
+| **pi-coding-agent** | Agent execution | Installed via `npm install -g @mariozechner/pi-coding-agent` or bundled alongside |
+| **Adapter binaries** | Messaging | Eve (Go), Telegram, Discord, etc. — spawned as child processes |
+
+### Distribution Strategy
+
+The Go binary itself is a single static file. But the full Nexus installation requires:
+
+```
+brew install nexus              # installs the Go binary
+npm install -g pi               # installs pi-coding-agent + pi-ai + pi-agent-core
+nexus init                      # configures adapters, config.yaml, state directory
+```
+
+Alternative: bundle pi-coding-agent's node_modules alongside the Go binary in the distribution package, eliminating the npm install step (user still needs Node.js runtime).
 
 ---
 
