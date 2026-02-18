@@ -38,7 +38,7 @@ const MSTEAMS_CAPABILITIES: ChannelCapabilities = {
   supports_reactions: true,       // Emoji reactions
   supports_polls: false,
   supports_buttons: true,         // Adaptive Card actions
-  supports_ptt: false,
+  supports_voice_notes: false,
 };
 ```
 

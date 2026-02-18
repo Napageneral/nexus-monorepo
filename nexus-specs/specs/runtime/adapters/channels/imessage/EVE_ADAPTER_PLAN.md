@@ -88,7 +88,7 @@ require (
 )
 
 // For local development until SDK is published:
-replace github.com/nexus-project/adapter-sdk-go => ../../nexus-adapter-sdk-go
+replace github.com/nexus-project/adapter-sdk-go => ../../nexus-adapter-sdks/nexus-adapter-sdk-go
 ```
 
 The SDK has **zero external dependencies** (stdlib only), so this adds no transitive deps. Eve's existing `go-sqlite3` dependency (CGo) handles all DB access.
@@ -213,7 +213,7 @@ Executed via `exec.CommandContext(ctx, "osascript", "-e", script)`.
 ```go
 func eveSend(ctx context.Context, req nexadapter.SendRequest) (*nexadapter.DeliveryResult, error) {
     return nexadapter.SendWithChunking(req.Text, 4000, func(chunk string) (string, error) {
-        err := sendAppleScript(ctx, req.Target, chunk, req.Media)
+        err := sendAppleScript(ctx, req.To, chunk, req.Media)
         if err != nil {
             return "", err
         }
@@ -527,7 +527,7 @@ The adapter depends on the warehouse database existing. First-time users need to
 - `../../ADAPTER_SDK.md` — SDK design and components
 - `UPSTREAM_REVIEW.md` — Gap analysis of eve against adapter protocol
 - `CHANNEL_SPEC.md` — iMessage channel capabilities
-- SDK source: `~/nexus/home/projects/nexus/nexus-adapter-sdk-go/`
+- SDK source: `~/nexus/home/projects/nexus/nexus-adapter-sdks/nexus-adapter-sdk-go/`
 - Eve source: `~/nexus/home/projects/eve/`
 
 ---

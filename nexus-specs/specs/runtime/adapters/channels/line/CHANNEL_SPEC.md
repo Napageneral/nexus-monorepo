@@ -18,7 +18,7 @@ const LINE_CAPABILITIES: ChannelCapabilities = {
   supports_reactions: false,
   supports_polls: false,
   supports_buttons: true,         // Template/Flex buttons
-  supports_ptt: false,
+  supports_voice_notes: false,
 };
 ```
 

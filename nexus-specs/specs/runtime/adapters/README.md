@@ -25,7 +25,14 @@ Adapters are external tools (like `eve`, `gog`, `discord-cli`) that meet defined
 | `ADAPTER_INTERFACES.md` | ✅ Done | Data contracts overview and design principles |
 | `INBOUND_INTERFACE.md` | ✅ Done | Receiving events, NexusEvent schema |
 | `OUTBOUND_INTERFACE.md` | ✅ Done | Delivery, formatting, chunking |
+| `OUTBOUND_TARGETING.md` | ✅ Done | Targeting semantics for threads + replies (`thread_id`, `reply_to_id`) |
+| `BUILTIN_ADAPTERS.md` | 🚧 Active | Which integrations ship as built-in adapters (ingress + clock) and how they relate to the control-plane |
+| `INTERNAL_ADAPTERS.md` | 🚧 Active | Add first-class support for internal (in-process) adapters like clock + HTTP ingress bridges |
+| `CHANNEL_MIGRATION_TRACKER.md` | ✅ Active | Channel-by-channel execution tracker for adapter cutover |
+| `CHANNEL_DIRECTORY.md` | ✅ Active | Per-channel directory of outbound targets (separate from identity directory) |
 | `channels/` | ✅ Done | Per-channel specs (9 channels) |
+| `ADAPTER_CREDENTIALS.md` | ✅ Active | How adapter accounts link to credentials + how NEX injects secrets |
+| `ADAPTER_SDK_TYPESCRIPT.md` | ✅ Active | Detailed spec for the TypeScript adapter SDK |
 
 ### Upstream Reference
 

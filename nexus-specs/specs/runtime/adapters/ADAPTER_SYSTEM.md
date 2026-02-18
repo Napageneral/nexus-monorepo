@@ -79,7 +79,7 @@ interface AdapterInfo {
   channel_capabilities: ChannelCapabilities;
 }
 
-type AdapterCapability = "monitor" | "send" | "stream" | "backfill" | "health" | "react" | "edit" | "delete" | "poll";
+type AdapterCapability = "monitor" | "send" | "stream" | "backfill" | "health" | "accounts" | "react" | "edit" | "delete" | "poll";
 ```
 
 #### `monitor`
@@ -102,8 +102,8 @@ Output: One `NexusEvent` JSON object per line on stdout. Process runs until kill
 Deliver a message to the platform. The adapter handles all formatting and chunking internally.
 
 ```bash
-<command> send --account <account_id> --to <target> --text "message content"
-<command> send --account <account_id> --to <target> --media <path> [--caption "text"]
+<command> send --account <account_id> --to <target> [--thread <thread_id>] [--reply-to <reply_to_id>] --text "message content"
+<command> send --account <account_id> --to <target> [--thread <thread_id>] [--reply-to <reply_to_id>] --media <path> [--caption "text"]
 ```
 
 Output: JSON `DeliveryResult` on stdout.
@@ -113,7 +113,16 @@ interface DeliveryResult {
   success: boolean;
   message_ids: string[];       // Platform message IDs (one per chunk)
   chunks_sent: number;
+  total_chars?: number;        // Optional metrics field
   error?: DeliveryError;
+}
+
+interface DeliveryError {
+  type: 'rate_limited' | 'permission_denied' | 'not_found' | 'content_rejected' | 'network' | 'unknown';
+  message: string;
+  retry: boolean;
+  retry_after_ms?: number;
+  details?: Record<string, unknown>;
 }
 ```
 
@@ -128,7 +137,7 @@ Handle real-time streaming delivery. A long-running bidirectional process (like 
 **Stdin:** StreamEvents as JSONL from NEX:
 
 ```jsonl
-{"type":"stream_start","runId":"run_abc","target":{"to":"channel:123"},"sessionLabel":"main"}
+{"type":"stream_start","runId":"run_abc","target":{"channel":"discord","account_id":"echo-bot","to":"channel:123","thread_id":"123456789012345678","reply_to_id":"987654321098765432"},"sessionLabel":"main"}
 {"type":"token","text":"Hello "}
 {"type":"token","text":"world!"}
 {"type":"tool_status","toolName":"Read","toolCallId":"tc_1","status":"started"}
@@ -672,7 +681,7 @@ NEX resolves outbound adapter from NexusRequest.delivery
      │         Adapter reports: delivery status on stdout
      │
      │   NO → NEX Block Pipeline coalesces tokens into blocks
-     │         NEX calls: <command> send --account <id> --to <target> --text "block"
+     │         NEX calls: <command> send --account <id> --to <target> [--thread <thread_id>] [--reply-to <reply_to_id>] --text "block"
      │         Repeated for each block with human-like delays
      │
      ▼
@@ -698,7 +707,7 @@ For platforms that can't stream (iMessage, WhatsApp), NEX coalesces tokens into 
 For explicit agent sends via the `message` tool (not in response to streaming), the flow is direct:
 
 ```
-Agent calls message tool → NEX resolves adapter → <command> send --to <target> --text "content"
+Agent calls message tool → NEX resolves adapter → <command> send --account <id> --to <target> [--thread <thread_id>] [--reply-to <reply_to_id>] --text "content"
 ```
 
 No streaming is involved — the message content is complete when the tool is called.
@@ -714,7 +723,7 @@ Agent calls: message({ action: "send", channel: "discord", to: "channel:123", te
 Message tool resolves: adapter=discord-cli, account=echo-bot
      │
      ▼
-NEX calls: discord-cli send --account echo-bot --to "channel:123" --text "..."
+NEX calls: discord-cli send --account echo-bot --to "channel:123" [--thread <thread_id>] [--reply-to <reply_to_id>] --text "..."
      │
      ▼
 Same flow as above
@@ -727,7 +736,7 @@ The agent knows what channels are available because `ChannelContext.available_ch
 The `--to` parameter uses a consistent format across adapters:
 
 ```
-<command> send --account <id> --to "<target>" --text "..."
+<command> send --account <id> --to "<target>" [--thread <thread_id>] [--reply-to <reply_to_id>] --text "..."
 ```
 
 Target format is adapter-specific but follows conventions:
@@ -933,6 +942,14 @@ Those specs define the **data contracts** — NexusEvent schema, DeliveryResult 
 
 Adapters link to credentials via `credential_service`. The credential store's `Service → Account → Credentials[]` hierarchy maps naturally to adapter accounts.
 
+### Adapter Credentials (ADAPTER_CREDENTIALS.md)
+
+Defines how NEX resolves credential pointers and injects usable secrets into adapter processes (without argv leakage).
+
+### Outbound Targeting (OUTBOUND_TARGETING.md)
+
+Defines the canonical semantics for `thread_id` / `reply_to_id` and the required adapter protocol support (`--thread`, `--reply-to`, `stream_start.target`).
+
 ### NEX Pipeline (OVERVIEW.md)
 
 Adapter events enter the pipeline at `receiveEvent`. Outbound delivery happens at `deliverResponse`. This spec defines how events get from adapter to pipeline and back.
@@ -962,6 +979,8 @@ Channel capabilities and available channels are injected into event context duri
 - `ADAPTER_INTERFACES.md` — Data contracts (NexusEvent, DeliveryResult)
 - `INBOUND_INTERFACE.md` — Inbound event schema and normalization
 - `OUTBOUND_INTERFACE.md` — Delivery interface, formatting, chunking
+- `OUTBOUND_TARGETING.md` — Threading + reply semantics
+- `CHANNEL_DIRECTORY.md` — Directory of outbound targets per channel/account
 - `channels/` — Per-channel capability specs
 - `../nex/NEXUS_REQUEST.md` — Request object adapters create/consume
 - `../broker/CONTEXT_ASSEMBLY.md` — How channel context feeds into agent prompts

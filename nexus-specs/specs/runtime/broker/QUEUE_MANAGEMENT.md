@@ -1,7 +1,7 @@
 # Queue Management
 
 **Status:** SPEC IN PROGRESS  
-**Last Updated:** 2026-02-02
+**Last Updated:** 2026-02-16
 
 ---
 
@@ -20,26 +20,23 @@ How messages are delivered when a session is busy:
 
 | Mode | During Active Run | After Run Ends |
 |------|-------------------|----------------|
-| `steer` | Inject message into active context | Run normally |
+| `steer` | Abort active run (preempt) | Drain backlog into next run |
 | `followup` | Queue message | Process FIFO |
-| `collect` | Queue message | Batch all into one prompt |
-| `steer-backlog` | Try steer, queue if fails | Process queue |
+| `collect` | Queue message | Batch all into one turn (events-based) |
 | `queue` | Simple FIFO | Process FIFO |
-| `interrupt` | Abort active run | Run new message |
+| `interrupt` | Abort active run (preempt) | Drain backlog into next run |
 
 ### Mode Details
 
-**steer** — Injects a message into an actively streaming agent run. The agent sees the new message mid-response and can adjust. Best for urgent updates or clarifications.
+**steer** — Preemptive mode. Aborts the active run and starts a new run that includes the new message plus any queued backlog. There is no in-run message injection.
 
 **followup** — Queues the message for processing after the current run completes. Messages processed one at a time in order.
 
-**collect** — Queues messages and batches them into a single prompt when processing begins. Good for high-volume inputs (e.g., group chat where multiple people message while agent is busy).
-
-**steer-backlog** — Attempts to steer; if agent is not in a steerable state, queues instead.
+**collect** — Queues messages and batches them into a single turn when processing begins (represented as `event_ids`, not concatenated text). Good for high-volume inputs (e.g., group chat where multiple people message while agent is busy).
 
 **queue** — Simple FIFO queue, no steering attempts.
 
-**interrupt** — Aborts current run immediately, clears queue, processes this message. Use for urgent cancellation or priority messages.
+**interrupt** — Preemptive mode. Aborts the active run and starts a new run that includes the new message plus any queued backlog. This "clears the queue" by draining it into the next run (it does not drop queued messages by default).
 
 ---
 
@@ -125,35 +122,36 @@ When queue reaches capacity:
 
 ---
 
-## Steering
+## Preemption (Steer/Interrupt)
 
-### How Steering Works
+`steer` and `interrupt` are **preemptive** queue modes.
 
-Steering injects a message into an actively running agent:
+- There is **no in-run message injection**.
+- Preemption means: **abort the active run**, persist any partial output, and start a **new run** that includes the new message plus the drained backlog.
 
-```typescript
-async function steer(sessionLabel: string, message: Message): Promise<boolean> {
-  const runState = getRunState(sessionLabel);
-  
-  // Can only steer during active streaming
-  if (runState !== 'streaming') {
-    return false;  // Fall back to queue
-  }
-  
-  // Inject message into agent's message queue
-  await injectMessage(sessionLabel, message);
-  return true;
-}
+High-level behavior:
+
+```text
+Incoming message (mode=steer/interrupt)
+  -> abort active run (if any)
+  -> drain queued backlog + this message into ONE next run
+  -> context assembly replays drained items as distinct messages
 ```
 
-### When Steering Fails
+## Batched Message Representation (Events-Based)
 
-Steering fails when:
-- No active run
-- Run is compacting (not accepting input)
-- Run just finished (race condition)
+For `collect` and preemptive runs (`steer`/`interrupt`), NEX does not concatenate multiple inbound messages into one synthetic blob.
 
-On failure, the message is queued for followup processing.
+Instead, it builds a synthetic event that references the original Events Ledger IDs:
+
+- `event.metadata.collect_batch`: `{ count, event_ids, strategy: "events" }`
+- `event.metadata.queue_batch`: `{ mode, count, event_ids, strategy: "events" }`
+
+The synthetic event's `content` is the most recent message (the last event in `event_ids`). Context assembly then:
+
+1. Loads the prior `event_ids` (excluding the last one) from the Events Ledger
+2. Appends them as distinct history messages (preserving order)
+3. Uses the latest event as the current message
 
 ---
 
@@ -163,10 +161,10 @@ Messages between agents (MA ↔ WA) use the same queue system:
 
 ```typescript
 // When WA sends to MA
-broker.send({
-  from: "code-worker",
-  to: "manager",
-  content: "Task complete. Found 4 issues.",
+agent_send({
+  op: "message",
+  text: "Task complete. Found 4 issues.",
+  target: { session: "manager" },
 });
 
 // Routed to MA's session queue
@@ -174,6 +172,12 @@ broker.send({
 ```
 
 This enables natural flow of progress updates and results without blocking.
+
+### Worker Result Delivery Invariant
+
+- WA completion always emits a durable `worker_result` event to the caller session.
+- If the caller session is busy, the `worker_result` is queued (not dropped) and delivered per queue mode.
+- `dispatch_id` and `spawned_session_label` are preserved in metadata for correlation and ledger/cortex lookup.
 
 ---
 

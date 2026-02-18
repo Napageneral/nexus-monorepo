@@ -207,11 +207,11 @@ func runSend(adapter Adapter, args []string) error {
 
 	req := SendRequest{
 		Account:  *account,
-		Target:   *to,
+		To:       *to,
 		Text:     *text,
 		Media:    *media,
 		Caption:  *caption,
-		ReplyTo:  *replyTo,
+		ReplyToID:  *replyTo,
 		ThreadID: *threadID,
 	}
 

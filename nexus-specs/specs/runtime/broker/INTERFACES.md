@@ -1,7 +1,7 @@
 # Broker Interfaces
 
 **Status:** TODO  
-**Last Updated:** 2026-02-02
+**Last Updated:** 2026-02-16
 
 ---
 
@@ -129,8 +129,8 @@ Types used across broker interfaces:
 
 ```typescript
 interface AgentIdentity {
-  agentId: string;           // Unique identifier (e.g., "manager", "code-worker")
-  sessionKey: string;        // Underlying session key
+  personaId: string;         // Behavioral decorator (swappable)
+  sessionKey: string;        // Routing key / queue target
   role: 'manager' | 'worker';
 }
 ```
@@ -140,8 +140,8 @@ interface AgentIdentity {
 ```typescript
 interface AgentMessage {
   id: string;                // Unique message ID
-  from: string;              // Sender agent ID or 'user' or 'system'
-  to: string;                // Target agent ID
+  fromSession: string;       // Sender session label or 'user' or 'system'
+  toSession: string;         // Target session label
   content: string;           // Message content
   timestamp: number;
   conversationId?: string;   // Group related messages
@@ -172,6 +172,15 @@ interface RoutingTarget {
   // Modifier:
   smart?: boolean;    // Use Cortex to find best target first
 }
+```
+
+### Dispatch Target (agent_send)
+
+```typescript
+type DispatchTarget =
+  | { kind: "session"; session: string }                     // v1: explicit session routing
+  | { kind: "new_session"; labelHint?: string }              // v1: spawn worker
+  | { kind: "fork"; fromTurnId: string; labelHint?: string } // v2: true fork from checkpoint
 ```
 
 ---

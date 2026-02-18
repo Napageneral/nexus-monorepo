@@ -42,7 +42,7 @@ TypeScript (NEX daemon)              Go (Cortex)
                      (shared, both read+write)
 ```
 
-**Database access:** Both processes read from and write to `nexus.db`. SQLite handles concurrent reads natively. Write contention is managed via WAL mode and short transactions. Cortex also writes to `cortex/{agentId}.db` for per-agent embeddings.
+**Database access:** Both processes read from and write to `nexus.db`. SQLite handles concurrent reads natively. Write contention is managed via WAL mode and short transactions. Cortex also writes to `state/cortex/cortex.db` for derived embeddings and analyses.
 
 **Adapter communication:** Adapters are external binaries invoked via CLI protocol. Language doesn't matter — Go, TS, Python, Rust, shell scripts all work.
 

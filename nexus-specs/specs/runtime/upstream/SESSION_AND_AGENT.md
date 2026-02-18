@@ -99,7 +99,7 @@ type SessionEntry = {
   verboseLevel?: string;
   reasoningLevel?: string;
   sendPolicy?: "allow" | "deny";
-  queueMode?: "steer" | "followup" | "collect" | "steer-backlog" | "queue" | "interrupt";
+  queueMode?: "steer" | "followup" | "collect" | "queue" | "interrupt";
   
   // Usage tracking
   inputTokens?: number;

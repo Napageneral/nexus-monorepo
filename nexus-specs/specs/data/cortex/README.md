@@ -86,7 +86,7 @@ Upstream openclaw used a file-based memory system (`MEMORY.md`, `memory/*.md`) t
 │  │  (patterns, relationships, temporal facts)            │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                                                              │
-│  Storage: ~/nexus/state/cortex/{agentId}.db (per-agent)    │
+│  Storage: ~/nexus/state/cortex/cortex.db (shared)          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -174,7 +174,12 @@ interface IdentityEnrichment {
 
 ## Related
 
+- `MEMORY_SYSTEM.md` — Tripartite memory model (declarative, episodic, procedural)
+- `CORTEX_AGENT_INTERFACE.md` — Tool and API surface for agents to query/write memory
+- `roles/MEMORY_READER.md` — Memory reader meeseeks role spec
+- `roles/MEMORY_WRITER.md` — Memory writer meeseeks role spec
 - `CORTEX_NEX_MIGRATION.md` — Integration plan (how mnemonic becomes Cortex)
+- `../../runtime/broker/MEESEEKS_PATTERN.md` — Disposable role fork pattern
 - `../ledgers/` — System of Record (source data)
 - `../../runtime/nex/NEXUS_REQUEST.md` — Pipeline lifecycle (Cortex feeds into stage 5)
 - `../../runtime/broker/CONTEXT_ASSEMBLY.md` — Cortex injection into agent context (Layer 3)

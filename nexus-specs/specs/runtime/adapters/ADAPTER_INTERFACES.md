@@ -148,12 +148,14 @@ What the channel supports:
 ```typescript
 interface ChannelCapabilities {
   // Text limits
-  text_limit: number;            // Max chars per message
-  caption_limit?: number;        // Max chars for media caption
+  text_limit: number;                    // Max chars per message
+  caption_limit?: number;                // Max chars for media caption
   
   // Formatting
   supports_markdown: boolean;
-  markdown_flavor?: 'standard' | 'discord' | 'telegram_html' | 'slack';
+  markdown_flavor?: 'standard' | 'discord' | 'telegram_html' | 'slack_mrkdwn';
+  supports_tables: boolean;
+  supports_code_blocks: boolean;
   
   // Features
   supports_embeds: boolean;
@@ -161,7 +163,10 @@ interface ChannelCapabilities {
   supports_reactions: boolean;
   supports_polls: boolean;
   supports_buttons: boolean;
-  supports_ptt: boolean;         // Push-to-talk audio
+  supports_edit: boolean;
+  supports_delete: boolean;
+  supports_media: boolean;
+  supports_voice_notes: boolean;          // Native "voice note" / PTT-style messages
   
   // Streaming (informational — actual support declared via 'stream' in adapter supports)
   supports_streaming_edit: boolean;   // Can pseudo-stream by editing messages
@@ -189,9 +194,18 @@ What happened:
 ```typescript
 interface DeliveryResult {
   success: boolean;
-  message_ids: string[];         // Platform message IDs
+  message_ids: string[];         // Platform message IDs (one per chunk)
   chunks_sent: number;
-  error?: string;
+  total_chars?: number;
+  error?: DeliveryError;
+}
+
+interface DeliveryError {
+  type: 'rate_limited' | 'permission_denied' | 'not_found' | 'content_rejected' | 'network' | 'unknown';
+  message: string;
+  retry: boolean;
+  retry_after_ms?: number;
+  details?: Record<string, unknown>;
 }
 ```
 
@@ -340,12 +354,13 @@ interface DeliveryOptions {
 ### Error Types
 
 ```typescript
-type DeliveryError = 
-  | { type: 'rate_limited'; retry_after_ms: number }
-  | { type: 'permission_denied'; reason: string }
-  | { type: 'not_found'; target: string }
-  | { type: 'network'; message: string }
-  | { type: 'unknown'; message: string };
+interface DeliveryError {
+  type: 'rate_limited' | 'permission_denied' | 'not_found' | 'content_rejected' | 'network' | 'unknown';
+  message: string;
+  retry: boolean;
+  retry_after_ms?: number;
+  details?: Record<string, unknown>;
+}
 ```
 
 ---

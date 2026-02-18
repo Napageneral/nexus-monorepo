@@ -1,0 +1,16 @@
+{
+  "success": false,
+  "message_ids": [],
+  "chunks_sent": 0,
+  "total_chars": 12,
+  "error": {
+    "type": "rate_limited",
+    "message": "rate limited",
+    "retry_after_ms": 1000,
+    "retry": true,
+    "details": {
+      "http_status": 429
+    }
+  }
+}
+

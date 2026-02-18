@@ -18,7 +18,7 @@ const IMESSAGE_CAPABILITIES: ChannelCapabilities = {
   supports_reactions: true,      // Tapbacks
   supports_polls: false,
   supports_buttons: false,
-  supports_ptt: false,           // Voice memos are attachments
+  supports_voice_notes: false,   // Voice memos are attachments
 };
 ```
 

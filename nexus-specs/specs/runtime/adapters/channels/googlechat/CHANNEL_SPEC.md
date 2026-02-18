@@ -37,7 +37,7 @@ const GOOGLECHAT_CAPABILITIES: ChannelCapabilities = {
   supports_reactions: true,       // Emoji reactions
   supports_polls: false,
   supports_buttons: true,         // Card buttons
-  supports_ptt: false,
+  supports_voice_notes: false,
 };
 ```
 

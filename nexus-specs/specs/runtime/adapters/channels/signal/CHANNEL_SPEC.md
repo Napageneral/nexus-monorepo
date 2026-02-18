@@ -19,7 +19,7 @@ const SIGNAL_CAPABILITIES: ChannelCapabilities = {
   supports_reactions: true,
   supports_polls: false,
   supports_buttons: false,
-  supports_ptt: true,            // Voice notes
+  supports_voice_notes: true,    // Voice notes
 };
 ```
 

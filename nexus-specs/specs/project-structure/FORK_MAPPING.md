@@ -139,7 +139,7 @@ Built from multiple openclaw modules. The Broker wraps pi-coding-agent and write
 | `broker/sessions/` | `sessions/`, `routing/session-key.ts` | `broker/SESSION_LIFECYCLE.md` | Session create/resume, queue modes, aliases, serial execution |
 | `broker/streaming.ts` | `agents/pi-embedded-subscribe.tools.ts` | `runtime/STREAMING.md` | BrokerStreamHandle, StreamEvent protocol |
 | `broker/compaction.ts` | `sessions/` (compaction logic) | `broker/AGENT_ENGINE.md` | Wrap upstream compaction, add metadata table |
-| `broker/queue.ts` | `auto-reply/reply/` (queue management) | `broker/SESSION_LIFECYCLE.md` | 6 queue modes: steer, followup, collect, steer-backlog, queue, interrupt |
+| `broker/queue.ts` | `auto-reply/reply/` (queue management) | `broker/SESSION_LIFECYCLE.md` | 5 queue modes: steer, followup, collect, queue, interrupt |
 
 ### 🟡 REPLACE: `src/iam/` — Identity & Access Management
 

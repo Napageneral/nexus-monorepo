@@ -1,0 +1,7 @@
+{
+  "success": true,
+  "message_ids": ["123", "124"],
+  "chunks_sent": 2,
+  "total_chars": 2500
+}
+

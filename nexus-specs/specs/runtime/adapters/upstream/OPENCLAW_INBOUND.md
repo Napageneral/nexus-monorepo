@@ -674,11 +674,7 @@ Examples:
 4. **DM scoping is configurable** — Can collapse or isolate DM sessions
 5. **Shared infrastructure** — Inbound and outbound share routing/session code
 6. **Envelope format** — Provides context to agent about message source
-7. **Deduplication is critical** — 20-minute TTL, 5000 entry cache prevents duplicates
-
----
-
-## Related Documents- `OPENCLAW_OUTBOUND.md` — Outbound delivery patterns
+7. **Deduplication is critical** — 20-minute TTL, 5000 entry cache prevents duplicates---## Related Documents- `OPENCLAW_OUTBOUND.md` — Outbound delivery patterns
 - `STREAMING_OUTPUT.md` — Block streaming and coalescing
 - `CHANNEL_INVENTORY.md` — All channel implementations
 - `../INBOUND_INTERFACE.md` — Nexus inbound interface spec

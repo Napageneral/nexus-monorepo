@@ -1,7 +1,7 @@
 # NEX — Nexus Event Exchange
 
 **Status:** ACTIVE  
-**Last Updated:** 2026-02-04
+**Last Updated:** 2026-02-12
 
 ---
 
@@ -17,6 +17,10 @@ This folder contains the core NEX orchestrator specifications — the central pi
 |------|--------|-------------|
 | **`NEX.md`** | ✅ Complete | **START HERE** — Central orchestrator (8-stage pipeline) |
 | `DAEMON.md` | ✅ Complete | Process lifecycle — startup, signals, shutdown, supervision |
+| `CONTROL_PLANE.md` | 🧭 Design | Single-daemon control-plane (Gateway removal) — WS RPC + HTTP endpoints live inside NEX |
+| `SINGLE_TENANT_MULTI_USER.md` | 🧭 Design | Single-tenant, multi-user runtime — trust zones, auth, identity mapping, and anti-spoofing requirements |
+| `CONTROL_PLANE_AUTHZ_TAXONOMY.md` | 🧭 Design | Control-plane action/resource taxonomy (Option A authz) — maps WS methods to IAM permissions |
+| `SESSION_IMPORT_SERVICE.md` | 🧭 Design | Gateway-free AIX import adapter plan — NEX-owned session import/chunk service |
 | `NEXUS_REQUEST.md` | ✅ Complete | The data bus that accumulates context through pipeline |
 | `INTERFACES.md` | ⚠️ Retired | Distributed to home specs. See file for redirect table. |
 | `PLUGINS.md` | ✅ Complete | NEX plugin system (hook points) |

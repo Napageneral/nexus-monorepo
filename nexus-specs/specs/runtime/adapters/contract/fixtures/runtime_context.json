@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "channel": "discord",
+  "account_id": "echo-bot",
+  "config": {
+    "dm_policy": "allow_owner_only"
+  },
+  "credential": {
+    "kind": "token",
+    "value": "REDACTED"
+  }
+}
+

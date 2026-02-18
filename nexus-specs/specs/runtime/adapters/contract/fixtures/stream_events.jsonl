@@ -1,0 +1,8 @@
+{"type":"stream_start","runId":"run_abc","sessionLabel":"main","target":{"channel":"discord","account_id":"echo-bot","to":"channel:123","thread_id":"123456789012345678","reply_to_id":"987654321098765432"}}
+{"type":"token","text":"Hello "}
+{"type":"token","text":"world!"}
+{"type":"tool_status","toolName":"Read","toolCallId":"tc_1","status":"started"}
+{"type":"tool_status","toolName":"Read","toolCallId":"tc_1","status":"completed","summary":"Read file.ts"}
+{"type":"reasoning","text":"thinking..."}
+{"type":"stream_end","runId":"run_abc","final":true}
+

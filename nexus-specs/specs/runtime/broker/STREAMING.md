@@ -8,5 +8,5 @@ Streaming is a cross-cutting concern that touches Broker, NEX, and Adapters. The
 - Agent Engine → Broker callback translation
 - NEX stream routing (native vs block pipeline)
 - Adapter `stream` command protocol
-- Interruption (steer/abort)
+- Interruption (preempt/abort)
 - Streaming vs ledger write separation

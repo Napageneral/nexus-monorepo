@@ -128,7 +128,7 @@ Agents can spawn background workers via `sessions_spawn` tool:
 - Nested spawning forbidden (subagents can't spawn subagents)
 - Results announced back to parent via announce flow
 
-**Nexus:** Uses `send_message_to_agent` with full bidirectional communication.
+**Nexus:** Uses `agent_send` (`op="dispatch"` / `op="message"`) with full bidirectional communication.
 
 ---
 
@@ -161,7 +161,7 @@ The Nexus Broker diverges from OpenClaw in several key ways:
 
 | Aspect | OpenClaw | Nexus Broker |
 |--------|----------|--------------|
-| Spawning tool | `sessions_spawn` | `send_message_to_agent` |
+| Spawning tool | `sessions_spawn` | `agent_send` (`op="dispatch"`) |
 | Result delivery | Announce flow (completion only) | Bidirectional (anytime) |
 | Nested spawning | Forbidden | Allowed (depth limit: 3) |
 | Worker persistence | Ephemeral (cleanup after run) | All agents persistent |

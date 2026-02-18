@@ -21,6 +21,8 @@ The Access Control Layer (ACL) is a declarative system that determines WHO can i
 | **[POLICIES.md](./POLICIES.md)** | Policy schema, examples, evaluation algorithm |
 | **[GRANTS.md](./GRANTS.md)** | Dynamic permissions and approval workflows |
 | **[AUDIT.md](./AUDIT.md)** | Audit logging and queries |
+| **[TOOL_APPROVALS.md](./TOOL_APPROVALS.md)** | Replace legacy exec approvals with IAM-native approvals + grants |
+| **[PAIRING_UX.md](./PAIRING_UX.md)** | UX layer for first-contact approvals (DM pairing) built on IAM |
 
 ---
 

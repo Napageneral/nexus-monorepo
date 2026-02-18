@@ -35,7 +35,7 @@ const GMAIL_CAPABILITIES: ChannelCapabilities = {
   supports_reactions: false,
   supports_polls: false,
   supports_buttons: false,
-  supports_ptt: false,
+  supports_voice_notes: false,
   supports_html: true,            // Email supports HTML
   supports_attachments: true,
 };

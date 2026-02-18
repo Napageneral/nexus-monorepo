@@ -92,7 +92,6 @@ interface BrokerStreamHandle {
   
   // NEX can signal back to Broker
   abort(): void;                    // Cancel execution
-  steer(message: string): boolean;  // Inject message into active context
   
   // Status queries
   isStreaming(): boolean;
@@ -345,26 +344,25 @@ Or suppressed entirely, depending on channel config.
 
 ## Interruption During Streaming
 
-### Steering (Inject Message)
+### Preemption (Steer/Interrupt)
 
-When a new user message arrives while the agent is streaming:
+When a new message arrives for a session with an active run:
 
 ```
-User sends new message → NEX checks active run for session
+User sends new message → NEX enqueues message (mode=interrupt/steer)
     │
-    ├── Run is streaming?
-    │     YES → broker.stream.steer(message)
-    │           Agent sees new message in context, adjusts response
-    │           Streaming continues with updated content
+    ├── Active run exists?
+    │     YES → broker.stream.abort()
+    │           Broker persists partial output (turn status = 'aborted')
     │
-    ├── Run is executing tool?
-    │     YES → Queue message for after tool completes
-    │
-    └── Run is not active?
+    └── Queue drains backlog into the next run
+          - Preemptive modes drain queued messages + the new message
+          - NEX builds a synthetic batch event referencing original event_ids
+          - Context assembly replays them as distinct messages
           → Start new run
 ```
 
-Steer is only possible while the agent is actively streaming (producing tokens), not during tool execution.
+There is **no in-run message injection** in the Broker streaming interface. `steer` is treated as a preemptive alias of `interrupt` (abort + restart).
 
 ### Abort
 
@@ -374,10 +372,10 @@ If the agent needs to be stopped (interrupt queue mode, user cancellation):
 NEX calls → broker.stream.abort()
     │
     ├── Agent execution cancelled via AbortSignal
-    ├── Stream receives stream_error with partial=true
+    ├── Stream ends (stop_reason = 'aborted')
     ├── If adapter is streaming: adapter gets stream_end or error, finalizes
     ├── Partial content already delivered to user stays visible
-    └── Ledger records the turn as 'failed' with partial content
+    └── Ledger records the turn as 'aborted' and persists any partial output
 ```
 
 ---

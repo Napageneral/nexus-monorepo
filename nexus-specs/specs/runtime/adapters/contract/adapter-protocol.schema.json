@@ -1,0 +1,331 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexus-project.dev/schemas/adapter-protocol/v1",
+  "title": "Nexus Adapter Protocol (v1)",
+  "type": "object",
+  "$defs": {
+    "AdapterCapability": {
+      "type": "string",
+      "enum": ["monitor", "send", "stream", "backfill", "health", "accounts", "react", "edit", "delete", "poll"]
+    },
+    "ChannelCapabilities": {
+      "type": "object",
+      "required": [
+        "text_limit",
+        "supports_markdown",
+        "supports_tables",
+        "supports_code_blocks",
+        "supports_embeds",
+        "supports_threads",
+        "supports_reactions",
+        "supports_polls",
+        "supports_buttons",
+        "supports_edit",
+        "supports_delete",
+        "supports_media",
+        "supports_voice_notes",
+        "supports_streaming_edit"
+      ],
+      "properties": {
+        "text_limit": { "type": "integer", "minimum": 0 },
+        "caption_limit": { "type": "integer", "minimum": 0 },
+        "supports_markdown": { "type": "boolean" },
+        "markdown_flavor": { "type": "string" },
+        "supports_tables": { "type": "boolean" },
+        "supports_code_blocks": { "type": "boolean" },
+        "supports_embeds": { "type": "boolean" },
+        "supports_threads": { "type": "boolean" },
+        "supports_reactions": { "type": "boolean" },
+        "supports_polls": { "type": "boolean" },
+        "supports_buttons": { "type": "boolean" },
+        "supports_edit": { "type": "boolean" },
+        "supports_delete": { "type": "boolean" },
+        "supports_media": { "type": "boolean" },
+        "supports_voice_notes": { "type": "boolean" },
+        "supports_streaming_edit": { "type": "boolean" },
+        "supports_ptt": {
+          "type": "boolean",
+          "description": "Deprecated alias for supports_voice_notes (kept for transition)."
+        }
+      },
+      "additionalProperties": true
+    },
+    "AdapterInfo": {
+      "type": "object",
+      "required": ["channel", "name", "version", "supports", "multi_account", "channel_capabilities"],
+      "properties": {
+        "channel": { "type": "string" },
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "supports": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AdapterCapability" }
+        },
+        "credential_service": { "type": "string" },
+        "multi_account": { "type": "boolean" },
+        "channel_capabilities": { "$ref": "#/$defs/ChannelCapabilities" }
+      },
+      "additionalProperties": false
+    },
+    "Attachment": {
+      "type": "object",
+      "required": ["id", "filename", "content_type"],
+      "properties": {
+        "id": { "type": "string" },
+        "filename": { "type": "string" },
+        "content_type": { "type": "string" },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "url": { "type": "string" },
+        "path": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "NexusEvent": {
+      "type": "object",
+      "required": [
+        "event_id",
+        "timestamp",
+        "content",
+        "content_type",
+        "channel",
+        "account_id",
+        "sender_id",
+        "peer_id",
+        "peer_kind"
+      ],
+      "properties": {
+        "event_id": { "type": "string" },
+        "timestamp": { "type": "integer" },
+        "content": { "type": "string" },
+        "content_type": {
+          "type": "string",
+          "enum": ["text", "image", "audio", "video", "file", "reaction"]
+        },
+        "attachments": { "type": "array", "items": { "$ref": "#/$defs/Attachment" } },
+        "channel": { "type": "string" },
+        "account_id": { "type": "string" },
+        "sender_id": { "type": "string" },
+        "sender_name": { "type": "string" },
+        "peer_id": { "type": "string" },
+        "peer_kind": { "type": "string", "enum": ["dm", "group", "channel"] },
+        "thread_id": { "type": "string" },
+        "reply_to_id": { "type": "string" },
+        "metadata": { "type": "object", "additionalProperties": true }
+      },
+      "additionalProperties": false
+    },
+    "DeliveryErrorType": {
+      "type": "string",
+      "enum": [
+        "rate_limited",
+        "permission_denied",
+        "not_found",
+        "content_rejected",
+        "network",
+        "unknown"
+      ]
+    },
+    "DeliveryError": {
+      "type": "object",
+      "required": ["type", "message", "retry"],
+      "properties": {
+        "type": { "$ref": "#/$defs/DeliveryErrorType" },
+        "message": { "type": "string" },
+        "retry_after_ms": { "type": "integer", "minimum": 0 },
+        "retry": { "type": "boolean" },
+        "details": { "type": "object", "additionalProperties": true }
+      },
+      "additionalProperties": false
+    },
+    "DeliveryResult": {
+      "type": "object",
+      "required": ["success", "message_ids", "chunks_sent"],
+      "properties": {
+        "success": { "type": "boolean" },
+        "message_ids": { "type": "array", "items": { "type": "string" } },
+        "chunks_sent": { "type": "integer", "minimum": 0 },
+        "total_chars": { "type": "integer", "minimum": 0 },
+        "error": { "$ref": "#/$defs/DeliveryError" }
+      },
+      "additionalProperties": false
+    },
+    "AdapterHealth": {
+      "type": "object",
+      "required": ["connected", "account"],
+      "properties": {
+        "connected": { "type": "boolean" },
+        "account": { "type": "string" },
+        "last_event_at": { "type": "integer" },
+        "error": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      },
+      "additionalProperties": false
+    },
+    "AdapterAccount": {
+      "type": "object",
+      "required": ["id", "status"],
+      "properties": {
+        "id": { "type": "string" },
+        "display_name": { "type": "string" },
+        "credential_ref": { "type": "string" },
+        "status": { "type": "string", "enum": ["ready", "active", "error"] }
+      },
+      "additionalProperties": false
+    },
+    "DeliveryTarget": {
+      "type": "object",
+      "required": ["channel", "account_id", "to"],
+      "properties": {
+        "channel": { "type": "string" },
+        "account_id": { "type": "string" },
+        "to": { "type": "string" },
+        "thread_id": { "type": "string" },
+        "reply_to_id": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "StreamEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "runId", "sessionLabel", "target"],
+          "properties": {
+            "type": { "const": "stream_start" },
+            "runId": { "type": "string" },
+            "sessionLabel": { "type": "string" },
+            "target": { "$ref": "#/$defs/DeliveryTarget" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "text"],
+          "properties": { "type": { "const": "token" }, "text": { "type": "string" } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "toolName", "toolCallId", "status"],
+          "properties": {
+            "type": { "const": "tool_status" },
+            "toolName": { "type": "string" },
+            "toolCallId": { "type": "string" },
+            "status": { "type": "string", "enum": ["started", "completed", "failed"] },
+            "summary": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "text"],
+          "properties": { "type": { "const": "reasoning" }, "text": { "type": "string" } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "runId"],
+          "properties": {
+            "type": { "const": "stream_end" },
+            "runId": { "type": "string" },
+            "final": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "error", "partial"],
+          "properties": {
+            "type": { "const": "stream_error" },
+            "error": { "type": "string" },
+            "partial": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "AdapterStreamStatus": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "messageId"],
+          "properties": {
+            "type": { "const": "message_created" },
+            "messageId": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "messageId", "chars"],
+          "properties": {
+            "type": { "const": "message_updated" },
+            "messageId": { "type": "string" },
+            "chars": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "messageId", "final"],
+          "properties": {
+            "type": { "const": "message_sent" },
+            "messageId": { "type": "string" },
+            "final": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "messageIds"],
+          "properties": {
+            "type": { "const": "delivery_complete" },
+            "messageIds": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "error"],
+          "properties": { "type": { "const": "delivery_error" }, "error": { "type": "string" } },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "RuntimeCredential": {
+      "type": "object",
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": { "type": "string" },
+        "value": { "type": "string" },
+        "ref": { "type": "string" },
+        "service": { "type": "string" },
+        "account": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "RuntimeContext": {
+      "type": "object",
+      "required": ["channel", "account_id", "config"],
+      "properties": {
+        "version": { "type": "integer", "minimum": 1 },
+        "channel": { "type": "string" },
+        "account_id": { "type": "string" },
+        "config": { "type": "object", "additionalProperties": true },
+        "credential": { "$ref": "#/$defs/RuntimeCredential" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "properties": {
+    "AdapterInfo": { "$ref": "#/$defs/AdapterInfo" },
+    "NexusEvent": { "$ref": "#/$defs/NexusEvent" },
+    "DeliveryResult": { "$ref": "#/$defs/DeliveryResult" },
+    "AdapterHealth": { "$ref": "#/$defs/AdapterHealth" },
+    "AdapterAccount": { "$ref": "#/$defs/AdapterAccount" },
+    "StreamEvent": { "$ref": "#/$defs/StreamEvent" },
+    "AdapterStreamStatus": { "$ref": "#/$defs/AdapterStreamStatus" },
+    "RuntimeContext": { "$ref": "#/$defs/RuntimeContext" }
+  },
+  "additionalProperties": false
+}
+

@@ -30,6 +30,7 @@ const (
 	CapStream   Capability = "stream"
 	CapBackfill Capability = "backfill"
 	CapHealth   Capability = "health"
+	CapAccounts Capability = "accounts"
 	CapReact    Capability = "react"
 	CapEdit     Capability = "edit"
 	CapDelete   Capability = "delete"
@@ -108,11 +109,11 @@ type Attachment struct {
 // SendRequest contains the parameters for a `send` command invocation.
 type SendRequest struct {
 	Account  string `json:"account"`
-	Target   string `json:"target"`              // Email, phone, channel:id, etc.
+	To       string `json:"to"`                  // Email, phone, channel:id, etc.
 	Text     string `json:"text,omitempty"`
 	Media    string `json:"media,omitempty"`      // File path
 	Caption  string `json:"caption,omitempty"`
-	ReplyTo  string `json:"reply_to,omitempty"`   // Reply to event ID
+	ReplyToID  string `json:"reply_to_id,omitempty"` // Reply to event ID
 	ThreadID string `json:"thread_id,omitempty"`
 }
 
@@ -121,6 +122,7 @@ type DeliveryResult struct {
 	Success    bool           `json:"success"`
 	MessageIDs []string       `json:"message_ids"`
 	ChunksSent int            `json:"chunks_sent"`
+	TotalChars int            `json:"total_chars,omitempty"`
 	Error      *DeliveryError `json:"error,omitempty"`
 }
 
@@ -130,6 +132,7 @@ type DeliveryError struct {
 	Message      string `json:"message"`
 	RetryAfterMs int    `json:"retry_after_ms,omitempty"` // For rate_limited
 	Retry        bool   `json:"retry"`                    // Whether NEX should retry
+	Details      map[string]any `json:"details,omitempty"` // Optional channel-specific debugging
 }
 
 // --- Health ---

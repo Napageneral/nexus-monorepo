@@ -1,7 +1,7 @@
 # Outbound Adapter Interface
 
 **Status:** DESIGN COMPLETE  
-**Last Updated:** 2026-01-30
+**Last Updated:** 2026-02-18
 
 ---
 
@@ -46,12 +46,14 @@ What the channel supports (for agent context):
 ```typescript
 interface ChannelCapabilities {
   // Text limits
-  text_limit: number;            // Max chars per message
-  caption_limit?: number;        // Max chars for media caption
+  text_limit: number;                    // Max chars per message
+  caption_limit?: number;                // Max chars for media caption
   
   // Formatting
   supports_markdown: boolean;
   markdown_flavor?: 'standard' | 'discord' | 'telegram_html' | 'slack_mrkdwn';
+  supports_tables: boolean;              // Render or must convert?
+  supports_code_blocks: boolean;
   
   // Features
   supports_embeds: boolean;
@@ -59,11 +61,17 @@ interface ChannelCapabilities {
   supports_reactions: boolean;
   supports_polls: boolean;
   supports_buttons: boolean;
-  supports_ptt: boolean;         // Push-to-talk audio
   supports_edit: boolean;
   supports_delete: boolean;
+  supports_media: boolean;
+  supports_voice_notes: boolean;          // Native "voice note" / PTT-style messages
+
+  // Behavioral
+  supports_streaming_edit: boolean;       // Can "stream" by editing message
 }
 ```
+
+**Note:** Some older docs/channel specs use `supports_ptt`. Treat that as a deprecated alias of `supports_voice_notes`.
 
 ### Capabilities by Channel
 
@@ -113,17 +121,26 @@ interface DeliveryResult {
   success: boolean;
   message_ids: string[];         // Platform message IDs (one per chunk)
   chunks_sent: number;
-  total_chars: number;
+  total_chars?: number;          // Optional metrics field
   error?: DeliveryError;
 }
 
-type DeliveryError = 
-  | { type: 'rate_limited'; retry_after_ms: number }
-  | { type: 'permission_denied'; reason: string }
-  | { type: 'not_found'; target: string }
-  | { type: 'content_rejected'; reason: string }  // Too long, bad format
-  | { type: 'network'; message: string }
-  | { type: 'unknown'; message: string };
+interface DeliveryError {
+  // Machine-readable classification used by NEX retry/backoff policy.
+  type: 'rate_limited' | 'permission_denied' | 'not_found' | 'content_rejected' | 'network' | 'unknown';
+
+  // Human-readable message for logs/diagnostics.
+  message: string;
+
+  // Policy signal to NEX: whether a retry is appropriate.
+  retry: boolean;
+
+  // Optional: rate limit backoff.
+  retry_after_ms?: number;
+
+  // Optional: structured channel-specific debugging (never required).
+  details?: Record<string, unknown>;
+}
 ```
 
 ---
@@ -169,7 +186,7 @@ chunkText(content: string, options?: ChunkOptions): string[]
 ### Chunking Rules
 
 1. **Prefer natural breaks:** paragraphs, sentences, words
-2. **Preserve code blocks:** Don't split mid-fence
+2. **Preserve code blocks:** Don't split mid-fence. If a single fenced code block exceeds the limit, split by closing and reopening the fence between chunks.
 3. **First chunk gets reply:** Only first chunk uses `reply_to_id`
 4. **Add continuations:** Optional "..." at end/start
 

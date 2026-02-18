@@ -1,7 +1,7 @@
 # Cortex Integration Plan
 
-**Status:** PLANNING  
-**Last Updated:** 2026-02-09
+**Status:** IN PROGRESS  
+**Last Updated:** 2026-02-10
 
 ---
 
@@ -36,7 +36,7 @@ See `../../project-structure/LANGUAGE_DECISION.md` for the full rationale.
 | Package | NEX Role | Notes |
 |---------|----------|-------|
 | `internal/bus/` | Async job queue | Powers background analysis pipeline |
-| `internal/db/` | Cortex DB access | Per-agent `cortex/{agentId}.db` |
+| `internal/db/` | Cortex DB access | Shared `state/cortex/cortex.db` |
 | `internal/compute/` | Job execution engine | Parallel analysis, rate control, embeddings batching |
 | `internal/memory/` | Analysis pipeline | Entity extraction, relationship resolution, dedup |
 | `internal/search/` | Semantic search | Embeddings, similarity queries |
@@ -47,11 +47,10 @@ See `../../project-structure/LANGUAGE_DECISION.md` for the full rationale.
 
 ```
 ~/nexus/state/cortex/
-├── atlas.db          # Per-agent derived knowledge
-├── ...               # One DB per agent
+└── cortex.db         # Shared derived knowledge across agents
 ```
 
-Each `cortex/{agentId}.db` contains: episodes, facets, embeddings, analyses.
+`state/cortex/cortex.db` contains: episodes, facets, embeddings, analyses.
 
 Cortex also writes enrichments to `identity.db` (the Identity Ledger) when it discovers new relationships or identities with high confidence.
 
@@ -124,6 +123,45 @@ When Cortex is unavailable (not running, not yet implemented), `search()` return
 - Proactive context injection (Cortex suggests relevant context)
 - Identity enrichment pipeline (auto-discover relationships)
 - Cortex-informed routing (smart session forking)
+
+---
+
+## Repository Migration (mnemonic -> `nex/cortex`)
+
+This section tracks the concrete repository-level integration of the existing mnemonic codebase into the `nex` fork.
+
+### Canonical Target
+
+- **Location:** `~/nexus/home/projects/nexus/nex/cortex/`
+- **Go module:** `github.com/Napageneral/nex/cortex`
+- **CLI binary:** `cortex`
+- **Default config path:** `~/nexus/state/cortex/config.yaml`
+- **Default data path:** `~/nexus/state/cortex/cortex.db`
+
+### Integration Checklist
+
+| Step | Status | Notes |
+|------|--------|-------|
+| Copy mnemonic source into `nex/cortex/` | ✅ | Imported as baseline (without `.git`) |
+| Rewrite module/import paths to `github.com/Napageneral/nex/cortex` | ✅ | All Go imports updated |
+| Rename CLI entrypoint `cmd/mnemonic` -> `cmd/cortex` | ✅ | Makefile + goreleaser aligned |
+| Repoint default config/data paths to Nexus state tree | ✅ | `NEXUS_HOME` + `NEXUS_CORTEX_*` supported |
+| Remove copied build artifacts/binaries | ✅ | Keep repo source-only |
+| Add Cortex HTTP API for `CortexClient` | ⏳ | Needed for NEX stage-5 queries |
+| Supervise Cortex process from NEX daemon | ⏳ | Start/stop/health wiring pending |
+| Keep shared Cortex DB (`state/cortex/cortex.db`) | ✅ | Per-agent split removed from architecture |
+| Align mnemonic tables to Nexus ledger contracts | ⏳ | Events/Agents/Identity compatibility pass pending |
+
+### Environment Variables
+
+Canonical overrides:
+- `NEXUS_CORTEX_CONFIG_DIR`
+- `NEXUS_CORTEX_DATA_DIR`
+
+Compatibility fallbacks:
+- `CORTEX_CONFIG_DIR`, `CORTEX_DATA_DIR`
+- `MNEMONIC_CONFIG_DIR`, `MNEMONIC_DATA_DIR`
+- `COMMS_CONFIG_DIR`, `COMMS_DATA_DIR`
 
 ---
 

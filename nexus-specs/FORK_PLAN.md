@@ -20,7 +20,7 @@ Nexus is a personal AI ecosystem forked from **openclaw** (formerly moltbot/claw
 | **nex** | `~/nexus/home/projects/nexus/nex` | Nexus implementation (fresh fork) |
 | **nexus-specs** | `~/nexus/home/projects/nexus/nexus-specs` | Specifications (authoritative) |
 | **openclaw** | `~/nexus/home/projects/openclaw` | Upstream reference (read-only) |
-| **nexus-adapter-sdk-go** | `~/nexus/home/projects/nexus/nexus-adapter-sdk-go` | Go adapter SDK |
+| **nexus-adapter-sdks** | `~/nexus/home/projects/nexus/nexus-adapter-sdks` | Adapter SDK monorepo (Go + TypeScript) |
 
 ### Fork Baseline
 

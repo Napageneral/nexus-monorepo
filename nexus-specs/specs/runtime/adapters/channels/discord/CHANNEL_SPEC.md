@@ -18,7 +18,7 @@ const DISCORD_CAPABILITIES: ChannelCapabilities = {
   supports_reactions: true,
   supports_polls: false,         // Discord polls are different API
   supports_buttons: false,       // Requires bot interactions
-  supports_ptt: false,
+  supports_voice_notes: false,
 };
 ```
 
@@ -151,3 +151,4 @@ TBD: `discord-cli` or integrate with existing Discord bot setup.
 ## Related
 - `../upstream/OPENCLAW_OUTBOUND.md` — Full upstream details
 - `../ADAPTER_INTERFACES.md` — Interface definitions
+- `ONBOARDING.md` — Credential + account setup flow (credentials-first)

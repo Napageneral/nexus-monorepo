@@ -1,7 +1,7 @@
 # Smart Routing
 
 **Status:** TODO (Not Fully Integrated)  
-**Last Updated:** 2026-02-02
+**Last Updated:** 2026-02-16
 
 ---
 
@@ -10,6 +10,9 @@
 Smart routing uses Cortex to intelligently route messages to the best context, rather than explicit addressing.
 
 **This is a v2 feature.** Explicit routing (direct session/thread addressing) is v1.
+
+Fork targeting (`fromTurnId` / checkpoint routing) is **broker-owned** in v2 smart routing.  
+Managers in v1 only dispatch at the session layer (`target.session` or spawn-new).
 
 ---
 

@@ -1,7 +1,7 @@
 # NEX — Nexus Event Exchange
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-09
+**Last Updated:** 2026-02-12
 
 ---
 
@@ -76,10 +76,12 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │    │  telegram-bot          — external CLI process                         │    │
 │    │  clock (timer/cron)    — external CLI process                         │    │
 │    │  webhooks              — HTTP endpoint adapter                        │    │
-│    │  aix (IDE sessions)    — external CLI process                         │    │
+│    │  aix (IDE sessions)    — external import worker process               │    │
 │    │                                                                        │    │
-│    │  All adapters normalize to NexusEvent and pipe via JSONL stdout       │    │
-│    │  See: adapters/ADAPTER_SYSTEM.md                                      │    │
+│    │  Channel adapters normalize to NexusEvent and pipe via JSONL stdout   │    │
+│    │  AIX import adapter emits session import batches/chunks to the        │    │
+│    │  Session Import Service (not the receiveEvent pipeline)               │    │
+│    │  See: adapters/ADAPTER_SYSTEM.md, nex/SESSION_IMPORT_SERVICE.md       │    │
 │    │                                                                        │    │
 │    └────────────────────────────────────────────────────────────────────────┘    │
 │                                      │                                            │
@@ -195,7 +197,7 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │    │  Facet Store        ← Extracted structured data                       │    │
 │    │  Analysis Store     ← Insights, patterns                              │    │
 │    │                                                                        │    │
-│    │  Stored per-agent: ~/nexus/state/cortex/{agentId}.db                  │    │
+│    │  Stored at: ~/nexus/state/cortex/cortex.db (shared)                   │    │
 │    │  Transport TBD: HTTP API, Unix socket, or direct SQLite               │    │
 │    │                                                                        │    │
 │    └────────────────────────────────────────────────────────────────────────┘    │

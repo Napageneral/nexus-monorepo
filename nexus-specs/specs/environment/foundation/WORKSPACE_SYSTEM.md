@@ -1,595 +1,293 @@
 # Workspace System Specification
 
-**Status:** AUTHORITATIVE DOCUMENT  
-**Last Updated:** 2026-01-29
+**Status:** AUTHORITATIVE
+**Last Updated:** 2026-02-17
+
+**Canonical lifecycle spec:** `specs/environment/foundation/WORKSPACE_LIFECYCLE.md`
 
 ---
 
 ## Overview
 
-This document is the **authoritative specification** for the Nexus workspace system. It defines how initialization, onboarding, project structure, bootstrap files, and agent bindings work together.
+This is the canonical workspace contract for Nexus.
 
-**Subordinate specs must align with this document:**
-- `INIT_REFERENCE.md` — Init command details
-- `WORKSPACE_LAYOUT_REFERENCE.md` — Directory layout
-- `BOOTSTRAP_FILES_REFERENCE.md` — File templates
-- `harnesses/HARNESS_BINDINGS.md` — IDE/harness integrations
-- `BOOTSTRAP_ONBOARDING.md` — Bootstrap conversation flow
+All subordinate environment specs must align with this document:
+- `INIT_REFERENCE.md`
+- `WORKSPACE_LAYOUT_REFERENCE.md`
+- `BOOTSTRAP_FILES_REFERENCE.md`
+- `BOOTSTRAP_ONBOARDING.md`
 
----
-
-## The Workspace Lifecycle
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 1: nexus init                                                         │
-│ Creates everything — structure AND default config                           │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Directories:                          Files:                               │
-│  ~/nexus/                              ~/nexus/AGENTS.md                    │
-│  ~/nexus/skills/tools/                 ~/nexus/state/agents/BOOTSTRAP.md    │
-│  ~/nexus/skills/connectors/            ~/nexus/state/gateway/config.json    │
-│  ~/nexus/skills/guides/                ~/nexus/state/agents/config.json     │
-│  ~/nexus/state/                        ~/nexus/state/credentials/config.json│
-│  ~/nexus/state/agents/                 ~/nexus/state/nexus.db (System of Record)
-│  ~/nexus/state/user/                                                        │
-│  ~/nexus/state/credentials/                                                 │
-│  ~/nexus/state/gateway/                                                     │
-│  ~/nexus/state/cortex/                                                      │
-│  ~/nexus/home/                                                              │
-│                                                                             │
-│  Output: "Nexus initialized! Open ~/nexus/ in your AI assistant to begin." │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 2: User opens ~/nexus/ in Cursor (or other agent harness)             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Agent reads AGENTS.md → sees it's a Nexus workspace                        │
-│  Notices: No state/agents/*/IDENTITY.md exists (only BOOTSTRAP.md)          │
-│  Action: Agent reads BOOTSTRAP.md and starts the conversation               │
-│                                                                             │
-│  THIS IS AN AGENT CONVERSATION — not a CLI wizard!                          │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 3: BOOTSTRAP Conversation (Agent-driven)                              │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Agent says: "Hey. I just came online. Who am I? Who are you?"              │
-│                                                                             │
-│  Through conversation, they establish:                                      │
-│  • Agent name, emoji, creature, vibe                                        │
-│  • User name, timezone, email, preferences                                  │
-│                                                                             │
-│  Agent writes files:                                                        │
-│  • state/agents/{name}/IDENTITY.md    ← Directory named from conversation   │
-│  • state/agents/{name}/SOUL.md                                              │
-│  • state/user/IDENTITY.md                                                   │
-│                                                                             │
-│  Agent runs: nexus status → sees current capabilities                       │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 4: Silent Detection (Agent-driven, after bootstrap)                   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Agent runs: nexus credential scan --deep                                   │
-│  → Finds env vars (ANTHROPIC_API_KEY, GITHUB_TOKEN, etc.)                   │
-│  → Imports Claude CLI / Codex CLI credentials                               │
-│                                                                             │
-│  Agent runs: nexus bindings detect --json (uses AIX internally)            │
-│  → Detects which agent harnesses user has (Cursor, Claude Code, etc.)       │
-│  → Detects which ones they use most frequently                              │
-│                                                                             │
-│  Agent detects: OS platform                                                 │
-│  → Suggests relevant skill packs (macos-essentials, etc.)                   │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 5: Agent Bindings (Auto-created for top 2 harnesses)                  │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Agent runs: nexus bindings detect --json                                   │
-│  → Returns harnesses ranked by AIX session count                            │
-│  → Identifies supported harnesses (Cursor, Claude Code, OpenCode)           │
-│  → Codex is NOT supported (no lifecycle hooks)                              │
-│                                                                             │
-│  Agent creates bindings for top 2 supported harnesses:                      │
-│  → nexus bindings create cursor                                             │
-│  → nexus bindings create claude-code                                        │
-│                                                                             │
-│  Agent: "I see you use Cursor and Claude Code most. I've set up bindings    │
-│          so they connect to Nexus. Want me to set up others?"               │
-│                                                                             │
-│  Creates:                                                                   │
-│  • Cursor: .cursor/hooks.json, .cursor/hooks/nexus-session-start.js         │
-│  • Claude Code: CLAUDE.md, .claude/settings.json                            │
-│  • OpenCode: .opencode/plugins/nexus-bootstrap.ts                           │
-│                                                                             │
-│  User must open ~/nexus/ as workspace root for bindings to work.            │
-│                                                                             │
-│  If AIX not available: Agent prompts user to install AIX or manually        │
-│  specify which harnesses they use.                                          │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 6: Access Planes / Follow-up Tasks (Agent suggests)                   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Agent: "Here's what else we could set up when you're ready:"               │
-│                                                                             │
-│  • Channels (WhatsApp, Telegram, Discord) → handled by gateway plugin       │
-│  • Skill packs → nexus skills install macos-essentials                       │
-│  • Cloud sync → nexus-cloud setup                                           │
-│                                                                             │
-│  These are follow-up tasks, not part of core onboarding.                    │
-│  Channel setup is documented in specs/agent-system/GATEWAY.md               │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+This contract is **big-bang**:
+- no backward compatibility requirements
+- no legacy aliases as a spec obligation
 
 ---
 
-## 1. Project Structure
+## Contract Summary
 
-### Directory Layout
-
-```
-~/nexus/                              # NEXUS_ROOT
-├── AGENTS.md                         # System behavior (always present)
-├── HEARTBEAT.md                      # Heartbeat checklist (optional, user-created)
-│
-├── skills/                           # Skill definitions
-│   ├── tools/{name}/                 # CLI tool wrappers (gog, tmux, etc.)
-│   ├── connectors/{name}/            # Auth connectors (google-oauth, etc.)
-│   └── guides/{name}/                # Pure documentation (filesystem, etc.)
-│
-├── state/                            # All runtime state (visible, not hidden)
-│   ├── nexus.db                      # System of Record (SQLite)
-│   │                                 # Contains: Events, Agents, Identity, Nexus ledgers
-│   │                                 # Sessions/turns/messages stored here, not files
-│   │
-│   ├── cortex/                       # Derived data layer
-│   │   └── {agentId}.db              # Per-agent embeddings, episodes, analyses
-│   │
-│   ├── agents/
-│   │   ├── BOOTSTRAP.md              # First-run ritual template (permanent)
-│   │   ├── config.json               # Agent defaults config
-│   │   └── {agent-name}/             # Per-agent identity
-│   │       ├── IDENTITY.md
-│   │       └── SOUL.md
-│   │
-│   ├── user/
-│   │   └── IDENTITY.md               # User profile
-│   │
-│   ├── credentials/
-│   │   ├── config.json               # Credential system config
-│   │   ├── index.json                # Fast lookup index
-│   │   └── {service}/                # Per-service credentials
-│   │       └── {account}.json
-│   │
-│   └── gateway/
-│       └── config.json               # Gateway config
-│
-├── home/                             # USER'S PERSONAL SPACE
-│   └── (user content, cloud-synced)
-│
-├── .cursor/                          # Cursor binding (if configured)
-│   ├── hooks.json
-│   └── hooks/
-│       └── nexus-session-start.js
-│
-├── .claude/                          # Claude Code binding (if configured)
-│   └── settings.json
-│
-└── .opencode/                        # OpenCode binding (if configured)
-    └── plugins/
-        └── nexus-bootstrap.ts
-```
-
-### Key Design Decisions
-
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| State visibility | `state/` not hidden | Transparency, discoverability |
-| Config split | Per-domain config files | Clear separation of concerns |
-| User space | `home/` directory | Clear separation from system |
-| Skills location | `skills/` at root | First-class, easy to browse |
-| Sessions in DB | `nexus.db` (Agents Ledger) | Structured queries, no file sprawl |
-| Cortex per-agent | `cortex/{agentId}.db` | Isolation, embeddings stay local |
-
-### Environment Variables
-
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `NEXUS_ROOT` | Root directory | `~/nexus` |
-| `NEXUS_STATE_DIR` | State directory | `~/nexus/state` |
-| `NEXUS_HOME` | User home directory | `~/nexus/home` |
-| `NEXUS_PROFILE` | Named profile | (none) |
-
-When `NEXUS_PROFILE=foo`, root becomes `~/nexus-foo/`.
-
-### Data Layer Integration
-
-The workspace includes the **System of Record** and **Derived Data Layer** from the runtime architecture:
-
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| **System of Record** | `state/nexus.db` | SQLite with four ledgers |
-| **Cortex** | `state/cortex/{agentId}.db` | Per-agent derived data |
-
-**System of Record (nexus.db)** contains four ledgers:
-
-| Ledger | What It Stores |
-|--------|----------------|
-| **Events Ledger** | Raw incoming events from adapters |
-| **Agents Ledger** | Sessions, turns, messages, tool calls |
-| **Identity Graph** | Entities, aliases, memberships |
-| **Nexus Ledger** | Pipeline traces for observability |
-
-**Cortex** is the derived layer — built from ledger data:
-- **Episodes:** Summarized chunks for context retrieval
-- **Facets:** Structured observations about entities
-- **Embeddings:** Vector search over conversations
-
-> **Key insight:** Sessions are NOT stored as files. They're written to the Agents Ledger in `nexus.db`, enabling structured queries and avoiding file sprawl.
-
-See `specs/data/` for full ledger and cortex specifications.
+| Area | Canonical Contract |
+|------|--------------------|
+| State data | Split ledger DBs in `state/data/*.db` |
+| Cortex | Shared DB at `state/cortex/cortex.db` |
+| Config | Single file at `state/config.json` |
+| CLI boundary | `nexus status` for orientation, `nexus runtime ...` for control-plane |
+| Terminology | Use `runtime` / `control-plane`; do not use `gateway` as canonical product term |
 
 ---
 
-## 2. Init Command
+## Workspace Lifecycle
 
-### Behavior
+### Phase 1: `nexus init`
+
+`nexus init` creates directory structure, databases, bootstrap files, and a seed config with a generated auth token. All DBs are created eagerly with current schemas applied. Init is idempotent.
+
+### Phase 2: Agent bootstrap conversation
+
+When the user opens `~/nexus/` in an agent harness, the agent reads:
+- `AGENTS.md`
+- `state/agents/BOOTSTRAP.md`
+
+If no agent identity exists (no subdirectories in `state/agents/`), the agent runs the bootstrap conversation and writes identity files. `BOOTSTRAP.md` is permanent and never deleted -- it serves as a reusable template for creating new agent personas at any time.
+
+### Phase 3: Silent detection and setup
+
+After identity is established, the agent can run capability discovery:
+- credential scan/import
+- harness detection
+- optional follow-up setup (skills, cloud, channels)
+
+### Phase 4: Runtime operation
+
+The runtime/control-plane serves health, automation, hooks, channel delivery, and agent execution operations. Runtime controls live under `nexus runtime ...`.
+
+---
+
+## Canonical Layout
+
+```text
+{workspace_root}/
+├── AGENTS.md                          # Workspace behavior contract
+├── skills/                            # Flat skills dir (metadata tracks type internally)
+├── home/                              # User personal workspace
+└── state/
+    ├── data/
+    │   ├── events.db                  # Events ledger
+    │   ├── agents.db                  # Agents ledger
+    │   ├── identity.db                # Identity mappings
+    │   └── nexus.db                   # Request traces + automations table
+    ├── cortex/
+    │   └── cortex.db                  # Cortex memory store
+    ├── agents/
+    │   ├── BOOTSTRAP.md               # Permanent onboarding template
+    │   └── {name}/                    # Agent persona directories
+    │       ├── IDENTITY.md
+    │       └── SOUL.md
+    ├── user/
+    │   └── IDENTITY.md                # User profile
+    ├── credentials/                   # Credential index + pointers
+    ├── workspace/                     # Automation workspaces (meeseeks pattern)
+    │   ├── memory-reader/             # Memory reader meeseeks workspace
+    │   └── memory-writer/             # Memory writer meeseeks workspace
+    └── config.json                    # Runtime config with auth token
+```
+
+Optional workspace-local harness artifacts may exist (for example `.cursor/`, `.claude/`, `.opencode/`) when bindings are enabled.
+
+---
+
+## Directory Concepts
+
+Two directory structures serve different purposes. They are hierarchical -- personas sit above workspaces.
+
+### Agent Personas (`state/agents/{name}/`)
+
+Agent personas define **who the agent is**. Identity, personality, values, boundaries.
+
+```
+state/agents/
+├── BOOTSTRAP.md                       # Permanent onboarding template
+└── echo/                              # Agent persona "Echo"
+    ├── IDENTITY.md                    # Who I am, what I do
+    └── SOUL.md                        # Personality, boundaries, values
+```
+
+- Created during onboarding conversation
+- One directory per named agent persona (Echo, Atlas, etc.)
+- Applied as the "who am I" layer during context assembly
+- Read into the system prompt as `## Agent Identity` and `## Agent Soul`
+
+### Automation Workspaces (`state/workspace/{name}/`)
+
+Automation workspaces are **accumulated knowledge stores** for a specific function or role. They are the working directories for meeseeks-pattern automations.
+
+```
+state/workspace/
+├── memory-reader/                     # Memory search specialist
+│   ├── ROLE.md                        # Role instructions
+│   ├── SKILLS.md                      # Accumulated skills (self-improving)
+│   ├── PATTERNS.md                    # Common patterns (self-improving)
+│   ├── ERRORS.md                      # Known failure modes (self-improving)
+│   └── skills/                        # Skill files, scripts, schemas
+└── memory-writer/                     # Memory extraction specialist
+    └── ...
+```
+
+- Created by the automation seeder at runtime startup
+- One directory per automation that has `workspace_dir` set
+- NOT for agent persona files -- persona files live in `state/agents/`
+
+### The Relationship
+
+Personas are hierarchical ABOVE workspaces. Echo (a persona) might be the identity applied to a memory-reader meeseeks execution. The persona says "who I am," the workspace says "what I know about this job."
+
+```
+Agent Persona (state/agents/echo/)
+  = "I am Echo, a helpful assistant who values precision"
+
+Automation Workspace (state/workspace/memory-reader/)
+  = "I know how to search cortex, these queries work well, these patterns fail"
+
+During execution:
+  system_prompt = persona.IDENTITY + persona.SOUL + workspace.ROLE + workspace.SKILLS
+```
+
+---
+
+## Data Layer Integration
+
+### System of Record: `state/data/*.db`
+
+The System of Record is split into ledger databases:
+- `events.db` for inbound/outbound event records
+- `agents.db` for sessions, turns, tool calls, and agent interaction state
+- `identity.db` for entities, aliases, membership, and identity graph operations
+- `nexus.db` for runtime traces, control-plane metadata, and nexus-level runtime data (includes automations table)
+
+All DBs are created eagerly by `nexus init` with current schemas applied.
+
+### Derived Layer: `state/cortex/cortex.db`
+
+Cortex is a shared derived store across all agents.
+
+It captures artifacts like:
+- episodes
+- facets
+- embeddings
+- analyses
+
+Per-agent Cortex DB files are not canonical.
+
+---
+
+## Init Contract
+
+### Command
 
 ```bash
 nexus init [--workspace <path>]
 ```
 
-**Creates everything.** Structure AND default config files.
+### Required directories
 
-### What Gets Created
+- `{workspace_root}/skills/`
+- `{workspace_root}/state/data/`
+- `{workspace_root}/state/cortex/`
+- `{workspace_root}/state/agents/`
+- `{workspace_root}/state/user/`
+- `{workspace_root}/state/credentials/`
+- `{workspace_root}/state/workspace/`
+- `{workspace_root}/home/`
 
-**Directories:**
-- `~/nexus/`
-- `~/nexus/skills/tools/`
-- `~/nexus/skills/connectors/`
-- `~/nexus/skills/guides/`
-- `~/nexus/state/`
-- `~/nexus/state/agents/`
-- `~/nexus/state/user/`
-- `~/nexus/state/credentials/`
-- `~/nexus/state/gateway/`
-- `~/nexus/state/cortex/`
-- `~/nexus/home/`
+### Required files
 
-**Files:**
-- `~/nexus/AGENTS.md` (from template)
-- `~/nexus/state/agents/BOOTSTRAP.md` (from template)
-- `~/nexus/state/agents/config.json` (default agent config)
-- `~/nexus/state/credentials/config.json` (default credential config)
-- `~/nexus/state/gateway/config.json` (default gateway config)
+- `{workspace_root}/AGENTS.md`
+- `{workspace_root}/state/agents/BOOTSTRAP.md`
+- `{workspace_root}/state/config.json`
+- `{workspace_root}/state/data/events.db` (with schema applied)
+- `{workspace_root}/state/data/agents.db` (with schema applied)
+- `{workspace_root}/state/data/identity.db` (with schema applied)
+- `{workspace_root}/state/data/nexus.db` (with schema applied)
+- `{workspace_root}/state/cortex/cortex.db` (with schema applied)
 
-### Default Config Content
+### Config shape
 
-**`state/agents/config.json`:**
-```json
-{
-  "defaults": {
-    "model": "claude-sonnet-4-20250514"
-  }
-}
-```
+`state/config.json` is a single namespaced document. Core domains:
+- `agent`
+- `credentials`
+- `runtime`
+- `hooks`
+- `automation`
+- `acl`
+- `channels`
+- `cortex`
 
-**`state/credentials/config.json`:**
-```json
-{
-  "defaultStorage": "keychain",
-  "syncOnStatus": true,
-  "syncTtlMinutes": 15,
-  "rotation": {
-    "enabled": ["anthropic", "openai", "gemini", "openrouter", "groq"]
-  }
-}
-```
+There is no `runtime.mode` field. Local vs remote is a deployment concern -- the runtime infers local mode from `bind: loopback`.
 
-**`state/gateway/config.json`:**
-```json
-{
-  "port": 18789,
-  "bind": "loopback",
-  "auth": {
-    "mode": "token"
-  },
-  "credentials": {
-    "level": 1,
-    "blocked": []
-  }
-}
-```
+### Idempotency
 
-### Idempotent
-
-Safe to run multiple times:
-- Creates directories only if they don't exist
-- Does not overwrite existing files
-- Reports what was created vs already present
+`nexus init` must be safe to run repeatedly:
+- create missing paths and files
+- do not overwrite existing user data unless explicitly requested
+- do not recreate DB files that already exist
 
 ---
 
-## 3. Bootstrap Files
+## Onboarding Contract
 
-### Files Created by Init
+Onboarding is an agent conversation, not a CLI questionnaire.
 
-| File | Location | Template |
-|------|----------|----------|
-| `AGENTS.md` | `~/nexus/AGENTS.md` | `reference/AGENTS.md` |
-| `BOOTSTRAP.md` | `state/agents/BOOTSTRAP.md` | `reference/BOOTSTRAP.md` |
+The conversation must establish:
+- agent identity (`state/agents/{name}/IDENTITY.md`)
+- agent behavior (`state/agents/{name}/SOUL.md`)
+- user profile (`state/user/IDENTITY.md`)
 
-### Files Created by Agent During Onboarding
+Agent directory naming comes from the conversation outcome, normalized to filesystem-safe format.
 
-| File | Location | Template |
-|------|----------|----------|
-| Agent IDENTITY | `state/agents/{name}/IDENTITY.md` | `reference/IDENTITY-agent.md` |
-| Agent SOUL | `state/agents/{name}/SOUL.md` | `reference/SOUL.md` |
-| User IDENTITY | `state/user/IDENTITY.md` | `reference/IDENTITY-user.md` |
-
-### Agent Directory Naming
-
-The agent directory name comes from the **bootstrap conversation**, not a CLI flag.
-
-- User says: "Call me Atlas" → Directory: `state/agents/atlas/`
-- Lowercase, spaces replaced with hyphens
-- Never create `agents/default/`
-- The `--agent` flag exists only for internal/testing purposes
-
-### BOOTSTRAP.md Handling
-
-1. Lives permanently at `state/agents/BOOTSTRAP.md`
-2. Read by agent when no `state/agents/*/IDENTITY.md` exists
-3. NOT deleted after onboarding (kept for creating additional agents)
+`BOOTSTRAP.md` is permanent. It is never deleted after onboarding. It serves as the reusable template for creating new agent personas at any time.
 
 ---
 
-## 4. Onboarding Flow
+## Runtime / Control-Plane Contract
 
-### Key Principle
+### Grammar boundary
 
-**Onboarding is an agent conversation, not a CLI wizard.**
+- `nexus status`: orientation and capability summary
+- `nexus runtime ...`: runtime/control-plane operations
 
-The user opens `~/nexus/` in their agent harness (Cursor, Claude Code, etc.). The agent reads `AGENTS.md`, detects no identity exists, reads `BOOTSTRAP.md`, and starts the conversation.
+### Canonical runtime surfaces
 
-### Sequence
+Runtime command surfaces include:
+- process/service control
+- health/status/probe
+- method invocation and message routing controls
+- event wake and operational diagnostics
 
-1. **Agent reads BOOTSTRAP.md** — Sees the "Hello, World" ritual
-2. **Conversation** — Agent and user establish identity together
-3. **Agent writes files** — IDENTITY.md, SOUL.md, user IDENTITY.md
-4. **Silent detection** — Agent scans for credentials, harnesses, OS
-5. **Auto-create bindings** — Top 2 harnesses get bindings automatically
-6. **Suggest follow-ups** — Channels, skill packs, cloud sync
-
-### Detection Phase
-
-After establishing identity, the agent:
-
-1. **Credential scan:** `nexus credential scan --deep`
-   - Discovers env vars (ANTHROPIC_API_KEY, etc.)
-   - Imports Claude CLI / Codex CLI credentials
-   - See `../capabilities/credentials/CREDENTIAL_SYSTEM.md` for details
-
-2. **Harness detection:** Uses `aix` skill/tool
-   - Detects installed agent harnesses (Cursor, Claude Code, Codex, etc.)
-   - Ranks by usage frequency
-   - Creates bindings for top 2 automatically
-
-3. **OS detection:** Platform-specific suggestions
-   - macOS → suggest macos-essentials skill pack
-   - Linux → suggest linux-essentials skill pack
-
-### What Is NOT Asked
-
-Configuration is deferred — use `nexus configure` later:
-
-| Aspect | Default | Configure Later |
-|--------|---------|-----------------|
-| Gateway port | 18789 | `nexus configure gateway.port` |
-| Gateway bind | loopback | `nexus configure gateway.bind` |
-| Model | claude-sonnet-4-20250514 | `nexus configure agents.defaults.model` |
-| Credential storage | keychain | `nexus configure credentials.defaultStorage` |
+`gateway` naming is non-canonical in the spec contract.
 
 ---
 
-## 5. Agent Bindings
+## Relationship to Other Specs
 
-### Key Principle
-
-**Nexus is the source of truth. Bindings point to Nexus.**
-
-Users must open `~/nexus/` as their workspace root for bindings to work.
-
-### Supported Harnesses
-
-| Harness | Command | Auto-Created | Support |
-|---------|---------|--------------|---------|
-| **Cursor** | `nexus bindings create cursor` | ✅ If top 2 | ✅ Full |
-| **Claude Code** | `nexus bindings create claude-code` | ✅ If top 2 | ✅ Full |
-| **OpenCode** | `nexus bindings create opencode` | ✅ If top 2 | ✅ Full |
-| **Codex** | N/A | ❌ Never | ⛔ Not supported |
-
-> **Codex:** Not supported due to lack of lifecycle hooks. Cannot inject or refresh context.
-
-### CLI Commands
-
-```bash
-nexus bindings detect                # Detect harnesses via AIX
-nexus bindings list                  # Show configured bindings
-nexus bindings create cursor         # Create Cursor binding
-nexus bindings create claude-code    # Create Claude Code binding
-nexus bindings create opencode       # Create OpenCode binding
-nexus bindings verify                # Verify bindings are correct
-nexus bindings refresh               # Regenerate all bindings
-nexus bindings remove cursor         # Remove binding
-```
-
-### Harness Detection
-
-Uses AIX to detect which harnesses the user has, ranked by usage:
-
-```bash
-nexus bindings detect --json
-```
-
-**Requires:** AIX installed (`brew install Napageneral/tap/aix`)
-
-No fallback without AIX — detection requires accurate session data.
-
-### Cursor Binding
-
-**Creates:**
-```
-~/nexus/
-├── AGENTS.md                        # Instructions (already exists)
-└── .cursor/
-    ├── hooks.json                   # Hook config (startup + compact)
-    └── hooks/
-        └── nexus-session-start.js   # Context injection script
-```
-
-**How it works:**
-
-1. User opens `~/nexus/` in Cursor
-2. Session start hook runs `nexus-session-start.js`
-3. Script runs `nexus status --json`, reads identity files
-4. Context injected via `additional_context`
-5. Hook also runs after compaction (re-injects context)
-
-### Claude Code Binding
-
-**Creates:**
-```
-~/nexus/
-├── CLAUDE.md                        # Instructions (identical to AGENTS.md)
-└── .claude/
-    └── settings.json                # Hook config (reuses Cursor script)
-```
-
-### OpenCode Binding
-
-**Creates:**
-```
-~/nexus/
-├── AGENTS.md                        # Instructions (already exists)
-└── .opencode/
-    └── plugins/
-        └── nexus-bootstrap.ts       # Native TypeScript plugin
-```
-
-**Key advantage:** OpenCode injects context on every LLM call (not just session start).
-
-### Context Injection
-
-All supported bindings inject:
-
-| Context | Cursor | Claude Code | OpenCode |
-|---------|--------|-------------|----------|
-| Instructions | `AGENTS.md` | `CLAUDE.md` | `AGENTS.md` |
-| Agent identity | Hook | Hook | Plugin |
-| User identity | Hook | Hook | Plugin |
-| Daily memory | Hook | Hook | Plugin |
-| Post-compaction refresh | ✅ Yes | ✅ Yes | ✅ Yes |
-
-**Full specification:** See `harnesses/HARNESS_BINDINGS.md`
+| Spec | Role |
+|------|------|
+| `WORKSPACE_LIFECYCLE.md` | Full lifecycle from init through operational state |
+| `INIT_REFERENCE.md` | Init behavior and file creation details |
+| `WORKSPACE_LAYOUT_REFERENCE.md` | Directory and file path reference |
+| `BOOTSTRAP_FILES_REFERENCE.md` | Template/file inventory |
+| `BOOTSTRAP_ONBOARDING.md` | Conversation flow contract |
+| `RUNTIME_REALIGNMENT_DECISIONS.md` | Locked architectural decisions |
 
 ---
 
-## 6. Templates Reference
+## Acceptance Checklist
 
-### Bootstrap Templates
-
-Located in `bootstrap-templates/`:
-
-| Template | Purpose |
-|----------|---------|
-| `AGENTS.md` | System behavior document |
-| `BOOTSTRAP.md` | First-run ritual |
-| `IDENTITY-agent.md` | Agent identity template |
-| `IDENTITY-user.md` | User identity template |
-| `SOUL.md` | Agent persona template |
-
-> **Note:** See `BOOTSTRAP_FILES_REFERENCE.md` for detailed template purposes and usage.
-
-### Harness Binding Templates
-
-Located in `harnesses/templates/`:
-
-| Harness | Files |
-|---------|-------|
-| Cursor | `cursor/hooks.json`, `cursor/nexus-session-start.js` |
-| Claude Code | `claude-code/settings.json` |
-| OpenCode | `opencode/nexus-bootstrap.ts` |
-| Codex | `codex/README.md` (limitations doc) |
-
----
-
-## 7. Config Structure
-
-### Split Config Philosophy
-
-Config is split by domain, not unified in one file:
-
-| Config | Location | Purpose |
-|--------|----------|---------|
-| Agent defaults | `state/agents/config.json` | Model, behavior settings |
-| Credential system | `state/credentials/config.json` | Storage, rotation, sync |
-| Gateway | `state/gateway/config.json` | Port, bind, auth, access control |
-
-### Why Split?
-
-- **Clarity:** Each domain's config is self-contained
-- **Permissions:** Different consumers may need different access
-- **Modularity:** Gateway is optional; its config shouldn't pollute core
-- **Discoverability:** Easy to find config for specific subsystem
-
----
-
-## 8. Relationship to Other Specs
-
-| Spec | Relationship |
-|------|--------------|
-| `../interface/cli/` | CLI commands |
-| `../capabilities/` | Skills, credentials, capability mapping |
-| `../../data/ledgers/` | System of Record (nexus.db schema) |
-| `../../data/cortex/` | Derived layer (embeddings, episodes) |
-| `../../runtime/` | NEX, adapters, broker, hooks |
-| `../OVERVIEW.md` | Environment overview |
-
----
-
-## 9. Open Work
-
-| Item | Status | Notes |
-|------|--------|-------|
-| Harness bindings | ✅ COMPLETE | See `harnesses/HARNESS_BINDINGS.md` |
-| AIX integration | ✅ COMPLETE | `nexus bindings detect` |
-| Cursor binding | ✅ COMPLETE | Hooks + script templates |
-| Claude Code binding | ✅ COMPLETE | Settings + shared script |
-| OpenCode binding | ✅ COMPLETE | Native TypeScript plugin |
-| Codex binding | ⛔ NOT SUPPORTED | No lifecycle hooks |
-| Nexus bot bindings | NEEDS SPEC | How gateway agent gets context |
-| CLI implementation | TODO | Implement `nexus bindings` commands |
-
----
-
-*This document is authoritative. Update subordinate specs to align with this.*
+This spec is considered aligned when all are true:
+- subordinate foundation docs point to `state/config.json` only (not `state/nexus/config.json`)
+- subordinate foundation docs describe split ledgers under `state/data/*.db`
+- subordinate foundation docs describe shared `state/cortex/cortex.db`
+- foundation docs use runtime/control-plane terminology instead of gateway terminology
+- `skills/` is described as flat (no `tools/`, `connectors/`, `guides/` subdirectories)
+- DBs are described as eagerly created by init (not lazily created at runtime)
+- `BOOTSTRAP.md` is described as permanent (never deleted)
+- `state/workspace/` is described as automation workspaces only (not agent persona files)
+- agent personas (`state/agents/{name}/`) and automation workspaces (`state/workspace/{name}/`) are clearly distinguished

@@ -18,7 +18,7 @@ The Adapter SDK provides shared infrastructure for building Nexus adapters. Inst
 | SDK | Module | Adapters |
 |-----|--------|----------|
 | **Go** | `github.com/nexus-project/adapter-sdk-go` | eve, gog, AIX, bird, calendar (5) |
-| **TypeScript** | `@nexus/adapter-sdk` (future) | Discord, WhatsApp, Slack, Voice (4) |
+| **TypeScript** | `@nexus/adapter-sdk` (see `ADAPTER_SDK_TYPESCRIPT.md`) | Discord, WhatsApp, Slack, Voice (4) |
 
 Each SDK is a **separate repository** — Go modules and npm packages have different tooling, CI, and release cycles. The shared contract (NexusEvent schema, AdapterInfo, DeliveryResult) is defined in the spec docs and implemented idiomatically in each language.
 
@@ -66,7 +66,7 @@ The adapter binary exposes a fixed set of subcommands matching the adapter proto
 ```
 <binary> info                                           → JSON stdout
 <binary> monitor --account <id> --format jsonl          → JSONL stdout (long-running)
-<binary> send --account <id> --to <target> --text "..." → JSON stdout
+<binary> send --account <id> --to <target> [--thread <thread_id>] [--reply-to <reply_to_id>] --text "..." → JSON stdout
 <binary> backfill --account <id> --since <date> --format jsonl → JSONL stdout (terminates)
 <binary> health --account <id>                          → JSON stdout
 <binary> accounts list                                  → JSON stdout
@@ -102,7 +102,7 @@ nexadapter.PollMonitor(nexadapter.PollConfig{
 
 ### Text Chunking
 
-Smart text splitting for `send` that respects platform character limits. Splits at natural boundaries: paragraph breaks > line breaks > sentence ends > word boundaries. Never breaks mid-word.
+Smart text splitting for `send` that respects platform character limits. Splits at natural boundaries: paragraph breaks > line breaks > sentence ends > word boundaries. Preserves fenced code blocks (does not split mid-fence; closes and reopens fences when a single block exceeds the limit).
 
 ```go
 chunks := nexadapter.ChunkText(longMessage, 2000) // Discord's limit
@@ -210,13 +210,14 @@ For now: clone a reference adapter (like eve-adapter) and modify.
 ## Repo Structure
 
 ```
-nexus-adapter-sdk-go/           # Go SDK library (go module)
-nexus-adapter-sdk-ts/           # TypeScript SDK package (future)
+nexus-adapter-sdks/
+├── nexus-adapter-sdk-go/       # Go SDK library (go module)
+└── nexus-adapter-sdk-ts/       # TypeScript SDK package (npm)
 
 # Each adapter is its own repo, imports SDK as dependency:
 eve/                            # go get github.com/nexus-project/adapter-sdk-go
 gog/                            # go get github.com/nexus-project/adapter-sdk-go
-discord-adapter/                # npm install @nexus/adapter-sdk
+discord-adapter/                # npm install @nexus-project/adapter-sdk-ts
 ```
 
 SDK updates flow via normal dependency management — bump version in `go.mod` or `package.json`.

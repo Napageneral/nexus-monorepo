@@ -1,0 +1,27 @@
+{
+  "channel": "discord",
+  "name": "discord-adapter",
+  "version": "0.1.0",
+  "supports": ["monitor", "send", "stream", "health", "accounts"],
+  "credential_service": "discord",
+  "multi_account": true,
+  "channel_capabilities": {
+    "text_limit": 2000,
+    "caption_limit": 2000,
+    "supports_markdown": true,
+    "markdown_flavor": "discord",
+    "supports_tables": false,
+    "supports_code_blocks": true,
+    "supports_embeds": true,
+    "supports_threads": true,
+    "supports_reactions": true,
+    "supports_polls": false,
+    "supports_buttons": false,
+    "supports_edit": true,
+    "supports_delete": true,
+    "supports_media": true,
+    "supports_voice_notes": false,
+    "supports_streaming_edit": true
+  }
+}
+

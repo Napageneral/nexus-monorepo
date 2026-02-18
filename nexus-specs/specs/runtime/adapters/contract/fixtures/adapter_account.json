@@ -1,0 +1,7 @@
+{
+  "id": "default",
+  "display_name": "Default Account",
+  "credential_ref": "discord/echo-bot",
+  "status": "ready"
+}
+

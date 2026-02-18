@@ -378,7 +378,6 @@ type StreamEvent =
 interface BrokerStreamHandle {
   onEvent(callback: (event: StreamEvent) => void): void;
   abort(): void;
-  steer(message: string): boolean;
   isStreaming(): boolean;
   isCompacting(): boolean;
 }

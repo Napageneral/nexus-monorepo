@@ -1,0 +1,30 @@
+{
+  "name": "@nexus-project/adapter-sdk-ts",
+  "version": "0.0.0",
+  "description": "TypeScript SDK for Nexus external adapter CLI protocol",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "build": "tsdown && tsc -p tsconfig.dts.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "tsdown": "^0.20.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

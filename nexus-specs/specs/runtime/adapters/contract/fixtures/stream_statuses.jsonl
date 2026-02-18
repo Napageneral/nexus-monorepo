@@ -1,0 +1,4 @@
+{"type":"message_created","messageId":"abc123"}
+{"type":"message_updated","messageId":"abc123","chars":12}
+{"type":"delivery_complete","messageIds":["abc123"]}
+

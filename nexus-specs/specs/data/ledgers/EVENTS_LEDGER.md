@@ -3,6 +3,11 @@
 **Status:** DESIGN COMPLETE  
 **Last Updated:** 2026-02-02
 
+> Note: For the current consolidation target (threads, normalized attachments,
+> event state/tags, reply links, and document index tables in `events.db`),
+> use `EVENTS_LEDGER_CONSOLIDATED_TARGET_STATE.md` as the implementation
+> contract.
+
 ---
 
 ## Overview

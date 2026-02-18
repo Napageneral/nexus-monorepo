@@ -19,7 +19,7 @@ const TELEGRAM_CAPABILITIES: ChannelCapabilities = {
   supports_reactions: true,
   supports_polls: true,
   supports_buttons: true,        // Inline keyboards
-  supports_ptt: true,            // Voice messages
+  supports_voice_notes: true,    // Voice messages
 };
 ```
 
@@ -214,3 +214,4 @@ TBD: `telegram-cli` wrapper or Grammy-based integration. Need to decide:
 ## Related
 - `../upstream/CHANNEL_INVENTORY.md` — Full upstream details
 - `../ADAPTER_INTERFACES.md` — Interface definitions
+- `ONBOARDING.md` — Credential + account setup flow (credentials-first)

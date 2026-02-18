@@ -1,0 +1,18 @@
+{
+  "event_id": "discord:1234567890",
+  "timestamp": 1707235200000,
+  "content": "Hello world",
+  "content_type": "text",
+  "channel": "discord",
+  "account_id": "echo-bot",
+  "sender_id": "user123",
+  "sender_name": "alice",
+  "peer_id": "chan456",
+  "peer_kind": "group",
+  "thread_id": "thread789",
+  "reply_to_id": "msg000",
+  "metadata": {
+    "guild_id": "guild111"
+  }
+}
+

@@ -1,243 +1,162 @@
-# Bootstrap Files Specification
+# Bootstrap Files Reference
 
-**Status:** ALIGNED WITH WORKSPACE_SYSTEM.md  
-**Last Updated:** 2026-01-29
+**Canonical lifecycle spec:** `specs/environment/foundation/WORKSPACE_LIFECYCLE.md`
+
+**Status:** Quick-reference catalog for workspace file inventory
+**Last Updated:** 2026-02-17
 
 ---
 
 ## Overview
 
-This document inventories all files created during Nexus initialization and onboarding, their purposes, and templates.
+This document catalogs every file and directory in a Nexus workspace, organized by **which phase creates it**. Use this as a checklist when writing or debugging E2E harness assertions.
+
+Three phases create files:
+
+1. **`nexus init`** -- deterministic, no user input
+2. **Runtime startup** -- seeds automation workspaces and DB rows
+3. **Onboarding conversation** -- interactive, produces identity artifacts
 
 ---
 
-## Files Created During `nexus init`
+## Phase 1: `nexus init`
 
-| File | Location | Purpose | Template |
-|------|----------|---------|----------|
-| `AGENTS.md` | `~/nexus/AGENTS.md` | Main system behavior doc | `reference/AGENTS.md` |
-| `BOOTSTRAP.md` | `state/agents/BOOTSTRAP.md` | First-run ritual template | `reference/BOOTSTRAP.md` |
-| `agents/config.json` | `state/agents/config.json` | Agent defaults config | Default JSON (see below) |
-| `credentials/config.json` | `state/credentials/config.json` | Credential system config | Default JSON (see below) |
-| `gateway/config.json` | `state/gateway/config.json` | Gateway config | Default JSON (see below) |
+Init is fully deterministic. Everything below is created eagerly (no lazy creation).
 
-### AGENTS.md
+### Root-level
 
-The main system behavior document. Contains:
-- CLI-first orientation (`nexus status`)
-- Capability status legend
-- Full CLI grammar
-- Skill types taxonomy
-- Credential hygiene best practices
-- Workspace structure overview
-- Cloud sync instructions
-- Safety rules
-- Social behavior guidelines
-- **Hooks** (proactive wake-ups) — simplified reference to the hooks system
+| Path | Purpose |
+|------|---------|
+| `AGENTS.md` | Workspace behavior contract, read by all agents |
+| `skills/` | Flat directory for user-authored skills (empty at init) |
+| `home/` | User home directory (empty at init) |
 
-**Template:** `reference/AGENTS.md`
+### `state/data/` -- databases (eager, with schema)
 
-**Important:** AGENTS.md references the **Hooks** system for proactive agent wake-ups. Agents can:
-- Register hooks via `nexus hooks register` to react to events
-- Check `HEARTBEAT.md` if woken by a heartbeat hook
-- Reply `HEARTBEAT_OK` if nothing needs attention
+| Path | Purpose |
+|------|---------|
+| `state/data/events.db` | Event log |
+| `state/data/agents.db` | Agent registry |
+| `state/data/identity.db` | Identity data |
+| `state/data/nexus.db` | Core nexus data |
 
-See `specs/runtime/nex/automations/AUTOMATION_SYSTEM.md` for the full automation system spec.
+### `state/cortex/` -- memory database (eager, with schema)
 
-### BOOTSTRAP.md
+| Path | Purpose |
+|------|---------|
+| `state/cortex/cortex.db` | Derived memory / cortex store |
 
-First-run ritual template. Used during agent onboarding conversation to establish agent identity.
+### `state/agents/` -- bootstrap template
 
-**Handling:**
-1. Lives permanently at `state/agents/BOOTSTRAP.md`
-2. Read by agent when no `state/agents/*/IDENTITY.md` exists
-3. NOT deleted after onboarding (kept for creating additional agents)
+| Path | Purpose |
+|------|---------|
+| `state/agents/BOOTSTRAP.md` | Permanent first-run identity conversation template (never deleted) |
 
-**Template:** `reference/BOOTSTRAP.md`
+### `state/` -- config and empty directories
 
-**Note:** Memory is handled by the Cortex (derived layer), not markdown files. The BOOTSTRAP.md template does not reference MEMORY.md.
+| Path | Purpose |
+|------|---------|
+| `state/config.json` | Canonical config with generated auth token |
+| `state/user/` | Empty dir; populated during onboarding |
+| `state/credentials/` | Empty dir; populated by credential flows |
+| `state/workspace/` | Empty dir; populated by runtime startup for automation workspaces only |
 
 ---
 
-## Files Created During Agent Onboarding
+## Phase 2: Runtime Startup
 
-| File | Location | Purpose | Template |
-|------|----------|---------|----------|
-| Agent IDENTITY.md | `state/agents/{name}/IDENTITY.md` | Agent name, emoji, vibe | `reference/IDENTITY-agent.md` |
-| Agent SOUL.md | `state/agents/{name}/SOUL.md` | Agent persona & boundaries | `reference/SOUL.md` |
-| User IDENTITY.md | `state/user/IDENTITY.md` | User profile | `reference/IDENTITY-user.md` |
+Runtime seeds automation workspaces inside `state/workspace/` and inserts automation table rows. This happens every time the runtime boots (idempotently).
 
-**Note:** The agent directory name (`{name}`) comes from the bootstrap conversation, not a CLI flag. The directory is never named `default`.
+### Automation workspaces
 
-### Agent IDENTITY.md
+Each automation workspace gets the same internal structure:
 
-Agent's identity markers.
-
-**Template:** `reference/IDENTITY-agent.md`
-
-### Agent SOUL.md
-
-Agent's persona, boundaries, and behavior guidelines.
-
-**Template:** `reference/SOUL.md`
-
-**Note:** Memory is handled by the Cortex (derived layer), not markdown files. The SOUL.md template does not reference MEMORY.md.
-
-### User IDENTITY.md
-
-User's profile, updated by the agent as they learn.
-
-**Template:** `reference/IDENTITY-user.md`
-
----
-
-## Config Files Created During Init
-
-### `state/agents/config.json`
-
-Default agent configuration.
-
-**Default content:**
-```json
-{
-  "defaults": {
-    "model": "claude-sonnet-4-20250514"
-  }
-}
+```
+state/workspace/{automation-name}/
+  ROLE.md
+  SKILLS.md
+  PATTERNS.md
+  ERRORS.md
+  skills/
 ```
 
-### `state/credentials/config.json`
+Seeded automations:
 
-Default credential system configuration.
+| Workspace | Path |
+|-----------|------|
+| memory-reader | `state/workspace/memory-reader/` |
+| memory-writer | `state/workspace/memory-writer/` |
 
-**Default content:**
-```json
-{
-  "defaultStorage": "keychain",
-  "syncOnStatus": true,
-  "syncTtlMinutes": 15,
-  "rotation": {
-    "enabled": ["anthropic", "openai", "gemini", "openrouter", "groq"]
-  }
-}
-```
+### Database rows (automations table)
 
-### `state/gateway/config.json`
+| Row | Purpose |
+|-----|---------|
+| `memory-reader` | Reads and surfaces relevant memory |
+| `memory-writer` | Writes new memories to cortex |
+| `command-logger` | Logs commands/events |
+| `boot-md` | Boot-time markdown generation |
 
-Default gateway configuration.
+### Cortex seed
 
-**Default content:**
-```json
-{
-  "port": 18789,
-  "bind": "loopback",
-  "auth": {
-    "mode": "token"
-  },
-  "credentials": {
-    "level": 1,
-    "blocked": []
-  }
-}
-```
+| Row | Purpose |
+|-----|---------|
+| Owner entity placeholder | Seed entry in cortex for the workspace owner |
 
 ---
 
-## Agent Binding Templates
+## Phase 3: Onboarding Conversation
 
-Harness binding templates live in `harnesses/templates/`:
+Created interactively during the bootstrap conversation (driven by `BOOTSTRAP.md`). The `{name}` segment is derived from conversation output and normalized for filesystem safety.
 
-| Harness | Templates |
-|---------|-----------|
-| Cursor | `cursor/hooks.json`, `cursor/nexus-session-start.js` |
-| Claude Code | `claude-code/settings.json` |
-| OpenCode | `opencode/nexus-bootstrap.ts` |
-| Codex | `codex/README.md` (not supported — limitations doc) |
-
-These are used when creating bindings via `nexus bindings create <harness>`. See `harnesses/HARNESS_BINDINGS.md` for details.
-
-**Note:** Authoritative templates are in `harnesses/templates/`.
+| Path | Purpose |
+|------|---------|
+| `state/agents/{name}/IDENTITY.md` | Agent identity markers |
+| `state/agents/{name}/SOUL.md` | Agent behavior and persona boundaries |
+| `state/user/IDENTITY.md` | User profile and preferences |
 
 ---
 
-## Optional Files
+## What Does NOT Exist
 
-### HEARTBEAT.md
+These are common misconceptions. None of these paths are valid in a Nexus workspace:
 
-**Location:** `~/nexus/HEARTBEAT.md` (next to AGENTS.md)
-
-**Created by:** User (optional, not auto-created)
-
-**Purpose:** User-customizable checklist read by agents when woken by heartbeat hooks.
-
-**Relationship to Automations:** The automation system handles heartbeat scheduling. HEARTBEAT.md is just the checklist the agent reads when a heartbeat automation fires. See `specs/runtime/nex/automations/AUTOMATION_SYSTEM.md`.
-
-**Template:**
-
-```markdown
-# HEARTBEAT.md
-
-Things to check on each heartbeat:
-
-- [ ] Important emails (urgent flags, VIPs)
-- [ ] Calendar events coming up (<2h)
-- [ ] Weather if user might be going out
-- [ ] Project status (git repos, CI)
-
-If nothing needs attention, stay quiet (reply HEARTBEAT_OK).
-
-## Custom checks
-
-Add project-specific items here as needed.
-```
-
-### MEMORY.md
-
-**Status:** NOT USED in Nexus
-
-**Reason:** Memory is handled by the Cortex (derived layer), not markdown files.
-
-Upstream clawdbot uses `MEMORY.md` for agent memory. Nexus replaces this with the Cortex system. Templates (BOOTSTRAP.md, SOUL.md) do not reference MEMORY.md.
+| Invalid path | Clarification |
+|--------------|---------------|
+| `TOOLS.md` | No TOOLS.md anywhere in Nexus |
+| `state/workspace/IDENTITY.md` | Identity files live in `state/agents/{name}/`, not workspace |
+| `state/workspace/USER.md` | User files live in `state/user/`, not workspace |
+| `state/nexus/config.json` | Config is at `state/config.json`, not `state/nexus/` |
+| Any lazily-created DB | All databases are created eagerly by init with schema applied |
 
 ---
 
-## Files NOT Created
+## Notes for E2E Harness Authors
 
-| Upstream File | Nexus Status | Notes |
-|---------------|--------------|-------|
-| `TOOLS.md` | Not used | Handled via `nexus skills` CLI |
-| `MEMORY.md` | Not used | Handled by Cortex |
-| `USER.md` | Renamed | Now `state/user/IDENTITY.md` |
-| `.gitignore` | Not created | No default git init |
+- **BOOTSTRAP.md is permanent.** It is never deleted after onboarding. Assertions should expect it to exist at all times.
+- **`state/workspace/` is exclusively for automation workspaces.** No agent identity or user files belong here.
+- **All databases exist after init.** Do not wait for runtime to assert DB file existence; assert immediately after init.
+- **`state/config.json` contains a generated auth token.** Validate it exists and has a non-empty `auth` field (or equivalent).
+- **Phase ordering matters.** Init must complete before runtime startup. Runtime startup must complete before onboarding assertions on automation workspaces.
 
 ---
 
-## File Frontmatter
+## Frontmatter Convention
 
-Identity files use YAML frontmatter for machine-readable metadata:
+Identity files may use YAML frontmatter for machine-readable fields:
 
 ```markdown
 ---
 name: Atlas
-emoji: 🧭
-creature: "description"
-vibe: "description"
+emoji: "..."
+vibe: "direct, pragmatic"
 ---
-# Human-readable content below
 ```
-
-This allows:
-- Programmatic parsing via `nexus` CLI
-- Human editing with nice formatting
-- Flexible additional fields
 
 ---
 
 ## Related Specifications
 
-- **WORKSPACE_SYSTEM.md** — Authoritative spec (this document aligns with it)
-- **INIT_REFERENCE.md** — File creation timing
-- **BOOTSTRAP_ONBOARDING.md** — Ritual flow
-- **harnesses/HARNESS_BINDINGS.md** — IDE/harness binding configurations
-- **specs/runtime/nex/automations/AUTOMATION_SYSTEM.md** — Automation system
-- **specs/runtime/nex/PLUGINS.md** — NEX plugin system
+- `WORKSPACE_LIFECYCLE.md` -- canonical lifecycle phases
+- `INIT_REFERENCE.md` -- init implementation details
+- `BOOTSTRAP_ONBOARDING.md` -- onboarding conversation flow
+- `WORKSPACE_LAYOUT_REFERENCE.md` -- directory structure reference

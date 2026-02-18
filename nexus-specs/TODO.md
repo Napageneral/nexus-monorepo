@@ -40,7 +40,7 @@ All high-priority specs are complete and aligned. Ready for implementation.
 | **Event Bus** | `nex/BUS_ARCHITECTURE.md` | ✅ |
 | **Adapter System** | `adapters/ADAPTER_SYSTEM.md`, `ADAPTER_INTERFACES.md`, `ADAPTER_SDK.md` | ✅ |
 | **Channel Reviews** | `channels/*/UPSTREAM_REVIEW.md` (9 channels) | ✅ |
-| **Go Adapter SDK** | `nexus-adapter-sdk-go/` (built, compiles) | ✅ |
+| **Go Adapter SDK** | `nexus-adapter-sdks/nexus-adapter-sdk-go/` (built, compiles) | ✅ |
 | **Context Assembly** | `broker/CONTEXT_ASSEMBLY.md` | ✅ |
 | **Agent Engine** | `broker/AGENT_ENGINE.md` | ✅ |
 | **Session Lifecycle** | `broker/SESSION_LIFECYCLE.md` | ✅ |
@@ -60,6 +60,7 @@ All high-priority specs are complete and aligned. Ready for implementation.
 | Task | Location | Notes |
 |------|----------|-------|
 | **Eve Adapter** | `channels/imessage/EVE_ADAPTER_PLAN.md` | First adapter — implementing now |
+| **Channel Adapter Cutover** | `runtime/adapters/CHANNEL_MIGRATION_TRACKER.md` | Priority order: eve -> gog -> discord/telegram/whatsapp -> ingress + clock |
 
 ### Next Steps
 
@@ -111,7 +112,7 @@ Deep dives into OpenClaw functionality. Important but not blocking V1.
 | **Doctor System** | High | Self-healing diagnostics — health checks, repairs, config validation |
 | **Browser Automation** | High | Playwright, CDP, container isolation. Full design review before porting. |
 | **Gateway → NEX Adapter** | Medium | How OpenClaw gateway RPC maps to NEX adapter pattern |
-| **Exec Approvals** | Medium | Human-in-the-loop approval queue. Check IAM spec coverage. |
+| **Exec Approvals → IAM Tool Approvals** | High | **Parity shipped:** `exec.approval.*` is IAM-backed and `exec` consults IAM grants so “allow always” suppresses future prompts. **Strictly-better shipped:** structured permission request fields, generic approvals RPC (`acl.approval.request`, `acl.requests.*`), Control UI approvals inbox, and `acl.approval.*` broadcast events. **Runtime shipped:** exec/node no longer consult `exec-approvals.json` allowlists/defaults for authorization; legacy exec-approvals RPC/UI/CLI retired. **Remaining:** optionally import old allowlist entries into IAM grants. Spec: `runtime/iam/TOOL_APPROVALS.md`. |
 | **Plugin System Analysis** | Medium | Map OpenClaw plugin install to NEX adapter + hook install |
 | **`dm` → `direct` rename** | Medium | Upstream renamed peer kind. Adopt in our session key formats. |
 

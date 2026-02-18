@@ -1,118 +1,106 @@
-# Project Structure Specification
+# Workspace Layout Reference
 
-**Status:** ALIGNED WITH WORKSPACE_SYSTEM.md  
-**Last Updated:** 2026-01-29
+**Canonical lifecycle spec:** `specs/environment/foundation/WORKSPACE_LIFECYCLE.md`
 
----
-
-## Overview
-
-This document defines the canonical directory structure for a Nexus workspace.
+**Status:** CANONICAL
+**Last Updated:** 2026-02-17
 
 ---
 
 ## Root Layout
 
-```
-~/nexus/                          # NEXUS_ROOT
-├── AGENTS.md                     # System behavior (nexus-specific)
-├── HEARTBEAT.md                  # Heartbeat checklist (optional)
-├── skills/                       # User's skill definitions
-│   ├── tools/{name}/             # CLI tool wrappers
-│   ├── connectors/{name}/        # Auth/credential connectors
-│   └── guides/{name}/            # Pure documentation skills
-├── state/                        # All runtime state (visible, not hidden)
-│   ├── user/
-│   │   └── IDENTITY.md           # User profile
-│   ├── agents/
-│   │   ├── BOOTSTRAP.md          # First-run ritual template (permanent)
-│   │   ├── config.json           # Agent defaults config
-│   │   └── {agent-name}/
-│   │       ├── IDENTITY.md       # Agent identity
-│   │       └── SOUL.md           # Persona & boundaries
-│   ├── nexus.db                  # System of Record (SQLite)
-│   │                             # Contains: Events, Agents, Identity, Nexus ledgers
-│   │                             # Sessions/turns/messages stored here, NOT files
-│   ├── cortex/                   # Derived data layer
-│   │   └── {agentId}.db          # Per-agent embeddings, episodes, analyses
-│   ├── credentials/
-│   │   ├── config.json           # Credential system config
-│   │   ├── index.json            # Fast lookup index
-│   │   └── {service}/            # Per-service credentials
-│   │       └── {account}.json
-│   └── gateway/
-│       └── config.json           # Gateway config
-├── home/                         # USER'S PERSONAL SPACE
-│   └── (user content)
-│
-├── .cursor/                      # Cursor binding (if configured)
-│   ├── hooks.json
-│   └── hooks/
-│       └── nexus-session-start.js
-│
-├── .claude/                      # Claude Code binding (if configured)
-│   └── settings.json
-│
-└── .opencode/                    # OpenCode binding (if configured)
-    └── plugins/
-        └── nexus-bootstrap.ts
+```text
+{workspace_root}/
+├── AGENTS.md                          # Workspace behavior contract
+├── skills/                            # Flat skills directory (no subdirs)
+├── home/                              # User personal workspace
+└── state/
+    ├── data/
+    │   ├── events.db                  # Events ledger
+    │   ├── agents.db                  # Agents ledger
+    │   ├── identity.db                # Identity mappings
+    │   └── nexus.db                   # Request traces + automations table
+    ├── cortex/
+    │   └── cortex.db                  # Cortex memory store
+    ├── agents/
+    │   ├── BOOTSTRAP.md               # Permanent onboarding template (NEVER deleted)
+    │   └── {name}/                    # Agent persona directories
+    │       ├── IDENTITY.md            # Agent identity
+    │       └── SOUL.md                # Agent persona, values, boundaries
+    ├── user/
+    │   └── IDENTITY.md                # User profile and preferences
+    ├── credentials/                   # Credential index + storage pointers
+    ├── workspace/                     # Automation workspaces (meeseeks pattern)
+    │   └── {name}/                    # Accumulated knowledge per workspace
+    │       ├── ROLE.md                # Workspace role definition
+    │       ├── SKILLS.md              # Workspace skill manifest
+    │       ├── PATTERNS.md            # Learned patterns
+    │       ├── ERRORS.md              # Known failure modes
+    │       └── skills/               # Workspace-specific skills
+    └── config.json                    # Runtime config with generated auth token
 ```
 
 ---
 
 ## Key Directories
 
-### `~/nexus/` (NEXUS_ROOT)
+### `{workspace_root}/`
 
-The workspace root. Contains system files and subdirectories.
+Workspace root. Contains only `AGENTS.md`, `skills/`, `home/`, and `state/`.
 
-**Key Files:**
-- `AGENTS.md` — System behavior documentation (always present)
-- `HEARTBEAT.md` — Optional heartbeat checklist
+### `skills/`
 
-### `~/nexus/skills/`
+Flat directory of skill definitions. Skill type is tracked in metadata, not directory structure. No `tools/`, `connectors/`, or `guides/` subdirectories.
 
-User's skill definitions, organized by type:
+### `home/`
 
-| Subdirectory | Purpose |
-|--------------|---------|
-| `tools/{name}/` | CLI tool wrappers (e.g., `gog`, `tmux`) |
-| `connectors/{name}/` | Auth/credential connectors (e.g., `google-oauth`) |
-| `guides/{name}/` | Pure documentation skills (e.g., `filesystem`) |
+User personal workspace and primary sync surface.
 
-Each skill has a `SKILL.md` file and optional supporting files.
+### `state/`
 
-### `~/nexus/state/`
+All runtime state, visible and inspectable.
 
-All runtime state. **Visible, not hidden** — transparency over obscurity.
-
-| Subdirectory | Purpose |
-|--------------|---------|
-| `user/` | User identity and profile |
-| `agents/` | Agent identity files and config |
-| `nexus.db` | System of Record (all ledgers) |
-| `cortex/` | Derived data (embeddings, episodes) |
-| `credentials/` | Credential pointers (not raw secrets) and config |
-| `gateway/` | Gateway configuration |
-
-### `~/nexus/home/`
-
-**User's personal space.** This is where users put their projects, notes, and personal content.
-
-Nexus Cloud syncs this directory (minus patterns in `home/.nexusignore`).
+| Path | Purpose |
+|------|---------|
+| `state/data/` | Split system-of-record ledger DBs (created eagerly by init) |
+| `state/cortex/` | Cortex memory store |
+| `state/agents/` | Agent bootstrap template + per-agent persona directories |
+| `state/user/` | User identity and preferences |
+| `state/credentials/` | Credential index and storage pointers |
+| `state/workspace/` | Automation workspaces with accumulated knowledge |
+| `state/config.json` | Standalone runtime config |
 
 ---
 
-## Comparison with Upstream
+## Agents vs Workspaces
 
-| Aspect | Upstream (clawdbot) | Nexus | Rationale |
-|--------|---------------------|-------|-----------|
-| Root | `~/clawd/` | `~/nexus/` | Branding |
-| State | `~/.clawdbot/` (hidden) | `~/nexus/state/` (visible) | Discoverability |
-| Config | `~/.clawdbot/clawdbot.json` | Split configs by domain | Clear separation of concerns |
-| Workspace | `~/clawd/` (flat) | `~/nexus/home/` (nested) | Clear separation |
-| Skills | n/a | `~/nexus/skills/` | Skills are first-class |
-| Sessions | `~/.clawdbot/sessions/` | `~/nexus/state/nexus.db` (Agents Ledger) | Structured queries, no file sprawl |
+Agent persona directories (`state/agents/{name}/`) and automation workspaces (`state/workspace/{name}/`) are hierarchical: a persona is applied ON TOP of a workspace. They serve distinct purposes:
+
+- **`state/agents/{name}/`** -- Identity. Who the agent is (IDENTITY.md, SOUL.md).
+- **`state/workspace/{name}/`** -- Knowledge. What the workspace has learned (ROLE.md, SKILLS.md, PATTERNS.md, ERRORS.md, skills/).
+
+---
+
+## File Locations Reference
+
+| Data | Canonical Location |
+|------|--------------------|
+| Workspace behavior contract | `AGENTS.md` |
+| Runtime config | `state/config.json` |
+| User profile | `state/user/IDENTITY.md` |
+| Agent bootstrap template | `state/agents/BOOTSTRAP.md` |
+| Agent identity | `state/agents/{name}/IDENTITY.md` |
+| Agent persona | `state/agents/{name}/SOUL.md` |
+| Events ledger | `state/data/events.db` |
+| Agents ledger | `state/data/agents.db` |
+| Identity mappings | `state/data/identity.db` |
+| Request traces + automations | `state/data/nexus.db` |
+| Cortex memory store | `state/cortex/cortex.db` |
+| Credential storage | `state/credentials/` |
+| Workspace role | `state/workspace/{name}/ROLE.md` |
+| Workspace skills | `state/workspace/{name}/SKILLS.md` |
+| Workspace patterns | `state/workspace/{name}/PATTERNS.md` |
+| Workspace errors | `state/workspace/{name}/ERRORS.md` |
 
 ---
 
@@ -120,89 +108,25 @@ Nexus Cloud syncs this directory (minus patterns in `home/.nexusignore`).
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `NEXUS_ROOT` | Root directory | `~/nexus` |
-| `NEXUS_STATE_DIR` | State directory | `~/nexus/state` |
-| `NEXUS_HOME` | User home directory | `~/nexus/home` |
-| `NEXUS_PROFILE` | Named profile | (none) |
-
-### Profile Support
-
-When `NEXUS_PROFILE=foo`:
-- Root becomes `~/nexus-foo/`
-- Allows multiple isolated Nexus instances
+| `NEXUS_ROOT` | Workspace root | `~/nexus` |
+| `NEXUS_STATE_DIR` | State directory | `{root}/state` |
+| `NEXUS_HOME` | User home directory | `{root}/home` |
+| `NEXUS_CONFIG_PATH` | Config file override | `{root}/state/config.json` |
+| `NEXUS_PROFILE` | Named profile | unset |
 
 ---
 
 ## Design Decisions
 
-### Visible State Directory
-
-**Decision:** `~/nexus/state/` instead of hidden `~/.nexus/`
-
-**Rationale:**
-- Everything in one place
-- Easy to explore and understand
-- No hunting for hidden directories
-- Git-friendly (can add to `.gitignore` selectively)
-
-### Separate `home/` Directory
-
-**Decision:** User content in `~/nexus/home/`, not workspace root
-
-**Rationale:**
-- Clear separation of system vs user space
-- `home/` is the cloud-synced directory
-- Prevents accidental modification of system files
-- Maps to familiar "home directory" concept
-
-### Skills as First-Class
-
-**Decision:** Dedicated `~/nexus/skills/` with subdirectories by type
-
-**Rationale:**
-- Skills are central to Nexus identity
-- Organized by type (tools, connectors, guides)
-- Easy to browse and discover
-- Supports `nexus skills list --type tools`
-
-### Split Config Philosophy
-
-**Decision:** Config split by domain into separate files
-
-**Rationale:**
-- Clear separation of concerns
-- Each domain's config is self-contained
-- Different consumers may need different access
-- Gateway is optional; its config shouldn't pollute core
-- Easy to find config for specific subsystem
-
-### No Per-Agent Sessions
-
-**Decision:** Sessions stored in `state/nexus.db` (Agents Ledger), not files
-
-**Rationale:**
-- Simpler structure
-- Sessions reference agent by ID in metadata
-- Avoids duplication and complexity
+- **DBs created eagerly** -- All ledger databases under `state/data/` are created by `nexus init`, not lazily on first use.
+- **Flat skills directory** -- `skills/` has no subdirectories. Skill type (tool, connector, guide) is tracked in metadata.
+- **Standalone config** -- `state/config.json` is a standalone file, not nested under a `nexus/` subdirectory.
+- **BOOTSTRAP.md is permanent** -- `state/agents/BOOTSTRAP.md` is the onboarding template and is NEVER deleted.
+- **Visible state** -- `state/` is a visible system directory for transparency and inspectability.
+- **Split ledgers** -- Separate databases isolate write paths and reduce contention.
+- **No TOOLS.md** -- Tool discovery is handled through skills metadata, not a manifest file.
+- **No runtime.mode** -- Config does not include a `runtime.mode` field.
 
 ---
 
-## File Locations Reference
-
-| Data | Location |
-|------|----------|
-| Agent defaults config | `state/agents/config.json` |
-| Credential system config | `state/credentials/config.json` |
-| Gateway config | `state/gateway/config.json` |
-| User profile | `state/user/IDENTITY.md` |
-| Agent identity | `state/agents/{name}/IDENTITY.md` |
-| Agent persona | `state/agents/{name}/SOUL.md` |
-| Session data | `state/nexus.db` (Agents Ledger) |
-| Derived data | `state/cortex/{agentId}.db` |
-| Credentials | `state/credentials/{service}/{account}.json` |
-| Credential index | `state/credentials/index.json` |
-
----
-
-*See INIT_REFERENCE.md for how structure is created.*  
-*See BOOTSTRAP_FILES_REFERENCE.md for file inventory.*
+See `WORKSPACE_LIFECYCLE.md` for creation behavior and lifecycle semantics.

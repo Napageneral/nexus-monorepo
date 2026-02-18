@@ -290,7 +290,7 @@ interface AccessContext {
   rate_limit_remaining?: number;
 }
 
-type QueueMode = 'steer' | 'followup' | 'collect' | 'steer-backlog' | 'queue' | 'interrupt';
+type QueueMode = 'steer' | 'followup' | 'collect' | 'queue' | 'interrupt';
 ```
 
 ### May Exit

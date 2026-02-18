@@ -1,7 +1,7 @@
 # Agent Broker Overview
 
 **Status:** SPEC IN PROGRESS  
-**Last Updated:** 2026-02-06
+**Last Updated:** 2026-02-16
 
 ---
 
@@ -132,6 +132,11 @@ route({ persona: "atlas" });                  // Persona's main session
 route({ session: "main", smart: true });      // Smart search, then session routing
 ```
 
+For MWP dispatch (`agent_send(op="dispatch")`), v1 MA behavior is session-level only:
+- target session provided -> route to that existing session
+- no target session -> spawn new worker session
+- turn-level fork targeting is a Broker smart-routing concern (v2), not MA prompt burden
+
 ### Smart Routing
 
 Smart routing is a **modifier**, not a separate routing mode:
@@ -165,12 +170,11 @@ How messages are delivered when a session is busy:
 
 | Mode | During Active Run | After Run Ends |
 |------|-------------------|----------------|
-| `steer` | Inject message into active context | Run normally |
+| `steer` | Abort active run (preempt) | Drain backlog into next run |
 | `followup` | Queue message | Process FIFO |
-| `collect` | Queue message | Batch all into one prompt |
-| `steer-backlog` | Try steer, queue if fails | Process queue |
+| `collect` | Queue message | Batch all into one turn (events-based) |
 | `queue` | Simple queue | Process FIFO |
-| `interrupt` | Abort active run | Run new message |
+| `interrupt` | Abort active run (preempt) | Drain backlog into next run |
 
 ### Session Pointer Management
 
@@ -279,13 +283,13 @@ The Broker writes directly to the **Agents Ledger** (not JSONL files):
 MA ↔ WA messages go through the **Broker directly**, not via NEX:
 
 ```
-MA calls: send_message_to_agent({ to: "code-worker", content: "..." })
+MA calls: agent_send({ op: "message", target: { session: "worker:code-worker" }, text: "..." })
         │
         ▼
 Broker routes to WA session
         │
         ▼
-WA processes, calls: send_message_to_agent({ to: "manager", content: "result" })
+WA processes, calls: agent_send({ op: "message", target: { session: "parent" }, text: "result" })
         │
         ▼
 Broker routes back to MA

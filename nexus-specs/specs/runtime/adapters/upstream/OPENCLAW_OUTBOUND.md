@@ -775,11 +775,7 @@ if (params.mirror && results.length > 0) {
 6. **Error handling** — Best effort mode useful for non-critical messages
 7. **Delivery confirmation** — Returns message IDs but no delivery status callbacks
 8. **Human delays** — Makes responses feel natural, configurable per agent
-9. **Reply dispatcher is serialized** — Preserves tool → block → final ordering
-
----
-
-## Related Documents- `OPENCLAW_INBOUND.md` — Inbound reception patterns
+9. **Reply dispatcher is serialized** — Preserves tool → block → final ordering---## Related Documents- `OPENCLAW_INBOUND.md` — Inbound reception patterns
 - `STREAMING_OUTPUT.md` — Block streaming and coalescing details
 - `CHANNEL_INVENTORY.md` — All channel implementations
 - `../OUTBOUND_INTERFACE.md` — Nexus outbound interface spec

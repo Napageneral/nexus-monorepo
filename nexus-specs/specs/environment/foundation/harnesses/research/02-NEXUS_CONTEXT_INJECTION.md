@@ -182,7 +182,7 @@ Tags are stripped before sending. Only works on platforms that support replies.
 
 ## Messaging
 - Replies route automatically to current chat
-- Use `send_message_to_agent` to communicate with workers
+- Use `agent_send` to dispatch work to workers and (rarely) message agent sessions
 - Never send streaming/partial replies to external surfaces
 
 ## Group Chat Behavior
@@ -219,9 +219,10 @@ On platforms that support reactions (Discord, Slack):
 ### MA Tools
 
 ```
-- spawn_worker: Delegate tasks to worker agents
-- send_message_to_agent: Communicate with workers mid-task
-- respond_to_user: Send final response to user
+- agent_send (op="dispatch"): Delegate tasks to worker agents (fire-and-forget)
+- agent_send (op="message"): Message an agent session (including your parent)
+- send_message: Send an explicit user-facing message to an explicit channel + target
+- wait: End the turn without sending a user-facing response
 ```
 
 ---
@@ -240,7 +241,7 @@ You are a worker agent spawned by {parent_agent} to handle:
 Complete your task and report back.
 
 ## Communication
-- Use `send_message_to_agent` to message your parent if you need clarification
+- Use `agent_send` (op="message", target.session="parent") to message your parent if you need clarification
 - Your final response will be delivered to the parent agent
 ```
 

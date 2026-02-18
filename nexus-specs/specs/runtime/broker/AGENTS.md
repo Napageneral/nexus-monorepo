@@ -1,7 +1,7 @@
 # Manager-Worker Pattern (MWP)
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-02  
+**Last Updated:** 2026-02-16  
 **Related:** DATA_MODEL.md, OVERVIEW.md
 
 ---
@@ -11,6 +11,11 @@
 The Manager-Worker Pattern (MWP) defines how Nexus orchestrates multiple agents to handle complex tasks.
 
 **Core insight:** A single user-facing agent (Manager) maintains conversation continuity while delegating context-heavy execution to specialized agents (Workers).
+
+In Nexus MWP:
+- The MA is communication-only (decide what to say, when to wait, and what to dispatch).
+- The MA aggressively parallelizes work via async dispatch to WAs.
+- The MA may write to a scratchpad workspace, but does not do project/tool work directly.
 
 ---
 
@@ -51,12 +56,16 @@ The Manager-Worker Pattern (MWP) defines how Nexus orchestrates multiple agents 
 │  • User conversation       │   │  • Task execution                  │
 │  • Intent understanding    │   │  • Heavy project context           │
 │  • Delegation decisions    │   │  • Specialized tools               │
-│  • Limited tools           │   │  • Can spawn sub-workers           │
+│  • Communication learning  │   │  • Can spawn sub-workers           │
 │                            │   │                                    │
 │  Tools:                    │   │  Can message back to MA:           │
-│  - dispatch_to_agent       │   │  - Progress updates                │
-│  - reply_to_caller         │   │  - Clarifying questions            │
-│                            │   │  - Partial results                 │
+│  - agent_send              │   │  - Progress updates                │
+│  - get_agent_status        │   │  - Clarifying questions            │
+│  - ledger/cortex inspection│   │  - Partial results                 │
+│  - wait                    │   │                                    │
+│  - send_message            │   │  Final result always returns:      │
+│  (scratchpad-only file     │   │  - worker_result → caller session  │
+│   tools, sandboxed)        │   │                                    │
 └────────────────────────────┘   └────────────────────────────────────┘
                                              │
                                              │ nested spawn
@@ -92,9 +101,12 @@ Workers can message the Manager at any time, not just at completion:
 - Clarifying questions that need user input
 - Early results before full completion
 
-### 4. Persona Inheritance
+### 4. Persona Is Separate From Session Keys
 
-Worker Agents inherit their Manager's persona (identity + permissions). They share the same behavioral constraints and access levels.
+Session keys identify the conversation/thread target (dm/group/worker/etc). Persona is a routing decorator that can be swapped without changing the session key.
+
+- Workers default to the caller's persona (same identity + permissions).
+- A dispatch may explicitly request a different `personaId`/persona (still subject to IAM).
 
 ---
 
@@ -106,17 +118,60 @@ Worker Agents inherit their Manager's persona (identity + permissions). They sha
 MA decides to delegate: "This requires deep code analysis"
   │
   ▼
-MA calls: dispatch_to_agent({ to: "code-worker", task: "..." })
+MA calls: agent_send({ op: "dispatch", text: "...", target: { session: "worker:code-worker" } })
   │
   ▼
-Broker routes task to WA session
+Broker enqueues a durable worker request (fire-and-forget)
   │
   ▼
 WA executes (may take minutes, can use tools)
   │
   ▼
-WA response flows back to MA via broker
+WA completion enqueues a `worker_result` event back to the caller session (MA)
 ```
+
+### Dispatch Targeting (v1 + v2 Shape)
+
+Canonical interface (tool-level shape):
+
+```typescript
+type AgentSendInput =
+  | {
+      op: "dispatch";
+      text: string;
+      // v1:
+      // - target.session provided => route to existing session
+      // - target omitted => spawn new worker session
+      // v2:
+      // - smart/forked routing may resolve from historical checkpoints
+      target?: DispatchTarget;
+      deliveryMode?: "queue" | "interrupt";
+      metadata?: Record<string, unknown>;
+    }
+  | {
+      op: "message";
+      text: string;
+      target: { session: string };
+      deliveryMode?: "queue" | "interrupt";
+      metadata?: Record<string, unknown>;
+    };
+
+type DispatchTarget =
+  | { kind: "session"; session: string }                      // v1 explicit routing
+  | { kind: "new_session"; labelHint?: string }               // v1 explicit spawn
+  | { kind: "fork"; fromTurnId: string; labelHint?: string }  // v2 smart/explicit fork
+```
+
+LLM shorthand contract for v1 (what MA thinks in prompts):
+- `agent_send("task", "worker:label")` -> dispatch to existing session
+- `agent_send("task")` -> spawn a new worker session
+
+### Dispatch Handles and History Lookup
+
+- Every `agent_send(op=dispatch)` returns a `dispatch_id` (the tool call id) and `spawned_session_label`.
+- The spawned worker session persists a backlink: `spawn_tool_call_id = dispatch_id`.
+- Worker results include `broker.dispatched_tool_call_id = dispatch_id` for correlation.
+- Long-term: no special "get agent logs" tool is required. MA/WA inspection should use existing ledger + Cortex APIs with `dispatch_id` and `spawned_session_label` as the lookup handles.
 
 ### WA → MA: Mid-Task Communication
 
@@ -124,7 +179,7 @@ WA response flows back to MA via broker
 WA encounters ambiguity during execution
   │
   ▼
-WA calls: send_message_to_agent({ to: "manager", content: "Need clarification..." })
+WA calls: agent_send({ op: "message", text: "Need clarification...", target: { session: "parent" } })
   │
   ▼
 Broker routes to MA session
@@ -148,10 +203,7 @@ User: "How's that code review going?"
 MA receives via NEX pipeline
   │
   ▼
-MA calls: send_message_to_agent({ to: "code-worker", content: "Status?" })
-  │
-  ▼
-WA responds with current progress
+MA inspects worker history via ledger/cortex using dispatch_id/session_label
   │
   ▼
 MA summarizes for user
@@ -165,22 +217,24 @@ MA summarizes for user
 
 | Tool | Purpose |
 |------|---------|
-| `dispatch_to_agent` | Delegate task to a worker agent |
-| `reply_to_caller` | Send response back to user |
-| `get_agent_status` | Check if worker is busy/idle |
+| `agent_send` | Unified inter-agent send: dispatch work (`op=dispatch`) or message (`op=message`) |
+| `get_agent_status` | Check session status + queue snapshot |
+| `wait` | End turn without sending a user-facing reply |
+| `send_message` | Send explicit user-facing messages to any channel/target (multi-channel) |
 
 ### Worker Tools
 
 | Tool | Purpose |
 |------|---------|
-| `send_message_to_agent` | Message back to manager (or other workers) |
-| Full tool access | File ops, shell, web, etc. (per permissions) |
+| `agent_send` | Message the manager/parent or other agents; can also dispatch sub-workers |
+| Full tool access | File ops, shell, web, etc. (per permissions), but no direct end-user messaging |
+| (implicit) `worker_result` | Worker completion is always routed upstream to the caller session |
 
 ---
 
 ## Open Questions
 
-1. **MA tool restrictions:** How minimal should MA's toolset be? Just delegation + response? Or some read-only tools for quick answers?
+1. **MA sandboxing:** How hard should we sandbox MA scratchpad-only file access (tool-level path allowlist vs stronger OS/container sandbox)?
 
 2. **Spawn depth limit:** Is 3 levels sufficient? Should it be per-workspace configurable?
 

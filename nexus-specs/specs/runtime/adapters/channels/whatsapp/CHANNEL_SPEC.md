@@ -18,7 +18,7 @@ const WHATSAPP_CAPABILITIES: ChannelCapabilities = {
   supports_reactions: true,
   supports_polls: true,          // Max 12 options
   supports_buttons: false,       // Business API only
-  supports_ptt: true,            // Push-to-talk voice notes
+  supports_voice_notes: true,    // Native voice notes (PTT-style)
 };
 ```
 

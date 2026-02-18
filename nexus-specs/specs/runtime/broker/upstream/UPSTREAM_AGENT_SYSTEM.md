@@ -1477,7 +1477,7 @@ This prevents concurrent modifications to the same session transcript.
 
 | Aspect | Upstream | Nexus Broker |
 |--------|----------|--------------|
-| Spawning | `sessions_spawn` tool | `send_message_to_agent` |
+| Spawning | `sessions_spawn` tool | `agent_send` (`op="dispatch"`) |
 | Run tracking | subagent-registry (JSON file) | Broker tracks in Agents Ledger |
 | Results | subagent-announce | Broker routes back to parent |
 | Queue modes | steer/followup/collect/interrupt | Same modes, durable in SQLite |

@@ -1,7 +1,7 @@
 # Session Lifecycle
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-06
+**Last Updated:** 2026-02-16
 
 ---
 
@@ -276,11 +276,10 @@ How messages are handled when a session is busy:
 
 | Mode | During Active Run | After Run Ends | Default For |
 |------|-------------------|----------------|-------------|
-| `interrupt` | Abort active run, start new | — | User → MA |
-| `steer` | Inject into active context | Run normally | — |
+| `interrupt` | Abort active run (preempt) | Drain backlog into next run | User → MA |
+| `steer` | Abort active run (preempt) | Drain backlog into next run | — |
 | `followup` | Queue message | Process next from queue | WA → MA, Timer → MA |
-| `collect` | Queue message | Batch all queued into one turn | — |
-| `steer-backlog` | Try steer, queue if fails | Process queue | — |
+| `collect` | Queue message | Batch all queued into one turn (events-based) | — |
 | `queue` | Queue message | Process FIFO | General default |
 
 ### Default Queue Modes
@@ -290,7 +289,17 @@ How messages are handled when a session is busy:
 | User → MA | `interrupt` | New user message should cancel stale generation |
 | WA → MA | `followup` | Don't interrupt MA for worker status updates |
 | Timer/Automation → MA | `followup` | Don't interrupt for periodic checks |
-| MA → WA | Direct tool call | Synchronous within MA's turn |
+| MA → WA | `agent_send(op=dispatch)` | Async, durable dispatch; results flow back via worker_result events |
+
+### MA Dispatch Semantics (v1)
+
+In v1 (pre-smart-forking), the MA only reasons about sessions:
+
+- `agent_send(op="dispatch", target.session=...)` -> enqueue task on that existing session
+- `agent_send(op="dispatch")` with no target session -> spawn a new worker session (`worker:{ulid}`)
+- MA does not choose turn-level fork points directly
+
+Turn/thread-level fork targeting is reserved for Broker smart routing (v2), which may decide to fork from a historical checkpoint before delivering work.
 
 ### Queue Drain
 
@@ -300,8 +309,6 @@ When a turn completes and the queue has messages:
 Turn completes → release lock → check queue
     │
     ├── Queue empty → session goes idle
-    │
-    ├── Mode: interrupt → (shouldn't have queue — interrupt cancels active)
     │
     ├── Mode: followup/queue → take next message
     │     Create new NexusRequest (re-enter at stage 5, skip stages 1-4)
@@ -316,7 +323,9 @@ Turn completes → release lock → check queue
 
 **Key:** Queued messages get fresh context assembly. The session head has advanced since they were queued, so the agent sees the result of the prior turn.
 
-**Queue storage:** In-memory for v1 (messages are small, sessions are single-process). Durable queue is a later optimization if needed.
+**Preemptive modes (`interrupt`/`steer`):** If a new message arrives while a run is active, the Broker aborts the active run and the queue drains the backlog (queued messages + the new message) into a single `queue_batch` turn that runs next.
+
+**Queue storage:** Durable write-through to the Agents Ledger (`queue_items`) with startup rehydration. In-memory scheduling is a performance optimization, not the source of truth.
 
 ---
 
@@ -405,6 +414,17 @@ Turn A → Turn B → Turn X → Turn Y (session "main")
 - **Explicit fork:** Agent or user wants to explore an alternative from a specific point
 - **Identity promotion:** Could technically be a fork, but we use aliases instead (see above)
 
+### Dispatch Targeting Contract (Forward-Compatible)
+
+```typescript
+type DispatchTarget =
+  | { kind: "session"; session: string }                     // v1: send to existing session
+  | { kind: "new_session"; labelHint?: string }              // v1: spawn worker session
+  | { kind: "fork"; fromTurnId: string; labelHint?: string } // v2: true fork from checkpoint
+```
+
+`kind: "fork"` always creates a new session. Routing to an existing session and routing to a historical turn are intentionally distinct operations.
+
 ### Fork Flow
 
 ```typescript
@@ -434,7 +454,7 @@ async function forkFromTurn(turnId: string, label?: string): Promise<Session> {
 
 ### Creation
 
-When an MA spawns a WA via `dispatch_to_agent` tool:
+When an MA spawns a WA via `agent_send` (`op="dispatch"`):
 
 ```sql
 INSERT INTO sessions (
@@ -453,13 +473,15 @@ INSERT INTO sessions (
 ### Subagent Lifecycle
 
 ```
-MA calls dispatch_to_agent
-  → Broker creates WA session (task_status: 'running')
+MA calls agent_send(op="dispatch")
+  → Broker enqueues worker request (durable)
+    - target session provided: route to that session queue
+    - no target session: create worker session then queue
+  → WA session is ensured during worker pipeline execution (assembleContext)
   → Context Assembly for WA (stripped-down system prompt, task-focused)
   → WA executes (may take many turns)
-  → WA calls send_message_to_agent({ to: "manager" })
-    → New turn in MA's session (source: 'agent')
-    → MA responds to user
+  → WA completion is delivered upstream as a `worker_result` event to the parent session
+    → MA can inspect logs/traces and respond to the user
   → WA marks task complete (task_status: 'completed')
 ```
 
@@ -474,7 +496,7 @@ turns table:
   turn_45 (MA): tool_call with spawned_session_label="worker:abc"
   
 tool_calls table:
-  tc_xyz: turn_id=turn_45, tool_name="dispatch_to_agent", spawned_session="worker:abc"
+  tc_xyz: turn_id=turn_45, tool_name="agent_send", op="dispatch", spawned_session="worker:abc"
 ```
 
 This enables:

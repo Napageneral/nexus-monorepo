@@ -147,7 +147,7 @@ Workers can spawn their own workers. This is intentional and tracked:
 ```
 WA executes complex task
   ↓
-WA needs specialized help → dispatch_to_agent({ to: "sub-worker", ... })
+WA needs specialized help → agent_send({ op: "dispatch", target: { session: "worker:sub-worker" }, ... })
   ↓
 Sub-WA executes, can spawn further if needed
   ↓
@@ -162,9 +162,10 @@ Unlike OpenClaw's completion-only model, Nexus workers can message back anytime:
 
 ```typescript
 // Worker tools include:
-send_message_to_agent({ 
-  to: "manager",
-  content: "Need clarification on X..."
+agent_send({
+  op: "message",
+  text: "Need clarification on X...",
+  target: { session: "parent" }
 })
 ```
 
@@ -330,7 +331,7 @@ Manager ◄────► Worker ◄────► Sub-Worker
 ### Nexus
 
 - Workers inherit Manager permissions (scoped down, not up)
-- Workers can use `send_message_to_agent` to communicate
+- Workers can use `agent_send` (`op="message"`) to communicate
 - Workers can spawn sub-workers (within depth limit)
 - Workers share behavioral constraints of their Manager
 - Explicit permission escalation/restriction is a design question (not yet specified)
@@ -341,7 +342,7 @@ Manager ◄────► Worker ◄────► Sub-Worker
 
 | Component | OpenClaw | Nexus |
 |-----------|----------|-------|
-| **Spawn tool** | `sessions_spawn` | `dispatch_to_agent` |
+| **Spawn tool** | `sessions_spawn` | `agent_send` (`op="dispatch"`) |
 | **Spawn tracking** | `subagent-registry.ts` (JSON file) | Agents Ledger (SQLite) |
 | **Session keys** | `agent:{id}:subagent:{uuid}` | Managed by Broker |
 | **Result routing** | `subagent-announce.ts` via gateway | Broker direct routing |
@@ -389,9 +390,9 @@ Workers that take minutes can:
 
 If porting from OpenClaw to Nexus MWP:
 
-1. **Replace `sessions_spawn`** with `dispatch_to_agent`
+1. **Replace `sessions_spawn`** with `agent_send` (`op="dispatch"`)
 2. **Remove nested spawn checks** — Nexus Broker handles depth limits
-3. **Add bidirectional communication** — Workers can use `send_message_to_agent`
+3. **Add bidirectional communication** — Workers can use `agent_send` (`op="message"`)
 4. **Rethink announce flow** — Results route through Broker, not gateway announce
 5. **Update subagent prompts** — Remove "no spawning" restriction, add "can delegate if needed"
 6. **Migrate queue state** — From in-memory Map to Agents Ledger

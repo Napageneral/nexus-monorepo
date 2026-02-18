@@ -1,8 +1,8 @@
 # NEX Daemon
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-05  
-**Related:** NEX.md, ADAPTER_SYSTEM.md, BUS_ARCHITECTURE.md, PLUGINS.md
+**Last Updated:** 2026-02-13  
+**Related:** NEX.md, CONTROL_PLANE.md, ADAPTER_SYSTEM.md, SESSION_IMPORT_SERVICE.md, BUS_ARCHITECTURE.md, PLUGINS.md
 
 ---
 
@@ -52,14 +52,14 @@ nexus daemon start
 When `nexus daemon start` executes:
 
 ```
-1. Lock                        Acquire PID lockfile (~/.nexus/nex.pid)
-2. Config                      Load nex.yaml, validate schema
+1. Lock                        Acquire PID lockfile (~/nexus/state/nex.pid)
+2. Config                      Load state/nexus/config.json, validate schema
 3. Logging                     Initialize structured logger
 4. Databases                   Open/migrate ledger databases
 5. Event Bus                   Initialize in-memory pub/sub
 6. Plugin Loader               Load plugins from plugins/ directory
 7. Pipeline                    Wire up 8-stage pipeline with loaded plugins
-8. HTTP Server                 Start health + SSE endpoint
+8. Control-Plane Server        Start HTTP + WS (health + SSE + UI + endpoints + RPC)
 9. Adapter Manager             Start enabled adapter accounts (spawn processes)
 10. Timer                      Start internal heartbeat/cron adapter
 11. Ready                      Publish system.started, write ready state
@@ -89,40 +89,18 @@ On exit (clean or crash handler), the lockfile is removed.
 
 ### 2. Configuration
 
-Load from `nex.yaml`:
+Load from canonical config file:
 
-```yaml
-# nex.yaml
-daemon:
-  host: "127.0.0.1"           # Bind address for HTTP server
-  port: 7400                   # HTTP port (health + SSE)
-  log_level: "info"            # debug | info | warn | error
+- `~/nexus/state/nexus/config.json`
 
-pipeline:
-  timeout_ms: 300000           # 5 min max per request
+The config is a single JSON document namespaced by domain. Representative domains:
 
-ledgers:
-  directory: ./data            # Base path for SQLite databases
-
-adapters:
-  # See ADAPTER_SYSTEM.md for full adapter config
-  gog:
-    command: "gog"
-    # ...
-
-plugins:
-  directory: ./plugins
-  enabled:
-    - logging
-    - analytics
-
-timer:
-  heartbeat_interval_ms: 60000 # 1 minute heartbeat
-  cron: []                     # Cron expressions (future)
-
-bus:
-  mode: "memory"               # memory | write-through
-```
+- `runtime.*` (bind host/port, exposure, UI hosting)
+- `adapters.*`
+- `plugins.*`
+- `bus.*`
+- `timer.*`
+- `cortex.*`
 
 Config validation fails fast — if the config is invalid, the daemon exits with a clear error before touching databases or spawning processes.
 
@@ -131,37 +109,55 @@ Config validation fails fast — if the config is invalid, the daemon exits with
 Open (or create + migrate) all ledger databases:
 
 ```
-data/
+state/data/
 ├── events.db        # Events Ledger — inbound/outbound events
 ├── agents.db        # Agents Ledger — sessions, turns, messages, tool_calls
 ├── identity.db      # Identity Graph — entities, identities, union-find
 ├── nexus.db         # Nexus Ledger — nex_traces, adapter_instances, config
-└── cortex/          # Cortex DBs (per-agent, managed by Cortex)
-    └── {agentId}.db
+```
+
+The Cortex derived store is separate and canonical at:
+
+```
+state/cortex/cortex.db
 ```
 
 Migration strategy: each database has a `schema_version` table. On open, check version and apply any pending migrations. If migration fails, daemon exits with error — never run with stale schema.
 
 ### 4. Adapter Manager Boot
 
-The Adapter Manager reads the `adapters:` config and the `adapter_instances` DB table, then starts enabled accounts:
+The Adapter Manager reads the `adapters:` config and the `adapter_instances` DB table, then starts enabled accounts.
+
+Adapter classes:
+
+1. **Channel adapters** (iMessage, Gmail, Discord, etc.) — monitor JSONL `NexusEvent` -> pipeline
+2. **Import adapters** (`aix`) — IPC import frames -> Session Import Service
+
+Boot behavior:
 
 ```
 For each adapter in config:
-  For each account with monitor: true OR backfill pending:
-    1. Verify credential (if credential_ref set)
-    2. Spawn monitor: <command> monitor --account <id> --format jsonl
-    3. Begin reading JSONL stdout → pipeline
-    4. Update adapter_instances: status=running, pid=<pid>
-    5. If backfill enabled and not completed → spawn backfill
-    6. Start health check loop
+  For each enabled account:
+    If class == channel:
+      1. Verify credential (if credential_ref set)
+      2. Spawn monitor: <command> monitor --account <id> --format jsonl
+      3. Read monitor stdout JSONL -> receiveEvent pipeline
+      4. Update adapter_instances: status=running, pid=<pid>
+      5. Start health check loop
+
+    If class == import (aix):
+      1. Spawn worker process under local IPC transport
+      2. Route IPC import.batch/import.chunk -> Session Import Service
+      3. Start tail loop (sync) and/or enqueue backfill jobs (async)
+      4. Update adapter_instances: status=running, pid=<pid>
+      5. Start health check loop
 ```
 
-Adapters start in parallel (no ordering dependency between adapters). Each adapter's stdout reader runs in its own async loop.
+Adapters start in parallel (no ordering dependency between adapters). Runtime readers/listeners run in async loops per adapter account.
 
 **Startup order within an adapter account is sequential:** credential check → spawn → confirm stdout is readable → mark running.
 
-See `ADAPTER_SYSTEM.md` for full adapter lifecycle, restart policy, health monitoring.
+See `ADAPTER_SYSTEM.md` for channel adapter lifecycle and `SESSION_IMPORT_SERVICE.md` for `aix` import adapter lifecycle.
 
 ### 5. Timer Adapter
 
@@ -205,16 +201,18 @@ Cron events carry the label in metadata so automations can distinguish them:
 }
 ```
 
-### 6. HTTP Server
+### 6. Control-Plane Server (HTTP + WS)
 
-Minimal HTTP server for health checks and SSE streaming:
+The daemon serves the runtime control-plane for CLI + UI + integrations. At minimum:
 
 ```
 GET /health              → Health check (for doctor system, monitoring)
 GET /api/events/stream   → SSE event stream (bus subscriber)
 ```
 
-Binds to `daemon.host:daemon.port` (default `127.0.0.1:7400`). Loopback only by default — no external exposure without explicit config.
+Additional control-plane endpoints (UI, hooks, OpenAI/OpenResponses, tools invoke, WS RPC) are specified in `CONTROL_PLANE.md`.
+
+Binds to `runtime.*` configuration (default loopback). No external exposure without explicit config.
 
 #### Health Endpoint
 
@@ -330,7 +328,7 @@ Signal received
 SIGUSR1 received
      │
      ▼
-1. Re-read nex.yaml
+1. Re-read state/nexus/config.json
 2. Validate new config against schema
 3. If invalid → log error, keep running with old config
 4. Diff old vs new config
@@ -357,7 +355,7 @@ CLI trigger:
 nexus daemon reload
 
 # Equivalent to:
-kill -USR1 $(cat ~/.nexus/nex.pid)
+kill -USR1 $(cat ~/nexus/state/nex.pid)
 ```
 
 ---
@@ -405,15 +403,15 @@ nexus daemon start
 nexus daemon start --detach
 
 # With specific config
-nexus daemon start --config ./custom-nex.yaml
+nexus daemon start --config ./custom-config.json
 
 # With log level override
 nexus daemon start --log-level debug
 ```
 
 Flags:
-- `--detach` / `-d` — Run in background, write logs to `~/.nexus/logs/nex.log`
-- `--config <path>` — Config file path (default: `~/nexus/nex.yaml`)
+- `--detach` / `-d` — Run in background, write logs to `~/nexus/state/logs/nex.log`
+- `--config <path>` — Config file path (default: `~/nexus/state/nexus/config.json`)
 - `--log-level <level>` — Override config log level
 - `--port <port>` — Override config HTTP port
 
@@ -549,7 +547,7 @@ Structured JSON logging to stdout (foreground) or log file (detached):
 {"ts":"2026-02-05T14:30:03.345Z","level":"error","msg":"Pipeline error","request_id":"req_def","error":"LLM rate limited","stage":"runAgent"}
 ```
 
-Log file location (detached mode): `~/.nexus/logs/nex.log`
+Log file location (detached mode): `~/nexus/state/logs/nex.log`
 
 Log rotation: not handled by daemon — use system logrotate or similar. The daemon reopens log file on SIGHUP (standard pattern).
 
@@ -558,23 +556,22 @@ Log rotation: not handled by daemon — use system logrotate or similar. The dae
 ## File Locations
 
 ```
-~/.nexus/                    # Daemon runtime state
+~/nexus/state/               # Canonical runtime state (CLI/daemon owned)
 ├── nex.pid                  # PID lockfile (created at start, removed at stop)
 └── logs/
     └── nex.log              # Log file (detached mode only)
 
-~/nexus/                     # Nexus workspace
-├── nex.yaml                 # Daemon configuration
-├── plugins/                 # Plugin directory
-├── data/                    # Ledger databases
-│   ├── events.db
-│   ├── agents.db
-│   ├── identity.db
-│   ├── nexus.db
-│   └── cortex/
-│       └── {agentId}.db
-└── state/
-    └── ...                  # Nexus state (managed by CLI)
+~/nexus/state/nexus/
+└── config.json              # Canonical config
+
+~/nexus/state/data/
+├── events.db
+├── agents.db
+├── identity.db
+└── nexus.db
+
+~/nexus/state/cortex/
+└── cortex.db
 ```
 
 ---
