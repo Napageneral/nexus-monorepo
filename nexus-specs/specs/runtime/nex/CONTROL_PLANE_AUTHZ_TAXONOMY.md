@@ -1,6 +1,6 @@
 # Control-Plane Authorization Taxonomy (Action/Resource)
 
-**Status:** IMPLEMENTED (taxonomy) · DESIGN (enforcement wiring)  
+**Status:** IMPLEMENTED (taxonomy + enforcement wiring)  
 **Last Updated:** 2026-02-18  
 **Related:** `SINGLE_TENANT_MULTI_USER.md`, `CONTROL_PLANE.md`, `../iam/ACCESS_CONTROL_SYSTEM.md`, `../iam/POLICIES.md`, `../iam/AUDIT.md`
 
@@ -56,17 +56,39 @@ The taxonomy is intentionally centralized so we do **not** scatter per-handler a
 
 ---
 
-## Enforcement Plan (Next)
+## Enforcement (Implemented)
 
-Wiring steps (implementation work):
+Enforcement is implemented in the control-plane dispatcher so `path=iam` methods are authorized via IAM before the handler runs:
 
-1. In the control-plane dispatcher, resolve the method’s taxonomy entry:
-   - `path=iam`: evaluate IAM for the authenticated principal and require `permission` to be allowed
-   - `path=pipeline`: allow the call to proceed (the downstream `NexusEvent` will be authorized in pipeline)
-   - `path=transport`: allow only for authenticated/paired transports (existing role/scopes rules still apply)
-2. Audit every `path=iam` decision:
-   - principal + method + action/resource + decision + matched policies + grants applied
-3. Treat token scopes as **optional upper bounds** (transport-level), not as the primary authorization mechanism.
+1. Control-plane dispatcher integration:
+   - `/Users/tyler/nexus/home/projects/nexus/nex/src/nex/control-plane/server-methods.ts`
+2. IAM authorizer (centralized, taxonomy-driven):
+   - `/Users/tyler/nexus/home/projects/nexus/nex/src/nex/control-plane/iam-authorize.ts`
+   - Unit tests:
+     - `/Users/tyler/nexus/home/projects/nexus/nex/src/nex/control-plane/iam-authorize.test.ts`
+
+Rules:
+
+- `path=iam`: evaluate IAM for the authenticated principal and require `permission` to be allowed
+- `path=pipeline`: allow the call to proceed (the downstream `NexusEvent` will be authorized in pipeline)
+- `path=transport`: authorize via the existing transport handshake/role rules
+
+IAM is evaluated using the same policies + grants engine as event ingress by treating `permission` as a tool name (e.g. `control.sessions.read`) in `permissions.tools.allow/deny`.
+
+### Audit Logging
+
+Control-plane IAM decisions are written to `acl_access_log` with explicit operation metadata columns:
+
+- `operation_kind` (set to `"control-plane"`)
+- `operation` (WS method name)
+- `operation_resource`
+- `operation_action`
+- `operation_permission`
+
+Implementation:
+
+- Schema + migration + insert wiring:
+  - `/Users/tyler/nexus/home/projects/nexus/nex/src/iam/audit.ts`
 
 ---
 
@@ -74,4 +96,3 @@ Wiring steps (implementation work):
 
 - This taxonomy is designed for **single-tenant, multi-user**: different operator principals can be granted different control-plane permissions using IAM policies/grants.
 - “Uniform IAM everywhere” does **not** require turning control-plane reads/writes into `NexusEvent`s; it requires that the same IAM engine is used for authorization + audit.
-
