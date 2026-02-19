@@ -16,7 +16,7 @@ Outbound adapters deliver responses to external platforms. They handle formattin
 ```typescript
 interface OutboundAdapter {
   // Identity
-  channel: string;               // "discord", "telegram", "imessage", etc.
+  platform: string;              // "discord", "telegram", "imessage", etc.
   
   // Capabilities
   capabilities: ChannelCapabilities;
@@ -92,7 +92,7 @@ Where to send:
 
 ```typescript
 interface DeliveryTarget {
-  channel: string;               // Platform
+  platform: string;              // Platform
   account_id: string;            // Which bot account to use
   to: string;                    // Target identifier
   thread_id?: string;            // For threaded replies
@@ -230,7 +230,7 @@ interface MessageToolParams {
   // Send
   message?: string;
   to?: string;                   // Defaults to reply
-  channel?: string;              // Defaults to current
+  platform?: string;             // Defaults to current
   
   // Threading
   thread_id?: string;
@@ -250,8 +250,8 @@ interface MessageToolParams {
 
 ```typescript
 async function executeMessageTool(params: MessageToolParams, ctx: ToolContext) {
-  const channel = params.channel || ctx.delivery.channel;
-  const adapter = getOutboundAdapter(channel);
+  const platform = params.platform || ctx.delivery.platform;
+  const adapter = getOutboundAdapter(platform);
   
   if (params.action === 'send') {
     // Format for channel
@@ -260,9 +260,9 @@ async function executeMessageTool(params: MessageToolParams, ctx: ToolContext) {
     
     // Deliver
     const target: DeliveryTarget = {
-      channel,
+      platform,
       account_id: ctx.delivery.account_id,
-      to: params.to || ctx.delivery.peer_id,
+      to: params.to || ctx.delivery.container_id,
       thread_id: params.thread_id || ctx.delivery.thread_id,
       reply_to_id: params.reply_to_id || ctx.delivery.reply_to_id,
     };
@@ -319,7 +319,7 @@ eve react --message-id "abc123" --emoji "👍"
 import { iMessageAdapter } from './adapters/imessage';
 
 await iMessageAdapter.sendText({
-  channel: 'imessage',
+  platform: 'imessage',
   account_id: 'default',
   to: '+14155551234',
 }, 'Hello from Nexus');
@@ -334,12 +334,12 @@ await iMessageAdapter.sendText({
 ```typescript
 async function deliverResponse(request: NexusRequest, content: string) {
   const { delivery } = request;
-  const adapter = getOutboundAdapter(delivery.channel);
+  const adapter = getOutboundAdapter(delivery.platform);
   
   const result = await adapter.sendText({
-    channel: delivery.channel,
+    platform: delivery.platform,
     account_id: delivery.account_id,
-    to: delivery.peer_id,
+    to: delivery.container_id,
     thread_id: delivery.thread_id,
     reply_to_id: delivery.reply_to_id,
   }, content);

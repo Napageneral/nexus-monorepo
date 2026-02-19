@@ -93,7 +93,7 @@ interface TriggerConditions {
   
   // Match against event properties
   event?: {
-    channels?: string[];        // ['imessage', 'sms', 'discord']
+    platforms?: string[];        // ['imessage', 'sms', 'discord']
     types?: string[];           // ['timer_tick', 'message']
     direction?: 'sent' | 'received';
   };
@@ -132,7 +132,7 @@ interface AutomationContext {
   
   // Services
   ledger: LedgerClient;         // Query ledgers
-  cortex: CortexClient;         // Semantic search
+  memory: MemoryClient;         // Semantic search (replaces eliminated CortexClient / Go HTTP IPC)
   llm: LLMService;              // Call LLM
   
   // Utilities
@@ -146,16 +146,19 @@ interface AutomationContext {
 ```typescript
 interface LedgerClient {
   query<T>(sql: string, params?: any[]): Promise<T[]>;
-  // Read-only access to Events, Agents, Identity ledgers
+  // Read-only access to all 6 databases (events.db, agents.db, identity.db, memory.db, embeddings.db, runtime.db)
 }
 
-interface CortexClient {
+interface MemoryClient {
   search(query: string, options?: {
-    channels?: string[];
+    platforms?: string[];
     since?: number;
     limit?: number;
   }): Promise<{ eventId: string; score: number }[]>;
 }
+
+// Note: CortexClient (Go HTTP IPC) is eliminated per DATABASE_ARCHITECTURE.md §4.
+// MemoryClient queries memory.db + embeddings.db directly via TS.
 
 interface LLMService {
   (prompt: string, options?: { json?: boolean }): Promise<string>;

@@ -1,8 +1,9 @@
 # Meeseeks Pattern (Disposable Role Forks)
 
 **Status:** DESIGN SPEC
-**Last Updated:** 2026-02-13
+**Last Updated:** 2026-02-18
 **Related:** AGENTS.md, DATA_MODEL.md, ../../data/cortex/roles/
+**Database layout:** See `../../data/DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
 
 ---
 
@@ -191,7 +192,7 @@ Meeseeks agents operate in **code mode** — they have bash/filesystem access an
 
 ### Skills over structured tools
 
-Instead of defining a thick layer of bespoke tool_use tools (cortex_entity_search, cortex_relationship_query, etc.), meeseeks agents get **skills** — workspace files that contain schemas, query patterns, write helpers, and scripts. The agent uses these skills with its existing code mode capabilities.
+Instead of defining a thick layer of bespoke tool_use tools (memory_entity_search, memory_relationship_query, etc.), meeseeks agents get **skills** -- workspace files that contain schemas, query patterns, write helpers, and scripts. The agent uses these skills with its existing code mode capabilities.
 
 **Why skills instead of tools?**
 
@@ -207,22 +208,22 @@ Instead of HTTP-backed tools, meeseeks get **direct SQLite database paths** and 
 ```
 ~/.nexus/state/meeseeks/memory-reader/
   skills/
-    cortex/
-      SCHEMA.md           # Full CREATE TABLE statements for cortex.db
+    memory/
+      SCHEMA.md           # Full CREATE TABLE statements for memory.db + identity.db (entities)
       QUERIES.md          # Common query patterns with examples
-      cortex-search.sh    # Script that runs semantic + FTS search (embedding computation)
-      cortex-write.sh     # Script that handles writes with side-effect coordination
-      DB_PATH             # Just the path: ~/.nexus/data/cortex.db
+      memory-search.sh    # Script that runs semantic + FTS search (embedding computation)
+      memory-write.sh     # Script that handles writes with side-effect coordination
+      DB_PATHS            # Paths: memory.db, identity.db, embeddings.db
 ```
 
 The agent's ROLE.md references the skill folder. The agent reads the schema, writes SQL, runs scripts. Everything it needs is in the workspace.
 
 ### Semantic search: the one thing SQL can't do
 
-`cortex_search` (semantic + text search) requires computing query embeddings at runtime and doing vector similarity across heterogeneous tables. SQL alone can't express this. Two options:
+`memory_search` (semantic + text search) requires computing query embeddings at runtime and doing vector similarity across heterogeneous tables. SQL alone can't express this. Two options:
 
-1. **Skill script** — `cortex-search.sh` that calls an embedding service, computes similarity, ranks results, returns JSON. The agent calls it via bash.
-2. **One structured tool** — `cortex_search` as a real tool_use tool backed by the Go service.
+1. **Skill script** -- `memory-search.sh` that calls an embedding service, computes similarity, ranks results, returns JSON. The agent calls it via bash.
+2. **One structured tool** -- `memory_search` as a real tool_use tool backed by a TS endpoint.
 
 Either works. The skill script approach is more consistent with the overall model. The structured tool approach is more ergonomic for the LLM. Both remain valid — the right choice depends on implementation experience.
 
@@ -328,7 +329,7 @@ INSERT INTO automations (
 
 ### Memory Writer
 
-Registered at `after:runAgent` (async). Fires after the agent turn completes — extracts entities, relationships, and episodes from the completed turn and writes to Cortex.
+Registered at `after:runAgent` (async). Fires after the agent turn completes -- extracts entities, relationships, and episodes from the completed turn and writes to memory.db + identity.db (entities) + embeddings.db.
 
 See `../../data/cortex/roles/MEMORY_WRITER.md` for full role spec.
 
@@ -360,11 +361,11 @@ Reader workspace                         Writer workspace
   PATTERNS.md                              PATTERNS.md
   ERRORS.md  ←──── writer reads ────────── ERRORS.md
   skills/                                  skills/
-    cortex/                                  cortex/
+    memory/                                  memory/
       SCHEMA.md                                SCHEMA.md
       QUERIES.md                               QUERIES.md
-      cortex-search.sh                         cortex-search.sh
-      cortex-write.sh                          cortex-write.sh
+      memory-search.sh                         memory-search.sh
+      memory-write.sh                          memory-write.sh
   NOTES_FOR_WRITER.md ──── writer reads ──→
                      ←──── reader reads ─── NOTES_FOR_READER.md
 ```
@@ -541,9 +542,9 @@ This function is called at every hook point in the pipeline and broker dispatch 
 
 4. **Internal hook loading:** Load directory-discovered hooks into the automations table at startup (full convergence), or keep them as a separate loading path that feeds into the same runner?
 
-5. **Event ledger unification:** Resolved — see `../../data/cortex/EVENT_LEDGER_UNIFICATION.md`. One events ledger (`events.db`), Cortex events table removed. Pipeline already captures inbound + outbound. AIX adapters already built.
+5. **Event ledger unification:** Resolved -- see `../../data/cortex/EVENT_LEDGER_UNIFICATION.md`. One events ledger (`events.db`), legacy cortex events table removed. Pipeline already captures inbound + outbound. AIX adapters already built.
 
-6. **Semantic search delivery:** Should `cortex_search` (embedding + FTS hybrid search) be a structured tool_use tool, or a skill script (`cortex-search.sh`) the agent calls via bash? Skill script is more consistent; structured tool is more ergonomic for the LLM.
+6. **Semantic search delivery:** Should `memory_search` (embedding + FTS hybrid search) be a structured tool_use tool, or a skill script (`memory-search.sh`) the agent calls via bash? Skill script is more consistent; structured tool is more ergonomic for the LLM.
 
 ---
 

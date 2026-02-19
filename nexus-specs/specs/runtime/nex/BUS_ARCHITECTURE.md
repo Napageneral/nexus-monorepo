@@ -33,7 +33,7 @@ The Nexus Event Bus provides real-time pub/sub communication between system comp
 │  │  • Agent executor (streaming)              • Format-on-save             ││
 │  │  • Tool executor (file.edited)             • LSP                        ││
 │  │  • PTY manager                             • Share sync                 ││
-│  │  • File watcher                            • Cortex                      ││
+│  │  • File watcher                            • Memory System               ││
 │  │  • Permission/ACL system                   • Logging                    ││
 │  │  • Adapters (in/out)                       • Analytics                  ││
 │  │                                                                          ││
@@ -239,13 +239,13 @@ Bus.subscribeAll((event) => {
 | `nex.request.completed` | `request_id`, `duration_ms` | Pipeline done |
 | `nex.request.error` | `request_id`, `error` | Pipeline failed |
 
-### Category 7: ACL & Hooks
+### Category 7: Access Control & Hooks
 
 | Event | Properties | Purpose |
 |-------|------------|---------|
-| `acl.decision` | `request_id`, `principal`, `allowed` | Access decision |
-| `acl.grant.requested` | `grant_id`, `permission` | Needs user grant |
-| `acl.grant.resolved` | `grant_id`, `granted` | User responded |
+| `access.decision` | `request_id`, `principal`, `allowed` | Access decision |
+| `access.grant.requested` | `grant_id`, `permission` | Needs user grant |
+| `access.grant.resolved` | `grant_id`, `granted` | User responded |
 | `hook.fired` | `hook_id`, `event_id`, `result` | Hook triggered |
 | `hook.error` | `hook_id`, `error` | Hook failed |
 
@@ -287,7 +287,7 @@ Bus.subscribeAll((event) => {
 | PTY/Terminal | 3 |
 | Permissions & Questions | 4 |
 | NEX Pipeline | 4 |
-| ACL & Hooks | 5 |
+| Access Control & Hooks | 5 |
 | Adapters | 4 |
 | System | 3 |
 | LSP & Tools | 4 |
@@ -466,7 +466,7 @@ const analyticsPlugin: NEXPlugin = {
 │  │                                                                       │   │
 │  │  Each stage can publish:                                             │   │
 │  │  • Receive → adapter.in.received, nex.request.started               │   │
-│  │  • ACL → acl.decision, acl.grant.requested                          │   │
+│  │  • ACL → access.decision, access.grant.requested                     │   │
 │  │  • Hooks → hook.fired, hook.error                                   │   │
 │  │  • Broker → session.created, turn.created                           │   │
 │  │  • Agent → agent.streaming.*, agent.status.*, agent.tool.*          │   │
@@ -536,7 +536,7 @@ packages/core/src/
 - Session/message events → Adapt to turn-based
 - Permission/question → Keep
 - File/PTY/LSP → Keep
-- Add NEX/ACL/Hook/Adapter events
+- Add NEX/Access Control/Hook/Adapter events
 
 ---
 

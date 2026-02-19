@@ -101,22 +101,22 @@ Principals are WHO is making a request. They map to identities in your ledger.
 When an event arrives, we resolve the sender via the **Identity Ledger**:
 
 ```
-Event: { channel: "imessage", from: "+15551234567" }
+Event: { platform: "imessage", sender_id: "+15551234567" }
                     │
                     ▼
-         ┌─────────────────────────┐
-         │  Identity Ledger Lookup │
-         │                         │
-         │  SELECT e.*, ei.*       │
-         │  FROM entities e        │
-         │  JOIN entity_identities │
-         │    ei ON e.id =         │
-         │    ei.entity_id         │
-         │  WHERE ei.channel =     │
-         │  'imessage' AND         │
-         │  ei.identifier =        │
-         │  '+15551234567'         │
-         └─────────────────────────┘
+         ┌──────────────────────────────┐
+         │  identity.db Contact Lookup  │
+         │                              │
+         │  SELECT c.entity_id          │
+         │  FROM contacts c             │
+         │  WHERE c.platform =          │
+         │  'imessage' AND              │
+         │  c.sender_id =              │
+         │  '+15551234567'              │
+         │                              │
+         │  → Then resolve entity via   │
+         │    merged_into chain         │
+         └──────────────────────────────┘
                     │
                     ▼
          Principal: {
@@ -163,8 +163,8 @@ Conditions are additional context that modifies which policies match.
 
 | Condition | Description | Examples |
 |-----------|-------------|----------|
-| **channel** | Communication platform | `imessage`, `discord`, `slack` |
-| **peer_kind** | DM vs group | `dm`, `group` |
+| **platform** | Communication platform | `imessage`, `discord`, `slack` |
+| **container_kind** | DM vs group | `dm`, `group` |
 | **account** | Multi-account contexts | `slack:company-workspace` |
 | **guild** | Discord server | `discord:guild-123` |
 | **time** | Time-based rules | `23:00-08:00`, `weekends` |
@@ -327,7 +327,7 @@ Policies assign sessions via templating:
 ```yaml
 session:
   persona: atlas
-  key: "family:{principal.name}"  # → "family:casey"
+  key: "family:{principal.name}"    # → "family:casey"
 ```
 
 ### Template Variables
@@ -336,8 +336,8 @@ session:
 |----------|-------------|
 | `{principal.name}` | Person's name |
 | `{principal.id}` | Person's ID |
-| `{channel}` | Channel name |
-| `{peer_id}` | Group/peer ID |
+| `{platform}` | Platform name |
+| `{container_id}` | Group/container ID |
 | `{account}` | Account ID |
 
 ### Session Isolation Examples
@@ -346,9 +346,9 @@ session:
 |---------|-------------|----------|
 | `main` | `main` | Owner DMs collapse |
 | `family:{principal.name}` | `family:casey` | Per-family-member isolation |
-| `{channel}:group:{peer_id}` | `discord:group:123` | Per-group isolation |
+| `{platform}:group:{container_id}` | `discord:group:123` | Per-group isolation |
 | `work` | `work` | Work context unified |
-| `unknown:{channel}:{principal.id}` | `unknown:email:xyz` | Unknown sender isolation |
+| `unknown:{platform}:{principal.id}` | `unknown:email:xyz` | Unknown sender isolation |
 
 ---
 
@@ -358,7 +358,7 @@ Every access decision is logged. See `AUDIT.md` for full spec.
 
 ### What's Logged
 
-- Event details (channel, sender)
+- Event details (platform, sender)
 - Resolved principal
 - Matching policies
 - Effect (allow/deny)
@@ -528,24 +528,32 @@ Event Ledger → Event Handler [ ACL → Hooks ] → Broker
 The Identity Ledger stores entities (persons and personas) with their contact identities:
 
 ```sql
--- IDENTITY LEDGER
+-- identity.db — Entities (relocated from cortex.db per DATABASE_ARCHITECTURE.md)
 entities (
   id TEXT PRIMARY KEY,
-  type TEXT NOT NULL,           -- 'person' | 'persona'
   name TEXT,
-  is_user INTEGER,              -- True for owner (person only)
-  relationship TEXT,            -- family, partner, etc. (person only)
-  created_at INTEGER,
-  updated_at INTEGER
+  type TEXT NOT NULL,           -- 'person' | 'persona' | 'discord_handle' | 'phone' | 'email' | ...
+  merged_into TEXT,             -- union-find merge chain (NULL = canonical root)
+  normalized TEXT,
+  is_user INTEGER,              -- True for owner
+  source TEXT,                  -- 'delivery' | 'inferred' | 'manual'
+  mention_count INTEGER,
+  first_seen INTEGER,
+  last_seen INTEGER
 );
 
-entity_identities (
-  entity_id TEXT,
-  channel TEXT,                 -- imessage, discord, etc.
-  identifier TEXT,              -- +1234567, @atlas_bot
-  account_id TEXT,              -- For personas: which bot account
-  is_owned INTEGER DEFAULT 0,   -- True if entity OWNS this identity
-  PRIMARY KEY (channel, identifier),
+-- identity.db — Contacts replace the old entity_identities table
+contacts (
+  platform TEXT NOT NULL,       -- imessage, discord, etc.
+  space_id TEXT NOT NULL DEFAULT '',
+  sender_id TEXT NOT NULL,      -- +1234567, @atlas_bot
+  entity_id TEXT NOT NULL,
+  first_seen INTEGER NOT NULL,
+  last_seen INTEGER NOT NULL,
+  message_count INTEGER NOT NULL DEFAULT 0,
+  sender_name TEXT,
+  avatar_url TEXT,
+  PRIMARY KEY (platform, space_id, sender_id),
   FOREIGN KEY (entity_id) REFERENCES entities(id)
 );
 
@@ -557,9 +565,11 @@ entity_tags (
 );
 ```
 
+> **Note (DATABASE_ARCHITECTURE.md):** The old `entity_identities` table is superseded by the `contacts` table, which uses `(platform, space_id, sender_id)` instead of `(channel, identifier)`. Entities, contacts, and entity_tags all live in `identity.db`.
+
 **Key insight:** Personas are entities that OWN identities (bot accounts). People HAVE identities (contact info).
 
-**Cortex enrichment:** The Cortex can learn relationships over time from conversation patterns and update the Identity Ledger.
+**Memory System enrichment:** The Memory System can learn relationships over time from conversation patterns and update the entities in identity.db.
 
 Persona workspace files (`SOUL.md`, credentials, etc.) remain managed by Nexus workspace — the Identity Ledger handles principal resolution for ACL routing.
 

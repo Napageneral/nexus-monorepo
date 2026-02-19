@@ -1,7 +1,7 @@
 # Inbound Adapter Interface
 
 **Status:** DESIGN COMPLETE  
-**Last Updated:** 2026-01-30
+**Last Updated:** 2026-02-18
 
 ---
 
@@ -16,7 +16,7 @@ Inbound adapters receive messages from external platforms and normalize them to 
 ```typescript
 interface InboundAdapter {
   // Identity
-  channel: string;               // "discord", "telegram", "imessage", etc.
+  platform: string;              // "discord", "telegram", "imessage", etc.
   
   // Lifecycle
   start(config: AdapterConfig): Promise<void>;
@@ -52,7 +52,7 @@ The normalized event format all adapters emit:
 ```typescript
 interface NexusEvent {
   // Identity
-  event_id: string;              // "{channel}:{source_id}"
+  event_id: string;              // "{platform}:{source_id}"
   timestamp: number;             // Unix ms
   
   // Content
@@ -61,12 +61,12 @@ interface NexusEvent {
   attachments?: Attachment[];
   
   // Routing context
-  channel: string;               // Platform name
+  platform: string;              // Platform name
   account_id: string;            // Which bot account received
   sender_id: string;             // Platform-specific sender ID
   sender_name?: string;          // Display name if available
-  peer_id: string;               // Chat/channel/user ID
-  peer_kind: 'dm' | 'group' | 'channel';
+  container_id: string;          // Chat/channel/DM container ID
+  container_kind: 'dm' | 'group' | 'channel' | 'direct';
   thread_id?: string;            // For threaded conversations
   reply_to_id?: string;          // If replying to a message
   
@@ -136,7 +136,7 @@ const discordMsg = {
   content: "Hello world",
   author: { id: "user123", username: "alice" },
   channel_id: "chan456",
-  guild_id: "guild789",
+  space_id: "guild789",
 };
 
 // Normalized NexusEvent
@@ -145,14 +145,14 @@ const event: NexusEvent = {
   timestamp: Date.now(),
   content: "Hello world",
   content_type: "text",
-  channel: "discord",
+  platform: "discord",
   account_id: "bot-account-1",
   sender_id: "user123",
   sender_name: "alice",
-  peer_id: "chan456",
-  peer_kind: "group",  // or "dm" if DM channel
+  container_id: "chan456",
+  container_kind: "group",  // or "dm" if DM container
   metadata: {
-    guild_id: "guild789",
+    space_id: "guild789",
   },
 };
 ```
@@ -175,11 +175,11 @@ const event: NexusEvent = {
   timestamp: Date.now(),
   content: "Hey there",
   content_type: "text",
-  channel: "imessage",
+  platform: "imessage",
   account_id: "default",
   sender_id: "+14155551234",
-  peer_id: "+14155551234",
-  peer_kind: "dm",
+  container_id: "+14155551234",
+  container_kind: "dm",
 };
 ```
 
@@ -192,7 +192,7 @@ Adapters can optionally filter events before emission:
 ```typescript
 interface EventFilter {
   type: 'include' | 'exclude';
-  field: 'sender_id' | 'peer_id' | 'content_type';
+  field: 'sender_id' | 'container_id' | 'content_type';
   pattern: string | RegExp;
 }
 ```
@@ -200,7 +200,7 @@ interface EventFilter {
 Example: Only DMs from specific users:
 ```typescript
 filters: [
-  { type: 'include', field: 'peer_kind', pattern: 'dm' },
+  { type: 'include', field: 'container_kind', pattern: 'dm' },
   { type: 'include', field: 'sender_id', pattern: /^\+1415/ },
 ]
 ```
@@ -238,13 +238,13 @@ function createNexusRequest(event: NexusEvent): NexusRequest {
     },
     
     delivery: {
-      channel: event.channel,
+      platform: event.platform,
       account_id: event.account_id,
-      peer_id: event.peer_id,
-      peer_kind: event.peer_kind,
+      container_id: event.container_id,
+      container_kind: event.container_kind,
       thread_id: event.thread_id,
       reply_to_id: event.reply_to_id,
-      capabilities: getChannelCapabilities(event.channel),
+      capabilities: getPlatformCapabilities(event.platform),
     },
     
     pipeline: [{ stage: 'adapter_inbound', timestamp: Date.now() }],
@@ -256,16 +256,16 @@ function createNexusRequest(event: NexusEvent): NexusRequest {
 
 ## Existing Adapters
 
-| Tool | Channel | Status | Notes |
-|------|---------|--------|-------|
+| Tool | Platform | Status | Notes |
+|------|----------|--------|-------|
 | `eve` | iMessage | ✅ | macOS only |
 | `gog` | Gmail | ✅ | Via Google API |
 | `aix` | AI sessions | ✅ | Cursor/IDE |
 
 ### To Port from Upstream
 
-| Channel | Upstream | Target Tool |
-|---------|----------|-------------|
+| Platform | Upstream | Target Tool |
+|----------|----------|-------------|
 | Discord | `src/discord/monitor.ts` | `discord-cli` |
 | Telegram | `src/telegram/monitor.ts` | `telegram-bot` |
 | WhatsApp | `src/web/inbound/` | Baileys wrapper |

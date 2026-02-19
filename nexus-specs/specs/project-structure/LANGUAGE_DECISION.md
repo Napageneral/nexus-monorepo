@@ -26,27 +26,28 @@
 
 ## Boundaries
 
-The TS/Go boundary is a **process boundary**, not a library boundary. No FFI, no shared memory.
+> **Update (2026-02-18):** The Go cortex process has been eliminated. All logic (memory pipeline, recall, search, entity extraction) is ported to TypeScript. The long-term plan is to unify everything into a single Go runtime, but short-term we unify into TS first. See [DATABASE_ARCHITECTURE.md](../data/DATABASE_ARCHITECTURE.md).
+
+Currently, Nexus is a **single TypeScript process** (the NEX daemon). The Go cortex code remains in the repo for the eventual Go unification but is not a runtime participant.
 
 ```
-TypeScript (NEX daemon)              Go (Cortex)
-┌──────────────────────┐            ┌──────────────────────┐
-│ NEX pipeline         │            │ Analysis pipeline    │
-│ Broker               │◄──────────│ Embeddings           │
-│ Agent execution      │  queries  │ Semantic search      │
-│ CLI commands         │  writes   │ Entity extraction    │
-│ Tool framework       │            │ Job system           │
-└──────────┬───────────┘            └──────────┬───────────┘
-           │                                   │
-           └──────── nexus.db (SQLite) ────────┘
-                     (shared, both read+write)
+TypeScript (NEX daemon — single process)
+┌──────────────────────────────────────┐
+│ NEX pipeline         Memory System   │
+│ Broker               (TS port)       │
+│ Agent execution      Embeddings      │
+│ CLI commands         Semantic search │
+│ Tool framework       Entity extract  │
+└──────────────────┬───────────────────┘
+                   │
+     6 SQLite databases under state/data/
+     (events, agents, identity, memory,
+      embeddings, runtime)
 ```
 
-**Database access:** Both processes read from and write to `nexus.db`. SQLite handles concurrent reads natively. Write contention is managed via WAL mode and short transactions. Cortex also writes to `state/cortex/cortex.db` for derived embeddings and analyses.
+**Database access:** The single process reads/writes all 6 databases. SQLite WAL mode enables concurrent reads. Write contention is isolated by database (hot-path writes to events.db, agents.db, and identity.db don't block each other).
 
 **Adapter communication:** Adapters are external binaries invoked via CLI protocol. Language doesn't matter — Go, TS, Python, Rust, shell scripts all work.
-
-**Cortex ↔ NEX communication:** Cortex exposes functionality that NEX can query (semantic search, memory retrieval). The exact interface (HTTP API, Unix socket, direct SQLite reads) is TBD but the process boundary is clean.
 
 ---
 

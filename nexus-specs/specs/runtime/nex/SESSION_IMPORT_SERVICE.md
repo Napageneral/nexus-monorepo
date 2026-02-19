@@ -327,7 +327,7 @@ Job model rules:
 
 Backfill job persistence schema (required):
 
-1. Persist jobs in `nexus.db` (runtime domain), not in import payload source stores.
+1. Persist jobs in `runtime.db` (formerly `nexus.db`, runtime domain), not in import payload source stores.
 2. Minimum fields:
    - `id` (primary key)
    - `source`

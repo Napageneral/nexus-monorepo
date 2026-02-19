@@ -1,0 +1,25 @@
+{
+  "name": "@nexus-project/nexus-adapter-discord",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Nexus Discord external adapter",
+  "main": "dist/index.js",
+  "bin": {
+    "nexus-adapter-discord": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@nexus-project/adapter-sdk-ts": "file:../nexus-adapter-sdks/nexus-adapter-sdk-ts",
+    "discord.js": "^14.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.5"
+  }
+}

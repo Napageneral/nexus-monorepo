@@ -1,7 +1,7 @@
 # NEX — Nexus Event Exchange
 
 **Status:** ACTIVE  
-**Last Updated:** 2026-02-12
+**Last Updated:** 2026-02-18
 
 ---
 
@@ -20,6 +20,8 @@ This folder contains the core NEX orchestrator specifications — the central pi
 | `CONTROL_PLANE.md` | 🧭 Design | Single-daemon control-plane (Gateway removal) — WS RPC + HTTP endpoints live inside NEX |
 | `SINGLE_TENANT_MULTI_USER.md` | 🧭 Design | Single-tenant, multi-user runtime — trust zones, auth, identity mapping, and anti-spoofing requirements |
 | `INGRESS_CREDENTIALS.md` | 🧭 Design | Customer ingress credentials — API keys + persistent anonymous webchat sessions (entity-per-visitor) |
+| `INGRESS_INTEGRITY.md` | 🧭 Design | Field stamping contract (daemon-stamped vs adapter/client claims) to prevent identity/policy spoofing |
+| `INGRESS_CONTROL_PLANE_UNIFICATION_PLAN.md` | 🚧 Plan | Concrete build plan for control-plane IAM credential ops + internal `http-ingress` adapterization |
 | `CONTROL_PLANE_AUTHZ_TAXONOMY.md` | ✅ Implemented | Control-plane action/resource taxonomy + enforcement (Option A authz) — maps WS methods to IAM permissions |
 | `SESSION_IMPORT_SERVICE.md` | 🧭 Design | Gateway-free AIX import adapter plan — NEX-owned session import/chunk service |
 | `NEXUS_REQUEST.md` | ✅ Complete | The data bus that accumulates context through pipeline |

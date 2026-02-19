@@ -1,8 +1,11 @@
 # Events Ledger Consolidated Target State
 
-**Status:** DESIGN SPEC (REFINED)  
-**Last Updated:** 2026-02-16  
+**Status:** DESIGN SPEC (REFINED)
+**Last Updated:** 2026-02-18
 **Related:** `EVENTS_LEDGER.md`, `../cortex/EVENT_LEDGER_UNIFICATION.md`, `../cortex/CORTEX_NEX_MIGRATION.md`
+
+> **Canonical Reference:** See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the
+> authoritative 6-database inventory, table ownership, and migration plan.
 
 ---
 
@@ -12,7 +15,7 @@ Define the refined end state for Nexus communications data:
 
 1. `events.db` is the single source of truth for communications events.
 2. Useful Cortex-era event features (threads, normalized attachments, event state/tags, reply links, document indexing) move into `events.db`.
-3. `cortex.db` no longer owns communications infrastructure; it remains the derived intelligence layer.
+3. `memory.db` (successor to `cortex.db`) does not own communications infrastructure; it contains the memory system (facts, episodes, analysis).
 
 ---
 
@@ -28,7 +31,7 @@ Define the refined end state for Nexus communications data:
 6. Event state/tags remain in the primary event system (`events.db`), including event-time metadata (`viewed_at`, `archived_at`, etc.).
 7. `document_heads` and `retrieval_log` belong with the event ledger, not Cortex.
 8. Existing diagnostic tools are kept, but rewritten against the unified `events.db` schema (no compatibility shims as production behavior).
-9. Go adapters become official Nexus ingestion paths but write into the same unified ledger schema.
+9. All adapters (Nex TS) write into the same unified ledger schema.
 10. Language/runtime consolidation is out of scope for this spec.
 
 ---
@@ -42,16 +45,23 @@ Define the refined end state for Nexus communications data:
 - Communication annotations/state
 - Procedural document index pointers and retrieval telemetry (until re-homed)
 
-### `cortex.db` owns
+### `memory.db` owns (successor to cortex.db)
 
 - Episodes and episode relationships
-- Entity graph and person graph
-- Analysis outputs/facets
-- Embeddings and derived search artifacts
+- Facts, mental models, causal links, facets
+- Analysis pipeline outputs
+
+### `identity.db` owns
+
+- Entity graph (entities, entity_tags, cooccurrences, merge_candidates)
+
+### `embeddings.db` owns
+
+- Embeddings and derived search artifacts (sqlite-vec)
 
 ### Explicit non-goal
 
-`cortex.db` is not a second communications ledger.
+None of the above databases are a second communications ledger.
 
 ---
 
@@ -77,8 +87,12 @@ CREATE TABLE IF NOT EXISTS events (
     content_type TEXT NOT NULL DEFAULT 'text',
     attachments TEXT,                    -- JSON array (canonical payload form)
 
-    from_channel TEXT NOT NULL,
-    from_identifier TEXT NOT NULL,
+    -- NOTE: from_channel/from_identifier use legacy names for backward compatibility.
+    -- Canonical terminology per the Unified Delivery Taxonomy:
+    --   from_channel    → platform
+    --   from_identifier → sender_id
+    from_channel TEXT NOT NULL,           -- platform of sender
+    from_identifier TEXT NOT NULL,        -- sender_id on that platform
     to_recipients TEXT,                  -- JSON array of participant refs
 
     timestamp INTEGER NOT NULL,          -- unix ms at source
@@ -110,21 +124,10 @@ CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(
 
 Kept synchronized via insert/update/delete triggers on `events`.
 
-### Sync bookkeeping
-
-#### `sync_watermarks`
-
-Tracks adapter sync checkpoints for event ingestion paths.
-
-```sql
-CREATE TABLE IF NOT EXISTS sync_watermarks (
-    adapter TEXT PRIMARY KEY,
-    last_sync_at INTEGER NOT NULL,
-    last_event_id TEXT
-);
-```
-
 ### Organization/index tables
+
+> **Note:** The `sync_watermarks` table has been removed. Adapters own their
+> sync state internally. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) section 5.
 
 #### `threads`
 
@@ -133,7 +136,7 @@ First-class conversation grouping keyed by the same `thread_id` used on events.
 ```sql
 CREATE TABLE IF NOT EXISTS threads (
     id TEXT PRIMARY KEY,                 -- canonical thread_id
-    channel TEXT NOT NULL,
+    channel TEXT NOT NULL,               -- platform (legacy column name)
     name TEXT,
     is_group INTEGER NOT NULL DEFAULT 0,
 
@@ -158,8 +161,9 @@ CREATE INDEX IF NOT EXISTS idx_threads_last_event_at ON threads(last_event_at DE
 
 #### `event_participants`
 
-Event-level normalized participant rows for query speed and dedupe.  
-Not a static thread membership table.
+Event-level normalized participant rows for query speed and dedupe.
+Not a static thread membership table. The `channel`/`identifier` columns here
+correspond to `platform`/`sender_id` in the Unified Delivery Taxonomy.
 
 ```sql
 CREATE TABLE IF NOT EXISTS event_participants (
@@ -283,6 +287,7 @@ CREATE INDEX IF NOT EXISTS idx_event_tags_tag ON event_tags(tag_id);
 #### `document_heads`
 
 Stable pointer from procedural key (`skill:*`, `doc:*`, etc.) to current document event id.
+The `channel` column here corresponds to `platform` in the Unified Delivery Taxonomy.
 
 #### `retrieval_log`
 
@@ -320,7 +325,7 @@ CREATE TABLE IF NOT EXISTS retrieval_log (
 2. `threads`, `event_participants`, and normalized `attachments` are index/operational tables in the same database.
 3. Inline event fields remain required even when normalized tables exist:
    - `events.thread_id`
-   - `events.from_identifier`
+   - `events.from_identifier` (canonical: `sender_id`)
    - `events.to_recipients`
    - `events.attachments`
 4. Rebuild tools may re-derive index tables from canonical event rows.
@@ -343,18 +348,23 @@ State/tag/document tables are maintained by higher-level workflows, not raw chan
 
 ## Reader Requirements
 
-1. Readers query `events.db` directly (Node) or via attached `events_ledger` (Go).
+1. Readers query `events.db` directly (Nex TS) or via attached `events_ledger`.
 2. Diagnostic/validation tools are retained but rewritten to unified schema.
 3. No runtime path may depend on resurrecting removed legacy Cortex comms tables.
 
 ---
 
-## Cortex Integration
+## Memory System Integration
 
-1. `cortex.db` keeps episodes, graph, analysis, and embeddings.
-2. `episode_events.event_id` logically references `events.db.events.id`.
-3. Cortex readers join events through attached `events_ledger`.
-4. `document_heads` and `retrieval_log` move out of Cortex and into `events.db`.
+> **Note:** `cortex.db` has been superseded by `memory.db`, `identity.db` (entities),
+> and `embeddings.db`. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md).
+
+1. `memory.db` keeps episodes, facts, mental models, and analysis pipeline.
+2. `identity.db` keeps entities, entity_tags, cooccurrences, and merge_candidates.
+3. `embeddings.db` keeps vector embeddings (sqlite-vec).
+4. `episode_events.event_id` logically references `events.db.events.id`.
+5. Memory system readers join events through attached `events_ledger`.
+6. `document_heads` and `retrieval_log` live in `events.db`.
 
 ---
 
@@ -363,7 +373,7 @@ State/tag/document tables are maintained by higher-level workflows, not raw chan
 ### Phase 1: Schema expansion in `events.db`
 
 - Add `reply_to` to `events`.
-- Add all new tables defined above in both TS (`src/db/events.ts`) and Go (`cortex/internal/eventsledger/eventsledger.go`) schema definitions.
+- Add all new tables defined above in TS (`src/db/events.ts`) schema definitions.
 - Keep migrations additive and idempotent.
 
 ### Phase 2: Writer updates
@@ -376,9 +386,9 @@ State/tag/document tables are maintained by higher-level workflows, not raw chan
 - Rewrite diagnostic tools (`encode-imessage-samples`, `verify-memory-live`) to unified schema.
 - Remove temporary compatibility view behavior.
 
-### Phase 4: Cortex boundary cleanup
+### Phase 4: Memory system boundary cleanup
 
-- Remove any remaining communications ownership from `cortex.db`.
+- Ensure no communications ownership remains in `memory.db` (successor to `cortex.db`).
 - Move procedural document index usage (`document_heads`, `retrieval_log`) to `events.db`.
 
 ### Phase 5: Validation and hardening
@@ -404,7 +414,7 @@ State/tag/document tables are maintained by higher-level workflows, not raw chan
    - state transitions have timestamps; tags can be queried by tag or event.
 7. Document retrieval integrity:
    - `document_heads` resolves latest doc event; `retrieval_log` records accesses.
-8. Cortex integration:
+8. Memory system integration:
    - episode and search flows succeed via attached `events_ledger` without legacy comms tables.
 
 ---
@@ -412,6 +422,6 @@ State/tag/document tables are maintained by higher-level workflows, not raw chan
 ## Out of Scope
 
 1. Runtime/language consolidation (TS vs Go vs Rust) beyond schema and behavior compatibility.
-2. Moving episodes/entities/embeddings out of `cortex.db`.
+2. ~~Moving episodes/entities/embeddings out of `cortex.db`.~~ **Done.** Entities are now in `identity.db`, embeddings in `embeddings.db`, and episodes/facts in `memory.db`. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md).
 3. Product UI policy decisions for state/tag semantics beyond storage contracts.
 

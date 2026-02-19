@@ -3,17 +3,17 @@ import { NexusEvent } from "./protocol.js";
 export class EventBuilder {
   private event: NexusEvent;
 
-  constructor(channel: string, eventID: string) {
+  constructor(platform: string, eventID: string) {
     this.event = {
-      channel,
+      platform,
       event_id: eventID,
       timestamp: Date.now(),
       content: "",
       content_type: "text",
       account_id: "",
       sender_id: "",
-      peer_id: "",
-      peer_kind: "dm",
+      container_id: "",
+      container_kind: "dm",
     };
   }
 
@@ -45,9 +45,16 @@ export class EventBuilder {
     return this;
   }
 
-  withPeer(peerID: string, kind: NexusEvent["peer_kind"]): this {
-    this.event.peer_id = peerID;
-    this.event.peer_kind = kind;
+  withContainer(containerID: string, kind: NexusEvent["container_kind"]): this {
+    this.event.container_id = containerID;
+    this.event.container_kind = kind;
+    return this;
+  }
+
+  // Deprecated alias retained for transition.
+  withPeer(peerID: string, kind: NexusEvent["container_kind"]): this {
+    this.event.container_id = peerID;
+    this.event.container_kind = kind;
     return this;
   }
 
@@ -87,7 +94,6 @@ export class EventBuilder {
   }
 }
 
-export function newEvent(channel: string, eventID: string): EventBuilder {
-  return new EventBuilder(channel, eventID);
+export function newEvent(platform: string, eventID: string): EventBuilder {
+  return new EventBuilder(platform, eventID);
 }
-

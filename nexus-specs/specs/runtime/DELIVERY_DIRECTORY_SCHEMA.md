@@ -31,7 +31,7 @@ All tables in this document live in `identity.db`.
 Rationale:
 
 - `identity.db` is already the pipeline-speed lookup store (contacts + auth).
-- Directory lookups should be local, fast, and not require cortex joins for common UI/IAM operations.
+- Directory lookups should be local, fast, and not require cross-DB joins for common UI/IAM operations.
 
 ---
 
@@ -40,7 +40,7 @@ Rationale:
 1. **Ids are authoritative.** `*_name` fields are best-effort display strings.
 2. **History is tracked as intervals.** Name history tables store `first_seen/last_seen` for each distinct name.
 3. **Membership is observed-first.** Start with "observed participant" tracking from messages; add active sync later if needed.
-4. **No hard FKs to cortex.** `entity_id` references cortex entities by convention (cross-db).
+4. **Entities are in identity.db.** `entity_id` references the `entities` table, which lives in the same database as contacts and directory tables. This enables JOINs for identity resolution without cross-DB lookups. See [DATABASE_ARCHITECTURE.md](../data/DATABASE_ARCHITECTURE.md).
 
 ---
 
@@ -78,7 +78,7 @@ CREATE INDEX IF NOT EXISTS idx_contacts_last_seen ON contacts(last_seen DESC);
 Notes:
 
 - For Discord: `space_id` SHOULD be '' for contacts if `sender_id` is globally unique and we want a single contact per user.
-  - Per-space nicknames should be tracked in `delivery_container_participants.last_sender_name`.
+  - Per-space nicknames should be tracked in `container_participants.last_sender_name`.
 - For Slack: `space_id` SHOULD be the workspace id because `sender_id` is only meaningful within a workspace.
 - `space_id` is `NOT NULL` with a default of `''` because SQLite `UNIQUE`/`PRIMARY KEY` constraints treat `NULL` values as distinct.
   - Using `''` ensures `(platform, space_id, sender_id)` is truly unique even when a platform has no `space_id`.
@@ -90,7 +90,7 @@ Notes:
 Spaces are the "server/workspace" layer. Not all platforms have spaces.
 
 ```sql
-CREATE TABLE IF NOT EXISTS delivery_spaces (
+CREATE TABLE IF NOT EXISTS spaces (
   platform           TEXT NOT NULL,
   account_id         TEXT NOT NULL,
   space_id           TEXT NOT NULL,
@@ -106,31 +106,38 @@ CREATE TABLE IF NOT EXISTS delivery_spaces (
   PRIMARY KEY (platform, account_id, space_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_delivery_spaces_last_seen ON delivery_spaces(last_seen DESC);
+CREATE INDEX IF NOT EXISTS idx_spaces_last_seen ON spaces(last_seen DESC);
 ```
 
-### Space Name History
+> **Note (DATABASE_ARCHITECTURE.md):** The `delivery_` prefix is dropped from all table names. The database name (`identity.db`) provides sufficient context.
+
+### Name History (Unified `names` Table)
+
+All name history for spaces, containers, and threads is stored in a single unified `names` table:
 
 ```sql
-CREATE TABLE IF NOT EXISTS delivery_space_names (
+CREATE TABLE IF NOT EXISTS names (
+  kind         TEXT NOT NULL,  -- 'space' | 'container' | 'thread'
   platform     TEXT NOT NULL,
   account_id   TEXT NOT NULL,
-  space_id     TEXT NOT NULL,
+  target_id    TEXT NOT NULL,  -- space_id, container_id, or thread_id depending on kind
+  parent_id    TEXT NOT NULL DEFAULT '',  -- container_id for threads, '' otherwise
   name         TEXT NOT NULL,
-
   first_seen   INTEGER NOT NULL,
   last_seen    INTEGER NOT NULL,
-
-  PRIMARY KEY (platform, account_id, space_id, name)
+  PRIMARY KEY (kind, platform, account_id, target_id, parent_id, name)
 );
 
-CREATE INDEX IF NOT EXISTS idx_delivery_space_names_last_seen ON delivery_space_names(last_seen DESC);
+CREATE INDEX IF NOT EXISTS idx_names_last_seen ON names(last_seen DESC);
+CREATE INDEX IF NOT EXISTS idx_names_target ON names(kind, platform, account_id, target_id);
 ```
+
+> **Note (DATABASE_ARCHITECTURE.md):** The three separate `delivery_space_names`, `delivery_container_names`, and `delivery_thread_names` tables are consolidated into this single `names` table. The `kind` column discriminates between space, container, and thread names.
 
 Write rule:
 
-- On every inbound event that includes `space_name`, upsert `(platform, account_id, space_id, space_name)` and update `last_seen`.
-- If the name differs from `delivery_spaces.current_name`, set `current_name` and `current_name_seen` and allow the history table to retain both.
+- On every inbound event that includes `space_name`, upsert `(kind='space', platform, account_id, target_id=space_id, name=space_name)` and update `last_seen`.
+- If the name differs from `spaces.current_name`, set `current_name` and `current_name_seen` and allow the history table to retain both.
 
 ---
 
@@ -139,7 +146,7 @@ Write rule:
 Containers are the "place messages happen".
 
 ```sql
-CREATE TABLE IF NOT EXISTS delivery_containers (
+CREATE TABLE IF NOT EXISTS containers (
   platform              TEXT NOT NULL,
   account_id            TEXT NOT NULL,
 
@@ -160,29 +167,17 @@ CREATE TABLE IF NOT EXISTS delivery_containers (
   PRIMARY KEY (platform, account_id, container_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_delivery_containers_space ON delivery_containers(platform, account_id, space_id);
-CREATE INDEX IF NOT EXISTS idx_delivery_containers_last_seen ON delivery_containers(last_seen DESC);
+CREATE INDEX IF NOT EXISTS idx_containers_space ON containers(platform, account_id, space_id);
+CREATE INDEX IF NOT EXISTS idx_containers_last_seen ON containers(last_seen DESC);
 ```
 
 ### Container Name History
 
-```sql
-CREATE TABLE IF NOT EXISTS delivery_container_names (
-  platform     TEXT NOT NULL,
-  account_id   TEXT NOT NULL,
-  container_id TEXT NOT NULL,
-  name         TEXT NOT NULL,
-  first_seen   INTEGER NOT NULL,
-  last_seen    INTEGER NOT NULL,
-  PRIMARY KEY (platform, account_id, container_id, name)
-);
-
-CREATE INDEX IF NOT EXISTS idx_delivery_container_names_last_seen ON delivery_container_names(last_seen DESC);
-```
+Container names are stored in the unified `names` table (see above) with `kind = 'container'` and `target_id = container_id`.
 
 Write rule:
 
-- On inbound events with `container_name`, upsert the matching row in `delivery_container_names`.
+- On inbound events with `container_name`, upsert the matching row in `names` with `kind = 'container'`.
 
 ---
 
@@ -191,7 +186,7 @@ Write rule:
 Threads are optional sub-containers within a container.
 
 ```sql
-CREATE TABLE IF NOT EXISTS delivery_threads (
+CREATE TABLE IF NOT EXISTS threads (
   platform              TEXT NOT NULL,
   account_id            TEXT NOT NULL,
 
@@ -209,26 +204,13 @@ CREATE TABLE IF NOT EXISTS delivery_threads (
   PRIMARY KEY (platform, account_id, container_id, thread_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_delivery_threads_container ON delivery_threads(platform, account_id, container_id);
-CREATE INDEX IF NOT EXISTS idx_delivery_threads_last_seen ON delivery_threads(last_seen DESC);
+CREATE INDEX IF NOT EXISTS idx_threads_container ON threads(platform, account_id, container_id);
+CREATE INDEX IF NOT EXISTS idx_threads_last_seen ON threads(last_seen DESC);
 ```
 
 ### Thread Name History
 
-```sql
-CREATE TABLE IF NOT EXISTS delivery_thread_names (
-  platform     TEXT NOT NULL,
-  account_id   TEXT NOT NULL,
-  container_id TEXT NOT NULL,
-  thread_id    TEXT NOT NULL,
-  name         TEXT NOT NULL,
-  first_seen   INTEGER NOT NULL,
-  last_seen    INTEGER NOT NULL,
-  PRIMARY KEY (platform, account_id, container_id, thread_id, name)
-);
-
-CREATE INDEX IF NOT EXISTS idx_delivery_thread_names_last_seen ON delivery_thread_names(last_seen DESC);
-```
+Thread names are stored in the unified `names` table (see above) with `kind = 'thread'`, `target_id = thread_id`, and `parent_id = container_id`.
 
 ---
 
@@ -243,7 +225,7 @@ It is not a perfect membership list, but it provides:
 - a foundation for later active sync (Slack channel member list, Discord member list, etc)
 
 ```sql
-CREATE TABLE IF NOT EXISTS delivery_container_participants (
+CREATE TABLE IF NOT EXISTS container_participants (
   platform          TEXT NOT NULL,
   account_id        TEXT NOT NULL,
 
@@ -266,9 +248,9 @@ CREATE TABLE IF NOT EXISTS delivery_container_participants (
   PRIMARY KEY (platform, account_id, container_id, thread_id, entity_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_delivery_container_participants_entity ON delivery_container_participants(entity_id);
-CREATE INDEX IF NOT EXISTS idx_delivery_container_participants_container ON delivery_container_participants(platform, account_id, container_id, thread_id);
-CREATE INDEX IF NOT EXISTS idx_delivery_container_participants_last_seen ON delivery_container_participants(last_seen DESC);
+CREATE INDEX IF NOT EXISTS idx_container_participants_entity ON container_participants(entity_id);
+CREATE INDEX IF NOT EXISTS idx_container_participants_container ON container_participants(platform, account_id, container_id, thread_id);
+CREATE INDEX IF NOT EXISTS idx_container_participants_last_seen ON container_participants(last_seen DESC);
 ```
 
 Write rules:
@@ -285,7 +267,7 @@ Write rules:
 If an adapter can emit explicit join/leave events (Discord membership events, Slack channel join/leave), store them here.
 
 ```sql
-CREATE TABLE IF NOT EXISTS delivery_membership_events (
+CREATE TABLE IF NOT EXISTS membership_events (
   id             TEXT PRIMARY KEY,          -- ULID/UUID
 
   platform       TEXT NOT NULL,
@@ -303,8 +285,8 @@ CREATE TABLE IF NOT EXISTS delivery_membership_events (
   metadata_json   TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_delivery_membership_events_lookup ON delivery_membership_events(platform, account_id, container_id, occurred_at);
-CREATE INDEX IF NOT EXISTS idx_delivery_membership_events_entity ON delivery_membership_events(entity_id, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_membership_events_lookup ON membership_events(platform, account_id, container_id, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_membership_events_entity ON membership_events(entity_id, occurred_at);
 ```
 
 This table enables "true membership history" when the platform provides it.
@@ -317,7 +299,7 @@ This table enables "true membership history" when the platform provides it.
 
 ```sql
 SELECT platform, account_id, container_kind, space_id, container_id, current_name, last_seen
-FROM delivery_containers
+FROM containers
 WHERE platform = ? AND account_id = ?
 ORDER BY last_seen DESC
 LIMIT 50;
@@ -327,7 +309,7 @@ LIMIT 50;
 
 ```sql
 SELECT thread_id, current_name, last_seen
-FROM delivery_threads
+FROM threads
 WHERE platform = ? AND account_id = ? AND container_id = ?
 ORDER BY last_seen DESC;
 ```
@@ -336,7 +318,7 @@ ORDER BY last_seen DESC;
 
 ```sql
 SELECT entity_id, last_sender_name, message_count, first_seen, last_seen
-FROM delivery_container_participants
+FROM container_participants
 WHERE platform = ? AND account_id = ? AND container_id = ? AND thread_id = ''
 ORDER BY last_seen DESC;
 ```
@@ -345,8 +327,8 @@ ORDER BY last_seen DESC;
 
 ```sql
 SELECT name, first_seen, last_seen
-FROM delivery_container_names
-WHERE platform = ? AND account_id = ? AND container_id = ?
+FROM names
+WHERE kind = 'container' AND platform = ? AND account_id = ? AND target_id = ?
 ORDER BY first_seen ASC;
 ```
 
@@ -358,4 +340,4 @@ ORDER BY first_seen ASC;
    - This spec uses `(platform, space_id, sender_id)` with `space_id=''` as the general solution.
 2. Should container primary keys include `space_id` as well, or is `(platform, account_id, container_id)` sufficient?
    - This spec uses `(platform, account_id, container_id)` to keep directory ownership per adapter account.
-3. Should we store canonical entity ids (post-merge) in these tables, or store observed ids and resolve via cortex at query time?
+3. Should we store canonical entity ids (post-merge) in these tables, or store observed ids and resolve via identity.db entity chain at query time?

@@ -1,13 +1,23 @@
-# Nexus Ledger Schema
+# Nexus Ledger Schema (runtime.db)
 
-**Status:** DESIGN COMPLETE  
-**Last Updated:** 2026-02-02
+**Status:** DESIGN COMPLETE
+**Last Updated:** 2026-02-18
+
+> **Rename notice:** This database has been renamed from `nexus.db` to `runtime.db`.
+> See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the canonical 6-database
+> inventory, table ownership, and migration plan.
+>
+> **Relocated tables:**
+> - ACL tables (`acl_grants`, `acl_grant_log`, `acl_access_log`, `acl_permission_requests`)
+>   have moved to `identity.db` with the `acl_` prefix dropped (now `grants`, `grant_log`,
+>   `access_log`, `permission_requests`).
+> - `aix_import_jobs` has been renamed to `import_jobs` (dropped `aix_` prefix).
 
 ---
 
 ## Overview
 
-The Nexus Ledger stores the complete trace of every `NexusRequest` as it flows through the NEX pipeline. Each stage populates more fields on the request object, and the ledger captures both intermediate states (upserts) and the final result.
+The Nexus Ledger (`runtime.db`, formerly `nexus.db`) stores the complete trace of every `NexusRequest` as it flows through the NEX pipeline. Each stage populates more fields on the request object, and the ledger captures both intermediate states (upserts) and the final result.
 
 **Purpose:**
 - Debugging: See exactly what happened at each stage
@@ -60,7 +70,7 @@ CREATE TABLE nexus_requests (
     agent_tool_calls TEXT,            -- JSON array of tool names called
     
     -- Delivery (populated at deliverResponse)
-    delivery_channel TEXT,            -- Where response was sent
+    delivery_channel TEXT,            -- Platform where response was sent (canonical: platform)
     delivery_message_ids TEXT,        -- JSON array of platform message IDs
     delivery_success BOOLEAN,
     delivery_error TEXT,              -- Error message if failed
@@ -197,31 +207,38 @@ ORDER BY times_fired DESC;
 
 ---
 
-## Relationship to Other Ledgers
+## Relationship to Other Databases
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      SYSTEM OF RECORD                            │
-│                                                                  │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
-│  │    Events    │  │    Agents    │  │      Identity        │  │
-│  │    Ledger    │  │    Ledger    │  │       Graph          │  │
-│  └──────┬───────┘  └──────┬───────┘  └──────────────────────┘  │
-│         │                 │                                      │
-│         │    ┌────────────┴────────────┐                        │
-│         │    │                         │                        │
-│         ▼    ▼                         │                        │
-│  ┌─────────────────────────────────────┴─────────────────────┐  │
-│  │                     NEXUS LEDGER                           │  │
-│  │              (Pipeline Trace / Audit)                      │  │
-│  │                                                            │  │
-│  │  Links to: events.id, turns.id, entities.id               │  │
-│  │  Contains: Full request trace from receiveEvent → finalize│  │
-│  └────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                        6-DATABASE ARCHITECTURE                        │
+│                                                                       │
+│  ┌────────────┐  ┌────────────┐  ┌──────────────┐                   │
+│  │ events.db  │  │ agents.db  │  │ identity.db  │                   │
+│  │  (events)  │  │ (sessions, │  │ (contacts,   │                   │
+│  │            │  │  turns)    │  │  entities,   │                   │
+│  └─────┬──────┘  └─────┬──────┘  │  auth, ACL)  │                   │
+│        │               │         └──────────────┘                   │
+│        │    ┌──────────┘                                             │
+│        ▼    ▼                                                        │
+│  ┌───────────────────────────────────────────────────────────────┐   │
+│  │                  runtime.db (formerly nexus.db)                │   │
+│  │                  Pipeline Trace / Audit                        │   │
+│  │                                                               │   │
+│  │  Links to: events.id, turns.id, entities.id                   │   │
+│  │  Contains: Full request trace from receiveEvent → finalize    │   │
+│  │  Also: adapter_instances, automations, import_jobs, bus       │   │
+│  └───────────────────────────────────────────────────────────────┘   │
+│                                                                       │
+│  ┌────────────┐  ┌───────────────┐                                   │
+│  │ memory.db  │  │ embeddings.db │                                   │
+│  │ (facts,    │  │ (sqlite-vec)  │                                   │
+│  │  episodes) │  │               │                                   │
+│  └────────────┘  └───────────────┘                                   │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
-**Key insight:** The Nexus Ledger is the *observability layer* of the System of Record. It references the other ledgers but focuses on *how* requests were processed, not *what* the content was.
+**Key insight:** The runtime.db (formerly Nexus Ledger) is the *observability layer* of the system. It references events.db, agents.db, and identity.db but focuses on *how* requests were processed, not *what* the content was.
 
 ---
 
@@ -251,6 +268,7 @@ This keeps the ledger performant for recent debugging while preserving long-term
 
 ## Related Documents
 
+- `../DATABASE_ARCHITECTURE.md` — Canonical 6-database spec (authoritative table inventory and ownership)
 - `README.md` — System of Record overview
 - `../../runtime/nex/NEXUS_REQUEST.md` — NexusRequest schema
 - `../../runtime/nex/NEX.md` — Pipeline stages

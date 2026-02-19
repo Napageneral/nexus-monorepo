@@ -1,7 +1,7 @@
 # Channel Directory (Targets + Threads)
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-17  
+**Last Updated:** 2026-02-18  
 **Related:** `ADAPTER_SYSTEM.md`, `INBOUND_INTERFACE.md`, `OUTBOUND_TARGETING.md`, `../../data/cortex/v2/UNIFIED_ENTITY_STORE.md`
 
 ---
@@ -33,7 +33,7 @@ The channel directory becomes necessary when:
 
 The channel directory is owned by the **NEX Adapter Manager** and is keyed by:
 
-- `delivery.channel`
+- `delivery.platform`
 - `delivery.account_id`
 
 It is not the identity system and should not attempt to infer cross-channel identity.
@@ -44,11 +44,11 @@ It is not the identity system and should not attempt to infer cross-channel iden
 
 ```ts
 type ChannelDirectoryEntry = {
-  channel: string;
+  platform: string;
   account_id: string;
 
-  peer_kind: "dm" | "group" | "channel";
-  peer_id: string;               // platform-native container id
+  container_kind: "dm" | "group" | "channel";
+  container_id: string;               // platform-native container id
   thread_id?: string;            // platform-native thread/topic id
 
   display_name?: string;         // best-effort human name for UI
@@ -64,7 +64,7 @@ type ChannelDirectoryEntry = {
 
 **Notes:**
 
-- `peer_id` + `thread_id` identify the outbound destination (see `OUTBOUND_TARGETING.md`).
+- `container_id` + `thread_id` identify the outbound destination (see `OUTBOUND_TARGETING.md`).
 - `display_name` and `handle` are convenience fields for UI; they are untrusted and may change.
 
 ---
@@ -75,8 +75,8 @@ type ChannelDirectoryEntry = {
 
 On every inbound `NexusEvent`, NEX upserts a channel directory entry using:
 
-- `event.channel`, `event.account_id`
-- `event.peer_kind`, `event.peer_id`, `event.thread_id`
+- `event.platform`, `event.account_id`
+- `event.container_kind`, `event.container_id`, `event.thread_id`
 - Best-effort names from `event.metadata`
 - `last_seen_at = event.timestamp`
 - `last_message_id = source message id` (if available)
@@ -107,7 +107,7 @@ NEX can call this:
 NEX should expose:
 
 - Recent targets per channel/account
-- Filter by `peer_kind`
+- Filter by `container_kind`
 - Search by `display_name` / `handle` (best-effort)
 
 **Important:** Do not inject the full directory into agent prompts. If agent needs to select a destination, provide a tool or a small recent list.
@@ -130,4 +130,3 @@ The channel directory maps those identifiers into **sendable targets** and optio
 - Directory fields are derived from external platforms and are **untrusted input**.
 - Treat `display_name` and `metadata` as advisory only.
 - IAM policies still gate whether inbound events are allowed and whether outbound sends are permitted.
-

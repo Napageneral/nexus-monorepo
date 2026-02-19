@@ -72,26 +72,31 @@ type ChannelCapabilities struct {
 // One JSON object per line on stdout (JSONL).
 type NexusEvent struct {
 	// Identity
-	EventID   string `json:"event_id"`  // "{channel}:{source_id}"
+	EventID   string `json:"event_id"`  // "{platform}:{source_id}"
 	Timestamp int64  `json:"timestamp"` // Unix ms
 
 	// Content
 	Content     string       `json:"content"`
-	ContentType string       `json:"content_type"` // "text", "image", "audio", "video", "file", "reaction"
+	ContentType string       `json:"content_type"` // "text", "image", "audio", "video", "file", "reaction", "membership"
 	Attachments []Attachment `json:"attachments,omitempty"`
 
 	// Routing context
-	Channel    string `json:"channel"`     // Platform name
-	AccountID  string `json:"account_id"`  // Which account received this
-	SenderID   string `json:"sender_id"`   // Platform-specific sender ID
-	SenderName string `json:"sender_name,omitempty"`
-	PeerID     string `json:"peer_id"`     // Chat/channel/user ID (conversation identifier)
-	PeerKind   string `json:"peer_kind"`   // "dm", "group", "channel"
-	ThreadID   string `json:"thread_id,omitempty"`
-	ReplyToID  string `json:"reply_to_id,omitempty"`
+	Platform      string `json:"platform"`                // Platform name
+	AccountID     string `json:"account_id"`              // Which account received this
+	SenderID      string `json:"sender_id"`               // Platform-specific sender ID
+	SenderName    string `json:"sender_name,omitempty"`
+	SpaceID       string `json:"space_id,omitempty"`      // Optional parent container scope (guild/workspace)
+	SpaceName     string `json:"space_name,omitempty"`    // Optional display name
+	ContainerID   string `json:"container_id"`            // Chat/channel/DM identifier
+	ContainerKind string `json:"container_kind"`          // "dm", "direct", "group", "channel"
+	ContainerName string `json:"container_name,omitempty"`
+	ThreadID      string `json:"thread_id,omitempty"`
+	ThreadName    string `json:"thread_name,omitempty"`
+	ReplyToID     string `json:"reply_to_id,omitempty"`
 
 	// Platform metadata (anything channel-specific)
-	Metadata map[string]any `json:"metadata,omitempty"`
+	Metadata         map[string]any `json:"metadata,omitempty"`
+	DeliveryMetadata map[string]any `json:"delivery_metadata,omitempty"`
 }
 
 // Attachment represents a media attachment on an event.
@@ -187,7 +192,7 @@ type StreamEvent struct {
 
 // DeliveryTarget identifies where to send a message during streaming.
 type DeliveryTarget struct {
-	Channel   string `json:"channel"`
+	Platform  string `json:"platform"`
 	AccountID string `json:"account_id"`
 	To        string `json:"to"`
 	ThreadID  string `json:"thread_id,omitempty"`

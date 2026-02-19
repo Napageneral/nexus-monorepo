@@ -2,6 +2,9 @@
 
 Where state lives and understanding is built.
 
+> **Canonical Reference:** See [DATABASE_ARCHITECTURE.md](./DATABASE_ARCHITECTURE.md) for the
+> authoritative database inventory, table ownership, and migration plan.
+
 ---
 
 ## What This Is
@@ -15,36 +18,36 @@ Data infrastructure handles **persistent state**. It's the "memory" — where ev
 | Folder | Purpose |
 |--------|---------|
 | `ledgers/` | System of Record — primary data storage |
-| `cortex/` | Derived understanding — episodes, facets, embeddings |
+| `cortex/` | Legacy derived-understanding docs (being superseded — see DATABASE_ARCHITECTURE.md) |
 
 ---
 
-## The Two Layers
+## The 6-Database Model
 
-### System of Record (Ledgers)
+Nexus uses a multi-database SQLite architecture. Each database file has a clear, single-sentence purpose and well-defined ownership boundaries.
 
-The primary data layer. Four ledgers:
+| # | Database | What It Stores |
+|---|----------|----------------|
+| 1 | **events.db** | All inbound/outbound message events — the canonical event ledger |
+| 2 | **agents.db** | Sessions, turns, messages, tool calls, artifacts |
+| 3 | **identity.db** | Contacts, directory, entities, auth, ACL |
+| 4 | **memory.db** | Facts, episodes, mental models, analysis pipeline |
+| 5 | **embeddings.db** | Semantic vector index (sqlite-vec) |
+| 6 | **runtime.db** | Request tracking, adapters, automations, bus |
 
-| Ledger | What It Stores |
-|--------|----------------|
-| **Events Ledger** | All inbound/outbound events |
-| **Agents Ledger** | Sessions, turns, messages, tool calls |
-| **Identity Graph** | Contacts, entities, identity mappings |
-| **Nexus Ledger** | NexusRequest pipeline traces (debugging, audit) |
+**Key property:** Single owner per table. No cross-database foreign keys. Write contention isolation between hot paths.
 
-**Key property:** Immutable. Events are appended, not modified.
+### Memory System (formerly "Cortex")
 
-### Derived Layer (Cortex)
+Understanding built from the primary databases:
 
-Understanding built from the ledgers:
+| Concept | Database |
+|---------|----------|
+| **Facts & Episodes** | memory.db |
+| **Entities & Knowledge Graph** | identity.db |
+| **Embeddings** | embeddings.db |
 
-| Concept | What It Is |
-|---------|------------|
-| **Episodes** | Coherent conversation segments |
-| **Facets** | Entities, topics, patterns extracted |
-| **Embeddings** | Vector representations for semantic search |
-
-**Key property:** Regenerable. Can be rebuilt from ledgers.
+**Key property:** Regenerable. Can be rebuilt from events.db + agents.db.
 
 ---
 
@@ -54,22 +57,25 @@ Understanding built from the ledgers:
 External Event
       │
       ▼
-Events Ledger ──────────────► Cortex
-      │                         │
-      ▼                         │
-Agent Execution                 │
-      │                         │
-      ▼                         ▼
-Agents Ledger ──────────────► Cortex
-      │
-      ▼
-Identity Graph
+events.db ─────────────────────────────┐
+      │                                 │
+      ▼                                 ▼
+Agent Execution                   Memory Pipeline (TS)
+      │                                 │
+      ▼                                 ├──► memory.db (facts, episodes)
+agents.db ──────────────────────────────┤
+      │                                 ├──► identity.db (entities)
+      ▼                                 │
+identity.db (contacts, auth, ACL)       └──► embeddings.db (vectors)
+
+runtime.db (request traces, adapters, automations)
 ```
 
 ---
 
 ## See Also
 
+- [DATABASE_ARCHITECTURE.md](./DATABASE_ARCHITECTURE.md) — Canonical database spec (6-database inventory, migrations, ownership)
 - `../runtime/` — How data is created (event processing)
 - `../environment/credentials/` — Secrets (special kind of data)
 - `../README.md` — System overview

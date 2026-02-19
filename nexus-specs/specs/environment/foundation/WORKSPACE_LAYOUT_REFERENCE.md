@@ -3,7 +3,9 @@
 **Canonical lifecycle spec:** `specs/environment/foundation/WORKSPACE_LIFECYCLE.md`
 
 **Status:** CANONICAL
-**Last Updated:** 2026-02-17
+**Last Updated:** 2026-02-18
+
+> **Canonical reference:** See [DATABASE_ARCHITECTURE.md](../data/DATABASE_ARCHITECTURE.md) for the authoritative database layout.
 
 ---
 
@@ -16,12 +18,12 @@
 ├── home/                              # User personal workspace
 └── state/
     ├── data/
-    │   ├── events.db                  # Events ledger
-    │   ├── agents.db                  # Agents ledger
-    │   ├── identity.db                # Identity mappings
-    │   └── nexus.db                   # Request traces + automations table
-    ├── cortex/
-    │   └── cortex.db                  # Cortex memory store
+    │   ├── events.db                  # Event ledger
+    │   ├── agents.db                  # Agent sessions
+    │   ├── identity.db                # Contacts, directory, entities, auth, ACL
+    │   ├── memory.db                  # Facts, episodes, analysis (Memory System)
+    │   ├── embeddings.db              # Semantic vector index
+    │   └── runtime.db                 # Request traces, adapters, automations, bus
     ├── agents/
     │   ├── BOOTSTRAP.md               # Permanent onboarding template (NEVER deleted)
     │   └── {name}/                    # Agent persona directories
@@ -62,8 +64,7 @@ All runtime state, visible and inspectable.
 
 | Path | Purpose |
 |------|---------|
-| `state/data/` | Split system-of-record ledger DBs (created eagerly by init) |
-| `state/cortex/` | Cortex memory store |
+| `state/data/` | All 6 databases (created eagerly by init) |
 | `state/agents/` | Agent bootstrap template + per-agent persona directories |
 | `state/user/` | User identity and preferences |
 | `state/credentials/` | Credential index and storage pointers |
@@ -91,11 +92,12 @@ Agent persona directories (`state/agents/{name}/`) and automation workspaces (`s
 | Agent bootstrap template | `state/agents/BOOTSTRAP.md` |
 | Agent identity | `state/agents/{name}/IDENTITY.md` |
 | Agent persona | `state/agents/{name}/SOUL.md` |
-| Events ledger | `state/data/events.db` |
-| Agents ledger | `state/data/agents.db` |
-| Identity mappings | `state/data/identity.db` |
-| Request traces + automations | `state/data/nexus.db` |
-| Cortex memory store | `state/cortex/cortex.db` |
+| Event ledger | `state/data/events.db` |
+| Agent sessions | `state/data/agents.db` |
+| Contacts, directory, entities, auth, ACL | `state/data/identity.db` |
+| Facts, episodes, analysis (Memory System) | `state/data/memory.db` |
+| Semantic vector index | `state/data/embeddings.db` |
+| Request traces, adapters, automations, bus | `state/data/runtime.db` |
 | Credential storage | `state/credentials/` |
 | Workspace role | `state/workspace/{name}/ROLE.md` |
 | Workspace skills | `state/workspace/{name}/SKILLS.md` |
@@ -118,12 +120,12 @@ Agent persona directories (`state/agents/{name}/`) and automation workspaces (`s
 
 ## Design Decisions
 
-- **DBs created eagerly** -- All ledger databases under `state/data/` are created by `nexus init`, not lazily on first use.
+- **DBs created eagerly** -- All 6 databases under `state/data/` are created by `nexus init`, not lazily on first use.
 - **Flat skills directory** -- `skills/` has no subdirectories. Skill type (tool, connector, guide) is tracked in metadata.
 - **Standalone config** -- `state/config.json` is a standalone file, not nested under a `nexus/` subdirectory.
 - **BOOTSTRAP.md is permanent** -- `state/agents/BOOTSTRAP.md` is the onboarding template and is NEVER deleted.
 - **Visible state** -- `state/` is a visible system directory for transparency and inspectability.
-- **Split ledgers** -- Separate databases isolate write paths and reduce contention.
+- **6-DB layout** -- Separate databases isolate write paths and reduce contention. Memory System spans memory.db + identity.db + embeddings.db.
 - **No TOOLS.md** -- Tool discovery is handled through skills metadata, not a manifest file.
 - **No runtime.mode** -- Config does not include a `runtime.mode` field.
 

@@ -1,7 +1,8 @@
 # NEX — Nexus Event Exchange
 
-**Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-12
+**Status:** DESIGN SPEC
+**Last Updated:** 2026-02-18
+**Database layout:** See `../../data/DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
 
 ---
 
@@ -36,7 +37,7 @@ NEX Process (TypeScript)
 ├── resolveIdentity()    // 2. WHO sent this? Query Identity Graph
 ├── resolveAccess()      // 3. WHAT can they do? Policies → permissions, session routing
 ├── runAutomations()     // 4. Match automations, execute hooks, may enrich or handle
-├── assembleContext()    // 5. Build AssembledContext (history, Cortex, config, formatting)
+├── assembleContext()    // 5. Build AssembledContext (history, memory, config, formatting)
 ├── runAgent()           // 6. Execute agent with assembled context (pi-coding-agent)
 ├── deliverResponse()    // 7. Format, chunk, send via out-adapter
 └── finalize()           // 8. Write trace to Nexus Ledger, emit outbound event
@@ -134,9 +135,9 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │  │  │ 5. assembleContext()                                                   │  │  │
 │  │  │    • Gather context for finalized session (parallel fetches):         │  │  │
 │  │  │      - Conversation history from Agents Ledger                        │  │  │
-│  │  │      - Relevant context from Cortex (future)                         │  │  │
+│  │  │      - Relevant context from Memory System (memory.db, embeddings.db) │  │  │
 │  │  │      - Agent config (persona, model, tools)                           │  │  │
-│  │  │      - Channel formatting guidance                                     │  │  │
+│  │  │      - Platform formatting guidance                                    │  │  │
 │  │  │    • Create/resume session, create turn in Agents Ledger             │  │  │
 │  │  │    • Build AssembledContext (internal to Broker, NOT on NexusRequest) │  │  │
 │  │  │    • Populate: agent (turn_id, session_label, model, token_budget)   │  │  │
@@ -156,8 +157,8 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │  │                                   │                                         │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
 │  │  │ 7. deliverResponse()                                                   │  │  │
-│  │  │    • Format response for target channel                               │  │  │
-│  │  │    • Chunk if necessary (respects channel text limits)                │  │  │
+│  │  │    • Format response for target platform                              │  │  │
+│  │  │    • Chunk if necessary (respects platform text limits)              │  │  │
 │  │  │    • Send via adapter's `send` command                                │  │  │
 │  │  │    • Populate: delivery_result (message_ids, success)                │  │  │
 │  │  │    • Note: may be no-op if native streaming already delivered         │  │  │
@@ -170,35 +171,23 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │  │  │    • Finalize NexusRequest with pipeline trace + timing               │  │  │
 │  │  │    • Write full trace to Nexus Ledger                                 │  │  │
 │  │  │    • Write outbound event to Events Ledger                            │  │  │
-│  │  │    • Emit to Cortex for analysis (future)                             │  │  │
+│  │  │    • Emit to Memory System for analysis (async)                        │  │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘  │  │
 │  │                                   │                                         │  │
 │  │                          [plugin: onFinalize]                               │  │
 │  │                                                                             │  │
 │  └────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                   │
-│  LEDGERS (System of Record) ───────────────────────────────────────────────┐    │
+│  DATABASES (System of Record) ─────────────────────────────────────────────┐    │
 │    │                                                                        │    │
-│    │  Events Ledger      ← Inbound events, outbound responses              │    │
-│    │  Agents Ledger      ← Turns, sessions, messages, tool calls           │    │
-│    │  Identity Ledger    ← Contacts, entities, Identity Graph              │    │
-│    │  Nexus Ledger       ← Full NexusRequest traces                        │    │
+│    │  events.db          ← Inbound events, outbound responses              │    │
+│    │  agents.db          ← Turns, sessions, messages, tool calls           │    │
+│    │  identity.db        ← Contacts, directory, entities, auth, ACL        │    │
+│    │  memory.db          ← Facts, episodes, analysis (Memory System)       │    │
+│    │  embeddings.db      ← Semantic vector index (sqlite-vec)              │    │
+│    │  runtime.db         ← NexusRequest traces, adapters, automations, bus │    │
 │    │                                                                        │    │
-│    │  All ledgers stored in ~/nexus/state/data/ (SQLite)                   │    │
-│    │                                                                        │    │
-│    └────────────────────────────────────────────────────────────────────────┘    │
-│                                                                                   │
-│  CORTEX (async, derived layer — Go process) ────────────────────────────┐    │
-│    │                                                                        │    │
-│    │  Reads from ledgers → Produces structured knowledge                   │    │
-│    │                                                                        │    │
-│    │  Episode Store      ← Conversation episodes                           │    │
-│    │  Embedding Store    ← Semantic vectors                                │    │
-│    │  Facet Store        ← Extracted structured data                       │    │
-│    │  Analysis Store     ← Insights, patterns                              │    │
-│    │                                                                        │    │
-│    │  Stored at: ~/nexus/state/cortex/cortex.db (shared)                   │    │
-│    │  Transport TBD: HTTP API, Unix socket, or direct SQLite               │    │
+│    │  All databases stored in ~/nexus/state/data/ (SQLite)                 │    │
 │    │                                                                        │    │
 │    └────────────────────────────────────────────────────────────────────────┘    │
 │                                                                                   │
@@ -218,14 +207,14 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 | **NexusRequest lifecycle** | Through NEX | NEX orchestrates; writes are part of pipeline |
 | **Reads/queries** | Direct | No reason to add latency |
 | **Background jobs** | Direct | Independent work, not part of request |
-| **Cortex analysis** | Direct | Separate Go process, reads from ledgers |
+| **Memory System** | Direct | TS memory pipeline reads from events.db/agents.db, writes to memory.db/identity.db/embeddings.db |
 
 ### What This Means Concretely
 
 1. **Stages update NexusRequest, NEX coordinates** — stages return results, NEX maintains lifecycle
 2. **Broker writes to Agents Ledger directly** — it's part of the NEX process, just a logical separation
 3. **CLI reads directly** — no need to route queries through NEX
-4. **Cortex reads/writes directly** — separate Go process, accesses ledgers and its own cortex DBs
+4. **Memory System reads/writes directly** — TS pipeline reads events.db + agents.db, writes memory.db + identity.db (entities) + embeddings.db
 
 ### Shared Database Library
 
@@ -234,10 +223,12 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 import Database from 'better-sqlite3';
 
 interface Ledgers {
-  events: Database;    // Events Ledger
-  agents: Database;    // Agents Ledger
-  identity: Database;  // Identity Ledger (Identity Graph)
-  nexus: Database;     // Nexus Ledger (request traces)
+  events: Database;      // Event Ledger
+  agents: Database;      // Agents Ledger
+  identity: Database;    // Identity (contacts, directory, entities, auth, ACL)
+  memory: Database;      // Memory System (facts, episodes, analysis)
+  embeddings: Database;  // Semantic vector index
+  runtime: Database;     // Runtime Operations (requests, adapters, automations, bus)
 }
 
 // Raw SQL queries — no ORM
@@ -350,9 +341,9 @@ const results = await Promise.all(
 
 **Context Assembly (parallel):**
 ```typescript
-const [history, cortexContext, agentConfig] = await Promise.all([
+const [history, memoryContext, agentConfig] = await Promise.all([
   getConversationHistory(req.access.routing.session_label),
-  cortex.queryRelevantContext(req.event.content),
+  memory.queryRelevantContext(req.event.content),
   loadAgentConfig(req.access.routing.persona),
 ]);
 ```
@@ -363,7 +354,7 @@ The main pipeline is sequential (each stage depends on previous).
 
 Background work can run in parallel:
 - Async writes to ledgers
-- Emit to Cortex for analysis
+- Emit to Memory System for analysis
 - Bus event notifications
 
 ---
@@ -476,7 +467,7 @@ pipeline:
 
 data:
   directory: ./data          # SQLite databases stored here
-  # Creates: events.db, agents.db, identity.db, nexus.db
+  # Creates: events.db, agents.db, identity.db, memory.db, embeddings.db, runtime.db
 
 adapters:
   - name: eve
@@ -541,8 +532,10 @@ src/
 │       ├── ledgers.ts          # Database connections
 │       ├── events.ts           # Events Ledger queries
 │       ├── agents.ts           # Agents Ledger queries
-│       ├── identity.ts         # Identity Graph queries
-│       └── nexus.ts            # Nexus Ledger queries
+│       ├── identity.ts         # Identity queries (contacts, entities, auth, ACL)
+│       ├── memory.ts           # Memory System queries (facts, episodes)
+│       ├── embeddings.ts       # Embedding queries (vector search)
+│       └── runtime.ts          # Runtime Operations queries (requests, adapters)
 ```
 
 ---
@@ -559,7 +552,7 @@ When a Manager Agent (MA) spawns a Worker Agent (WA), the WA runs through the Br
 The agent uses the `send message` tool, which routes through NEX to the appropriate out-adapter via its `send` command. The adapter handles chunking based on channel capabilities. Multiple tool calls = multiple messages.
 
 ### Language Decision
-NEX core is **TypeScript** (Bun runtime). Cortex is **Go** (separate process). See `../../project-structure/LANGUAGE_DECISION.md`.
+NEX core is **TypeScript** (Bun runtime). The Memory System (formerly Cortex) is ported to TypeScript — there is no separate Go process. See `../../project-structure/LANGUAGE_DECISION.md`.
 
 ---
 

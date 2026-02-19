@@ -1,6 +1,6 @@
 # Single-Tenant, Multi-User Runtime
 
-**Status:** PARTIALLY IMPLEMENTED (control-plane IAM authz + password login)  
+**Status:** PARTIALLY IMPLEMENTED (control-plane IAM authz + password login + ingress integrity telemetry + ingress credential WS methods)  
 **Last Updated:** 2026-02-18  
 **Related:** `CONTROL_PLANE.md`, `../iam/ACCESS_CONTROL_SYSTEM.md`, `../iam/POLICIES.md`, `../adapters/INTERNAL_ADAPTERS.md`, `../adapters/INBOUND_INTERFACE.md`
 
@@ -37,13 +37,18 @@ Implemented in `nex`:
   - `auth.users.list`
   - `auth.users.create`
   - `auth.users.setPassword`
+- Control-plane ingress credential WS methods:
+  - `ingress.credentials.list`
+  - `ingress.credentials.create`
+  - `ingress.credentials.revoke`
+  - `ingress.credentials.rotate`
 - System ingress channels reduced to the minimal internal set (`clock`, `boot`, `restart`).
+- Ingress HTTP routing has an internal adapter boundary (`http-ingress`) with submodule dispatch (hooks/slack/plugins/OpenAI/OpenResponses).
 
 Still required (not yet implemented):
 
 - OIDC auth provider (pluggable AuthN backends beyond username/password).
-- First-class “customer ingress credential” issuance UX (API keys / webchat sessions) beyond the CLI (`nexus acl tokens create --audience ingress`).
-- Adapter ingress integrity hardening (daemon-stamped fields + adapter channel claims validation).
+- Control-plane UI integration for ingress credential lifecycle (WS methods exist; UI surface not yet wired).
 - Customer sandbox enforcement verification (tool/credential/data enforcement tests and remaining enforcement gaps).
 
 ---

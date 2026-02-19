@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://nexus-project.dev/schemas/adapter-protocol/v1",
-  "title": "Nexus Adapter Protocol (v1)",
+  "$id": "https://nexus-project.dev/schemas/adapter-protocol/v2",
+  "title": "Nexus Adapter Protocol (v2)",
   "type": "object",
   "$defs": {
     "AdapterCapability": {
@@ -87,11 +87,11 @@
         "timestamp",
         "content",
         "content_type",
-        "channel",
+        "platform",
         "account_id",
         "sender_id",
-        "peer_id",
-        "peer_kind"
+        "container_id",
+        "container_kind"
       ],
       "properties": {
         "event_id": { "type": "string" },
@@ -99,18 +99,23 @@
         "content": { "type": "string" },
         "content_type": {
           "type": "string",
-          "enum": ["text", "image", "audio", "video", "file", "reaction"]
+          "enum": ["text", "image", "audio", "video", "file", "reaction", "membership"]
         },
         "attachments": { "type": "array", "items": { "$ref": "#/$defs/Attachment" } },
-        "channel": { "type": "string" },
+        "platform": { "type": "string" },
         "account_id": { "type": "string" },
         "sender_id": { "type": "string" },
         "sender_name": { "type": "string" },
-        "peer_id": { "type": "string" },
-        "peer_kind": { "type": "string", "enum": ["dm", "group", "channel"] },
+        "space_id": { "type": "string" },
+        "space_name": { "type": "string" },
+        "container_id": { "type": "string" },
+        "container_kind": { "type": "string", "enum": ["dm", "direct", "group", "channel"] },
+        "container_name": { "type": "string" },
         "thread_id": { "type": "string" },
+        "thread_name": { "type": "string" },
         "reply_to_id": { "type": "string" },
-        "metadata": { "type": "object", "additionalProperties": true }
+        "metadata": { "type": "object", "additionalProperties": true },
+        "delivery_metadata": { "type": "object", "additionalProperties": true }
       },
       "additionalProperties": false
     },
@@ -174,9 +179,9 @@
     },
     "DeliveryTarget": {
       "type": "object",
-      "required": ["channel", "account_id", "to"],
+      "required": ["platform", "account_id", "to"],
       "properties": {
-        "channel": { "type": "string" },
+        "platform": { "type": "string" },
         "account_id": { "type": "string" },
         "to": { "type": "string" },
         "thread_id": { "type": "string" },
@@ -328,4 +333,3 @@
   },
   "additionalProperties": false
 }
-

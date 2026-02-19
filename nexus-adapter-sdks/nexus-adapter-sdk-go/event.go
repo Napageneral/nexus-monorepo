@@ -8,20 +8,20 @@ type EventBuilder struct {
 	event NexusEvent
 }
 
-// NewEvent creates a new event builder for the given channel and event ID.
-// The event ID should follow the convention "{channel}:{source_id}".
+// NewEvent creates a new event builder for the given platform and event ID.
+// The event ID should follow the convention "{platform}:{source_id}".
 //
 //	event := nexadapter.NewEvent("imessage", "imessage:abc-def-123").
 //	    WithTimestamp(msg.Date).
 //	    WithContent(msg.Text).
 //	    WithSender(msg.Handle, msg.DisplayName).
-//	    WithPeer(msg.ChatID, "dm").
+//	    WithContainer(msg.ChatID, "dm").
 //	    WithAccount("default").
 //	    Build()
-func NewEvent(channel, eventID string) *EventBuilder {
+func NewEvent(platform, eventID string) *EventBuilder {
 	return &EventBuilder{
 		event: NexusEvent{
-			Channel:     channel,
+			Platform:    platform,
 			EventID:     eventID,
 			ContentType: "text",
 			Timestamp:   time.Now().UnixMilli(),
@@ -61,13 +61,18 @@ func (b *EventBuilder) WithSender(id, name string) *EventBuilder {
 	return b
 }
 
-// WithPeer sets the conversation identifier and kind.
-// peerID is the chat/channel/DM identifier.
-// kind is one of: "dm", "group", "channel".
-func (b *EventBuilder) WithPeer(peerID, kind string) *EventBuilder {
-	b.event.PeerID = peerID
-	b.event.PeerKind = kind
+// WithContainer sets the conversation container identifier and kind.
+// containerID is the chat/channel/DM identifier.
+// kind is one of: "dm", "direct", "group", "channel".
+func (b *EventBuilder) WithContainer(containerID, kind string) *EventBuilder {
+	b.event.ContainerID = containerID
+	b.event.ContainerKind = kind
 	return b
+}
+
+// WithPeer is a deprecated alias for WithContainer.
+func (b *EventBuilder) WithPeer(peerID, kind string) *EventBuilder {
+	return b.WithContainer(peerID, kind)
 }
 
 // WithAccount sets the adapter account ID that received this event.
@@ -79,6 +84,13 @@ func (b *EventBuilder) WithAccount(account string) *EventBuilder {
 // WithThread sets the thread ID for threaded conversations.
 func (b *EventBuilder) WithThread(threadID string) *EventBuilder {
 	b.event.ThreadID = threadID
+	return b
+}
+
+// WithSpace sets the optional parent container scope (e.g., guild/workspace).
+func (b *EventBuilder) WithSpace(spaceID, spaceName string) *EventBuilder {
+	b.event.SpaceID = spaceID
+	b.event.SpaceName = spaceName
 	return b
 }
 

@@ -1,8 +1,9 @@
 # Session Lifecycle
 
 **Status:** DESIGN SPEC
-**Last Updated:** 2026-02-17
+**Last Updated:** 2026-02-18
 **Canonical routing spec:** `specs/runtime/RUNTIME_ROUTING.md`
+**Database layout:** See `../../data/DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
 
 ---
 
@@ -22,13 +23,13 @@ Session keys are produced by `buildSessionKey()` at stage 3 (`resolveAccess`). B
 
 | Scenario | Format | Example |
 |----------|--------|---------|
-| DM (any channel) | `dm:{canonical_entity_id}` | `dm:ent_002` |
-| Group/channel | `group:{channel}:{peer_id}` | `group:discord:general` |
-| Group thread | `group:{channel}:{peer_id}:thread:{id}` | `group:slack:eng:thread:ts123` |
+| DM (any platform) | `dm:{canonical_entity_id}` | `dm:ent_002` |
+| Group/channel | `group:{platform}:{container_id}` | `group:discord:general` |
+| Group thread | `group:{platform}:{container_id}:thread:{thread_id}` | `group:slack:eng:thread:ts123` |
 | Worker/subagent | `worker:{ulid}` | `worker:01HWXYZ...` |
 | System | `system:{purpose}` | `system:compaction` |
 
-There is no `dm:{channel}:{sender_id}` fallback format. See `../RUNTIME_ROUTING.md` for the full `buildSessionKey()` implementation.
+There is no `dm:{platform}:{sender_id}` fallback format. See `../RUNTIME_ROUTING.md` for the full `buildSessionKey()` implementation.
 
 ### ACL Policy Examples
 
@@ -39,7 +40,7 @@ There is no `dm:{channel}:{sender_id}` fallback format. See `../RUNTIME_ROUTING.
     principal:
       type: [known, owner]
     delivery:
-      peer_kind: dm
+      container_kind: dm
   session:
     key: "dm:{principal.entity_id}"
     persona: atlas
@@ -48,9 +49,9 @@ There is no `dm:{channel}:{sender_id}` fallback format. See `../RUNTIME_ROUTING.
 - name: group-session
   match:
     delivery:
-      peer_kind: group
+      container_kind: group
   session:
-    key: "group:{delivery.channel}:{delivery.peer_id}"
+    key: "group:{delivery.platform}:{delivery.container_id}"
     persona: atlas
 ```
 
@@ -124,12 +125,12 @@ VALUES (?, NULL, ?, ?, ?, ?, ?, 'active');
 
 ### Architecture
 
-Identity resolution uses two systems working at different speeds:
+Identity resolution uses two systems working at different speeds, both in `identity.db`:
 
-- **Contacts table** (`identity.db`): Pipeline-speed lookup. Maps `(channel, sender_id)` to an `entity_id`. Updated synchronously on every inbound message. Zero LLM, sub-millisecond.
-- **Entity store** (`cortex.db`): Knowledge-speed resolution. Entities with union-find (`merged_into` chains) handle progressive identity resolution. The memory-writer merges entities asynchronously as it learns who people are.
+- **Contacts table** (`identity.db`): Pipeline-speed lookup. Maps `(platform, space_id, sender_id)` to an `entity_id`. Updated synchronously on every inbound message. Zero LLM, sub-millisecond.
+- **Entity store** (`identity.db`): Knowledge-speed resolution. Entities with union-find (`merged_into` chains) handle progressive identity resolution. The memory-writer merges entities asynchronously as it learns who people are.
 
-The pipeline crosses both databases on every message: contact lookup in `identity.db`, then merged_into chain walk in `cortex.db` to find the canonical entity. Both are local SQLite, no network hop.
+Both contacts and entities live in `identity.db`, so the pipeline does a single-database lookup: contact resolution + merged_into chain walk are JOINable within the same database. No cross-DB hop.
 
 ### Session Aliases on Entity Merge
 

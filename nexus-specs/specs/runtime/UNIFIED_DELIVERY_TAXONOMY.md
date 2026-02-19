@@ -286,8 +286,9 @@ Rules:
 
 - `reply_to_id` is reserved for a stable message reference when the platform provides one.
 - If the platform requires an ephemeral reply handle, adapters MUST place it in:
-  - `delivery.metadata.reply_handle` (string)
-- NEX MUST treat `delivery.metadata.reply_handle` as an outbound-only hint:
+  - `delivery.metadata.reply_token` (string)
+  - (`delivery.metadata.reply_handle` is a deprecated alias; adapters SHOULD prefer `reply_token`.)
+- NEX MUST treat `delivery.metadata.reply_token` as an outbound-only hint:
   - never for IAM matching
   - never for session keys
   - never for dedupe

@@ -3,7 +3,9 @@
 **Canonical lifecycle spec:** `specs/environment/foundation/WORKSPACE_LIFECYCLE.md`
 
 **Status:** ALIGNED WITH `WORKSPACE_LIFECYCLE.md`
-**Last Updated:** 2026-02-17
+**Last Updated:** 2026-02-18
+
+> **Canonical reference:** See [DATABASE_ARCHITECTURE.md](../data/DATABASE_ARCHITECTURE.md) for the authoritative database layout.
 
 ---
 
@@ -36,12 +38,12 @@ nexus init [--workspace <path>]
 ├── home/                              # User personal workspace
 └── state/
     ├── data/
-    │   ├── events.db                  # Events ledger (empty, schema applied)
-    │   ├── agents.db                  # Agents ledger (empty, schema applied)
-    │   ├── identity.db                # Identity mappings (empty, schema applied)
-    │   └── nexus.db                   # Request traces + automations table (empty, schema applied)
-    ├── cortex/
-    │   └── cortex.db                  # Cortex memory store (empty, schema applied)
+    │   ├── events.db                  # Event ledger (empty, schema applied)
+    │   ├── agents.db                  # Agent sessions (empty, schema applied)
+    │   ├── identity.db                # Contacts, directory, entities, auth, ACL (empty, schema applied)
+    │   ├── memory.db                  # Facts, episodes, analysis (empty, schema applied)
+    │   ├── embeddings.db              # Semantic vector index (empty, schema applied)
+    │   └── runtime.db                 # Request traces, adapters, automations, bus (empty, schema applied)
     ├── agents/
     │   └── BOOTSTRAP.md               # Permanent onboarding conversation template (NEVER deleted)
     ├── user/                          # Empty — populated during onboarding
@@ -55,8 +57,7 @@ nexus init [--workspace <path>]
 | Path | Purpose |
 |------|---------|
 | `skills/` | Flat skills directory — no subdirectories. Internal metadata on each skill tracks its type (tool, connector, guide). |
-| `state/data/` | Ledger databases |
-| `state/cortex/` | Cortex memory database |
+| `state/data/` | All 6 databases |
 | `state/agents/` | Agent bootstrap template; agent persona subdirectories created during onboarding |
 | `state/user/` | User identity files (created during onboarding) |
 | `state/credentials/` | Credential pointers/index (populated during credential sync/scan) |
@@ -77,11 +78,12 @@ All databases are created eagerly by init with their current schema applied. The
 
 | Database | Location | Purpose |
 |----------|----------|---------|
-| `events.db` | `state/data/events.db` | Events ledger |
-| `agents.db` | `state/data/agents.db` | Agents ledger |
-| `identity.db` | `state/data/identity.db` | Identity mappings |
-| `nexus.db` | `state/data/nexus.db` | Request traces + automations table |
-| `cortex.db` | `state/cortex/cortex.db` | Cortex memory store |
+| `events.db` | `state/data/events.db` | Event ledger |
+| `agents.db` | `state/data/agents.db` | Agent sessions |
+| `identity.db` | `state/data/identity.db` | Contacts, directory, entities, auth, ACL |
+| `memory.db` | `state/data/memory.db` | Facts, episodes, analysis (Memory System) |
+| `embeddings.db` | `state/data/embeddings.db` | Semantic vector index |
+| `runtime.db` | `state/data/runtime.db` | Request traces, adapters, automations, bus |
 
 ---
 
@@ -177,7 +179,7 @@ See `WORKSPACE_LIFECYCLE.md` Phase 3 for the full onboarding flow.
 
 - Directory structure matches the tree above
 - `state/config.json` exists with `runtime.port`, `runtime.bind: "loopback"`, `runtime.auth.mode: "token"`, `runtime.auth.token` (non-empty string)
-- All 5 DB files exist: `events.db`, `agents.db`, `identity.db`, `nexus.db`, `cortex.db`
+- All 6 DB files exist under `state/data/`: `events.db`, `agents.db`, `identity.db`, `memory.db`, `embeddings.db`, `runtime.db`
 - `state/agents/BOOTSTRAP.md` exists and is non-empty
 - `AGENTS.md` exists at workspace root
 - `skills/` directory exists (flat, no subdirectories)

@@ -130,7 +130,7 @@ const analyticsPlugin: NEXPlugin = {
   
   onFinalize: async (req) => {
     await analytics.track('request_complete', {
-      channel: req.delivery.channel,
+      platform: req.delivery.platform,
       persona: req.access?.routing.persona,
       duration_ms: req.pipeline.duration_ms,
       input_tokens: req.response?.usage?.input_tokens,

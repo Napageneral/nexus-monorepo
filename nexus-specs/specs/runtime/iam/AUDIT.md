@@ -22,15 +22,15 @@ Every access decision is logged for debugging, security analysis, and compliance
 ### Schema
 
 ```sql
-CREATE TABLE acl_access_log (
+CREATE TABLE access_log (
   id TEXT PRIMARY KEY,
   timestamp INTEGER NOT NULL,
-  
+
   -- Event context
   event_id TEXT,                  -- FK to events ledger
-  channel TEXT NOT NULL,
-  sender_identifier TEXT NOT NULL,
-  peer_kind TEXT,                 -- dm, group
+  platform TEXT NOT NULL,
+  sender_id TEXT NOT NULL,
+  container_kind TEXT,            -- dm, group
   account TEXT,
   
   -- Resolved principal
@@ -69,11 +69,13 @@ CREATE TABLE acl_access_log (
 );
 
 -- Indexes for common queries
-CREATE INDEX idx_access_log_time ON acl_access_log(timestamp);
-CREATE INDEX idx_access_log_principal ON acl_access_log(principal_id);
-CREATE INDEX idx_access_log_effect ON acl_access_log(effect);
-CREATE INDEX idx_access_log_channel ON acl_access_log(channel);
-CREATE INDEX idx_access_log_type ON acl_access_log(principal_type);
+CREATE INDEX idx_access_log_time ON access_log(timestamp);
+CREATE INDEX idx_access_log_principal ON access_log(principal_id);
+CREATE INDEX idx_access_log_effect ON access_log(effect);
+CREATE INDEX idx_access_log_platform ON access_log(platform);
+CREATE INDEX idx_access_log_type ON access_log(principal_type);
+
+-- Note: Table lives in identity.db. The acl_ prefix is dropped per DATABASE_ARCHITECTURE.md.
 ```
 
 ### Record Structure
@@ -85,9 +87,9 @@ interface AccessLogEntry {
   
   // Event context
   event_id?: string;
-  channel: string;
-  sender_identifier: string;
-  peer_kind?: 'dm' | 'group';
+  platform: string;
+  sender_id: string;
+  container_kind?: 'dm' | 'group';
   account?: string;
   
   // Resolved principal
@@ -130,30 +132,32 @@ interface AccessLogEntry {
 ### Schema
 
 ```sql
-CREATE TABLE acl_grant_log (
+CREATE TABLE grant_log (
   id TEXT PRIMARY KEY,
   timestamp INTEGER NOT NULL,
-  
+
   -- Grant reference
   grant_id TEXT NOT NULL,
-  
+
   -- Activity type
   activity TEXT NOT NULL,         -- created, used, expired, revoked
-  
+
   -- Context
   actor TEXT,                     -- Who performed the action
   reason TEXT,
-  
+
   -- For 'used' activities
-  access_log_id TEXT,             -- FK to acl_access_log
-  
-  FOREIGN KEY (grant_id) REFERENCES acl_grants(id),
-  FOREIGN KEY (access_log_id) REFERENCES acl_access_log(id)
+  access_log_id TEXT,             -- FK to access_log
+
+  FOREIGN KEY (grant_id) REFERENCES grants(id),
+  FOREIGN KEY (access_log_id) REFERENCES access_log(id)
 );
 
-CREATE INDEX idx_grant_log_grant ON acl_grant_log(grant_id);
-CREATE INDEX idx_grant_log_time ON acl_grant_log(timestamp);
-CREATE INDEX idx_grant_log_activity ON acl_grant_log(activity);
+CREATE INDEX idx_grant_log_grant ON grant_log(grant_id);
+CREATE INDEX idx_grant_log_time ON grant_log(timestamp);
+CREATE INDEX idx_grant_log_activity ON grant_log(activity);
+
+-- Note: Table lives in identity.db. The acl_ prefix is dropped per DATABASE_ARCHITECTURE.md.
 ```
 
 ### Activity Types
@@ -169,7 +173,7 @@ CREATE INDEX idx_grant_log_activity ON acl_grant_log(activity);
 
 ## Request Log
 
-Permission requests are already logged in `acl_permission_requests` table (see GRANTS.md). This serves as the audit trail for the approval workflow.
+Permission requests are already logged in the `permission_requests` table in identity.db (see GRANTS.md). This serves as the audit trail for the approval workflow.
 
 ---
 
@@ -182,15 +186,15 @@ async function logAccessDecision(
   decision: AccessDecision,
   context: EvaluationContext
 ): Promise<void> {
-  await db.insert('acl_access_log', {
+  await db.insert('access_log', {
     id: generateId(),
     timestamp: Date.now(),
-    
+
     // Event context
     event_id: context.event?.id,
-    channel: context.channel,
-    sender_identifier: context.sender,
-    peer_kind: context.peer_kind,
+    platform: context.platform,
+    sender_id: context.sender_id,
+    container_kind: context.container_kind,
     account: context.account,
     
     // Principal
@@ -234,7 +238,7 @@ async function logGrantUsage(
   grant: Grant,
   accessLogId: string
 ): Promise<void> {
-  await db.insert('acl_grant_log', {
+  await db.insert('grant_log', {
     id: generateId(),
     timestamp: Date.now(),
     grant_id: grant.id,
@@ -251,14 +255,14 @@ async function logGrantUsage(
 ### Recent Denials
 
 ```sql
-SELECT 
+SELECT
   timestamp,
-  channel,
-  sender_identifier,
+  platform,
+  sender_id,
   principal_name,
   deny_reason,
   policies_denied
-FROM acl_access_log
+FROM access_log
 WHERE effect = 'deny'
   AND timestamp > datetime('now', '-24 hours')
 ORDER BY timestamp DESC
@@ -268,13 +272,13 @@ LIMIT 100;
 ### Access History for Person
 
 ```sql
-SELECT 
+SELECT
   timestamp,
-  channel,
+  platform,
   effect,
   tools_allowed,
   session_key
-FROM acl_access_log
+FROM access_log
 WHERE principal_id = 'person_casey'
 ORDER BY timestamp DESC
 LIMIT 50;
@@ -283,14 +287,14 @@ LIMIT 50;
 ### Unknown Sender Attempts
 
 ```sql
-SELECT 
-  sender_identifier,
-  channel,
+SELECT
+  sender_id,
+  platform,
   COUNT(*) as attempts,
   MAX(timestamp) as last_attempt
-FROM acl_access_log
+FROM access_log
 WHERE principal_type = 'unknown'
-GROUP BY sender_identifier, channel
+GROUP BY sender_id, platform
 ORDER BY attempts DESC;
 ```
 
@@ -300,7 +304,7 @@ ORDER BY attempts DESC;
 SELECT 
   policy_name,
   COUNT(*) as times_matched
-FROM acl_access_log,
+FROM access_log,
      json_each(policies_matched) as policy_name
 GROUP BY policy_name
 ORDER BY times_matched DESC;
@@ -316,8 +320,8 @@ SELECT
   gl.activity,
   gl.timestamp,
   gl.actor
-FROM acl_grants g
-JOIN acl_grant_log gl ON g.id = gl.grant_id
+FROM grants g
+JOIN grant_log gl ON g.id = gl.grant_id
 WHERE g.id = 'grant_abc123'
 ORDER BY gl.timestamp DESC;
 ```
@@ -331,8 +335,8 @@ SELECT
   g.resources,
   COUNT(gl.id) as times_used,
   MAX(gl.timestamp) as last_used
-FROM acl_grants g
-LEFT JOIN acl_grant_log gl ON g.id = gl.grant_id AND gl.activity = 'used'
+FROM grants g
+LEFT JOIN grant_log gl ON g.id = gl.grant_id AND gl.activity = 'used'
 WHERE g.revoked_at IS NULL
   AND (g.expires_at IS NULL OR g.expires_at > unixepoch() * 1000)
 GROUP BY g.id
@@ -358,9 +362,9 @@ nexus acl audit list --principal casey
 nexus acl audit list --principal-type unknown
 nexus acl audit list --relationship family
 
-# Filter by channel
-nexus acl audit list --channel discord
-nexus acl audit list --channel slack --account work
+# Filter by platform
+nexus acl audit list --platform discord
+nexus acl audit list --platform slack --account work
 
 # Filter by policy
 nexus acl audit list --policy group-chat-restrictions
@@ -377,7 +381,7 @@ nexus acl audit export --format json > audit.json
 # Statistics
 nexus acl audit stats
 nexus acl audit stats --by principal
-nexus acl audit stats --by channel
+nexus acl audit stats --by platform
 nexus acl audit stats --by policy
 
 # Grant audit
@@ -394,7 +398,7 @@ nexus acl grants audit --all --since yesterday
 ```
 Denied Access Attempts (last 10)
 ────────────────────────────────────────────────────────────────────────
-TIME                 CHANNEL    SENDER              REASON
+TIME                 PLATFORM   SENDER              REASON
 ────────────────────────────────────────────────────────────────────────
 2026-01-29 14:32:01  email      spam@example.com    block-unknown
 2026-01-29 12:15:43  discord    user#9999           block-unknown
@@ -407,7 +411,7 @@ TIME                 CHANNEL    SENDER              REASON
 ```
 Access Log for Casey (last 5)
 ────────────────────────────────────────────────────────────────────────
-TIME                 CHANNEL    EFFECT   SESSION           TOOLS
+TIME                 PLATFORM   EFFECT   SESSION           TOOLS
 ────────────────────────────────────────────────────────────────────────
 2026-01-29 15:00:12  imessage   allow    partner:casey     web_search, weather
 2026-01-29 14:45:33  discord    allow    discord:group:123 web_search (group)
@@ -430,7 +434,7 @@ By principal type:
   Unknown:               47 (3.8%)
   System:                19 (1.5%)
 
-By channel:
+By platform:
   iMessage:             567 (45.5%)
   Discord:              412 (33.0%)
   Slack:                198 (15.9%)
@@ -462,13 +466,13 @@ audit:
 
 ```sql
 -- Run periodically (e.g., daily)
-DELETE FROM acl_access_log 
+DELETE FROM access_log 
 WHERE timestamp < unixepoch() * 1000 - (90 * 24 * 60 * 60 * 1000);
 
-DELETE FROM acl_grant_log
+DELETE FROM grant_log
 WHERE timestamp < unixepoch() * 1000 - (365 * 24 * 60 * 60 * 1000);
 
-DELETE FROM acl_permission_requests
+DELETE FROM permission_requests
 WHERE created_at < unixepoch() * 1000 - (365 * 24 * 60 * 60 * 1000);
 ```
 
@@ -492,7 +496,7 @@ Potential alert conditions:
 
 The audit log contains:
 - Sender identities
-- Message context (channel, peer)
+- Message context (platform, container)
 - Access patterns
 
 This data should be:

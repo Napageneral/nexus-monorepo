@@ -242,7 +242,7 @@ Workers can spawn nested workers. There is no depth limit.
 | **Thread** | Thread/Turn ID | Direct routing to that turn's cumulative context |
 | **Session** | Session label | Resolves to session's current thread head |
 | **Persona** | Persona ID | Resolves to persona's main session |
-| **Smart** | Just content | Cortex finds best matching thread |
+| **Smart** | Just content | Memory System finds best matching thread |
 
 **All resolve to thread ID.** Thread routing is the primitive.
 

@@ -1,8 +1,9 @@
 # Live E2E Harness Specification (Real LLM)
 
 **Status:** ACTIVE
-**Last Updated:** 2026-02-17
+**Last Updated:** 2026-02-18
 **Canonical Lifecycle Spec:** `specs/environment/foundation/WORKSPACE_LIFECYCLE.md`
+**Database Layout:** See `specs/data/DATABASE_ARCHITECTURE.md` for the canonical 6-database layout
 
 ## Purpose
 
@@ -38,7 +39,7 @@ The 7 original clarification items are grouped into 3 bundles. Bundle A is **res
 
 All decisions captured in `specs/environment/foundation/WORKSPACE_LIFECYCLE.md`:
 
-- **Item 1 (`nexus init` contract):** Init creates all dirs, all 5 DBs (eagerly, with schema), generates auth token, writes config to `state/config.json`. Flat `skills/` dir. `BOOTSTRAP.md` is permanent.
+- **Item 1 (`nexus init` contract):** Init creates all dirs, all 6 DBs (eagerly, with schema: events.db, agents.db, identity.db, memory.db, embeddings.db, runtime.db), generates auth token, writes config to `state/config.json`. Flat `skills/` dir. `BOOTSTRAP.md` is permanent.
 - **Item 2 (onboarding identity + completion):** Always MWP. Bootstrap detected by absence of agent persona dirs in `state/agents/`. `BOOTSTRAP.md` content injected into MA system prompt. Identity files at `state/agents/{name}/IDENTITY.md` + `SOUL.md`, `state/user/IDENTITY.md`. Completion = persona dir exists with `IDENTITY.md`.
 - **Item 6 (credential scan):** External CLI auto-sync at runtime startup. Agent-driven env var scan during onboarding (MA dispatches worker). `BOOTSTRAP.md` template instructs MA to do this.
 - **Item 7 (default automations):** Ships memory-reader, memory-writer, command-logger, boot-md. Seeded at runtime startup. Workspaces at `state/workspace/{name}/`. Legacy `session-memory` and `soul-evil` dropped.
@@ -47,7 +48,7 @@ All decisions captured in `specs/environment/foundation/WORKSPACE_LIFECYCLE.md`:
 
 All decisions captured in `specs/runtime/RUNTIME_ROUTING.md`:
 
-- **Item 3 (session keys + routing):** Contacts table in `identity.db` maps `(channel, sender_id)` → `entity_id`. Every sender gets an entity from first contact (auto-created in cortex). Session keys are always entity-based: `dm:{canonical_entity_id}`. No `dm:{channel}:{sender_id}` fallback. Entity merges propagate to session aliases synchronously. Turn trees are never merged — memory bridges across sessions.
+- **Item 3 (session keys + routing):** Contacts table in `identity.db` maps `(platform, sender_id)` → `entity_id`. Every sender gets an entity from first contact (auto-created in identity.db). Session keys are always entity-based: `dm:{canonical_entity_id}`. No `dm:{platform}:{sender_id}` fallback. Entity merges propagate to session aliases synchronously. Turn trees are never merged — memory bridges across sessions.
 - **Item 4 (adapters-only runtime):** Big-bang removal of legacy channels, gmail-watcher, cron. Adapter manager is the sole external ingest/delivery path. `chat.send` is a direct dispatch (not an adapter). Adapter config in `~/.nex.yaml`.
 
 ### Bundle C: Optional Runtime Surfaces (Item 5) — PENDING
@@ -104,8 +105,10 @@ Each scenario is chat-driven (messages sent to the runtime) and validated by rea
 - `state/data/events.db` — inbound + outbound event records
 - `state/data/agents.db` — sessions, turns, messages, tool_calls, queue_items
 - `state/data/identity.db` — identity mappings
-- `state/data/nexus.db` — `nexus_requests` trace rows, `automations` table
-- `state/cortex/cortex.db` — entities, observations, episodes
+- `state/data/runtime.db` — `nexus_requests` trace rows, `automations` table
+- `state/data/memory.db` — facts, episodes, analysis
+- `state/data/identity.db` — contacts, entities, auth, ACL
+- `state/data/embeddings.db` — semantic vector index
 - `runtime.log` — startup logs, crashes, warnings
 - Filesystem — `state/agents/`, `state/user/`, `state/workspace/`, `state/credentials/`
 
@@ -116,7 +119,7 @@ Each scenario is chat-driven (messages sent to the runtime) and validated by rea
 3. **Assert post-init state:**
    - Directory structure matches `WORKSPACE_LIFECYCLE.md` Phase 1
    - `state/config.json` has `runtime.auth.token` (non-empty)
-   - All 5 DB files exist
+   - All 6 DB files exist (events.db, agents.db, identity.db, memory.db, embeddings.db, runtime.db)
    - `state/agents/BOOTSTRAP.md` exists
    - `state/workspace/` is empty
    - `state/user/` is empty
@@ -124,7 +127,7 @@ Each scenario is chat-driven (messages sent to the runtime) and validated by rea
 5. Wait for `/health` 200.
 6. **Assert post-boot state:**
    - At least one provider credential exists (from external CLI sync)
-   - Owner entity exists in cortex
+   - Owner entity exists in identity.db
    - Automations table has: `memory-reader`, `memory-writer`, `command-logger`, `boot-md`
    - `state/workspace/memory-reader/` and `state/workspace/memory-writer/` exist with seed files
 
@@ -273,7 +276,10 @@ Ledgers:
 - `specs/data/ledgers/AGENTS_LEDGER.md`
 - `specs/data/ledgers/NEXUS_LEDGER.md`
 
+Database architecture:
+- `specs/data/DATABASE_ARCHITECTURE.md` **(primary, canonical for all 6 databases)**
+
 Memory:
-- `specs/data/cortex/v2/MEMORY_SYSTEM_V2.md`
-- `specs/data/cortex/v2/UNIFIED_ENTITY_STORE.md`
-- `specs/data/cortex/v2/MEMORY_WRITER_V2.md`
+- `specs/data/memory/MEMORY_SYSTEM_V2.md`
+- `specs/data/memory/UNIFIED_ENTITY_STORE.md`
+- `specs/data/memory/MEMORY_WRITER_V2.md`

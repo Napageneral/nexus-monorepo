@@ -1,8 +1,9 @@
 # NEX Daemon
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-13  
+**Last Updated:** 2026-02-18
 **Related:** NEX.md, CONTROL_PLANE.md, ADAPTER_SYSTEM.md, SESSION_IMPORT_SERVICE.md, BUS_ARCHITECTURE.md, PLUGINS.md
+**Database layout:** See `../../data/DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
 
 ---
 
@@ -100,7 +101,7 @@ The config is a single JSON document namespaced by domain. Representative domain
 - `plugins.*`
 - `bus.*`
 - `timer.*`
-- `cortex.*`
+- `memory.*`
 
 Config validation fails fast — if the config is invalid, the daemon exits with a clear error before touching databases or spawning processes.
 
@@ -110,16 +111,12 @@ Open (or create + migrate) all ledger databases:
 
 ```
 state/data/
-├── events.db        # Events Ledger — inbound/outbound events
+├── events.db        # Event Ledger — inbound/outbound events
 ├── agents.db        # Agents Ledger — sessions, turns, messages, tool_calls
-├── identity.db      # Identity Graph — entities, identities, union-find
-├── nexus.db         # Nexus Ledger — nex_traces, adapter_instances, config
-```
-
-The Cortex derived store is separate and canonical at:
-
-```
-state/cortex/cortex.db
+├── identity.db      # Identity — contacts, directory, entities, auth, ACL
+├── memory.db        # Memory System — facts, episodes, analysis
+├── embeddings.db    # Semantic vector index (sqlite-vec)
+└── runtime.db       # Runtime Operations — requests, adapters, automations, bus
 ```
 
 Migration strategy: each database has a `schema_version` table. On open, check version and apply any pending migrations. If migration fails, daemon exits with error — never run with stale schema.
@@ -130,7 +127,7 @@ The Adapter Manager reads the `adapters:` config and the `adapter_instances` DB 
 
 Adapter classes:
 
-1. **Channel adapters** (iMessage, Gmail, Discord, etc.) — monitor JSONL `NexusEvent` -> pipeline
+1. **Platform adapters** (iMessage, Gmail, Discord, etc.) — monitor JSONL `NexusEvent` -> pipeline
 2. **Import adapters** (`aix`) — IPC import frames -> Session Import Service
 
 Boot behavior:
@@ -138,7 +135,7 @@ Boot behavior:
 ```
 For each adapter in config:
   For each enabled account:
-    If class == channel:
+    If class == platform:
       1. Verify credential (if credential_ref set)
       2. Spawn monitor: <command> monitor --account <id> --format jsonl
       3. Read monitor stdout JSONL -> receiveEvent pipeline
@@ -250,7 +247,9 @@ interface HealthResponse {
     events_db: "ok" | "error";
     agents_db: "ok" | "error";
     identity_db: "ok" | "error";
-    nexus_db: "ok" | "error";
+    memory_db: "ok" | "error";
+    embeddings_db: "ok" | "error";
+    runtime_db: "ok" | "error";
   };
 }
 ```
@@ -281,7 +280,7 @@ Once all subsystems are initialized:
     discord-cli/echo-bot  discord   ● running
   Plugins:   2 loaded (logging, analytics)
   Timer:     heartbeat every 60s
-  Ledgers:   4/4 ok
+  Ledgers:   6/6 ok
 ```
 
 ---
@@ -457,7 +456,7 @@ nexus daemon status
 #
 # Plugins: logging, analytics
 # Timer: heartbeat 60s, 2 cron jobs
-# Ledgers: 4/4 ok
+# Ledgers: 6/6 ok
 ```
 
 If not running:
@@ -568,10 +567,9 @@ Log rotation: not handled by daemon — use system logrotate or similar. The dae
 ├── events.db
 ├── agents.db
 ├── identity.db
-└── nexus.db
-
-~/nexus/state/cortex/
-└── cortex.db
+├── memory.db
+├── embeddings.db
+└── runtime.db
 ```
 
 ---

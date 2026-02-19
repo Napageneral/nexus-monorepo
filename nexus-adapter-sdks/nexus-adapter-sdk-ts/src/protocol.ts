@@ -70,17 +70,28 @@ export const AttachmentSchema = z.object({
 
 export type Attachment = z.infer<typeof AttachmentSchema>;
 
-export const PeerKindSchema = z.enum(["dm", "group", "channel"]);
-export type PeerKind = z.infer<typeof PeerKindSchema>;
+export const ContainerKindSchema = z.enum(["dm", "direct", "group", "channel"]);
+export type ContainerKind = z.infer<typeof ContainerKindSchema>;
+// Deprecated alias retained for transition.
+export const PeerKindSchema = ContainerKindSchema;
+export type PeerKind = ContainerKind;
 
-export const ContentTypeSchema = z.enum(["text", "image", "audio", "video", "file", "reaction"]);
+export const ContentTypeSchema = z.enum([
+  "text",
+  "image",
+  "audio",
+  "video",
+  "file",
+  "reaction",
+  "membership",
+]);
 export type ContentType = z.infer<typeof ContentTypeSchema>;
 
 // NexusEvent is the normalized event format that all adapters emit.
 // One JSON object per line on stdout (JSONL).
 export const NexusEventSchema = z.object({
   // Identity
-  event_id: z.string(), // "{channel}:{source_id}"
+  event_id: z.string(), // "{platform}:{source_id}"
   timestamp: z.number().int(), // Unix ms
 
   // Content
@@ -89,17 +100,22 @@ export const NexusEventSchema = z.object({
   attachments: z.array(AttachmentSchema).optional(),
 
   // Routing context
-  channel: z.string(),
+  platform: z.string(),
   account_id: z.string(),
   sender_id: z.string(),
   sender_name: z.string().optional(),
-  peer_id: z.string(),
-  peer_kind: PeerKindSchema,
+  space_id: z.string().optional(),
+  space_name: z.string().optional(),
+  container_id: z.string(),
+  container_kind: ContainerKindSchema,
+  container_name: z.string().optional(),
   thread_id: z.string().optional(),
+  thread_name: z.string().optional(),
   reply_to_id: z.string().optional(),
 
   // Platform metadata
   metadata: z.record(z.string(), z.unknown()).optional(),
+  delivery_metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type NexusEvent = z.infer<typeof NexusEventSchema>;
@@ -175,7 +191,7 @@ export type AdapterAccount = z.infer<typeof AdapterAccountSchema>;
 // --- Streaming Protocol ---
 
 export const DeliveryTargetSchema = z.object({
-  channel: z.string(),
+  platform: z.string(),
   account_id: z.string(),
   to: z.string(),
   thread_id: z.string().optional(),

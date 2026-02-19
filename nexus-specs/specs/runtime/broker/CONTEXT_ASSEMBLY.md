@@ -24,7 +24,7 @@ Context comes from five distinct sources, each changing at a different rate:
 | 1 | **Workspace** | AGENTS.md, rules, static runtime info (host, os, arch) | Rarely (config changes) |
 | 2 | **Persona** | SOUL.md, IDENTITY.md, user IDENTITY.md, permissions | Rarely (identity changes) |
 | 3 | **Session** | Conversation history from Agents Ledger (turns, compaction summaries) | Every turn (grows incrementally) |
-| 4 | **Cortex** | Injected memories, relevant skill context, semantic matches | Per-event (varies by content) |
+| 4 | **Memory** | Injected memories, relevant skill context, semantic matches | Per-event (varies by content) |
 | 5 | **Event** | Current time, channel, hook injections, user message | Every turn (fully dynamic) |
 
 ### Three Physical Layers
@@ -49,7 +49,7 @@ messages: [
 | **Workspace** | System Prompt (static) | Full cache hit — identical between turns |
 | **Persona** | System Prompt (static) | Full cache hit — identical between turns |
 | **Session** | Conversation History (incremental) | Prefix cache — extends each turn, only new exchange is uncached |
-| **Cortex** | Current Event (dynamic) | Never cached — varies per event |
+| **Memory** | Current Event (dynamic) | Never cached — varies per event |
 | **Event** | Current Event (dynamic) | Never cached — changes every turn |
 
 **Why this mapping matters for cost:**
@@ -60,7 +60,7 @@ Turn N+1: [system] [history_1..N]   [user_N+1]       → cache extends (only use
 After compaction: [system] [summary] [kept] [user_M]  → cache miss (new prefix, acceptable)
 ```
 
-Workspace and Persona are static — they form the system prompt that gets cached perfectly. Session history extends incrementally — Anthropic's prefix caching means only the newest exchange is uncached. Cortex and Event are dynamic — they go in the final message and are never cached, but they're typically small relative to history.
+Workspace and Persona are static — they form the system prompt that gets cached perfectly. Session history extends incrementally — Anthropic's prefix caching means only the newest exchange is uncached. Memory and Event are dynamic — they go in the final message and are never cached, but they're typically small relative to history.
 
 ---
 
@@ -97,12 +97,12 @@ The messages array between system prompt and current event. Grows by one exchang
 
 The final user message. Changes every turn. Never cached.
 
-**Conceptual layers baked in:** Cortex + Event
+**Conceptual layers baked in:** Memory + Event
 
 **Contains:**
 - Current time and timezone
 - Channel and channel actions (for MA)
-- Cortex injections (future: relevant memories, skill context)
+- Memory injections (future: relevant memories, skill context)
 - Event-specific metadata
 - Hook injections
 - The actual user message / event content
@@ -158,7 +158,7 @@ Run `nexus skill use <name>` to get the full guide for any capability.
 |-------|-----------------|-----------|
 | `host`, `os`, `arch` | Yes | Static per machine |
 | `model`, `provider` | No (logged in turn) | Changes per turn, not useful as context |
-| `channel`, `channelActions` | No (event context) | Varies by event |
+| `platform`, `platformActions` | No (event context) | Varies by event |
 | `time`, `timezone` | No (event context) | Changes every turn |
 
 ### System Prompt Construction
@@ -278,11 +278,11 @@ function buildCurrentMessage(event: NexusEvent, role: AgentRole): Message {
   contextParts.push(`Current time: ${new Date().toISOString()}`);
   contextParts.push(`Timezone: ${event.timezone || 'UTC'}`);
   
-  // Channel context (MA only)
-  if (role === 'manager' && event.channel) {
-    contextParts.push(`Channel: ${event.channel}`);
-    if (event.channelActions?.length) {
-      contextParts.push(`Available actions: ${event.channelActions.join(', ')}`);
+  // Platform context (MA only)
+  if (role === 'manager' && event.platform) {
+    contextParts.push(`Platform: ${event.platform}`);
+    if (event.platformActions?.length) {
+      contextParts.push(`Available actions: ${event.platformActions.join(', ')}`);
     }
   }
   
@@ -430,7 +430,7 @@ async function handleOverflow(
 
 When tokens are tight, compress in this order:
 
-1. **Cortex injection** — Reduce to 0 (not implemented yet)
+1. **Memory injection** — Reduce to 0 (not implemented yet)
 2. **Conversation history** — Trigger compaction, summarize old turns
 3. **NEVER cut:**
    - System prompt (workspace rules, persona identity, nexus environment)
@@ -466,9 +466,9 @@ Different agent roles get different context:
 | Workspace (AGENTS.md) | Full | Full |
 | Persona identity | Own identity | Inherits from MA |
 | Nexus environment | Full capabilities | Scoped to task-relevant |
-| Channel context | Yes (channel, actions) | No (internal only) |
+| Platform context | Yes (platform, actions) | No (internal only) |
 | Session history | Full MA thread | Only WA task context |
-| Cortex injection | Future: relevant memories | Future: task-specific only |
+| Memory injection | Future: relevant memories | Future: task-specific only |
 | Spawning capability | Can spawn workers | Can spawn nested workers |
 | Messaging tools | Full platform access | Reply to MA only |
 
@@ -528,7 +528,7 @@ ${renderNexusEnvironment(params.nexusEnv)}
 │     - Walk thread ancestry                                            │
 │     - Apply compaction summaries if present                          │
 │     ↓                                                                 │
-│  4. Build current event message (time, channel, hooks, content)      │
+│  4. Build current event message (time, platform, hooks, content)     │
 │     ↓                                                                 │
 │  5. Prepare tool set (with IAM-based filtering)                      │
 │     ↓                                                                 │
@@ -544,13 +544,13 @@ ${renderNexusEnvironment(params.nexusEnv)}
 
 ---
 
-## Cortex Integration
+## Memory System Integration
 
-**STATUS: DEFERRED** — Automatic Cortex injection is a future enhancement. Initial implementation will NOT have automatic memory/skill injection.
+**STATUS: DEFERRED** — Automatic memory injection is a future enhancement. Initial implementation will NOT have automatic memory/skill injection.
 
 **Current approach:** Agents discover and load skills on-demand via `nexus skill use <name>`. No automatic injection.
 
-**Future approach:** Cortex reads the event content and automatically injects relevant skill guides and memory into context. This would:
+**Future approach:** The Memory System reads the event content and automatically injects relevant skill guides and memory into context. This would:
 - Replace the manual `nexus skill use` pattern for common skills
 - Inject relevant memories/episodes based on conversation topic
 - Be budget-aware (allocated from token budget, compressed first when tight)
@@ -571,12 +571,12 @@ Context tracking lives at the message level (see `AGENTS_LEDGER.md`). Each messa
   workspace: { agentsMdHash: "abc123", version: 2 },
   persona: { id: "atlas", soulHash: "def456" },
   nexusEnv: { capabilityCount: 18, snapshotAt: 1706000000000 },
-  cortex: null  // Future: injected memory/skill references
+  memory: null  // Future: injected memory/skill references
 }
 
 // Example context_json for a user message
 {
-  event: { channel: "imessage", hookCount: 2 },
+  event: { platform: "imessage", hookCount: 2 },
   attachments: [{ path: "file.ts", lines: [1, 50] }],
   injectedAt: 1706000000000
 }
@@ -604,4 +604,4 @@ Context tracking lives at the message level (see `AGENTS_LEDGER.md`). Each messa
 
 ---
 
-*This document defines context assembly for the Nexus agent system. See TODO.md for deferred items (Cortex injection, auto skill injection).*
+*This document defines context assembly for the Nexus agent system. See TODO.md for deferred items (Memory injection, auto skill injection).*

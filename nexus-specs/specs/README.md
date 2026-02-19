@@ -1,7 +1,8 @@
 # Nexus Architecture Overview
 
-**Status:** CANONICAL  
-**Last Updated:** 2026-02-02
+**Status:** CANONICAL
+**Last Updated:** 2026-02-18
+**Database Layout:** See `specs/data/DATABASE_ARCHITECTURE.md` for the canonical 6-database layout
 
 ---
 
@@ -52,7 +53,7 @@ NEX processes events through 8 sequential stages. Each stage is a verb describin
 │  │   4. runAutomations    Match and execute hooks (parallel)              │    │
 │  │        ↓                Populate: hooks context, may handle event       │    │
 │  │                                                                          │    │
-│  │   5. assembleContext    Gather history from Cortex                      │    │
+│  │   5. assembleContext    Gather history from Memory System               │    │
 │  │        ↓                Prepare agent context                           │    │
 │  │                                                                          │    │
 │  │   6. runAgent           Execute agent (streaming)                       │    │
@@ -91,17 +92,17 @@ The 8 pipeline stages map to 6 core components:
 | `resolveIdentity` | **IAM** | Identity resolution from Identity Ledger |
 | `resolveAccess` | **IAM** | ACL policy evaluation, permissions, session routing |
 | `runAutomations` | **Hooks Engine** | Match triggers, execute hooks |
-| `assembleContext` | **Broker** | Gather history, Cortex context, agent config |
+| `assembleContext` | **Broker** | Gather history, memory context, agent config |
 | `runAgent` | **Broker** | Execute agent with assembled context |
 | `deliverResponse` | **Out-Adapters** | Format and deliver to platforms |
-| `finalize` | **NEX** | Trace logging, emit for Cortex analysis |
+| `finalize` | **NEX** | Trace logging, emit for memory analysis |
 
 **Component view:**
 ```
 NEX orchestrates:
   In-Adapters → IAM → Hooks Engine → Broker → Out-Adapters
                               ↓
-                    System of Record + Cortex
+                    System of Record + Memory
 ```
 
 ---
@@ -112,29 +113,32 @@ NEX orchestrates:
 
 Primary data stores:
 
-| Ledger | Purpose | Contents |
-|--------|---------|----------|
-| **Events** | What happened | All inbound/outbound events (permanent) |
-| **Agents** | AI conversations | Sessions, turns, messages, tool calls |
-| **Identity** | Who is involved | Identity Graph: Contacts (hard facts) → Entities → Mappings (fuzzy) |
-| **Nexus** | Pipeline traces | NexusRequest lifecycle, timing, audit |
+| Database | Purpose | Contents |
+|----------|---------|----------|
+| **events.db** | What happened | All inbound/outbound events (permanent) |
+| **agents.db** | AI conversations | Sessions, turns, messages, tool calls |
+| **identity.db** | Who is involved | Contacts, directory, entities, auth, ACL |
+| **memory.db** | What the AI remembers | Facts, episodes, analysis pipeline |
+| **embeddings.db** | Semantic search | Vector representations for similarity search |
+| **runtime.db** | Pipeline traces | NexusRequest lifecycle, adapters, automations, bus |
 
-All ledgers live in `~/nexus/state/nexus.db` (SQLite).
+All databases are SQLite files in `{workspace}/state/data/`. See `specs/data/DATABASE_ARCHITECTURE.md` for the canonical 6-database inventory and migration plan.
 
-**See:** `../data/ledgers/`
+**See:** `../data/ledgers/`, `../data/DATABASE_ARCHITECTURE.md`
 
-### Cortex (Derived Layer)
+### Memory System (Derived Layer)
 
 Mutable analysis layer that makes raw data useful:
 
-| Component | Purpose |
-|-----------|---------|
-| **Episodes** | Chunks of events grouped for analysis |
-| **Facets** | Extracted metadata (entities, topics, sentiment) |
-| **Embeddings** | Vector representations for semantic search |
-| **Analyses** | Insights, patterns, learned relationships |
+| Component | Database | Purpose |
+|-----------|----------|---------|
+| **Facts** | memory.db | Extracted knowledge about entities |
+| **Episodes** | memory.db | Chunks of events grouped for analysis |
+| **Entities** | identity.db | Named entities, knowledge graph, merge candidates |
+| **Embeddings** | embeddings.db | Vector representations for semantic search |
+| **Analysis** | memory.db | Insights, patterns, learned relationships |
 
-**Key insight:** System of Record is facts. Cortex is understanding.
+**Key insight:** System of Record is facts. Memory is understanding.
 
 ---
 
@@ -153,7 +157,7 @@ Every event creates a `NexusRequest` object that flows through the pipeline, acc
 | `deliverResponse` | `delivery_result` (message IDs, success) |
 | `finalize` | `pipeline` (timing, trace) |
 
-The complete NexusRequest is persisted to Nexus Ledger for debugging and audit.
+The complete NexusRequest is persisted to runtime.db for debugging and audit.
 
 ---
 
@@ -197,7 +201,7 @@ Programmatic event handlers:
 ### Broker
 
 Orchestrates agent execution:
-- Assembles conversation context (history + Cortex)
+- Assembles conversation context (history + memory)
 - Manages sessions, threads, turns
 - Coordinates streaming to out-adapters
 - Writes directly to Agents Ledger
@@ -239,11 +243,11 @@ Format and deliver responses:
 3. IAM resolves discord:user123 → entity "Alex" (relationship: work)
 4. IAM grants: web search, calendar read, route to "Atlas"
 5. Hooks: none match
-6. Broker prepares: fetches conversation history, relevant context from Cortex
+6. Broker prepares: fetches conversation history, relevant context from memory
 7. Agent executes: generates response, calls web_search
 8. Deliver: sends to Discord (chunks if needed)
 9. Complete: traces logged
-10. Cortex (background): extracts entities from conversation
+10. Memory system (background): extracts entities from conversation
 ```
 
 ### Example 3: Timer tick (heartbeat)
@@ -280,7 +284,7 @@ Format and deliver responses:
 | **Central orchestrator** | NEX | One place owns the pipeline |
 | **Data bus** | NexusRequest | Context accumulates through stages |
 | **Broker writes directly** | To Agents Ledger (no JSONL) | Avoids sync loops with AIX |
-| **Single database** | SQLite (`nexus.db`) | Simpler transactions, single backup |
+| **6-database layout** | SQLite (events, agents, identity, memory, embeddings, runtime) | Write contention isolation, single owner per table |
 | **IAM before Hooks** | Policies (WHO) before scripts (WHAT) | Security first |
 | **All agents persistent** | No ephemeral agents | Every session can be resumed |
 | **Nested spawning allowed** | WAs (MA = Manager Agent, WA = Worker Agent) can spawn sub-WAs | Removed upstream restriction |
@@ -310,7 +314,8 @@ Specs are organized into four conceptual layers:
 | Folder | Status | Description |
 |--------|--------|-------------|
 | **ledgers/** | ✅ Current | System of Record schemas (Events, Agents, Identity) |
-| **cortex/** | ✅ Current | Derived layer (episodes, facets, embeddings) |
+| **memory/** | ✅ Current | Memory system (facts, episodes, embeddings, analysis) |
+| **DATABASE_ARCHITECTURE.md** | ✅ Current | Canonical 6-database layout and migration plan |
 
 ### Agent Environment (`environment/`)
 

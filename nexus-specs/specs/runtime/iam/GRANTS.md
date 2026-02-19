@@ -118,7 +118,7 @@ interface Grant {
   
   // Scope (optional)
   conditions?: {
-    channel?: string;            // Only on this channel
+    platform?: string;            // Only on this platform
     session?: string;            // Only in this session
   };
 }
@@ -127,31 +127,33 @@ interface Grant {
 ### Database Schema
 
 ```sql
-CREATE TABLE acl_grants (
+CREATE TABLE grants (
   id TEXT PRIMARY KEY,
-  
+
   -- Principal matching
   principal_query TEXT NOT NULL,  -- JSON query
-  
+
   -- Resources
   resources TEXT NOT NULL,        -- JSON array
-  
+
   -- Lifecycle
   created_at INTEGER NOT NULL,
   expires_at INTEGER,             -- NULL = permanent
   revoked_at INTEGER,             -- NULL = active
-  
+
   -- Audit
   granted_by TEXT NOT NULL,
   reason TEXT,
   request_context TEXT,
-  
+
   -- Scope
   conditions TEXT                 -- JSON conditions
 );
 
-CREATE INDEX idx_grants_active ON acl_grants(expires_at, revoked_at);
-CREATE INDEX idx_grants_principal ON acl_grants(principal_query);
+CREATE INDEX idx_grants_active ON grants(expires_at, revoked_at);
+CREATE INDEX idx_grants_principal ON grants(principal_query);
+
+-- Note: Table lives in identity.db. The acl_ prefix is dropped per DATABASE_ARCHITECTURE.md.
 ```
 
 ---
@@ -166,7 +168,7 @@ interface PermissionRequest {
   
   // Who's asking
   requester: Principal;
-  requester_channel: string;      // Where they asked
+  requester_platform: string;     // Where they asked
   
   // What they want
   resources: string[];
@@ -183,7 +185,7 @@ interface PermissionRequest {
   // Response
   responder?: string;             // Who responded (owner)
   response_at?: number;
-  response_channel?: string;
+  response_platform?: string;
   grant_id?: string;              // If approved, the created grant
 }
 ```
@@ -191,32 +193,34 @@ interface PermissionRequest {
 ### Database Schema
 
 ```sql
-CREATE TABLE acl_permission_requests (
+CREATE TABLE permission_requests (
   id TEXT PRIMARY KEY,
-  
+
   -- Requester
   requester_id TEXT,
-  requester_channel TEXT,
-  
+  requester_platform TEXT,
+
   -- Request
   resources TEXT NOT NULL,        -- JSON array
   reason TEXT,
   original_message TEXT,
-  
+
   -- Lifecycle
   created_at INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
   expires_at INTEGER NOT NULL,
-  
+
   -- Response
   responder TEXT,
   response_at INTEGER,
-  response_channel TEXT,
-  grant_id TEXT REFERENCES acl_grants(id)
+  response_platform TEXT,
+  grant_id TEXT REFERENCES grants(id)
 );
 
-CREATE INDEX idx_requests_pending ON acl_permission_requests(status) 
+CREATE INDEX idx_requests_pending ON permission_requests(status)
   WHERE status = 'pending';
+
+-- Note: Table lives in identity.db. The acl_ prefix is dropped per DATABASE_ARCHITECTURE.md.
 ```
 
 ---
@@ -256,10 +260,10 @@ async function handleRequest(ctx: AgentContext) {
 ```typescript
 async function requestElevation(req: ElevationRequest): Promise<void> {
   // 1. Create request record
-  const request = await db.insert('acl_permission_requests', {
+  const request = await db.insert('permission_requests', {
     id: generateId(),
     requester_id: req.requester.id,
-    requester_channel: req.channel,
+    requester_platform: req.platform,
     resources: JSON.stringify(req.resources),
     reason: req.reason,
     original_message: req.original_message,
@@ -292,7 +296,7 @@ async function handleOwnerResponse(
   requestId: string, 
   action: string
 ): Promise<void> {
-  const request = await db.get('acl_permission_requests', requestId);
+  const request = await db.get('permission_requests', requestId);
   
   if (request.status !== 'pending') {
     throw new Error('Request already processed');
@@ -301,7 +305,7 @@ async function handleOwnerResponse(
   switch (action) {
     case 'approve_once':
       // No grant, just approve this one request
-      await db.update('acl_permission_requests', requestId, {
+      await db.update('permission_requests', requestId, {
         status: 'approved',
         responder: 'owner',
         response_at: Date.now(),
@@ -320,7 +324,7 @@ async function handleOwnerResponse(
         reason: request.reason,
         request_context: request.original_message,
       });
-      await db.update('acl_permission_requests', requestId, {
+      await db.update('permission_requests', requestId, {
         status: 'approved',
         responder: 'owner',
         response_at: Date.now(),
@@ -340,7 +344,7 @@ async function handleOwnerResponse(
         reason: request.reason,
         request_context: request.original_message,
       });
-      await db.update('acl_permission_requests', requestId, {
+      await db.update('permission_requests', requestId, {
         status: 'approved',
         responder: 'owner',
         response_at: Date.now(),
@@ -350,7 +354,7 @@ async function handleOwnerResponse(
       break;
       
     case 'deny':
-      await db.update('acl_permission_requests', requestId, {
+      await db.update('permission_requests', requestId, {
         status: 'denied',
         responder: 'owner',
         response_at: Date.now(),
@@ -398,7 +402,7 @@ function loadActiveGrants(principal: Principal): Grant[] {
   const now = Date.now();
   
   return db.query(`
-    SELECT * FROM acl_grants
+    SELECT * FROM grants
     WHERE revoked_at IS NULL
       AND (expires_at IS NULL OR expires_at > ?)
       AND principal_matches(principal_query, ?)
@@ -585,7 +589,7 @@ principal_query:
 resources:
   - send_email
 conditions:
-  channel: slack
+  platform: slack
   session: work
 expires_at: null
 granted_by: owner

@@ -1,9 +1,9 @@
 # Runtime Routing
 
 **Status:** DESIGN SPEC
-**Last Updated:** 2026-02-17
+**Last Updated:** 2026-02-18
 **Resolves:** LIVE_E2E_HARNESS.md Bundle B (Items 3, 4)
-**Related:** `broker/SESSION_LIFECYCLE.md`, `../data/cortex/v2/UNIFIED_ENTITY_STORE.md`, `../data/cortex/v2/MEMORY_SYSTEM_V2.md`, `adapters/ADAPTER_SYSTEM.md`
+**Related:** `broker/SESSION_LIFECYCLE.md`, `../data/DATABASE_ARCHITECTURE.md`, `../data/cortex/v2/MEMORY_SYSTEM_V2.md`, `adapters/ADAPTER_SYSTEM.md`
 
 ---
 
@@ -11,17 +11,17 @@
 
 This document defines how messages flow from inbound delivery to session routing once a Nexus workspace is alive. It covers:
 
-1. **Contacts** — the delivery-driven directory that maps `(channel, sender_id)` to entities
+1. **Contacts** — the delivery-driven directory that maps `(platform, space_id, sender_id)` to entities
 2. **Identity resolution** — how the pipeline resolves a sender to a principal at pipeline speed
 3. **Session key generation** — how sessions are keyed to identities
 4. **Entity merge propagation** — what happens to contacts and sessions when entities merge
-5. **Adapters-only runtime** — removing legacy channels in favor of the adapter system
+5. **Adapters-only runtime** — removing legacy platform plugins in favor of the adapter system
 
 ---
 
 ## Design Principles
 
-1. **Identity-driven sessions.** Sessions belong to people (entities), not channels. Two channels, same person, same session.
+1. **Identity-driven sessions.** Sessions belong to people (entities), not platforms. Two platforms, same person, same session.
 2. **Pipeline-speed resolution.** Identity resolution is synchronous, zero-LLM, sub-millisecond. The memory-writer does the smart work asynchronously.
 3. **Every sender has an entity from message one.** No "unknown sender" state for session routing. First message creates both a contact and an entity. Session key is always entity-based.
 4. **Contacts are infrastructure. Entities are knowledge.** Contacts answer "how to reach someone." Entities answer "who someone is." Different write paths, different concerns, linked by ID.
@@ -33,7 +33,7 @@ This document defines how messages flow from inbound delivery to session routing
 
 ### What Contacts Are
 
-A contact is a delivery endpoint — a `(channel, identifier)` pair representing one way to reach or be reached by someone. Every inbound message creates or updates a contact automatically at pipeline time. No LLM involved.
+A contact is a delivery endpoint — a `(platform, space_id, sender_id)` tuple representing one way to reach or be reached by someone. Every inbound message creates or updates a contact automatically at pipeline time. No LLM involved.
 
 Contacts are the pipeline-speed lookup index. Given a delivery context, the contacts table answers: "what entity is this sender?"
 
@@ -43,85 +43,85 @@ Contacts live in `identity.db`:
 
 ```sql
 CREATE TABLE contacts (
-    channel         TEXT NOT NULL,              -- 'discord', 'slack', 'imessage', 'gmail', 'control-plane', 'webchat'
-    identifier      TEXT NOT NULL,              -- platform-specific sender ID
-    entity_id       TEXT NOT NULL,              -- FK → cortex entities table (by convention, cross-db)
+    platform        TEXT NOT NULL,              -- 'discord', 'slack', 'imessage', 'gmail', 'control-plane', 'webchat'
+    space_id        TEXT NOT NULL DEFAULT '',   -- optional scoping (e.g., Slack workspace); '' when N/A
+    sender_id       TEXT NOT NULL,              -- platform-specific sender ID
+    entity_id       TEXT NOT NULL,              -- FK to entities.id (same DB)
     first_seen      INTEGER NOT NULL,           -- unix ms
     last_seen       INTEGER NOT NULL,           -- unix ms
-    message_count   INTEGER DEFAULT 0,
-    display_name    TEXT,                       -- last known display name from platform
-    avatar_url      TEXT,                       -- last known avatar from platform
-    PRIMARY KEY (channel, identifier)
+    message_count   INTEGER NOT NULL DEFAULT 0,
+    sender_name     TEXT,                       -- best-effort display name (untrusted)
+    avatar_url      TEXT,                       -- best-effort (untrusted)
+    PRIMARY KEY (platform, space_id, sender_id)
 );
 
-CREATE INDEX idx_contacts_entity ON contacts(entity_id);
+CREATE INDEX idx_contacts_entity_id ON contacts(entity_id);
 CREATE INDEX idx_contacts_last_seen ON contacts(last_seen DESC);
 ```
 
 ### What identity.db Contains
 
-With this design, `identity.db` simplifies to two concerns:
+With the new database architecture, `identity.db` is the unified identity, directory, and access control store:
 
 1. **Contacts** — delivery-driven directory (as above)
-2. **Auth** — tokens (`auth_tokens`) and passwords (`auth_passwords`)
-
-The following tables are **removed from identity.db**:
-
-| Table | Disposition |
-|-------|------------|
-| `entities` | Moved to cortex.db (Unified Entity Store) |
-| `identity_mappings` | Replaced by `contacts.entity_id` direct link |
-| `entity_tags` | Moved to cortex.db |
+2. **Directory** — spaces, containers, threads, participants (see `DELIVERY_DIRECTORY_SCHEMA.md`)
+3. **Entities & Knowledge Graph** — entities, entity_tags, entity_cooccurrences, merge_candidates (relocated from cortex.db per DATABASE_ARCHITECTURE.md). `contacts.entity_id` → `entities.id` within the same DB, enabling JOINs.
+4. **Auth** — tokens (`auth_tokens`) and passwords (`auth_passwords`)
+5. **Access Control** — grants, grant_log, access_log, permission_requests (relocated from nexus.db, `acl_` prefix dropped)
 
 ### Auto-Create Entity on First Contact
 
-When a new `(channel, identifier)` pair is seen for the first time, the pipeline:
+When a new `(platform, space_id, sender_id)` tuple is seen for the first time, the pipeline:
 
-1. **Creates a contact row** in `identity.db` with a new `entity_id`
-2. **Creates a corresponding entity** in `cortex.db` with:
-   - `name`: `{channel}:{identifier}` (e.g., `discord:tyler#1234`)
-   - `type`: channel-specific (e.g., `discord_handle`, `phone`, `email`, `slack_user`)
+1. **Creates a corresponding entity** in `identity.db` with:
+   - `name`: `{platform}:{sender_id}` (e.g., `discord:tyler#1234`)
+     - If `space_id` is used for uniqueness (Slack), the name SHOULD include it: `{platform}:{space_id}:{sender_id}`
+   - `type`: platform-specific (e.g., `discord_handle`, `phone`, `email`, `slack_user`)
    - `source`: `'delivery'`
    - `merged_into`: `NULL` (canonical root — this IS the identity until merged)
+2. **Creates a contact row** in `identity.db` linking that delivery endpoint to the entity id
 
 ```typescript
 function ensureContact(
   identityDb: DatabaseSync,
-  cortexDb: DatabaseSync,
   delivery: DeliveryContext,
   timestamp: number,
 ): { entity_id: string; is_new: boolean } {
+  const platform = delivery.platform;
+  const spaceId = delivery.space_id ?? '';
+  const senderId = delivery.sender_id;
+
   // Check existing
   const existing = identityDb
-    .prepare('SELECT entity_id FROM contacts WHERE channel = ? AND identifier = ?')
-    .get(delivery.channel, delivery.sender_id) as { entity_id: string } | undefined;
+    .prepare('SELECT entity_id FROM contacts WHERE platform = ? AND space_id = ? AND sender_id = ?')
+    .get(platform, spaceId, senderId) as { entity_id: string } | undefined;
 
   if (existing) {
     // Update last_seen, message_count
     identityDb.prepare(`
       UPDATE contacts SET last_seen = ?, message_count = message_count + 1,
-        display_name = COALESCE(?, display_name),
+        sender_name = COALESCE(?, sender_name),
         avatar_url = COALESCE(?, avatar_url)
-      WHERE channel = ? AND identifier = ?
-    `).run(timestamp, delivery.sender_name ?? null, null, delivery.channel, delivery.sender_id);
+      WHERE platform = ? AND space_id = ? AND sender_id = ?
+    `).run(timestamp, delivery.sender_name ?? null, null, platform, spaceId, senderId);
 
     return { entity_id: existing.entity_id, is_new: false };
   }
 
-  // New contact: create entity in cortex, then contact
+  // New contact: create entity + contact row in identity.db (same DB).
   const entityId = generateULID();
-  const entityName = `${delivery.channel}:${delivery.sender_id}`;
-  const entityType = inferEntityType(delivery.channel); // discord_handle, phone, email, etc.
+  const entityName = spaceId ? `${platform}:${spaceId}:${senderId}` : `${platform}:${senderId}`;
+  const entityType = inferEntityType(platform); // discord_handle, phone, email, etc.
 
-  cortexDb.prepare(`
+  identityDb.prepare(`
     INSERT INTO entities (id, name, type, source, normalized, first_seen, last_seen, created_at, updated_at)
     VALUES (?, ?, ?, 'delivery', ?, ?, ?, ?, ?)
   `).run(entityId, entityName, entityType, entityName.toLowerCase(), timestamp, timestamp, timestamp, timestamp);
 
   identityDb.prepare(`
-    INSERT INTO contacts (channel, identifier, entity_id, first_seen, last_seen, message_count, display_name)
-    VALUES (?, ?, ?, ?, ?, 1, ?)
-  `).run(delivery.channel, delivery.sender_id, entityId, timestamp, timestamp, delivery.sender_name ?? null);
+    INSERT INTO contacts (platform, space_id, sender_id, entity_id, first_seen, last_seen, message_count, sender_name)
+    VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+  `).run(platform, spaceId, senderId, entityId, timestamp, timestamp, delivery.sender_name ?? null);
 
   return { entity_id: entityId, is_new: true };
 }
@@ -129,9 +129,9 @@ function ensureContact(
 
 ### The Owner Contact
 
-The owner (Nexus user) is a special case. At init/boot time, the owner entity is seeded in cortex (per `WORKSPACE_LIFECYCLE.md`). The `control-plane` and `webchat` channels use a well-known entity ID (`entity-owner` or the configured owner entity). No contact lookup needed — the `chat.send` code path sets `entity_id` directly from the auth token.
+The owner (Nexus user) is a special case. At init/boot time, the owner entity is seeded in `identity.db` (per `WORKSPACE_LIFECYCLE.md`). The `control-plane` and `webchat` platforms use a well-known entity ID (`entity-owner` or the configured owner entity). No contact lookup needed — the `chat.send` code path sets `entity_id` directly from the auth token.
 
-For external channels where the owner is also a sender (e.g., outbound messages captured by adapters), the contact is created normally and the memory-writer merges it with the owner entity when it recognizes the pattern.
+For external platforms where the owner is also a sender (e.g., outbound messages captured by adapters), the contact is created normally and the memory-writer merges it with the owner entity when it recognizes the pattern.
 
 ---
 
@@ -141,29 +141,29 @@ For external channels where the owner is also a sender (e.g., outbound messages 
 
 ```
 Message arrives with DeliveryContext:
-  { channel: "discord", sender_id: "tyler#1234", sender_name: "Tyler", ... }
+  { platform: "discord", sender_id: "tyler#1234", sender_name: "Tyler", ... }
 
 Stage 2: resolveIdentity
   │
-  ├── System/webhook channel? → system/webhook principal (no contact lookup)
+  ├── System/webhook platform? → system/webhook principal (no contact lookup)
   │
   ├── Control-plane/webchat? → owner principal from auth token entity_id
   │
-  └── External adapter channel:
+  └── External adapter platform:
       │
       ├── ensureContact(delivery) → { entity_id, is_new }
       │
-      ├── Follow merged_into chain in cortex → canonical_entity_id
-      │     (recursive CTE, typically 0-2 hops)
+      ├── Follow merged_into chain in identity.db → canonical_entity_id
+      │     (recursive CTE, typically 0-2 hops, same DB as contacts)
       │
-      ├── Look up canonical entity details (name, type, is_user, tags)
+      ├── Look up canonical entity details in identity.db (name, type, is_user, tags)
       │
       └── Build PrincipalContext:
             type: is_user ? "owner" : "known"  // always "known" or "owner", never "unknown"
             entity_id: canonical_entity_id
             name: entity.name
             tags: entity_tags
-            identities: [{ channel, identifier }]  // from contacts table
+            identities: [{ platform, identifier: sender_id }]  // from contacts table
 ```
 
 **Key change from old system:** There is no `unknown` principal type for external senders. Every sender gets an entity on first contact. The principal is always `known` (or `owner` if `is_user = true`). The entity may be sparse (just a channel handle, no real name), but it exists.
@@ -173,47 +173,40 @@ The `unknown` principal type still exists for edge cases:
 - System error during contact/entity creation
 - Explicit policy to deny un-enriched entities
 
-### Cross-DB Lookup
+### Same-DB Lookup (identity.db)
 
-Contacts live in `identity.db`. Entities live in `cortex.db`. The resolution crosses databases:
+Contacts and entities both live in `identity.db` (entities relocated from cortex.db per DATABASE_ARCHITECTURE.md). Identity resolution is a single-DB operation -- contact lookup and entity chain walk are in the same database, enabling JOINs.
 
 ```typescript
-// 1. Contact lookup (identity.db)
-const contact = identityDb
-  .prepare('SELECT entity_id FROM contacts WHERE channel = ? AND identifier = ?')
-  .get(channel, senderId);
-
-// 2. Entity chain walk (cortex.db)
-const canonical = cortexDb.prepare(`
-  WITH RECURSIVE chain AS (
-    SELECT * FROM entities WHERE id = ?
+// Contact lookup + entity chain walk (both identity.db)
+const canonical = identityDb.prepare(`
+  WITH contact AS (
+    SELECT entity_id FROM contacts
+    WHERE platform = ? AND space_id = ? AND sender_id = ?
+  ),
+  RECURSIVE chain AS (
+    SELECT e.* FROM entities e JOIN contact c ON e.id = c.entity_id
     UNION ALL
-    SELECT e.* FROM entities e JOIN chain c ON e.id = c.merged_into
+    SELECT e2.* FROM entities e2 JOIN chain ch ON e2.id = ch.merged_into
   )
   SELECT * FROM chain WHERE merged_into IS NULL
-`).get(contact.entity_id);
+`).get(platform, spaceId, senderId);
 ```
 
-Both are SQLite, both are local, both are fast. The cross-db aspect is two sequential queries, not a network hop.
+Because both tables are in the same SQLite database, this is a single synchronous query with no cross-db overhead.
 
-### Path Compression (Optional Optimization)
+### Contacts After Merge (Optional Optimization)
 
-Over time, merged_into chains can grow (though typically shallow). Periodic path compression updates contacts to point directly to the canonical root:
+Correctness does **not** require rewriting contacts on merge: the pipeline can resolve canonical identity by following the `merged_into` chain in identity.db.
+
+For performance and convenience (directory queries, proactive reachability), merge code MAY "compress" contacts by updating any contacts that point at merged leaf entities:
 
 ```sql
--- Run periodically (e.g., on startup or after a merge batch)
-UPDATE contacts SET entity_id = (
-  WITH RECURSIVE chain AS (
-    SELECT id, merged_into FROM entities WHERE id = contacts.entity_id
-    UNION ALL
-    SELECT e.id, e.merged_into FROM entities e JOIN chain c ON e.id = c.merged_into
-  )
-  SELECT id FROM chain WHERE merged_into IS NULL
-)
-WHERE entity_id IN (SELECT id FROM entities WHERE merged_into IS NOT NULL);
+-- Executed by merge code that knows the leaf ids it merged.
+UPDATE contacts
+SET entity_id = ?canonical_entity_id
+WHERE entity_id IN (?merged_leaf_entity_ids...);
 ```
-
-This is an optimization, not a requirement. The chain walk is correct without it.
 
 ---
 
@@ -225,13 +218,13 @@ Session keys are produced by `buildSessionKey()` at `resolveAccess`:
 
 | Scenario | Format | Example |
 |----------|--------|---------|
-| DM (any channel) | `dm:{canonical_entity_id}` | `dm:ent_002` |
-| Group/channel | `group:{channel}:{peer_id}` | `group:discord:general` |
-| Group thread | `group:{channel}:{peer_id}:thread:{id}` | `group:slack:eng:thread:ts123` |
+| DM (any platform) | `dm:{canonical_entity_id}` | `dm:ent_002` |
+| Group/channel | `group:{platform}:{container_id}` | `group:discord:general` |
+| Group thread | `group:{platform}:{container_id}:thread:{id}` | `group:slack:eng:thread:ts123` |
 | Worker/meeseeks | `worker:{ulid}` | `worker:01HWXYZ...` |
 | System | `system:{purpose}` | `system:compaction` |
 
-**Key change:** There is no `dm:{channel}:{sender_id}` fallback format. Because every sender has an entity from message one, all DM sessions are entity-based from the start.
+**Key change:** There is no `dm:{platform}:{sender_id}` fallback format. Because every sender has an entity from message one, all DM sessions are entity-based from the start.
 
 ### Session Key Resolution
 
@@ -241,7 +234,7 @@ export function buildSessionKey(input: SessionKeyInput): string {
 
   // System principals
   if (principal.type === "system" || principal.type === "webhook") {
-    const purpose = principal.source ?? delivery.channel;
+    const purpose = principal.source ?? delivery.platform;
     return `system:${purpose}`;
   }
 
@@ -251,8 +244,8 @@ export function buildSessionKey(input: SessionKeyInput): string {
   }
 
   // Group / channel conversations
-  if (delivery.peer_kind === "group" || delivery.peer_kind === "channel") {
-    const base = `group:${delivery.channel}:${delivery.peer_id}`;
+  if (delivery.container_kind === "group" || delivery.container_kind === "channel") {
+    const base = `group:${delivery.platform}:${delivery.container_id}`;
     return delivery.thread_id ? `${base}:thread:${delivery.thread_id}` : base;
   }
 
@@ -265,18 +258,18 @@ export function buildSessionKey(input: SessionKeyInput): string {
 
 ## Entity Merge Propagation
 
-When the memory-writer (or any agent) merges two entities in cortex, three systems are affected:
+When the memory-writer (or any agent) merges two entities in identity.db, three systems are affected:
 
 ### 1. Contacts: No Update Needed
 
-Contacts point to their original entity_id. The union-find chain in cortex resolves to the canonical root. No contact rows need updating.
+Contacts point to their original `entity_id`. The union-find chain in identity.db resolves to the canonical root. No contact rows need updating for correctness.
 
 ```
 Contact: (discord, tyler#1234) → entity_id = ent_001
 Entity: ent_001.merged_into = ent_002
 Entity: ent_002.merged_into = NULL  ← canonical root
 
-Pipeline resolves: contact → ent_001 → chain walk → ent_002
+Pipeline resolves: contact → ent_001 → chain walk in identity.db → ent_002
 Session key: dm:ent_002
 ```
 
@@ -336,13 +329,13 @@ function propagateMergeToSessions(
 When sessions alias after an entity merge, the non-primary sessions stop receiving new messages. Their turn trees remain intact and queryable. The system bridges knowledge across sessions through two mechanisms:
 
 **A. Memory system (automatic):**
-Facts extracted from all sessions are linked to entities via `fact_entities` in cortex. Since the entities are now merged, all facts resolve to the same canonical entity. The memory-reader naturally surfaces relevant facts from all sessions when building context for the primary session.
+Facts extracted from all sessions are linked to entities via `fact_entities` in memory.db (referencing entity IDs in identity.db by convention). Since the entities are now merged, all facts resolve to the same canonical entity. The memory-reader naturally surfaces relevant facts from all sessions when building context for the primary session.
 
 **B. Merge notification (one-time):**
 When the merge creates session aliases, the system injects a context note into the primary session:
 
 ```
-[System] Identity merge: {entity_name} was also chatting via {channel}
+[System] Identity merge: {entity_name} was also chatting via {platform}
 (session {old_session_label}, {turn_count} turns). Memory system has
 indexed that conversation. Use session history tools if you need
 specific details from those conversations.
@@ -372,20 +365,21 @@ After merge (ent_001 and ent_003 → canonical ent_002):
 
 Responses always go back through the adapter the message came from, not the adapter the session was originally created on. The `deliverResponse` stage uses the inbound `DeliveryContext` on the current `NexusRequest` to determine the outbound adapter.
 
-This means a session originally created from Discord can receive a message from Slack and respond on Slack — because it's the same person, just a different channel.
+This means a session originally created from Discord can receive a message from Slack and respond on Slack — because it's the same person, just a different platform.
 
 ### Reachability
 
-The contacts table answers "what channels can I reach this entity on?" for proactive outreach:
+The contacts table answers "what platforms can I reach this entity on?" for proactive outreach:
 
 ```sql
--- All contacts for an entity (including merged aliases)
-SELECT c.channel, c.identifier, c.display_name
-FROM contacts c
-JOIN entities e ON c.entity_id = e.id
-WHERE e.id = ?canonical_entity_id
-   OR e.merged_into = ?canonical_entity_id;
+-- Recommended: keep contacts.entity_id compressed to the canonical entity id on merge (see "Contacts After Merge").
+SELECT platform, space_id, sender_id, sender_name, avatar_url, last_seen
+FROM contacts
+WHERE entity_id = ?canonical_entity_id
+ORDER BY last_seen DESC;
 ```
+
+If contacts are not compressed, NEX must resolve canonicalization via the `merged_into` chain in identity.db (contacts and entities are in the same DB, so this is a straightforward JOIN).
 
 ---
 
@@ -399,7 +393,7 @@ Big-bang cutover. No migration story. Remove all legacy ingest/delivery systems.
 
 | Component | Path | Reason |
 |-----------|------|--------|
-| Legacy channel plugins | `nex/src/channels/` | Replaced by adapter system |
+| Legacy platform plugins | `nex/src/channels/` | Replaced by adapter system |
 | Gmail watcher | `nex/src/hooks/gmail-watcher.ts` | Replace with email adapter |
 | Channel initialization | in `server-startup.ts` | No longer needed |
 | Cron/scheduler (legacy) | various | Replaced by clock adapter or automations |
@@ -408,7 +402,7 @@ Big-bang cutover. No migration story. Remove all legacy ingest/delivery systems.
 
 | Component | Role |
 |-----------|------|
-| **Adapter Manager** | Sole inbound/outbound path for external channels. Adapters run as supervised child processes, communicate via JSON-line protocol. |
+| **Adapter Manager** | Sole inbound/outbound path for external platforms. Adapters run as supervised child processes, communicate via JSON-line protocol. |
 | **`chat.send` (control-plane)** | Direct dispatch into NEX pipeline for local CLI and web UI. NOT an adapter — it's inside the runtime process. Constructs its own DeliveryContext. |
 | **NEX Pipeline** | Unchanged. Receives `NexusEvent` from both adapters and `chat.send`. Doesn't care about the source. |
 
@@ -434,13 +428,13 @@ Adapter config lives at `~/.nex.yaml` (or `NEXUS_NEX_CONFIG_PATH`). Already spec
 adapters:
   - name: discord-main
     command: nexus-adapter-discord
-    channel: discord
+    platform: discord
     account: my-server
     credentials:
       token: ${DISCORD_BOT_TOKEN}
   - name: slack-work
     command: nexus-adapter-slack
-    channel: slack
+    platform: slack
     account: anthropic
     credentials:
       token: ${SLACK_BOT_TOKEN}
@@ -460,9 +454,9 @@ The contacts table and auto-entity-creation pattern interact with the memory sys
 
 On first contact from a new sender:
 - A contact row in `identity.db`
-- An entity in `cortex.db` with `source = 'delivery'`, `type` = channel-specific handle type
+- An entity in `identity.db` with `source = 'delivery'`, `type` = platform-specific handle type
 
-These delivery-sourced entities are **sparse** — they have a channel handle as a name and no enrichment. They exist so that:
+These delivery-sourced entities are **sparse** — they have a platform handle as a name and no enrichment. They exist so that:
 1. Session routing works from message one
 2. Facts extracted from the conversation can be linked to an entity
 3. The memory-writer can discover and enrich them
@@ -495,9 +489,9 @@ The function signature and behavior are defined above in the "Entity Merge Propa
 
 ### What Does NOT Change in Memory System V2
 
-The memory system V2 entity store (entities, fact_entities, merge_candidates, entity_cooccurrences, etc.) is unchanged by this spec. The unified entity store design is correct. This spec adds:
+The memory system V2 memory tables (facts, fact_entities, episodes, etc. in memory.db) are unchanged by this spec. The entity store tables (entities, merge_candidates, entity_cooccurrences, entity_tags) are relocated to `identity.db` per DATABASE_ARCHITECTURE.md, enabling same-DB JOINs with contacts. This spec adds:
 
-1. A contacts table in `identity.db` that points into the cortex entity store
+1. A contacts table in `identity.db` that links to entities (same DB -- JOINable)
 2. A requirement that entity merges propagate to session aliases
 3. A contract about delivery-sourced entities and how the memory-writer should handle them
 
@@ -509,16 +503,12 @@ The memory system V2 entity store (entities, fact_entities, merge_candidates, en
 
 ```diff
 - contacts table (old: channel, identifier, first_seen, last_seen, message_count, display_name, avatar_url)
-+ contacts table (new: adds entity_id NOT NULL)
++ contacts table (new: platform, space_id, sender_id, entity_id NOT NULL, sender_name, ...)
 
 - identity_mappings table
 + REMOVED (replaced by contacts.entity_id direct link)
 
-- entities table
-+ REMOVED from identity.db (lives only in cortex.db)
-
-- entity_tags table
-+ REMOVED from identity.db (lives only in cortex.db)
++ delivery directory tables (spaces/containers/threads/names/participants) — see `DELIVERY_DIRECTORY_SCHEMA.md`
 
   auth_tokens table — UNCHANGED
   auth_passwords table — UNCHANGED
@@ -526,8 +516,8 @@ The memory system V2 entity store (entities, fact_entities, merge_candidates, en
 
 ### Pipeline Stage Updates
 
-- `resolveIdentity.ts`: Call `ensureContact()` (creates contact + entity if new). Follow merged_into chain to canonical root. Build principal from canonical entity. Remove fallback to `unknown` for external senders.
-- `resolveAccess.ts`: `buildSessionKey()` simplified — no `dm:{channel}:{sender_id}` branch.
+- `resolveIdentity.ts`: Call `ensureContact()` (creates contact + entity in identity.db if new). Follow merged_into chain to canonical root (same-DB query). Build principal from canonical entity. Remove fallback to `unknown` for external senders.
+- `resolveAccess.ts`: `buildSessionKey()` simplified — no `dm:{platform}:{sender_id}` branch.
 - `session.ts`: `promoteSessionIdentity()` already exists. Add `propagateMergeToSessions()`.
 
 ### server-startup.ts Cleanup
@@ -544,10 +534,10 @@ The memory system V2 entity store (entities, fact_entities, merge_candidates, en
 ### Scenario 5: Adapter E2E (Extended, Phase 6)
 
 1. Configure a test adapter (EVE or mock adapter).
-2. Send inbound message via adapter with `(channel='test', sender_id='user-001')`.
+2. Send inbound message via adapter with `(platform='test', sender_id='user-001')`.
 3. **Assert:**
    - Contact row created in `identity.db` with `entity_id` set
-   - Entity created in `cortex.db` with `name='test:user-001'`, `type='test_handle'`, `source='delivery'`
+   - Entity created in `identity.db` with `name='test:user-001'`, `type='test_handle'`, `source='delivery'`
    - Session created with label `dm:{entity_id}`
    - Principal resolved as `known` (not `unknown`)
    - Response delivered back through the test adapter
@@ -568,7 +558,7 @@ The memory system V2 entity store (entities, fact_entities, merge_candidates, en
 ## See Also
 
 - `broker/SESSION_LIFECYCLE.md` — Session creation, turn processing, queue management, forking
-- `../data/cortex/v2/UNIFIED_ENTITY_STORE.md` — Entity schema, union-find operations, merge candidates
+- `../data/DATABASE_ARCHITECTURE.md` — 6-database layout, entity relocation to identity.db
 - `../data/cortex/v2/MEMORY_SYSTEM_V2.md` — Memory architecture, retain flow, consolidation
 - `../data/cortex/v2/MEMORY_WRITER_V2.md` — Memory-writer entity resolution and merge behavior
 - `adapters/ADAPTER_SYSTEM.md` — Adapter protocol, manager, configuration

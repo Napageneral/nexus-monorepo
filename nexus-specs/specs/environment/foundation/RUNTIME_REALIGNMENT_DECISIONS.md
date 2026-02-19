@@ -1,7 +1,9 @@
 # Runtime Realignment Decisions (Big-Bang)
 
 **Status:** DECISION LOCKED
-**Last Updated:** 2026-02-13
+**Last Updated:** 2026-02-18
+
+> **Canonical reference:** See [DATABASE_ARCHITECTURE.md](../data/DATABASE_ARCHITECTURE.md) for the authoritative database layout.
 **Scope:** `nexus-specs` + `nex` only (ignore external/legacy projects)
 
 ---
@@ -22,8 +24,8 @@ These are **big-bang** decisions.
 
 | Area | Decision |
 |------|----------|
-| State layout | Use split ledger DBs under `state/data/*.db` |
-| Cortex storage | Use shared DB at `state/cortex/cortex.db` |
+| State layout | Use 6 split databases under `state/data/*.db` (events, agents, identity, memory, embeddings, runtime) |
+| Memory system | Memory System databases (memory.db, identity.db, embeddings.db) replace legacy cortex.db |
 | Config | Use one canonical config file at `state/nexus/config.json` |
 | CLI ownership | `nex` owns both runtime engine and CLI control plane |
 | Runtime process model | Single long-running **NEX daemon** (control-plane included); no separate gateway service |
@@ -42,13 +44,12 @@ These are **big-bang** decisions.
 ├── home/
 └── state/
     ├── data/
-    │   ├── events.db
-    │   ├── agents.db
-    │   ├── identity.db
-    │   └── nexus.db
-    ├── cortex/
-    │   ├── cortex.db
-    │   └── (optional runtime files owned by Cortex process)
+    │   ├── events.db          # Event ledger
+    │   ├── agents.db          # Agent sessions
+    │   ├── identity.db        # Contacts, directory, entities, auth, ACL
+    │   ├── memory.db          # Facts, episodes, analysis (Memory System)
+    │   ├── embeddings.db      # Semantic vector index
+    │   └── runtime.db         # Request traces, adapters, automations, bus
     ├── agents/
     │   ├── BOOTSTRAP.md
     │   └── {agent-name}/
@@ -62,18 +63,15 @@ These are **big-bang** decisions.
         └── config.json
 ```
 
-### What Is In `state/cortex/cortex.db`?
+### Memory System (replaces legacy cortex.db)
 
-`state/cortex/cortex.db` is the shared **derived knowledge store**.
+The legacy `state/cortex/cortex.db` has been superseded by three databases under `state/data/`:
 
-It is intended to hold Cortex artifacts such as:
+- **memory.db** -- facts, episodes, facets, analyses, mental models (Memory System)
+- **embeddings.db** -- semantic vector index (shared across subsystems)
+- **identity.db** -- entities and knowledge graph (co-located with contacts, auth, ACL)
 
-- Episodes
-- Facets
-- Embeddings
-- Analyses
-
-This matches existing Cortex intent in specs/data and runtime docs.
+See [DATABASE_ARCHITECTURE.md](../data/DATABASE_ARCHITECTURE.md) for the full table inventories.
 
 ### Explicitly Not Canonical
 
@@ -191,8 +189,8 @@ Implications:
 
 This decision is implemented when all are true:
 
-- Ledger DBs are read/written only from `state/data/*.db`
-- Cortex data is read/written under `state/cortex/cortex.db`
+- All 6 databases are read/written only from `state/data/*.db`
+- Memory System data is read/written via memory.db, identity.db, and embeddings.db under `state/data/`
 - Config reads/writes use only `state/nexus/config.json`
 - `nexus status` is orientation-first
 - Runtime service/API controls are under `nexus runtime ...`

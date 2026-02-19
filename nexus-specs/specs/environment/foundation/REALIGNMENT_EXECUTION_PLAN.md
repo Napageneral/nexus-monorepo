@@ -1,8 +1,10 @@
 # Runtime Realignment Execution Plan
 
-**Status:** ACTIVE IMPLEMENTATION PLAN  
-**Last Updated:** 2026-02-12  
+**Status:** ACTIVE IMPLEMENTATION PLAN
+**Last Updated:** 2026-02-18
 **Scope:** `nexus-specs` + `nex` only
+
+> **Canonical reference:** See [DATABASE_ARCHITECTURE.md](../data/DATABASE_ARCHITECTURE.md) for the authoritative database layout.
 
 ---
 
@@ -30,7 +32,7 @@ This is a **big-bang** migration plan:
 | W2 | Runtime rename completion | Remove/rename `gateway` terminology and command surface where still user-facing | IN PROGRESS |
 | W3 | Canonical init/bootstrap | Implement `nexus init` and align created files/directories to canonical workspace layout | COMPLETE |
 | W4 | Branding/type cleanup | Remove `OpenClaw` naming and legacy env/dir aliases from code paths and types | IN PROGRESS |
-| W5 | Cortex local DB contract | Ensure shared local Cortex DB at `state/cortex/cortex.db` is implemented as canonical | NOT STARTED |
+| W5 | Memory System DB layout | Ensure 6-DB layout under `state/data/` is implemented per DATABASE_ARCHITECTURE.md (memory.db, identity.db, embeddings.db replace cortex.db) | NOT STARTED |
 | W6 | Canonical config schema | Align top-level config domains to canonical namespaced contract | NOT STARTED |
 
 ---
@@ -113,8 +115,7 @@ Deliverables:
 
 - `nexus init` implemented
 - canonical layout creation:
-  - `state/data/`
-  - `state/cortex/`
+  - `state/data/` (all 6 databases)
   - `state/agents/`
   - `state/user/`
   - `state/credentials/`
@@ -138,17 +139,19 @@ Exit criteria:
 - canonical naming used in types/config/runtime modules
 - no compatibility-first fallback paths on the critical config/state startup path
 
-### Phase E - Cortex Local DB Canonicalization (W5)
+### Phase E - Memory System DB Layout (W5)
 
 Deliverables:
 
-- canonical local `state/cortex/cortex.db` ownership defined and implemented
-- runtime integrations (hooks/automation/pipeline) read/write through canonical local Cortex contract
+- 6-DB layout under `state/data/` implemented per DATABASE_ARCHITECTURE.md
+- memory.db, identity.db (entities), and embeddings.db replace legacy cortex.db
+- runtime.db replaces legacy nexus.db
+- runtime integrations (hooks/automation/pipeline) read/write through canonical DB contracts
 
 Exit criteria:
 
-- local shared Cortex DB is the source for derived artifacts
-- runtime starts and operates correctly with canonical local Cortex path
+- Memory System databases (memory.db, identity.db, embeddings.db) are the source for derived artifacts
+- runtime starts and operates correctly with canonical 6-DB layout
 
 ### Phase F - Config Schema Canonicalization (W6)
 
@@ -172,7 +175,7 @@ Exit criteria:
 | Runtime naming | e2e contract tests for status/doctor/runtime outputs |
 | Init/layout | filesystem integration tests against canonical directory/file set |
 | Branding cleanup | static grep checks for forbidden legacy terms in public surfaces |
-| Cortex | runtime integration tests using local `state/cortex/cortex.db` |
+| Memory System | runtime integration tests using 6-DB layout under `state/data/` |
 | Config schema | schema validation tests + CLI read/write tests |
 
 ---
@@ -203,9 +206,11 @@ Exit criteria:
 - [ ] Remove legacy env/state fallback logic on primary path.
 - [ ] Add regression checks for reintroduction.
 
-### W5 - Cortex local DB
-- [ ] Implement/verify canonical local Cortex DB path `state/cortex/cortex.db`.
-- [ ] Align runtime services to local shared DB contract.
+### W5 - Memory System DB layout
+- [ ] Implement 6-DB layout under `state/data/` per DATABASE_ARCHITECTURE.md.
+- [ ] Migrate cortex.db tables to memory.db, identity.db, and embeddings.db.
+- [ ] Rename nexus.db to runtime.db.
+- [ ] Align runtime services to new DB contracts.
 - [ ] Add integration coverage.
 
 ### W6 - Config schema

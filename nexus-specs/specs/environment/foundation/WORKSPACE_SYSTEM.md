@@ -1,7 +1,9 @@
 # Workspace System Specification
 
 **Status:** AUTHORITATIVE
-**Last Updated:** 2026-02-17
+**Last Updated:** 2026-02-18
+
+> **Canonical reference:** See [DATABASE_ARCHITECTURE.md](../data/DATABASE_ARCHITECTURE.md) for the authoritative database layout.
 
 **Canonical lifecycle spec:** `specs/environment/foundation/WORKSPACE_LIFECYCLE.md`
 
@@ -27,8 +29,8 @@ This contract is **big-bang**:
 
 | Area | Canonical Contract |
 |------|--------------------|
-| State data | Split ledger DBs in `state/data/*.db` |
-| Cortex | Shared DB at `state/cortex/cortex.db` |
+| State data | 6 databases in `state/data/*.db` (events, agents, identity, memory, embeddings, runtime) |
+| Memory system | Memory System via memory.db + identity.db + embeddings.db (replaces legacy cortex.db) |
 | Config | Single file at `state/config.json` |
 | CLI boundary | `nexus status` for orientation, `nexus runtime ...` for control-plane |
 | Terminology | Use `runtime` / `control-plane`; do not use `gateway` as canonical product term |
@@ -71,12 +73,12 @@ The runtime/control-plane serves health, automation, hooks, channel delivery, an
 ├── home/                              # User personal workspace
 └── state/
     ├── data/
-    │   ├── events.db                  # Events ledger
-    │   ├── agents.db                  # Agents ledger
-    │   ├── identity.db                # Identity mappings
-    │   └── nexus.db                   # Request traces + automations table
-    ├── cortex/
-    │   └── cortex.db                  # Cortex memory store
+    │   ├── events.db                  # Event ledger
+    │   ├── agents.db                  # Agent sessions
+    │   ├── identity.db                # Contacts, directory, entities, auth, ACL
+    │   ├── memory.db                  # Facts, episodes, analysis (Memory System)
+    │   ├── embeddings.db              # Semantic vector index
+    │   └── runtime.db                 # Request traces, adapters, automations, bus
     ├── agents/
     │   ├── BOOTSTRAP.md               # Permanent onboarding template
     │   └── {name}/                    # Agent persona directories
@@ -145,7 +147,7 @@ Agent Persona (state/agents/echo/)
   = "I am Echo, a helpful assistant who values precision"
 
 Automation Workspace (state/workspace/memory-reader/)
-  = "I know how to search cortex, these queries work well, these patterns fail"
+  = "I know how to search memory, these queries work well, these patterns fail"
 
 During execution:
   system_prompt = persona.IDENTITY + persona.SOUL + workspace.ROLE + workspace.SKILLS
@@ -155,27 +157,27 @@ During execution:
 
 ## Data Layer Integration
 
-### System of Record: `state/data/*.db`
+### All databases: `state/data/*.db`
 
-The System of Record is split into ledger databases:
+All 6 databases live under `state/data/`:
 - `events.db` for inbound/outbound event records
 - `agents.db` for sessions, turns, tool calls, and agent interaction state
-- `identity.db` for entities, aliases, membership, and identity graph operations
-- `nexus.db` for runtime traces, control-plane metadata, and nexus-level runtime data (includes automations table)
+- `identity.db` for contacts, directory, entities, auth, and ACL
+- `memory.db` for facts, episodes, mental models, and analysis pipeline (Memory System)
+- `embeddings.db` for semantic vector index (shared across subsystems)
+- `runtime.db` for request traces, adapter instances, automations, and bus (replaces legacy nexus.db)
 
 All DBs are created eagerly by `nexus init` with current schemas applied.
 
-### Derived Layer: `state/cortex/cortex.db`
+### Memory System: memory.db + identity.db + embeddings.db
 
-Cortex is a shared derived store across all agents.
+The Memory System (replacing the legacy Cortex derived store) spans three databases:
 
-It captures artifacts like:
-- episodes
-- facets
-- embeddings
-- analyses
+- **memory.db** -- facts, episodes, facets, analyses, mental models
+- **identity.db** -- entities and knowledge graph (co-located with contacts, auth, ACL)
+- **embeddings.db** -- semantic vector index (shared by memory recall, entity search, event search)
 
-Per-agent Cortex DB files are not canonical.
+Per-agent memory DB files are not canonical.
 
 ---
 
@@ -191,7 +193,6 @@ nexus init [--workspace <path>]
 
 - `{workspace_root}/skills/`
 - `{workspace_root}/state/data/`
-- `{workspace_root}/state/cortex/`
 - `{workspace_root}/state/agents/`
 - `{workspace_root}/state/user/`
 - `{workspace_root}/state/credentials/`
@@ -206,8 +207,9 @@ nexus init [--workspace <path>]
 - `{workspace_root}/state/data/events.db` (with schema applied)
 - `{workspace_root}/state/data/agents.db` (with schema applied)
 - `{workspace_root}/state/data/identity.db` (with schema applied)
-- `{workspace_root}/state/data/nexus.db` (with schema applied)
-- `{workspace_root}/state/cortex/cortex.db` (with schema applied)
+- `{workspace_root}/state/data/memory.db` (with schema applied)
+- `{workspace_root}/state/data/embeddings.db` (with schema applied)
+- `{workspace_root}/state/data/runtime.db` (with schema applied)
 
 ### Config shape
 
@@ -283,8 +285,8 @@ Runtime command surfaces include:
 
 This spec is considered aligned when all are true:
 - subordinate foundation docs point to `state/config.json` only (not `state/nexus/config.json`)
-- subordinate foundation docs describe split ledgers under `state/data/*.db`
-- subordinate foundation docs describe shared `state/cortex/cortex.db`
+- subordinate foundation docs describe 6 databases under `state/data/*.db`
+- subordinate foundation docs describe Memory System via memory.db + identity.db + embeddings.db
 - foundation docs use runtime/control-plane terminology instead of gateway terminology
 - `skills/` is described as flat (no `tools/`, `connectors/`, `guides/` subdirectories)
 - DBs are described as eagerly created by init (not lazily created at runtime)

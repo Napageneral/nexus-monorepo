@@ -1,7 +1,7 @@
 # NexusRequest Lifecycle
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-06
+**Last Updated:** 2026-02-18
 
 ---
 
@@ -29,12 +29,12 @@ NexusRequest created ───────────────────�
   │  └─ Side effect: write to Events Ledger (async)
   │
   │  Stage 2: resolveIdentity
-  │  ├─ Reads: delivery.sender_id, delivery.channel
+  │  ├─ Reads: delivery.sender_id, delivery.platform
   │  ├─ Writes: principal
   │  └─ May exit: unknown sender → deny policy
   │
   │  Stage 3: resolveAccess
-  │  ├─ Reads: principal, delivery (channel, peer_kind)
+  │  ├─ Reads: principal, delivery (channel, container_kind)
   │  ├─ Writes: access (decision, permissions, session routing)
   │  └─ May exit: access denied
   │
@@ -149,7 +149,7 @@ type RequestStatus =
 ```typescript
 interface EventContext {
   // From adapter's JSONL output
-  event_id: string;                  // "{channel}:{source_id}" — globally unique
+  event_id: string;                  // "{platform}:{source_id}" — globally unique
   timestamp: number;                 // When the event occurred (Unix ms)
   
   // Content
@@ -163,7 +163,7 @@ interface EventContext {
 
 interface DeliveryContext {
   // Where this came from and where the reply goes
-  channel: string;                   // "discord", "imessage", "gmail", etc.
+  platform: string;                  // "discord", "imessage", "gmail", etc.
   account_id: string;                // Which adapter account received this
   
   // Sender
@@ -171,8 +171,8 @@ interface DeliveryContext {
   sender_name?: string;              // Display name if available
   
   // Conversation context
-  peer_id: string;                   // Chat/channel/user ID (reply target)
-  peer_kind: 'dm' | 'group' | 'channel';
+  container_id: string;                   // Chat/channel/user ID (reply target)
+  container_kind: 'dm' | 'group' | 'channel';
   thread_id?: string;                // Platform thread if applicable
   reply_to_id?: string;              // Message being replied to
   
@@ -184,7 +184,7 @@ interface DeliveryContext {
 }
 
 interface AvailableChannel {
-  channel: string;
+  platform: string;
   accounts: string[];
   capabilities: ChannelCapabilities;
 }
@@ -213,8 +213,8 @@ Events Ledger ← INSERT event (async, fire-and-forget)
 
 ### Reads
 
-- `delivery.channel` + `delivery.sender_id` — used to look up identity
-- `delivery.peer_kind` — context for system principals (timers, webhooks)
+- `delivery.platform` + `delivery.sender_id` — used to look up identity
+- `delivery.container_kind` — context for system principals (timers, webhooks)
 
 ### Writes
 
@@ -229,7 +229,7 @@ interface PrincipalContext {
   relationship?: string;             // "family", "partner", "work", "friend"
   
   // All known identities for this entity (for cross-channel awareness)
-  identities?: { channel: string; identifier: string }[];
+  identities?: { platform: string; identifier: string }[];
   
   // For system/webhook principals
   source?: string;                   // "timer", "stripe", "github"
@@ -258,7 +258,7 @@ if (principal.type === 'unknown' && defaultPolicy === 'deny') {
 ### Reads
 
 - `principal` — who is this?
-- `delivery.channel`, `delivery.peer_kind`, `delivery.account_id` — context conditions for policy matching
+- `delivery.platform`, `delivery.container_kind`, `delivery.account_id` — context conditions for policy matching
 
 ### Writes
 
@@ -397,7 +397,7 @@ const effectiveRouting = {
 |---|---|
 | `event.content`, `event.attachments` | Current message (Layer 3: Event) |
 | `event.metadata` | Event-specific context injection |
-| `delivery.channel`, `delivery.capabilities` | Channel context for MA (Layer 3: Event) |
+| `delivery.platform`, `delivery.capabilities` | Channel context for MA (Layer 3: Event) |
 | `delivery.available_channels` | Available channels for message tool (Layer 3: Event) |
 | `principal.name`, `principal.relationship` | Sender context for MA (Layer 3: Event) |
 | `access.permissions` | IAM-filtered tool set |
@@ -559,7 +559,7 @@ Agents Ledger ← INSERT turn, messages, tool_calls, thread, session pointer upd
 ### Reads
 
 - `response.content` — what to deliver (if not already streamed)
-- `delivery.channel`, `delivery.account_id`, `delivery.peer_id` — where to deliver
+- `delivery.platform`, `delivery.account_id`, `delivery.container_id` — where to deliver
 
 ### Writes
 
@@ -642,7 +642,7 @@ This is the critical interface between NEX (pipeline) and Broker (agent executio
 │                                   │         │                                  │
 │  event.content ──────────────────────────►  currentMessage.content            │
 │  event.attachments ──────────────────────►  currentMessage.attachments        │
-│  delivery.channel ───────────────────────►  currentMessage (channel context)  │
+│  delivery.platform ───────────────────────►  currentMessage (channel context)  │
 │  delivery.capabilities ──────────────────►  currentMessage (channel context)  │
 │  principal.name/relationship ────────────►  currentMessage (sender context)   │
 │  triggers.enrichment ────────────────────►  currentMessage (enriched context) │
@@ -756,7 +756,7 @@ CREATE TABLE nex_traces (
     request_json TEXT NOT NULL,          -- Full NexusRequest serialized
     
     -- Denormalized for fast queries
-    channel TEXT,                        -- delivery.channel
+    platform TEXT,                       -- delivery.platform
     sender_entity_id TEXT,              -- principal.entity_id
     agent_id TEXT,                      -- agent.agent_id
     session_label TEXT,                 -- agent.session_label
@@ -769,7 +769,7 @@ CREATE TABLE nex_traces (
 
 CREATE INDEX idx_nex_traces_event ON nex_traces(event_id);
 CREATE INDEX idx_nex_traces_status ON nex_traces(status);
-CREATE INDEX idx_nex_traces_channel ON nex_traces(channel);
+CREATE INDEX idx_nex_traces_platform ON nex_traces(platform);
 CREATE INDEX idx_nex_traces_agent ON nex_traces(agent_id, session_label);
 CREATE INDEX idx_nex_traces_created ON nex_traces(created_at);
 ```

@@ -47,7 +47,7 @@ The Hook Service is part of the NEX daemon process that handles:
 Instead of multiple daemons, a single **Nexus Service** handles:
 - Hook evaluation (on event arrival)
 - Broker dispatch (routing to agents)
-- Cortex event ingestion
+- Event ingestion
 - Session state management
 
 This aligns with the architectural unification happening across specs.
@@ -223,7 +223,7 @@ CREATE INDEX idx_hooks_created_by ON hooks(created_by_agent);
 CREATE TABLE hook_invocations (
   id TEXT PRIMARY KEY,
   hook_id TEXT NOT NULL,
-  event_id TEXT NOT NULL,           -- FK to Cortex events
+  event_id TEXT NOT NULL,           -- FK to events table in events.db
   
   -- Timing
   started_at INTEGER NOT NULL,
@@ -265,7 +265,7 @@ CREATE INDEX idx_invocations_time ON hook_invocations(started_at);
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
 │  │                    EVENT INGESTION                                   │    │
 │  │                                                                      │    │
-│  │  Cortex Adapters → Normalize → Store in events table              │    │
+│  │  Adapters → Normalize → Store in events table                     │    │
 │  │  Timer Adapter → Tick event every 60s                               │    │
 │  │                                                                      │    │
 │  │  On new event → Publish to Hook Evaluator                           │    │
@@ -276,7 +276,7 @@ CREATE INDEX idx_invocations_time ON hook_invocations(started_at);
 │  │                    HOOK EVALUATOR                                    │    │
 │  │                                                                      │    │
 │  │  • Load enabled hooks from DB (cached in memory)                    │    │
-│  │  • Build HookContext (dbPath, search, llm)                          │    │
+│  │  • Build HookContext (dbPaths, search, llm)                         │    │
 │  │  • Execute ALL hooks in PARALLEL                                    │    │
 │  │  • Record invocations, update health                                │    │
 │  │  • Apply circuit breaker logic                                      │    │
@@ -298,7 +298,8 @@ CREATE INDEX idx_invocations_time ON hook_invocations(started_at);
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
 │  │                    SHARED INFRASTRUCTURE                             │    │
 │  │                                                                      │    │
-│  │  • SQLite DB (events, hooks, sessions, entities)                   │    │
+│  │  • SQLite DBs (events.db, agents.db, identity.db, memory.db,      │    │
+│  │    embeddings.db, runtime.db — 6 databases per DATABASE_ARCH)     │    │
 │  │  • Embeddings client (Gemini)                                       │    │
 │  │  • LLM client (Gemini 3 Flash)                                      │    │
 │  │  • Hook runtime (Bun)                                               │    │
@@ -312,7 +313,7 @@ CREATE INDEX idx_invocations_time ON hook_invocations(started_at);
 Event arrives (iMessage, timer tick, webhook, etc.)
         │
         ▼
-Store in Cortex events table
+Store in events.db
         │
         ▼
 Publish to Hook Evaluator (internal)
@@ -325,7 +326,7 @@ For each hook IN PARALLEL:
         │
         ├─ Build HookContext
         │    • event: the event
-        │    • dbPath: path to Cortex DB
+        │    • dbPaths: paths to databases (events.db, memory.db, etc.)
         │    • search(): semantic search function
         │    • llm(): Gemini 3 Flash call function
         │    • now: current time
@@ -448,7 +449,7 @@ Agent says: "Done! I've set up a safety check for Casey."
 
 | Question | Where |
 |----------|-------|
-| How does service receive events? | Cortex adapter spec |
+| How does service receive events? | Inbound adapter spec |
 | How does Broker assemble context? | ../broker/CONTEXT_ASSEMBLY.md |
 | Session state management? | ../broker/SESSION_LIFECYCLE.md |
 | Outbound response adapters? | Response Adapter spec |
@@ -471,4 +472,4 @@ Agent says: "Done! I've set up a safety check for Casey."
 
 ---
 
-*This spec captures the Hook Service design. It should be unified with ongoing Broker and Cortex specs as those evolve.*
+*This spec captures the Hook Service design. It should be unified with ongoing Broker and Memory System specs as those evolve.*

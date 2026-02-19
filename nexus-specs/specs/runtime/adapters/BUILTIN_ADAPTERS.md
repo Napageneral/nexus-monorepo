@@ -2,7 +2,7 @@
 
 **Status:** DESIGN + IMPLEMENTATION TRACKER  
 **Last Updated:** 2026-02-16  
-**Related:** `./ADAPTER_SYSTEM.md`, `./INBOUND_INTERFACE.md`, `./OUTBOUND_INTERFACE.md`, `./CHANNEL_MIGRATION_TRACKER.md`, `../nex/CONTROL_PLANE.md`, `../nex/DAEMON.md`, `../nex/NEX.md`
+**Related:** `./ADAPTER_SYSTEM.md`, `./INBOUND_INTERFACE.md`, `./OUTBOUND_INTERFACE.md`, `./CHANNEL_MIGRATION_TRACKER.md`, `./CLOCK_ADAPTER.md`, `../nex/CONTROL_PLANE.md`, `../nex/DAEMON.md`, `../nex/NEX.md`
 
 ---
 
@@ -157,4 +157,3 @@ Moving bridges into built-in adapters makes ingress points consistent with Disco
 - Do we want one **unified HTTP ingress adapter** (webhooks + openai + openresponses) or separate adapters per protocol?
 - How should OpenAI/OpenResponses adapters implement streaming IPC while staying inside the existing adapter manager contract?
 - Should "hooks" be a mapping config inside `webhook`, or a distinct `hooks` adapter for ergonomics?
-

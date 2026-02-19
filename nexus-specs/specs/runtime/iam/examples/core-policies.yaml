@@ -53,7 +53,7 @@ policies:
     
     match:
       conditions:
-        - peer_kind: group
+        - container_kind: group
     
     effect: allow
     
@@ -66,6 +66,6 @@ policies:
     
     session:
       persona: atlas
-      key: "{channel}:group:{peer_id}"
+      key: "{platform}:group:{container_id}"
     
     priority: 90  # High - overrides most personal rules

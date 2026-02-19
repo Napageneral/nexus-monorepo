@@ -8,6 +8,7 @@ import (
 	"net/mail"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,10 @@ const (
 	defaultSubject      = "Message from Nexus"
 	defaultPollInterval = 20 * time.Second
 )
+
+type monitorState struct {
+	HistoryID string `json:"history_id"`
+}
 
 func main() {
 	nexadapter.Run(nexadapter.Adapter{
@@ -181,12 +186,13 @@ func send(ctx context.Context, req nexadapter.SendRequest) (*nexadapter.Delivery
 		}, nil
 	}
 
-	out, err := runGogJSON(ctx, resolved,
-		"gmail", "send",
-		"--to", target,
-		"--subject", subject,
-		"--body", body,
-	)
+	out, err := runGogJSON(ctx, resolved, buildGmailSendArgs(
+		target,
+		subject,
+		body,
+		strings.TrimSpace(req.ThreadID),
+		strings.TrimSpace(req.ReplyToID),
+	)...)
 	if err != nil {
 		return &nexadapter.DeliveryResult{
 			Success: false,
@@ -227,6 +233,28 @@ func send(ctx context.Context, req nexadapter.SendRequest) (*nexadapter.Delivery
 		MessageIDs: []string{messageID},
 		ChunksSent: 1,
 	}, nil
+}
+
+func buildGmailSendArgs(
+	target string,
+	subject string,
+	body string,
+	threadID string,
+	replyToMessageID string,
+) []string {
+	args := []string{
+		"gmail", "send",
+		"--to", target,
+		"--subject", subject,
+		"--body", body,
+	}
+	if threadID != "" {
+		args = append(args, "--thread-id", threadID)
+	}
+	if replyToMessageID != "" {
+		args = append(args, "--reply-to-message-id", replyToMessageID)
+	}
+	return args
 }
 
 func parseEmailContent(text string) (subject string, body string) {
@@ -297,10 +325,32 @@ func monitor(ctx context.Context, account string, emit nexadapter.EmitFunc) erro
 	if cursor == "" {
 		return errors.New("gmail watch status missing historyId")
 	}
-
-	// Fast-forward once so we don't replay backlog at startup.
-	cursor = fastForwardHistoryCursor(ctx, resolved, cursor)
-	nexadapter.LogInfo("monitor starting for account %q (historyId=%s)", resolved, cursor)
+	statePath, stateErr := resolveMonitorStatePath(resolved)
+	if stateErr != nil {
+		nexadapter.LogError("monitor state path unavailable for %s: %v", resolved, stateErr)
+	}
+	if statePath != "" {
+		if persisted, err := readMonitorCursor(statePath); err == nil && persisted != "" {
+			cursor = persisted
+		} else if err != nil {
+			nexadapter.LogError("failed reading monitor state for %s: %v", resolved, err)
+		}
+	}
+	if statePath == "" || cursor == strings.TrimSpace(watch.Watch.HistoryID) {
+		// First run (or missing state): fast-forward once so we don't replay backlog at startup.
+		cursor = fastForwardHistoryCursor(ctx, resolved, cursor)
+	}
+	if statePath != "" {
+		if err := writeMonitorCursor(statePath, cursor); err != nil {
+			nexadapter.LogError("failed writing monitor state for %s: %v", resolved, err)
+		}
+	}
+	nexadapter.LogInfo(
+		"monitor starting for account %q (historyId=%s state=%s)",
+		resolved,
+		cursor,
+		statePath,
+	)
 
 	ticker := time.NewTicker(resolvePollInterval())
 	defer ticker.Stop()
@@ -330,6 +380,11 @@ func monitor(ctx context.Context, account string, emit nexadapter.EmitFunc) erro
 
 		if nextCursor != "" && nextCursor != cursor {
 			cursor = nextCursor
+			if statePath != "" {
+				if err := writeMonitorCursor(statePath, cursor); err != nil {
+					nexadapter.LogError("failed writing monitor state for %s: %v", resolved, err)
+				}
+			}
 		}
 	}
 }
@@ -437,29 +492,24 @@ func buildEventFromMessage(ctx context.Context, account string, messageID string
 	}
 
 	content := renderEmailEventContent(subject, resp.Message.Snippet)
-	event := nexadapter.NewEvent("gmail", fmt.Sprintf("gmail:message:%s", messageID)).
+	eventBuilder := nexadapter.NewEvent("gmail", fmt.Sprintf("gmail:message:%s", messageID)).
 		WithTimestampUnixMs(timestamp).
 		WithContent(content).
 		WithSender(senderID, senderName).
-		WithPeer(peerID, peerKind).
+		WithContainer(peerID, peerKind).
 		WithAccount(account).
-		Build()
-
+		WithMetadata("message_id", messageID).
+		WithMetadata("thread_id", threadID).
+		WithMetadata("subject", subject).
+		WithMetadata("from", fromHeader).
+		WithMetadata("to", toHeader).
+		WithMetadata("snippet", resp.Message.Snippet).
+		WithMetadata("label_ids", resp.Message.LabelIDs)
 	if threadID != "" {
-		event.ThreadID = threadID
+		eventBuilder.WithThread(threadID)
 	}
 
-	event.Metadata = map[string]any{
-		"message_id": messageID,
-		"thread_id":  threadID,
-		"subject":    subject,
-		"from":       fromHeader,
-		"to":         toHeader,
-		"snippet":    resp.Message.Snippet,
-		"label_ids":  resp.Message.LabelIDs,
-	}
-
-	return event, nil
+	return eventBuilder.Build(), nil
 }
 
 func renderEmailEventContent(subject string, snippet string) string {
@@ -552,4 +602,81 @@ func runGogJSON(ctx context.Context, account string, args ...string) ([]byte, er
 	}
 
 	return nil, err
+}
+
+func resolveMonitorStatePath(account string) (string, error) {
+	if raw := strings.TrimSpace(os.Getenv("NEXUS_GOG_STATE_PATH")); raw != "" { //nolint:gosec // config
+		return raw, nil
+	}
+	baseDir := strings.TrimSpace(os.Getenv("NEXUS_GOG_STATE_DIR")) //nolint:gosec // config
+	if baseDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home dir: %w", err)
+		}
+		baseDir = filepath.Join(home, ".nexus", "adapters", "gog")
+	}
+	token := sanitizeFileToken(account)
+	if token == "" {
+		token = "default"
+	}
+	return filepath.Join(baseDir, token+".monitor.json"), nil
+}
+
+func sanitizeFileToken(raw string) string {
+	trimmed := strings.TrimSpace(strings.ToLower(raw))
+	if trimmed == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, ch := range trimmed {
+		switch {
+		case ch >= 'a' && ch <= 'z':
+			b.WriteRune(ch)
+		case ch >= '0' && ch <= '9':
+			b.WriteRune(ch)
+		case ch == '.', ch == '-', ch == '_':
+			b.WriteRune(ch)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	return strings.Trim(b.String(), "._-")
+}
+
+func readMonitorCursor(statePath string) (string, error) {
+	raw, err := os.ReadFile(statePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
+		return "", err
+	}
+	var state monitorState
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return "", fmt.Errorf("parse monitor state: %w", err)
+	}
+	return strings.TrimSpace(state.HistoryID), nil
+}
+
+func writeMonitorCursor(statePath string, cursor string) error {
+	if strings.TrimSpace(cursor) == "" {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o700); err != nil {
+		return err
+	}
+	payload, err := json.MarshalIndent(monitorState{HistoryID: cursor}, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmpPath := statePath + ".tmp"
+	if err := os.WriteFile(tmpPath, append(payload, '\n'), 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, statePath); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }

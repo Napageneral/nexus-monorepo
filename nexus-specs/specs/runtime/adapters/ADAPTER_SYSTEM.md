@@ -599,7 +599,7 @@ adapters:
 
 ### Database (Runtime State)
 
-Lives in `nexus.db`. Machine-managed. Tracks what IS happening.
+Lives in `runtime.db` (formerly `nexus.db`). Machine-managed. Tracks what IS happening.
 
 ```sql
 CREATE TABLE adapter_instances (

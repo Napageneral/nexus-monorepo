@@ -1,7 +1,10 @@
 # Events Ledger Schema
 
-**Status:** DESIGN COMPLETE  
-**Last Updated:** 2026-02-02
+**Status:** DESIGN COMPLETE
+**Last Updated:** 2026-02-18
+
+> **Canonical Reference:** See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the
+> authoritative 6-database inventory, table ownership, and migration plan.
 
 > Note: For the current consolidation target (threads, normalized attachments,
 > event state/tags, reply links, and document index tables in `events.db`),
@@ -38,8 +41,14 @@ CREATE TABLE events (
     attachments TEXT,                 -- JSON array of Attachment objects
     
     -- Participants
-    from_channel TEXT NOT NULL,       -- Channel type of sender
-    from_identifier TEXT NOT NULL,    -- Sender identifier on that channel
+    -- NOTE: The columns below use legacy names for backward compatibility.
+    -- The canonical terminology per the Unified Delivery Taxonomy is:
+    --   from_channel    → platform
+    --   from_identifier → sender_id
+    -- See DATABASE_ARCHITECTURE.md §3.3 (identity.db contacts table) for the
+    -- canonical (platform, space_id, sender_id) composite key.
+    from_channel TEXT NOT NULL,       -- Platform of sender (e.g. 'imessage', 'gmail')
+    from_identifier TEXT NOT NULL,    -- Sender ID on that platform
     to_recipients TEXT,               -- JSON array of ParticipantRef objects
     
     -- Timing
@@ -84,10 +93,14 @@ CREATE INDEX idx_events_type ON events(type);
 
 ```typescript
 interface ParticipantRef {
-    channel: string;      // 'imessage', 'discord', 'gmail', etc.
-    identifier: string;   // '+15551234567', 'user#1234', 'alice@example.com'
+    channel: string;      // Platform: 'imessage', 'discord', 'gmail', etc.
+    identifier: string;   // Sender ID: '+15551234567', 'user#1234', 'alice@example.com'
 }
 ```
+
+> **Terminology note:** The canonical Unified Delivery Taxonomy uses `platform`
+> and `sender_id`. The `channel`/`identifier` names in this interface are
+> retained for backward compatibility with existing event data.
 
 ---
 
@@ -214,6 +227,7 @@ This enables "what did the agent say?" queries and complete audit trails.
 
 ## Related Documents
 
+- `../DATABASE_ARCHITECTURE.md` — Canonical 6-database spec (authoritative table inventory and ownership)
 - `README.md` — System of Record overview
 - `../../runtime/adapters/ADAPTER_INTERFACES.md` — NexusEvent schema (inbound)
 - `../../runtime/nex/NEXUS_REQUEST.md` — Pipeline lifecycle (stage 1 writes inbound, stage 8 writes outbound)

@@ -30,8 +30,8 @@ Policies are declarative rules that match principals and conditions, then assign
       agent: string               # Agent ID
     
     conditions:                   # Context conditions (array, any match)
-      - channel: string           # imessage, discord, slack, etc.
-        peer_kind: string         # dm, group
+      - platform: string           # imessage, discord, slack, etc.
+        container_kind: string    # dm, group
         account: string           # Multi-account identifier
         guild: string             # Discord guild ID
         time: string              # Time range "HH:MM-HH:MM"
@@ -68,8 +68,8 @@ Session keys support templating:
 | `{principal.name}` | Person's name from ledger | `casey` |
 | `{principal.id}` | Person's ID | `person_abc123` |
 | `{principal.relationship}` | Relationship | `partner` |
-| `{channel}` | Event channel | `discord` |
-| `{peer_id}` | Group/channel ID | `123456789` |
+| `{platform}` | Event platform | `discord` |
+| `{container_id}` | Group/container ID | `123456789` |
 | `{account}` | Account identifier | `work-slack` |
 | `{guild}` | Discord guild | `987654321` |
 
@@ -169,7 +169,7 @@ These are the essential policies most users will have:
   
   match:
     conditions:
-      - peer_kind: group
+      - container_kind: group
   
   effect: allow
   
@@ -182,7 +182,7 @@ These are the essential policies most users will have:
   
   session:
     persona: atlas
-    key: "{channel}:group:{peer_id}"
+    key: "{platform}:group:{container_id}"
   
   priority: 90
 ```
@@ -280,9 +280,9 @@ These are the essential policies most users will have:
   
   match:
     conditions:
-      - channel: slack
+      - platform: slack
         account: company-workspace
-      - channel: discord
+      - platform: discord
         guild: "987654321"
   
   effect: allow
@@ -329,7 +329,7 @@ These are the essential policies most users will have:
   
   match:
     conditions:
-      - channel: slack
+      - platform: slack
         time: weekends
   
   effect: allow
@@ -547,7 +547,7 @@ These are the essential policies most users will have:
     principal:
       is_user: true
     conditions:
-      - channel: discord
+      - platform: discord
         account: atlas-bot
   
   effect: allow
@@ -572,7 +572,7 @@ These are the essential policies most users will have:
   
   match:
     conditions:
-      - channel: discord
+      - platform: discord
         account: atlas-public-bot
   
   effect: allow
@@ -604,7 +604,7 @@ These are the essential policies most users will have:
 
 **Resolution:**
 - Priority 90 > 80
-- Session: `discord:group:{peer_id}` (from group policy)
+- Session: `discord:group:{container_id}` (from group policy)
 - Permissions: group restrictions (more restrictive)
 
 ### Example 2: Mom in Work Slack
@@ -649,7 +649,7 @@ These are the essential policies most users will have:
 ### Option B: Database
 
 ```sql
-CREATE TABLE acl_policies (
+CREATE TABLE policies (
   id TEXT PRIMARY KEY,
   name TEXT UNIQUE NOT NULL,
   description TEXT,
@@ -689,7 +689,7 @@ nexus acl policies enable partner-access
 nexus acl policies disable partner-access
 
 # Test evaluation
-nexus acl test --principal casey --channel discord --peer-kind dm
+nexus acl test --principal casey --platform discord --container-kind dm
 
 # Validate policies
 nexus acl policies validate
