@@ -17,6 +17,12 @@ This document defines how messages flow from inbound delivery to session routing
 4. **Entity merge propagation** — what happens to contacts and sessions when entities merge
 5. **Adapters-only runtime** — removing legacy platform plugins in favor of the adapter system
 
+Receiver model note:
+
+- `DeliveryContext` is sender/container taxonomy only.
+- Receiver resolution output is stored separately on `NexusRequest.receiver`.
+- `NexusRequest.receiver` determines whether the pipeline executes agent turns (`type=persona`) or takes the non-agent path (`type=system/entity/unknown`).
+
 ---
 
 ## Design Principles
@@ -218,19 +224,24 @@ Session keys are produced by `buildSessionKey()` at `resolveAccess`:
 
 | Scenario | Format | Example |
 |----------|--------|---------|
-| DM (any platform) | `dm:{canonical_entity_id}` | `dm:ent_002` |
-| Group/channel | `group:{platform}:{container_id}` | `group:discord:general` |
-| Group thread | `group:{platform}:{container_id}:thread:{id}` | `group:slack:eng:thread:ts123` |
+| DM (any platform, persona receiver) | `dm:{canonical_entity_id}:persona:{persona}` | `dm:ent_002:persona:atlas` |
+| Group/channel (persona receiver) | `group:{platform}:{container_id}:persona:{persona}` | `group:discord:general:persona:atlas` |
+| Group thread (persona receiver) | `group:{platform}:{container_id}:persona:{persona}:thread:{id}` | `group:slack:eng:persona:atlas:thread:ts123` |
 | Worker/meeseeks | `worker:{ulid}` | `worker:01HWXYZ...` |
 | System | `system:{purpose}` | `system:compaction` |
 
-**Key change:** There is no `dm:{platform}:{sender_id}` fallback format. Because every sender has an entity from message one, all DM sessions are entity-based from the start.
+**Key change:** There is no `dm:{platform}:{sender_id}` fallback format. Because every sender has an entity from message one, DM sessions are entity-based from the start. Receiver persona scoping is encoded in the key when `receiver.type = persona`.
+
+Legacy compatibility:
+
+- Existing `dm:{entity}` and `group:{platform}:{container_id}` labels remain resolvable via aliases during migration.
 
 ### Session Key Resolution
 
 ```typescript
 export function buildSessionKey(input: SessionKeyInput): string {
-  const { principal, delivery } = input;
+  const { principal, delivery, receiver } = input;
+  const receiverPersona = receiver?.type === "persona" ? receiver.persona_id : undefined;
 
   // System principals
   if (principal.type === "system" || principal.type === "webhook") {
@@ -243,14 +254,22 @@ export function buildSessionKey(input: SessionKeyInput): string {
     return principal.entity_id ? `worker:${principal.entity_id}` : `system:agent`;
   }
 
+  if (receiver && receiver.type !== "persona") {
+    return `system:${receiver.source ?? delivery.platform}`;
+  }
+
   // Group / channel conversations
   if (delivery.container_kind === "group" || delivery.container_kind === "channel") {
-    const base = `group:${delivery.platform}:${delivery.container_id}`;
+    const base = receiverPersona
+      ? `group:${delivery.platform}:${delivery.container_id}:persona:${receiverPersona}`
+      : `group:${delivery.platform}:${delivery.container_id}`;
     return delivery.thread_id ? `${base}:thread:${delivery.thread_id}` : base;
   }
 
-  // DM: always entity-based (every sender has an entity)
-  return `dm:${principal.entity_id}`;
+  // DM: entity-based, persona-scoped when receiver is a persona.
+  return receiverPersona
+    ? `dm:${principal.entity_id}:persona:${receiverPersona}`
+    : `dm:${principal.entity_id}`;
 }
 ```
 
@@ -270,7 +289,7 @@ Entity: ent_001.merged_into = ent_002
 Entity: ent_002.merged_into = NULL  ← canonical root
 
 Pipeline resolves: contact → ent_001 → chain walk in identity.db → ent_002
-Session key: dm:ent_002
+Session key: dm:ent_002:persona:atlas
 ```
 
 ### 2. Sessions: Alias Creation
@@ -517,7 +536,7 @@ The memory system V2 memory tables (facts, fact_entities, episodes, etc. in memo
 ### Pipeline Stage Updates
 
 - `resolveIdentity.ts`: Call `ensureContact()` (creates contact + entity in identity.db if new). Follow merged_into chain to canonical root (same-DB query). Build principal from canonical entity. Remove fallback to `unknown` for external senders.
-- `resolveAccess.ts`: `buildSessionKey()` simplified — no `dm:{platform}:{sender_id}` branch.
+- `resolveAccess.ts`: `buildSessionKey()` simplified — no `dm:{platform}:{sender_id}` branch, receiver-aware persona scoping.
 - `session.ts`: `promoteSessionIdentity()` already exists. Add `propagateMergeToSessions()`.
 
 ### server-startup.ts Cleanup
@@ -538,7 +557,7 @@ The memory system V2 memory tables (facts, fact_entities, episodes, etc. in memo
 3. **Assert:**
    - Contact row created in `identity.db` with `entity_id` set
    - Entity created in `identity.db` with `name='test:user-001'`, `type='test_handle'`, `source='delivery'`
-   - Session created with label `dm:{entity_id}`
+   - Session created with label `dm:{entity_id}:persona:{persona}` (legacy `dm:{entity_id}` still resolvable via aliases)
    - Principal resolved as `known` (not `unknown`)
    - Response delivered back through the test adapter
 

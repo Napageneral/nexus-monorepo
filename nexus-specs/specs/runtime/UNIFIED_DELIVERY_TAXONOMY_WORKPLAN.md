@@ -50,6 +50,7 @@ This is a long-term, correctness-first migration. The target state is a clean in
 - [x] Update session key construction to use `container_kind/container_id/thread_id` with the canonical routing logic.
 - [x] Update audit logging to store the new normalized identifiers.
 - [x] Update control-plane/webchat dispatch code to construct canonical delivery contexts and bind sender identity from auth.
+- [x] Lock receiver modeling: keep delivery sender-only; store resolved receiver on `NexusRequest.receiver`.
 
 ### Bucket 4: Adapter SDKs (Go + TypeScript)
 

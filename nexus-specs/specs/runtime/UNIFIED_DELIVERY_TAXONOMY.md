@@ -83,6 +83,12 @@ type DeliveryContext = {
 };
 ```
 
+Receiver separation (normative):
+
+- `DeliveryContext` does not include receiver identity.
+- Receiver identity is resolved in-pipeline and stored on `NexusRequest.receiver`.
+- IAM and routing may use both sender-side `DeliveryContext` and resolved `receiver`, but adapters only emit `DeliveryContext`.
+
 Notes:
 
 - `direct` is reserved for internal NEX ingress surfaces (control-plane/webchat/runtime). External adapters MUST NOT emit `direct`.

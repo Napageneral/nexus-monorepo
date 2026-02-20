@@ -22,10 +22,14 @@ This plan is the execution bridge from current runtime shape to one uniform mode
 Implementation snapshot (2026-02-19):
 
 - Phase 1 implemented in `nex`: control-plane WS methods for ingress credentials (`list/create/revoke/rotate`) with IAM taxonomy + runtime tests.
+- Ingress credential `create/rotate` now synchronizes canonical policy role tags on the target entity (`operator/member/customer`) to keep token role and IAM principal tag evaluation aligned.
 - Operator control UI now includes ingress credential management in the Approvals tab (filter/create/list/rotate/revoke) with browser tests.
 - Phase 2 scaffold started: ingress HTTP route dispatch now runs through a dedicated internal `http-ingress` adapter boundary module with explicit submodules.
 - `/api/ingress/webchat/session` moved into the `http-ingress` adapter (`webchat-session` submodule), removing direct handling from `server-http.ts`.
 - Hook HTTP parsing/auth/mapping handler moved out of `server-http.ts` into dedicated `hooks-http.ts` ingress module; `server-http.ts` now delegates through `http-ingress` adapter.
+- OpenAI/OpenResponses/webchat/hooks handler modules are now physically namespaced under `src/nex/control-plane/http-ingress/*` (ownership no longer mixed with generic control-plane modules).
+- Back-compat control-plane fallback for ingress bridges removed: control-plane no longer serves ingress HTTP routes when ingress listener is disabled.
+- Startup guard added: runtime now fails fast if ingress bridges are enabled while `runtime.ingress.enabled` is false.
 
 ---
 
@@ -155,7 +159,11 @@ Deliver:
 Progress:
 
 - `webchat-session` cut over.
-- Remaining major cutover targets: OpenAI compat, OpenResponses compat, hooks/mappings ownership cleanup.
+- OpenAI/OpenResponses/hooks route handling is delegated through `http-ingress` modules.
+- Ingress bridge handlers are now organized under `control-plane/http-ingress/` (`openai-http.ts`, `openresponses-http.ts`, `webchat-session-http.ts`, `hooks-http.ts`), with adapter imports/tests updated.
+- Control-plane listener no longer serves ingress bridge routes; ingress bridge endpoints are ingress-listener only.
+- Runtime now fails fast when ingress bridges are enabled while `runtime.ingress.enabled` is false.
+- E2E guard coverage added in `src/nex/control-plane/server.ingress-cutover.e2e.test.ts`.
 
 ## Phase 4: Hardening + Defaults
 
@@ -167,6 +175,14 @@ Deliver:
   - no principal spoofing
   - token credential lifecycle
   - customer-safe restrictions
+
+Progress:
+
+- Added ingress e2e policy-bundle enforcement matrix in `src/nex/control-plane/ingress.bootstrap-policy.e2e.test.ts`.
+- Matrix validates `operator/member/customer/default-deny` behavior through OpenAI ingress tokens against canonical `nexus_requests` access records (`access_decision`, `access_policy`, `permissions`).
+- Matrix now also validates OpenResponses ingress parity for the same role bundle and denylist enforcement behavior.
+- Regression suite confirms customer/member denylist enforcement (`shell/exec/send_email/credentials_*`, plus customer file/browser denies) while preserving ingress cutover guarantees.
+- Added e2e lifecycle bridge test proving control-plane credential rotation changes ingress behavior in real runtime flow (`customer` token constraints -> rotate to `member` -> updated constraints + old token revoked).
 
 ---
 

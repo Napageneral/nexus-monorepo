@@ -2,7 +2,7 @@
 
 **Status:** PARTIALLY IMPLEMENTED (control-plane IAM authz + password login + ingress integrity telemetry + ingress credential WS methods)  
 **Last Updated:** 2026-02-18  
-**Related:** `CONTROL_PLANE.md`, `../iam/ACCESS_CONTROL_SYSTEM.md`, `../iam/POLICIES.md`, `../adapters/INTERNAL_ADAPTERS.md`, `../adapters/INBOUND_INTERFACE.md`
+**Related:** `CONTROL_PLANE.md`, `HOSTED_FRONTDOOR_PER_TENANT_RUNTIME.md`, `HOSTED_RUNTIME_PROFILE.md`, `../iam/ACCESS_CONTROL_SYSTEM.md`, `../iam/POLICIES.md`, `../adapters/INTERNAL_ADAPTERS.md`, `../adapters/INBOUND_INTERFACE.md`
 
 ---
 

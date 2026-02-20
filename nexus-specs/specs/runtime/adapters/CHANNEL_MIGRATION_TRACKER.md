@@ -1,7 +1,7 @@
 # Channel Adapter Migration Tracker
 
 **Status:** ACTIVE IMPLEMENTATION TRACKER  
-**Last Updated:** 2026-02-16  
+**Last Updated:** 2026-02-20  
 **Related:** `ADAPTER_SYSTEM.md`, `ADAPTER_INTERFACES.md`, `../nex/CONTROL_PLANE.md`
 
 ---
@@ -18,6 +18,36 @@ Track migration from in-process channel runtimes to **NEX external adapters** (m
 - External ingress must be adapters (no privileged bypass path).
 - No backward-compat requirement with legacy gateway/openclaw daemon shapes.
 - IAM is the only approval/authorization boundary.
+- Upstream behavior parity for channel adapters is pinned to OpenClaw baseline commit `fd8c6d1f77a2ab8366a3e02ae1626f3d87c733e9`.
+- Adapter parity work must compare against latest upstream OpenClaw channel implementations, not legacy in-process `nex` channel/plugin code.
+- Channel policy/gating logic lives in IAM + automation/manager layers, not inside external adapter binaries.
+
+---
+
+## Upstream Baseline Lock
+
+### Canonical Upstream Baseline
+
+- Repo: `openclaw/openclaw`
+- Branch: `main`
+- Locked baseline SHA: `fd8c6d1f77a2ab8366a3e02ae1626f3d87c733e9`
+- Merge-base against current `nex`: `0efaf5aa8215de281ebe6f4097c6e2021a1dc5fe`
+
+### Required Porting Rule
+
+For Discord/Slack/Signal/Telegram parity work:
+
+1. Use `openclaw/src/<channel>` as source-of-truth behavior.
+2. Port only IO adapter behavior into external adapter binaries.
+3. Do not re-import in-process plugin policy/approval logic into adapters.
+
+### Update Procedure
+
+When baseline is bumped:
+
+1. Record new SHA in this file.
+2. Produce adapter delta summary (Discord/Slack/Signal/Telegram/iMessage).
+3. Update migration tasks with explicit “upstream delta required” items before code changes.
 
 ---
 

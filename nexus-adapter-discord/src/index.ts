@@ -73,6 +73,7 @@ const STREAM_PLACEHOLDER_TEXT = "...";
 const STREAM_RENDER_INTERVAL_MS = 300;
 const STREAM_RENDER_MIN_DELTA_CHARS = 64;
 const DEFAULT_BACKFILL_MAX_MESSAGES_PER_CHANNEL = 500;
+const DISCORD_DISALLOWED_INTENTS_CLOSE_CODE = 4014;
 
 function asRecord(value: unknown): UnknownRecord | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -126,6 +127,39 @@ function asStringArray(value: unknown): string[] {
   return value
     .map((entry) => asString(entry))
     .filter((entry): entry is string => Boolean(entry));
+}
+
+function extractDiscordCloseCode(event: unknown): number | undefined {
+  if (typeof event !== "object" || event === null) {
+    return undefined;
+  }
+  const code = (event as { code?: unknown }).code;
+  if (typeof code === "number" && Number.isFinite(code)) {
+    return Math.trunc(code);
+  }
+  if (typeof code === "string") {
+    const parsed = Number.parseInt(code, 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function extractDiscordCloseReason(event: unknown): string | undefined {
+  if (typeof event !== "object" || event === null) {
+    return undefined;
+  }
+  const reason = (event as { reason?: unknown }).reason;
+  return typeof reason === "string" ? reason : undefined;
+}
+
+function isDiscordDisallowedIntentsError(error: unknown): boolean {
+  if (error instanceof Error) {
+    return error.message.includes(String(DISCORD_DISALLOWED_INTENTS_CLOSE_CODE));
+  }
+  if (typeof error === "string") {
+    return error.includes(String(DISCORD_DISALLOWED_INTENTS_CLOSE_CODE));
+  }
+  return false;
 }
 
 function getDiscordToken(ctx: AdapterContext): string {
@@ -1234,12 +1268,75 @@ await runAdapter({
 
     let selfID = "";
 
+    let stopRequested = false;
+    let stopMonitor: (() => void) | null = null;
+    let disallowedIntentsLogged = false;
+
+    const requestMonitorStop = () => {
+      stopRequested = true;
+      stopMonitor?.();
+    };
+
+    const logDisallowedIntents = () => {
+      if (disallowedIntentsLogged) {
+        return;
+      }
+      disallowedIntentsLogged = true;
+      ctx.log.error(
+        "discord: gateway closed with code 4014 (missing privileged gateway intents). Enable required intents in the Discord Developer Portal or disable them in adapter config.",
+      );
+    };
+
     client.on("ready", () => {
       selfID = client.user?.id ?? "";
       ctx.log.info(
         "discord monitor connected account=%s bot_id=%s",
         JSON.stringify(args.account),
         JSON.stringify(selfID),
+      );
+    });
+
+    client.on("shardDisconnect", (event, shardID) => {
+      const closeCode = extractDiscordCloseCode(event);
+      if (closeCode === DISCORD_DISALLOWED_INTENTS_CLOSE_CODE) {
+        logDisallowedIntents();
+        requestMonitorStop();
+        return;
+      }
+      const reason = extractDiscordCloseReason(event);
+      ctx.log.info(
+        "discord shard disconnected account=%s shard=%s code=%s reason=%s",
+        JSON.stringify(args.account),
+        String(shardID),
+        String(closeCode ?? "unknown"),
+        JSON.stringify(reason ?? ""),
+      );
+    });
+
+    client.on("error", (error) => {
+      if (isDiscordDisallowedIntentsError(error)) {
+        logDisallowedIntents();
+        requestMonitorStop();
+        return;
+      }
+      ctx.log.error(
+        "discord monitor error account=%s err=%s",
+        JSON.stringify(args.account),
+        error instanceof Error ? error.message : String(error),
+      );
+    });
+
+    client.on("shardError", (error, shardID) => {
+      if (isDiscordDisallowedIntentsError(error)) {
+        logDisallowedIntents();
+        requestMonitorStop();
+        return;
+      }
+      ctx.log.error(
+        "discord shard error account=%s shard=%s err=%s",
+        JSON.stringify(args.account),
+        String(shardID),
+        error instanceof Error ? error.message : String(error),
       );
     });
 
@@ -1303,9 +1400,20 @@ await runAdapter({
     await client.login(token);
 
     await new Promise<void>((resolve) => {
-      const onAbort = () => resolve();
-      if (ctx.signal.aborted) {
+      let settled = false;
+      const finish = () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        stopMonitor = null;
+        ctx.signal.removeEventListener("abort", onAbort);
         resolve();
+      };
+      const onAbort = () => finish();
+      stopMonitor = finish;
+      if (ctx.signal.aborted || stopRequested) {
+        finish();
         return;
       }
       ctx.signal.addEventListener("abort", onAbort, { once: true });

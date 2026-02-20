@@ -23,13 +23,15 @@ Session keys are produced by `buildSessionKey()` at stage 3 (`resolveAccess`). B
 
 | Scenario | Format | Example |
 |----------|--------|---------|
-| DM (any platform) | `dm:{canonical_entity_id}` | `dm:ent_002` |
-| Group/channel | `group:{platform}:{container_id}` | `group:discord:general` |
-| Group thread | `group:{platform}:{container_id}:thread:{thread_id}` | `group:slack:eng:thread:ts123` |
+| DM (persona receiver) | `dm:{canonical_entity_id}:persona:{persona}` | `dm:ent_002:persona:atlas` |
+| Group/channel (persona receiver) | `group:{platform}:{container_id}:persona:{persona}` | `group:discord:general:persona:atlas` |
+| Group thread (persona receiver) | `group:{platform}:{container_id}:persona:{persona}:thread:{thread_id}` | `group:slack:eng:persona:atlas:thread:ts123` |
 | Worker/subagent | `worker:{ulid}` | `worker:01HWXYZ...` |
 | System | `system:{purpose}` | `system:compaction` |
 
 There is no `dm:{platform}:{sender_id}` fallback format. See `../RUNTIME_ROUTING.md` for the full `buildSessionKey()` implementation.
+
+Legacy compatibility note: existing `dm:{entity}` and `group:{platform}:{container_id}` labels remain resolvable via session aliases during migration.
 
 ### ACL Policy Examples
 
@@ -42,7 +44,7 @@ There is no `dm:{platform}:{sender_id}` fallback format. See `../RUNTIME_ROUTING
     delivery:
       container_kind: dm
   session:
-    key: "dm:{principal.entity_id}"
+    key: "dm:{principal.entity_id}:persona:{receiver.persona_id}"
     persona: atlas
 
 # Group chat → channel-based
@@ -51,7 +53,7 @@ There is no `dm:{platform}:{sender_id}` fallback format. See `../RUNTIME_ROUTING
     delivery:
       container_kind: group
   session:
-    key: "group:{delivery.platform}:{delivery.container_id}"
+    key: "group:{delivery.platform}:{delivery.container_id}:persona:{receiver.persona_id}"
     persona: atlas
 ```
 
@@ -65,19 +67,19 @@ Because every sender gets an entity from first contact, session keys are entity-
 Day 1: Mom texts from iMessage
        → contact auto-created (imessage, +15559876543)
        → entity auto-created: ent_001 (type=phone, name="imessage:+15559876543")
-       → session key: "dm:ent_001"
+       → session key: "dm:ent_001:persona:atlas"
 
 Day 3: Memory-writer discovers real name ("that's my Mom, Sarah")
        → creates person entity: ent_002 (type=person, name="Sarah")
        → merges ent_001 into ent_002
-       → propagateMergeToSessions() creates alias: "dm:ent_002" → "dm:ent_001"
+       → propagateMergeToSessions() creates alias: "dm:ent_002:persona:atlas" → "dm:ent_001:persona:atlas"
        → future messages route via alias to existing session
 
 Day 7: Mom emails from mom@gmail.com
        → contact auto-created (gmail, mom@gmail.com)
        → entity auto-created: ent_003 (type=email)
        → memory-writer recognizes same person → merges ent_003 into ent_002
-       → propagateMergeToSessions() creates alias: "dm:ent_003" → "dm:ent_001"
+       → propagateMergeToSessions() creates alias: "dm:ent_003:persona:atlas" → "dm:ent_001:persona:atlas"
        → all channels now converge on the same session
 ```
 
@@ -138,21 +140,21 @@ When the memory-writer (or any agent) merges two entities, `propagateMergeToSess
 
 ```
 Before merge:
-  dm:ent_001 (iMessage session, 20 turns about project planning)
-  dm:ent_003 (Gmail session, 5 turns about weekend plans)
+  dm:ent_001:persona:atlas (iMessage session, 20 turns about project planning)
+  dm:ent_003:persona:atlas (Gmail session, 5 turns about weekend plans)
 
 Memory-writer merges ent_001 and ent_003 → canonical ent_002
 
 propagateMergeToSessions() runs:
-  1. Find DM sessions: dm:ent_001 (20 turns), dm:ent_003 (5 turns)
-  2. Pick primary: dm:ent_001 (most turns)
-  3. Create alias: dm:ent_002 → dm:ent_001
-  4. Create alias: dm:ent_003 → dm:ent_001
+  1. Find DM sessions: dm:ent_001:persona:atlas (20 turns), dm:ent_003:persona:atlas (5 turns)
+  2. Pick primary: dm:ent_001:persona:atlas (most turns)
+  3. Create alias: dm:ent_002:persona:atlas → dm:ent_001:persona:atlas
+  4. Create alias: dm:ent_003:persona:atlas → dm:ent_001:persona:atlas
 
 After merge:
   Next message from Gmail:
     Contact (gmail, mom@gmail.com) → ent_003 → merged_into → ent_002
-    Session key: dm:ent_002 → alias → dm:ent_001
+    Session key: dm:ent_002:persona:atlas → alias → dm:ent_001:persona:atlas
     Memory-reader finds facts from both conversations
     Agent responds via Gmail adapter (outbound uses inbound delivery context)
 ```

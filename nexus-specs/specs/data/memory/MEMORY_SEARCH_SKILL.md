@@ -1,7 +1,7 @@
 # Memory Search Skill
 
 **Status:** DESIGN SPEC
-**Last Updated:** 2026-02-17
+**Last Updated:** 2026-02-20
 **Related:** MEMORY_SYSTEM_V2.md, MEMORY_WRITER_V2.md, MEMORY_REFLECT_SKILL.md
 
 ---
@@ -45,13 +45,16 @@ Parameters:
 
 Returns:
   results[]   Array of matched items with:
-    - id, text, type ('fact' | 'observation' | 'mental_model' | 'entity')
+    - id, text, type ('fact' | 'observation' | 'mental_model' | 'entity' | 'event')
     - as_of (when it happened), relevance score
     - is_stale (for observations/mental models)
     - entity_ids[] (linked entities)
     - source metadata
     - For entity results: name, type, aliases[], mention_count
+    - For event results: raw unretained events from short-term memory
 ```
+
+> **Short-term memory:** Very recent events that haven't been processed by the retain pipeline yet are searchable as `type: 'event'` results. These are raw events (not extracted facts), useful for answering questions about very recent context. See `MEMORY_V2_RETAIN_PIPELINE.md`.
 
 ---
 
@@ -97,6 +100,19 @@ recall(query, scope=['facts'])
 - Use for specific details, recent information, or verification
 
 **When to start here:** Specific factual questions, recent events, or verifying stale higher-layer data. "When did Tyler last meet with Sarah?" or "What was discussed in yesterday's standup?"
+
+### Layer 0: Short-Term Events (Most Recent)
+
+```
+recall(query)  -- event results included automatically
+```
+
+- Raw unretained events from the last few hours (not yet processed by the retain pipeline)
+- Useful for very recent context: "What was just said?" or "What happened in the last conversation?"
+- These are raw event text, not extracted facts — may be noisy
+- Included automatically in recall() results as `type: 'event'`
+
+**When these help:** Questions about very recent activity that the retain pipeline hasn't processed yet.
 
 ### Choosing Your Entry Point
 

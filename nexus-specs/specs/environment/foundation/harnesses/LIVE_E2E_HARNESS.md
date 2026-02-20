@@ -1,7 +1,7 @@
 # Live E2E Harness Specification (Real LLM)
 
 **Status:** ACTIVE
-**Last Updated:** 2026-02-18
+**Last Updated:** 2026-02-20
 **Canonical Lifecycle Spec:** `specs/environment/foundation/WORKSPACE_LIFECYCLE.md`
 **Database Layout:** See `specs/data/DATABASE_ARCHITECTURE.md` for the canonical 6-database layout
 
@@ -42,7 +42,7 @@ All decisions captured in `specs/environment/foundation/WORKSPACE_LIFECYCLE.md`:
 - **Item 1 (`nexus init` contract):** Init creates all dirs, all 6 DBs (eagerly, with schema: events.db, agents.db, identity.db, memory.db, embeddings.db, runtime.db), generates auth token, writes config to `state/config.json`. Flat `skills/` dir. `BOOTSTRAP.md` is permanent.
 - **Item 2 (onboarding identity + completion):** Always MWP. Bootstrap detected by absence of agent persona dirs in `state/agents/`. `BOOTSTRAP.md` content injected into MA system prompt. Identity files at `state/agents/{name}/IDENTITY.md` + `SOUL.md`, `state/user/IDENTITY.md`. Completion = persona dir exists with `IDENTITY.md`.
 - **Item 6 (credential scan):** External CLI auto-sync at runtime startup. Agent-driven env var scan during onboarding (MA dispatches worker). `BOOTSTRAP.md` template instructs MA to do this.
-- **Item 7 (default automations):** Ships memory-reader, memory-writer, command-logger, boot-md. Seeded at runtime startup. Workspaces at `state/workspace/{name}/`. Legacy `session-memory` and `soul-evil` dropped.
+- **Item 7 (default automations):** Ships memory-reader, memory-writer (retain-episode path), command-logger, boot-md. Seeded at runtime startup. Workspaces at `state/workspace/{name}/`. Legacy `session-memory` and `soul-evil` dropped.
 
 ### Bundle B: Runtime Routing (Items 3, 4) — RESOLVED
 
@@ -51,11 +51,19 @@ All decisions captured in `specs/runtime/RUNTIME_ROUTING.md`:
 - **Item 3 (session keys + routing):** Contacts table in `identity.db` maps `(platform, sender_id)` → `entity_id`. Every sender gets an entity from first contact (auto-created in identity.db). Session keys are always entity-based: `dm:{canonical_entity_id}`. No `dm:{platform}:{sender_id}` fallback. Entity merges propagate to session aliases synchronously. Turn trees are never merged — memory bridges across sessions.
 - **Item 4 (adapters-only runtime):** Big-bang removal of legacy channels, gmail-watcher, cron. Adapter manager is the sole external ingest/delivery path. `chat.send` is a direct dispatch (not an adapter). Adapter config in `~/.nex.yaml`.
 
-### Bundle C: Optional Runtime Surfaces (Item 5) — PENDING
+### Bundle C: Optional Runtime Surfaces (Item 5) — RESOLVED
 
 **Theme:** Canvas host and browser control — are they first-class or opt-in?
 
-Items: 5 (canvas host + browser control)
+All decisions captured in `specs/runtime/RUNTIME_SURFACES.md`:
+
+- **Canvas host:** Superseded. Agent-generated UIs render inline in the Control UI SPA via JSON-defined components (JSON Render). The standalone canvas file server is eliminated.
+- **A2UI bridge:** Redesigned as a thin mobile native shim. No longer a separate serving/injection system.
+- **Browser control:** Deferred, opt-in. Kept config-gated and dormant (`browser.enabled = false`). Re-evaluate after core runtime is hardened.
+- **TUI:** Dropped. No target users, zero architectural impact.
+- **Ingress listener:** Migrated to `http-ingress` internal adapter. Control plane returns to purely privileged local surface.
+- **UI architecture:** One SPA, multiple shells (browser, Tauri desktop, mobile WebView). Agent canvas is a section of the SPA.
+- **Surface consolidation:** Target state is 2 ports (Control Plane + adapter-owned HTTP ingress) vs current 5-6.
 
 ---
 
@@ -83,6 +91,10 @@ Script: `nex/scripts/dev/nexus-e2e-live.ts`
 - `--max-turns <n>`: number of onboarding turns to send (default: 3)
 - `--timeout-ms <ms>`: trace completion timeout (default: 180s)
 - `--health-timeout-ms <ms>`: readiness timeout (default: 30s)
+- `--adapter-mode <off|isolated|eve>`: adapter isolation mode (default: `off`)
+- `--eve-adapter-command <cmd>`: adapter command when `--adapter-mode eve` (default: `eve-adapter`)
+- `--eve-channel <name>`: adapter channel when `--adapter-mode eve` (default: `imessage`)
+- `--eve-account <id>`: adapter account when `--adapter-mode eve` (default: `default`)
 - `--keep`: keep the workspace dir for inspection
 - `--cleanup-on-fail`: cleanup only when passing
 
@@ -128,8 +140,8 @@ Each scenario is chat-driven (messages sent to the runtime) and validated by rea
 6. **Assert post-boot state:**
    - At least one provider credential exists (from external CLI sync)
    - Owner entity exists in identity.db
-   - Automations table has: `memory-reader`, `memory-writer`, `command-logger`, `boot-md`
-   - `state/workspace/memory-reader/` and `state/workspace/memory-writer/` exist with seed files
+   - Automations table has baseline defaults: `command-logger`, `boot-md`
+   - Memory automations are currently out of scope for baseline harness pass/fail
 
 ### Scenario 2: Onboarding Conversation (MWP)
 
@@ -157,8 +169,7 @@ Each scenario is chat-driven (messages sent to the runtime) and validated by rea
    - Worker turn recorded in agents ledger
    - Worker returned result to MA
    - MA produced user-facing reply
-   - Memory-reader fired at `worker:pre_execution` (check automation invocations)
-   - Memory-writer fired at `after:runAgent` (check automation invocations)
+   - Memory hook invocation checks are deferred until memory pipeline stabilization
 
 ### Scenario 4: Queue Semantics (Extended)
 
@@ -214,7 +225,7 @@ Changes:
 
 ### Phase 3: Default Automations Seeding + Validation
 
-Goal: Memory-reader, memory-writer, command-logger, boot-md seeded at startup. Memory automations fire during MWP conversations.
+Goal: Memory-reader, memory-writer, command-logger, boot-md seeded at startup. Memory-reader fires at `worker:pre_execution`; memory-writer fires at `memory:retain-episode`.
 
 Changes:
 - Add automation seeder to startup sequence
@@ -249,6 +260,7 @@ Environment:
 - `specs/environment/foundation/INIT_REFERENCE.md`
 - `specs/environment/foundation/BOOTSTRAP_FILES_REFERENCE.md`
 - `specs/environment/foundation/BOOTSTRAP_ONBOARDING.md`
+- `specs/environment/foundation/ONBOARDING_EXPERIENCE_CONTRACT.md`
 
 Runtime routing:
 - `specs/runtime/RUNTIME_ROUTING.md` **(primary, canonical for Bundle B)**

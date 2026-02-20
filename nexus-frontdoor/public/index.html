@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nexus Frontdoor</title>
+    <style>
+      :root {
+        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #1f2937;
+        background: #f8fafc;
+      }
+      body {
+        max-width: 720px;
+        margin: 2.5rem auto;
+        padding: 0 1rem;
+      }
+      h1 {
+        margin-bottom: 0.5rem;
+      }
+      .card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.75rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+      }
+      input {
+        width: 100%;
+        margin: 0.25rem 0 0.75rem;
+        padding: 0.55rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 0.5rem;
+      }
+      button {
+        border: 0;
+        border-radius: 0.5rem;
+        background: #0f766e;
+        color: white;
+        padding: 0.55rem 0.85rem;
+        cursor: pointer;
+      }
+      pre {
+        background: #0f172a;
+        color: #e2e8f0;
+        border-radius: 0.5rem;
+        padding: 0.75rem;
+        overflow: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Nexus Frontdoor</h1>
+    <p>Scaffold shell for hosted login, runtime token minting, and per-tenant proxying.</p>
+
+    <div class="card">
+      <h2>Password Login</h2>
+      <label>Username</label>
+      <input id="username" value="owner" />
+      <label>Password</label>
+      <input id="password" type="password" value="changeme" />
+      <button id="login">Log In</button>
+      <button id="logout">Log Out</button>
+    </div>
+
+    <div class="card">
+      <h2>Runtime Token</h2>
+      <button id="mint">Mint Token</button>
+      <button id="refresh">Refresh Token</button>
+      <button id="revoke">Revoke Token</button>
+    </div>
+
+    <div class="card">
+      <h2>Proxied Runtime Health</h2>
+      <button id="runtimeHealth">GET /runtime/health</button>
+      <button id="openControlUi">Open /app</button>
+    </div>
+
+    <pre id="out">ready</pre>
+
+    <script>
+      let lastRefreshToken = "";
+      const out = document.getElementById("out");
+      const print = (value) => {
+        out.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+      };
+
+      async function post(url, body = {}) {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(body),
+        });
+        const text = await res.text();
+        let json = {};
+        try {
+          json = JSON.parse(text);
+        } catch {}
+        return { status: res.status, json };
+      }
+
+      document.getElementById("login").onclick = async () => {
+        const username = document.getElementById("username").value;
+        const password = document.getElementById("password").value;
+        const result = await post("/api/auth/login", { username, password });
+        print(result);
+      };
+
+      document.getElementById("logout").onclick = async () => {
+        const result = await post("/api/auth/logout");
+        print(result);
+      };
+
+      document.getElementById("mint").onclick = async () => {
+        const result = await post("/api/runtime/token");
+        lastRefreshToken = result.json?.refresh_token || "";
+        print(result);
+      };
+
+      document.getElementById("refresh").onclick = async () => {
+        const result = await post("/api/runtime/token/refresh", { refresh_token: lastRefreshToken });
+        lastRefreshToken = result.json?.refresh_token || lastRefreshToken;
+        print(result);
+      };
+
+      document.getElementById("revoke").onclick = async () => {
+        const result = await post("/api/runtime/token/revoke", { refresh_token: lastRefreshToken });
+        print(result);
+      };
+
+      document.getElementById("runtimeHealth").onclick = async () => {
+        const res = await fetch("/runtime/health", { credentials: "include" });
+        const text = await res.text();
+        print({ status: res.status, body: text });
+      };
+
+      document.getElementById("openControlUi").onclick = () => {
+        location.href = "/app";
+      };
+    </script>
+  </body>
+</html>

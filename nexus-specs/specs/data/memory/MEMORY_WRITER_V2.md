@@ -1,7 +1,7 @@
 # Memory Writer V2
 
 **Status:** DESIGN SPEC
-**Last Updated:** 2026-02-18
+**Last Updated:** 2026-02-20
 **Supersedes:** ../roles/MEMORY_WRITER.md
 **Related:** MEMORY_SYSTEM_V2.md, UNIFIED_ENTITY_STORE.md, ../../runtime/RUNTIME_ROUTING.md
 
@@ -11,20 +11,22 @@
 
 ## Overview
 
-The Memory-Writer is a meeseeks that transforms NexusEvents into facts, entities, and causal links. It replaces both the old 7-stage Go pipeline and the Hindsight 10-step retain pipeline with an agentic approach.
+The Memory-Writer is a meeseeks that transforms NexusEvents into facts and entities. It replaces both the old 7-stage Go pipeline and the Hindsight 10-step retain pipeline with an agentic approach.
 
-**The agent IS the extractor.** There is no `extract_facts()` tool. The agent's role prompt teaches it to read events, identify facts and entities, resolve entities, check for duplicates, and identify causal relationships. The tools it uses are for database operations (searching and writing), not for the extraction logic itself.
+**The agent IS the extractor.** There is no `extract_facts()` tool. The agent's role prompt teaches it to read an episode of events, identify facts and entities, resolve entities, and check for duplicates. The tools it uses are for database operations (searching and writing), not for the extraction logic itself.
 
 ---
 
 ## Trigger
 
-The Memory-Writer fires on an `eventIngested` hook. When an event arrives in the Events Ledger, the writer is triggered with:
+> **Full design:** See `MEMORY_V2_RETAIN_PIPELINE.md` for episode grouping, boundary detection, and the scheduled-event trigger mechanism.
 
-1. **The event itself** -- full NexusEvent with deliveryContext
-2. **Thread context** -- the last N events from the same thread/session for conversational context
+The Memory-Writer is triggered per **episode**, not per event. Events accumulate in their thread/channel, and when an episode boundary is detected (90-minute conversation gap, token budget exceeded, or end-of-day flush), the writer receives:
 
-The same hook works for all event types: iMessages, emails, agent turns, Discord messages, etc. The writer's role prompt teaches it how to handle each type.
+1. **The full episode** -- an array of NexusEvents in chronological order, with deliveryContext on each
+2. **Episode metadata** -- platform, thread_id, event count, token estimate
+
+The same pipeline works for all event types: iMessages, emails, agent turns, Discord messages, etc. The writer's role prompt teaches it how to handle each type. Events are searchable in short-term memory (via recall) before the writer processes them.
 
 ---
 
@@ -42,9 +44,9 @@ The Memory-Writer is role-based. Its behavior comes from its ROLE.md prompt, not
 
 4. **Entity resolution** -- For each entity, search the entity store for existing matches. Use context, co-occurrence patterns, and the PII extraction pipeline to resolve. When confident, merge. When uncertain, create merge candidates.
 
-5. **Causal link identification** -- Look for cause-effect relationships between the new facts and between new and existing facts. Causal language includes: "because", "therefore", "led to", "resulted in", "caused by", "due to", "as a result of". When in doubt, don't create a link -- false causal links are worse than missing ones.
+5. **Self-improvement** -- The writer learns over time which events are worth processing, which entity resolutions are tricky, and how to optimize its extraction patterns. It can update its own ROLE.md and create helper scripts to refine its approach.
 
-6. **Self-improvement** -- The writer learns over time which events are worth processing, which entity resolutions are tricky, and how to optimize its extraction patterns. It can create its own mental models to assist with future extraction.
+> **Note:** The writer does NOT create causal links or mental models. Causal links are detected by the consolidation pipeline, which sees the full fact graph across episodes and platforms. Mental models are created by the reflect skill. See `MEMORY_SYSTEM_V2.md` and `MEMORY_REFLECT_SKILL.md`.
 
 ### What the Role Prompt Does NOT Do
 
@@ -83,9 +85,6 @@ link_fact_entity(fact_id, entity_id)
     Create a junction entry linking a fact to an entity.
     Also updates entity_cooccurrences for all entity pairs in the fact.
 
-insert_causal_link(from_fact_id, to_fact_id, strength)
-    Store a causal relationship between two facts.
-
 propose_merge(entity_a_id, entity_b_id, confidence, reason)
     Create a merge candidate for review.
     If confidence is above auto-merge threshold, executes the merge directly.
@@ -98,19 +97,20 @@ These may be exposed as tools, CLI commands, or direct API calls -- the exact me
 ## Workflow
 
 ```
-Event arrives via eventIngested hook
+Episode boundary detected (conversation gap / token budget / EOD flush)
     |
     v
-Memory-Writer receives: NexusEvent + thread context (last N events)
+Memory-Writer receives: episode (array of NexusEvents in chronological order)
     |
     v
-Agent reads event content and deliveryContext
+Agent reads all events in the episode, noting deliveryContext on each
     |
     v
-Agent extracts facts:
-    - Reads the content + surrounding context
+Agent extracts facts across the episode:
+    - Reads the content + conversation flow
     - Identifies atomic durable knowledge (not ephemeral state)
     - Each fact is a natural language sentence
+    - Consolidates related information from multiple messages into single facts
     |
     v
 For each fact:
@@ -129,66 +129,67 @@ For each fact:
     |
     +---> Link entities: link_fact_entity(fact_id, entity_id) for each entity
     |
-    +---> Causal analysis: look for cause-effect relationships
-          With other new facts from this batch
-          With existing facts found during dedup search
-          insert_causal_link(cause_fact, effect_fact, strength)
-    |
     v
 Agent completes. System runs post-agent steps:
     |
     +---> Generate embeddings for new facts (algorithmic)
-    +---> Queue consolidation job for new facts (background)
+    +---> Mark episode events as is_retained=TRUE
+    +---> Queue episode-batched consolidation for new facts (background)
 ```
 
 ---
 
 ## Consolidation (Background Job)
 
-Consolidation runs after the Memory-Writer completes. It processes facts with `is_consolidated = FALSE` and synthesizes them into observations.
+> **Full design:** See `MEMORY_V2_RETAIN_PIPELINE.md` for the complete consolidation architecture.
+
+Consolidation runs after the Memory-Writer completes an episode. It processes all new facts from that episode together — **episode-batched**, not per-fact. This gives the consolidation prompt full context about related facts from the same conversation.
 
 ### How It Works
 
-For each unconsolidated fact:
+For each batch of new facts from a completed episode:
 
-1. **Recall related content** -- Search for existing observations and facts related to this fact's text.
+1. **Recall related content** -- Search for existing observations related to the new facts.
 
-2. **Evaluate worthiness** -- Not every fact merits an observation. If no related facts exist and the fact is isolated, mark it as consolidated and move on. Only create observations when facts cluster together meaningfully.
+2. **Cluster facts by topic** -- Group the new facts into topic clusters. Each cluster gets its own observation (or updates an existing one).
 
-3. **Find or create knowledge-episode** -- If related content exists:
-   - If an existing observation/episode covers this topic: extend the episode (new version, parent_id chain) with the source events behind this fact
-   - If no existing episode: create a new knowledge-episode grouping the related source events
+3. **For each cluster, find or create knowledge-episode** -- If related content exists:
+   - If an existing observation/episode covers this topic: extend the episode (new version, parent_id chain)
+   - If no existing episode: create a new knowledge-episode grouping the source events
 
-   4. **Run observation analysis** -- Execute the observation analysis type against the episode:
-   - Single LLM call: new fact + existing observation text -> create/update actions
+4. **Run observation analysis** -- Single LLM call per cluster: new facts + existing observation text → create/update actions
    - Extracts durable knowledge, not ephemeral state
    - Handles contradictions with temporal markers ("used to X, now Y")
-   - New analysis_run created (parent_id -> previous run for history)
-   - Observation text stored in `analysis_runs.output_text` (no facet needed)
+   - New analysis_run created (parent_id → previous run for history)
+   - Observation text stored in `analysis_runs.output_text`
 
-5. **Mark consolidated** -- Set `is_consolidated = TRUE` on the fact.
+5. **Detect causal links** -- The consolidation pipeline identifies cause-effect relationships across the full fact graph (cross-episode, cross-platform). This is where `causal_links` rows are created — the writer does NOT create them.
 
-6. **Trigger mental model refresh** -- If any mental models are configured for auto-refresh after consolidation, queue refresh jobs.
+6. **Propose cross-platform entity merges** -- When facts from different platforms reference similar entities, consolidation proposes merges.
+
+7. **Mark consolidated** -- Set `is_consolidated = TRUE` on all processed facts.
+
+8. **Trigger mental model refresh** -- If any mental models are configured for auto-refresh after consolidation, queue refresh jobs.
 
 ### Consolidation Prompt (from Hindsight, adapted)
 
 The observation analysis type uses a prompt that instructs the LLM to:
 - Extract DURABLE KNOWLEDGE from facts, not ephemeral state
-- "User moved to Room 203" -> "Room 203 exists" (not "User is in Room 203")
+- "User moved to Room 203" → "Room 203 exists" (not "User is in Room 203")
 - Preserve specific details (names, locations, numbers)
 - Handle contradictions: "Alex used to love pizza but now hates it"
 - Never merge facts about different people or unrelated topics
-- Return empty array if fact contains no durable knowledge
+- Return empty array if facts contain no durable knowledge
 
 ### Execution
 
-Consolidation uses the existing Cortex parallel worker system. Each fact is processed independently -- no batching of multiple facts into one LLM call. This makes it simple, parallelizable, and crash-recoverable.
-
-If we want to make consolidation agentic later, each fact can be forked as a lightweight meeseeks. For now, simple LLM extraction is sufficient.
+Consolidation uses the existing Cortex parallel worker system. Facts from each episode are processed together in a single LLM call per topic cluster. This is more accurate than per-fact consolidation because the model sees related facts together and can create better observations.
 
 ---
 
-## Event Context: What the Writer Receives
+## Episode Context: What the Writer Receives
+
+The writer receives a full episode: an array of NexusEvents in chronological order. The prompt is framed as "This is a conversation episode containing N messages from [platform]. Extract durable knowledge."
 
 ### NexusEvent DeliveryContext
 
@@ -201,15 +202,16 @@ If we want to make consolidation agentic later, each fact can be forked as a lig
 | `peer_kind` | "dm" / "group" / "channel" | Context for extraction |
 | `thread_id` | "thread_abc" | Thread grouping |
 
-### Thread Context
+### Episode as Conversation Context
 
-The last N events from the same thread/session. Gives the writer conversational context for better extraction. For iMessages: the recent messages in the conversation. For agent turns: the recent turns in the session.
+The full episode provides conversational context. Unlike the old per-event approach (which needed separate "thread context" lookups), the episode already contains the full conversation window. For iMessages: a conversation with a 90-minute gap between episodes. For agent turns: a session or portion of a session. For email: a thread grouped by In-Reply-To headers.
 
-### What Does NOT Flow Through
+### What Does NOT Flow Through (Currently)
 
-- Agent tool calls and reasoning chains (not available as events)
+- Agent tool calls and reasoning chains (not currently in the event representation)
 - System prompts (filtered out)
-- For richer agent session extraction: future enhancement to fork the agent session ledger
+
+> **Future enhancement:** Agent turns have richer metadata (tool_calls, reasoning) that standalone events don't. The event representation should be enriched to include full turn metadata so the writer can extract what was DECIDED. See `MEMORY_V2_RETAIN_PIPELINE.md` "What About Agent Turns?" section. Until then, the writer extracts from the user message + agent response text only.
 
 ---
 
@@ -276,9 +278,10 @@ The Memory-Writer meeseeks follows the standard meeseeks self-improvement patter
 
 - **ROLE.md** -- Can be updated by the writer to refine extraction strategies
 - **Scripts** -- Can create helper scripts for common patterns
-- **Mental models** -- Can create its own mental models that assist with entity resolution and extraction (e.g., "Known entity disambiguation rules", "Common false positive patterns")
 
 These persist across invocations, making the writer more effective over time.
+
+> **Note:** The writer does NOT create mental models. Mental model CRUD belongs exclusively in the reflect skill (`MEMORY_REFLECT_SKILL.md`). The writer focuses on fact extraction, entity identification, and deduplication.
 
 ---
 
@@ -290,16 +293,19 @@ These persist across invocations, making the writer more effective over time.
 | **Extraction** | Hardcoded stages | LLM extraction with fixed prompt | Agent with role prompt (self-improving) |
 | **Entity resolution** | Contact import + extracted | 3-signal scorer (name/cooccurrence/temporal) | Agentic: uses context, PII pipeline, co-occurrence |
 | **Deduplication** | UNIQUE constraints | Cosine >0.95 in 24hr window | Agent searches and decides |
-| **Links** | Relationships table (structured triples) | 4 link types in memory_links at write time | Only causal links at write time |
-| **Consolidation** | None (observation-log at read time) | Background job per fact, 1 LLM call each | Background job, existing parallel worker |
-| **Input format** | Structured Go types | content + context string | Full NexusEvent + thread context |
-| **Self-improvement** | None | None | ROLE.md, scripts, mental models |
+| **Links** | Relationships table (structured triples) | 4 link types in memory_links at write time | No links at write time; causal links detected by consolidation |
+| **Consolidation** | None (observation-log at read time) | Background job per fact, 1 LLM call each | Episode-batched: all facts from episode consolidated together |
+| **Input format** | Structured Go types | content + context string | Full episode (array of NexusEvents in chronological order) |
+| **Self-improvement** | None | None | ROLE.md, scripts (no mental models — those belong to reflect skill) |
 
 ---
 
 ## See Also
 
 - `MEMORY_SYSTEM_V2.md` -- Full memory architecture
+- `MEMORY_V2_RETAIN_PIPELINE.md` -- Episode-based retain pipeline (episode grouping, filtering, consolidation batching)
+- `MEMORY_V2_INFRASTRUCTURE_WORKPLAN.md` -- Recall parity, writer scope changes
+- `MEMORY_REFLECT_SKILL.md` -- Deep research and mental model creation (the only path for mental model CRUD)
 - `UNIFIED_ENTITY_STORE.md` -- Entity store details
 - `../roles/MEMORY_WRITER.md` -- Previous writer spec (superseded)
 - `../roles/MEMORY_READER.md` -- Reader spec (to be updated)

@@ -2,7 +2,7 @@
 
 **Status:** IMPLEMENTATION PLAN
 **Created:** 2026-02-17
-**Updated:** 2026-02-18
+**Updated:** 2026-02-20
 **Target:** `/Users/tyler/nexus/home/projects/nexus/nex/cortex/`
 
 > **Canonical reference:** See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the authoritative database layout. Memory tables live in `memory.db`. Entity tables live in `identity.db`. Embeddings live in `embeddings.db`. The Go cortex process is being eliminated -- all logic is being ported to TypeScript.
@@ -118,7 +118,7 @@ One agent, working through these phases in order, is the cleanest path. Each pha
    d. **Causal traversal** — Given a seed fact from other strategies, traverse `causal_links` to find causally connected facts.
 
 3. **Implement RRF fusion:**
-   - Run strategies in parallel (goroutines).
+   - Run strategies in parallel (async TS — recall is fully TypeScript, Go binary eliminated).
    - Each returns a ranked list of fact/observation/mental_model IDs.
    - Fuse via RRF (k=60).
    - Apply MMR for diversity (λ=0.7) using embeddings.
@@ -184,7 +184,9 @@ One agent, working through these phases in order, is the cleanest path. Each pha
 
 ## Phase 4: Memory-Writer Meeseeks
 
-**What:** The agentic fact extractor. Receives events, extracts facts, resolves entities, writes to the store.
+> **Updated design:** The writer is now triggered per episode, not per event. See `MEMORY_V2_RETAIN_PIPELINE.md` for the full episode-based retain architecture. The writer no longer creates causal links (consolidation handles those) or mental models (reflect skill handles those).
+
+**What:** The agentic fact extractor. Receives episodes, extracts facts, resolves entities, writes to the store.
 
 **Steps:**
 
@@ -195,32 +197,24 @@ One agent, working through these phases in order, is the cleanest path. Each pha
        skills/
            cortex/
                recall.ts    -- recall() tool binding
-               write.ts     -- insert_fact, create_entity, link_fact_entity,
-                               insert_causal_link, propose_merge
+               write.ts     -- insert_fact, create_entity, link_fact_entity, propose_merge
    ```
 
 2. **Implement the tool bindings:**
-   - `recall` — calls the Go recall() function from Phase 2
+   - `recall` — calls the TS recall() function from Phase 2
    - `insert_fact` — INSERT into facts table, returns fact_id
    - `create_entity` — INSERT into entities table, returns entity_id
    - `link_fact_entity` — INSERT into fact_entities, UPDATE entity_cooccurrences
-   - `insert_causal_link` — INSERT into causal_links
    - `propose_merge` — INSERT into merge_candidates, auto-merge if confidence > threshold (UPDATE entities SET merged_into)
 
-3. **Wire the trigger hooks:**
+3. **Wire the episode-based trigger:**
+   - Episode boundary detected (conversation gap / token budget / EOD flush)
+   - Assemble episode from all unretained events in the thread
+   - Fork the memory-writer meeseeks with the full episode
+   - Post-retain: mark events as `is_retained = TRUE`, embed facts, trigger consolidation
+   - See `MEMORY_V2_RETAIN_PIPELINE.md` for full trigger design
 
-   **Path 1 (agent turn complete):**
-   - After a broker execution completes, fire the memory-writer meeseeks
-   - Pass: the full turn content (user message + agent response + tool results)
-   - Mark source event IDs as processed by inserting into `memory_processing_log` table (created in Phase 1)
-
-   **Path 2 (standalone event / eventIngested):**
-   - Register a hook on event finalization
-   - Check if event is already memory-processed → skip
-   - Fork the memory-writer meeseeks with: raw event + deliveryContext
-   - The writer uses recall() to gather context about sender/thread
-
-4. **Test end-to-end:** Send a test event through each path. Verify facts appear in the facts table, entities in entities table, links in fact_entities.
+4. **Test end-to-end:** Send test events, let episode boundary trigger, verify facts appear in the facts table, entities in entities table, links in fact_entities.
 
 **Files touched:**
 - Meeseeks workspace files (ROLE.md, skill scripts)
@@ -232,35 +226,37 @@ One agent, working through these phases in order, is the cleanest path. Each pha
 
 ## Phase 5: Consolidation Worker
 
+> **Updated design:** Consolidation is now episode-batched — all facts from an episode are consolidated together, not per-fact. The consolidation pipeline also handles causal link detection and cross-platform entity merge proposals. See `MEMORY_V2_RETAIN_PIPELINE.md`.
+
 **What:** Background job that processes unconsolidated facts into observations.
 
 **Steps:**
 
-1. **Create the consolidation job** in the compute engine:
-   - Query: `SELECT * FROM facts WHERE is_consolidated = FALSE ORDER BY created_at ASC`
-   - For each fact:
-     a. Recall related observations and facts
-     b. Decide: worth creating/updating an observation? (Skip isolated facts)
-     c. If yes: find or create a knowledge-episode, run the observation analysis type
-     d. Create/update analysis_run (observation text goes in `output_text`, no facet needed)
-     e. Insert into observation_facts junction
-     f. Mark fact as `is_consolidated = TRUE`
-     g. Commit per fact (crash-recoverable)
+1. **Create the episode-batched consolidation job:**
+   - Triggered when a retain job completes and produces new facts
+   - Query new unconsolidated facts from the completed episode
+   - Batch recall related observations/facts for the whole batch
+   - Cluster facts by topic/entity overlap
+   - Per cluster: single LLM call with consolidation prompt (new facts + existing observations → create/update actions)
+   - Detect causal links between facts (cross-episode, cross-platform)
+   - Propose entity merges from cross-platform patterns
+   - Mark facts as `is_consolidated = TRUE`
+   - Commit per cluster (crash-recoverable)
 
 2. **Register the observation analysis type:**
-   - Use the consolidation prompt from MEMORY_WRITER_V2.md (adapted from Hindsight's consolidation prompts)
+   - Use the consolidation prompt from MEMORY_V2_RETAIN_PIPELINE.md (episode-batched, multi-fact)
    - Insert into `analysis_types` with name `observation_v1`
 
 3. **Wire staleness:** When a new observation is created/updated that's linked to a mental model, set `is_stale = TRUE` on that mental model.
 
-4. **Schedule:** Run after the memory-writer completes (triggered by new unconsolidated facts), or periodically.
+4. **Schedule:** Run after the memory-writer completes each episode, or periodically for catch-up.
 
-**Reference:** Port Hindsight's `consolidator.py`. The per-fact processing with individual commits is directly translatable.
+**Reference:** Port Hindsight's `consolidator.py`, adapted for episode-batched processing. See `MEMORY_V2_RETAIN_PIPELINE.md` "Episode-Batched Consolidation" section for full prompt design.
 
-**Test:** Insert facts, run consolidation, verify observations appear as analysis_runs (output_text populated), verify observation_facts links exist.
+**Test:** Insert facts via a retain job, run consolidation, verify observations appear as analysis_runs (output_text populated), verify observation_facts links exist, verify causal_links are created.
 
 **Files touched:**
-- `internal/compute/engine.go` — add consolidation job handler
+- `src/cortex-memory-v2/consolidation.ts` — refactor for episode-batched processing
 - Consolidation prompt (embedded or in analysis_types)
 
 ---
@@ -283,12 +279,12 @@ One agent, working through these phases in order, is the cleanest path. Each pha
 2. **Register the automation:**
    - Hook point: `worker:pre_execution`
    - Blocking: yes
-   - Timeout: 3 seconds
+   - Timeout: 60 seconds (generous — typical latency under 10s)
    - Model: fast cheap model (gpt-5.3-codex-spark or equivalent)
 
 3. **Implement the dispatch script:**
    - Fork the injection meeseeks with the worker's task description
-   - Meeseeks calls recall() 1-3 times
+   - Meeseeks uses its judgment on recall() calls (zero for computational tasks, multiple for entity-rich inputs)
    - Returns selected relevant facts as `<memory_context>` block (or nothing if irrelevant)
    - Enrichment injected into worker's currentMessage
 
@@ -326,6 +322,8 @@ One agent, working through these phases in order, is the cleanest path. Each pha
 ---
 
 ## Phase 8: Cleanup + Backfill
+
+> **Redesigned:** The backfill pipeline has been completely redesigned as an episode-based retain pipeline. See `MEMORY_V2_RETAIN_PIPELINE.md` for the full architecture including: episode grouping from historical events, pre-episode filtering via `memory_filters` table, parallel retain with configurable concurrency, crash-recovery via `backfill_runs`/`backfill_episodes` tables, and cost estimation.
 
 **What:** Remove dead code from the old system. Set up backfill pipeline.
 

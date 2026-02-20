@@ -1,0 +1,29 @@
+{
+  "name": "@nexus-project/nexus-frontdoor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hosted frontdoor scaffold for per-tenant Nexus runtimes",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "password:hash": "tsx src/password-hash.ts"
+  },
+  "dependencies": {
+    "http-proxy": "^1.18.1",
+    "openid-client": "^6.8.1"
+  },
+  "devDependencies": {
+    "@types/http-proxy": "^1.17.16",
+    "@types/node": "^24.3.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.18",
+    "ws": "^8.18.3"
+  }
+}

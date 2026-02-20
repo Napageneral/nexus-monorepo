@@ -61,6 +61,8 @@ All high-priority specs are complete and aligned. Ready for implementation.
 |------|----------|-------|
 | **Eve Adapter** | `channels/imessage/EVE_ADAPTER_PLAN.md` | First adapter — implementing now |
 | **Channel Adapter Cutover** | `runtime/adapters/CHANNEL_MIGRATION_TRACKER.md` | Priority order: eve -> gog -> discord/telegram/whatsapp -> ingress + clock |
+| **Hosted Frontdoor + Per-Tenant Runtime** | `runtime/nex/HOSTED_FRONTDOOR_PER_TENANT_RUNTIME.md`, `runtime/nex/HOSTED_RUNTIME_PROFILE.md` | Runtime-side hosted profile shipped. Frontdoor scaffold shipped at `home/projects/nexus/nexus-frontdoor` (password auth + OIDC JWK verification + tenant proxy + token mint/refresh/revoke + live-stack + browser smoke e2e). Remaining: key rotation strategy + full hosted Control UI integration. |
+| **Hosted Frontdoor Confidence Workplan** | `runtime/nex/HOSTED_FRONTDOOR_CONFIDENCE_WORKPLAN.md` | Execute phased validation: live-stack e2e (real runtime + real frontdoor), cross-tenant isolation, anti-spoof proxy tests, then OIDC verification + browser smoke. |
 
 ### Next Steps
 

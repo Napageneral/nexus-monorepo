@@ -20,12 +20,29 @@ const (
 	adapterName    = "gog-adapter"
 	adapterVersion = "0.1.0"
 
-	defaultSubject      = "Message from Nexus"
-	defaultPollInterval = 20 * time.Second
+	defaultSubject          = "Message from Nexus"
+	defaultPollInterval     = 20 * time.Second
+	defaultPollQuery        = "in:inbox newer_than:7d"
+	defaultBackfillQuery    = "in:inbox -in:spam -category:promotions -category:social"
+	defaultSearchMax        = 100
+	maxSeenMessageIDs       = 500
+	defaultRateLimitRetries = 6
+	defaultRetryBaseDelay   = 2 * time.Second
+	maxRetryDelay           = 45 * time.Second
 )
 
 type monitorState struct {
 	HistoryID string `json:"history_id"`
+}
+
+type pollState struct {
+	SeenMessageIDs []string `json:"seen_message_ids"`
+}
+
+type backfillState struct {
+	LastSinceRFC3339 string `json:"last_since_rfc3339"`
+	LastCompletedAt  int64  `json:"last_completed_at"`
+	LastMessageID    string `json:"last_message_id,omitempty"`
 }
 
 func main() {
@@ -33,6 +50,7 @@ func main() {
 		Info:     info,
 		Monitor:  monitor,
 		Send:     send,
+		Backfill: backfill,
 		Health:   health,
 		Accounts: accounts,
 	})
@@ -46,6 +64,7 @@ func info() *nexadapter.AdapterInfo {
 		Supports: []nexadapter.Capability{
 			nexadapter.CapMonitor,
 			nexadapter.CapSend,
+			nexadapter.CapBackfill,
 			nexadapter.CapHealth,
 		},
 		CredentialService: "google",
@@ -249,7 +268,11 @@ func buildGmailSendArgs(
 		"--body", body,
 	}
 	if threadID != "" {
-		args = append(args, "--thread-id", threadID)
+		// gogcli only allows one of --thread-id or --reply-to-message-id.
+		// Prefer explicit reply target when both are provided.
+		if replyToMessageID == "" {
+			args = append(args, "--thread-id", threadID)
+		}
 	}
 	if replyToMessageID != "" {
 		args = append(args, "--reply-to-message-id", replyToMessageID)
@@ -292,6 +315,13 @@ type gogHistoryResponse struct {
 	NextPageToken string   `json:"nextPageToken"`
 }
 
+type gogMessageSearchResponse struct {
+	Messages []struct {
+		ID string `json:"id"`
+	} `json:"messages"`
+	NextPageToken string `json:"nextPageToken"`
+}
+
 type gogGmailGetResponse struct {
 	Message struct {
 		ID           string   `json:"id"`
@@ -310,44 +340,101 @@ func monitor(ctx context.Context, account string, emit nexadapter.EmitFunc) erro
 		return err
 	}
 
-	// Require a configured watch state so we can seed a valid history cursor.
-	watchOut, err := runGogJSON(ctx, resolved, "gmail", "watch", "status")
-	if err != nil {
-		return fmt.Errorf("missing gmail watch state for %s: %w (run `gog --account %s gmail watch start ...` first)", resolved, err, resolved)
-	}
-
-	var watch gogWatchStatusResponse
-	if err := json.Unmarshal(watchOut, &watch); err != nil {
-		return fmt.Errorf("parse gmail watch status: %w", err)
-	}
-
-	cursor := strings.TrimSpace(watch.Watch.HistoryID)
-	if cursor == "" {
-		return errors.New("gmail watch status missing historyId")
-	}
 	statePath, stateErr := resolveMonitorStatePath(resolved)
 	if stateErr != nil {
 		nexadapter.LogError("monitor state path unavailable for %s: %v", resolved, stateErr)
 	}
-	if statePath != "" {
-		if persisted, err := readMonitorCursor(statePath); err == nil && persisted != "" {
-			cursor = persisted
-		} else if err != nil {
-			nexadapter.LogError("failed reading monitor state for %s: %v", resolved, err)
+
+	cursor, err := resolveHistoryCursor(ctx, resolved, statePath)
+	if err == nil && strings.TrimSpace(cursor) != "" {
+		return monitorWithHistoryCursor(ctx, resolved, cursor, statePath, emit)
+	}
+
+	nexadapter.LogInfo(
+		"monitor starting for account %q in polling mode (no Gmail watch state): %v",
+		resolved,
+		err,
+	)
+	pollStatePath, pollStateErr := resolvePollStatePath(resolved)
+	if pollStateErr != nil {
+		nexadapter.LogError("poll state path unavailable for %s: %v", resolved, pollStateErr)
+	}
+	return monitorWithPollingQuery(ctx, resolved, pollStatePath, emit)
+}
+
+func backfill(ctx context.Context, account string, since time.Time, emit nexadapter.EmitFunc) error {
+	resolved, err := resolveAccount(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	query := buildBackfillQuery(since)
+	page := ""
+	lastMessageID := ""
+	seen := make(map[string]struct{})
+	total := 0
+
+	nexadapter.LogInfo(
+		"backfill starting for account %q (since=%s query=%q)",
+		resolved,
+		since.UTC().Format(time.RFC3339),
+		query,
+	)
+
+	for {
+		nextPage, messageIDs, err := searchMessageIDsPage(ctx, resolved, query, page, defaultSearchMax)
+		if err != nil {
+			return err
+		}
+
+		for i := len(messageIDs) - 1; i >= 0; i-- {
+			messageID := strings.TrimSpace(messageIDs[i])
+			if messageID == "" {
+				continue
+			}
+			if _, exists := seen[messageID]; exists {
+				continue
+			}
+			seen[messageID] = struct{}{}
+			event, err := buildEventFromMessage(ctx, resolved, messageID)
+			if err != nil {
+				nexadapter.LogError("gmail get failed for %s/%s: %v", resolved, messageID, err)
+				continue
+			}
+			emit(event)
+			lastMessageID = messageID
+			total++
+		}
+
+		if strings.TrimSpace(nextPage) == "" {
+			break
+		}
+		page = nextPage
+	}
+
+	backfillStatePath, pathErr := resolveBackfillStatePath(resolved)
+	if pathErr != nil {
+		nexadapter.LogError("backfill state path unavailable for %s: %v", resolved, pathErr)
+	} else if backfillStatePath != "" {
+		if err := writeBackfillState(backfillStatePath, since, lastMessageID); err != nil {
+			nexadapter.LogError("failed writing backfill state for %s: %v", resolved, err)
 		}
 	}
-	if statePath == "" || cursor == strings.TrimSpace(watch.Watch.HistoryID) {
-		// First run (or missing state): fast-forward once so we don't replay backlog at startup.
-		cursor = fastForwardHistoryCursor(ctx, resolved, cursor)
-	}
-	if statePath != "" {
-		if err := writeMonitorCursor(statePath, cursor); err != nil {
-			nexadapter.LogError("failed writing monitor state for %s: %v", resolved, err)
-		}
-	}
+
+	nexadapter.LogInfo("backfill complete for account %q: %d messages", resolved, total)
+	return nil
+}
+
+func monitorWithHistoryCursor(
+	ctx context.Context,
+	account string,
+	cursor string,
+	statePath string,
+	emit nexadapter.EmitFunc,
+) error {
 	nexadapter.LogInfo(
 		"monitor starting for account %q (historyId=%s state=%s)",
-		resolved,
+		account,
 		cursor,
 		statePath,
 	)
@@ -363,16 +450,16 @@ func monitor(ctx context.Context, account string, emit nexadapter.EmitFunc) erro
 		case <-ticker.C:
 		}
 
-		nextCursor, messageIDs, err := fetchHistoryMessageIDs(ctx, resolved, cursor)
+		nextCursor, messageIDs, err := fetchHistoryMessageIDs(ctx, account, cursor)
 		if err != nil {
-			nexadapter.LogError("gmail history failed for %s: %v", resolved, err)
+			nexadapter.LogError("gmail history failed for %s: %v", account, err)
 			continue
 		}
 
 		for _, messageID := range messageIDs {
-			event, err := buildEventFromMessage(ctx, resolved, messageID)
+			event, err := buildEventFromMessage(ctx, account, messageID)
 			if err != nil {
-				nexadapter.LogError("gmail get failed for %s/%s: %v", resolved, messageID, err)
+				nexadapter.LogError("gmail get failed for %s/%s: %v", account, messageID, err)
 				continue
 			}
 			emit(event)
@@ -382,8 +469,103 @@ func monitor(ctx context.Context, account string, emit nexadapter.EmitFunc) erro
 			cursor = nextCursor
 			if statePath != "" {
 				if err := writeMonitorCursor(statePath, cursor); err != nil {
-					nexadapter.LogError("failed writing monitor state for %s: %v", resolved, err)
+					nexadapter.LogError("failed writing monitor state for %s: %v", account, err)
 				}
+			}
+		}
+	}
+}
+
+func monitorWithPollingQuery(
+	ctx context.Context,
+	account string,
+	pollStatePath string,
+	emit nexadapter.EmitFunc,
+) error {
+	seenSet := newSeenMessageSet(nil)
+	hasPersistedState := false
+	if pollStatePath != "" {
+		if seen, err := readPollState(pollStatePath); err == nil {
+			seenSet = newSeenMessageSet(seen.SeenMessageIDs)
+			hasPersistedState = len(seen.SeenMessageIDs) > 0
+		} else {
+			nexadapter.LogError("failed reading poll state for %s: %v", account, err)
+		}
+	}
+
+	query := resolvePollQuery()
+	nexadapter.LogInfo(
+		"polling query monitor active for account %q (query=%q state=%s)",
+		account,
+		query,
+		pollStatePath,
+	)
+
+	// First run without persisted state: fast-forward so monitor starts from "now"
+	// instead of replaying recent mailbox history.
+	if !hasPersistedState {
+		messageIDs, err := fetchRecentMessageIDs(ctx, account, query, defaultSearchMax)
+		if err != nil {
+			nexadapter.LogError("initial gmail message search failed for %s: %v", account, err)
+		} else {
+			for _, messageID := range messageIDs {
+				seenSet.Add(messageID)
+			}
+			if pollStatePath != "" {
+				if err := writePollState(
+					pollStatePath,
+					pollState{SeenMessageIDs: seenSet.Snapshot()},
+				); err != nil {
+					nexadapter.LogError("failed writing initial poll state for %s: %v", account, err)
+				}
+			}
+			nexadapter.LogInfo(
+				"polling query monitor fast-forwarded for account %q (%d known IDs)",
+				account,
+				len(messageIDs),
+			)
+		}
+	}
+
+	ticker := time.NewTicker(resolvePollInterval())
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			nexadapter.LogInfo("monitor shutting down")
+			return nil
+		case <-ticker.C:
+		}
+
+		messageIDs, err := fetchRecentMessageIDs(ctx, account, query, defaultSearchMax)
+		if err != nil {
+			nexadapter.LogError("gmail message search failed for %s: %v", account, err)
+			continue
+		}
+
+		updated := false
+		for i := len(messageIDs) - 1; i >= 0; i-- {
+			messageID := strings.TrimSpace(messageIDs[i])
+			if messageID == "" || seenSet.Contains(messageID) {
+				continue
+			}
+			event, err := buildEventFromMessage(ctx, account, messageID)
+			if err != nil {
+				nexadapter.LogError("gmail get failed for %s/%s: %v", account, messageID, err)
+				continue
+			}
+			emit(event)
+			seenSet.Add(messageID)
+			updated = true
+		}
+
+		if updated && pollStatePath != "" {
+			if err := writePollState(
+				pollStatePath,
+				pollState{SeenMessageIDs: seenSet.Snapshot()},
+			); err != nil {
+				nexadapter.LogError("failed writing poll state for %s: %v", account, err)
 			}
 		}
 	}
@@ -396,6 +578,112 @@ func resolvePollInterval() time.Duration {
 		}
 	}
 	return defaultPollInterval
+}
+
+func resolveRateLimitRetries() int {
+	if raw := strings.TrimSpace(os.Getenv("NEXUS_GOG_RATE_LIMIT_RETRIES")); raw != "" { //nolint:gosec // config
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed >= 0 {
+			return parsed
+		}
+	}
+	return defaultRateLimitRetries
+}
+
+func resolveRateLimitBackoff() time.Duration {
+	if raw := strings.TrimSpace(os.Getenv("NEXUS_GOG_RATE_LIMIT_BACKOFF")); raw != "" { //nolint:gosec // config
+		if d, err := time.ParseDuration(raw); err == nil && d > 0 {
+			return d
+		}
+	}
+	return defaultRetryBaseDelay
+}
+
+func isRateLimitError(stderr string) bool {
+	lower := strings.ToLower(strings.TrimSpace(stderr))
+	if lower == "" {
+		return false
+	}
+	return strings.Contains(lower, "ratelimitexceeded") ||
+		strings.Contains(lower, "quota exceeded") ||
+		strings.Contains(lower, "too many requests")
+}
+
+func backoffDelay(attempt int, base time.Duration) time.Duration {
+	if base <= 0 {
+		base = defaultRetryBaseDelay
+	}
+	multiplier := 1 << attempt
+	delay := time.Duration(multiplier) * base
+	if delay > maxRetryDelay {
+		return maxRetryDelay
+	}
+	return delay
+}
+
+func sleepWithContext(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func resolvePollQuery() string {
+	if raw := strings.TrimSpace(os.Getenv("NEXUS_GOG_POLL_QUERY")); raw != "" { //nolint:gosec // config
+		return raw
+	}
+	return defaultPollQuery
+}
+
+func resolveBackfillQueryBase() string {
+	if raw := strings.TrimSpace(os.Getenv("NEXUS_GOG_BACKFILL_QUERY_BASE")); raw != "" { //nolint:gosec // config
+		return raw
+	}
+	return defaultBackfillQuery
+}
+
+func resolveHistoryCursor(ctx context.Context, account string, statePath string) (string, error) {
+	if statePath != "" {
+		persisted, err := readMonitorCursor(statePath)
+		if err != nil {
+			nexadapter.LogError("failed reading monitor state for %s: %v", account, err)
+		}
+		if strings.TrimSpace(persisted) != "" {
+			return persisted, nil
+		}
+	}
+
+	watchCursor, err := readWatchCursor(ctx, account)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(watchCursor) == "" {
+		return "", errors.New("gmail watch status missing historyId")
+	}
+
+	cursor := fastForwardHistoryCursor(ctx, account, watchCursor)
+	if statePath != "" {
+		if err := writeMonitorCursor(statePath, cursor); err != nil {
+			nexadapter.LogError("failed writing monitor state for %s: %v", account, err)
+		}
+	}
+	return cursor, nil
+}
+
+func readWatchCursor(ctx context.Context, account string) (string, error) {
+	watchOut, err := runGogJSON(ctx, account, "gmail", "watch", "status")
+	if err != nil {
+		return "", err
+	}
+
+	var watch gogWatchStatusResponse
+	if err := json.Unmarshal(watchOut, &watch); err != nil {
+		return "", fmt.Errorf("parse gmail watch status: %w", err)
+	}
+	return strings.TrimSpace(watch.Watch.HistoryID), nil
 }
 
 func fastForwardHistoryCursor(ctx context.Context, account string, cursor string) string {
@@ -458,6 +746,75 @@ func fetchHistoryMessageIDs(ctx context.Context, account string, cursor string) 
 	}
 
 	return nextCursor, messageIDs, nil
+}
+
+func fetchRecentMessageIDs(ctx context.Context, account string, query string, max int) ([]string, error) {
+	_, messageIDs, err := searchMessageIDsPage(ctx, account, query, "", max)
+	if err != nil {
+		return nil, err
+	}
+	return messageIDs, nil
+}
+
+func searchMessageIDsPage(
+	ctx context.Context,
+	account string,
+	query string,
+	pageToken string,
+	max int,
+) (nextPageToken string, messageIDs []string, err error) {
+	trimmedQuery := strings.TrimSpace(query)
+	if trimmedQuery == "" {
+		return "", nil, errors.New("missing Gmail search query")
+	}
+	if max <= 0 {
+		max = defaultSearchMax
+	}
+
+	args := []string{
+		"gmail",
+		"messages",
+		"search",
+		trimmedQuery,
+		"--max",
+		strconv.Itoa(max),
+	}
+	if strings.TrimSpace(pageToken) != "" {
+		args = append(args, "--page", strings.TrimSpace(pageToken))
+	}
+
+	out, err := runGogJSON(ctx, account, args...)
+	if err != nil {
+		return "", nil, err
+	}
+
+	var resp gogMessageSearchResponse
+	if err := json.Unmarshal(out, &resp); err != nil {
+		return "", nil, fmt.Errorf("parse gmail message search: %w", err)
+	}
+
+	messageIDs = make([]string, 0, len(resp.Messages))
+	for _, msg := range resp.Messages {
+		id := strings.TrimSpace(msg.ID)
+		if id == "" {
+			continue
+		}
+		messageIDs = append(messageIDs, id)
+	}
+
+	return strings.TrimSpace(resp.NextPageToken), messageIDs, nil
+}
+
+func buildBackfillQuery(since time.Time) string {
+	dateFilter := fmt.Sprintf("after:%s", since.UTC().Format("2006/01/02"))
+	if raw := strings.TrimSpace(os.Getenv("NEXUS_GOG_BACKFILL_QUERY")); raw != "" { //nolint:gosec // config
+		lower := strings.ToLower(raw)
+		if strings.Contains(lower, "after:") {
+			return raw
+		}
+		return fmt.Sprintf("%s %s", raw, dateFilter)
+	}
+	return fmt.Sprintf("%s %s", resolveBackfillQueryBase(), dateFilter)
 }
 
 func buildEventFromMessage(ctx context.Context, account string, messageID string) (nexadapter.NexusEvent, error) {
@@ -584,30 +941,61 @@ func runGogJSON(ctx context.Context, account string, args ...string) ([]byte, er
 	}
 	full := append(base, args...)
 
-	cmd := exec.CommandContext(ctx, gogCommand(), full...) //nolint:gosec // command is configurable by user
-	cmd.Env = os.Environ()
+	maxRetries := resolveRateLimitRetries()
+	baseDelay := resolveRateLimitBackoff()
 
-	out, err := cmd.Output()
-	if err == nil {
-		return out, nil
-	}
+	for attempt := 0; ; attempt++ {
+		cmd := exec.CommandContext(ctx, gogCommand(), full...) //nolint:gosec // command is configurable by user
+		cmd.Env = os.Environ()
 
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		stderr := strings.TrimSpace(string(exitErr.Stderr))
-		if stderr == "" {
-			stderr = "no stderr"
+		out, err := cmd.Output()
+		if err == nil {
+			return out, nil
 		}
-		return nil, fmt.Errorf("gog %s failed: %s", strings.Join(args, " "), stderr)
-	}
 
-	return nil, err
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			stderr := strings.TrimSpace(string(exitErr.Stderr))
+			if stderr == "" {
+				stderr = "no stderr"
+			}
+			if attempt < maxRetries && isRateLimitError(stderr) {
+				delay := backoffDelay(attempt, baseDelay)
+				nexadapter.LogError(
+					"gog rate limited (%s); retrying in %s (%d/%d)",
+					strings.Join(args, " "),
+					delay,
+					attempt+1,
+					maxRetries,
+				)
+				if err := sleepWithContext(ctx, delay); err != nil {
+					return nil, err
+				}
+				continue
+			}
+			return nil, fmt.Errorf("gog %s failed: %s", strings.Join(args, " "), stderr)
+		}
+
+		return nil, err
+	}
 }
 
 func resolveMonitorStatePath(account string) (string, error) {
 	if raw := strings.TrimSpace(os.Getenv("NEXUS_GOG_STATE_PATH")); raw != "" { //nolint:gosec // config
 		return raw, nil
 	}
+	return resolveStatePath(account, ".monitor.json")
+}
+
+func resolvePollStatePath(account string) (string, error) {
+	return resolveStatePath(account, ".poll.json")
+}
+
+func resolveBackfillStatePath(account string) (string, error) {
+	return resolveStatePath(account, ".backfill.json")
+}
+
+func resolveStatePath(account string, suffix string) (string, error) {
 	baseDir := strings.TrimSpace(os.Getenv("NEXUS_GOG_STATE_DIR")) //nolint:gosec // config
 	if baseDir == "" {
 		home, err := os.UserHomeDir()
@@ -620,7 +1008,7 @@ func resolveMonitorStatePath(account string) (string, error) {
 	if token == "" {
 		token = "default"
 	}
-	return filepath.Join(baseDir, token+".monitor.json"), nil
+	return filepath.Join(baseDir, token+suffix), nil
 }
 
 func sanitizeFileToken(raw string) string {
@@ -663,10 +1051,45 @@ func writeMonitorCursor(statePath string, cursor string) error {
 	if strings.TrimSpace(cursor) == "" {
 		return nil
 	}
+	state := monitorState{HistoryID: strings.TrimSpace(cursor)}
+	return writeJSONStateFile(statePath, state)
+}
+
+func readPollState(statePath string) (pollState, error) {
+	raw, err := os.ReadFile(statePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return pollState{}, nil
+		}
+		return pollState{}, err
+	}
+	var state pollState
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return pollState{}, fmt.Errorf("parse poll state: %w", err)
+	}
+	state.SeenMessageIDs = trimSeenMessageIDs(state.SeenMessageIDs)
+	return state, nil
+}
+
+func writePollState(statePath string, state pollState) error {
+	state.SeenMessageIDs = trimSeenMessageIDs(state.SeenMessageIDs)
+	return writeJSONStateFile(statePath, state)
+}
+
+func writeBackfillState(statePath string, since time.Time, lastMessageID string) error {
+	state := backfillState{
+		LastSinceRFC3339: since.UTC().Format(time.RFC3339),
+		LastCompletedAt:  time.Now().UnixMilli(),
+		LastMessageID:    strings.TrimSpace(lastMessageID),
+	}
+	return writeJSONStateFile(statePath, state)
+}
+
+func writeJSONStateFile(statePath string, state any) error {
 	if err := os.MkdirAll(filepath.Dir(statePath), 0o700); err != nil {
 		return err
 	}
-	payload, err := json.MarshalIndent(monitorState{HistoryID: cursor}, "", "  ")
+	payload, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -679,4 +1102,68 @@ func writeMonitorCursor(statePath string, cursor string) error {
 		return err
 	}
 	return nil
+}
+
+type seenMessageSet struct {
+	order []string
+	seen  map[string]struct{}
+}
+
+func newSeenMessageSet(seed []string) *seenMessageSet {
+	set := &seenMessageSet{
+		order: make([]string, 0, len(seed)),
+		seen:  make(map[string]struct{}, len(seed)),
+	}
+	for _, id := range trimSeenMessageIDs(seed) {
+		set.Add(id)
+	}
+	return set
+}
+
+func (s *seenMessageSet) Contains(id string) bool {
+	_, ok := s.seen[strings.TrimSpace(id)]
+	return ok
+}
+
+func (s *seenMessageSet) Add(id string) {
+	normalized := strings.TrimSpace(id)
+	if normalized == "" {
+		return
+	}
+	if _, exists := s.seen[normalized]; exists {
+		return
+	}
+	s.order = append(s.order, normalized)
+	s.seen[normalized] = struct{}{}
+	for len(s.order) > maxSeenMessageIDs {
+		oldest := s.order[0]
+		s.order = s.order[1:]
+		delete(s.seen, oldest)
+	}
+}
+
+func (s *seenMessageSet) Snapshot() []string {
+	out := make([]string, len(s.order))
+	copy(out, s.order)
+	return out
+}
+
+func trimSeenMessageIDs(ids []string) []string {
+	result := make([]string, 0, len(ids))
+	seen := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		normalized := strings.TrimSpace(id)
+		if normalized == "" {
+			continue
+		}
+		if _, exists := seen[normalized]; exists {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		result = append(result, normalized)
+	}
+	if len(result) <= maxSeenMessageIDs {
+		return result
+	}
+	return result[len(result)-maxSeenMessageIDs:]
 }

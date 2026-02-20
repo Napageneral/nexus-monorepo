@@ -1,7 +1,7 @@
 # Memory Injection (Memory Reader V2)
 
 **Status:** DESIGN SPEC
-**Last Updated:** 2026-02-17
+**Last Updated:** 2026-02-20
 **Supersedes:** ../roles/MEMORY_READER.md
 **Related:** MEMORY_SYSTEM_V2.md, MEMORY_SEARCH_SKILL.md, MEMORY_WRITER_V2.md
 
@@ -48,7 +48,7 @@ worker:pre_execution hook
     |     Fast model receives: latest message + task description
     |       |
     |       v
-    |     recall(task_description, budget='low')
+    |     recall() calls as needed (budget='low')
     |       |
     |       v
     |     Model triages results: relevant? worth injecting?
@@ -82,7 +82,7 @@ Target: gpt-5.3-codex-spark or equivalent fast-inference model.
 
 One tool: `recall(query, params)`
 
-The meeseeks calls recall() 1-3 times based on the task, then decides what to inject.
+The meeseeks uses its judgment on how many recall() calls to make — zero for purely computational tasks, multiple for entity-rich inputs.
 
 ### Role Prompt (Minimal)
 
@@ -90,7 +90,7 @@ The meeseeks calls recall() 1-3 times based on the task, then decides what to in
 You are the Memory Injection agent. Your job:
 
 1. Read the worker's task description
-2. Search memory with recall() for relevant context
+2. Search memory with recall() for relevant context — use as many searches as needed
 3. Decide which results are worth injecting
 4. Return ONLY facts that are directly relevant to the task
 
@@ -99,19 +99,21 @@ Rules:
 - Be selective. 3-5 highly relevant facts beat 15 tangential ones.
 - Include entity identifiers (emails, names) when they help the task.
 - Include temporal context (dates) when recent information matters.
+- recall() may return short-term event results (type: 'event') for very recent context — include these when relevant.
 - Do NOT synthesize or summarize. Just select and return the relevant items.
 ```
 
 ### Max Turns
 
-2-3 turns max. Typically:
+Unconstrained — the meeseeks uses its judgment. Typically 2-5 turns:
 1. Initial recall on task description
-2. Optional targeted recall on a specific entity or topic
-3. Triage and return
+2. Optional targeted recall on specific entities or topics
+3. Additional searches if the input is rich with context
+4. Triage and return
 
 ### Timeout
 
-3 seconds. If exceeded, worker proceeds without memory. The fast model should complete in < 1 second.
+60 seconds. If exceeded, worker proceeds without memory. Typical latency is under 10 seconds. The fast model handles most cases in a few turns; the generous timeout ensures complex entity-rich inputs aren't cut off.
 
 ---
 
@@ -141,12 +143,12 @@ Injected as a prefix to `currentMessage`, same as V1.
 |--------|-----------------|---------------------|
 | **Architecture** | Full meeseeks, heavy model | Lightweight meeseeks, fast model |
 | **Model** | Same as main session | Fast cheap model (gpt-5.3-codex-spark) |
-| **Latency** | 3-10 seconds | < 1 second target |
-| **Search strategy** | Agentic: SQL, cortex-search, multiple iterations | Simple: 1-3 recall() calls + triage |
+| **Latency** | 3-10 seconds | Under 10 seconds typical |
+| **Search strategy** | Agentic: SQL, cortex-search, multiple iterations | Unconstrained recall() calls + triage |
 | **Output** | Synthesized narrative with headers and sections | Flat list of selected facts with timestamps |
-| **Iteration** | Up to 3 turns of complex search | 2-3 turns of recall + triage |
+| **Iteration** | Up to 3 turns of complex search | Typically 2-5 turns of recall + triage |
 | **Self-improvement** | SKILLS.md, PATTERNS.md, ERRORS.md | Minimal — fast model, simple task |
-| **Timeout** | 10 seconds | 3 seconds |
+| **Timeout** | 10 seconds | 60 seconds |
 | **Junk filtering** | N/A (always injects something) | Core feature — returns nothing if irrelevant |
 
 ---
@@ -204,7 +206,7 @@ INSERT INTO automations (
   1,                                                     -- blocking
   '~/.nexus/state/hooks/scripts/memory-injection.ts',
   '~/.nexus/state/meeseeks/memory-injection/',
-  3000                                                   -- 3s timeout
+  60000                                                  -- 60s timeout
 );
 ```
 

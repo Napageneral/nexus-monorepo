@@ -1,7 +1,7 @@
 # Memory Reflect Skill
 
 **Status:** DESIGN SPEC
-**Last Updated:** 2026-02-16
+**Last Updated:** 2026-02-20
 **Related:** MEMORY_SEARCH_SKILL.md, MEMORY_SYSTEM_V2.md
 
 ---
@@ -20,10 +20,11 @@ Agents that need to do more than simple search:
 
 - **Any agent** that wants to deeply research a topic and produce a synthesized report
 - **Any agent** that wants to persist research results for future use
-- **Memory-Writer** -- can create its own mental models for self-improvement (entity disambiguation rules, extraction patterns)
 - **User-triggered reflection** -- when the user asks "What do you know about X?" and wants a thorough answer
 
 This skill **requires** the Memory Search skill. It uses `recall()` extensively.
+
+> **Note:** The Memory-Writer does NOT import this skill. The writer focuses on fact extraction, entity identification, and deduplication. Mental model CRUD belongs exclusively to agents using the reflect skill. See `MEMORY_WRITER_V2.md`.
 
 ---
 
@@ -257,9 +258,9 @@ The reflection depth should match the budget:
 
 Agents can use the reflect skill to create mental models that improve their own future performance.
 
-### Memory-Writer Self-Improvement
+### Agent Self-Improvement Examples
 
-The Memory-Writer meeseeks can create mental models like:
+Agents that import this skill can create mental models for their own domains:
 
 ```
 "Entity Disambiguation Rules"
@@ -267,18 +268,15 @@ The Memory-Writer meeseeks can create mental models like:
   - Tyler Shaver (is_user=TRUE) vs Tyler Johnson (friend)
   - Discord handle coolgamer42 -> resolved to John Smith on Day 5
 
-"Common False Positive Patterns"
+"Common Extraction Patterns"
   - Greetings ("hey how are you") rarely contain extractable facts
-  - Automated messages (bot notifications) should be skipped
+  - Automated messages (bot notifications) can be skipped
   - "I'll do X" is a plan, not a fact -- extract cautiously
-
-"Channel-Specific Extraction Rules"
-  - Discord: messages are short, context from thread is essential
-  - Email: subject line often contains the key topic
-  - iMessage: sender_id is a phone number, resolve via entity store
 ```
 
-These mental models persist across invocations, making the writer more effective over time. The writer can search its own mental models at the start of each invocation to load its learned patterns.
+These mental models persist across invocations, making agents more effective over time. Any agent can search mental models at the start of each invocation to load learned patterns.
+
+> **Note:** The Memory-Writer does NOT create mental models. It uses ROLE.md updates and workspace scripts for self-improvement instead. See `MEMORY_WRITER_V2.md`.
 
 ### Any Agent Self-Improvement
 
