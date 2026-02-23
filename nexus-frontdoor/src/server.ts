@@ -11,7 +11,14 @@ import { SlidingWindowRateLimiter } from "./rate-limit.js";
 import { mintRuntimeAccessToken } from "./runtime-token.js";
 import { SessionStore } from "./session-store.js";
 import { resolveTenant } from "./tenant-resolver.js";
-import type { FrontdoorConfig, RuntimeTokenResponse, SessionRecord } from "./types.js";
+import { TenantAutoProvisioner } from "./tenant-autoprovision.js";
+import type {
+  FrontdoorConfig,
+  RuntimeDescriptor,
+  RuntimeTokenResponse,
+  SessionRecord,
+  TenantConfig,
+} from "./types.js";
 
 type CreateServerOptions = {
   config?: FrontdoorConfig;
@@ -114,15 +121,71 @@ function readSession(params: {
   return params.sessions.getSession(sessionId);
 }
 
+function resolveRuntimeDescriptor(tenant: TenantConfig): RuntimeDescriptor {
+  const baseRaw = tenant.runtimePublicBaseUrl?.trim() || tenant.runtimeUrl.trim();
+  let base = baseRaw;
+  let wsUrl = tenant.runtimeWsUrl?.trim();
+  let sseUrl = tenant.runtimeSseUrl?.trim();
+  try {
+    const parsedBase = new URL(baseRaw);
+    const baseNoHash = new URL(parsedBase.toString());
+    baseNoHash.hash = "";
+    baseNoHash.search = "";
+    base = baseNoHash.toString().replace(/\/$/, "");
+
+    if (!wsUrl) {
+      const wsParsed = new URL(baseNoHash.toString());
+      wsParsed.protocol = wsParsed.protocol === "https:" ? "wss:" : "ws:";
+      wsParsed.pathname = "/";
+      wsParsed.search = "";
+      wsParsed.hash = "";
+      wsUrl = wsParsed.toString();
+    }
+    if (!sseUrl) {
+      const sseParsed = new URL("/api/events/stream", baseNoHash);
+      sseParsed.search = "";
+      sseParsed.hash = "";
+      sseUrl = sseParsed.toString();
+    }
+  } catch {
+    const normalized = baseRaw.replace(/\/+$/, "");
+    base = normalized;
+    if (!wsUrl) {
+      wsUrl = normalized.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:") + "/";
+    }
+    if (!sseUrl) {
+      sseUrl = `${normalized}/api/events/stream`;
+    }
+  }
+  return {
+    tenant_id: tenant.id,
+    base_url: base,
+    http_base_url: base,
+    ws_url: wsUrl!,
+    sse_url: sseUrl!,
+  };
+}
+
+function resolveTargetOrigin(rawUrl: string): string | null {
+  try {
+    return new URL(rawUrl).origin.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 function buildRuntimeTokenResponse(params: {
   config: FrontdoorConfig;
   session: SessionRecord;
   refreshToken: string;
+  tenant: TenantConfig;
+  clientId?: string;
 }): RuntimeTokenResponse {
   const access = mintRuntimeAccessToken({
     config: params.config,
     principal: params.session.principal,
     sessionId: params.session.id,
+    clientId: params.clientId,
   });
   return {
     access_token: access.token,
@@ -135,6 +198,8 @@ function buildRuntimeTokenResponse(params: {
     entity_id: params.session.principal.entityId,
     scopes: [...params.session.principal.scopes],
     roles: [...params.session.principal.roles],
+    runtime: resolveRuntimeDescriptor(params.tenant),
+    connection_mode: "direct",
   };
 }
 
@@ -215,6 +280,12 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     rateLimits.proxyRequests.blockSeconds * 1000,
   );
   const oidc = new OidcFlowManager();
+  const autoProvisioner = config.autoProvision.enabled
+    ? new TenantAutoProvisioner(config)
+    : null;
+  if (autoProvisioner) {
+    autoProvisioner.seedTenantsIntoConfig();
+  }
   const proxy = httpProxy.createProxyServer({
     ws: true,
     changeOrigin: true,
@@ -254,7 +325,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     return false;
   }
 
-  function proxyRuntimeRequest(params: {
+function proxyRuntimeRequest(params: {
     req: IncomingMessage;
     res: ServerResponse;
     url: URL;
@@ -262,6 +333,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     route: "runtime" | "app";
   }): void {
     const tenant = resolveTenant(config, params.session.principal);
+    const targetOrigin = resolveTargetOrigin(tenant.runtimeUrl);
     const access = mintRuntimeAccessToken({
       config,
       principal: params.session.principal,
@@ -271,6 +343,13 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     params.req.headers["x-nexus-frontdoor-tenant"] = tenant.id;
     params.req.headers["x-nexus-frontdoor-session"] = params.session.id;
     params.req.headers["x-request-id"] = params.req.headers["x-request-id"] ?? randomToken(10);
+    if (targetOrigin) {
+      const originHeader = params.req.headers.origin;
+      if (typeof originHeader === "string" && originHeader.trim()) {
+        params.req.headers["x-nexus-frontdoor-origin"] = originHeader.trim();
+      }
+      params.req.headers.origin = targetOrigin;
+    }
     const targetPath =
       params.route === "runtime"
         ? params.url.pathname.slice("/runtime".length) || "/"
@@ -448,6 +527,16 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             provider,
             state,
             code,
+            resolvePrincipal: async ({ provider: oidcProvider, claims, fallbackPrincipal }) => {
+              if (!autoProvisioner) {
+                return fallbackPrincipal;
+              }
+              return await autoProvisioner.resolveOrProvision({
+                provider: oidcProvider,
+                claims,
+                fallbackPrincipal,
+              });
+            },
           });
           const session = sessions.createSession(completed.principal);
           setCookie({
@@ -488,13 +577,18 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         ) {
           return;
         }
+        const body = (await readJsonBody<{ client_id?: string }>(req)) ?? {};
+        const clientId = typeof body.client_id === "string" ? body.client_id.trim() : "";
         const refreshToken = sessions.issueRefreshToken(session.id);
+        const tenant = resolveTenant(config, session.principal);
         sendJson(res, 200, {
           ok: true,
           ...buildRuntimeTokenResponse({
             config,
             session,
             refreshToken,
+            tenant,
+            clientId: clientId || undefined,
           }),
         });
         return;
@@ -512,8 +606,9 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         ) {
           return;
         }
-        const body = (await readJsonBody<{ refresh_token?: string }>(req)) ?? {};
+        const body = (await readJsonBody<{ refresh_token?: string; client_id?: string }>(req)) ?? {};
         const refreshToken = typeof body.refresh_token === "string" ? body.refresh_token.trim() : "";
+        const clientId = typeof body.client_id === "string" ? body.client_id.trim() : "";
         if (!refreshToken) {
           sendJson(res, 400, {
             ok: false,
@@ -529,12 +624,15 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           });
           return;
         }
+        const tenant = resolveTenant(config, rotated.session.principal);
         sendJson(res, 200, {
           ok: true,
           ...buildRuntimeTokenResponse({
             config,
             session: rotated.session,
             refreshToken: rotated.nextRefreshToken,
+            tenant,
+            clientId: clientId || undefined,
           }),
         });
         return;
@@ -649,6 +747,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     }
     try {
       const tenant = resolveTenant(config, session.principal);
+      const targetOrigin = resolveTargetOrigin(tenant.runtimeUrl);
       const access = mintRuntimeAccessToken({
         config,
         principal: session.principal,
@@ -658,6 +757,13 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       req.headers["x-nexus-frontdoor-tenant"] = tenant.id;
       req.headers["x-nexus-frontdoor-session"] = session.id;
       req.headers["x-request-id"] = req.headers["x-request-id"] ?? randomToken(10);
+      if (targetOrigin) {
+        const originHeader = req.headers.origin;
+        if (typeof originHeader === "string" && originHeader.trim()) {
+          req.headers["x-nexus-frontdoor-origin"] = originHeader.trim();
+        }
+        req.headers.origin = targetOrigin;
+      }
       const nextPath = isRuntimePath
         ? `${url.pathname.slice("/runtime".length) || "/"}${url.search || ""}`
         : `${url.pathname || "/"}${url.search || ""}`;
@@ -673,6 +779,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
   server.on("close", () => {
     sessions.close();
+    autoProvisioner?.close();
   });
 
   return { server, config };

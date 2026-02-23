@@ -29,12 +29,12 @@ Legacy (`v1`) field names (example: `channel`, `peer_id`, `peer_kind`) are **not
 ## Transition Behavior (NEX Runtime)
 
 - Inbound adapter parsing:
-  - NEX accepts canonical `v2` payloads.
-  - NEX also accepts legacy `v1` flat payloads during migration and normalizes them to canonical internal `NexusEvent` shape.
+  - NEX accepts only canonical `v2` adapter payloads.
+  - Legacy `v1` adapter payloads are rejected.
 - Outbound adapter invocations:
   - NEX emits canonical `v2` fields for send/stream targeting (`thread_id`, `reply_to_id` included when available).
 
-This preserves backward compatibility while keeping the machine-readable contract authoritative for all new adapters.
+This keeps the machine-readable contract authoritative and enforces strict adapter boundary behavior.
 
 ## Conformance
 

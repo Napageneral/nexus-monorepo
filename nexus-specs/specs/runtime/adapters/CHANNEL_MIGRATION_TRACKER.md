@@ -1,7 +1,7 @@
 # Channel Adapter Migration Tracker
 
 **Status:** ACTIVE IMPLEMENTATION TRACKER  
-**Last Updated:** 2026-02-20  
+**Last Updated:** 2026-02-21  
 **Related:** `ADAPTER_SYSTEM.md`, `ADAPTER_INTERFACES.md`, `../nex/CONTROL_PLANE.md`
 
 ---
@@ -53,13 +53,19 @@ When baseline is bumped:
 
 ## Current Snapshot
 
-As of 2026-02-16:
+As of 2026-02-21:
 
 - `eve` has a real adapter binary in `home/projects/eve/cmd/eve-adapter/main.go`.
 - `gog-adapter` now exists as a **separate wrapper project** at `home/projects/nexus/nexus-adapter-gog/` (shells out to the `gog` binary; does not modify upstream `gogcli`).
-- `nex` adapter protocol parser now accepts both modern nested events and legacy flat SDK payloads (compat bridge during migration).
-- Discord/Telegram/WhatsApp are still in-process plugin channels under `nex/extensions/*`.
-- Clock/timer exists as cron/timer service patterns in runtime code; no adapter process yet.
+- `discord` adapter exists as a standalone project at `home/projects/nexus/nexus-adapter-discord/`.
+- `telegram` adapter now exists as a standalone project at `home/projects/nexus/nexus-adapter-telegram/`.
+- `whatsapp` adapter now exists as a standalone project at `home/projects/nexus/nexus-adapter-whatsapp/`.
+- `nex` adapter protocol parser now enforces strict v2 adapter payloads (canonical flat event + canonical delivery result); legacy adapter output acceptance was removed.
+- Telegram and WhatsApp adapter repos include command-level contract smokes (info/send/event-shape/health behavior).
+- WhatsApp adapter now requires standard `@whiskeysockets/baileys` dependency resolution (fallback loader removed).
+- Telegram/WhatsApp in-process extension monitor startup hooks (`runtime.startAccount`) were removed.
+- `~/.nex.yaml` now includes Telegram and WhatsApp adapter bootstrap entries (monitor disabled by default until credentials are configured).
+- Clock/timer is implemented as an internal runtime adapter/service (periodic `clock.tick` NexusEvents), not an external process.
 
 ---
 
@@ -71,7 +77,7 @@ As of 2026-02-16:
 4. **Telegram adapter extraction**
 5. **WhatsApp adapter extraction**
 6. **HTTP ingress adapters (webhook/OpenAI/OpenResponses)**
-7. **Clock/timer adapter**
+7. **Clock/timer internal adapter hardening**
 
 ---
 
@@ -81,10 +87,10 @@ As of 2026-02-16:
 |--------|----------------|-------------------------------|----------------------------------|------|
 | iMessage (eve) | ✅ (`eve-adapter`) | ⚠️ Partial | ✅ | Adapter exists; runtime fallback/default alignment needed per environment |
 | Gmail (gog) | ✅ (`gog-adapter` wrapper) | ⚠️ Partial | ⚠️ Hook watcher path | Wrapper exists; requires valid gog OAuth client + account watch state; NEX config + cutover pending |
-| Discord | ❌ | ❌ | ✅ (`extensions/discord`) | Monitor/send currently in plugin runtime |
-| Telegram | ❌ | ❌ | ✅ (`extensions/telegram`) | Poll/webhook flows currently plugin runtime |
-| WhatsApp | ❌ | ❌ | ✅ (`extensions/whatsapp`) | Web runtime + login methods currently plugin runtime |
-| Clock/Timer | ❌ | ❌ | ⚠️ Cron/timer service | Needs explicit adapter shape and cutover |
+| Discord | ✅ (`nexus-adapter-discord`) | ⚠️ Partial | ✅ (`extensions/discord`) | Adapter binary exists; cutover parity + config wiring still in progress |
+| Telegram | ✅ (`nexus-adapter-telegram`) | ⚠️ Partial | ⚠️ Extension remains for outbound/status only (monitor startup removed) | Adapter binary + contract smokes landed; runtime bootstrap wired; live credentialed E2E pending |
+| WhatsApp | ✅ (`nexus-adapter-whatsapp`) | ⚠️ Partial | ⚠️ Extension remains for outbound/status only (monitor startup removed) | Adapter binary + contract smokes landed; runtime bootstrap wired; live credentialed E2E pending |
+| Clock/Timer | ✅ (internal `clock` service) | ✅ | ⚠️ Legacy cron concepts remain in docs/tests | Emits periodic `clock.tick` events; scheduler behavior stays in automations |
 | HTTP Webhook bridge | ❌ | ❌ | ⚠️ Control-plane routes | Must become adapter process |
 | OpenAI/OpenResponses bridge | ❌ | ❌ | ⚠️ Control-plane routes | Must become adapter process |
 
@@ -153,6 +159,27 @@ As of 2026-02-16:
 - Current channel implementations are in-process plugins (`nex/extensions/*`).
 - Inbound flows still go through legacy auto-reply dispatch paths.
 
+### Completed (This Pass)
+
+- Added standalone Telegram adapter project:
+  - `home/projects/nexus/nexus-adapter-telegram/`
+  - Implements: `info`, `monitor`, `send`, `health`, `accounts list`
+  - Outbound thread + reply handling wired (`--thread` -> `message_thread_id`, `--reply-to` -> `reply_to_message_id`)
+  - Contract smokes added and passing (`npm test`)
+- Added standalone WhatsApp adapter project:
+  - `home/projects/nexus/nexus-adapter-whatsapp/`
+  - Implements: `info`, `monitor`, `send`, `health`, `accounts list`
+  - Outbound reply handling wired (`--reply-to` best-effort quoted message mapping)
+  - Contract smokes added and passing (`npm test`)
+  - Removed fallback module loading; requires standard `@whiskeysockets/baileys` dependency
+- Tightened NEX adapter boundary parsing to strict v2:
+  - Removed legacy adapter payload acceptance in `nex/src/nex/adapters/protocol.ts`
+  - Updated adapter parser tests and monitor supervision fixtures to canonical v2 output
+- Wired runtime bootstrap entries in `~/.nex.yaml` for Telegram + WhatsApp (`/Users/tyler/nexus/bin/nexus-adapter-telegram`, `/Users/tyler/nexus/bin/nexus-adapter-whatsapp`)
+- Removed in-process Telegram + WhatsApp monitor startup hooks in extension plugins:
+  - `nex/extensions/telegram/src/channel.ts`
+  - `nex/extensions/whatsapp/src/channel.ts`
+
 ### Strategy
 
 - Extract each channel to adapter binaries with same monitor/send semantics.
@@ -171,6 +198,11 @@ As of 2026-02-16:
 
 - Remove corresponding in-process `runtime.startAccount` monitor path after adapter parity.
 
+### Remaining
+
+- Run live credentialed E2E for Telegram + WhatsApp via adapter manager path.
+- Remove residual Telegram/WhatsApp extension monitor-era codepaths once outbound/status parity is fully migrated.
+
 ---
 
 ## Workstream D: Ingress Adapters (P1)
@@ -185,13 +217,14 @@ All inbound payloads normalize to `NexusEvent` and enter pipeline via adapter ma
 
 ---
 
-## Workstream E: Clock/Timer Adapter (P1)
+## Workstream E: Clock/Timer Internal Adapter (P1)
 
 Current state includes cron/timer service behavior in runtime.
 
 Target state:
 
-- Dedicated adapter process emits timer/heartbeat/scheduled `NexusEvent`s.
+- Internal clock service emits periodic `clock.tick` `NexusEvent`s.
+- No external clock process is required.
 - IAM policies for `system`/`timer` principals gate automation execution.
 - Automations/hooks are the behavior layer; scheduler emits events only.
 
@@ -209,6 +242,7 @@ Target state:
 
 ## Immediate Next Execution Targets
 
-1. Add NEX adapter e2e smoke for `eve-adapter` + config wiring.
-2. Add NEX adapter e2e smoke for `gog-adapter` + config wiring.
-3. Start Discord adapter extraction plan (monitor + send first, backfill optional).
+1. Run live credentialed Telegram monitor/send E2E (monitor currently disabled pending token).
+2. Run live credentialed WhatsApp monitor/send E2E (monitor currently disabled pending linked auth dir).
+3. Continue Discord parity hardening (upstream deltas + config cutover).
+4. Remove residual extension monitor-era codepaths after adapter-only runtime parity pass.

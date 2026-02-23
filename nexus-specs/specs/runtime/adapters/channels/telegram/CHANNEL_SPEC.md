@@ -1,6 +1,6 @@
 # Telegram Adapter
 
-**Status:** TODO  
+**Status:** IMPLEMENTED (EXTERNAL ADAPTER V1)  
 **Nexus Tool:** `telegram-cli` (TBD)  
 **Upstream:** `src/telegram/` (full implementation)
 

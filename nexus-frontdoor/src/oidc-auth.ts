@@ -16,7 +16,7 @@ type OidcTokenResponse = {
   expires_in?: number;
 };
 
-type OidcClaims = {
+export type OidcClaims = {
   sub?: string;
   email?: string;
   email_verified?: boolean;
@@ -210,7 +210,7 @@ function mappingMatches(mapping: OidcMapping, claims: OidcClaims): boolean {
   return true;
 }
 
-function resolvePrincipalFromMappings(params: {
+export function resolvePrincipalFromMappings(params: {
   config: FrontdoorConfig;
   provider: string;
   claims: OidcClaims;
@@ -398,6 +398,12 @@ export class OidcFlowManager {
     provider: string;
     state: string;
     code: string;
+    resolvePrincipal?: (input: {
+      config: FrontdoorConfig;
+      provider: string;
+      claims: OidcClaims;
+      fallbackPrincipal: Principal | null;
+    }) => Promise<Principal | null> | Principal | null;
   }): Promise<{ principal: Principal; returnTo?: string }> {
     const provider = params.config.oidcProviders.get(params.provider);
     if (!provider) {
@@ -464,11 +470,19 @@ export class OidcFlowManager {
 
     this.states.delete(params.state);
 
-    const principal = resolvePrincipalFromMappings({
+    const fallbackPrincipal = resolvePrincipalFromMappings({
       config: params.config,
       provider: params.provider,
       claims,
     });
+    const principal = params.resolvePrincipal
+      ? await params.resolvePrincipal({
+          config: params.config,
+          provider: params.provider,
+          claims,
+          fallbackPrincipal,
+        })
+      : fallbackPrincipal;
     if (!principal) {
       throw new Error("oidc_no_mapping");
     }

@@ -83,6 +83,7 @@ function baseConfig(runtimeUrl: string): FrontdoorConfig {
         {
           id: "tenant-dev",
           runtimeUrl,
+          runtimePublicBaseUrl: runtimeUrl,
         },
       ],
     ]),
@@ -91,6 +92,16 @@ function baseConfig(runtimeUrl: string): FrontdoorConfig {
     oidcEnabled: false,
     oidcProviders: new Map(),
     oidcMappings: [],
+    autoProvision: {
+      enabled: false,
+      storePath: undefined,
+      providers: [],
+      tenantIdPrefix: "tenant",
+      defaultRoles: ["operator"],
+      defaultScopes: ["operator.admin"],
+      command: undefined,
+      commandTimeoutMs: 120000,
+    },
   };
 }
 
@@ -153,10 +164,22 @@ describe("frontdoor scaffold", () => {
       access_token: string;
       refresh_token: string;
       tenant_id: string;
+      connection_mode?: string;
+      runtime?: {
+        tenant_id?: string;
+        http_base_url?: string;
+        ws_url?: string;
+        sse_url?: string;
+      };
     };
     expect(mintBody.ok).toBe(true);
     expect(mintBody.access_token.split(".")).toHaveLength(3);
     expect(mintBody.tenant_id).toBe("tenant-dev");
+    expect(mintBody.connection_mode).toBe("direct");
+    expect(mintBody.runtime?.tenant_id).toBe("tenant-dev");
+    expect(mintBody.runtime?.http_base_url).toBe(runtime.origin);
+    expect(typeof mintBody.runtime?.ws_url).toBe("string");
+    expect(typeof mintBody.runtime?.sse_url).toBe("string");
 
     const refreshResp = await fetch(`${frontdoorRunning.origin}/api/runtime/token/refresh`, {
       method: "POST",
@@ -279,11 +302,15 @@ describe("frontdoor scaffold", () => {
     let lastAuthorization = "";
     let lastTenantHeader = "";
     let lastRuntimeUrl = "";
+    let lastOriginHeader = "";
+    let forwardedOriginHeader = "";
     const runtime = await listen(
       createHttpServer((req, res) => {
         lastAuthorization = String(req.headers.authorization ?? "");
         lastTenantHeader = String(req.headers["x-nexus-frontdoor-tenant"] ?? "");
         lastRuntimeUrl = String(req.url ?? "");
+        lastOriginHeader = String(req.headers.origin ?? "");
+        forwardedOriginHeader = String(req.headers["x-nexus-frontdoor-origin"] ?? "");
         res.statusCode = 200;
         res.setHeader("content-type", "application/json");
         res.end(JSON.stringify({ ok: true, url: req.url }));
@@ -298,16 +325,21 @@ describe("frontdoor scaffold", () => {
     const resp = await fetch(`${frontdoorRunning.origin}/app/dashboard?pane=chat`, {
       headers: {
         cookie,
+        origin: "https://frontend.example.com",
       },
     });
     expect(resp.status).toBe(200);
     expect(lastTenantHeader).toBe("tenant-dev");
     expect(lastRuntimeUrl).toBe("/app/dashboard?pane=chat");
     expect(lastAuthorization.startsWith("Bearer ")).toBe(true);
+    expect(lastOriginHeader).toBe(runtime.origin);
+    expect(forwardedOriginHeader).toBe("https://frontend.example.com");
   });
 
   it("proxies websocket upgrades with trusted-token header injection", async () => {
     let wsAuthHeader = "";
+    let wsOriginHeader = "";
+    let wsForwardedOriginHeader = "";
     const runtimeServer = createHttpServer((_req, res) => {
       res.statusCode = 404;
       res.end("missing");
@@ -320,6 +352,8 @@ describe("frontdoor scaffold", () => {
     });
     wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
       wsAuthHeader = String(req.headers.authorization ?? "");
+      wsOriginHeader = String(req.headers.origin ?? "");
+      wsForwardedOriginHeader = String(req.headers["x-nexus-frontdoor-origin"] ?? "");
       ws.send("ok");
       ws.close();
     });
@@ -334,6 +368,7 @@ describe("frontdoor scaffold", () => {
       const ws = new WebSocket(`${wsUrl}/runtime/ws`, {
         headers: {
           cookie,
+          origin: "https://frontend.example.com",
         },
       });
       ws.once("message", (data: RawData) => resolve(String(data)));
@@ -341,6 +376,8 @@ describe("frontdoor scaffold", () => {
     });
     expect(message).toBe("ok");
     expect(wsAuthHeader.startsWith("Bearer ")).toBe(true);
+    expect(wsOriginHeader).toBe(runtime.origin);
+    expect(wsForwardedOriginHeader).toBe("https://frontend.example.com");
   });
 
   it("overwrites spoofed runtime identity headers from clients", async () => {

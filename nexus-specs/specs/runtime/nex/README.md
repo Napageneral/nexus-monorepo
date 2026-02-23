@@ -24,6 +24,8 @@ This folder contains the core NEX orchestrator specifications — the central pi
 | `INGRESS_CONTROL_PLANE_UNIFICATION_PLAN.md` | 🚧 Plan | Concrete build plan for control-plane IAM credential ops + internal `http-ingress` adapterization |
 | `CONTROL_PLANE_AUTHZ_TAXONOMY.md` | ✅ Implemented | Control-plane action/resource taxonomy + enforcement (Option A authz) — maps WS methods to IAM permissions |
 | `HOSTED_FRONTDOOR_CONFIDENCE_WORKPLAN.md` | 🚧 Plan | Phased confidence plan for hosted frontdoor (live-stack e2e, cross-tenant isolation, anti-spoof tests, OIDC hardening, browser smoke) |
+| `HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md` | 🧭 Design | Canonical hosted direct browser -> tenant runtime contract (frontdoor auth/token APIs + runtime HTTP/WS/SSE auth and schema fields) |
+| `HOSTED_DIRECT_BROWSER_RUNTIME_WORKPLAN.md` | 🚧 Plan | Phased implementation guide for direct browser -> tenant runtime cutover (contracts, CORS/origin, UI client bootstrap, e2e, rollout) |
 | `SESSION_IMPORT_SERVICE.md` | 🧭 Design | Gateway-free AIX import adapter plan — NEX-owned session import/chunk service |
 | `NEXUS_REQUEST.md` | ✅ Complete | The data bus that accumulates context through pipeline |
 | `INTERFACES.md` | ⚠️ Retired | Distributed to home specs. See file for redirect table. |

@@ -3,6 +3,9 @@ export type RuntimeRole = "operator" | "member" | "customer" | "anonymous";
 export type TenantConfig = {
   id: string;
   runtimeUrl: string;
+  runtimePublicBaseUrl: string;
+  runtimeWsUrl?: string;
+  runtimeSseUrl?: string;
 };
 
 export type UserConfig = {
@@ -28,6 +31,17 @@ export type OidcProviderConfig = {
   userInfoUrl?: string;
   scope?: string;
   redirectUri: string;
+};
+
+export type AutoProvisionConfig = {
+  enabled: boolean;
+  storePath?: string;
+  providers: string[];
+  tenantIdPrefix: string;
+  defaultRoles: string[];
+  defaultScopes: string[];
+  command?: string;
+  commandTimeoutMs: number;
 };
 
 export type OidcMapping = {
@@ -85,6 +99,7 @@ export type FrontdoorConfig = {
   oidcEnabled: boolean;
   oidcProviders: Map<string, OidcProviderConfig>;
   oidcMappings: OidcMapping[];
+  autoProvision: AutoProvisionConfig;
 };
 
 export type Principal = {
@@ -126,6 +141,16 @@ export type RuntimeTokenResponse = {
   entity_id: string;
   scopes: string[];
   roles: string[];
+  runtime: RuntimeDescriptor;
+  connection_mode: "direct";
+};
+
+export type RuntimeDescriptor = {
+  tenant_id: string;
+  base_url: string;
+  http_base_url: string;
+  ws_url: string;
+  sse_url: string;
 };
 
 export type OidcTransientState = {

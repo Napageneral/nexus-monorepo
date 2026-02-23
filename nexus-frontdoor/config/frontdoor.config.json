@@ -28,7 +28,8 @@
   },
   "tenants": {
     "tenant-dev": {
-      "runtimeUrl": "http://127.0.0.1:18789"
+      "runtimeUrl": "http://127.0.0.1:18789",
+      "runtimePublicBaseUrl": "http://127.0.0.1:18789"
     }
   },
   "users": [
@@ -71,5 +72,15 @@
         }
       }
     ]
+  },
+  "autoProvision": {
+    "enabled": false,
+    "storePath": "./state/frontdoor-autoprovision.db",
+    "providers": ["google"],
+    "tenantIdPrefix": "tenant",
+    "defaultRoles": ["operator"],
+    "defaultScopes": ["operator.admin"],
+    "command": "node /Users/tyler/nexus/home/projects/nexus/nexus-frontdoor/scripts/provision-tenant-local.mjs",
+    "commandTimeoutMs": 120000
   }
 }

@@ -1,0 +1,10 @@
+{
+  "name": "@nexus-project/nexus-frontdoor-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vercel frontend launcher for Nexus frontdoor and tenant runtimes",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod --yes"
+  }
+}

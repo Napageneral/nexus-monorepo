@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nexus Frontdoor Launcher</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <h1>Nexus Hosted</h1>
+      <p>Sign up or log in, then launch your tenant control plane.</p>
+
+      <div class="row" style="margin-bottom: 12px;">
+        <span id="statusPill" class="pill">Session unknown</span>
+      </div>
+
+      <section class="grid">
+        <div class="card">
+          <h2>Google OAuth</h2>
+          <p class="muted">Recommended customer flow (signup + login).</p>
+          <div class="row">
+            <button id="googleSignupBtn" class="primary">Sign Up with Google</button>
+            <button id="googleLoginBtn">Log In with Google</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Password Login</h2>
+          <p class="muted">Fallback for local/operator testing.</p>
+          <label for="username">Username</label>
+          <input id="username" value="owner" />
+          <label for="password">Password</label>
+          <input id="password" type="password" value="changeme" />
+          <div class="row">
+            <button id="loginBtn" class="primary">Log In</button>
+            <button id="logoutBtn" class="danger">Log Out</button>
+            <button id="sessionBtn">Refresh Session</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Tenant Access</h2>
+          <div class="row">
+            <button id="openTenantAppBtn" class="primary">Open Tenant Control UI</button>
+            <button id="mintBtn">Mint Runtime Token (Debug)</button>
+            <button id="wsConnectBtn">WS Connect (Debug)</button>
+          </div>
+        </div>
+
+        <div class="card" style="grid-column: 1 / -1;">
+          <h2>Logs</h2>
+          <pre id="logs">ready\n</pre>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

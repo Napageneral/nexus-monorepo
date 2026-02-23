@@ -8,6 +8,7 @@ Implements:
 - tenant resolution from authenticated principal
 - short-lived runtime token minting (HS256 JWT)
 - refresh/revoke lifecycle for runtime tokens
+- runtime endpoint descriptor bootstrap in token responses for direct browser -> runtime
 - reverse proxy for tenant runtime HTTP + WS + SSE under `/runtime/*`
 - control UI passthrough under `/app` and WS upgrades for hosted control UI
 - shared UI shell served from frontdoor (`/`)
@@ -25,6 +26,62 @@ Defaults:
 - frontdoor: `http://127.0.0.1:4789`
 - tenant runtime in sample config: `http://127.0.0.1:18789`
 - sample login: `owner / changeme`
+
+## Local Hosted Demo Stack (tmux)
+
+Runs a full local stack for today’s hosted flow:
+
+- isolated hosted-mode Nexus runtime (trusted-token auth)
+- frontdoor service
+- Cloudflare quick tunnel for runtime
+- Cloudflare quick tunnel for frontdoor
+
+Start:
+
+```bash
+cd /Users/tyler/nexus/home/projects/nexus/nexus-frontdoor
+pnpm demo-stack:start
+```
+
+Status:
+
+```bash
+pnpm demo-stack:status
+```
+
+Stop:
+
+```bash
+pnpm demo-stack:stop
+```
+
+The stack writes URLs to:
+
+- `/Users/tyler/nexus/home/projects/nexus/nexus-frontdoor/.demo-stack/stack.env`
+
+Default frontdoor login for demo stack:
+
+- `owner / changeme`
+
+### Real Customer Flow Mode (Google OAuth + Auto-Provision)
+
+The stack can run in customer mode where first Google login creates a tenant
+and seeds that tenant's identity ledger (`entities`, `contacts`, `entity_tags`).
+
+Required env before `pnpm demo-stack:start`:
+
+- `FRONTDOOR_PUBLIC_ORIGIN` (stable HTTPS origin for the frontdoor, must match Google OAuth redirect settings)
+- `FRONTDOOR_GOOGLE_CLIENT_ID`
+- `FRONTDOOR_GOOGLE_CLIENT_SECRET` (optional for PKCE-only clients, recommended for web clients)
+
+Optional:
+
+- `FRONTDOOR_AUTOPROVISION_ENABLED=true` (defaults to true when `FRONTDOOR_PUBLIC_ORIGIN` + client id are set)
+
+Notes:
+
+- Google OAuth does not support random redirect origins for production flows. Quick tunnel URLs rotate, so use a stable public origin for reliable login/signup.
+- Tenant runtimes are provisioned with hosted trusted-token auth and control UI assets. The provisioning script will build control UI assets if missing.
 
 ## Config
 
@@ -46,6 +103,9 @@ Important env overrides:
 - `FRONTDOOR_RUNTIME_TOKEN_ISSUER`
 - `FRONTDOOR_RUNTIME_TOKEN_AUDIENCE`
 - `FRONTDOOR_OIDC_ENABLED=true`
+- `FRONTDOOR_AUTOPROVISION_ENABLED=true`
+- `FRONTDOOR_TENANT_CONTROL_UI_ROOT=/abs/path/to/nex/dist/control-ui`
+- `FRONTDOOR_TENANT_BUILD_UI_IF_MISSING=1`
 
 ## Password Hash Utility
 
@@ -60,8 +120,8 @@ pnpm password:hash -- 'my-password'
 - `GET /api/auth/session`
 - `GET /api/auth/oidc/start?provider=<id>&return_to=/`
 - `GET /api/auth/oidc/callback/<provider>?code=...&state=...`
-- `POST /api/runtime/token`
-- `POST /api/runtime/token/refresh`
+- `POST /api/runtime/token` (returns access/refresh + runtime descriptor)
+- `POST /api/runtime/token/refresh` (same response schema with rotated refresh token)
 - `POST /api/runtime/token/revoke`
 - `ALL /runtime/*` (proxied to tenant runtime with minted bearer token)
 - `ALL /app/*` (proxied to runtime control UI path)

@@ -47,6 +47,16 @@ type RawFrontdoorConfig = {
     providers?: unknown;
     mappings?: unknown;
   };
+  autoProvision?: {
+    enabled?: unknown;
+    storePath?: unknown;
+    providers?: unknown;
+    tenantIdPrefix?: unknown;
+    defaultRoles?: unknown;
+    defaultScopes?: unknown;
+    command?: unknown;
+    commandTimeoutMs?: unknown;
+  };
 };
 
 function readNumber(input: unknown, fallback: number): number {
@@ -90,9 +100,17 @@ function parseTenants(raw: unknown): Map<string, TenantConfig> {
     if (!runtimeUrl) {
       continue;
     }
+    const runtimePublicBaseUrl =
+      readString((value as Record<string, unknown>).runtimePublicBaseUrl, "") || runtimeUrl;
+    const runtimeWsUrl = readString((value as Record<string, unknown>).runtimeWsUrl, "") || undefined;
+    const runtimeSseUrl =
+      readString((value as Record<string, unknown>).runtimeSseUrl, "") || undefined;
     tenants.set(id, {
       id,
       runtimeUrl,
+      runtimePublicBaseUrl,
+      runtimeWsUrl,
+      runtimeSseUrl,
     });
   }
   return tenants;
@@ -292,6 +310,15 @@ function parseRateLimit(raw: unknown, defaults: ParsedRateLimit): ParsedRateLimi
   };
 }
 
+function parseStringArray(raw: unknown): string[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    .map((item) => item.trim());
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): FrontdoorConfig {
   const configPath = env.FRONTDOOR_CONFIG_PATH?.trim() || DEFAULT_CONFIG_PATH;
   const rawText = fs.readFileSync(configPath, "utf8");
@@ -380,19 +407,54 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): FrontdoorConfi
   };
 
   const tenants = parseTenants(raw.tenants);
-  if (tenants.size === 0) {
-    throw new Error("frontdoor config has no tenants");
-  }
   const { usersByUsername, usersById } = parseUsers(raw.users);
-  if (usersByUsername.size === 0) {
-    throw new Error("frontdoor config has no users");
-  }
 
   const oidcEnabled =
     String(env.FRONTDOOR_OIDC_ENABLED ?? String(raw.oidc?.enabled ?? "false")).toLowerCase() ===
     "true";
   const oidcProviders = parseOidcProviders(raw.oidc?.providers);
   const oidcMappings = parseOidcMappings(raw.oidc?.mappings);
+
+  const autoProvisionEnabled =
+    String(env.FRONTDOOR_AUTOPROVISION_ENABLED ?? String(raw.autoProvision?.enabled ?? "false"))
+      .toLowerCase()
+      .trim() === "true";
+  const autoProvisionStorePathRaw = readString(
+    env.FRONTDOOR_AUTOPROVISION_STORE_PATH,
+    readString(raw.autoProvision?.storePath, ""),
+  );
+  const autoProvisionStorePath = autoProvisionStorePathRaw
+    ? path.isAbsolute(autoProvisionStorePathRaw)
+      ? autoProvisionStorePathRaw
+      : path.resolve(configDir, autoProvisionStorePathRaw)
+    : sessionStorePath
+      ? path.resolve(path.dirname(sessionStorePath), "frontdoor-autoprovision.db")
+      : path.resolve(configDir, "frontdoor-autoprovision.db");
+  const autoProvisionProviders = parseStringArray(raw.autoProvision?.providers).map((item) =>
+    item.toLowerCase(),
+  );
+  const autoProvisionTenantPrefix =
+    readString(env.FRONTDOOR_AUTOPROVISION_TENANT_PREFIX, readString(raw.autoProvision?.tenantIdPrefix, "")) ||
+    "tenant";
+  const autoProvisionDefaultRoles = parseStringArray(raw.autoProvision?.defaultRoles);
+  const autoProvisionDefaultScopes = parseStringArray(raw.autoProvision?.defaultScopes);
+  const autoProvisionCommand =
+    readString(env.FRONTDOOR_AUTOPROVISION_COMMAND, readString(raw.autoProvision?.command, "")) ||
+    undefined;
+  const autoProvisionCommandTimeoutMs = Math.max(
+    5_000,
+    readNumber(
+      env.FRONTDOOR_AUTOPROVISION_COMMAND_TIMEOUT_MS,
+      readNumber(raw.autoProvision?.commandTimeoutMs, 120_000),
+    ),
+  );
+
+  if (tenants.size === 0 && !autoProvisionEnabled) {
+    throw new Error("frontdoor config has no tenants");
+  }
+  if (usersByUsername.size === 0 && !oidcEnabled && !autoProvisionEnabled) {
+    throw new Error("frontdoor config has no users");
+  }
 
   return {
     host,
@@ -415,6 +477,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): FrontdoorConfi
     oidcEnabled,
     oidcProviders,
     oidcMappings,
+    autoProvision: {
+      enabled: autoProvisionEnabled,
+      storePath: autoProvisionStorePath,
+      providers: autoProvisionProviders,
+      tenantIdPrefix: autoProvisionTenantPrefix,
+      defaultRoles: autoProvisionDefaultRoles,
+      defaultScopes: autoProvisionDefaultScopes,
+      command: autoProvisionCommand,
+      commandTimeoutMs: autoProvisionCommandTimeoutMs,
+    },
   };
 }
 

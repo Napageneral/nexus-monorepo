@@ -1,6 +1,6 @@
 # WhatsApp Adapter
 
-**Status:** TODO  
+**Status:** IMPLEMENTED (EXTERNAL ADAPTER V1)  
 **Nexus Tool:** Baileys integration (existing)  
 **Upstream:** `src/web/` (full implementation)
 

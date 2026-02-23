@@ -66,6 +66,7 @@ function baseConfig(): FrontdoorConfig {
         {
           id: "tenant-dev",
           runtimeUrl: "http://127.0.0.1:18789",
+          runtimePublicBaseUrl: "http://127.0.0.1:18789",
         },
       ],
     ]),
@@ -85,6 +86,16 @@ function baseConfig(): FrontdoorConfig {
         },
       },
     ],
+    autoProvision: {
+      enabled: false,
+      storePath: undefined,
+      providers: [],
+      tenantIdPrefix: "tenant",
+      defaultRoles: ["operator"],
+      defaultScopes: ["operator.admin"],
+      command: undefined,
+      commandTimeoutMs: 120000,
+    },
   };
 }
 

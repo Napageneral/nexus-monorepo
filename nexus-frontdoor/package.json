@@ -11,7 +11,10 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "password:hash": "tsx src/password-hash.ts"
+    "password:hash": "tsx src/password-hash.ts",
+    "demo-stack:start": "bash ./scripts/demo-stack-start.sh",
+    "demo-stack:stop": "bash ./scripts/demo-stack-stop.sh",
+    "demo-stack:status": "bash ./scripts/demo-stack-status.sh"
   },
   "dependencies": {
     "http-proxy": "^1.18.1",

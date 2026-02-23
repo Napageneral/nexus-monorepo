@@ -1,0 +1,10 @@
+{
+  "runtime": {
+    "port": 18789,
+    "bind": "loopback",
+    "auth": {
+      "mode": "token",
+      "token": "272d821f5ebcf603456e827b657ebe94763fedfd8a3e6be6"
+    }
+  }
+}

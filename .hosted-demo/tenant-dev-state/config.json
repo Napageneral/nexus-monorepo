@@ -1,0 +1,23 @@
+{
+  "runtime": {
+    "hostedMode": true,
+    "tenantId": "tenant-dev",
+    "bind": "loopback",
+    "auth": {
+      "mode": "trusted_token",
+      "allowTailscale": false,
+      "trustedToken": {
+        "issuer": "https://frontdoor.demo.nexus",
+        "audience": "control-plane",
+        "hmacSecret": "frontdoor-demo-shared-secret-2026-02-23",
+        "requireJti": true,
+        "clockSkewSeconds": 60
+      }
+    },
+    "controlUi": {
+      "allowedOrigins": [
+        "https://nexus-frontdoor-web.vercel.app"
+      ]
+    }
+  }
+}

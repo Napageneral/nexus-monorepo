@@ -80,6 +80,8 @@
 
     <script>
       let lastRefreshToken = "";
+      let lastAccessToken = "";
+      let lastRuntime = null;
       const out = document.getElementById("out");
       const print = (value) => {
         out.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
@@ -115,12 +117,16 @@
       document.getElementById("mint").onclick = async () => {
         const result = await post("/api/runtime/token");
         lastRefreshToken = result.json?.refresh_token || "";
+        lastAccessToken = result.json?.access_token || "";
+        lastRuntime = result.json?.runtime || null;
         print(result);
       };
 
       document.getElementById("refresh").onclick = async () => {
         const result = await post("/api/runtime/token/refresh", { refresh_token: lastRefreshToken });
         lastRefreshToken = result.json?.refresh_token || lastRefreshToken;
+        lastAccessToken = result.json?.access_token || lastAccessToken;
+        lastRuntime = result.json?.runtime || lastRuntime;
         print(result);
       };
 
@@ -130,12 +136,30 @@
       };
 
       document.getElementById("runtimeHealth").onclick = async () => {
-        const res = await fetch("/runtime/health", { credentials: "include" });
-        const text = await res.text();
-        print({ status: res.status, body: text });
+        try {
+          if (lastRuntime?.http_base_url && lastAccessToken) {
+            const direct = await fetch(`${lastRuntime.http_base_url}/health`, {
+              headers: {
+                authorization: `Bearer ${lastAccessToken}`,
+              },
+            });
+            const text = await direct.text();
+            print({ mode: "direct", status: direct.status, body: text });
+            return;
+          }
+        } catch (error) {
+          print({ mode: "direct", error: String(error), hint: "falling back to /runtime/health" });
+        }
+        const fallback = await fetch("/runtime/health", { credentials: "include" });
+        const text = await fallback.text();
+        print({ mode: "proxy-fallback", status: fallback.status, body: text });
       };
 
       document.getElementById("openControlUi").onclick = () => {
+        if (lastRuntime?.base_url) {
+          window.location.href = lastRuntime.base_url;
+          return;
+        }
         location.href = "/app";
       };
     </script>
