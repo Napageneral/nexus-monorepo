@@ -30,7 +30,7 @@
 
         <article id="workspacePanel" class="card" hidden>
           <h2>Workspace</h2>
-          <p class="muted">Select the workspace you want to open.</p>
+          <p class="muted">Select the workspace and app you want to open.</p>
           <label for="workspaceSelect">Available workspaces</label>
           <select id="workspaceSelect"></select>
           <div class="row">
@@ -39,6 +39,9 @@
           </div>
           <p id="workspaceSummary" class="muted">No active workspace selected.</p>
           <p class="muted">Workspace access count: <span id="workspaceCount">0</span></p>
+          <label for="appSelect">Available apps</label>
+          <select id="appSelect"></select>
+          <p id="appSummary" class="muted">No app selected.</p>
           <div class="row">
             <button id="openTenantAppBtn" class="primary">Open workspace</button>
           </div>

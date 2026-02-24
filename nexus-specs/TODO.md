@@ -65,6 +65,9 @@ All high-priority specs are complete and aligned. Ready for implementation.
 | **Hosted Frontdoor Confidence Workplan** | `runtime/nex/HOSTED_FRONTDOOR_CONFIDENCE_WORKPLAN.md` | Execute phased validation: live-stack e2e (real runtime + real frontdoor), cross-tenant isolation, anti-spoof proxy tests, then OIDC verification + browser smoke. |
 | **Hosted Frontdoor Multi-Workspace Access** | `runtime/nex/HOSTED_FRONTDOOR_MULTI_WORKSPACE.md` | New design spec for one user -> many workspace memberships with explicit workspace selection before runtime token mint/connect. Review + approve before implementation. |
 | **Hosted Workspace UX + Lifecycle** | `runtime/nex/HOSTED_WORKSPACE_UX_LIFECYCLE.md` | Product-level UX + operating model for signup/login, workspace creation policy, invites, switching, and VPS/service/tenant topology. Review and lock before implementation. |
+| **Oracle + Multi-UI Tenant Integration** | `specs/nex/HOSTED_ORACLE_MULTI_UI_INTEGRATION.md` | Design lock for Oracle GitHub App + Oracle UI in tenant runtime, runtime multi-app mounts, and frontdoor workspace/app launch model (hard cutover, no frontdoor Oracle data plane). |
+| **Runtime Multi-UI Cutover (Phase 1)** | `specs/nex/RUNTIME_MULTI_UI_CUTOVER.md` | Implement runtime app registry + `/api/apps` + strict `/app/<app_id>` mount routing; remove bare `/app/*` fallback. |
+| **Frontdoor Multi-UI Launch (Phase 2)** | `specs/nex/FRONTDOOR_MULTI_UI_LAUNCH.md` | Implement workspace+app selector in hosted shell, runtime-driven app catalog fetch, and app-aware launch path (replace hardcoded `/app/chat`). |
 
 ### Next Steps
 

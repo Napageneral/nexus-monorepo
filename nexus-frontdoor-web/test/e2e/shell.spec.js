@@ -42,6 +42,8 @@ test("authenticated owner can select workspace and launch runtime app", async ({
   await page.locator("#selectWorkspaceBtn").click();
   await expect(page.locator("#statusPill")).toContainText("Workspace selected");
   await expect(page.locator("#workspaceSummary")).toContainText("Tenant Ops");
+  await expect(page.locator("#appSelect")).toHaveValue("control");
+  await expect(page.locator("#appSummary")).toContainText("Control");
   await expect(page.locator("#billingPlan")).toHaveText("starter");
   await expect(page.locator("#usageRequests30d")).toHaveText("58");
   await expect(page.locator("#billingInvoiceList")).toContainText("No invoices yet.");
@@ -56,7 +58,7 @@ test("authenticated owner can select workspace and launch runtime app", async ({
   await popup.close();
 
   await page.locator("#openTenantAppBtn").click();
-  await page.waitForURL(`${FRONTDOOR_ORIGIN}/app/chat?session=main&workspace_id=tenant-ops`);
+  await page.waitForURL(`${FRONTDOOR_ORIGIN}/app/control/chat?workspace_id=tenant-ops`);
   await expect(page.locator("body")).toContainText("Mock Runtime App");
 });
 

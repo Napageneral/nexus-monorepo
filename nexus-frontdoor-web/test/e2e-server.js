@@ -181,6 +181,36 @@ async function frontdoorHandler(req, res) {
     sendJson(res, 200, { ok: true, runtime: "tenant-dev", status: "healthy" });
     return;
   }
+  if (method === "GET" && pathname === "/runtime/api/apps") {
+    const session = getSession(req);
+    if (!session) {
+      sendJson(res, 401, { ok: false, error: "unauthorized" });
+      return;
+    }
+    const workspaceId = String(parsed.searchParams.get("workspace_id") || session.active_workspace_id || "").trim();
+    const items = [
+      {
+        app_id: "control",
+        display_name: "Control",
+        entry_path: "/app/control/chat",
+        api_base: "/api/control",
+        icon: "control-panel",
+        order: 10,
+      },
+    ];
+    if (workspaceId === "tenant-ops") {
+      items.push({
+        app_id: "oracle",
+        display_name: "Oracle",
+        entry_path: "/app/oracle/",
+        api_base: "/api/oracle",
+        icon: "tree",
+        order: 20,
+      });
+    }
+    sendJson(res, 200, { ok: true, items });
+    return;
+  }
   if (method === "GET" && pathname === "/api/auth/session") {
     const session = getSession(req);
     if (!session) {

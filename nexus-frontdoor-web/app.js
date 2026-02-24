@@ -4,6 +4,8 @@ const state = {
   session: null,
   workspaces: [],
   activeWorkspaceId: "",
+  workspaceApps: [],
+  activeAppId: "",
   frontdoorOrigin: "",
   operatorWorkspaces: [],
 };
@@ -112,6 +114,49 @@ function updateWorkspaceSummary() {
   summary.textContent = `Active workspace: ${selected.display_name || selected.workspace_id}`;
 }
 
+function renderAppSelect() {
+  const select = el("appSelect");
+  if (!select) {
+    return;
+  }
+  const items = state.workspaceApps;
+  select.innerHTML = "";
+  if (!items.length) {
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "No apps available";
+    select.appendChild(empty);
+    select.value = "";
+    state.activeAppId = "";
+    return;
+  }
+  for (const item of items) {
+    const option = document.createElement("option");
+    option.value = item.app_id;
+    option.textContent = item.display_name || item.app_id;
+    select.appendChild(option);
+  }
+  const selected =
+    state.activeAppId && items.some((item) => item.app_id === state.activeAppId)
+      ? state.activeAppId
+      : items[0].app_id;
+  state.activeAppId = selected;
+  select.value = selected;
+}
+
+function updateAppSummary() {
+  const summary = el("appSummary");
+  if (!summary) {
+    return;
+  }
+  const selected = state.workspaceApps.find((item) => item.app_id === state.activeAppId);
+  if (!selected) {
+    summary.textContent = "No app selected.";
+    return;
+  }
+  summary.textContent = `Active app: ${selected.display_name || selected.app_id}`;
+}
+
 function resetOwnerInsights() {
   el("usageRequests30d").textContent = "0";
   el("usageTokensIn30d").textContent = "0";
@@ -162,7 +207,7 @@ function updateUiFromSession(session, options = {}) {
 
   el("googleBtn").hidden = authenticated;
   el("logoutBtn").hidden = !authenticated;
-  el("openTenantAppBtn").disabled = !authenticated || !state.activeWorkspaceId;
+  el("openTenantAppBtn").disabled = !authenticated || !state.activeWorkspaceId || !state.activeAppId;
   el("workspacePanel").hidden = !authenticated;
   el("invitePanel").hidden = !authenticated;
   el("ownerInsightsPanel").hidden = !workspaceAdminAllowed;
@@ -184,8 +229,12 @@ function updateUiFromSession(session, options = {}) {
 
   state.workspaces = [];
   state.activeWorkspaceId = "";
+  state.workspaceApps = [];
+  state.activeAppId = "";
   renderWorkspaceSelect();
   updateWorkspaceSummary();
+  renderAppSelect();
+  updateAppSummary();
   el("workspaceCount").textContent = "0";
   resetOwnerInsights();
   renderOperatorWorkspaceInventory([]);
@@ -201,12 +250,69 @@ function currentWorkspaceId() {
   return value || "";
 }
 
+function currentAppId() {
+  const select = el("appSelect");
+  const value = String(select?.value || state.activeAppId || "").trim();
+  return value || "";
+}
+
+function currentAppDescriptor() {
+  const appId = currentAppId();
+  return state.workspaceApps.find((item) => item.app_id === appId) || null;
+}
+
+async function loadWorkspaceApps() {
+  if (!state.session) {
+    state.workspaceApps = [];
+    state.activeAppId = "";
+    renderAppSelect();
+    updateAppSummary();
+    el("openTenantAppBtn").disabled = true;
+    return;
+  }
+  const workspaceId = currentWorkspaceId();
+  if (!workspaceId) {
+    state.workspaceApps = [];
+    state.activeAppId = "";
+    renderAppSelect();
+    updateAppSummary();
+    el("openTenantAppBtn").disabled = true;
+    return;
+  }
+  const result = await api(`/runtime/api/apps?workspace_id=${encodeURIComponent(workspaceId)}`, {
+    method: "GET",
+  });
+  if (!result.ok || !Array.isArray(result.body?.items)) {
+    state.workspaceApps = [];
+    state.activeAppId = "";
+    renderAppSelect();
+    updateAppSummary();
+    el("openTenantAppBtn").disabled = true;
+    return;
+  }
+  state.workspaceApps = result.body.items
+    .filter((item) => item && typeof item === "object")
+    .map((item) => ({
+      app_id: String(item.app_id || "").trim(),
+      display_name: String(item.display_name || item.app_id || "").trim(),
+      entry_path: String(item.entry_path || "").trim(),
+    }))
+    .filter((item) => item.app_id && item.entry_path.startsWith("/app/"));
+  renderAppSelect();
+  updateAppSummary();
+  el("openTenantAppBtn").disabled = !state.session || !state.activeWorkspaceId || !state.activeAppId;
+}
+
 async function loadWorkspaces() {
   if (!state.session) {
     state.workspaces = [];
     state.activeWorkspaceId = "";
     renderWorkspaceSelect();
     updateWorkspaceSummary();
+    state.workspaceApps = [];
+    state.activeAppId = "";
+    renderAppSelect();
+    updateAppSummary();
     el("workspaceCount").textContent = "0";
     resetOwnerInsights();
     return;
@@ -217,6 +323,10 @@ async function loadWorkspaces() {
     state.activeWorkspaceId = "";
     renderWorkspaceSelect();
     updateWorkspaceSummary();
+    state.workspaceApps = [];
+    state.activeAppId = "";
+    renderAppSelect();
+    updateAppSummary();
     el("workspaceCount").textContent = "0";
     resetOwnerInsights();
     setPill("Workspace list unavailable", "err");
@@ -233,7 +343,8 @@ async function loadWorkspaces() {
   renderWorkspaceSelect();
   updateWorkspaceSummary();
   el("workspaceCount").textContent = String(state.workspaces.length);
-  el("openTenantAppBtn").disabled = !state.session || !state.activeWorkspaceId;
+  await loadWorkspaceApps();
+  el("openTenantAppBtn").disabled = !state.session || !state.activeWorkspaceId || !state.activeAppId;
   await loadWorkspaceInsights();
 }
 
@@ -509,6 +620,11 @@ async function openTenantControlUi() {
     setPill("Select a workspace first", "err");
     return;
   }
+  const app = currentAppDescriptor();
+  if (!app) {
+    setPill("Select an app first", "err");
+    return;
+  }
   const selected = await api("/api/workspaces-select", {
     method: "POST",
     body: JSON.stringify({
@@ -528,26 +644,35 @@ async function openTenantControlUi() {
   }
   const frontdoorOrigin = String(originResp.body.frontdoor_origin || "").replace(/\/+$/, "");
   state.frontdoorOrigin = frontdoorOrigin;
-  const launch = new URL("/app/chat", frontdoorOrigin);
-  launch.searchParams.set("session", "main");
+  const launch = new URL(app.entry_path || "/app/control/chat", frontdoorOrigin);
   launch.searchParams.set("workspace_id", workspaceId);
   window.location.href = launch.toString();
 }
 
-function handleWorkspacePickerChange() {
+async function handleWorkspacePickerChange() {
   state.activeWorkspaceId = currentWorkspaceId();
   updateWorkspaceSummary();
-  el("openTenantAppBtn").disabled = !state.session || !state.activeWorkspaceId;
+  await loadWorkspaceApps();
+  el("openTenantAppBtn").disabled = !state.session || !state.activeWorkspaceId || !state.activeAppId;
   loadWorkspaceInsights().catch(() => {
     resetOwnerInsights();
   });
+}
+
+function handleAppPickerChange() {
+  state.activeAppId = currentAppId();
+  updateAppSummary();
+  el("openTenantAppBtn").disabled = !state.session || !state.activeWorkspaceId || !state.activeAppId;
 }
 
 el("googleBtn").addEventListener("click", startGoogle);
 el("logoutBtn").addEventListener("click", logout);
 el("openTenantAppBtn").addEventListener("click", openTenantControlUi);
 el("loginBtn").addEventListener("click", loginPassword);
-el("workspaceSelect").addEventListener("change", handleWorkspacePickerChange);
+el("workspaceSelect").addEventListener("change", () => {
+  void handleWorkspacePickerChange();
+});
+el("appSelect").addEventListener("change", handleAppPickerChange);
 el("refreshWorkspacesBtn").addEventListener("click", loadWorkspaces);
 el("selectWorkspaceBtn").addEventListener("click", selectWorkspace);
 el("redeemInviteBtn").addEventListener("click", redeemInvite);

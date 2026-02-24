@@ -26,6 +26,9 @@ This folder contains the core NEX orchestrator specifications — the central pi
 | `HOSTED_FRONTDOOR_CONFIDENCE_WORKPLAN.md` | 🚧 Plan | Phased confidence plan for hosted frontdoor (live-stack e2e, cross-tenant isolation, anti-spoof tests, OIDC hardening, browser smoke) |
 | `HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md` | 🧭 Design | Canonical hosted direct browser -> tenant runtime contract (frontdoor auth/token APIs + runtime HTTP/WS/SSE auth and schema fields) |
 | `HOSTED_DIRECT_BROWSER_RUNTIME_WORKPLAN.md` | 🚧 Plan | Phased implementation guide for direct browser -> tenant runtime cutover (contracts, CORS/origin, UI client bootstrap, e2e, rollout) |
+| `HOSTED_ORACLE_MULTI_UI_INTEGRATION.md` | 🧭 Design | Canonical Oracle + multi-UI architecture: frontdoor auth/routing only, tenant-owned Oracle GitHub App/data plane, runtime app mounts, and NexusEvent/IAM execution model |
+| `RUNTIME_MULTI_UI_CUTOVER.md` | 🚧 Plan | Phase 1 runtime app-model implementation: `/app/<app_id>` mount contract, `/api/apps` catalog, and hard cutover away from bare `/app/*` |
+| `FRONTDOOR_MULTI_UI_LAUNCH.md` | 🚧 Plan | Phase 2 frontdoor shell implementation: workspace+app selection, runtime-driven app catalog, and app-aware launch routing |
 | `SESSION_IMPORT_SERVICE.md` | 🧭 Design | Gateway-free AIX import adapter plan — NEX-owned session import/chunk service |
 | `NEXUS_REQUEST.md` | ✅ Complete | The data bus that accumulates context through pipeline |
 | `INTERFACES.md` | ⚠️ Retired | Distributed to home specs. See file for redirect table. |
