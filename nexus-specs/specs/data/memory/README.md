@@ -19,12 +19,14 @@ The memory system handles higher-order processing -- integrating raw events into
 
 ## What the Memory System Provides
 
-| Component | Description |
-|-----------|-------------|
-| **Episodes** | Chunks of events grouped for analysis |
-| **Facets** | Extracted metadata (entities, topics, sentiment) |
-| **Embeddings** | Vector representations for semantic search |
-| **Analyses** | Insights, patterns, learned relationships |
+| Layer | Component | Description |
+|-------|-----------|-------------|
+| **L1 — Events** | Short-term memory | Raw events indexed for immediate searchability via recall() |
+| **L2 — Facts/Episodes** | Facts & Episodes | Atomic durable knowledge extracted from conversation episodes |
+| **L3 — Observations** | Observations | Synthesized patterns from clusters of related facts |
+| **L4 — Mental Models** | Mental Models | Comprehensive reports created by the reflect skill |
+| *Support* | **Embeddings** | Vector representations for semantic search (embeddings.db) |
+| *Support* | **Entities** | Unified entity store for identity resolution (identity.db) |
 
 ---
 
@@ -185,9 +187,9 @@ interface IdentityEnrichment {
 - `MEMORY_WRITER_V2.md` — Agentic retain flow
 - `MEMORY_SEARCH_SKILL.md` — Agent search skill (recall API)
 - `UNIFIED_ENTITY_STORE.md` — Entity store (lives in identity.db)
-- `MEMORY_SYSTEM.md` — Tripartite memory model (declarative, episodic, procedural)
-- `roles/MEMORY_READER.md` — Memory reader meeseeks role spec
-- `roles/MEMORY_WRITER.md` — Memory writer meeseeks role spec (superseded by MEMORY_WRITER_V2.md)
+- `../../_archive/MEMORY_SYSTEM.md` — Tripartite memory model (declarative, episodic, procedural)
+- `../../_archive/MEMORY_READER.md` — Memory reader meeseeks role spec
+- `../../_archive/MEMORY_WRITER.md` — Memory writer meeseeks role spec (superseded by MEMORY_WRITER_V2.md)
 - `../../runtime/broker/MEESEEKS_PATTERN.md` — Disposable role fork pattern
 - `../ledgers/` — System of Record (source data)
 - `../../runtime/nex/NEXUS_REQUEST.md` — Pipeline lifecycle
