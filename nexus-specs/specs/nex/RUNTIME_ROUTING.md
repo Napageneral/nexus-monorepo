@@ -3,7 +3,7 @@
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-18
 **Resolves:** LIVE_E2E_HARNESS.md Bundle B (Items 3, 4)
-**Related:** `broker/SESSION_LIFECYCLE.md`, `../data/DATABASE_ARCHITECTURE.md`, `../data/memory/v2/MEMORY_SYSTEM.md`, `adapters/ADAPTER_SYSTEM.md`
+**Related:** `../agents/SESSION_LIFECYCLE.md`, `../../DATABASE_ARCHITECTURE.md`, `../../memory/MEMORY_SYSTEM.md`, `../delivery/ADAPTER_SYSTEM.md`
 
 ---
 
@@ -21,7 +21,7 @@ Receiver model note:
 
 - `DeliveryContext` is sender/container taxonomy only.
 - Receiver resolution output is stored separately on `NexusRequest.receiver`.
-- `NexusRequest.receiver` determines whether the pipeline executes agent turns (`type=persona`) or takes the non-agent path (`type=system/entity/unknown`).
+- `NexusRequest.receiver` determines whether the pipeline executes agent turns (`type=agent`) or takes the non-agent path (`type=system/entity/unknown`).
 
 ---
 
@@ -82,7 +82,7 @@ When a new `(platform, space_id, sender_id)` tuple is seen for the first time, t
 1. **Creates a corresponding entity** in `identity.db` with:
    - `name`: `{platform}:{sender_id}` (e.g., `discord:tyler#1234`)
      - If `space_id` is used for uniqueness (Slack), the name SHOULD include it: `{platform}:{space_id}:{sender_id}`
-   - `type`: platform-specific (e.g., `discord_handle`, `phone`, `email`, `slack_user`)
+   - `type`: `'person'` (delivery-sourced entities default to person type)
    - `source`: `'delivery'`
    - `merged_into`: `NULL` (canonical root — this IS the identity until merged)
 2. **Creates a contact row** in `identity.db` linking that delivery endpoint to the entity id
@@ -117,7 +117,7 @@ function ensureContact(
   // New contact: create entity + contact row in identity.db (same DB).
   const entityId = generateULID();
   const entityName = spaceId ? `${platform}:${spaceId}:${senderId}` : `${platform}:${senderId}`;
-  const entityType = inferEntityType(platform); // discord_handle, phone, email, etc.
+  const entityType = 'person'; // delivery-sourced entities default to person; memory-writer may reclassify
 
   identityDb.prepare(`
     INSERT INTO entities (id, name, type, source, normalized, first_seen, last_seen, created_at, updated_at)
@@ -151,9 +151,9 @@ Message arrives with DeliveryContext:
 
 Stage 2: resolveIdentity
   │
-  ├── System/webhook platform? → system/webhook principal (no contact lookup)
+  ├── System/webhook platform? → system/webhook sender (no contact lookup)
   │
-  ├── Control-plane/webchat? → owner principal from auth token entity_id
+  ├── Control-plane/webchat? → owner sender from auth token entity_id
   │
   └── External adapter platform:
       │
@@ -164,7 +164,7 @@ Stage 2: resolveIdentity
       │
       ├── Look up canonical entity details in identity.db (name, type, is_user, tags)
       │
-      └── Build PrincipalContext:
+      └── Build SenderContext:
             type: is_user ? "owner" : "known"  // always "known" or "owner", never "unknown"
             entity_id: canonical_entity_id
             name: entity.name
@@ -230,7 +230,7 @@ Session keys are produced by `buildSessionKey()` at `resolveAccess`:
 | Worker/meeseeks | `worker:{ulid}` | `worker:01HWXYZ...` |
 | System | `system:{purpose}` | `system:compaction` |
 
-**Key change:** There is no `dm:{platform}:{sender_id}` fallback format. Because every sender has an entity from message one, DM sessions are entity-based from the start. Receiver persona scoping is encoded in the key when `receiver.type = persona`.
+**Key change:** There is no `dm:{platform}:{sender_id}` fallback format. Because every sender has an entity from message one, DM sessions are entity-based from the start. Receiver persona scoping is encoded in the key when `receiver.type = agent`.
 
 Legacy compatibility:
 
@@ -241,7 +241,7 @@ Legacy compatibility:
 ```typescript
 export function buildSessionKey(input: SessionKeyInput): string {
   const { principal, delivery, receiver } = input;
-  const receiverPersona = receiver?.type === "persona" ? receiver.persona_id : undefined;
+  const receiverPersona = receiver?.type === "agent" ? receiver.persona_id : undefined;
 
   // System principals
   if (principal.type === "system" || principal.type === "webhook") {
@@ -254,7 +254,7 @@ export function buildSessionKey(input: SessionKeyInput): string {
     return principal.entity_id ? `worker:${principal.entity_id}` : `system:agent`;
   }
 
-  if (receiver && receiver.type !== "persona") {
+  if (receiver && receiver.type !== "agent") {
     return `system:${receiver.source ?? delivery.platform}`;
   }
 
@@ -266,7 +266,7 @@ export function buildSessionKey(input: SessionKeyInput): string {
     return delivery.thread_id ? `${base}:thread:${delivery.thread_id}` : base;
   }
 
-  // DM: entity-based, persona-scoped when receiver is a persona.
+  // DM: entity-based, persona-scoped when receiver is an agent.
   return receiverPersona
     ? `dm:${principal.entity_id}:persona:${receiverPersona}`
     : `dm:${principal.entity_id}`;
@@ -576,13 +576,13 @@ The memory system V2 memory tables (facts, fact_entities, episodes, etc. in memo
 
 ## See Also
 
-- `broker/SESSION_LIFECYCLE.md` — Session creation, turn processing, queue management, forking
-- `../data/DATABASE_ARCHITECTURE.md` — 6-database layout, entity relocation to identity.db
-- `../data/memory/v2/MEMORY_SYSTEM.md` — Memory architecture, retain flow, consolidation
-- `../data/memory/v2/MEMORY_WRITER.md` — Memory-writer entity resolution and merge behavior
-- `adapters/ADAPTER_SYSTEM.md` — Adapter protocol, manager, configuration
-- `../environment/foundation/WORKSPACE_LIFECYCLE.md` — Init, boot, onboarding lifecycle
-- `../environment/foundation/harnesses/LIVE_E2E_HARNESS.md` — E2E harness scenarios
+- `../agents/SESSION_LIFECYCLE.md` — Session creation, turn processing, queue management, forking
+- `../../DATABASE_ARCHITECTURE.md` — 6-database layout, entity relocation to identity.db
+- `../../memory/MEMORY_SYSTEM.md` — Memory architecture, retain flow, consolidation
+- `../../memory/MEMORY_WRITER.md` — Memory-writer entity resolution and merge behavior
+- `../delivery/ADAPTER_SYSTEM.md` — Adapter protocol, manager, configuration
+- `../../environment/foundation/WORKSPACE_LIFECYCLE.md` — Init, boot, onboarding lifecycle
+- `../../environment/foundation/harnesses/LIVE_E2E_HARNESS.md` — E2E harness scenarios
 
 ---
 

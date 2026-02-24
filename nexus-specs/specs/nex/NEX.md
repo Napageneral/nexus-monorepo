@@ -2,7 +2,7 @@
 
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-18
-**Database layout:** See `../../data/DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
+**Database layout:** See `../../DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
 
 ---
 
@@ -51,7 +51,7 @@ All function calls. No network hops.
 | Stage | Input | Output on NexusRequest | May Exit Pipeline? |
 |-------|-------|------------------------|-------------------|
 | `ingest()` | NexusEvent from adapter | `event`, `delivery` populated | No |
-| `resolveIdentity()` | NexusRequest | `principal` populated | Yes (unknown sender policy) |
+| `resolveIdentity()` | NexusRequest | `sender` populated | Yes (unknown sender policy) |
 | `resolveReceiver()` | NexusRequest | `receiver` populated (type, persona_id, entity_id) | No |
 | `resolveAccess()` | NexusRequest | `access` populated (decision, permissions, routing) | Yes (access denied) |
 | `runAutomations()` | NexusRequest | `triggers` populated (automations fired, enrichment) | Yes (automation handles completely) |
@@ -106,7 +106,7 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │  │  │ 2. resolveIdentity()                                                  │  │  │
 │  │  │    • WHO sent this?                                                   │  │  │
 │  │  │    • Query Identity Graph (contacts → mappings → entities)           │  │  │
-│  │  │    • Populate: principal (type, entity_id, identity details)         │  │  │
+│  │  │    • Populate: sender (type, entity_id, identity details)            │  │  │
 │  │  │    • If unknown → may exit based on deny policy                      │  │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘  │  │
 │  │                                   │                                         │  │
@@ -124,7 +124,7 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
 │  │  │ 4. resolveAccess()                                                    │  │  │
 │  │  │    • WHAT can they do?                                                │  │  │
-│  │  │    • Evaluate ACL policies against principal + receiver + conditions  │  │  │
+│  │  │    • Evaluate ACL policies against sender + receiver + conditions     │  │  │
 │  │  │    • Populate: access (decision, permissions, routing)               │  │  │
 │  │  │    • Routing includes: persona, session_key, queue_mode              │  │  │
 │  │  │    • If denied → exit pipeline (async: write denial to audit)        │  │  │
@@ -134,7 +134,7 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │  │                                   │                                         │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
 │  │  │ 5. runAutomations()                                                   │  │  │
-│  │  │    • Match automations against event + principal + receiver + access  │  │  │
+│  │  │    • Match automations against event + sender + receiver + access     │  │  │
 │  │  │    • Execute matched automations (parallel where independent)        │  │  │
 │  │  │    • Populate: triggers (automations_fired, enrichment, overrides)   │  │  │
 │  │  │    • If automation handles completely → exit pipeline                 │  │  │
@@ -260,7 +260,7 @@ The `NexusRequest` is created at `ingest()` and populated through each stage:
 | Stage | Fields Populated |
 |-------|------------------|
 | **ingest()** | `request_id`, `created_at`, `event`, `delivery` |
-| **resolveIdentity()** | `principal` (type, entity_id, display_name, is_user) |
+| **resolveIdentity()** | `sender` (type, entity_id, display_name, is_user) |
 | **resolveReceiver()** | `receiver` (type, persona_id, entity_id, name, source) |
 | **resolveAccess()** | `access` (decision, permissions, routing: persona, session_key, queue_mode) |
 | **runAutomations()** | `triggers` (automations_evaluated, automations_fired, enrichment, routing_override, handled) |
@@ -403,7 +403,7 @@ The Adapter Manager:
 - Routes `NexusEvent` objects into the pipeline
 - Handles health monitoring, auto-restart, crash recovery
 
-See `../adapters/ADAPTER_SYSTEM.md` for the complete adapter specification.
+See `../delivery/ADAPTER_SYSTEM.md` for the complete adapter specification.
 
 ---
 
@@ -495,7 +495,7 @@ function asyncWrite(db: Database, query: string, params: any[]) {
   },
   "http": {
     "host": "127.0.0.1",
-    "port": 7400               // Health + SSE endpoint
+    "port": 18789              // WS RPC Adapter (SPA + WS + health)
   }
 }
 ```
@@ -558,7 +558,7 @@ When a Manager Agent (MA) spawns a Worker Agent (WA), the WA runs through the Br
 The agent uses the `send message` tool, which routes through NEX to the appropriate out-adapter via its `send` command. The adapter handles chunking based on channel capabilities. Multiple tool calls = multiple messages.
 
 ### Language Decision
-NEX core is **TypeScript** (Bun runtime). The Memory System is TypeScript — there is no separate Go process. See `../../project-structure/LANGUAGE_DECISION.md`.
+NEX core is **TypeScript** (Bun runtime). The Memory System is TypeScript — there is no separate Go process. See `../../architecture/LANGUAGE_DECISION.md`.
 
 ---
 
@@ -570,6 +570,6 @@ NEX core is **TypeScript** (Bun runtime). The Memory System is TypeScript — th
 - `BUS_ARCHITECTURE.md` — Real-time event bus
 - `automations/AUTOMATION_SYSTEM.md` — Automation system
 - `../STREAMING.md` — Canonical streaming architecture
-- `../adapters/ADAPTER_SYSTEM.md` — Adapter system (canonical)
+- `../delivery/ADAPTER_SYSTEM.md` — Adapter system (canonical)
 - `../iam/ACCESS_CONTROL_SYSTEM.md` — IAM specifications
-- `../broker/` — Broker and agent specifications
+- `../agents/` — Agent engine and session specifications

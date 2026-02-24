@@ -30,14 +30,13 @@ CREATE TABLE access_log (
   event_id TEXT,                  -- FK to events ledger
   platform TEXT NOT NULL,
   sender_id TEXT NOT NULL,
-  container_kind TEXT,            -- dm, group
+  container_kind TEXT,            -- direct, group, channel
   account TEXT,
   
-  -- Resolved principal
-  principal_id TEXT,              -- Person ID if resolved
-  principal_type TEXT NOT NULL,   -- owner, known, unknown, system, webhook, agent
-  principal_name TEXT,
-  principal_relationship TEXT,
+  -- Resolved sender
+  sender_entity_id TEXT,          -- Person ID if resolved
+  sender_type TEXT NOT NULL,      -- owner, known, unknown, system, webhook, agent
+  sender_name TEXT,
   
   -- Policy evaluation
   policies_evaluated TEXT,        -- JSON array of all checked
@@ -70,10 +69,10 @@ CREATE TABLE access_log (
 
 -- Indexes for common queries
 CREATE INDEX idx_access_log_time ON access_log(timestamp);
-CREATE INDEX idx_access_log_principal ON access_log(principal_id);
+CREATE INDEX idx_access_log_sender ON access_log(sender_entity_id);
 CREATE INDEX idx_access_log_effect ON access_log(effect);
 CREATE INDEX idx_access_log_platform ON access_log(platform);
-CREATE INDEX idx_access_log_type ON access_log(principal_type);
+CREATE INDEX idx_access_log_type ON access_log(sender_type);
 
 -- Note: Table lives in identity.db. The acl_ prefix is dropped per DATABASE_ARCHITECTURE.md.
 ```
@@ -89,14 +88,13 @@ interface AccessLogEntry {
   event_id?: string;
   platform: string;
   sender_id: string;
-  container_kind?: 'dm' | 'group';
+  container_kind?: 'direct' | 'group' | 'channel';
   account?: string;
   
-  // Resolved principal
-  principal_id?: string;
-  principal_type: 'owner' | 'known' | 'unknown' | 'system' | 'webhook' | 'agent';
-  principal_name?: string;
-  principal_relationship?: string;
+  // Resolved sender
+  sender_entity_id?: string;
+  sender_type: 'owner' | 'known' | 'unknown' | 'system' | 'webhook' | 'agent';
+  sender_name?: string;
   
   // Policy evaluation
   policies_evaluated: string[];
@@ -197,11 +195,10 @@ async function logAccessDecision(
     container_kind: context.container_kind,
     account: context.account,
     
-    // Principal
-    principal_id: context.principal.id,
-    principal_type: context.principal.type,
-    principal_name: context.principal.name,
-    principal_relationship: context.principal.relationship,
+    // Sender
+    sender_entity_id: context.sender.entity_id,
+    sender_type: context.sender.type,
+    sender_name: context.sender.name,
     
     // Evaluation
     policies_evaluated: JSON.stringify(context.policies_evaluated),
@@ -259,7 +256,7 @@ SELECT
   timestamp,
   platform,
   sender_id,
-  principal_name,
+  sender_name,
   deny_reason,
   policies_denied
 FROM access_log
@@ -279,7 +276,7 @@ SELECT
   tools_allowed,
   session_key
 FROM access_log
-WHERE principal_id = 'person_casey'
+WHERE sender_entity_id = 'person_casey'
 ORDER BY timestamp DESC
 LIMIT 50;
 ```
@@ -293,7 +290,7 @@ SELECT
   COUNT(*) as attempts,
   MAX(timestamp) as last_attempt
 FROM access_log
-WHERE principal_type = 'unknown'
+WHERE sender_type = 'unknown'
 GROUP BY sender_id, platform
 ORDER BY attempts DESC;
 ```
@@ -315,7 +312,7 @@ ORDER BY times_matched DESC;
 ```sql
 SELECT 
   g.id,
-  g.principal_query,
+  g.sender_query,
   g.resources,
   gl.activity,
   gl.timestamp,
@@ -331,7 +328,7 @@ ORDER BY gl.timestamp DESC;
 ```sql
 SELECT 
   g.id,
-  g.principal_query,
+  g.sender_query,
   g.resources,
   COUNT(gl.id) as times_used,
   MAX(gl.timestamp) as last_used
@@ -357,10 +354,9 @@ nexus acl audit list --since yesterday
 nexus acl audit list --denied
 nexus acl audit list --allowed
 
-# Filter by principal
-nexus acl audit list --principal casey
-nexus acl audit list --principal-type unknown
-nexus acl audit list --relationship family
+# Filter by sender
+nexus acl audit list --sender casey
+nexus acl audit list --sender-type unknown
 
 # Filter by platform
 nexus acl audit list --platform discord
@@ -380,7 +376,7 @@ nexus acl audit export --format json > audit.json
 
 # Statistics
 nexus acl audit stats
-nexus acl audit stats --by principal
+nexus acl audit stats --by sender
 nexus acl audit stats --by platform
 nexus acl audit stats --by policy
 
@@ -406,7 +402,7 @@ TIME                 PLATFORM   SENDER              REASON
 ...
 ```
 
-### `nexus acl audit list --principal casey --last 5`
+### `nexus acl audit list --sender casey --last 5`
 
 ```
 Access Log for Casey (last 5)
@@ -428,7 +424,7 @@ Total decisions:      1,247
   Allowed:            1,189 (95.3%)
   Denied:                58 (4.7%)
 
-By principal type:
+By sender type:
   Owner:                892 (71.5%)
   Known contacts:       289 (23.2%)
   Unknown:               47 (3.8%)

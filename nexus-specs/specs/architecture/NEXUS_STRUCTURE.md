@@ -98,7 +98,7 @@ nexus/
 │   ├── db/                         # Ledger Access Layer
 │   │   ├── connection.ts           # SQLite connection (Bun SQLite)
 │   │   ├── migrations/             # Migration files
-│   │   ├── schema.sql              # Unified DDL for all four ledgers
+│   │   ├── schema.sql              # Unified DDL for all six databases
 │   │   ├── events/                 # Event Ledger queries
 │   │   │   ├── write.ts
 │   │   │   └── read.ts
@@ -196,12 +196,12 @@ All persistent state lives in six SQLite databases under `state/data/`, accessed
 
 | Database | Purpose | Key Tables |
 |----------|---------|------------|
-| **events.db** | Every inbound/outbound event normalized and stored. FTS5 full-text index. | `events`, `threads`, `event_participants`, `attachments`, `sync_watermarks` |
+| **events.db** | Every inbound/outbound event normalized and stored. FTS5 full-text index. | `events`, `threads`, `event_participants`, `attachments` |
 | **agents.db** | Session lifecycle, turns, messages, tool calls, compactions, artifacts. | `sessions`, `turns`, `messages`, `tool_calls`, `compactions`, `artifacts` |
-| **identity.db** | Entities, identity resolution, contacts, auth tokens, the Identity Graph. | `contacts`, `entities`, `identity_mappings`, `entity_tags`, `auth_tokens` |
-| **memory.db** | Knowledge graph: entities, relationships, episodes, observations, mental models. | `entities`, `relationships`, `episodes`, `episode_events`, `observations` |
-| **embeddings.db** | Vector embeddings for semantic search (sqlite-vec). | `embeddings`, `embedding_queue` |
-| **runtime.db** | Pipeline requests, automations, IAM grants/audit, adapter state, import jobs. | `nexus_requests`, `automations`, `acl_grants`, `adapter_instances` |
+| **identity.db** | Entities, identity resolution, contacts, auth tokens, the Identity Graph. | `contacts`, `entities`, `entity_tags`, `auth_tokens` |
+| **memory.db** | Knowledge graph: facts, episodes, mental models. | `facts`, `fact_entities`, `episodes`, `episode_events`, `mental_models` |
+| **embeddings.db** | Vector embeddings for semantic search (sqlite-vec). | `embeddings` |
+| **runtime.db** | Pipeline requests, automations, adapter state, import jobs. | `nexus_requests`, `automations`, `adapter_instances` |
 
 SQLite WAL mode enables concurrent reads. Write contention is isolated by database -- hot-path writes to events.db, agents.db, and identity.db don't block each other.
 
@@ -241,7 +241,7 @@ openclaw:  Storage.set(["session", projectID, sessionID], data)
 nexus:     db.insert(agent_sessions).values(session)
 ```
 
-All state flows through the four ledgers. No file-based session storage.
+All state flows through the six databases. No file-based session storage.
 
 ### 3. IAM Owns Routing
 

@@ -563,7 +563,7 @@ The Identity Ledger stores entities (persons and personas) with their contact id
 entities (
   id TEXT PRIMARY KEY,
   name TEXT,
-  type TEXT NOT NULL,           -- 'person' | 'persona' | 'discord_handle' | 'phone' | 'email' | ...
+  type TEXT NOT NULL,           -- 'person' | 'agent' | 'group' | 'organization' | 'service'
   merged_into TEXT,             -- union-find merge chain (NULL = canonical root)
   normalized TEXT,
   is_user INTEGER,              -- True for owner

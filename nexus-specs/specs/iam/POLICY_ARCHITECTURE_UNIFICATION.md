@@ -83,8 +83,8 @@ Same semantic function in two different places.
 
 `AuthorizationInput` (conceptual):
 
-- `principal`: resolved sender identity
-- `receiver`: resolved target (persona/system/entity)
+- `sender`: resolved sender identity
+- `receiver`: resolved target (agent/system/entity)
 - `delivery`: platform/space/container/thread context
 - `operation`: event/hook/method metadata (e.g. `memory:retain-episode`, control-plane method)
 - `agent_request`: desired role/persona/session/model/toolset hints
@@ -157,7 +157,7 @@ Current retain paths call `applyInternalRetainAccess(...)`.
 
 **Required end-state:**
 
-- define explicit internal principal + operation policies
+- define explicit internal sender + operation policies
 - canonical compiler grants equivalent permissions
 - remove manual access injection from retain paths
 
@@ -169,15 +169,14 @@ To support permissions across contacts/entities/personas/roles, policy matching 
 
 ### 7.1 Subject Selectors (Who)
 
-- `principal.type` (`owner|known|unknown|system|agent|webhook`)
-- `principal.entity_id`
-- `principal.relationship` (partner/family/friend/work/etc)
-- `principal.tags[]`
-- `principal.contact_handle` (normalized channel identifier)
+- `sender.type` (`owner|known|unknown|system|agent|webhook`)
+- `sender.entity_id`
+- `sender.tags[]`
+- `sender.contact_handle` (normalized channel identifier)
 
 ### 7.2 Receiver Selectors (Target)
 
-- `receiver.type` (`persona|system|entity|unknown`)
+- `receiver.type` (`agent|system|entity|unknown`)
 - `receiver.persona_id`
 - `receiver.entity_id`
 

@@ -5,10 +5,10 @@
 **Status:** ACTIVE
 **Last Updated:** 2026-02-20
 **Related:**
-- [DATABASE_ARCHITECTURE.md](../data/DATABASE_ARCHITECTURE.md)
-- [ADAPTER_SYSTEM.md](adapters/ADAPTER_SYSTEM.md)
-- [INTERNAL_ADAPTERS.md](adapters/INTERNAL_ADAPTERS.md)
-- [LIVE_E2E_HARNESS.md](../environment/foundation/harnesses/LIVE_E2E_HARNESS.md)
+- [DATABASE_ARCHITECTURE.md](../../DATABASE_ARCHITECTURE.md)
+- [ADAPTER_SYSTEM.md](../delivery/ADAPTER_SYSTEM.md)
+- [INTERNAL_ADAPTERS.md](../delivery/INTERNAL_ADAPTERS.md)
+- [LIVE_E2E_HARNESS.md](../../environment/foundation/harnesses/LIVE_E2E_HARNESS.md)
 
 ---
 
@@ -385,7 +385,7 @@ The mobile native bridge shim exposes these capabilities via `window.Nexus.*` AP
 
 ## 6. Eliminated Surfaces
 
-These surfaces exist in the current codebase (inherited from OpenClaw) and are being eliminated or superseded.
+These surfaces exist in the current codebase (inherited from openclaw) and are being eliminated or superseded.
 
 ### 6.1 Ingress Listener (`:18790`) → HTTP Ingress Adapter
 
@@ -431,7 +431,7 @@ The browser automation space is rapidly evolving. Building and maintaining a bes
 - Keep existing upstream code config-gated and dormant (`browser.enabled = false`)
 - Zero runtime cost when disabled (lazy-loaded)
 - No workspace lifecycle changes, no E2E assertions
-- Re-evaluate when core runtime is hardened, considering: upstream OpenClaw browser control, Vercel `agent-browser`, Anthropic computer-use, Playwright MCP
+- Re-evaluate when core runtime is hardened, considering: upstream openclaw browser control, Vercel `agent-browser`, Anthropic computer-use, Playwright MCP
 
 ### 7.3 Unique Value If Retained
 

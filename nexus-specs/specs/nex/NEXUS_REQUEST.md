@@ -188,7 +188,7 @@ interface DeliveryContext {
 
   // Conversation context
   container_id: string;              // Chat/channel/user ID (reply target)
-  container_kind: 'dm' | 'group' | 'channel' | 'direct';
+  container_kind: 'direct' | 'group' | 'channel'; // 'direct' for DMs. Legacy 'dm' normalized to 'direct' at ingest.
   thread_id?: string;                // Platform thread if applicable
   reply_to_id?: string;              // Message being replied to
 
@@ -196,10 +196,10 @@ interface DeliveryContext {
   capabilities: ChannelCapabilities;
 
   // Available outbound channels (all active adapters — for agent context)
-  available_channels: AvailableChannel[];
+  available_platforms: AvailablePlatform[];
 }
 
-interface AvailableChannel {
+interface AvailablePlatform {
   platform: string;
   accounts: string[];
   capabilities: ChannelCapabilities;
@@ -227,7 +227,7 @@ Events Ledger ← INSERT event (async, fire-and-forget)
 **Who:** IAM
 **What:** Resolves the sender identity — WHO sent this event. Queries Identity Graph.
 
-> **Cross-reference:** See [`../../runtime/iam/IDENTITY_RESOLUTION.md`](../../runtime/iam/IDENTITY_RESOLUTION.md) for the full identity resolution algorithm and Identity Graph schema.
+> **Cross-reference:** See [`../iam/IDENTITY_RESOLUTION.md`](../iam/IDENTITY_RESOLUTION.md) for the full identity resolution algorithm and Identity Graph schema.
 
 ### Reads
 
@@ -477,8 +477,8 @@ const effectiveRouting = {
 | `event.content`, `event.attachments` | Current message (Layer 3: Event) |
 | `event.metadata` | Event-specific context injection |
 | `delivery.platform`, `delivery.capabilities` | Channel context for MA (Layer 3: Event) |
-| `delivery.available_channels` | Available channels for message tool (Layer 3: Event) |
-| `principal.name`, `principal.relationship` | Sender context for MA (Layer 3: Event) |
+| `delivery.available_platforms` | Available platforms for message tool (Layer 3: Event) |
+| `sender.name`, `sender.tags` | Sender context for MA (Layer 3: Event) |
 | `receiver.persona_id`, `receiver.name` | Receiver/persona context for routing and system prompt |
 | `access.permissions` | IAM-filtered tool set |
 | `access.routing.persona` | Which persona → which SOUL.md, IDENTITY.md (Layer 1: System Prompt) |
@@ -619,7 +619,7 @@ interface ToolCallSummary {
 
 ### Side Effects
 
-**Streaming:** During execution, the Broker emits `StreamEvent` objects to NEX via `BrokerStreamHandle`. NEX routes them to the adapter (or block pipeline). See `../STREAMING.md`.
+**Streaming:** During execution, the Broker emits `StreamEvent` objects to NEX via `BrokerStreamHandle`. NEX routes them to the adapter (or block pipeline). See `../delivery/STREAMING.md`.
 
 **Agents Ledger write:** After execution completes, the Broker writes the full `AgentResult` to the Agents Ledger in a single transaction:
 
@@ -725,7 +725,7 @@ This is the critical interface between NEX (pipeline) and Broker (agent executio
 │  event.attachments ──────────────────────►  currentMessage.attachments        │
 │  delivery.platform ───────────────────────►  currentMessage (channel context)  │
 │  delivery.capabilities ──────────────────►  currentMessage (channel context)  │
-│  principal.name/relationship ────────────►  currentMessage (sender context)   │
+│  sender.name, sender.tags ──────────────►  currentMessage (sender context)   │
 │  receiver.persona_id/name ─────────────►  systemPrompt (receiver/persona)   │
 │  triggers.enrichment ────────────────────►  currentMessage (enriched context) │
 │                                   │         │                                  │
@@ -779,7 +779,7 @@ After agent execution, the Broker maps the `AgentResult` back onto the NexusRequ
 
 ```
 Stage 2 exit (unknown sender denied):
-  principal: populated
+  sender: populated
   receiver: null
   access: null
   triggers: null
@@ -788,7 +788,7 @@ Stage 2 exit (unknown sender denied):
   status: 'denied'
 
 Stage 4 exit (ACL denied):
-  principal: populated
+  sender: populated
   receiver: populated
   access: { decision: 'deny', ... }
   triggers: null
@@ -797,7 +797,7 @@ Stage 4 exit (ACL denied):
   status: 'denied'
 
 Stage 5 exit (automation handled):
-  principal: populated
+  sender: populated
   receiver: populated
   access: populated
   triggers: { handled: true, handled_by: '...' }
@@ -842,7 +842,7 @@ CREATE TABLE nex_traces (
     
     -- Denormalized for fast queries
     platform TEXT,                       -- delivery.platform
-    sender_entity_id TEXT,              -- principal.entity_id
+    sender_entity_id TEXT,              -- sender.entity_id
     agent_id TEXT,                      -- agent.agent_id
     session_key TEXT,                 -- agent.session_key
     turn_id TEXT,                       -- agent.turn_id
@@ -877,10 +877,10 @@ CREATE INDEX idx_nex_traces_created ON nex_traces(created_at);
 
 - `NEX.md` — Pipeline architecture and stage definitions
 - `INTERFACES.md` — Component interface contracts (being aligned to this spec)
-- `../broker/AGENT_ENGINE.md` — AssembledContext and AgentResult types
-- `../broker/CONTEXT_ASSEMBLY.md` — How AssembledContext is built from NexusRequest
-- `../STREAMING.md` — StreamEvent protocol during stage 7
-- `../../data/ledgers/NEXUS_LEDGER.md` — Nexus Ledger schema (trace storage)
+- `../agents/AGENT_ENGINE.md` — AssembledContext and AgentResult types
+- `../agents/CONTEXT_ASSEMBLY.md` — How AssembledContext is built from NexusRequest
+- `../delivery/STREAMING.md` — StreamEvent protocol during stage 7
+- `../ledgers/NEXUS_LEDGER.md` — Nexus Ledger schema (trace storage)
 - `../iam/ACCESS_CONTROL_SYSTEM.md` — ACL policies evaluated at stage 4
 - `../nex/automations/AUTOMATION_SYSTEM.md` — Automations evaluated at stage 5
 

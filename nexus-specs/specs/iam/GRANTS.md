@@ -39,7 +39,7 @@ Casey: "Can you check when Tyler is free?"
          │
          ▼
    Grant created:
-     principal: casey
+     sender: casey
      resources: [calendar_read]
      expires: 24h
          │
@@ -82,7 +82,7 @@ Tyler: "Give Casey access to my calendar permanently"
          │
          ▼
    Grant created:
-     principal: casey
+     sender: casey
      resources: [calendar_read]
      expires: null  # Permanent
      granted_by: tyler
@@ -97,7 +97,7 @@ interface Grant {
   id: string;                    // Unique grant ID
   
   // Who gets the grant
-  principal_query: {             // Query to match principals
+  sender_query: {                // Query to match senders
     person_id?: string;          // Specific person
     relationship?: string;       // All family members
     tags?: string[];             // People with tags
@@ -130,8 +130,8 @@ interface Grant {
 CREATE TABLE grants (
   id TEXT PRIMARY KEY,
 
-  -- Principal matching
-  principal_query TEXT NOT NULL,  -- JSON query
+  -- Sender matching
+  sender_query TEXT NOT NULL,     -- JSON query
 
   -- Resources
   resources TEXT NOT NULL,        -- JSON array
@@ -151,7 +151,7 @@ CREATE TABLE grants (
 );
 
 CREATE INDEX idx_grants_active ON grants(expires_at, revoked_at);
-CREATE INDEX idx_grants_principal ON grants(principal_query);
+CREATE INDEX idx_grants_sender ON grants(sender_query);
 
 -- Note: Table lives in identity.db. The acl_ prefix is dropped per DATABASE_ARCHITECTURE.md.
 ```
@@ -167,7 +167,7 @@ interface PermissionRequest {
   id: string;
   
   // Who's asking
-  requester: Principal;
+  requester: SenderContext;
   requester_platform: string;     // Where they asked
   
   // What they want
@@ -239,7 +239,7 @@ async function handleRequest(ctx: AgentContext) {
   if (needsCalendar && !permissions.tools.includes('calendar_read')) {
     // Can't access calendar — request elevation
     await requestElevation({
-      requester: ctx.principal,
+      requester: ctx.sender,
       resources: ['calendar_read'],
       reason: "User asked about schedule availability",
       original_message: event.content,
@@ -317,7 +317,7 @@ async function handleOwnerResponse(
     case 'approve_day':
       // Create 24-hour grant
       const dayGrant = await createGrant({
-        principal_query: { person_id: request.requester_id },
+        sender_query: { person_id: request.requester_id },
         resources: JSON.parse(request.resources),
         expires_at: Date.now() + 24 * 60 * 60 * 1000,
         granted_by: 'owner',
@@ -337,7 +337,7 @@ async function handleOwnerResponse(
     case 'approve_always':
       // Create permanent grant
       const permGrant = await createGrant({
-        principal_query: { person_id: request.requester_id },
+        sender_query: { person_id: request.requester_id },
         resources: JSON.parse(request.resources),
         expires_at: null, // Permanent
         granted_by: 'owner',
@@ -373,16 +373,16 @@ async function handleOwnerResponse(
 Grants are checked during ACL evaluation:
 
 ```typescript
-function evaluateAccess(principal: Principal, event: Event): AccessDecision {
+function evaluateAccess(sender: SenderContext, event: Event): AccessDecision {
   // 1. Evaluate static policies
-  const policyResult = evaluatePolicies(principal, event);
-  
+  const policyResult = evaluatePolicies(sender, event);
+
   if (policyResult.effect === 'deny') {
     return policyResult; // Deny short-circuit
   }
-  
-  // 2. Load active grants for this principal
-  const grants = loadActiveGrants(principal);
+
+  // 2. Load active grants for this sender
+  const grants = loadActiveGrants(sender);
   
   // 3. Merge grant permissions with policy permissions
   const permissions = mergePermissions(
@@ -398,15 +398,15 @@ function evaluateAccess(principal: Principal, event: Event): AccessDecision {
   };
 }
 
-function loadActiveGrants(principal: Principal): Grant[] {
+function loadActiveGrants(sender: SenderContext): Grant[] {
   const now = Date.now();
-  
+
   return db.query(`
     SELECT * FROM grants
     WHERE revoked_at IS NULL
       AND (expires_at IS NULL OR expires_at > ?)
-      AND principal_matches(principal_query, ?)
-  `, [now, JSON.stringify(principal)]);
+      AND sender_matches(sender_query, ?)
+  `, [now, JSON.stringify(sender)]);
 }
 ```
 
@@ -417,7 +417,7 @@ function loadActiveGrants(principal: Principal): Grant[] {
 ```bash
 # List active grants
 nexus acl grants list
-nexus acl grants list --principal casey
+nexus acl grants list --sender casey
 nexus acl grants list --expired
 
 # View grant details
@@ -425,7 +425,7 @@ nexus acl grants show grant_abc123
 
 # Create grant manually
 nexus acl grants create \
-  --principal casey \
+  --sender casey \
   --resources calendar_read \
   --expires 24h \
   --reason "Approved via CLI"
@@ -478,11 +478,11 @@ async function handleSendEmailRequest(
   ctx: AgentContext, 
   draft: EmailDraft
 ): Promise<void> {
-  // Check if principal can send email
+  // Check if sender can send email
   if (!ctx.permissions.tools.includes('send_email')) {
     // Create approval request for this specific action
     const approval = await createActionApproval({
-      requester: ctx.principal,
+      requester: ctx.sender,
       action: 'send_email',
       details: {
         to: draft.to,
@@ -495,7 +495,7 @@ async function handleSendEmailRequest(
     await notifyOwner({
       type: 'action_approval',
       approval_id: approval.id,
-      requester_name: ctx.principal.name,
+      requester_name: ctx.sender.name,
       action: 'Send email',
       preview: formatEmailPreview(draft),
       actions: [
@@ -541,7 +541,7 @@ All grant activity is logged:
 ### Rate Limiting
 
 Prevent spam:
-- Max N pending requests per principal
+- Max N pending requests per sender
 - Cooldown between requests
 - Block if too many denials
 
@@ -554,7 +554,7 @@ Prevent spam:
 ```yaml
 # Created via CLI or agent
 id: grant_partner_calendar
-principal_query:
+sender_query:
   relationship: partner
 resources:
   - calendar_read
@@ -568,7 +568,7 @@ reason: "Partner should always see my calendar"
 ```yaml
 # Created via approval flow
 id: grant_work_access_abc
-principal_query:
+sender_query:
   person_id: person_contractor
 resources:
   - github
@@ -584,7 +584,7 @@ reason: "Contractor needs project access"
 ```yaml
 # Only applies in specific context
 id: grant_scoped_assistant
-principal_query:
+sender_query:
   person_id: person_assistant
 resources:
   - send_email

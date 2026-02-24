@@ -12,14 +12,14 @@
 Every directory in the openclaw codebase is listed with a decision and destination. This is the **execution guide** for the fork transformation. Agents should follow this document file-by-file.
 
 **Architecture references:**
-- `nex/NEX.md` — 9-stage pipeline, NexusRequest lifecycle
-- `nex/NEXUS_REQUEST.md` — Data bus schema
-- `nex/DAEMON.md` — Process lifecycle
-- `adapters/ADAPTER_SYSTEM.md` — External CLI adapter model
-- `broker/AGENT_ENGINE.md` — pi-coding-agent wrapper
-- `broker/SESSION_LIFECYCLE.md` — Session management
-- `data/ledgers/*.md` — System of Record schemas
-- `project-structure/NEXUS_STRUCTURE.md` — Target codebase layout
+- `../nex/NEX.md` — 9-stage pipeline, NexusRequest lifecycle
+- `../nex/NEXUS_REQUEST.md` — Data bus schema
+- `../nex/DAEMON.md` — Process lifecycle
+- `../delivery/ADAPTER_SYSTEM.md` — External CLI adapter model
+- `../agents/AGENT_ENGINE.md` — pi-coding-agent wrapper
+- `../agents/SESSION_LIFECYCLE.md` — Session management
+- `../ledgers/*.md` — System of Record schemas
+- `NEXUS_STRUCTURE.md` — Target codebase layout
 
 ---
 
@@ -99,22 +99,22 @@ This is the heart of Nexus and does NOT exist in openclaw. Build from specs.
 
 | New File/Dir | Spec | Source Material |
 |-------------|------|----------------|
-| `nex/pipeline.ts` | `nex/NEX.md` | New — 9-stage sync pipeline |
-| `nex/request.ts` | `nex/NEXUS_REQUEST.md` | New — NexusRequest + NexusEvent Zod schemas |
-| `nex/daemon/` | `nex/DAEMON.md` | Adapt from `src/daemon/` (PID lock, signals, startup) |
-| `nex/bus/` | `nex/BUS_ARCHITECTURE.md` | Adapt from openclaw bus — keep pub/sub, change event types |
-| `nex/plugins/` | `nex/PLUGINS.md` | New — NEXPlugin interface, loader, hook points |
-| `nex/adapters/manager.ts` | `adapters/ADAPTER_SYSTEM.md` | New — spawn/supervise external adapter processes |
-| `nex/adapters/protocol.ts` | `adapters/ADAPTER_SYSTEM.md` | New — JSONL CLI protocol handling |
-| `nex/stages/receiveEvent.ts` | `nex/NEX.md` | New — create NexusRequest from NexusEvent |
-| `nex/stages/resolveIdentity.ts` | `nex/NEX.md` | New — query Identity Graph |
-| `nex/stages/resolveAccess.ts` | `nex/NEX.md` | New — evaluate ACL policies |
-| `nex/stages/resolveReceiver.ts` | `nex/NEX.md` | New — determine target agent/session |
-| `nex/stages/runAutomations.ts` | `nex/NEX.md` | New — match and execute automations |
-| `nex/stages/assembleContext.ts` | `nex/NEX.md` | Calls Broker's context assembly |
-| `nex/stages/runAgent.ts` | `nex/NEX.md` | Calls Broker's agent engine |
-| `nex/stages/deliverResponse.ts` | `nex/NEX.md` | Send via adapter's `send` command |
-| `nex/stages/finalize.ts` | `nex/NEX.md` | Write to Nexus Ledger, emit outbound event |
+| `nex/pipeline.ts` | `../nex/NEX.md` | New — 9-stage sync pipeline |
+| `nex/request.ts` | `../nex/NEXUS_REQUEST.md` | New — NexusRequest + NexusEvent Zod schemas |
+| `nex/daemon/` | `../nex/DAEMON.md` | Adapt from `src/daemon/` (PID lock, signals, startup) |
+| `nex/bus/` | `../nex/BUS_ARCHITECTURE.md` | Adapt from openclaw bus — keep pub/sub, change event types |
+| `nex/plugins/` | `../nex/PLUGINS.md` | New — NEXPlugin interface, loader, hook points |
+| `nex/adapters/manager.ts` | `../delivery/ADAPTER_SYSTEM.md` | New — spawn/supervise external adapter processes |
+| `nex/adapters/protocol.ts` | `../delivery/ADAPTER_SYSTEM.md` | New — JSONL CLI protocol handling |
+| `nex/stages/receiveEvent.ts` | `../nex/NEX.md` | New — create NexusRequest from NexusEvent |
+| `nex/stages/resolveIdentity.ts` | `../nex/NEX.md` | New — query Identity Graph |
+| `nex/stages/resolveAccess.ts` | `../nex/NEX.md` | New — evaluate ACL policies |
+| `nex/stages/resolveReceiver.ts` | `../nex/NEX.md` | New — determine target agent/session |
+| `nex/stages/runAutomations.ts` | `../nex/NEX.md` | New — match and execute automations |
+| `nex/stages/assembleContext.ts` | `../nex/NEX.md` | Calls Broker's context assembly |
+| `nex/stages/runAgent.ts` | `../nex/NEX.md` | Calls Broker's agent engine |
+| `nex/stages/deliverResponse.ts` | `../nex/NEX.md` | Send via adapter's `send` command |
+| `nex/stages/finalize.ts` | `../nex/NEX.md` | Write to Nexus Ledger, emit outbound event |
 
 ### 🔵 NEW: `src/db/` — Data Layer
 
@@ -123,13 +123,13 @@ Replaces openclaw's file-based storage entirely. 6 databases: events.db, agents.
 | New File | Spec | Notes |
 |----------|------|-------|
 | `db/ledgers.ts` | — | SQLite connections (better-sqlite3) |
-| `db/events.ts` | `data/ledgers/EVENTS_LEDGER.md` | Raw SQL queries — no ORM |
-| `db/agents.ts` | `data/ledgers/AGENTS_LEDGER.md` | Sessions, turns, messages, tool_calls, compactions |
-| `db/identity.ts` | `data/ledgers/IDENTITY_GRAPH.md` | Contacts, entities, mappings, aliases |
-| `db/memory.ts` | `data/ledgers/MEMORY.md` | Episodes, facets, semantic memory |
-| `db/embeddings.ts` | `data/ledgers/EMBEDDINGS.md` | Vector embeddings |
-| `db/runtime.ts` | `data/ledgers/RUNTIME.md` | Runtime state, pipeline traces |
-| `db/migrations/` | `nex/DAEMON.md` | schema_version table + migration runner |
+| `db/events.ts` | `../ledgers/EVENTS_LEDGER.md` | Raw SQL queries — no ORM |
+| `db/agents.ts` | `../ledgers/AGENTS_LEDGER.md` | Sessions, turns, messages, tool_calls, compactions |
+| `db/identity.ts` | `../iam/IDENTITY_RESOLUTION.md` | Contacts, entities, mappings, aliases |
+| `db/memory.ts` | `../memory/MEMORY_SYSTEM.md` | Episodes, facets, semantic memory |
+| `db/embeddings.ts` | `../memory/MEMORY_SYSTEM.md` | Vector embeddings |
+| `db/runtime.ts` | `../ledgers/NEXUS_LEDGER.md` | Runtime state, pipeline traces |
+| `db/migrations/` | `../nex/DAEMON.md` | schema_version table + migration runner |
 
 ### 🟡 REPLACE: `src/broker/` — Agent Execution
 
@@ -137,12 +137,12 @@ Built from multiple openclaw modules. The Broker wraps pi-coding-agent and write
 
 | Nexus | From Openclaw | Spec | Notes |
 |-------|--------------|------|-------|
-| `broker/engine.ts` | `agents/pi-embedded-runner/` | `broker/AGENT_ENGINE.md` | Wrap `runEmbeddedPiAgent()`, return AgentResult |
-| `broker/context.ts` | `agents/pi-embedded-runner/history.ts`, prompt construction | `broker/CONTEXT_ASSEMBLY.md` | 3-layer context: system prompt, conversation history, current event |
-| `broker/sessions/` | `sessions/`, `routing/session-key.ts` | `broker/SESSION_LIFECYCLE.md` | Session create/resume, queue modes, aliases, serial execution |
-| `broker/streaming.ts` | `agents/pi-embedded-subscribe.tools.ts` | `runtime/STREAMING.md` | BrokerStreamHandle, StreamEvent protocol |
-| `broker/compaction.ts` | `sessions/` (compaction logic) | `broker/AGENT_ENGINE.md` | Wrap upstream compaction, add metadata table |
-| `broker/queue.ts` | `auto-reply/reply/` (queue management) | `broker/SESSION_LIFECYCLE.md` | 5 queue modes: steer, followup, collect, queue, interrupt |
+| `broker/engine.ts` | `agents/pi-embedded-runner/` | `../agents/AGENT_ENGINE.md` | Wrap `runEmbeddedPiAgent()`, return AgentResult |
+| `broker/context.ts` | `agents/pi-embedded-runner/history.ts`, prompt construction | `../agents/CONTEXT_ASSEMBLY.md` | 3-layer context: system prompt, conversation history, current event |
+| `broker/sessions/` | `sessions/`, `routing/session-key.ts` | `../agents/SESSION_LIFECYCLE.md` | Session create/resume, queue modes, aliases, serial execution |
+| `broker/streaming.ts` | `agents/pi-embedded-subscribe.tools.ts` | `../delivery/STREAMING.md` | BrokerStreamHandle, StreamEvent protocol |
+| `broker/compaction.ts` | `sessions/` (compaction logic) | `../agents/AGENT_ENGINE.md` | Wrap upstream compaction, add metadata table |
+| `broker/queue.ts` | `auto-reply/reply/` (queue management) | `../agents/SESSION_LIFECYCLE.md` | 5 queue modes: steer, followup, collect, queue, interrupt |
 
 ### 🟡 REPLACE: `src/iam/` — Identity & Access Management
 
@@ -150,11 +150,11 @@ New module replacing openclaw's per-call permission system.
 
 | Nexus | From Openclaw | Spec | Notes |
 |-------|--------------|------|-------|
-| `iam/identity.ts` | `routing/resolve-route.ts` | `data/ledgers/IDENTITY_GRAPH.md` | Query contacts → mappings → entities |
-| `iam/policies.ts` | (new) | `iam/ACCESS_CONTROL_SYSTEM.md`, `iam/POLICIES.md` | YAML policy evaluation, declarative |
-| `iam/grants.ts` | (new) | `iam/GRANTS.md` | Dynamic temporary permissions |
-| `iam/audit.ts` | (new) | `iam/AUDIT.md` | Decision logging to SQLite |
-| `iam/routing.ts` | `routing/bindings.ts` | `iam/ACCESS_CONTROL_SYSTEM.md` | Session key assignment from policies |
+| `iam/identity.ts` | `routing/resolve-route.ts` | `../iam/IDENTITY_RESOLUTION.md` | Query contacts → mappings → entities |
+| `iam/policies.ts` | (new) | `../iam/ACCESS_CONTROL_SYSTEM.md`, `../iam/POLICIES.md` | YAML policy evaluation, declarative |
+| `iam/grants.ts` | (new) | `../iam/GRANTS.md` | Dynamic temporary permissions |
+| `iam/audit.ts` | (new) | `../iam/AUDIT.md` | Decision logging to SQLite |
+| `iam/routing.ts` | `routing/bindings.ts` | `../iam/ACCESS_CONTROL_SYSTEM.md` | Session key assignment from policies |
 
 ---
 
@@ -418,7 +418,7 @@ Openclaw bundles channel handling in `src/`. Nexus moves these to `extensions/` 
 
 ## extensions/ — External Adapter Processes
 
-Extensions become external CLI adapter processes per `ADAPTER_SYSTEM.md`. Each must implement the adapter CLI protocol: `info`, `monitor`, `send`, `stream`, `health`.
+Extensions become external CLI adapter processes per `../delivery/ADAPTER_SYSTEM.md`. Each must implement the adapter CLI protocol: `info`, `monitor`, `send`, `stream`, `health`.
 
 | Extension | Nexus Channel | Priority | Notes |
 |-----------|--------------|----------|-------|
@@ -498,20 +498,20 @@ These don't exist in openclaw at all:
 
 | Component | Location | Spec | Priority |
 |-----------|----------|------|----------|
-| **NEX Pipeline** | `src/nex/pipeline.ts` | `nex/NEX.md` | P0 |
-| **NexusRequest types** | `src/nex/request.ts` | `nex/NEXUS_REQUEST.md` | P0 |
-| **Pipeline stages (9)** | `src/nex/stages/*.ts` | `nex/NEX.md` | P0 |
-| **Adapter Manager** | `src/nex/adapters/manager.ts` | `adapters/ADAPTER_SYSTEM.md` | P0 |
-| **Adapter CLI protocol** | `src/nex/adapters/protocol.ts` | `adapters/ADAPTER_SYSTEM.md` | P0 |
-| **Events Ledger** | `src/db/events.ts` | `data/ledgers/EVENTS_LEDGER.md` | P0 |
-| **Agents Ledger** | `src/db/agents.ts` | `data/ledgers/AGENTS_LEDGER.md` | P0 |
-| **Identity Ledger** | `src/db/identity.ts` | `data/ledgers/IDENTITY_GRAPH.md` | P0 |
-| **Nexus Ledger** | `src/db/nexus.ts` | `data/ledgers/NEXUS_LEDGER.md` | P0 |
-| **ACL Policy Engine** | `src/iam/policies.ts` | `iam/ACCESS_CONTROL_SYSTEM.md` | P1 |
-| **Grants System** | `src/iam/grants.ts` | `iam/GRANTS.md` | P1 |
-| **Audit Logger** | `src/iam/audit.ts` | `iam/AUDIT.md` | P1 |
-| **Automation System** | `src/nex/automations/` | `nex/automations/AUTOMATION_SYSTEM.md` | P2 |
-| **Clock Adapter** | `extensions/clock/` | `CLOCK_ADAPTER.md` — DESIGN LOCKED + IMPLEMENTED | P1 |
+| **NEX Pipeline** | `src/nex/pipeline.ts` | `../nex/NEX.md` | P0 |
+| **NexusRequest types** | `src/nex/request.ts` | `../nex/NEXUS_REQUEST.md` | P0 |
+| **Pipeline stages (9)** | `src/nex/stages/*.ts` | `../nex/NEX.md` | P0 |
+| **Adapter Manager** | `src/nex/adapters/manager.ts` | `../delivery/ADAPTER_SYSTEM.md` | P0 |
+| **Adapter CLI protocol** | `src/nex/adapters/protocol.ts` | `../delivery/ADAPTER_SYSTEM.md` | P0 |
+| **Events Ledger** | `src/db/events.ts` | `../ledgers/EVENTS_LEDGER.md` | P0 |
+| **Agents Ledger** | `src/db/agents.ts` | `../ledgers/AGENTS_LEDGER.md` | P0 |
+| **Identity Ledger** | `src/db/identity.ts` | `../iam/IDENTITY_RESOLUTION.md` | P0 |
+| **Nexus Ledger** | `src/db/nexus.ts` | `../ledgers/NEXUS_LEDGER.md` | P0 |
+| **ACL Policy Engine** | `src/iam/policies.ts` | `../iam/ACCESS_CONTROL_SYSTEM.md` | P1 |
+| **Grants System** | `src/iam/grants.ts` | `../iam/GRANTS.md` | P1 |
+| **Audit Logger** | `src/iam/audit.ts` | `../iam/AUDIT.md` | P1 |
+| **Automation System** | `src/nex/automations/` | `../nex/automations/AUTOMATION_SYSTEM.md` | P2 |
+| **Clock Adapter** | `extensions/clock/` | `../delivery/CLOCK_ADAPTER.md` — DESIGN LOCKED + IMPLEMENTED | P1 |
 
 ---
 
