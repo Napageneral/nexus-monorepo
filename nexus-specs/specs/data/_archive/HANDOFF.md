@@ -21,14 +21,14 @@ Read ALL of these files before writing any code. They are the source of truth fo
 **Then read the architecture and data model:**
 
 ```
-/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_SYSTEM_V2.md
+/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_SYSTEM.md
 /Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/UNIFIED_ENTITY_STORE.md
 ```
 
 **Then the writer (the most complex piece):**
 
 ```
-/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_WRITER_V2.md
+/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_WRITER.md
 /Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_WRITER_ROLE.md
 ```
 

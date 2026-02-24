@@ -57,6 +57,7 @@ ingest → resolveIdentity → resolveReceiver → resolveAccess → runAutomati
 - `../README.md` — System overview
 - `../data/` — Where state lives (ledgers, memory)
 - `../environment/` — Agent working context
+- `PLATFORM_CHANNEL_TERMINOLOGY_CUTOVER.md` — hard-cutover terminology spec (`platform` vs `channel`)
 
 ---
 

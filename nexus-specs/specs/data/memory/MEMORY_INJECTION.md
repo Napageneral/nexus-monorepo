@@ -3,7 +3,7 @@
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-20
 **Supersedes:** ../roles/MEMORY_READER.md
-**Related:** MEMORY_SYSTEM_V2.md, MEMORY_SEARCH_SKILL.md, MEMORY_WRITER_V2.md
+**Related:** MEMORY_SYSTEM.md, MEMORY_SEARCH_SKILL.md, MEMORY_WRITER.md
 
 ---
 
@@ -228,5 +228,5 @@ INSERT INTO automations (
 
 - `MEMORY_SEARCH_SKILL.md` -- How agents do deeper search when injection isn't enough
 - `MEMORY_REFLECT_SKILL.md` -- Deep research and mental model creation
-- `MEMORY_SYSTEM_V2.md` -- Full memory architecture
-- `MEMORY_WRITER_V2.md` -- How memory gets written
+- `MEMORY_SYSTEM.md` -- Full memory architecture
+- `MEMORY_WRITER.md` -- How memory gets written

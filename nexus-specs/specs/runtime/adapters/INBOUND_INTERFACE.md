@@ -63,10 +63,11 @@ interface NexusEvent {
   // Routing context
   platform: string;              // Platform name
   account_id: string;            // Which bot account received
-  sender_id: string;             // Platform-specific sender ID
+  sender_id: string;             // Platform-specific sender ID (see IDENTITY_RESOLUTION.md for resolution)
   sender_name?: string;          // Display name if available
+  space_id?: string;             // Workspace/server scope (e.g. Slack workspace, Discord guild)
   container_id: string;          // Chat/channel/DM container ID
-  container_kind: 'dm' | 'group' | 'channel' | 'direct';
+  container_kind: 'direct' | 'group' | 'channel';  // Legacy `dm` normalizes to `direct` at ingest.
   thread_id?: string;            // For threaded conversations
   reply_to_id?: string;          // If replying to a message
   
@@ -130,10 +131,8 @@ const event: NexusEvent = {
   sender_id: "user123",
   sender_name: "alice",
   container_id: "chan456",
-  container_kind: "group",  // or "dm" if DM container
-  metadata: {
-    space_id: "guild789",
-  },
+  space_id: "guild789",
+  container_kind: "group",  // or "direct" if DM container
 };
 ```
 
@@ -159,7 +158,7 @@ const event: NexusEvent = {
   account_id: "default",
   sender_id: "+14155551234",
   container_id: "+14155551234",
-  container_kind: "dm",
+  container_kind: "direct",
 };
 ```
 
@@ -177,10 +176,10 @@ interface EventFilter {
 }
 ```
 
-Example: Only DMs from specific users:
+Example: Only direct messages from specific users:
 ```typescript
 filters: [
-  { type: 'include', field: 'container_kind', pattern: 'dm' },
+  { type: 'include', field: 'container_kind', pattern: 'direct' },
   { type: 'include', field: 'sender_id', pattern: /^\+1415/ },
 ]
 ```
@@ -258,4 +257,5 @@ function createNexusRequest(event: NexusEvent): NexusRequest {
 
 - `OUTBOUND_INTERFACE.md` — Delivery interface
 - `ADAPTER_INTERFACES.md` — Combined overview
+- `IDENTITY_RESOLUTION.md` — How `sender_id` is resolved to an entity
 - `channels/{channel}.md` — Per-channel specs

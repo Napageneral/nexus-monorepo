@@ -39,7 +39,7 @@
 ### Inbound / Monitor
 - **`eve watch`** — Polls chat.db, outputs JSONL events with rowid, text, sender, chat_id, is_from_me, timestamp
 - **`eve sync`** — Full ETL from chat.db → eve.db (handles, chats, messages, attachments, reactions, conversations). Watermark-based incremental sync.
-- **Event format needs adaptation** — Current JSONL schema is eve-specific, not NexusEvent. Fields need renaming: `sender` → `sender_id`, `chat_id` → `peer_id`, add `channel: "imessage"`, add `peer_kind`, etc.
+- **Event format needs adaptation** — Current JSONL schema is eve-specific, not NexusEvent. Fields need renaming: `sender` → `sender_id`, `chat_id` → `container_id`, add `channel: "imessage"`, add `container_kind`, etc.
 
 ### Outbound / Send
 - **`eve send`** — Full implementation via AppleScript (`osascript`). Supports:
@@ -81,7 +81,7 @@ Current `eve watch` output:
 
 Needed NexusEvent format:
 ```json
-{"event_id":"imessage:12345","timestamp":1707235200000,"content":"Hey","content_type":"text","channel":"imessage","account_id":"default","sender_id":"+14155551234","peer_id":"+14155551234","peer_kind":"dm"}
+{"event_id":"imessage:12345","timestamp":1707235200000,"content":"Hey","content_type":"text","channel":"imessage","account_id":"default","sender_id":"+14155551234","container_id":"+14155551234","container_kind":"direct"}
 ```
 
 **Gap:** Field renaming + schema alignment. Could be done via:

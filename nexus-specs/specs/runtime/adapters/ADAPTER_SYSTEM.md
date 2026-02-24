@@ -76,7 +76,7 @@ interface AdapterInfo {
   multi_account: boolean;             // Supports multiple accounts?
 
   // Platform capabilities (for agent context)
-  platform_capabilities: PlatformCapabilities;
+  platform_capabilities: ChannelCapabilities;
 }
 
 type AdapterCapability = "monitor" | "send" | "stream" | "backfill" | "health" | "accounts" | "react" | "edit" | "delete" | "poll";
@@ -230,7 +230,7 @@ interface PlatformContext {
   account: string;                       // "echo-bot", "default"
 
   // What the platform supports
-  capabilities: PlatformCapabilities;
+  capabilities: ChannelCapabilities;
 
   // Available platforms for explicit sends (all active outbound adapters)
   available_platforms: AvailablePlatform[];
@@ -239,7 +239,7 @@ interface PlatformContext {
 interface AvailablePlatform {
   platform: string;
   accounts: string[];
-  capabilities: PlatformCapabilities;
+  capabilities: ChannelCapabilities;
 }
 ```
 
@@ -258,12 +258,12 @@ iMessage adapter: Strips markdown, plain text
 
 The adapter owns the conversion logic because it knows platform quirks intimately. NEX doesn't need to know that Telegram uses HTML parse mode or that Discord suppresses link embeds with `<>`.
 
-### PlatformCapabilities
+### ChannelCapabilities
 
 Reported by each adapter via `info`, stored by NEX, served to context assembly:
 
 ```typescript
-interface PlatformCapabilities {
+interface ChannelCapabilities {
   // Text limits
   text_limit: number;                    // Max chars per message
   caption_limit?: number;                // Max chars for media caption
@@ -870,7 +870,7 @@ The Adapter Manager exposes state to the Broker for context assembly.
 interface AdapterManagerQuery {
   // For context assembly
   getActivePlatforms(): ActivePlatform[];
-  getPlatformCapabilities(platform: string): PlatformCapabilities;
+  getChannelCapabilities(platform: string): ChannelCapabilities;
 
   // For outbound delivery
   getOutboundAdapter(platform: string, account?: string): ResolvedAdapter;
@@ -883,7 +883,7 @@ interface ActivePlatform {
   platform: string;                   // "gmail", "discord", "imessage"
   adapter: string;                    // "gog", "discord-cli", "eve"
   accounts: string[];                 // Active accounts for this platform
-  capabilities: PlatformCapabilities;
+  capabilities: ChannelCapabilities;
   direction: "inbound" | "outbound" | "both";
 }
 ```
@@ -936,7 +936,7 @@ An adapter declares its level implicitly via the `supports` array in `info`.
 
 ### Adapter Interfaces (ADAPTER_INTERFACES.md, INBOUND_INTERFACE.md, OUTBOUND_INTERFACE.md)
 
-Those specs define the **data contracts** — NexusEvent schema, DeliveryResult schema, PlatformCapabilities shape. This spec defines the **operational system** — how NEX manages adapters as processes.
+Those specs define the **data contracts** — NexusEvent schema, DeliveryResult schema, ChannelCapabilities shape. This spec defines the **operational system** — how NEX manages adapters as processes.
 
 ### Credential System (CREDENTIAL_SYSTEM.md)
 

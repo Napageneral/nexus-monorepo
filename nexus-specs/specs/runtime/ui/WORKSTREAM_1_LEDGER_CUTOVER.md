@@ -2,8 +2,9 @@
 
 **Status:** LOCKED FOR IMPLEMENTATION  
 **Last Updated:** 2026-02-12  
-**Related:** `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/runtime/ui/COMMAND_CENTER.md`  
+**Related:** `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/runtime/ui/COMMAND_CENTER.md`
 **Related:** `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/ledgers/AGENTS_LEDGER.md`
+**Incorporates:** formerly separate `WORKSTREAM_1_BROKER_HARDENING.md` addendum
 
 ---
 
@@ -175,3 +176,69 @@ Session-level metric duplication is intentionally avoided.
 4. Session alias promotion and import reconciliation resolve to stable canonical sessions.
 5. `sessions.import` behavior is idempotent with deterministic `imported/upserted/skipped/failed` outcomes.
 6. Command Center can read session continuity from ledger-only semantics.
+7. Heartbeat subsystem and controls are removed from runtime, gateway, cron coupling, and web monitor paths.
+8. Duplicate inbound events do not trigger duplicate pipeline behavior.
+9. Duplicate handling is observable with explicit trace semantics.
+10. A single canonical session resolver is used by pipeline, gateway, and import.
+11. Delivery target handling remains functional without heartbeat-specific wrappers.
+
+---
+
+## Broker Hardening (Pre-Command Center)
+
+The following hardening constraints tighten broker behavior before Command Center implementation. These are additive to the ledger cutover above.
+
+### Heartbeat Removal
+
+The heartbeat subsystem is **removed root-and-stem** — no migration shim, no runtime fallback, no partial retention. Hooks/automations replace heartbeat wake and heartbeat message pipelines. Equivalent observability is emitted through hooks/automation telemetry, not heartbeat event channels.
+
+Remove:
+1. Heartbeat scheduler/wake/event APIs and controls.
+2. Heartbeat token behavior, heartbeat visibility config, heartbeat delivery wrappers.
+3. Heartbeat-driven cron wake modes and hook wake modes tied to heartbeat semantics.
+4. Web heartbeat runner and heartbeat-specific channel hooks.
+
+Keep (only if still needed outside heartbeat):
+1. Generic outbound targeting utility (`resolveOutboundTarget`) for delivery paths.
+2. Any generic coalescing primitive only if explicitly reused by hooks runtime; otherwise delete.
+
+### Orchestration-Boundary Dedupe
+
+For inbound duplicates identified by `(source, source_id)`:
+1. Do not run full pipeline side effects again.
+2. Do not produce duplicate agent turns or duplicate outbound delivery.
+3. Record an explicit duplicate/drop outcome for observability.
+
+Implementation contract:
+1. Receive stage must surface duplicate detection outcome (not just rely on SQL no-op).
+2. Pipeline must short-circuit downstream stages for duplicates.
+3. Duplicate short-circuit status must be visible in request trace/event telemetry.
+
+### Canonical Session Resolver
+
+Broker-owned shared resolver module in NEX core (not gateway-only, not import-only).
+
+Consumers:
+1. Pipeline stages (primary source for runtime turn/session writes)
+2. Gateway session methods (resolve/list/preview/path operations)
+3. Import ingestion (`sessions.import` reconciliation)
+
+Required behavior:
+1. Canonical direct lookup
+2. Alias lookup
+3. Deterministic suffix disambiguation policy
+4. Identity promotion alias minting
+5. Canonical label return for all callers
+
+No resolver behavior should depend on transcript/session-store files.
+
+### Delivery Target Handling (Post-Heartbeat)
+
+Keep delivery target logic generic and explicit in broker delivery path. Remove heartbeat-specific target wrapper helpers with heartbeat deletion. Any shared targeting utility retained must be heartbeat-agnostic.
+
+### Hardening Rollout Order
+
+1. Implement orchestration dedupe short-circuit first (safety guard).
+2. Centralize session resolver and switch call sites.
+3. Remove heartbeat subsystem and wake coupling.
+4. Validate gateway + import + pipeline compatibility under resolver unification.

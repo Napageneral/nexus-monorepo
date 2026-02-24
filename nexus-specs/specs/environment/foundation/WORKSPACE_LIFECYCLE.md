@@ -567,5 +567,5 @@ This section defines what the E2E harness should validate at each lifecycle phas
 - `specs/runtime/broker/MEESEEKS_PATTERN.md` — Meeseeks automation pattern
 - `specs/runtime/broker/CONTEXT_ASSEMBLY.md` — Context assembly for MWP
 - `specs/data/DATABASE_ARCHITECTURE.md` — Canonical 6-database layout
-- `specs/data/memory/MEMORY_SYSTEM_V2.md` — Memory system architecture
+- `specs/data/memory/MEMORY_SYSTEM.md` — Memory system architecture
 - `specs/environment/foundation/harnesses/LIVE_E2E_HARNESS.md` — E2E harness workplan

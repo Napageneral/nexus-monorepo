@@ -186,7 +186,7 @@ One agent, working through these phases in order, is the cleanest path. Each pha
 
 ## Phase 4: Memory-Writer Meeseeks
 
-> **Updated design:** The writer is now triggered per episode, not per event. See `MEMORY_V2_RETAIN_PIPELINE.md` for the full episode-based retain architecture. The writer no longer creates causal links (consolidation handles those) or mental models (reflect skill handles those).
+> **Updated design:** The writer is now triggered per episode, not per event. See `RETAIN_PIPELINE.md` for the full episode-based retain architecture. The writer no longer creates causal links (consolidation handles those) or mental models (reflect skill handles those).
 
 **What:** The agentic fact extractor. Receives episodes, extracts facts, resolves entities, writes to the store.
 
@@ -214,7 +214,7 @@ One agent, working through these phases in order, is the cleanest path. Each pha
    - Assemble episode from all unretained events in the thread
    - Fork the memory-writer meeseeks with the full episode
    - Post-retain: mark events as `is_retained = TRUE`, embed facts, trigger consolidation
-   - See `MEMORY_V2_RETAIN_PIPELINE.md` for full trigger design
+   - See `RETAIN_PIPELINE.md` for full trigger design
 
 4. **Test end-to-end:** Send test events, let episode boundary trigger, verify facts appear in the facts table, entities in entities table, links in fact_entities.
 
@@ -228,7 +228,7 @@ One agent, working through these phases in order, is the cleanest path. Each pha
 
 ## Phase 5: Consolidation Worker
 
-> **Updated design:** Consolidation is now episode-batched — all facts from an episode are consolidated together, not per-fact. The consolidation pipeline also handles causal link detection and cross-platform entity merge proposals. See `MEMORY_V2_RETAIN_PIPELINE.md`.
+> **Updated design:** Consolidation is now episode-batched — all facts from an episode are consolidated together, not per-fact. The consolidation pipeline also handles causal link detection and cross-platform entity merge proposals. See `RETAIN_PIPELINE.md`.
 
 **What:** Background job that processes unconsolidated facts into observations.
 
@@ -246,14 +246,14 @@ One agent, working through these phases in order, is the cleanest path. Each pha
    - Commit per cluster (crash-recoverable)
 
 2. **Register the observation analysis type:**
-   - Use the consolidation prompt from MEMORY_V2_RETAIN_PIPELINE.md (episode-batched, multi-fact)
+   - Use the consolidation prompt from RETAIN_PIPELINE.md (episode-batched, multi-fact)
    - Insert into `analysis_types` with name `observation_v1`
 
 3. **Wire staleness:** When a new observation is created/updated that's linked to a mental model, set `is_stale = TRUE` on that mental model.
 
 4. **Schedule:** Run after the memory-writer completes each episode, or periodically for catch-up.
 
-**Reference:** Port Hindsight's `consolidator.py`, adapted for episode-batched processing. See `MEMORY_V2_RETAIN_PIPELINE.md` "Episode-Batched Consolidation" section for full prompt design.
+**Reference:** Port Hindsight's `consolidator.py`, adapted for episode-batched processing. See `RETAIN_PIPELINE.md` "Episode-Batched Consolidation" section for full prompt design.
 
 **Test:** Insert facts via a retain job, run consolidation, verify observations appear as analysis_runs (output_text populated), verify observation_facts links exist, verify causal_links are created.
 
@@ -325,7 +325,7 @@ One agent, working through these phases in order, is the cleanest path. Each pha
 
 ## Phase 8: Cleanup + Backfill
 
-> **Redesigned:** The backfill pipeline has been completely redesigned as an episode-based retain pipeline. See `MEMORY_V2_RETAIN_PIPELINE.md` for the full architecture including: episode grouping from historical events, pre-episode filtering via `memory_filters` table, parallel retain with configurable concurrency, crash-recovery via `backfill_runs`/`backfill_episodes` tables, and cost estimation.
+> **Redesigned:** The backfill pipeline has been completely redesigned as an episode-based retain pipeline. See `RETAIN_PIPELINE.md` for the full architecture including: episode grouping from historical events, pre-episode filtering via `memory_filters` table, parallel retain with configurable concurrency, crash-recovery via `backfill_runs`/`backfill_episodes` tables, and cost estimation.
 
 **What:** Remove dead code from the old system. Set up backfill pipeline.
 

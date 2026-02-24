@@ -85,8 +85,8 @@ This is the only source of truth for runtime authorization decisions.
 
 | Term | Definition |
 |------|------------|
-| **Principal** | The identity making a request (person, system, webhook, agent) |
-| **Policy** | A rule that matches principals/conditions and assigns permissions |
+| **Sender** | The sender of a message (person, system, webhook, agent) |
+| **Policy** | A rule that matches senders/conditions and assigns permissions |
 | **Grant** | A dynamic, temporary permission given via approval flow |
 | **Effect** | Allow or Deny |
 | **Resources** | Tools, credentials, data access levels |
@@ -94,16 +94,16 @@ This is the only source of truth for runtime authorization decisions.
 
 ---
 
-## Principals
+## Senders
 
-Principals are WHO is making a request. They map to identities in your ledger.
+Senders are WHO is sending a message. They map to identities in your ledger.
 
-### Principal Types
+### Sender Types
 
 | Type | Description | Matching |
 |------|-------------|----------|
 | **Owner** | The user (you) | `is_user: true` in ledger |
-| **Known Contact** | Person in your ledger | Query by relationship, tags, ID |
+| **Known Contact** | Person in your ledger | Query by tags, groups, ID |
 | **Unknown** | Sender not in contacts | `unknown: true` |
 | **System** | Timer, cron, internal events | `system: true` |
 | **Webhook** | External service calling in | `webhook: {source}` |
@@ -132,17 +132,19 @@ Event: { platform: "imessage", sender_id: "+15551234567" }
          └──────────────────────────────┘
                     │
                     ▼
-         Principal: {
+         SenderContext: {
            entity_id: "entity_abc",
            type: "person",
            name: "Casey",
            is_user: false,
-           relationship: "partner",
-           tags: ["trusted", "family"]
+           tags: ["trusted", "family", "relationship:partner"],
+           groups: ["family"]
          }
 ```
 
-If no match: `Principal: { unknown: true }`
+If no match: `SenderContext: { unknown: true }`
+
+> **Note:** Use entity tags (e.g., `relationship:partner`) and group memberships instead of a dedicated relationship field.
 
 **Note:** The Identity Ledger is conceptually separate from the Event Ledger. See `../../README.md` for the System of Record.
 
@@ -150,7 +152,7 @@ If no match: `Principal: { unknown: true }`
 
 ## Resources
 
-Resources are WHAT principals can access.
+Resources are WHAT senders can access.
 
 ### Resource Categories
 
@@ -177,7 +179,7 @@ Conditions are additional context that modifies which policies match.
 | Condition | Description | Examples |
 |-----------|-------------|----------|
 | **platform** | Communication platform | `imessage`, `discord`, `slack` |
-| **container_kind** | DM vs group | `dm`, `group` |
+| **container_kind** | Conversation type | `direct`, `group`, `channel` |
 | **account** | Multi-account contexts | `slack:company-workspace` |
 | **guild** | Discord server | `discord:guild-123` |
 | **time** | Time-based rules | `23:00-08:00`, `weekends` |
@@ -195,8 +197,8 @@ Policies are the rules. See `POLICIES.md` for full schema and examples.
   description: What this policy does
   
   match:
-    principal:
-      # Principal matching criteria
+    sender:
+      # Sender matching criteria
     conditions:
       # Context conditions
   
@@ -220,7 +222,7 @@ Policies are the rules. See `POLICIES.md` for full schema and examples.
 
 IAM evaluation is layered in this order:
 
-1. Resolve principal (identity lookup)
+1. Resolve sender (identity lookup)
 2. Evaluate ACL policies (match, priority, deny precedence, permission merge)
 3. Apply grants
 4. Apply role caps (manager/worker/unified restrictions)
@@ -273,7 +275,7 @@ Casey: "Can you check Tyler's calendar?"
            │
            ▼
      Grant created: {
-       principal: casey,
+       sender: casey,
        resources: [calendar_read],
        expires: 24h,
        granted_by: tyler
@@ -331,10 +333,10 @@ When a timer/cron triggers agent work:
 ### Permission Inheritance
 
 ```
-Principal permissions
+Sender permissions
         │
         ▼
-   MA permissions (= principal permissions)
+   MA permissions (= sender permissions)
         │
         ▼
    WA permissions (= intersection of MA + WA request)
@@ -352,15 +354,16 @@ Policies assign sessions via templating:
 ```yaml
 session:
   persona: atlas
-  key: "family:{principal.name}"    # → "family:casey"
+  key: "family:{sender.name}"    # → "family:casey"
 ```
 
 ### Template Variables
 
 | Variable | Description |
 |----------|-------------|
-| `{principal.name}` | Person's name |
-| `{principal.id}` | Person's ID |
+| `{sender.name}` | Person's name |
+| `{sender.id}` | Person's ID |
+| `{sender.groups}` | Sender's group memberships |
 | `{platform}` | Platform name |
 | `{container_id}` | Group/container ID |
 | `{account}` | Account ID |
@@ -370,10 +373,10 @@ session:
 | Pattern | Session Key | Use Case |
 |---------|-------------|----------|
 | `main` | `main` | Owner DMs collapse |
-| `family:{principal.name}` | `family:casey` | Per-family-member isolation |
+| `family:{sender.name}` | `family:casey` | Per-family-member isolation |
 | `{platform}:group:{container_id}` | `discord:group:123` | Per-group isolation |
 | `work` | `work` | Work context unified |
-| `unknown:{platform}:{principal.id}` | `unknown:email:xyz` | Unknown sender isolation |
+| `unknown:{platform}:{sender.id}` | `unknown:email:xyz` | Unknown sender isolation |
 
 ---
 
@@ -384,7 +387,7 @@ Every access decision is logged. See `AUDIT.md` for full spec.
 ### What's Logged
 
 - Event details (platform, sender)
-- Resolved principal
+- Resolved sender
 - Matching policies
 - Effect (allow/deny)
 - Resulting permissions
@@ -396,7 +399,7 @@ Every access decision is logged. See `AUDIT.md` for full spec.
 
 ```bash
 nexus acl audit --denied --last 100
-nexus acl audit --principal casey --since yesterday
+nexus acl audit --sender casey --since yesterday
 nexus acl audit --policy "group-chat-restrictions"
 ```
 
@@ -416,17 +419,18 @@ Personas and ACL are separate but connected:
 Personas should be tracked similarly to people:
 
 ```
-persons table:
+entities table:
   - id: "tyler"
+    type: "person"
     is_user: true
     ...
   - id: "casey"
-    relationship: "partner"
+    type: "person"
+    tags: ["relationship:partner"]
+    groups: ["family"]
     ...
-
-personas table:  (or same table with type)
   - id: "atlas"
-    type: "persona"
+    type: "agent"
     accounts: [discord:atlas-bot, telegram:atlas-bot]
     ...
 ```
@@ -442,13 +446,13 @@ This enables:
 
 | IAM Concept | Nexus ACL | Notes |
 |-------------|-----------|-------|
-| Principal | Principal | Same concept |
+| Principal | Sender | Same concept — "sender" in Nexus ACL context |
 | Action | Tools | What they can invoke |
 | Resource | Credentials, Data | What they can access |
 | Condition | Conditions | Context modifiers |
 | Effect | Effect | Allow/Deny |
 | Policy | Policy | Same structure |
-| Role | — | Not needed (principals have relationships) |
+| Role | — | Not needed (senders have tags and groups) |
 | Permission Boundary | — | Not needed yet |
 | STS/AssumeRole | — | Not needed (no cross-account) |
 
@@ -490,7 +494,7 @@ ACL determines the **dispatch context** sent to Broker:
 ```typescript
 interface BrokerDispatch {
   event: Event;
-  principal: Principal;
+  sender: SenderContext;
   permissions: PermissionSet;
   session: {
     persona: string;
@@ -545,7 +549,7 @@ Event Ledger → Event Handler [ ACL → Hooks ] → Broker
 ```
 
 - **If ACL denies:** Event dropped, logged to audit
-- **If ACL allows:** Event passed to hooks with `{ principal, permissions, session }`
+- **If ACL allows:** Event passed to hooks with `{ sender, permissions, session }`
 - **Hooks receive pre-resolved context** — no need to re-check identity
 
 ---
@@ -598,7 +602,7 @@ entity_tags (
 
 **Memory System enrichment:** The Memory System can learn relationships over time from conversation patterns and update the entities in identity.db.
 
-Persona workspace files (`SOUL.md`, credentials, etc.) remain managed by Nexus workspace — the Identity Ledger handles principal resolution for ACL routing.
+Persona workspace files (`SOUL.md`, credentials, etc.) remain managed by Nexus workspace — the Identity Ledger handles sender resolution for ACL routing.
 
 ---
 

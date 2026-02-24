@@ -2,7 +2,7 @@
 
 **Status:** IMPLEMENTATION PLAN
 **Created:** 2026-02-19
-**Depends On:** MEMORY_SYSTEM_V2.md, `../_archive/WORKPLAN.md` (Phases 1-8 complete, archived)
+**Depends On:** MEMORY_SYSTEM.md, `../_archive/WORKPLAN.md` (Phases 1-8 complete, archived)
 **Context:** All 8 phases of the original WORKPLAN.md have been implemented. This workplan covers infrastructure improvements, recall parity with Hindsight, and agent experience refinements identified during review.
 
 ---
@@ -11,7 +11,7 @@
 
 This workplan covers non-backfill improvements to the memory system. These are refinements to existing infrastructure: embedding provider swappability, recall API parity with Hindsight's retrieval engine, agent prompt enrichment, and writer tool scope changes.
 
-A separate spec document (`MEMORY_V2_RETAIN_PIPELINE.md`) covers the backfill pipeline redesign (episode-based batching, short-term memory, and consolidation batching). That spec adds:
+A separate spec document (`RETAIN_PIPELINE.md`) covers the backfill pipeline redesign (episode-based batching, short-term memory, and consolidation batching). That spec adds:
 - A 5th recall retrieval strategy (short-term/unretained events via `is_retained` flag on the events table)
 - Recall is now fully TypeScript (`src/cortex-memory-v2/recall.ts`) — all Go file references have been updated accordingly
 - The consolidation pipeline moves to episode-batched processing with causal link detection (moved from writer)
@@ -218,7 +218,7 @@ After initial temporal retrieval, boost facts that are temporally adjacent to al
 **Steps:**
 1. Create temporal constraint parser (TypeScript, rule-based)
 2. Implement temporal retrieval strategy with decay scoring
-3. Wire into recall as an additional parallel strategy alongside short-term events (see MEMORY_V2_RETAIN_PIPELINE.md — short-term event retrieval is the 5th strategy added by the retain pipeline work; temporal becomes the 6th)
+3. Wire into recall as an additional parallel strategy alongside short-term events (see RETAIN_PIPELINE.md — short-term event retrieval is the 5th strategy added by the retain pipeline work; temporal becomes the 6th)
 4. Feed results into RRF fusion
 
 > **Note:** Recall is fully TypeScript. Short-term event retrieval (querying unretained events via `is_retained = FALSE`) is being added as a 5th strategy by the retain pipeline work. Temporal retrieval is a separate strategy on top of that.
@@ -361,13 +361,13 @@ This may need adaptation depending on sqlite-vec's compatibility with CTEs. Test
 **Steps:**
 1. Remove `insert_causal_link`, `create_mental_model`, `update_mental_model` from the memory writer tools (`createCortexMemoryWriterTools`)
 2. Update MEMORY_WRITER_ROLE.md to remove causal link and mental model sections
-3. Update MEMORY_WRITER_V2.md spec to reflect the scope change
+3. Update MEMORY_WRITER.md spec to reflect the scope change
 4. Add causal link detection to the consolidation pipeline prompt/logic
 
 **Files touched:**
 - `src/agents/tools/cortex-memory-writer-tools.ts` — remove 3 tools
 - `nexus-specs/specs/data/memory/MEMORY_WRITER_ROLE.md` — update role prompt
-- `nexus-specs/specs/data/memory/MEMORY_WRITER_V2.md` — update spec
+- `nexus-specs/specs/data/memory/MEMORY_WRITER.md` — update spec
 - `src/cortex-memory-v2/consolidation.ts` — add causal link detection to consolidation prompt
 
 ---

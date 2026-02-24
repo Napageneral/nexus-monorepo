@@ -23,7 +23,7 @@ This is accomplished via structured delivery fields in `NexusEvent` (inbound) an
 These are the normalized fields that must exist on inbound events and must be preserved for outbound delivery:
 
 - `delivery.platform`: platform (`discord`, `telegram`, `imessage`, …)
-- `delivery.container_kind`: `dm | group | channel`
+- `delivery.container_kind`: `direct | group | channel`
 - `delivery.container_id`: conversation container ID
 - `delivery.thread_id`: thread/topic ID (when applicable)
 - `delivery.reply_to_id`: message ID being replied to (when applicable)

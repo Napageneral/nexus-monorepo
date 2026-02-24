@@ -3,7 +3,7 @@
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-23
 **Supersedes:** ../../_archive/IDENTITY_GRAPH.md, entities/entity_aliases/persons tables in ../../_archive/MEMORY_SYSTEM.md
-**Related:** MEMORY_SYSTEM_V2.md, MEMORY_WRITER_V2.md
+**Related:** MEMORY_SYSTEM.md, MEMORY_WRITER.md, IDENTITY_RESOLUTION.md
 **Routing integration:** specs/runtime/RUNTIME_ROUTING.md
 
 > **Canonical reference:** See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the authoritative database layout. Entity tables (`entities`, `entity_tags`, `entity_cooccurrences`, `merge_candidates`), contacts, groups, directory, and auth tables all live in `identity.db`. This means `contacts.entity_id` -> `entities.id` is a same-database JOIN -- no cross-DB boundary.
@@ -38,8 +38,7 @@ All standards agree: **identifiers are attributes of identities, not identities 
 CREATE TABLE entities (
     id              TEXT PRIMARY KEY,       -- ULID
     name            TEXT NOT NULL,          -- human-readable: 'Sarah Chen', 'Anthropic', 'Unknown (iMessage)'
-    type            TEXT,                   -- 'person', 'org', 'group', 'project', 'location',
-                                            -- 'event', 'document', 'pet', 'concept', 'bot', 'system'
+    type            TEXT,                   -- 'person', 'agent', 'group', 'organization', 'service'
     merged_into     TEXT REFERENCES entities(id),  -- union-set parent pointer (NULL = canonical root)
     normalized      TEXT,                   -- lowercase/stripped name for fast matching
     is_user         BOOLEAN DEFAULT FALSE,  -- is this the Nexus owner?
@@ -63,16 +62,10 @@ CREATE INDEX idx_entities_is_user ON entities(is_user) WHERE is_user = TRUE;
 | Type | What it represents | Examples |
 |------|--------------------|----------|
 | `person` | A human being | Sarah Chen, Mom, Unknown (iMessage) |
-| `org` | A company, institution, team | Anthropic, MIT, Engineering Team |
+| `agent` | A Nexus agent persona | nexus (default), work-assistant |
 | `group` | A named group with membership | Family, Book Club, Project Alpha Team |
-| `project` | A project, product, or codebase | Nexus, Cortex, ChatStats |
-| `location` | A place | San Francisco, Anthropic HQ |
-| `event` | A meeting, conference, occurrence | HTAA Meeting, Sprint Review |
-| `document` | A file, article, spec | UNIFIED_ENTITY_STORE.md |
-| `pet` | An animal companion | Luna the cat |
-| `concept` | A topic-defining concept | Machine Learning, Wedding Planning |
-| `bot` | An automated system identity | GitHub Bot, Slack Bot |
-| `system` | A Nexus system principal | webhook, cron |
+| `organization` | A company, institution, team | Anthropic, MIT, Engineering Team |
+| `service` | An external automated system | GitHub Bot, Slack Bot, webhook |
 
 **Never used as entity types:** `phone`, `email`, `discord_handle`, `slack_user`, `telegram_user`, `whatsapp_user`, `signal_user`, or any `*_handle`. These are contact identifiers stored in the `contacts` table.
 
@@ -108,6 +101,23 @@ CREATE INDEX idx_contacts_last_seen ON contacts(last_seen DESC);
 - `label` classifies the contact point (like SCIM's `type` on multi-valued attributes). A phone number might be `'personal'` or `'work'` or `'shared'`.
 - `owner_id` tracks organizational ownership. A shared phone line or team email can point to the org entity that owns it, even though `entity_id` points to the person currently using it.
 
+**Universal Identifier Pattern (two-row):** When a message arrives from a phone number or email address, the delivery pipeline creates **two** contact rows pointing to the same entity:
+
+1. **Universal contact:** `(platform="phone"/"email", space_id="", sender_id=canonical_identifier)` -- represents the phone number or email address itself, independent of any messaging platform.
+2. **Platform contact:** `(platform="imessage"/"whatsapp"/etc, space_id="", sender_id=raw_sender_id)` -- represents the platform-specific binding used for routing.
+
+Both rows share the same `entity_id`. The universal contact enables cross-platform identity resolution (e.g., an iMessage sender and a WhatsApp sender with the same phone number can be linked). The platform contact enables fast routing lookups for inbound messages.
+
+For example, an iMessage from `+15551234567` creates:
+- `("phone", "", "+15551234567")` -> `ent_001` (universal)
+- `("imessage", "", "+15551234567")` -> `ent_001` (platform)
+
+A WhatsApp message from `15551234567@s.whatsapp.net` creates:
+- `("phone", "", "+15551234567")` -> `ent_001` (universal, already exists -- triggers identity resolution)
+- `("whatsapp", "", "15551234567@s.whatsapp.net")` -> `ent_001` (platform)
+
+See [IDENTITY_RESOLUTION.md](IDENTITY_RESOLUTION.md) for the full universal identifier extraction logic and cross-platform resolution flow.
+
 **Contacts can change hands.** A phone number may belong to Sarah today and be reassigned tomorrow. The `entity_id` can be updated when ownership changes. This is different from entity merges (which are permanent).
 
 ### Contact Name Observations
@@ -128,6 +138,8 @@ CREATE TABLE contact_name_observations (
 ```
 
 ### Entity Co-occurrences
+
+> **Status: Deferred.** Write-side implemented (link_fact_entity updates counts). Read-side merge scoring not yet implemented. Data accumulates for future use by consolidation agent.
 
 Tracks which entities appear together in facts. Feeds into entity resolution scoring.
 
@@ -272,7 +284,7 @@ See `../../runtime/RUNTIME_ROUTING.md` for the full session-alias lifecycle and 
 
 ## Entity and Contact Creation: Examples
 
-### Scenario: iMessage contact resolution
+### Scenario: iMessage contact resolution (universal identifier pattern)
 
 ```
 Day 1: iMessage from +15551234567 (sender_name: "Mom")
@@ -280,7 +292,12 @@ Day 1: iMessage from +15551234567 (sender_name: "Mom")
   INSERT INTO entities (id, name, type, source, first_seen, last_seen, normalized)
   VALUES ('ent_001', 'Mom', 'person', 'delivery', $now, $now, 'mom');
 
-  -- Contact row binds the phone number to the entity:
+  -- TWO contact rows created (universal identifier pattern):
+  -- 1. Universal contact (phone number, platform-independent):
+  INSERT INTO contacts (platform, sender_id, entity_id, first_seen, last_seen, sender_name)
+  VALUES ('phone', '+15551234567', 'ent_001', $now, $now, 'Mom');
+
+  -- 2. Platform contact (iMessage-specific, used for routing):
   INSERT INTO contacts (platform, sender_id, entity_id, first_seen, last_seen, sender_name)
   VALUES ('imessage', '+15551234567', 'ent_001', $now, $now, 'Mom');
 
@@ -291,11 +308,23 @@ Day 3: Memory-Writer extracts "Mom called about dinner plans for Saturday"
   -- Links the fact to the existing entity ent_001 (Mom).
   -- No new entity needed. The person entity already exists.
 
-Day 7: Email from mom@gmail.com (sender_name: "Mom")
-  -- Delivery pipeline looks up existing entity by sender_name or creates new:
+Day 7: WhatsApp from 15551234567@s.whatsapp.net (sender_name: "Mom")
+  -- Delivery pipeline extracts phone from JID: +15551234567
+  -- Universal contact ("phone", "+15551234567") already exists -> entity ent_001
+  -- Only the platform contact is new:
+  INSERT INTO contacts (platform, sender_id, entity_id, first_seen, last_seen, sender_name)
+  VALUES ('whatsapp', '15551234567@s.whatsapp.net', 'ent_001', $now, $now, 'Mom');
+
+  -- No new entity needed! The universal phone contact already resolved to Mom.
+  -- Cross-platform identity resolution happened automatically via the two-row pattern.
+
+Day 10: Email from mom@gmail.com (sender_name: "Mom")
+  -- Delivery pipeline creates universal + platform contacts:
   INSERT INTO entities (id, name, type, source, first_seen, last_seen, normalized)
   VALUES ('ent_002', 'Mom', 'person', 'delivery', $now, $now, 'mom');
 
+  INSERT INTO contacts (platform, sender_id, entity_id, first_seen, last_seen, sender_name)
+  VALUES ('email', 'mom@gmail.com', 'ent_002', $now, $now, 'Mom');
   INSERT INTO contacts (platform, sender_id, entity_id, first_seen, last_seen, sender_name)
   VALUES ('gmail', 'mom@gmail.com', 'ent_002', $now, $now, 'Mom');
 
@@ -308,11 +337,16 @@ Result:
 ```
 Mom (ent_001, type=person, canonical root)
   Contacts:
-    +-- imessage: +15551234567
-    +-- gmail: mom@gmail.com
+    +-- phone: +15551234567          (universal)
+    +-- imessage: +15551234567       (platform)
+    +-- whatsapp: 15551234567@s.whatsapp.net  (platform, resolved via universal phone match)
+    +-- email: mom@gmail.com         (universal)
+    +-- gmail: mom@gmail.com         (platform)
   Merged entities:
     +-- ent_002 (Mom, merged_into=ent_001)
 ```
+
+See [IDENTITY_RESOLUTION.md](IDENTITY_RESOLUTION.md) for details on universal identifier extraction from platform-specific sender IDs (e.g., WhatsApp JID -> E.164 phone number).
 
 ### Scenario: Discord handle — unknown sender
 
@@ -374,6 +408,20 @@ The company main line +18005551234 belongs to Anthropic, currently used by the r
 
 When the receptionist changes, update entity_id. owner_id stays the same.
 ```
+
+---
+
+## Bootstrap Entities
+
+On startup, the runtime ensures certain foundational entities exist before any messages are processed:
+
+1. **Entity-owner** -- A `person` entity with `is_user=true` representing the Nexus owner. This is the identity that all owner-originated messages resolve to, and the anchor for personal memory. A single contact is seeded for the auth login path: `(login, "", "owner")` → `entity-owner`. System-origin platforms (cron, runtime, boot, restart, node, clock) do NOT get contacts — they resolve directly to entity-owner at the `resolveIdentity` stage without a contacts lookup.
+
+2. **Agent persona entities** -- One `agent` entity per configured agent persona (e.g., the default "nexus" agent, "eve", "atlas"). These have `type='agent'` and `source='bootstrap'`. Each persona also gets a contact row: `("agent", "", "{persona_id}")` → `"entity-{persona_id}"`. This makes the system symmetric — every message has both a sender entity and a receiver entity in the same identity graph.
+
+Bootstrap entities are created idempotently (no duplicates on restart). They are always canonical roots (`merged_into IS NULL`).
+
+See [IDENTITY_RESOLUTION.md](IDENTITY_RESOLUTION.md) for details on how bootstrap entities participate in the identity resolution flow, system-origin resolution, and how the owner entity is matched to inbound self-messages.
 
 ---
 
@@ -493,6 +541,19 @@ When entities merge via `union()`, the contact rows in `identity.db` are **not**
 
 The memory-writer discovers delivery-sourced entities (`source = 'delivery'`) and enriches them with context from conversations (real names, relationships, organizational affiliations). When a real name is discovered for a placeholder entity, the writer can either update the entity's name directly or create a new person entity and merge.
 
+### Memory-writer entity creation (knowledge entities)
+
+The memory writer also creates **knowledge entities** — people, organizations, and concepts mentioned in conversation that may never send messages through an adapter. These entities are knowledge graph nodes, not delivery endpoints. No contacts are created for them.
+
+The core challenge is **dedup at creation time**. The `create_entity` tool should:
+
+1. **Fuzzy search existing entities** by normalized name (lowercase/stripped match against `entities.normalized`)
+2. **Check embedding similarity** if available — compare the proposed entity name against existing entity embeddings
+3. **If match above threshold** → return the existing `entity_id` instead of creating a duplicate
+4. **Only create if genuinely new** — no normalized name match and no embedding similarity above threshold
+
+Knowledge entities (`source = 'inferred'`) and delivery entities (`source = 'delivery'`) coexist in the same `entities` table. The writer should always search existing entities before creating new ones.
+
 ### Contacts vs. conversational mentions
 
 **Contacts are only for actual delivery endpoints.** When a user says "my email is tyler@example.com" in conversation, the memory-writer stores this as a **fact** about the person entity (e.g., "Tyler's email is tyler@example.com") and links the fact to Tyler's entity. It does **not** create a contact row or a separate entity for the email address.
@@ -526,7 +587,7 @@ This distinction matters: a contact means "we can route messages to/from this id
 
 ## See Also
 
-- `MEMORY_SYSTEM_V2.md` -- Full memory architecture
-- `MEMORY_WRITER_V2.md` -- How entity resolution works in the retain flow
+- `MEMORY_SYSTEM.md` -- Full memory architecture
+- `MEMORY_WRITER.md` -- How entity resolution works in the retain flow
 - `../../_archive/IDENTITY_GRAPH.md` -- Previous identity system (superseded)
 - `../../runtime/RUNTIME_ROUTING.md` -- Runtime routing and session resolution

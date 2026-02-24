@@ -185,7 +185,7 @@ Once adapters write to `events.db` and episode linking uses Nex event IDs:
 | `entity_cooccurrences` | Co-occurrence stats |
 | `merge_candidates` | Entity dedup |
 
-> **Note:** The following V1 tables from the legacy memory DB have been eliminated entirely: `persons`, `contacts`, `contact_identifiers`, `person_contact_links`, `person_facts`, `entity_aliases`, `relationships`, `episode_entity_mentions`, `episode_relationship_mentions`, `entity_merge_events`. See MEMORY_SYSTEM_V2.md for the V2 schema.
+> **Note:** The following V1 tables from the legacy memory DB have been eliminated entirely: `persons`, `contacts`, `contact_identifiers`, `person_contact_links`, `person_facts`, `entity_aliases`, `relationships`, `episode_entity_mentions`, `episode_relationship_mentions`, `entity_merge_events`. See MEMORY_SYSTEM.md for the V2 schema.
 
 #### Tables eliminated (no migration)
 

@@ -177,13 +177,13 @@ interface IdentityEnrichment {
 ## Related
 
 - [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) — Canonical database layout (memory.db, identity.db, embeddings.db)
-- `MEMORY_SYSTEM_V2.md` — Full 4-layer memory architecture
-- `MEMORY_WRITER_V2.md` — Agentic retain flow
+- `MEMORY_SYSTEM.md` — Full 4-layer memory architecture
+- `MEMORY_WRITER.md` — Agentic retain flow
 - `MEMORY_WRITER_ROLE.md` — Memory-Writer meeseeks role spec
 - `MEMORY_SEARCH_SKILL.md` — Agent search skill (recall API)
 - `MEMORY_REFLECT_SKILL.md` — Deep research and mental model persistence
 - `MEMORY_INJECTION.md` — Memory injection into agent context
-- `MEMORY_V2_RETAIN_PIPELINE.md` — Retain pipeline (events to facts)
+- `RETAIN_PIPELINE.md` — Retain pipeline (events to facts)
 - `UNIFIED_ENTITY_STORE.md` — Entity store (lives in identity.db)
 - `../../runtime/broker/MEESEEKS_PATTERN.md` — Disposable role fork pattern
 - `../ledgers/` — System of Record (source data)

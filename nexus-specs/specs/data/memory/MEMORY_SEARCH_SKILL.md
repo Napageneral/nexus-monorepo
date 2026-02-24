@@ -2,7 +2,7 @@
 
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-20
-**Related:** MEMORY_SYSTEM_V2.md, MEMORY_WRITER_V2.md, MEMORY_REFLECT_SKILL.md
+**Related:** MEMORY_SYSTEM.md, MEMORY_WRITER.md, MEMORY_REFLECT_SKILL.md
 
 ---
 
@@ -54,7 +54,7 @@ Returns:
     - For event results: raw unretained events from short-term memory
 ```
 
-> **Short-term memory:** Very recent events that haven't been processed by the retain pipeline yet are searchable as `type: 'event'` results. These are raw events (not extracted facts), useful for answering questions about very recent context. See `MEMORY_V2_RETAIN_PIPELINE.md`.
+> **Short-term memory:** Very recent events that haven't been processed by the retain pipeline yet are searchable as `type: 'event'` results. These are raw events (not extracted facts), useful for answering questions about very recent context. See `RETAIN_PIPELINE.md`.
 
 ---
 
@@ -395,6 +395,6 @@ Strip conversational framing. Search for entities and concepts, not questions.
 
 ## See Also
 
-- `MEMORY_SYSTEM_V2.md` -- Full memory architecture and schemas
+- `MEMORY_SYSTEM.md` -- Full memory architecture and schemas
 - `MEMORY_REFLECT_SKILL.md` -- Deep research and mental model creation
-- `MEMORY_WRITER_V2.md` -- How memory is written (uses this skill for dedup)
+- `MEMORY_WRITER.md` -- How memory is written (uses this skill for dedup)

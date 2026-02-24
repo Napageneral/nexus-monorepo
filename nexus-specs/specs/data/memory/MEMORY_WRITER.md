@@ -1,9 +1,9 @@
-# Memory Writer V2
+# Memory Writer
 
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-23
 **Supersedes:** ../roles/MEMORY_WRITER.md
-**Related:** MEMORY_SYSTEM_V2.md, UNIFIED_ENTITY_STORE.md, ../../runtime/RUNTIME_ROUTING.md
+**Related:** MEMORY_SYSTEM.md, UNIFIED_ENTITY_STORE.md, ../../runtime/RUNTIME_ROUTING.md
 
 > **Canonical reference:** See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the authoritative database layout. Facts/episodes live in `memory.db`. Entities live in `identity.db`. Embeddings live in `embeddings.db`.
 
@@ -19,7 +19,7 @@ The Memory-Writer is a meeseeks that transforms NexusEvents into facts and entit
 
 ## Trigger
 
-> **Full design:** See `MEMORY_V2_RETAIN_PIPELINE.md` for episode grouping, boundary detection, and the scheduled-event trigger mechanism.
+> **Full design:** See `RETAIN_PIPELINE.md` for episode grouping, boundary detection, and the scheduled-event trigger mechanism.
 
 The Memory-Writer is triggered per **episode**, not per event. Events accumulate in their thread/channel, and when an episode boundary is detected (90-minute conversation gap, token budget exceeded, or end-of-day flush), the writer receives:
 
@@ -46,7 +46,7 @@ The Memory-Writer is role-based. Its behavior comes from its ROLE.md prompt, not
 
 5. **Self-improvement** -- The writer learns over time which events are worth processing, which entity resolutions are tricky, and how to optimize its extraction patterns. It can update its own ROLE.md and create helper scripts to refine its approach.
 
-> **Note:** The writer does NOT create causal links or mental models. Causal links are detected by the consolidation pipeline, which sees the full fact graph across episodes and platforms. Mental models are created by the reflect skill. See `MEMORY_SYSTEM_V2.md` and `MEMORY_REFLECT_SKILL.md`.
+> **Note:** The writer does NOT create causal links or mental models. Causal links are detected by the consolidation pipeline, which sees the full fact graph across episodes and platforms. Mental models are created by the reflect skill. See `MEMORY_SYSTEM.md` and `MEMORY_REFLECT_SKILL.md`.
 
 ### What the Role Prompt Does NOT Do
 
@@ -145,7 +145,7 @@ Consolidation runs as a background process after the Memory-Writer completes an 
 
 The writer does NOT run consolidation directly -- it only queues the job. The consolidation pipeline handles topic clustering, causal link detection, cross-platform entity merge proposals, and mental model refresh triggers.
 
-> **Full design:** See `MEMORY_V2_RETAIN_PIPELINE.md` for the complete consolidation pipeline spec, including batching strategy, observation prompts, and execution details.
+> **Full design:** See `RETAIN_PIPELINE.md` for the complete consolidation pipeline spec, including batching strategy, observation prompts, and execution details.
 
 ---
 
@@ -173,7 +173,7 @@ The full episode provides conversational context. Unlike the old per-event appro
 - Agent tool calls and reasoning chains (not currently in the event representation)
 - System prompts (filtered out)
 
-> **Future enhancement:** Agent turns have richer metadata (tool_calls, reasoning) that standalone events don't. The event representation should be enriched to include full turn metadata so the writer can extract what was DECIDED. See `MEMORY_V2_RETAIN_PIPELINE.md` "What About Agent Turns?" section. Until then, the writer extracts from the user message + agent response text only.
+> **Future enhancement:** Agent turns have richer metadata (tool_calls, reasoning) that standalone events don't. The event representation should be enriched to include full turn metadata so the writer can extract what was DECIDED. See `RETAIN_PIPELINE.md` "What About Agent Turns?" section. Until then, the writer extracts from the user message + agent response text only.
 
 ---
 
@@ -266,9 +266,9 @@ These persist across invocations, making the writer more effective over time.
 
 ## See Also
 
-- `MEMORY_SYSTEM_V2.md` -- Full memory architecture
-- `MEMORY_V2_RETAIN_PIPELINE.md` -- Episode-based retain pipeline (episode grouping, filtering, consolidation batching)
-- `MEMORY_V2_INFRASTRUCTURE_WORKPLAN.md` -- Recall parity, writer scope changes
+- `MEMORY_SYSTEM.md` -- Full memory architecture
+- `RETAIN_PIPELINE.md` -- Episode-based retain pipeline (episode grouping, filtering, consolidation batching)
+- `INFRASTRUCTURE_WORKPLAN.md` -- Recall parity, writer scope changes
 - `MEMORY_REFLECT_SKILL.md` -- Deep research and mental model creation (the only path for mental model CRUD)
 - `UNIFIED_ENTITY_STORE.md` -- Entity store details
 - `../../_archive/MEMORY_WRITER.md` -- Previous writer spec (superseded)

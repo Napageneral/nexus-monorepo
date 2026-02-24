@@ -292,6 +292,6 @@ Database architecture:
 - `specs/data/DATABASE_ARCHITECTURE.md` **(primary, canonical for all 6 databases)**
 
 Memory:
-- `specs/data/memory/MEMORY_SYSTEM_V2.md`
+- `specs/data/memory/MEMORY_SYSTEM.md`
 - `specs/data/memory/UNIFIED_ENTITY_STORE.md`
-- `specs/data/memory/MEMORY_WRITER_V2.md`
+- `specs/data/memory/MEMORY_WRITER.md`

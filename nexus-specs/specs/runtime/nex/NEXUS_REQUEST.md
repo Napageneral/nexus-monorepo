@@ -30,7 +30,7 @@ NexusRequest created ───────────────────�
   │
   │  Stage 2: resolveIdentity
   │  ├─ Reads: delivery.sender_id, delivery.platform
-  │  ├─ Writes: principal
+  │  ├─ Writes: sender
   │  └─ May exit: unknown sender → deny policy
   │
   │  Stage 3: resolveReceiver
@@ -39,17 +39,17 @@ NexusRequest created ───────────────────�
   │  └─ Determines WHO this message is addressed to
   │
   │  Stage 4: resolveAccess
-  │  ├─ Reads: principal, receiver, delivery (platform, container_kind)
+  │  ├─ Reads: sender, receiver, delivery (platform, container_kind)
   │  ├─ Writes: access (decision, permissions, session routing)
   │  └─ May exit: access denied
   │
   │  Stage 5: runAutomations
-  │  ├─ Reads: event, principal, receiver, access
+  │  ├─ Reads: event, sender, receiver, access
   │  ├─ Writes: triggers (which fired, context enrichment, overrides)
   │  └─ May exit: automation handles event completely
   │
   │  Stage 6: routeSession
-  │  ├─ Reads: event, delivery, principal, receiver, access, triggers
+  │  ├─ Reads: event, delivery, sender, receiver, access, triggers
   │  ├─ Writes: agent (turn_id, model, token budget, context metadata)
   │  └─ Side effect: builds AssembledContext (NOT stored on NexusRequest)
   │
@@ -94,7 +94,7 @@ interface NexusRequest {
   // STAGE 2: resolveIdentity
   // ═══════════════════════════════════════════════════════════════════
 
-  principal?: PrincipalContext;       // null until stage 2 runs
+  sender?: SenderContext;             // null until stage 2 runs
 
   // ═══════════════════════════════════════════════════════════════════
   // STAGE 3: resolveReceiver
@@ -224,30 +224,33 @@ Events Ledger ← INSERT event (async, fire-and-forget)
 
 ## Stage 2: resolveIdentity
 
-**Who:** IAM  
-**What:** Resolves WHO sent this event. Queries Identity Graph.
+**Who:** IAM
+**What:** Resolves the sender identity — WHO sent this event. Queries Identity Graph.
+
+> **Cross-reference:** See [`../../runtime/iam/IDENTITY_RESOLUTION.md`](../../runtime/iam/IDENTITY_RESOLUTION.md) for the full identity resolution algorithm and Identity Graph schema.
 
 ### Reads
 
 - `delivery.platform` + `delivery.sender_id` — used to look up identity
-- `delivery.container_kind` — context for system principals (timers, webhooks)
+- `delivery.container_kind` — context for system senders (timers, webhooks)
 
 ### Writes
 
 ```typescript
-interface PrincipalContext {
+interface SenderContext {
   // Classification
   type: 'owner' | 'known' | 'unknown' | 'system' | 'webhook' | 'agent';
-  
+
   // Identity (from Identity Graph — may be null for unknown)
   entity_id?: string;                // entities table primary key
   name?: string;                     // "Mom", "Casey", "Tyler"
-  relationship?: string;             // "family", "partner", "work", "friend"
-  
+  tags?: string[];                   // freeform tags, e.g. ["family", "vip"]
+  groups?: string[];                 // group IDs the entity belongs to
+
   // All known identities for this entity (for cross-channel awareness)
   identities?: { platform: string; identifier: string }[];
-  
-  // For system/webhook principals
+
+  // For system/webhook senders
   source?: string;                   // "timer", "stripe", "github"
 }
 ```
@@ -257,7 +260,7 @@ interface PrincipalContext {
 If the sender is unknown and the default policy is deny, the pipeline exits here:
 
 ```typescript
-if (principal.type === 'unknown' && defaultPolicy === 'deny') {
+if (sender.type === 'unknown' && defaultPolicy === 'deny') {
   request.status = 'denied';
   request.pipeline.push({ stage: 'resolveIdentity', ..., exit_reason: 'unknown_sender_denied' });
   goto deliverResponse;
@@ -275,17 +278,17 @@ if (principal.type === 'unknown' && defaultPolicy === 'deny') {
 
 - `delivery.receiver_id`, `delivery.receiver_name` — platform-level receiver hints
 - `delivery.platform`, `delivery.container_kind` — context for resolution
-- `principal` — sender context (may influence receiver selection)
+- `sender` — sender context (may influence receiver selection)
 
 ### Writes
 
 ```typescript
 interface ReceiverContext {
-  type: 'persona' | 'system' | 'entity' | 'unknown';
+  type: 'agent' | 'system' | 'entity' | 'unknown';
 
-  // Resolved identity
-  persona_id?: string;               // If type is 'persona' — which persona handles this
-  entity_id?: string;                // If type is 'entity' — target entity ID
+  // Resolved identity — receivers are entities in identity.db
+  entity_id?: string;                // Entity ID in identity.db (always set for 'agent' and 'entity' types)
+  persona_id?: string;               // If type is 'agent' — which persona handles this (matches entity-{persona_id})
   name?: string;                     // Resolved display name
 
   // Resolution metadata
@@ -294,21 +297,27 @@ interface ReceiverContext {
 }
 ```
 
+An agent persona IS an entity with `type = 'agent'` in identity.db. When the receiver is resolved to a persona, `entity_id` references the agent's entity (e.g., `"entity-eve"`) and `persona_id` provides the persona key for config lookup.
+
 ### Resolution Logic
 
 ```
 delivery.receiver_id present?
   │
-  YES → Look up receiver_id against known personas/entities
-  │     → Found persona → type: 'persona', persona_id set
-  │     → Found entity  → type: 'entity', entity_id set
-  │     → Not found     → type: 'unknown'
+  YES → Look up receiver_id against known agent personas/entities
+  │     → Found agent persona → type: 'agent', entity_id + persona_id set
+  │     → Found other entity  → type: 'entity', entity_id set
+  │     → Not found           → type: 'unknown'
   │
   NO → Infer from context:
-       → DM/direct container → default persona (source: 'dm')
+       → DM/direct container → default agent persona (source: 'dm')
        → Group/channel with mention → resolve mention (source: 'mention')
-       → Fallback → default persona from config (source: 'default')
+       → Fallback → default agent persona from config (source: 'default')
 ```
+
+### Pipeline Symmetry
+
+Both sender and receiver are entities in the same identity graph (`identity.db`). The sender is resolved at Stage 2 (`resolveIdentity`) and the receiver is resolved at Stage 3 (`resolveReceiver`). Both reference `entity_id` values from the `entities` table. This symmetry is established at bootstrap time: the owner and all agent personas are seeded as entities with contacts, so every message has a sender entity and a receiver entity.
 
 ### Pipeline Trace Entry
 
@@ -325,7 +334,7 @@ delivery.receiver_id present?
 
 ### Reads
 
-- `principal` — who is this?
+- `sender` — who is this?
 - `receiver` — who is this addressed to?
 - `delivery.platform`, `delivery.container_kind`, `delivery.account_id` — context conditions for policy matching
 
@@ -377,7 +386,7 @@ if (access.decision === 'deny') {
 
 ```
 IAM Audit Log ← INSERT decision record
-  - principal, policy matched, decision, timestamp
+  - sender, policy matched, decision, timestamp
 ```
 
 ---
@@ -390,7 +399,7 @@ IAM Audit Log ← INSERT decision record
 ### Reads
 
 - `event` — content matching
-- `principal` — who-based triggers
+- `sender` — who-based triggers
 - `receiver` — receiver context for routing-aware automations
 - `access.permissions` — what the sender can do (passed to automation context)
 - `access.routing.session_key` — current routing target
@@ -860,7 +869,7 @@ CREATE INDEX idx_nex_traces_created ON nex_traces(created_at);
 
 3. **Multiple responses per request?** If the agent sends multiple messages (e.g., text + image), how is that captured? (Proposal: `response.content` is the primary response. Multiple delivery results captured as array.)
 
-4. **Webhook/timer events that skip most stages?** Timer ticks may not need identity resolution. Should there be a fast path? (Proposal: system principals get pre-resolved identity, skip stage 2.)
+4. **Webhook/timer events that skip most stages?** Timer ticks may not need identity resolution. **Resolved:** System-origin platforms (cron, runtime, boot, restart, node, clock) are recognized at Stage 2 and short-circuit to entity-owner without a contacts lookup. See `IDENTITY_RESOLUTION.md` System-Origin Resolution.
 
 ---
 

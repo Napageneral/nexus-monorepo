@@ -3,7 +3,8 @@
 **Status:** IMPLEMENTED (runtime-side v1 + hosted frontdoor hardening v2)  
 **Last Updated:** 2026-02-20  
 **Related:**
-- `HOSTED_FRONTDOOR_PER_TENANT_RUNTIME.md`
+- `HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md`
+- `HOSTED_MULTI_WORKSPACE.md`
 - `SINGLE_TENANT_MULTI_USER.md`
 - `INGRESS_INTEGRITY.md`
 - `CONTROL_PLANE_AUTHZ_TAXONOMY.md`
@@ -257,3 +258,34 @@ These suites pass together for hosted/runtime profile coverage.
 3. close remaining control-plane HTTP IAM parity gaps for hosted profile endpoints ✅
 4. add hosted-mode auth regression suite ✅
 5. integrate with frontdoor scaffold for end-to-end tests ✅ (scaffold-local coverage), expand into Nexus hosted CI matrix ⏳
+
+---
+
+## High-Level Architecture
+
+```mermaid
+flowchart LR
+  U["Browser User"] --> FD["Frontdoor (app.domain)"]
+  FD -->|"OIDC/password login"| IDP["Identity Provider"]
+  FD -->|"workspace resolve"| TD["Workspace Directory"]
+  FD -->|"mint short-lived runtime token"| TI["Token Issuer"]
+  FD -->|"HTTP/WS/SSE proxy"| R1["Workspace Runtime A"]
+  FD -->|"HTTP/WS/SSE proxy"| R2["Workspace Runtime B"]
+  R1 --> DB1["Workspace A state/ledgers"]
+  R2 --> DB2["Workspace B state/ledgers"]
+```
+
+---
+
+## Frontdoor Scaffold Modules
+
+The frontdoor scaffold project (`nexus-frontdoor`) provides:
+
+1. `auth-provider/` — password provider + OIDC interface
+2. `tenant-resolver/` — maps user/session to workspace
+3. `runtime-token-issuer/` — JWT/assertion signer
+4. `runtime-proxy/` — HTTP/WS/SSE reverse proxy with sticky routing
+5. `ui-shell/` — hosted control UI static assets
+6. `observability/` — request logs, auth logs, routing logs
+
+See `HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md` for the API contract and `HOSTED_MULTI_WORKSPACE.md` for the multi-workspace data model.

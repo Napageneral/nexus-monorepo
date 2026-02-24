@@ -60,8 +60,8 @@ Calendar events as NexusEvents:
   "channel": "calendar",
   "account_id": "tnapathy@gmail.com",
   "sender_id": "organizer@example.com",
-  "peer_id": "calendar:primary",
-  "peer_kind": "channel",
+  "container_id": "calendar:primary",
+  "container_kind": "channel",
   "metadata": {
     "summary": "Team standup",
     "location": "Conference Room B",

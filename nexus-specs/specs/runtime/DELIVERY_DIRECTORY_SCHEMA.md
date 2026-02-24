@@ -68,6 +68,9 @@ CREATE TABLE IF NOT EXISTS contacts (
   sender_name    TEXT,                      -- best-effort display name (untrusted)
   avatar_url     TEXT,                      -- best-effort (untrusted)
 
+  label          TEXT,                      -- 'personal', 'work', 'shared', 'org' (like SCIM's multi-valued type)
+  owner_id       TEXT REFERENCES entities(id), -- org/group entity that owns this contact point, if any
+
   PRIMARY KEY (platform, space_id, sender_id)
 );
 
@@ -82,6 +85,9 @@ Notes:
 - For Slack: `space_id` SHOULD be the workspace id because `sender_id` is only meaningful within a workspace.
 - `space_id` is `NOT NULL` with a default of `''` because SQLite `UNIQUE`/`PRIMARY KEY` constraints treat `NULL` values as distinct.
   - Using `''` ensures `(platform, space_id, sender_id)` is truly unique even when a platform has no `space_id`.
+- **Universal identifier contacts:** Contacts with `platform="phone"` or `platform="email"` are pseudo-platform entries that represent cross-platform reachable identifiers (e.g. a phone number usable via iMessage, WhatsApp, and Signal). These are not tied to a specific adapter but serve as canonical contact points for identity resolution. See `UNIFIED_ENTITY_STORE.md` for the full contact model.
+- `label` classifies the contact point (like SCIM's `type` on multi-valued attributes). A phone number might be `'personal'` or `'work'` or `'shared'`.
+- `owner_id` tracks organizational ownership. A shared phone line or team email can point to the org entity that owns it, even though `entity_id` points to the person currently using it.
 
 ---
 
@@ -151,7 +157,7 @@ CREATE TABLE IF NOT EXISTS containers (
   account_id            TEXT NOT NULL,
 
   container_id          TEXT NOT NULL,
-  container_kind        TEXT NOT NULL,      -- dm | group | channel | direct
+  container_kind        TEXT NOT NULL,      -- direct | group | channel
 
   -- Use '' when not applicable.
   space_id              TEXT NOT NULL DEFAULT '',

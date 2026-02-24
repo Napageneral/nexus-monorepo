@@ -21,11 +21,11 @@
 Read these files in order. Do not skim — read them fully.
 
 **Architecture + Schema:**
-1. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_SYSTEM_V2.md` — Master architecture doc. 4-layer memory stack, recall() API, trigger mechanism, schema, implementation hints. This is the source of truth.
+1. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_SYSTEM.md` — Master architecture doc. 4-layer memory stack, recall() API, trigger mechanism, schema, implementation hints. This is the source of truth.
 2. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/UNIFIED_ENTITY_STORE.md` — Entity resolution via union-find. Everything is an entity. merged_into pointer chains.
 
 **Write Path:**
-3. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_WRITER_V2.md` — Writer meeseeks spec: tools, hooks, two trigger paths (agent turn complete vs eventIngested).
+3. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_WRITER.md` — Writer meeseeks spec: tools, hooks, two trigger paths (agent turn complete vs eventIngested).
 4. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_WRITER_ROLE.md` — The actual system prompt for the writer agent. Extraction rules, workflow, entity resolution.
 
 **Read Path:**

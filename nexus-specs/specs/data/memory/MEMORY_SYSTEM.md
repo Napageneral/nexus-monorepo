@@ -1,9 +1,9 @@
-# Memory System V2
+# Memory System
 
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-20
 **Supersedes:** ../MEMORY_SYSTEM.md
-**Related:** UNIFIED_ENTITY_STORE.md, MEMORY_WRITER_V2.md, ../../ledgers/EVENTS_LEDGER.md, ../../ledgers/IDENTITY_GRAPH.md
+**Related:** UNIFIED_ENTITY_STORE.md, MEMORY_WRITER.md, ../../ledgers/EVENTS_LEDGER.md, ../../ledgers/IDENTITY_GRAPH.md
 
 > **Canonical reference:** See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the authoritative database layout. Memory tables live in `memory.db`. Entity tables (`entities`, `entity_tags`, `entity_cooccurrences`, `merge_candidates`) live in `identity.db`. Embeddings live in `embeddings.db`.
 
@@ -128,7 +128,7 @@ CREATE TABLE causal_links (
 CREATE INDEX idx_causal_links_to ON causal_links(to_fact_id);
 ```
 
-Causal links are identified by the **consolidation pipeline** (not the writer). The consolidation pipeline sees the full fact graph across episodes and platforms, enabling it to detect causal relationships the writer couldn't see in isolation. See `MEMORY_V2_RETAIN_PIPELINE.md` for details.
+Causal links are identified by the **consolidation pipeline** (not the writer). The consolidation pipeline sees the full fact graph across episodes and platforms, enabling it to detect causal relationships the writer couldn't see in isolation. See `RETAIN_PIPELINE.md` for details.
 
 #### Observation-Fact Linkage
 
@@ -310,7 +310,7 @@ CREATE INDEX idx_mental_models_stale ON mental_models(is_stale) WHERE is_stale =
 - Users can explicitly request mental model creation
 - The consolidation system can trigger refreshes on existing models when related observations update
 
-> **Note:** The Memory-Writer meeseeks does NOT create or update mental models. Mental model CRUD belongs exclusively in the reflect skill. The writer focuses on fact extraction, entity identification, and deduplication. See `MEMORY_V2_INFRASTRUCTURE_WORKPLAN.md` Item 9.
+> **Note:** The Memory-Writer meeseeks does NOT create or update mental models. Mental model CRUD belongs exclusively in the reflect skill. The writer focuses on fact extraction, entity identification, and deduplication. See `INFRASTRUCTURE_WORKPLAN.md` Item 9.
 
 **Versioning:** When a mental model is refreshed, a new row is created with `parent_id` pointing to the previous version. The old version stays for history.
 
@@ -394,7 +394,7 @@ Both pipelines share:
 
 The pipelines are independent. Episodes group events temporally. Facts extract knowledge from events. Observations synthesize facts into durable knowledge. They operate on the same data but produce different outputs for different query patterns.
 
-> **See also:** `MEMORY_V2_RETAIN_PIPELINE.md` for the full episode-based retain architecture, including short-term memory, episode grouping, filtering, and consolidation batching.
+> **See also:** `RETAIN_PIPELINE.md` for the full episode-based retain architecture, including short-term memory, episode grouping, filtering, and consolidation batching.
 
 ---
 
@@ -420,16 +420,16 @@ A single search interface with tunable parameters. Used by agents via a skill/to
 2. **Keyword search** -- FTS5 over fact text
 3. **Entity traversal** -- facts linked to queried entities via fact_entities
 4. **Causal traversal** -- facts connected via causal_links
-5. **Short-term events** -- unretained events (`is_retained = FALSE` on events table) searched via FTS + semantic. Returns `type: 'event'` results. See `MEMORY_V2_RETAIN_PIPELINE.md`.
+5. **Short-term events** -- unretained events (`is_retained = FALSE` on events table) searched via FTS + semantic. Returns `type: 'event'` results. See `RETAIN_PIPELINE.md`.
 
-Temporal and platform filtering are applied as WHERE clauses on results. Dedicated temporal retrieval (proximity-based decay scoring) is planned — see `MEMORY_V2_INFRASTRUCTURE_WORKPLAN.md` Item 5.
+Temporal and platform filtering are applied as WHERE clauses on results. Dedicated temporal retrieval (proximity-based decay scoring) is planned — see `INFRASTRUCTURE_WORKPLAN.md` Item 5.
 
 **Fusion:** Reciprocal Rank Fusion (RRF) with k=60 across strategies. Post-fusion MMR (Maximal Marginal Relevance) for diversity (λ=0.7). No cross-encoder reranking initially.
 
 **Budget controls which strategies run:**
 - `low`: semantic search only (single vector query, fastest)
-- `mid`: semantic + keyword + entity traversal + short-term events + link expansion (see MEMORY_V2_INFRASTRUCTURE_WORKPLAN.md Item 6)
-- `high`: all strategies including MPFP graph traversal (see MEMORY_V2_INFRASTRUCTURE_WORKPLAN.md Item 4) + higher result limits
+- `mid`: semantic + keyword + entity traversal + short-term events + link expansion (see INFRASTRUCTURE_WORKPLAN.md Item 6)
+- `high`: all strategies including MPFP graph traversal (see INFRASTRUCTURE_WORKPLAN.md Item 4) + higher result limits
 
 **Hierarchical retrieval strategy (taught via skill):**
 1. Search mental models first (highest quality, if applicable)
@@ -473,7 +473,7 @@ See `MEMORY_INJECTION.md` for full details.
 
 ## Trigger Mechanism (Write Path) — Episode-Based Retain
 
-> **Note:** The original per-event dual-path trigger design has been replaced by an episode-based retain pipeline. See `MEMORY_V2_RETAIN_PIPELINE.md` for the full design.
+> **Note:** The original per-event dual-path trigger design has been replaced by an episode-based retain pipeline. See `RETAIN_PIPELINE.md` for the full design.
 
 Events no longer trigger the writer individually. Instead:
 
@@ -502,7 +502,7 @@ Both agent turns and standalone events flow through the same episode-based pipel
 
 ## Backfill Strategy
 
-> **Full design:** See `MEMORY_V2_RETAIN_PIPELINE.md` for the complete episode-based backfill architecture.
+> **Full design:** See `RETAIN_PIPELINE.md` for the complete episode-based backfill architecture.
 
 Backfill uses the **same episode-based retain pipeline** as live. The key differences: episodes are pre-computed from historical events, higher parallelism (4+ concurrent retain jobs), and pre-episode filtering removes obvious noise before grouping.
 
@@ -541,7 +541,7 @@ CREATE VIRTUAL TABLE vec_embeddings USING vec0(
 );
 ```
 
-> **Note:** The dimension is determined by the embedding provider abstraction (see `MEMORY_V2_INFRASTRUCTURE_WORKPLAN.md` Item 1). On model change, the vec table is rebuilt from the `embeddings` table.
+> **Note:** The dimension is determined by the embedding provider abstraction (see `INFRASTRUCTURE_WORKPLAN.md` Item 1). On model change, the vec table is rebuilt from the `embeddings` table.
 
 Query with cosine similarity:
 ```sql
@@ -628,7 +628,7 @@ Reference: Hindsight implements MMR in its recall pipeline. Standard algorithm, 
 The old memory system used Gemini embeddings but these are expensive per-call. For V2, use the same local model as Hindsight:
 
 - **Default:** `BAAI/bge-small-en-v1.5` via node-llama-cpp GGUF (Q8_0). 384 dimensions. Runs locally, zero API cost.
-- **Provider abstraction:** The embedding provider is swappable via env vars (`NEXUS_EMBEDDINGS_PROVIDER`, `NEXUS_EMBEDDINGS_MODEL`). Supports local, OpenAI, Cohere, LiteLLM. See `MEMORY_V2_INFRASTRUCTURE_WORKPLAN.md` Item 1.
+- **Provider abstraction:** The embedding provider is swappable via env vars (`NEXUS_EMBEDDINGS_PROVIDER`, `NEXUS_EMBEDDINGS_MODEL`). Supports local, OpenAI, Cohere, LiteLLM. See `INFRASTRUCTURE_WORKPLAN.md` Item 1.
 - **Dimension:** Auto-detected from provider at initialization. The `embeddings` table stores model metadata; the `vec_embeddings` virtual table is rebuilt on model change.
 - **Hindsight reference:** `hindsight_api/config.py` — `DEFAULT_EMBEDDINGS_LOCAL_MODEL = "BAAI/bge-small-en-v1.5"`, `DEFAULT_EMBEDDING_DIMENSION = 384`. Hindsight supports 6 providers via abstract interface.
 
@@ -655,7 +655,7 @@ Follow existing conventions in `~/.nexus/state/meeseeks/`:
 
 Follow existing patterns in `~/.nexus/state/hooks/`.
 
-**Memory-writer:** Triggered by the episode boundary detection system (scheduled-event approach). When a retain trigger fires (conversation gap, token budget, or end-of-day flush), the writer meeseeks is forked with the assembled episode. See `MEMORY_V2_RETAIN_PIPELINE.md` for the `pending_retain_triggers` table and trigger mechanism.
+**Memory-writer:** Triggered by the episode boundary detection system (scheduled-event approach). When a retain trigger fires (conversation gap, token budget, or end-of-day flush), the writer meeseeks is forked with the assembled episode. See `RETAIN_PIPELINE.md` for the `pending_retain_triggers` table and trigger mechanism.
 
 **Memory-injection:** Hooks into `worker:pre_execution` (blocking, 60s timeout).
 
@@ -669,7 +669,7 @@ Check the Nex TS event bus and hook infrastructure for existing patterns. (Go `i
 |-------|--------|
 | `relationships` | Replaced by `fact_entities` junction -- facts ARE the relationships |
 | `entity_aliases` | Unified into single `entities` table |
-| `identity_mappings` | Absorbed into `entities` table (contact handles are entities in identity.db; routable contacts in the delivery/routing system are a separate concept — see MEMORY_WRITER_V2.md "Contacts Contract") |
+| `identity_mappings` | Absorbed into `entities` table (contact handles are entities in identity.db; routable contacts in the delivery/routing system are a separate concept — see MEMORY_WRITER.md "Contacts Contract") |
 | `persons` | Unified into `entities` table |
 | `person_contact_links` | Contact handles are entities in identity.db, merge handles linking |
 | `person_facts` | Facts about people live in `facts` table |
@@ -680,10 +680,10 @@ Check the Nex TS event bus and hook infrastructure for existing patterns. (Go `i
 
 ## See Also
 
-- `MEMORY_V2_RETAIN_PIPELINE.md` -- Episode-based retain architecture (short-term memory, episode grouping, filtering, consolidation batching, backfill)
-- `MEMORY_V2_INFRASTRUCTURE_WORKPLAN.md` -- Recall parity, embedding provider abstraction, writer scope changes, skill enrichment
+- `RETAIN_PIPELINE.md` -- Episode-based retain architecture (short-term memory, episode grouping, filtering, consolidation batching, backfill)
+- `INFRASTRUCTURE_WORKPLAN.md` -- Recall parity, embedding provider abstraction, writer scope changes, skill enrichment
 - `UNIFIED_ENTITY_STORE.md` -- Entity unification and IAM integration
-- `MEMORY_WRITER_V2.md` -- Agentic retain flow
+- `MEMORY_WRITER.md` -- Agentic retain flow
 - `MEMORY_WRITER_ROLE.md` -- The writer's role prompt
 - `MEMORY_INJECTION.md` -- Automated memory injection (read path)
 - `MEMORY_SEARCH_SKILL.md` -- Agent search skill

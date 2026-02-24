@@ -359,7 +359,7 @@ ORDER BY m.id
 | `ci.identifier` | `sender_id` | Phone or email from contact_identifiers |
 | `c.name` | `sender_name` | Real name from AddressBook hydration |
 | `ch.chat_identifier` | `container_id` | Chat identifier string |
-| `ch.is_group` | `container_kind` | `true` → `"group"`, `false` → `"dm"` |
+| `ch.is_group` | `container_kind` | `true` → `"group"`, `false` → `"direct"` |
 | `m.reply_to_guid` | `reply_to_id` | `"imessage:" + reply_to_guid` if non-null |
 | `m.is_from_me` | `metadata.is_from_me` | Boolean |
 | `m.chat_id` | `metadata.chat_id` | Integer |
@@ -371,7 +371,7 @@ ORDER BY m.id
 
 ```go
 func convertWarehouseMessage(row WarehouseMessage) nexadapter.NexusEvent {
-    containerKind := "dm"
+    containerKind := "direct"
     if row.IsGroup {
         containerKind = "group"
     }
@@ -441,7 +441,7 @@ eve-adapter monitor --account default
 - `sender_name` contains real names (from AddressBook), not just phone numbers
 - `is_from_me` metadata correctly reflects direction
 - Group messages have `container_kind: "group"`
-- DMs have `container_kind: "dm"`
+- DMs have `container_kind: "direct"`
 - Content is clean (no U+FFFC, no null bytes)
 
 ### 3. `eve-adapter send --account default --to "+1XXXXXXXXXX" --text "Hello from Nexus"`

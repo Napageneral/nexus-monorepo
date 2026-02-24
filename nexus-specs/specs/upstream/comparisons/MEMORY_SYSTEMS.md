@@ -249,7 +249,6 @@ These are **read-mostly** — the agent can update them, but they're not the pri
 
 - `../cortex/README.md` — Cortex architecture and components
 - `../cortex/upstream/UPSTREAM_MEMORY.md` — Full OpenClaw memory system analysis
-- `MEMORY_PHILOSOPHY.md` — Philosophical framing of the difference
 - `../ledgers/` — System of Record (source data for Cortex)
 
 ---

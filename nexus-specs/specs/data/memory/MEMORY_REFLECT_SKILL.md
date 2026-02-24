@@ -2,7 +2,7 @@
 
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-20
-**Related:** MEMORY_SEARCH_SKILL.md, MEMORY_SYSTEM_V2.md
+**Related:** MEMORY_SEARCH_SKILL.md, MEMORY_SYSTEM.md
 
 ---
 
@@ -24,7 +24,7 @@ Agents that need to do more than simple search:
 
 This skill **requires** the Memory Search skill. It uses `recall()` extensively.
 
-> **Note:** The Memory-Writer does NOT import this skill. The writer focuses on fact extraction, entity identification, and deduplication. Mental model CRUD belongs exclusively to agents using the reflect skill. See `MEMORY_WRITER_V2.md`.
+> **Note:** The Memory-Writer does NOT import this skill. The writer focuses on fact extraction, entity identification, and deduplication. Mental model CRUD belongs exclusively to agents using the reflect skill. See `MEMORY_WRITER.md`.
 
 ---
 
@@ -276,7 +276,7 @@ Agents that import this skill can create mental models for their own domains:
 
 These mental models persist across invocations, making agents more effective over time. Any agent can search mental models at the start of each invocation to load learned patterns.
 
-> **Note:** The Memory-Writer does NOT create mental models. It uses ROLE.md updates and workspace scripts for self-improvement instead. See `MEMORY_WRITER_V2.md`.
+> **Note:** The Memory-Writer does NOT create mental models. It uses ROLE.md updates and workspace scripts for self-improvement instead. See `MEMORY_WRITER.md`.
 
 ### Any Agent Self-Improvement
 
@@ -356,5 +356,5 @@ Output: Synthesized markdown answer + mental model created
 ## See Also
 
 - `MEMORY_SEARCH_SKILL.md` -- The search foundation this skill builds on
-- `MEMORY_SYSTEM_V2.md` -- Full memory architecture (mental models schema)
-- `MEMORY_WRITER_V2.md` -- How the Memory-Writer uses these skills for self-improvement
+- `MEMORY_SYSTEM.md` -- Full memory architecture (mental models schema)
+- `MEMORY_WRITER.md` -- How the Memory-Writer uses these skills for self-improvement

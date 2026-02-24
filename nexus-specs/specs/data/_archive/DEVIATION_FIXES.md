@@ -141,7 +141,7 @@ This prevents garbage/hallucinated output from polluting the worker's context.
 
 **What's wrong:** `cortex-memory-writer-tools.ts` uses `randomUUID()` from `node:crypto` for all entity/fact/merge_candidate IDs. UUIDs are not time-sortable. The schema comments say `-- ULID` for every ID column.
 
-**What the spec says (MEMORY_SYSTEM_V2.md schema, UNIFIED_ENTITY_STORE.md schema):**
+**What the spec says (MEMORY_SYSTEM.md schema, UNIFIED_ENTITY_STORE.md schema):**
 Every `id` column is annotated `TEXT PRIMARY KEY, -- ULID`
 
 **File:** `nex/src/agents/tools/cortex-memory-writer-tools.ts` lines 2, 219, 245, 289, 449
@@ -162,7 +162,7 @@ ULIDs are time-sortable, which matters for ordering by creation time without an 
 
 **What's wrong:** The Path 1 writer hook (`hook_...v4.ts`) passes only `latestTurn` (user_message + assistant_response) to the writer meeseeks. No thread context (surrounding messages from the same session).
 
-**What the spec says (MEMORY_WRITER_V2.md §Trigger):**
+**What the spec says (MEMORY_WRITER.md §Trigger):**
 > "1. The event itself — full NexusEvent with deliveryContext"
 > "2. Thread context — the last N events from the same thread/session for conversational context"
 
@@ -179,7 +179,7 @@ ULIDs are time-sortable, which matters for ordering by creation time without an 
 
 **What's wrong:** Path 1 doesn't pass any deliveryContext to the writer. The writer needs platform, sender_id, sender_name, etc. for entity resolution and source attribution.
 
-**What the spec says (MEMORY_WRITER_V2.md §Event Context):**
+**What the spec says (MEMORY_WRITER.md §Event Context):**
 The writer receives the full NexusEvent with deliveryContext including platform, sender_id, sender_name, container_id, container_kind, thread_id.
 
 **File:** `state/hooks/scripts/hook_83961572-199a-43a2-b060-7b3b9d655411.v4.ts`
@@ -268,7 +268,7 @@ This is a real performance win — SQLite handles concurrent reads fine with WAL
 
 **What's wrong:** `facts.access_count` and `mental_models.access_count` exist in the schema but are never updated by recall(). These columns are designed for LRU/popularity-based retrieval tuning.
 
-**What the spec says (MEMORY_SYSTEM_V2.md schema):**
+**What the spec says (MEMORY_SYSTEM.md schema):**
 The `access_count` column exists on facts, analysis_runs, and mental_models, implying it should track retrieval hits.
 
 **File:** `nex/cortex/internal/recall/recall.go` — nowhere in the file.
@@ -365,7 +365,7 @@ Option 2 is simpler and likely fast enough. The brute-force scan will become a r
 
 **What's wrong:** The Path 1 hook (`v4.ts`) fires `triggerConsolidation()` after the writer completes (line 203). The Path 2 hook (`memory-writer-ingest.source.ts`) does not — it just delegates to the writer automation and returns.
 
-**What the spec says (MEMORY_WRITER_V2.md §Workflow):**
+**What the spec says (MEMORY_WRITER.md §Workflow):**
 > "Agent completes. System runs post-agent steps: Generate embeddings for new facts (algorithmic), Queue consolidation job for new facts (background)"
 
 This applies to BOTH paths.
@@ -476,7 +476,7 @@ The current consolidation.go:
 4. Never calls recall()
 5. Never uses LLM synthesis
 
-### What the Spec Says (MEMORY_WRITER_V2.md §Consolidation)
+### What the Spec Says (MEMORY_WRITER.md §Consolidation)
 
 For each unconsolidated fact:
 1. `recall(fact.text)` — find related observations and facts

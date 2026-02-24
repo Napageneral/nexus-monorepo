@@ -120,7 +120,7 @@ Polling is simplest and matches how `eve watch` works.
 Convert current SQLite-write logic to NexusEvent JSONL emission:
 
 ```json
-{"event_id":"aix:cursor:msg123","timestamp":1707235200000,"content":"User query text","content_type":"text","channel":"aix","account_id":"cursor","sender_id":"aix:cursor:user","peer_id":"aix:cursor:session456","peer_kind":"dm","thread_id":"aix:cursor:session456","metadata":{"role":"user","session_id":"session456"}}
+{"event_id":"aix:cursor:msg123","timestamp":1707235200000,"content":"User query text","content_type":"text","channel":"aix","account_id":"cursor","sender_id":"aix:cursor:user","container_id":"aix:cursor:session456","container_kind":"direct","thread_id":"aix:cursor:session456","metadata":{"role":"user","session_id":"session456"}}
 ```
 
 ### Account Model

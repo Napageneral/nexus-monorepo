@@ -126,8 +126,8 @@ MsgContext fields → NexusEvent fields:
   Provider → channel ("discord")
   SenderId → sender_id
   SenderName → sender_name
-  To → peer_id
-  ChatType → peer_kind ("dm" | "group")
+  To → container_id
+  ChatType → container_kind ("direct" | "group")
   MessageSid → event_id prefix
   RawBody → content
 ```

@@ -1,154 +1,216 @@
-# Built-in Adapters (Ingress + Event Sources)
+# Built-in & Internal Adapters
 
-**Status:** DESIGN + IMPLEMENTATION TRACKER  
-**Last Updated:** 2026-02-16  
+**Status:** DESIGN + IMPLEMENTATION TRACKER
+**Last Updated:** 2026-02-23
 **Related:** `./ADAPTER_SYSTEM.md`, `./INBOUND_INTERFACE.md`, `./OUTBOUND_INTERFACE.md`, `./CHANNEL_MIGRATION_TRACKER.md`, `./CLOCK_ADAPTER.md`, `../nex/CONTROL_PLANE.md`, `../nex/DAEMON.md`, `../nex/NEX.md`
 
 ---
 
 ## Purpose
 
-Define which integrations are shipped "with NEX" as **built-in adapters** and clarify the boundary between:
-
-- the **control-plane** (privileged local UI/CLI surface)
-- **external ingress** (protocol bridges that must enter via the adapter system)
-
-This doc also tracks current implementation reality in `nex/` vs the target adapter architecture.
-
----
-
-## Definitions
-
-- **Control-plane**: privileged local interfaces for the user + agents to operate the runtime (WS RPC, local UI hosting, health/SSE, privileged tool services).
-- **Adapter**: a supervised integration point (normally an external process) that emits normalized `NexusEvent` and receives outbound `send/stream` delivery.
-- **Built-in adapter**: an adapter shipped alongside NEX (still managed like any other adapter; not a "bypass").
+Define which integrations are shipped "with NEX" as **built-in adapters**, clarify the boundary between control-plane and external ingress, and specify how **internal (in-process) adapters** work alongside external (process-based) adapters.
 
 ---
 
 ## Canonical Boundary (Locked)
 
-- Control-plane WS RPC is **not** an adapter. It is the privileged control plane for local CLI/UI/nodes.
-- Control-plane HTTP is **not** an adapter. It hosts UI, avatars/media, health, and the bus SSE stream.
-- Any protocol bridge that accepts traffic from "the outside world" is an **adapter**:
-  - webhooks (hooks, Slack, etc)
-  - OpenAI/OpenResponses compatibility APIs
-  - channel ingress (Discord/Telegram/WhatsApp/etc)
-  - scheduled event sources (clock/timer)
+**Control-plane** — privileged local interfaces for the user + agents to operate the runtime.
+- Transport: WebSocket RPC + control-plane HTTP (UI, avatars, health, SSE bus stream).
+- Default binding: loopback (local-only) unless explicitly exposed with strict auth.
+- Control-plane must not "run agents directly" — it can *request* work by emitting a `NexusEvent` (which then hits IAM).
+
+**Adapters** — supervised integration points that emit normalized `NexusEvent` and receive outbound delivery.
+- Any protocol bridge that accepts traffic from "the outside world" is an adapter: webhooks, OpenAI/OpenResponses compatibility APIs, channel ingress (Discord/Telegram/WhatsApp/etc), scheduled event sources (clock/timer).
 - Any agent execution must be reachable as `NexusEvent -> nex.processEvent(...)` (no hidden agent-run paths).
+- Built-in adapters ship alongside NEX but are still managed via the adapter manager (health, restarts, status).
 
 ---
 
-## Current State (Implementation Snapshot)
+## Adapter Kinds
 
-The real long-running runtime is implemented in `nex/src/nex/control-plane/` and its HTTP server:
+We support two adapter kinds with the same state/supervision model:
 
-- Control-plane HTTP:
-  - `GET /health`
-  - `GET /api/events/stream` (SSE from the NEX bus)
-  - Control UI hosting + avatars
-  - Canvas/A2UI endpoints
-- Control-plane WS:
-  - local privileged RPC and push events (CLI/UI/nodes)
+### 1. Process adapters (existing)
 
-Additionally, the control-plane HTTP server currently still hosts **several protocol bridges** that should become adapters:
+- Spawn external executables.
+- Monitor = JSONL on stdout.
+- Send/stream/backfill/health via CLI protocol.
 
-| Bridge | Current Location (Implementation) | Current Behavior | Target |
-| --- | --- | --- | --- |
-| Hooks webhook endpoints | `nex/src/nex/control-plane/server/hooks.ts`, `nex/src/nex/control-plane/server-http.ts` | Normalizes payload + dispatches into NEX pipeline | Move to a webhook ingress adapter |
-| OpenAI compat (`/v1/chat/completions`) | `nex/src/nex/control-plane/openai-http.ts` | Normalizes request + dispatches into NEX pipeline + streams response | Move to OpenAI compat adapter |
-| OpenResponses compat (`/v1/responses`) | `nex/src/nex/control-plane/openresponses-http.ts` | Normalizes request + dispatches into NEX pipeline + streams response | Move to OpenResponses compat adapter |
-| Tools invoke (`POST /tools/invoke`) | `nex/src/nex/control-plane/tools-invoke-http.ts` | Dispatches into NEX pipeline as a `tool_invoke` request | May remain control-plane (privileged tool service), but must remain IAM-gated + audited |
-| Slack inbound webhook routing | `nex/src/slack/http/registry.ts` + registrations from `nex/src/slack/monitor/provider.ts` | In-process Slack runtime ingress | Replace with Slack adapter |
-| Cron/timer scheduling | `nex/src/cron/*` + wiring in `nex/src/nex/control-plane/server-cron.ts` | In-process scheduler; main jobs enqueue ephemeral system events; isolated jobs run pipeline | Replace with clock adapter + automations (cron service becomes optional UI sugar) |
+### 2. Internal adapters (new)
+
+- Implement adapter semantics as an in-process TypeScript module inside the daemon.
+- No child process required.
+- Still exposes the same conceptual capabilities (info/health, and optionally monitor/send/stream/backfill).
+- Still tracked + supervised as adapter instances (`adapter/account`).
+
+Both kinds use the same state tracking:
+
+- `status`: running | restarting | errored | stopped
+- `health`: healthy | degraded | disconnected | unknown | errored
+- `last_event_at`, `events_received`, `events_sent`
+- restart policy + backoff (for internal adapters, "restart" means "stop + start instance")
+
+This lets `/health` and UI show a single adapter table regardless of adapter kind.
+
+---
+
+## Internal Adapter Interface
+
+```ts
+type InternalAdapterKind = "event_source" | "ingress_server" | "ingress_surface";
+
+type InternalAdapterDefinition = {
+  name: string;     // adapter name (e.g. "clock", "http-ingress")
+  platform: string; // delivery.platform used on emitted events (e.g. "clock", "webhook")
+  kind: InternalAdapterKind;
+  supports: Array<"monitor" | "health" | "backfill" | "send" | "stream">;
+};
+
+type InternalAdapterInstance = {
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  health(): Promise<{ connected: boolean; last_event_at?: number; error?: string }>;
+};
+
+type InternalAdapterContext = {
+  adapter: string;
+  account: string;
+  emitEvent: (event: NexusEvent) => Promise<void>;   // calls nex.processEvent(...)
+  now: () => number;
+  log: { info(msg: string): void; warn(msg: string): void; error(msg: string): void };
+};
+```
+
+Notes:
+- Internal adapters **emit `NexusEvent`**; they do not bypass IAM.
+- Internal adapters can be inbound-only (webhooks) or event-source-only (clock).
+- Process adapters remain the default for external channels.
+
+---
+
+## Configuration Model
+
+Internal adapters are configured alongside process adapters. Recommended shape (explicit `kind`):
+
+```yaml
+adapters:
+  clock:
+    kind: internal
+    internal: { module: clock }
+    platform: clock
+    accounts:
+      default:
+        monitor: true
+        config:
+          heartbeat_interval_ms: 60000
+          cron:
+            - expr: "0 8 * * *"
+              label: "morning-summary"
+```
 
 ---
 
 ## Target Built-in Adapters
 
-These are "batteries included" adapters that should ship with NEX, but still be managed via the adapter manager (health, restarts, status).
+### 1. `clock` (event_source)
 
-### 1. `clock` (Timer / Scheduled Events)
+Emit time-based `NexusEvent`s (heartbeats, schedule labels) to drive proactive automations.
 
-Purpose:
-- Emit time-based `NexusEvent`s (heartbeats, schedule labels) to drive proactive automations.
+Canonical event shape:
+
+```ts
+{
+  event: {
+    event_id: "clock:heartbeat:1700000000000",
+    timestamp: 1700000000000,
+    content: "",
+    content_type: "text",
+    metadata: { type: "clock.heartbeat" }
+  },
+  delivery: {
+    platform: "clock",
+    account_id: "default",
+    sender_id: "clock:tick",
+    sender_name: "Clock",
+    container_id: "clock:tick",
+    container_kind: "channel",
+    capabilities: {},
+    available_platforms: []
+  }
+}
+```
 
 Notes:
-- Specs currently disagree on naming (`timer` internal vs `clock` external). Implementation already special-cases `delivery.channel === "clock"` for system identity.
-- Canonical direction: treat this as a **built-in adapter** and standardize on `channel: "clock"` for scheduled events.
+- Automations match on `event.metadata.type` and/or `delivery.platform === "clock"`.
+- The clock adapter emits events only; it does not run agents itself.
+- See `CLOCK_ADAPTER.md` for detailed design.
 
-### 2. `webhook` (Generic HTTP Webhook Ingress)
+### 2. `http-ingress` (ingress_server)
 
-Purpose:
-- Accept inbound HTTP payloads and normalize them to `NexusEvent`.
-- Provide a config-driven mapping layer (route -> normalization -> metadata).
+A single managed HTTP listener (separate from control-plane) for external protocol bridges.
 
-This becomes the foundational ingress for:
-- hooks
-- third-party webhooks (GitHub/Stripe/etc)
-- any new HTTP-based ingress without adding daemon routes
+Bridge modules hosted inside `http-ingress`:
+- **webhook** bridge — generic route mappings + hooks-like endpoints
+- **openai-compat** bridge — `/v1/chat/completions`
+- **openresponses-compat** bridge — `/v1/responses`
 
-### 3. `openai-compat` (OpenAI HTTP Compatibility)
+Each bridge normalizes inbound requests into `NexusEvent` (with `_nex_ingress` metadata) and runs them through the pipeline.
 
-Purpose:
-- Serve `/v1/chat/completions` and translate requests into `NexusEvent`s.
-- Stream responses back to the HTTP caller (SSE).
+### 3. `runtime` (ingress_surface) — Optional
 
-Implementation constraint:
-- Cross-process request/response streaming requires a stable local IPC mechanism inside the adapter (monitor/serve process owns the HTTP connection; `send/stream` invocations must reach it).
-
-### 4. `openresponses-compat` (OpenResponses HTTP Compatibility)
-
-Same as `openai-compat`, targeting `/v1/responses`.
+Represent local UI/webchat "messages to agents" as an adapter-managed ingress surface, keeping control-plane as management transport while the `runtime` internal adapter is the canonical "local message ingress" source.
 
 ---
 
-## Legacy Usage (Why This Is Confusing Today)
+## Current State (Implementation Snapshot)
 
-The runtime currently mixes two "shapes" of ingress:
+The control-plane HTTP server currently hosts several protocol bridges that should become adapters:
 
-1. Control-plane surfaces (correct): privileged local UI/CLI.
-2. External protocol bridges (incorrect placement): implemented as daemon routes for convenience.
+| Bridge | Current Location | Target |
+| --- | --- | --- |
+| Hooks webhook endpoints | `server/hooks.ts`, `server-http.ts` | `http-ingress` webhook bridge |
+| OpenAI compat (`/v1/chat/completions`) | `openai-http.ts` | `http-ingress` openai-compat bridge |
+| OpenResponses compat (`/v1/responses`) | `openresponses-http.ts` | `http-ingress` openresponses-compat bridge |
+| Tools invoke (`POST /tools/invoke`) | `tools-invoke-http.ts` | May remain control-plane (privileged tool service) |
+| Slack inbound webhook routing | `slack/http/registry.ts` | Slack adapter |
+| Cron/timer scheduling | `cron/*` + `server-cron.ts` | Clock adapter + automations |
 
-The second category *functions*, but it:
-- is not supervised/configured like other adapters
-- blurs the security boundary (external ingress vs privileged control-plane)
-- makes it harder to reason about "what counts as a channel"
+### Clock/Timer Spec Inconsistency
 
-Moving bridges into built-in adapters makes ingress points consistent with Discord/Telegram/etc adapters.
-
----
-
-## Clock/Timer: Spec + Implementation Reality
-
-### Specs today (inconsistent)
-
-- `../nex/DAEMON.md` describes an **internal** `timer` adapter with `channel: "timer"`.
-- `../nex/NEX.md` describes an **external** `clock` adapter with `channel: "clock"`.
-
-### Implementation today (partial)
-
-- `nex` recognizes `delivery.channel === "clock"` as a system principal ("Clock Adapter") for IAM identity resolution.
-- There is no adapter process emitting clock/timer events yet.
-- There is an in-process cron scheduler under `nex/src/cron/*` (not adapter-shaped).
-
-### Canonical target (proposed)
-
-- Use `delivery.channel: "clock"` for all scheduled events.
-- Emit events as normal `NexusEvent` objects via the adapter system.
-- Encode event intent in `event.metadata`:
-  - `type: "clock.heartbeat"` or `type: "clock.tick"`
-  - `cron_label`, `cron_expr`, `schedule_id`, etc
+- `DAEMON.md` describes an internal `timer` adapter with `channel: "timer"`.
+- `NEX.md` describes an external `clock` adapter with `channel: "clock"`.
+- Implementation recognizes `delivery.channel === "clock"` for system identity.
+- **Canonical target:** standardize on `platform: "clock"` for all scheduled events.
 
 ---
 
-## Validation Checklist
+## IAM Expectations
 
-- Clock adapter emits events and they show up in:
-  - `events.db` (events ledger)
-  - `nexus_requests` (trace ledger)
-  - IAM audit logs (where relevant)
-- Webhook/OpenAI/OpenResponses ingress works end-to-end **with the bridge moved out of control-plane routes**.
-- Control-plane server remains local-first and does not host external ingress.
+- Every internal adapter must emit `NexusEvent` with an appropriate `delivery.platform`.
+- `resolveIdentity` should produce correct principals:
+  - `clock` → system principal `source=timer`
+  - `webhook` → webhook principal (not system)
+  - local `runtime` → owner/known where appropriate
+
+---
+
+## Migration Plan
+
+1. Implement internal adapter registry + runtime support.
+2. Implement internal `clock` adapter emitting events (heartbeat first).
+3. Implement internal `http-ingress` adapter (new bind/port) and port hooks webhooks, OpenAI/OpenResponses routes.
+4. Remove those endpoints from the control-plane HTTP router (control-plane returns to privileged/local).
+5. (Optional) Model local webchat ingress via internal `runtime` adapter.
+
+---
+
+## Acceptance Criteria
+
+- `nexus status` / runtime health shows internal adapters as adapter instances with health/state.
+- `clock` emits events that appear in events ledger + nexus_requests.
+- `http-ingress` can accept a webhook/OpenAI request and the agent run is visible as a NEX pipeline trace (IAM + audit included).
+- Webhook/OpenAI/OpenResponses ingress works end-to-end with the bridge moved out of control-plane routes.
+- Control-plane remains local-first and does not host external ingress by default.
 
 ---
 

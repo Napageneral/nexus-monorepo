@@ -3,7 +3,7 @@
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-18
 **Resolves:** LIVE_E2E_HARNESS.md Bundle B (Items 3, 4)
-**Related:** `broker/SESSION_LIFECYCLE.md`, `../data/DATABASE_ARCHITECTURE.md`, `../data/memory/v2/MEMORY_SYSTEM_V2.md`, `adapters/ADAPTER_SYSTEM.md`
+**Related:** `broker/SESSION_LIFECYCLE.md`, `../data/DATABASE_ARCHITECTURE.md`, `../data/memory/v2/MEMORY_SYSTEM.md`, `adapters/ADAPTER_SYSTEM.md`
 
 ---
 
@@ -578,8 +578,8 @@ The memory system V2 memory tables (facts, fact_entities, episodes, etc. in memo
 
 - `broker/SESSION_LIFECYCLE.md` — Session creation, turn processing, queue management, forking
 - `../data/DATABASE_ARCHITECTURE.md` — 6-database layout, entity relocation to identity.db
-- `../data/memory/v2/MEMORY_SYSTEM_V2.md` — Memory architecture, retain flow, consolidation
-- `../data/memory/v2/MEMORY_WRITER_V2.md` — Memory-writer entity resolution and merge behavior
+- `../data/memory/v2/MEMORY_SYSTEM.md` — Memory architecture, retain flow, consolidation
+- `../data/memory/v2/MEMORY_WRITER.md` — Memory-writer entity resolution and merge behavior
 - `adapters/ADAPTER_SYSTEM.md` — Adapter protocol, manager, configuration
 - `../environment/foundation/WORKSPACE_LIFECYCLE.md` — Init, boot, onboarding lifecycle
 - `../environment/foundation/harnesses/LIVE_E2E_HARNESS.md` — E2E harness scenarios
