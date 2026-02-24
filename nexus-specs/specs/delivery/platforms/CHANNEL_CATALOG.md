@@ -2,7 +2,7 @@
 
 **Status:** REFERENCE
 **Last Updated:** 2026-02-23
-**Related:** `../ADAPTER_SYSTEM.md`, `../INBOUND_INTERFACE.md`, `../OUTBOUND_INTERFACE.md`, `../OUTBOUND_TARGETING.md`, `../ADAPTER_CREDENTIALS.md`, `../BUILTIN_ADAPTERS.md`
+**Related:** `../ADAPTER_SYSTEM.md`, `../INBOUND_INTERFACE.md`, `../OUTBOUND_INTERFACE.md`, `../sdk/OUTBOUND_TARGETING.md`, `../sdk/ADAPTER_CREDENTIALS.md`, `../adapters/BUILTIN_ADAPTERS.md`
 
 ---
 
@@ -668,10 +668,10 @@ const MSTEAMS_CAPABILITIES: ChannelCapabilities = {
 ## Related
 
 - `../ADAPTER_SYSTEM.md` — Adapter protocol definition
-- `../ADAPTER_SDK.md` — SDK design and components
-- `../ADAPTER_CREDENTIALS.md` — Credential management
-- `../OUTBOUND_TARGETING.md` — Delivery targeting contract
-- `../CHANNEL_DIRECTORY.md` — Channel directory population
+- `../sdk/ADAPTER_SDK.md` — SDK design and components
+- `../sdk/ADAPTER_CREDENTIALS.md` — Credential management
+- `../sdk/OUTBOUND_TARGETING.md` — Delivery targeting contract
+- `../adapters/CHANNEL_DIRECTORY.md` — Channel directory population
 - `UPSTREAM_CHANNEL_REVIEWS.md` — Per-platform upstream gap analysis and effort estimates
 - `../../iam/ACCESS_CONTROL_SYSTEM.md` — IAM policies
 - `../../iam/PAIRING_UX.md` — Permission request / pairing flow

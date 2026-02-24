@@ -948,11 +948,11 @@ Those specs define the **data contracts** — NexusEvent schema, DeliveryResult 
 
 Adapters link to credentials via `credential_service`. The credential store's `Service → Account → Credentials[]` hierarchy maps naturally to adapter accounts.
 
-### Adapter Credentials (ADAPTER_CREDENTIALS.md)
+### Adapter Credentials (sdk/ADAPTER_CREDENTIALS.md)
 
 Defines how NEX resolves credential pointers and injects usable secrets into adapter processes (without argv leakage).
 
-### Outbound Targeting (OUTBOUND_TARGETING.md)
+### Outbound Targeting (sdk/OUTBOUND_TARGETING.md)
 
 Defines the canonical semantics for `thread_id` / `reply_to_id` and the required adapter protocol support (`--thread`, `--reply-to`, `stream_start.target`).
 
@@ -984,8 +984,8 @@ Platform capabilities and available platforms are injected into event context du
 
 - `INBOUND_INTERFACE.md` — Inbound event schema, data contracts (NexusEvent)
 - `OUTBOUND_INTERFACE.md` — Delivery interface, formatting, chunking
-- `OUTBOUND_TARGETING.md` — Threading + reply semantics
-- `CHANNEL_DIRECTORY.md` — Directory of outbound targets per channel/account
+- `sdk/OUTBOUND_TARGETING.md` — Threading + reply semantics
+- `adapters/CHANNEL_DIRECTORY.md` — Directory of outbound targets per channel/account
 - `platforms/` — Per-platform capability specs
 - `../nex/NEXUS_REQUEST.md` — Request object adapters create/consume
 - `../agents/CONTEXT_ASSEMBLY.md` — How platform context feeds into agent prompts

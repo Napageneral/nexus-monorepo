@@ -2,7 +2,7 @@
 
 **Status:** PARTIALLY IMPLEMENTED (control-plane IAM authz + password login + ingress integrity telemetry + ingress credential WS methods)  
 **Last Updated:** 2026-02-18  
-**Related:** `CONTROL_PLANE.md`, `HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md`, `HOSTED_RUNTIME_PROFILE.md`, `SURFACE_ADAPTER_V2.md`, `../iam/ACCESS_CONTROL_SYSTEM.md`, `../iam/POLICIES.md`, `../delivery/INTERNAL_ADAPTERS.md`, `../delivery/INBOUND_INTERFACE.md`
+**Related:** `CONTROL_PLANE.md`, `../hosted/HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md`, `../hosted/HOSTED_RUNTIME_PROFILE.md`, `../SURFACE_ADAPTER_V2.md`, `../../iam/ACCESS_CONTROL_SYSTEM.md`, `../../iam/POLICIES.md`, `../../delivery/INTERNAL_ADAPTERS.md`, `../../delivery/INBOUND_INTERFACE.md`
 
 ---
 
@@ -117,7 +117,7 @@ All external protocol bridges are adapters (process or internal adapters) and MU
 - clock/timer event source
 - channel integrations (Discord/Telegram/WhatsApp/iMessage/etc)
 
-Network-facing ingress should be hosted by an internal adapter (example: `http-ingress`) with runtime-managed binding and explicit trust-zone policy. Physical listener count is deployment detail. See `../delivery/INTERNAL_ADAPTERS.md`.
+Network-facing ingress should be hosted by an internal adapter (example: `http-ingress`) with runtime-managed binding and explicit trust-zone policy. Physical listener count is deployment detail. See `../../delivery/INTERNAL_ADAPTERS.md`.
 
 ---
 

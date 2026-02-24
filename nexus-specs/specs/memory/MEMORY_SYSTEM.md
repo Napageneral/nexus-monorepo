@@ -310,7 +310,7 @@ CREATE INDEX idx_mental_models_stale ON mental_models(is_stale) WHERE is_stale =
 - Users can explicitly request mental model creation
 - The consolidation system can trigger refreshes on existing models when related observations update
 
-> **Note:** The Memory-Writer meeseeks does NOT create or update mental models. Mental model CRUD belongs exclusively in the reflect skill. The writer focuses on fact extraction, entity identification, and deduplication. See `INFRASTRUCTURE_WORKPLAN.md` Item 9.
+> **Note:** The Memory-Writer meeseeks does NOT create or update mental models. Mental model CRUD belongs exclusively in the reflect skill. The writer focuses on fact extraction, entity identification, and deduplication. See `workplans/INFRASTRUCTURE_WORKPLAN.md` Item 9.
 
 **Versioning:** When a mental model is refreshed, a new row is created with `parent_id` pointing to the previous version. The old version stays for history.
 
@@ -422,14 +422,14 @@ A single search interface with tunable parameters. Used by agents via a skill/to
 4. **Causal traversal** -- facts connected via causal_links
 5. **Short-term events** -- unretained events (`is_retained = FALSE` on events table) searched via FTS + semantic. Returns `type: 'event'` results. See `RETAIN_PIPELINE.md`.
 
-Temporal and platform filtering are applied as WHERE clauses on results. Dedicated temporal retrieval (proximity-based decay scoring) is planned — see `INFRASTRUCTURE_WORKPLAN.md` Item 5.
+Temporal and platform filtering are applied as WHERE clauses on results. Dedicated temporal retrieval (proximity-based decay scoring) is planned — see `workplans/INFRASTRUCTURE_WORKPLAN.md` Item 5.
 
 **Fusion:** Reciprocal Rank Fusion (RRF) with k=60 across strategies. Post-fusion MMR (Maximal Marginal Relevance) for diversity (λ=0.7). No cross-encoder reranking initially.
 
 **Budget controls which strategies run:**
 - `low`: semantic search only (single vector query, fastest)
-- `mid`: semantic + keyword + entity traversal + short-term events + link expansion (see INFRASTRUCTURE_WORKPLAN.md Item 6)
-- `high`: all strategies including MPFP graph traversal (see INFRASTRUCTURE_WORKPLAN.md Item 4) + higher result limits
+- `mid`: semantic + keyword + entity traversal + short-term events + link expansion (see workplans/INFRASTRUCTURE_WORKPLAN.md Item 6)
+- `high`: all strategies including MPFP graph traversal (see workplans/INFRASTRUCTURE_WORKPLAN.md Item 4) + higher result limits
 
 **Hierarchical retrieval strategy (taught via skill):**
 1. Search mental models first (highest quality, if applicable)
@@ -449,7 +449,7 @@ The skill teaches:
 - Budget management (low/mid/high search depth)
 - How to use recall() parameters for filtered search
 
-For persisting search results as mental models, see the Memory Reflect skill (`MEMORY_REFLECT_SKILL.md`).
+For persisting search results as mental models, see the Memory Reflect skill (`skills/MEMORY_REFLECT_SKILL.md`).
 
 Agents that import this skill: Memory-Writer (for dedup/resolution during retain), any conversational agent (for searching when automated injection isn't enough), any meeseeks that needs context.
 
@@ -467,7 +467,7 @@ A lightweight meeseeks at `worker:pre_execution`. Uses a fast cheap model (gpt-5
 
 Any agent can import the Memory Search skill and call `recall()` with targeted parameters during its session. This is the "pull" model — the agent actively searches when it knows it needs more context beyond what the injection provided.
 
-See `MEMORY_INJECTION.md` for full details.
+See `skills/MEMORY_INJECTION.md` for full details.
 
 ---
 
@@ -541,7 +541,7 @@ CREATE VIRTUAL TABLE vec_embeddings USING vec0(
 );
 ```
 
-> **Note:** The dimension is determined by the embedding provider abstraction (see `INFRASTRUCTURE_WORKPLAN.md` Item 1). On model change, the vec table is rebuilt from the `embeddings` table.
+> **Note:** The dimension is determined by the embedding provider abstraction (see `workplans/INFRASTRUCTURE_WORKPLAN.md` Item 1). On model change, the vec table is rebuilt from the `embeddings` table.
 
 Query with cosine similarity:
 ```sql
@@ -628,7 +628,7 @@ Reference: Hindsight implements MMR in its recall pipeline. Standard algorithm, 
 The old memory system used Gemini embeddings but these are expensive per-call. For V2, use the same local model as Hindsight:
 
 - **Default:** `BAAI/bge-small-en-v1.5` via node-llama-cpp GGUF (Q8_0). 384 dimensions. Runs locally, zero API cost.
-- **Provider abstraction:** The embedding provider is swappable via env vars (`NEXUS_EMBEDDINGS_PROVIDER`, `NEXUS_EMBEDDINGS_MODEL`). Supports local, OpenAI, Cohere, LiteLLM. See `INFRASTRUCTURE_WORKPLAN.md` Item 1.
+- **Provider abstraction:** The embedding provider is swappable via env vars (`NEXUS_EMBEDDINGS_PROVIDER`, `NEXUS_EMBEDDINGS_MODEL`). Supports local, OpenAI, Cohere, LiteLLM. See `workplans/INFRASTRUCTURE_WORKPLAN.md` Item 1.
 - **Dimension:** Auto-detected from provider at initialization. The `embeddings` table stores model metadata; the `vec_embeddings` virtual table is rebuilt on model change.
 - **Hindsight reference:** `hindsight_api/config.py` — `DEFAULT_EMBEDDINGS_LOCAL_MODEL = "BAAI/bge-small-en-v1.5"`, `DEFAULT_EMBEDDING_DIMENSION = 384`. Hindsight supports 6 providers via abstract interface.
 
@@ -638,7 +638,7 @@ Follow existing conventions in `~/.nexus/state/meeseeks/`:
 
 ```
 ~/.nexus/state/meeseeks/memory-writer/
-    ROLE.md              -- Role prompt (see MEMORY_WRITER_ROLE.md)
+    ROLE.md              -- Role prompt (see workplans/MEMORY_WRITER_ROLE.md)
     skills/
         memory/
             recall.ts    -- recall() tool implementation
@@ -681,13 +681,13 @@ Check the Nex TS event bus and hook infrastructure for existing patterns. (Go `i
 ## See Also
 
 - `RETAIN_PIPELINE.md` -- Episode-based retain architecture (short-term memory, episode grouping, filtering, consolidation batching, backfill)
-- `INFRASTRUCTURE_WORKPLAN.md` -- Recall parity, embedding provider abstraction, writer scope changes, skill enrichment
+- `workplans/INFRASTRUCTURE_WORKPLAN.md` -- Recall parity, embedding provider abstraction, writer scope changes, skill enrichment
 - `UNIFIED_ENTITY_STORE.md` -- Entity unification and IAM integration
 - `MEMORY_WRITER.md` -- Agentic retain flow
-- `MEMORY_WRITER_ROLE.md` -- The writer's role prompt
-- `MEMORY_INJECTION.md` -- Automated memory injection (read path)
-- `MEMORY_SEARCH_SKILL.md` -- Agent search skill
-- `MEMORY_REFLECT_SKILL.md` -- Deep research and mental model creation
+- `workplans/MEMORY_WRITER_ROLE.md` -- The writer's role prompt
+- `skills/MEMORY_INJECTION.md` -- Automated memory injection (read path)
+- `skills/MEMORY_SEARCH_SKILL.md` -- Agent search skill
+- `skills/MEMORY_REFLECT_SKILL.md` -- Deep research and mental model creation
 - `../../ledgers/EVENTS_LEDGER.md` -- Source event schema
 - `../../ledgers/IDENTITY_GRAPH.md` -- Previous identity system (superseded)
 - `../MEMORY_SYSTEM.md` -- Previous memory system (superseded)

@@ -2,7 +2,7 @@
 
 **Status:** DESIGN SPEC  
 **Last Updated:** 2026-02-18
-**Related:** NEX.md, CONTROL_PLANE.md, `../delivery/ADAPTER_SYSTEM.md`, SESSION_IMPORT_SERVICE.md, BUS_ARCHITECTURE.md, PLUGINS.md
+**Related:** NEX.md, ingress/CONTROL_PLANE.md, `../delivery/ADAPTER_SYSTEM.md`, workplans/SESSION_IMPORT_SERVICE.md, BUS_ARCHITECTURE.md, PLUGINS.md
 **Database layout:** See `../DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
 
 ---
@@ -154,7 +154,7 @@ Adapters start in parallel (no ordering dependency between adapters). Runtime re
 
 **Startup order within an adapter account is sequential:** credential check → spawn → confirm stdout is readable → mark running.
 
-See `../delivery/ADAPTER_SYSTEM.md` for channel adapter lifecycle and `SESSION_IMPORT_SERVICE.md` for `aix` import adapter lifecycle.
+See `../delivery/ADAPTER_SYSTEM.md` for channel adapter lifecycle and `workplans/SESSION_IMPORT_SERVICE.md` for `aix` import adapter lifecycle.
 
 ### 5. Timer Adapter
 
@@ -207,7 +207,7 @@ GET /health              → Health check (for doctor system, monitoring)
 GET /api/events/stream   → SSE event stream (bus subscriber)
 ```
 
-Additional control-plane endpoints (UI, hooks, OpenAI/OpenResponses, tools invoke, WS RPC) are specified in `CONTROL_PLANE.md`.
+Additional control-plane endpoints (UI, hooks, OpenAI/OpenResponses, tools invoke, WS RPC) are specified in `ingress/CONTROL_PLANE.md`.
 
 Binds to `runtime.*` configuration (default loopback). No external exposure without explicit config.
 

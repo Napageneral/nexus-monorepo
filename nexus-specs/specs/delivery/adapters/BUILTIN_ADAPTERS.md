@@ -2,7 +2,7 @@
 
 **Status:** DESIGN + IMPLEMENTATION TRACKER
 **Last Updated:** 2026-02-24
-**Related:** `./ADAPTER_SYSTEM.md`, `./INBOUND_INTERFACE.md`, `./OUTBOUND_INTERFACE.md`, `./CHANNEL_MIGRATION_TRACKER.md`, `./CLOCK_ADAPTER.md`, `../nex/CONTROL_PLANE.md`, `../nex/DAEMON.md`, `../nex/NEX.md`, `../nex/SURFACE_ADAPTER_V2.md`
+**Related:** `../ADAPTER_SYSTEM.md`, `../INBOUND_INTERFACE.md`, `../OUTBOUND_INTERFACE.md`, `../workplans/CHANNEL_MIGRATION_TRACKER.md`, `./CLOCK_ADAPTER.md`, `../../nex/ingress/CONTROL_PLANE.md`, `../../nex/DAEMON.md`, `../../nex/NEX.md`, `../../nex/SURFACE_ADAPTER_V2.md`
 
 ---
 
@@ -178,8 +178,8 @@ The control-plane HTTP server currently hosts several protocol bridges that shou
 
 ### Clock/Timer Spec Inconsistency
 
-- `../nex/DAEMON.md` describes an internal `timer` adapter with `platform: "timer"`.
-- `../nex/NEX.md` describes an external `clock` adapter with `platform: "clock"`.
+- `../../nex/DAEMON.md` describes an internal `timer` adapter with `platform: "timer"`.
+- `../../nex/NEX.md` describes an external `clock` adapter with `platform: "clock"`.
 - Implementation recognizes `delivery.platform === "clock"` for system identity.
 - **Canonical target:** standardize on `platform: "clock"` for all scheduled events.
 

@@ -2,7 +2,7 @@
 
 **Status:** Plan (Hard Cutover)
 **Last Updated:** 2026-02-24
-**Canonical Design:** `ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md`
+**Canonical Design:** `../ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md`
 
 ---
 

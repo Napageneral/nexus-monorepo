@@ -2,7 +2,7 @@
 
 **Status:** DRAFT (planning)  
 **Last Updated:** 2026-02-24  
-**Related:** `HOSTED_ORACLE_MULTI_UI_INTEGRATION.md`, `SINGLE_TENANT_MULTI_USER.md`, `INGRESS_INTEGRITY.md`
+**Related:** `HOSTED_ORACLE_MULTI_UI_INTEGRATION.md`, `../ingress/SINGLE_TENANT_MULTI_USER.md`, `../ingress/INGRESS_INTEGRITY.md`
 
 ---
 

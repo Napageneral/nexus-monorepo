@@ -87,12 +87,12 @@ interface EmbeddingConfig {
 
 **Changes:**
 1. Update `timeout_ms` from `3000` to `60000` in the bundled automation registration (seeder.ts)
-2. Remove the "Target latency < 1 second" language from MEMORY_INJECTION.md — this was aspirational and too restrictive
+2. Remove the "Target latency < 1 second" language from ../skills/MEMORY_INJECTION.md — this was aspirational and too restrictive
 3. Update the spec to say: "The injection meeseeks has a 60-second timeout. It should complete as fast as possible but is allowed to take longer for large inputs. The fast model and simple task keep typical latency under 10 seconds."
 
 **Files touched:**
 - `src/nex/automations/seeder.ts` — change timeout_ms
-- `nexus-specs/specs/data/memory/MEMORY_INJECTION.md` — update timeout and latency language
+- `../skills/MEMORY_INJECTION.md` — update timeout and latency language
 
 ---
 
@@ -100,14 +100,14 @@ interface EmbeddingConfig {
 
 **What:** Remove the fixed "1-3 recall calls" constraint from the injection meeseeks. Allow it to short-circuit with zero calls or search more extensively for rich inputs.
 
-**Changes to MEMORY_INJECTION.md spec:**
+**Changes to ../skills/MEMORY_INJECTION.md spec:**
 1. Remove "Max Turns: 2-3 turns max" — replace with: "The injection meeseeks should use its judgment on how many recall calls to make. For simple tasks or ones unlikely to have relevant memory, return nothing immediately without searching. For tasks rich with entities and context, search multiple times along different dimensions."
 2. Add explicit short-circuit guidance: "If the task is purely computational (math, code generation with no personal context), or if the content contains no entity references or personal context, return nothing immediately. Do not search just to search."
 3. Add high-end guidance: "For large inputs mentioning multiple entities, topics, or time periods, search along each dimension separately. There is no hard cap on recall calls — the timeout is the natural constraint."
 4. Keep the overall philosophy: "This is a best-effort quick scan, not a research project. The main agent can use the Memory Search skill for deeper exploration."
 
 **Files touched:**
-- `nexus-specs/specs/data/memory/MEMORY_INJECTION.md` — update turn/call guidance
+- `../skills/MEMORY_INJECTION.md` — update turn/call guidance
 
 ---
 
@@ -366,8 +366,8 @@ This may need adaptation depending on sqlite-vec's compatibility with CTEs. Test
 
 **Files touched:**
 - `src/agents/tools/memory-writer-tools.ts` — remove 3 tools
-- `nexus-specs/specs/data/memory/MEMORY_WRITER_ROLE.md` — update role prompt
-- `nexus-specs/specs/data/memory/MEMORY_WRITER.md` — update spec
+- `MEMORY_WRITER_ROLE.md` — update role prompt
+- `../MEMORY_WRITER.md` — update spec
 - `src/memory/consolidation.ts` — add causal link detection to consolidation prompt
 
 ---
@@ -415,7 +415,7 @@ when you discover real names. Don't create duplicate entities for handles that a
 2. Also add entity resolution carefulness guidance — specifically the "same name, different person" case (e.g., two different Tylers) and nickname tracking (e.g., "Ty" → Tyler)
 
 **Files touched:**
-- `nexus-specs/specs/data/memory/MEMORY_WRITER_ROLE.md` — add architecture context
+- `MEMORY_WRITER_ROLE.md` — add architecture context
 
 ---
 

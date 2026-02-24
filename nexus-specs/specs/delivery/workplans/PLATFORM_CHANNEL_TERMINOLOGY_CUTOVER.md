@@ -4,10 +4,10 @@
 **Last Updated:** 2026-02-24  
 **Scope:** Runtime terminology normalization across NEX, IAM, control-plane, and memory ledgers  
 **Related:**
-- `UNIFIED_DELIVERY_TAXONOMY.md`
+- `../UNIFIED_DELIVERY_TAXONOMY.md`
 - `UNIFIED_DELIVERY_TAXONOMY_WORKPLAN.md`
-- `RUNTIME_ROUTING.md`
-- `iam/POLICY_ARCHITECTURE_UNIFICATION.md`
+- `../../nex/RUNTIME_ROUTING.md`
+- `../../iam/POLICY_ARCHITECTURE_UNIFICATION.md`
 
 ---
 

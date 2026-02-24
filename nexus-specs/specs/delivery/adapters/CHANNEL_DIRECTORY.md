@@ -2,7 +2,7 @@
 
 **Status:** DESIGN SPEC  
 **Last Updated:** 2026-02-18  
-**Related:** `ADAPTER_SYSTEM.md`, `INBOUND_INTERFACE.md`, `OUTBOUND_TARGETING.md`, `../../data/memory/v2/UNIFIED_ENTITY_STORE.md`
+**Related:** `../ADAPTER_SYSTEM.md`, `../INBOUND_INTERFACE.md`, `../sdk/OUTBOUND_TARGETING.md`, `../../data/memory/v2/UNIFIED_ENTITY_STORE.md`
 
 ---
 
@@ -64,7 +64,7 @@ type ChannelDirectoryEntry = {
 
 **Notes:**
 
-- `container_id` + `thread_id` identify the outbound destination (see `OUTBOUND_TARGETING.md`).
+- `container_id` + `thread_id` identify the outbound destination (see `../sdk/OUTBOUND_TARGETING.md`).
 - `display_name` and `handle` are convenience fields for UI; they are untrusted and may change.
 
 ---

@@ -5,12 +5,12 @@
 **Related:**
 - `SINGLE_TENANT_MULTI_USER.md` (single-tenant, multi-user + anti-spoofing)
 - `INGRESS_CREDENTIALS.md` (API keys + webchat sessions)
-- `../delivery/UNIFIED_DELIVERY_TAXONOMY.md` (canonical delivery ids)
-- `./RUNTIME_ROUTING.md` (routing + identity resolution)
-- `../delivery/INBOUND_INTERFACE.md` (adapter ingress contract)
-- `../delivery/INTERNAL_ADAPTERS.md` (http-ingress + clock as internal adapters)
-- `../iam/ACCESS_CONTROL_SYSTEM.md` (IAM model)
-- `../iam/POLICIES.md` (policy matching)
+- `../../delivery/UNIFIED_DELIVERY_TAXONOMY.md` (canonical delivery ids)
+- `../RUNTIME_ROUTING.md` (routing + identity resolution)
+- `../../delivery/INBOUND_INTERFACE.md` (adapter ingress contract)
+- `../../delivery/INTERNAL_ADAPTERS.md` (http-ingress + clock as internal adapters)
+- `../../iam/ACCESS_CONTROL_SYSTEM.md` (IAM model)
+- `../../iam/POLICIES.md` (policy matching)
 
 ---
 

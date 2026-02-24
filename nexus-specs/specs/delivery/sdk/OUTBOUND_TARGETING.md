@@ -151,5 +151,5 @@ Outbound:
 
 ## Non-Goals
 
-- A global “directory” of all possible targets. That is specified separately in `CHANNEL_DIRECTORY.md`.
+- A global “directory” of all possible targets. That is specified separately in `../adapters/CHANNEL_DIRECTORY.md`.
 - Forcing a single `to` string format across all adapters. The adapter controls `to` formats (but must document them).

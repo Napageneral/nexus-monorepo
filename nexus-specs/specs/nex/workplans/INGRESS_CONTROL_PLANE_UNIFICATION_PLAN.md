@@ -2,7 +2,7 @@
 
 **Status:** IN PROGRESS  
 **Last Updated:** 2026-02-19  
-**Related:** `CONTROL_PLANE.md`, `SINGLE_TENANT_MULTI_USER.md`, `INGRESS_CREDENTIALS.md`, `INGRESS_INTEGRITY.md`, `CONTROL_PLANE_AUTHZ_TAXONOMY.md`, `SURFACE_ADAPTER_V2.md`, `../delivery/INTERNAL_ADAPTERS.md`
+**Related:** `../ingress/CONTROL_PLANE.md`, `../ingress/SINGLE_TENANT_MULTI_USER.md`, `../ingress/INGRESS_CREDENTIALS.md`, `../ingress/INGRESS_INTEGRITY.md`, `../ingress/CONTROL_PLANE_AUTHZ_TAXONOMY.md`, `../SURFACE_ADAPTER_V2.md`, `../../delivery/INTERNAL_ADAPTERS.md`
 
 ---
 

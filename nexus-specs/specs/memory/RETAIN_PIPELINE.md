@@ -2,7 +2,7 @@
 
 **Status:** DESIGN SPEC (RESOLVED)
 **Created:** 2026-02-19
-**Depends On:** MEMORY_SYSTEM.md, MEMORY_WRITER.md, INFRASTRUCTURE_WORKPLAN.md
+**Depends On:** MEMORY_SYSTEM.md, MEMORY_WRITER.md, workplans/INFRASTRUCTURE_WORKPLAN.md
 **Context:** All 8 phases of the original WORKPLAN.md have been implemented (see `../_archive/WORKPLAN.md`, archived). The current backfill implementation processes events one-by-one through the full agentic pipeline, which won't scale to millions of events. This spec redesigns the retain pipeline to be episode-based, unifying the live and backfill paths.
 
 ---
@@ -413,7 +413,7 @@ VALUES ('f3', 'include-boss-emails', 'gmail',
 
 ### Writer Meeseeks — Scoped to Extraction
 
-The memory-writer meeseeks is scoped to **fact extraction, entity identification, deduplication, and entity resolution.** It does NOT handle causal links or mental models (see INFRASTRUCTURE_WORKPLAN.md Item 9).
+The memory-writer meeseeks is scoped to **fact extraction, entity identification, deduplication, and entity resolution.** It does NOT handle causal links or mental models (see workplans/INFRASTRUCTURE_WORKPLAN.md Item 9).
 
 **Tools available:**
 - `recall` — for dedup checks, entity resolution, gathering context
@@ -496,7 +496,7 @@ When the writer sees a sender for the first time, the delivery pipeline has alre
 - Enrich it when real names are discovered (propose merge to create person entity)
 
 **Provenance tracking:**
-Every entity resolution decision should be logged (see INFRASTRUCTURE_WORKPLAN.md Item 12) so that incorrect merges can be audited and split, and incorrect splits can be merged. Track which event/fact/episode triggered each resolution.
+Every entity resolution decision should be logged (see workplans/INFRASTRUCTURE_WORKPLAN.md Item 12) so that incorrect merges can be audited and split, and incorrect splits can be merged. Track which event/fact/episode triggered each resolution.
 
 ### Parallelism
 
@@ -951,6 +951,6 @@ Is 90 minutes the right default gap for all platforms?
 
 - `MEMORY_SYSTEM.md` — Master architecture document
 - `MEMORY_WRITER.md` — Writer meeseeks spec (being updated for scoped extraction)
-- `INFRASTRUCTURE_WORKPLAN.md` — Recall parity, embedding provider, tool scope changes
-- `MEMORY_INJECTION.md` — Memory injection meeseeks (timeout + deconstraining updates)
-- `MEMORY_WRITER_ROLE.md` — Writer role prompt (architecture context additions)
+- `workplans/INFRASTRUCTURE_WORKPLAN.md` — Recall parity, embedding provider, tool scope changes
+- `skills/MEMORY_INJECTION.md` — Memory injection meeseeks (timeout + deconstraining updates)
+- `workplans/MEMORY_WRITER_ROLE.md` — Writer role prompt (architecture context additions)

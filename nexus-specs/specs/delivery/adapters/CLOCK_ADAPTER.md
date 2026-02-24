@@ -2,7 +2,7 @@
 
 **Status:** DESIGN LOCKED + IMPLEMENTED (V1)  
 **Last Updated:** 2026-02-19  
-**Related:** `BUILTIN_ADAPTERS.md`, `UNIFIED_DELIVERY_TAXONOMY.md`, `nex/CONTROL_PLANE.md`, `nex/automations/AUTOMATION_SYSTEM.md`
+**Related:** `BUILTIN_ADAPTERS.md`, `../UNIFIED_DELIVERY_TAXONOMY.md`, `../../nex/ingress/CONTROL_PLANE.md`, `../../nex/automations/AUTOMATION_SYSTEM.md`
 
 ---
 

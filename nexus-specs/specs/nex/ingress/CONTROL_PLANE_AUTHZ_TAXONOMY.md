@@ -2,7 +2,7 @@
 
 **Status:** SPEC LOCKED (runtime cutover pending)  
 **Last Updated:** 2026-02-24  
-**Related:** `SURFACE_ADAPTER_V2.md`, `SINGLE_TENANT_MULTI_USER.md`, `CONTROL_PLANE.md`, `../iam/ACCESS_CONTROL_SYSTEM.md`, `../iam/POLICIES.md`, `../iam/AUDIT.md`
+**Related:** `../SURFACE_ADAPTER_V2.md`, `SINGLE_TENANT_MULTI_USER.md`, `CONTROL_PLANE.md`, `../../iam/ACCESS_CONTROL_SYSTEM.md`, `../../iam/POLICIES.md`, `../../iam/AUDIT.md`
 
 ---
 

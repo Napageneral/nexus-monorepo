@@ -511,7 +511,7 @@ These don't exist in openclaw at all:
 | **Grants System** | `src/iam/grants.ts` | `../iam/GRANTS.md` | P1 |
 | **Audit Logger** | `src/iam/audit.ts` | `../iam/AUDIT.md` | P1 |
 | **Automation System** | `src/nex/automations/` | `../nex/automations/AUTOMATION_SYSTEM.md` | P2 |
-| **Clock Adapter** | `extensions/clock/` | `../delivery/CLOCK_ADAPTER.md` — DESIGN LOCKED + IMPLEMENTED | P1 |
+| **Clock Adapter** | `extensions/clock/` | `../delivery/adapters/CLOCK_ADAPTER.md` — DESIGN LOCKED + IMPLEMENTED | P1 |
 
 ---
 

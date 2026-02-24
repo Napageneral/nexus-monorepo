@@ -2,7 +2,7 @@
 
 **Status:** ACTIVE IMPLEMENTATION TRACKER  
 **Last Updated:** 2026-02-21  
-**Related:** `ADAPTER_SYSTEM.md`, `INBOUND_INTERFACE.md`, `OUTBOUND_INTERFACE.md`, `../nex/CONTROL_PLANE.md`
+**Related:** `../ADAPTER_SYSTEM.md`, `../INBOUND_INTERFACE.md`, `../OUTBOUND_INTERFACE.md`, `../../nex/ingress/CONTROL_PLANE.md`
 
 ---
 

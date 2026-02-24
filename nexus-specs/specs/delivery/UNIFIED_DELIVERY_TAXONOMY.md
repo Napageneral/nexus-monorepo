@@ -4,7 +4,7 @@
 **Last Updated:** 2026-02-18  
 **Related:**
 - `adapters/INBOUND_INTERFACE.md`
-- `adapters/OUTBOUND_TARGETING.md`
+- `sdk/OUTBOUND_TARGETING.md`
 - `adapters/CHANNEL_DIRECTORY.md`
 - `iam/POLICIES.md`
 - `iam/ACCESS_CONTROL_SYSTEM.md`
@@ -261,7 +261,7 @@ This taxonomy supports two different directory systems:
 The exact database schema for these directories is specified elsewhere:
 
 - `adapters/CHANNEL_DIRECTORY.md` (logical directory model)
-- `DELIVERY_DIRECTORY_SCHEMA.md` (physical schema in identity.db)
+- `adapters/DELIVERY_DIRECTORY_SCHEMA.md` (physical schema in identity.db)
 - `RUNTIME_ROUTING.md` (contacts + identity resolution)
 
 This document only locks the naming and meaning of the delivery identifiers.

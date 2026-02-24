@@ -87,7 +87,7 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │    │  Channel adapters normalize to NexusEvent and pipe via JSONL stdout   │    │
 │    │  AIX import adapter emits session import batches/chunks to the        │    │
 │    │  Session Import Service (not the event pipeline)                │    │
-│    │  See: adapters/ADAPTER_SYSTEM.md, nex/SESSION_IMPORT_SERVICE.md       │    │
+│    │  See: adapters/ADAPTER_SYSTEM.md, nex/workplans/SESSION_IMPORT_SERVICE.md       │    │
 │    │                                                                        │    │
 │    └────────────────────────────────────────────────────────────────────────┘    │
 │                                      │                                            │

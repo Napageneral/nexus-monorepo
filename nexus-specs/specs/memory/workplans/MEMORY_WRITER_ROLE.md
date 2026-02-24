@@ -2,8 +2,8 @@
 
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-23
-**Implements:** MEMORY_WRITER.md
-**Related:** MEMORY_SYSTEM.md, UNIFIED_ENTITY_STORE.md
+**Implements:** ../MEMORY_WRITER.md
+**Related:** ../MEMORY_SYSTEM.md, ../UNIFIED_ENTITY_STORE.md
 
 ---
 
@@ -232,8 +232,8 @@ propose_merge(entity_a_id, entity_b_id, confidence, reason)
 
 ## See Also
 
-- `MEMORY_WRITER.md` — Spec for the writer meeseeks
-- `RETAIN_PIPELINE.md` — Episode-based retain pipeline (episode grouping, filtering, writer input format)
-- `MEMORY_SYSTEM.md` — Full memory architecture
-- `MEMORY_REFLECT_SKILL.md` — Mental model creation (not the writer's job)
-- `UNIFIED_ENTITY_STORE.md` — Entity store details
+- `../MEMORY_WRITER.md` — Spec for the writer meeseeks
+- `../RETAIN_PIPELINE.md` — Episode-based retain pipeline (episode grouping, filtering, writer input format)
+- `../MEMORY_SYSTEM.md` — Full memory architecture
+- `../skills/MEMORY_REFLECT_SKILL.md` — Mental model creation (not the writer's job)
+- `../UNIFIED_ENTITY_STORE.md` — Entity store details

@@ -4,12 +4,12 @@
 **Last Updated:** 2026-02-18  
 **Related:**
 - `SINGLE_TENANT_MULTI_USER.md` (trust zones + multi-user story)
-- `../delivery/INTERNAL_ADAPTERS.md` (http-ingress + webchat as internal adapters)
-- `../delivery/UNIFIED_DELIVERY_TAXONOMY.md` (canonical delivery ids)
-- `../delivery/DELIVERY_DIRECTORY_SCHEMA.md` (identity.db directory schema)
-- `./RUNTIME_ROUTING.md` (contacts + identity resolution)
-- `../iam/ACCESS_CONTROL_SYSTEM.md` (IAM model)
-- `../iam/POLICIES.md` (policy matching)
+- `../../delivery/INTERNAL_ADAPTERS.md` (http-ingress + webchat as internal adapters)
+- `../../delivery/UNIFIED_DELIVERY_TAXONOMY.md` (canonical delivery ids)
+- `../../delivery/adapters/DELIVERY_DIRECTORY_SCHEMA.md` (identity.db directory schema)
+- `../RUNTIME_ROUTING.md` (contacts + identity resolution)
+- `../../iam/ACCESS_CONTROL_SYSTEM.md` (IAM model)
+- `../../iam/POLICIES.md` (policy matching)
 
 ---
 

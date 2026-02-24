@@ -5,7 +5,7 @@
 **Status:** DESIGN SPEC
 **Date:** 2026-02-22
 **Bundle:** Cross-cutting (nexus runtime, code-cartographer/oracle, memory system, broker)
-**Related:** runtime/broker/QUEUE_MANAGEMENT.md, data/memory/MEMORY_SYSTEM.md, data/memory/MEMORY_INJECTION.md, data/DATABASE_ARCHITECTURE.md, runtime/broker/MEESEEKS_PATTERN.md, runtime/adapters/ADAPTER_PROTOCOL.md
+**Related:** runtime/broker/QUEUE_MANAGEMENT.md, data/memory/MEMORY_SYSTEM.md, memory/skills/MEMORY_INJECTION.md, data/DATABASE_ARCHITECTURE.md, runtime/broker/MEESEEKS_PATTERN.md, runtime/adapters/ADAPTER_PROTOCOL.md
 **See also:** code-cartographer docs/PRLM.md, docs/specs/SPEC-oracle-server-v2.md, docs/PRLM-seams.md, docs/PRLM-terrain-history.md
 
 ---
@@ -71,7 +71,7 @@ The routing intelligence comes from the shared memory system (§3).
 
 ### Problem
 
-The current Memory-Injection Meeseeks (MEMORY_INJECTION.md) runs as a blocking `worker:pre_execution` hook with a 60-second timeout. This adds latency to every request, even when memory has nothing relevant.
+The current Memory-Injection Meeseeks (memory/skills/MEMORY_INJECTION.md) runs as a blocking `worker:pre_execution` hook with a 60-second timeout. This adds latency to every request, even when memory has nothing relevant.
 
 ### Solution: Fast Recall + Async Deep Search
 
@@ -560,7 +560,7 @@ The memory system Go module (now ported to TS) had moderate coupling to nex:
 - `runtime/broker/QUEUE_MANAGEMENT.md` — Queue modes (steer, interrupt, collect, etc.)
 - `runtime/broker/MEESEEKS_PATTERN.md` — Disposable role forks
 - `data/memory/MEMORY_SYSTEM.md` — 4-layer memory architecture
-- `data/memory/MEMORY_INJECTION.md` — Current memory reader meeseeks
+- `memory/skills/MEMORY_INJECTION.md` — Current memory reader meeseeks
 - `data/memory/RETAIN_PIPELINE.md` — Episode-based retain pipeline
 - `data/DATABASE_ARCHITECTURE.md` — 6-database canonical layout
 - `runtime/adapters/ADAPTER_PROTOCOL.md` — Adapter interface

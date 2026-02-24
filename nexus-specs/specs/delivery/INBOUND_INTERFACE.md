@@ -73,7 +73,7 @@ type Attachment = {
 
 ## Ingress Integrity Rules
 
-Adapters emit canonical data, but runtime remains final authority for integrity-critical fields as defined in `../nex/INGRESS_INTEGRITY.md`.
+Adapters emit canonical data, but runtime remains final authority for integrity-critical fields as defined in `../nex/ingress/INGRESS_INTEGRITY.md`.
 
 Normative constraints:
 

@@ -389,7 +389,7 @@ Add Oracle actions (examples):
 
 After this design is approved, create one implementation spec per phase:
 
-1. `RUNTIME_MULTI_UI_CUTOVER.md`
+1. `../workplans/RUNTIME_MULTI_UI_CUTOVER.md`
 2. `FRONTDOOR_MULTI_UI_LAUNCH.md`
 3. `ORACLE_RUNTIME_MODULE.md`
 4. `ORACLE_GITHUB_APP_INTEGRATION.md`

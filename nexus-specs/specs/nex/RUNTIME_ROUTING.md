@@ -70,7 +70,7 @@ CREATE INDEX idx_contacts_last_seen ON contacts(last_seen DESC);
 With the new database architecture, `identity.db` is the unified identity, directory, and access control store:
 
 1. **Contacts** — delivery-driven directory (as above)
-2. **Directory** — spaces, containers, threads, participants (see `DELIVERY_DIRECTORY_SCHEMA.md`)
+2. **Directory** — spaces, containers, threads, participants (see `../delivery/adapters/DELIVERY_DIRECTORY_SCHEMA.md`)
 3. **Entities & Knowledge Graph** — entities, entity_tags, entity_cooccurrences, merge_candidates (relocated per DATABASE_ARCHITECTURE.md). `contacts.entity_id` → `entities.id` within the same DB, enabling JOINs.
 4. **Auth** — tokens (`auth_tokens`) and passwords (`auth_passwords`)
 5. **Access Control** — grants, grant_log, access_log, permission_requests (relocated from nexus.db, `acl_` prefix dropped)
@@ -517,7 +517,7 @@ The memory system V2 memory tables (facts, fact_entities, episodes, etc. in memo
 - identity_mappings table
 + REMOVED (replaced by contacts.entity_id direct link)
 
-+ delivery directory tables (spaces/containers/threads/names/participants) — see `DELIVERY_DIRECTORY_SCHEMA.md`
++ delivery directory tables (spaces/containers/threads/names/participants) — see `../delivery/adapters/DELIVERY_DIRECTORY_SCHEMA.md`
 
   auth_tokens table — UNCHANGED
   auth_passwords table — UNCHANGED

@@ -2,7 +2,7 @@
 
 **Status:** ACTIVE  
 **Last Updated:** 2026-02-24  
-**Related:** `ADAPTER_SYSTEM.md`, `BUILTIN_ADAPTERS.md`, `INBOUND_INTERFACE.md`, `../nex/SURFACE_ADAPTER_V2.md`
+**Related:** `ADAPTER_SYSTEM.md`, `adapters/BUILTIN_ADAPTERS.md`, `INBOUND_INTERFACE.md`, `../nex/SURFACE_ADAPTER_V2.md`
 
 ---
 
@@ -61,11 +61,11 @@ type InternalAdapterContext = {
 Rules:
 
 1. `emitEvent` is the only path for event ingress side effects.
-2. Internal adapters must follow ingress-integrity rules (`../nex/INGRESS_INTEGRITY.md`).
+2. Internal adapters must follow ingress-integrity rules (`../nex/ingress/INGRESS_INTEGRITY.md`).
 3. Internal adapters are visible in adapter supervision/status endpoints.
 
 ---
 
 ## Implementation Notes
 
-For built-in adapter inventory and migration details, see `BUILTIN_ADAPTERS.md`.
+For built-in adapter inventory and migration details, see `adapters/BUILTIN_ADAPTERS.md`.

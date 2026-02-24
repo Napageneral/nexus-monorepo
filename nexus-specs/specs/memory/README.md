@@ -129,7 +129,7 @@ Returns:
                is_stale flag, linked entity_ids, source metadata
 ```
 
-> See `MEMORY_SEARCH_SKILL.md` for the full recall() API, hierarchical retrieval strategy, and budget management. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for storage layout.
+> See `skills/MEMORY_SEARCH_SKILL.md` for the full recall() API, hierarchical retrieval strategy, and budget management. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for storage layout.
 
 ---
 
@@ -179,10 +179,10 @@ interface IdentityEnrichment {
 - [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) — Canonical database layout (memory.db, identity.db, embeddings.db)
 - `MEMORY_SYSTEM.md` — Full 4-layer memory architecture
 - `MEMORY_WRITER.md` — Agentic retain flow
-- `MEMORY_WRITER_ROLE.md` — Memory-Writer meeseeks role spec
-- `MEMORY_SEARCH_SKILL.md` — Agent search skill (recall API)
-- `MEMORY_REFLECT_SKILL.md` — Deep research and mental model persistence
-- `MEMORY_INJECTION.md` — Memory injection into agent context
+- `workplans/MEMORY_WRITER_ROLE.md` — Memory-Writer meeseeks role spec
+- `skills/MEMORY_SEARCH_SKILL.md` — Agent search skill (recall API)
+- `skills/MEMORY_REFLECT_SKILL.md` — Deep research and mental model persistence
+- `skills/MEMORY_INJECTION.md` — Memory injection into agent context
 - `RETAIN_PIPELINE.md` — Retain pipeline (events to facts)
 - `UNIFIED_ENTITY_STORE.md` — Entity store (lives in identity.db)
 - `../../runtime/broker/MEESEEKS_PATTERN.md` — Disposable role fork pattern

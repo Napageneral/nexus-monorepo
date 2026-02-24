@@ -17,25 +17,25 @@ This folder contains the core NEX orchestrator specifications — the central pi
 |------|--------|-------------|
 | **`NEX.md`** | ✅ Complete | **START HERE** — Central orchestrator (8-stage pipeline) |
 | `DAEMON.md` | ✅ Complete | Process lifecycle — startup, signals, shutdown, supervision |
-| `CONTROL_PLANE.md` | 🧭 Design | Single-daemon control-plane (Gateway removal) — WS RPC + HTTP endpoints live inside NEX |
-| `SINGLE_TENANT_MULTI_USER.md` | 🧭 Design | Single-tenant, multi-user runtime — trust zones, auth, identity mapping, and anti-spoofing requirements |
-| `INGRESS_CREDENTIALS.md` | 🧭 Design | Customer ingress credentials — API keys + persistent anonymous webchat sessions (entity-per-visitor) |
-| `INGRESS_INTEGRITY.md` | 🧭 Design | Field stamping contract (daemon-stamped vs adapter/client claims) to prevent identity/policy spoofing |
-| `INGRESS_CONTROL_PLANE_UNIFICATION_PLAN.md` | 🚧 Plan | Concrete build plan for control-plane IAM credential ops + internal `http-ingress` adapterization |
-| `CONTROL_PLANE_AUTHZ_TAXONOMY.md` | ✅ Implemented | Control-plane action/resource taxonomy + enforcement (Option A authz) — maps WS methods to IAM permissions |
+| `ingress/CONTROL_PLANE.md` | 🧭 Design | Single-daemon control-plane (Gateway removal) — WS RPC + HTTP endpoints live inside NEX |
+| `ingress/SINGLE_TENANT_MULTI_USER.md` | 🧭 Design | Single-tenant, multi-user runtime — trust zones, auth, identity mapping, and anti-spoofing requirements |
+| `ingress/INGRESS_CREDENTIALS.md` | 🧭 Design | Customer ingress credentials — API keys + persistent anonymous webchat sessions (entity-per-visitor) |
+| `ingress/INGRESS_INTEGRITY.md` | 🧭 Design | Field stamping contract (daemon-stamped vs adapter/client claims) to prevent identity/policy spoofing |
+| `workplans/INGRESS_CONTROL_PLANE_UNIFICATION_PLAN.md` | 🚧 Plan | Concrete build plan for control-plane IAM credential ops + internal `http-ingress` adapterization |
+| `ingress/CONTROL_PLANE_AUTHZ_TAXONOMY.md` | ✅ Implemented | Control-plane action/resource taxonomy + enforcement (Option A authz) — maps WS methods to IAM permissions |
 | `../_archive/HOSTED_FRONTDOOR_CONFIDENCE_WORKPLAN.md` | 🗃️ Archive | Historical phased confidence plan for hosted frontdoor |
-| `HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md` | 🧭 Design | Canonical hosted direct browser -> tenant runtime contract (frontdoor auth/token APIs + runtime HTTP/WS/SSE auth and schema fields) |
-| `HOSTED_DIRECT_BROWSER_RUNTIME_WORKPLAN.md` | 🚧 Plan | Phased implementation guide for direct browser -> tenant runtime cutover (contracts, CORS/origin, UI client bootstrap, e2e, rollout) |
-| `HOSTED_ORACLE_MULTI_UI_INTEGRATION.md` | 🧭 Design | Canonical Oracle + multi-UI architecture: frontdoor auth/routing only, tenant-owned Oracle GitHub App/data plane, runtime app mounts, and NexusEvent/IAM execution model |
-| `ORACLE_GITHUB_APP_INTEGRATION.md` | 🚧 Plan | Tenant-scoped Oracle GitHub App onboarding and webhook integration contract |
-| `ORACLE_RUNTIME_MODULE.md` | 🚧 Plan | Oracle app package/runtime module contract for tenant install/mount/lifecycle |
-| `ORACLE_E2E_VALIDATION_PLAN.md` | 🚧 Plan | End-to-end hosted validation matrix for Oracle onboarding + runtime integration |
-| `RUNTIME_MULTI_UI_CUTOVER.md` | 🚧 Plan | Phase 1 runtime app-model implementation: `/app/<app_id>` mount contract, `/api/apps` catalog, and hard cutover away from bare `/app/*` |
-| `FRONTDOOR_MULTI_UI_LAUNCH.md` | 🚧 Plan | Phase 2 frontdoor shell implementation: workspace+app selection, runtime-driven app catalog, and app-aware launch routing |
+| `hosted/HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md` | 🧭 Design | Canonical hosted direct browser -> tenant runtime contract (frontdoor auth/token APIs + runtime HTTP/WS/SSE auth and schema fields) |
+| `hosted/HOSTED_DIRECT_BROWSER_RUNTIME_WORKPLAN.md` | 🚧 Plan | Phased implementation guide for direct browser -> tenant runtime cutover (contracts, CORS/origin, UI client bootstrap, e2e, rollout) |
+| `hosted/HOSTED_ORACLE_MULTI_UI_INTEGRATION.md` | 🧭 Design | Canonical Oracle + multi-UI architecture: frontdoor auth/routing only, tenant-owned Oracle GitHub App/data plane, runtime app mounts, and NexusEvent/IAM execution model |
+| `hosted/ORACLE_GITHUB_APP_INTEGRATION.md` | 🚧 Plan | Tenant-scoped Oracle GitHub App onboarding and webhook integration contract |
+| `hosted/ORACLE_RUNTIME_MODULE.md` | 🚧 Plan | Oracle app package/runtime module contract for tenant install/mount/lifecycle |
+| `hosted/ORACLE_E2E_VALIDATION_PLAN.md` | 🚧 Plan | End-to-end hosted validation matrix for Oracle onboarding + runtime integration |
+| `workplans/RUNTIME_MULTI_UI_CUTOVER.md` | 🚧 Plan | Phase 1 runtime app-model implementation: `/app/<app_id>` mount contract, `/api/apps` catalog, and hard cutover away from bare `/app/*` |
+| `hosted/FRONTDOOR_MULTI_UI_LAUNCH.md` | 🚧 Plan | Phase 2 frontdoor shell implementation: workspace+app selection, runtime-driven app catalog, and app-aware launch routing |
 | `SURFACE_ADAPTER_V2.md` | 🧭 Design | Canonical `protocol/control/event` operation model and adapter/surface contracts for hard cutover away from `transport/iam/pipeline` |
 | `ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md` | 🧭 Design | Canonical sender/receiver symmetry, entity-based session identity, no-atlas-fallback routing, persona binding model, and mandatory continuity transfer rules |
-| `ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING_WORKPLAN.md` | 🚧 Plan | Detailed hard-cutover execution plan: schema, runtime stage changes, migration, and validation matrix |
-| `SESSION_IMPORT_SERVICE.md` | 🧭 Design | Gateway-free AIX import adapter plan — NEX-owned session import/chunk service |
+| `workplans/ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING_WORKPLAN.md` | 🚧 Plan | Detailed hard-cutover execution plan: schema, runtime stage changes, migration, and validation matrix |
+| `workplans/SESSION_IMPORT_SERVICE.md` | 🧭 Design | Gateway-free AIX import adapter plan — NEX-owned session import/chunk service |
 | `NEXUS_REQUEST.md` | ✅ Complete | The data bus that accumulates context through pipeline |
 | `PLUGINS.md` | ✅ Complete | NEX plugin system (hook points) |
 | `../delivery/STREAMING.md` | ✅ Complete | Canonical runtime streaming architecture |

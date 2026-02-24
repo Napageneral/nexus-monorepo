@@ -2,7 +2,7 @@
 
 **Status:** DESIGN SPEC  
 **Last Updated:** 2026-02-13  
-**Related:** DAEMON.md, BUS_ARCHITECTURE.md, NEX.md, NEXUS_REQUEST.md, SINGLE_TENANT_MULTI_USER.md, ../../environment/interface/cli/COMMANDS.md, ../../environment/foundation/RUNTIME_REALIGNMENT_DECISIONS.md
+**Related:** ../DAEMON.md, ../BUS_ARCHITECTURE.md, ../NEX.md, ../NEXUS_REQUEST.md, SINGLE_TENANT_MULTI_USER.md, ../../environment/interface/cli/COMMANDS.md, ../../environment/foundation/RUNTIME_REALIGNMENT_DECISIONS.md
 
 ---
 

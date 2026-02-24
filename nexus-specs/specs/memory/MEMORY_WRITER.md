@@ -46,7 +46,7 @@ The Memory-Writer is role-based. Its behavior comes from its ROLE.md prompt, not
 
 5. **Self-improvement** -- The writer learns over time which events are worth processing, which entity resolutions are tricky, and how to optimize its extraction patterns. It can update its own ROLE.md and create helper scripts to refine its approach.
 
-> **Note:** The writer does NOT create causal links or mental models. Causal links are detected by the consolidation pipeline, which sees the full fact graph across episodes and platforms. Mental models are created by the reflect skill. See `MEMORY_SYSTEM.md` and `MEMORY_REFLECT_SKILL.md`.
+> **Note:** The writer does NOT create causal links or mental models. Causal links are detected by the consolidation pipeline, which sees the full fact graph across episodes and platforms. Mental models are created by the reflect skill. See `MEMORY_SYSTEM.md` and `skills/MEMORY_REFLECT_SKILL.md`.
 
 ### What the Role Prompt Does NOT Do
 
@@ -245,7 +245,7 @@ The Memory-Writer meeseeks follows the standard meeseeks self-improvement patter
 
 These persist across invocations, making the writer more effective over time.
 
-> **Note:** The writer does NOT create mental models. Mental model CRUD belongs exclusively in the reflect skill (`MEMORY_REFLECT_SKILL.md`). The writer focuses on fact extraction, entity identification, and deduplication.
+> **Note:** The writer does NOT create mental models. Mental model CRUD belongs exclusively in the reflect skill (`skills/MEMORY_REFLECT_SKILL.md`). The writer focuses on fact extraction, entity identification, and deduplication.
 
 ---
 
@@ -268,9 +268,9 @@ These persist across invocations, making the writer more effective over time.
 
 - `MEMORY_SYSTEM.md` -- Full memory architecture
 - `RETAIN_PIPELINE.md` -- Episode-based retain pipeline (episode grouping, filtering, consolidation batching)
-- `INFRASTRUCTURE_WORKPLAN.md` -- Recall parity, writer scope changes
-- `MEMORY_REFLECT_SKILL.md` -- Deep research and mental model creation (the only path for mental model CRUD)
+- `workplans/INFRASTRUCTURE_WORKPLAN.md` -- Recall parity, writer scope changes
+- `skills/MEMORY_REFLECT_SKILL.md` -- Deep research and mental model creation (the only path for mental model CRUD)
 - `UNIFIED_ENTITY_STORE.md` -- Entity store details
 - `../../_archive/MEMORY_WRITER.md` -- Previous writer spec (superseded)
-- `MEMORY_INJECTION.md` -- Read-path memory injection meeseeks
+- `skills/MEMORY_INJECTION.md` -- Read-path memory injection meeseeks
 - `../../runtime/RUNTIME_ROUTING.md` -- Runtime routing, `propagateMergeToSessions()`, session alias behavior

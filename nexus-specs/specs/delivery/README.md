@@ -24,14 +24,14 @@ Control-plane WS/HTTP surfaces are specified separately as control surfaces (`pr
 | `ADAPTER_SYSTEM.md` | ✅ Done | **Operational system** — registration, accounts, lifecycle, process management, health, context integration |
 | `INBOUND_INTERFACE.md` | ✅ Done | Receiving events, NexusEvent schema |
 | `OUTBOUND_INTERFACE.md` | ✅ Done | Delivery, formatting, chunking |
-| `OUTBOUND_TARGETING.md` | ✅ Done | Targeting semantics for threads + replies (`thread_id`, `reply_to_id`) |
-| `BUILTIN_ADAPTERS.md` | 🚧 Active | Which integrations ship as built-in adapters (ingress + clock) and how they relate to the control-plane |
+| `sdk/OUTBOUND_TARGETING.md` | ✅ Done | Targeting semantics for threads + replies (`thread_id`, `reply_to_id`) |
+| `adapters/BUILTIN_ADAPTERS.md` | 🚧 Active | Which integrations ship as built-in adapters (ingress + clock) and how they relate to the control-plane |
 | `INTERNAL_ADAPTERS.md` | 🚧 Active | Add first-class support for internal (in-process) adapters like clock + HTTP ingress bridges |
-| `CHANNEL_MIGRATION_TRACKER.md` | ✅ Active | Platform-by-platform execution tracker for adapter cutover |
-| `CHANNEL_DIRECTORY.md` | ✅ Active | Per-platform directory of outbound targets (separate from identity directory) |
+| `workplans/CHANNEL_MIGRATION_TRACKER.md` | ✅ Active | Platform-by-platform execution tracker for adapter cutover |
+| `adapters/CHANNEL_DIRECTORY.md` | ✅ Active | Per-platform directory of outbound targets (separate from identity directory) |
 | `platforms/` | ✅ Done | Per-platform specs (9 platforms) |
-| `ADAPTER_CREDENTIALS.md` | ✅ Active | How adapter accounts link to credentials + how NEX injects secrets |
-| `ADAPTER_SDK_TYPESCRIPT.md` | ✅ Active | Detailed spec for the TypeScript adapter SDK |
+| `sdk/ADAPTER_CREDENTIALS.md` | ✅ Active | How adapter accounts link to credentials + how NEX injects secrets |
+| `sdk/ADAPTER_SDK_TYPESCRIPT.md` | ✅ Active | Detailed spec for the TypeScript adapter SDK |
 | `../nex/SURFACE_ADAPTER_V2.md` | ✅ Locked | Canonical runtime surface model (`protocol/control/event`) and boundary between control surfaces and event adapters |
 
 ### Upstream Reference

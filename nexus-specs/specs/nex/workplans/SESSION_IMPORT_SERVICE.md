@@ -2,7 +2,7 @@
 
 **Status:** DESIGN SPEC  
 **Last Updated:** 2026-02-12  
-**Related:** NEX.md, DAEMON.md, BUS_ARCHITECTURE.md, ADAPTER_SYSTEM.md
+**Related:** ../NEX.md, ../DAEMON.md, ../BUS_ARCHITECTURE.md, ../../delivery/ADAPTER_SYSTEM.md
 
 ---
 
