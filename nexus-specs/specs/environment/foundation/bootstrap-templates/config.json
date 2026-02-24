@@ -21,7 +21,7 @@
       "events": true,
       "moderation": false
     },
-    "dm": {
+    "direct": {
       "enabled": true,
       "policy": "pairing"
     }
@@ -63,7 +63,7 @@
         "events": true,
         "moderation": false
       },
-      "dm": {
+      "direct": {
         "enabled": true,
         "policy": "pairing"
       }

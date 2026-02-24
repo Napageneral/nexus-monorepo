@@ -45,7 +45,7 @@ NEX processes events through 8 sequential stages. Each stage is a verb describin
 │  │        ↓                Write event to System of Record (async)         │    │
 │  │                                                                          │    │
 │  │   2. resolveIdentity    WHO sent this? Query Identity Ledger            │    │
-│  │        ↓                Populate: principal.identity                    │    │
+│  │        ↓                Populate: sender identity                       │    │
 │  │                                                                          │    │
 │  │   3. resolveAccess      WHAT can they do? Evaluate ACL policies         │    │
 │  │        ↓                Populate: permissions, session (base)           │    │
@@ -149,7 +149,7 @@ Every event creates a `NexusRequest` object that flows through the pipeline, acc
 | Stage | Adds to NexusRequest |
 |-------|---------------------|
 | `receiveEvent` | `event`, `delivery` (channel, thread, etc.) |
-| `resolveIdentity` | `principal.identity` (who sent this) |
+| `resolveIdentity` | `sender` (who sent this) |
 | `resolveAccess` | `access` (routing) |
 | `runAutomations` | `triggers` (which fired, extracted context) |
 | `assembleContext` | `agent` (turn_id, thread_id, context) |
@@ -254,8 +254,8 @@ Format and deliver responses:
 
 ```
 1. timer adapter emits 60-second tick
-2. NEX creates NexusRequest (principal: system)
-3. IAM: system principal, timer policies
+2. NEX creates NexusRequest (sender: system)
+3. IAM: system sender, timer policies
 4. Hooks match: "email-check" (cron trigger)
 5. Hook executes: checks email, finds nothing urgent
 6. Hook returns: no action needed

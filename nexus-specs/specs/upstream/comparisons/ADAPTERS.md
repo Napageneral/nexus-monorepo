@@ -392,8 +392,8 @@ Formatting and chunking logic from OpenClaw should be ported into adapter tools:
 
 ## Related Specs
 
-- `specs/runtime/adapters/ADAPTER_INTERFACES.md` — Interface definitions
-- `specs/runtime/adapters/INBOUND_INTERFACE.md` — Inbound details
+- `specs/runtime/adapters/ADAPTER_SYSTEM.md` — Adapter operational system
+- `specs/runtime/adapters/INBOUND_INTERFACE.md` — Inbound interface details
 - `specs/runtime/adapters/OUTBOUND_INTERFACE.md` — Outbound details
 - `specs/runtime/adapters/upstream/CHANNEL_INVENTORY.md` — All OpenClaw channels
 - `specs/runtime/adapters/channels/` — Per-channel specs
