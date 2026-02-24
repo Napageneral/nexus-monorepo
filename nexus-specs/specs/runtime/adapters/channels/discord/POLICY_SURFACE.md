@@ -23,7 +23,7 @@ Extract Discord out of in-process "channels" into an external Nexus adapter bina
 
 - does transport + normalization only (I/O adapter)
 - emits a high-fidelity `NexusEvent` for every inbound Discord message event we care about
-- preserves structured delivery targeting fields end-to-end (`peer_kind`, `peer_id`, `thread_id`, `reply_to_id`)
+- preserves structured delivery targeting fields end-to-end (`container_kind`, `container_id`, `thread_id`, `reply_to_id`)
 - moves all access control and "should we respond" decisions out of the adapter and into Nexus (IAM + Manager/automations)
 
 This document is the "policy surface map" for the Discord migration: what stays in the adapter vs what becomes IAM policy vs what becomes Manager/automation behavior.
@@ -49,8 +49,8 @@ The adapter MUST NOT DM pairing codes or pairing prompts.
 3. **Structured delivery targeting is mandatory.**
 Adapters MUST preserve:
 - `delivery.channel`
-- `delivery.peer_kind` (`dm|group|channel`)
-- `delivery.peer_id` (conversation container)
+- `delivery.container_kind` (`dm|group|channel`)
+- `delivery.container_id` (conversation container)
 - `delivery.thread_id` (thread/topic id when applicable)
 - `delivery.reply_to_id` (message id being replied to when applicable)
 
@@ -67,7 +67,7 @@ Rationale: IAM should answer "is this allowed?" not "is this worth replying to?"
 
 ## Terminology (Discord)
 
-- `peer_id`: Discord channel id.
+- `container_id`: Discord channel id.
   - DMs: DM channel id.
   - Guilds: the text channel id (or forum channel id, etc).
 - `thread_id`: Discord thread channel id (threads are channels in Discord's model).
@@ -151,8 +151,8 @@ The Discord adapter SHOULD emit one `NexusEvent` per Discord message event (crea
 - `content_type = "text"` for normal messages (other content types if supported)
 - `sender_id` (discord user id)
 - `sender_name` (best-effort display name)
-- `peer_kind` (`dm` if DM channel; otherwise `group` or `channel` per your peer_kind taxonomy)
-- `peer_id` (discord channel id)
+- `container_kind` (`dm` if DM channel; otherwise `group` or `channel` per the delivery taxonomy)
+- `container_id` (discord channel id)
 - `thread_id` (discord thread channel id when applicable)
 - `reply_to_id` (referenced discord message id when message is a reply)
 
@@ -162,7 +162,7 @@ The Discord adapter SHOULD emit one `NexusEvent` per Discord message event (crea
 
 - `guild_id` (string or null)
 - `guild_name` (best-effort)
-- `channel_id` (same as `peer_id`)
+- `channel_id` (same as `container_id`)
 - `channel_name` (best-effort)
 - `channel_type` (best-effort enum/string)
 - `thread_id` (same as `thread_id` when present)
@@ -189,7 +189,7 @@ The adapter MUST implement outbound targeting per `OUTBOUND_TARGETING.md`.
 ### Routing Rules
 
 - If `to.thread_id` is present, send to that thread channel id.
-- Else send to `to.peer_id`.
+- Else send to `to.container_id`.
 - If `to.reply_to_id` is present, include Discord `message_reference` with that id.
 
 ### Chunking Rules
@@ -302,7 +302,7 @@ The adapter does not own this UX.
 
 ## Open Questions (Track Explicitly)
 
-1. Should `peer_kind` for Discord guild channels be `group` or `channel` (or both via metadata)?
-2. Should IAM conditions first-class `guild_id` and `channel_id` matching, or should we rely on `peer_id` scoping only?
+1. Should `container_kind` for Discord guild channels be `group` or `channel` (or both via metadata)?
+2. Should IAM conditions first-class `guild_id` and `channel_id` matching, or should we rely on `container_id` scoping only?
 3. Do we need an explicit "ingest-only" decision type distinct from `allow` that means "do not respond" (Manager stage), or is "allowed but Manager decides to be silent" sufficient?
 4. Do we want the adapter to implement an active directory listing command early, or rely on passive population via inbound events (recommended default per `CHANNEL_DIRECTORY.md`)?

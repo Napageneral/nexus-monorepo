@@ -118,8 +118,8 @@ gog gmail label remove <message-id> "INBOX"
 ### Event Fields
 ```typescript
 {
-  channel: 'gmail',
-  peer_kind: 'email',
+  platform: 'gmail',
+  container_kind: 'email',
   thread_id: message.threadId,
   metadata: {
     message_id: message.id,

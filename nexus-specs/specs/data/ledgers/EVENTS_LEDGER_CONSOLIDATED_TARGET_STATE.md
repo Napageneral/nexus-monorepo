@@ -2,7 +2,7 @@
 
 **Status:** DESIGN SPEC (REFINED)
 **Last Updated:** 2026-02-18
-**Related:** `EVENTS_LEDGER.md`, `../cortex/EVENT_LEDGER_UNIFICATION.md`, `../cortex/CORTEX_NEX_MIGRATION.md`
+**Related:** `EVENTS_LEDGER.md`, `../_archive/EVENT_LEDGER_UNIFICATION.md` (archived), `../_archive/CORTEX_NEX_MIGRATION.md`
 
 > **Canonical Reference:** See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the
 > authoritative 6-database inventory, table ownership, and migration plan.
@@ -14,8 +14,8 @@
 Define the refined end state for Nexus communications data:
 
 1. `events.db` is the single source of truth for communications events.
-2. Useful Cortex-era event features (threads, normalized attachments, event state/tags, reply links, document indexing) move into `events.db`.
-3. `memory.db` (successor to `cortex.db`) does not own communications infrastructure; it contains the memory system (facts, episodes, analysis).
+2. Useful legacy event features (threads, normalized attachments, event state/tags, reply links, document indexing) move into `events.db`.
+3. `memory.db` does not own communications infrastructure; it contains the memory system (facts, episodes, analysis).
 
 ---
 
@@ -29,7 +29,7 @@ Define the refined end state for Nexus communications data:
    - Normalized in `events.db.attachments` for queryability/dedupe.
 5. `reply_to` is a first-class event column (not metadata-only).
 6. Event state/tags remain in the primary event system (`events.db`), including event-time metadata (`viewed_at`, `archived_at`, etc.).
-7. `document_heads` and `retrieval_log` belong with the event ledger, not Cortex.
+7. `document_heads` and `retrieval_log` belong with the event ledger, not the memory system.
 8. Existing diagnostic tools are kept, but rewritten against the unified `events.db` schema (no compatibility shims as production behavior).
 9. All adapters (Nex TS) write into the same unified ledger schema.
 10. Language/runtime consolidation is out of scope for this spec.
@@ -45,7 +45,7 @@ Define the refined end state for Nexus communications data:
 - Communication annotations/state
 - Procedural document index pointers and retrieval telemetry (until re-homed)
 
-### `memory.db` owns (successor to cortex.db)
+### `memory.db` owns
 
 - Episodes and episode relationships
 - Facts, mental models, causal links, facets
@@ -282,7 +282,7 @@ CREATE TABLE IF NOT EXISTS event_tags (
 CREATE INDEX IF NOT EXISTS idx_event_tags_tag ON event_tags(tag_id);
 ```
 
-### Procedural document index tables (moved from Cortex)
+### Procedural document index tables (moved from legacy memory DB)
 
 #### `document_heads`
 
@@ -350,13 +350,13 @@ State/tag/document tables are maintained by higher-level workflows, not raw chan
 
 1. Readers query `events.db` directly (Nex TS) or via attached `events_ledger`.
 2. Diagnostic/validation tools are retained but rewritten to unified schema.
-3. No runtime path may depend on resurrecting removed legacy Cortex comms tables.
+3. No runtime path may depend on resurrecting removed legacy memory system comms tables.
 
 ---
 
 ## Memory System Integration
 
-> **Note:** `cortex.db` has been superseded by `memory.db`, `identity.db` (entities),
+> **Note:** The legacy memory DB has been superseded by `memory.db`, `identity.db` (entities),
 > and `embeddings.db`. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md).
 
 1. `memory.db` keeps episodes, facts, mental models, and analysis pipeline.
@@ -388,7 +388,7 @@ State/tag/document tables are maintained by higher-level workflows, not raw chan
 
 ### Phase 4: Memory system boundary cleanup
 
-- Ensure no communications ownership remains in `memory.db` (successor to `cortex.db`).
+- Ensure no communications ownership remains in `memory.db`.
 - Move procedural document index usage (`document_heads`, `retrieval_log`) to `events.db`.
 
 ### Phase 5: Validation and hardening
@@ -422,6 +422,6 @@ State/tag/document tables are maintained by higher-level workflows, not raw chan
 ## Out of Scope
 
 1. Runtime/language consolidation (TS vs Go vs Rust) beyond schema and behavior compatibility.
-2. ~~Moving episodes/entities/embeddings out of `cortex.db`.~~ **Done.** Entities are now in `identity.db`, embeddings in `embeddings.db`, and episodes/facts in `memory.db`. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md).
+2. ~~Moving episodes/entities/embeddings out of the legacy memory DB.~~ **Done.** Entities are now in `identity.db`, embeddings in `embeddings.db`, and episodes/facts in `memory.db`. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md).
 3. Product UI policy decisions for state/tag semantics beyond storage contracts.
 

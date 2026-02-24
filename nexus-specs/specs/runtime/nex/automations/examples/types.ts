@@ -68,7 +68,7 @@ export interface TriggerConditions {
 // HOOK CONTEXT: What the handler receives
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface CortexEvent {
+export interface NexusEvent {
   id: string;                   // "{adapter}:{source_id}"
   timestamp: number;            // Unix ms
   channel: string;              // "imessage", "gmail", "discord", etc.
@@ -90,7 +90,7 @@ export interface HookMetadata {
 
 export interface HookContext {
   // The event being evaluated
-  event: CortexEvent;
+  event: NexusEvent;
   
   // ACL-resolved identity and permissions (NEW - from ACL layer)
   principal: Principal;
@@ -98,7 +98,7 @@ export interface HookContext {
   session: Session;
   
   // Database access
-  dbPath: string;               // Path to Cortex SQLite database
+  dbPath: string;               // Path to memory SQLite database
   
   // Semantic search (embeddings handled internally)
   search(query: string, opts?: {

@@ -64,7 +64,7 @@ IAM outputs a single `AuthorizationEnvelope` that all downstream runtime paths m
 
 - `decision`: allow | deny | ask
 - `permissions`: tools allow/deny, credentials, data_access
-- `routing`: persona, session_label, queue_mode
+- `routing`: persona, session_key, queue_mode
 - `provenance`: matched policies, denied policies, grants applied, deny reason
 
 This is the only source of truth for runtime authorization decisions.
@@ -241,7 +241,7 @@ IAM evaluation is layered in this order:
 | Area | Old layered behavior | New canonical behavior |
 |------|-----------------------|------------------------|
 | Runtime access source | `resolveAccess` plus manual overrides in some paths | Single compiler output for all paths |
-| Tool filtering | Multiple filters at different points (`assembleContext`, `runAgent`, `tool-invoke`) | Single normalized tool allow/deny envelope |
+| Tool filtering | Multiple filters at different points (`routeSession`, `runAgent`, `tool-invoke`) | Single normalized tool allow/deny envelope |
 | Legacy synthetic requests | Some paths injected `request.access` directly | Synthetic requests still allowed, but authorization must be compiled |
 | Explainability | Fragmented, path-dependent | One provenance chain per decision |
 
@@ -555,7 +555,7 @@ Event Ledger → Event Handler [ ACL → Hooks ] → Broker
 The Identity Ledger stores entities (persons and personas) with their contact identities:
 
 ```sql
--- identity.db — Entities (relocated from cortex.db per DATABASE_ARCHITECTURE.md)
+-- identity.db — Entities (relocated per DATABASE_ARCHITECTURE.md)
 entities (
   id TEXT PRIMARY KEY,
   name TEXT,

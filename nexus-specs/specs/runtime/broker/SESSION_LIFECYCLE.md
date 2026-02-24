@@ -19,7 +19,7 @@ This document defines the complete lifecycle of agent sessions — from creation
 
 ### Format
 
-Session keys are produced by `buildSessionKey()` at stage 3 (`resolveAccess`). Because every sender has an entity from first contact (via the contacts table + auto-entity-creation), all DM session keys are entity-based from the start.
+Session keys are produced by `buildSessionKey()` at stage 4 (`resolveAccess`). Because every sender has an entity from first contact (via the contacts table + auto-entity-creation), all DM session keys are entity-based from the start.
 
 | Scenario | Format | Example |
 |----------|--------|---------|
@@ -91,13 +91,13 @@ The Broker handles merges via **session aliases** (see Identity-Session Coupling
 
 ### When
 
-Sessions are created **eagerly** at stage 5 (`assembleContext`) by the Broker. The Broker needs the session row to exist for queue management — you can't lock a session that doesn't have a row yet.
+Sessions are created **eagerly** at stage 6 (`routeSession`) by the Broker. The Broker needs the session row to exist for queue management — you can't lock a session that doesn't have a row yet.
 
 ### Flow
 
 ```
-Stage 3 (resolveAccess): ACL produces routing.session_label
-Stage 5 (assembleContext): Broker resolves session
+Stage 4 (resolveAccess): ACL produces routing.session_key
+Stage 6 (routeSession): Broker resolves session
     │
     ├── Lookup session by label
     │     Found → use it, acquire lock
@@ -109,7 +109,7 @@ Stage 5 (assembleContext): Broker resolves session
     │     Session is new → thread_id is null, this will be the root turn
     │     Session exists → thread_id points to latest turn
     │
-    └── Proceed with context assembly
+    └── Proceed with session routing
 ```
 
 ### New Session Insert
@@ -304,13 +304,13 @@ Turn completes → release lock → check queue
     ├── Queue empty → session goes idle
     │
     ├── Mode: followup/queue → take next message
-    │     Create new NexusRequest (re-enter at stage 5, skip stages 1-4)
-    │     Fresh assembleContext with updated session head
+    │     Create new NexusRequest (re-enter at stage 6, skip stages 1-5)
+    │     Fresh routeSession with updated session head
     │     Process turn → repeat
     │
     └── Mode: collect → take ALL queued messages
           Batch into single turn (multiple query messages)
-          Fresh assembleContext
+          Fresh routeSession
           Process turn → done
 ```
 
@@ -340,11 +340,11 @@ Nexus wraps `pi-coding-agent`, which has built-in compaction. We don't reinvent 
 **1. Proactive budget check (before calling pi-agent)**
 
 ```typescript
-// At assembleContext, before sending to agent engine
+// At routeSession, before sending to agent engine
 const estimatedTokens = systemPromptTokens + historyTokens + eventTokens;
 if (estimatedTokens > modelLimit * 0.85) {
   // Trigger compaction before execution, not during
-  await triggerCompaction(sessionLabel);
+  await triggerCompaction(sessionKey);
   // Re-read history after compaction
   history = await buildHistoryMessages(threadId);
 }
@@ -470,7 +470,7 @@ MA calls agent_send(op="dispatch")
   → Broker enqueues worker request (durable)
     - target session provided: route to that session queue
     - no target session: create worker session then queue
-  → WA session is ensured during worker pipeline execution (assembleContext)
+  → WA session is ensured during worker pipeline execution (routeSession)
   → Context Assembly for WA (stripped-down system prompt, task-focused)
   → WA executes (may take many turns)
   → WA completion is delivered upstream as a `worker_result` event to the parent session
@@ -503,7 +503,7 @@ This enables:
 ```
                     ┌──────────────────────────────┐
                     │        SESSION CREATED         │
-                    │   (eager, at assembleContext)  │
+                    │   (eager, at routeSession)     │
                     └──────────────┬───────────────┘
                                    │
                                    ▼
@@ -538,7 +538,7 @@ This enables:
 - `CONTEXT_ASSEMBLY.md` — Compaction-aware history building, token budget
 - `AGENTS.md` — Manager-Worker Pattern, inter-agent communication
 - `../../data/ledgers/AGENTS_LEDGER.md` — Schema for sessions, threads, compactions, session_history
-- `../../runtime/nex/NEXUS_REQUEST.md` — Pipeline stages 3 (routing) and 5 (session resolution)
+- `../../runtime/nex/NEXUS_REQUEST.md` — Pipeline stages 4 (routing) and 6 (session resolution)
 - `../../runtime/iam/ACCESS_CONTROL_SYSTEM.md` — ACL policies that produce session keys
 
 ---

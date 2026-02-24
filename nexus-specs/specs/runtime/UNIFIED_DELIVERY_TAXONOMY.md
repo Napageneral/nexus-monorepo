@@ -106,7 +106,7 @@ This section locks how each major platform maps into the taxonomy.
 - `account_id = "default"` (or another stable runtime account id; control-plane is not multi-account in the adapter sense)
 - `space_id`: none.
 - `container_kind = "direct"`
-- `container_id`: the control-plane "conversation container" identifier (recommended: the target session label / session key the UI is sending into).
+- `container_id`: the control-plane "conversation container" identifier (recommended: the target session key the UI is sending into).
 - `thread_id`: none.
 - `reply_to_id`: none.
 
@@ -121,7 +121,7 @@ Identity binding (normative):
 - `account_id = "default"` (or a stable webchat account id)
 - `space_id`: none.
 - `container_kind = "direct"` (webchat is an ingress surface, not an external adapter platform)
-- `container_id`: the webchat conversation id (recommended: a stable session label/room id; if per-visitor, a stable webchat session id).
+- `container_id`: the webchat conversation id (recommended: a stable session key/room id; if per-visitor, a stable webchat session id).
 - `thread_id`: none.
 - `reply_to_id`: none.
 

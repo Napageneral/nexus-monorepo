@@ -319,9 +319,9 @@ External harnesses are **unified agents** — they handle both conversation and 
 | Dropped | Reason |
 |---------|--------|
 | TOOLS.md | Removed — local notes go in AGENTS.md or skills |
-| MEMORY.md | Replaced by Cortex (derived layer) |
+| MEMORY.md | Replaced by Memory System (derived layer) |
 | HEARTBEAT.md | Handled differently in Nexus event system |
-| cortex/YYYY-MM-DD.md | Replaced by Cortex |
+| cortex/YYYY-MM-DD.md | Replaced by Memory System |
 | Heartbeat guidance | Event system handles this |
 | Self-update section | Unnecessary complexity |
 | Model aliases | Not defined in prompts |

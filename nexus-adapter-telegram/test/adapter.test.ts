@@ -30,7 +30,7 @@ function createRuntimeContextEnv(): { env: NodeJS.ProcessEnv; cleanup: () => voi
     JSON.stringify(
       {
         version: 1,
-        channel: "telegram",
+        platform: "telegram",
         account_id: "default",
         config: {},
         credential: {
@@ -90,10 +90,10 @@ describe("telegram adapter contract smoke", () => {
       .find(Boolean);
     expect(line).toBeTruthy();
     const parsed = JSON.parse(line ?? "{}");
-    expect(parsed.channel).toBe("telegram");
+    expect(parsed.platform).toBe("telegram");
     expect(parsed.supports).toContain("monitor");
     expect(parsed.supports).toContain("send");
-    expect(parsed.channel_capabilities.supports_threads).toBe(true);
+    expect(parsed.platform_capabilities.supports_threads).toBe(true);
   });
 
   it("passes thread_id and reply_to_id to Telegram API on send", async () => {

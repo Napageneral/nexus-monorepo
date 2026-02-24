@@ -1,11 +1,13 @@
+> **Note:** This workplan references Go code paths that have been ported to TypeScript. The Go memory subprocess has been eliminated. Retained for historical reference.
+
 # Memory System V2 — Implementation Workplan
 
 **Status:** IMPLEMENTATION PLAN
 **Created:** 2026-02-17
 **Updated:** 2026-02-20
-**Target:** `/Users/tyler/nexus/home/projects/nexus/nex/cortex/`
+**Target:** `/Users/tyler/nexus/home/projects/nexus/nex/src/` (TypeScript memory system)
 
-> **Canonical reference:** See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the authoritative database layout. Memory tables live in `memory.db`. Entity tables live in `identity.db`. Embeddings live in `embeddings.db`. The Go cortex process is being eliminated -- all logic is being ported to TypeScript.
+> **Canonical reference:** See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the authoritative database layout. Memory tables live in `memory.db`. Entity tables live in `identity.db`. Embeddings live in `embeddings.db`. The memory system runs in-process as TypeScript.
 
 ---
 
@@ -57,7 +59,7 @@ One agent, working through these phases in order, is the cleanest path. Each pha
    **Tables ELIMINATED (do not keep):**
    - ~~`sync_watermarks`~~ — adapters own their sync state. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) section 5.
    - ~~`adapter_state`~~ — Go adapter key-value store eliminated.
-   - ~~`bus_events`~~ — single Nex bus replaces cortex Go bus.
+   - ~~`bus_events`~~ — single Nex bus replaces old Go bus.
    - ~~`sync_jobs`~~ — Go sync pipeline eliminated.
    - ~~`agent_sessions`, `agent_messages`, `agent_turns`, `agent_tool_calls`~~ — duplicates of agents.db. Eliminated.
 
@@ -69,7 +71,7 @@ One agent, working through these phases in order, is the cleanest path. Each pha
    - `mental_models`
    - `memory_processing_log` (tracks which events the writer has processed — separate from events table)
 
-   **Tables to CREATE in identity.db (entity tables relocated from old cortex.db, now eliminated):**
+   **Tables to CREATE in identity.db (entity tables relocated from legacy memory DB):**
    - `entities` (new schema from UNIFIED_ENTITY_STORE.md)
    - `entity_cooccurrences`
    - `entity_tags`
@@ -89,10 +91,10 @@ One agent, working through these phases in order, is the cleanest path. Each pha
    - Insert the `observation_v1` analysis type into `analysis_types`
    - Insert a `consolidation` episode definition into `episode_definitions`
 
-**Test:** Open memory.db / identity.db / embeddings.db, verify all tables exist, verify old cortex.db tables are gone (cortex.db is superseded by memory.db + identity.db + embeddings.db). Run a few inserts into facts/entities to confirm constraints work.
+**Test:** Open memory.db / identity.db / embeddings.db, verify all tables exist, verify old legacy memory DB tables are gone (superseded by memory.db + identity.db + embeddings.db). Run a few inserts into facts/entities to confirm constraints work.
 
 **Files touched:**
-- `internal/db/schema.sql` — rewrite the memory system tables (Go cortex schema -- being eliminated, ported to TS)
+- `internal/db/schema.sql` — legacy Go schema (eliminated, ported to TS)
 - `nex/src/db/memory.ts` — new TS schema for memory.db
 - `nex/src/db/identity.ts` — add entity tables to identity.db schema
 - `nex/src/db/embeddings.ts` — new TS schema for embeddings.db
@@ -195,7 +197,7 @@ One agent, working through these phases in order, is the cleanest path. Each pha
    ~/.nexus/state/meeseeks/memory-writer/
        ROLE.md          -- from MEMORY_WRITER_ROLE.md spec
        skills/
-           cortex/
+           memory/
                recall.ts    -- recall() tool binding
                write.ts     -- insert_fact, create_entity, link_fact_entity, propose_merge
    ```
@@ -272,7 +274,7 @@ One agent, working through these phases in order, is the cleanest path. Each pha
    ~/.nexus/state/meeseeks/memory-injection/
        ROLE.md          -- minimal triage prompt from MEMORY_INJECTION.md
        skills/
-           cortex/
+           memory/
                recall.ts    -- recall() tool (read-only, same as writer's)
    ```
 

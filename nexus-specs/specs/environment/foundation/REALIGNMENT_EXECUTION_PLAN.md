@@ -32,7 +32,7 @@ This is a **big-bang** migration plan:
 | W2 | Runtime rename completion | Remove/rename `gateway` terminology and command surface where still user-facing | IN PROGRESS |
 | W3 | Canonical init/bootstrap | Implement `nexus init` and align created files/directories to canonical workspace layout | COMPLETE |
 | W4 | Branding/type cleanup | Remove `OpenClaw` naming and legacy env/dir aliases from code paths and types | IN PROGRESS |
-| W5 | Memory System DB layout | Ensure 6-DB layout under `state/data/` is implemented per DATABASE_ARCHITECTURE.md (memory.db, identity.db, embeddings.db replace cortex.db) | NOT STARTED |
+| W5 | Memory System DB layout | Ensure 6-DB layout under `state/data/` is implemented per DATABASE_ARCHITECTURE.md (memory.db, identity.db, embeddings.db) | NOT STARTED |
 | W6 | Canonical config schema | Align top-level config domains to canonical namespaced contract | NOT STARTED |
 
 ---
@@ -119,7 +119,7 @@ Deliverables:
   - `state/agents/`
   - `state/user/`
   - `state/credentials/`
-  - `state/nexus/config.json`
+  - `state/config.json`
 - bootstrap identity paths aligned to `state/agents/{name}` + `state/user/IDENTITY.md`
 
 Exit criteria:
@@ -144,7 +144,7 @@ Exit criteria:
 Deliverables:
 
 - 6-DB layout under `state/data/` implemented per DATABASE_ARCHITECTURE.md
-- memory.db, identity.db (entities), and embeddings.db replace legacy cortex.db
+- memory.db, identity.db (entities), and embeddings.db for Memory System
 - runtime.db replaces legacy nexus.db
 - runtime integrations (hooks/automation/pipeline) read/write through canonical DB contracts
 
@@ -157,12 +157,12 @@ Exit criteria:
 
 Deliverables:
 
-- top-level config domains aligned to canonical contract (`agent`, `credentials`, `runtime`, `hooks`, `automation`, `acl`, `channels`, `cortex`, etc.)
+- top-level config domains aligned to canonical contract (`agent`, `credentials`, `runtime`, `hooks`, `automation`, `acl`, `channels`, `memory`, etc.)
 - schema validation and CLI `config` behavior aligned to canonical path + keys
 
 Exit criteria:
 
-- `state/nexus/config.json` validates under canonical domain schema
+- `state/config.json` validates under canonical domain schema
 - no contradictory schema/docs between env specs and runtime implementation
 
 ---
@@ -208,7 +208,7 @@ Exit criteria:
 
 ### W5 - Memory System DB layout
 - [ ] Implement 6-DB layout under `state/data/` per DATABASE_ARCHITECTURE.md.
-- [ ] Migrate cortex.db tables to memory.db, identity.db, and embeddings.db.
+- [ ] Implement memory.db, identity.db, and embeddings.db schemas per DATABASE_ARCHITECTURE.md.
 - [ ] Rename nexus.db to runtime.db.
 - [ ] Align runtime services to new DB contracts.
 - [ ] Add integration coverage.

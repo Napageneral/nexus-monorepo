@@ -1,12 +1,14 @@
+> **Status:** ARCHIVED — Historical event ledger unification plan.
+
 # Handoff: Event Ledger Unification
 
 ## TL;DR
 
-There are two event tables that should be one. Delete the Cortex one, keep the Nex one, migrate all adapters. This is infrastructure cleanup that unblocks the memory system.
+There are two event tables that should be one. Delete the legacy one (in cortex.db), keep the Nex one, migrate all adapters. This is infrastructure cleanup that unblocks the Memory System.
 
 ## Read This First
 
-**Primary spec:** `specs/data/cortex/EVENT_LEDGER_UNIFICATION.md` — has the full design, column mappings, table inventories, and implementation order.
+**Primary spec:** `specs/data/memory/EVENT_LEDGER_UNIFICATION.md` — has the full design, column mappings, table inventories, and implementation order.
 
 **Key code files to understand before starting:**
 
@@ -15,7 +17,7 @@ There are two event tables that should be one. Delete the Cortex one, keep the N
 | `nex/src/db/events.ts` | **The keeper.** Nex events ledger schema + insert/query functions. This is the one true events table. | 1 |
 | `nex/src/nex/stages/receiveEvent.ts` | Stage 1 — writes inbound events to events.db | 2 |
 | `nex/src/nex/stages/finalize.ts` | Stage 8 — writes outbound events to events.db | 2 |
-| `nex/cortex/internal/db/schema.sql` | **The one being removed.** Cortex DB schema. The `events` table and everything in the "EVENTS LEDGER" section is being deleted. Everything in "CORE LEDGER", "ENTITIES", "RELATIONSHIPS", "AGENTS LEDGER" sections stays. | 3 |
+| `nex/cortex/internal/db/schema.sql` | **The one being removed.** Legacy memory DB schema. The `events` table and everything in the "EVENTS LEDGER" section is being deleted. Everything in "CORE LEDGER", "ENTITIES", "RELATIONSHIPS", "AGENTS LEDGER" sections stays. | 3 |
 | `nex/cortex/internal/adapters/aix.go` | AIX full-fidelity adapter — needs migration to write to events.db | 4 |
 | `nex/cortex/internal/adapters/aix_events.go` | AIX trimmed-turns adapter — needs migration | 4 |
 | `nex/cortex/internal/adapters/nexus.go` | Nexus event log adapter — needs migration | 4 |
@@ -83,11 +85,11 @@ The outbound event should capture: content, channel, recipient, timestamp, and a
 
 ### Step 3: Migrate Go adapters to write to events.db
 
-Each Go adapter in `nex/cortex/internal/adapters/` currently opens `cortex.db` and writes to the Cortex events table. They need to open `events.db` and write with the Nex schema instead.
+Each Go adapter in `nex/cortex/internal/adapters/` currently opens `cortex.db` and writes to the legacy events table. They need to open `events.db` and write with the Nex schema instead.
 
-**Column mapping (Cortex → Nex):**
+**Column mapping (legacy → Nex):**
 
-| Cortex column | Nex column | How to map |
+| Legacy column | Nex column | How to map |
 |---|---|---|
 | `id` | `id` | Same |
 | `timestamp` | `timestamp` | Same |
@@ -128,7 +130,7 @@ Changes:
 2. When the chunking code needs to read events, ATTACH `events.db` to the cortex connection: `ATTACH DATABASE 'path/to/events.db' AS events_ledger`
 3. Update queries that join events to use the attached database
 
-### Step 5: Remove Cortex events infrastructure
+### Step 5: Remove legacy events infrastructure
 
 Once all adapters write to events.db and episodes reference the new IDs:
 
@@ -153,7 +155,7 @@ Once all adapters write to events.db and episodes reference the new IDs:
 
 ## Key Design Decisions (don't second-guess these)
 
-1. **One events ledger** — `events.db` is the single source of truth. No Cortex events table.
+1. **One events ledger** — `events.db` is the single source of truth. No legacy events table in cortex.db.
 2. **Inline participants** — `from_identifier` + `to_recipients` on the event row. No junction table.
 3. **Direction values** — `"inbound"`, `"outbound"`, `"observed"`. Not sent/received.
 4. **Cross-database episode linking** — `episode_events` stays in cortex.db, references events.db IDs by convention (no FK).
@@ -173,4 +175,4 @@ Once all adapters write to events.db and episodes reference the new IDs:
 2. After each adapter migration: run `mnemonic sync --adapter <name>` and verify events appear in events.db with correct schema
 3. After outbound capture: send a message via agent tool, verify outbound event appears in events.db
 4. After episode linking: verify episodes can be created that reference events.db event IDs
-5. After cortex events removal: verify cortex.db no longer has the old events table, verify all Cortex operations still work
+5. After legacy events removal: verify cortex.db no longer has the old events table, verify all Memory System operations still work

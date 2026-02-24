@@ -6,9 +6,9 @@ package nexadapter
 // identity, capabilities, and channel features to NEX.
 type AdapterInfo struct {
 	// Identity
-	Channel string `json:"channel"`  // "gmail", "imessage", "discord", etc.
-	Name    string `json:"name"`     // Human-friendly name
-	Version string `json:"version"`  // Semver
+	Platform string `json:"platform"` // "gmail", "imessage", "discord", etc.
+	Name     string `json:"name"`     // Human-friendly name
+	Version  string `json:"version"`  // Semver
 
 	// What this adapter implements
 	Supports []Capability `json:"supports"`
@@ -17,8 +17,8 @@ type AdapterInfo struct {
 	CredentialService string `json:"credential_service,omitempty"` // Links to credential store service
 	MultiAccount      bool   `json:"multi_account"`
 
-	// Channel capabilities (for agent context)
-	ChannelCapabilities ChannelCapabilities `json:"channel_capabilities"`
+	// Platform capabilities (for agent context)
+	PlatformCapabilities ChannelCapabilities `json:"platform_capabilities"`
 }
 
 // Capability identifies a command/feature the adapter supports.

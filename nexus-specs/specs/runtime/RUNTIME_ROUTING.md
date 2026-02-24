@@ -3,7 +3,7 @@
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-18
 **Resolves:** LIVE_E2E_HARNESS.md Bundle B (Items 3, 4)
-**Related:** `broker/SESSION_LIFECYCLE.md`, `../data/DATABASE_ARCHITECTURE.md`, `../data/cortex/v2/MEMORY_SYSTEM_V2.md`, `adapters/ADAPTER_SYSTEM.md`
+**Related:** `broker/SESSION_LIFECYCLE.md`, `../data/DATABASE_ARCHITECTURE.md`, `../data/memory/v2/MEMORY_SYSTEM_V2.md`, `adapters/ADAPTER_SYSTEM.md`
 
 ---
 
@@ -71,7 +71,7 @@ With the new database architecture, `identity.db` is the unified identity, direc
 
 1. **Contacts** — delivery-driven directory (as above)
 2. **Directory** — spaces, containers, threads, participants (see `DELIVERY_DIRECTORY_SCHEMA.md`)
-3. **Entities & Knowledge Graph** — entities, entity_tags, entity_cooccurrences, merge_candidates (relocated from cortex.db per DATABASE_ARCHITECTURE.md). `contacts.entity_id` → `entities.id` within the same DB, enabling JOINs.
+3. **Entities & Knowledge Graph** — entities, entity_tags, entity_cooccurrences, merge_candidates (relocated per DATABASE_ARCHITECTURE.md). `contacts.entity_id` → `entities.id` within the same DB, enabling JOINs.
 4. **Auth** — tokens (`auth_tokens`) and passwords (`auth_passwords`)
 5. **Access Control** — grants, grant_log, access_log, permission_requests (relocated from nexus.db, `acl_` prefix dropped)
 
@@ -181,7 +181,7 @@ The `unknown` principal type still exists for edge cases:
 
 ### Same-DB Lookup (identity.db)
 
-Contacts and entities both live in `identity.db` (entities relocated from cortex.db per DATABASE_ARCHITECTURE.md). Identity resolution is a single-DB operation -- contact lookup and entity chain walk are in the same database, enabling JOINs.
+Contacts and entities both live in `identity.db` (entities relocated per DATABASE_ARCHITECTURE.md). Identity resolution is a single-DB operation -- contact lookup and entity chain walk are in the same database, enabling JOINs.
 
 ```typescript
 // Contact lookup + entity chain walk (both identity.db)
@@ -305,26 +305,26 @@ function propagateMergeToSessions(
   const allEntityIds = [canonicalEntityId, ...mergedEntityIds];
 
   // Find all DM sessions for involved entities
-  const sessionLabels = allEntityIds
+  const sessionKeys = allEntityIds
     .map(id => `dm:${id}`)
-    .filter(label => sessionExists(agentsDb, label));
+    .filter(key => sessionExists(agentsDb, key));
 
-  if (sessionLabels.length <= 1) {
+  if (sessionKeys.length <= 1) {
     // 0 or 1 sessions — nothing to alias
     // If 1: create alias from canonical key if different
-    if (sessionLabels.length === 1) {
+    if (sessionKeys.length === 1) {
       const canonicalKey = `dm:${canonicalEntityId}`;
-      if (sessionLabels[0] !== canonicalKey) {
-        createSessionAlias(agentsDb, canonicalKey, sessionLabels[0], 'identity_merge');
+      if (sessionKeys[0] !== canonicalKey) {
+        createSessionAlias(agentsDb, canonicalKey, sessionKeys[0], 'identity_merge');
       }
     }
     return;
   }
 
   // Multiple sessions: pick primary (most turns)
-  const primary = sessionLabels
-    .map(label => ({ label, turns: countSessionTurns(agentsDb, label) }))
-    .sort((a, b) => b.turns - a.turns)[0].label;
+  const primary = sessionKeys
+    .map(key => ({ key, turns: countSessionTurns(agentsDb, key) }))
+    .sort((a, b) => b.turns - a.turns)[0].key;
 
   // Canonical entity key → primary session
   const canonicalKey = `dm:${canonicalEntityId}`;
@@ -333,9 +333,9 @@ function propagateMergeToSessions(
   }
 
   // All non-primary sessions → primary session
-  for (const label of sessionLabels) {
-    if (label !== primary) {
-      createSessionAlias(agentsDb, label, primary, 'identity_merge');
+  for (const key of sessionKeys) {
+    if (key !== primary) {
+      createSessionAlias(agentsDb, key, primary, 'identity_merge');
     }
   }
 }
@@ -355,7 +355,7 @@ When the merge creates session aliases, the system injects a context note into t
 
 ```
 [System] Identity merge: {entity_name} was also chatting via {platform}
-(session {old_session_label}, {turn_count} turns). Memory system has
+(session {old_session_key}, {turn_count} turns). Memory system has
 indexed that conversation. Use session history tools if you need
 specific details from those conversations.
 ```
@@ -441,7 +441,7 @@ nexus start
 
 ### Adapter Configuration
 
-Adapter config lives at `~/.nex.yaml` (or `NEXUS_NEX_CONFIG_PATH`). Already specced and implemented:
+Adapter config lives in `config.json` (or `NEXUS_NEX_CONFIG_PATH`). Already specced and implemented:
 
 ```yaml
 adapters:
@@ -578,8 +578,8 @@ The memory system V2 memory tables (facts, fact_entities, episodes, etc. in memo
 
 - `broker/SESSION_LIFECYCLE.md` — Session creation, turn processing, queue management, forking
 - `../data/DATABASE_ARCHITECTURE.md` — 6-database layout, entity relocation to identity.db
-- `../data/cortex/v2/MEMORY_SYSTEM_V2.md` — Memory architecture, retain flow, consolidation
-- `../data/cortex/v2/MEMORY_WRITER_V2.md` — Memory-writer entity resolution and merge behavior
+- `../data/memory/v2/MEMORY_SYSTEM_V2.md` — Memory architecture, retain flow, consolidation
+- `../data/memory/v2/MEMORY_WRITER_V2.md` — Memory-writer entity resolution and merge behavior
 - `adapters/ADAPTER_SYSTEM.md` — Adapter protocol, manager, configuration
 - `../environment/foundation/WORKSPACE_LIFECYCLE.md` — Init, boot, onboarding lifecycle
 - `../environment/foundation/harnesses/LIVE_E2E_HARNESS.md` — E2E harness scenarios

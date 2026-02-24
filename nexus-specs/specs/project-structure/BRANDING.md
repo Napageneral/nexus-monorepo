@@ -42,7 +42,7 @@ Automated script to rebrand **openclaw** (formerly moltbot/clawdbot) → nexus. 
 | Original | Branded |
 |----------|---------|
 | `~/.clawdbot/` | `~/nexus/state/` |
-| `~/.clawdbot/clawdbot.json` | `~/nexus/nex.yaml` |
+| `~/.clawdbot/clawdbot.json` | `~/nexus/state/config.json` |
 | `~/clawd/` (workspace) | `~/nexus/home/` |
 
 ### Type Names

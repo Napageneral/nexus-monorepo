@@ -61,7 +61,7 @@ In Nexus MWP:
 │  Tools:                    │   │  Can message back to MA:           │
 │  - agent_send              │   │  - Progress updates                │
 │  - get_agent_status        │   │  - Clarifying questions            │
-│  - ledger/cortex inspection│   │  - Partial results                 │
+│  - ledger/memory inspection│   │  - Partial results                 │
 │  - wait                    │   │                                    │
 │  - send_message            │   │  Final result always returns:      │
 │  (scratchpad-only file     │   │  - worker_result → caller session  │
@@ -168,10 +168,10 @@ LLM shorthand contract for v1 (what MA thinks in prompts):
 
 ### Dispatch Handles and History Lookup
 
-- Every `agent_send(op=dispatch)` returns a `dispatch_id` (the tool call id) and `spawned_session_label`.
+- Every `agent_send(op=dispatch)` returns a `dispatch_id` (the tool call id) and `spawned_session_key`.
 - The spawned worker session persists a backlink: `spawn_tool_call_id = dispatch_id`.
 - Worker results include `broker.dispatched_tool_call_id = dispatch_id` for correlation.
-- Long-term: no special "get agent logs" tool is required. MA/WA inspection should use existing ledger + Cortex APIs with `dispatch_id` and `spawned_session_label` as the lookup handles.
+- Long-term: no special "get agent logs" tool is required. MA/WA inspection should use existing ledger + Memory System APIs with `dispatch_id` and `spawned_session_key` as the lookup handles.
 
 ### WA → MA: Mid-Task Communication
 
@@ -203,7 +203,7 @@ User: "How's that code review going?"
 MA receives via NEX pipeline
   │
   ▼
-MA inspects worker history via ledger/cortex using dispatch_id/session_label
+MA inspects worker history via ledger/memory using dispatch_id/session_key
   │
   ▼
 MA summarizes for user

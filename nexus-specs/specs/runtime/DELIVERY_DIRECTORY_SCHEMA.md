@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS contacts (
   space_id       TEXT NOT NULL DEFAULT '',
 
   sender_id      TEXT NOT NULL,             -- platform-native sender identity
-  entity_id      TEXT NOT NULL,             -- cortex entity id (canonical or merged leaf; resolve via cortex chain)
+  entity_id      TEXT NOT NULL,             -- entity id (canonical or merged leaf; resolve via identity.db merge chain)
 
   first_seen     INTEGER NOT NULL,          -- unix ms
   last_seen      INTEGER NOT NULL,          -- unix ms

@@ -16,18 +16,18 @@ Nex injects a JSON file path via:
 export NEXUS_ADAPTER_CONTEXT_PATH=/path/to/runtime-context.json
 ```
 
-This SDK accepts both:
+This SDK accepts both credential envelope shapes:
 
 1. Spec shape:
 
 ```json
-{"channel":"discord","account_id":"echo-bot","config":{},"credential":{"kind":"token","value":"REDACTED"}}
+{"platform":"discord","account_id":"echo-bot","config":{},"credential":{"kind":"token","value":"REDACTED"}}
 ```
 
 2. Legacy Nex v1 injection (back-compat):
 
 ```json
-{"version":1,"channel":"discord","account_id":"default","config":{},"credential":{"ref":"discord/default","service":"discord","account":"default","value":"REDACTED"}}
+{"version":1,"platform":"discord","account_id":"default","config":{},"credential":{"ref":"discord/default","service":"discord","account":"default","value":"REDACTED"}}
 ```
 
 The SDK reads it with `requireAdapterRuntimeContext()` (or `loadAdapterRuntimeContext()`).
@@ -39,13 +39,13 @@ import { runAdapter } from "@nexus-project/adapter-sdk-ts";
 
 await runAdapter({
   info: async () => ({
-    channel: "discord",
+    platform: "discord",
     name: "discord-adapter",
     version: "0.0.0",
     supports: ["monitor", "send", "stream", "health"],
     credential_service: "discord",
     multi_account: true,
-    channel_capabilities: {
+    platform_capabilities: {
       text_limit: 2000,
       supports_markdown: true,
       markdown_flavor: "discord",

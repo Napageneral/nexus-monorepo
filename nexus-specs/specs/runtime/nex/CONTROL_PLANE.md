@@ -31,7 +31,7 @@ This spec defines the target unification and the migration work required to comp
 - **Local-first privileged control-plane**: bind on loopback by default; remote exposure requires strict auth.
 - **Single control-plane port**: one bind host/port for control-plane HTTP + WS (and SSE on the same server).
 - **Adapters own external ingress**: all non-control-plane protocol bridges are supervised adapters (no in-daemon exceptions).
-- **Single IAM boundary**: nothing that runs an agent bypasses `receiveEvent -> resolveAccess -> ...`; approvals/permissions are enforced and audited by IAM.
+- **Single IAM boundary**: nothing that runs an agent bypasses `ingest -> resolveAccess -> ...`; approvals/permissions are enforced and audited by IAM.
 - **Single source of truth**: control-plane operations act through NEX primitives (bus, ledgers, adapters, pipeline), not parallel code paths.
 - **Terminology**: "gateway" is non-canonical; use **runtime** / **control-plane**.
 
@@ -51,7 +51,7 @@ This spec defines the target unification and the migration work required to comp
 Today `nex` contains **two** server concepts:
 
 1. `src/nex/daemon.ts` (NEX daemon)
-   - Owns: ledgers, event bus, plugins, pipeline, cortex supervision, adapter manager, SSE.
+   - Owns: ledgers, event bus, plugins, pipeline, Memory System, adapter manager, SSE.
    - HTTP surface is currently small (health + SSE + a few service endpoints).
 
 2. `src/gateway/` (legacy control-plane server)
@@ -86,10 +86,10 @@ graph TB
     CPHTTP["Control-plane HTTP (health + SSE + UI + avatars + tools)"]
     SSE["SSE bus stream (/api/events/stream)"]
     Bus["Event Bus (typed)"]
-    Pipe["NEX pipeline (8 stages)"]
+    Pipe["NEX pipeline (9 stages)"]
     Ledgers["SQLite ledgers"]
     AdapterMgr["Adapter manager + monitors"]
-    Cortex["Cortex supervisor/client"]
+    Memory["Memory System (in-process)"]
   end
 
   CLI --> CPWS
@@ -108,7 +108,7 @@ graph TB
   AdapterMgr --> Pipe
   Pipe --> Ledgers
   Pipe --> AdapterMgr
-  Pipe --> Cortex
+  Pipe --> Memory
 ```
 
 ---
@@ -167,7 +167,7 @@ A unified daemon only makes sense if inbound HTTP/WS actions flow through NEX co
 
 Normative behavior:
 
-- Anything that "runs an agent" must create a `NexusEvent` and enter the NEX pipeline via `receiveEvent`.
+- Anything that "runs an agent" must create a `NexusEvent` and enter the NEX pipeline via `ingest`.
 - Streaming to clients must be expressed as NEX `StreamEvent` / bus events, then adapted to the caller (WS push or SSE frames).
 
 Anti-pattern (to remove):

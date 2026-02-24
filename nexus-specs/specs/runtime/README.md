@@ -22,7 +22,7 @@ Event → Adapters → NEX Pipeline → Broker → Adapters → External
 
 | Folder | Purpose |
 |--------|---------|
-| `nex/` | Pipeline orchestrator — the 8-stage event processing pipeline |
+| `nex/` | Pipeline orchestrator — the 9-stage event processing pipeline |
 | `adapters/` | External connections — how Nexus talks to Discord, iMessage, etc. |
 | `iam/` | Identity & Access Management — who can do what |
 | `nex/automations/` | Automation system — proactive/reactive agent invocations |
@@ -35,27 +35,27 @@ Event → Adapters → NEX Pipeline → Broker → Adapters → External
 NEX (Nexus Event Exchange) is the central orchestrator:
 
 ```
-receiveEvent → resolveIdentity → resolveAccess → runAutomations
-                                                        │
-                                                        ▼
-              finalize ← deliverResponse ← runAgent ← assembleContext
+ingest → resolveIdentity → resolveReceiver → resolveAccess → runAutomations
+                                                                     │
+                                                                     ▼
+              deliverResponse ← processResponse ← runAgent ← routeSession
 ```
 
 | Stage | Owner |
 |-------|-------|
-| `receiveEvent` | Adapters |
-| `resolveIdentity`, `resolveAccess` | IAM |
+| `ingest` | Adapters |
+| `resolveIdentity`, `resolveReceiver`, `resolveAccess` | IAM |
 | `runAutomations` | Hooks |
-| `assembleContext`, `runAgent` | Broker |
-| `deliverResponse` | NEX + Adapters |
-| `finalize` | NEX |
+| `routeSession`, `runAgent` | Broker |
+| `processResponse` | NEX + Adapters |
+| `deliverResponse` | NEX |
 
 ---
 
 ## See Also
 
 - `../README.md` — System overview
-- `../data/` — Where state lives (ledgers, cortex)
+- `../data/` — Where state lives (ledgers, memory)
 - `../environment/` — Agent working context
 
 ---

@@ -1,6 +1,7 @@
 # Broker Interfaces
 
-**Status:** TODO  
+> **Status:** ARCHIVED — Stale TODO stub. See AGENT_ENGINE.md and MEESEEKS_PATTERN.md for current interfaces.
+
 **Last Updated:** 2026-02-16
 
 ---
@@ -10,7 +11,7 @@
 This document defines the contracts between the Broker and its neighbors:
 - **NEX → Broker:** How NEX invokes the Broker
 - **Broker → NEX:** What the Broker returns to NEX
-- **Broker ↔ Cortex:** How the Broker queries Cortex for context
+- **Broker ↔ Memory System:** How the Broker queries the Memory System for context
 
 ---
 
@@ -18,7 +19,7 @@ This document defines the contracts between the Broker and its neighbors:
 
 **TODO:** Define the exact interface.
 
-NEX invokes the Broker during the `assembleContext` and `runAgent` pipeline stages.
+NEX invokes the Broker during the `routeSession` and `runAgent` pipeline stages.
 
 ### Input: NexusRequest
 
@@ -87,37 +88,37 @@ See `STREAMING.md` for streaming considerations.
 
 ---
 
-## Broker ↔ Cortex Interface
+## Broker ↔ Memory System Interface
 
 **TODO:** Define the exact interface.
 
-The Broker queries Cortex for context injection during `assembleContext`.
+The Broker queries the Memory System for context injection during `routeSession`.
 
 ### Query Interface
 
 ```typescript
 // TODO: Define exact interface
-interface CortexQuery {
+interface MemoryQuery {
   // What to search for
   query: string;
-  
+
   // Scope
   identity?: string;      // Filter by identity
   timeRange?: TimeRange;  // Filter by time
-  
+
   // Limits
   maxTokens?: number;
   maxResults?: number;
 }
 
-interface CortexResult {
+interface MemoryResult {
   episodes: Episode[];
   facets: Facet[];
   // ...
 }
 ```
 
-See `CONTEXT_ASSEMBLY.md` for how Cortex results are used.
+See `CONTEXT_ASSEMBLY.md` for how Memory System results are used.
 
 ---
 
@@ -140,8 +141,8 @@ interface AgentIdentity {
 ```typescript
 interface AgentMessage {
   id: string;                // Unique message ID
-  fromSession: string;       // Sender session label or 'user' or 'system'
-  toSession: string;         // Target session label
+  fromSession: string;       // Sender session key or 'user' or 'system'
+  toSession: string;         // Target session key
   content: string;           // Message content
   timestamp: number;
   conversationId?: string;   // Group related messages
@@ -166,11 +167,11 @@ type AgentState =
 interface RoutingTarget {
   // Mutually exclusive - pick one:
   thread?: string;    // Turn/Thread ID (bedrock)
-  session?: string;   // Session label → resolves to thread head
+  session?: string;   // Session key → resolves to thread head
   persona?: string;   // Persona ID → resolves to main session → thread head
   
   // Modifier:
-  smart?: boolean;    // Use Cortex to find best target first
+  smart?: boolean;    // Use Memory System to find best target first
 }
 ```
 

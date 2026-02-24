@@ -1,7 +1,7 @@
 # Discord Adapter
 
-**Status:** TODO  
-**Nexus Tool:** `discord-cli` (TBD)  
+**Status:** IMPLEMENTED (adapter exists as `nexus-adapter-discord`)
+**Nexus Tool:** `nexus-adapter-discord`
 **Upstream:** `src/discord/` (full implementation)
 
 ---
@@ -66,8 +66,8 @@ A     B
 ### Event Fields
 ```typescript
 {
-  channel: 'discord',
-  peer_kind: message.channel.isDMBased() ? 'dm' : 'group',
+  platform: 'discord',
+  container_kind: message.channel.isDMBased() ? 'dm' : 'group',
   thread_id: message.channel.isThread() ? message.channel.id : undefined,
   metadata: {
     guild_id: message.guildId,

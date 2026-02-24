@@ -202,7 +202,7 @@ Quick reference: ✅ active · ⭐ ready · 🔧 needs-setup · 📥 needs-insta
 
 - `../README.md` — System architecture overview
 - `../runtime/` — Event processing engine (NEX, adapters, broker)
-- `../data/` — Where state lives (ledgers, cortex)
+- `../data/` — Where state lives (ledgers, Memory System)
 - `../services/` — Optional platform features (cloud, collab)
 
 ---

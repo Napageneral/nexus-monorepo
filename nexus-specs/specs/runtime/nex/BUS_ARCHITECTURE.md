@@ -77,22 +77,27 @@ await AgentLedger.appendContent(turnId, "Hello")
 
 **Configuration:**
 
-```yaml
-# nex.yaml
-bus:
-  # Primary: always in-memory for real-time
-  mode: 'memory'  # 'memory' | 'write-through'
-  
-  # Optional: write-through to SQLite for audit/debug
-  write_through:
-    enabled: false           # Set true to enable
-    path: ./data/bus.db      # SQLite database
-    retention_days: 7        # Auto-cleanup old events
-    
-  # Optional: append-only log file (simpler than SQLite)
-  audit_log:
-    enabled: false
-    path: ./logs/bus-events.jsonl
+```jsonc
+// config.json — bus section
+{
+  "bus": {
+    // Primary: always in-memory for real-time
+    "mode": "memory",        // "memory" | "write-through"
+
+    // Optional: write-through to SQLite for audit/debug
+    "write_through": {
+      "enabled": false,      // Set true to enable
+      "path": "./data/bus.db",
+      "retention_days": 7
+    },
+
+    // Optional: append-only log file (simpler than SQLite)
+    "audit_log": {
+      "enabled": false,
+      "path": "./logs/bus-events.jsonl"
+    }
+  }
+}
 ```
 
 **Modes:**
@@ -200,9 +205,9 @@ Bus.subscribeAll((event) => {
 
 | Event | Properties | Purpose |
 |-------|------------|---------|
-| `session.created` | `session_label`, `persona` | New session |
-| `session.updated` | `session_label`, `changes` | Session modified |
-| `turn.created` | `turn_id`, `session_label` | New turn started |
+| `session.created` | `session_key`, `persona` | New session |
+| `session.updated` | `session_key`, `changes` | Session modified |
+| `turn.created` | `turn_id`, `session_key` | New turn started |
 | `turn.completed` | `turn_id`, `usage` | Turn finished |
 
 ### Category 3: File & Workspace

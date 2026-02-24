@@ -185,7 +185,7 @@ Broker receives:
 - name: group-restrictions
   match:
     conditions:
-      - peer_kind: group
+      - container_kind: group
   permissions:
     tools:
       deny: [send_email, read_messages]
@@ -204,7 +204,7 @@ Broker receives:
 - name: group-restrictions
   priority: 90
   session:
-    key: "{channel}:group:{peer_id}"
+    key: "{platform}:group:{container_id}"
 ```
 
 ### Pattern: Scoped System Hooks

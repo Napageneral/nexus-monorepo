@@ -2,7 +2,7 @@
 
 **Status:** DESIGN SPEC  
 **Last Updated:** 2026-02-18  
-**Related:** `ADAPTER_SYSTEM.md`, `INBOUND_INTERFACE.md`, `OUTBOUND_TARGETING.md`, `../../data/cortex/v2/UNIFIED_ENTITY_STORE.md`
+**Related:** `ADAPTER_SYSTEM.md`, `INBOUND_INTERFACE.md`, `OUTBOUND_TARGETING.md`, `../../data/memory/v2/UNIFIED_ENTITY_STORE.md`
 
 ---
 

@@ -1,22 +1,32 @@
 # Unified Entity Store
 
 **Status:** DESIGN SPEC
-**Last Updated:** 2026-02-18
-**Supersedes:** ../../ledgers/IDENTITY_GRAPH.md, entities/entity_aliases/persons tables in ../MEMORY_SYSTEM.md
+**Last Updated:** 2026-02-23
+**Supersedes:** ../../_archive/IDENTITY_GRAPH.md, entities/entity_aliases/persons tables in ../../_archive/MEMORY_SYSTEM.md
 **Related:** MEMORY_SYSTEM_V2.md, MEMORY_WRITER_V2.md
 **Routing integration:** specs/runtime/RUNTIME_ROUTING.md
 
-> **Canonical reference:** See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the authoritative database layout. Entity tables (`entities`, `entity_tags`, `entity_cooccurrences`, `merge_candidates`) live in `identity.db` alongside contacts, directory, and auth tables. This means `contacts.entity_id` -> `entities.id` is a same-database JOIN -- no cross-DB boundary.
+> **Canonical reference:** See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the authoritative database layout. Entity tables (`entities`, `entity_tags`, `entity_cooccurrences`, `merge_candidates`), contacts, groups, directory, and auth tables all live in `identity.db`. This means `contacts.entity_id` -> `entities.id` is a same-database JOIN -- no cross-DB boundary.
 
 ---
 
 ## Overview
 
-The Unified Entity Store collapses three prior entity systems (Identity Graph entities, Cortex entities, Hindsight entities) into a single table with a union-set (union-find) structure for identity resolution.
+The Unified Entity Store collapses three prior entity systems (Identity Graph entities, legacy memory system entities, Hindsight entities) into a single table with a union-set (union-find) structure for identity resolution.
 
-**Core principle:** Everything is an entity. Phone numbers, email addresses, Discord handles, nicknames, canonical names, organizations, projects, concepts -- all live in one table. The `merged_into` pointer creates a tree where following the chain leads to the canonical identity.
+**Core principle:** Entities are identities -- people, organizations, groups, projects, concepts, locations. An entity represents a "who" or a "what," never a reachable address. Phone numbers, email addresses, and platform handles are **contact identifiers**, not entities. They live in the `contacts` table as bindings between platform-specific addresses and the entities they belong to.
 
 **Design philosophy:** Maximally simple. The agent does the hard work of resolution, deduplication, and merging. The table is a flexible canvas, not a constraint system.
+
+### Ontology
+
+This design is informed by industry standards:
+
+- **SCIM (RFC 7642-7644):** Users are identity resources; phone numbers and emails are multi-valued attributes of users, not independent resources. Groups are first-class resources with members.
+- **Schema.org:** Person and Organization are entities; ContactPoint is a property of an entity describing how to reach it, not a separate entity.
+- **vCard/jCard:** Contact information (phone, email, address) is structured data belonging to a person record.
+
+All standards agree: **identifiers are attributes of identities, not identities themselves.** The contacts table serves as the identifier binding layer (like SCIM's multi-valued attributes or Schema.org's ContactPoint), while the entities table holds actual identities.
 
 ---
 
@@ -27,14 +37,13 @@ The Unified Entity Store collapses three prior entity systems (Identity Graph en
 ```sql
 CREATE TABLE entities (
     id              TEXT PRIMARY KEY,       -- ULID
-    name            TEXT NOT NULL,          -- the identifier: '+15551234567', 'coolgamer42',
-                                            -- 'John Smith', 'Anthropic', 'discord:tyler#1234'
-    type            TEXT,                   -- free-form: 'person', 'phone', 'email', 'discord_handle',
-                                            -- 'slack_user', 'org', 'project', 'concept', 'location'...
+    name            TEXT NOT NULL,          -- human-readable: 'Sarah Chen', 'Anthropic', 'Unknown (iMessage)'
+    type            TEXT,                   -- 'person', 'org', 'group', 'project', 'location',
+                                            -- 'event', 'document', 'pet', 'concept', 'bot', 'system'
     merged_into     TEXT REFERENCES entities(id),  -- union-set parent pointer (NULL = canonical root)
-    normalized      TEXT,                   -- lowercase/stripped for fast matching
+    normalized      TEXT,                   -- lowercase/stripped name for fast matching
     is_user         BOOLEAN DEFAULT FALSE,  -- is this the Nexus owner?
-    source          TEXT DEFAULT 'inferred', -- 'manual', 'imported', 'inferred'
+    source          TEXT DEFAULT 'inferred', -- 'manual', 'imported', 'inferred', 'delivery'
     mention_count   INTEGER DEFAULT 0,      -- times this entity appears in facts
     first_seen      INTEGER,               -- unix ms
     last_seen       INTEGER,               -- unix ms
@@ -49,7 +58,74 @@ CREATE INDEX idx_entities_type ON entities(type);
 CREATE INDEX idx_entities_is_user ON entities(is_user) WHERE is_user = TRUE;
 ```
 
-**That's it.** No `platform`, `sender_id`, `mapping_type`, `confidence`, `alias_type`, `display_name`, `relationship`, `notes`, `message_count` columns. Those are either captured by the `type` field, stored as facts in the facts table, or derivable from events.
+**Entity types are constrained to actual identities:**
+
+| Type | What it represents | Examples |
+|------|--------------------|----------|
+| `person` | A human being | Sarah Chen, Mom, Unknown (iMessage) |
+| `org` | A company, institution, team | Anthropic, MIT, Engineering Team |
+| `group` | A named group with membership | Family, Book Club, Project Alpha Team |
+| `project` | A project, product, or codebase | Nexus, Cortex, ChatStats |
+| `location` | A place | San Francisco, Anthropic HQ |
+| `event` | A meeting, conference, occurrence | HTAA Meeting, Sprint Review |
+| `document` | A file, article, spec | UNIFIED_ENTITY_STORE.md |
+| `pet` | An animal companion | Luna the cat |
+| `concept` | A topic-defining concept | Machine Learning, Wedding Planning |
+| `bot` | An automated system identity | GitHub Bot, Slack Bot |
+| `system` | A Nexus system principal | webhook, cron |
+
+**Never used as entity types:** `phone`, `email`, `discord_handle`, `slack_user`, `telegram_user`, `whatsapp_user`, `signal_user`, or any `*_handle`. These are contact identifiers stored in the `contacts` table.
+
+**That's it.** No `platform`, `sender_id`, `mapping_type`, `confidence`, `alias_type`, `display_name`, `relationship`, `notes`, `message_count` columns. Those are either stored in the contacts table, captured as facts in the facts table, or derivable from events.
+
+### Contacts
+
+The contacts table maps platform-specific identifiers to entities. It serves as the identifier binding layer -- the equivalent of SCIM's multi-valued `emails`/`phoneNumbers` attributes or Schema.org's `ContactPoint`.
+
+```sql
+CREATE TABLE contacts (
+    platform       TEXT NOT NULL,             -- discord/slack/imessage/telegram/gmail/control-plane/webchat/...
+    space_id       TEXT NOT NULL DEFAULT '',  -- Optional scope for platforms where sender_id isn't globally unique (Slack).
+    sender_id      TEXT NOT NULL,             -- platform-native sender identity (+15551234567, coolgamer42, etc.)
+    entity_id      TEXT NOT NULL,             -- identity.entities id (canonical or merged leaf; resolve via merged_into chain)
+    first_seen     INTEGER NOT NULL,          -- unix ms
+    last_seen      INTEGER NOT NULL,          -- unix ms
+    message_count  INTEGER NOT NULL DEFAULT 0,
+    sender_name    TEXT,                      -- best-effort display name from platform (untrusted)
+    avatar_url     TEXT,                      -- best-effort (untrusted)
+    label          TEXT,                      -- 'personal', 'work', 'shared', 'org' (like SCIM's multi-valued type)
+    owner_id       TEXT REFERENCES entities(id), -- org/group entity that owns this contact point, if any
+    PRIMARY KEY (platform, space_id, sender_id)
+);
+
+CREATE INDEX idx_contacts_entity_id ON contacts(entity_id);
+CREATE INDEX idx_contacts_last_seen ON contacts(last_seen DESC);
+```
+
+**Key properties:**
+- `entity_id` is always NOT NULL. Even for unknown senders, a person entity is created immediately so facts can accumulate.
+- `sender_name` caches the platform display name. This is untrusted and may change.
+- `label` classifies the contact point (like SCIM's `type` on multi-valued attributes). A phone number might be `'personal'` or `'work'` or `'shared'`.
+- `owner_id` tracks organizational ownership. A shared phone line or team email can point to the org entity that owns it, even though `entity_id` points to the person currently using it.
+
+**Contacts can change hands.** A phone number may belong to Sarah today and be reassigned tomorrow. The `entity_id` can be updated when ownership changes. This is different from entity merges (which are permanent).
+
+### Contact Name Observations
+
+Tracks historical display names observed for contacts across platforms.
+
+```sql
+CREATE TABLE contact_name_observations (
+    platform       TEXT NOT NULL,
+    space_id       TEXT NOT NULL DEFAULT '',
+    sender_id      TEXT NOT NULL,
+    observed_name  TEXT NOT NULL,
+    first_seen     INTEGER NOT NULL,
+    last_seen      INTEGER NOT NULL,
+    seen_count     INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (platform, space_id, sender_id, observed_name)
+);
+```
 
 ### Entity Co-occurrences
 
@@ -72,7 +148,7 @@ CREATE INDEX idx_entity_cooccurrences_count ON entity_cooccurrences(count DESC);
 
 ### Entity Tags
 
-For ACL scoping and classification.
+For ACL scoping and lightweight classification.
 
 ```sql
 CREATE TABLE entity_tags (
@@ -84,6 +160,41 @@ CREATE TABLE entity_tags (
 
 CREATE INDEX idx_entity_tags_tag ON entity_tags(tag);
 ```
+
+Tags are for lightweight classification and ACL anchoring. For structured membership with roles and nesting, use Groups (below).
+
+### Groups
+
+First-class group model for structured membership, nesting, and metadata. Every group also has a corresponding row in `entities` with `type='group'` so it can participate in facts, tags, and the memory system.
+
+```sql
+CREATE TABLE groups (
+    id              TEXT PRIMARY KEY,         -- matches entities.id for this group
+    name            TEXT NOT NULL,
+    description     TEXT,
+    parent_group_id TEXT REFERENCES groups(id), -- nesting: team:frontend ⊂ team:engineering
+    owner_id        TEXT REFERENCES entities(id), -- who manages this group
+    created_at      INTEGER NOT NULL,
+    updated_at      INTEGER NOT NULL
+);
+
+CREATE TABLE group_members (
+    group_id        TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    entity_id       TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    role            TEXT NOT NULL DEFAULT 'member', -- 'admin', 'member', 'viewer'
+    added_at        INTEGER NOT NULL,
+    PRIMARY KEY (group_id, entity_id)
+);
+
+CREATE INDEX idx_group_members_entity ON group_members(entity_id);
+CREATE INDEX idx_groups_parent ON groups(parent_group_id);
+```
+
+**Groups vs. Tags:**
+- **Tags** are lightweight labels for classification and ACL. No metadata, no membership roles, no nesting. Good for: `'trusted'`, `'family'`, `'org:anthropic'`.
+- **Groups** are first-class entities with membership lists, roles, nesting, and metadata. Good for: "Engineering Team" (with admin/member roles), "Project Alpha Team" (nested under Engineering), "Book Club" (with description and owner).
+
+A group entity can also have tags. "Engineering Team" (group) might be tagged `'team:engineering'` (tag) for ACL purposes.
 
 ### Merge Candidates
 
@@ -159,56 +270,84 @@ See `../../runtime/RUNTIME_ROUTING.md` for the full session-alias lifecycle and 
 
 ---
 
-## How Everything is an Entity: Examples
+## Entity and Contact Creation: Examples
 
 ### Scenario: iMessage contact resolution
 
 ```
-Day 1: iMessage from +15551234567
+Day 1: iMessage from +15551234567 (sender_name: "Mom")
+  -- Delivery pipeline creates a person entity using sender_name:
   INSERT INTO entities (id, name, type, source, first_seen, last_seen, normalized)
-  VALUES ('ent_001', '+15551234567', 'phone', 'imported', $now, $now, '+15551234567');
-  -- merged_into = NULL, this IS the canonical identity (all we know)
+  VALUES ('ent_001', 'Mom', 'person', 'delivery', $now, $now, 'mom');
 
-Day 3: Memory-Writer extracts "Mom called about dinner" from message content
-  INSERT INTO entities (id, name, type, source, first_seen, normalized)
-  VALUES ('ent_002', 'Mom', 'person', 'inferred', $now, 'mom');
-  -- Agent recognizes from context: Mom = the person at +15551234567
-  UPDATE entities SET merged_into = 'ent_002' WHERE id = 'ent_001';
-  -- Now: +15551234567 -> Mom (Mom is canonical)
+  -- Contact row binds the phone number to the entity:
+  INSERT INTO contacts (platform, sender_id, entity_id, first_seen, last_seen, sender_name)
+  VALUES ('imessage', '+15551234567', 'ent_001', $now, $now, 'Mom');
 
-Day 7: Email from mom@gmail.com, agent resolves same person
-  INSERT INTO entities (id, name, type, source, first_seen, normalized)
-  VALUES ('ent_003', 'mom@gmail.com', 'email', 'imported', $now, 'mom@gmail.com');
-  UPDATE entities SET merged_into = 'ent_002' WHERE id = 'ent_003';
-  -- Now: mom@gmail.com -> Mom, +15551234567 -> Mom
+  -- The phone number lives in contacts.sender_id, NOT as an entity.
+  -- The entity is immediately a 'person' that can accumulate facts.
+
+Day 3: Memory-Writer extracts "Mom called about dinner plans for Saturday"
+  -- Links the fact to the existing entity ent_001 (Mom).
+  -- No new entity needed. The person entity already exists.
+
+Day 7: Email from mom@gmail.com (sender_name: "Mom")
+  -- Delivery pipeline looks up existing entity by sender_name or creates new:
+  INSERT INTO entities (id, name, type, source, first_seen, last_seen, normalized)
+  VALUES ('ent_002', 'Mom', 'person', 'delivery', $now, $now, 'mom');
+
+  INSERT INTO contacts (platform, sender_id, entity_id, first_seen, last_seen, sender_name)
+  VALUES ('gmail', 'mom@gmail.com', 'ent_002', $now, $now, 'Mom');
+
+  -- Memory-Writer later resolves: same person!
+  -- propose_merge(ent_001, ent_002, confidence=0.95, reason="same display name Mom, iMessage + Gmail")
+  -- Auto-merge: ent_002 merged_into ent_001
 ```
 
 Result:
 ```
-Mom (ent_002, type=person, canonical root)
-  +-- +15551234567 (ent_001, type=phone, merged_into=ent_002)
-  +-- mom@gmail.com (ent_003, type=email, merged_into=ent_002)
+Mom (ent_001, type=person, canonical root)
+  Contacts:
+    +-- imessage: +15551234567
+    +-- gmail: mom@gmail.com
+  Merged entities:
+    +-- ent_002 (Mom, merged_into=ent_001)
 ```
 
-### Scenario: Discord handle resolution
+### Scenario: Discord handle — unknown sender
 
 ```
-Day 1: Discord message from coolgamer42
+Day 1: Discord message from coolgamer42 (no sender_name available)
+  -- Delivery pipeline creates a person entity with placeholder name:
   INSERT INTO entities (id, name, type, source, first_seen, normalized)
-  VALUES ('ent_010', 'discord:coolgamer42', 'discord_handle', 'imported', $now, 'discord:coolgamer42');
-  -- This IS the canonical identity for now
+  VALUES ('ent_010', 'Unknown (discord:coolgamer42)', 'person', 'delivery', $now, 'unknown (discord:coolgamer42)');
+
+  INSERT INTO contacts (platform, sender_id, entity_id, first_seen, last_seen, sender_name)
+  VALUES ('discord', 'coolgamer42', 'ent_010', $now, $now, NULL);
 
 Day 5: Conversation reveals real name is "John Smith"
-  INSERT INTO entities (id, name, type, source, first_seen, normalized)
-  VALUES ('ent_011', 'John Smith', 'person', 'inferred', $now, 'john smith');
-  UPDATE entities SET merged_into = 'ent_011' WHERE id = 'ent_010';
-  -- John Smith is now canonical
+  -- Memory-Writer updates the entity name (or creates a new entity and merges):
+  UPDATE entities SET name = 'John Smith', normalized = 'john smith', updated_at = $now
+  WHERE id = 'ent_010';
 
 Day 8: Slack message from jsmith in workspace anthropic
   INSERT INTO entities (id, name, type, source, first_seen, normalized)
-  VALUES ('ent_012', 'slack:anthropic:jsmith', 'slack_user', 'imported', $now, 'slack:anthropic:jsmith');
-  -- Agent resolves: same person
-  UPDATE entities SET merged_into = 'ent_011' WHERE id = 'ent_012';
+  VALUES ('ent_012', 'jsmith', 'person', 'delivery', $now, 'jsmith');
+
+  INSERT INTO contacts (platform, space_id, sender_id, entity_id, first_seen, last_seen)
+  VALUES ('slack', 'anthropic', 'jsmith', 'ent_012', $now, $now);
+
+  -- Agent resolves: same person as John Smith
+  -- propose_merge(ent_010, ent_012, confidence=0.9, reason="context match")
+  -- Auto-merge: ent_012 merged_into ent_010
+```
+
+Result:
+```
+John Smith (ent_010, type=person, canonical root)
+  Contacts:
+    +-- discord: coolgamer42
+    +-- slack/anthropic: jsmith
 ```
 
 ### Scenario: Ambiguous names
@@ -226,6 +365,16 @@ When "Tyler" appears in a message, the agent:
 5. If uncertain, creates a merge_candidate for human review
 ```
 
+### Scenario: Shared/org-owned contact
+
+```
+The company main line +18005551234 belongs to Anthropic, currently used by the receptionist:
+  INSERT INTO contacts (platform, sender_id, entity_id, label, owner_id, ...)
+  VALUES ('phone', '+18005551234', 'ent_receptionist', 'shared', 'ent_anthropic', ...);
+
+When the receptionist changes, update entity_id. owner_id stays the same.
+```
+
 ---
 
 ## Entity Resolution Flow
@@ -235,7 +384,7 @@ Entity resolution is agentic. The Memory-Writer agent makes all resolution decis
 1. **Exact matching** -- normalized name lookup
 2. **Co-occurrence scoring** -- entities that frequently appear together are likely related
 3. **Contextual reasoning** -- the agent reads the event content and thread context to disambiguate
-4. **PII extraction pipeline** -- existing Cortex PII extraction identifies structured identifiers
+4. **PII extraction pipeline** -- PII extraction identifies structured identifiers (which become facts about entities, not entities themselves)
 5. **Merge candidate creation** -- when uncertain, the agent proposes merges for review
 
 The agent has access to the full entity store and can search, create, and merge entities.
@@ -256,6 +405,8 @@ The agent has access to the full entity store and can search, create, and merge 
 
 4. **Facts inherit ACL from their entities.** A fact linked to entity "Mom" (tagged `'family'`) is visible to agents scoped to `'family'`.
 
+5. **Group membership for structured access.** Groups provide role-based membership (admin/member/viewer) and nesting. A group entity can be tagged for ACL, and all members inherit the group's access scope via the tag.
+
 ### Resolution flow for incoming events
 
 ```
@@ -264,8 +415,8 @@ Event arrives with deliveryContext:
     platform: "imessage",
     sender_id: "+15551234567",
     sender_name: "Mom",
-    peer_id: "+15551234567",
-    peer_kind: "dm",
+    container_id: "+15551234567",
+    container_kind: "dm",
     ...
   }
 
@@ -275,11 +426,11 @@ Event arrives with deliveryContext:
    -> 'ent_001'
 
 2. Follow merged_into chain in identity.db to canonical entity:
-   ent_001 (+15551234567) -> ent_002 (Mom)
-   -- Same database — JOINable, no cross-DB boundary
+   ent_001 (Mom) -> canonical root (or ent_001 if already canonical)
+   -- Same database -- JOINable, no cross-DB boundary
 
 3. Look up tags for canonical entity:
-   SELECT tag FROM entity_tags WHERE entity_id = 'ent_002';
+   SELECT tag FROM entity_tags WHERE entity_id = 'ent_001';
    -> ['family', 'trusted']
 
 4. Apply permissions based on tags.
@@ -296,14 +447,14 @@ From the NexusEvent deliveryContext (Zod schema):
 | `sender_id` | string | Platform-specific unique sender ID |
 | `sender_name` | string? | Display name from platform |
 | `space_id` | string? | Server/workspace identifier |
-| `peer_id` | string | Conversation/chat identifier |
-| `peer_kind` | enum | 'dm', 'direct', 'group', 'channel' |
+| `container_id` | string | Conversation/chat identifier |
+| `container_kind` | enum | 'dm', 'direct', 'group', 'channel' |
 | `thread_id` | string? | Thread ID for threaded conversations |
 | `reply_to_id` | string? | Message being replied to |
 | `capabilities` | object | Platform capabilities (markdown, message length, etc.) |
 | `available_channels` | array | Other platforms available for response |
 
-The agent uses these fields to create entities with appropriate types and to provide context for resolution. For example, `sender_id` on Discord might be `coolgamer42#1234` (globally unique with discriminator), which the agent stores as the entity name with type `discord_handle`.
+The delivery pipeline uses `sender_name` to name the auto-created person entity. The `sender_id` is stored only in the contacts table, not as an entity name. If no `sender_name` is available, the entity is named with a placeholder like `Unknown (discord:coolgamer42)`.
 
 ---
 
@@ -311,9 +462,9 @@ The agent uses these fields to create entities with appropriate types and to pro
 
 ### The contacts table (identity.db)
 
-A `contacts` table in `identity.db` maps `(platform, space_id, sender_id)` to `entity_id` in the unified entity store. This is the pipeline-speed lookup for identity resolution -- sub-millisecond, no LLM involvement, pure key-value.
+The `contacts` table in `identity.db` maps `(platform, space_id, sender_id)` to `entity_id` in the unified entity store. This is the pipeline-speed lookup for identity resolution -- sub-millisecond, no LLM involvement, pure key-value.
 
-> **Note:** Both `contacts` and `entities` now live in `identity.db`. This means the lookup is a single-database JOIN -- no cross-DB boundary.
+> **Note:** Both `contacts` and `entities` live in `identity.db`. This means the lookup is a single-database JOIN -- no cross-DB boundary.
 
 ```
 contacts (identity.db)
@@ -323,10 +474,10 @@ contacts (identity.db)
 
 ### Auto-creation on inbound messages
 
-Every inbound message auto-creates two things:
+Every inbound message from an unknown sender auto-creates two things:
 
-1. **A contact row** in `identity.db` -- `(platform, space_id, sender_id)` keyed for fast routing lookup.
-2. **A delivery-sourced entity** in `identity.db` -- with type set to the platform-specific handle type (e.g., `'discord_handle'`, `'phone'`, `'email'`) and `source = 'delivery'`.
+1. **A person entity** in `identity.db` -- with `type = 'person'`, `source = 'delivery'`, and `name` set to `sender_name` from the delivery context (or a placeholder like `'Unknown (platform:sender_id)'` if no name is available). The entity is always a person, never a phone number or handle.
+2. **A contact row** in `identity.db` -- `(platform, space_id, sender_id)` keyed for fast routing lookup, pointing to the new entity.
 
 This happens at delivery time, before any LLM processing, ensuring that every sender has a routable identity from their first message. Both the contact and entity live in the same database (`identity.db`), enabling FK integrity and efficient JOINs.
 
@@ -334,19 +485,21 @@ This happens at delivery time, before any LLM processing, ensuring that every se
 
 When entities merge via `union()`, the contact rows in `identity.db` are **not** updated. The `entity_id` in the contacts table may point to a non-canonical (merged) entity, but the union-find chain in `identity.db` resolves to the canonical root (same database, JOINable). This means:
 
-- No write-amplification on merges -- contacts are write-once.
+- No write-amplification on merges -- contacts are write-once (for routing purposes).
 - The resolution path is: `contacts.entity_id` -> follow `merged_into` chain -> canonical entity.
 - Path compression can shorten chains but is never required for correctness.
 
 ### Memory-writer enrichment
 
-The memory-writer discovers delivery-sourced entities (`source = 'delivery'`), enriches them with context from conversations (real names, relationships, organizational affiliations), and merges them into `person` entities via the union-set. A phone number entity created by delivery becomes a child of a person entity once the agent resolves who it belongs to.
+The memory-writer discovers delivery-sourced entities (`source = 'delivery'`) and enriches them with context from conversations (real names, relationships, organizational affiliations). When a real name is discovered for a placeholder entity, the writer can either update the entity's name directly or create a new person entity and merge.
 
 ### Contacts vs. conversational mentions
 
-**Contacts are only for actual delivery endpoints.** When a user says "my email is tyler@example.com" in conversation, the memory-writer creates an entity in `identity.db` (type `'email'`, source `'inferred'`) but does **not** create a contact row. Contact rows are exclusively created by the delivery pipeline for senders/recipients that have actually exchanged messages through Nexus.
+**Contacts are only for actual delivery endpoints.** When a user says "my email is tyler@example.com" in conversation, the memory-writer stores this as a **fact** about the person entity (e.g., "Tyler's email is tyler@example.com") and links the fact to Tyler's entity. It does **not** create a contact row or a separate entity for the email address.
 
-This distinction matters: a contact means "we can route messages to/from this identifier." A conversational mention means "we know this identifier exists." Only the former participates in pipeline-speed routing.
+Contact rows are exclusively created by the delivery pipeline for senders/recipients that have actually exchanged messages through Nexus.
+
+This distinction matters: a contact means "we can route messages to/from this identifier." A conversational mention means "we know this identifier exists" and is stored as a fact about the person it belongs to. Only the former participates in pipeline-speed routing.
 
 ---
 
@@ -358,15 +511,16 @@ This distinction matters: a contact means "we can route messages to/from this id
 | Identity Graph `entities` table | Merged into unified entities table in `identity.db` |
 | Identity Graph `identity_mappings` table | Replaced by direct `contacts.entity_id` link in identity.db. The separate mapping table with confidence/mapping_type columns is no longer needed -- progressive resolution is handled by entity merges in the union-set |
 | Identity Graph `entity_tags` table | Kept as-is, in `identity.db` |
-| Cortex `entities` table | Merged into unified entities table, relocated to `identity.db` |
-| Cortex `entity_aliases` table | Aliases are entities with merged_into pointing to canonical |
-| Cortex `persons` table | Persons are entities with type='person' |
-| Cortex `person_contact_links` table | Contacts merged_into persons via union-set |
-| Cortex `person_facts` table | Facts about people live in the facts table (in `memory.db`) |
-| Cortex `merge_candidates` table | Kept as-is, in `identity.db` |
+| Legacy `entities` table | Merged into unified entities table, relocated to `identity.db` |
+| Legacy `entity_aliases` table | Aliases are entities with merged_into pointing to canonical |
+| Legacy `persons` table | Persons are entities with type='person' |
+| Legacy `person_contact_links` table | Contacts table maps identifiers to person entities |
+| Legacy `person_facts` table | Facts about people live in the facts table (in `memory.db`) |
+| Legacy `merge_candidates` table | Kept as-is, in `identity.db` |
 | Hindsight `entities` table | Merged into unified entities table |
 | Hindsight `entity_cooccurrences` table | Kept as-is, in `identity.db` |
 | Three separate name-history tables (`delivery_space_names`, `delivery_container_names`, `delivery_thread_names`) | Consolidated into single `names` table in `identity.db`. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) section 3.3. |
+| Phone/email/handle entity types | Eliminated. Platform identifiers live in `contacts.sender_id`, not as entities. Conversationally-mentioned identifiers are stored as facts. |
 
 ---
 
@@ -374,5 +528,5 @@ This distinction matters: a contact means "we can route messages to/from this id
 
 - `MEMORY_SYSTEM_V2.md` -- Full memory architecture
 - `MEMORY_WRITER_V2.md` -- How entity resolution works in the retain flow
-- `../../ledgers/IDENTITY_GRAPH.md` -- Previous identity system (superseded)
+- `../../_archive/IDENTITY_GRAPH.md` -- Previous identity system (superseded)
 - `../../runtime/RUNTIME_ROUTING.md` -- Runtime routing and session resolution

@@ -46,13 +46,13 @@ export const ChannelCapabilitiesSchema = z
 export type ChannelCapabilities = z.infer<typeof ChannelCapabilitiesSchema>;
 
 export const AdapterInfoSchema = z.object({
-  channel: z.string(),
+  platform: z.string(),
   name: z.string(),
   version: z.string(),
   supports: z.array(AdapterCapabilitySchema),
   credential_service: z.string().optional(),
   multi_account: z.boolean(),
-  channel_capabilities: ChannelCapabilitiesSchema,
+  platform_capabilities: ChannelCapabilitiesSchema,
 });
 
 export type AdapterInfo = z.infer<typeof AdapterInfoSchema>;

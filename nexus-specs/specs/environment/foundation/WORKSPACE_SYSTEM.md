@@ -30,7 +30,7 @@ This contract is **big-bang**:
 | Area | Canonical Contract |
 |------|--------------------|
 | State data | 6 databases in `state/data/*.db` (events, agents, identity, memory, embeddings, runtime) |
-| Memory system | Memory System via memory.db + identity.db + embeddings.db (replaces legacy cortex.db) |
+| Memory system | Memory System via memory.db + identity.db + embeddings.db |
 | Config | Single file at `state/config.json` |
 | CLI boundary | `nexus status` for orientation, `nexus runtime ...` for control-plane |
 | Terminology | Use `runtime` / `control-plane`; do not use `gateway` as canonical product term |
@@ -171,7 +171,7 @@ All DBs are created eagerly by `nexus init` with current schemas applied.
 
 ### Memory System: memory.db + identity.db + embeddings.db
 
-The Memory System (replacing the legacy Cortex derived store) spans three databases:
+The Memory System spans three databases:
 
 - **memory.db** -- facts, episodes, facets, analyses, mental models
 - **identity.db** -- entities and knowledge graph (co-located with contacts, auth, ACL)
@@ -221,7 +221,7 @@ nexus init [--workspace <path>]
 - `automation`
 - `acl`
 - `channels`
-- `cortex`
+- `memory`
 
 There is no `runtime.mode` field. Local vs remote is a deployment concern -- the runtime infers local mode from `bind: loopback`.
 

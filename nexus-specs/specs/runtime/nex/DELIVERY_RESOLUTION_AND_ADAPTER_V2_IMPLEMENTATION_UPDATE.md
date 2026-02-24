@@ -1,4 +1,4 @@
-# Delivery Resolution + Adapter V2 Implementation Update
+# Delivery Resolution + Adapter Implementation Update
 
 **Status:** IMPLEMENTED (runtime/code complete)  
 **Last Updated:** 2026-02-24  
@@ -22,7 +22,7 @@ This update captures the concrete implementation and validation completed in `ne
 2. Receiver resolution using the same contact/identity system as sender resolution
 3. Removal of implicit `atlas` receiver fallback (non-escalating unresolved behavior)
 4. Runtime-orchestrated adapter backfill wiring
-5. Adapter-core `channel -> platform` cutover (strict v2 naming in adapter runtime surfaces)
+5. Adapter-core `channel -> platform` cutover (strict delivery taxonomy naming in adapter runtime surfaces)
 
 ---
 

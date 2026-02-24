@@ -33,14 +33,15 @@ NEX is a single TypeScript process. All stages are **functions**, not separate s
 
 ```
 NEX Process (TypeScript)
-├── receiveEvent()       // 1. Normalize NexusEvent, create NexusRequest
+├── ingest()             // 1. Normalize NexusEvent, create NexusRequest
 ├── resolveIdentity()    // 2. WHO sent this? Query Identity Graph
-├── resolveAccess()      // 3. WHAT can they do? Policies → permissions, session routing
-├── runAutomations()     // 4. Match automations, execute hooks, may enrich or handle
-├── assembleContext()    // 5. Build AssembledContext (history, memory, config, formatting)
-├── runAgent()           // 6. Execute agent with assembled context (pi-coding-agent)
-├── deliverResponse()    // 7. Format, chunk, send via out-adapter
-└── finalize()           // 8. Write trace to Nexus Ledger, emit outbound event
+├── resolveReceiver()    // 3. WHO is this addressed to? Resolve target persona/entity
+├── resolveAccess()      // 4. WHAT can they do? Policies → permissions, session routing
+├── runAutomations()     // 5. Match automations, execute hooks, may enrich or handle
+├── routeSession()       // 6. Build AssembledContext (history, memory, config, formatting)
+├── runAgent()           // 7. Execute agent with assembled context (pi-coding-agent)
+├── processResponse()    // 8. Format, chunk, send via out-adapter
+└── deliverResponse()    // 9. Write trace to Nexus Ledger, emit outbound event
 
 All function calls. No network hops.
 ```
@@ -49,14 +50,15 @@ All function calls. No network hops.
 
 | Stage | Input | Output on NexusRequest | May Exit Pipeline? |
 |-------|-------|------------------------|-------------------|
-| `receiveEvent()` | NexusEvent from adapter | `event`, `delivery` populated | No |
+| `ingest()` | NexusEvent from adapter | `event`, `delivery` populated | No |
 | `resolveIdentity()` | NexusRequest | `principal` populated | Yes (unknown sender policy) |
+| `resolveReceiver()` | NexusRequest | `receiver` populated (type, persona_id, entity_id) | No |
 | `resolveAccess()` | NexusRequest | `access` populated (decision, permissions, routing) | Yes (access denied) |
 | `runAutomations()` | NexusRequest | `triggers` populated (automations fired, enrichment) | Yes (automation handles completely) |
-| `assembleContext()` | NexusRequest | `agent` populated (turn_id, model, token_budget); builds `AssembledContext` internally | No |
-| `runAgent()` | AssembledContext (from stage 5) | `response` populated (content, tool_calls, usage) | No |
-| `deliverResponse()` | NexusRequest | `delivery_result` populated | No |
-| `finalize()` | NexusRequest | `pipeline` trace complete, `status` set | No |
+| `routeSession()` | NexusRequest | `agent` populated (turn_id, model, token_budget); builds `AssembledContext` internally | No |
+| `runAgent()` | AssembledContext (from stage 6) | `response` populated (content, tool_calls, usage) | No |
+| `processResponse()` | NexusRequest | `delivery_result` populated | No |
+| `deliverResponse()` | NexusRequest | `pipeline` trace complete, `status` set | No |
 
 See `NEXUS_REQUEST.md` for the full typed schema per stage.
 
@@ -81,7 +83,7 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │    │                                                                        │    │
 │    │  Channel adapters normalize to NexusEvent and pipe via JSONL stdout   │    │
 │    │  AIX import adapter emits session import batches/chunks to the        │    │
-│    │  Session Import Service (not the receiveEvent pipeline)               │    │
+│    │  Session Import Service (not the ingest pipeline)               │    │
 │    │  See: adapters/ADAPTER_SYSTEM.md, nex/SESSION_IMPORT_SERVICE.md       │    │
 │    │                                                                        │    │
 │    └────────────────────────────────────────────────────────────────────────┘    │
@@ -89,16 +91,16 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │                                      │ NexusEvent (JSONL from adapter process)   │
 │                                      ▼                                            │
 │  ┌────────────────────────────────────────────────────────────────────────────┐  │
-│  │                          SYNC PIPELINE (8 stages)                          │  │
+│  │                          SYNC PIPELINE (9 stages)                          │  │
 │  │                                                                             │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 1. receiveEvent()                                                     │  │  │
+│  │  │ 1. ingest()                                                            │  │  │
 │  │  │    • Create NexusRequest from NexusEvent                             │  │  │
 │  │  │    • Populate: request_id, event, delivery                           │  │  │
 │  │  │    • Async: Write event to Events Ledger                             │  │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘  │  │
 │  │                                   │                                         │  │
-│  │                        [plugin: afterReceiveEvent]                         │  │
+│  │                        [plugin: afterIngest]                              │  │
 │  │                                   │                                         │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
 │  │  │ 2. resolveIdentity()                                                  │  │  │
@@ -111,19 +113,28 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │  │                       [plugin: afterResolveIdentity]                       │  │
 │  │                                   │                                         │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 3. resolveAccess()                                                    │  │  │
+│  │  │ 3. resolveReceiver()                                                  │  │  │
+│  │  │    • WHO is this addressed to?                                        │  │  │
+│  │  │    • Resolve target persona/entity from delivery context             │  │  │
+│  │  │    • Populate: receiver (type, persona_id, entity_id, name, source)  │  │  │
+│  │  └──────────────────────────────────────────────────────────────────────┘  │  │
+│  │                                   │                                         │  │
+│  │                       [plugin: afterResolveReceiver]                       │  │
+│  │                                   │                                         │  │
+│  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
+│  │  │ 4. resolveAccess()                                                    │  │  │
 │  │  │    • WHAT can they do?                                                │  │  │
-│  │  │    • Evaluate ACL policies against principal + conditions             │  │  │
+│  │  │    • Evaluate ACL policies against principal + receiver + conditions  │  │  │
 │  │  │    • Populate: access (decision, permissions, routing)               │  │  │
-│  │  │    • Routing includes: persona, session_label, queue_mode            │  │  │
+│  │  │    • Routing includes: persona, session_key, queue_mode              │  │  │
 │  │  │    • If denied → exit pipeline (async: write denial to audit)        │  │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘  │  │
 │  │                                   │                                         │  │
 │  │                        [plugin: afterResolveAccess]                        │  │
 │  │                                   │                                         │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 4. runAutomations()                                                   │  │  │
-│  │  │    • Match automations against event + principal + access            │  │  │
+│  │  │ 5. runAutomations()                                                   │  │  │
+│  │  │    • Match automations against event + principal + receiver + access  │  │  │
 │  │  │    • Execute matched automations (parallel where independent)        │  │  │
 │  │  │    • Populate: triggers (automations_fired, enrichment, overrides)   │  │  │
 │  │  │    • If automation handles completely → exit pipeline                 │  │  │
@@ -132,7 +143,7 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │  │                       [plugin: afterRunAutomations]                        │  │
 │  │                                   │                                         │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 5. assembleContext()                                                   │  │  │
+│  │  │ 6. routeSession()                                                      │  │  │
 │  │  │    • Gather context for finalized session (parallel fetches):         │  │  │
 │  │  │      - Conversation history from Agents Ledger                        │  │  │
 │  │  │      - Relevant context from Memory System (memory.db, embeddings.db) │  │  │
@@ -140,13 +151,13 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │  │  │      - Platform formatting guidance                                    │  │  │
 │  │  │    • Create/resume session, create turn in Agents Ledger             │  │  │
 │  │  │    • Build AssembledContext (internal to Broker, NOT on NexusRequest) │  │  │
-│  │  │    • Populate: agent (turn_id, session_label, model, token_budget)   │  │  │
+│  │  │    • Populate: agent (turn_id, session_key, model, token_budget)     │  │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘  │  │
 │  │                                   │                                         │  │
-│  │                       [plugin: afterAssembleContext]                        │  │
+│  │                       [plugin: afterRouteSession]                          │  │
 │  │                                   │                                         │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 6. runAgent()                                                          │  │  │
+│  │  │ 7. runAgent()                                                          │  │  │
 │  │  │    • Execute pi-coding-agent with AssembledContext                     │  │  │
 │  │  │    • Streaming: tokens flow to adapter via BrokerStreamHandle         │  │  │
 │  │  │    • Populate: response (content, tool_calls, usage, stop_reason)    │  │  │
@@ -156,7 +167,7 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │  │                          [plugin: afterRunAgent]                            │  │
 │  │                                   │                                         │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 7. deliverResponse()                                                   │  │  │
+│  │  │ 8. processResponse()                                                   │  │  │
 │  │  │    • Format response for target platform                              │  │  │
 │  │  │    • Chunk if necessary (respects platform text limits)              │  │  │
 │  │  │    • Send via adapter's `send` command                                │  │  │
@@ -164,17 +175,17 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │  │  │    • Note: may be no-op if native streaming already delivered         │  │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘  │  │
 │  │                                   │                                         │  │
-│  │                       [plugin: afterDeliverResponse]                       │  │
+│  │                       [plugin: afterProcessResponse]                       │  │
 │  │                                   │                                         │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 8. finalize()                                                          │  │  │
+│  │  │ 9. deliverResponse()                                                   │  │  │
 │  │  │    • Finalize NexusRequest with pipeline trace + timing               │  │  │
 │  │  │    • Write full trace to Nexus Ledger                                 │  │  │
 │  │  │    • Write outbound event to Events Ledger                            │  │  │
 │  │  │    • Emit to Memory System for analysis (async)                        │  │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘  │  │
 │  │                                   │                                         │  │
-│  │                          [plugin: onFinalize]                               │  │
+│  │                          [plugin: onDeliverResponse]                        │  │
 │  │                                                                             │  │
 │  └────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                   │
@@ -234,8 +245,8 @@ interface Ledgers {
 // Raw SQL queries — no ORM
 function writeEvent(db: Database, event: NexusEvent): void { /* ... */ }
 function writeTurn(db: Database, turn: TurnRecord): void { /* ... */ }
-function queryThreads(db: Database, sessionLabel: string): Thread[] { /* ... */ }
-function getSession(db: Database, label: string): Session | null { /* ... */ }
+function queryThreads(db: Database, sessionKey: string): Thread[] { /* ... */ }
+function getSession(db: Database, sessionKey: string): Session | null { /* ... */ }
 ```
 
 Both NEX and other components use the same library. NEX doesn't "own" the database — it owns the NexusRequest lifecycle.
@@ -244,18 +255,19 @@ Both NEX and other components use the same library. NEX doesn't "own" the databa
 
 ## NexusRequest Lifecycle
 
-The `NexusRequest` is created at `receiveEvent()` and populated through each stage:
+The `NexusRequest` is created at `ingest()` and populated through each stage:
 
 | Stage | Fields Populated |
 |-------|------------------|
-| **receiveEvent()** | `request_id`, `created_at`, `event`, `delivery` |
+| **ingest()** | `request_id`, `created_at`, `event`, `delivery` |
 | **resolveIdentity()** | `principal` (type, entity_id, display_name, is_user) |
-| **resolveAccess()** | `access` (decision, permissions, routing: persona, session_label, queue_mode) |
+| **resolveReceiver()** | `receiver` (type, persona_id, entity_id, name, source) |
+| **resolveAccess()** | `access` (decision, permissions, routing: persona, session_key, queue_mode) |
 | **runAutomations()** | `triggers` (automations_evaluated, automations_fired, enrichment, routing_override, handled) |
-| **assembleContext()** | `agent` (turn_id, session_label, model, provider, token_budget, role, persona_id) |
+| **routeSession()** | `agent` (turn_id, session_key, model, provider, token_budget, role, persona_id) |
 | **runAgent()** | `response` (content, tool_calls, usage, stop_reason, compaction, subagents_spawned) |
-| **deliverResponse()** | `delivery_result` (success, message_ids, chunks_sent, error) |
-| **finalize()** | `pipeline` (stage timings trace), `status` (completed/failed/denied/handled_by_automation) |
+| **processResponse()** | `delivery_result` (success, message_ids, chunks_sent, error) |
+| **deliverResponse()** | `pipeline` (stage timings trace), `status` (completed/failed/denied/handled_by_automation) |
 
 See `NEXUS_REQUEST.md` for the complete typed schema.
 
@@ -268,10 +280,10 @@ See `NEXUS_REQUEST.md` for the complete typed schema.
 Each stage waits for the previous to complete:
 
 ```
-receiveEvent → resolveIdentity → resolveAccess → runAutomations → assembleContext → runAgent → deliverResponse → finalize
+ingest → resolveIdentity → resolveReceiver → resolveAccess → runAutomations → routeSession → runAgent → processResponse → deliverResponse
 ```
 
-All 8 stages are sync because each depends on the output of the previous.
+All 9 stages are sync because each depends on the output of the previous.
 
 ### Async (Fire-and-Forget Writes)
 
@@ -287,16 +299,16 @@ async function pipeline(event: NexusEvent): Promise<NexusRequest> {
   
   await resolveAccess(req);
   if (req.access.decision === 'deny') {
-    return finalize(req, 'denied');
+    return deliverResponse(req, 'denied');
   }
   
   await runAutomations(req);
   if (req.triggers.handled) {
-    return finalize(req, 'handled_by_automation');
+    return deliverResponse(req, 'handled_by_automation');
   }
   
   // ... remaining stages
-  return finalize(req, 'completed');
+  return deliverResponse(req, 'completed');
 }
 ```
 
@@ -342,7 +354,7 @@ const results = await Promise.all(
 **Context Assembly (parallel):**
 ```typescript
 const [history, memoryContext, agentConfig] = await Promise.all([
-  getConversationHistory(req.access.routing.session_label),
+  getConversationHistory(req.access.routing.session_key),  // session_key from routing
   memory.queryRelevantContext(req.event.content),
   loadAgentConfig(req.access.routing.persona),
 ]);
@@ -405,15 +417,16 @@ interface NEXPlugin {
   priority?: number;  // Lower runs first (default: 100)
   
   // Lifecycle hooks (after each stage)
-  afterReceiveEvent?(req: NexusRequest): Promise<void | 'skip'>;
+  afterIngest?(req: NexusRequest): Promise<void | 'skip'>;
   afterResolveIdentity?(req: NexusRequest): Promise<void | 'skip'>;
+  afterResolveReceiver?(req: NexusRequest): Promise<void | 'skip'>;
   afterResolveAccess?(req: NexusRequest): Promise<void | 'skip'>;
   afterRunAutomations?(req: NexusRequest): Promise<void | 'skip'>;
-  afterAssembleContext?(req: NexusRequest): Promise<void | 'skip'>;
+  afterRouteSession?(req: NexusRequest): Promise<void | 'skip'>;
   afterRunAgent?(req: NexusRequest): Promise<void | 'skip'>;
-  afterDeliverResponse?(req: NexusRequest): Promise<void | 'skip'>;
-  
-  onFinalize?(req: NexusRequest): Promise<void>;
+  afterProcessResponse?(req: NexusRequest): Promise<void | 'skip'>;
+
+  onDeliverResponse?(req: NexusRequest): Promise<void>;
   onError?(req: NexusRequest, error: Error): Promise<void>;
 }
 ```
@@ -460,39 +473,31 @@ function asyncWrite(db: Database, query: string, params: any[]) {
 
 ## Configuration
 
-```yaml
-# nex.yaml
-pipeline:
-  timeout_ms: 300000        # 5 min max per request
-
-data:
-  directory: ./data          # SQLite databases stored here
-  # Creates: events.db, agents.db, identity.db, memory.db, embeddings.db, runtime.db
-
-adapters:
-  - name: eve
-    enabled: true
-  - name: gog
-    enabled: true
-  - name: clock
-    enabled: true
-    config:
-      heartbeat_interval_ms: 60000
-  - name: webhook
-    enabled: true
-    config:
-      port: 8080
-      path: /webhooks
-
-plugins:
-  directory: ./plugins
-  enabled:
-    - logging
-    - analytics
-
-http:
-  host: 127.0.0.1
-  port: 7400               # Health + SSE endpoint
+```jsonc
+// state/config.json
+{
+  "pipeline": {
+    "timeout_ms": 300000        // 5 min max per request
+  },
+  "data": {
+    "directory": "./data"       // SQLite databases stored here
+    // Creates: events.db, agents.db, identity.db, memory.db, embeddings.db, runtime.db
+  },
+  "adapters": [
+    { "name": "eve", "enabled": true },
+    { "name": "gog", "enabled": true },
+    { "name": "clock", "enabled": true, "config": { "heartbeat_interval_ms": 60000 } },
+    { "name": "webhook", "enabled": true, "config": { "port": 8080, "path": "/webhooks" } }
+  ],
+  "plugins": {
+    "directory": "./plugins",
+    "enabled": ["logging", "analytics"]
+  },
+  "http": {
+    "host": "127.0.0.1",
+    "port": 7400               // Health + SSE endpoint
+  }
+}
 ```
 
 ---
@@ -506,20 +511,21 @@ src/
 │   ├── pipeline.ts             # Pipeline execution
 │   ├── request.ts              # NexusRequest type and helpers
 │   ├── daemon.ts               # Process lifecycle (PID, signals, startup)
-│   ├── config.ts               # nex.yaml schema (Zod)
+│   ├── config.ts               # config.json schema (Zod)
 │   ├── plugins/                # Plugin system
 │   │   ├── loader.ts
 │   │   ├── types.ts
 │   │   └── builtin/            # Built-in plugins
 │   ├── stages/                 # Pipeline stages
-│   │   ├── receiveEvent.ts
+│   │   ├── ingest.ts
 │   │   ├── resolveIdentity.ts
+│   │   ├── resolveReceiver.ts
 │   │   ├── resolveAccess.ts
 │   │   ├── runAutomations.ts
-│   │   ├── assembleContext.ts
+│   │   ├── routeSession.ts
 │   │   ├── runAgent.ts
-│   │   ├── deliverResponse.ts
-│   │   └── finalize.ts
+│   │   ├── processResponse.ts
+│   │   └── deliverResponse.ts
 │   ├── adapters/               # Adapter Manager
 │   │   ├── manager.ts          # Spawn/supervise adapter processes
 │   │   ├── protocol.ts         # JSONL protocol handling
@@ -552,7 +558,7 @@ When a Manager Agent (MA) spawns a Worker Agent (WA), the WA runs through the Br
 The agent uses the `send message` tool, which routes through NEX to the appropriate out-adapter via its `send` command. The adapter handles chunking based on channel capabilities. Multiple tool calls = multiple messages.
 
 ### Language Decision
-NEX core is **TypeScript** (Bun runtime). The Memory System (formerly Cortex) is ported to TypeScript — there is no separate Go process. See `../../project-structure/LANGUAGE_DECISION.md`.
+NEX core is **TypeScript** (Bun runtime). The Memory System is TypeScript — there is no separate Go process. See `../../project-structure/LANGUAGE_DECISION.md`.
 
 ---
 

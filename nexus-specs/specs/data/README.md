@@ -18,7 +18,7 @@ Data infrastructure handles **persistent state**. It's the "memory" — where ev
 | Folder | Purpose |
 |--------|---------|
 | `ledgers/` | System of Record — primary data storage |
-| `cortex/` | Legacy derived-understanding docs (being superseded — see DATABASE_ARCHITECTURE.md) |
+| `memory/` | Derived understanding — facts, episodes, entities, embeddings (see DATABASE_ARCHITECTURE.md) |
 
 ---
 
@@ -37,7 +37,7 @@ Nexus uses a multi-database SQLite architecture. Each database file has a clear,
 
 **Key property:** Single owner per table. No cross-database foreign keys. Write contention isolation between hot paths.
 
-### Memory System (formerly "Cortex")
+### Memory System
 
 Understanding built from the primary databases:
 

@@ -17,7 +17,7 @@ describe("runtime context", () => {
       `${JSON.stringify(
         {
           version: 1,
-          channel: "discord",
+          platform: "discord",
           account_id: "default",
           config: { webhook_id: "abc123" },
           credential: {
@@ -38,7 +38,7 @@ describe("runtime context", () => {
       process.env[ADAPTER_CONTEXT_ENV_VAR] = ctxPath;
       const loaded = requireAdapterRuntimeContext();
       expect(loaded).toMatchObject({
-        channel: "discord",
+        platform: "discord",
         account_id: "default",
         config: { webhook_id: "abc123" },
         credential: { kind: "token", ref: "discord/default", value: "token-123" },
@@ -60,7 +60,7 @@ describe("runtime context", () => {
       ctxPath,
       `${JSON.stringify(
         {
-          channel: "discord",
+          platform: "discord",
           account_id: "echo-bot",
           config: { dm_policy: "allow_owner_only" },
           credential: {
@@ -79,7 +79,7 @@ describe("runtime context", () => {
       process.env[ADAPTER_CONTEXT_ENV_VAR] = ctxPath;
       const loaded = requireAdapterRuntimeContext();
       expect(loaded).toMatchObject({
-        channel: "discord",
+        platform: "discord",
         account_id: "echo-bot",
         config: { dm_policy: "allow_owner_only" },
         credential: { kind: "token", value: "token-456" },

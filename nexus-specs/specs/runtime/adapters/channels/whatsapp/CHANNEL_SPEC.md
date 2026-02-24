@@ -65,8 +65,8 @@ A     B
 ### Event Fields
 ```typescript
 {
-  channel: 'whatsapp',
-  peer_kind: msg.key.remoteJid.endsWith('@g.us') ? 'group' : 'dm',
+  platform: 'whatsapp',
+  container_kind: msg.key.remoteJid.endsWith('@g.us') ? 'group' : 'dm',
   thread_id: undefined,          // No native threading
   metadata: {
     jid: msg.key.remoteJid,

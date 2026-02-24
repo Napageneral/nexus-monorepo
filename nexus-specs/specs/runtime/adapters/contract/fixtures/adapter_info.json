@@ -1,11 +1,11 @@
 {
-  "channel": "discord",
+  "platform": "discord",
   "name": "discord-adapter",
   "version": "0.1.0",
   "supports": ["monitor", "send", "stream", "health", "accounts"],
   "credential_service": "discord",
   "multi_account": true,
-  "channel_capabilities": {
+  "platform_capabilities": {
     "text_limit": 2000,
     "caption_limit": 2000,
     "supports_markdown": true,
@@ -24,4 +24,3 @@
     "supports_streaming_edit": true
   }
 }
-

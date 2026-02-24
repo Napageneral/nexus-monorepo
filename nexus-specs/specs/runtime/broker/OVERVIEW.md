@@ -14,7 +14,7 @@ The Agent Broker is responsible for:
 4. **Agent Execution** — Wrapping pi-coding-agent with Nexus context
 5. **Ledger Writes** — Persisting sessions/turns to the Agents Ledger
 
-The Broker is invoked by NEX during the `assembleContext` and `runAgent` pipeline stages. It does not handle inbound events directly — that's NEX's job.
+The Broker is invoked by NEX during the `routeSession` and `runAgent` pipeline stages. It does not handle inbound events directly — that's NEX's job.
 
 ---
 
@@ -28,7 +28,7 @@ The Broker is invoked by NEX during the `assembleContext` and `runAgent` pipelin
 │                                                                              │
 │   1. BEFORE EXECUTION (Broker's primary job)                                │
 │      • Resolve routing → session/thread                                     │
-│      • Assemble context (workspace, persona, history, Cortex)               │
+│      • Assemble context (workspace, persona, history, Memory System)        │
 │      • Build system prompt                                                   │
 │      • Prepare tool set (with IAM-based filtering)                          │
 │                                                                              │
@@ -55,7 +55,7 @@ The Broker is invoked by NEX during the `assembleContext` and `runAgent` pipelin
 **What Broker adds:**
 - NEX integration (receives NexusRequest, returns AgentResponse)
 - SQLite-based persistence (Agents Ledger instead of JSONL)
-- Cortex context injection (semantic memory layer)
+- Memory System context injection (semantic memory layer)
 - IAM-based tool filtering
 - Manager-Worker orchestration
 
@@ -71,7 +71,7 @@ NEX hands the Broker a `NexusRequest` with:
 
 The Broker:
 1. Resolves the routing decision to a specific session/thread
-2. Assembles context (history, Cortex injection, system prompt)
+2. Assembles context (history, Memory System injection, system prompt)
 3. Executes the agent
 4. Returns the response to NEX for delivery
 
@@ -82,12 +82,12 @@ The Broker:
 │   ... → resolveAccess → runAutomations → ┌─────────────────────────────┐   │
 │                                           │       BROKER DOMAIN          │   │
 │                                           │  ┌────────────────────────┐  │   │
-│                                           │  │ assembleContext        │  │   │
+│                                           │  │ routeSession           │  │   │
 │                                           │  │ runAgent               │  │   │
 │                                           │  └────────────────────────┘  │   │
 │                                           └──────────────┬──────────────┘   │
 │                                                          ↓                   │
-│                                           deliverResponse → finalize ...     │
+│                                       processResponse → deliverResponse     │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -118,18 +118,18 @@ The Broker supports three levels of routing abstraction:
 interface RoutingTarget {
   // Mutually exclusive - pick one:
   thread?: string;    // Turn/Thread ID (bedrock)
-  session?: string;   // Session label → resolves to thread head
+  session?: string;   // Session key → resolves to thread head
   persona?: string;   // Persona ID → resolves to main session → thread head
   
   // Modifier:
-  smart?: boolean;    // Use Cortex to find best target first
+  smart?: boolean;    // Use Memory System to find best target first
 }
 
 // Examples:
 route({ thread: "turn-abc-123" });           // Direct to turn
 route({ session: "main" });                   // Session's current head
 route({ persona: "atlas" });                  // Persona's main session
-route({ session: "main", smart: true });      // Smart search, then session routing
+route({ session: "main", smart: true });      // Smart search via Memory System, then session routing
 ```
 
 For MWP dispatch (`agent_send(op="dispatch")`), v1 MA behavior is session-level only:
@@ -140,7 +140,7 @@ For MWP dispatch (`agent_send(op="dispatch")`), v1 MA behavior is session-level 
 ### Smart Routing
 
 Smart routing is a **modifier**, not a separate routing mode:
-1. Query Cortex for best matching thread/session/persona
+1. Query Memory System for best matching thread/session/persona
 2. Use the resolved target with standard routing
 3. Falls back to specified default if no good match
 
@@ -148,15 +148,15 @@ Smart routing is a **modifier**, not a separate routing mode:
 
 ## Session Keys
 
-Session keys are stable identifiers assigned by ACL policies during `resolveAccess` (stage 3). Format depends on sender type:
+Session keys are stable identifiers assigned by ACL policies during `resolveAccess` (stage 4). Format depends on sender type:
 
 ### Common Patterns
 
 | Pattern | Example | Description |
 |---------|---------|-------------|
 | DM (entity-based) | `dm:{entity_id}` | Known sender, resolved via Identity Graph |
-| DM (channel-based) | `dm:{channel}:{sender_id}` | Unknown sender, channel-scoped |
-| Group | `group:{channel}:{peer_id}` | Group conversations |
+| DM (platform-based) | `dm:{platform}:{sender_id}` | Unknown sender, platform-scoped |
+| Group | `group:{platform}:{container_id}` | Group conversations |
 | Worker | `worker:{ulid}` | Spawned worker sessions |
 | System | `system:{purpose}` | System-triggered sessions (timers, etc.) |
 
@@ -204,15 +204,15 @@ To intentionally fork from a turn that already has children:
 
 ```typescript
 async forkFromTurn(turnId: string, message: Message): Promise<Session> {
-  const newSessionLabel = `fork-${uuid()}`;
-  
+  const newSessionKey = `fork-${uuid()}`;
+
   // Create session pointing to fork point
-  await db.createSession({ label: newSessionLabel, threadId: turnId });
-  
+  await db.createSession({ label: newSessionKey, threadId: turnId });
+
   // Route message - creates new turn as child of turnId
-  await this.routeToSession(newSessionLabel, message);
-  
-  return db.getSession(newSessionLabel);
+  await this.routeToSession(newSessionKey, message);
+
+  return db.getSession(newSessionKey);
 }
 ```
 
@@ -233,7 +233,7 @@ The Broker assembles context before agent execution from five conceptual layers,
 | **Workspace** — AGENTS.md, rules, static runtime | System Prompt (static) | Full cache |
 | **Persona** — SOUL.md, IDENTITY.md, permissions | System Prompt (static) | Full cache |
 | **Session** — History from thread ancestry | Conversation History (incremental) | Prefix cache |
-| **Cortex** — Relevant context from derived layer | Current Event (dynamic) | Never cached |
+| **Memory System** — Relevant context from derived layer | Current Event (dynamic) | Never cached |
 | **Event** — Triggering event, hook injections, user message | Current Event (dynamic) | Never cached |
 
 **See:** `CONTEXT_ASSEMBLY.md` for the full specification.
@@ -304,9 +304,15 @@ This is a fast path that bypasses the NEX pipeline — no event storage, no hook
 | Document | Description |
 |----------|-------------|
 | **OVERVIEW.md** | This file — broker overview |
+| **AGENTS.md** | Manager-Worker Pattern, inter-agent communication |
 | **DATA_MODEL.md** | Ontology — conceptual definitions (Message, Turn, Thread, Session, Persona) |
 | **AGENT_ENGINE.md** | pi-coding-agent wrapper interface (in/out contracts, ledger mapping) |
 | **CONTEXT_ASSEMBLY.md** | How context is built before agent execution (5 conceptual → 3 physical layers) |
+| **INTERFACES.md** | (ARCHIVED) Stale TODO stub — see AGENT_ENGINE.md and MEESEEKS_PATTERN.md |
+| **QUEUE_MANAGEMENT.md** | Queue modes, session locking, drain semantics |
+| **MEESEEKS_PATTERN.md** | Canonical automation system — disposable role forks, hook points, workspace model |
+| **SMART_ROUTING.md** | (ARCHIVED) v2 feature — smart routing via Memory System |
+| **SESSION_LIFECYCLE.md** | Session creation, identity coupling, forking, compaction, subagent lifecycle |
 | **STREAMING.md** | Redirect → `../STREAMING.md` (consolidated cross-cutting streaming spec) |
 | **upstream/** | Upstream OpenClaw reference documentation |
 
@@ -316,7 +322,7 @@ This is a fast path that bypasses the NEX pipeline — no event storage, no hook
 
 1. **NEX → Broker handoff:** Exact interface and data contract
 2. **Context assembly details:** Full spec for each layer
-3. **Cortex integration:** How Broker queries Cortex for context injection
+3. **Memory System integration:** How Broker queries Memory System for context injection
 4. **Error handling:** Agent run failures, queue overflow, recovery paths
 5. **Persona management:** Storage, creation, inheritance rules
 
@@ -326,7 +332,7 @@ This is a fast path that bypasses the NEX pipeline — no event storage, no hook
 
 - `../nex/` — NEX pipeline (triggers Broker)
 - `../ledgers/AGENTS_LEDGER.md` — Where Broker writes sessions/turns
-- `../cortex/` — Where Broker queries for context
+- `../../data/memory/MEMORY_SYSTEM.md` — Where Broker queries for context (Memory System)
 - `../iam/` — Permissions that constrain agent execution
 
 ---

@@ -90,7 +90,7 @@ Media sends follow the same targeting flags:
 For streaming adapters, `stream_start.target` MUST be a full `DeliveryTarget`:
 
 ```jsonl
-{"type":"stream_start","runId":"run_abc","sessionLabel":"main","target":{"platform":"discord","account_id":"echo-bot","to":"channel:123","thread_id":"123456789012345678","reply_to_id":"987654321098765432"}}
+{"type":"stream_start","runId":"run_abc","sessionKey":"main","target":{"platform":"discord","account_id":"echo-bot","to":"channel:123","thread_id":"123456789012345678","reply_to_id":"987654321098765432"}}
 ```
 
 ---

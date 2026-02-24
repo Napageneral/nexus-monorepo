@@ -87,8 +87,8 @@ Convert Markdown tables to monospace styled text:
 ### Event Fields
 ```typescript
 {
-  channel: 'signal',
-  peer_kind: envelope.dataMessage?.groupInfo ? 'group' : 'dm',
+  platform: 'signal',
+  container_kind: envelope.dataMessage?.groupInfo ? 'group' : 'dm',
   thread_id: undefined,          // No native threading
   metadata: {
     source: envelope.source,      // Sender phone number

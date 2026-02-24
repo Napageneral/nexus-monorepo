@@ -1,6 +1,7 @@
 # Adapter Interface Definitions
 
-**Status:** DESIGN COMPLETE  
+> **Status:** ARCHIVED — Superseded by `ADAPTER_SYSTEM.md` (CLI protocol) and `INBOUND_INTERFACE.md`/`OUTBOUND_INTERFACE.md`. This doc used the old programmatic interface style.
+
 **Last Updated:** 2026-01-30
 
 ---
@@ -78,8 +79,8 @@ interface NexusEvent {
   account_id: string;            // Which bot account received
   sender_id: string;
   sender_name?: string;
-  peer_id: string;               // Chat/channel/user ID
-  peer_kind: 'dm' | 'group' | 'channel';
+  container_id: string;          // Chat/channel/user ID
+  container_kind: 'dm' | 'group' | 'channel';
   thread_id?: string;
   reply_to_id?: string;
   
@@ -226,7 +227,7 @@ Types for the bidirectional `stream` protocol (JSONL on stdin/stdout):
 ```typescript
 // NEX → Adapter (stdin)
 type StreamEvent =
-  | { type: 'stream_start'; runId: string; sessionLabel: string; target: DeliveryTarget }
+  | { type: 'stream_start'; runId: string; sessionKey: string; target: DeliveryTarget }
   | { type: 'token'; text: string }
   | { type: 'tool_status'; toolName: string; toolCallId: string; status: 'started' | 'completed' | 'failed'; summary?: string }
   | { type: 'reasoning'; text: string }
@@ -402,7 +403,7 @@ function createNexusRequest(event: NexusEvent): NexusRequest {
     delivery: {
       channel: event.channel,
       account_id: event.account_id,
-      peer_id: event.peer_id,
+      container_id: event.container_id,
       capabilities: getCapabilities(event.channel),
       ...
     },
@@ -421,7 +422,7 @@ async function deliverResponse(request: NexusRequest, content: string) {
   return adapter.sendText({
     channel: request.delivery.channel,
     account_id: request.delivery.account_id,
-    to: request.delivery.peer_id,
+    to: request.delivery.container_id,
     thread_id: request.delivery.thread_id,
     reply_to_id: request.delivery.reply_to_id,
   }, content);

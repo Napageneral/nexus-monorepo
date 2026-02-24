@@ -7,7 +7,7 @@
 
 ## Overview
 
-The `NexusRequest` is the data bus that flows through the entire NEX pipeline. Each of the 8 stages reads from it and writes to it, building up a complete trace of everything that happened for a given event.
+The `NexusRequest` is the data bus that flows through the entire NEX pipeline. Each of the 9 stages reads from it and writes to it, building up a complete trace of everything that happened for a given event.
 
 **Inspired by:** Ad exchange bid request patterns — a single object that accumulates context as it flows through the system.
 
@@ -19,12 +19,12 @@ The `NexusRequest` is the data bus that flows through the entire NEX pipeline. E
 
 ---
 
-## The 8 Stages
+## The 9 Stages
 
 ```
 NexusRequest created ─────────────────────────────────────────────────
   │
-  │  Stage 1: receiveEvent
+  │  Stage 1: ingest
   │  ├─ Writes: request_id, event, delivery
   │  └─ Side effect: write to Events Ledger (async)
   │
@@ -33,32 +33,37 @@ NexusRequest created ───────────────────�
   │  ├─ Writes: principal
   │  └─ May exit: unknown sender → deny policy
   │
-  │  Stage 3: resolveAccess
-  │  ├─ Reads: principal, delivery (channel, container_kind)
+  │  Stage 3: resolveReceiver
+  │  ├─ Reads: delivery.receiver_id, delivery.receiver_name, delivery.platform
+  │  ├─ Writes: receiver (type, persona_id, entity_id, name, source, metadata)
+  │  └─ Determines WHO this message is addressed to
+  │
+  │  Stage 4: resolveAccess
+  │  ├─ Reads: principal, receiver, delivery (platform, container_kind)
   │  ├─ Writes: access (decision, permissions, session routing)
   │  └─ May exit: access denied
   │
-  │  Stage 4: runAutomations
-  │  ├─ Reads: event, principal, access
+  │  Stage 5: runAutomations
+  │  ├─ Reads: event, principal, receiver, access
   │  ├─ Writes: triggers (which fired, context enrichment, overrides)
   │  └─ May exit: automation handles event completely
   │
-  │  Stage 5: assembleContext
-  │  ├─ Reads: event, delivery, principal, access, triggers
+  │  Stage 6: routeSession
+  │  ├─ Reads: event, delivery, principal, receiver, access, triggers
   │  ├─ Writes: agent (turn_id, model, token budget, context metadata)
   │  └─ Side effect: builds AssembledContext (NOT stored on NexusRequest)
   │
-  │  Stage 6: runAgent
-  │  ├─ Reads: (uses AssembledContext from stage 5, not NexusRequest directly)
+  │  Stage 7: runAgent
+  │  ├─ Reads: (uses AssembledContext from stage 6, not NexusRequest directly)
   │  ├─ Writes: response (content, tool_calls, usage, stop_reason)
   │  └─ Side effects: streams to adapter, writes to Agents Ledger
   │
-  │  Stage 7: deliverResponse
+  │  Stage 8: processResponse
   │  ├─ Reads: response, delivery
   │  ├─ Writes: delivery_result (message_ids, success)
   │  └─ Note: may be no-op if streaming already delivered
   │
-  │  Stage 8: finalize
+  │  Stage 9: deliverResponse
   │  ├─ Writes: pipeline (timing trace), status
   │  └─ Side effects: write to Nexus Ledger, emit outbound event to Events Ledger
   │
@@ -79,7 +84,7 @@ interface NexusRequest {
   created_at: number;                // Unix ms — when NEX received the event
   
   // ═══════════════════════════════════════════════════════════════════
-  // STAGE 1: receiveEvent
+  // STAGE 1: ingest
   // ═══════════════════════════════════════════════════════════════════
   
   event: EventContext;
@@ -88,41 +93,47 @@ interface NexusRequest {
   // ═══════════════════════════════════════════════════════════════════
   // STAGE 2: resolveIdentity
   // ═══════════════════════════════════════════════════════════════════
-  
+
   principal?: PrincipalContext;       // null until stage 2 runs
-  
+
   // ═══════════════════════════════════════════════════════════════════
-  // STAGE 3: resolveAccess
+  // STAGE 3: resolveReceiver
   // ═══════════════════════════════════════════════════════════════════
-  
-  access?: AccessContext;             // null until stage 3 runs
-  
+
+  receiver?: ReceiverContext;         // null until stage 3 runs
+
   // ═══════════════════════════════════════════════════════════════════
-  // STAGE 4: runAutomations
+  // STAGE 4: resolveAccess
   // ═══════════════════════════════════════════════════════════════════
-  
-  triggers?: TriggerContext;          // null until stage 4 runs
-  
+
+  access?: AccessContext;             // null until stage 4 runs
+
   // ═══════════════════════════════════════════════════════════════════
-  // STAGE 5: assembleContext
+  // STAGE 5: runAutomations
   // ═══════════════════════════════════════════════════════════════════
-  
-  agent?: AgentContext;               // null until stage 5 runs
-  
+
+  triggers?: TriggerContext;          // null until stage 5 runs
+
   // ═══════════════════════════════════════════════════════════════════
-  // STAGE 6: runAgent
+  // STAGE 6: routeSession
   // ═══════════════════════════════════════════════════════════════════
-  
-  response?: ResponseContext;         // null until stage 6 completes
-  
+
+  agent?: AgentContext;               // null until stage 6 runs
+
   // ═══════════════════════════════════════════════════════════════════
-  // STAGE 7: deliverResponse
+  // STAGE 7: runAgent
   // ═══════════════════════════════════════════════════════════════════
-  
-  delivery_result?: DeliveryResult;   // null until stage 7 runs
-  
+
+  response?: ResponseContext;         // null until stage 7 completes
+
   // ═══════════════════════════════════════════════════════════════════
-  // STAGE 8: finalize
+  // STAGE 8: processResponse
+  // ═══════════════════════════════════════════════════════════════════
+
+  delivery_result?: DeliveryResult;   // null until stage 8 runs
+
+  // ═══════════════════════════════════════════════════════════════════
+  // STAGE 9: deliverResponse
   // ═══════════════════════════════════════════════════════════════════
   
   pipeline: PipelineTrace[];          // Grows with each stage
@@ -132,16 +143,16 @@ interface NexusRequest {
 type RequestStatus =
   | 'processing'                      // Pipeline in progress
   | 'completed'                       // Normal completion
-  | 'denied'                          // ACL denied (exits at stage 2 or 3)
-  | 'handled_by_automation'           // Automation handled completely (exits at stage 4)
+  | 'denied'                          // ACL denied (exits at stage 2 or 4)
+  | 'handled_by_automation'           // Automation handled completely (exits at stage 5)
   | 'failed';                         // Error at any stage
 ```
 
 ---
 
-## Stage 1: receiveEvent
+## Stage 1: ingest
 
-**Who:** Adapter Manager (receives JSONL from adapter process)  
+**Who:** Adapter Manager (receives JSONL from adapter process)
 **What:** Creates NexusRequest from raw adapter event, writes to Events Ledger.
 
 ### Writes
@@ -165,20 +176,25 @@ interface DeliveryContext {
   // Where this came from and where the reply goes
   platform: string;                  // "discord", "imessage", "gmail", etc.
   account_id: string;                // Which adapter account received this
-  
+  space_id: string;                  // Workspace/server/org scope (e.g., Discord guild ID)
+
   // Sender
   sender_id: string;                 // Platform-specific sender identifier
   sender_name?: string;              // Display name if available
-  
+
+  // Receiver (who this message is addressed to)
+  receiver_id?: string;              // Platform-specific receiver identifier (e.g., bot user ID)
+  receiver_name?: string;            // Display name of receiver if available
+
   // Conversation context
-  container_id: string;                   // Chat/channel/user ID (reply target)
-  container_kind: 'dm' | 'group' | 'channel';
+  container_id: string;              // Chat/channel/user ID (reply target)
+  container_kind: 'dm' | 'group' | 'channel' | 'direct';
   thread_id?: string;                // Platform thread if applicable
   reply_to_id?: string;              // Message being replied to
-  
+
   // Channel capabilities (from adapter info, cached by Adapter Manager)
   capabilities: ChannelCapabilities;
-  
+
   // Available outbound channels (all active adapters — for agent context)
   available_channels: AvailableChannel[];
 }
@@ -201,7 +217,7 @@ Events Ledger ← INSERT event (async, fire-and-forget)
 ### Pipeline Trace Entry
 
 ```typescript
-{ stage: 'receiveEvent', timestamp: number, duration_ms: number }
+{ stage: 'ingest', timestamp: number, duration_ms: number }
 ```
 
 ---
@@ -244,20 +260,73 @@ If the sender is unknown and the default policy is deny, the pipeline exits here
 if (principal.type === 'unknown' && defaultPolicy === 'deny') {
   request.status = 'denied';
   request.pipeline.push({ stage: 'resolveIdentity', ..., exit_reason: 'unknown_sender_denied' });
-  goto finalize;
+  goto deliverResponse;
 }
 ```
 
 ---
 
-## Stage 3: resolveAccess
+## Stage 3: resolveReceiver
 
-**Who:** IAM  
+**Who:** IAM / Receiver Resolver
+**What:** Resolves WHO this message is addressed to. Uses delivery context (receiver_id, receiver_name, platform) to determine the target persona or entity.
+
+### Reads
+
+- `delivery.receiver_id`, `delivery.receiver_name` — platform-level receiver hints
+- `delivery.platform`, `delivery.container_kind` — context for resolution
+- `principal` — sender context (may influence receiver selection)
+
+### Writes
+
+```typescript
+interface ReceiverContext {
+  type: 'persona' | 'system' | 'entity' | 'unknown';
+
+  // Resolved identity
+  persona_id?: string;               // If type is 'persona' — which persona handles this
+  entity_id?: string;                // If type is 'entity' — target entity ID
+  name?: string;                     // Resolved display name
+
+  // Resolution metadata
+  source: 'mention' | 'dm' | 'default' | 'config' | 'override';
+  metadata?: Record<string, unknown>;
+}
+```
+
+### Resolution Logic
+
+```
+delivery.receiver_id present?
+  │
+  YES → Look up receiver_id against known personas/entities
+  │     → Found persona → type: 'persona', persona_id set
+  │     → Found entity  → type: 'entity', entity_id set
+  │     → Not found     → type: 'unknown'
+  │
+  NO → Infer from context:
+       → DM/direct container → default persona (source: 'dm')
+       → Group/channel with mention → resolve mention (source: 'mention')
+       → Fallback → default persona from config (source: 'default')
+```
+
+### Pipeline Trace Entry
+
+```typescript
+{ stage: 'resolveReceiver', timestamp: number, duration_ms: number }
+```
+
+---
+
+## Stage 4: resolveAccess
+
+**Who:** IAM
 **What:** Evaluates ACL policies to determine WHAT the sender can do and WHERE it routes.
 
 ### Reads
 
 - `principal` — who is this?
+- `receiver` — who is this addressed to?
 - `delivery.platform`, `delivery.container_kind`, `delivery.account_id` — context conditions for policy matching
 
 ### Writes
@@ -281,7 +350,7 @@ interface AccessContext {
   // Session routing (from highest-priority matching policy)
   routing: {
     persona: string;                 // Which agent persona handles this
-    session_label: string;           // Session key for routing
+    session_key: string;           // Session key for routing
     queue_mode?: QueueMode;          // How to handle busy sessions
   };
   
@@ -300,7 +369,7 @@ If access is denied:
 ```typescript
 if (access.decision === 'deny') {
   request.status = 'denied';
-  goto finalize;
+  goto deliverResponse;
 }
 ```
 
@@ -313,17 +382,18 @@ IAM Audit Log ← INSERT decision record
 
 ---
 
-## Stage 4: runAutomations
+## Stage 5: runAutomations
 
-**Who:** Hook Engine (automations are the primary hook type here)  
+**Who:** Hook Engine (automations are the primary hook type here)
 **What:** Evaluates registered automations against the event. May enrich context, override routing, or handle the event entirely.
 
 ### Reads
 
 - `event` — content matching
 - `principal` — who-based triggers
+- `receiver` — receiver context for routing-aware automations
 - `access.permissions` — what the sender can do (passed to automation context)
-- `access.routing.session_label` — current routing target
+- `access.routing.session_key` — current routing target
 
 ### Writes
 
@@ -342,7 +412,7 @@ interface TriggerContext {
   // Routing overrides (automation can redirect)
   routing_override?: {
     persona?: string;                // Override persona
-    session_label?: string;          // Override session
+    session_key?: string;          // Override session
     agent?: string;                  // Override which agent
   };
   
@@ -368,7 +438,7 @@ If an automation handles the event completely:
 if (triggers.handled) {
   request.status = 'handled_by_automation';
   // Automation may have sent a response directly or triggered a different agent
-  goto finalize;
+  goto deliverResponse;
 }
 ```
 
@@ -379,16 +449,16 @@ If automations provide routing overrides, they're merged with ACL routing:
 ```typescript
 const effectiveRouting = {
   persona: triggers.routing_override?.persona ?? access.routing.persona,
-  session_label: triggers.routing_override?.session_label ?? access.routing.session_label,
+  session_key: triggers.routing_override?.session_key ?? access.routing.session_key,
   queue_mode: access.routing.queue_mode ?? 'followup',
 };
 ```
 
 ---
 
-## Stage 5: assembleContext
+## Stage 6: routeSession
 
-**Who:** Broker  
+**Who:** Broker
 **What:** Reads from NexusRequest to build the `AssembledContext` that the agent engine needs. This is the critical NexusRequest → AssembledContext mapping.
 
 ### Reads (everything so far)
@@ -400,9 +470,10 @@ const effectiveRouting = {
 | `delivery.platform`, `delivery.capabilities` | Channel context for MA (Layer 3: Event) |
 | `delivery.available_channels` | Available channels for message tool (Layer 3: Event) |
 | `principal.name`, `principal.relationship` | Sender context for MA (Layer 3: Event) |
+| `receiver.persona_id`, `receiver.name` | Receiver/persona context for routing and system prompt |
 | `access.permissions` | IAM-filtered tool set |
 | `access.routing.persona` | Which persona → which SOUL.md, IDENTITY.md (Layer 1: System Prompt) |
-| `access.routing.session_label` | Which session → which thread → conversation history (Layer 2: History) |
+| `access.routing.session_key` | Which session → which thread → conversation history (Layer 2: History) |
 | `triggers.enrichment` | Automation-enriched context (Layer 3: Event) |
 | `triggers.routing_override` | Overridden persona/session if applicable |
 
@@ -411,11 +482,11 @@ const effectiveRouting = {
 The Broker produces an `AssembledContext` object that goes to the agent engine. This is an **internal** object — it does NOT live on the NexusRequest. See `broker/AGENT_ENGINE.md` for the full type.
 
 ```
-NexusRequest ──► Broker.assembleContext() ──► AssembledContext
+NexusRequest ──► Broker.routeSession() ──► AssembledContext
                                                   │
                                                   ├── systemPrompt (Workspace + Persona layers)
                                                   ├── history[] (Session layer from Agents Ledger)
-                                                  ├── currentMessage (Event + Cortex layers)
+                                                  ├── currentMessage (Event + Memory layers)
                                                   ├── tools (IAM-filtered from access.permissions)
                                                   ├── model, provider, modelConfig
                                                   ├── tokenBudget
@@ -432,7 +503,7 @@ interface AgentContext {
   role: 'manager' | 'worker' | 'unified';
   
   // Session/turn routing (resolved from access.routing + triggers.routing_override)
-  session_label: string;
+  session_key: string;
   parent_turn_id: string;            // Turn we're appending to
   turn_id: string;                   // New turn ID (ULID, generated here)
   
@@ -472,14 +543,14 @@ Check budget → doesn't fit → triggerCompaction() → rebuild history → pro
 
 ---
 
-## Stage 6: runAgent
+## Stage 7: runAgent
 
-**Who:** Broker (delegates to Agent Engine / pi-coding-agent)  
+**Who:** Broker (delegates to Agent Engine / pi-coding-agent)
 **What:** Executes the agent with the AssembledContext. Streams tokens to NEX. Writes to Agents Ledger after completion.
 
 ### Reads
 
-- Uses `AssembledContext` (internal, from stage 5), not NexusRequest directly
+- Uses `AssembledContext` (internal, from stage 6), not NexusRequest directly
 - The agent engine has no knowledge of NexusRequest
 
 ### Writes
@@ -523,7 +594,7 @@ interface ResponseContext {
   
   // Subagent spawns
   subagents_spawned?: {
-    session_label: string;
+    session_key: string;
     role: string;
   }[];
 }
@@ -551,15 +622,16 @@ Agents Ledger ← INSERT turn, messages, tool_calls, thread, session pointer upd
 
 ---
 
-## Stage 7: deliverResponse
+## Stage 8: processResponse
 
-**Who:** NEX + Adapter Manager  
+**Who:** NEX + Adapter Manager
 **What:** Ensures the response reached the user. May be a no-op if streaming already delivered.
 
 ### Reads
 
 - `response.content` — what to deliver (if not already streamed)
 - `delivery.platform`, `delivery.account_id`, `delivery.container_id` — where to deliver
+- `receiver` — receiver context for response attribution
 
 ### Writes
 
@@ -576,7 +648,7 @@ interface DeliveryResult {
 ### Delivery Paths
 
 ```
-Was response streamed during stage 6?
+Was response streamed during stage 7?
   │
   YES → delivery_result = { success: true, streamed: true, message_ids: [from stream status] }
   │
@@ -586,9 +658,9 @@ Was response streamed during stage 6?
 
 ---
 
-## Stage 8: finalize
+## Stage 9: deliverResponse
 
-**Who:** NEX  
+**Who:** NEX
 **What:** Writes the complete pipeline trace, emits outbound event, sets final status.
 
 ### Writes
@@ -607,8 +679,8 @@ interface PipelineTrace {
 
 ```typescript
 // Determined by what happened during the pipeline
-if (stage2_denied || stage3_denied) → 'denied'
-if (stage4_handled)                 → 'handled_by_automation'
+if (stage2_denied || stage4_denied) → 'denied'
+if (stage5_handled)                 → 'handled_by_automation'
 if (any_stage_errored)              → 'failed'
 else                                → 'completed'
 ```
@@ -645,10 +717,11 @@ This is the critical interface between NEX (pipeline) and Broker (agent executio
 │  delivery.platform ───────────────────────►  currentMessage (channel context)  │
 │  delivery.capabilities ──────────────────►  currentMessage (channel context)  │
 │  principal.name/relationship ────────────►  currentMessage (sender context)   │
+│  receiver.persona_id/name ─────────────►  systemPrompt (receiver/persona)   │
 │  triggers.enrichment ────────────────────►  currentMessage (enriched context) │
 │                                   │         │                                  │
 │  access.routing.persona ─────────────────►  systemPrompt (persona lookup)     │
-│  access.routing.session_label ───────────►  history (session → thread → turns)│
+│  access.routing.session_key ───────────►  history (session → thread → turns)│
 │                                   │         │                                  │
 │  access.permissions.tools ───────────────►  tools (IAM-filtered)              │
 │  access.permissions.credentials ─────────►  (credential access during exec)   │
@@ -658,7 +731,7 @@ This is the critical interface between NEX (pipeline) and Broker (agent executio
 │  (generated) ────────────────────────────►  turn_id, run_id                   │
 │                                   │         │                                  │
 │  request_id ─────────────────────────────►  sourceEventId (metadata)          │
-│  access.routing.* ───────────────────────►  sessionLabel, role (metadata)     │
+│  access.routing.* ───────────────────────►  sessionKey, role (metadata)       │
 └──────────────────────────────────┘         └──────────────────────────────────┘
 ```
 
@@ -698,22 +771,25 @@ After agent execution, the Broker maps the `AgentResult` back onto the NexusRequ
 ```
 Stage 2 exit (unknown sender denied):
   principal: populated
+  receiver: null
   access: null
   triggers: null
   agent: null
   response: null
   status: 'denied'
 
-Stage 3 exit (ACL denied):
+Stage 4 exit (ACL denied):
   principal: populated
+  receiver: populated
   access: { decision: 'deny', ... }
   triggers: null
   agent: null
   response: null
   status: 'denied'
 
-Stage 4 exit (automation handled):
+Stage 5 exit (automation handled):
   principal: populated
+  receiver: populated
   access: populated
   triggers: { handled: true, handled_by: '...' }
   agent: null (or populated if automation invoked a different agent)
@@ -728,10 +804,10 @@ Stage 4 exit (automation handled):
 | When | Where | What |
 |------|-------|------|
 | Stage 1 (async) | Events Ledger | Inbound event |
-| Stage 3 | IAM Audit | ACL decision record |
-| Stage 6 (after exec) | Agents Ledger | Turn, messages, tool calls, thread, session pointer |
-| Stage 8 | Nexus Ledger | Complete NexusRequest trace |
-| Stage 8 | Events Ledger | Outbound event (response as event, closes the loop) |
+| Stage 4 | IAM Audit | ACL decision record |
+| Stage 7 (after exec) | Agents Ledger | Turn, messages, tool calls, thread, session pointer |
+| Stage 9 | Nexus Ledger | Complete NexusRequest trace |
+| Stage 9 | Events Ledger | Outbound event (response as event, closes the loop) |
 
 ---
 
@@ -759,7 +835,7 @@ CREATE TABLE nex_traces (
     platform TEXT,                       -- delivery.platform
     sender_entity_id TEXT,              -- principal.entity_id
     agent_id TEXT,                      -- agent.agent_id
-    session_label TEXT,                 -- agent.session_label
+    session_key TEXT,                 -- agent.session_key
     turn_id TEXT,                       -- agent.turn_id
     
     -- Error (if failed)
@@ -770,7 +846,7 @@ CREATE TABLE nex_traces (
 CREATE INDEX idx_nex_traces_event ON nex_traces(event_id);
 CREATE INDEX idx_nex_traces_status ON nex_traces(status);
 CREATE INDEX idx_nex_traces_platform ON nex_traces(platform);
-CREATE INDEX idx_nex_traces_agent ON nex_traces(agent_id, session_label);
+CREATE INDEX idx_nex_traces_agent ON nex_traces(agent_id, session_key);
 CREATE INDEX idx_nex_traces_created ON nex_traces(created_at);
 ```
 
@@ -794,10 +870,10 @@ CREATE INDEX idx_nex_traces_created ON nex_traces(created_at);
 - `INTERFACES.md` — Component interface contracts (being aligned to this spec)
 - `../broker/AGENT_ENGINE.md` — AssembledContext and AgentResult types
 - `../broker/CONTEXT_ASSEMBLY.md` — How AssembledContext is built from NexusRequest
-- `../STREAMING.md` — StreamEvent protocol during stage 6
+- `../STREAMING.md` — StreamEvent protocol during stage 7
 - `../../data/ledgers/NEXUS_LEDGER.md` — Nexus Ledger schema (trace storage)
-- `../iam/ACCESS_CONTROL_SYSTEM.md` — ACL policies evaluated at stage 3
-- `../nex/automations/AUTOMATION_SYSTEM.md` — Automations evaluated at stage 4
+- `../iam/ACCESS_CONTROL_SYSTEM.md` — ACL policies evaluated at stage 4
+- `../nex/automations/AUTOMATION_SYSTEM.md` — Automations evaluated at stage 5
 
 ---
 

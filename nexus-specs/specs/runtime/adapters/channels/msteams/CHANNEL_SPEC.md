@@ -155,8 +155,8 @@ Use Adaptive Cards for:
 ### Inbound
 ```typescript
 {
-  channel: 'msteams',
-  peer_kind: activity.conversation.isGroup ? 'group' : 'dm',
+  platform: 'msteams',
+  container_kind: activity.conversation.isGroup ? 'group' : 'dm',
   thread_id: activity.conversation.id,
   metadata: {
     team_id: activity.channelData?.team?.id,

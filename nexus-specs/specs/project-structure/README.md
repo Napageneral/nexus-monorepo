@@ -18,6 +18,7 @@ This folder documents the codebase structure — both the upstream openclaw proj
 | `UPSTREAM_STRUCTURE.md` | Analysis of openclaw's codebase layout |
 | `NEXUS_STRUCTURE.md` | Target Nexus project structure |
 | `FORK_MAPPING.md` | How openclaw components map to Nexus |
+| `BRANDING.md` | Branding transformation rules (openclaw -> nexus) |
 
 ---
 
@@ -32,14 +33,14 @@ This folder documents the codebase structure — both the upstream openclaw proj
 | `src/session/` | `src/broker/` | Session management |
 | `src/permission/` | `src/iam/` | Per-call → upfront ACL |
 | `src/plugin/` | Removed | Replaced by NEX hooks + Skills |
-| `src/memory/` | Removed | Replaced by Cortex |
+| `src/memory/` | Removed | Replaced by Memory System |
 
 ### New Nexus Components
 
 | Component | Purpose |
 |-----------|---------|
-| `src/ledgers/` | System of Record (Events, Agents, Identity, Nexus) |
-| `src/cortex/` | Derived layer (episodes, facets, embeddings) |
+| `src/ledgers/` | System of Record (6 databases: events, agents, identity, memory, embeddings, runtime) |
+| `src/memory/` | Memory System — derived layer (episodes, facets, embeddings) |
 | `src/iam/` | Identity & Access Management |
 | `src/adapters/` | In/out adapters for platforms |
 | `src/nex/` | Central orchestrator |

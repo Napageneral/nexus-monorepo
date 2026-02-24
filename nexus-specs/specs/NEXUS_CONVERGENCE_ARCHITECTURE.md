@@ -1,3 +1,5 @@
+> **Status:** ARCHIVED — Design exploration for Go convergence. See `specs/project-structure/LANGUAGE_AND_ARCHITECTURE.md` for canonical architecture decision.
+
 # Nexus Convergence Architecture — ABC, Seeds, and the Software Factory
 
 **Status:** DESIGN SPEC
@@ -170,9 +172,9 @@ This pattern applies to **both** nexus chat (personal assistant) and the oracle 
 
 In the current PRLM spec, each node is somewhat isolated. The memory system in Nexus is designed for a single agent's context. For the ABC architecture, we need **one memory store, many readers, scoped by tree topology**.
 
-### Solution: Single Shared Cortex with Topology Fields
+### Solution: Single Shared Memory Store with Topology Fields
 
-All tree nodes share one Cortex memory store. Every fact, observation, and mental model is tagged with tree topology metadata enabling scoped queries.
+All tree nodes share one memory store. Every fact, observation, and mental model is tagged with tree topology metadata enabling scoped queries.
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -365,7 +367,7 @@ oracle-seed/
 │   └── daily-seam-analysis.yaml  # High-leverage change detection
 ├── personas/
 │   └── oracle.yaml   # The oracle agent persona
-└── config.yaml       # Seed-level configuration
+└── config.json       # Seed-level configuration
 ```
 
 Ships with everything a user needs:
@@ -387,7 +389,7 @@ openclaw-seed/
 │   └── ...
 ├── personas/
 │   └── ...
-└── config.yaml
+└── config.json
 ```
 
 ### Other Seeds
@@ -491,10 +493,10 @@ The cartographer broker is a **direct port** of the nex broker's core infrastruc
 | Meeseeks Pattern (session forking, one-shot workers) | ✅ Complete |
 | Checkpointing & Forking | ✅ Complete |
 | Context Assembly (5-layer → 3-layer) | ❌ Missing |
-| Cortex Integration (memory injection) | ❌ Missing |
+| Memory Integration (memory injection) | ❌ Missing |
 | Automations System (meeseeks v2 hooks) | ❌ Missing |
 | Streaming Protocol (structured StreamEvent) | ❌ Missing |
-| Smart Routing (Cortex-based thread matching) | ❌ Missing |
+| Smart Routing (memory-based thread matching) | ❌ Missing |
 | Adapter System | ❌ Missing |
 
 ### Path Forward
@@ -505,7 +507,7 @@ Rather than maintaining two runtimes, cartographer becomes a **plugin** inside t
 
 Long-term, the entire nex runtime moves to Go. The cartographer already has the broker in Go. The strategy is to port nex components piece by piece into the cartographer's Go codebase until the full runtime is in Go:
 
-1. **Memory (Cortex)** — Already in Go (`github.com/Napageneral/nex/cortex`). Needs: events abstraction, LLM provider interface, tree topology fields. Extraction complexity: ~3 days for core, ~1 week for full abstraction.
+1. **Memory System** — Now in TypeScript (ported from Go `github.com/Napageneral/nex/cortex`). Needs: events abstraction, LLM provider interface, tree topology fields. Extraction complexity: ~3 days for core, ~1 week for full abstraction.
 
 2. **Adapter Protocol** — Port the adapter SDK and create git adapter. The Go adapter SDK already exists (`nexus-adapter-sdk-go`).
 
@@ -515,9 +517,9 @@ Long-term, the entire nex runtime moves to Go. The cartographer already has the 
 
 5. **Streaming** — Port the StreamEvent protocol. Depends on broker (done).
 
-### Cortex Portability Assessment
+### Memory System Portability Assessment
 
-The Cortex Go module has moderate coupling to nex:
+The memory system Go module (now ported to TS) had moderate coupling to nex:
 
 | Dependency | Coupling | Mitigation |
 |-----------|----------|------------|
@@ -540,7 +542,7 @@ The Cortex Go module has moderate coupling to nex:
 
 2. **Seeds are applications.** A seed is a nexus configured for a purpose. Same runtime, different shape.
 
-3. **Memory is shared, queries are scoped.** One Cortex store per nexus instance. Tree topology metadata enables each node to query its relevant slice.
+3. **Memory is shared, queries are scoped.** One memory store per nexus instance. Tree topology metadata enables each node to query its relevant slice.
 
 4. **Events are the source of truth.** Git commits, chat messages, API calls — everything enters as an event and flows through the same pipeline: events → facts → observations → mental models.
 

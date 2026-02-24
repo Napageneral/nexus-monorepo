@@ -52,9 +52,9 @@
     },
     "AdapterInfo": {
       "type": "object",
-      "required": ["channel", "name", "version", "supports", "multi_account", "channel_capabilities"],
+      "required": ["platform", "name", "version", "supports", "multi_account", "platform_capabilities"],
       "properties": {
-        "channel": { "type": "string" },
+        "platform": { "type": "string" },
         "name": { "type": "string" },
         "version": { "type": "string" },
         "supports": {
@@ -63,7 +63,7 @@
         },
         "credential_service": { "type": "string" },
         "multi_account": { "type": "boolean" },
-        "channel_capabilities": { "$ref": "#/$defs/ChannelCapabilities" }
+        "platform_capabilities": { "$ref": "#/$defs/ChannelCapabilities" }
       },
       "additionalProperties": false
     },
@@ -193,11 +193,11 @@
       "oneOf": [
         {
           "type": "object",
-          "required": ["type", "runId", "sessionLabel", "target"],
+          "required": ["type", "runId", "sessionKey", "target"],
           "properties": {
             "type": { "const": "stream_start" },
             "runId": { "type": "string" },
-            "sessionLabel": { "type": "string" },
+            "sessionKey": { "type": "string" },
             "target": { "$ref": "#/$defs/DeliveryTarget" }
           },
           "additionalProperties": false
@@ -310,10 +310,10 @@
     },
     "RuntimeContext": {
       "type": "object",
-      "required": ["channel", "account_id", "config"],
+      "required": ["platform", "account_id", "config"],
       "properties": {
         "version": { "type": "integer", "minimum": 1 },
-        "channel": { "type": "string" },
+        "platform": { "type": "string" },
         "account_id": { "type": "string" },
         "config": { "type": "object", "additionalProperties": true },
         "credential": { "$ref": "#/$defs/RuntimeCredential" }

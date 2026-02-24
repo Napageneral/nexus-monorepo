@@ -150,7 +150,7 @@ Run `nexus skill use <name>` to get the full guide for any capability.
 
 **Why not inject full skill guides?** Skill guides are loaded on-demand via `nexus skill use <name>`. Injecting all of them would waste tokens. The summary tells the agent what's available; the agent loads what it needs.
 
-**Future:** Cortex will auto-inject relevant skill guides based on event content. For now, the agent discovers and loads skills via CLI.
+**Future:** The Memory System will auto-inject relevant skill guides based on event content. For now, the agent discovers and loads skills via CLI.
 
 ### 4. Static Runtime Info
 
@@ -324,7 +324,7 @@ interface AssembledContext {
   tokenBudget: TokenBudget;
   
   // Metadata (for ledger writes after execution)
-  sessionLabel: string;              // Which session this turn belongs to
+  session_key: string;               // Which session this turn belongs to
   parentTurnId: string;              // Parent turn in the tree
   role: AgentRole;                   // 'manager' | 'worker' | 'unified'
   toolsetName: string;               // Named toolset applied
@@ -386,15 +386,15 @@ Before each turn, check the budget:
 
 ```typescript
 async function ensureBudget(
-  budget: TokenBudget, 
-  sessionLabel: string
+  budget: TokenBudget,
+  sessionKey: string
 ): Promise<{ compacted: boolean }> {
   if (budget.remaining > 0) {
     return { compacted: false };  // We're fine
   }
-  
+
   // Need to compact — trigger before sending to model
-  await triggerCompaction(sessionLabel, {
+  await triggerCompaction(sessionKey, {
     targetTokens: budget.available * 0.6,  // Compact to 60% of available
     trigger: 'context_limit',
   });
@@ -411,11 +411,11 @@ If the model still returns a context overflow error (our estimate was wrong):
 
 ```typescript
 async function handleOverflow(
-  sessionLabel: string, 
+  sessionKey: string,
   budget: TokenBudget
 ): Promise<void> {
   // More aggressive compaction — keep fewer turns
-  await triggerCompaction(sessionLabel, {
+  await triggerCompaction(sessionKey, {
     targetTokens: budget.available * 0.4,  // Compact to 40%
     trigger: 'overflow_recovery',
   });
@@ -520,7 +520,7 @@ ${renderNexusEnvironment(params.nexusEnv)}
 │                                                                       │
 │  INPUTS: NexusRequest (event, identity, permissions, routing)        │
 │                                                                       │
-│  1. Resolve routing → session label → thread head                    │
+│  1. Resolve routing → session key → thread head                      │
 │     ↓                                                                 │
 │  2. Build system prompt (workspace + persona + nexus env + runtime)   │
 │     ↓                                                                 │

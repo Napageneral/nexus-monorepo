@@ -1,19 +1,19 @@
 # Nexus Project Structure
 
 **Status:** REFERENCE  
-**Updated:** 2026-02-09  
+**Updated:** 2026-02-23  
 **Purpose:** Define the project structure for the Nexus monorepo
 
 ---
 
 ## Design Principles
 
-1. **Ledger-centric** — Four ledgers are the system of record; all state flows through them
+1. **Database-centric** — Six databases are the system of record; all state flows through them
 2. **Component isolation** — Each module maps to a clear responsibility boundary
 3. **Interface-driven** — Components communicate via defined interfaces and the event bus
 4. **Adapters are processes** — External CLI executables, not in-process objects
 5. **Skills not plugins** — Markdown docs + binaries, not code plugins
-6. **Cortex is separate** — Go process with its own lifecycle, communicates over IPC
+6. **Memory system is unified** — The memory system (recall, search, entity extraction, embeddings, consolidation) runs inside the nex process as TypeScript. No separate process, no IPC boundary.
 
 ---
 
@@ -21,14 +21,14 @@
 
 | Decision | Resolution |
 |----------|------------|
-| **Language (core)** | TypeScript — NEX, Broker, CLI, adapters, IAM |
-| **Language (Cortex)** | Go — separate process, IPC to core |
+| **Language** | TypeScript — single process, all subsystems including memory |
 | **Runtime** | Bun |
 | **Package manager** | Bun workspaces + Turborepo |
 | **Monorepo** | Yes — single repo, workspace packages |
 | **TUI** | Dropped |
-| **Config file** | `nex.yaml` |
+| **Config file** | `config.json` |
 | **Upstream fork** | openclaw |
+| **Future** | Full Go port (see `LANGUAGE_AND_ARCHITECTURE.md`) |
 
 ---
 
@@ -40,7 +40,6 @@
 | **MA** | Manager Agent | Top-level agent that owns a session; delegates to WAs, manages context |
 | **WA** | Worker Agent | Specialized agent spawned by an MA for a focused subtask |
 | **IAM** | Identity & Access Management | Policy evaluation, ACL grants, session routing, audit |
-| **Cortex** | Cortex | Derived intelligence layer — embeddings, episodes, facets, search |
 
 ---
 
@@ -71,7 +70,7 @@ nexus/
 │   │   ├── session.ts              # Session lifecycle management
 │   │   ├── queue.ts                # Queue modes (steer, followup, collect, interrupt)
 │   │   ├── executor.ts             # MA/WA execution orchestration
-│   │   ├── context.ts              # Context assembly (ledgers + Cortex)
+│   │   ├── context.ts              # Context assembly (ledgers + Memory System)
 │   │   ├── agents/
 │   │   │   ├── manager.ts          # Manager Agent implementation
 │   │   │   ├── worker.ts           # Worker Agent implementation
@@ -83,7 +82,7 @@ nexus/
 │   │   └── session-pointer.ts      # Session pointer management
 │   │
 │   ├── iam/                        # Identity & Access Management
-│   │   ├── policies.ts             # Load/parse ACL policies from nex.yaml
+│   │   ├── policies.ts             # Load/parse ACL policies from config.json
 │   │   ├── evaluate.ts             # Policy evaluation engine
 │   │   ├── grants.ts               # Dynamic grants (runtime overrides)
 │   │   ├── resolve.ts              # Identity resolution (who is this participant?)
@@ -138,7 +137,7 @@ nexus/
 │   │
 │   ├── workspace/                  # Workspace Management
 │   │   ├── init.ts                 # Workspace initialization
-│   │   ├── config.ts               # nex.yaml parsing
+│   │   ├── config.ts               # config.json parsing
 │   │   └── paths.ts                # Path resolution
 │   │
 │   ├── credentials/                # Credential System
@@ -158,16 +157,6 @@ nexus/
 │       │   ├── claude.ts
 │       │   └── clawdbot.ts
 │       └── main.ts
-│
-├── cortex/                         # Cortex — SEPARATE Go PROCESS
-│   ├── go.mod
-│   ├── go.sum
-│   ├── main.go                     # Entry point, IPC server
-│   ├── episodes/                   # Episode extraction & retrieval
-│   ├── facets/                     # Facet extraction & storage
-│   ├── embeddings/                 # Embedding generation & vector search
-│   ├── search/                     # Unified search interface
-│   └── ipc/                        # IPC protocol (communicates with TS core)
 │
 ├── adapters/                       # Adapter binaries (external CLI executables)
 │   ├── imessage/                   # Each adapter is a standalone CLI
@@ -192,7 +181,7 @@ nexus/
 ├── specs/                          # Specifications (current nexus-specs)
 │   └── ...
 │
-├── nex.yaml                        # Nexus configuration
+├── config.json                     # Nexus configuration
 ├── package.json                    # Bun workspace config
 ├── turbo.json                      # Turborepo config
 ├── tsconfig.json                   # TypeScript config
@@ -201,18 +190,24 @@ nexus/
 
 ---
 
-## Four Ledgers
+## Six Databases
 
-All persistent state lives in four ledgers, accessed through `src/db/`.
+All persistent state lives in six SQLite databases under `state/data/`, accessed through `src/db/`.
 
-| Ledger | Purpose | Key Tables |
-|--------|---------|------------|
-| **Events** | Every inbound/outbound event normalized and stored | `events`, `event_participants`, `event_metadata` |
-| **Agents** | Session lifecycle, turns, messages, tool calls | `sessions`, `turns`, `messages`, `tool_calls` |
-| **Identity** | Entities, identity resolution, and the **Identity Graph** | `entities`, `identities`, `identity_edges`, `identity_graph` |
-| **Nexus** | Workspace config, skill state, credentials, system metadata | `config`, `skill_state`, `credential_pointers` |
+| Database | Purpose | Key Tables |
+|----------|---------|------------|
+| **events.db** | Every inbound/outbound event normalized and stored. FTS5 full-text index. | `events`, `threads`, `event_participants`, `attachments`, `sync_watermarks` |
+| **agents.db** | Session lifecycle, turns, messages, tool calls, compactions, artifacts. | `sessions`, `turns`, `messages`, `tool_calls`, `compactions`, `artifacts` |
+| **identity.db** | Entities, identity resolution, contacts, auth tokens, the Identity Graph. | `contacts`, `entities`, `identity_mappings`, `entity_tags`, `auth_tokens` |
+| **memory.db** | Knowledge graph: entities, relationships, episodes, observations, mental models. | `entities`, `relationships`, `episodes`, `episode_events`, `observations` |
+| **embeddings.db** | Vector embeddings for semantic search (sqlite-vec). | `embeddings`, `embedding_queue` |
+| **runtime.db** | Pipeline requests, automations, IAM grants/audit, adapter state, import jobs. | `nexus_requests`, `automations`, `acl_grants`, `adapter_instances` |
 
-The Identity Ledger contains the **Identity Graph** — a graph structure mapping relationships between entities, identities, and platform accounts. This is queried by IAM for identity resolution and by Cortex for relationship-aware search.
+SQLite WAL mode enables concurrent reads. Write contention is isolated by database -- hot-path writes to events.db, agents.db, and identity.db don't block each other.
+
+The Identity database contains the **Identity Graph** -- a graph structure mapping relationships between entities, identities, and platform accounts. This is queried by IAM for identity resolution and by the memory system for relationship-aware search.
+
+See `specs/data/DATABASE_ARCHITECTURE.md` for the canonical database specification.
 
 ---
 
@@ -256,7 +251,7 @@ Session routing is determined by IAM policy evaluation, not hardcoded rules. Whe
 Event → NEX pipeline → IAM evaluates ACL policies → routing decision → Broker
 ```
 
-ACL policies in `nex.yaml` define which events reach which agents, with what permissions, and how sessions are routed (new session, existing session, queue mode).
+ACL policies in `config.json` define which events reach which agents, with what permissions, and how sessions are routed (new session, existing session, queue mode).
 
 ### 4. Adapters Are External Processes
 
@@ -266,12 +261,13 @@ Unlike openclaw where external communication isn't structured, Nexus adapters ar
 - Communicate over stdin/stdout using a JSON-lines protocol
 - A single adapter handles both directions for its platform
 
-### 5. Cortex Is a Separate Go Process
+### 5. Memory System Is Unified Inside Nex
 
-Cortex runs as a separate Go process, not embedded in the TypeScript core. It communicates with the core over IPC. This allows:
-- Independent deployment and scaling
-- Go's strengths for embedding generation and vector operations
-- Clean process boundary between hot path (TypeScript) and intelligence layer (Go)
+The memory system (recall, search, entity extraction, embeddings, consolidation) runs inside the nex process as TypeScript. There is no separate process, no IPC boundary, no Go subprocess. The old Go memory subprocess has been eliminated -- all its logic has been ported to TypeScript. This provides:
+- Zero serialization overhead for memory operations
+- Single process simplicity -- no subprocess management or health checking
+- Direct function calls instead of HTTP/IPC roundtrips
+- One connection pool for all 6 SQLite databases
 
 ### 6. MA/WA Agent Hierarchy
 
@@ -293,7 +289,7 @@ AIX syncs from external harnesses (Cursor, Codex, Claude Code). It feeds the Age
 | `src/tool/` | `src/tools/` | Same tool system, extended |
 | `src/permission/` | `src/iam/` | Policy-based, not per-call approval |
 | `src/bus/` | `src/bus/` | Similar pattern, different event types |
-| `src/config/` | `src/workspace/` | Nexus workspace model, `nex.yaml` |
+| `src/config/` | `src/workspace/` | Nexus workspace model, `config.json` |
 | `src/plugin/` | `src/skills/` | Markdown + binaries, not code plugins |
 | `src/storage/` | `src/db/` | SQLite ledgers, not file storage |
 | `src/server/` | `src/nex/` + `src/broker/` | NEX is ingest, Broker is execution |
@@ -308,9 +304,9 @@ AIX syncs from external harnesses (Cursor, Codex, Claude Code). It feeds the Age
 | `src/db/identity/` | Identity Ledger with Identity Graph |
 | `src/db/nexus/` | Nexus Ledger (workspace metadata) |
 | `src/aix/` | External harness sync |
-| `cortex/` | Go-based derived intelligence layer |
+| `src/memory/` | Unified memory system (recall, search, entity extraction, embeddings) |
 | `adapters/` | External CLI adapter binaries |
 
 ---
 
-*This document reflects the resolved architecture as of 2026-02-09.*
+*This document reflects the resolved architecture as of 2026-02-23. See `LANGUAGE_AND_ARCHITECTURE.md` for the canonical language and architecture decision.*

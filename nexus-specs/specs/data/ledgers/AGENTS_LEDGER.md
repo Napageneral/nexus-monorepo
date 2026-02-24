@@ -215,7 +215,7 @@ CREATE TABLE messages (
     
     -- Rich metadata
     thinking TEXT,                    -- Extended thinking content (if applicable)
-    context_json TEXT,                -- Context snapshot: assembled context, cortex injections, attached files
+    context_json TEXT,                -- Context snapshot: assembled context, memory injections, attached files
     metadata_json TEXT,               -- Catch-all for additional metadata
     
     FOREIGN KEY (turn_id) REFERENCES turns(id)
@@ -257,7 +257,7 @@ CREATE TABLE tool_calls (
     status TEXT NOT NULL DEFAULT 'pending',  -- 'pending' | 'running' | 'completed' | 'failed'
     
     -- Subagent spawning
-    spawned_session_label TEXT,       -- Session label if this tool spawned a subagent
+    spawned_session_label TEXT,       -- Session key if this tool spawned a subagent
     
     -- Timing
     started_at INTEGER NOT NULL,
@@ -465,7 +465,7 @@ CREATE INDEX idx_message_codeblocks_message ON message_codeblocks(message_id);
 
 Turns form a tree, not a list. This enables:
 - **Branching**: Start new conversation path from any point
-- **Smart forking**: Cortex finds optimal fork point
+- **Smart forking**: Memory system finds optimal fork point
 - **Rollback**: Return to earlier state without losing history
 
 ```

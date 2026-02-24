@@ -31,7 +31,7 @@ nexus daemon start
 │                                                           │
 │  ┌──────────────┐  ┌────────────┐  ┌──────────────────┐ │
 │  │  Pipeline     │  │  Plugins   │  │  HTTP Server     │ │
-│  │  (8 stages)   │  │  (loaded)  │  │  (health + SSE)  │ │
+│  │  (9 stages)   │  │  (loaded)  │  │  (health + SSE)  │ │
 │  └──────────────┘  └────────────┘  └──────────────────┘ │
 │                                                           │
 │  ┌──────────────┐  ┌────────────────────────────────────┐│
@@ -54,12 +54,12 @@ When `nexus daemon start` executes:
 
 ```
 1. Lock                        Acquire PID lockfile (~/nexus/state/nex.pid)
-2. Config                      Load state/nexus/config.json, validate schema
+2. Config                      Load state/config.json, validate schema
 3. Logging                     Initialize structured logger
 4. Databases                   Open/migrate ledger databases
 5. Event Bus                   Initialize in-memory pub/sub
 6. Plugin Loader               Load plugins from plugins/ directory
-7. Pipeline                    Wire up 8-stage pipeline with loaded plugins
+7. Pipeline                    Wire up 9-stage pipeline with loaded plugins
 8. Control-Plane Server        Start HTTP + WS (health + SSE + UI + endpoints + RPC)
 9. Adapter Manager             Start enabled adapter accounts (spawn processes)
 10. Timer                      Start internal heartbeat/cron adapter
@@ -92,7 +92,7 @@ On exit (clean or crash handler), the lockfile is removed.
 
 Load from canonical config file:
 
-- `~/nexus/state/nexus/config.json`
+- `~/nexus/state/config.json`
 
 The config is a single JSON document namespaced by domain. Representative domains:
 
@@ -138,7 +138,7 @@ For each adapter in config:
     If class == platform:
       1. Verify credential (if credential_ref set)
       2. Spawn monitor: <command> monitor --account <id> --format jsonl
-      3. Read monitor stdout JSONL -> receiveEvent pipeline
+      3. Read monitor stdout JSONL -> ingest pipeline
       4. Update adapter_instances: status=running, pid=<pid>
       5. Start health check loop
 
@@ -163,17 +163,17 @@ The timer adapter is internal (not an external process). It generates synthetic 
 ```typescript
 interface TimerEvent {
   event_id: string;        // "timer:heartbeat:<timestamp>"
-  channel: "timer";
+  platform: "clock";
   content_type: "system/heartbeat";
   content: "";
   timestamp: number;
   sender_id: "system";
-  peer_id: "system";
-  peer_kind: "dm";
+  container_id: "system";
+  container_kind: "direct";
 }
 ```
 
-Timer events enter the full pipeline like any other event. Automations can match on `channel: "timer"` for scheduled tasks (daily summaries, periodic checks, etc.).
+Timer events enter the full pipeline like any other event. Automations can match on `platform: "clock"` for scheduled tasks (daily summaries, periodic checks, etc.).
 
 ```yaml
 timer:
@@ -191,7 +191,7 @@ Cron events carry the label in metadata so automations can distinguish them:
 // Timer cron event
 {
   event_id: "timer:cron:morning-summary:1707235200000",
-  channel: "timer",
+  platform: "clock",
   content_type: "system/cron",
   content: "",
   metadata: { cron_label: "morning-summary", cron_expr: "0 8 * * *" }
@@ -327,7 +327,7 @@ Signal received
 SIGUSR1 received
      │
      ▼
-1. Re-read state/nexus/config.json
+1. Re-read state/config.json
 2. Validate new config against schema
 3. If invalid → log error, keep running with old config
 4. Diff old vs new config
@@ -410,7 +410,7 @@ nexus daemon start --log-level debug
 
 Flags:
 - `--detach` / `-d` — Run in background, write logs to `~/nexus/state/logs/nex.log`
-- `--config <path>` — Config file path (default: `~/nexus/state/nexus/config.json`)
+- `--config <path>` — Config file path (default: `~/nexus/state/config.json`)
 - `--log-level <level>` — Override config log level
 - `--port <port>` — Override config HTTP port
 
@@ -541,7 +541,7 @@ Structured JSON logging to stdout (foreground) or log file (detached):
 ```jsonl
 {"ts":"2026-02-05T14:30:00.123Z","level":"info","msg":"Daemon started","version":"0.1.0","pid":12345}
 {"ts":"2026-02-05T14:30:00.456Z","level":"info","msg":"Adapter started","adapter":"eve","account":"default","pid":1234}
-{"ts":"2026-02-05T14:30:01.789Z","level":"info","msg":"Pipeline complete","request_id":"req_abc","duration_ms":1234,"stage_count":8}
+{"ts":"2026-02-05T14:30:01.789Z","level":"info","msg":"Pipeline complete","request_id":"req_abc","duration_ms":1234,"stage_count":9}
 {"ts":"2026-02-05T14:30:02.012Z","level":"warn","msg":"Adapter health degraded","adapter":"gog","account":"tyler@work.com"}
 {"ts":"2026-02-05T14:30:03.345Z","level":"error","msg":"Pipeline error","request_id":"req_def","error":"LLM rate limited","stage":"runAgent"}
 ```
@@ -560,8 +560,8 @@ Log rotation: not handled by daemon — use system logrotate or similar. The dae
 └── logs/
     └── nex.log              # Log file (detached mode only)
 
-~/nexus/state/nexus/
-└── config.json              # Canonical config
+~/nexus/state/
+├── config.json              # Canonical config
 
 ~/nexus/state/data/
 ├── events.db
@@ -576,7 +576,7 @@ Log rotation: not handled by daemon — use system logrotate or similar. The dae
 
 ## Related Documents
 
-- `NEX.md` — The 8-stage pipeline this daemon runs
+- `NEX.md` — The 9-stage pipeline this daemon runs
 - `NEXUS_REQUEST.md` — The data bus flowing through the pipeline
 - `PLUGINS.md` — Plugin loading and hook points
 - `BUS_ARCHITECTURE.md` — Event bus and SSE streaming

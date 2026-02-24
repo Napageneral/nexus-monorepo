@@ -431,13 +431,13 @@ const TELEGRAM_CHANNEL_CAPABILITIES = {
 
 export const telegramAdapter: AdapterDefinition = {
   info: async () => ({
-    channel: "telegram",
+    platform: "telegram",
     name: "nexus-adapter-telegram",
     version: "0.1.0",
     supports: ["monitor", "send", "health", "accounts"],
     credential_service: "telegram",
     multi_account: true,
-    channel_capabilities: TELEGRAM_CHANNEL_CAPABILITIES,
+    platform_capabilities: TELEGRAM_CHANNEL_CAPABILITIES,
   }),
 
   accounts: async (ctx) => {

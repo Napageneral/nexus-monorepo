@@ -1,7 +1,7 @@
 # Memory Writer V2
 
 **Status:** DESIGN SPEC
-**Last Updated:** 2026-02-20
+**Last Updated:** 2026-02-23
 **Supersedes:** ../roles/MEMORY_WRITER.md
 **Related:** MEMORY_SYSTEM_V2.md, UNIFIED_ENTITY_STORE.md, ../../runtime/RUNTIME_ROUTING.md
 
@@ -38,7 +38,7 @@ The Memory-Writer is role-based. Its behavior comes from its ROLE.md prompt, not
 
 1. **Fact extraction** -- Read the event and surrounding context. Identify atomic facts (durable knowledge, not ephemeral state). Each fact is a natural language sentence.
 
-2. **Entity identification** -- Identify all entities mentioned: people, organizations, projects, locations, concepts. Use specific identifiers from the deliveryContext when available (sender_id, platform handles).
+2. **Entity identification** -- Identify all entities mentioned: people, organizations, groups, projects, locations, concepts. Entities are identities (the "who"), not identifiers (phone numbers, emails, handles). Use `sender_name` from the deliveryContext to name person entities.
 
 3. **Deduplication** -- Before inserting a fact, search for similar existing facts. If a near-duplicate exists (semantically similar, same time period), skip it.
 
@@ -141,49 +141,11 @@ Agent completes. System runs post-agent steps:
 
 ## Consolidation (Background Job)
 
-> **Full design:** See `MEMORY_V2_RETAIN_PIPELINE.md` for the complete consolidation architecture.
+Consolidation runs as a background process after the Memory-Writer completes an episode. It synthesizes per-fact observations from accumulated evidence: new facts from the episode are clustered by topic, matched against existing observations, and processed through an LLM call that produces durable knowledge summaries. Observations are stored as `analysis_runs` with `type='observation'`, each chained to its predecessor via `parent_id` for history.
 
-Consolidation runs after the Memory-Writer completes an episode. It processes all new facts from that episode together — **episode-batched**, not per-fact. This gives the consolidation prompt full context about related facts from the same conversation.
+The writer does NOT run consolidation directly -- it only queues the job. The consolidation pipeline handles topic clustering, causal link detection, cross-platform entity merge proposals, and mental model refresh triggers.
 
-### How It Works
-
-For each batch of new facts from a completed episode:
-
-1. **Recall related content** -- Search for existing observations related to the new facts.
-
-2. **Cluster facts by topic** -- Group the new facts into topic clusters. Each cluster gets its own observation (or updates an existing one).
-
-3. **For each cluster, find or create knowledge-episode** -- If related content exists:
-   - If an existing observation/episode covers this topic: extend the episode (new version, parent_id chain)
-   - If no existing episode: create a new knowledge-episode grouping the source events
-
-4. **Run observation analysis** -- Single LLM call per cluster: new facts + existing observation text → create/update actions
-   - Extracts durable knowledge, not ephemeral state
-   - Handles contradictions with temporal markers ("used to X, now Y")
-   - New analysis_run created (parent_id → previous run for history)
-   - Observation text stored in `analysis_runs.output_text`
-
-5. **Detect causal links** -- The consolidation pipeline identifies cause-effect relationships across the full fact graph (cross-episode, cross-platform). This is where `causal_links` rows are created — the writer does NOT create them.
-
-6. **Propose cross-platform entity merges** -- When facts from different platforms reference similar entities, consolidation proposes merges.
-
-7. **Mark consolidated** -- Set `is_consolidated = TRUE` on all processed facts.
-
-8. **Trigger mental model refresh** -- If any mental models are configured for auto-refresh after consolidation, queue refresh jobs.
-
-### Consolidation Prompt (from Hindsight, adapted)
-
-The observation analysis type uses a prompt that instructs the LLM to:
-- Extract DURABLE KNOWLEDGE from facts, not ephemeral state
-- "User moved to Room 203" → "Room 203 exists" (not "User is in Room 203")
-- Preserve specific details (names, locations, numbers)
-- Handle contradictions: "Alex used to love pizza but now hates it"
-- Never merge facts about different people or unrelated topics
-- Return empty array if facts contain no durable knowledge
-
-### Execution
-
-Consolidation uses the existing Cortex parallel worker system. Facts from each episode are processed together in a single LLM call per topic cluster. This is more accurate than per-fact consolidation because the model sees related facts together and can create better observations.
+> **Full design:** See `MEMORY_V2_RETAIN_PIPELINE.md` for the complete consolidation pipeline spec, including batching strategy, observation prompts, and execution details.
 
 ---
 
@@ -195,11 +157,11 @@ The writer receives a full episode: an array of NexusEvents in chronological ord
 
 | Field | Example | Use |
 |-------|---------|-----|
-| `platform` | "discord" | Entity type hint, source_platform metadata |
-| `sender_id` | "coolgamer42#1234" | Entity name for sender |
-| `sender_name` | "Cool Gamer" | Display name, alias candidate |
-| `peer_id` | "server/channel" | Thread context for pulling surrounding messages |
-| `peer_kind` | "dm" / "group" / "channel" | Context for extraction |
+| `platform` | "discord" | Source platform metadata |
+| `sender_id` | "coolgamer42#1234" | Contact identifier (stored in contacts table, NOT as entity name) |
+| `sender_name` | "Cool Gamer" | Person entity name (used for entity creation/matching) |
+| `container_id` | "server/channel" | Thread context for pulling surrounding messages |
+| `container_kind` | "dm" / "group" / "channel" | Context for extraction |
 | `thread_id` | "thread_abc" | Thread grouping |
 
 ### Episode as Conversation Context
@@ -221,38 +183,40 @@ The memory-writer must cooperate with the delivery pipeline and the contacts/rou
 
 ### Delivery-Sourced Entities Exist in identity.db
 
-When a message arrives from a previously-unknown sender, the delivery pipeline auto-creates an entity in the unified entity store (`identity.db`) with:
+When a message arrives from a previously-unknown sender, the delivery pipeline auto-creates:
 
-- `source = 'delivery'`
-- `type` = a platform-specific handle type (e.g., `discord_handle`, `phone`, `email`)
-- `name` = the raw handle (e.g., `tyler#1234`, `+15551234567`, `alice@example.com`)
+1. **A person entity** in `identity.db` with:
+   - `source = 'delivery'`
+   - `type = 'person'` (always — entities are identities, never identifiers)
+   - `name` = `sender_name` from the delivery context, or a placeholder like `'Unknown (discord:coolgamer42)'` if no name is available
 
-These entities are **sparse** -- they contain only the platform handle as a name. They have no facts, no observations, no enrichment. They exist so that the routing system can map a sender to a session immediately, before the memory-writer has ever seen a message from that sender.
+2. **A contact row** in `identity.db` binding `(platform, space_id, sender_id)` to the entity.
+
+These delivery-sourced entities may be sparse — they might only have a display name. They exist so that the routing system can map a sender to a session immediately, and so that facts can start accumulating against the entity from the first message.
 
 ### Discovering and Enriching Delivery-Sourced Entities
 
 When extracting entities from a conversation, the memory-writer **must** check for existing delivery-sourced entities and prefer linking to them over creating new ones. Specifically:
 
-1. **Match on handle.** When the writer identifies an entity from a deliveryContext (e.g., `sender_id = "tyler#1234"` on a Discord platform), it should search the entity store for a delivery-sourced entity with a matching handle before creating a new entity. Use `recall(sender_id, scope=['entities'])` or equivalent.
+1. **Match on sender.** When the writer identifies an entity from a deliveryContext, search for the existing delivery-sourced person entity. The delivery pipeline already created it — look it up by searching for entities matching the `sender_name`, or use the contact lookup via `(platform, sender_id)`.
 
-2. **Link facts to the existing entity.** If a delivery-sourced entity is found, all extracted facts about that sender should be linked to it via `link_fact_entity()`. Do not create a second entity for the same handle.
+2. **Link facts to the existing entity.** If a delivery-sourced entity is found, all extracted facts about that sender should be linked to it via `link_fact_entity()`. Do not create a second entity for the same person.
 
-3. **Promote to person on real-name discovery.** When the writer learns a real name for a handle (e.g., a Discord message says "Hey, I'm Tyler" or context makes it clear), the writer should:
-   - Create a new entity with `type = 'person'`, `source = 'inferred'`, `name = 'Tyler'`
-   - Merge the delivery-sourced handle entity into the new person entity via `propose_merge()` with high confidence
-   - The handle becomes an alias on the canonical person entity
+3. **Update name on real-name discovery.** When the writer learns a real name for a placeholder entity (e.g., a Discord message says "Hey, I'm Tyler" or context makes it clear), the writer should either:
+   - Update the existing entity's name directly (if it's a placeholder like "Unknown (discord:coolgamer42)")
+   - Or create a new person entity with the real name and merge the placeholder into it via `propose_merge()` with high confidence
 
 ### Conversational Contact Discovery
 
 People mention contact information in conversation: "my email is abc@gmail.com", "you can reach me at 555-1234", "my Discord is coolgamer42". When the writer detects this:
 
-1. **Create an entity for the mentioned contact info.** For example:
-   - `create_entity(name="abc@gmail.com", type="email", source="inferred")`
-   - `create_entity(name="555-1234", type="phone", source="inferred")`
+1. **Store as a fact about the person.** For example:
+   - `insert_fact(text="Tyler's email is abc@gmail.com", ...)` and link to Tyler's entity
+   - `insert_fact(text="Sarah's phone number is 555-1234", ...)` and link to Sarah's entity
 
-2. **Merge into the sender's canonical entity.** The mentioned contact info belongs to the person who said it (or the person it was said about, from context). Use `propose_merge()` to merge the contact entity into their canonical entity.
+2. **Do NOT create entities for identifiers.** Phone numbers, email addresses, and handles are not entities. They are attributes of people, stored as facts.
 
-3. **Do NOT create a contact row in `identity.db`.** Contacts in the routing system are created only by actual delivery events (a real message arriving from that address). Conversationally-mentioned contact info enriches the entity in `identity.db` but does not create a routable contact. The delivery pipeline owns contact creation.
+3. **Do NOT create a contact row in `identity.db`.** Contacts in the routing system are created only by actual delivery events (a real message arriving from that address). Conversationally-mentioned contact info is stored as facts about the person entity. The delivery pipeline owns contact creation.
 
 ### CRITICAL: Propagate Merges to Sessions
 
@@ -287,7 +251,7 @@ These persist across invocations, making the writer more effective over time.
 
 ## Differences from Prior Systems
 
-| Aspect | Cortex V1 (Go pipeline) | Hindsight (retain pipeline) | Memory-Writer V2 |
+| Aspect | Memory System V1 (Go pipeline) | Hindsight (retain pipeline) | Memory-Writer V2 |
 |--------|------------------------|---------------------------|-------------------|
 | **Architecture** | 7-stage algorithmic pipeline | 10-step pipeline + background consolidation | Agentic: agent IS the extractor |
 | **Extraction** | Hardcoded stages | LLM extraction with fixed prompt | Agent with role prompt (self-improving) |
@@ -307,6 +271,6 @@ These persist across invocations, making the writer more effective over time.
 - `MEMORY_V2_INFRASTRUCTURE_WORKPLAN.md` -- Recall parity, writer scope changes
 - `MEMORY_REFLECT_SKILL.md` -- Deep research and mental model creation (the only path for mental model CRUD)
 - `UNIFIED_ENTITY_STORE.md` -- Entity store details
-- `../roles/MEMORY_WRITER.md` -- Previous writer spec (superseded)
-- `../roles/MEMORY_READER.md` -- Reader spec (to be updated)
+- `../../_archive/MEMORY_WRITER.md` -- Previous writer spec (superseded)
+- `MEMORY_INJECTION.md` -- Read-path memory injection meeseeks
 - `../../runtime/RUNTIME_ROUTING.md` -- Runtime routing, `propagateMergeToSessions()`, session alias behavior

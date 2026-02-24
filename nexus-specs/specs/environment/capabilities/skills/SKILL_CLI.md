@@ -148,7 +148,7 @@ Modification:
   Base version: 2.3.1
   Local changes detected (use `nexus skills diff gog` to view)
 
-Location:       ~/nexus/skills/tools/gog/
+Location:       ~/nexus/skills/gog/
 ```
 
 ### `nexus skills search <query>`
@@ -184,7 +184,7 @@ $ nexus skills install gog
 Fetching gog@latest from hub...
 Downloading v2.4.0 (23 KB)...
 Verifying checksum... ✓
-Installing to ~/nexus/skills/tools/gog/
+Installing to ~/nexus/skills/gog/
 
 ✅ Installed gog v2.4.0
 

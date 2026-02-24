@@ -1,21 +1,23 @@
+> **Status:** ARCHIVED — Reference material for the future Go port. See `specs/project-structure/LANGUAGE_AND_ARCHITECTURE.md` for canonical architecture decision.
+
 # Nexus Go Migration Specification
 
 > **Status**: Draft
 > **Created**: 2025-02-16
 > **Baseline**: TypeScript codebase at nexus v2026.2.6-3, forked from OpenClaw commit `0efaf5aa8`
-> **Cortex baseline**: `github.com/Napageneral/nex/cortex` (Go 1.24.0, already Go)
+> **Memory System baseline**: `github.com/Napageneral/nex/cortex` (Go 1.24.0, already Go)
 
 ---
 
 ## 1. Executive Summary
 
-Nexus is being migrated from a split TypeScript + Go architecture into a **Go binary + pi-coding-agent RPC subprocess**. The current system runs a Node.js TypeScript process for the core runtime, agent orchestration, CLI, and control plane, with a separate Go process (`cortex`) for the derived knowledge layer. The migration moves everything except the LLM agent loop into a single `nexus` Go binary, with `pi-coding-agent` retained as an RPC subprocess for agent execution.
+Nexus is being migrated from a split TypeScript + Go architecture into a **Go binary + pi-coding-agent RPC subprocess**. The current system runs a Node.js TypeScript process for the core runtime, agent orchestration, CLI, and control plane, with a separate Go process (Memory System, in `nex/cortex/`) for the derived knowledge layer. The migration moves everything except the LLM agent loop into a single `nexus` Go binary, with `pi-coding-agent` retained as an RPC subprocess for agent execution.
 
 ### Core Principles
 
 1. **Pure behavioral port** — no functionality is cut. Every feature, every edge case, every tool policy layer is preserved identically. The 6,995 existing tests serve as the behavioral specification.
 2. **pi-coding-agent stays as a dependency** — the `@mariozechner/pi-ai`, `@mariozechner/pi-agent-core`, and `@mariozechner/pi-coding-agent` packages are NOT ported to Go. They are invoked via pi-coding-agent's existing RPC mode (`pi --mode rpc`), communicating over JSON-lines on stdin/stdout. This preserves the upstream agent's full capabilities and reduces maintenance burden.
-3. **Cortex becomes a library** — the cortex Go code moves from a subprocess communicating over HTTP to direct function calls within the same process.
+3. **Memory System becomes a library** — the cortex Go code moves from a subprocess communicating over HTTP to direct function calls within the same process.
 4. **Adapters stay external** — adapter processes (Eve, Telegram, Discord, etc.) remain separate binaries speaking the 7-command CLI protocol over stdin/stdout. The Go binary spawns and supervises them.
 5. **Swift apps are unchanged** — iOS/macOS apps continue to communicate over the same HTTP/WebSocket control plane endpoints.
 6. **The web UI stays JavaScript** — Lit web components are embedded via `go:embed` and served as static files.
@@ -23,8 +25,8 @@ Nexus is being migrated from a split TypeScript + Go architecture into a **Go bi
 ### What This Eliminates
 
 - Node.js as the **primary** runtime (the main process is Go; Node.js only runs as a supervised subprocess for pi-coding-agent)
-- The cortex subprocess and its HTTP server on `:4317`
-- CortexSupervisor process management
+- The memory system subprocess and its HTTP server on `:4317`
+- MemorySupervisor process management
 - The deep integration between Nexus TypeScript and pi-agent internals (`pi-embedded-runner`, `commands/agent.ts` bridge layers)
 - Zod schemas for pipeline/config (replaced by Go structs)
 - TypeBox runtime validation for pipeline/config (replaced by Go's type system + `encoding/json`)
@@ -41,7 +43,7 @@ Nexus is being migrated from a split TypeScript + Go architecture into a **Go bi
 ### What This Gains
 
 - Go binary ~28-30MB + pi-coding-agent Node.js subprocess
-- Cortex operations become function calls (eliminates subprocess spawn + JSON serialization + HTTP roundtrip per meeseeks hook)
+- Memory System operations become function calls (eliminates subprocess spawn + JSON serialization + HTTP roundtrip per meeseeks hook)
 - One SQLite connection pool, one primary process, one memory space for the core runtime
 - Distribution via `brew install nexus` + `npm install -g @mariozechner/pi-coding-agent` (or bundled)
 - Instant startup for the Go runtime (vs 2-3 second Node.js bootstrap for the full TS app)
@@ -96,11 +98,11 @@ nexus/
 │   │   ├── protocol.go             ← 7-command CLI protocol parsing
 │   │   └── state.go                ← adapter_instances SQLite persistence
 │   │
-│   ├── cortex/                     ← cortex as a library (no more HTTP/subprocess)
+│   ├── memory/                     ← Memory System as a library (no more HTTP/subprocess)
 │   │   ├── search.go               ← entity/episode search (was HTTP /search)
 │   │   ├── recall.go               ← memory recall (was HTTP /recall)
 │   │   ├── write.go                ← memory write (entity/relationship/episode extraction)
-│   │   ├── memory/                 ← memory pipeline (from cortex/internal/memory/)
+│   │   ├── pipeline/               ← memory pipeline (from cortex/internal/memory/)
 │   │   ├── compute/                ← embeddings, adaptive compute
 │   │   ├── identify/               ← entity resolution
 │   │   └── sync/                   ← adapter sync jobs (Eve, Gmail, Calendar)
@@ -123,7 +125,7 @@ nexus/
 │   │   ├── agents.go               ← agents.db (turns, threads, sessions, compactions, etc.)
 │   │   ├── identity.go             ← identity.db (contacts, entities, mappings, auth_tokens)
 │   │   ├── nexus.go                ← nexus.db (requests, hooks, IAM tables, adapter state)
-│   │   └── cortex.go               ← cortex.db (entities, relationships, episodes, embeddings)
+│   │   └── memory.go               ← memory.db + embeddings.db (entities, relationships, episodes, embeddings)
 │   │
 │   ├── config/                     ← configuration system
 │   │   ├── loader.go               ← YAML config loading, env substitution, $include resolution
@@ -202,7 +204,7 @@ All adapters speak the 7-command adapter protocol over stdin/stdout. Nexus spawn
 $ nexus serve
 
 [nexus] Pipeline ready (8 stages)
-[nexus] Cortex initialized (3 ledgers, 847 entities, 12,431 episodes)
+[nexus] Memory System initialized (847 entities, 12,431 episodes)
 [nexus] pi-coding-agent RPC subprocess ready (PID 42890)
 [nexus] Adapter supervisor started
 [nexus]   eve (iMessage) — healthy, PID 42891
@@ -217,7 +219,8 @@ events.db           ← event ledger
 agents.db           ← agents ledger
 identity.db         ← identity ledger
 nexus.db            ← nexus ledger (requests, hooks, IAM, adapter state)
-cortex.db           ← cortex knowledge graph
+memory.db           ← Memory System knowledge graph
+embeddings.db       ← semantic vector index
 config.yaml         ← user configuration
 adapters/           ← adapter binaries
 workspaces/         ← agent workspaces
@@ -301,7 +304,7 @@ With pi-coding-agent kept as an RPC subprocess, only the Nexus-side orchestratio
 | **Ported to Go** | | **~14K** | **→ ~8-10K Go** | |
 | `src/agents/` (remaining) | ~220 | ~44K | — | Handled by pi-coding-agent |
 | `src/auto-reply/` | 121 | 21,218 | — | Reply pipeline stays in pi subprocess |
-| `src/memory/` | 27 | 6,872 | — | Memory hooks called by Go (cortex is Go) |
+| `src/memory/` | 27 | 6,872 | — | Memory hooks called by Go (Memory System is Go) |
 | `src/plugins/` | 29 | 5,778 | — | Plugin execution stays in pi subprocess |
 
 **New Go code needed:** ~1.5K Go for the RPC client (spawn `pi --mode rpc`, JSON-line protocol, typed commands/responses/events).
@@ -338,7 +341,7 @@ With pi-coding-agent kept as an RPC subprocess, only the Nexus-side orchestratio
 | Channel adapters (discord, telegram, slack, etc.) | 42,078 | Become standalone adapter binaries |
 | Extensions (browser, media, TTS, canvas) | 18,533 | Become standalone extension processes |
 | Web/TUI/UI | 13,954 TS + 77,285 Swift | Web UI embedded via go:embed; Swift apps unchanged |
-| Cortex (Go) | 48,346 | Already Go — absorbed into `internal/cortex/` |
+| Memory System (Go) | 48,346 | Already Go — absorbed into `internal/memory/` |
 
 #### Summary
 
@@ -349,7 +352,7 @@ With pi-coding-agent kept as an RPC subprocess, only the Nexus-side orchestratio
 | Agent RPC Client (new) | 0 | ~1.5K | P0 | Spawn pi, JSON-line protocol |
 | CLI/Config/Infra | 89K | ~30-40K | P1 | Full port |
 | Cross-cutting | 12K | ~6-8K | P1 | Security, cron, logging, markdown |
-| Cortex (already Go) | — (48K Go) | 0 (inline) | ✅ | Already Go, becomes library calls |
+| Memory System (already Go) | — (48K Go) | 0 (inline) | ✅ | Already Go, becomes library calls |
 | **Total to write** | **~177K TS** | **~81-100K Go** | | |
 | | | | | |
 | pi-* packages (kept) | ~51K JS | 0 | — | RPC subprocess, NOT ported |
@@ -611,7 +614,7 @@ type StageRuntime struct {
     AdapterMgr   *AdapterManager
     Bus          EventBusPublisher
     LedgerClient LedgerClient
-    CortexClient CortexClient        // in Go, this is a direct function call
+    MemoryClient MemoryClient        // in Go, this is a direct function call
     LLMClient    LLMClient
     AbortSignal  context.Context
     EnqueueEvent func(event any, opts *EnqueueOpts) error
@@ -1341,7 +1344,7 @@ The JS runtime only needs to support:
 
 1. **Hook evaluation scripts** — return `{ fire: boolean, enrich?: object }`
 2. **Workspace bootstrapping** — shell commands via `os/exec` (not JS)
-3. **Cortex skill folder seeding** — file operations (not JS)
+3. **Memory skill folder seeding** — file operations (not JS)
 
 The goja VM is created once and reused. Scripts are typically < 50 lines. No npm packages, no async/await, no DOM. Pure data transformation.
 
@@ -1353,7 +1356,7 @@ function evaluate(event, context) {
     return {
         fire: true,
         enrich: {
-            memories: context.cortex_results || null
+            memories: context.memory_results || null
         }
     };
 }
@@ -1390,10 +1393,10 @@ Port `internal/cli/`, `internal/config/`, `internal/daemon/`.
 
 **Validation**: Port the 214 CLI/config test files. Config parsing tests with temp directories translate cleanly.
 
-### Phase 3: Cortex Unification + Integration (Weeks 8-12, overlapping)
+### Phase 3: Memory System Unification + Integration (Weeks 8-12, overlapping)
 
-- Move cortex from subprocess to `internal/cortex/` library calls
-- Eliminate the cortex HTTP server on `:4317` and CortexSupervisor
+- Move memory system from subprocess to `internal/memory/` library calls
+- Eliminate the memory system HTTP server on `:4317` and MemorySupervisor
 - Full integration testing with real adapters + pi-coding-agent subprocess
 - End-to-end playtesting
 
@@ -1447,11 +1450,11 @@ TypeScript tests using `vi.fn()` for callbacks → Go tests using function varia
 |---------|---------|-------|
 | CLI framework | `github.com/spf13/cobra` | |
 | Config loading | `gopkg.in/yaml.v3` | |
-| SQLite | `modernc.org/sqlite` (pure Go) or `github.com/mattn/go-sqlite3` (CGO) | Cortex currently uses mattn; consider unifying |
+| SQLite | `modernc.org/sqlite` (pure Go) or `github.com/mattn/go-sqlite3` (CGO) | Memory System currently uses mattn; consider unifying |
 | HTTP framework | `net/http` (stdlib) | No external framework needed |
 | WebSocket | `github.com/gorilla/websocket` or `nhooyr.io/websocket` | For control plane |
 | JS runtime | `github.com/dop251/goja` | For automations hook scripts |
-| UUID | `github.com/google/uuid` | Already used in cortex |
+| UUID | `github.com/google/uuid` | Already used in memory system |
 | Structured logging | `log/slog` (stdlib) | |
 | Env loading | `github.com/joho/godotenv` | |
 | TUI (optional) | `github.com/charmbracelet/bubbletea` | If terminal UI desired |
@@ -1499,7 +1502,7 @@ require (
 )
 ```
 
-The existing cortex code at `github.com/Napageneral/nex/cortex` gets reorganized into `internal/cortex/` within this module.
+The existing memory system code at `github.com/Napageneral/nex/cortex` gets reorganized into `internal/memory/` within this module.
 
 ---
 

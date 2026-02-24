@@ -52,7 +52,7 @@ CREATE TABLE access_log (
   tools_allowed TEXT,             -- JSON array
   tools_denied TEXT,              -- JSON array
   credentials_allowed TEXT,       -- JSON array
-  data_access TEXT,               -- full, restricted, none
+  data_access TEXT,               -- full, contextual, minimal, none
   
   -- Resulting session (if allowed)
   persona TEXT,
@@ -111,7 +111,7 @@ interface AccessLogEntry {
   tools_allowed?: string[];
   tools_denied?: string[];
   credentials_allowed?: string[];
-  data_access?: 'full' | 'restricted' | 'none';
+  data_access?: 'full' | 'contextual' | 'minimal' | 'none';
   
   // Resulting session
   persona?: string;

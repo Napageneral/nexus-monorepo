@@ -2,7 +2,7 @@
 
 > **Status:** APPROVED
 > **Bundle:** Cross-cutting (touches Bundle A workspace lifecycle, Bundle B runtime routing, and data layer)
-> **Supersedes:** Ad-hoc multi-ledger layout from legacy cortex + nex split
+> **Supersedes:** Ad-hoc multi-ledger layout from legacy memory subprocess + nex split
 > **Date:** 2025-02-18
 
 ---
@@ -12,8 +12,8 @@
 Nexus uses a multi-database SQLite architecture. Each database file has a clear, single-sentence purpose and well-defined ownership boundaries. This spec defines:
 
 - The **6 canonical databases**, their names, locations, and table inventories
-- **What gets deleted** from the legacy layout (cortex duplication, stale tables, sync_watermarks)
-- **What gets relocated** (entities → identity.db, cortex agent tables → gone, Go adapter sync → adapter-owned)
+- **What gets deleted** from the legacy layout (legacy memory DB duplication, stale tables, sync_watermarks)
+- **What gets relocated** (entities → identity.db, legacy agent tables → gone, Go adapter sync → adapter-owned)
 - **Migration paths** for each change
 - The **adapter sync interface** that replaces centralized sync_watermarks
 
@@ -23,7 +23,7 @@ Nexus uses a multi-database SQLite architecture. Each database file has a clear,
 2. **No cross-database foreign keys.** References across DBs use convention (e.g., `entity_id` in identity.db points to `entities.id` in identity.db).
 3. **Write contention isolation.** Hot-path writes (events, agent turns, contact upserts) should not block each other.
 4. **Adapters own their sync state.** No centralized `sync_watermarks` table. Each adapter manages its own cursor/watermark internally and exposes status via interface.
-5. **One bus.** The Nex TypeScript `InMemoryEventBus` (with optional write-through to runtime.db) is the single event bus. Cortex's Go-side `bus_events` is eliminated.
+5. **One bus.** The Nex TypeScript `InMemoryEventBus` (with optional write-through to runtime.db) is the single event bus. The old Go-side `bus_events` is eliminated.
 
 ---
 
@@ -36,15 +36,15 @@ All databases live under `{workspace}/state/data/`.
 | 1 | `events.db` | Raw inbound/outbound message events — the canonical event ledger. | Nex TS |
 | 2 | `agents.db` | All agent session state: turns, messages, tool calls, artifacts. | Nex TS |
 | 3 | `identity.db` | Who sent this, where do they live, can they access this — contacts, directory, entities, auth, ACL. | Nex TS |
-| 4 | `memory.db` | What the AI remembers — facts, episodes, mental models, analysis pipeline. | Nex TS (read by Go cortex for now) |
-| 5 | `embeddings.db` | Semantic vector index — shared by all subsystems that need similarity search. | Nex TS + Go cortex |
+| 4 | `memory.db` | What the AI remembers — facts, episodes, mental models, analysis pipeline. | Nex TS |
+| 5 | `embeddings.db` | Semantic vector index — shared by all subsystems that need similarity search. | Nex TS |
 | 6 | `runtime.db` | How the system is running — request tracking, adapters, automations, bus. | Nex TS |
 
 ### Legacy files to DELETE
 
 | File | Why |
 |------|-----|
-| `state/cortex/cortex.db` | Legacy path, schema v21, stale `canonical_name`/`entity_type_id` columns. Both Node and Go agree canonical path is `state/data/cortex/cortex.db`. |
+| `state/cortex/cortex.db` | Legacy path, schema v21, stale columns. Replaced by `memory.db` + `identity.db` + `embeddings.db`. |
 | `state/data/cortex.db` | Empty 0-byte artifact. |
 | `state/data/cortex/cortex.db` | Replaced by `memory.db` + `embeddings.db` + tables relocated to `identity.db`. After migration, this file is superseded. |
 
@@ -84,7 +84,7 @@ No changes from current state. Clean and well-scoped.
 |-------|---------|
 | `sessions` | Agent session metadata (label, persona, routing_key, origin, status). |
 | `session_history` | Thread-change log per session. |
-| `session_aliases` | Alias → session_label mappings. |
+| `session_aliases` | Alias → session_key mappings. |
 | `threads` | Thread state per turn (ancestry, token count, depth). |
 | `turns` | Individual LLM turn metadata (model, tokens, status, role). |
 | `messages` | All messages within turns (user/assistant/system/tool). |
@@ -108,7 +108,7 @@ No changes from current state. Clean and well-scoped.
 
 This is the largest change from the legacy layout. It unifies:
 - **Contacts + Delivery Directory** (from Bundle B / RUNTIME_ROUTING + DELIVERY_DIRECTORY_SCHEMA)
-- **Entities + Knowledge Graph** (relocated from cortex.db)
+- **Entities + Knowledge Graph** (relocated from legacy memory DB)
 - **Auth** (preserved from old identity.db)
 - **Access Control** (relocated from nexus.db)
 
@@ -179,7 +179,7 @@ CREATE INDEX IF NOT EXISTS idx_names_target ON names(kind, platform, account_id,
 
 ### 3.4 memory.db — Memory System
 
-Renamed from `cortex.db`. Contains only the memory/knowledge tables. All sync, bus, and agent duplication removed.
+Successor to the legacy memory DB. Contains only the memory/knowledge tables. All sync, bus, and agent duplication removed.
 
 | Table | Purpose |
 |-------|---------|
@@ -198,11 +198,11 @@ Renamed from `cortex.db`. Contains only the memory/knowledge tables. All sync, b
 | `memory_processing_log` | Processing pipeline log for idempotency and debugging. |
 | `schema_version` | Schema version tracking for migrations. |
 
-**Removed from old cortex.db:**
+**Removed from old legacy memory DB:**
 
 | Removed Table | Why |
 |---------------|-----|
-| `bus_events` | Nex bus is the single bus. Cortex Go bus eliminated. |
+| `bus_events` | Nex bus is the single bus. Old Go bus eliminated. |
 | `sync_watermarks` | Adapters own their sync state. See §5. |
 | `sync_jobs` | Go sync pipeline eliminated. Adapters own their sync. |
 | `adapter_state` | Go adapter key-value store eliminated. Adapters own their state. |
@@ -211,15 +211,15 @@ Renamed from `cortex.db`. Contains only the memory/knowledge tables. All sync, b
 | `agent_messages` | Duplicate of agents.db. Eliminated. |
 | `agent_tool_calls` | Duplicate of agents.db. Eliminated. |
 
-**Note on memory pipeline reads:** The memory extraction pipeline (entity extraction, fact extraction, etc.) currently reads from the cortex agent tables. After this migration, it must read from `agents.db` directly (for turn/message data) and `events.db` (for event data). This is a required code change in the Go cortex binary (short-term) and then in the TS port (long-term).
+**Note on memory pipeline reads:** The memory extraction pipeline (entity extraction, fact extraction, etc.) reads from `agents.db` directly (for turn/message data) and `events.db` (for event data). The old legacy agent tables in the memory DB have been eliminated.
 
-**Schema source:** `nex/cortex/internal/db/schema.sql` (subset), migrated to new TS-owned schema file.
+**Schema source:** `nex/src/db/memory.ts` (TS-owned schema file).
 
 ---
 
 ### 3.5 embeddings.db — Semantic Vector Index
 
-Split out from cortex.db. Embeddings are a shared resource — multiple subsystems generate and query them.
+Split out from the legacy memory DB. Embeddings are a shared resource — multiple subsystems generate and query them.
 
 | Table | Purpose |
 |-------|---------|
@@ -232,7 +232,7 @@ Split out from cortex.db. Embeddings are a shared resource — multiple subsyste
 3. Batch embedding writes (during memory processing) don't compete with fact/episode writes.
 4. Future: multiple subsystems can embed and query without opening the entire memory DB.
 
-**Schema source:** New TS-owned schema file. Migrated from cortex schema.sql `embeddings`/`vec_embeddings` definitions.
+**Schema source:** `nex/src/db/embeddings.ts` (TS-owned schema file).
 
 ---
 
@@ -265,21 +265,21 @@ Renamed from `nexus.db`. Captures all runtime orchestration state.
 
 ---
 
-## 4. Go Cortex Elimination Plan
+## 4. Go Memory Subprocess Elimination Plan
 
 ### Context
 
-The Go cortex binary (`nex/cortex/`) currently serves two roles:
-1. **Sync pipeline** — Go adapters (eve, gmail, bird, aix, calendar, contacts, nexus) that pull data from external sources into events.db and cortex.db.
+The old Go memory binary (`nex/cortex/`) previously served two roles:
+1. **Sync pipeline** — Go adapters (eve, gmail, bird, aix, calendar, contacts, nexus) that pulled data from external sources into events.db and the legacy memory DB.
 2. **HTTP serve** — `/recall` and `/search` endpoints for semantic memory retrieval.
 
-Long-term, everything (Nex TS + cortex Go) will be unified into a single Go runtime. Short-term, we unify everything into TS to get the interactions dialed in.
+All of this has been unified into the single TypeScript nex process. Long-term, the entire system will be ported to Go as a single binary.
 
 ### What Gets Eliminated
 
 #### 4.1 Go Sync Adapters — DELETED
 
-All Go cortex adapters are already ported to Nex TS. The following Go adapter code is dead:
+All Go memory subprocess adapters are already ported to Nex TS. The following Go adapter code is dead:
 
 | Go Adapter | File | Status |
 |------------|------|--------|
@@ -293,7 +293,7 @@ All Go cortex adapters are already ported to Nex TS. The following Go adapter co
 | Nexus | `cortex/internal/adapters/nexus.go` | Replaced by Nex TS |
 | Bird (Twitter) | `cortex/internal/adapters/bird.go` | Replaced by Nex TS adapter |
 
-The entire `cortex/internal/adapters/` directory, `cortex/internal/sync/` directory, and related CLI commands (`cortex sync`) can be removed.
+The entire `cortex/internal/adapters/` directory, `cortex/internal/sync/` directory, and related legacy CLI commands have been removed.
 
 #### 4.2 Go Bus — DELETED
 
@@ -305,13 +305,13 @@ The entire `cortex/internal/adapters/` directory, `cortex/internal/sync/` direct
 
 #### 4.4 Go Agent Ledger Tables — DELETED
 
-`agent_sessions`, `agent_turns`, `agent_messages`, `agent_tool_calls` in cortex schema. These were copies of agents.db data. The memory pipeline must be updated to read from agents.db directly.
+`agent_sessions`, `agent_turns`, `agent_messages`, `agent_tool_calls` in the legacy memory DB schema. These were copies of agents.db data. The memory pipeline now reads from agents.db directly.
 
 ### What Gets Ported to TS
 
 #### 4.5 Memory Pipeline — PORT TO TS
 
-The memory extraction pipeline (`cortex/internal/memory/pipeline.go`) is the high-value logic:
+The memory extraction pipeline (formerly `cortex/internal/memory/pipeline.go`, now ported to TS) is the high-value logic:
 1. Extract entities from episodes
 2. Resolve entity references
 3. Extract relationships
@@ -342,7 +342,7 @@ agents.db (agent turns) ──read──→ Memory Pipeline (TS)
 
 ### Problem
 
-The legacy system had `sync_watermarks` tables in both events.db and cortex.db. Go cortex adapters wrote watermarks into events.db directly, creating cross-process SQLite contention and dual-ownership confusion. The Nex TS adapter supervisor separately tracked `backfill_cursor` on `adapter_instances`.
+The legacy system had `sync_watermarks` tables in both events.db and the legacy memory DB. The old Go adapters wrote watermarks into events.db directly, creating cross-process SQLite contention and dual-ownership confusion. The Nex TS adapter supervisor separately tracked `backfill_cursor` on `adapter_instances`.
 
 ### Decision
 
@@ -392,7 +392,7 @@ The AIX import pipeline (`AixImportRuntime`) already manages its own sync state 
 ### Migration Steps
 
 1. Remove `sync_watermarks` from events.db schema (`nex/src/db/events.ts`).
-2. Remove `sync_watermarks` from cortex/memory.db schema (`nex/cortex/internal/db/schema.sql`).
+2. Remove `sync_watermarks` from memory.db schema.
 3. Remove all Go adapter code that reads/writes `sync_watermarks` (already dead — Go adapters are eliminated per §4.1).
 4. Update adapter interface specs to document `getSyncStatus()` contract.
 5. On existing workspaces: the table can be left in place (harmless) or dropped via migration. No data loss — watermarks are ephemeral.
@@ -404,9 +404,9 @@ The AIX import pipeline (`AixImportRuntime`) already manages its own sync state 
 ### From Old Schema
 
 The old identity.db had:
-- `entities` (id, name, type) — local copy of cortex entities → **DROPPED** (entities move to identity.db but from cortex's V2 schema)
+- `entities` (id, name, type) — local copy of memory system entities → **DROPPED** (entities move to identity.db with the V2 schema)
 - `identity_mappings` (channel, identifier → entity_id) — superseded by new `contacts` table → **DROPPED**
-- `entity_tags` — local copy → **DROPPED** (entity_tags move to identity.db from cortex)
+- `entity_tags` — local copy → **DROPPED** (entity_tags move to identity.db from legacy memory DB)
 - `contacts` (old format) → **REPLACED** by new `contacts` with `(platform, space_id, sender_id)` PK
 - `auth_tokens` → **PRESERVED** (data migrated)
 - `auth_passwords` → **PRESERVED** (data migrated)
@@ -420,7 +420,7 @@ The old identity.db had:
 
 ### Additional Migrations Needed
 
-1. **Entities from cortex.db → identity.db:** The `entities`, `entity_tags`, `entity_cooccurrences`, `merge_candidates` tables currently live in cortex.db (schema v22). They need to be migrated to identity.db. This is a data migration (copy rows from cortex.db entities into identity.db entities).
+1. **Entities from legacy memory DB → identity.db:** The `entities`, `entity_tags`, `entity_cooccurrences`, `merge_candidates` tables previously lived in the legacy memory DB (schema v22). They have been migrated to identity.db.
 
 2. **ACL from nexus.db → identity.db:** The `acl_grants`, `acl_grant_log`, `acl_access_log`, `acl_permission_requests` tables move from nexus.db to identity.db, dropping the `acl_` prefix.
 
@@ -430,9 +430,9 @@ The old identity.db had:
 
 ## 7. Memory DB — Detailed Migration
 
-### From cortex.db
+### From Legacy Memory DB
 
-`memory.db` is the successor to `cortex.db` at `state/data/cortex/cortex.db`.
+`memory.db` is the successor to the legacy `state/data/cortex/cortex.db`.
 
 **Tables that move to memory.db (kept):**
 - `facts`, `fact_entities`, `facts_fts`, `observation_facts`
@@ -448,7 +448,7 @@ The old identity.db had:
 - `embeddings`, `vec_embeddings`
 
 **Tables DELETED (no migration needed — data is duplicated or ephemeral):**
-- `bus_events` — cortex internal bus log, ephemeral
+- `bus_events` — old internal bus log, ephemeral
 - `sync_watermarks` — ephemeral sync cursors
 - `sync_jobs` — ephemeral job state
 - `adapter_state` — ephemeral adapter state
@@ -501,10 +501,9 @@ After migration, memory.db tables that reference `entity_id` (e.g., `fact_entiti
 
 **Deleted:**
 ```
-{workspace}/state/cortex/cortex.db         # LEGACY — delete
+{workspace}/state/cortex/                  # LEGACY directory — delete
 {workspace}/state/data/cortex.db           # EMPTY ARTIFACT — delete
-{workspace}/state/data/cortex/cortex.db    # SUPERSEDED by memory.db + identity.db + embeddings.db
-{workspace}/state/data/cortex/             # Directory can be removed after migration
+{workspace}/state/data/cortex/             # SUPERSEDED by memory.db + identity.db + embeddings.db — delete
 ```
 
 ---
@@ -519,7 +518,7 @@ Create or update TypeScript schema files for each database:
 |------|------|-------|
 | Update events.db schema | `nex/src/db/events.ts` | Remove `sync_watermarks` from schema SQL |
 | Update identity.db schema | `nex/src/db/identity.ts` | Add entities, entity_tags, entity_cooccurrences, merge_candidates, ACL tables, unified `names` table. Rename `delivery_*` tables. |
-| Create memory.db schema | `nex/src/db/memory.ts` | New file. Facts, episodes, analysis tables from cortex schema. |
+| Create memory.db schema | `nex/src/db/memory.ts` | New file. Facts, episodes, analysis tables from legacy memory DB schema. |
 | Create embeddings.db schema | `nex/src/db/embeddings.ts` | New file. embeddings + vec_embeddings. |
 | Update runtime.db schema | `nex/src/db/nexus.ts` | Remove ACL tables (moved to identity). Rename `aix_import_jobs` → `import_jobs`. Remove `sync_watermarks` if present. |
 | Update hooks schema | `nex/src/db/hooks.ts` | No changes needed — automations + hook_invocations stay in runtime.db. |
@@ -535,33 +534,33 @@ Update `nex/src/db/ledgers.ts` to:
 
 | Migration | From | To | Strategy |
 |-----------|------|----|----------|
-| Entities + entity_tags + cooccurrences + merge_candidates | cortex.db | identity.db | Copy rows, then drop from cortex |
+| Entities + entity_tags + cooccurrences + merge_candidates | legacy memory DB | identity.db | Copy rows, then drop from legacy DB |
 | ACL tables | nexus.db | identity.db | Copy rows, drop from nexus, rename (drop `acl_` prefix) |
-| Facts + episodes + analysis | cortex.db | memory.db | File rename or row copy |
-| Embeddings | cortex.db | embeddings.db | Row copy |
-| Agent tables | cortex.db | (nowhere) | Delete — data exists in agents.db |
-| Bus/sync/adapter_state | cortex.db | (nowhere) | Delete — ephemeral |
+| Facts + episodes + analysis | legacy memory DB | memory.db | File rename or row copy |
+| Embeddings | legacy memory DB | embeddings.db | Row copy |
+| Agent tables | legacy memory DB | (nowhere) | Delete — data exists in agents.db |
+| Bus/sync/adapter_state | legacy memory DB | (nowhere) | Delete — ephemeral |
 | sync_watermarks | events.db | (nowhere) | Delete — adapters own state |
 
 ### Phase 4: Code Updates
 
 | Area | What Changes |
 |------|--------------|
-| Memory pipeline | Reads from agents.db + events.db instead of cortex agent tables. Writes to memory.db + identity.db (entities) + embeddings.db. |
+| Memory pipeline | Reads from agents.db + events.db. Writes to memory.db + identity.db (entities) + embeddings.db. |
 | Identity resolution | Uses contacts + entities from identity.db (same DB = JOINable). |
-| Runtime boot | Opens 6 DBs. Seeds owner entity in identity.db instead of cortex.db. |
+| Runtime boot | Opens 6 DBs. Seeds owner entity in identity.db. |
 | Adapter manager | Queries `getSyncStatus()` on adapters instead of reading `sync_watermarks`. Updates `backfill_cursor` snapshot on `adapter_instances`. |
 | ACL checks | Reads from identity.db instead of nexus.db (runtime.db). |
 | Recall/search endpoints | Port from Go to TS. Query memory.db + embeddings.db + identity.db (entities). |
-| Go cortex binary | Remove adapters/, sync/, bus/, state/ packages. Keep only memory pipeline + HTTP serve (temporarily). |
+| Go memory binary (eliminated) | All Go packages removed. Memory pipeline and HTTP serve ported to TS. |
 
-### Phase 5: Go Cortex Cleanup
+### Phase 5: Go Memory Subprocess Cleanup (Complete)
 
-1. Delete `cortex/internal/adapters/` — all adapters are Nex TS now.
-2. Delete `cortex/internal/sync/` — sync is adapter-owned.
-3. Delete `cortex/internal/bus/` — Nex bus is the single bus.
-4. Delete `cortex/internal/state/` — adapters own their state.
-5. Remove agent ledger tables from `cortex/internal/db/schema.sql`.
+1. Deleted `cortex/internal/adapters/` — all adapters are Nex TS now.
+2. Deleted `cortex/internal/sync/` — sync is adapter-owned.
+3. Deleted `cortex/internal/bus/` — Nex bus is the single bus.
+4. Deleted `cortex/internal/state/` — adapters own their state.
+5. Removed agent ledger tables from legacy schema.
 6. Remove `sync_watermarks`, `sync_jobs`, `bus_events`, `adapter_state` from schema.
 7. Update memory pipeline to read agents.db and events.db directly.
 8. Update `/recall` and `/search` to query new DB locations.
@@ -599,12 +598,12 @@ For comprehension purposes, here are the high-level conceptual groupings of all 
 
 | Document | Location | What Changes |
 |----------|----------|--------------|
-| Cortex SCHEMA.md | `state/meeseeks/memory-writer/skills/cortex/SCHEMA.md` | Completely stale (pre-V2 schema with persons, contacts, etc.). Must be rewritten for memory.db schema. |
+| Legacy SCHEMA.md | `state/meeseeks/memory-writer/skills/cortex/SCHEMA.md` | Completely stale (pre-V2 schema with persons, contacts, etc.). Must be rewritten for memory.db schema. |
 | RUNTIME_ROUTING.md | `nexus-specs/specs/runtime/RUNTIME_ROUTING.md` | Still uses old `(channel, identifier)` terminology. Update to `(platform, space_id, sender_id)` per delivery taxonomy. |
 | DELIVERY_DIRECTORY_SCHEMA.md | `nexus-specs/specs/runtime/DELIVERY_DIRECTORY_SCHEMA.md` | Update to reflect dropped `delivery_` prefix and unified `names` table. |
 | IDENTITY_GRAPH.md | `nexus-specs/specs/data/ledgers/IDENTITY_GRAPH.md` | Update to reflect entities now in identity.db, old identity_mappings eliminated. |
 | EVENTS_LEDGER.md | `nexus-specs/specs/data/ledgers/EVENTS_LEDGER.md` | Update to remove `sync_watermarks` from documented schema. |
 | NEXUS_LEDGER.md | `nexus-specs/specs/data/ledgers/NEXUS_LEDGER.md` | Update for rename to runtime.db, ACL tables relocated, import_jobs rename. |
-| BUS_ARCHITECTURE.md | `nexus-specs/specs/runtime/nex/BUS_ARCHITECTURE.md` | Update to state single Nex bus, cortex bus eliminated. |
-| CORTEX_NEX_MIGRATION.md | `nexus-specs/specs/data/cortex/CORTEX_NEX_MIGRATION.md` | Update with this spec's migration plan. |
+| BUS_ARCHITECTURE.md | `nexus-specs/specs/runtime/nex/BUS_ARCHITECTURE.md` | Update to state single Nex bus, old Go bus eliminated. |
+| CORTEX_NEX_MIGRATION.md | `nexus-specs/specs/data/_archive/CORTEX_NEX_MIGRATION.md` | Archived. Superseded by this spec's migration plan. |
 | Event ledger unification | `docs/refactor/event-ledger-unification.md` | May need updates re: memory.db reading events.db. |

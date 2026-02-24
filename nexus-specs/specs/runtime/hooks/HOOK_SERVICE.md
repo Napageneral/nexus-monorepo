@@ -1,7 +1,8 @@
 # Hook Service Specification
 
-**Status:** DRAFT  
-**Last Updated:** 2026-01-29  
+> **Status:** ARCHIVED — Superseded by `../broker/MEESEEKS_PATTERN.md` which defines the canonical automation system. Hooks are places in the runtime where automations run.
+
+**Last Updated:** 2026-01-29
 **Related:** ../nex/EVENT_SYSTEM_DESIGN.md, ../broker/OVERVIEW.md, ../broker/DATA_MODEL.md
 
 ---

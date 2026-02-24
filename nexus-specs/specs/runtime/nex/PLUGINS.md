@@ -28,14 +28,15 @@ Event Arrives
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                          NEX PIPELINE                                    │
 │                                                                          │
-│  1. receiveEvent()         →  [afterReceiveEvent]                       │
+│  1. ingest()               →  [afterIngest]                             │
 │  2. resolveIdentity()      →  [afterResolveIdentity]                    │
-│  3. resolveAccess()        →  [afterResolveAccess]                      │
-│  4. runAutomations()       →  [afterRunAutomations]  ← AUTOMATIONS     │
-│  5. assembleContext()      →  [afterAssembleContext]                    │
-│  6. runAgent()             →  [afterRunAgent]                           │
-│  7. deliverResponse()      →  [afterDeliverResponse]                    │
-│  8. finalize()             →  [onFinalize]                              │
+│  3. resolveReceiver()      →  [afterResolveReceiver]                    │
+│  4. resolveAccess()        →  [afterResolveAccess]                      │
+│  5. runAutomations()       →  [afterRunAutomations]  ← AUTOMATIONS     │
+│  6. routeSession()         →  [afterRouteSession]                       │
+│  7. runAgent()             →  [afterRunAgent]                           │
+│  8. processResponse()      →  [afterProcessResponse]                    │
+│  9. deliverResponse()      →  [onDeliverResponse]                       │
 │                                                                          │
 │  Error at any stage        →  [onError]                                 │
 │                                                                          │
@@ -50,17 +51,18 @@ Event Arrives
 interface NEXPlugin {
   name: string;
   priority?: number;  // Lower runs first (default: 100)
-  
+
   // Lifecycle hooks (after each stage)
-  afterReceiveEvent?(req: NexusRequest): Promise<void | 'skip'>;
+  afterIngest?(req: NexusRequest): Promise<void | 'skip'>;
   afterResolveIdentity?(req: NexusRequest): Promise<void | 'skip'>;
+  afterResolveReceiver?(req: NexusRequest): Promise<void | 'skip'>;
   afterResolveAccess?(req: NexusRequest): Promise<void | 'skip'>;
   afterRunAutomations?(req: NexusRequest): Promise<void | 'skip'>;
-  afterAssembleContext?(req: NexusRequest): Promise<void | 'skip'>;
+  afterRouteSession?(req: NexusRequest): Promise<void | 'skip'>;
   afterRunAgent?(req: NexusRequest): Promise<void | 'skip'>;
-  afterDeliverResponse?(req: NexusRequest): Promise<void | 'skip'>;
-  
-  onFinalize?(req: NexusRequest): Promise<void>;
+  afterProcessResponse?(req: NexusRequest): Promise<void | 'skip'>;
+
+  onDeliverResponse?(req: NexusRequest): Promise<void>;
   onError?(req: NexusRequest, error: Error): Promise<void>;
 }
 ```
@@ -81,14 +83,14 @@ Plugins can:
 | Plugin | Hook Point | Purpose |
 |--------|------------|---------|
 | **Logging** | All | Log request flow for debugging |
-| **Analytics** | onFinalize | Track latency, token usage, costs |
-| **Automations** | afterRunAutomations | Evaluate automation triggers (stage 4) |
+| **Analytics** | onDeliverResponse | Track latency, token usage, costs |
+| **Automations** | afterRunAutomations | Evaluate automation triggers (stage 5) |
 
 ---
 
 ## Automations
 
-Automations are a specific plugin pattern that plugs into the `runAutomations` stage (stage 4 — after IAM resolves identity/permissions, before context assembly).
+Automations are a specific plugin pattern that plugs into the `runAutomations` stage (stage 5 — after IAM resolves identity/permissions, before session routing).
 
 Automations:
 - Evaluate user/agent-created scripts against events
@@ -107,15 +109,15 @@ See `automations/AUTOMATION_SYSTEM.md` for the full automation specification.
 ```typescript
 const loggingPlugin: NEXPlugin = {
   name: 'logging',
-  
-  afterReceiveEvent: async (req) => {
+
+  afterIngest: async (req) => {
     console.log(`[NEX] Received: ${req.event.event_id}`);
   },
-  
-  onFinalize: async (req) => {
+
+  onDeliverResponse: async (req) => {
     console.log(`[NEX] Complete: ${req.request_id} in ${req.pipeline.duration_ms}ms`);
   },
-  
+
   onError: async (req, error) => {
     console.error(`[NEX] Error: ${error.message}`);
   },
@@ -127,8 +129,8 @@ const loggingPlugin: NEXPlugin = {
 ```typescript
 const analyticsPlugin: NEXPlugin = {
   name: 'analytics',
-  
-  onFinalize: async (req) => {
+
+  onDeliverResponse: async (req) => {
     await analytics.track('request_complete', {
       platform: req.delivery.platform,
       persona: req.access?.routing.persona,
@@ -164,7 +166,7 @@ const urgentFlagPlugin: NEXPlugin = {
 Plugins are loaded from configuration:
 
 ```yaml
-# nex.yaml
+# config.json — plugins section
 plugins:
   directory: ./plugins
   enabled:

@@ -69,8 +69,8 @@ A     B
 ### Event Fields
 ```typescript
 {
-  channel: 'slack',
-  peer_kind: message.channel_type === 'im' ? 'dm' : 'group',
+  platform: 'slack',
+  container_kind: message.channel_type === 'im' ? 'dm' : 'group',
   thread_id: message.thread_ts,
   metadata: {
     team_id: message.team,

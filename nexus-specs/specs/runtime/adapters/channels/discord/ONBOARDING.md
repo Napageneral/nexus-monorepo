@@ -13,7 +13,7 @@ Bring up a Discord adapter account in a way that:
 - uses the Nexus credential system (Keychain pointer preferred on macOS)
 - keeps secrets out of config and argv
 - defaults to safe IAM behavior (owner DMs allowed, everything else denied/ask)
-- preserves structured delivery fields (`peer_kind`, `peer_id`, `thread_id`, `reply_to_id`)
+- preserves structured delivery fields (`container_kind`, `container_id`, `thread_id`, `reply_to_id`)
 
 ---
 
@@ -137,7 +137,7 @@ For the policy mapping, see `POLICY_SURFACE.md`.
 
 Discord must preserve:
 
-- `delivery.peer_id` = parent channel (or DM channel)
+- `delivery.container_id` = parent channel (or DM channel)
 - `delivery.thread_id` = thread channel ID when applicable
 - `delivery.reply_to_id` = message ID being replied to
 

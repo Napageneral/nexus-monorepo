@@ -189,7 +189,7 @@ type SessionsImportResponse = {
   results: Array<{
     sourceProvider: string;
     sourceSessionId: string;
-    sessionLabel?: string;
+    sessionKey?: string;
     status: "imported" | "upserted" | "skipped" | "failed";
     reason?: string;
   }>;
@@ -262,7 +262,7 @@ High-level mapping:
 Important:
 1. Source IDs should be preserved in metadata/provenance fields for debug and reimport reconciliation.
 2. `origin`/`origin_session_id` style fields should identify harness source cleanly.
-3. Session label generation must be deterministic enough to avoid alias churn.
+3. Session key generation must be deterministic enough to avoid alias churn.
 
 ---
 
@@ -296,7 +296,7 @@ Operational artifacts:
 ## Open Questions For Assignee
 
 1. Exact storage location for source IDs/fingerprints in NEX ledger model.
-2. Final session label/routing key generation for imported sessions.
+2. Final session key/routing key generation for imported sessions.
 3. Whether import applies directly to core ledger tables or to a staging table + merger job.
 4. Whether `sessions.list` should expose provenance inline or behind optional flags.
 

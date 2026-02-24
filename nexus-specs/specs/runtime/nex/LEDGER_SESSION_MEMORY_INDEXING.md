@@ -4,7 +4,7 @@
 **Last Updated:** 2026-02-13  
 **Related:** `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/runtime/ui/WORKSTREAM_1_LEDGER_CUTOVER.md`  
 **Related:** `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/ledgers/AGENTS_LEDGER.md`  
-**Related (Upstream):** `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/cortex/upstream/UPSTREAM_MEMORY.md` (Session transcript indexing)
+**Related (Upstream):** `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/upstream/UPSTREAM_MEMORY.md` (Session transcript indexing)
 
 ---
 
@@ -16,7 +16,7 @@ Preserve the upstream “sessions” memory source (used by `memory_search`) whi
 2. Session recall is derived from the **Agents Ledger** (native NEX + AIX imports write here).
 3. The indexing plane stays the existing memory index (builtin sqlite index and/or QMD backend), but **its inputs become ledger-derived**.
 
-This is a **recall/search** feature (cross-session retrieval), not prompt assembly. Prompt history assembly is already ledger-based via `assembleContext`.
+This is a **recall/search** feature (cross-session retrieval), not prompt assembly. Prompt history assembly is already ledger-based via `routeSession`.
 
 ### 1.1 Configuration Gate (Decision)
 
@@ -87,14 +87,14 @@ Apply the same redaction intent as upstream session indexing:
 
 **Unit of indexing = per-turn documents** (superior incremental behavior vs per-session whole-doc rewrites).
 
-For each session label and for each turn in that session head ancestry, we synthesize a markdown-ish document:
+For each session key and for each turn in that session head ancestry, we synthesize a markdown-ish document:
 
 - Path format (not a real filesystem path; it’s an index ID):
-  - `sessions/<safeSessionLabel>/turns/<turnId>.md`
+  - `sessions/<safeSessionKey>/turns/<turnId>.md`
 
 - Content format:
   - Header (metadata for humans + debugging):
-    - `Session: <sessionLabel>`
+    - `Session: <sessionKey>`
     - `Turn: <turnId>`
     - optional: timestamp/model/provider
   - Body:
@@ -230,6 +230,6 @@ Replace wording:
 
 ## 8. Non-Goals
 
-1. Replacing memory with Cortex episodic/declarative systems (handled elsewhere).
+1. Replacing memory with Memory System episodic/declarative systems (handled elsewhere).
 2. Building UI for browsing memory/session index (Command Center uses Agents Ledger directly).
 3. Adding new RAG systems; this only preserves upstream “sessions” recall in a ledger-native way.

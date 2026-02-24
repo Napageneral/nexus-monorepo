@@ -7,7 +7,7 @@
 
 ## 1. Folder Structure
 
-- [ ] `specs/data/cortex/` directory no longer exists (renamed to `specs/data/memory/`)
+- [ ] `specs/data/cortex/` directory no longer exists (superseded by `specs/data/memory/`)
 - [ ] `specs/data/memory/` exists and contains V2 memory specs
 - [ ] `specs/data/memory/v2/` is flattened into `specs/data/memory/` (V2 is the only version)
 - [ ] `specs/data/_archive/` exists and contains the 6 superseded docs:
@@ -17,7 +17,7 @@
   - [ ] `CORTEX_AGENT_INTERFACE.md` (was `data/cortex/`)
   - [ ] `MEMORY_WRITER.md` (was `data/cortex/roles/`)
   - [ ] `MEMORY_READER.md` (was `data/cortex/roles/`)
-- [ ] `specs/data/cortex/roles/` directory no longer exists
+- [ ] `specs/data/cortex/` and `specs/data/cortex/roles/` directories no longer exist
 - [ ] `specs/data/ledgers/` still exists with updated docs
 
 ## 2. Term Elimination — Zero Occurrences Expected
@@ -26,18 +26,18 @@ The following terms should appear NOWHERE in the active (non-archived) spec corp
 Search scope: `specs/` excluding `specs/data/_archive/` and any `upstream/` directories.
 
 ### 2.1 Database Names
-- [ ] `cortex.db` — zero occurrences (replaced by `memory.db` or `identity.db` depending on context)
+- [ ] `cortex.db` — zero occurrences in active prose (replaced by `memory.db` or `identity.db` depending on context; OK in file paths describing legacy files to delete)
 - [ ] `nexus.db` — zero occurrences (replaced by `runtime.db`)
-- [ ] `cortex/cortex.db` — zero occurrences
+- [ ] `cortex/cortex.db` — zero occurrences in active prose (OK in file paths describing legacy files to delete)
 
 ### 2.2 Eliminated Tables
 - [ ] `sync_watermarks` — zero occurrences as a table name (OK in historical/migration context if clearly marked)
 - [ ] `identity_mappings` — zero occurrences as a table name
 - [ ] `entity_aliases` — zero occurrences as a table name
-- [ ] `agent_sessions` (in cortex context) — zero occurrences
-- [ ] `agent_turns` (in cortex context) — zero occurrences
-- [ ] `agent_messages` (in cortex context) — zero occurrences
-- [ ] `agent_tool_calls` (in cortex context) — zero occurrences
+- [ ] `agent_sessions` (in legacy memory DB context) — zero occurrences
+- [ ] `agent_turns` (in legacy memory DB context) — zero occurrences
+- [ ] `agent_messages` (in legacy memory DB context) — zero occurrences
+- [ ] `agent_tool_calls` (in legacy memory DB context) — zero occurrences
 - [ ] `persons` — zero occurrences as a table name
 - [ ] `person_facts` — zero occurrences
 - [ ] `person_contact_links` — zero occurrences
@@ -68,11 +68,11 @@ Search scope: `specs/` excluding `specs/data/_archive/` and any `upstream/` dire
 - [ ] `cortex-search.sh` — zero occurrences (replaced by `recall()`)
 - [ ] `cortex-write.sh` — zero occurrences
 - [ ] `CortexClient` — zero occurrences (Go HTTP IPC eliminated)
-- [ ] `CortexSupervisor` — zero occurrences or marked as deprecated/transitional
-- [ ] `cortex serve` — zero occurrences or marked as deprecated/transitional
-- [ ] `internal/adapters/` (Go cortex adapter paths) — zero occurrences
-- [ ] `internal/sync/` (Go cortex sync paths) — zero occurrences
-- [ ] `internal/bus/` (Go cortex bus paths) — zero occurrences
+- [ ] `CortexSupervisor` — zero occurrences (Go subprocess eliminated)
+- [ ] `cortex serve` — zero occurrences (Go subprocess eliminated)
+- [ ] `internal/adapters/` (Go adapter paths) — zero occurrences
+- [ ] `internal/sync/` (Go sync paths) — zero occurrences
+- [ ] `internal/bus/` (Go bus paths) — zero occurrences
 
 ## 3. Required Terms — Must Be Present
 
@@ -117,14 +117,14 @@ Each updated document should:
 - [ ] Use `runtime.db` not `nexus.db` when referring to the runtime operations database
 - [ ] Use `embeddings.db` when referring to vector embeddings
 - [ ] Reference DATABASE_ARCHITECTURE.md as the canonical source for DB layout
-- [ ] Not reference Go cortex adapters or sync pipeline as current/active
+- [ ] Not reference Go memory subprocess adapters or sync pipeline as current/active
 - [ ] Use delivery taxonomy terminology (platform, space_id, sender_id, container_id)
 
 ## 5. Cross-Reference Integrity
 
 - [ ] Every spec that mentions a database name uses the correct 6-DB naming
 - [ ] Every spec that mentions table locations is consistent with DATABASE_ARCHITECTURE.md §3
-- [ ] No spec describes entities as living in cortex.db or memory.db
+- [ ] No spec describes entities as living in a legacy memory DB or memory.db
 - [ ] No spec describes ACL tables as living in nexus.db or runtime.db
 - [ ] The WORKSPACE_LIFECYCLE.md boot sequence references 6 databases
 - [ ] The LIVE_E2E_HARNESS.md scenario references use correct DB names

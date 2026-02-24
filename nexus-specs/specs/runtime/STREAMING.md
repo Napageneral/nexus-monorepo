@@ -57,7 +57,7 @@ The Broker emits `StreamEvent` objects during agent execution. These flow throug
 
 ```typescript
 type StreamEvent =
-  | { type: 'stream_start'; runId: string; sessionLabel: string; target: DeliveryTarget }
+  | { type: 'stream_start'; runId: string; sessionKey: string; target: DeliveryTarget }
   | { type: 'token'; text: string }
   | { type: 'tool_status'; toolName: string; toolCallId: string; status: 'started' | 'completed' | 'failed'; summary?: string }
   | { type: 'reasoning'; text: string }
@@ -186,7 +186,7 @@ Adapters that support streaming implement a `stream` command — a long-running 
 NEX pipes StreamEvents directly to the adapter's stdin:
 
 ```jsonl
-{"type":"stream_start","runId":"run_abc","target":{"to":"channel:123456","thread_id":"789"},"sessionLabel":"main"}
+{"type":"stream_start","runId":"run_abc","target":{"to":"channel:123456","thread_id":"789"},"sessionKey":"main"}
 {"type":"token","text":"Let me "}
 {"type":"token","text":"check "}
 {"type":"token","text":"that for you."}

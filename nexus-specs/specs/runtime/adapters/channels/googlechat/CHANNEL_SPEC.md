@@ -128,8 +128,8 @@ Convert tables to code blocks or lists.
 ### Inbound
 ```typescript
 {
-  channel: 'googlechat',
-  peer_kind: space.type === 'DM' ? 'dm' : 'group',
+  platform: 'googlechat',
+  container_kind: space.type === 'DM' ? 'dm' : 'group',
   thread_id: message.thread?.name,
   metadata: {
     space_name: space.name,

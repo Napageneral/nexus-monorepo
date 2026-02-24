@@ -36,7 +36,7 @@ The Adapter System defines how NEX discovers, configures, manages, and communica
 │   │   • Read JSONL from stdout → NexusEvent → Pipeline                │     │
 │   │   • Health monitoring, auto-restart with backoff                  │     │
 │   │   • Track runtime state in DB                                     │     │
-│   │   • Expose adapter/channel state for context assembly             │     │
+│   │   • Expose adapter/platform state for context assembly            │     │
 │   └───────────────────────────────────────────────────────────────────┘     │
 │                                                                              │
 │   ┌──────────────┐  ┌──────────┐  ┌──────────┐  ┌───────────────┐         │
@@ -64,7 +64,7 @@ Self-describe the adapter. NEX calls this during registration and periodically f
 ```typescript
 interface AdapterInfo {
   // Identity
-  channel: string;                    // "gmail", "imessage", "discord", etc.
+  platform: string;                   // "gmail", "imessage", "discord", etc.
   name: string;                       // Human-friendly name
   version: string;                    // Semver
 
@@ -75,8 +75,8 @@ interface AdapterInfo {
   credential_service?: string;        // Links to credential store service (e.g., "google")
   multi_account: boolean;             // Supports multiple accounts?
 
-  // Channel capabilities (for agent context)
-  channel_capabilities: ChannelCapabilities;
+  // Platform capabilities (for agent context)
+  platform_capabilities: PlatformCapabilities;
 }
 
 type AdapterCapability = "monitor" | "send" | "stream" | "backfill" | "health" | "accounts" | "react" | "edit" | "delete" | "poll";
@@ -93,8 +93,8 @@ Stream live events as JSONL on stdout. NEX spawns this as a long-running process
 Output: One `NexusEvent` JSON object per line on stdout. Process runs until killed.
 
 ```jsonl
-{"event_id":"gmail:msg:abc123","timestamp":1707235200000,"content":"Hey Tyler","channel":"gmail",...}
-{"event_id":"gmail:msg:def456","timestamp":1707235260000,"content":"Meeting at 3pm","channel":"gmail",...}
+{"event_id":"gmail:msg:abc123","timestamp":1707235200000,"content":"Hey Tyler","platform":"gmail",...}
+{"event_id":"gmail:msg:def456","timestamp":1707235260000,"content":"Meeting at 3pm","platform":"gmail",...}
 ```
 
 #### `send`
@@ -126,9 +126,15 @@ interface DeliveryError {
 }
 ```
 
+---
+
+### Optional Commands
+
 #### `stream`
 
 Handle real-time streaming delivery. A long-running bidirectional process (like `monitor`). NEX pipes `StreamEvent` JSONL to stdin; the adapter emits delivery status JSONL on stdout.
+
+**Only required if adapter declares `"stream"` in supports.** Adapters without `stream` support fall back to NEX's block pipeline, which coalesces tokens into blocks and delivers via `send`. See `broker/STREAMING.md` for the full streaming architecture.
 
 ```bash
 <command> stream --account <account_id> --format jsonl
@@ -137,7 +143,7 @@ Handle real-time streaming delivery. A long-running bidirectional process (like 
 **Stdin:** StreamEvents as JSONL from NEX:
 
 ```jsonl
-{"type":"stream_start","runId":"run_abc","target":{"channel":"discord","account_id":"echo-bot","to":"channel:123","thread_id":"123456789012345678","reply_to_id":"987654321098765432"},"sessionLabel":"main"}
+{"type":"stream_start","runId":"run_abc","target":{"platform":"discord","account_id":"echo-bot","to":"channel:123","thread_id":"123456789012345678","reply_to_id":"987654321098765432"},"sessionKey":"main"}
 {"type":"token","text":"Hello "}
 {"type":"token","text":"world!"}
 {"type":"tool_status","toolName":"Read","toolCallId":"tc_1","status":"started"}
@@ -155,12 +161,6 @@ Handle real-time streaming delivery. A long-running bidirectional process (like 
 ```
 
 The stream process is long-running and handles multiple deliveries (each `stream_start`/`stream_end` pair is one delivery). The adapter internally handles platform-specific rendering — edit throttling for Discord/Telegram, SSE for web/API, etc.
-
-**Only required if adapter declares `"stream"` in supports.** Adapters without `stream` support fall back to NEX's block pipeline, which coalesces tokens into blocks and delivers via `send`. See `broker/STREAMING.md` for the full streaming architecture.
-
----
-
-### Optional Commands
 
 #### `backfill`
 
@@ -210,7 +210,7 @@ interface AdapterAccount {
 
 ---
 
-## Channel Capabilities & Agent Context
+## Platform Capabilities & Agent Context
 
 ### The Problem
 
@@ -220,26 +220,26 @@ When an agent generates a response, it needs to know what it's writing FOR. You 
 
 **Layer 1: Agent Awareness (context assembly)**
 
-The agent is told about channel capabilities so it can tailor its writing style. This is injected into context by the Broker during assembly.
+The agent is told about platform capabilities so it can tailor its writing style. This is injected into context by the Broker during assembly.
 
 ```typescript
 // Injected into event context (dynamic, per-turn)
-interface ChannelContext {
+interface PlatformContext {
   // Where the message came from / where the reply goes
-  channel: string;                       // "discord", "imessage", "gmail"
+  platform: string;                      // "discord", "imessage", "gmail"
   account: string;                       // "echo-bot", "default"
 
-  // What the channel supports
-  capabilities: ChannelCapabilities;
+  // What the platform supports
+  capabilities: PlatformCapabilities;
 
-  // Available channels for explicit sends (all active outbound adapters)
-  available_channels: AvailableChannel[];
+  // Available platforms for explicit sends (all active outbound adapters)
+  available_platforms: AvailablePlatform[];
 }
 
-interface AvailableChannel {
-  channel: string;
+interface AvailablePlatform {
+  platform: string;
   accounts: string[];
-  capabilities: ChannelCapabilities;
+  capabilities: PlatformCapabilities;
 }
 ```
 
@@ -258,12 +258,12 @@ iMessage adapter: Strips markdown, plain text
 
 The adapter owns the conversion logic because it knows platform quirks intimately. NEX doesn't need to know that Telegram uses HTML parse mode or that Discord suppresses link embeds with `<>`.
 
-### ChannelCapabilities
+### PlatformCapabilities
 
 Reported by each adapter via `info`, stored by NEX, served to context assembly:
 
 ```typescript
-interface ChannelCapabilities {
+interface PlatformCapabilities {
   // Text limits
   text_limit: number;                    // Max chars per message
   caption_limit?: number;                // Max chars for media caption
@@ -294,17 +294,17 @@ interface ChannelCapabilities {
 
 The agent knows capabilities from context. For simple cases (text limit, markdown yes/no), this is enough. For complex platform-specific formatting (Telegram inline keyboards, Discord embeds, Slack Block Kit), the agent needs deeper guidance.
 
-**Strategy:** The `message` tool's response can include formatting hints when the agent is sending to a specific channel. This avoids polluting the system prompt (which would break caching) while providing just-in-time guidance.
+**Strategy:** The `message` tool's response can include formatting hints when the agent is sending to a specific platform. This avoids polluting the system prompt (which would break caching) while providing just-in-time guidance.
 
 ```typescript
 // When agent calls the message tool, the tool implementation can inject
 // platform-specific guidance based on the target channel
-function getFormattingGuidance(channel: string): string | null {
-  // Only inject for channels with complex formatting
-  if (channel === "telegram") return TELEGRAM_HTML_GUIDE;
-  if (channel === "discord") return DISCORD_FORMATTING_GUIDE;
-  if (channel === "slack") return SLACK_MRKDWN_GUIDE;
-  return null; // Simple channels don't need guidance
+function getFormattingGuidance(platform: string): string | null {
+  // Only inject for platforms with complex formatting
+  if (platform === "telegram") return TELEGRAM_HTML_GUIDE;
+  if (platform === "discord") return DISCORD_FORMATTING_GUIDE;
+  if (platform === "slack") return SLACK_MRKDWN_GUIDE;
+  return null; // Simple platforms don't need guidance
 }
 ```
 
@@ -470,7 +470,7 @@ Write to Events Ledger (async, idempotent)
 Create NexusRequest
      │
      ▼
-NEX Pipeline: receiveEvent → resolveIdentity → resolveAccess → ...
+NEX Pipeline: ingest → resolveIdentity → resolveReceiver → resolveAccess → ...
 ```
 
 Every JSONL line from the adapter becomes a NexusEvent, gets written to the Events Ledger, and enters the full NEX pipeline.
@@ -494,7 +494,7 @@ Backfill runs as a background process after monitoring starts. The adapter emits
    └── Re-running backfill for same period is safe
 ```
 
-**Why backfill skips the pipeline:** You don't want to generate agent responses for 10,000 old emails. Backfill populates the Events Ledger and Identity Graph (contacts), providing historical context for Cortex and future queries. The pipeline is for live events only.
+**Why backfill skips the pipeline:** You don't want to generate agent responses for 10,000 old emails. Backfill populates the Events Ledger and Identity Graph (contacts), providing historical context for the Memory System and future queries. The pipeline is for live events only.
 
 ### Shutdown
 
@@ -559,13 +559,13 @@ nexus adapter restart gog/tnapathy@gmail.com
 
 ### Config (Desired State)
 
-Lives in `nex.yaml`. Human-editable, version-controllable. Defines what should exist and how it should run.
+Lives in `state/config.json`. Human-editable, version-controllable. Defines what should exist and how it should run.
 
 ```yaml
 adapters:
   gog:
     command: "gog"
-    channel: gmail
+    platform: gmail
     credential_service: google
     accounts:
       tnapathy@gmail.com:
@@ -581,7 +581,7 @@ adapters:
 
   eve:
     command: "eve"
-    channel: imessage
+    platform: imessage
     accounts:
       default:
         monitor: true
@@ -589,7 +589,7 @@ adapters:
 
   discord-cli:
     command: "discord-cli"
-    channel: discord
+    platform: discord
     credential_service: discord
     accounts:
       echo-bot:
@@ -599,14 +599,14 @@ adapters:
 
 ### Database (Runtime State)
 
-Lives in `runtime.db` (formerly `nexus.db`). Machine-managed. Tracks what IS happening.
+Lives in `runtime.db`. Machine-managed. Tracks what IS happening.
 
 ```sql
 CREATE TABLE adapter_instances (
     -- Identity
     adapter TEXT NOT NULL,              -- 'gog', 'eve', 'discord-cli'
     account TEXT NOT NULL,              -- 'tnapathy@gmail.com', 'default', 'echo-bot'
-    channel TEXT NOT NULL,              -- 'gmail', 'imessage', 'discord'
+    platform TEXT NOT NULL,             -- 'gmail', 'imessage', 'discord'
 
     -- Process state
     status TEXT NOT NULL DEFAULT 'stopped',
@@ -640,7 +640,7 @@ CREATE TABLE adapter_instances (
 );
 
 CREATE INDEX idx_adapter_instances_status ON adapter_instances(status);
-CREATE INDEX idx_adapter_instances_channel ON adapter_instances(channel);
+CREATE INDEX idx_adapter_instances_platform ON adapter_instances(platform);
 ```
 
 ### Config vs DB Responsibilities
@@ -655,7 +655,7 @@ CREATE INDEX idx_adapter_instances_channel ON adapter_instances(channel);
 | Event counts | DB | Runtime metric |
 | Restart count | DB | Ephemeral, resets on config change |
 | Backfill progress | DB | Runtime tracking |
-| Channel capabilities | DB (cached) | From adapter `info`, refreshed periodically |
+| Platform capabilities | DB (cached) | From adapter `info`, refreshed periodically |
 
 ---
 
@@ -689,7 +689,7 @@ NEX reads delivery status
      │
      ├── Write outbound event to Events Ledger (closes the loop)
      ├── Update NexusRequest with delivery_result
-     └── Continue to finalize stage
+     └── Continue to deliverResponse stage
 ```
 
 ### Streaming Path (adapters with `stream` support)
@@ -712,12 +712,12 @@ Agent calls message tool → NEX resolves adapter → <command> send --account <
 
 No streaming is involved — the message content is complete when the tool is called.
 
-### Explicit Sends (Agent → Different Channel)
+### Explicit Sends (Agent → Different Platform)
 
-When the agent uses the `message` tool to send to a channel other than the originating one:
+When the agent uses the `message` tool to send to a platform other than the originating one:
 
 ```
-Agent calls: message({ action: "send", channel: "discord", to: "channel:123", text: "..." })
+Agent calls: message({ action: "send", platform: "discord", to: "channel:123", text: "..." })
      │
      ▼
 Message tool resolves: adapter=discord-cli, account=echo-bot
@@ -729,7 +729,7 @@ NEX calls: discord-cli send --account echo-bot --to "channel:123" [--thread <thr
 Same flow as above
 ```
 
-The agent knows what channels are available because `ChannelContext.available_channels` was injected during context assembly.
+The agent knows what platforms are available because `PlatformContext.available_platforms` was injected during context assembly.
 
 ### Target Resolution
 
@@ -741,8 +741,8 @@ The `--to` parameter uses a consistent format across adapters:
 
 Target format is adapter-specific but follows conventions:
 
-| Channel | Target Format | Examples |
-|---------|---------------|----------|
+| Platform | Target Format | Examples |
+|----------|---------------|----------|
 | gmail | Email address | `tyler@example.com` |
 | imessage | Phone or email | `+14155551234`, `tyler@icloud.com` |
 | discord | `channel:<id>` or `user:<id>` | `channel:123456789` |
@@ -763,7 +763,7 @@ nexus adapter unregister <name>
 # List adapters
 nexus adapter list                     # All registered adapters
 nexus adapter list --running           # Only running
-nexus adapter list --channel gmail     # Filter by channel
+nexus adapter list --platform gmail    # Filter by platform
 
 # Adapter info
 nexus adapter info <name>              # Show adapter details + accounts
@@ -869,42 +869,42 @@ The Adapter Manager exposes state to the Broker for context assembly.
 ```typescript
 interface AdapterManagerQuery {
   // For context assembly
-  getActiveChannels(): ActiveChannel[];
-  getChannelCapabilities(channel: string): ChannelCapabilities;
+  getActivePlatforms(): ActivePlatform[];
+  getPlatformCapabilities(platform: string): PlatformCapabilities;
 
   // For outbound delivery
-  getOutboundAdapter(channel: string, account?: string): ResolvedAdapter;
+  getOutboundAdapter(platform: string, account?: string): ResolvedAdapter;
 
   // For status display
   getAdapterStatus(): AdapterInstanceStatus[];
 }
 
-interface ActiveChannel {
-  channel: string;                    // "gmail", "discord", "imessage"
+interface ActivePlatform {
+  platform: string;                   // "gmail", "discord", "imessage"
   adapter: string;                    // "gog", "discord-cli", "eve"
-  accounts: string[];                 // Active accounts for this channel
-  capabilities: ChannelCapabilities;
+  accounts: string[];                 // Active accounts for this platform
+  capabilities: PlatformCapabilities;
   direction: "inbound" | "outbound" | "both";
 }
 ```
 
 ### What Goes Into Agent Context
 
-During context assembly, the Broker injects channel information into the **event context** (dynamic, per-turn):
+During context assembly, the Broker injects platform information into the **event context** (dynamic, per-turn):
 
 ```typescript
 // Injected into event context alongside time, timezone, etc.
-const channelContext = {
-  // Current channel (where this message came from)
-  channel: "imessage",
-  peer: "+14155551234",
+const platformContext = {
+  // Current platform (where this message came from)
+  platform: "imessage",
+  container_id: "+14155551234",
   capabilities: { text_limit: 4000, supports_markdown: false, ... },
 
-  // All channels available for explicit sends
-  available_channels: [
-    { channel: "gmail", accounts: ["tnapathy@gmail.com", "tyler@work.com"] },
-    { channel: "imessage", accounts: ["default"] },
-    { channel: "discord", accounts: ["echo-bot"], capabilities: { text_limit: 2000, supports_markdown: true, ... } },
+  // All platforms available for explicit sends
+  available_platforms: [
+    { platform: "gmail", accounts: ["tnapathy@gmail.com", "tyler@work.com"] },
+    { platform: "imessage", accounts: ["default"] },
+    { platform: "discord", accounts: ["echo-bot"], capabilities: { text_limit: 2000, supports_markdown: true, ... } },
   ],
 };
 ```
@@ -936,7 +936,7 @@ An adapter declares its level implicitly via the `supports` array in `info`.
 
 ### Adapter Interfaces (ADAPTER_INTERFACES.md, INBOUND_INTERFACE.md, OUTBOUND_INTERFACE.md)
 
-Those specs define the **data contracts** — NexusEvent schema, DeliveryResult schema, ChannelCapabilities shape. This spec defines the **operational system** — how NEX manages adapters as processes.
+Those specs define the **data contracts** — NexusEvent schema, DeliveryResult schema, PlatformCapabilities shape. This spec defines the **operational system** — how NEX manages adapters as processes.
 
 ### Credential System (CREDENTIAL_SYSTEM.md)
 
@@ -952,17 +952,17 @@ Defines the canonical semantics for `thread_id` / `reply_to_id` and the required
 
 ### NEX Pipeline (OVERVIEW.md)
 
-Adapter events enter the pipeline at `receiveEvent`. Outbound delivery happens at `deliverResponse`. This spec defines how events get from adapter to pipeline and back.
+Adapter events enter the pipeline at `ingest`. Outbound delivery happens at `processResponse`. This spec defines how events get from adapter to pipeline and back.
 
 ### Context Assembly (broker/CONTEXT_ASSEMBLY.md)
 
-Channel capabilities and available channels are injected into event context during assembly. This spec defines where that data comes from (Adapter Manager).
+Platform capabilities and available platforms are injected into event context during assembly. This spec defines where that data comes from (Adapter Manager).
 
 ---
 
 ## Open Questions
 
-1. **Config location** — Resolved: adapter config lives in `nex.yaml` under the `adapters:` key.
+1. **Config location** — Resolved: adapter config lives in `state/config.json` under the `adapters` key.
 
 2. **Adapter updates** — How to handle adapter binary updates? Restart required? Hot-reload capabilities?
 
@@ -983,7 +983,7 @@ Channel capabilities and available channels are injected into event context duri
 - `CHANNEL_DIRECTORY.md` — Directory of outbound targets per channel/account
 - `channels/` — Per-channel capability specs
 - `../nex/NEXUS_REQUEST.md` — Request object adapters create/consume
-- `../broker/CONTEXT_ASSEMBLY.md` — How channel context feeds into agent prompts
+- `../broker/CONTEXT_ASSEMBLY.md` — How platform context feeds into agent prompts
 - `../../environment/capabilities/credentials/CREDENTIAL_SYSTEM.md` — Credential linking
 - `upstream/CHANNEL_INVENTORY.md` — OpenClaw channel implementations
 - `upstream/OPENCLAW_INBOUND.md` — OpenClaw inbound patterns

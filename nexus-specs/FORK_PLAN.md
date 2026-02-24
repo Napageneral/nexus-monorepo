@@ -34,28 +34,29 @@ Nexus is a personal AI ecosystem forked from **openclaw** (formerly moltbot/claw
 
 | Aspect | Openclaw | Nexus |
 |--------|----------|-------|
-| **Data model** | JSONL session files | SQLite ledgers (System of Record) |
-| **Memory** | File-based (MEMORY.md) | Cortex (Go, derived layer) |
+| **Data model** | JSONL session files | SQLite ledgers (6 databases: events, agents, identity, memory, embeddings, runtime) |
+| **Memory** | File-based (MEMORY.md) | Memory System (TypeScript, unified) |
 | **Access control** | Per-call permissions | Upfront IAM policies |
-| **Event flow** | Direct handling | NEX pipeline (8 stages) |
+| **Event flow** | Direct handling | NEX pipeline (9 stages) |
 | **Workspace** | Hidden `~/.openclaw/` | Visible `~/nexus/` |
 | **Skills** | Bundled plugins | Hub-based (no bundled skills) |
 | **Adapters** | In-process | External CLI executables |
-| **Config** | `openclaw.json` | `nex.yaml` |
-| **Language** | TypeScript | TypeScript core + Go Cortex |
+| **Config** | `openclaw.json` | `config.json` |
+| **Language** | TypeScript | TypeScript (Go port planned) |
 
 ---
 
 ## Implementation Sequence
 
-### Step 0: Fork + Rebrand (DONE)
+### Step 0: Fork + Rebrand (~80% COMPLETE)
 
 - [x] Fresh clone from openclaw HEAD (`0efaf5aa8`)
 - [x] Set up remotes (origin → Napageneral/nex, upstream → openclaw)
 - [x] Run `rebrand-nexus.sh` (all 9 phases pass)
-- [ ] `pnpm install && pnpm build && pnpm test` — verify rebrand didn't break anything
+- [x] `pnpm install && pnpm build && pnpm test` — rebrand verified
+- [x] Commit rebranded state as baseline
+- [x] Implementation ~80% complete
 - [ ] Push to GitHub (pending GitHub recovery from 500 errors)
-- [ ] Commit rebranded state as baseline
 
 ### Step 1: Scaffold the Nexus Structure
 
@@ -67,7 +68,7 @@ src/
 ├── agents/          → src/broker/ (agent execution)
 ├── auto-reply/      → src/broker/ (session/queue management)
 ├── channels/        → src/nex/adapters/ (adapter protocol types)
-├── config/          → src/config/ (keep, adapt for nex.yaml)
+├── config/          → src/config/ (keep, adapt for config.json)
 ├── daemon/          → src/nex/daemon/ (NEX daemon lifecycle)
 ├── commands/        → src/cli/ (CLI commands)
 ├── discord/         → extensions/discord/ (already there)
@@ -77,7 +78,7 @@ src/
 ├── bus/             → src/nex/bus/ (event bus)
 ├── plugins/         → src/nex/plugins/ (plugin system)
 ├── gateway/         → src/gateway/ (keep for now, eventual NEX HTTP)
-├── memory/          → DROP (replaced by Cortex)
+├── memory/          → DROP (replaced by Memory System)
 ├── browser/         → defer (not V1)
 extensions/          → extensions/ (external adapter processes)
 packages/            → DROP (legacy package names)
@@ -87,7 +88,7 @@ packages/            → DROP (legacy package names)
 ```
 src/
 ├── nex/             # NEX orchestrator
-│   ├── pipeline.ts  # 8-stage pipeline
+│   ├── pipeline.ts  # 9-stage pipeline
 │   ├── request.ts   # NexusRequest types
 │   ├── daemon/      # Process lifecycle
 │   ├── bus/         # Event bus + SSE
@@ -112,10 +113,10 @@ src/
 │   └── nexus.ts     # Nexus Ledger (raw SQL)
 ├── cli/             # nexus CLI
 ├── tools/           # Tool registry
-├── config/          # Config system (nex.yaml)
+├── config/          # Config system (config.json)
 └── gateway/         # HTTP/SSE server
 extensions/          # External adapter processes
-cortex/              # Go process (separate, later)
+memory/              # Memory System (TypeScript, unified)
 ```
 
 **Deliverable:** A document (`SCAFFOLD_MAP.md`) listing every file move/rename/delete from current → target. This becomes the progress tracker.
@@ -136,17 +137,17 @@ Port the SQLite ledger layer. This is the bedrock everything writes to.
 
 ### Step 3: NEX Pipeline Skeleton (P0)
 
-The 8-stage pipeline with stub implementations.
+The 9-stage pipeline with stub implementations.
 
 | Task | Spec | Notes |
 |------|------|-------|
 | NexusRequest type definitions | `nex/NEXUS_REQUEST.md` | Zod schemas for each stage |
-| Pipeline executor (8 stages) | `nex/NEX.md` | Stages are function calls, sync |
+| Pipeline executor (9 stages) | `nex/NEX.md` | Stages are function calls, sync |
 | Stub stage implementations | `nex/NEX.md` | Pass-through, accumulate NexusRequest |
 | Nexus Ledger writes | `nex/NEXUS_REQUEST.md` | Trace each request |
 | NEXPlugin interface | `nex/PLUGINS.md` | Hook points at each stage |
 
-**Verification:** Synthetic event traverses all 8 stages, NexusRequest accumulates correctly, trace written to Nexus Ledger.
+**Verification:** Synthetic event traverses all 9 stages, NexusRequest accumulates correctly, trace written to Nexus Ledger.
 
 ### Step 4: Agent Engine (P0)
 
@@ -204,9 +205,9 @@ Tie the system together as a managed process.
 | Streaming pipeline | `runtime/STREAMING.md` | Token-level delivery |
 | Automations | `nex/automations/AUTOMATION_SYSTEM.md` | Proactive/reactive hooks |
 
-### Step 9: Cortex Integration (P2, Go)
+### Step 9: Memory System Integration (P2)
 
-Separate Go process, integrates via HTTP API.
+Unified TypeScript memory system (episodes, facets, embeddings).
 
 ---
 
@@ -233,8 +234,8 @@ Each step has a concrete test before proceeding:
 |------|------|
 | **0** | `pnpm test` passes on rebranded fork |
 | **1** | Scaffold document maps every file; modules compile |
-| **2** | All 4 ledger schemas create; CRUD tests pass |
-| **3** | Synthetic event → 8 stages → Nexus Ledger trace |
+| **2** | All 6 database schemas create; CRUD tests pass |
+| **3** | Synthetic event → 9 stages → Nexus Ledger trace |
 | **4** | Agent executes, response in Agents Ledger |
 | **5** | Real iMessage → full pipeline → reply delivered |
 | **6** | Unknown sender → identity created; known sender → permissions applied |
@@ -262,7 +263,7 @@ Each step has a concrete test before proceeding:
 
 - `dm` → `direct` rename (ChatType refactor) — adopt when we implement session keys
 - Compaction hardening (staged pruning, context overflow recovery) — port to Broker
-- QMD memory backend — study but our Cortex is different
+- QMD memory backend — study but our Memory System is different
 - Gateway agents CRUD — relevant for daemon management
 
 ---

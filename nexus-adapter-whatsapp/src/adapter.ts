@@ -505,13 +505,13 @@ const WHATSAPP_CHANNEL_CAPABILITIES = {
 
 export const whatsappAdapter: AdapterDefinition = {
   info: async () => ({
-    channel: "whatsapp",
+    platform: "whatsapp",
     name: "nexus-adapter-whatsapp",
     version: "0.1.0",
     supports: ["monitor", "send", "health", "accounts"],
     credential_service: "whatsapp",
     multi_account: true,
-    channel_capabilities: WHATSAPP_CHANNEL_CAPABILITIES,
+    platform_capabilities: WHATSAPP_CHANNEL_CAPABILITIES,
   }),
 
   accounts: async (ctx) => {

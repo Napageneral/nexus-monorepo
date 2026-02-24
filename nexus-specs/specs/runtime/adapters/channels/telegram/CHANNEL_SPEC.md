@@ -1,7 +1,7 @@
 # Telegram Adapter
 
 **Status:** IMPLEMENTED (EXTERNAL ADAPTER V1)  
-**Nexus Tool:** `telegram-cli` (TBD)  
+**Nexus Tool:** `nexus-adapter-telegram` (TBD)
 **Upstream:** `src/telegram/` (full implementation)
 
 ---
@@ -79,8 +79,8 @@ A     B</pre>
 ### Event Fields
 ```typescript
 {
-  channel: 'telegram',
-  peer_kind: ctx.chat.type === 'private' ? 'dm' : 'group',
+  platform: 'telegram',
+  container_kind: ctx.chat.type === 'private' ? 'dm' : 'group',
   thread_id: ctx.message.message_thread_id?.toString(),
   metadata: {
     chat_id: ctx.chat.id,

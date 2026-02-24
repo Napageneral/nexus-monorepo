@@ -1,5 +1,5 @@
 ---
-summary: "Root AGENTS.md for Nexus workspaces - system behavior and CLI gateway"
+summary: "Root AGENTS.md for Nexus workspaces - system behavior and CLI reference"
 read_when:
   - Bootstrapping a workspace
   - Fresh nexus install
@@ -8,7 +8,7 @@ read_when:
 
 You are operating within a Nexus workspace — a personal AI ecosystem with skills and identity.
 
-## 🚀 First Action - Orient Yourself
+## First Action - Orient Yourself
 
 Run `nexus status` to understand the current state:
 ```bash
@@ -21,7 +21,7 @@ The CLI tells you who you are, what capabilities are available, and suggests nex
 
 ---
 
-## 📊 Capability Status Legend
+## Capability Status Legend
 
 | Emoji | Status | Meaning |
 |-------|--------|---------|
@@ -34,7 +34,7 @@ The CLI tells you who you are, what capabilities are available, and suggests nex
 
 ---
 
-## 🆔 Identity
+## Identity
 
 Read these files to know who you are and who you're helping:
 
@@ -46,7 +46,7 @@ If you learn something important about the user, update their profile in `state/
 
 ---
 
-## 🔧 Nexus CLI
+## Nexus CLI
 
 The `nexus` CLI is your interface to the system. Here's the full grammar:
 
@@ -56,7 +56,7 @@ nexus
 ├── capabilities                  # Full capability map
 │   └── [--status <status>]       # Filter by status
 │
-├── skill
+├── skills
 │   ├── list                      # List all skills
 │   │   └── [--type] [--status]   # Filter options
 │   ├── use <name>                # Get skill guide (SKILL.md content)
@@ -101,7 +101,7 @@ gog gmail search "is:unread"  # Use the tool yourself
 
 ---
 
-## 🔐 Credential Hygiene
+## Credential Hygiene
 
 If you encounter credentials (env vars, config files, CLI auth, .env files), **capture and track them** in Nexus immediately. This prevents losing access later.
 
@@ -112,28 +112,40 @@ If you encounter credentials (env vars, config files, CLI auth, .env files), **c
 
 ---
 
-## 📁 Workspace Structure
+## Workspace Structure
 
 ```
 ~/nexus/
 ├── AGENTS.md              # This file — system behavior
-├── skills/                # Skill definitions (curated)
-│   ├── tools/{name}/      # Tool skills
-│   ├── connectors/{name}/ # Connector skills
-│   ├── guides/{name}/     # Guide skills
-├── state/                 # Runtime state (CLI-managed)
-│   ├── user/IDENTITY.md   # User profile
-│   ├── agents/{name}/     # Agent identity files
-│   ├── credentials/       # Credential pointers
-│   └── skills/            # Per-skill state and usage
-└── home/                  # USER'S PERSONAL SPACE
+├── skills/                # Flat skills directory (type tracked in metadata)
+│   └── {name}/            # Each skill is a directory
+│       └── SKILL.md       # Skill documentation and frontmatter
+├── home/                  # USER'S PERSONAL SPACE
+└── state/
+    ├── data/              # All databases
+    │   ├── events.db      # Event ledger
+    │   ├── agents.db      # Agent sessions
+    │   ├── identity.db    # Contacts, directory, entities, auth, ACL
+    │   ├── memory.db      # Facts, episodes, analysis (Memory System)
+    │   ├── embeddings.db  # Semantic vector index
+    │   └── runtime.db     # Request traces, adapters, automations, bus
+    ├── agents/            # Agent personas
+    │   ├── BOOTSTRAP.md   # Permanent onboarding template
+    │   └── {name}/        # Agent identity files
+    │       ├── IDENTITY.md
+    │       └── SOUL.md
+    ├── user/
+    │   └── IDENTITY.md    # User profile
+    ├── credentials/       # Credential pointers
+    ├── workspace/         # Automation workspaces (meeseeks pattern)
+    └── config.json        # Runtime config
 ```
 
 **Key insight:** `home/` is the user's space — explore it to understand them. `state/` is system-managed. `skills/` contains your capabilities.
 
 ---
 
-## ☁️ Cloud Sync
+## Cloud Sync
 
 Nexus Cloud provides encrypted backup and sync of the user's `home/` directory. Keys stay local — the server never sees plaintext.
 
@@ -148,7 +160,7 @@ Nexus Cloud provides encrypted backup and sync of the user's `home/` directory. 
 
 ---
 
-## 🛡️ Safety Rules
+## Safety Rules
 
 ### Never Do
 - Exfiltrate private data. Ever.
@@ -174,7 +186,7 @@ Nexus Cloud provides encrypted backup and sync of the user's `home/` directory. 
 
 ---
 
-## 💬 Social Behavior
+## Social Behavior
 
 ### Group Chats
 You have access to your human's stuff. That doesn't mean you *share* their stuff. In groups, you're a participant — not their voice, not their proxy.

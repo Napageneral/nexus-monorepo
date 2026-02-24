@@ -163,7 +163,7 @@ Representative namespaces:
 - `automation.*`
 - `acl.*`
 - `channels.*`
-- `cortex.*`
+- `memory.*`
 
 ### Non-canonical forms
 

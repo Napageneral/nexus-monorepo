@@ -30,23 +30,22 @@ Every event in Nexus — chat messages, control operations, platform notificatio
 
 ### 2.1 Pipeline Stages
 
-Every event, regardless of source, flows through these stages:
+Every event, regardless of source, flows through the 9-stage pipeline:
 
 ```
 ALL EVENTS (from any adapter)
   │
-  ├── auth            Verify the credential (token, API key, adapter auth)
-  ├── identify sender Contact lookup: (platform, space_id, sender_id) → sender entity
-  ├── identify receiver Contact lookup: who is this addressed to? → receiver entity
-  ├── access          Does this sender have permission to reach this receiver?
-  ├── log             Write to events.db (full audit trail, always)
-  ├── automations     Evaluate all matching automations
+  │  1. ingest              Normalize event, create NexusRequest
+  │  2. resolveIdentity     Contact lookup: (platform, space_id, sender_id) → sender entity
+  │  3. resolveReceiver     Contact lookup: who is this addressed to? → receiver entity
+  │  4. resolveAccess       Does this sender have permission to reach this receiver?
+  │  5. runAutomations      Evaluate all matching automations
   │
   ├── receiver is agent persona?
   │   │
-  │   YES ──→ assembleContext → runAgent → deliverResponse
+  │   YES ──→ 6. routeSession → 7. runAgent → 8. processResponse → 9. deliverResponse
   │   │
-  │   NO ──→ done (but automations may have triggered agents independently)
+  │   NO ──→ 9. deliverResponse (log + done; automations may have triggered agents independently)
   │
   └── if control operation: execute handler, return result to caller
 ```
@@ -194,7 +193,7 @@ Control operation receiver semantics (normative):
 - Control operations resolve `receiver = system` (not persona).
 - They MUST still pass through auth/identify/access/log/automations.
 - They MUST preserve synchronous request/response behavior for the caller.
-- Because receiver is `system`, they take the non-agent branch (no `assembleContext → runAgent` path).
+- Because receiver is `system`, they take the non-agent branch (no `routeSession → runAgent` path).
 
 **Special properties:**
 - Always-on (cannot be disabled — it IS the runtime)
@@ -266,13 +265,13 @@ System adapters emit events with sender = "system". No external auth needed (the
                                                 ┌──────────────────┐
 ┌─────────────┐                                 │                  │
 │ Discord     │── JSONL ──→ Discord Adapter ───→│    PIPELINE      │
-│ Gmail       │── JSONL ──→ Gmail Adapter ─────→│                  │
-│ Slack       │── JSONL ──→ Slack Adapter ─────→│  auth            │
-│ iMessage    │── JSONL ──→ iMessage Adapter ──→│  identify sender │
-└─────────────┘                                 │  identify recv   │
-                                                │  access          │
-┌─────────────┐                                 │  log (events.db) │
-│ System      │── internal → Clock Adapter ────→│  automations     │
+│ Gmail       │── JSONL ──→ Gmail Adapter ─────→│  (9 stages)      │
+│ Slack       │── JSONL ──→ Slack Adapter ─────→│                  │
+│ iMessage    │── JSONL ──→ iMessage Adapter ──→│  1. ingest       │
+└─────────────┘                                 │  2. resolveId    │
+                                                │  3. resolveRecv  │
+┌─────────────┐                                 │  4. resolveAccess│
+│ System      │── internal → Clock Adapter ────→│  5. runAutomate  │
 └─────────────┘                                 │    │             │
                                                 │    ▼             │
                                                 │  receiver is     │
@@ -280,13 +279,13 @@ System adapters emit events with sender = "system". No external auth needed (the
                                                 │    │       │     │
                                                 │   YES     NO     │
                                                 │    │       │     │
-                                                │  assemble  done  │
-                                                │  Context   (or   │
-                                                │    │      auto-  │
-                                                │  runAgent mation │
-                                                │    │      fired) │
-                                                │  deliver         │
-                                                │  Response        │
+                                                │  6.route   9.    │
+                                                │  Session deliver  │
+                                                │  7.runAgent Resp │
+                                                │  8.process       │
+                                                │    Response      │
+                                                │  9.deliver       │
+                                                │    Response      │
                                                 └──────────────────┘
 ```
 
@@ -464,7 +463,7 @@ Ports 18791-18792 are only used when `browser.enabled = true`.
 ### Phase 2: Unified Pipeline
 - Add receiver resolution to the pipeline (identify receiver entity from delivery context)
 - Add event logging for all event types (control ops included) to `events.db`
-- Make `assembleContext → runAgent` conditional on receiver being an agent persona
+- Make `routeSession → runAgent` conditional on receiver being an agent persona
 - Update session key format to include receiver persona: `dm:{sender}:persona:{persona}`
 
 ### Phase 3: WS RPC as Adapter

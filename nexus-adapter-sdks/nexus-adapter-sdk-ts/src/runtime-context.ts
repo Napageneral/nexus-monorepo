@@ -22,7 +22,7 @@ const AdapterRuntimeCredentialSchemaV2 = z
 const AdapterRuntimeContextFileSchema = z
   .object({
     version: z.number().optional(),
-    channel: z.string(),
+    platform: z.string(),
     account_id: z.string(),
     config: z.record(z.string(), z.unknown()).default({}),
     credential: z.union([AdapterRuntimeCredentialSchemaV2, AdapterRuntimeCredentialSchemaV1]).optional(),
@@ -38,7 +38,7 @@ export type AdapterRuntimeCredential =
   | (z.infer<typeof AdapterRuntimeCredentialSchemaV1> & { kind: string });
 
 export type AdapterRuntimeContext = {
-  channel: string;
+  platform: string;
   account_id: string;
   config: Record<string, unknown>;
   credential?: AdapterRuntimeCredential;
@@ -79,7 +79,7 @@ export function readAdapterRuntimeContextFile(pathValue: string): AdapterRuntime
   const parsed = JSON.parse(raw) as unknown;
   const file = AdapterRuntimeContextFileSchema.parse(parsed);
   return {
-    channel: file.channel,
+    platform: file.platform,
     account_id: file.account_id,
     config: file.config,
     ...(file.credential ? { credential: normalizeCredential(file.credential) } : {}),

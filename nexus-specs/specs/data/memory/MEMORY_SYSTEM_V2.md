@@ -11,7 +11,7 @@
 
 ## Overview
 
-The Nexus memory system is a 4-layer architecture that transforms raw events into progressively higher levels of understanding. It draws from Hindsight's fact-extraction and consolidation pipeline, Cortex's episode-analysis framework, and a unified entity store.
+The Nexus memory system is a 4-layer architecture that transforms raw events into progressively higher levels of understanding. It draws from Hindsight's fact-extraction and consolidation pipeline, the episode-analysis framework, and a unified entity store.
 
 Two parallel pipelines operate over the same event stream and shared entity store:
 1. **Events -> Episodes -> Analyses** (temporal grouping + structured analysis)
@@ -93,7 +93,7 @@ CREATE INDEX idx_facts_access ON facts(access_count DESC);
 
 #### Knowledge Graph: fact_entities
 
-The knowledge graph is a simple junction table linking facts to entities. This replaces both Hindsight's `unit_entities` and Cortex's structured `relationships` table.
+The knowledge graph is a simple junction table linking facts to entities. This replaces both Hindsight's `unit_entities` and the old structured `relationships` table.
 
 A fact like "Tyler works at Anthropic building Nexus" gets linked to three entities: Tyler, Anthropic, Nexus. The relationship between them is encoded in the natural language of the fact itself -- no structured triples needed.
 
@@ -182,7 +182,7 @@ Pre-computed links cause write amplification (entity links are O(n^2)), require 
 
 ### Layer 2b: Episodes
 
-Episodes are unchanged from the current Cortex system, with one addition: `parent_id` for version history.
+Episodes are unchanged from the current memory system, with one addition: `parent_id` for version history.
 
 ```sql
 CREATE TABLE episodes (
@@ -507,7 +507,7 @@ Both agent turns and standalone events flow through the same episode-based pipel
 Backfill uses the **same episode-based retain pipeline** as live. The key differences: episodes are pre-computed from historical events, higher parallelism (4+ concurrent retain jobs), and pre-episode filtering removes obvious noise before grouping.
 
 **Summary flow:**
-1. **Scan + filter** → query events.db, apply pre-episode filters (SQL WHERE clauses from `memory_filters` table in nexus.db), skip already-retained events
+1. **Scan + filter** → query events.db, apply pre-episode filters (SQL WHERE clauses from `memory_filters` table in runtime.db), skip already-retained events
 2. **Group into episodes** → group by (platform, thread_id), split at 90-minute conversation gaps + 6000-token budget
 3. **Estimate** → show episode count, time/cost estimate, confirm before proceeding
 4. **Retain** → process episodes through the same writer meeseeks pipeline in parallel (configurable concurrency)
@@ -625,7 +625,7 @@ Reference: Hindsight implements MMR in its recall pipeline. Standard algorithm, 
 
 ### Embedding Model
 
-The old Cortex used Gemini embeddings but these are expensive per-call. For V2, use the same local model as Hindsight:
+The old memory system used Gemini embeddings but these are expensive per-call. For V2, use the same local model as Hindsight:
 
 - **Default:** `BAAI/bge-small-en-v1.5` via node-llama-cpp GGUF (Q8_0). 384 dimensions. Runs locally, zero API cost.
 - **Provider abstraction:** The embedding provider is swappable via env vars (`NEXUS_EMBEDDINGS_PROVIDER`, `NEXUS_EMBEDDINGS_MODEL`). Supports local, OpenAI, Cohere, LiteLLM. See `MEMORY_V2_INFRASTRUCTURE_WORKPLAN.md` Item 1.
@@ -640,14 +640,14 @@ Follow existing conventions in `~/.nexus/state/meeseeks/`:
 ~/.nexus/state/meeseeks/memory-writer/
     ROLE.md              -- Role prompt (see MEMORY_WRITER_ROLE.md)
     skills/
-        cortex/
+        memory/
             recall.ts    -- recall() tool implementation
             write.ts     -- insert_fact, create_entity, etc.
 
 ~/.nexus/state/meeseeks/memory-injection/
     ROLE.md              -- Minimal triage prompt
     skills/
-        cortex/
+        memory/
             recall.ts    -- recall() tool only (read-only)
 ```
 

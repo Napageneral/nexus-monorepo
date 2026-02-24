@@ -25,8 +25,8 @@ These are **big-bang** decisions.
 | Area | Decision |
 |------|----------|
 | State layout | Use 6 split databases under `state/data/*.db` (events, agents, identity, memory, embeddings, runtime) |
-| Memory system | Memory System databases (memory.db, identity.db, embeddings.db) replace legacy cortex.db |
-| Config | Use one canonical config file at `state/nexus/config.json` |
+| Memory system | Memory System databases (memory.db, identity.db, embeddings.db) |
+| Config | Use one canonical config file at `state/config.json` |
 | CLI ownership | `nex` owns both runtime engine and CLI control plane |
 | Runtime process model | Single long-running **NEX daemon** (control-plane included); no separate gateway service |
 | Terminology | Replace `gateway` naming with `runtime` / `control-plane` |
@@ -59,13 +59,12 @@ These are **big-bang** decisions.
     │   └── IDENTITY.md
     ├── credentials/
     │   └── index.json
-    └── nexus/
-        └── config.json
+    └── config.json
 ```
 
-### Memory System (replaces legacy cortex.db)
+### Memory System
 
-The legacy `state/cortex/cortex.db` has been superseded by three databases under `state/data/`:
+The Memory System uses three databases under `state/data/`:
 
 - **memory.db** -- facts, episodes, facets, analyses, mental models (Memory System)
 - **embeddings.db** -- semantic vector index (shared across subsystems)
@@ -89,7 +88,7 @@ The following paths are not canonical after this decision:
 
 Use exactly one config file:
 
-- `~/nexus/state/nexus/config.json`
+- `~/nexus/state/config.json`
 
 ### Schema Model
 
@@ -104,7 +103,7 @@ Example top-level domains:
 - `hooks`
 - `automation`
 - `acl`
-- `cortex`
+- `memory`
 - `ui`
 - `logging`
 
@@ -178,7 +177,7 @@ Implications:
 ## 6. Implementation Order
 
 1. Update specs to match this document (state layout, config, CLI contract language)
-2. Align `nex` config path + schema on `state/nexus/config.json`
+2. Align `nex` config path + schema on `state/config.json`
 3. Align `nex` CLI semantics and rename `gateway` command surface to `runtime`
 4. Update tests/e2e contracts to the new state/config/CLI contract
 5. Remove contradictory docs and references
@@ -191,7 +190,7 @@ This decision is implemented when all are true:
 
 - All 6 databases are read/written only from `state/data/*.db`
 - Memory System data is read/written via memory.db, identity.db, and embeddings.db under `state/data/`
-- Config reads/writes use only `state/nexus/config.json`
+- Config reads/writes use only `state/config.json`
 - `nexus status` is orientation-first
 - Runtime service/API controls are under `nexus runtime ...`
 - Only one runtime service exists: NEX daemon owns the control-plane (no separate gateway service)
@@ -201,7 +200,7 @@ This decision is implemented when all are true:
 
 ## Related Specs
 
-- `../../data/cortex/README.md`
+- `../../data/memory/README.md`
 - `../../runtime/nex/DAEMON.md`
 - `../../runtime/nex/NEX.md`
 - `./WORKSPACE_SYSTEM.md`

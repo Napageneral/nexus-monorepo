@@ -1,7 +1,7 @@
 # iMessage Adapter
 
-**Status:** TODO  
-**Nexus Tool:** `eve` (BlueBubbles integration)  
+**Status:** IMPLEMENTED (adapter exists as `eve`)
+**Nexus Tool:** `eve` (BlueBubbles integration)
 **Upstream:** `src/imessage/` (full implementation)
 
 ---
@@ -62,8 +62,8 @@ A     B
 ### Event Fields
 ```typescript
 {
-  channel: 'imessage',
-  peer_kind: chat.participants.length > 2 ? 'group' : 'dm',
+  platform: 'imessage',
+  container_kind: chat.participants.length > 2 ? 'group' : 'dm',
   thread_id: undefined,          // No native threading
   metadata: {
     chat_guid: chat.guid,

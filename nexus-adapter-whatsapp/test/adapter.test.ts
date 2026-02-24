@@ -55,7 +55,7 @@ describe("whatsapp adapter contract smoke", () => {
       .map((entry) => entry.trim())
       .find(Boolean);
     const parsed = JSON.parse(line ?? "{}");
-    expect(parsed.channel).toBe("whatsapp");
+    expect(parsed.platform).toBe("whatsapp");
     expect(parsed.supports).toContain("monitor");
     expect(parsed.supports).toContain("send");
   });

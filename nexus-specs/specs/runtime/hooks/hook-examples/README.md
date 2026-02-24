@@ -18,7 +18,7 @@ This guide explains how to write hooks for the Nexus event system. Hooks work al
 │                                    │                                         │
 │                                    ▼                                         │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                    CORTEX (Event Layer)                            │   │
+│  │                    NEX (Event Layer)                               │   │
 │  │                                                                      │   │
 │  │  • Normalizes all events into unified schema                        │   │
 │  │  • Stores in Events Ledger (permanent)                              │   │
@@ -201,7 +201,7 @@ When triggers match, your handler receives a `HookContext`:
 ```typescript
 interface HookContext {
   // The event being evaluated
-  event: CortexEvent;
+  event: NexusEvent;
   
   // ACL-resolved identity and permissions (already validated)
   principal: Principal;       // { type, name, relationship, entity_id }
@@ -209,7 +209,7 @@ interface HookContext {
   session: Session;           // { session_key, persona, thread_id }
   
   // Database access
-  dbPath: string;             // Path to Cortex SQLite database
+  dbPath: string;             // Path to Memory System SQLite database
   
   // Semantic search
   search(query, opts);        // Embeddings handled internally
@@ -324,7 +324,7 @@ handler: async (ctx: HookContext): Promise<HookResult> => {
 
 ### Pattern 3: Database Query
 
-Query Cortex for additional context.
+Query the database for additional context.
 
 ```typescript
 handler: async (ctx: HookContext): Promise<HookResult> => {

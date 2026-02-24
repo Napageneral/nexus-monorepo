@@ -1,3 +1,5 @@
+> **Note:** This document references Go code paths that have been eliminated. The Go memory subprocess has been replaced by the unified TypeScript memory system. Retained for historical reference during the TS port.
+
 # Memory System V2 — Spec Deviation Fix List
 
 **Status:** REVIEW AGENT OUTPUT
@@ -6,7 +8,7 @@
 **For:** Implementing Agent (codex)
 **Database Layout:** See `specs/data/DATABASE_ARCHITECTURE.md` for the canonical 6-database layout
 
-> **Note:** This document was a point-in-time review of the Go cortex implementation. The Go cortex is now being eliminated and all logic ported to TypeScript. These findings should be considered during the TS port. Go code references (recall.go, strategies.go, consolidation.go, embeddings_batcher.go, etc.) point to code being superseded — the TS implementation should incorporate these fixes directly. Memory data now lives in memory.db (facts, episodes), identity.db (entities), and embeddings.db (vectors).
+> **Note:** This document was a point-in-time review of the Go memory subprocess implementation. The Go subprocess is now eliminated and all logic ported to TypeScript. These findings should be considered during the TS port. Go code references (recall.go, strategies.go, consolidation.go, embeddings_batcher.go, etc.) point to code being superseded -- the TS implementation should incorporate these fixes directly. Memory data now lives in memory.db (facts, episodes), identity.db (entities), and embeddings.db (vectors).
 
 ---
 
@@ -82,11 +84,11 @@ One-line fix. Verify the v4 hook exists and is the current version. This means P
 **What's wrong:** The workspace at `state/meeseeks/memory-reader/` contains V1 artifacts that contaminate the system prompt:
 
 ```
-SKILLS.md        — references cortex-search.sh, raw SQL via sqlite3
+SKILLS.md        — references legacy shell search, raw SQL via sqlite3
 PATTERNS.md      — V1 workflow patterns
 ERRORS.md        — V1 reflection logs
-skills/cortex/cortex-search.sh   — V1 shell search script
-skills/cortex/cortex-write.sh    — V1 shell write script
+skills/cortex/cortex-search.sh   — V1 shell search script (legacy)
+skills/cortex/cortex-write.sh    — V1 shell write script (legacy)
 skills/cortex/SCHEMA.md          — 37KB V1 schema dump
 skills/cortex/QUERIES.md         — V1 query patterns
 ```
@@ -98,12 +100,12 @@ assembled.systemPrompt += `\n\n${ctx.workspace.role}\n${ctx.workspace.skills}`;
 
 **What the spec says (MEMORY_INJECTION.md):** The workspace should be `memory-injection/` (not `memory-reader/`) and contain ONLY:
 - `ROLE.md` — minimal triage prompt
-- `skills/cortex/recall.ts` — recall tool binding
+- `skills/memory/recall.ts` — recall tool binding
 
 **Fix:**
 1. Create new workspace: `state/meeseeks/memory-injection/`
 2. Move the existing `ROLE.md` (which is actually correct and well-written) to the new workspace.
-3. Create `skills/cortex/recall.ts` with just the recall tool binding.
+3. Create `skills/memory/recall.ts` with just the recall tool binding.
 4. Delete or archive the entire `state/meeseeks/memory-reader/` directory.
 5. Update the automation DB record to point to the new workspace.
 6. Disable `self_improvement` on the automation record — the spec says "Minimal — fast model, simple task" for self-improvement. A fast cheap model should not be updating its own workspace.
@@ -167,7 +169,7 @@ ULIDs are time-sortable, which matters for ordering by creation time without an 
 **File:** `state/hooks/scripts/hook_83961572-199a-43a2-b060-7b3b9d655411.v4.ts` lines 146-161
 
 **Fix:**
-1. The hook has access to `ctx.request.agent?.session_label`. Use this to query recent session history.
+1. The hook has access to `ctx.request.agent?.session_key`. Use this to query recent session history.
 2. Pass the last 3-5 turns as thread context in the task payload, not just the latest turn.
 3. The writer's ROLE.md already says "Use full history only for disambiguation when the payload is ambiguous" — this is correct, but the history needs to actually be available.
 
@@ -178,7 +180,7 @@ ULIDs are time-sortable, which matters for ordering by creation time without an 
 **What's wrong:** Path 1 doesn't pass any deliveryContext to the writer. The writer needs platform, sender_id, sender_name, etc. for entity resolution and source attribution.
 
 **What the spec says (MEMORY_WRITER_V2.md §Event Context):**
-The writer receives the full NexusEvent with deliveryContext including platform, sender_id, sender_name, peer_id, peer_kind, thread_id.
+The writer receives the full NexusEvent with deliveryContext including platform, sender_id, sender_name, container_id, container_kind, thread_id.
 
 **File:** `state/hooks/scripts/hook_83961572-199a-43a2-b060-7b3b9d655411.v4.ts`
 

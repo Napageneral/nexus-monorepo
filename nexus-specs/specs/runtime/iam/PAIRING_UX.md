@@ -13,7 +13,7 @@
 1. **Identity resolution** (mapping platform sender ids to principals/entities)
 2. **IAM policies** (allow/deny/ask) and **grants** (approvals)
 
-The purpose is to make “unknown sender on a channel” a safe, user-friendly flow:
+The purpose is to make “unknown sender on a platform” a safe, user-friendly flow:
 
 - Ask the owner for approval
 - Record a durable identity mapping
@@ -41,15 +41,15 @@ Rationale: group/channel exposure is broader; DMs are the natural onboarding sur
 
 An adapter emits a `NexusEvent` that includes:
 
-- `channel`, `account_id`
+- `platform`, `account_id`
 - `sender_id`
-- `peer_kind`, `peer_id`, optional `thread_id`
+- `container_kind`, `container_id`, optional `thread_id`
 
 ### 2. Resolve Principal (Identity)
 
 Identity resolution attempts to map:
 
-`(channel, sender_id)` → `principal_id`
+`(platform, space_id, sender_id)` → `principal_id` (via contacts table)
 
 If no mapping exists, treat sender as `principal = unknown`.
 
@@ -57,9 +57,9 @@ If no mapping exists, treat sender as `principal = unknown`.
 
 IAM evaluates policies for the resolved principal + context:
 
-- channel
-- peer_kind
-- peer_id (conversation container)
+- platform
+- container_kind
+- container_id (conversation container)
 - account_id
 
 If the decision is:
@@ -72,7 +72,7 @@ If the decision is:
 
 On `ask`, create an `acl_permission_requests` record (see `GRANTS.md`) that includes:
 
-- requester identity (channel, sender_id, display name if available)
+- requester identity (platform, sender_id, display name if available)
 - request context (the triggering message content)
 - proposed policy scope (dm-only vs broader)
 
@@ -89,14 +89,14 @@ NEX notifies the owner (via control plane) with choices:
 On approval, NEX performs **two** writes:
 
 1. **Identity mapping write**
-   - record `(channel, sender_id) -> principal_id`
+   - record `(platform, space_id, sender_id) -> entity_id` in the contacts table
 2. **Access rule write**
-   - either a durable IAM policy allowlisting the principal on the channel/peer scope
+   - either a durable IAM policy allowlisting the principal on the platform/container scope
    - or a time-bounded grant (for “allow once / allow today”)
 
 On denial, NEX may:
 
-- write an explicit deny policy for that `(channel, sender_id)` mapping (optional)
+- write an explicit deny policy for that `(platform, sender_id)` mapping (optional)
 - or simply close the request as denied
 
 ### 7. Subsequent Messages
@@ -110,7 +110,7 @@ Once the identity mapping exists, subsequent events resolve to the principal and
 If you remove pairing UX entirely, the system still works, but you lose:
 
 - A simple way to create principals + mappings from real inbound events
-- A simple way to create correctly-scoped allow policies (“allow this DM user on Discord”)
+- A simple way to create correctly-scoped allow policies (“allow this DM user on this platform”)
 - A clear audit trail of first-contact approvals
 
 Pairing is therefore recommended even in an IAM-first system, but it remains a UX layer, not a security boundary.
@@ -121,5 +121,5 @@ Pairing is therefore recommended even in an IAM-first system, but it remains a U
 
 1. Should “unknown in group” ever be `ask`? (Default: no.)
 2. Should “allow always” create a principal automatically if none exists, or require user naming/tagging? (Likely auto-create with later edit.)
-3. What is the canonical store for `(channel, sender_id) -> principal` mappings? (Identity ledger vs unified entity store integration.)
+3. What is the canonical store for `(platform, space_id, sender_id) -> entity_id` mappings? (Resolved: contacts table in identity.db.)
 

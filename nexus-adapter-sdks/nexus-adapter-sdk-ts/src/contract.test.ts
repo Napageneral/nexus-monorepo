@@ -86,7 +86,7 @@ describe("adapter protocol contract (nexus-specs)", () => {
     expect(get("RuntimeContext")(runtimeCtx)).toBe(true);
     // TS SDK loads runtime context from disk (not via zod schema export).
     expect(readAdapterRuntimeContextFile(runtimeContextPath)).toMatchObject({
-      channel: "discord",
+      platform: "discord",
       account_id: "echo-bot",
     });
 

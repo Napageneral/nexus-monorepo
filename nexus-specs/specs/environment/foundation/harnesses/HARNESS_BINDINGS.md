@@ -350,8 +350,8 @@ Node.js script that injects Nexus context into the session.
 | Agent Identity | `state/agents/{name}/IDENTITY.md` | Name, emoji, vibe |
 | Agent Soul | `state/agents/{name}/SOUL.md` | Persona, boundaries |
 | User Identity | `state/user/IDENTITY.md` | User profile |
-| Daily Memory (today) | `home/cortex/YYYY-MM-DD.md` | Today's context |
-| Daily Memory (yesterday) | `home/cortex/YYYY-MM-DD.md` | Yesterday's context |
+| Daily Memory (today) | `home/memory/YYYY-MM-DD.md` | Today's context |
+| Daily Memory (yesterday) | `home/memory/YYYY-MM-DD.md` | Yesterday's context |
 
 **Template location:** `templates/cursor/`
 
@@ -534,7 +534,7 @@ If AIX is not installed or initialized, `nexus bindings detect` returns an error
 
 ### Flow
 
-During onboarding (Phase 5 in WORKSPACE_SYSTEM.md), the agent:
+During onboarding (see WORKSPACE_LIFECYCLE.md), the agent:
 
 ```
 1. Runs credential scan:

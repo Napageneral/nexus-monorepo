@@ -358,8 +358,8 @@ ORDER BY m.id
 | — | `account_id` | `"default"` (constant) |
 | `ci.identifier` | `sender_id` | Phone or email from contact_identifiers |
 | `c.name` | `sender_name` | Real name from AddressBook hydration |
-| `ch.chat_identifier` | `peer_id` | Chat identifier string |
-| `ch.is_group` | `peer_kind` | `true` → `"group"`, `false` → `"dm"` |
+| `ch.chat_identifier` | `container_id` | Chat identifier string |
+| `ch.is_group` | `container_kind` | `true` → `"group"`, `false` → `"dm"` |
 | `m.reply_to_guid` | `reply_to_id` | `"imessage:" + reply_to_guid` if non-null |
 | `m.is_from_me` | `metadata.is_from_me` | Boolean |
 | `m.chat_id` | `metadata.chat_id` | Integer |
@@ -371,16 +371,16 @@ ORDER BY m.id
 
 ```go
 func convertWarehouseMessage(row WarehouseMessage) nexadapter.NexusEvent {
-    peerKind := "dm"
+    containerKind := "dm"
     if row.IsGroup {
-        peerKind = "group"
+        containerKind = "group"
     }
 
     b := nexadapter.NewEvent("imessage", "imessage:"+row.GUID).
         WithTimestampUnixMs(row.Timestamp.UnixMilli()).
         WithContent(row.Content).
         WithSender(row.SenderIdentifier, row.SenderName).
-        WithPeer(row.ChatIdentifier, peerKind).
+        WithContainer(row.ChatIdentifier, containerKind).
         WithAccount("default").
         WithMetadata("is_from_me", row.IsFromMe).
         WithMetadata("chat_id", row.ChatID).
@@ -434,14 +434,14 @@ eve-adapter monitor --account default
 # Should see NexusEvent JSONL appear on stdout within ~2 seconds
 ```
 
-**Expected:** JSONL events with valid `event_id`, `timestamp`, `content`, `sender_id`, `sender_name`, `peer_id`, `peer_kind`.
+**Expected:** JSONL events with valid `event_id`, `timestamp`, `content`, `sender_id`, `sender_name`, `container_id`, `container_kind`.
 
 **Verify:**
 - New messages appear within ~2-3s of being sent (sync + query cycle)
 - `sender_name` contains real names (from AddressBook), not just phone numbers
 - `is_from_me` metadata correctly reflects direction
-- Group messages have `peer_kind: "group"`
-- DMs have `peer_kind: "dm"`
+- Group messages have `container_kind: "group"`
+- DMs have `container_kind: "dm"`
 - Content is clean (no U+FFFC, no null bytes)
 
 ### 3. `eve-adapter send --account default --to "+1XXXXXXXXXX" --text "Hello from Nexus"`

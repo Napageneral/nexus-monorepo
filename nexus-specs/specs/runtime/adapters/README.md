@@ -22,7 +22,7 @@ Adapters are external tools (like `eve`, `gog`, `discord-cli`) that meet defined
 | Spec | Status | Description |
 |------|--------|-------------|
 | `ADAPTER_SYSTEM.md` | ✅ Done | **Operational system** — registration, accounts, lifecycle, process management, health, context integration |
-| `ADAPTER_INTERFACES.md` | ✅ Done | Data contracts overview and design principles |
+| `ADAPTER_INTERFACES.md` | 📦 Archived | Data contracts overview and design principles (superseded by `ADAPTER_SYSTEM.md` + `INBOUND_INTERFACE.md`/`OUTBOUND_INTERFACE.md`) |
 | `INBOUND_INTERFACE.md` | ✅ Done | Receiving events, NexusEvent schema |
 | `OUTBOUND_INTERFACE.md` | ✅ Done | Delivery, formatting, chunking |
 | `OUTBOUND_TARGETING.md` | ✅ Done | Targeting semantics for threads + replies (`thread_id`, `reply_to_id`) |
@@ -103,18 +103,18 @@ Adapters create/consume `NexusRequest`:
 
 See `channels/` folder. All channels from upstream are documented:
 
-| Channel | Upstream | Spec | Nexus Tool |
-|---------|----------|------|------------|
-| Discord | Full | `channels/discord.md` | TBD |
-| Telegram | Full | `channels/telegram.md` | TBD |
-| WhatsApp | Full | `channels/whatsapp.md` | Baileys |
-| iMessage | Full | `channels/imessage.md` | `eve` |
-| Signal | Full | `channels/signal.md` | signal-cli |
-| Slack | Full | `channels/slack.md` | TBD |
-| LINE | Full | `channels/line.md` | TBD |
-| Gmail | Hooks only | `channels/gmail.md` | `gog` |
-| Google Chat | Config only | `channels/googlechat.md` | — |
-| MS Teams | Config only | `channels/msteams.md` | — |
+| Platform | Upstream | Spec | Nexus Tool |
+|----------|----------|------|------------|
+| Discord | Full | `channels/discord/CHANNEL_SPEC.md` | `nexus-adapter-discord` |
+| Telegram | Full | `channels/telegram/CHANNEL_SPEC.md` | `nexus-adapter-telegram` |
+| WhatsApp | Full | `channels/whatsapp/CHANNEL_SPEC.md` | Baileys |
+| iMessage | Full | `channels/imessage/CHANNEL_SPEC.md` | `eve` |
+| Signal | Full | `channels/signal/CHANNEL_SPEC.md` | signal-cli |
+| Slack | Full | `channels/slack/CHANNEL_SPEC.md` | `nexus-adapter-slack` |
+| LINE | Full | `channels/line/CHANNEL_SPEC.md` | TBD |
+| Gmail | Hooks only | `channels/gmail/CHANNEL_SPEC.md` | `gog` |
+| Google Chat | Config only | `channels/googlechat/CHANNEL_SPEC.md` | — |
+| MS Teams | Config only | `channels/msteams/CHANNEL_SPEC.md` | — |
 
 Each spec includes:
 - Capabilities object

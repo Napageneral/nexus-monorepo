@@ -22,12 +22,12 @@ describe("runAdapter", () => {
     const code = await runAdapter(
       {
         info: () => ({
-          channel: "test",
+          platform: "test",
           name: "test-adapter",
           version: "0.0.0",
           supports: ["monitor"],
           multi_account: false,
-          channel_capabilities: {
+          platform_capabilities: {
             text_limit: 1,
             supports_markdown: false,
             supports_tables: false,
@@ -56,7 +56,10 @@ describe("runAdapter", () => {
 
     expect(code).toBe(0);
     expect(stderr.read()).toBe("");
-    expect(JSON.parse(stdout.read().trim())).toMatchObject({ channel: "test", name: "test-adapter" });
+    expect(JSON.parse(stdout.read().trim())).toMatchObject({
+      platform: "test",
+      name: "test-adapter",
+    });
   });
 
   it("send handler errors are returned as a structured DeliveryResult (exit 0)", async () => {
@@ -66,12 +69,12 @@ describe("runAdapter", () => {
     const code = await runAdapter(
       {
         info: () => ({
-          channel: "test",
+          platform: "test",
           name: "test-adapter",
           version: "0.0.0",
           supports: ["send"],
           multi_account: false,
-          channel_capabilities: {
+          platform_capabilities: {
             text_limit: 2000,
             supports_markdown: false,
             supports_tables: false,
@@ -118,12 +121,12 @@ describe("runAdapter", () => {
     const code = await runAdapter(
       {
         info: () => ({
-          channel: "test",
+          platform: "test",
           name: "test-adapter",
           version: "0.0.0",
           supports: ["monitor"],
           multi_account: false,
-          channel_capabilities: {
+          platform_capabilities: {
             text_limit: 1,
             supports_markdown: false,
             supports_tables: false,
@@ -157,4 +160,3 @@ describe("runAdapter", () => {
     expect(stderr.read()).toContain("Missing adapter runtime context");
   });
 });
-

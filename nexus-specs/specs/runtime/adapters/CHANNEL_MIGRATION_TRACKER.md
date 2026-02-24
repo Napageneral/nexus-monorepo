@@ -64,7 +64,7 @@ As of 2026-02-21:
 - Telegram and WhatsApp adapter repos include command-level contract smokes (info/send/event-shape/health behavior).
 - WhatsApp adapter now requires standard `@whiskeysockets/baileys` dependency resolution (fallback loader removed).
 - Telegram/WhatsApp in-process extension monitor startup hooks (`runtime.startAccount`) were removed.
-- `~/.nex.yaml` now includes Telegram and WhatsApp adapter bootstrap entries (monitor disabled by default until credentials are configured).
+- `config.json` now includes Telegram and WhatsApp adapter bootstrap entries (monitor disabled by default until credentials are configured).
 - Clock/timer is implemented as an internal runtime adapter/service (periodic `clock.tick` NexusEvents), not an external process.
 
 ---
@@ -116,7 +116,7 @@ As of 2026-02-21:
 
 ### Remaining
 
-- Ensure runtime config (`nex.yaml`) points to correct Eve adapter command/path for target environments.
+- Ensure runtime config (`config.json`) points to correct Eve adapter command/path for target environments.
 - Add adapter contract smoke in NEX e2e suite (`info`, monitor startup, send dry-run, health).
 
 ---
@@ -140,7 +140,7 @@ As of 2026-02-21:
 
 ### Remaining
 
-- Configure `nex.yaml` adapter bootstrap entry for `gog-adapter` accounts in target environments.
+- Configure `config.json` adapter bootstrap entry for `gog-adapter` accounts in target environments.
 - Add NEX e2e contract smoke for Gmail adapter lifecycle (`info`, monitor startup, send dry-run, health).
 - Fix/refresh gog OAuth client credentials and re-authorize accounts (currently some environments return `oauth2: "deleted_client"`).
 - Ensure `gog gmail watch start` has been run for target accounts (monitor seeds from watch status historyId).
@@ -175,7 +175,7 @@ As of 2026-02-21:
 - Tightened NEX adapter boundary parsing to strict v2:
   - Removed legacy adapter payload acceptance in `nex/src/nex/adapters/protocol.ts`
   - Updated adapter parser tests and monitor supervision fixtures to canonical v2 output
-- Wired runtime bootstrap entries in `~/.nex.yaml` for Telegram + WhatsApp (`/Users/tyler/nexus/bin/nexus-adapter-telegram`, `/Users/tyler/nexus/bin/nexus-adapter-whatsapp`)
+- Wired runtime bootstrap entries in `config.json` for Telegram + WhatsApp (`/Users/tyler/nexus/bin/nexus-adapter-telegram`, `/Users/tyler/nexus/bin/nexus-adapter-whatsapp`)
 - Removed in-process Telegram + WhatsApp monitor startup hooks in extension plugins:
   - `nex/extensions/telegram/src/channel.ts`
   - `nex/extensions/whatsapp/src/channel.ts`

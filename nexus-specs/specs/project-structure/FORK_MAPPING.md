@@ -12,7 +12,7 @@
 Every directory in the openclaw codebase is listed with a decision and destination. This is the **execution guide** for the fork transformation. Agents should follow this document file-by-file.
 
 **Architecture references:**
-- `nex/NEX.md` — 8-stage pipeline, NexusRequest lifecycle
+- `nex/NEX.md` — 9-stage pipeline, NexusRequest lifecycle
 - `nex/NEXUS_REQUEST.md` — Data bus schema
 - `nex/DAEMON.md` — Process lifecycle
 - `adapters/ADAPTER_SYSTEM.md` — External CLI adapter model
@@ -41,13 +41,13 @@ Every directory in the openclaw codebase is listed with a decision and destinati
 nex/                              # The fork (Napageneral/nex)
 ├── src/
 │   ├── nex/                      # 🔵 NEX orchestrator (central, NEW)
-│   │   ├── pipeline.ts           #    8-stage pipeline executor
+│   │   ├── pipeline.ts           #    9-stage pipeline executor
 │   │   ├── request.ts            #    NexusRequest types (Zod)
 │   │   ├── daemon/               #    Process lifecycle, PID, signals
 │   │   ├── bus/                   #    Event bus + SSE (from openclaw bus/)
 │   │   ├── plugins/              #    NEX plugin system
 │   │   ├── adapters/             #    Adapter Manager (spawn/supervise)
-│   │   └── stages/               #    Stage implementations (8 files)
+│   │   └── stages/               #    Stage implementations (9 files)
 │   │
 │   ├── broker/                   # 🟡 Agent execution (from agents/ + sessions/ + auto-reply/)
 │   │   ├── engine.ts             #    pi-coding-agent wrapper
@@ -72,7 +72,7 @@ nex/                              # The fork (Napageneral/nex)
 │   │
 │   ├── tools/                    # 🟢 Tool system (from agents/tools/ + commands/)
 │   ├── providers/                # 🟢 LLM providers (keep as-is)
-│   ├── config/                   # 🟢 Config system (adapt for nex.yaml)
+│   ├── config/                   # 🟢 Config system (adapt for config.json)
 │   ├── cli/                      # 🟢 CLI commands (adapt)
 │   ├── gateway/                  # 🟢 HTTP server (adapt → NEX HTTP endpoint)
 │   ├── infra/                    # 🟢 Infrastructure utils (keep)
@@ -84,7 +84,7 @@ nex/                              # The fork (Napageneral/nex)
 │   ├── telegram/                 #    Telegram adapter
 │   └── ...
 │
-├── cortex/                       # 🔵 Go process (LATER — separate)
+├── memory/                       # 🔵 Memory System (TypeScript, unified)
 ├── skills/                       # 🟢 Skill definitions (adapt)
 └── ...
 ```
@@ -99,7 +99,7 @@ This is the heart of Nexus and does NOT exist in openclaw. Build from specs.
 
 | New File/Dir | Spec | Source Material |
 |-------------|------|----------------|
-| `nex/pipeline.ts` | `nex/NEX.md` | New — 8-stage sync pipeline |
+| `nex/pipeline.ts` | `nex/NEX.md` | New — 9-stage sync pipeline |
 | `nex/request.ts` | `nex/NEXUS_REQUEST.md` | New — NexusRequest + NexusEvent Zod schemas |
 | `nex/daemon/` | `nex/DAEMON.md` | Adapt from `src/daemon/` (PID lock, signals, startup) |
 | `nex/bus/` | `nex/BUS_ARCHITECTURE.md` | Adapt from openclaw bus — keep pub/sub, change event types |
@@ -109,6 +109,7 @@ This is the heart of Nexus and does NOT exist in openclaw. Build from specs.
 | `nex/stages/receiveEvent.ts` | `nex/NEX.md` | New — create NexusRequest from NexusEvent |
 | `nex/stages/resolveIdentity.ts` | `nex/NEX.md` | New — query Identity Graph |
 | `nex/stages/resolveAccess.ts` | `nex/NEX.md` | New — evaluate ACL policies |
+| `nex/stages/resolveReceiver.ts` | `nex/NEX.md` | New — determine target agent/session |
 | `nex/stages/runAutomations.ts` | `nex/NEX.md` | New — match and execute automations |
 | `nex/stages/assembleContext.ts` | `nex/NEX.md` | Calls Broker's context assembly |
 | `nex/stages/runAgent.ts` | `nex/NEX.md` | Calls Broker's agent engine |
@@ -117,7 +118,7 @@ This is the heart of Nexus and does NOT exist in openclaw. Build from specs.
 
 ### 🔵 NEW: `src/db/` — Data Layer
 
-Replaces openclaw's file-based storage entirely. Build from ledger specs.
+Replaces openclaw's file-based storage entirely. 6 databases: events.db, agents.db, identity.db, memory.db, embeddings.db, runtime.db. Build from ledger specs.
 
 | New File | Spec | Notes |
 |----------|------|-------|
@@ -125,7 +126,9 @@ Replaces openclaw's file-based storage entirely. Build from ledger specs.
 | `db/events.ts` | `data/ledgers/EVENTS_LEDGER.md` | Raw SQL queries — no ORM |
 | `db/agents.ts` | `data/ledgers/AGENTS_LEDGER.md` | Sessions, turns, messages, tool_calls, compactions |
 | `db/identity.ts` | `data/ledgers/IDENTITY_GRAPH.md` | Contacts, entities, mappings, aliases |
-| `db/nexus.ts` | `data/ledgers/NEXUS_LEDGER.md` | Pipeline traces |
+| `db/memory.ts` | `data/ledgers/MEMORY.md` | Episodes, facets, semantic memory |
+| `db/embeddings.ts` | `data/ledgers/EMBEDDINGS.md` | Vector embeddings |
+| `db/runtime.ts` | `data/ledgers/RUNTIME.md` | Runtime state, pipeline traces |
 | `db/migrations/` | `nex/DAEMON.md` | schema_version table + migration runner |
 
 ### 🟡 REPLACE: `src/broker/` — Agent Execution
@@ -263,12 +266,12 @@ Maps to `nex/plugins/` (pipeline hooks) and `nex/automations/` (user automations
 
 ### 🟢 ADAPT: `src/config/` — Configuration
 
-Keep and adapt for `nex.yaml`.
+Keep and adapt for `config.json`.
 
 | Openclaw | Nexus Destination | Action |
 |----------|------------------|--------|
 | `config/paths.ts` | keep (already rewritten) | 🟢 Already adapted |
-| `config/schema.ts` | Adapt for nex.yaml Zod schema | 🟡 New config structure |
+| `config/schema.ts` | Adapt for config.json Zod schema | 🟡 New config structure |
 | `config/sessions/` | `broker/sessions/config.ts` | 🟡 Session config → Broker |
 | `config/channel-capabilities.ts` | keep | 🟢 Channel capability definitions |
 | `config/types.*.ts` | keep | 🟢 Type definitions |
@@ -395,7 +398,7 @@ Openclaw bundles channel handling in `src/`. Nexus moves these to `extensions/` 
 |----------|--------|
 | `src/acp/` | Agent Client Protocol — not used |
 | `src/tui/` | No TUI — confirmed drop |
-| `src/memory/` | Replaced by Cortex (Go, separate process) |
+| `src/memory/` | Replaced by Memory System (TypeScript, unified) |
 | `src/docs/` | Separate docs site |
 | `src/wizard/` | Onboarding wizard — different model |
 | `src/tts/` | Text-to-speech — not V1 |
@@ -439,8 +442,8 @@ Extensions become external CLI adapter processes per `ADAPTER_SYSTEM.md`. Each m
 | `extensions/twitch/` | twitch | Low | Twitch chat |
 | `extensions/copilot-proxy/` | — | 🟢 ADAPT | Copilot credential proxy |
 | `extensions/google-*-auth/` | — | 🟢 ADAPT | Google OAuth flows |
-| `extensions/memory-core/` | 🔴 DROP | Replaced by Cortex |
-| `extensions/memory-lancedb/` | 🔴 DROP | Replaced by Cortex |
+| `extensions/memory-core/` | 🔴 DROP | Replaced by Memory System |
+| `extensions/memory-lancedb/` | 🔴 DROP | Replaced by Memory System |
 | `extensions/llm-task/` | 🔶 DEFER | LLM task runner |
 | `extensions/device-pair/` | 🔶 DEFER | Device pairing |
 | `extensions/phone-control/` | 🔶 DEFER | Phone control |
@@ -497,7 +500,7 @@ These don't exist in openclaw at all:
 |-----------|----------|------|----------|
 | **NEX Pipeline** | `src/nex/pipeline.ts` | `nex/NEX.md` | P0 |
 | **NexusRequest types** | `src/nex/request.ts` | `nex/NEXUS_REQUEST.md` | P0 |
-| **Pipeline stages (8)** | `src/nex/stages/*.ts` | `nex/NEX.md` | P0 |
+| **Pipeline stages (9)** | `src/nex/stages/*.ts` | `nex/NEX.md` | P0 |
 | **Adapter Manager** | `src/nex/adapters/manager.ts` | `adapters/ADAPTER_SYSTEM.md` | P0 |
 | **Adapter CLI protocol** | `src/nex/adapters/protocol.ts` | `adapters/ADAPTER_SYSTEM.md` | P0 |
 | **Events Ledger** | `src/db/events.ts` | `data/ledgers/EVENTS_LEDGER.md` | P0 |
@@ -508,7 +511,7 @@ These don't exist in openclaw at all:
 | **Grants System** | `src/iam/grants.ts` | `iam/GRANTS.md` | P1 |
 | **Audit Logger** | `src/iam/audit.ts` | `iam/AUDIT.md` | P1 |
 | **Automation System** | `src/nex/automations/` | `nex/automations/AUTOMATION_SYSTEM.md` | P2 |
-| **Clock Adapter** | `extensions/clock/` | (needs spec) | P1 |
+| **Clock Adapter** | `extensions/clock/` | `CLOCK_ADAPTER.md` — DESIGN LOCKED + IMPLEMENTED | P1 |
 
 ---
 
@@ -519,7 +522,7 @@ Follows `FORK_PLAN.md` Step 1 (scaffold). The transformation proceeds in this or
 ### Wave 1: Create New Modules (no breakage)
 1. Create `src/db/` — ledger schemas and queries (pure new code)
 2. Create `src/nex/request.ts` — NexusRequest + NexusEvent Zod types
-3. Create `src/nex/pipeline.ts` — 8-stage executor with stubs
+3. Create `src/nex/pipeline.ts` — 9-stage executor with stubs
 4. Create `src/nex/stages/` — stub implementations
 5. Create `src/nex/adapters/` — Adapter Manager skeleton
 6. Create `src/iam/` — identity resolution + ACL policy engine

@@ -49,7 +49,7 @@ All decisions captured in `specs/environment/foundation/WORKSPACE_LIFECYCLE.md`:
 All decisions captured in `specs/runtime/RUNTIME_ROUTING.md`:
 
 - **Item 3 (session keys + routing):** Contacts table in `identity.db` maps `(platform, sender_id)` → `entity_id`. Every sender gets an entity from first contact (auto-created in identity.db). Session keys are always entity-based: `dm:{canonical_entity_id}`. No `dm:{platform}:{sender_id}` fallback. Entity merges propagate to session aliases synchronously. Turn trees are never merged — memory bridges across sessions.
-- **Item 4 (adapters-only runtime):** Big-bang removal of legacy channels, gmail-watcher, cron. Adapter manager is the sole external ingest/delivery path. `chat.send` is a direct dispatch (not an adapter). Adapter config in `~/.nex.yaml`.
+- **Item 4 (adapters-only runtime):** Big-bang removal of legacy channels, gmail-watcher, cron. Adapter manager is the sole external ingest/delivery path. `chat.send` is a direct dispatch (not an adapter). Adapter config in `config.json`.
 
 ### Bundle C: Optional Runtime Surfaces (Item 5) — RESOLVED
 

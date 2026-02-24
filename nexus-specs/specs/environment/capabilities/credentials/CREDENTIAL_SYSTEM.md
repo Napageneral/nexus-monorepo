@@ -13,7 +13,7 @@ The Nexus credential system provides secure storage and retrieval of secrets wit
 1. **No plaintext secrets** — Credential files are *pointers* to secure backends (Keychain, 1Password, env, external commands)
 2. **Service-first hierarchy** — Service → Account → Credentials[]
 3. **Flexible ownership** — Credentials can be owned by user, agents, or both
-4. **Consumer-centric policies** — Access control at Gateway/agent level, not credential level
+4. **Consumer-centric policies** — Access control at runtime/agent level, not credential level
 5. **Auto-sync** — External CLI credentials are imported automatically
 6. **Opt-in rotation** — Profile rotation only for configured services (LLM APIs)
 
@@ -389,14 +389,14 @@ type CredentialIndex = {
 
 ## 6. Access Control (Consumer-Centric Policies)
 
-Access control is defined at the **consumer level** (Gateway, agents), not at the credential level. This is more intuitive — you configure what each consumer can access, not what each credential allows.
+Access control is defined at the **consumer level** (runtime, agents), not at the credential level. This is more intuitive — you configure what each consumer can access, not what each credential allows.
 
 ### Policy Location
 
 Policies live in the consumer's config, not in the credentials directory:
 
 ```
-state/nexus/config.json                    # Gateway access config
+state/config.json                          # Runtime access config
 state/agents/{agent}/config.json           # Per-agent access config (if needed)
 ```
 
@@ -410,12 +410,12 @@ state/agents/{agent}/config.json           # Per-agent access config (if needed)
 
 #### Level 1: Opt-Out (Default Recommended)
 
-Gateway can access all `user`-owned credentials by default. User can explicitly block sensitive credentials.
+Runtime can access all `user`-owned credentials by default. User can explicitly block sensitive credentials.
 
 **Config:**
 ```json
 {
-  "gateway": {
+  "runtime": {
     "credentials": {
       "level": 1,
       "blocked": [
@@ -429,8 +429,8 @@ Gateway can access all `user`-owned credentials by default. User can explicitly 
 
 **CLI:**
 ```bash
-nexus gateway block google/tnapathy@gmail.com
-nexus gateway unblock google/tnapathy@gmail.com
+nexus runtime block google/tnapathy@gmail.com
+nexus runtime unblock google/tnapathy@gmail.com
 ```
 
 **Agent assistance:** Agent can suggest which credentials should be blocked based on sensitivity (email, code repos, etc.).
@@ -442,7 +442,7 @@ Gateway cannot access ANY credentials by default. Must explicitly allow each one
 **Config:**
 ```json
 {
-  "gateway": {
+  "runtime": {
     "credentials": {
       "level": 2,
       "allowed": [
@@ -458,8 +458,8 @@ Gateway cannot access ANY credentials by default. Must explicitly allow each one
 **CLI:**
 ```bash
 nexus config set gateway.credentials.level 2
-nexus gateway allow discord/echo-bot
-nexus gateway allow "anthropic/*"   # Wildcard for all anthropic accounts
+nexus runtime allow discord/echo-bot
+nexus runtime allow "anthropic/*"   # Wildcard for all anthropic accounts
 ```
 
 #### Level 3: Scoped Access (Fine-Grained)
@@ -469,7 +469,7 @@ Credentials can have scope restrictions — only usable for specific purposes.
 **Config:**
 ```json
 {
-  "gateway": {
+  "runtime": {
     "credentials": {
       "level": 3,
       "allowed": ["discord/echo-bot", "anthropic/*"],
@@ -491,7 +491,7 @@ Different agents have different access levels. Each agent has its own credential
 **Gateway config (default for all):**
 ```json
 {
-  "gateway": {
+  "runtime": {
     "credentials": {
       "level": 1,
       "blocked": ["google/*"]
@@ -1009,17 +1009,17 @@ Policy management is at the Gateway level, not credential level:
 nexus gateway credentials
 
 # Level 1: Block specific credentials (default allows all)
-nexus gateway block google/tnapathy@gmail.com
-nexus gateway block "github/*"           # Wildcard: all github accounts
-nexus gateway unblock google/tnapathy@gmail.com
+nexus runtime block google/tnapathy@gmail.com
+nexus runtime block "github/*"           # Wildcard: all github accounts
+nexus runtime unblock google/tnapathy@gmail.com
 
 # Level 2: Switch to opt-in mode
 nexus config set gateway.credentials.level 2
-nexus gateway allow discord/echo-bot
-nexus gateway allow "anthropic/*"
+nexus runtime allow discord/echo-bot
+nexus runtime allow "anthropic/*"
 
 # Level 3: Add scope restrictions
-nexus gateway allow discord/echo-bot --scope provider:discord
+nexus runtime allow discord/echo-bot --scope provider:discord
 ```
 
 ### Agent-Specific Access
@@ -1071,7 +1071,7 @@ nexus credential remove anthropic/old-account
 
 ```json
 {
-  "gateway": {
+  "runtime": {
     "credentials": {
       "level": 1,
       "blocked": ["google/*", "github/*"]

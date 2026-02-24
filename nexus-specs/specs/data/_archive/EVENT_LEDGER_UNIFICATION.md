@@ -2,11 +2,11 @@
 
 **Status:** COMPLETE
 **Last Updated:** 2026-02-18
-**Related:** MEMORY_SYSTEM.md, CORTEX_AGENT_INTERFACE.md, roles/MEMORY_WRITER.md, ../../runtime/broker/MEESEEKS_PATTERN.md
+**Related:** ../../_archive/MEMORY_SYSTEM.md, ../../_archive/CORTEX_AGENT_INTERFACE.md, ../../_archive/MEMORY_WRITER.md, ../../runtime/broker/MEESEEKS_PATTERN.md
 
 > **Canonical reference:** See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the authoritative database layout.
 >
-> **Note:** This unification is now complete. The Cortex events table has been eliminated. All Go adapters have been ported to TypeScript and write to the Nex events ledger (`events.db`). The document below is retained for historical context on the design decisions.
+> **Note:** This unification is now complete. The legacy memory events table has been eliminated. All Go adapters have been ported to TypeScript and write to the Nex events ledger (`events.db`). The document below is retained for historical context on the design decisions.
 
 ---
 
@@ -16,15 +16,15 @@ There are currently **two separate event systems** with different schemas, diffe
 
 1. **Nex Events Ledger** (`~/nexus/state/data/events.db`) — TypeScript, managed by `nex/src/db/events.ts`. Written by pipeline stages (`receiveEvent`, `finalize`). Has inbound and outbound events with `platform`, `sender_id`, `to_recipients`.
 
-2. **Cortex Events Table** (`cortex.db` (now split into memory.db/identity.db/embeddings.db) → `events` table) — ~~Go, managed by `nex/cortex/internal/db/schema.sql`. Written by adapters (AIX, Gmail, iMessage, Nexus logs).~~ **ELIMINATED.** All Go adapters have been ported to TS. Had `source_adapter`, `direction`, `event_participants`, FTS5, and episode linking.
+2. **Legacy Memory Events Table** (`cortex.db` (now split into memory.db/identity.db/embeddings.db) → `events` table) — ~~Go, managed by `nex/cortex/internal/db/schema.sql`. Written by adapters (AIX, Gmail, iMessage, Nexus logs).~~ **ELIMINATED.** All Go adapters have been ported to TS. Had `source_adapter`, `direction`, `event_participants`, FTS5, and episode linking.
 
-The Cortex events table is a bad port. There should be **one events ledger** — the Nex one. All adapters should write to it. All downstream consumers (episodes, memory, search) should read from it.
+The legacy memory events table was a bad port. There should be **one events ledger** — the Nex one. All adapters should write to it. All downstream consumers (episodes, memory, search) should read from it.
 
 ---
 
 ## Decision
 
-**Delete the Cortex events table and everything that depends on it. Unify around the Nex events ledger (`events.db`).**
+**Delete the legacy memory events table and everything that depends on it. Unify around the Nex events ledger (`events.db`).**
 
 ---
 
@@ -59,9 +59,9 @@ CREATE TABLE IF NOT EXISTS events (
 );
 ```
 
-### Cortex Events Table (`cortex.db`, now memory.db/identity.db/embeddings.db) — REMOVED
+### Legacy Memory Events Table (`cortex.db`, now memory.db/identity.db/embeddings.db) -- REMOVED
 
-> **Eliminated.** All Go adapters (`aix.go`, `aix_events.go`, `nexus.go`, `eve.go`, `gmail.go`, `bird.go`) have been ported to TypeScript and now write directly to `events.db`. The Go cortex adapter code (`cortex/internal/adapters/`) is deleted. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) section 4.
+> **Eliminated.** All Go adapters (`aix.go`, `aix_events.go`, `nexus.go`, `eve.go`, `gmail.go`, `bird.go`) have been ported to TypeScript and now write directly to `events.db`. The Go adapter code (`cortex/internal/adapters/`) is deleted. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) section 4.
 
 ---
 
@@ -69,11 +69,11 @@ CREATE TABLE IF NOT EXISTS events (
 
 ### Phase 1: Migrate Adapters to Write to Nex Events Ledger — COMPLETE
 
-> **Done.** All Go adapters have been ported to TypeScript and write directly to `events.db`. The Go cortex adapter code is eliminated. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) section 4.
+> **Done.** All Go adapters have been ported to TypeScript and write directly to `events.db`. The Go adapter code is eliminated. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) section 4.
 
-#### Column Mapping (Cortex → Nex) — Historical Reference
+#### Column Mapping (Legacy → Nex) -- Historical Reference
 
-| Cortex column | Nex column | Mapping |
+| Legacy column | Nex column | Mapping |
 |---|---|---|
 | `id` | `id` | Keep as-is |
 | `timestamp` | `timestamp` | Keep as-is |
@@ -93,15 +93,15 @@ CREATE TABLE IF NOT EXISTS events (
 
 #### Migration Notes for `sender_id` and `to_recipients`
 
-The Cortex schema used a separate `event_participants` junction table for sender/recipient info. The Nex schema inlines `sender_id` and `to_recipients` directly on the event row. This is simpler -- no junction table needed.
+The legacy schema used a separate `event_participants` junction table for sender/recipient info. The Nex schema inlines `sender_id` and `to_recipients` directly on the event row. This is simpler -- no junction table needed.
 
 ### Phase 2: Add Missing Capabilities to Nex Events Ledger
 
-The Cortex events table has features the Nex events table doesn't:
+The legacy memory events table had features the Nex events table doesn't:
 
 #### Must Add
 
-1. **FTS5 full-text search** — The Cortex schema has `events_fts` with porter stemming. The memory reader needs text search over events. Add to `events.db`:
+1. **FTS5 full-text search** — The legacy schema had `events_fts` with porter stemming. The memory reader needs text search over events. Add to `events.db`:
    ```sql
    CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(
        event_id UNINDEXED,
@@ -115,17 +115,17 @@ The Cortex events table has features the Nex events table doesn't:
 
 #### Nice to Have (Can Defer)
 
-3. **Threads table** — The Cortex schema has a `threads` table grouping events. The Nex schema just has `thread_id` as a string column. This is fine for now — threads can be derived from `thread_id` values.
+3. **Threads table** — The legacy schema had a `threads` table grouping events. The Nex schema just has `thread_id` as a string column. This is fine for now — threads can be derived from `thread_id` values.
 
-4. **Event state** (read/unread, flagged, archived) — The Cortex `event_state` table. Not needed for memory. Can add later.
+4. **Event state** (read/unread, flagged, archived) — The legacy `event_state` table. Not needed for memory. Can add later.
 
-5. **Attachments table** — The Nex schema has an `attachments` JSON column. The Cortex schema has a full `attachments` table with storage URIs, MIME types, content hashes. The JSON column is sufficient for now.
+5. **Attachments table** — The Nex schema has an `attachments` JSON column. The legacy schema had a full `attachments` table with storage URIs, MIME types, content hashes. The JSON column is sufficient for now.
 
-6. **Event tags** — The Cortex `event_tags` and `tags` tables. Not needed for memory writer. Can add later.
+6. **Event tags** — The legacy `event_tags` and `tags` tables. Not needed for memory writer. Can add later.
 
 ### Phase 3: Migrate Episode Linking
 
-The Cortex `episode_events` junction table links episodes to events by event ID:
+The legacy `episode_events` junction table links episodes to events by event ID:
 
 ```sql
 CREATE TABLE IF NOT EXISTS episode_events (
@@ -136,15 +136,15 @@ CREATE TABLE IF NOT EXISTS episode_events (
 );
 ```
 
-Currently `event_id` references the Cortex events table. After migration, it needs to reference Nex events ledger IDs.
+Currently `event_id` references the legacy events table. After migration, it needs to reference Nex events ledger IDs.
 
 **Decision: Cross-database reference.** `episode_events` lives in `memory.db`, referencing `events.db` event IDs by convention (no FK enforcement across databases). The `event_id` column is a logical reference, and the chunking code ATTACHes `events.db` when it needs to read events.
 
-### Phase 4: Remove Cortex Events Infrastructure
+### Phase 4: Remove Legacy Events Infrastructure
 
 Once adapters write to `events.db` and episode linking uses Nex event IDs:
 
-#### Tables Removed from cortex.db (now in events.db)
+#### Tables Removed from legacy memory DB (now in events.db)
 
 | Table | Why it was removed |
 |---|---|
@@ -159,7 +159,7 @@ Once adapters write to `events.db` and episode linking uses Nex event IDs:
 | `document_heads` | Now in `events.db` |
 | `retrieval_log` | Now in `events.db` |
 
-#### Tables now in memory.db (successor to cortex.db for facts/episodes)
+#### Tables now in memory.db (successor to legacy memory DB for facts/episodes)
 
 | Table | Notes |
 |---|---|
@@ -176,7 +176,7 @@ Once adapters write to `events.db` and episode linking uses Nex event IDs:
 | `memory_processing_log` | Event processing tracking |
 | `schema_version` | Schema version tracking |
 
-#### Tables now in identity.db (entities relocated from cortex.db)
+#### Tables now in identity.db (entities relocated from legacy memory DB)
 
 | Table | Notes |
 |---|---|
@@ -185,7 +185,7 @@ Once adapters write to `events.db` and episode linking uses Nex event IDs:
 | `entity_cooccurrences` | Co-occurrence stats |
 | `merge_candidates` | Entity dedup |
 
-> **Note:** The following V1 tables from cortex.db have been eliminated entirely: `persons`, `contacts`, `contact_identifiers`, `person_contact_links`, `person_facts`, `entity_aliases`, `relationships`, `episode_entity_mentions`, `episode_relationship_mentions`, `entity_merge_events`. See MEMORY_SYSTEM_V2.md for the V2 schema.
+> **Note:** The following V1 tables from the legacy memory DB have been eliminated entirely: `persons`, `contacts`, `contact_identifiers`, `person_contact_links`, `person_facts`, `entity_aliases`, `relationships`, `episode_entity_mentions`, `episode_relationship_mentions`, `entity_merge_events`. See MEMORY_SYSTEM_V2.md for the V2 schema.
 
 #### Tables eliminated (no migration)
 
@@ -193,7 +193,7 @@ Once adapters write to `events.db` and episode linking uses Nex event IDs:
 |---|---|
 | `sync_watermarks` | **Eliminated.** Adapters own their sync state. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) section 5. |
 | `adapter_state` | **Eliminated.** Go adapter key-value store removed. |
-| `bus_events` | **Eliminated.** Single Nex bus replaces cortex's Go bus. |
+| `bus_events` | **Eliminated.** Single Nex bus replaces the old Go bus. |
 | `sync_jobs` | **Eliminated.** Go sync pipeline removed. |
 
 #### Embeddings now in embeddings.db
@@ -251,7 +251,7 @@ Alternatively, the agent message tool path (`executeSendAction`) could also writ
 
 ## Direction Values
 
-The Nex schema currently uses `"inbound"` / `"outbound"`. The Cortex schema uses `"sent"` / `"received"` / `"observed"` / etc.
+The Nex schema currently uses `"inbound"` / `"outbound"`. The legacy schema used `"sent"` / `"received"` / `"observed"` / etc.
 
 **Decision: Keep Nex's `"inbound"` / `"outbound"`, add `"observed"`.**
 
@@ -265,7 +265,7 @@ The Nex schema currently uses `"inbound"` / `"outbound"`. The Cortex schema uses
 
 ## AIX Import: No Changes Needed
 
-The AIX adapters are already solid. They now write to `events.db` (migration from cortex.db is complete):
+The AIX adapters are already solid. They now write to `events.db` (migration from the legacy memory DB is complete):
 1. Write to `events.db` directly
 2. Columns mapped to the Nex schema (see column mapping above)
 3. `sender_id` and `to_recipients` set inline on the event row (no junction table)
@@ -286,7 +286,7 @@ The two-adapter model is correct:
 6. ~~**Migrate NexusAdapter**~~ — **DONE.** Ported to TS.
 7. **Migrate episode_events linking** — Reference Nex event IDs, cross-db (episodes now in memory.db)
 8. ~~**Add sync watermarks to `events.db`**~~ — **Eliminated.** Adapters own their sync state.
-9. ~~**Remove Cortex events infrastructure**~~ — **DONE.** Go adapter code eliminated.
+9. ~~**Remove legacy events infrastructure**~~ -- **DONE.** Go adapter code eliminated.
 10. **Migrate `document_heads` and `retrieval_log`** — If still needed, point at new event IDs
 
 ---
@@ -327,9 +327,9 @@ END;
 
 Add `"observed"` as valid direction (no schema change needed — it's just a TEXT column, but document the convention).
 
-### Removed from old cortex.db
+### Removed from old legacy memory DB
 
-All tables listed in "Tables Removed" above, plus their indexes and triggers. The cortex.db file is superseded by memory.db + identity.db + embeddings.db.
+All tables listed in "Tables Removed" above, plus their indexes and triggers. The legacy memory DB file is superseded by memory.db + identity.db + embeddings.db.
 
 ---
 
@@ -337,7 +337,7 @@ All tables listed in "Tables Removed" above, plus their indexes and triggers. Th
 
 1. **`document_heads` and `retrieval_log`** — Moved to `events.db`. They track document-type events and belong with the event ledger.
 
-2. **`bus_events`** — Cortex Go bus eliminated. The single Nex `InMemoryEventBus` (with optional write-through to `runtime.db`) is the only bus. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) section 3.6.
+2. **`bus_events`** — Old Go bus eliminated. The single Nex `InMemoryEventBus` (with optional write-through to `runtime.db`) is the only bus. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) section 3.6.
 
 3. **Adapter sync for non-event data** — `sync_watermarks` eliminated entirely. Each adapter owns its sync state internally. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) section 5.
 
@@ -347,8 +347,8 @@ All tables listed in "Tables Removed" above, plus their indexes and triggers. Th
 
 ## Related Documents
 
-- `MEMORY_SYSTEM.md` — Tripartite memory model
-- `CORTEX_AGENT_INTERFACE.md` — Cortex tool/API surface
-- `roles/MEMORY_WRITER.md` — Memory writer role spec
-- `roles/MEMORY_READER.md` — Memory reader role spec
+- `../../_archive/MEMORY_SYSTEM.md` — Tripartite memory model
+- `../../_archive/CORTEX_AGENT_INTERFACE.md` — Memory System tool/API surface
+- `../../_archive/MEMORY_WRITER.md` — Memory writer role spec
+- `../../_archive/MEMORY_READER.md` — Memory reader role spec
 - `../../runtime/broker/MEESEEKS_PATTERN.md` — Meeseeks pattern

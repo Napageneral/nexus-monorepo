@@ -30,13 +30,13 @@ This is a long-term, correctness-first migration. The target state is a clean in
 
 ### Bucket 2: Adapter Protocol Contract (schema + fixtures)
 
-- [x] Introduce a protocol v2 contract (recommended) with the new field names.
+- [x] Introduce a canonical protocol contract with the delivery taxonomy field names.
   - Update `adapters/contract/adapter-protocol.schema.json`
   - Update fixtures in `adapters/contract/fixtures/`
 - [x] Define the transition behavior for NEX:
-  - Accept v1 inputs temporarily (legacy field names) and normalize into v2 internally.
-  - Emit v2 outputs for adapter invocations and internal tooling.
-- [x] Update `adapters/contract/ADAPTER_PROTOCOL_SCHEMA.md` to explain v1 vs v2 expectations and timeline.
+  - Accept legacy inputs temporarily (legacy field names) and normalize into canonical form internally.
+  - Emit canonical outputs for adapter invocations and internal tooling.
+- [x] Update `adapters/contract/ADAPTER_PROTOCOL_SCHEMA.md` to explain legacy vs canonical expectations and timeline.
 
 ### Bucket 3: NEX Internal Delivery Schema + Pipeline
 
@@ -55,12 +55,12 @@ This is a long-term, correctness-first migration. The target state is a clean in
 ### Bucket 4: Adapter SDKs (Go + TypeScript)
 
 - [x] Rename SDK types to match canonical field names.
-- [x] Update conformance tests to validate against protocol v2 fixtures.
+- [x] Update conformance tests to validate against canonical protocol fixtures.
 - [x] Provide small helper functions for common platform mappings (Slack thread ids, Discord threads-as-channels, iMessage reply bubbles, etc).
 
 ### Bucket 5: Adapters (Discord/Telegram/etc)
 
-- [ ] Update adapters to emit v2 `NexusEvent` lines with canonical delivery fields.
+- [ ] Update adapters to emit canonical `NexusEvent` lines with delivery taxonomy fields.
 - [ ] Update outbound to accept canonical target fields and preserve `thread_id` and `reply_to_id`.
 - [ ] Ensure adapters emit optional display fields (`space_name/container_name/thread_name`) when available.
 - [ ] Ensure adapters never emit internal-only `container_kind="direct"`.
@@ -78,7 +78,7 @@ This is a long-term, correctness-first migration. The target state is a clean in
 ### Bucket 7: Tests + Migration Harness
 
 - [x] Update unit/integration tests that construct delivery contexts.
-- [x] Add adapter-contract tests for both v1 (legacy accepted) and v2 (canonical).
+- [x] Add adapter-contract tests for both legacy (accepted) and canonical formats.
 - [ ] Add an E2E smoke test for:
   - control-plane/webchat (token-derived sender identity)
   - Discord/Slack/Telegram sample events (canonical routing fields)
@@ -89,7 +89,7 @@ This is a long-term, correctness-first migration. The target state is a clean in
 ## Exit Criteria (Done Definition)
 
 - Internal NEX code no longer references legacy naming in primary types and stage logic.
-- Adapter protocol contract v2 is the only supported contract for newly-built adapters.
-- Both Go + TS adapter SDKs pass conformance tests against the same v2 contract.
+- The canonical adapter protocol contract is the only supported contract for newly-built adapters.
+- Both Go + TS adapter SDKs pass conformance tests against the same canonical contract.
 - Core adapters (Discord/Telegram/Slack/iMessage/Gmail) emit canonical delivery fields and preserve `thread_id` + `reply_to_id` for outbound.
 - IAM policies can match `space_id`, `container_kind`, `container_id`, `thread_id` without relying on platform-specific metadata hacks.

@@ -79,22 +79,22 @@ For performance, queues use a write-through cache pattern:
 ### Drain Loop
 
 ```typescript
-async function drainQueue(sessionLabel: string): Promise<void> {
-  const settings = await getQueueSettings(sessionLabel);
-  
-  while (hasPendingItems(sessionLabel)) {
+async function drainQueue(sessionKey: string): Promise<void> {
+  const settings = await getQueueSettings(sessionKey);
+
+  while (hasPendingItems(sessionKey)) {
     // Wait for debounce period (allows batching for collect mode)
     await waitForDebounce(settings.debounceMs);
-    
+
     if (settings.mode === 'collect') {
       // Batch all pending into single prompt
-      const items = await dequeueAll(sessionLabel);
+      const items = await dequeueAll(sessionKey);
       const batchedPrompt = formatBatch(items);
-      await processMessage(sessionLabel, batchedPrompt);
+      await processMessage(sessionKey, batchedPrompt);
     } else {
       // Process one at a time
-      const item = await dequeueOne(sessionLabel);
-      await processMessage(sessionLabel, item.message);
+      const item = await dequeueOne(sessionKey);
+      await processMessage(sessionKey, item.message);
     }
   }
 }
@@ -177,7 +177,7 @@ This enables natural flow of progress updates and results without blocking.
 
 - WA completion always emits a durable `worker_result` event to the caller session.
 - If the caller session is busy, the `worker_result` is queued (not dropped) and delivered per queue mode.
-- `dispatch_id` and `spawned_session_label` are preserved in metadata for correlation and ledger/cortex lookup.
+- `dispatch_id` and `spawned_session_key` are preserved in metadata for correlation and ledger/memory lookup.
 
 ---
 

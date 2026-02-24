@@ -70,7 +70,7 @@ Remaining:
 2. **Channel/platform spoofing**
    - Example: an ingress path claims `platform="control-plane"` to get privileged policies or bypass identity resolution.
 3. **Conversation spoofing**
-   - Example: attacker chooses a `container_id` or `thread_id` that maps to a privileged session label or policy condition.
+   - Example: attacker chooses a `container_id` or `thread_id` that maps to a privileged session key or policy condition.
 4. **Timestamp spoofing**
    - Example: attacker supplies a timestamp to bypass time-based IAM conditions.
 5. **Capabilities spoofing**

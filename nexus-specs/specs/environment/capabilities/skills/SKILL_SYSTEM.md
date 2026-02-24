@@ -310,11 +310,13 @@ Connectors declare `enables: [service]`:
 
 ## Files Summary
 
+The `skills/` directory is **flat** -- all skills live directly under `skills/{name}/` regardless of type. Skill type (tool, connector, guide) is tracked in metadata, not directory hierarchy.
+
 | File | Location | Purpose |
 |------|----------|---------|
 | `manifest.json` | `state/skills/manifest.json` | Track all skills |
-| `.nexus-skill.json` | `skills/{type}s/{name}/` | Hub provenance |
-| `SKILL.md` | `skills/{type}s/{name}/SKILL.md` | Skill documentation |
+| `.nexus-skill.json` | `skills/{name}/` | Hub provenance |
+| `SKILL.md` | `skills/{name}/SKILL.md` | Skill documentation |
 | `usage.log` | `state/skills/{name}/usage.log` | Usage tracking |
 
 ---

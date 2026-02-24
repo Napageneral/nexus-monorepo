@@ -45,7 +45,7 @@ These apply profile/provider/group/subagent policy filtering independently of AC
 
 ### 2.3 Request-Level Hard Overrides
 
-- `nex/src/cortex-memory-v2/retain-access.ts`  
+- `nex/src/memory-v2/retain-access.ts`
   Directly injects `request.access` with `tools=["*"]`, `credentials=["*"]`, `data_access=full`.
 - `nex/src/auto-reply/reply/agent-runner-execution.ts`  
   Constructs synthetic `NexusRequest` with inline allow permissions.
@@ -102,7 +102,7 @@ Same semantic function in two different places.
   - `data_access: none|minimal|contextual|full`
 - `routing`:
   - `persona`
-  - `session_label`
+  - `session_key`
   - `queue_mode`
 - `constraints`:
   - role caps (manager/worker/unified)
@@ -245,7 +245,7 @@ Every decision should include stable IDs that correlate:
 - access decision logs
 - grant usage
 - request IDs
-- session labels
+- session keys
 
 ---
 

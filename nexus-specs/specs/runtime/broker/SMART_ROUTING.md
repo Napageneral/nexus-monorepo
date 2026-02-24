@@ -1,13 +1,14 @@
 # Smart Routing
 
-**Status:** TODO (Not Fully Integrated)  
+> **Status:** ARCHIVED — v2 feature. Not integrated with current data model.
+
 **Last Updated:** 2026-02-16
 
 ---
 
 ## Overview
 
-Smart routing uses Cortex to intelligently route messages to the best context, rather than explicit addressing.
+Smart routing uses the Memory System to intelligently route messages to the best context, rather than explicit addressing.
 
 **This is a v2 feature.** Explicit routing (direct session/thread addressing) is v1.
 
@@ -80,7 +81,7 @@ interface AgentBroker {
   // === Smart Routing (v2) ===
   
   /**
-   * Route to best checkpoint using Cortex.
+   * Route to best checkpoint using the Memory System.
    * Returns routing decision with confidence.
    */
   routeSmart(task: string): Promise<SmartRouteResult>;
@@ -128,7 +129,7 @@ interface Checkpoint {
 ## Requirements
 
 Smart routing requires:
-1. **Cortex populated** with session history and facets
+1. **Memory System populated** with session history and facets
 2. **Embedding index** for semantic matching
 3. **Quality signals** on turns (from analysis)
 4. **Scoring algorithm** (threshold tuning)
@@ -148,7 +149,7 @@ Smart routing requires:
 
 - `OVERVIEW.md` — Broker overview
 - `CONTEXT_ASSEMBLY.md` — How forked context is assembled
-- `../cortex/` — Cortex system
+- `../../data/memory/` — Memory System
 
 ---
 

@@ -58,9 +58,9 @@ func main() {
 
 func info() *nexadapter.AdapterInfo {
 	return &nexadapter.AdapterInfo{
-		Channel: "gmail",
-		Name:    adapterName,
-		Version: adapterVersion,
+		Platform: "gmail",
+		Name:     adapterName,
+		Version:  adapterVersion,
 		Supports: []nexadapter.Capability{
 			nexadapter.CapMonitor,
 			nexadapter.CapSend,
@@ -69,7 +69,7 @@ func info() *nexadapter.AdapterInfo {
 		},
 		CredentialService: "google",
 		MultiAccount:      true,
-		ChannelCapabilities: nexadapter.ChannelCapabilities{
+		PlatformCapabilities: nexadapter.ChannelCapabilities{
 			TextLimit:             20000,
 			SupportsMarkdown:      true,
 			MarkdownFlavor:        "standard",

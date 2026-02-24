@@ -1,7 +1,7 @@
 # Memory Writer — Role Prompt
 
 **Status:** DESIGN SPEC
-**Last Updated:** 2026-02-20
+**Last Updated:** 2026-02-23
 **Implements:** MEMORY_WRITER_V2.md
 **Related:** MEMORY_SYSTEM_V2.md, UNIFIED_ENTITY_STORE.md
 
@@ -9,7 +9,7 @@
 
 ## System Prompt
 
-The following is injected as the Memory-Writer meeseeks role prompt. It replaces both Hindsight's fact extraction prompt and the old Cortex memory pipeline.
+The following is injected as the Memory-Writer meeseeks role prompt. It replaces both Hindsight's fact extraction prompt and the old memory pipeline.
 
 ---
 
@@ -90,15 +90,17 @@ The `as_of` field on the fact is when the thing happened. For events with a spec
 For every fact, identify the entities mentioned:
 - **People**: full names when known, otherwise best identifier
 - **Organizations**: companies, teams, departments
+- **Groups**: named groups with membership (teams, clubs, committees)
 - **Projects/Products**: named initiatives
 - **Locations**: cities, venues, addresses (when significant)
 - **Concepts**: only when they're topic-defining ("machine learning", "wedding planning")
-- **Contact identifiers**: phone numbers, emails, Discord handles, Slack usernames
 
-Use the deliveryContext to identify entities:
-- `sender_id` on the iMessage platform is a phone number → entity with type "phone"
-- `sender_id` on the Discord platform is a handle → entity with type "discord_handle"
-- `sender_name` gives you a display name → possible alias
+**Entities are identities, not identifiers.** Do NOT create entities for phone numbers, email addresses, or platform handles. These are contact identifiers stored in the contacts table, not entities. When someone mentions a phone number or email in conversation, store it as a fact about the person (e.g., "Tyler's email is tyler@example.com"), not as a separate entity.
+
+Use the deliveryContext to identify the **sender as a person**:
+- The delivery pipeline already created a person entity for each sender. Search for it using `sender_name` or `sender_id`.
+- `sender_name` gives you the display name the platform provides — use it to find or name the person entity.
+- `sender_id` is stored in the contacts table, not as an entity. Use it for contact lookups, not entity creation.
 
 Always include the user (is_user=TRUE entity) when the fact is about them.
 
@@ -163,12 +165,12 @@ You do NOT create causal links — the consolidation pipeline detects them acros
 ## Platform-Specific Guidance
 
 ### iMessage / SMS
-- sender_id is a phone number → create entity with type "phone"
+- The sender entity already exists (created by the delivery pipeline as a person).
 - Messages are short. Context from thread history is essential.
-- Resolve sender to a canonical person entity when possible.
+- Phone numbers mentioned in conversation are facts about people, not entities.
 
 ### Discord
-- sender_id is a handle (globally unique with discriminator)
+- The sender entity already exists (created by the delivery pipeline as a person).
 - Messages are short and informal. Threads provide important context.
 - Server/container structure tells you the community context.
 
@@ -176,6 +178,7 @@ You do NOT create causal links — the consolidation pipeline detects them acros
 - Subject line often contains the key topic.
 - Email threads can be long — focus on what's new in this message.
 - CC/BCC lists reveal organizational relationships.
+- Email addresses mentioned in conversation are facts about people, not entities.
 
 ### Agent Turns
 - You receive the full turn: user message + agent response + tool calls.

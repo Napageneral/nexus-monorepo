@@ -3,7 +3,7 @@
 **Status:** DESIGN SPEC (RESOLVED)
 **Created:** 2026-02-19
 **Depends On:** MEMORY_SYSTEM_V2.md, MEMORY_WRITER_V2.md, MEMORY_V2_INFRASTRUCTURE_WORKPLAN.md
-**Context:** All 8 phases of the original WORKPLAN.md have been implemented. The current backfill implementation processes events one-by-one through the full agentic pipeline, which won't scale to millions of events. This spec redesigns the retain pipeline to be episode-based, unifying the live and backfill paths.
+**Context:** All 8 phases of the original WORKPLAN.md have been implemented (see `../_archive/WORKPLAN.md`, archived). The current backfill implementation processes events one-by-one through the full agentic pipeline, which won't scale to millions of events. This spec redesigns the retain pipeline to be episode-based, unifying the live and backfill paths.
 
 ---
 
@@ -199,7 +199,7 @@ For **live** events, episode boundaries are detected using the **scheduled-event
 4. If the token budget is exceeded before the gap timer fires, close the episode immediately and start a new accumulation window. The scheduled trigger for the old window is cancelled.
 
 ```sql
--- Track pending retain triggers per thread (in memory.db or nexus.db)
+-- Track pending retain triggers per thread (in memory.db or runtime.db)
 CREATE TABLE pending_retain_triggers (
     thread_key      TEXT PRIMARY KEY,   -- "(platform, thread_id)" composite key
     scheduled_at    INTEGER NOT NULL,   -- when the retain should fire (unix ms)
@@ -304,7 +304,7 @@ The filter runs before episode grouping. Events that don't pass the filter are n
 
 ### Filter Definition
 
-Filters are **SQL WHERE clause fragments** stored in nexus.db. Each filter specifies:
+Filters are **SQL WHERE clause fragments** stored in runtime.db. Each filter specifies:
 - **Platform** (optional): which platform this rule applies to
 - **WHERE clause**: a SQL fragment that matches against the events table columns
 - **Action**: `include` or `exclude`
@@ -358,10 +358,10 @@ nexus memory filters disable spam-email-filter
 
 ### Filter Storage (RESOLVED)
 
-Filters are stored as **SQL WHERE clause fragments** in a `memory_filters` table in **nexus.db**. This keeps filter configuration with other Nexus system config and makes filter evaluation a direct SQL operation — no DSL interpretation layer needed.
+Filters are stored as **SQL WHERE clause fragments** in a `memory_filters` table in **runtime.db**. This keeps filter configuration with other Nexus system config and makes filter evaluation a direct SQL operation — no DSL interpretation layer needed.
 
 ```sql
--- In nexus.db
+-- In runtime.db
 CREATE TABLE memory_filters (
     id              TEXT PRIMARY KEY,       -- ULID
     name            TEXT NOT NULL UNIQUE,   -- human-readable filter name
@@ -400,7 +400,7 @@ VALUES ('f2', 'exclude-spam-email', 'gmail',
 -- User: include a specific sender that was being excluded (priority 10, overrides)
 INSERT INTO memory_filters (id, name, platform, where_clause, action, priority)
 VALUES ('f3', 'include-boss-emails', 'gmail',
-  "from_identifier = 'boss@company.com'", 'include', 10);
+  "sender_id = 'boss@company.com'", 'include', 10);
 ```
 
 **Cost prediction:** The `nexus memory backfill --dry-run` command already shows event counts and episode estimates. Rough cost estimates based on episode count × average cost per episode will be added to the dry-run output. Precise cost prediction is deferred until we have real backfill data to calibrate against.
@@ -870,7 +870,7 @@ The following questions were open during initial design and have been resolved:
 
 1. **Episode grouping mechanics (live path):** → Scheduled-event timer approach. See "Live Episode Boundary Detection — Scheduled Events" section.
 2. **Short-term memory implementation:** → `is_retained` flag on events table, not a separate table. See "Implementation — Flag on Events Table" section.
-3. **Filter storage and composition:** → SQL WHERE clauses in `memory_filters` table in nexus.db. Exclude beats include at same priority. See "Filter Storage (RESOLVED)" section.
+3. **Filter storage and composition:** → SQL WHERE clauses in `memory_filters` table in runtime.db. Exclude beats include at same priority. See "Filter Storage (RESOLVED)" section.
 4. **Writer input format for episodes:** → Array of NexusEvents in chronological order. Prompt framed as "conversation episode containing N messages." See "Writer Meeseeks — Scoped to Extraction" section.
 5. **Consolidation batching prompt design:** → Episode-batched is better for accuracy. Multiple NEW FACTS per prompt. Separate observations per topic cluster. See "Episode-Batched Consolidation (RESOLVED)" section.
 
@@ -911,7 +911,7 @@ Is 90 minutes the right default gap for all platforms?
     |
     v
 3. Pre-Episode Filter System
-   - memory_filters table in nexus.db (SQL WHERE clause fragments)
+   - memory_filters table in runtime.db (SQL WHERE clause fragments)
    - Filter composition: exclude beats include at same priority
    - CLI for filter management (list, add, preview, disable)
    - Default filters deferred until adapters are settled

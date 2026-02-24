@@ -808,13 +808,13 @@ const discordStreamHandlers = {
 };
 await runAdapter({
     info: async () => ({
-        channel: "discord",
+        platform: "discord",
         name: "nexus-discord-adapter",
         version: "0.1.0",
         supports: ["monitor", "send", "stream", "backfill", "health", "accounts"],
         credential_service: "discord",
         multi_account: true,
-        channel_capabilities: {
+        platform_capabilities: {
             text_limit: DISCORD_TEXT_LIMIT,
             supports_markdown: true,
             markdown_flavor: "discord",

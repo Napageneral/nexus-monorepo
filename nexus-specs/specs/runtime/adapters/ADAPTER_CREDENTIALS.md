@@ -76,7 +76,7 @@ When spawning any adapter process (monitor/send/stream/etc.), NEX writes an ephe
 The runtime context file contains:
 
 - adapter channel + account id
-- adapter-specific config (from `nex.yaml`)
+- adapter-specific config (from `config.json`)
 - resolved credential values (plaintext, already dereferenced from pointers)
 
 **Example:**

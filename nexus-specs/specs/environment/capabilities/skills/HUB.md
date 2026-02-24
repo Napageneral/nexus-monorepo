@@ -221,9 +221,7 @@ nexus skills use <slug>                       # Read SKILL.md for usage
 ```
 ~/nexus/
 ├── skills/                              # Installed skills (managed)
-│   ├── tools/{name}/
-│   ├── connectors/{name}/
-│   └── guides/{name}/
+│   └── {name}/                          # Flat — type tracked in metadata
 │
 ├── home/
 │   └── skills/                          # Local skills (user workspace)
@@ -342,8 +340,8 @@ nexus skills install gog
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ 3. Install to skill directory                                │
-│    - Read SKILL.md frontmatter for type                      │
-│    - Install to ~/nexus/skills/{type}s/{name}/               │
+│    - Read SKILL.md frontmatter for metadata                   │
+│    - Install to ~/nexus/skills/{name}/                        │
 │    - Write .nexus-skill.json with provenance                 │
 └───────────────────────────┬─────────────────────────────────┘
                             │

@@ -1,3 +1,5 @@
+> **Status:** ARCHIVED — Superseded by `LANGUAGE_AND_ARCHITECTURE.md`. Retained for historical reference.
+
 # Language Decision
 
 **Status:** DECIDED  

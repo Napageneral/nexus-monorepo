@@ -407,13 +407,13 @@ async function sendWithRetry(
 
 ### To Port from Upstream
 
-| Channel | Upstream | Target Tool |
-|---------|----------|-------------|
-| Discord | `src/discord/send.ts` | `discord-cli` |
-| Telegram | `src/telegram/send.ts` | `telegram-bot` |
+| Platform | Upstream | Target Tool |
+|----------|----------|-------------|
+| Discord | `src/discord/send.ts` | `nexus-adapter-discord` |
+| Telegram | `src/telegram/send.ts` | `nexus-adapter-telegram` |
 | WhatsApp | `src/web/outbound.ts` | Baileys wrapper |
 | Signal | `src/signal/send.ts` | signal-cli wrapper |
-| Slack | `src/slack/send.ts` | `slack-cli` |
+| Slack | `src/slack/send.ts` | `nexus-adapter-slack` |
 
 ---
 

@@ -50,8 +50,8 @@ LINE uses webhooks (no long-polling or WebSocket):
 
 ```typescript
 {
-  channel: 'line',
-  peer_kind: event.source.type === 'user' ? 'dm' : 'group',
+  platform: 'line',
+  container_kind: event.source.type === 'user' ? 'dm' : 'group',
   metadata: {
     user_id: event.source.userId,
     group_id: event.source.groupId,

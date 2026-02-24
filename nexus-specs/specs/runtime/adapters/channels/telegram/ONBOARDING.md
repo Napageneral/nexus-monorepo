@@ -13,7 +13,7 @@ Bring up a Telegram adapter account in a way that:
 - uses the Nexus credential system (Keychain pointer preferred on macOS)
 - keeps secrets out of config and argv
 - defaults to safe IAM behavior (owner DMs allowed, groups denied unless explicitly allowed)
-- preserves structured delivery fields (`peer_kind`, `peer_id`, `thread_id`, `reply_to_id`)
+- preserves structured delivery fields (`container_kind`, `container_id`, `thread_id`, `reply_to_id`)
 
 ---
 
@@ -112,7 +112,7 @@ If webhook mode is used, the adapter is responsible for running its HTTP server;
 
 Telegram must preserve:
 
-- `delivery.peer_id` = chat id
+- `delivery.container_id` = chat id
 - `delivery.thread_id` = `message_thread_id` when the chat is a forum supergroup topic
 - `delivery.reply_to_id` = `reply_to_message_id` when applicable
 

@@ -1,3 +1,5 @@
+> **Status:** ARCHIVED — Historical meeseeks/memory implementation plan.
+
 # Handoff: Meeseeks Automation Infrastructure + Memory System
 
 ## TL;DR
@@ -17,10 +19,10 @@ Steps 1-2 of the event ledger work (FTS5 + outbound capture) should be done firs
 | Order | Spec | Path | What it covers |
 |---|---|---|---|
 | 1 | **MEESEEKS_PATTERN.md** | `specs/runtime/broker/MEESEEKS_PATTERN.md` | Automation infrastructure: schema, hook runner, dispatch pattern, workspaces, peer access, self-improvement, cost model |
-| 2 | **MEMORY_READER.md** | `specs/data/cortex/roles/MEMORY_READER.md` | Reader automation: registration, dispatch script, search strategy, output format, hot path constraints |
-| 3 | **MEMORY_WRITER.md** | `specs/data/cortex/roles/MEMORY_WRITER.md` | Writer automation: registration, agent-as-pipeline, observation-log model, extraction philosophy, skill tooling |
-| 4 | **CORTEX_AGENT_INTERFACE.md** | `specs/data/cortex/CORTEX_AGENT_INTERFACE.md` | Tooling surface: skill folders, cortex-search.sh, cortex-write.sh, schema reference, migration from old tools |
-| 5 | **MEMORY_SYSTEM.md** | `specs/data/cortex/MEMORY_SYSTEM.md` | High-level memory model: declarative/episodic/procedural, observation-log, read-time interpretation |
+| 2 | **MEMORY_READER.md** | `specs/data/memory/roles/MEMORY_READER.md` | Reader automation: registration, dispatch script, search strategy, output format, hot path constraints |
+| 3 | **MEMORY_WRITER.md** | `specs/data/memory/roles/MEMORY_WRITER.md` | Writer automation: registration, agent-as-pipeline, observation-log model, extraction philosophy, skill tooling |
+| 4 | **MEMORY_AGENT_INTERFACE.md** | `specs/data/memory/MEMORY_AGENT_INTERFACE.md` | Tooling surface: skill folders, memory-search.sh, memory-write.sh, schema reference, migration from old tools |
+| 5 | **MEMORY_SYSTEM.md** | `specs/data/memory/MEMORY_SYSTEM.md` | High-level memory model: declarative/episodic/procedural, observation-log, read-time interpretation |
 
 ## Key Code Files
 
@@ -31,7 +33,7 @@ Steps 1-2 of the event ledger work (FTS5 + outbound capture) should be done firs
 | `nex/src/db/hooks.ts` | Current hooks table schema + CRUD. Gets renamed to automations. |
 | `nex/src/nex/automations/hooks-runtime.ts` | Current hook evaluation runtime. Gets extended to support the new automation model. |
 | `nex/src/nex/request.ts` | `NexusRequest`, `createNexusRequest()`, `EventContext`, `TriggerContext`, `AgentContext` types. |
-| `nex/cortex/internal/db/schema.sql` | Cortex DB schema — entities, relationships, entity_aliases, episodes, etc. The knowledge graph tables the writer writes to. |
+| `nex/cortex/internal/db/schema.sql` | Memory System DB schema — entities, relationships, entity_aliases, episodes, etc. The knowledge graph tables the writer writes to. |
 
 ## What You're Building (5 phases)
 
@@ -141,24 +143,24 @@ After main handler completes, if `self_improvement = 1`:
 
 ### Phase 2: Skill Infrastructure
 
-Build the skill folder system that gives meeseeks agents direct SQLite access to Cortex.
+Build the skill folder system that gives meeseeks agents direct SQLite access to the Memory System.
 
 #### 2a. Skill folder seeding
 
-When bootstrapping a memory meeseeks workspace, create `skills/cortex/`:
+When bootstrapping a memory meeseeks workspace, create `skills/memory/`:
 
 ```
-skills/cortex/
-  DB_PATH             # Just the path: ~/.nexus/data/cortex.db
+skills/memory/
+  DB_PATH             # Just the path: ~/.nexus/data/memory.db
   SCHEMA.md           # Auto-generated from current schema.sql
-  QUERIES.md          # Pre-built query patterns (from CORTEX_AGENT_INTERFACE.md)
-  cortex-search.sh    # Semantic + FTS5 hybrid search script
-  cortex-write.sh     # Write helper with side-effect coordination
+  QUERIES.md          # Pre-built query patterns (from MEMORY_AGENT_INTERFACE.md)
+  memory-search.sh    # Semantic + FTS5 hybrid search script
+  memory-write.sh     # Write helper with side-effect coordination
 ```
 
 `SCHEMA.md` should be auto-generated from the actual schema.sql so it stays current.
 
-#### 2b. cortex-search.sh
+#### 2b. memory-search.sh
 
 Script the agent calls via bash for semantic search (the one operation raw SQL can't do):
 1. Takes a query string as input
@@ -169,7 +171,7 @@ Script the agent calls via bash for semantic search (the one operation raw SQL c
 
 Start simple — even just FTS5 search is useful. Add embedding-based search as a second pass.
 
-#### 2c. cortex-write.sh
+#### 2c. memory-write.sh
 
 Script the agent calls for writes that need side-effect coordination:
 1. `entity` subcommand — INSERT into entities + entity_aliases, trigger background embedding
@@ -210,7 +212,7 @@ See MEMORY_READER.md for the full dispatch script pattern. Key points:
 #### 3c. ROLE.md
 
 Write reader instructions per MEMORY_READER.md spec:
-- Search strategy: entity detection → cortex-search → relationship traversal → read-time interpretation → iterate
+- Search strategy: entity detection → memory-search → relationship traversal → read-time interpretation → iterate
 - Output: `<memory_context>` block with relevant facts, relationships, recent episodes
 - Constraints: target <5s, max 3 agentic turns, focus on relevance not completeness
 
@@ -244,7 +246,7 @@ INSERT INTO automations (
 See MEMORY_WRITER.md for the full pattern. Key differences from reader:
 - Gets FULL conversation history via `assembleContext`
 - Async — fire and don't await
-- No enrichment returned (writes directly to Cortex)
+- No enrichment returned (writes directly to memory.db)
 
 #### 4c. ROLE.md
 
@@ -298,7 +300,7 @@ Convert existing `NEXPlugin` methods to automations. This is cleanup, not blocki
 2. **Blocking automation:** Register at `worker:pre_execution` that returns enrichment. Verify enrichment appears in worker's context.
 3. **Workspace:** Verify workspace directory is created with seed files. Verify automation can read ROLE.md.
 4. **Peer access:** Verify reader can read writer's SKILLS.md and vice versa.
-5. **Memory reader E2E:** Ask the worker about a known entity. Verify the reader searches Cortex and injects relevant context.
-6. **Memory writer E2E:** Have a conversation mentioning a new person. Verify the writer creates an entity + relationships in Cortex.
+5. **Memory reader E2E:** Ask the worker about a known entity. Verify the reader searches memory and injects relevant context.
+6. **Memory writer E2E:** Have a conversation mentioning a new person. Verify the writer creates an entity + relationships in the Memory System.
 7. **Self-improvement:** Verify SKILLS.md gets updated after the reflection turn.
 8. **Concurrency:** Fire two rapid turns. Verify the second writer queues behind the first (SessionQueue enforcement).

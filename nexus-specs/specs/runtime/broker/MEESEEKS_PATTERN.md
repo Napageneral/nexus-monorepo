@@ -2,7 +2,7 @@
 
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-18
-**Related:** AGENTS.md, DATA_MODEL.md, ../../data/cortex/roles/
+**Related:** AGENTS.md, DATA_MODEL.md, ../../data/memory/roles/
 **Database layout:** See `../../data/DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
 
 ---
@@ -42,20 +42,21 @@ Every hook point supports both **blocking** and **async** automations. The hook 
 
 | Hook point | When | Typical use |
 |------------|------|-------------|
-| `after:receiveEvent` | After event parsing | Event transformation |
+| `after:ingest` | After event parsing | Event transformation |
 | `after:resolveIdentity` | After identity resolution | Identity enrichment |
+| `after:resolveReceiver` | After receiver resolution | Receiver enrichment |
 | `after:resolveAccess` | After IAM | Access policy augmentation |
-| `runAutomations` | Stage 4 — first safe decision point | General-purpose automations, routing overrides |
-| `after:assembleContext` | After context assembly | Context augmentation |
+| `runAutomations` | Stage 5 — first safe decision point | General-purpose automations, routing overrides |
+| `after:routeSession` | After session routing | Context augmentation |
 | `after:runAgent` | After agent turn completes | Post-turn processing (memory writes, analytics) |
-| `after:deliverResponse` | After response delivered | Analytics, logging |
-| `finalize` | Pipeline finalization | Cleanup, persistence |
+| `after:processResponse` | After response processed | Analytics, logging |
+| `deliverResponse` | Pipeline delivery/finalization | Cleanup, persistence |
 
 #### Broker hooks
 
 | Hook point | When | Typical use |
 |------------|------|-------------|
-| `worker:pre_execution` | After worker assembleContext, before worker startBrokerExecution | **Memory injection for workers** |
+| `worker:pre_execution` | After worker routeSession, before worker startBrokerExecution | **Memory injection for workers** |
 
 #### Lifecycle hooks
 
@@ -250,13 +251,13 @@ export default async function memoryReaderAutomation(ctx: AutomationContext) {
   // ctx.request IS the workerRequest — not a copy, the same object.
   const taskContent = ctx.request.event.content;
 
-  // 1. Derive a meeseeks session label from the parent request.
+  // 1. Derive a meeseeks session key from the parent request.
   //    Own session for broker queue isolation, but same request for lineage.
-  const meeseeksSession = `meeseeks:memory-reader:${ctx.request.agent?.session_label || ctx.request.request_id}`;
+  const meeseeksSession = `meeseeks:memory-reader:${ctx.request.agent?.session_key || ctx.request.request_id}`;
 
-  // 2. Assemble context — same request, meeseeks session label, focused task.
+  // 2. Assemble context — same request, meeseeks session key, focused task.
   const assembled = await ctx.assembleContext({
-    sessionLabel: meeseeksSession,
+    sessionKey: meeseeksSession,
     task: `Search memory for context relevant to: ${taskContent}`,
   });
 
@@ -265,7 +266,7 @@ export default async function memoryReaderAutomation(ctx: AutomationContext) {
 
   // 4. Execute through the broker
   const execution = ctx.startBrokerExecution(assembled, {
-    sessionLabel: meeseeksSession,
+    sessionKey: meeseeksSession,
   });
   const result = await execution.result;
 
@@ -280,8 +281,8 @@ export default async function memoryReaderAutomation(ctx: AutomationContext) {
 
 The automation gets these capabilities through its context:
 - `ctx.request` — the NexusRequest that triggered this automation (NOT a copy — the actual request)
-- `ctx.assembleContext({ sessionLabel, task })` — calls `assembleContextStage` for a meeseeks execution scoped to the parent request
-- `ctx.startBrokerExecution(assembled, { sessionLabel })` — runs the meeseeks through the broker, all traces accumulate on `ctx.request`
+- `ctx.assembleContext({ sessionKey, task })` — calls `assembleContextStage` for a meeseeks execution scoped to the parent request
+- `ctx.startBrokerExecution(assembled, { sessionKey })` — runs the meeseeks through the broker, all traces accumulate on `ctx.request`
 - `ctx.workspace` — runtime-provided workspace context (home dir files, peer access)
 
 **For blocking automations:** await `execution.result`, return enrichment.
@@ -307,7 +308,7 @@ The canonical meeseeks pair. Two separate automations, each at its own hook poin
 
 Registered at `worker:pre_execution` (blocking). Fires in the worker dispatch path — searches memory and injects context into the worker's assembled context before the broker begins execution.
 
-See `../../data/cortex/roles/MEMORY_READER.md` for full role spec.
+See `../../data/memory/roles/MEMORY_READER.md` for full role spec.
 
 ```sql
 INSERT INTO automations (
@@ -331,7 +332,7 @@ INSERT INTO automations (
 
 Registered at `after:runAgent` (async). Fires after the agent turn completes -- extracts entities, relationships, and episodes from the completed turn and writes to memory.db + identity.db (entities) + embeddings.db.
 
-See `../../data/cortex/roles/MEMORY_WRITER.md` for full role spec.
+See `../../data/memory/roles/MEMORY_WRITER.md` for full role spec.
 
 ```sql
 INSERT INTO automations (
@@ -432,10 +433,10 @@ When `self_improvement = 1`, the runtime chains a reflection turn after the prim
 ```typescript
 // Runtime, after main handler completes
 if (automation.self_improvement && automation.workspace_dir && taskResult) {
-  const improveSessionLabel = `meeseeks:${automation.name}:improve:${request.request_id}`;
+  const improveSessionKey = `meeseeks:${automation.name}:improve:${request.request_id}`;
 
   const assembled = await assembleContextStage(request, runtime, {
-    sessionLabel: improveSessionLabel,
+    sessionKey: improveSessionKey,
     task: `Reflect on your task execution. Update workspace files with learnings:
       - ${automation.workspace_dir}/SKILLS.md
       - ${automation.workspace_dir}/PATTERNS.md
@@ -445,7 +446,7 @@ if (automation.self_improvement && automation.workspace_dir && taskResult) {
   assembled.systemPrompt += `\n\n${workspaceContext.role}`;
 
   const execution = startBrokerExecution(assembled, runtime, {
-    sessionLabel: improveSessionLabel,
+    sessionKey: improveSessionKey,
   });
   void execution.result; // Fire and forget — don't block
 }
@@ -520,7 +521,7 @@ This function is called at every hook point in the pipeline and broker dispatch 
 | Table rename + migration | Small | `hooks` → `automations`, add 6 new columns |
 | Hook point runner | Medium | Generic `evaluateAutomationsAtHook()` function |
 | `worker:pre_execution` hook | Medium | Insert hook in worker dispatch path (runAgent.ts lines 1501-1504 and 1718-1721) |
-| `after:runAgent` hook | Medium | Insert hook in pipeline.ts after stage 6, async fire-and-forget |
+| `after:runAgent` hook | Medium | Insert hook in pipeline.ts after stage 7, async fire-and-forget |
 | Automation context extension | Medium | Expose `request`, `assembleContext`, `startBrokerExecution`, `workspace` on AutomationContext |
 | Peer workspace loading | Small | Read `peer_workspaces` JSON, provide `peers` array on workspace context |
 | Per-automation timeout | Small | Check `automation.timeout_ms` in timeout resolver |
@@ -542,7 +543,7 @@ This function is called at every hook point in the pipeline and broker dispatch 
 
 4. **Internal hook loading:** Load directory-discovered hooks into the automations table at startup (full convergence), or keep them as a separate loading path that feeds into the same runner?
 
-5. **Event ledger unification:** Resolved -- see `../../data/cortex/EVENT_LEDGER_UNIFICATION.md`. One events ledger (`events.db`), legacy cortex events table removed. Pipeline already captures inbound + outbound. AIX adapters already built.
+5. **Event ledger unification:** Resolved -- see `../../data/_archive/EVENT_LEDGER_UNIFICATION.md` (archived). One events ledger (`events.db`), legacy events table removed. Pipeline already captures inbound + outbound. AIX adapters already built.
 
 6. **Semantic search delivery:** Should `memory_search` (embedding + FTS hybrid search) be a structured tool_use tool, or a skill script (`memory-search.sh`) the agent calls via bash? Skill script is more consistent; structured tool is more ergonomic for the LLM.
 
@@ -552,7 +553,7 @@ This function is called at every hook point in the pipeline and broker dispatch 
 
 - `AGENTS.md` — Manager-Worker Pattern, worker dispatch
 - `DATA_MODEL.md` — Core data model
-- `../../data/cortex/roles/MEMORY_READER.md` — Memory reader meeseeks role spec
-- `../../data/cortex/roles/MEMORY_WRITER.md` — Memory writer meeseeks role spec
-- `../../data/cortex/MEMORY_SYSTEM.md` — Tripartite memory model
-- `../../data/cortex/CORTEX_AGENT_INTERFACE.md` — Cortex tool/API surface
+- `../../data/memory/roles/MEMORY_READER.md` — Memory reader meeseeks role spec
+- `../../data/memory/roles/MEMORY_WRITER.md` — Memory writer meeseeks role spec
+- `../../data/memory/MEMORY_SYSTEM.md` — Tripartite memory model
+- `../../data/memory/MEMORY_AGENT_INTERFACE.md` — Memory System tool/API surface

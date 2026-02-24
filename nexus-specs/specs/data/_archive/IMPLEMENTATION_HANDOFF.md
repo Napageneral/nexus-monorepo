@@ -1,3 +1,5 @@
+> **Status:** ARCHIVED — Historical implementation plan.
+
 # Implementation Handoff: Meeseeks + Memory System
 
 ## What You're Building
@@ -27,11 +29,11 @@ This is the foundation. It defines:
 - **Cost model** — All meeseeks run through broker using existing Anthropic OAuth. Free marginal cost.
 
 ### 2. MEMORY_READER.md — The reader meeseeks
-**Path:** `specs/data/cortex/roles/MEMORY_READER.md`
+**Path:** `specs/data/memory/roles/MEMORY_READER.md`
 
 Automation at `worker:pre_execution` (blocking, 10s timeout). Searches memory, returns enrichment that gets prepended to worker's `currentMessage`. Key details:
 - Dispatch script pattern
-- Skill-based tooling: `cortex-search.sh` for semantic search, raw SQL for everything else
+- Skill-based tooling: `memory-search.sh` for semantic search, raw SQL for everything else
 - Agentic search strategy (entity detection → search → relationship traversal → read-time interpretation → iterate)
 - Read-time relationship interpretation from observation log
 - Output format (`<memory_context>` block)
@@ -39,32 +41,32 @@ Automation at `worker:pre_execution` (blocking, 10s timeout). Searches memory, r
 - Peer access to writer's workspace
 
 ### 3. MEMORY_WRITER.md — The writer meeseeks
-**Path:** `specs/data/cortex/roles/MEMORY_WRITER.md`
+**Path:** `specs/data/memory/roles/MEMORY_WRITER.md`
 
 Automation at `after:runAgent` (async, 30s timeout). Extracts entities, relationships, episodes from completed turns. Key details:
 - **Agent IS the pipeline** — Replaces 7-stage Go pipeline with single intelligent pass
 - **Observation-log model** — Append-only relationships, no dedup, no contradiction detection at write
 - Relationship extraction rules (1:1 primitive, group naming at 3+ recurring / 6+ always)
-- Skill-based tooling: `cortex-write.sh` for writes with side-effect coordination
+- Skill-based tooling: `memory-write.sh` for writes with side-effect coordination
 - Identity relationships written directly to `entity_aliases` (no separate IdentityPromoter stage)
 - Full conversation history via `assembleContext` for context-aware extraction
 - Frequency tuning (`every_turn`, `every_n_turns`, `pre_compaction`)
 - Peer access to reader's workspace
 
 ### 4. CORTEX_AGENT_INTERFACE.md — The tooling surface
-**Path:** `specs/data/cortex/CORTEX_AGENT_INTERFACE.md`
+**Path:** `specs/data/memory/MEMORY_AGENT_INTERFACE.md`
 
-Defines how agents interact with the Cortex DB. The key shift: **skills + direct SQLite, not structured tools.**
-- Full schema reference for all three ledgers (Events, Core, Agents) in `cortex.db`
-- Skill folder structure: `SCHEMA.md`, `QUERIES.md`, `cortex-search.sh`, `cortex-write.sh`, `DB_PATH`
+Defines how agents interact with the Memory System databases. The key shift: **skills + direct SQLite, not structured tools.**
+- Full schema reference for memory.db + embeddings.db
+- Skill folder structure: `SCHEMA.md`, `QUERIES.md`, `memory-search.sh`, `memory-write.sh`, `DB_PATH`
 - Example SQL queries for common patterns
-- `cortex-search.sh` — semantic + FTS5 hybrid search (the one operation needing more than SQL)
-- `cortex-write.sh` — write helper handling side effects (embedding triggers, alias normalization, mention junction tables)
+- `memory-search.sh` — semantic + FTS5 hybrid search (the one operation needing more than SQL)
+- `memory-write.sh` — write helper handling side effects (embedding triggers, alias normalization, mention junction tables)
 - Background embedding system
 - Migration table mapping every old tool to its skill-based replacement
 
 ### 5. Supporting context
-- **Database schema:** `nex/cortex/internal/db/schema.sql` — The actual CREATE TABLE statements. One `cortex.db` file, WAL mode, three logical ledgers.
+- **Database schema:** `nex/cortex/internal/db/schema.sql` — The actual CREATE TABLE statements for the legacy memory DB. WAL mode, three logical ledgers. Being superseded by memory.db + embeddings.db.
 - **Current pipeline code:** `nex/cortex/internal/memory/pipeline.go` and siblings — The Go memory pipeline being replaced. Good reference for understanding what the writer agent conceptually does.
 - **Worker dispatch:** `nex/src/nex/stages/runAgent.ts` — Lines 1439-1510 for worker dispatch, line 1501 for `assembleContextStage`, line 1504 for `startBrokerExecution`. This is where `worker:pre_execution` gets inserted.
 - **Request types:** `nex/src/nex/request.ts` — `NexusRequest`, `createNexusRequest()`, `EventContext`, `TriggerContext`, `AgentContext` type definitions.
@@ -84,12 +86,12 @@ Defines how agents interact with the Cortex DB. The key shift: **skills + direct
 8. **Self-improvement chaining** — After main handler, if `self_improvement = 1`, dispatch reflection turn via same `assembleContext` + `startBrokerExecution` pattern, fire-and-forget.
 
 ### Phase 2: Skill Infrastructure
-1. **Skill folder seeding** — When bootstrapping workspace, create `skills/cortex/` with:
-   - `DB_PATH` — path to cortex.db
+1. **Skill folder seeding** — When bootstrapping workspace, create `skills/memory/` with:
+   - `DB_PATH` — path to memory.db
    - `SCHEMA.md` — auto-generated from current schema
-   - `QUERIES.md` — pre-built query patterns from CORTEX_AGENT_INTERFACE.md
-2. **`cortex-search.sh`** — Script that computes query embeddings, runs vector similarity against embeddings table, cross-references with FTS5, ranks results. Returns JSON.
-3. **`cortex-write.sh`** — Script that handles INSERT + side effects: alias normalization, background embedding trigger, merge candidate detection, mention junction table rows.
+   - `QUERIES.md` — pre-built query patterns from MEMORY_AGENT_INTERFACE.md
+2. **`memory-search.sh`** — Script that computes query embeddings, runs vector similarity against embeddings table, cross-references with FTS5, ranks results. Returns JSON.
+3. **`memory-write.sh`** — Script that handles INSERT + side effects: alias normalization, background embedding trigger, merge candidate detection, mention junction table rows.
 
 ### Phase 3: Memory Reader
 1. **Register automation** — `memory-reader` at `worker:pre_execution`, blocking, 10s timeout, workspace at `~/.nexus/state/meeseeks/memory-reader/`, peer to writer workspace.
@@ -129,8 +131,8 @@ These were deliberately decided during design. Don't second-guess them:
 
 ## Known Gaps / Open Questions
 
-- **Event Ledger Unification** — There are currently two event systems (Nex `events.db` and Cortex `events` table in `cortex.db`). The Cortex one is a bad port and needs to be removed. All adapters need to write to the Nex events ledger. **See `specs/data/cortex/EVENT_LEDGER_UNIFICATION.md` for the full spec.** This is a prerequisite for the memory system — the writer and episodic memory need a single coherent events ledger.
+- **Event Ledger Unification** — There are currently two event systems (Nex `events.db` and a legacy `events` table in cortex.db). The legacy one is a bad port and needs to be removed. All adapters need to write to the Nex events ledger. **See `specs/data/memory/EVENT_LEDGER_UNIFICATION.md` for the full spec.** This is a prerequisite for the Memory System — the writer and episodic memory need a single coherent events ledger.
 - **MEMORY_SYSTEM.md** — Updated to reflect observation-log model, read-time interpretation, agent-as-pipeline, and skills + direct SQLite tooling.
-- **Semantic search delivery** — Should be `cortex-search.sh` (skill script) or `cortex_search` (structured tool)? Decide during implementation.
-- **Write script complexity** — Start `cortex-write.sh` minimal (INSERT + embedding trigger), expand as needed.
+- **Semantic search delivery** — Should be `memory-search.sh` (skill script) or `memory_search` (structured tool)? Decide during implementation.
+- **Write script complexity** — Start `memory-write.sh` minimal (INSERT + embedding trigger), expand as needed.
 - **Relationship unique index** — Existing unique indexes on `relationships` table enforce dedup. Need to relax for append-only model.

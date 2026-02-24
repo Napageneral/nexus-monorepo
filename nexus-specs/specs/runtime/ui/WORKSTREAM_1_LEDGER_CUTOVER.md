@@ -57,7 +57,7 @@ This section defines how legacy `SessionEntry`-style data maps into ledger write
 
 ### A. Keep at Session Level
 
-1. Session label/canonical key -> `sessions.label`
+1. Session key/canonical key -> `sessions.label`
 2. Parent subagent linkage -> `sessions.parent_session_label`, `sessions.parent_turn_id`, `sessions.spawn_tool_call_id`
 3. Provenance -> `sessions.origin`, `sessions.origin_session_id`
 4. Pointer update time -> `sessions.updated_at`
@@ -88,7 +88,7 @@ This section defines how legacy `SessionEntry`-style data maps into ledger write
 ## Turn Write Contract
 
 For every broker run:
-1. Resolve canonical session label (with alias lookup).
+1. Resolve canonical session key (with alias lookup).
 2. Resolve parent turn from session head.
 3. Compute effective turn config:
    - global defaults
@@ -110,14 +110,14 @@ Transactional requirement:
 ## Alias Minting and Resolution
 
 Resolution order:
-1. Direct session label lookup.
+1. Direct session key lookup.
 2. Alias lookup in `session_aliases`.
 3. Create new session if unresolved.
 
 Alias minting rules:
 1. Mint alias on identity promotion (channel-based key -> canonical entity key).
 2. Mint alias on import reconciliation when source/native keys differ but should resolve to same canonical session.
-3. Alias target must always be a canonical session label (no alias chains).
+3. Alias target must always be a canonical session key (no alias chains).
 4. For merge candidate selection:
    - prefer session with larger `session_history` depth
    - tie-break by latest `sessions.updated_at`
@@ -138,7 +138,7 @@ Per-item outcomes:
 4. Invalid payload/linkage -> `failed` with reason
 
 Collision policy:
-1. Non-unique label hints never overwrite canonical session labels.
+1. Non-unique label hints never overwrite canonical session keys.
 2. Deterministic canonical labels remain stable across retries.
 3. Parent/child linkage is repaired in a second pass within the same import operation where needed.
 

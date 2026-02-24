@@ -88,9 +88,9 @@ interface Attachment {
 
 ## Implementation Patterns
 
-### Pattern 1: CLI Tool (Recommended)
+### Pattern: CLI Tool (Canonical)
 
-Tool emits JSON lines on stdout:
+Tool emits JSON lines on stdout. This is the only canonical implementation pattern — see `ADAPTER_SYSTEM.md` for the full CLI protocol.
 
 ```bash
 # Tool monitors and emits events
@@ -102,26 +102,6 @@ eve monitor --account default --format jsonl
 ```
 
 Nexus reads stdout and processes events.
-
-### Pattern 2: Daemon with RPC
-
-Tool runs as daemon, Nexus connects via socket:
-
-```bash
-# Start daemon
-discord-cli daemon --socket /tmp/discord.sock
-
-# Nexus connects and receives events
-```
-
-### Pattern 3: HTTP Webhook
-
-Tool runs HTTP server, platforms send webhooks:
-
-```bash
-# Tool handles webhooks, emits to Nexus via callback
-telegram-bot serve --port 8080 --callback http://localhost:9000/events
-```
 
 ---
 
@@ -266,11 +246,11 @@ function createNexusRequest(event: NexusEvent): NexusRequest {
 
 | Platform | Upstream | Target Tool |
 |----------|----------|-------------|
-| Discord | `src/discord/monitor.ts` | `discord-cli` |
-| Telegram | `src/telegram/monitor.ts` | `telegram-bot` |
+| Discord | `src/discord/monitor.ts` | `nexus-adapter-discord` |
+| Telegram | `src/telegram/monitor.ts` | `nexus-adapter-telegram` |
 | WhatsApp | `src/web/inbound/` | Baileys wrapper |
 | Signal | `src/signal/monitor.ts` | signal-cli wrapper |
-| Slack | `src/slack/monitor.ts` | `slack-cli` |
+| Slack | `src/slack/monitor.ts` | `nexus-adapter-slack` |
 
 ---
 

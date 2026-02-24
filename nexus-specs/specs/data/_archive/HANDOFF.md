@@ -1,8 +1,10 @@
+> **Status:** ARCHIVED — Historical handoff document. File paths reference old directory structure.
+
 # Memory System V2 — Implementation Handoff
 
 > **Database Layout:** See `specs/data/DATABASE_ARCHITECTURE.md` for the canonical 6-database layout. The memory system spans memory.db (facts, episodes), identity.db (entities), and embeddings.db (vectors).
 
-> **Note:** This handoff was originally written for Go cortex implementation. The Go cortex (`nex/cortex/`) is now being eliminated and all logic ported to TypeScript. The Go code paths referenced below (internal/db/, internal/search/, internal/memory/, internal/identify/, internal/contacts/, internal/compute/) are being superseded by the TS implementation. These references remain for historical context.
+> **Note:** This handoff was originally written for the Go memory subprocess implementation. The Go subprocess (`nex/cortex/`) is now eliminated and all logic ported to TypeScript. The Go code paths referenced below (internal/db/, internal/search/, internal/memory/, internal/identify/, internal/contacts/, internal/compute/) are superseded by the TS implementation. These references remain for historical context.
 
 You are implementing a major refactor of the memory system inside the Nexus project. This is a BIG BANG REFACTOR — no backwards compatibility concerns. Drop the old, build the new.
 
@@ -13,40 +15,40 @@ Read ALL of these files before writing any code. They are the source of truth fo
 **Start with the workplan — it tells you the exact order to build things:**
 
 ```
-/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/cortex/v2/WORKPLAN.md
+/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/WORKPLAN.md
 ```
 
 **Then read the architecture and data model:**
 
 ```
-/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/cortex/v2/MEMORY_SYSTEM_V2.md
-/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/cortex/v2/UNIFIED_ENTITY_STORE.md
+/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_SYSTEM_V2.md
+/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/UNIFIED_ENTITY_STORE.md
 ```
 
 **Then the writer (the most complex piece):**
 
 ```
-/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/cortex/v2/MEMORY_WRITER_V2.md
-/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/cortex/v2/MEMORY_WRITER_ROLE.md
+/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_WRITER_V2.md
+/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_WRITER_ROLE.md
 ```
 
 **Then the read path:**
 
 ```
-/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/cortex/v2/MEMORY_INJECTION.md
-/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/cortex/v2/MEMORY_SEARCH_SKILL.md
-/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/cortex/v2/MEMORY_REFLECT_SKILL.md
+/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_INJECTION.md
+/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_SEARCH_SKILL.md
+/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_REFLECT_SKILL.md
 ```
 
 ## Step 2: Understand the Existing Codebase
 
-The Go cortex code being superseded lives here:
+The Go memory subprocess code being superseded lives here:
 
 ```
 /Users/tyler/nexus/home/projects/nexus/nex/cortex/
 ```
 
-> **IMPORTANT:** The Go cortex is being eliminated. All logic is being ported to TypeScript. The following Go code paths are listed for reference only — they are being replaced by the TS implementation. See `specs/data/DATABASE_ARCHITECTURE.md` §4 for the full Go cortex elimination plan.
+> **IMPORTANT:** The Go memory subprocess is eliminated. All logic has been ported to TypeScript. The following Go code paths are listed for reference only -- they have been replaced by the TS implementation. See `specs/data/DATABASE_ARCHITECTURE.md` section 4 for the full Go elimination plan.
 
 Key locations (Go, being eliminated):
 
@@ -131,7 +133,7 @@ When you're done:
 
 ## Notes
 
-- The implementation is TypeScript in `/nex/src/`. The Go cortex code at `/nex/cortex/` is being eliminated. The `nex/cortex/` directory structure is being superseded by the TS implementation.
+- The implementation is TypeScript in `/nex/src/`. The Go memory subprocess code at `/nex/cortex/` has been eliminated. The `nex/cortex/` directory structure is superseded by the TS implementation.
 - SQLite, not Postgres. Use sqlite-vec for vectors, FTS5 for keyword search. Memory data is split across memory.db, identity.db (entities), and embeddings.db per DATABASE_ARCHITECTURE.md.
 - The Go compute engine (`internal/compute/`) is being ported to TS.
 - Test each phase before moving to the next. The workplan has test criteria for each phase.

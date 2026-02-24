@@ -1,7 +1,7 @@
 # Memory System (Derived Layer)
 
-**Status:** DESIGN COMPLETE
-**Last Updated:** 2026-02-18
+**Status:** IMPLEMENTED
+**Last Updated:** 2026-02-23
 
 > **Canonical reference:** See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the authoritative database layout, table inventories, and migration plan.
 
@@ -96,7 +96,7 @@ Upstream openclaw used a file-based memory system (`MEMORY.md`, `memory/*.md`) t
 └─────────────────────────────────────────────────────────────┘
 ```
 
-> **Note:** The Go cortex process has been eliminated. All memory system logic is ported to TypeScript. Entities now live in `identity.db` (not `memory.db`), enabling JOINs with contacts for identity resolution. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for full details.
+> **Note:** The memory system runs in-process as TypeScript. There is no separate subprocess. Entities live in `identity.db` (not `memory.db`), enabling JOINs with contacts for identity resolution. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for full details.
 
 ---
 
@@ -112,31 +112,24 @@ The memory system is queried by multiple components for semantic search and memo
 | **Agents** | `recall()` tool (agent-initiated memory lookup) |
 | **CLI** | `nexus search` (user semantic search) |
 
-```typescript
-interface MemoryQuery {
-  query: string;                   // Natural language or semantic
-  filters?: {
-    sources?: string[];            // Limit to adapters ('imessage', 'gmail', etc.)
-    time_range?: { start: number; end: number };
-    entity_ids?: string[];         // Limit to participants
-  };
-  limit?: number;
-  include_embeddings?: boolean;
-}
+```
+recall(query, params)
 
-interface MemoryResult {
-  hits: {
-    episode_id: string;
-    score: number;
-    content_preview: string;
-    source_event_ids: string[];
-    facets: Facet[];
-  }[];
-  total_hits: number;
-}
+Key parameters:
+  query        string      Natural language search query
+  scope        string[]    What to search: facts, observations, mental_models, entities
+  entity       string      Filter by entity name or ID
+  time_after   integer     Only results after this timestamp (unix ms)
+  time_before  integer     Only results before this timestamp (unix ms)
+  budget       string      Search depth: 'low' | 'mid' | 'high'
+
+Returns:
+  results[]    facts + observations + mental_models ranked by RRF+MMR
+               Each result includes: id, text, type, as_of, relevance score,
+               is_stale flag, linked entity_ids, source metadata
 ```
 
-> **Note:** The Go cortex process has been eliminated. Memory queries are served directly by the Nex TS process via `recall()`. See `MEMORY_SEARCH_SKILL.md` for the recall API. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for storage layout.
+> See `MEMORY_SEARCH_SKILL.md` for the full recall() API, hierarchical retrieval strategy, and budget management. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for storage layout.
 
 ---
 
@@ -170,13 +163,14 @@ interface IdentityEnrichment {
 
 | Component | Status |
 |-----------|--------|
-| Episodes | Planned |
-| Facets | Planned |
-| Embeddings | Planned |
-| Analyses | Planned |
-| `recall()` tool | Stub (returns empty) |
-
-**Stub strategy:** Until the memory system is fully implemented, `recall()` returns empty results. The system works without it; it just lacks the "understanding" layer. All data is written to ledgers regardless, so the memory system can analyze retroactively once implemented.
+| Schema (memory.db, identity.db, embeddings.db) | Complete |
+| `recall()` | Complete |
+| Embedding pipeline | Complete |
+| Memory-Writer meeseeks | Complete |
+| Consolidation worker | Complete |
+| Memory Injection meeseeks | Complete |
+| Skills (search, reflect) | Complete |
+| Backfill CLI | Complete |
 
 ---
 
@@ -185,11 +179,12 @@ interface IdentityEnrichment {
 - [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) — Canonical database layout (memory.db, identity.db, embeddings.db)
 - `MEMORY_SYSTEM_V2.md` — Full 4-layer memory architecture
 - `MEMORY_WRITER_V2.md` — Agentic retain flow
+- `MEMORY_WRITER_ROLE.md` — Memory-Writer meeseeks role spec
 - `MEMORY_SEARCH_SKILL.md` — Agent search skill (recall API)
+- `MEMORY_REFLECT_SKILL.md` — Deep research and mental model persistence
+- `MEMORY_INJECTION.md` — Memory injection into agent context
+- `MEMORY_V2_RETAIN_PIPELINE.md` — Retain pipeline (events to facts)
 - `UNIFIED_ENTITY_STORE.md` — Entity store (lives in identity.db)
-- `../../_archive/MEMORY_SYSTEM.md` — Tripartite memory model (declarative, episodic, procedural)
-- `../../_archive/MEMORY_READER.md` — Memory reader meeseeks role spec
-- `../../_archive/MEMORY_WRITER.md` — Memory writer meeseeks role spec (superseded by MEMORY_WRITER_V2.md)
 - `../../runtime/broker/MEESEEKS_PATTERN.md` — Disposable role fork pattern
 - `../ledgers/` — System of Record (source data)
 - `../../runtime/nex/NEXUS_REQUEST.md` — Pipeline lifecycle

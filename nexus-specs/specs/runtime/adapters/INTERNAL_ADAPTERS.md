@@ -90,7 +90,7 @@ type InternalAdapterKind = "event_source" | "ingress_server" | "ingress_surface"
 
 type InternalAdapterDefinition = {
   name: string;     // adapter name (e.g. "clock", "http-ingress")
-  channel: string;  // delivery.channel used on emitted events (e.g. "clock", "webhook")
+  platform: string; // delivery.platform used on emitted events (e.g. "clock", "webhook")
   kind: InternalAdapterKind;
   supports: Array<"monitor" | "health" | "backfill" | "send" | "stream">;
 };
@@ -133,7 +133,7 @@ This lets `/health` and UI show a single adapter table regardless of adapter kin
 
 ## Configuration Model
 
-Adapters are still configured under the adapter bootstrap config (currently `~/nex.yaml`).
+Adapters are still configured under the adapter bootstrap config (`state/config.json`).
 
 We need a way to describe internal adapters. Two viable shapes:
 
@@ -144,7 +144,7 @@ adapters:
   clock:
     kind: internal
     internal: { module: clock }
-    channel: clock
+    platform: clock
     accounts:
       default:
         monitor: true
@@ -161,7 +161,7 @@ adapters:
 adapters:
   clock:
     command: "internal:clock"
-    channel: clock
+    platform: clock
     accounts:
       default:
         monitor: true
@@ -193,20 +193,20 @@ Canonical event shape (example):
     metadata: { type: "clock.heartbeat" }
   },
   delivery: {
-    channel: "clock",
+    platform: "clock",
     account_id: "default",
     sender_id: "clock:tick",
     sender_name: "Clock",
-    peer_id: "clock:tick",
-    peer_kind: "channel",
+    container_id: "clock:tick",
+    container_kind: "channel",
     capabilities: {},
-    available_channels: []
+    available_platforms: []
   }
 }
 ```
 
 Notes:
-- Automations match on `event.metadata.type` and/or `delivery.channel === "clock"`.
+- Automations match on `event.metadata.type` and/or `delivery.platform === "clock"`.
 - The clock adapter should *not* run agents itself; it emits events only.
 
 ### 2. `http-ingress` (ingress_server)
@@ -241,11 +241,11 @@ This keeps the control-plane as management transport, while the `runtime` intern
 
 ## IAM Expectations
 
-- Every internal adapter must emit `NexusEvent` with an appropriate `delivery.channel`.
+- Every internal adapter must emit `NexusEvent` with an appropriate `delivery.platform`.
 - `resolveIdentity` should produce correct principals:
   - `clock` should resolve to system principal `source=timer`.
   - `webhook` should resolve to webhook principal (not system).
-  - local `runtime` should resolve to owner/known where appropriate (may require revisiting “system ingress channel” classification for `runtime`).
+  - local `runtime` should resolve to owner/known where appropriate (may require revisiting “system ingress platform” classification for `runtime`).
 
 ---
 

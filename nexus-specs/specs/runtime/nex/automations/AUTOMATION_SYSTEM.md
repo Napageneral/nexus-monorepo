@@ -1,7 +1,8 @@
 # Automation System
 
-**Status:** DESIGN COMPLETE  
-**Last Updated:** 2026-02-04  
+> **Status:** ARCHIVED — Superseded by `../../broker/MEESEEKS_PATTERN.md` which defines the canonical automation system. Hooks are places in the runtime where automations run; automations are what run at those hooks.
+
+**Last Updated:** 2026-02-04
 **Related:** ../PLUGINS.md, ../NEX.md
 
 ---
@@ -132,7 +133,7 @@ interface AutomationContext {
   
   // Services
   ledger: LedgerClient;         // Query ledgers
-  memory: MemoryClient;         // Semantic search (replaces eliminated CortexClient / Go HTTP IPC)
+  memory: MemoryClient;         // Semantic search (in-process, no Go HTTP IPC)
   llm: LLMService;              // Call LLM
   
   // Utilities
@@ -157,7 +158,7 @@ interface MemoryClient {
   }): Promise<{ eventId: string; score: number }[]>;
 }
 
-// Note: CortexClient (Go HTTP IPC) is eliminated per DATABASE_ARCHITECTURE.md §4.
+// Note: Go HTTP IPC is eliminated per DATABASE_ARCHITECTURE.md §4.
 // MemoryClient queries memory.db + embeddings.db directly via TS.
 
 interface LLMService {

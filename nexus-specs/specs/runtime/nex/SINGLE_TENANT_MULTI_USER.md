@@ -346,7 +346,7 @@ Needed:
 
 - Enforce that adapter-emitted `delivery.channel` matches the adapter definition.
 - Forbid adapters from emitting privileged internal channels.
-- Optionally normalize `delivery.account_id`/`delivery.peer_kind` based on adapter config.
+- Optionally normalize `delivery.account_id`/`delivery.container_kind` based on adapter config.
 
 ### 5) Customer sandbox enforcement (IAM is necessary but not sufficient)
 

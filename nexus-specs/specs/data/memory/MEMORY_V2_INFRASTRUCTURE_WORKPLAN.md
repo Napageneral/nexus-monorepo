@@ -2,7 +2,7 @@
 
 **Status:** IMPLEMENTATION PLAN
 **Created:** 2026-02-19
-**Depends On:** MEMORY_SYSTEM_V2.md, WORKPLAN.md (Phases 1-8 complete)
+**Depends On:** MEMORY_SYSTEM_V2.md, `../_archive/WORKPLAN.md` (Phases 1-8 complete, archived)
 **Context:** All 8 phases of the original WORKPLAN.md have been implemented. This workplan covers infrastructure improvements, recall parity with Hindsight, and agent experience refinements identified during review.
 
 ---
@@ -13,9 +13,9 @@ This workplan covers non-backfill improvements to the memory system. These are r
 
 A separate spec document (`MEMORY_V2_RETAIN_PIPELINE.md`) covers the backfill pipeline redesign (episode-based batching, short-term memory, and consolidation batching). That spec adds:
 - A 5th recall retrieval strategy (short-term/unretained events via `is_retained` flag on the events table)
-- Recall is now fully TypeScript (`src/cortex-memory-v2/recall.ts`) — all Go file references below have been updated accordingly
+- Recall is now fully TypeScript (`src/cortex-memory-v2/recall.ts`) — all Go file references have been updated accordingly
 - The consolidation pipeline moves to episode-batched processing with causal link detection (moved from writer)
-- Filters are stored as SQL WHERE clauses in `memory_filters` table in nexus.db
+- Filters are stored as SQL WHERE clauses in `memory_filters` table in runtime.db
 
 Items in this workplan are independent of the retain pipeline work and can be implemented in parallel.
 
@@ -69,7 +69,7 @@ interface EmbeddingConfig {
 3. Add dimension auto-detection (embed a test string, read length)
 4. Add OpenAI provider (HTTP calls to embeddings API)
 5. Add environment variable configuration loading
-6. Update `getCortexV2EmbeddingProvider` in `src/cortex-memory-v2/embeddings.ts` to use the new factory
+6. Update the embedding provider factory in `src/cortex-memory-v2/embeddings.ts` to use the new interface
 7. Remove hardcoded `EMBEDDING_DIMENSIONS = 384` from writer-tools and consolidation — read from provider
 8. Add a CLI command or utility to rebuild vec_embeddings when switching models
 
@@ -170,7 +170,7 @@ Merge scores across all patterns → feed into RRF fusion
 4. Wire into recall pipeline as a new strategy alongside existing ones
 5. Feed MPFP results into RRF fusion
 
-> **Note:** Recall has been fully ported to TypeScript (`src/cortex-memory-v2/recall.ts`). The Go `cortex/internal/recall/` package is no longer used. All new recall work is TypeScript.
+> **Note:** Recall has been fully ported to TypeScript (`src/cortex-memory-v2/recall.ts`). The Go `internal/recall/` package is no longer used. All new recall work is TypeScript.
 
 **Files touched:**
 - `src/cortex-memory-v2/recall/graph.ts` — new file, MPFP implementation
@@ -359,7 +359,7 @@ This may need adaptation depending on sqlite-vec's compatibility with CTEs. Test
 - `propose_merge` — entity merge proposals during resolution
 
 **Steps:**
-1. Remove `insert_causal_link`, `create_mental_model`, `update_mental_model` from `createCortexMemoryWriterTools`
+1. Remove `insert_causal_link`, `create_mental_model`, `update_mental_model` from the memory writer tools (`createCortexMemoryWriterTools`)
 2. Update MEMORY_WRITER_ROLE.md to remove causal link and mental model sections
 3. Update MEMORY_WRITER_V2.md spec to reflect the scope change
 4. Add causal link detection to the consolidation pipeline prompt/logic

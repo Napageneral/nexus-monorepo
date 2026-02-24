@@ -56,7 +56,7 @@ interface AssembledContext {
   
   // === Metadata (for ledger writes, NOT sent to model) ===
   
-  sessionLabel: string;              // Which session this turn belongs to
+  session_key: string;              // Which session this turn belongs to
   parentTurnId: string;              // Parent turn in the tree
   role: AgentRole;                   // 'manager' | 'worker' | 'unified'
   toolsetName: string;               // Named toolset applied
@@ -72,7 +72,7 @@ The upstream `RunEmbeddedPiAgentParams` is a flat bag of ~30 params mixing conce
 
 | Upstream param | Nexus equivalent | Where it lives |
 |---------------|-----------------|----------------|
-| `sessionId`, `sessionKey`, `sessionFile` | `sessionLabel`, `parentTurnId` | AssembledContext metadata |
+| `sessionId`, `sessionKey`, `sessionFile` | `session_key`, `parentTurnId` | AssembledContext metadata |
 | `messageChannel`, `messageProvider` | Event context in `currentMessage` | Layer 3 |
 | `prompt`, `images` | `currentMessage.content` | Layer 3 |
 | `workspaceDir`, `agentDir` | `workspacePath`, system prompt | Layer 1 + metadata |
@@ -156,7 +156,7 @@ interface AgentToolCall {
   sequence: number;                  // Order within turn
   
   // If this tool call spawned a subagent
-  spawnedSessionLabel?: string;
+  spawnedSessionKey?: string;
 }
 ```
 
@@ -315,11 +315,11 @@ async function writeTurnToLedger(
     
     // 6. Update session pointer
     await tx.run(`UPDATE sessions SET thread_id = ?, updated_at = ? WHERE label = ?`,
-      [turnId, Date.now(), ctx.sessionLabel]);
+      [turnId, Date.now(), ctx.session_key]);
     
     // 7. Log session history
     await tx.run(`INSERT INTO session_history (session_label, thread_id, changed_at) VALUES (?, ?, ?)`,
-      [ctx.sessionLabel, turnId, Date.now()]);
+      [ctx.session_key, turnId, Date.now()]);
     
     // 8. If compaction happened, write compaction record
     if (result.compaction) {
@@ -364,7 +364,7 @@ The Broker translates agent callbacks into `StreamEvent` objects:
 ```typescript
 // Broker emits these to NEX
 type StreamEvent =
-  | { type: 'stream_start'; runId: string; sessionLabel: string; target: DeliveryTarget }
+  | { type: 'stream_start'; runId: string; sessionKey: string; target: DeliveryTarget }
   | { type: 'token'; text: string }
   | { type: 'tool_status'; toolName: string; toolCallId: string; status: 'started' | 'completed' | 'failed'; summary?: string }
   | { type: 'reasoning'; text: string }
@@ -451,7 +451,7 @@ See `STREAMING.md` for the full streaming architecture.
    b. Runs Context Assembly for worker context
    c. Executes worker via Agent Engine (recursive)
    d. Returns worker result to parent tool call
-3. Parent AgentResult includes the tool call with spawned_session_label
+3. Parent AgentResult includes the tool call with spawnedSessionKey
 ```
 
 ---

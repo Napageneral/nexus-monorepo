@@ -84,7 +84,7 @@ On confirmation, the MA dispatches a worker to run `nexus credential scan --impo
 
 **Note:** External CLI auto-sync (Claude CLI, Codex CLI, Qwen CLI) happens at **runtime startup** (Phase 2 of the lifecycle), not during onboarding. The onboarding credential scan covers the broader environment variable scan.
 
-### 6. Cortex entity seeding
+### 6. Entity seeding
 
 The runtime seeds a placeholder owner entity at startup. During onboarding, the **memory-writer meeseeks** observes the identity conversation and enriches the owner entity with real details. The agent persona entity is also created by the memory-writer when it observes identity data.
 

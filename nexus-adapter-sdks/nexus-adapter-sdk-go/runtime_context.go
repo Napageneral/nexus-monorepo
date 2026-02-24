@@ -15,7 +15,7 @@ const AdapterContextEnvVar = "NEXUS_ADAPTER_CONTEXT_PATH"
 // This is a process boundary contract (NEX -> adapter). Keep it stable.
 type RuntimeContext struct {
 	Version   int            `json:"version,omitempty"`
-	Channel   string         `json:"channel"`
+	Platform  string         `json:"platform"`
 	AccountID string         `json:"account_id"`
 	Config    map[string]any `json:"config"`
 
@@ -58,8 +58,8 @@ func LoadRuntimeContextFile(path string) (*RuntimeContext, error) {
 		return nil, fmt.Errorf("parse runtime context json: %w", err)
 	}
 
-	if ctx.Channel == "" {
-		return nil, fmt.Errorf("runtime context missing channel")
+	if ctx.Platform == "" {
+		return nil, fmt.Errorf("runtime context missing platform")
 	}
 	if ctx.AccountID == "" {
 		return nil, fmt.Errorf("runtime context missing account_id")
@@ -80,4 +80,3 @@ func LoadRuntimeContextFile(path string) (*RuntimeContext, error) {
 
 	return &ctx, nil
 }
-

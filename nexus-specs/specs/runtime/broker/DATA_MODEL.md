@@ -240,7 +240,7 @@ Workers can spawn nested workers. There is no depth limit.
 | Target | What You Specify | Resolution |
 |--------|------------------|------------|
 | **Thread** | Thread/Turn ID | Direct routing to that turn's cumulative context |
-| **Session** | Session label | Resolves to session's current thread head |
+| **Session** | Session key | Resolves to session's current thread head |
 | **Persona** | Persona ID | Resolves to persona's main session |
 | **Smart** | Just content | Memory System finds best matching thread |
 

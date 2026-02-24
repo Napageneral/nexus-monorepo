@@ -144,7 +144,7 @@ Injected as a prefix to `currentMessage`, same as V1.
 | **Architecture** | Full meeseeks, heavy model | Lightweight meeseeks, fast model |
 | **Model** | Same as main session | Fast cheap model (gpt-5.3-codex-spark) |
 | **Latency** | 3-10 seconds | Under 10 seconds typical |
-| **Search strategy** | Agentic: SQL, cortex-search, multiple iterations | Unconstrained recall() calls + triage |
+| **Search strategy** | Agentic: SQL, shell search, multiple iterations | Unconstrained recall() calls + triage |
 | **Output** | Synthesized narrative with headers and sections | Flat list of selected facts with timestamps |
 | **Iteration** | Up to 3 turns of complex search | Typically 2-5 turns of recall + triage |
 | **Self-improvement** | SKILLS.md, PATTERNS.md, ERRORS.md | Minimal — fast model, simple task |
@@ -219,7 +219,7 @@ INSERT INTO automations (
 | Memory Reader meeseeks (heavy) | **Replaced** by lightweight injection meeseeks |
 | `memory-reader/` workspace (full) | **Replaced** by minimal `memory-injection/` workspace |
 | `MEMORY_READER.md` role spec | **Superseded** by this document |
-| `cortex-search.sh` script | **Absorbed** into recall() implementation |
+| Legacy search script | **Absorbed** into recall() implementation |
 | Reader's SKILLS.md, PATTERNS.md | **Simplified** — fast model, minimal workspace |
 
 ---

@@ -13,13 +13,12 @@ The contract exists to prevent spec drift across Markdown docs and SDK implement
 
 ## Versioning
 
-- Canonical contract: `v2` (`$id` = `https://nexus-project.dev/schemas/adapter-protocol/v2`)
-- `v2` uses unified delivery taxonomy field names:
+- Canonical contract uses the unified delivery taxonomy field names:
   - `platform`, `account_id`, optional `space_id`
   - `container_kind`, `container_id`
   - optional `thread_id`, `reply_to_id`
 
-Legacy (`v1`) field names (example: `channel`, `peer_id`, `peer_kind`) are **not** part of the canonical schema.
+Legacy field names (example: `channel`, `peer_id`, `peer_kind`) are **not** part of the canonical schema.
 
 ## Files
 
@@ -29,10 +28,10 @@ Legacy (`v1`) field names (example: `channel`, `peer_id`, `peer_kind`) are **not
 ## Transition Behavior (NEX Runtime)
 
 - Inbound adapter parsing:
-  - NEX accepts only canonical `v2` adapter payloads.
-  - Legacy `v1` adapter payloads are rejected.
+  - NEX accepts only canonical adapter payloads.
+  - Legacy adapter payloads are rejected.
 - Outbound adapter invocations:
-  - NEX emits canonical `v2` fields for send/stream targeting (`thread_id`, `reply_to_id` included when available).
+  - NEX emits canonical fields for send/stream targeting (`thread_id`, `reply_to_id` included when available).
 
 This keeps the machine-readable contract authoritative and enforces strict adapter boundary behavior.
 

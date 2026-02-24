@@ -1,8 +1,10 @@
+> **Status:** ARCHIVED — Historical review document. File paths reference old directory structure.
+
 # Review Agent Handoff
 
 > **Database Layout:** See `specs/data/DATABASE_ARCHITECTURE.md` for the canonical 6-database layout. The memory system spans memory.db (facts, episodes), identity.db (entities), and embeddings.db (vectors).
 
-> **Note:** The Go cortex code paths referenced in this document (nex/cortex/internal/recall/, nex/cortex/internal/compute/, nex/cortex/cmd/cortex/) are being eliminated as part of the Go-to-TS port. All logic is being ported to TypeScript. These references remain for historical context of the review.
+> **Note:** The Go code paths referenced in this document (nex/cortex/internal/recall/, nex/cortex/internal/compute/, nex/cortex/cmd/cortex/) have been eliminated as part of the Go-to-TS port. All logic has been ported to TypeScript. These references remain for historical context of the review.
 
 **Role:** You are a design reviewer and implementation manager. You are NOT the implementing agent — a separate agent is doing the build work. Your job is to:
 
@@ -19,20 +21,20 @@
 Read these files in order. Do not skim — read them fully.
 
 **Architecture + Schema:**
-1. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/cortex/v2/MEMORY_SYSTEM_V2.md` — Master architecture doc. 4-layer memory stack, recall() API, trigger mechanism, schema, implementation hints. This is the source of truth.
-2. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/cortex/v2/UNIFIED_ENTITY_STORE.md` — Entity resolution via union-find. Everything is an entity. merged_into pointer chains.
+1. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_SYSTEM_V2.md` — Master architecture doc. 4-layer memory stack, recall() API, trigger mechanism, schema, implementation hints. This is the source of truth.
+2. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/UNIFIED_ENTITY_STORE.md` — Entity resolution via union-find. Everything is an entity. merged_into pointer chains.
 
 **Write Path:**
-3. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/cortex/v2/MEMORY_WRITER_V2.md` — Writer meeseeks spec: tools, hooks, two trigger paths (agent turn complete vs eventIngested).
-4. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/cortex/v2/MEMORY_WRITER_ROLE.md` — The actual system prompt for the writer agent. Extraction rules, workflow, entity resolution.
+3. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_WRITER_V2.md` — Writer meeseeks spec: tools, hooks, two trigger paths (agent turn complete vs eventIngested).
+4. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_WRITER_ROLE.md` — The actual system prompt for the writer agent. Extraction rules, workflow, entity resolution.
 
 **Read Path:**
-5. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/cortex/v2/MEMORY_INJECTION.md` — Lightweight reader meeseeks at worker:pre_execution. Fast model triage, 3s timeout.
-6. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/cortex/v2/MEMORY_SEARCH_SKILL.md` — Pure search skill. recall() API, hierarchical retrieval, entity scope, budget, query decomposition.
-7. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/cortex/v2/MEMORY_REFLECT_SKILL.md` — Deep research + mental model persistence. Multi-step loops, evidence guardrails.
+5. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_INJECTION.md` — Lightweight reader meeseeks at worker:pre_execution. Fast model triage, 3s timeout.
+6. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_SEARCH_SKILL.md` — Pure search skill. recall() API, hierarchical retrieval, entity scope, budget, query decomposition.
+7. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/MEMORY_REFLECT_SKILL.md` — Deep research + mental model persistence. Multi-step loops, evidence guardrails.
 
 **Implementation Plan:**
-8. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/cortex/v2/WORKPLAN.md` — 8-phase sequential build plan. Schema → recall() → embeddings → writer → consolidation → injection → skills → cleanup/backfill.
+8. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/WORKPLAN.md` — 8-phase sequential build plan. Schema → recall() → embeddings → writer → consolidation → injection → skills → cleanup/backfill.
 9. `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/data/memory/HANDOFF.md` — The orientation doc that was given to the implementing agent. Read this to understand what they were told.
 
 ---
@@ -43,7 +45,7 @@ The implementing agent has completed **Phase 1 (schema) and Phase 2 (recall)** a
 
 **Code already written (review these when asked):**
 
-> **Note:** The Go recall/serve code below was written during the Go cortex phase. It is being eliminated and ported to TypeScript. The Go embedding pipeline is also being ported to TS. See DATABASE_ARCHITECTURE.md §4 for the full elimination plan. Memory data now lives in memory.db (facts, episodes), with entities in identity.db and vectors in embeddings.db.
+> **Note:** The Go recall/serve code below was written during the Go memory subprocess phase. It has been eliminated and ported to TypeScript. The Go embedding pipeline has also been ported to TS. See DATABASE_ARCHITECTURE.md section 4 for the full elimination plan. Memory data now lives in memory.db (facts, episodes), with entities in identity.db and vectors in embeddings.db.
 
 Schema:
 - `/Users/tyler/nexus/home/projects/nexus/nex/cortex/internal/db/schema.sql` — Go V2 schema (being superseded by TS-owned schema files: memory.ts, identity.ts, embeddings.ts).

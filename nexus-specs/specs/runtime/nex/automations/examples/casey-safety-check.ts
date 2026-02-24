@@ -49,7 +49,7 @@ export const hook: Hook = {
     }
     
     // ─────────────────────────────────────────────────────────────────────────
-    // Query Cortex for Casey's messages since hook creation
+    // Query database for Casey's messages since hook creation
     // ─────────────────────────────────────────────────────────────────────────
     
     const db = new Database(dbPath, { readonly: true });
