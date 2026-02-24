@@ -25,6 +25,9 @@ function baseConfig(storePath: string): FrontdoorConfig {
     sessionCookieName: "nexus_fd_session",
     sessionTtlSeconds: 3600,
     sessionStorePath: undefined,
+    workspaceOwnerUserIds: new Set(),
+    workspaceDevCreatorEmails: new Set(),
+    workspaceInviteTtlSeconds: 7 * 24 * 60 * 60,
     runtimeTokenIssuer: "https://frontdoor.test",
     runtimeTokenAudience: "control-plane",
     runtimeTokenSecret: "frontdoor-secret-test",
@@ -147,4 +150,3 @@ process.stdin.on("end", () => {
     provisioner.close();
   });
 });
-

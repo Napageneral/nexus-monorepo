@@ -1,14 +1,22 @@
 # ACL Policies
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-01-29  
-**Related:** ACCESS_CONTROL_SYSTEM.md
+**Last Updated:** 2026-02-23  
+**Related:** ACCESS_CONTROL_SYSTEM.md, POLICY_ARCHITECTURE_UNIFICATION.md
 
 ---
 
 ## Overview
 
 Policies are declarative rules that match principals and conditions, then assign effects, permissions, and sessions. This document defines the policy schema and provides comprehensive examples.
+
+---
+
+## Scope of This Document
+
+This document defines the **ACL policy layer** only (matching, priority, deny precedence, permission merge, session assignment).
+
+Final runtime authorization is produced by the canonical compiler pipeline defined in `POLICY_ARCHITECTURE_UNIFICATION.md`, which applies additional layers after ACL merge (grants, role caps, execution caps, optional profile overlays).
 
 ---
 
@@ -31,11 +39,15 @@ Policies are declarative rules that match principals and conditions, then assign
     
     conditions:                   # Context conditions (array, any match)
       - platform: string           # imessage, discord, slack, etc.
-        container_kind: string    # dm, group
-        account: string           # Multi-account identifier
-        guild: string             # Discord guild ID
+        space_id: string          # workspace/server/tenant scope
+        container_id: string      # dm/group/channel container
+        thread_id: string         # thread/topic id
+        container_kind: string    # dm, group, channel
+        account: string           # compatibility alias (maps to account context)
+        guild: string             # compatibility alias (maps to space_id)
         time: string              # Time range "HH:MM-HH:MM"
         hook_id: string           # Specific hook (for system events)
+        event_type: string        # timer/webhook/etc event metadata type
   
   effect: allow | deny            # The decision
   
@@ -44,7 +56,7 @@ Policies are declarative rules that match principals and conditions, then assign
       allow: [string] | "*"       # Whitelist or all
       deny: [string]              # Blacklist (overrides allow)
     credentials: [string] | "*"   # Credential access
-    data: full | restricted | none
+    data: full | contextual | minimal | none
   
   session:                        # Where messages route (if allow)
     persona: string               # Target persona
@@ -112,9 +124,30 @@ Session keys support templating:
 7. APPLY MODIFIERS
    Collect all modifiers from matching policies
 
-8. LOG DECISION
+8. OUTPUT ACL RESULT
+   Produce ACL-layer decision envelope
+
+9. LOG DECISION
    Write to audit log
 ```
+
+## ACL vs Final Runtime Precedence
+
+| Layer | Owned by this spec? | Notes |
+|------|----------------------|-------|
+| ACL match/priority/deny/merge/session | Yes | Defined here |
+| Grant augmentation | No | `GRANTS.md` + compiler |
+| Role caps (manager/worker/unified) | No | Compiler/runtime caps |
+| Execution caps (sandbox/runtime) | No | Compiler/runtime caps |
+| Profile/provider/group/subagent overlays | No | Compiler inputs |
+
+### Old vs New Precedence Diff
+
+| Area | Old layered behavior | New canonical behavior |
+|------|-----------------------|------------------------|
+| What this doc implied | ACL result looked like final runtime result | ACL result is explicitly an intermediate layer |
+| Tool outcome | Could change later in path-specific filters | Must be finalized in canonical compiler output |
+| Path consistency | Stage/invoke/control paths could differ | Same precedence for all paths |
 
 ---
 
@@ -208,7 +241,7 @@ These are the essential policies most users will have:
       allow: [web_search, weather, calendar_read, read_file, smart_home]
       deny: [shell, send_email, read_messages, credentials_*]
     credentials: []
-    data: restricted
+    data: contextual
   
   session:
     persona: atlas
@@ -291,7 +324,7 @@ These are the essential policies most users will have:
     tools:
       allow: [web_search, github, jira, read_file, write_file]
     credentials: [github, jira, slack]
-    data: work
+    data: contextual
   
   session:
     persona: atlas
@@ -524,7 +557,7 @@ These are the essential policies most users will have:
     tools:
       allow: [web_search, calendar_read, calendar_write, send_email]
     credentials: [google]
-    data: restricted
+    data: contextual
   
   session:
     persona: atlas

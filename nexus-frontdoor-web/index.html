@@ -3,55 +3,80 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Nexus Frontdoor Launcher</title>
+    <title>Nexus Shell | Workspace Access</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <main class="wrap">
-      <h1>Nexus Hosted</h1>
-      <p>Sign up or log in, then launch your tenant control plane.</p>
+      <header class="hero">
+        <p class="eyebrow">Nexus Shell</p>
+        <h1>Customer workspace access</h1>
+        <p class="lead">Authenticate, then launch your tenant control plane in one click.</p>
+      </header>
 
-      <div class="row" style="margin-bottom: 12px;">
-        <span id="statusPill" class="pill">Session unknown</span>
+      <div class="status-row">
+        <span id="statusPill" class="pill">Checking session</span>
       </div>
 
       <section class="grid">
-        <div class="card">
-          <h2>Google OAuth</h2>
-          <p class="muted">Recommended customer flow (signup + login).</p>
+        <article class="card">
+          <h2>Sign in</h2>
+          <p class="muted">Use your Google account to access your Nexus tenant.</p>
           <div class="row">
-            <button id="googleSignupBtn" class="primary">Sign Up with Google</button>
-            <button id="googleLoginBtn">Log In with Google</button>
+            <button id="googleBtn" class="primary">Continue with Google</button>
+            <button id="logoutBtn" class="ghost" hidden>Sign out</button>
           </div>
-        </div>
+        </article>
 
-        <div class="card">
-          <h2>Password Login</h2>
-          <p class="muted">Fallback for local/operator testing.</p>
+        <article id="workspacePanel" class="card" hidden>
+          <h2>Workspace</h2>
+          <p class="muted">Select the workspace you want to open.</p>
+          <label for="workspaceSelect">Available workspaces</label>
+          <select id="workspaceSelect"></select>
+          <div class="row">
+            <button id="refreshWorkspacesBtn" class="ghost" type="button">Refresh</button>
+            <button id="selectWorkspaceBtn" type="button">Set active</button>
+          </div>
+          <p id="workspaceSummary" class="muted">No active workspace selected.</p>
+          <p class="muted">Workspace access count: <span id="workspaceCount">0</span></p>
+          <div class="row">
+            <button id="openTenantAppBtn" class="primary">Open workspace</button>
+          </div>
+        </article>
+
+        <article id="invitePanel" class="card" hidden>
+          <h2>Join by invite</h2>
+          <p class="muted">Redeem a workspace invite token if you were invited by an admin.</p>
+          <label for="inviteToken">Invite token</label>
+          <input id="inviteToken" placeholder="inv_xxx.yyy" />
+          <div class="row">
+            <button id="redeemInviteBtn" type="button">Redeem invite</button>
+          </div>
+        </article>
+
+        <section id="operatorPanel" class="operator card" hidden>
+          <h2>Operator access</h2>
+          <p class="muted">Fallback username/password flow for local operations only.</p>
           <label for="username">Username</label>
           <input id="username" value="owner" />
           <label for="password">Password</label>
-          <input id="password" type="password" value="changeme" />
+          <input id="password" type="password" value="" />
           <div class="row">
-            <button id="loginBtn" class="primary">Log In</button>
-            <button id="logoutBtn" class="danger">Log Out</button>
-            <button id="sessionBtn">Refresh Session</button>
+            <button id="loginBtn">Operator sign in</button>
           </div>
-        </div>
-
-        <div class="card">
-          <h2>Tenant Access</h2>
+          <hr />
+          <h3>Create workspace</h3>
+          <p class="muted">Operator-only workspace creation for provisioning/testing.</p>
+          <label for="workspaceName">Workspace name</label>
+          <input id="workspaceName" placeholder="Acme Workspace" />
+          <label for="workspaceRuntimeUrl">Runtime URL</label>
+          <input id="workspaceRuntimeUrl" placeholder="https://tenant.example.com" />
+          <label for="workspaceId">Workspace ID (optional)</label>
+          <input id="workspaceId" placeholder="tenant-acme" />
           <div class="row">
-            <button id="openTenantAppBtn" class="primary">Open Tenant Control UI</button>
-            <button id="mintBtn">Mint Runtime Token (Debug)</button>
-            <button id="wsConnectBtn">WS Connect (Debug)</button>
+            <button id="createWorkspaceBtn" type="button">Create workspace</button>
           </div>
-        </div>
-
-        <div class="card" style="grid-column: 1 / -1;">
-          <h2>Logs</h2>
-          <pre id="logs">ready\n</pre>
-        </div>
+        </section>
       </section>
     </main>
 

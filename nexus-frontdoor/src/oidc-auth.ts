@@ -404,7 +404,7 @@ export class OidcFlowManager {
       claims: OidcClaims;
       fallbackPrincipal: Principal | null;
     }) => Promise<Principal | null> | Principal | null;
-  }): Promise<{ principal: Principal; returnTo?: string }> {
+  }): Promise<{ principal: Principal; claims: OidcClaims; returnTo?: string }> {
     const provider = params.config.oidcProviders.get(params.provider);
     if (!provider) {
       throw new Error(`unknown oidc provider: ${params.provider}`);
@@ -488,6 +488,7 @@ export class OidcFlowManager {
     }
     return {
       principal,
+      claims,
       returnTo: stateRecord.returnTo,
     };
   }

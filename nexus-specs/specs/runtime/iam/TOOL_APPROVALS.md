@@ -1,8 +1,8 @@
 # IAM Tool Approvals (Exec Approval Manager Replacement)
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-13  
-**Related:** GRANTS.md, POLICIES.md, AUDIT.md, ../nex/CONTROL_PLANE.md
+**Last Updated:** 2026-02-23  
+**Related:** GRANTS.md, POLICIES.md, ACCESS_CONTROL_SYSTEM.md, POLICY_ARCHITECTURE_UNIFICATION.md, AUDIT.md, ../nex/CONTROL_PLANE.md
 
 ---
 
@@ -82,6 +82,29 @@ Weaknesses:
 
 4. **Exec allowlists become grants**
    - The old file allowlist is replaced by grants (no `exec-approvals.json` in the production path).
+
+---
+
+## Placement in Canonical Precedence
+
+Tool approvals are not a separate authorization system. They are part of the canonical compiler flow:
+
+1. ACL policy layer determines baseline tool permissions.
+2. Compiler checks grants for resource-level authorization (`exec:<path>` etc.).
+3. If required resource is missing and policy indicates approval flow, create `acl_permission_requests`.
+4. Approval resolution may create grant(s).
+5. Next compiler run includes new grant(s) and authorizes tool execution.
+
+This keeps approvals and standard IAM decisions in one path with one provenance chain.
+
+### Old vs New Precedence Diff
+
+| Area | Old layered behavior | New canonical behavior |
+|------|-----------------------|------------------------|
+| Approval decisioning | Exec-specific queue + side channel | IAM compiler + permission requests + grants |
+| Standing approval storage | File allowlist (`exec-approvals.json`) | `acl_grants` |
+| Authorization provenance | Split across subsystems | Single IAM provenance chain |
+| Path consistency | Could differ by invocation path | Same compiler/enforcement path for all tool invocations |
 
 ---
 

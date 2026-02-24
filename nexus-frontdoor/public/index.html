@@ -3,165 +3,364 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Nexus Frontdoor</title>
+    <title>Nexus | Sign in</title>
     <style>
       :root {
-        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        color: #1f2937;
-        background: #f8fafc;
+        --bg: #f3f7ff;
+        --ink: #0b1f3a;
+        --muted: #496180;
+        --line: #c8d6ec;
+        --panel: #ffffff;
+        --brand: #0b7a6e;
+        --brand-ink: #ffffff;
+        --brand-strong: #07574f;
+        --accent: #19418a;
       }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
       body {
-        max-width: 720px;
-        margin: 2.5rem auto;
-        padding: 0 1rem;
+        margin: 0;
+        min-height: 100%;
+        color: var(--ink);
+        font-family:
+          "Avenir Next",
+          Manrope,
+          "SF Pro Text",
+          "Segoe UI",
+          sans-serif;
+        background:
+          radial-gradient(1200px 600px at 85% -10%, #d8e8ff 0%, rgba(216, 232, 255, 0) 58%),
+          radial-gradient(900px 500px at -10% 100%, #c9f2ea 0%, rgba(201, 242, 234, 0) 55%),
+          var(--bg);
       }
+
+      .shell {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 20px 48px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin-bottom: 28px;
+      }
+
+      .brand-mark {
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+      }
+
+      .brand-meta {
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        text-transform: uppercase;
+      }
+
+      .panel {
+        background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        padding: 28px;
+        box-shadow: 0 18px 40px rgba(17, 39, 77, 0.07);
+      }
+
       h1 {
-        margin-bottom: 0.5rem;
+        margin: 0 0 10px;
+        font-size: clamp(28px, 5vw, 46px);
+        letter-spacing: -0.03em;
       }
-      .card {
-        background: white;
-        border: 1px solid #e2e8f0;
-        border-radius: 0.75rem;
-        padding: 1rem;
-        margin-bottom: 1rem;
+
+      .lead {
+        margin: 0 0 20px;
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 1.5;
+        max-width: 62ch;
       }
-      input {
-        width: 100%;
-        margin: 0.25rem 0 0.75rem;
-        padding: 0.55rem;
-        border: 1px solid #cbd5e1;
-        border-radius: 0.5rem;
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        padding: 6px 12px;
+        background: #f4f8ff;
+        color: var(--muted);
+        font-size: 13px;
+        margin-bottom: 18px;
       }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: #8aa1c2;
+      }
+
+      .status.ok .status-dot {
+        background: #0b7a6e;
+      }
+
+      .status.err .status-dot {
+        background: #c13d3d;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
       button {
-        border: 0;
-        border-radius: 0.5rem;
-        background: #0f766e;
-        color: white;
-        padding: 0.55rem 0.85rem;
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--ink);
+        border-radius: 10px;
+        padding: 11px 14px;
+        font-size: 14px;
+        font-weight: 600;
         cursor: pointer;
       }
-      pre {
-        background: #0f172a;
-        color: #e2e8f0;
-        border-radius: 0.5rem;
-        padding: 0.75rem;
-        overflow: auto;
+
+      button:hover {
+        border-color: #abc1e2;
+      }
+
+      button.primary {
+        background: linear-gradient(180deg, #0b8b7d 0%, var(--brand) 100%);
+        border-color: var(--brand-strong);
+        color: var(--brand-ink);
+      }
+
+      button.primary:hover {
+        background: linear-gradient(180deg, #0a7f72 0%, var(--brand-strong) 100%);
+      }
+
+      button.subtle {
+        color: var(--accent);
+      }
+
+      .hint {
+        margin-top: 16px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .operator {
+        margin-top: 22px;
+        border-top: 1px dashed var(--line);
+        padding-top: 16px;
+      }
+
+      .operator-toggle {
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 0;
+      }
+
+      .operator-form {
+        display: none;
+        margin-top: 12px;
+        max-width: 420px;
+      }
+
+      .operator-form.visible {
+        display: block;
+      }
+
+      label {
+        display: block;
+        margin: 8px 0 6px;
+        font-size: 12px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      input {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 11px;
+        font-size: 14px;
+        color: var(--ink);
+        background: #fff;
+      }
+
+      @media (max-width: 640px) {
+        .shell {
+          padding: 20px 14px 32px;
+        }
+
+        .panel {
+          padding: 18px;
+          border-radius: 16px;
+        }
       }
     </style>
   </head>
   <body>
-    <h1>Nexus Frontdoor</h1>
-    <p>Scaffold shell for hosted login, runtime token minting, and per-tenant proxying.</p>
+    <main class="shell">
+      <div class="brand">
+        <div class="brand-mark">NEXUS</div>
+        <div class="brand-meta">Hosted Control Plane</div>
+      </div>
 
-    <div class="card">
-      <h2>Password Login</h2>
-      <label>Username</label>
-      <input id="username" value="owner" />
-      <label>Password</label>
-      <input id="password" type="password" value="changeme" />
-      <button id="login">Log In</button>
-      <button id="logout">Log Out</button>
-    </div>
+      <section class="panel">
+        <h1>Sign in to your workspace</h1>
+        <p class="lead">
+          Secure access to your tenant runtime. No debug controls or token plumbing are exposed in this customer
+          surface.
+        </p>
 
-    <div class="card">
-      <h2>Runtime Token</h2>
-      <button id="mint">Mint Token</button>
-      <button id="refresh">Refresh Token</button>
-      <button id="revoke">Revoke Token</button>
-    </div>
+        <div id="status" class="status">
+          <span class="status-dot"></span>
+          <span id="statusText">Checking session</span>
+        </div>
 
-    <div class="card">
-      <h2>Proxied Runtime Health</h2>
-      <button id="runtimeHealth">GET /runtime/health</button>
-      <button id="openControlUi">Open /app</button>
-    </div>
+        <div class="actions">
+          <button id="googleBtn" class="primary">Continue with Google</button>
+          <button id="openBtn" class="primary" hidden>Open Workspace</button>
+          <button id="logoutBtn" class="subtle" hidden>Sign out</button>
+        </div>
+        <p class="hint" id="hintText">Use Google login to continue. You will be routed to your tenant runtime.</p>
 
-    <pre id="out">ready</pre>
+        <section id="operatorPanel" class="operator" hidden>
+          <div class="operator-toggle">Operator access</div>
+          <form id="operatorForm" class="operator-form visible">
+            <label for="username">Username</label>
+            <input id="username" value="owner" />
+            <label for="password">Password</label>
+            <input id="password" type="password" value="" />
+            <div class="actions" style="margin-top: 10px;">
+              <button id="operatorLoginBtn" type="submit">Sign in</button>
+            </div>
+          </form>
+        </section>
+      </section>
+    </main>
 
     <script>
-      let lastRefreshToken = "";
-      let lastAccessToken = "";
-      let lastRuntime = null;
-      const out = document.getElementById("out");
-      const print = (value) => {
-        out.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+      const state = {
+        session: null,
       };
+      const operatorMode = new URLSearchParams(window.location.search).get("operator") === "1";
 
-      async function post(url, body = {}) {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(body),
-        });
-        const text = await res.text();
-        let json = {};
-        try {
-          json = JSON.parse(text);
-        } catch {}
-        return { status: res.status, json };
+      const el = (id) => document.getElementById(id);
+
+      function setStatus(kind, text) {
+        const status = el("status");
+        status.classList.remove("ok", "err");
+        if (kind) {
+          status.classList.add(kind);
+        }
+        el("statusText").textContent = text;
       }
 
-      document.getElementById("login").onclick = async () => {
-        const username = document.getElementById("username").value;
-        const password = document.getElementById("password").value;
-        const result = await post("/api/auth/login", { username, password });
-        print(result);
-      };
+      function applySession(session) {
+        state.session = session;
+        const authed = Boolean(session && session.authenticated);
+        el("googleBtn").hidden = authed;
+        el("openBtn").hidden = !authed;
+        el("logoutBtn").hidden = !authed;
 
-      document.getElementById("logout").onclick = async () => {
-        const result = await post("/api/auth/logout");
-        print(result);
-      };
-
-      document.getElementById("mint").onclick = async () => {
-        const result = await post("/api/runtime/token");
-        lastRefreshToken = result.json?.refresh_token || "";
-        lastAccessToken = result.json?.access_token || "";
-        lastRuntime = result.json?.runtime || null;
-        print(result);
-      };
-
-      document.getElementById("refresh").onclick = async () => {
-        const result = await post("/api/runtime/token/refresh", { refresh_token: lastRefreshToken });
-        lastRefreshToken = result.json?.refresh_token || lastRefreshToken;
-        lastAccessToken = result.json?.access_token || lastAccessToken;
-        lastRuntime = result.json?.runtime || lastRuntime;
-        print(result);
-      };
-
-      document.getElementById("revoke").onclick = async () => {
-        const result = await post("/api/runtime/token/revoke", { refresh_token: lastRefreshToken });
-        print(result);
-      };
-
-      document.getElementById("runtimeHealth").onclick = async () => {
-        try {
-          if (lastRuntime?.http_base_url && lastAccessToken) {
-            const direct = await fetch(`${lastRuntime.http_base_url}/health`, {
-              headers: {
-                authorization: `Bearer ${lastAccessToken}`,
-              },
-            });
-            const text = await direct.text();
-            print({ mode: "direct", status: direct.status, body: text });
-            return;
-          }
-        } catch (error) {
-          print({ mode: "direct", error: String(error), hint: "falling back to /runtime/health" });
-        }
-        const fallback = await fetch("/runtime/health", { credentials: "include" });
-        const text = await fallback.text();
-        print({ mode: "proxy-fallback", status: fallback.status, body: text });
-      };
-
-      document.getElementById("openControlUi").onclick = () => {
-        if (lastRuntime?.base_url) {
-          window.location.href = lastRuntime.base_url;
+        if (authed) {
+          const who = session.display_name || session.email || session.username || session.entity_id || "user";
+          setStatus("ok", `Signed in as ${who}`);
+          el("hintText").textContent = "Launch opens your tenant control UI with a signed runtime token.";
           return;
         }
-        location.href = "/app";
-      };
+
+        setStatus("err", "Not signed in");
+        el("hintText").textContent = "Use Google login to continue. You will be routed to your tenant runtime.";
+      }
+
+      async function readJson(res) {
+        const text = await res.text();
+        if (!text) return {};
+        try {
+          return JSON.parse(text);
+        } catch {
+          return { raw: text };
+        }
+      }
+
+      async function refreshSession() {
+        try {
+          const res = await fetch("/api/auth/session", { method: "GET" });
+          const body = await readJson(res);
+          applySession(body);
+        } catch {
+          applySession(null);
+          setStatus("err", "Session unavailable");
+        }
+      }
+
+      async function operatorLogin(event) {
+        event.preventDefault();
+        const username = String(el("username").value || "").trim();
+        const password = String(el("password").value || "");
+        try {
+          const res = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ username, password }),
+          });
+          const body = await readJson(res);
+          if (!res.ok || !body?.ok) {
+            setStatus("err", "Operator login failed");
+            return;
+          }
+          await refreshSession();
+        } catch {
+          setStatus("err", "Operator login failed");
+        }
+      }
+
+      function startGoogle() {
+        const query = new URLSearchParams({
+          provider: "google",
+          return_to: "/app/chat?session=main",
+        });
+        window.location.href = `/api/auth/oidc/start?${query.toString()}`;
+      }
+
+      function openWorkspace() {
+        window.location.href = "/app/chat?session=main";
+      }
+
+      async function logout() {
+        try {
+          await fetch("/api/auth/logout", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: "{}",
+          });
+        } finally {
+          await refreshSession();
+        }
+      }
+
+      el("googleBtn").addEventListener("click", startGoogle);
+      el("openBtn").addEventListener("click", openWorkspace);
+      el("logoutBtn").addEventListener("click", logout);
+      el("operatorForm").addEventListener("submit", operatorLogin);
+      el("operatorPanel").hidden = !operatorMode;
+
+      refreshSession();
     </script>
   </body>
 </html>

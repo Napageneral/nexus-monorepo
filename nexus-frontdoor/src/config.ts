@@ -57,6 +57,12 @@ type RawFrontdoorConfig = {
     command?: unknown;
     commandTimeoutMs?: unknown;
   };
+  workspace?: {
+    storePath?: unknown;
+    ownerUserIds?: unknown;
+    devCreatorEmails?: unknown;
+    inviteTtlSeconds?: unknown;
+  };
 };
 
 function readNumber(input: unknown, fallback: number): number {
@@ -345,6 +351,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): FrontdoorConfi
       ? sessionStorePathRaw
       : path.resolve(configDir, sessionStorePathRaw)
     : undefined;
+  const workspaceStorePathRaw = readString(
+    env.FRONTDOOR_WORKSPACE_STORE_PATH,
+    readString(raw.workspace?.storePath, ""),
+  );
+  const workspaceStorePath = workspaceStorePathRaw
+    ? path.isAbsolute(workspaceStorePathRaw)
+      ? workspaceStorePathRaw
+      : path.resolve(configDir, workspaceStorePathRaw)
+    : sessionStorePath
+      ? path.resolve(path.dirname(sessionStorePath), "frontdoor-workspaces.db")
+      : path.resolve(configDir, "frontdoor-workspaces.db");
   const runtimeTokenIssuer = readString(
     env.FRONTDOOR_RUNTIME_TOKEN_ISSUER,
     readString(raw.runtimeToken?.issuer, baseUrl),
@@ -408,6 +425,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): FrontdoorConfi
 
   const tenants = parseTenants(raw.tenants);
   const { usersByUsername, usersById } = parseUsers(raw.users);
+  const workspaceOwnerUserIds = new Set(parseStringArray(raw.workspace?.ownerUserIds));
+  if (workspaceOwnerUserIds.size === 0) {
+    const ownerUser = usersByUsername.get("owner");
+    if (ownerUser?.id) {
+      workspaceOwnerUserIds.add(ownerUser.id);
+    }
+  }
+  const workspaceDevCreatorEmails = new Set(
+    parseStringArray(raw.workspace?.devCreatorEmails).map((item) => item.toLowerCase()),
+  );
+  const workspaceInviteTtlSeconds = Math.max(
+    60,
+    readNumber(
+      env.FRONTDOOR_WORKSPACE_INVITE_TTL_SECONDS,
+      readNumber(raw.workspace?.inviteTtlSeconds, 7 * 24 * 60 * 60),
+    ),
+  );
 
   const oidcEnabled =
     String(env.FRONTDOOR_OIDC_ENABLED ?? String(raw.oidc?.enabled ?? "false")).toLowerCase() ===
@@ -463,6 +497,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): FrontdoorConfi
     sessionCookieName,
     sessionTtlSeconds,
     sessionStorePath,
+    workspaceStorePath,
+    workspaceOwnerUserIds,
+    workspaceDevCreatorEmails,
+    workspaceInviteTtlSeconds,
     runtimeTokenIssuer,
     runtimeTokenAudience,
     runtimeTokenSecret,

@@ -151,6 +151,31 @@ export class SessionStore {
       .run(sessionId);
   }
 
+  updateSessionPrincipal(sessionId: string, principal: Principal): SessionRecord | null {
+    const current = this.getSession(sessionId);
+    if (!current) {
+      return null;
+    }
+    const next: SessionRecord = {
+      ...current,
+      principal,
+    };
+    if (!this.db) {
+      this.sessions.set(sessionId, next);
+      return next;
+    }
+    this.db
+      .prepare(
+        `
+        UPDATE frontdoor_sessions
+        SET principal_json = ?
+        WHERE session_id = ?
+      `,
+      )
+      .run(JSON.stringify(principal), sessionId);
+    return next;
+  }
+
   issueRefreshToken(sessionId: string, nowMs = Date.now()): string {
     const session = this.getSession(sessionId, nowMs);
     if (!session) {
@@ -340,4 +365,3 @@ export class SessionStore {
       .run(nowMs);
   }
 }
-

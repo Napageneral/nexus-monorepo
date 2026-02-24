@@ -4,3 +4,4 @@ coverage/
 *.log
 .vercel
 .demo-stack/
+state/

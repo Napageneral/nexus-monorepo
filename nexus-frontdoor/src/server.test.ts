@@ -3,7 +3,10 @@ import {
   type IncomingMessage,
   type Server as HttpServer,
 } from "node:http";
+import { randomUUID } from "node:crypto";
 import { AddressInfo } from "node:net";
+import path from "node:path";
+import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { createPasswordHash } from "./crypto.js";
@@ -29,6 +32,7 @@ async function listen(server: HttpServer): Promise<Running> {
 }
 
 function baseConfig(runtimeUrl: string): FrontdoorConfig {
+  const workspaceStorePath = path.join(tmpdir(), `nexus-frontdoor-workspaces-${randomUUID()}.db`);
   const user = {
     id: "u-owner",
     username: "owner",
@@ -48,6 +52,10 @@ function baseConfig(runtimeUrl: string): FrontdoorConfig {
     sessionCookieName: "nexus_fd_session",
     sessionTtlSeconds: 3600,
     sessionStorePath: undefined,
+    workspaceStorePath,
+    workspaceOwnerUserIds: new Set(["u-owner"]),
+    workspaceDevCreatorEmails: new Set<string>(),
+    workspaceInviteTtlSeconds: 7 * 24 * 60 * 60,
     runtimeTokenIssuer: "https://frontdoor.test",
     runtimeTokenAudience: "control-plane",
     runtimeTokenSecret: "frontdoor-secret-test",
@@ -105,15 +113,20 @@ function baseConfig(runtimeUrl: string): FrontdoorConfig {
   };
 }
 
-async function login(frontdoorOrigin: string): Promise<string> {
+async function login(
+  frontdoorOrigin: string,
+  credentials: { username?: string; password?: string } = {},
+): Promise<string> {
+  const username = credentials.username ?? "owner";
+  const password = credentials.password ?? "changeme";
   const response = await fetch(`${frontdoorOrigin}/api/auth/login`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      username: "owner",
-      password: "changeme",
+      username,
+      password,
     }),
   });
   expect(response.status).toBe(200);
@@ -336,6 +349,51 @@ describe("frontdoor scaffold", () => {
     expect(forwardedOriginHeader).toBe("https://frontend.example.com");
   });
 
+  it("bootstraps /app HTML routes with runtime token + runtimeUrl query params", async () => {
+    let lastRuntimeUrl = "";
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        lastRuntimeUrl = String(req.url ?? "");
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ ok: true, url: req.url }));
+      }),
+    );
+    const frontdoor = createFrontdoorServer({
+      config: baseConfig(runtime.origin),
+    });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const bootstrapResp = await fetch(`${frontdoorRunning.origin}/app/chat?session=main`, {
+      redirect: "manual",
+      headers: {
+        cookie,
+        accept: "text/html",
+      },
+    });
+    expect(bootstrapResp.status).toBe(302);
+    const location = bootstrapResp.headers.get("location");
+    expect(location).toBeTruthy();
+    const next = new URL(String(location), frontdoorRunning.origin);
+    expect(next.pathname).toBe("/app/chat");
+    expect(next.searchParams.get("session")).toBe("main");
+    const token = next.searchParams.get("token") ?? "";
+    expect(token.split(".")).toHaveLength(3);
+    expect(next.searchParams.get("runtimeUrl")).toBe(`ws://${new URL(runtime.origin).host}/`);
+
+    const proxiedResp = await fetch(`${frontdoorRunning.origin}${next.pathname}${next.search}`, {
+      headers: {
+        cookie,
+        accept: "text/html",
+      },
+    });
+    expect(proxiedResp.status).toBe(200);
+    expect(lastRuntimeUrl.startsWith("/app/chat?session=main")).toBe(true);
+    expect(lastRuntimeUrl.includes("token=")).toBe(true);
+    expect(lastRuntimeUrl.includes("runtimeUrl=")).toBe(true);
+  });
+
   it("proxies websocket upgrades with trusted-token header injection", async () => {
     let wsAuthHeader = "";
     let wsOriginHeader = "";
@@ -473,5 +531,175 @@ describe("frontdoor scaffold", () => {
     expect(second.headers.get("retry-after")).toBeTruthy();
     const body = (await second.json()) as { error?: string };
     expect(body.error).toBe("login_rate_limited");
+  });
+
+  it("supports workspace create, select, and workspace-scoped token mint", async () => {
+    const runtimePrimary = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true,"runtime":"primary"}');
+      }),
+    );
+    const runtimeSecondary = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true,"runtime":"secondary"}');
+      }),
+    );
+    const frontdoor = createFrontdoorServer({
+      config: baseConfig(runtimePrimary.origin),
+    });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const createResp = await fetch(`${frontdoorRunning.origin}/api/workspaces`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        workspace_id: "tenant-test-2",
+        display_name: "Tenant Test 2",
+        runtime_url: runtimeSecondary.origin,
+        runtime_public_base_url: runtimeSecondary.origin,
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const listResp = await fetch(`${frontdoorRunning.origin}/api/workspaces`, {
+      headers: { cookie },
+    });
+    expect(listResp.status).toBe(200);
+    const listBody = (await listResp.json()) as {
+      ok: boolean;
+      items: Array<{ workspace_id: string }>;
+    };
+    expect(listBody.ok).toBe(true);
+    expect(listBody.items.some((item) => item.workspace_id === "tenant-test-2")).toBe(true);
+
+    const selectResp = await fetch(`${frontdoorRunning.origin}/api/workspaces/select`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        workspace_id: "tenant-test-2",
+      }),
+    });
+    expect(selectResp.status).toBe(200);
+
+    const tokenResp = await fetch(`${frontdoorRunning.origin}/api/runtime/token`, {
+      method: "POST",
+      headers: {
+        cookie,
+      },
+    });
+    expect(tokenResp.status).toBe(200);
+    const tokenBody = (await tokenResp.json()) as {
+      tenant_id: string;
+      runtime?: { http_base_url?: string };
+    };
+    expect(tokenBody.tenant_id).toBe("tenant-test-2");
+    expect(tokenBody.runtime?.http_base_url).toBe(runtimeSecondary.origin);
+
+    const badWorkspaceResp = await fetch(`${frontdoorRunning.origin}/api/runtime/token`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        workspace_id: "tenant-missing",
+      }),
+    });
+    expect(badWorkspaceResp.status).toBe(403);
+  });
+
+  it("supports invite create and redeem across workspaces", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    config.tenants.set("tenant-alt", {
+      id: "tenant-alt",
+      runtimeUrl: runtime.origin,
+      runtimePublicBaseUrl: runtime.origin,
+    });
+    const memberUser = {
+      id: "u-member",
+      username: "member",
+      passwordHash: createPasswordHash("memberpass"),
+      tenantId: "tenant-alt",
+      entityId: "entity-member",
+      displayName: "Member",
+      email: "member@example.com",
+      roles: ["workspace_member"],
+      scopes: ["chat.send"],
+      disabled: false,
+    };
+    config.usersByUsername.set("member", memberUser);
+    config.usersById.set("u-member", memberUser);
+
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const ownerCookie = await login(frontdoorRunning.origin);
+
+    const inviteResp = await fetch(`${frontdoorRunning.origin}/api/workspaces/tenant-dev/invites`, {
+      method: "POST",
+      headers: {
+        cookie: ownerCookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        role: "workspace_member",
+        scopes: ["chat.send"],
+      }),
+    });
+    expect(inviteResp.status).toBe(200);
+    const inviteBody = (await inviteResp.json()) as {
+      ok: boolean;
+      invite_token: string;
+    };
+    expect(inviteBody.ok).toBe(true);
+    expect(inviteBody.invite_token.startsWith("inv_")).toBe(true);
+
+    const memberCookie = await login(frontdoorRunning.origin, {
+      username: "member",
+      password: "memberpass",
+    });
+    const redeemResp = await fetch(`${frontdoorRunning.origin}/api/invites/redeem`, {
+      method: "POST",
+      headers: {
+        cookie: memberCookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        token: inviteBody.invite_token,
+      }),
+    });
+    expect(redeemResp.status).toBe(200);
+
+    const workspacesResp = await fetch(`${frontdoorRunning.origin}/api/workspaces`, {
+      headers: {
+        cookie: memberCookie,
+      },
+    });
+    expect(workspacesResp.status).toBe(200);
+    const workspacesBody = (await workspacesResp.json()) as {
+      ok: boolean;
+      items: Array<{ workspace_id: string }>;
+    };
+    expect(workspacesBody.ok).toBe(true);
+    const ids = new Set(workspacesBody.items.map((item) => item.workspace_id));
+    expect(ids.has("tenant-alt")).toBe(true);
+    expect(ids.has("tenant-dev")).toBe(true);
   });
 });

@@ -18,6 +18,7 @@ The Access Control Layer (ACL) is a declarative system that determines WHO can i
 | Document | Description |
 |----------|-------------|
 | **[ACCESS_CONTROL_SYSTEM.md](./ACCESS_CONTROL_SYSTEM.md)** | Unified overview — start here |
+| **[POLICY_ARCHITECTURE_UNIFICATION.md](./POLICY_ARCHITECTURE_UNIFICATION.md)** | Canonical policy compiler architecture, layer precedence, and migration plan (required before IAM refactors) |
 | **[POLICIES.md](./POLICIES.md)** | Policy schema, examples, evaluation algorithm |
 | **[GRANTS.md](./GRANTS.md)** | Dynamic permissions and approval workflows |
 | **[AUDIT.md](./AUDIT.md)** | Audit logging and queries |

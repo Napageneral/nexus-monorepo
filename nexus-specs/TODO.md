@@ -63,6 +63,8 @@ All high-priority specs are complete and aligned. Ready for implementation.
 | **Channel Adapter Cutover** | `runtime/adapters/CHANNEL_MIGRATION_TRACKER.md` | Priority order: eve -> gog -> discord/telegram/whatsapp -> ingress + clock |
 | **Hosted Frontdoor + Per-Tenant Runtime** | `runtime/nex/HOSTED_FRONTDOOR_PER_TENANT_RUNTIME.md`, `runtime/nex/HOSTED_RUNTIME_PROFILE.md` | Runtime-side hosted profile shipped. Frontdoor scaffold shipped at `home/projects/nexus/nexus-frontdoor` (password auth + OIDC JWK verification + tenant proxy + token mint/refresh/revoke + live-stack + browser smoke e2e). Remaining: key rotation strategy + full hosted Control UI integration. |
 | **Hosted Frontdoor Confidence Workplan** | `runtime/nex/HOSTED_FRONTDOOR_CONFIDENCE_WORKPLAN.md` | Execute phased validation: live-stack e2e (real runtime + real frontdoor), cross-tenant isolation, anti-spoof proxy tests, then OIDC verification + browser smoke. |
+| **Hosted Frontdoor Multi-Workspace Access** | `runtime/nex/HOSTED_FRONTDOOR_MULTI_WORKSPACE.md` | New design spec for one user -> many workspace memberships with explicit workspace selection before runtime token mint/connect. Review + approve before implementation. |
+| **Hosted Workspace UX + Lifecycle** | `runtime/nex/HOSTED_WORKSPACE_UX_LIFECYCLE.md` | Product-level UX + operating model for signup/login, workspace creation policy, invites, switching, and VPS/service/tenant topology. Review and lock before implementation. |
 
 ### Next Steps
 

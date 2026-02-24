@@ -64,6 +64,10 @@ export type FrontdoorConfig = {
   sessionCookieName: string;
   sessionTtlSeconds: number;
   sessionStorePath?: string;
+  workspaceStorePath?: string;
+  workspaceOwnerUserIds: Set<string>;
+  workspaceDevCreatorEmails: Set<string>;
+  workspaceInviteTtlSeconds: number;
   runtimeTokenIssuer: string;
   runtimeTokenAudience: string;
   runtimeTokenSecret: string;

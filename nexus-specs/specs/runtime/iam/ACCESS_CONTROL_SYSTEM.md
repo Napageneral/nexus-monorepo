@@ -1,8 +1,8 @@
 # Access Control System
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-01-30  
-**Related:** ../../OVERVIEW.md, ../nex/EVENT_SYSTEM_DESIGN.md, ../broker/OVERVIEW.md
+**Last Updated:** 2026-02-23  
+**Related:** ../../OVERVIEW.md, ../nex/EVENT_SYSTEM_DESIGN.md, ../broker/OVERVIEW.md, POLICY_ARCHITECTURE_UNIFICATION.md
 
 ---
 
@@ -55,6 +55,19 @@ This separation provides clear visibility into access rules, enables GUI-based m
 ```
 
 **Key insight:** ACL runs BEFORE hooks. If a sender is not allowed, we never run any hook code. This is efficient and secure.
+
+---
+
+## Canonical Authorization Envelope
+
+IAM outputs a single `AuthorizationEnvelope` that all downstream runtime paths must consume:
+
+- `decision`: allow | deny | ask
+- `permissions`: tools allow/deny, credentials, data_access
+- `routing`: persona, session_label, queue_mode
+- `provenance`: matched policies, denied policies, grants applied, deny reason
+
+This is the only source of truth for runtime authorization decisions.
 
 ---
 
@@ -145,7 +158,7 @@ Resources are WHAT principals can access.
 |----------|----------|-------|
 | **Tools** | `web_search`, `shell`, `send_email`, `read_file` | Agent capabilities |
 | **Credentials** | `google`, `github`, `stripe` | API keys, OAuth tokens |
-| **Data Access** | `full`, `restricted`, `none` | Level of private data access |
+| **Data Access** | `full`, `contextual`, `minimal`, `none` | Level of private data access |
 
 ### Tool Categories
 
@@ -194,7 +207,7 @@ Policies are the rules. See `POLICIES.md` for full schema and examples.
       allow: [...]
       deny: [...]
     credentials: [...]
-    data: full | restricted | none
+    data: full | contextual | minimal | none
   
   session:
     persona: atlas
@@ -205,20 +218,32 @@ Policies are the rules. See `POLICIES.md` for full schema and examples.
 
 ### Evaluation Order
 
+IAM evaluation is layered in this order:
+
 1. Resolve principal (identity lookup)
-2. Collect all matching policies (principal + conditions)
-3. Sort by priority (highest first)
-4. Check for explicit denies (any deny → DENY)
-5. Merge permissions from all allowing policies
-6. Apply result
+2. Evaluate ACL policies (match, priority, deny precedence, permission merge)
+3. Apply grants
+4. Apply role caps (manager/worker/unified restrictions)
+5. Apply execution caps (sandbox/runtime)
+6. Apply optional profile overlays (agent/provider/group/subagent)
+7. Normalize final allow/deny envelope and enforce
 
 ### Priority Rules
 
 | Aspect | Resolution |
 |--------|------------|
 | **Session** | Highest priority policy wins |
-| **Permissions (allow)** | Union of all allows |
+| **Permissions (allow)** | Union of all ACL allows, then capped by downstream layers |
 | **Permissions (deny)** | Union of all denies; deny overrides allow |
+
+### Old vs New Precedence Diff
+
+| Area | Old layered behavior | New canonical behavior |
+|------|-----------------------|------------------------|
+| Runtime access source | `resolveAccess` plus manual overrides in some paths | Single compiler output for all paths |
+| Tool filtering | Multiple filters at different points (`assembleContext`, `runAgent`, `tool-invoke`) | Single normalized tool allow/deny envelope |
+| Legacy synthetic requests | Some paths injected `request.access` directly | Synthetic requests still allowed, but authorization must be compiled |
+| Explainability | Fragmented, path-dependent | One provenance chain per decision |
 
 ---
 
@@ -479,6 +504,8 @@ Broker uses this to:
 - Route to correct session
 - Enforce tool restrictions during agent execution
 - Preserve delivery context for response
+
+`runAgent`, direct tool invocation, control-plane authz, live retain, and backfill retain must all enforce the same compiled envelope.
 
 ---
 
