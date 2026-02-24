@@ -224,52 +224,49 @@ Session keys are produced by `buildSessionKey()` at `resolveAccess`:
 
 | Scenario | Format | Example |
 |----------|--------|---------|
-| DM (any platform, persona receiver) | `dm:{canonical_entity_id}:persona:{persona}` | `dm:ent_002:persona:atlas` |
-| Group/channel (persona receiver) | `group:{platform}:{container_id}:persona:{persona}` | `group:discord:general:persona:atlas` |
-| Group thread (persona receiver) | `group:{platform}:{container_id}:persona:{persona}:thread:{id}` | `group:slack:eng:persona:atlas:thread:ts123` |
+| DM | `dm:{sender_entity_id}:{receiver_entity_id}` | `dm:ent_mom:ent_eve` |
+| Group/channel container | `group:{platform}:{container_id}:{receiver_entity_id}` | `group:discord:general:ent_eve` |
 | Worker/meeseeks | `worker:{ulid}` | `worker:01HWXYZ...` |
 | System | `system:{purpose}` | `system:compaction` |
 
-**Key change:** There is no `dm:{platform}:{sender_id}` fallback format. Because every sender has an entity from message one, DM sessions are entity-based from the start. Receiver persona scoping is encoded in the key when `receiver.type = agent`.
+**Key change:** Session identity is entity-pair based. `:agent:` and `:thread:` are not part of canonical keys.
 
-Legacy compatibility:
+Group thread messages route to the same group session key as the parent container.
 
-- Existing `dm:{entity}` and `group:{platform}:{container_id}` labels remain resolvable via aliases during migration.
+Hard cutover:
+
+- New writes must use canonical entity-based keys only.
+- Legacy labels may be read only during one-time migration/reconciliation jobs, not as runtime routing formats.
 
 ### Session Key Resolution
 
 ```typescript
 export function buildSessionKey(input: SessionKeyInput): string {
-  const { principal, delivery, receiver } = input;
-  const receiverPersona = receiver?.type === "agent" ? receiver.persona_id : undefined;
+  const { sender, delivery, receiver } = input;
+  const receiverEntity = receiver?.entity_id?.trim();
 
-  // System principals
-  if (principal.type === "system" || principal.type === "webhook") {
-    const purpose = principal.source ?? delivery.platform;
+  // System senders
+  if (sender.type === "system" || sender.type === "webhook") {
+    const purpose = sender.source ?? delivery.platform;
     return `system:${purpose}`;
   }
 
-  // Agent (subagent) principals
-  if (principal.type === "agent") {
-    return principal.entity_id ? `worker:${principal.entity_id}` : `system:agent`;
+  // Agent (subagent) senders
+  if (sender.type === "agent") {
+    return sender.entity_id ? `worker:${sender.entity_id}` : `system:agent`;
   }
 
-  if (receiver && receiver.type !== "agent") {
-    return `system:${receiver.source ?? delivery.platform}`;
+  if (!receiverEntity) {
+    return `system:${receiver?.source ?? delivery.platform}`;
   }
 
-  // Group / channel conversations
+  // Group / channel conversations (threads collapse into container session)
   if (delivery.container_kind === "group" || delivery.container_kind === "channel") {
-    const base = receiverPersona
-      ? `group:${delivery.platform}:${delivery.container_id}:persona:${receiverPersona}`
-      : `group:${delivery.platform}:${delivery.container_id}`;
-    return delivery.thread_id ? `${base}:thread:${delivery.thread_id}` : base;
+    return `group:${delivery.platform}:${delivery.container_id}:${receiverEntity}`;
   }
 
-  // DM: entity-based, persona-scoped when receiver is an agent.
-  return receiverPersona
-    ? `dm:${principal.entity_id}:persona:${receiverPersona}`
-    : `dm:${principal.entity_id}`;
+  // DM: sender/receiver entity pair
+  return `dm:${sender.entity_id}:${receiverEntity}`;
 }
 ```
 
@@ -289,53 +286,46 @@ Entity: ent_001.merged_into = ent_002
 Entity: ent_002.merged_into = NULL  ← canonical root
 
 Pipeline resolves: contact → ent_001 → chain walk in identity.db → ent_002
-Session key: dm:ent_002:persona:atlas
+Session key: dm:ent_002:ent_eve
 ```
 
 ### 2. Sessions: Alias Creation
 
-When entities merge, existing sessions may need aliasing. The merge operation synchronously creates session aliases so that the new canonical session key resolves to the primary session.
+When entities merge, existing sessions may need canonicalization. The merge operation must:
+
+1. choose a primary session (latest activity; tie-break by turn count),
+2. generate continuity summary for each retired session,
+3. inject those summaries into the primary session,
+4. create aliases retired->primary,
+5. archive retired sessions.
+
+Summary injection is mandatory. If model summarization fails, runtime must use deterministic fallback summary generation.
 
 ```typescript
 function propagateMergeToSessions(
   agentsDb: DatabaseSync,
-  canonicalEntityId: string,
+  canonicalSenderEntityId: string,
   mergedEntityIds: string[],
 ): void {
-  const allEntityIds = [canonicalEntityId, ...mergedEntityIds];
+  const allSenderEntityIds = [canonicalSenderEntityId, ...mergedEntityIds];
 
-  // Find all DM sessions for involved entities
-  const sessionKeys = allEntityIds
-    .map(id => `dm:${id}`)
-    .filter(key => sessionExists(agentsDb, key));
+  // Find all DM sessions for involved sender entities.
+  // Group by receiver_entity_id so each receiver keeps its own continuity.
+  const groupedByReceiver = findDMSessionsBySenderSet(agentsDb, allSenderEntityIds);
 
-  if (sessionKeys.length <= 1) {
-    // 0 or 1 sessions — nothing to alias
-    // If 1: create alias from canonical key if different
-    if (sessionKeys.length === 1) {
-      const canonicalKey = `dm:${canonicalEntityId}`;
-      if (sessionKeys[0] !== canonicalKey) {
-        createSessionAlias(agentsDb, canonicalKey, sessionKeys[0], 'identity_merge');
-      }
+  for (const [receiverEntityId, sessionKeys] of groupedByReceiver) {
+    if (sessionKeys.length === 0) {
+      continue;
     }
-    return;
-  }
-
-  // Multiple sessions: pick primary (most turns)
-  const primary = sessionKeys
-    .map(key => ({ key, turns: countSessionTurns(agentsDb, key) }))
-    .sort((a, b) => b.turns - a.turns)[0].key;
-
-  // Canonical entity key → primary session
-  const canonicalKey = `dm:${canonicalEntityId}`;
-  if (canonicalKey !== primary) {
-    createSessionAlias(agentsDb, canonicalKey, primary, 'identity_merge');
-  }
-
-  // All non-primary sessions → primary session
-  for (const key of sessionKeys) {
-    if (key !== primary) {
-      createSessionAlias(agentsDb, key, primary, 'identity_merge');
+    const primary = pickPrimarySession(agentsDb, sessionKeys); // latest activity, tie-break by turns
+    const canonicalKey = `dm:${canonicalSenderEntityId}:${receiverEntityId}`;
+    if (canonicalKey !== primary) {
+      createSessionAlias(agentsDb, canonicalKey, primary, "identity_merge");
+    }
+    for (const key of sessionKeys) {
+      if (key !== primary) {
+        createSessionAlias(agentsDb, key, primary, "identity_merge");
+      }
     }
   }
 }
@@ -366,16 +356,16 @@ This gives the agent awareness that other conversations exist without polluting 
 
 ```
 Before merge:
-  dm:ent_001 (Discord, 20 turns about project planning)
-  dm:ent_003 (Slack, 10 turns about weekend plans)
+  dm:ent_001:ent_eve (Discord, 20 turns about project planning)
+  dm:ent_003:ent_eve (Slack, 10 turns about weekend plans)
 
 After merge (ent_001 and ent_003 → canonical ent_002):
-  dm:ent_002 → alias → dm:ent_001 (primary, keeps receiving messages)
-  dm:ent_003 → alias → dm:ent_001 (redirected)
+  dm:ent_002:ent_eve → alias → dm:ent_001:ent_eve (primary, keeps receiving messages)
+  dm:ent_003:ent_eve → alias → dm:ent_001:ent_eve (redirected)
 
   Next message from Slack:
     Contact (slack, tshaver) → ent_003 → merged_into → ent_002
-    Session key: dm:ent_002 → alias → dm:ent_001
+    Session key: dm:ent_002:ent_eve → alias → dm:ent_001:ent_eve
     Memory-reader finds facts from both conversations
     Agent responds via Slack adapter (outbound uses inbound delivery context)
 ```
@@ -412,7 +402,7 @@ Big-bang cutover. No migration story. Remove all legacy ingest/delivery systems.
 
 | Component | Path | Reason |
 |-----------|------|--------|
-| Legacy platform plugins | `nex/src/channels/` | Replaced by adapter system |
+| Legacy platform plugins | `nex/src/platforms/` | Replaced by adapter system |
 | Gmail watcher | `nex/src/hooks/gmail-watcher.ts` | Replace with email adapter |
 | Channel initialization | in `server-startup.ts` | No longer needed |
 | Cron/scheduler (legacy) | various | Replaced by clock adapter or automations |
@@ -535,9 +525,11 @@ The memory system V2 memory tables (facts, fact_entities, episodes, etc. in memo
 
 ### Pipeline Stage Updates
 
-- `resolveIdentity.ts`: Call `ensureContact()` (creates contact + entity in identity.db if new). Follow merged_into chain to canonical root (same-DB query). Build principal from canonical entity. Remove fallback to `unknown` for external senders.
-- `resolveAccess.ts`: `buildSessionKey()` simplified — no `dm:{platform}:{sender_id}` branch, receiver-aware persona scoping.
-- `session.ts`: `promoteSessionIdentity()` already exists. Add `propagateMergeToSessions()`.
+- `resolveIdentity.ts`: Continue delivery-driven sender resolution via contacts + canonicalization; keep sender/receiver substrate symmetry.
+- `resolveReceiver.ts`: Resolve receiver from `(platform, account_id)` account binding first, verify optional receiver hints, remove implicit default/atlas fallback paths.
+- `resolveAccess.ts`: Route by entity-based keys only (`dm:{sender_entity}:{receiver_entity}` and `group:{platform}:{container}:{receiver_entity}`), no thread-split canonical key.
+- `session.ts`: Replace `:agent:` grouping logic with receiver-entity grouping and make continuity transfer + aliasing mandatory on canonicalization.
+- `assembleContext.ts` / `runAgent.ts`: require resolved agent/persona binding; no implicit atlas fallback.
 
 ### server-startup.ts Cleanup
 
@@ -557,7 +549,7 @@ The memory system V2 memory tables (facts, fact_entities, episodes, etc. in memo
 3. **Assert:**
    - Contact row created in `identity.db` with `entity_id` set
    - Entity created in `identity.db` with `name='test:user-001'`, `type='test_handle'`, `source='delivery'`
-   - Session created with label `dm:{entity_id}:persona:{persona}` (legacy `dm:{entity_id}` still resolvable via aliases)
+   - Session created with label `dm:{sender_entity_id}:{receiver_entity_id}`
    - Principal resolved as `known` (not `unknown`)
    - Response delivered back through the test adapter
 

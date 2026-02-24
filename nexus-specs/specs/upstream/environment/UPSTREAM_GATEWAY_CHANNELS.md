@@ -542,7 +542,7 @@ For channels with `dmPolicy: "pairing"`:
 `agent:${agentId}:dm:${peerId}`
 // Example: "agent:main:dm:+15555550123"
 
-// Per-channel-peer DM session:
+// Per-platform-peer DM session:
 `agent:${agentId}:${channel}:dm:${peerId}`
 // Example: "agent:main:whatsapp:dm:+15555550123"
 
@@ -561,11 +561,11 @@ For channels with `dmPolicy: "pairing"`:
 ### DM Scope Options
 
 ```typescript
-type DmScope = "main" | "per-peer" | "per-channel-peer";
+type DmScope = "main" | "per-peer" | "per-platform-peer";
 
 // main: All DMs collapse into single session (default)
 // per-peer: Each unique sender gets their own session
-// per-channel-peer: Each channel+sender pair gets own session
+// per-platform-peer: Each channel+sender pair gets own session
 ```
 
 ### Identity Links
@@ -762,8 +762,8 @@ const environment = {
 - `src/gateway/server-startup.ts` - Sidecar startup (channels)
 - `src/gateway/server-channels.ts` - Channel manager
 - `src/gateway/auth.ts` - Gateway authentication
-- `src/channels/plugins/` - Channel plugin system
-- `src/channels/plugins/onboarding/` - Per-channel setup wizards
+- `src/platforms/plugins/` - Channel plugin system
+- `src/platforms/plugins/onboarding/` - Per-platform setup wizards
 - `src/routing/session-key.ts` - Session key utilities
 - `src/daemon/launchd.ts` - macOS service management
 - `src/daemon/systemd.ts` - Linux service management

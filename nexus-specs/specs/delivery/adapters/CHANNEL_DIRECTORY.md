@@ -11,7 +11,7 @@
 Nexus needs two different “directory” concepts:
 
 1. **Identity directory** (global): people/entities and their contact methods across channels.
-2. **Channel directory** (per-channel, per-account): the concrete platform targets you can send to (DM peers, group chats, channels, threads/topics).
+2. **Channel directory** (per-platform, per-account): the concrete platform targets you can send to (DM peers, group chats, channels, threads/topics).
 
 This document specifies the **channel directory**.
 
@@ -23,7 +23,7 @@ Replying to the current message does not require any directory: NEX already has 
 
 The channel directory becomes necessary when:
 
-- UI needs to list/select channels/conversations (e.g. “send a message to #general”)
+- UI needs to list/select platforms/conversations (e.g. “send a message to #general”)
 - Agent uses `message` tool to send to a *different* target than the current one
 - User wants “broadcast / notify” behavior
 
@@ -85,7 +85,7 @@ This makes the channel directory “just work” without requiring an explicit l
 
 ### 2. Active Sync (Optional, Future)
 
-Some platforms can enumerate channels/conversations even if no recent inbound traffic exists.
+Some platforms can enumerate platforms/conversations even if no recent inbound traffic exists.
 
 Adapters MAY implement a directory command surface (exact protocol TBD; preferred shape):
 

@@ -16,7 +16,7 @@ Preserve the upstream “sessions” memory source (used by `memory_search`) whi
 2. Session recall is derived from the **Agents Ledger** (native NEX + AIX imports write here).
 3. The indexing plane stays the existing memory index (builtin sqlite index and/or QMD backend), but **its inputs become ledger-derived**.
 
-This is a **recall/search** feature (cross-session retrieval), not prompt assembly. Prompt history assembly is already ledger-based via `routeSession`.
+This is a **recall/search** feature (cross-session retrieval), not prompt assembly. Prompt history assembly is already ledger-based via `assembleContext`.
 
 ### 1.1 Configuration Gate (Decision)
 

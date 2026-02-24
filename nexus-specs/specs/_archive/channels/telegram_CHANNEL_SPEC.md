@@ -190,7 +190,7 @@ await bot.api.sendMessage(chatId, text, {
 - Context building: `bot-message-context.ts`
 - Message dispatch: `bot-message-dispatch.ts`
 - Send functions: `send.ts`
-- Outbound adapter: `channels/plugins/outbound/telegram.ts`
+- Outbound adapter: `platforms/plugins/outbound/telegram.ts`
 
 ### Key Upstream Patterns
 ```typescript

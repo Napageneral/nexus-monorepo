@@ -2,7 +2,7 @@
 
 > **Status:** Upstream reference documentation  
 > **Source:** `~/nexus/home/projects/openclaw/`  
-> **Key directories:** `src/channels/`, `src/routing/`, `src/security/`
+> **Key directories:** `src/platforms/`, `src/routing/`, `src/security/`
 
 This document maps OpenClaw's channel abstraction layer, access control mechanisms, and session routing to inform Nexus's IAM system design.
 
@@ -72,7 +72,7 @@ OpenClaw's channel system provides a unified abstraction over multiple messaging
 
 ## 2. Channel Registry
 
-**Source:** `src/channels/registry.ts`
+**Source:** `src/platforms/registry.ts`
 
 The registry defines core chat channels with ordering, metadata, and aliases.
 
@@ -116,7 +116,7 @@ type ChannelMeta = {
   label: string;              // "Telegram"
   selectionLabel: string;     // "Telegram (Bot API)"
   detailLabel?: string;       // "Telegram Bot"
-  docsPath: string;           // "/channels/telegram"
+  docsPath: string;           // "/platforms/telegram"
   blurb: string;              // Setup description
   order?: number;             // Display ordering
   aliases?: string[];         // Alternative names
@@ -131,7 +131,7 @@ type ChannelMeta = {
 
 ## 3. Channel Dock Metadata
 
-**Source:** `src/channels/dock.ts`
+**Source:** `src/platforms/dock.ts`
 
 Docks provide lightweight channel behavior without loading full plugin implementations. They're used for shared code paths.
 
@@ -188,7 +188,7 @@ type ChannelDock = {
 
 ### 4.1 Allowlist Matching
 
-**Source:** `src/channels/allowlist-match.ts`, `src/channels/channel-config.ts`
+**Source:** `src/platforms/allowlist-match.ts`, `src/platforms/channel-config.ts`
 
 Allowlists control who can interact with the bot. Matching sources indicate how a match was found.
 
@@ -221,7 +221,7 @@ type AllowlistMatch = {
 #### Channel Entry Matching Algorithm
 
 ```typescript
-// src/channels/channel-config.ts
+// src/platforms/channel-config.ts
 
 function resolveChannelEntryMatchWithFallback(params) {
   // 1. Try direct key match
@@ -326,7 +326,7 @@ function resolveNestedAllowlistDecision(params: {
 
 ### 4.2 Mention Gating
 
-**Source:** `src/channels/mention-gating.ts`
+**Source:** `src/platforms/mention-gating.ts`
 
 Controls whether the bot responds in group chats based on @mentions.
 
@@ -385,7 +385,7 @@ function resolveMentionGatingWithBypass(params): MentionGateWithBypassResult {
 
 ### 4.3 Command Gating
 
-**Source:** `src/channels/command-gating.ts`
+**Source:** `src/platforms/command-gating.ts`
 
 Controls who can execute commands (slash commands, text commands).
 
@@ -442,7 +442,7 @@ function resolveControlCommandGate(params: {
 
 ### 4.4 Sender Identity Resolution
 
-**Source:** `src/channels/sender-identity.ts`
+**Source:** `src/platforms/sender-identity.ts`
 
 Validates sender identity fields from message context.
 
@@ -617,7 +617,7 @@ Examples:
 type DmScope = 
   | "main"                    // All DMs share main session
   | "per-peer"                // Per sender, cross-channel
-  | "per-channel-peer"        // Per channel + sender
+  | "per-platform-peer"        // Per channel + sender
   | "per-account-channel-peer"; // Per account + channel + sender
 ```
 
@@ -649,7 +649,7 @@ function buildAgentPeerSessionKey(params: {
           return `agent:${agentId}:${channel}:${accountId}:dm:${peerId}`;
         }
         break;
-      case "per-channel-peer":
+      case "per-platform-peer":
         if (peerId) {
           return `agent:${agentId}:${channel}:dm:${peerId}`;
         }
@@ -801,7 +801,7 @@ Automated remediation of common security issues.
 
 ### 7.1 Per-Channel Plugins
 
-**Source:** `src/channels/plugins/`
+**Source:** `src/platforms/plugins/`
 
 Each channel implements the `ChannelPlugin` interface:
 
@@ -849,7 +849,7 @@ type ChannelPlugin<ResolvedAccount = any> = {
 
 ### 7.2 Group Mention Resolution
 
-**Source:** `src/channels/plugins/group-mentions.ts`
+**Source:** `src/platforms/plugins/group-mentions.ts`
 
 Channel-specific group mention behavior:
 
@@ -976,26 +976,26 @@ policies:
 
 | File | Purpose |
 |------|---------|
-| `src/channels/registry.ts` | Channel ID ordering and aliases |
-| `src/channels/dock.ts` | Lightweight channel metadata |
-| `src/channels/allowlist-match.ts` | Allowlist match types |
-| `src/channels/channel-config.ts` | Channel entry matching |
-| `src/channels/mention-gating.ts` | Mention requirement logic |
-| `src/channels/command-gating.ts` | Command authorization |
-| `src/channels/sender-identity.ts` | Sender validation |
-| `src/channels/targets.ts` | Messaging target types |
-| `src/channels/session.ts` | Session recording |
+| `src/platforms/registry.ts` | Channel ID ordering and aliases |
+| `src/platforms/dock.ts` | Lightweight channel metadata |
+| `src/platforms/allowlist-match.ts` | Allowlist match types |
+| `src/platforms/channel-config.ts` | Channel entry matching |
+| `src/platforms/mention-gating.ts` | Mention requirement logic |
+| `src/platforms/command-gating.ts` | Command authorization |
+| `src/platforms/sender-identity.ts` | Sender validation |
+| `src/platforms/targets.ts` | Messaging target types |
+| `src/platforms/session.ts` | Session recording |
 | `src/routing/bindings.ts` | Agent-channel bindings |
 | `src/routing/resolve-route.ts` | Route resolution |
 | `src/routing/session-key.ts` | Session key generation |
 | `src/security/audit.ts` | Security auditing |
 | `src/security/external-content.ts` | External content handling |
 | `src/security/fix.ts` | Security fix automation |
-| `src/channels/plugins/types.ts` | Plugin type exports |
-| `src/channels/plugins/types.core.ts` | Core plugin types |
-| `src/channels/plugins/types.plugin.ts` | Plugin interface |
-| `src/channels/plugins/types.adapters.ts` | Adapter interfaces |
-| `src/channels/plugins/group-mentions.ts` | Group mention resolution |
-| `src/channels/plugins/allowlist-match.ts` | Allowlist utilities |
-| `src/channels/allowlists/resolve-utils.ts` | Allowlist merge utilities |
+| `src/platforms/plugins/types.ts` | Plugin type exports |
+| `src/platforms/plugins/types.core.ts` | Core plugin types |
+| `src/platforms/plugins/types.plugin.ts` | Plugin interface |
+| `src/platforms/plugins/types.adapters.ts` | Adapter interfaces |
+| `src/platforms/plugins/group-mentions.ts` | Group mention resolution |
+| `src/platforms/plugins/allowlist-match.ts` | Allowlist utilities |
+| `src/platforms/allowlists/resolve-utils.ts` | Allowlist merge utilities |
 | `src/sessions/session-key-utils.ts` | Session key parsing |

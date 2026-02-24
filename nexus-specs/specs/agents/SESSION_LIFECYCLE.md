@@ -2,7 +2,7 @@
 
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-18
-**Canonical routing spec:** `specs/runtime/RUNTIME_ROUTING.md`
+**Canonical routing spec:** `../nex/ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md`
 **Database layout:** See `../../data/DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
 
 ---
@@ -12,6 +12,10 @@
 This document defines the complete lifecycle of agent sessions — from creation through turn processing, compaction, forking, and entity-merge-driven session aliasing. It stitches together the session-related concepts defined across DATA_MODEL.md, AGENTS_LEDGER.md, CONTEXT_ASSEMBLY.md, and OVERVIEW.md into one coherent flow.
 
 **Key Insight:** Session keys are identity-driven from first contact. Every sender gets an entity on message one (via auto-entity-creation in the contacts table), so all DM sessions are entity-based from the start. When the memory-writer later discovers that two entities are the same person, entity merge propagates to session aliases — conversation history stays intact, memory bridges the knowledge gap.
+
+Hard-cutover note:
+- Routing semantics in this doc follow entity-based keys and receiver-entity scoping.
+- Any remaining `persona_id` SQL examples are legacy ledger schema references and are superseded by persona binding architecture in `../nex/ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md`.
 
 ---
 
@@ -23,15 +27,12 @@ Session keys are produced by `buildSessionKey()` at stage 4 (`resolveAccess`). B
 
 | Scenario | Format | Example |
 |----------|--------|---------|
-| DM (persona receiver) | `dm:{canonical_entity_id}:persona:{persona}` | `dm:ent_002:persona:atlas` |
-| Group/channel (persona receiver) | `group:{platform}:{container_id}:persona:{persona}` | `group:discord:general:persona:atlas` |
-| Group thread (persona receiver) | `group:{platform}:{container_id}:persona:{persona}:thread:{thread_id}` | `group:slack:eng:persona:atlas:thread:ts123` |
+| DM (entity receiver) | `dm:{sender_entity_id}:{receiver_entity_id}` | `dm:ent_mom:ent_eve_main` |
+| Group/channel (entity receiver) | `group:{platform}:{container_id}:{receiver_entity_id}` | `group:discord:general:ent_eve_main` |
 | Worker/subagent | `worker:{ulid}` | `worker:01HWXYZ...` |
 | System | `system:{purpose}` | `system:compaction` |
 
-There is no `dm:{platform}:{sender_id}` fallback format. See `../RUNTIME_ROUTING.md` for the full `buildSessionKey()` implementation.
-
-Legacy compatibility note: existing `dm:{entity}` and `group:{platform}:{container_id}` labels remain resolvable via session aliases during migration.
+Group thread messages route to the parent group session key by default; `thread_id` is metadata, not a canonical session key suffix.
 
 ### ACL Policy Examples
 
@@ -44,8 +45,9 @@ Legacy compatibility note: existing `dm:{entity}` and `group:{platform}:{contain
     delivery:
       container_kind: direct
   session:
-    key: "direct:{sender.entity_id}:persona:{receiver.agent_id}"
-    persona: atlas
+    key: "dm:{sender.entity_id}:{receiver.entity_id}"
+    agent_id: "eve-main"
+    persona_ref: "eve-main"
 
 # Group chat → channel-based
 - name: group-session
@@ -53,8 +55,9 @@ Legacy compatibility note: existing `dm:{entity}` and `group:{platform}:{contain
     delivery:
       container_kind: group
   session:
-    key: "group:{delivery.platform}:{delivery.container_id}:persona:{receiver.persona_id}"
-    persona: atlas
+    key: "group:{delivery.platform}:{delivery.container_id}:{receiver.entity_id}"
+    agent_id: "eve-main"
+    persona_ref: "eve-main"
 ```
 
 > **Note:** The `unknown` sender type still exists for edge cases (missing sender_id, system errors), but it is not a normal routing state for DM sessions. See `../RUNTIME_ROUTING.md` for details.
@@ -67,19 +70,19 @@ Because every sender gets an entity from first contact, session keys are entity-
 Day 1: Mom texts from iMessage
        → contact auto-created (imessage, +15559876543)
        → entity auto-created: ent_001 (type=phone, name="imessage:+15559876543")
-       → session key: "dm:ent_001:persona:atlas"
+       → session key: "dm:ent_001:ent_eve_main"
 
 Day 3: Memory-writer discovers real name ("that's my Mom, Sarah")
        → creates person entity: ent_002 (type=person, name="Sarah")
        → merges ent_001 into ent_002
-       → propagateMergeToSessions() creates alias: "dm:ent_002:persona:atlas" → "dm:ent_001:persona:atlas"
+       → propagateMergeToSessions() creates alias: "dm:ent_002:ent_eve_main" → "dm:ent_001:ent_eve_main"
        → future messages route via alias to existing session
 
 Day 7: Mom emails from mom@gmail.com
        → contact auto-created (gmail, mom@gmail.com)
        → entity auto-created: ent_003 (type=email)
        → memory-writer recognizes same person → merges ent_003 into ent_002
-       → propagateMergeToSessions() creates alias: "dm:ent_003:persona:atlas" → "dm:ent_001:persona:atlas"
+       → propagateMergeToSessions() creates alias: "dm:ent_003:ent_eve_main" → "dm:ent_001:ent_eve_main"
        → all channels now converge on the same session
 ```
 
@@ -91,13 +94,13 @@ The Broker handles merges via **session aliases** (see Identity-Session Coupling
 
 ### When
 
-Sessions are created **eagerly** at stage 6 (`routeSession`) by the Broker. The Broker needs the session row to exist for queue management — you can't lock a session that doesn't have a row yet.
+Sessions are created **eagerly** at stage 6 (`assembleContext`) by the Broker. The Broker needs the session row to exist for queue management — you can't lock a session that doesn't have a row yet.
 
 ### Flow
 
 ```
-Stage 4 (resolveAccess): ACL produces routing.session_key
-Stage 6 (routeSession): Broker resolves session
+Stage 4 (resolveAccess): ACL produces routing.session_label
+Stage 6 (assembleContext): Broker resolves session
     │
     ├── Lookup session by label
     │     Found → use it, acquire lock
@@ -140,21 +143,21 @@ When the memory-writer (or any agent) merges two entities, `propagateMergeToSess
 
 ```
 Before merge:
-  dm:ent_001:persona:atlas (iMessage session, 20 turns about project planning)
-  dm:ent_003:persona:atlas (Gmail session, 5 turns about weekend plans)
+  dm:ent_001:ent_eve_main (iMessage session, 20 turns about project planning)
+  dm:ent_003:ent_eve_main (Gmail session, 5 turns about weekend plans)
 
 Memory-writer merges ent_001 and ent_003 → canonical ent_002
 
 propagateMergeToSessions() runs:
-  1. Find DM sessions: dm:ent_001:persona:atlas (20 turns), dm:ent_003:persona:atlas (5 turns)
-  2. Pick primary: dm:ent_001:persona:atlas (most turns)
-  3. Create alias: dm:ent_002:persona:atlas → dm:ent_001:persona:atlas
-  4. Create alias: dm:ent_003:persona:atlas → dm:ent_001:persona:atlas
+  1. Find DM sessions: dm:ent_001:ent_eve_main (20 turns), dm:ent_003:ent_eve_main (5 turns)
+  2. Pick primary: dm:ent_001:ent_eve_main (most turns)
+  3. Create alias: dm:ent_002:ent_eve_main → dm:ent_001:ent_eve_main
+  4. Create alias: dm:ent_003:ent_eve_main → dm:ent_001:ent_eve_main
 
 After merge:
   Next message from Gmail:
     Contact (gmail, mom@gmail.com) → ent_003 → merged_into → ent_002
-    Session key: dm:ent_002:persona:atlas → alias → dm:ent_001:persona:atlas
+    Session key: dm:ent_002:ent_eve_main → alias → dm:ent_001:ent_eve_main
     Memory-reader finds facts from both conversations
     Agent responds via Gmail adapter (outbound uses inbound delivery context)
 ```
@@ -305,12 +308,12 @@ Turn completes → release lock → check queue
     │
     ├── Mode: followup/queue → take next message
     │     Create new NexusRequest (re-enter at stage 6, skip stages 1-5)
-    │     Fresh routeSession with updated session head
+    │     Fresh assembleContext with updated session head
     │     Process turn → repeat
     │
     └── Mode: collect → take ALL queued messages
           Batch into single turn (multiple query messages)
-          Fresh routeSession
+          Fresh assembleContext
           Process turn → done
 ```
 
@@ -340,7 +343,7 @@ Nexus wraps `pi-coding-agent`, which has built-in compaction. We don't reinvent 
 **1. Proactive budget check (before calling pi-agent)**
 
 ```typescript
-// At routeSession, before sending to agent engine
+// At assembleContext, before sending to agent engine
 const estimatedTokens = systemPromptTokens + historyTokens + eventTokens;
 if (estimatedTokens > modelLimit * 0.85) {
   // Trigger compaction before execution, not during
@@ -470,7 +473,7 @@ MA calls agent_send(op="dispatch")
   → Broker enqueues worker request (durable)
     - target session provided: route to that session queue
     - no target session: create worker session then queue
-  → WA session is ensured during worker pipeline execution (routeSession)
+  → WA session is ensured during worker pipeline execution (assembleContext)
   → Context Assembly for WA (stripped-down system prompt, task-focused)
   → WA executes (may take many turns)
   → WA completion is delivered upstream as a `worker_result` event to the parent session
@@ -503,7 +506,7 @@ This enables:
 ```
                     ┌──────────────────────────────┐
                     │        SESSION CREATED         │
-                    │   (eager, at routeSession)     │
+                    │   (eager, at assembleContext)     │
                     └──────────────┬───────────────┘
                                    │
                                    ▼

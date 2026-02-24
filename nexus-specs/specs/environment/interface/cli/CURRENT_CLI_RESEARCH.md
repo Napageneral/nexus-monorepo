@@ -109,7 +109,7 @@ Related implementation touchpoints:
 | Config path default | `state/nexus/config.json` | `state/nexus/config.json` (plus legacy fallbacks) |
 | Root orientation commands | `status/capabilities/identity/credential/config/init` | implemented in root registry (including `config list/get/set`) |
 | Status JSON naming | runtime/control-plane terms | now emits `runtime` / `runtimeService` keys (not `gateway*`) |
-| Terminology in help/docs | runtime/control-plane | substantial runtime wording pass complete (status/config/runtime/doctor/onboarding/channels/daemon + key CLI surfaces); residual gateway-heavy wording remains in legacy gateway-status/status-all/health-adjacent surfaces and deeper internals |
+| Terminology in help/docs | runtime/control-plane | substantial runtime wording pass complete (status/config/runtime/doctor/onboarding/platforms/daemon + key CLI surfaces); residual gateway-heavy wording remains in legacy gateway-status/status-all/health-adjacent surfaces and deeper internals |
 
 ---
 

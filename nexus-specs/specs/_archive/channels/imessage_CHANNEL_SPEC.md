@@ -218,7 +218,7 @@ await sendMessage(chatGuid, "Hey @Tyler, check this out");
 - Delivery: `monitor/deliver.ts`
 - Runtime: `monitor/runtime.ts`
 - Send functions: `send.ts`
-- Outbound adapter: `channels/plugins/outbound/imessage.ts`
+- Outbound adapter: `platforms/plugins/outbound/imessage.ts`
 
 ### Key Upstream Patterns
 ```typescript

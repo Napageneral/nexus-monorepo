@@ -2,7 +2,7 @@
 
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-18
-**Database layout:** See `../../DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
+**Database layout:** See `../DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
 
 ---
 
@@ -11,6 +11,9 @@
 NEX is the central orchestrator for the Nexus system. It receives events from adapters, coordinates the processing pipeline, and manages the flow of data through each stage.
 
 **Key insight:** NEX is a data bus. The `NexusRequest` object flows through the pipeline, accumulating context at each stage. NEX owns this lifecycle.
+
+Routing and identity language in this document follows:
+`ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md` (sender/receiver symmetry, account-bound receiver resolution, entity-based session labels, no Atlas fallback).
 
 ---
 
@@ -33,15 +36,15 @@ NEX is a single TypeScript process. All stages are **functions**, not separate s
 
 ```
 NEX Process (TypeScript)
-├── ingest()             // 1. Normalize NexusEvent, create NexusRequest
+├── receiveEvent()             // 1. Normalize NexusEvent, create NexusRequest
 ├── resolveIdentity()    // 2. WHO sent this? Query Identity Graph
-├── resolveReceiver()    // 3. WHO is this addressed to? Resolve target persona/entity
+├── resolveReceiver()    // 3. WHO is this addressed to? Resolve target agent/entity
 ├── resolveAccess()      // 4. WHAT can they do? Policies → permissions, session routing
-├── runAutomations()     // 5. Match automations, execute hooks, may enrich or handle
-├── routeSession()       // 6. Build AssembledContext (history, memory, config, formatting)
+├── runAutomations()     // 5. Default automation hookpoint (automations also run on other hookpoints)
+├── assembleContext()       // 6. Build AssembledContext (history, memory, config, formatting)
 ├── runAgent()           // 7. Execute agent with assembled context (pi-coding-agent)
-├── processResponse()    // 8. Format, chunk, send via out-adapter
-└── deliverResponse()    // 9. Write trace to Nexus Ledger, emit outbound event
+├── deliverResponse()    // 8. Format, chunk, send via out-adapter
+└── finalize()           // 9. Persist final trace/audit status (always runs)
 
 All function calls. No network hops.
 ```
@@ -50,15 +53,15 @@ All function calls. No network hops.
 
 | Stage | Input | Output on NexusRequest | May Exit Pipeline? |
 |-------|-------|------------------------|-------------------|
-| `ingest()` | NexusEvent from adapter | `event`, `delivery` populated | No |
+| `receiveEvent()` | NexusEvent from adapter | `event`, `delivery` populated | No |
 | `resolveIdentity()` | NexusRequest | `sender` populated | Yes (unknown sender policy) |
-| `resolveReceiver()` | NexusRequest | `receiver` populated (type, persona_id, entity_id) | No |
+| `resolveReceiver()` | NexusRequest | `receiver` populated (type, entity_id, agent_id?, persona_ref?) | No |
 | `resolveAccess()` | NexusRequest | `access` populated (decision, permissions, routing) | Yes (access denied) |
-| `runAutomations()` | NexusRequest | `triggers` populated (automations fired, enrichment) | Yes (automation handles completely) |
-| `routeSession()` | NexusRequest | `agent` populated (turn_id, model, token_budget); builds `AssembledContext` internally | No |
+| `runAutomations()` | NexusRequest | `triggers` populated (automations fired, enrichment); represents the default runtime hookpoint | Yes (automation handles completely) |
+| `assembleContext()` | NexusRequest | `agent` populated (turn_id, model, token_budget); builds `AssembledContext` internally | No |
 | `runAgent()` | AssembledContext (from stage 6) | `response` populated (content, tool_calls, usage) | No |
-| `processResponse()` | NexusRequest | `delivery_result` populated | No |
-| `deliverResponse()` | NexusRequest | `pipeline` trace complete, `status` set | No |
+| `deliverResponse()` | NexusRequest | `delivery_result` populated | No |
+| `finalize()` | NexusRequest | `pipeline` trace complete, `status` set | No |
 
 See `NEXUS_REQUEST.md` for the full typed schema per stage.
 
@@ -83,7 +86,7 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │    │                                                                        │    │
 │    │  Channel adapters normalize to NexusEvent and pipe via JSONL stdout   │    │
 │    │  AIX import adapter emits session import batches/chunks to the        │    │
-│    │  Session Import Service (not the ingest pipeline)               │    │
+│    │  Session Import Service (not the event pipeline)                │    │
 │    │  See: adapters/ADAPTER_SYSTEM.md, nex/SESSION_IMPORT_SERVICE.md       │    │
 │    │                                                                        │    │
 │    └────────────────────────────────────────────────────────────────────────┘    │
@@ -94,13 +97,13 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │  │                          SYNC PIPELINE (9 stages)                          │  │
 │  │                                                                             │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 1. ingest()                                                            │  │  │
+│  │  │ 1. receiveEvent()                                                            │  │  │
 │  │  │    • Create NexusRequest from NexusEvent                             │  │  │
 │  │  │    • Populate: request_id, event, delivery                           │  │  │
 │  │  │    • Async: Write event to Events Ledger                             │  │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘  │  │
 │  │                                   │                                         │  │
-│  │                        [plugin: afterIngest]                              │  │
+│  │                      [plugin: afterReceiveEvent]                           │  │
 │  │                                   │                                         │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
 │  │  │ 2. resolveIdentity()                                                  │  │  │
@@ -115,8 +118,8 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
 │  │  │ 3. resolveReceiver()                                                  │  │  │
 │  │  │    • WHO is this addressed to?                                        │  │  │
-│  │  │    • Resolve target persona/entity from delivery context             │  │  │
-│  │  │    • Populate: receiver (type, persona_id, entity_id, name, source)  │  │  │
+│  │  │    • Resolve target agent/entity from delivery context               │  │  │
+│  │  │    • Populate: receiver (type, entity_id, agent_id?, persona_ref?, name, source) │  │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘  │  │
 │  │                                   │                                         │  │
 │  │                       [plugin: afterResolveReceiver]                       │  │
@@ -126,7 +129,7 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │  │  │    • WHAT can they do?                                                │  │  │
 │  │  │    • Evaluate ACL policies against sender + receiver + conditions     │  │  │
 │  │  │    • Populate: access (decision, permissions, routing)               │  │  │
-│  │  │    • Routing includes: persona, session_key, queue_mode              │  │  │
+│  │  │    • Routing includes: agent_id, persona_ref, session_label, queue_mode │  │  │
 │  │  │    • If denied → exit pipeline (async: write denial to audit)        │  │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘  │  │
 │  │                                   │                                         │  │
@@ -137,24 +140,25 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │  │  │    • Match automations against event + sender + receiver + access     │  │  │
 │  │  │    • Execute matched automations (parallel where independent)        │  │  │
 │  │  │    • Populate: triggers (automations_fired, enrichment, overrides)   │  │  │
+│  │  │    • This is the default hookpoint; other hookpoints run around stages │  │  │
 │  │  │    • If automation handles completely → exit pipeline                 │  │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘  │  │
 │  │                                   │                                         │  │
 │  │                       [plugin: afterRunAutomations]                        │  │
 │  │                                   │                                         │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 6. routeSession()                                                      │  │  │
-│  │  │    • Gather context for finalized session (parallel fetches):         │  │  │
+│  │  │ 6. assembleContext()                                                │  │  │
+│  │  │    • Gather context for agent execution (parallel fetches):         │  │  │
 │  │  │      - Conversation history from Agents Ledger                        │  │  │
 │  │  │      - Relevant context from Memory System (memory.db, embeddings.db) │  │  │
 │  │  │      - Agent config (persona, model, tools)                           │  │  │
 │  │  │      - Platform formatting guidance                                    │  │  │
 │  │  │    • Create/resume session, create turn in Agents Ledger             │  │  │
 │  │  │    • Build AssembledContext (internal to Broker, NOT on NexusRequest) │  │  │
-│  │  │    • Populate: agent (turn_id, session_key, model, token_budget)     │  │  │
+│  │  │    • Populate: agent (turn_id, session_label, model, token_budget)   │  │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘  │  │
 │  │                                   │                                         │  │
-│  │                       [plugin: afterRouteSession]                          │  │
+│  │                      [plugin: afterAssembleContext]                        │  │
 │  │                                   │                                         │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
 │  │  │ 7. runAgent()                                                          │  │  │
@@ -167,7 +171,7 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │  │                          [plugin: afterRunAgent]                            │  │
 │  │                                   │                                         │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 8. processResponse()                                                   │  │  │
+│  │  │ 8. deliverResponse()                                                   │  │  │
 │  │  │    • Format response for target platform                              │  │  │
 │  │  │    • Chunk if necessary (respects platform text limits)              │  │  │
 │  │  │    • Send via adapter's `send` command                                │  │  │
@@ -175,17 +179,16 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │  │  │    • Note: may be no-op if native streaming already delivered         │  │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘  │  │
 │  │                                   │                                         │  │
-│  │                       [plugin: afterProcessResponse]                       │  │
+│  │                       [plugin: afterDeliverResponse]                       │  │
 │  │                                   │                                         │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 9. deliverResponse()                                                   │  │  │
+│  │  │ 9. finalize()                                                          │  │  │
 │  │  │    • Finalize NexusRequest with pipeline trace + timing               │  │  │
-│  │  │    • Write full trace to Nexus Ledger                                 │  │  │
-│  │  │    • Write outbound event to Events Ledger                            │  │  │
-│  │  │    • Emit to Memory System for analysis (async)                        │  │  │
+│  │  │    • Persist final status + audit metadata to Nexus Ledger            │  │  │
+│  │  │    • Emit to Memory System for analysis (async)                       │  │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘  │  │
 │  │                                   │                                         │  │
-│  │                          [plugin: onDeliverResponse]                        │  │
+│  │                             [plugin: onFinalize]                            │  │
 │  │                                                                             │  │
 │  └────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                   │
@@ -255,19 +258,19 @@ Both NEX and other components use the same library. NEX doesn't "own" the databa
 
 ## NexusRequest Lifecycle
 
-The `NexusRequest` is created at `ingest()` and populated through each stage:
+The `NexusRequest` is created at `receiveEvent()` and populated through each stage:
 
 | Stage | Fields Populated |
 |-------|------------------|
-| **ingest()** | `request_id`, `created_at`, `event`, `delivery` |
+| **receiveEvent()** | `request_id`, `created_at`, `event`, `delivery` |
 | **resolveIdentity()** | `sender` (type, entity_id, display_name, is_user) |
-| **resolveReceiver()** | `receiver` (type, persona_id, entity_id, name, source) |
-| **resolveAccess()** | `access` (decision, permissions, routing: persona, session_key, queue_mode) |
+| **resolveReceiver()** | `receiver` (type, entity_id, agent_id, persona_ref, name, source) |
+| **resolveAccess()** | `access` (decision, permissions, routing: agent_id, persona_ref, session_label, queue_mode) |
 | **runAutomations()** | `triggers` (automations_evaluated, automations_fired, enrichment, routing_override, handled) |
-| **routeSession()** | `agent` (turn_id, session_key, model, provider, token_budget, role, persona_id) |
+| **assembleContext()** | `agent` (turn_id, session_label, model, provider, token_budget, role, agent_id, persona_ref) |
 | **runAgent()** | `response` (content, tool_calls, usage, stop_reason, compaction, subagents_spawned) |
-| **processResponse()** | `delivery_result` (success, message_ids, chunks_sent, error) |
-| **deliverResponse()** | `pipeline` (stage timings trace), `status` (completed/failed/denied/handled_by_automation) |
+| **deliverResponse()** | `delivery_result` (success, message_ids, chunks_sent, error) |
+| **finalize()** | `pipeline` (stage timings trace), `status` (completed/failed/denied/handled_by_automation) |
 
 See `NEXUS_REQUEST.md` for the complete typed schema.
 
@@ -280,7 +283,7 @@ See `NEXUS_REQUEST.md` for the complete typed schema.
 Each stage waits for the previous to complete:
 
 ```
-ingest → resolveIdentity → resolveReceiver → resolveAccess → runAutomations → routeSession → runAgent → processResponse → deliverResponse
+receiveEvent → resolveIdentity → resolveReceiver → resolveAccess → runAutomations → assembleContext → runAgent → deliverResponse → finalize
 ```
 
 All 9 stages are sync because each depends on the output of the previous.
@@ -299,16 +302,19 @@ async function pipeline(event: NexusEvent): Promise<NexusRequest> {
   
   await resolveAccess(req);
   if (req.access.decision === 'deny') {
-    return deliverResponse(req, 'denied');
+    await deliverResponse(req);
+    return finalize(req, 'denied');
   }
   
   await runAutomations(req);
   if (req.triggers.handled) {
-    return deliverResponse(req, 'handled_by_automation');
+    await deliverResponse(req);
+    return finalize(req, 'handled_by_automation');
   }
   
   // ... remaining stages
-  return deliverResponse(req, 'completed');
+  await deliverResponse(req);
+  return finalize(req, 'completed');
 }
 ```
 
@@ -336,7 +342,7 @@ On completion, full response written to Agents Ledger
 Outbound event written to Events Ledger
 ```
 
-See `../STREAMING.md` for the canonical streaming architecture spec.
+See `../delivery/STREAMING.md` for the canonical streaming architecture spec.
 
 ---
 
@@ -354,9 +360,9 @@ const results = await Promise.all(
 **Context Assembly (parallel):**
 ```typescript
 const [history, memoryContext, agentConfig] = await Promise.all([
-  getConversationHistory(req.access.routing.session_key),  // session_key from routing
+  getConversationHistory(req.access.routing.session_label),  // session label from routing
   memory.queryRelevantContext(req.event.content),
-  loadAgentConfig(req.access.routing.persona),
+  loadAgentConfig(req.access.routing.persona_ref),
 ]);
 ```
 
@@ -417,16 +423,16 @@ interface NEXPlugin {
   priority?: number;  // Lower runs first (default: 100)
   
   // Lifecycle hooks (after each stage)
-  afterIngest?(req: NexusRequest): Promise<void | 'skip'>;
+  afterReceiveEvent?(req: NexusRequest): Promise<void | 'skip'>;
   afterResolveIdentity?(req: NexusRequest): Promise<void | 'skip'>;
   afterResolveReceiver?(req: NexusRequest): Promise<void | 'skip'>;
   afterResolveAccess?(req: NexusRequest): Promise<void | 'skip'>;
   afterRunAutomations?(req: NexusRequest): Promise<void | 'skip'>;
-  afterRouteSession?(req: NexusRequest): Promise<void | 'skip'>;
+  afterAssembleContext?(req: NexusRequest): Promise<void | 'skip'>;
   afterRunAgent?(req: NexusRequest): Promise<void | 'skip'>;
-  afterProcessResponse?(req: NexusRequest): Promise<void | 'skip'>;
+  afterDeliverResponse?(req: NexusRequest): Promise<void | 'skip'>;
 
-  onDeliverResponse?(req: NexusRequest): Promise<void>;
+  onFinalize?(req: NexusRequest): Promise<void>;
   onError?(req: NexusRequest, error: Error): Promise<void>;
 }
 ```
@@ -495,7 +501,7 @@ function asyncWrite(db: Database, query: string, params: any[]) {
   },
   "http": {
     "host": "127.0.0.1",
-    "port": 18789              // WS RPC Adapter (SPA + WS + health)
+    "port": 18789              // Control surface (SPA + WS + health)
   }
 }
 ```
@@ -517,15 +523,15 @@ src/
 │   │   ├── types.ts
 │   │   └── builtin/            # Built-in plugins
 │   ├── stages/                 # Pipeline stages
-│   │   ├── ingest.ts
+│   │   ├── receiveEvent.ts
 │   │   ├── resolveIdentity.ts
 │   │   ├── resolveReceiver.ts
 │   │   ├── resolveAccess.ts
 │   │   ├── runAutomations.ts
-│   │   ├── routeSession.ts
+│   │   ├── assembleContext.ts
 │   │   ├── runAgent.ts
-│   │   ├── processResponse.ts
-│   │   └── deliverResponse.ts
+│   │   ├── deliverResponse.ts
+│   │   └── finalize.ts
 │   ├── adapters/               # Adapter Manager
 │   │   ├── manager.ts          # Spawn/supervise adapter processes
 │   │   ├── protocol.ts         # JSONL protocol handling
@@ -558,7 +564,7 @@ When a Manager Agent (MA) spawns a Worker Agent (WA), the WA runs through the Br
 The agent uses the `send message` tool, which routes through NEX to the appropriate out-adapter via its `send` command. The adapter handles chunking based on channel capabilities. Multiple tool calls = multiple messages.
 
 ### Language Decision
-NEX core is **TypeScript** (Bun runtime). The Memory System is TypeScript — there is no separate Go process. See `../../architecture/LANGUAGE_DECISION.md`.
+NEX core is **TypeScript** (Bun runtime). The Memory System is TypeScript — there is no separate Go process. See `../architecture/LANGUAGE_DECISION.md`.
 
 ---
 
@@ -568,8 +574,8 @@ NEX core is **TypeScript** (Bun runtime). The Memory System is TypeScript — th
 - `DAEMON.md` — Process lifecycle, signals, startup sequence
 - `PLUGINS.md` — NEX plugin system
 - `BUS_ARCHITECTURE.md` — Real-time event bus
-- `automations/AUTOMATION_SYSTEM.md` — Automation system
-- `../STREAMING.md` — Canonical streaming architecture
+- `../_archive/AUTOMATION_SYSTEM.md` — Historical automation system spec
+- `../delivery/STREAMING.md` — Canonical streaming architecture
 - `../delivery/ADAPTER_SYSTEM.md` — Adapter system (canonical)
 - `../iam/ACCESS_CONTROL_SYSTEM.md` — IAM specifications
 - `../agents/` — Agent engine and session specifications

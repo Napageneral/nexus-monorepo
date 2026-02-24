@@ -47,7 +47,7 @@ Plus required dependents for correctness:
 1. `chatType: "channel"` and `container_kind = "channel"`.
 2. Session-key markers like `:channel:` when they represent container kind.
 3. Target-kind strings like `channel:<id>`.
-4. `channels.*` config namespace and plugin folder naming (`src/channels/*`).
+4. `channels.*` config namespace and plugin folder naming (`src/platforms/*`).
 
 ### Invalid (rename)
 
@@ -158,7 +158,7 @@ rg --line-number "container_kind\s*=\s*\"channel\"|:channel:|kind\s*!==\s*\"grou
 ## 8) Non-Goals for This Slice
 
 1. Renaming global `channels.*` config namespace.
-2. Renaming plugin registry/module folder names under `src/channels/*`.
+2. Renaming plugin registry/module folder names under `src/platforms/*`.
 3. Reworking container-kind taxonomy (`channel` as a valid kind remains intentional).
 
 ---

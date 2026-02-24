@@ -144,8 +144,8 @@ This document traces the lifecycle of a message through OpenClaw — from when i
 | Stage | Key Files |
 |-------|-----------|
 | **Channel Monitor** | `src/{channel}/monitor.ts`, `src/web/inbound/monitor.ts` |
-| **Access Control** | `src/web/inbound/access-control.ts`, `src/channels/allowlist-match.ts` |
-| **Gating** | `src/channels/mention-gating.ts`, `src/web/auto-reply/monitor/group-gating.ts` |
+| **Access Control** | `src/web/inbound/access-control.ts`, `src/platforms/allowlist-match.ts` |
+| **Gating** | `src/platforms/mention-gating.ts`, `src/web/auto-reply/monitor/group-gating.ts` |
 | **Dispatch** | `src/auto-reply/dispatch.ts`, `src/auto-reply/reply/dispatch-from-config.ts` |
 | **Agent Execution** | `src/auto-reply/reply/agent-runner.ts`, `src/agents/pi-embedded-runner/` |
 | **Reply Dispatcher** | `src/auto-reply/reply/reply-dispatcher.ts` |

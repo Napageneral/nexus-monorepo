@@ -44,9 +44,9 @@ CREATE TABLE nexus_requests (
     status TEXT NOT NULL,             -- 'processing', 'completed', 'failed', 'skipped'
     
     -- Sender identity (populated at resolveIdentity)
-    sender_id TEXT,                -- Entity ID if resolved
+    sender_entity_id TEXT,         -- Canonical sender entity ID if resolved
     sender_type TEXT,              -- 'owner', 'known', 'system', 'webhook', 'unknown'
-    sender_is_owner BOOLEAN,       -- Is this the Nexus owner?
+    sender_is_user BOOLEAN,        -- Is this the Nexus owner?
     
     -- Access (populated at resolveAccess)
     access_decision TEXT,             -- 'allow', 'deny'
@@ -70,7 +70,7 @@ CREATE TABLE nexus_requests (
     agent_tool_calls TEXT,            -- JSON array of tool names called
     
     -- Delivery (populated at deliverResponse)
-    delivery_platform TEXT,           -- Platform where response was sent
+    delivery_channel TEXT,            -- Platform where response was sent
     delivery_message_ids TEXT,        -- JSON array of platform message IDs
     delivery_success BOOLEAN,
     delivery_error TEXT,              -- Error message if failed
@@ -98,7 +98,7 @@ CREATE TABLE nexus_requests (
 CREATE INDEX idx_nexus_requests_event ON nexus_requests(event_id);
 CREATE INDEX idx_nexus_requests_status ON nexus_requests(status);
 CREATE INDEX idx_nexus_requests_started ON nexus_requests(started_at DESC);
-CREATE INDEX idx_nexus_requests_sender ON nexus_requests(sender_id);
+CREATE INDEX idx_nexus_requests_sender_entity ON nexus_requests(sender_entity_id);
 CREATE INDEX idx_nexus_requests_session ON nexus_requests(session_key);
 CREATE INDEX idx_nexus_requests_turn ON nexus_requests(turn_id);
 CREATE INDEX idx_nexus_requests_stage ON nexus_requests(stage);
@@ -121,9 +121,9 @@ VALUES ('01HQ...', 'imessage:p:+1555.../123', 'message', 'imessage', 'receiveEve
 -- After resolveIdentity
 UPDATE nexus_requests SET
     stage = 'resolveIdentity',
-    sender_id = '01HQENT001',
+    sender_entity_id = '01HQENT001',
     sender_type = 'person',
-    sender_is_owner = false
+    sender_is_user = false
 WHERE id = '01HQ...';
 
 -- After resolveAccess

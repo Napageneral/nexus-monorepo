@@ -2,7 +2,7 @@
 
 **Status:** REFERENCE  
 **Last Updated:** 2026-02-04  
-**Source:** `src/channels/sender-identity.ts`, `src/channels/plugins/normalize/`, `src/routing/session-key.ts`
+**Source:** `src/platforms/sender-identity.ts`, `src/platforms/plugins/normalize/`, `src/routing/session-key.ts`
 
 ---
 
@@ -258,7 +258,7 @@ Identity links map the same person across platforms for session continuity.
 
 ```yaml
 session:
-  dmScope: "per-peer"  # or per-channel-peer
+  dmScope: "per-peer"  # or per-platform-peer
   identityLinks:
     tyler:
       - telegram:123456789

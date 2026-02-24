@@ -1,108 +1,86 @@
-# Inbound Adapter Interface
+# Inbound Event Adapter Interface
 
-**Status:** DESIGN COMPLETE  
-**Last Updated:** 2026-02-18
+**Status:** DESIGN LOCKED  
+**Last Updated:** 2026-02-24  
+**Related:** `ADAPTER_SYSTEM.md`, `OUTBOUND_INTERFACE.md`, `../nex/SURFACE_ADAPTER_V2.md`, `../nex/NEXUS_REQUEST.md`
 
 ---
 
 ## Overview
 
-Inbound adapters receive messages from external platforms and normalize them to `NexusEvent`. They are external tools that emit events.
+This document defines inbound behavior for **event adapters** only.
+
+Control-plane WS/HTTP operations are specified by the control surface model (`protocol/control/event`) in `../nex/SURFACE_ADAPTER_V2.md` and are not part of this interface.
+
+Inbound event adapters normalize external/platform input to canonical `NexusEvent` records.
 
 ---
 
-## Interface
+## Canonical CLI Contract
 
-```typescript
-interface InboundAdapter {
-  // Identity
-  platform: string;              // "discord", "telegram", "imessage", etc.
-  
-  // Lifecycle
-  start(config: AdapterConfig): Promise<void>;
-  stop(): Promise<void>;
-  isConnected(): boolean;
-  
-  // Event emission
-  onEvent(callback: (event: NexusEvent) => void): void;
-  
-  // Optional: Health
-  healthCheck?(): Promise<HealthStatus>;
-}
+Inbound event adapters follow the adapter CLI protocol:
 
-interface AdapterConfig {
-  account_id: string;            // Which account to monitor
-  credentials?: CredentialRef;   // How to auth
-  filters?: EventFilter[];       // Optional event filtering
-}
+1. `info`
+2. `monitor --account <id> --format jsonl`
+3. optional: `backfill --account <id> --since <iso> --format jsonl`
+4. optional: `health --account <id>`
+5. optional: `accounts list`
 
-interface HealthStatus {
-  connected: boolean;
-  last_event_at?: number;
-  error?: string;
-}
-```
+Normative rule:
+
+- `monitor` emits one valid `NexusEvent` per stdout line (JSONL).
+
+See `ADAPTER_SYSTEM.md` for full command details.
 
 ---
 
-## NexusEvent Schema
+## NexusEvent Schema (Inbound)
 
-The normalized event format all adapters emit:
+```ts
+type NexusEvent = {
+  event_id: string; // "{platform}:{source_id}" stable idempotency key
+  timestamp: number; // unix ms (adapter timestamp; daemon also records receive timestamp)
 
-```typescript
-interface NexusEvent {
-  // Identity
-  event_id: string;              // "{platform}:{source_id}"
-  timestamp: number;             // Unix ms
-  
-  // Content
   content: string;
-  content_type: 'text' | 'image' | 'audio' | 'video' | 'file' | 'reaction';
+  content_type: "text" | "image" | "audio" | "video" | "file" | "reaction";
   attachments?: Attachment[];
-  
-  // Routing context
-  platform: string;              // Platform name
-  account_id: string;            // Which bot account received
-  sender_id: string;             // Platform-specific sender ID (see IDENTITY_RESOLUTION.md for resolution)
-  sender_name?: string;          // Display name if available
-  space_id?: string;             // Workspace/server scope (e.g. Slack workspace, Discord guild)
-  container_id: string;          // Chat/channel/DM container ID
-  container_kind: 'direct' | 'group' | 'channel';  // Legacy `dm` normalizes to `direct` at ingest.
-  thread_id?: string;            // For threaded conversations
-  reply_to_id?: string;          // If replying to a message
-  
-  // Platform metadata (varies by channel)
-  metadata?: Record<string, unknown>;
-}
 
-interface Attachment {
+  // Delivery/routing context
+  platform: string; // "discord", "telegram", "imessage", "openai", "webhook", ...
+  account_id: string; // adapter account that received the message
+  sender_id: string; // platform-specific sender identifier
+  sender_name?: string;
+  space_id?: string; // tenant/workspace/guild scope if applicable
+  container_id: string; // channel/dm/thread root
+  container_kind: "direct" | "group" | "channel";
+  thread_id?: string;
+  reply_to_id?: string;
+
+  metadata?: Record<string, unknown>;
+};
+
+type Attachment = {
   id: string;
   filename: string;
-  content_type: string;          // MIME type
+  content_type: string;
   size_bytes?: number;
-  url?: string;                  // Remote URL
-  path?: string;                 // Local path (if downloaded)
-}
+  url?: string;
+  path?: string;
+};
 ```
 
 ---
 
-## Implementation Patterns
+## Ingress Integrity Rules
 
-### Pattern: CLI Tool (Canonical)
+Adapters emit canonical data, but runtime remains final authority for integrity-critical fields as defined in `../nex/INGRESS_INTEGRITY.md`.
 
-Tool emits JSON lines on stdout. This is the only canonical implementation pattern — see `ADAPTER_SYSTEM.md` for the full CLI protocol.
+Normative constraints:
 
-```bash
-# Tool monitors and emits events
-eve monitor --account default --format jsonl
-
-# Output (one JSON per line):
-{"event_id":"imessage:abc123","timestamp":1706600000000,"content":"Hello",...}
-{"event_id":"imessage:def456","timestamp":1706600001000,"content":"World",...}
-```
-
-Nexus reads stdout and processes events.
+1. Adapter may supply source timestamp and external sender identifiers.
+2. Runtime stamps ingress source/account trust context and receive timestamp.
+3. Reserved internal platforms cannot be spoofed by external adapters.
+4. For HTTP/OpenAI/OpenResponses/webchat ingress, principal identity is credential/session-derived by daemon.
 
 ---
 
@@ -110,17 +88,7 @@ Nexus reads stdout and processes events.
 
 ### Discord
 
-```typescript
-// Raw Discord message
-const discordMsg = {
-  id: "1234567890",
-  content: "Hello world",
-  author: { id: "user123", username: "alice" },
-  channel_id: "chan456",
-  space_id: "guild789",
-};
-
-// Normalized NexusEvent
+```ts
 const event: NexusEvent = {
   event_id: "discord:1234567890",
   timestamp: Date.now(),
@@ -130,25 +98,15 @@ const event: NexusEvent = {
   account_id: "bot-account-1",
   sender_id: "user123",
   sender_name: "alice",
-  container_id: "chan456",
   space_id: "guild789",
-  container_kind: "group",  // or "direct" if DM container
+  container_id: "chan456",
+  container_kind: "group",
 };
 ```
 
 ### iMessage
 
-```typescript
-// Raw iMessage (from eve)
-const imsg = {
-  guid: "abc-def-123",
-  text: "Hey there",
-  sender: "+14155551234",
-  chat_id: "+14155551234",
-  is_group: false,
-};
-
-// Normalized NexusEvent
+```ts
 const event: NexusEvent = {
   event_id: "imessage:abc-def-123",
   timestamp: Date.now(),
@@ -164,98 +122,24 @@ const event: NexusEvent = {
 
 ---
 
-## Event Filtering
+## Runtime Integration
 
-Adapters can optionally filter events before emission:
+Inbound event adapters feed `NexusEvent` into runtime event processing:
 
-```typescript
-interface EventFilter {
-  type: 'include' | 'exclude';
-  field: 'sender_id' | 'container_id' | 'content_type';
-  pattern: string | RegExp;
-}
+```ts
+await nex.processEvent(event);
 ```
 
-Example: Only direct messages from specific users:
-```typescript
-filters: [
-  { type: 'include', field: 'container_kind', pattern: 'direct' },
-  { type: 'include', field: 'sender_id', pattern: /^\+1415/ },
-]
-```
+This enters the standard event pipeline (`receiveEvent -> resolveIdentity -> resolveAccess -> ...`).
 
 ---
 
-## Integration with Nexus
+## Existing Adapters (Examples)
 
-### Pipeline Entry
-
-```typescript
-// Adapter emits event
-adapter.onEvent(async (event: NexusEvent) => {
-  // Create NexusRequest
-  const request = createNexusRequest(event);
-  
-  // Run through pipeline: ACL → Hooks → Broker
-  await pipeline.process(request);
-});
-```
-
-### NexusRequest Creation
-
-```typescript
-function createNexusRequest(event: NexusEvent): NexusRequest {
-  return {
-    request_id: uuid(),
-    event_id: event.event_id,
-    timestamp: event.timestamp,
-    
-    event: {
-      content: event.content,
-      content_type: event.content_type,
-      attachments: event.attachments,
-    },
-    
-    delivery: {
-      platform: event.platform,
-      account_id: event.account_id,
-      container_id: event.container_id,
-      container_kind: event.container_kind,
-      thread_id: event.thread_id,
-      reply_to_id: event.reply_to_id,
-      capabilities: getPlatformCapabilities(event.platform),
-    },
-    
-    pipeline: [{ stage: 'adapter_inbound', timestamp: Date.now() }],
-  };
-}
-```
-
----
-
-## Existing Adapters
-
-| Tool | Platform | Status | Notes |
-|------|----------|--------|-------|
-| `eve` | iMessage | ✅ | macOS only |
-| `gog` | Gmail | ✅ | Via Google API |
-| `aix` | AI sessions | ✅ | Cursor/IDE |
-
-### To Port from Upstream
-
-| Platform | Upstream | Target Tool |
-|----------|----------|-------------|
-| Discord | `src/discord/monitor.ts` | `nexus-adapter-discord` |
-| Telegram | `src/telegram/monitor.ts` | `nexus-adapter-telegram` |
-| WhatsApp | `src/web/inbound/` | Baileys wrapper |
-| Signal | `src/signal/monitor.ts` | signal-cli wrapper |
-| Slack | `src/slack/monitor.ts` | `nexus-adapter-slack` |
-
----
-
-## Related
-
-- `OUTBOUND_INTERFACE.md` — Delivery interface
-- `ADAPTER_SYSTEM.md` — Adapter operational system
-- `IDENTITY_RESOLUTION.md` — How `sender_id` is resolved to an entity
-- `channels/{channel}.md` — Per-channel specs
+| Adapter | Platform | Status |
+|------|----------|--------|
+| `eve` | iMessage | active |
+| `nexus-adapter-discord` | Discord | active |
+| `nexus-adapter-gog` | Gmail | active |
+| `http-ingress` (internal) | openai/openresponses/webhooks/webchat | active |
+| `clock` (internal) | timer/scheduled source | active |

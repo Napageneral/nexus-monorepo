@@ -656,12 +656,12 @@ const MSTEAMS_CAPABILITIES: ChannelCapabilities = {
 
 | Channel | Monitor | Send | Outbound Adapter |
 |---------|---------|------|------------------|
-| Discord | `monitor/provider.ts` | `send.outbound.ts`, `chunk.ts` | `channels/plugins/outbound/discord.ts` |
-| Telegram | `bot.ts`, `bot-handlers.ts` | `send.ts` | `channels/plugins/outbound/telegram.ts` |
-| WhatsApp | `inbound/monitor.ts` | `outbound.ts` | `channels/plugins/outbound/whatsapp.ts` |
-| Slack | `monitor/provider.ts` | `send.ts`, `actions.ts` | `channels/plugins/outbound/slack.ts` |
+| Discord | `monitor/provider.ts` | `send.outbound.ts`, `chunk.ts` | `platforms/plugins/outbound/discord.ts` |
+| Telegram | `bot.ts`, `bot-handlers.ts` | `send.ts` | `platforms/plugins/outbound/telegram.ts` |
+| WhatsApp | `inbound/monitor.ts` | `outbound.ts` | `platforms/plugins/outbound/whatsapp.ts` |
+| Slack | `monitor/provider.ts` | `send.ts`, `actions.ts` | `platforms/plugins/outbound/slack.ts` |
 | Gmail | `hooks/gmail.ts` (hooks only) | N/A | N/A |
-| iMessage | `monitor.ts` | `send.ts` | `channels/plugins/outbound/imessage.ts` |
+| iMessage | `monitor.ts` | `send.ts` | `platforms/plugins/outbound/imessage.ts` |
 
 ---
 
@@ -672,6 +672,6 @@ const MSTEAMS_CAPABILITIES: ChannelCapabilities = {
 - `../ADAPTER_CREDENTIALS.md` — Credential management
 - `../OUTBOUND_TARGETING.md` — Delivery targeting contract
 - `../CHANNEL_DIRECTORY.md` — Channel directory population
-- `UPSTREAM_CHANNEL_REVIEWS.md` — Per-channel upstream gap analysis and effort estimates
+- `UPSTREAM_CHANNEL_REVIEWS.md` — Per-platform upstream gap analysis and effort estimates
 - `../../iam/ACCESS_CONTROL_SYSTEM.md` — IAM policies
 - `../../iam/PAIRING_UX.md` — Permission request / pairing flow

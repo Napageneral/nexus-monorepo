@@ -41,31 +41,31 @@ NEX processes events through 9 sequential stages. Each stage is a verb describin
 │  ┌─────────────────────────────────────────────────────────────────────────┐    │
 │  │                              PIPELINE                                    │    │
 │  │                                                                          │    │
-│  │   1. ingest             Create NexusRequest from NexusEvent             │    │
+│  │   1. receiveEvent       Create NexusRequest from NexusEvent             │    │
 │  │        ↓                Write event to Events Ledger (async)            │    │
 │  │                                                                          │    │
 │  │   2. resolveIdentity    WHO sent this? Query Identity Graph             │    │
 │  │        ↓                Populate: sender                                │    │
 │  │                                                                          │    │
-│  │   3. resolveReceiver    WHO is this for? Resolve target persona/entity  │    │
+│  │   3. resolveReceiver    WHO is this for? Resolve target agent/entity    │    │
 │  │        ↓                Populate: receiver                              │    │
 │  │                                                                          │    │
 │  │   4. resolveAccess      WHAT can they do? Evaluate ACL policies         │    │
 │  │        ↓                Populate: access (permissions, routing)         │    │
 │  │                                                                          │    │
-│  │   5. runAutomations     Match and execute automations                   │    │
+│  │   5. runAutomations     Evaluate hook-triggered automations             │    │
 │  │        ↓                Populate: triggers, may handle event            │    │
 │  │                                                                          │    │
-│  │   6. routeSession       Gather context, create/resume session           │    │
+│  │   6. assembleContext    Gather context, create/resume session           │    │
 │  │        ↓                Build AssembledContext (history, memory, config) │    │
 │  │                                                                          │    │
 │  │   7. runAgent           Execute agent with assembled context            │    │
 │  │        ↓                Generate response, call tools (streaming)       │    │
 │  │                                                                          │    │
-│  │   8. processResponse    Format and deliver via out-adapter              │    │
+│  │   8. deliverResponse    Format and deliver via out-adapter              │    │
 │  │        ↓                Handle formatting, chunking                     │    │
 │  │                                                                          │    │
-│  │   9. deliverResponse    Write trace, emit outbound event                │    │
+│  │   9. finalize           Write trace, emit outbound event                │    │
 │  │                                                                          │    │
 │  └─────────────────────────────────────────────────────────────────────────┘    │
 │                                                                                  │
@@ -74,12 +74,12 @@ NEX processes events through 9 sequential stages. Each stage is a verb describin
 
 ### Pipeline Hooks
 
-Each stage supports hooks that run after completion:
+Hooks run after each stage and on terminal finalize:
 
 ```
-afterIngest → afterResolveIdentity → afterResolveReceiver → afterResolveAccess
-→ afterRunAutomations → afterRouteSession → afterRunAgent → afterProcessResponse
-→ afterDeliverResponse
+afterReceiveEvent → afterResolveIdentity → afterResolveReceiver → afterResolveAccess
+→ afterRunAutomations → afterAssembleContext → afterRunAgent → afterDeliverResponse
+→ onFinalize
 ```
 
 Hooks can observe, modify the NexusRequest, or skip remaining stages.
@@ -92,15 +92,15 @@ The 9 pipeline stages map to core components:
 
 | Stage | Component | Description |
 |-------|-----------|-------------|
-| `ingest` | **In-Adapters** | Create NexusRequest from NexusEvent |
+| `receiveEvent` | **In-Adapters** | Create NexusRequest from NexusEvent |
 | `resolveIdentity` | **IAM** | WHO sent this? Query contacts → entities |
-| `resolveReceiver` | **IAM** | WHO is this for? Resolve target persona/entity |
+| `resolveReceiver` | **IAM** | WHO is this for? Resolve target agent/entity |
 | `resolveAccess` | **IAM** | WHAT can they do? Policy evaluation |
-| `runAutomations` | **Automations** | Match and execute automations |
-| `routeSession` | **Broker** | Gather context, create/resume session |
+| `runAutomations` | **Automations** | Evaluate automations at hook points |
+| `assembleContext` | **Broker** | Gather context, create/resume session |
 | `runAgent` | **Broker** | Execute agent with assembled context |
-| `processResponse` | **Out-Adapters** | Format and deliver to platforms |
-| `deliverResponse` | **NEX** | Write trace, emit outbound event |
+| `deliverResponse` | **Out-Adapters** | Format and deliver to platforms |
+| `finalize` | **NEX** | Always write terminal trace and emit outbound event |
 
 **Component view:**
 ```
@@ -153,15 +153,15 @@ Every event creates a `NexusRequest` object that flows through the pipeline, acc
 
 | Stage | Adds to NexusRequest |
 |-------|---------------------|
-| `ingest` | `event`, `delivery` (channel, thread, etc.) |
+| `receiveEvent` | `event`, `delivery` (channel, thread, etc.) |
 | `resolveIdentity` | `sender` (who sent this) |
 | `resolveReceiver` | `receiver` (type, persona_id, entity_id) |
 | `resolveAccess` | `access` (decision, permissions, routing) |
 | `runAutomations` | `triggers` (which fired, enrichment, overrides) |
-| `routeSession` | `agent` (turn_id, model, token_budget, context metadata) |
+| `assembleContext` | `agent` (turn_id, model, token_budget, context metadata) |
 | `runAgent` | `response` (content, tool_calls, usage) |
-| `processResponse` | `delivery_result` (message IDs, success) |
-| `deliverResponse` | `pipeline` (timing, trace), `status` |
+| `deliverResponse` | `delivery_result` (message IDs, success) |
+| `finalize` | `pipeline` (timing, trace), `status` |
 
 The complete NexusRequest is persisted to runtime.db for debugging and audit.
 

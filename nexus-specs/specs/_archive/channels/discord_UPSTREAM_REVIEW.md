@@ -85,7 +85,7 @@ No standalone Nexus tool exists for Discord. The entire implementation lives ins
 - `../../auto-reply/*` — Reply dispatch, chunking helpers, history, context building
 - `../../config/config.js` — `loadConfig()`, `OpenClawConfig` types
 - `../../routing/*` — Route resolution, session keys
-- `../../channels/*` — Allowlist utils, logging, session recording
+- `../../platforms/*` — Allowlist utils, logging, session recording
 - `../../agents/identity.js` — Agent config, ack reactions
 - `../../infra/*` — Retry policies, errors, system events
 - `../../media/*` — Media fetching/storage

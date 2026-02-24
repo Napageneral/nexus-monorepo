@@ -24,8 +24,8 @@ This document maps OpenClaw concepts to Nexus equivalents at a high level. For d
 | **Data storage** | JSONL files + JSON index | SQLite ledgers (System of Record) | Structured queries, atomic transactions, no file sprawl |
 | **Session tree** | `id`/`parentId` in JSONL | Turn tree in Agents Ledger | Same concept, better queryability |
 | **Memory** | File-based (MEMORY.md) + SQLite vectors | Cortex (derived layer) | Unified semantic search, episodes, facets |
-| **Access control** | Per-channel config, inline | Declarative YAML policies (IAM) | Security first, auditable, composable |
-| **Event flow** | Per-channel monitor → dispatch | NEX pipeline (8 stages) | Central orchestration, observable |
+| **Access control** | Per-platform config, inline | Declarative YAML policies (IAM) | Security first, auditable, composable |
+| **Event flow** | Per-platform monitor → dispatch | NEX pipeline (8 stages) | Central orchestration, observable |
 | **Workspace** | Hidden `~/.openclaw/` | Visible `~/nexus/` | Transparency, discoverability |
 | **Skills** | Bundled in repo | Hub-based, user installs | User choice, no bloat |
 | **Agent execution** | External `pi-coding-agent` | Broker component | More control, ledger integration |
@@ -42,7 +42,7 @@ This document maps OpenClaw concepts to Nexus equivalents at a high level. For d
 | `src/agents/` | Broker | Agent execution, session management |
 | `src/sessions/` | Agents Ledger | Session/turn storage |
 | `src/auto-reply/` | NEX pipeline | Message dispatch and reply |
-| `src/channels/` | Adapters (in/out) | Platform integrations |
+| `src/platforms/` | Adapters (in/out) | Platform integrations |
 | `src/plugins/` | NEX Plugins | Extensibility mechanism |
 | `src/hooks/` | NEX Pipeline hooks + Automations | Lifecycle events |
 | `src/memory/` | Cortex | Semantic search, embeddings |
@@ -87,7 +87,7 @@ This document maps OpenClaw concepts to Nexus equivalents at a high level. For d
 
 ### Code to Port
 
-1. **Outbound formatting/chunking** — Per-channel logic
+1. **Outbound formatting/chunking** — Per-platform logic
 2. **Compaction prompts** — Summary generation
 3. **Provider integrations** — Model SDK wrappers
 4. **Media handling** — Image/audio processing
@@ -99,7 +99,7 @@ This document maps OpenClaw concepts to Nexus equivalents at a high level. For d
 ### Removed Patterns
 
 1. **JSONL file storage** — Replaced by SQLite ledgers
-2. **Per-channel inline config** — Replaced by declarative IAM
+2. **Per-platform inline config** — Replaced by declarative IAM
 3. **Hidden workspace** — Everything visible in `~/nexus/`
 4. **Single config file** — Split by domain
 5. **Bundled skills** — Hub-based instead
@@ -152,7 +152,7 @@ This document maps OpenClaw concepts to Nexus equivalents at a high level. For d
 
 **But has limitations:**
 - JSONL files don't scale (no queries, file sprawl)
-- Access control is scattered (per-channel, per-group, inline)
+- Access control is scattered (per-platform, per-group, inline)
 - No central orchestrator (each channel has its own flow)
 - Hidden workspace makes debugging hard
 - Bundled skills create bloat
@@ -206,7 +206,7 @@ Beyond the tables above, key philosophical differences:
 | **Skill status** | Computed at runtime from filesystem | First-class status tracking (✅⭐🔧📥⛔❌) |
 | **Trigger system** | Internal hooks (many, scattered) | NEX Automations (organized, predictable) |
 | **Session routing** | Binding cascade (peer → guild → team) | IAM policies |
-| **Context assembly** | Per-channel, each does its own thing | `assembleContext` stage in NEX |
+| **Context assembly** | Per-platform, each does its own thing | `assembleContext` stage in NEX |
 | **Multi-agent** | Ad-hoc delegation (`sessions_spawn`) | Manager-Worker Pattern (MWP) |
 | **Commands** | Mixed with skills | Separate concept (skills ≠ commands) |
 

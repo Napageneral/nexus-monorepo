@@ -2,7 +2,7 @@
 
 **Status:** REFERENCE  
 **Last Updated:** 2026-02-04  
-**Source:** `src/channels/allowlist-match.ts`, `src/channels/channel-config.ts`, `src/channels/mention-gating.ts`
+**Source:** `src/platforms/allowlist-match.ts`, `src/platforms/channel-config.ts`, `src/platforms/mention-gating.ts`
 
 ---
 

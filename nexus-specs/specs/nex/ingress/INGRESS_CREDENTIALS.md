@@ -4,10 +4,10 @@
 **Last Updated:** 2026-02-18  
 **Related:**
 - `SINGLE_TENANT_MULTI_USER.md` (trust zones + multi-user story)
-- `../adapters/INTERNAL_ADAPTERS.md` (http-ingress + webchat as internal adapters)
-- `../UNIFIED_DELIVERY_TAXONOMY.md` (canonical delivery ids)
-- `../DELIVERY_DIRECTORY_SCHEMA.md` (identity.db directory schema)
-- `../RUNTIME_ROUTING.md` (contacts + identity resolution)
+- `../delivery/INTERNAL_ADAPTERS.md` (http-ingress + webchat as internal adapters)
+- `../delivery/UNIFIED_DELIVERY_TAXONOMY.md` (canonical delivery ids)
+- `../delivery/DELIVERY_DIRECTORY_SCHEMA.md` (identity.db directory schema)
+- `./RUNTIME_ROUTING.md` (contacts + identity resolution)
 - `../iam/ACCESS_CONTROL_SYSTEM.md` (IAM model)
 - `../iam/POLICIES.md` (policy matching)
 
@@ -292,4 +292,3 @@ This is not required for AuthN, but is useful for directory queries and consiste
 ### Phase 3 (future identity upgrade)
 
 - Add optional customer login and explicit merge/link flow from anonymous visitor entity to authenticated entity.
-

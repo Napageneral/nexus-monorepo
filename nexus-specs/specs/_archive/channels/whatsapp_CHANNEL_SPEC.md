@@ -225,7 +225,7 @@ await sock.sendMessage(groupJid, {
 - Access control: `inbound/access-control.ts`
 - Deduplication: `inbound/dedupe.ts`
 - Outbound: `outbound.ts`
-- Outbound adapter: `channels/plugins/outbound/whatsapp.ts`
+- Outbound adapter: `platforms/plugins/outbound/whatsapp.ts`
 - Auto-reply: `auto-reply/monitor.ts`
 
 ### Key Upstream Patterns

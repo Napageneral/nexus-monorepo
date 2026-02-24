@@ -3,7 +3,7 @@
 **Status:** DESIGN (locked direction, implementation pass pending)  
 **Last Updated:** 2026-02-23  
 **Related:**
-- `HOSTED_FRONTDOOR_PER_TENANT_RUNTIME.md`
+- `../_archive/HOSTED_FRONTDOOR_PER_TENANT_RUNTIME.md`
 - `HOSTED_RUNTIME_PROFILE.md`
 - `SINGLE_TENANT_MULTI_USER.md`
 - `INGRESS_INTEGRITY.md`
@@ -423,4 +423,3 @@ This is mandatory for browser safety when UI origin and runtime origin differ.
 6. Runtime rejects disallowed browser origins (HTTP CORS + WS origin check).
 7. Revoked refresh token cannot mint new runtime token.
 8. Cross-tenant token misuse fails (tenant A token against tenant B runtime).
-

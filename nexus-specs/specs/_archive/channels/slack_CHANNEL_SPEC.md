@@ -202,7 +202,7 @@ await client.files.uploadV2({
 ### Outbound
 - `send.ts` — Main send functions
 - `actions.ts` — Edit, delete, react, pin operations
-- `channels/plugins/outbound/slack.ts` — Outbound adapter
+- `platforms/plugins/outbound/slack.ts` — Outbound adapter
 
 ---
 

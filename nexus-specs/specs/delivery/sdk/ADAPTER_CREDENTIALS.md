@@ -145,7 +145,7 @@ Typical flow:
 3. Register adapter command.
 4. Link account `discord/echo-bot` and enable.
 
-See: `channels/discord/ONBOARDING.md`
+See: `platforms/discord/ONBOARDING.md`
 
 ### Telegram
 
@@ -160,5 +160,5 @@ Typical flow:
 3. Register adapter command.
 4. Link account and enable.
 
-See: `channels/telegram/ONBOARDING.md`
+See: `platforms/telegram/ONBOARDING.md`
 

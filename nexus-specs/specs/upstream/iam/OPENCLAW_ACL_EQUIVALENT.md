@@ -2,7 +2,7 @@
 
 **Status:** REFERENCE  
 **Last Updated:** 2026-02-04  
-**Source:** OpenClaw codebase (`src/channels/`, `src/routing/`, `src/security/`, `src/config/`)
+**Source:** OpenClaw codebase (`src/platforms/`, `src/routing/`, `src/security/`, `src/config/`)
 
 ---
 
@@ -11,7 +11,7 @@
 OpenClaw does NOT have a unified ACL system. Instead, access control and routing are handled through scattered subsystems:
 
 1. **Routing Bindings** — Match channel/account/peer to agentId
-2. **Channel Policies** — Per-channel access rules (`allowFrom`, `dmPolicy`, `groupPolicy`)
+2. **Channel Policies** — Per-platform access rules (`allowFrom`, `dmPolicy`, `groupPolicy`)
 3. **Agent Tool Restrictions** — Per-agent tool allowlists/denylists
 4. **Command Authorization** — Who can execute slash/text commands
 5. **Elevated Execution** — Privileged tool access for trusted senders
@@ -246,7 +246,7 @@ This document maps OpenClaw's approach to our ACL design.
 
 ## 4. Command Authorization
 
-**Location:** `src/channels/command-gating.ts`
+**Location:** `src/platforms/command-gating.ts`
 
 Controls who can execute slash commands and text commands.
 

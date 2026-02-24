@@ -2,7 +2,7 @@
 
 **Status:** PARTIALLY IMPLEMENTED (control-plane IAM authz + password login + ingress integrity telemetry + ingress credential WS methods)  
 **Last Updated:** 2026-02-18  
-**Related:** `CONTROL_PLANE.md`, `HOSTED_FRONTDOOR_PER_TENANT_RUNTIME.md`, `HOSTED_RUNTIME_PROFILE.md`, `../iam/ACCESS_CONTROL_SYSTEM.md`, `../iam/POLICIES.md`, `../adapters/INTERNAL_ADAPTERS.md`, `../adapters/INBOUND_INTERFACE.md`
+**Related:** `CONTROL_PLANE.md`, `HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md`, `HOSTED_RUNTIME_PROFILE.md`, `SURFACE_ADAPTER_V2.md`, `../iam/ACCESS_CONTROL_SYSTEM.md`, `../iam/POLICIES.md`, `../delivery/INTERNAL_ADAPTERS.md`, `../delivery/INBOUND_INTERFACE.md`
 
 ---
 
@@ -20,7 +20,7 @@ All agent work MUST enter the NEX pipeline as a `NexusEvent` and be authorized/a
 This spec defines:
 
 1. trust zones (control-plane vs ingress)
-2. the canonical identity model (Option 2: identity mapping via `(delivery.channel, delivery.sender_id)`)
+2. the canonical identity model (identity mapping via `(delivery.platform, delivery.sender_id)`)
 3. the concrete implementation changes required to support "hosted UI login -> per-user IAM" with no spoofing.
 
 ---
@@ -30,7 +30,7 @@ This spec defines:
 Implemented in `nex`:
 
 - Control-plane IAM authorization via a centralized action/resource taxonomy (Option A, not `NexusEvent`).
-- WS dispatcher enforcement for `path=iam` methods + audit logging with first-class control-plane operation columns.
+- WS dispatcher enforcement for `kind=control` methods + audit logging with first-class control-plane operation columns.
 - Control-plane HTTP `GET /health` + `GET /api/events/stream` are authenticated + IAM-authorized.
 - Password-based control-plane login (`POST /api/auth/login`) issuing DB-backed `auth_tokens` (audience `control-plane`).
 - Control-plane user management WS methods:
@@ -88,11 +88,11 @@ Still required (not yet implemented):
 
 ---
 
-## Trust Zones (One Daemon, Two Surfaces)
+## Trust Zones (One Daemon, Two Surface Roles)
 
 This split is a *network/surface boundary*, not "two IAM systems". IAM remains one spectrum of permissions.
 
-### A) Control-Plane Listener (privileged)
+### A) Control-Plane Surface (privileged)
 
 Responsibilities:
 
@@ -107,7 +107,7 @@ Defaults:
 - authenticated
 - IAM-authorized for every operation
 
-### B) Ingress Surfaces (adapter-managed)
+### B) Ingress Surface (adapter-managed)
 
 All external protocol bridges are adapters (process or internal adapters) and MUST emit `NexusEvent`:
 
@@ -117,17 +117,17 @@ All external protocol bridges are adapters (process or internal adapters) and MU
 - clock/timer event source
 - channel integrations (Discord/Telegram/WhatsApp/iMessage/etc)
 
-Network-facing ingress should be hosted by an internal adapter (example: `http-ingress`) with its own bind/port, separate from control-plane. See `../adapters/INTERNAL_ADAPTERS.md`.
+Network-facing ingress should be hosted by an internal adapter (example: `http-ingress`) with runtime-managed binding and explicit trust-zone policy. Physical listener count is deployment detail. See `../delivery/INTERNAL_ADAPTERS.md`.
 
 ---
 
-## Canonical Identity Model (Option 2)
+## Canonical Identity Model
 
-**Identity is resolved from `(delivery.channel, delivery.sender_id)`** using the identity ledger.
+**Identity is resolved from `(delivery.platform, delivery.sender_id)`** using the identity ledger.
 
 Normative requirements:
 
-1. For any network-facing ingress (HTTP/WS/webchat/OpenAI-compat/webhooks), `delivery.sender_id` MUST be **daemon-derived** from verified auth. It MUST NOT be user-controlled.
+1. For any network-facing ingress (HTTP/webchat/OpenAI-compat/webhooks), `delivery.sender_id` MUST be **daemon-derived** from verified auth. It MUST NOT be user-controlled.
 2. For channel adapters, `delivery.sender_id` MUST be derived from the upstream platform identity (Discord user id, Telegram user id, phone number, etc).
 3. Any user-provided identity fields (example: OpenAI `user`) are metadata only and MUST NOT affect principal resolution.
 4. `resolveIdentity` MUST NOT default to "system" based on channel except for explicit internal event sources.
@@ -143,7 +143,7 @@ The identity ledger maps:
 Resolution is:
 
 ```
-principal = resolve(channel, sender_id)
+principal = resolve(platform, sender_id)
 ```
 
 If no mapping exists:
@@ -180,7 +180,7 @@ This table defines the required source of truth for `delivery.sender_id` by ingr
 
 ### Control-plane WS (UI/CLI)
 
-- `delivery.channel`: `control-plane`
+- `delivery.platform`: `control-plane`
 - `delivery.sender_id`: stable user subject from auth
   - recommended: `oidc:<sub>` (OIDC) or `user:<uuid>` (local user DB)
 - `delivery.sender_name`: display name from mapped identity entity
@@ -199,7 +199,7 @@ Default mode can remain "local owner only", but it must still behave like the ca
 
 ### Node events (paired nodes/devices)
 
-- `delivery.channel`: `node`
+- `delivery.platform`: `node`
 - `delivery.sender_id`: stable node id derived from pairing (example: `node:<device_id>`)
 - principal mapping: `identity_mappings(node, node:<device_id>) -> entity`
 
@@ -209,7 +209,7 @@ Default mapping:
 
 ### Webhooks / hooks ingress
 
-- `delivery.channel`: `hooks` (or a more specific channel like `webhook`)
+- `delivery.platform`: `hooks` (or a more specific platform like `webhook`)
 - `delivery.sender_id`: derived from verified secret/signature, not headers/body
   - example: `hook:<hook_id>` or `integration:<integration_id>`
 - principal mapping: `identity_mappings(hooks, hook:<hook_id>) -> entity`
@@ -217,14 +217,14 @@ Default mapping:
 
 ### OpenAI / OpenResponses compatibility
 
-- `delivery.channel`: `openai` or `openresponses`
+- `delivery.platform`: `openai` or `openresponses`
 - `delivery.sender_id`: derived from the presented credential (API key / JWT), not request JSON
   - example: `api_key:<key_id>`
 - request fields like `user` are metadata only
 
 ### Customer webchat
 
-- `delivery.channel`: `webchat`
+- `delivery.platform`: `webchat`
 - `delivery.sender_id`: derived from a daemon-issued session token, not from request JSON
   - anonymous sessions: `webchat:<session_id>`
   - logged-in sessions: `user:<uuid>` (or `oidc:<sub>`) if the customer authenticates
@@ -239,9 +239,9 @@ Normative rules:
 
 1. Network-facing ingress MUST derive `delivery.sender_id` from verified auth and MUST ignore any caller-provided identity claims.
 2. Control-plane connections MUST authenticate per-user (not shared-secret) in hosted mode.
-3. Adapter monitor ingress MUST enforce channel integrity:
-   - adapter events may only claim `delivery.channel` values declared for that adapter
-   - adapters may never claim privileged internal channels (`control-plane`, `runtime`, etc)
+3. Adapter monitor ingress MUST enforce platform integrity:
+   - adapter events may only claim `delivery.platform` values declared for that adapter
+   - adapters may never claim reserved internal platforms (`control-plane`, `runtime`, etc)
 4. "System by channel" shortcuts are prohibited except for the minimal internal sources listed above.
 
 ---
@@ -344,7 +344,7 @@ Needed:
 
 ### 4) Adapter ingress integrity checks
 
-- Enforce that adapter-emitted `delivery.channel` matches the adapter definition.
+- Enforce that adapter-emitted `delivery.platform` matches the adapter definition.
 - Forbid adapters from emitting privileged internal channels.
 - Optionally normalize `delivery.account_id`/`delivery.container_kind` based on adapter config.
 

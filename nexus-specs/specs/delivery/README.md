@@ -1,17 +1,17 @@
-# Adapters Spec
+# Delivery + Adapters Spec
 
 **Status:** DESIGN IN PROGRESS  
-**Last Updated:** 2026-02-06
+**Last Updated:** 2026-02-24
 
 ---
 
 ## Overview
 
-Adapters connect Nexus to external platforms. They handle:
+Event adapters connect Nexus to external platforms (and internal event sources). They handle:
 - **Inbound:** Receiving messages, normalizing to `NexusEvent`
 - **Outbound:** Formatting and delivering responses
 
-Adapters are external tools (like `eve`, `gog`, `discord-cli`) that meet defined interfaces.
+Control-plane WS/HTTP surfaces are specified separately as control surfaces (`protocol/control/event`) in `../nex/SURFACE_ADAPTER_V2.md`.
 
 ---
 
@@ -22,41 +22,47 @@ Adapters are external tools (like `eve`, `gog`, `discord-cli`) that meet defined
 | Spec | Status | Description |
 |------|--------|-------------|
 | `ADAPTER_SYSTEM.md` | ✅ Done | **Operational system** — registration, accounts, lifecycle, process management, health, context integration |
-| ~~`ADAPTER_INTERFACES.md`~~ | 📦 Archived | _(Moved to `_archive/`. Superseded by `ADAPTER_SYSTEM.md` + `INBOUND_INTERFACE.md` + `OUTBOUND_INTERFACE.md`)_ |
 | `INBOUND_INTERFACE.md` | ✅ Done | Receiving events, NexusEvent schema |
 | `OUTBOUND_INTERFACE.md` | ✅ Done | Delivery, formatting, chunking |
 | `OUTBOUND_TARGETING.md` | ✅ Done | Targeting semantics for threads + replies (`thread_id`, `reply_to_id`) |
 | `BUILTIN_ADAPTERS.md` | 🚧 Active | Which integrations ship as built-in adapters (ingress + clock) and how they relate to the control-plane |
 | `INTERNAL_ADAPTERS.md` | 🚧 Active | Add first-class support for internal (in-process) adapters like clock + HTTP ingress bridges |
-| `CHANNEL_MIGRATION_TRACKER.md` | ✅ Active | Channel-by-channel execution tracker for adapter cutover |
-| `CHANNEL_DIRECTORY.md` | ✅ Active | Per-channel directory of outbound targets (separate from identity directory) |
-| `channels/` | ✅ Done | Per-channel specs (9 channels) |
+| `CHANNEL_MIGRATION_TRACKER.md` | ✅ Active | Platform-by-platform execution tracker for adapter cutover |
+| `CHANNEL_DIRECTORY.md` | ✅ Active | Per-platform directory of outbound targets (separate from identity directory) |
+| `platforms/` | ✅ Done | Per-platform specs (9 platforms) |
 | `ADAPTER_CREDENTIALS.md` | ✅ Active | How adapter accounts link to credentials + how NEX injects secrets |
 | `ADAPTER_SDK_TYPESCRIPT.md` | ✅ Active | Detailed spec for the TypeScript adapter SDK |
+| `../nex/SURFACE_ADAPTER_V2.md` | ✅ Locked | Canonical runtime surface model (`protocol/control/event`) and boundary between control surfaces and event adapters |
 
 ### Upstream Reference
 
 | Spec | Description |
 |------|-------------|
-| `upstream/CHANNEL_INVENTORY.md` | All channels in OpenClaw |
-| `upstream/TOOL_HOOK_MECHANISM.md` | How tool hooks work (and don't) |
-| `upstream/OPENCLAW_INBOUND.md` | OpenClaw inbound patterns |
-| `upstream/OPENCLAW_OUTBOUND.md` | OpenClaw outbound patterns |
+| `../upstream/delivery/CHANNEL_INVENTORY.md` | All channels in OpenClaw |
+| `../upstream/delivery/TOOL_HOOK_MECHANISM.md` | How tool hooks work (and don't) |
+| `../upstream/delivery/OPENCLAW_INBOUND.md` | OpenClaw inbound patterns |
+| `../upstream/delivery/OPENCLAW_OUTBOUND.md` | OpenClaw outbound patterns |
 
 ---
 
 ## Quick Start
 
-**Read `ADAPTER_SYSTEM.md`** for the full operational system (registration, lifecycle, accounts).  
+**Read `ADAPTER_SYSTEM.md`** for the full event-adapter operational system (registration, lifecycle, accounts).  
 **Read `INBOUND_INTERFACE.md`** and **`OUTBOUND_INTERFACE.md`** for data contracts (NexusEvent, DeliveryResult, ChannelCapabilities).
+**Read `../nex/SURFACE_ADAPTER_V2.md`** for control-surface operation semantics.
 
 ---
 
 ## Key Concepts
 
-### 1. External Tools
+### 1. Event Adapter Classes
 
-Adapters are external binaries that meet the interface:
+Event adapters come in two classes:
+
+1. Process adapters (external binaries)
+2. Internal event adapters (in-process modules managed with adapter lifecycle semantics)
+
+Process adapter example:
 
 ```bash
 # Inbound: tool emits events
@@ -66,9 +72,9 @@ eve monitor --format jsonl
 eve send --chat-id "+1234567890" --text "Hello"
 ```
 
-### 2. Separate Interfaces
+### 2. Separate Surface vs Adapter Interfaces
 
-Inbound and outbound are separate. One tool can implement both, or use different tools:
+Inbound and outbound are separate for event adapters. One adapter can implement both, or use different tools:
 
 | Tool | Inbound | Outbound | Channel |
 |------|---------|----------|---------|
@@ -76,9 +82,11 @@ Inbound and outbound are separate. One tool can implement both, or use different
 | `gog` | ✅ | ✅ | Gmail |
 | `aix` | ✅ | ❌ | AI sessions |
 
+Control-plane management operations are not modeled as channel-style monitor/send adapters; they use the control surface contract in `../nex/SURFACE_ADAPTER_V2.md`.
+
 ### 3. Capabilities
 
-Each channel exposes capabilities for agent context:
+Each platform exposes capabilities for agent context:
 
 ```typescript
 capabilities: {
@@ -97,40 +105,24 @@ Adapters create/consume `NexusRequest`:
 
 ---
 
-## Channel Support
+## Platform Support
 
-### Per-Channel Specs
+### Per-Platform Specs
 
-See `channels/` folder. All channels from upstream are documented:
+Per-platform details are consolidated in:
 
-| Platform | Upstream | Spec | Nexus Tool |
-|----------|----------|------|------------|
-| Discord | Full | `channels/discord/CHANNEL_SPEC.md` | `nexus-adapter-discord` |
-| Telegram | Full | `channels/telegram/CHANNEL_SPEC.md` | `nexus-adapter-telegram` |
-| WhatsApp | Full | `channels/whatsapp/CHANNEL_SPEC.md` | Baileys |
-| iMessage | Full | `channels/imessage/CHANNEL_SPEC.md` | `eve` |
-| Signal | Full | `channels/signal/CHANNEL_SPEC.md` | signal-cli |
-| Slack | Full | `channels/slack/CHANNEL_SPEC.md` | `nexus-adapter-slack` |
-| LINE | Full | `channels/line/CHANNEL_SPEC.md` | TBD |
-| Gmail | Hooks only | `channels/gmail/CHANNEL_SPEC.md` | `gog` |
-| Google Chat | Config only | `channels/googlechat/CHANNEL_SPEC.md` | — |
-| MS Teams | Config only | `channels/msteams/CHANNEL_SPEC.md` | — |
-
-Each spec includes:
-- Capabilities object
-- Formatting rules and limits
-- Media handling
-- Porting notes
+1. `platforms/CHANNEL_CATALOG.md`
+2. `platforms/README.md`
 
 ---
 
 ## Open Questions
 
-1. **Formatting guidance injection** — Just-in-time guidance when message tool is called. Strategy defined in `ADAPTER_SYSTEM.md` (tool response hints). See `upstream/TOOL_HOOK_MECHANISM.md` for deeper investigation.
+1. **Formatting guidance injection** — Just-in-time guidance when message tool is called. Strategy defined in `ADAPTER_SYSTEM.md` (tool response hints). See `../upstream/delivery/TOOL_HOOK_MECHANISM.md` for deeper investigation.
 
 2. **Webhook adapters** — Adapters that need to receive webhooks (Telegram, LINE) run their own HTTP server. NEX connects to them for health but doesn't manage the listener port.
 
-3. **Media handling** — Per-channel media limits and formats. See `channels/` for current specs.
+3. **Media handling** — Per-platform media limits and formats. See `platforms/` for current specs.
 
 4. **Rate limiting** — Should NEX enforce outbound rate limits globally, or leave to adapters? Currently adapter-managed.
 

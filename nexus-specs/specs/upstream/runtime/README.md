@@ -130,7 +130,7 @@ The complete flow of a message through OpenClaw:
 |--------|----------|-------|-------|
 | **Orchestrator** | Gateway RPC methods | NEX 8-stage pipeline | Nexus has defined stages |
 | **Data Storage** | JSONL files + sessions.json | SQLite ledgers | Nexus is queryable |
-| **Access Control** | Per-channel allowlists | Declarative IAM policies | Nexus is auditable |
+| **Access Control** | Per-platform allowlists | Declarative IAM policies | Nexus is auditable |
 | **Event Flow** | Channel → dispatch → agent | Adapters → NEX → Broker | Nexus has central pipeline |
 | **Plugins** | Discovery, loader, slots | NEX stage hooks | Nexus has defined hook points |
 | **Hooks** | 14+ lifecycle types | 8 pipeline stages | Nexus is more structured |
@@ -149,7 +149,7 @@ The complete flow of a message through OpenClaw:
 | `sessions/` | Agents Ledger | Session management |
 | `plugins/` | NEX plugins | Extension system |
 | `hooks/` | Automations | Lifecycle handlers |
-| `channels/` | Adapters | Platform connections |
+| `platforms/` | Adapters | Platform connections |
 | `infra/` | Infrastructure | Supporting utilities |
 | `config/` | Split configs | Configuration |
 | `daemon/` | Service layer | System services |
@@ -198,7 +198,7 @@ The complete flow of a message through OpenClaw:
 | OpenClaw Pattern | Nexus Improvement |
 |------------------|-------------------|
 | Inline allowlist checks | Declarative IAM policies |
-| Per-channel config | Domain-split configuration |
+| Per-platform config | Domain-split configuration |
 | JSONL file storage | SQLite ledger tables |
 | Scattered hook points | 8 defined pipeline stages |
 | Hidden workspace | Visible `~/nexus/` |
@@ -216,7 +216,7 @@ The complete flow of a message through OpenClaw:
 | `sessions/` | 7 | Session utilities |
 | `plugins/` | 37 | Extension system |
 | `hooks/` | 39 | Lifecycle hooks |
-| `channels/` | 70+ | Platform adapters |
+| `platforms/` | 70+ | Platform adapters |
 | `infra/` | 184 | Infrastructure |
 | `config/` | 133 | Configuration |
 | `daemon/` | 30 | Service management |

@@ -80,7 +80,7 @@ await startChannel('whatsapp', whatsappConfig);
 Channels register via a plugin system:
 
 ```typescript
-// src/channels/registry.ts
+// src/platforms/registry.ts
 export const CHAT_CHANNEL_ORDER = [
   "telegram", "whatsapp", "discord", "googlechat",
   "slack", "signal", "imessage",
@@ -371,7 +371,7 @@ Formatting and chunking logic from OpenClaw should be ported into adapter tools:
 2. Implement `monitor.ts` (800+ lines)
 3. Implement `send.ts`, `send.messages.ts`, etc.
 4. Implement outbound plugin
-5. Register in `channels/registry.ts`
+5. Register in `platforms/registry.ts`
 6. Add to `config.json` schema
 7. Submit PR
 8. Wait for review and release
@@ -396,7 +396,7 @@ Formatting and chunking logic from OpenClaw should be ported into adapter tools:
 - `specs/runtime/adapters/INBOUND_INTERFACE.md` — Inbound interface details
 - `specs/runtime/adapters/OUTBOUND_INTERFACE.md` — Outbound details
 - `specs/runtime/adapters/upstream/CHANNEL_INVENTORY.md` — All OpenClaw channels
-- `specs/runtime/adapters/channels/` — Per-channel specs
+- `specs/runtime/adapters/platforms/` — Per-platform specs
 
 ---
 

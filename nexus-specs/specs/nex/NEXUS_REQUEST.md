@@ -24,7 +24,7 @@ The `NexusRequest` is the data bus that flows through the entire NEX pipeline. E
 ```
 NexusRequest created ─────────────────────────────────────────────────
   │
-  │  Stage 1: ingest
+  │  Stage 1: receiveEvent
   │  ├─ Writes: request_id, event, delivery
   │  └─ Side effect: write to Events Ledger (async)
   │
@@ -34,8 +34,8 @@ NexusRequest created ───────────────────�
   │  └─ May exit: unknown sender → deny policy
   │
   │  Stage 3: resolveReceiver
-  │  ├─ Reads: delivery.receiver_id, delivery.receiver_name, delivery.platform
-  │  ├─ Writes: receiver (type, persona_id, entity_id, name, source, metadata)
+  │  ├─ Reads: delivery.platform, delivery.account_id, delivery.receiver_id?
+  │  ├─ Writes: receiver (type, entity_id, agent_id?, persona_ref?, name, source, metadata)
   │  └─ Determines WHO this message is addressed to
   │
   │  Stage 4: resolveAccess
@@ -48,7 +48,7 @@ NexusRequest created ───────────────────�
   │  ├─ Writes: triggers (which fired, context enrichment, overrides)
   │  └─ May exit: automation handles event completely
   │
-  │  Stage 6: routeSession
+  │  Stage 6: assembleContext
   │  ├─ Reads: event, delivery, sender, receiver, access, triggers
   │  ├─ Writes: agent (turn_id, model, token budget, context metadata)
   │  └─ Side effect: builds AssembledContext (NOT stored on NexusRequest)
@@ -58,12 +58,12 @@ NexusRequest created ───────────────────�
   │  ├─ Writes: response (content, tool_calls, usage, stop_reason)
   │  └─ Side effects: streams to adapter, writes to Agents Ledger
   │
-  │  Stage 8: processResponse
+  │  Stage 8: deliverResponse
   │  ├─ Reads: response, delivery
   │  ├─ Writes: delivery_result (message_ids, success)
   │  └─ Note: may be no-op if streaming already delivered
   │
-  │  Stage 9: deliverResponse
+  │  Stage 9: finalize
   │  ├─ Writes: pipeline (timing trace), status
   │  └─ Side effects: write to Nexus Ledger, emit outbound event to Events Ledger
   │
@@ -84,7 +84,7 @@ interface NexusRequest {
   created_at: number;                // Unix ms — when NEX received the event
   
   // ═══════════════════════════════════════════════════════════════════
-  // STAGE 1: ingest
+  // STAGE 1: receiveEvent
   // ═══════════════════════════════════════════════════════════════════
   
   event: EventContext;
@@ -115,7 +115,7 @@ interface NexusRequest {
   triggers?: TriggerContext;          // null until stage 5 runs
 
   // ═══════════════════════════════════════════════════════════════════
-  // STAGE 6: routeSession
+  // STAGE 6: assembleContext
   // ═══════════════════════════════════════════════════════════════════
 
   agent?: AgentContext;               // null until stage 6 runs
@@ -127,13 +127,13 @@ interface NexusRequest {
   response?: ResponseContext;         // null until stage 7 completes
 
   // ═══════════════════════════════════════════════════════════════════
-  // STAGE 8: processResponse
+  // STAGE 8: deliverResponse
   // ═══════════════════════════════════════════════════════════════════
 
   delivery_result?: DeliveryResult;   // null until stage 8 runs
 
   // ═══════════════════════════════════════════════════════════════════
-  // STAGE 9: deliverResponse
+  // STAGE 9: finalize
   // ═══════════════════════════════════════════════════════════════════
   
   pipeline: PipelineTrace[];          // Grows with each stage
@@ -150,7 +150,7 @@ type RequestStatus =
 
 ---
 
-## Stage 1: ingest
+## Stage 1: receiveEvent
 
 **Who:** Adapter Manager (receives JSONL from adapter process)
 **What:** Creates NexusRequest from raw adapter event, writes to Events Ledger.
@@ -188,7 +188,7 @@ interface DeliveryContext {
 
   // Conversation context
   container_id: string;              // Chat/channel/user ID (reply target)
-  container_kind: 'direct' | 'group' | 'channel'; // 'direct' for DMs. Legacy 'dm' normalized to 'direct' at ingest.
+  container_kind: 'direct' | 'group' | 'channel'; // 'direct' for DMs. Legacy 'dm' normalized to 'direct' at receiveEvent.
   thread_id?: string;                // Platform thread if applicable
   reply_to_id?: string;              // Message being replied to
 
@@ -217,7 +217,7 @@ Events Ledger ← INSERT event (async, fire-and-forget)
 ### Pipeline Trace Entry
 
 ```typescript
-{ stage: 'ingest', timestamp: number, duration_ms: number }
+{ stage: 'receiveEvent', timestamp: number, duration_ms: number }
 ```
 
 ---
@@ -272,13 +272,16 @@ if (sender.type === 'unknown' && defaultPolicy === 'deny') {
 ## Stage 3: resolveReceiver
 
 **Who:** IAM / Receiver Resolver
-**What:** Resolves WHO this message is addressed to. Uses delivery context (receiver_id, receiver_name, platform) to determine the target persona or entity.
+**What:** Resolves WHO this message is addressed to. Uses trusted adapter account routing (`platform + account_id`) as the primary receiver authority, with optional `receiver_id` verification.
+
+> Canonical authority: `ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md`.
 
 ### Reads
 
-- `delivery.receiver_id`, `delivery.receiver_name` — platform-level receiver hints
-- `delivery.platform`, `delivery.container_kind` — context for resolution
-- `sender` — sender context (may influence receiver selection)
+- `delivery.platform`, `delivery.account_id` — trusted receiver account tuple
+- `delivery.receiver_id`, `delivery.receiver_name` — optional verification hints
+- account->receiver entity bindings in identity data
+- `sender` — available for sender-specific binding resolution at later stages
 
 ### Writes
 
@@ -286,38 +289,38 @@ if (sender.type === 'unknown' && defaultPolicy === 'deny') {
 interface ReceiverContext {
   type: 'agent' | 'system' | 'entity' | 'unknown';
 
-  // Resolved identity — receivers are entities in identity.db
-  entity_id?: string;                // Entity ID in identity.db (always set for 'agent' and 'entity' types)
-  persona_id?: string;               // If type is 'agent' — which persona handles this (matches entity-{persona_id})
+  // Resolved identity — receiver is an entity in identity.db
+  entity_id?: string;                // Canonical receiver entity ID (required for agent/entity)
+  agent_id?: string;                 // Runtime executor ID (when receiver is agent)
+  persona_ref?: string;              // Persona identity profile reference (resolved from bindings)
   name?: string;                     // Resolved display name
 
   // Resolution metadata
-  source: 'mention' | 'dm' | 'default' | 'config' | 'override';
+  source: 'account_binding' | 'hint_verified' | 'override' | 'system';
   metadata?: Record<string, unknown>;
 }
 ```
 
-An agent persona IS an entity with `type = 'agent'` in identity.db. When the receiver is resolved to a persona, `entity_id` references the agent's entity (e.g., `"entity-eve"`) and `persona_id` provides the persona key for config lookup.
+An agent receiver IS an entity with `type='agent'` in identity.db. `entity_id` is the canonical receiver identity. `agent_id` and `persona_ref` are binding outputs, not session identity fields.
 
 ### Resolution Logic
 
 ```
-delivery.receiver_id present?
+lookup account receiver binding by (platform, account_id)
   │
-  YES → Look up receiver_id against known agent personas/entities
-  │     → Found agent persona → type: 'agent', entity_id + persona_id set
-  │     → Found other entity  → type: 'entity', entity_id set
-  │     → Not found           → type: 'unknown'
+  found? 
   │
-  NO → Infer from context:
-       → DM/direct container → default agent persona (source: 'dm')
-       → Group/channel with mention → resolve mention (source: 'mention')
-       → Fallback → default agent persona from config (source: 'default')
+  YES → canonical receiver_entity_id resolved
+  │     → if receiver_id is present, verify it maps to same canonical entity
+  │     → mismatch => integrity violation => deny
+  │     → match/absent => continue
+  │
+  NO  → unresolved receiver => fail closed (deny or non-agent path, no implicit default agent fallback)
 ```
 
 ### Pipeline Symmetry
 
-Both sender and receiver are entities in the same identity graph (`identity.db`). The sender is resolved at Stage 2 (`resolveIdentity`) and the receiver is resolved at Stage 3 (`resolveReceiver`). Both reference `entity_id` values from the `entities` table. This symmetry is established at bootstrap time: the owner and all agent personas are seeded as entities with contacts, so every message has a sender entity and a receiver entity.
+Both sender and receiver are entities in the same identity graph (`identity.db`). Sender is canonicalized at Stage 2; receiver is canonicalized at Stage 3 from account receiver bindings. Both carry canonical entity ids.
 
 ### Pipeline Trace Entry
 
@@ -358,8 +361,9 @@ interface AccessContext {
   
   // Session routing (from highest-priority matching policy)
   routing: {
-    persona: string;                 // Which agent persona handles this
-    session_key: string;           // Session key for routing
+    agent_id: string;                // Runtime executor identifier
+    persona_ref: string;             // Persona identity profile reference
+    session_label: string;           // Session key/label for routing
     queue_mode?: QueueMode;          // How to handle busy sessions
   };
   
@@ -402,7 +406,7 @@ IAM Audit Log ← INSERT decision record
 - `sender` — who-based triggers
 - `receiver` — receiver context for routing-aware automations
 - `access.permissions` — what the sender can do (passed to automation context)
-- `access.routing.session_key` — current routing target
+- `access.routing.session_label` — current routing target
 
 ### Writes
 
@@ -420,9 +424,9 @@ interface TriggerContext {
   
   // Routing overrides (automation can redirect)
   routing_override?: {
-    persona?: string;                // Override persona
-    session_key?: string;          // Override session
-    agent?: string;                  // Override which agent
+    agent_id?: string;               // Override runtime executor
+    persona_ref?: string;            // Override persona identity profile
+    session_label?: string;          // Override session
   };
   
   // Complete handling (event fully handled by automation, skip agent)
@@ -457,15 +461,16 @@ If automations provide routing overrides, they're merged with ACL routing:
 
 ```typescript
 const effectiveRouting = {
-  persona: triggers.routing_override?.persona ?? access.routing.persona,
-  session_key: triggers.routing_override?.session_key ?? access.routing.session_key,
+  agent_id: triggers.routing_override?.agent_id ?? access.routing.agent_id,
+  persona_ref: triggers.routing_override?.persona_ref ?? access.routing.persona_ref,
+  session_label: triggers.routing_override?.session_label ?? access.routing.session_label,
   queue_mode: access.routing.queue_mode ?? 'followup',
 };
 ```
 
 ---
 
-## Stage 6: routeSession
+## Stage 6: assembleContext
 
 **Who:** Broker
 **What:** Reads from NexusRequest to build the `AssembledContext` that the agent engine needs. This is the critical NexusRequest → AssembledContext mapping.
@@ -479,19 +484,19 @@ const effectiveRouting = {
 | `delivery.platform`, `delivery.capabilities` | Channel context for MA (Layer 3: Event) |
 | `delivery.available_platforms` | Available platforms for message tool (Layer 3: Event) |
 | `sender.name`, `sender.tags` | Sender context for MA (Layer 3: Event) |
-| `receiver.persona_id`, `receiver.name` | Receiver/persona context for routing and system prompt |
+| `receiver.entity_id`, `receiver.agent_id`, `receiver.name` | Receiver context (identity + runtime target) |
 | `access.permissions` | IAM-filtered tool set |
-| `access.routing.persona` | Which persona → which SOUL.md, IDENTITY.md (Layer 1: System Prompt) |
-| `access.routing.session_key` | Which session → which thread → conversation history (Layer 2: History) |
+| `access.routing.agent_id`, `access.routing.persona_ref` | Which runtime agent + persona identity profile |
+| `access.routing.session_label` | Which session → conversation history (Layer 2: History) |
 | `triggers.enrichment` | Automation-enriched context (Layer 3: Event) |
-| `triggers.routing_override` | Overridden persona/session if applicable |
+| `triggers.routing_override` | Overridden agent/persona/session if applicable |
 
 ### Produces (internal, NOT on NexusRequest)
 
 The Broker produces an `AssembledContext` object that goes to the agent engine. This is an **internal** object — it does NOT live on the NexusRequest. See `broker/AGENT_ENGINE.md` for the full type.
 
 ```
-NexusRequest ──► Broker.routeSession() ──► AssembledContext
+NexusRequest ──► Broker.assembleContext() ──► AssembledContext
                                                   │
                                                   ├── systemPrompt (Workspace + Persona layers)
                                                   ├── history[] (Session layer from Agents Ledger)
@@ -508,11 +513,11 @@ NexusRequest ──► Broker.routeSession() ──► AssembledContext
 interface AgentContext {
   // Agent identity
   agent_id: string;                  // e.g., "atlas"
-  persona_id: string;                // e.g., "atlas"
+  persona_ref: string;               // e.g., "atlas"
   role: 'manager' | 'worker' | 'unified';
   
   // Session/turn routing (resolved from access.routing + triggers.routing_override)
-  session_key: string;
+  session_label: string;
   parent_turn_id: string;            // Turn we're appending to
   turn_id: string;                   // New turn ID (ULID, generated here)
   
@@ -603,7 +608,7 @@ interface ResponseContext {
   
   // Subagent spawns
   subagents_spawned?: {
-    session_key: string;
+    session_label: string;
     role: string;
   }[];
 }
@@ -631,7 +636,7 @@ Agents Ledger ← INSERT turn, messages, tool_calls, thread, session pointer upd
 
 ---
 
-## Stage 8: processResponse
+## Stage 8: deliverResponse
 
 **Who:** NEX + Adapter Manager
 **What:** Ensures the response reached the user. May be a no-op if streaming already delivered.
@@ -667,7 +672,7 @@ Was response streamed during stage 7?
 
 ---
 
-## Stage 9: deliverResponse
+## Stage 9: finalize
 
 **Who:** NEX
 **What:** Writes the complete pipeline trace, emits outbound event, sets final status.
@@ -726,11 +731,11 @@ This is the critical interface between NEX (pipeline) and Broker (agent executio
 │  delivery.platform ───────────────────────►  currentMessage (channel context)  │
 │  delivery.capabilities ──────────────────►  currentMessage (channel context)  │
 │  sender.name, sender.tags ──────────────►  currentMessage (sender context)   │
-│  receiver.persona_id/name ─────────────►  systemPrompt (receiver/persona)   │
+│  receiver.entity_id/agent_id/name ─────►  systemPrompt (receiver context)    │
 │  triggers.enrichment ────────────────────►  currentMessage (enriched context) │
 │                                   │         │                                  │
-│  access.routing.persona ─────────────────►  systemPrompt (persona lookup)     │
-│  access.routing.session_key ───────────►  history (session → thread → turns)│
+│  access.routing.persona_ref ────────────►  systemPrompt (persona lookup)      │
+│  access.routing.session_label ─────────►  history (session → turns)           │
 │                                   │         │                                  │
 │  access.permissions.tools ───────────────►  tools (IAM-filtered)              │
 │  access.permissions.credentials ─────────►  (credential access during exec)   │
@@ -740,7 +745,7 @@ This is the critical interface between NEX (pipeline) and Broker (agent executio
 │  (generated) ────────────────────────────►  turn_id, run_id                   │
 │                                   │         │                                  │
 │  request_id ─────────────────────────────►  sourceEventId (metadata)          │
-│  access.routing.* ───────────────────────►  sessionKey, role (metadata)       │
+│  access.routing.* ───────────────────────►  session_label, role (metadata)    │
 └──────────────────────────────────┘         └──────────────────────────────────┘
 ```
 
@@ -844,7 +849,7 @@ CREATE TABLE nex_traces (
     platform TEXT,                       -- delivery.platform
     sender_entity_id TEXT,              -- sender.entity_id
     agent_id TEXT,                      -- agent.agent_id
-    session_key TEXT,                 -- agent.session_key
+    session_label TEXT,               -- agent.session_label
     turn_id TEXT,                       -- agent.turn_id
     
     -- Error (if failed)
@@ -855,7 +860,7 @@ CREATE TABLE nex_traces (
 CREATE INDEX idx_nex_traces_event ON nex_traces(event_id);
 CREATE INDEX idx_nex_traces_status ON nex_traces(status);
 CREATE INDEX idx_nex_traces_platform ON nex_traces(platform);
-CREATE INDEX idx_nex_traces_agent ON nex_traces(agent_id, session_key);
+CREATE INDEX idx_nex_traces_agent ON nex_traces(agent_id, session_label);
 CREATE INDEX idx_nex_traces_created ON nex_traces(created_at);
 ```
 

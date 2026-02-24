@@ -146,7 +146,7 @@ C) **Restore column:** Add `relationship TEXT` back to entities. Simple but cont
 
 ### In Code:
 - `src/utils/delivery-context.ts`: Separate legacy `DeliveryContext` type using `channel`
-- `src/channels/registry.ts`: `ChatChannelId`, `CHAT_CHANNEL_ORDER`
+- `src/platforms/registry.ts`: `ChatChannelId`, `CHAT_CHANNEL_ORDER`
 - `PrincipalContext`: Legacy transform from `{channel, identifier}` to `{platform, identifier}`
 - `access_log` table: has BOTH `channel TEXT` and `platform TEXT` columns
 - `IngressMetadata`: accepts `channel` as deprecated alias for `platform`

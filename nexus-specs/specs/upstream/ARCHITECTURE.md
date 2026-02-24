@@ -51,7 +51,7 @@ openclaw/
 
 | Directory | Purpose |
 |-----------|---------|
-| `channels/` | Channel abstraction layer, registry, targets |
+| `platforms/` | Channel abstraction layer, registry, targets |
 | `discord/` | Discord bot integration |
 | `slack/` | Slack workspace integration |
 | `telegram/` | Telegram bot integration |
@@ -207,7 +207,7 @@ Plugins extend OpenClaw via:
 - **Location:** `~/.openclaw/` (hidden directory)
 - **Main config:** `config.json` (JSON5 format)
 - **Sessions:** `workspace/sessions/` with `sessions.json` index
-- **Credentials:** Per-channel in config
+- **Credentials:** Per-platform in config
 
 ---
 

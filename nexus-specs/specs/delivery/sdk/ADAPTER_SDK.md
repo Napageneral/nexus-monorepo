@@ -1,13 +1,15 @@
-# Adapter SDK
+# Event Adapter SDK
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-06
+**Last Updated:** 2026-02-24
 
 ---
 
 ## Overview
 
-The Adapter SDK provides shared infrastructure for building Nexus adapters. Instead of each adapter reimplementing CLI parsing, JSONL emission, signal handling, NexusEvent construction, text chunking, and streaming protocol support, the SDK handles all of it. Adapter authors write only the platform-specific logic.
+The SDK provides shared infrastructure for building **event adapters**. Instead of each adapter reimplementing CLI parsing, JSONL emission, signal handling, NexusEvent construction, text chunking, and streaming protocol support, the SDK handles all of it.
+
+Control-surface operations (`protocol/control/event` methods for WS/HTTP runtime control plane) are out of scope and specified in `../nex/SURFACE_ADAPTER_V2.md`.
 
 **Rationale:** After reviewing 9 upstream channels, every single one shares the same boilerplate gaps — `info` command, `health` command, NexusEvent normalization, CLI routing, JSONL output, graceful shutdown. The SDK eliminates ~30-40% of per-adapter effort by extracting this into a shared library.
 
@@ -140,7 +142,7 @@ func main() {
     nexadapter.Run(nexadapter.Adapter{
         Info: func() *nexadapter.AdapterInfo {
             return &nexadapter.AdapterInfo{
-                Channel: "myplatform",
+                Platform: "myplatform",
                 Name:    "myplatform-cli",
                 Version: "0.1.0",
                 Supports: []nexadapter.Capability{
@@ -232,7 +234,7 @@ SDK updates flow via normal dependency management — bump version in `go.mod` o
 | `INBOUND_INTERFACE.md` | Defines NexusEvent schema → SDK's types |
 | `OUTBOUND_INTERFACE.MD` | Defines DeliveryResult, streaming types → SDK's types |
 | `ADAPTER_SYSTEM.md` | Adapter operational system overview |
-| `channels/` | Per-channel capabilities → adapter's `info` response |
+| `platforms/` | Per-platform capabilities → adapter's `info` response |
 
 ---
 

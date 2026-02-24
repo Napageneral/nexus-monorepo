@@ -3,56 +3,68 @@
 > Canonical reference for all Nexus runtime access surfaces, the unified event pipeline, and the consolidation plan.
 
 **Status:** ACTIVE
-**Last Updated:** 2026-02-20
+**Last Updated:** 2026-02-24
 **Related:**
 - [DATABASE_ARCHITECTURE.md](../../DATABASE_ARCHITECTURE.md)
 - [ADAPTER_SYSTEM.md](../delivery/ADAPTER_SYSTEM.md)
 - [INTERNAL_ADAPTERS.md](../delivery/INTERNAL_ADAPTERS.md)
 - [LIVE_E2E_HARNESS.md](../../environment/foundation/harnesses/LIVE_E2E_HARNESS.md)
+- [ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md](./ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md)
+- [SURFACE_ADAPTER_V2.md](./SURFACE_ADAPTER_V2.md)
 
 ---
 
 ## 1. Overview
 
-Every event in Nexus — chat messages, control operations, platform notifications, system heartbeats — enters through the same unified pipeline. There are no exceptions, no alternate paths, no surface-specific security models.
+Nexus uses one runtime with two execution kinds:
+
+1. `event` operations normalize to `NexusEvent` and run the event pipeline.
+2. `control` operations run direct handlers with IAM authorization and audit.
+
+Both share one security envelope (AuthN -> principal -> AuthZ -> audit/hooks). `protocol` operations are transport mechanics only.
 
 ### Design Principles
 
-1. **One pipeline, no exceptions.** Every event from every source goes through: auth → identify sender → identify receiver → access → log → automations.
-2. **Adapters are the only ingress mechanism.** Every source of events is an adapter — WS RPC, HTTP, Discord, Gmail, clock. Some are internal (always-on, in-process), some are external (child processes).
-3. **Receiver resolution drives agent execution.** If the resolved receiver is an agent persona, the agent runs. If not, the event is logged and automations decide what happens. No event `kind` field needed.
-4. **Everything is logged.** Every event hits `events.db` — messages, control operations, system events. Full audit trail for multi-user deployments.
-5. **One SPA, multiple shells.** A single web application serves all human-facing UI needs across browser, desktop, and mobile.
+1. **Operation-kind taxonomy is canonical.** `protocol | control | event` (hard cutover from `transport | iam | pipeline`).
+2. **Adapters own event ingress.** Event ingress is adapter-managed (`http-ingress`, clock, channels, etc.).
+3. **Control surfaces stay synchronous.** Control-plane management methods preserve request/response semantics.
+4. **Security and audit are uniform.** `control` and `event` operations use the same IAM/audit system.
+5. **Receiver resolution drives agent execution.** In the `event` pipeline, agent execution depends on resolved receiver/access.
+6. **One SPA, multiple shells/apps.** Runtime serves UI surfaces with app mounts.
 
 ---
 
-## 2. The Unified Event Pipeline
+## 2. Runtime Execution Model
 
-### 2.1 Pipeline Stages
+### 2.1 Event Pipeline Stages
 
-Every event, regardless of source, flows through the 9-stage pipeline:
+`event` operations flow through the 9-stage pipeline:
 
 ```
-ALL EVENTS (from any adapter)
+EVENT OPERATIONS
   │
-  │  1. ingest              Normalize event, create NexusRequest
+  │  1. receiveEvent              Normalize event, create NexusRequest
   │  2. resolveIdentity     Contact lookup: (platform, space_id, sender_id) → sender entity
   │  3. resolveReceiver     Contact lookup: who is this addressed to? → receiver entity
   │  4. resolveAccess       Does this sender have permission to reach this receiver?
   │  5. runAutomations      Evaluate all matching automations
   │
-  ├── receiver is agent persona?
+  ├── receiver is agent?
   │   │
-  │   YES ──→ 6. routeSession → 7. runAgent → 8. processResponse → 9. deliverResponse
+  │   YES ──→ 6. assembleContext → 7. runAgent → 8. deliverResponse → 9. finalize
   │   │
-  │   NO ──→ 9. deliverResponse (log + done; automations may have triggered agents independently)
+  │   NO ──→ 8. deliverResponse (may be no-op) → 9. finalize
   │
-  └── if control operation: execute handler, return result to caller
 ```
+
+`control` operations are not normalized to `NexusEvent`; they run direct handlers after IAM authorization and emit control operation audit/bus records.
 
 ### 2.2 Receiver Resolution — The Core Routing Primitive
 
-The pipeline resolves both **who sent this** and **who is this for** using the same contact/identity system.
+The pipeline resolves both **who sent this** and **who is this for** through the same identity substrate (`identity.db`), with different trusted ingress facts:
+
+- Sender resolution: contacts path from sender identifiers.
+- Receiver resolution: account binding path from trusted `(platform, account_id)`, with optional receiver hints used only for verification.
 
 Implementation contract (normative):
 
@@ -92,43 +104,38 @@ type ReceiverContext =
     };
 ```
 
-Agent personas are entities in `identity.db` with contact mappings:
+Agents are entities in `identity.db`; adapter accounts bind to receiver entities:
 
 ```
-Agent "main-agent" contacts:
-  (discord, guild_123, nexus-bot#5678)  → entity_id "main-agent"
-  (email, *, nexus@example.com)         → entity_id "main-agent"
-  (slack, workspace_abc, U_NEXUS)       → entity_id "main-agent"
-  (control-plane, *, default)           → entity_id "main-agent"
-
-Agent "support-agent" contacts:
-  (discord, guild_123, support-bot#9012) → entity_id "support-agent"
-  (email, *, support@example.com)        → entity_id "support-agent"
+Account receiver bindings:
+  (discord, atlas-bot-account)  → receiver_entity_id "ent_eve_main"
+  (gmail, nexus-primary-inbox)  → receiver_entity_id "ent_eve_main"
+  (slack, support-workspace)    → receiver_entity_id "ent_eve_support"
 ```
 
-When an event arrives, the adapter provides delivery context including receiver info. The pipeline resolves the receiver contact to an entity. If that entity is an agent persona, the agent runs.
+When an event arrives, receiver entity is resolved from account binding, canonicalized, then mapped to `(agent_id, persona_ref)` via persona bindings. If receiver resolves to `type=agent`, the agent path runs.
 
 **Examples:**
 
 | Event | Sender resolves to | Receiver resolves to | Agent runs? |
 |-------|-------------------|---------------------|-------------|
-| Discord DM to bot | tyler (entity) | main-agent (persona) | Yes — main-agent |
-| Email to nexus@example.com | someone (entity) | main-agent (persona) | Yes — main-agent |
-| Email to tyler@example.com | someone (entity) | tyler (owner, not persona) | No — but automations evaluate |
-| Control UI chat | operator (entity) | main-agent (persona) | Yes — main-agent |
-| `config.set` from CLI | operator (entity) | system (not a persona) | No — handler executes directly |
-| Clock heartbeat | system (entity) | system (not a persona) | No — but automation may trigger agent |
-| Slack @nexus in #general | coworker (entity) | main-agent (persona) | Yes — main-agent |
-| Slack message in #general (no mention) | coworker (entity) | #general space (not a persona) | No — but "monitor keywords" automation might trigger |
-| Random stranger DMs bot on Discord | stranger (entity) | main-agent (persona) | **Only if access check passes** — sender must be authorized |
+| Discord DM to bot | tyler (entity) | main-agent (agent) | Yes — main-agent |
+| Email to nexus@example.com | someone (entity) | main-agent (agent) | Yes — main-agent |
+| Email to tyler@example.com | someone (entity) | tyler (owner, not an agent) | No — but automations evaluate |
+| Control UI chat | operator (entity) | main-agent (agent) | Yes — main-agent |
+| `config.set` from CLI | operator (entity) | system (not an agent) | No — handler executes directly |
+| Clock heartbeat | system (entity) | system (not an agent) | No — but automation may trigger agent |
+| Slack @nexus in #general | coworker (entity) | main-agent (agent) | Yes — main-agent |
+| Slack message in #general (no mention) | coworker (entity) | #general space (not an agent) | No — but "monitor keywords" automation might trigger |
+| Random stranger DMs bot on Discord | stranger (entity) | main-agent (agent) | **Only if access check passes** — sender must be authorized |
 
 ### 2.3 Access Control on Receiver
 
-Just because someone addresses an agent persona doesn't mean the agent runs. The **access** stage checks:
+Just because someone addresses an agent doesn't mean the agent path runs. The **access** stage checks:
 
 - Is this sender authorized to communicate with this receiver?
 - Does the sender's entity have the required permissions?
-- Is this platform/channel approved for this agent persona?
+- Is this platform/channel approved for this agent?
 
 If a stranger emails your agent and they're not authorized, the event is logged (you see the attempt in your audit trail) but the agent is NOT invoked. No context assembled, no LLM call, no response. This is critical for security and cost control.
 
@@ -137,156 +144,91 @@ If a stranger emails your agent and they're not authorized, the event is logged 
 Session keys encode the sender-receiver relationship:
 
 ```
-DM sessions:    dm:{sender_entity}:persona:{receiver_persona}
-Group sessions: group:{platform}:{container_id}:persona:{receiver_persona}
-Thread sessions: group:{platform}:{container_id}:persona:{receiver_persona}:thread:{thread_id}
+DM sessions:    dm:{sender_entity_id}:{receiver_entity_id}
+Group sessions: group:{platform}:{container_id}:{receiver_entity_id}
 Worker sessions: worker:{ulid}
 System sessions: system:{purpose}
 ```
 
-The receiver persona is now part of the session key. This naturally supports multi-agent: two different agent personas communicating with the same sender get separate sessions.
+The receiver entity is part of the session key. This supports multiple receiver entities without coupling session identity to runtime persona choice.
 
-Legacy compatibility note:
-
-- Older labels (`dm:{sender_entity}`, `group:{platform}:{container_id}`) are still resolvable via aliases during migration, but new routing keys should use the persona-scoped form.
-
-Group chats always resolve to a unique group session keyed by container, not individual DM sessions. Everyone in the group shares one session per agent persona.
+Group thread messages route to the parent group session by default; `thread_id` remains metadata and does not create a canonical separate session key.
 
 ### 2.5 Automations — The Extension Point
 
-Automations evaluate on **every event** that passes through the pipeline, regardless of whether the receiver is an agent persona. This enables:
+Automations evaluate on **every event** that passes through the pipeline, regardless of whether the receiver is an agent. This enables:
 
 - **Ambient monitoring:** "When an email arrives matching pattern X, dispatch agent Y to analyze it."
 - **Security audit:** "When an API key is created, dispatch agent Z to review the action."
 - **Reactive workflows:** "When config changes, notify the operator via Discord."
 - **Scheduled tasks:** "On clock heartbeat matching cron pattern, dispatch agent."
 
-Automations can trigger agent execution on events that would otherwise not run an agent. The automation specifies which agent persona to invoke and with what context.
+Automations can trigger agent execution on events that would otherwise not run an agent. The automation specifies which agent to invoke and with what context.
 
 The base case — "message addressed to agent → agent runs" — is baked into the pipeline as a primitive, not an automation. This is the core product behavior and cannot be accidentally deleted.
 
 ---
 
-## 3. Adapters — The Only Ingress Mechanism
+## 3. Surface Roles and Adapter Classes
 
-Every source of events is an adapter. There are no alternate paths into the pipeline.
+### 3.1 Control Surface (internal, always-on)
 
-### 3.1 WS RPC Adapter (internal, always-on)
+The control-plane WS/HTTP surface is runtime-core and uses `protocol | control | event` classification.
 
-The Control Plane WebSocket connection at `:18789`. This is the primary human-facing interface.
-
-**What it handles:**
-
-| Operation | Event type | Pipeline behavior |
+| Method | Kind | Behavior |
 |-----------|-----------|-------------------|
-| `chat.send` | Message to agent persona | Full pipeline → agent runs |
-| `config.set` | Control operation | Full pipeline → handler executes, result returned |
-| `sessions.list` | Control operation | Full pipeline → handler executes, result returned |
-| `health` | Control operation | Full pipeline → handler executes, result returned |
-| `chat.abort` | Control operation | Full pipeline → handler executes, result returned |
-| `agents.reload` | Control operation | Full pipeline → handler executes, result returned |
+| `chat.send` | `event` | Normalize to `NexusEvent` -> event pipeline |
+| `config.set` | `control` | IAM authorize -> direct handler -> sync response |
+| `sessions.list` | `control` | IAM authorize -> direct handler -> sync response |
+| `health` | `control` | IAM authorize -> direct handler -> sync response |
+| `chat.abort` | `control` | IAM authorize -> direct handler -> sync response |
+| `agents.reload` | `control` | IAM authorize -> direct handler -> sync response |
 
-All operations go through auth → identify → access → log → automations. Control operations additionally have their handler execute and return a synchronous result to the caller.
+Rules:
 
-Control operation receiver semantics (normative):
+1. `protocol` methods are transport/session mechanics only.
+2. `control` and `event` methods share AuthN + principal + IAM + audit/hook prelude.
+3. `event` methods enter `nex.processEvent(...)`.
+4. `control` methods preserve synchronous request/response behavior.
 
-- Control operations resolve `receiver = system` (not persona).
-- They MUST still pass through auth/identify/access/log/automations.
-- They MUST preserve synchronous request/response behavior for the caller.
-- Because receiver is `system`, they take the non-agent branch (no `routeSession → runAgent` path).
+### 3.2 Event Ingress Adapters
 
-**Special properties:**
-- Always-on (cannot be disabled — it IS the runtime)
-- Synchronous result path for control operations
-- Serves the SPA (static file hosting over HTTP on the same port)
-- Serves `/health` endpoint
+Event ingress is adapter-managed and emits canonical `NexusEvent`.
 
-**Who connects:** Control UI (browser), Tauri desktop, mobile WebView, CLI.
+Internal adapter example:
 
-**Auth model:**
-- Local loopback: auto-trusted (operator is on the same machine)
-- Remote: token or password authentication
-- Hosted/multi-user: per-connection auth token → entity_id → permission set
-
-### 3.2 HTTP Ingress Adapter (internal, configurable)
-
-Owns its own HTTP listener (`:18790`). Handles protocol bridges for external API consumers.
-
-| Endpoint | Purpose |
+| Adapter | Purpose |
 |----------|---------|
-| `POST /v1/chat/completions` | OpenAI-compatible chat completions |
-| `POST /v1/responses` | OpenResponses API |
-| Webhook routes | Configurable webhook ingress |
-| `POST /api/ingress/webchat/session` | Webchat session bootstrap (cookie minting) |
+| `http-ingress` | OpenAI/OpenResponses/webhooks/webchat session bootstrap ingress |
 
-All requests → auth (bearer token / webhook signature) → pipeline.
-
-Can be enabled/disabled via config. Shows in `nexus adapter status`.
-
-### 3.3 External Adapters (child processes)
-
-Long-running processes that maintain their own connections to external platforms. Communicate via JSONL on stdio.
+External adapter examples (child processes over JSONL stdio):
 
 | Adapter | Platform | Transport |
 |---------|----------|-----------|
 | `nexus-adapter-discord` | Discord | Discord Gateway WebSocket |
 | `nexus-adapter-gog` | Gmail | IMAP |
 | `eve` | iMessage | AppleScript / native |
-| `slack` | Slack | Slack Socket Mode / HTTP callbacks |
+| `nexus-adapter-slack` | Slack | Socket mode / webhook callbacks |
 
-CLI protocol: `<command> monitor --account <id> --format jsonl` emits events on stdout. `<command> send --to <target> --text "..."` delivers outbound.
-
-Each adapter is individually configurable, supervised with restart policies, health-monitored, and visible in `nexus adapter status`.
-
-### 3.4 System Adapters (internal, always-on)
+### 3.3 System Event Adapters
 
 | Adapter | Purpose |
 |---------|---------|
-| `clock` | Timer/heartbeat events for cron-like scheduling |
+| `clock` | Timer/heartbeat/scheduled event source |
 
-System adapters emit events with sender = "system". No external auth needed (they are the system itself). Automations evaluate on their events to trigger scheduled agent work.
+System adapters emit reserved system events and still use event pipeline policy/audit behavior.
 
-### 3.5 Adapter Summary
+### 3.4 Summary
 
 ```
-     CLIENTS                         ADAPTERS                        PIPELINE
-┌─────────────┐
-│ Browser Tab  │──┐
-│ Tauri App    │  ├── WS ──→  WS RPC Adapter ─────────────┐
-│ Mobile App   │  │           (internal, always-on)        │
-│ CLI          │──┘                                        │
-└─────────────┘                                            │
-                                                           │
-┌─────────────┐                                            │
-│ OpenAI API  │── HTTP ──→  HTTP Ingress Adapter ──────────┤
-│ Webhooks    │            (internal, configurable)        │
-│ Webchat     │                                            │
-└─────────────┘                                            ▼
-                                                ┌──────────────────┐
-┌─────────────┐                                 │                  │
-│ Discord     │── JSONL ──→ Discord Adapter ───→│    PIPELINE      │
-│ Gmail       │── JSONL ──→ Gmail Adapter ─────→│  (9 stages)      │
-│ Slack       │── JSONL ──→ Slack Adapter ─────→│                  │
-│ iMessage    │── JSONL ──→ iMessage Adapter ──→│  1. ingest       │
-└─────────────┘                                 │  2. resolveId    │
-                                                │  3. resolveRecv  │
-┌─────────────┐                                 │  4. resolveAccess│
-│ System      │── internal → Clock Adapter ────→│  5. runAutomate  │
-└─────────────┘                                 │    │             │
-                                                │    ▼             │
-                                                │  receiver is     │
-                                                │  agent persona?  │
-                                                │    │       │     │
-                                                │   YES     NO     │
-                                                │    │       │     │
-                                                │  6.route   9.    │
-                                                │  Session deliver  │
-                                                │  7.runAgent Resp │
-                                                │  8.process       │
-                                                │    Response      │
-                                                │  9.deliver       │
-                                                │    Response      │
-                                                └──────────────────┘
+CLIENTS
+  -> Control Surface (protocol/control/event)
+      -> control handler path (kind=control)
+      -> event pipeline path (kind=event)
+
+EXTERNAL/INTERNAL INGRESS ADAPTERS
+  -> NexusEvent
+      -> event pipeline (9 stages)
 ```
 
 ---
@@ -295,14 +237,14 @@ System adapters emit events with sender = "system". No external auth needed (the
 
 Because every event is logged to `events.db` with resolved sender and receiver entities, the system automatically builds a complete interaction graph:
 
-- **Per-agent persona:** All contacts who have messaged this agent, when, on which platforms, how many interactions.
+- **Per-agent:** All contacts who have messaged this agent, when, on which platforms, how many interactions.
 - **Per-user entity:** All agents and platforms this user has interacted with, full communication history.
 - **Per-operator:** Audit trail of all control operations (config changes, API key issuance, permission modifications).
 - **Cross-platform:** A single entity may interact with the same agent via Discord, email, and the Control UI — all tracked and linked through the entity system.
 
 This data enables:
 - Audit dashboards for multi-user/business deployments
-- Contact/relationship visualization per agent persona
+- Contact/relationship visualization per agent
 - Security monitoring (unauthorized access attempts are logged even when denied)
 - Usage analytics (which agents are most active, which platforms, which users)
 
@@ -334,7 +276,7 @@ All human-facing UI is a single web application.
 │  └──────────────────┘  └──────────────────────────────┘ │
 └─────────────────────────┬────────────────────────────────┘
                           │
-              Served by WS RPC Adapter (HTTP + WS on :18789)
+              Served by Control Surface (HTTP + WS on :18789)
                           │
           ┌───────────────┼───────────────┐
           │               │               │
@@ -387,7 +329,7 @@ The mobile native bridge shim exposes these capabilities via `window.Nexus.*` AP
 
 These surfaces exist in the current codebase (inherited from openclaw) and are being eliminated or superseded.
 
-### 6.1 Ingress Listener (`:18790`) → HTTP Ingress Adapter
+### 6.1 Standalone Ingress Server (`:18790`) -> HTTP Ingress Adapter
 
 **Current state:** Separate HTTP server for protocol bridges. Calls `dispatchNexusEvent()` directly.
 
@@ -445,7 +387,7 @@ The browser automation space is rapidly evolving. Building and maintaining a bes
 
 | Port | Surface | Owner |
 |------|---------|-------|
-| **18789** | WS RPC Adapter (SPA + WS + health) | Runtime core (always-on) |
+| **18789** | Control surface (SPA + WS + health) | Runtime core (always-on) |
 | **18790** | HTTP Ingress Adapter (OpenAI compat, webhooks) | Internal adapter (configurable) |
 | **18791** | Browser Control REST API | Browser subsystem (deferred, opt-in) |
 | **18792** | Chrome Extension Relay | Browser subsystem (deferred, opt-in) |
@@ -463,22 +405,22 @@ Ports 18791-18792 are only used when `browser.enabled = true`.
 ### Phase 2: Unified Pipeline
 - Add receiver resolution to the pipeline (identify receiver entity from delivery context)
 - Add event logging for all event types (control ops included) to `events.db`
-- Make `routeSession → runAgent` conditional on receiver being an agent persona
-- Update session key format to include receiver persona: `dm:{sender}:persona:{persona}`
+- Make `assembleContext → runAgent` conditional on receiver being an agent
+- Update session key format to canonical entity-based routing: `dm:{sender_entity}:{receiver_entity}` and `group:{platform}:{container}:{receiver_entity}`
 
-### Phase 3: WS RPC as Adapter
-- Refactor control-plane WS RPC to emit events through the pipeline for all operations
-- Control operations go through auth → identify → access → log → automations → handler
-- Remove per-method auth checks in RPC handlers (pipeline handles auth/access)
+### Phase 3: Surface Taxonomy Cutover
+- Replace legacy `transport|iam|pipeline` names with `protocol|control|event`
+- Keep control-plane as control surface (not channel-style event adapter)
+- Enforce shared AuthN/principal/AuthZ/audit envelope before kind-specific execution
 
-### Phase 4: Internal Adapter Infrastructure
+### Phase 4: Internal Event Adapter Infrastructure
 - Implement internal adapter registry in the adapter manager
 - Define `InternalAdapterInstance` interface
 - Migrate HTTP ingress from standalone listener to `http-ingress` internal adapter
 - Add internal adapter health/status to `nexus adapter status`
 
 ### Phase 5: Clean Up
-- Remove standalone ingress listener creation
+- Remove standalone ingress fallback behavior
 - Drop TUI code
 - Drop canvas host server (`src/canvas-host/`)
 - Drop A2UI injection system
@@ -495,7 +437,7 @@ Ports 18791-18792 are only used when `browser.enabled = true`.
 
 | Surface | Role | Status |
 |---------|------|--------|
-| **WS RPC Adapter** (:18789) | Primary human interface (SPA + WS + control ops) | Core, always-on |
+| **Control surface** (:18789) | Primary human interface (SPA + WS + control ops) | Core, always-on |
 | **HTTP Ingress Adapter** (:18790) | External API bridges (OpenAI, webhooks) | Internal adapter, configurable |
 | **External Adapters** | Platform connections (Discord, Gmail, Slack, iMessage) | Core, per-platform |
 | **Clock Adapter** | System timer/heartbeat events | Internal adapter, always-on |
@@ -506,4 +448,4 @@ Ports 18791-18792 are only used when `browser.enabled = true`.
 | **TUI** | Terminal chat interface | Dropped |
 | **Canvas Host** | Standalone file server for agent HTML | Superseded |
 | **A2UI Bridge** | WebView injection system | Superseded |
-| **Ingress Listener** | Separate HTTP server for protocol bridges | Migrating to adapter |
+| **Ingress surface** | Adapter-owned external protocol bridges | Active |

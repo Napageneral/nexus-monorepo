@@ -2,7 +2,7 @@
 
 **Status:** DESIGN SPEC  
 **Last Updated:** 2026-02-23  
-**Related:** ../../OVERVIEW.md, ../nex/EVENT_SYSTEM_DESIGN.md, ../broker/OVERVIEW.md, POLICY_ARCHITECTURE_UNIFICATION.md
+**Related:** ../../OVERVIEW.md, ../nex/EVENT_SYSTEM_DESIGN.md, ../broker/OVERVIEW.md, POLICY_ARCHITECTURE_UNIFICATION.md, ../nex/ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md
 
 ---
 
@@ -12,7 +12,7 @@ The Access Control Layer (ACL) is a declarative system that sits in front of hoo
 
 1. **WHO** can send messages to the system
 2. **WHAT** permissions they have (tools, credentials, data access)
-3. **WHERE** their messages route (persona + session)
+3. **WHERE** their messages route (receiver entity + agent/persona binding + session label)
 
 This separation provides clear visibility into access rules, enables GUI-based management, and short-circuits unauthorized requests before any hook or agent runs.
 
@@ -64,7 +64,7 @@ IAM outputs a single `AuthorizationEnvelope` that all downstream runtime paths m
 
 - `decision`: allow | deny | ask
 - `permissions`: tools allow/deny, credentials, data_access
-- `routing`: persona, session_key, queue_mode
+- `routing`: agent_id, persona_ref, session_label, queue_mode
 - `provenance`: matched policies, denied policies, grants applied, deny reason
 
 This is the only source of truth for runtime authorization decisions.
@@ -90,7 +90,7 @@ This is the only source of truth for runtime authorization decisions.
 | **Grant** | A dynamic, temporary permission given via approval flow |
 | **Effect** | Allow or Deny |
 | **Resources** | Tools, credentials, data access levels |
-| **Session** | The persona + session key where messages route |
+| **Session** | The resolved session label where messages route, independent of persona binding |
 
 ---
 
@@ -243,7 +243,7 @@ IAM evaluation is layered in this order:
 | Area | Old layered behavior | New canonical behavior |
 |------|-----------------------|------------------------|
 | Runtime access source | `resolveAccess` plus manual overrides in some paths | Single compiler output for all paths |
-| Tool filtering | Multiple filters at different points (`routeSession`, `runAgent`, `tool-invoke`) | Single normalized tool allow/deny envelope |
+| Tool filtering | Multiple filters at different points (`assembleContext`, `runAgent`, `tool-invoke`) | Single normalized tool allow/deny envelope |
 | Legacy synthetic requests | Some paths injected `request.access` directly | Synthetic requests still allowed, but authorization must be compiled |
 | Explainability | Fragmented, path-dependent | One provenance chain per decision |
 
@@ -405,18 +405,18 @@ nexus acl audit --policy "group-chat-restrictions"
 
 ---
 
-## Integration with Personas
+## Integration with Agents
 
-Personas and ACL are separate but connected:
+Agents and ACL are separate but connected:
 
 | Concept | What It Is | Relationship to ACL |
 |---------|------------|---------------------|
-| **Persona** | Identity (name, soul, accounts) | ACL routes TO personas |
+| **Agent** | Identity (name, SOUL, accounts) | ACL routes TO agents |
 | **ACL Policy** | Access rules | Determines permissions + session |
 
-### Personas in Ledger
+### Agents in Ledger
 
-Personas should be tracked similarly to people:
+Agents should be tracked similarly to people:
 
 ```
 entities table:
@@ -437,8 +437,8 @@ entities table:
 
 This enables:
 - Unified identity resolution
-- Personas owning their own accounts
-- ACL routing based on which persona's account received the message
+- Agents owning their own accounts
+- ACL routing based on which agent account received the message
 
 ---
 
@@ -531,7 +531,7 @@ Broker uses this to:
 | **Policy storage** | YAML files for now, DB later | Human-editable, understand before formalizing |
 | **Policy editing** | Owner or owner-permissioned agents only | Prevent privilege escalation |
 | **Default policies** | Ship with owner-only defaults | Secure by default, loosen as needed |
-| **Persona accounts** | Track in unified entities ledger | Identity resolution for personas via same system |
+| **Agent accounts** | Track in unified entities ledger | Identity resolution for agents via same system |
 | **Agent-created hooks** | Yes, by owner-permissioned agents only | Agents are primary authors |
 
 ---
@@ -556,7 +556,7 @@ Event Ledger → Event Handler [ ACL → Hooks ] → Broker
 
 ## Identity Ledger Schema
 
-The Identity Ledger stores entities (persons and personas) with their contact identities:
+The Identity Ledger stores entities (persons and agents) with their contact identities:
 
 ```sql
 -- identity.db — Entities (relocated per DATABASE_ARCHITECTURE.md)

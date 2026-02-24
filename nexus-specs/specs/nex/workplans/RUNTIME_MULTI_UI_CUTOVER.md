@@ -29,19 +29,19 @@ From a user perspective, this phase enables:
 
 As of current `nex` branch:
 
-1. runtime is **dual-listener**:
-   - control-plane listener (`role: "control-plane"`)
-   - ingress listener (`role: "ingress"`)
-2. ingress bridges are only mounted on ingress listener.
-3. control-plane and ingress agent-triggering flows already dispatch via:
+1. runtime has two **surface roles**:
+   - control-plane surface (protocol/control operations + selected event methods)
+   - ingress surface (adapter-owned event ingress)
+2. ingress bridge ownership is separated from control-plane route ownership.
+3. agent-triggering flows dispatch via:
    - `dispatchNexusEvent(...) -> nex.processEvent(...)`
 
 Implication:
 
-- "Adapters unify ingress to NexusEvent pipeline" is true for most ingress paths.
-- Listener topology is still dual, not single-listener.
+- ingress unification to `NexusEvent` is the canonical behavior for agent-triggering work.
+- listener/port topology is implementation detail; surface semantics are the contract.
 
-This phase does not require listener collapse. It adds app-model primitives on top of current topology.
+This phase focuses on app-model primitives and does not require a specific listener count.
 
 ---
 
@@ -147,4 +147,3 @@ Must pass:
 5. `GET /app/chat` returns `404`.
 6. `GET /app` returns `404`.
 7. non-control app mount without installed app returns `404`.
-

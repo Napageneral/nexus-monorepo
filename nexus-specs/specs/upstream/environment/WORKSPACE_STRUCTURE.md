@@ -449,7 +449,7 @@ function resolveEffectiveAgentDir(cfg, agentId): string {
 
 ### Agent Bindings
 
-Map channels/accounts to specific agents:
+Map platforms/accounts to specific agents:
 
 ```json5
 {

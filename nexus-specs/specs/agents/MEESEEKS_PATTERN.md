@@ -47,16 +47,16 @@ Every hook point supports both **blocking** and **async** automations. The hook 
 | `after:resolveReceiver` | After receiver resolution | Receiver enrichment |
 | `after:resolveAccess` | After IAM | Access policy augmentation |
 | `runAutomations` | Stage 5 — first safe decision point | General-purpose automations, routing overrides |
-| `after:routeSession` | After session routing | Context augmentation |
+| `after:assembleContext` | After session routing | Context augmentation |
 | `after:runAgent` | After agent turn completes | Post-turn processing (memory writes, analytics) |
-| `after:processResponse` | After response processed | Analytics, logging |
+| `after:deliverResponse` | After response processed | Analytics, logging |
 | `deliverResponse` | Pipeline delivery/finalization | Cleanup, persistence |
 
 #### Broker hooks
 
 | Hook point | When | Typical use |
 |------------|------|-------------|
-| `worker:pre_execution` | After worker routeSession, before worker startBrokerExecution | **Memory injection for workers** |
+| `worker:pre_execution` | After worker assembleContext, before worker startBrokerExecution | **Memory injection for workers** |
 
 #### Lifecycle hooks
 

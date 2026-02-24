@@ -389,7 +389,7 @@ Openclaw bundles channel handling in `src/`. Nexus moves these to `extensions/` 
 | `src/whatsapp/` | `extensions/whatsapp/` | 🟡 Merge with extension, external CLI |
 | `src/line/` | `extensions/line/` | 🟡 Merge with extension, external CLI |
 | `src/web/` | `gateway/` (web inbound) | 🟡 Web channel → gateway |
-| `src/channels/` | `nex/adapters/types.ts` + extensions | 🟡 Channel types → shared, impls → extensions |
+| `src/platforms/` | `nex/adapters/types.ts` + extensions | 🟡 Channel types → shared, impls → extensions |
 | `src/canvas-host/` | 🔶 DEFER | Canvas/A2UI not V1 |
 
 ### 🔴 DROP

@@ -1,28 +1,29 @@
 # Built-in & Internal Adapters
 
 **Status:** DESIGN + IMPLEMENTATION TRACKER
-**Last Updated:** 2026-02-23
-**Related:** `./ADAPTER_SYSTEM.md`, `./INBOUND_INTERFACE.md`, `./OUTBOUND_INTERFACE.md`, `./CHANNEL_MIGRATION_TRACKER.md`, `./CLOCK_ADAPTER.md`, `../nex/CONTROL_PLANE.md`, `../nex/DAEMON.md`, `../nex/NEX.md`
+**Last Updated:** 2026-02-24
+**Related:** `./ADAPTER_SYSTEM.md`, `./INBOUND_INTERFACE.md`, `./OUTBOUND_INTERFACE.md`, `./CHANNEL_MIGRATION_TRACKER.md`, `./CLOCK_ADAPTER.md`, `../nex/CONTROL_PLANE.md`, `../nex/DAEMON.md`, `../nex/NEX.md`, `../nex/SURFACE_ADAPTER_V2.md`
 
 ---
 
 ## Purpose
 
-Define which integrations are shipped "with NEX" as **built-in adapters**, clarify the boundary between control-plane and external ingress, and specify how **internal (in-process) adapters** work alongside external (process-based) adapters.
+Define which integrations are shipped "with NEX" as **built-in event adapters**, clarify the boundary between control surfaces and event ingress, and specify how **internal (in-process) event adapters** work alongside external (process-based) adapters.
 
 ---
 
 ## Canonical Boundary (Locked)
 
-**Control-plane** — privileged local interfaces for the user + agents to operate the runtime.
+**Control surface** — privileged runtime interface for user/operator interaction.
 - Transport: WebSocket RPC + control-plane HTTP (UI, avatars, health, SSE bus stream).
-- Default binding: loopback (local-only) unless explicitly exposed with strict auth.
-- Control-plane must not "run agents directly" — it can *request* work by emitting a `NexusEvent` (which then hits IAM).
+- Operation kinds: `protocol`, `control`, `event`.
+- Default binding: loopback unless explicitly exposed with strict auth.
+- Control operations are direct IAM-authorized methods; event operations normalize to `NexusEvent`.
 
-**Adapters** — supervised integration points that emit normalized `NexusEvent` and receive outbound delivery.
-- Any protocol bridge that accepts traffic from "the outside world" is an adapter: webhooks, OpenAI/OpenResponses compatibility APIs, channel ingress (Discord/Telegram/WhatsApp/etc), scheduled event sources (clock/timer).
+**Event adapters** — supervised integration points that emit normalized `NexusEvent` and receive outbound delivery.
+- Any protocol bridge that accepts traffic from "the outside world" is an event adapter: webhooks, OpenAI/OpenResponses compatibility APIs, channel ingress (Discord/Telegram/WhatsApp/etc), scheduled event sources (clock/timer).
 - Any agent execution must be reachable as `NexusEvent -> nex.processEvent(...)` (no hidden agent-run paths).
-- Built-in adapters ship alongside NEX but are still managed via the adapter manager (health, restarts, status).
+- Built-in event adapters ship alongside NEX but are still managed via the adapter manager (health, restarts, status).
 
 ---
 
@@ -57,7 +58,7 @@ This lets `/health` and UI show a single adapter table regardless of adapter kin
 ## Internal Adapter Interface
 
 ```ts
-type InternalAdapterKind = "event_source" | "ingress_server" | "ingress_surface";
+type InternalAdapterKind = "event_source" | "ingress_server";
 
 type InternalAdapterDefinition = {
   name: string;     // adapter name (e.g. "clock", "http-ingress")
@@ -156,9 +157,9 @@ Bridge modules hosted inside `http-ingress`:
 
 Each bridge normalizes inbound requests into `NexusEvent` (with `_nex_ingress` metadata) and runs them through the pipeline.
 
-### 3. `runtime` (ingress_surface) — Optional
+### 3. `webchat` ingress module (optional)
 
-Represent local UI/webchat "messages to agents" as an adapter-managed ingress surface, keeping control-plane as management transport while the `runtime` internal adapter is the canonical "local message ingress" source.
+Local/hosted webchat ingress can be implemented as an `http-ingress` submodule that emits `NexusEvent`. Control-plane chat methods remain control-surface event operations.
 
 ---
 
@@ -177,9 +178,9 @@ The control-plane HTTP server currently hosts several protocol bridges that shou
 
 ### Clock/Timer Spec Inconsistency
 
-- `DAEMON.md` describes an internal `timer` adapter with `channel: "timer"`.
-- `NEX.md` describes an external `clock` adapter with `channel: "clock"`.
-- Implementation recognizes `delivery.channel === "clock"` for system identity.
+- `../nex/DAEMON.md` describes an internal `timer` adapter with `platform: "timer"`.
+- `../nex/NEX.md` describes an external `clock` adapter with `platform: "clock"`.
+- Implementation recognizes `delivery.platform === "clock"` for system identity.
 - **Canonical target:** standardize on `platform: "clock"` for all scheduled events.
 
 ---
@@ -200,7 +201,7 @@ The control-plane HTTP server currently hosts several protocol bridges that shou
 2. Implement internal `clock` adapter emitting events (heartbeat first).
 3. Implement internal `http-ingress` adapter (new bind/port) and port hooks webhooks, OpenAI/OpenResponses routes.
 4. Remove those endpoints from the control-plane HTTP router (control-plane returns to privileged/local).
-5. (Optional) Model local webchat ingress via internal `runtime` adapter.
+5. (Optional) Add local webchat ingress as an `http-ingress` submodule.
 
 ---
 

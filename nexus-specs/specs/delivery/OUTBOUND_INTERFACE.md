@@ -421,5 +421,5 @@ async function sendWithRetry(
 
 - `INBOUND_INTERFACE.md` — Event receiving interface
 - `ADAPTER_SYSTEM.md` — Adapter operational system
-- `channels/{channel}.md` — Per-channel specs
+- `platforms/{platform}.md` — Per-platform specs
 - `upstream/TOOL_HOOK_MECHANISM.md` — Hook details

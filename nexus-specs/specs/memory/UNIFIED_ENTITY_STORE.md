@@ -1,10 +1,10 @@
 # Unified Entity Store
 
 **Status:** DESIGN SPEC
-**Last Updated:** 2026-02-23
+**Last Updated:** 2026-02-24
 **Supersedes:** ../../_archive/IDENTITY_GRAPH.md, entities/entity_aliases/persons tables in ../../_archive/MEMORY_SYSTEM.md
-**Related:** MEMORY_SYSTEM.md, MEMORY_WRITER.md, IDENTITY_RESOLUTION.md
-**Routing integration:** specs/runtime/RUNTIME_ROUTING.md
+**Related:** MEMORY_SYSTEM.md, MEMORY_WRITER.md, ../iam/IDENTITY_RESOLUTION.md
+**Routing integration:** ../nex/RUNTIME_ROUTING.md
 
 > **Canonical reference:** See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the authoritative database layout. Entity tables (`entities`, `entity_tags`, `entity_cooccurrences`, `merge_candidates`), contacts, groups, directory, and auth tables all live in `identity.db`. This means `contacts.entity_id` -> `entities.id` is a same-database JOIN -- no cross-DB boundary.
 
@@ -14,7 +14,7 @@
 
 The Unified Entity Store collapses three prior entity systems (Identity Graph entities, legacy memory system entities, Hindsight entities) into a single table with a union-set (union-find) structure for identity resolution.
 
-**Core principle:** Entities are identities -- people, organizations, groups, projects, concepts, locations. An entity represents a "who" or a "what," never a reachable address. Phone numbers, email addresses, and platform handles are **contact identifiers**, not entities. They live in the `contacts` table as bindings between platform-specific addresses and the entities they belong to.
+**Core principle:** An entity represents any "who" or "what" worth remembering — people, organizations, groups, projects, concepts, locations, pets, documents, events. An entity is never a reachable address. Phone numbers, email addresses, and platform handles are **contact identifiers**, not entities. They live in the `contacts` table as bindings between platform-specific addresses and the entities they belong to. Any entity can have contacts; some naturally will (people, agents) and some naturally won't (concepts, locations), but there is no schema-level restriction.
 
 **Design philosophy:** Maximally simple. The agent does the hard work of resolution, deduplication, and merging. The table is a flexible canvas, not a constraint system.
 
@@ -38,7 +38,7 @@ All standards agree: **identifiers are attributes of identities, not identities 
 CREATE TABLE entities (
     id              TEXT PRIMARY KEY,       -- ULID
     name            TEXT NOT NULL,          -- human-readable: 'Sarah Chen', 'Anthropic', 'Unknown (iMessage)'
-    type            TEXT,                   -- 'person', 'agent', 'group', 'organization', 'service'
+    type            TEXT,                   -- unconstrained; common: person, agent, group, org, service, concept, location, project, event, document, pet
     merged_into     TEXT REFERENCES entities(id),  -- union-set parent pointer (NULL = canonical root)
     normalized      TEXT,                   -- lowercase/stripped name for fast matching
     is_user         BOOLEAN DEFAULT FALSE,  -- is this the Nexus owner?
@@ -57,19 +57,28 @@ CREATE INDEX idx_entities_type ON entities(type);
 CREATE INDEX idx_entities_is_user ON entities(is_user) WHERE is_user = TRUE;
 ```
 
-**Entity types are constrained to actual identities:**
+**Entity types are completely unconstrained.** The `type` column is free-text with no enum or CHECK constraint. The agent chooses whatever type feels right. The system documents common types below, but new types can be introduced freely. To help the agent self-align, expose a `SELECT DISTINCT type FROM entities` query so it can see what types already exist.
 
 | Type | What it represents | Examples |
 |------|--------------------|----------|
 | `person` | A human being | Sarah Chen, Mom, Unknown (iMessage) |
-| `agent` | A Nexus agent persona | nexus (default), work-assistant |
+| `agent` | A Nexus agent | nexus (default), work-assistant |
 | `group` | A named group with membership | Family, Book Club, Project Alpha Team |
-| `organization` | A company, institution, team | Anthropic, MIT, Engineering Team |
+| `org` | A company, institution, team | Anthropic, MIT, Engineering Team |
 | `service` | An external automated system | GitHub Bot, Slack Bot, webhook |
+| `concept` | An idea, topic, or abstract thing | machine learning, stoicism, TypeScript |
+| `location` | A place | San Francisco, the office, Mom's house |
+| `project` | A project or initiative | Project Alpha, nexus-specs, Q2 launch |
+| `event` | A named event or occasion | Sarah's birthday, team offsite 2026 |
+| `document` | A document or artifact | the PRD, config.json, that email thread |
+| `pet` | An animal companion | Luna (the cat), Max (the dog) |
 
-**Never used as entity types:** `phone`, `email`, `discord_handle`, `slack_user`, `telegram_user`, `whatsapp_user`, `signal_user`, or any `*_handle`. These are contact identifiers stored in the `contacts` table.
+This is not exhaustive — the agent may use other types as needed.
 
-**That's it.** No `platform`, `sender_id`, `mapping_type`, `confidence`, `alias_type`, `display_name`, `relationship`, `notes`, `message_count` columns. Those are either stored in the contacts table, captured as facts in the facts table, or derivable from events.
+Identifiers like `phone`, `email`, and platform handles are modeled as contact identifiers in the `contacts` table rather than standalone entity types.
+Any entity may have zero, one, or many contacts over time; there is no schema-level restriction on which types can have contacts.
+
+No `platform`, `sender_id`, `mapping_type`, `confidence`, `alias_type`, `display_name`, `relationship`, `notes`, `message_count` columns. Those are either stored in the contacts table, captured as facts in the facts table, or derivable from events.
 
 ### Contacts
 
@@ -86,8 +95,6 @@ CREATE TABLE contacts (
     message_count  INTEGER NOT NULL DEFAULT 0,
     sender_name    TEXT,                      -- best-effort display name from platform (untrusted)
     avatar_url     TEXT,                      -- best-effort (untrusted)
-    label          TEXT,                      -- 'personal', 'work', 'shared', 'org' (like SCIM's multi-valued type)
-    owner_id       TEXT REFERENCES entities(id), -- org/group entity that owns this contact point, if any
     PRIMARY KEY (platform, space_id, sender_id)
 );
 
@@ -98,8 +105,6 @@ CREATE INDEX idx_contacts_last_seen ON contacts(last_seen DESC);
 **Key properties:**
 - `entity_id` is always NOT NULL. Even for unknown senders, a person entity is created immediately so facts can accumulate.
 - `sender_name` caches the platform display name. This is untrusted and may change.
-- `label` classifies the contact point (like SCIM's `type` on multi-valued attributes). A phone number might be `'personal'` or `'work'` or `'shared'`.
-- `owner_id` tracks organizational ownership. A shared phone line or team email can point to the org entity that owns it, even though `entity_id` points to the person currently using it.
 
 **Universal Identifier Pattern (two-row):** When a message arrives from a phone number or email address, the delivery pipeline creates **two** contact rows pointing to the same entity:
 
@@ -278,7 +283,7 @@ When `union(entity_a, entity_b)` executes, `propagateMergeToSessions()` **MUST**
 
 If session propagation is skipped or deferred, inbound messages for the merged entity may fail to route to existing conversations until the next session lookup cache refresh.
 
-See `../../runtime/RUNTIME_ROUTING.md` for the full session-alias lifecycle and routing implications.
+See `../nex/RUNTIME_ROUTING.md` for the full session-alias lifecycle and routing implications.
 
 ---
 
@@ -399,16 +404,6 @@ When "Tyler" appears in a message, the agent:
 5. If uncertain, creates a merge_candidate for human review
 ```
 
-### Scenario: Shared/org-owned contact
-
-```
-The company main line +18005551234 belongs to Anthropic, currently used by the receptionist:
-  INSERT INTO contacts (platform, sender_id, entity_id, label, owner_id, ...)
-  VALUES ('phone', '+18005551234', 'ent_receptionist', 'shared', 'ent_anthropic', ...);
-
-When the receptionist changes, update entity_id. owner_id stays the same.
-```
-
 ---
 
 ## Bootstrap Entities
@@ -496,11 +491,11 @@ From the NexusEvent deliveryContext (Zod schema):
 | `sender_name` | string? | Display name from platform |
 | `space_id` | string? | Server/workspace identifier |
 | `container_id` | string | Conversation/chat identifier |
-| `container_kind` | enum | 'dm', 'direct', 'group', 'channel' |
+| `container_kind` | enum | 'direct', 'group', 'channel' |
 | `thread_id` | string? | Thread ID for threaded conversations |
 | `reply_to_id` | string? | Message being replied to |
 | `capabilities` | object | Platform capabilities (markdown, message length, etc.) |
-| `available_channels` | array | Other platforms available for response |
+| `available_platforms` | array | Other platforms available for response |
 
 The delivery pipeline uses `sender_name` to name the auto-created person entity. The `sender_id` is stored only in the contacts table, not as an entity name. If no `sender_name` is available, the entity is named with a placeholder like `Unknown (discord:coolgamer42)`.
 
@@ -543,7 +538,7 @@ The memory-writer discovers delivery-sourced entities (`source = 'delivery'`) an
 
 ### Memory-writer entity creation (knowledge entities)
 
-The memory writer also creates **knowledge entities** — people, organizations, and concepts mentioned in conversation that may never send messages through an adapter. These entities are knowledge graph nodes, not delivery endpoints. No contacts are created for them.
+The memory writer also creates entities — people, organizations, concepts, locations, projects, and anything else mentioned in conversation that may never send messages through an adapter. These entities are knowledge graph nodes. Contacts are optional bindings and can be attached later when operationally useful.
 
 The core challenge is **dedup at creation time**. The `create_entity` tool should:
 
@@ -556,9 +551,9 @@ Knowledge entities (`source = 'inferred'`) and delivery entities (`source = 'del
 
 ### Contacts vs. conversational mentions
 
-**Contacts are only for actual delivery endpoints.** When a user says "my email is tyler@example.com" in conversation, the memory-writer stores this as a **fact** about the person entity (e.g., "Tyler's email is tyler@example.com") and links the fact to Tyler's entity. It does **not** create a contact row or a separate entity for the email address.
+Contacts should be created when there is a concrete delivery/runtime identity to bind. When a user says "my email is tyler@example.com" in conversation, the memory-writer stores this as a **fact** about the person entity and links the fact to that entity. Contact creation is a deliberate binding step, not an automatic side effect of text extraction.
 
-Contact rows are exclusively created by the delivery pipeline for senders/recipients that have actually exchanged messages through Nexus.
+Contact rows are primarily created by the delivery pipeline for senders/recipients that have actually exchanged messages through Nexus. The memory-writer should only consider creating a contact when a message contains something that looks like a concrete contact identifier (a phone number, email, handle) AND the context suggests it should be linked to an entity for routing purposes.
 
 This distinction matters: a contact means "we can route messages to/from this identifier." A conversational mention means "we know this identifier exists" and is stored as a fact about the person it belongs to. Only the former participates in pipeline-speed routing.
 
@@ -581,7 +576,7 @@ This distinction matters: a contact means "we can route messages to/from this id
 | Hindsight `entities` table | Merged into unified entities table |
 | Hindsight `entity_cooccurrences` table | Kept as-is, in `identity.db` |
 | Three separate name-history tables (`delivery_space_names`, `delivery_container_names`, `delivery_thread_names`) | Consolidated into single `names` table in `identity.db`. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) section 3.3. |
-| Phone/email/handle entity types | Eliminated. Platform identifiers live in `contacts.sender_id`, not as entities. Conversationally-mentioned identifiers are stored as facts. |
+| Phone/email/handle entity types | Prefer contact bindings in `contacts.sender_id` instead of separate identifier entities; conversational mentions are stored as facts. |
 
 ---
 
@@ -590,4 +585,4 @@ This distinction matters: a contact means "we can route messages to/from this id
 - `MEMORY_SYSTEM.md` -- Full memory architecture
 - `MEMORY_WRITER.md` -- How entity resolution works in the retain flow
 - `../../_archive/IDENTITY_GRAPH.md` -- Previous identity system (superseded)
-- `../../runtime/RUNTIME_ROUTING.md` -- Runtime routing and session resolution
+- `../nex/RUNTIME_ROUTING.md` -- Runtime routing and session resolution

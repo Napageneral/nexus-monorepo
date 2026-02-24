@@ -59,7 +59,7 @@
 - `send.emojis-stickers.ts` — Emoji/sticker support
 - `send.permissions.ts` — Permission handling
 - `send.guild.ts` — Guild operations
-- `channels/plugins/outbound/discord.ts` — Outbound adapter
+- `platforms/plugins/outbound/discord.ts` — Outbound adapter
 
 **Features:**
 - 2000 char limit
@@ -93,7 +93,7 @@
 - `draft-stream.ts` — Streaming support
 - `inline-buttons.ts` — Inline button support
 - `model-buttons.ts` — Model selection buttons
-- `channels/plugins/outbound/telegram.ts` — Outbound adapter
+- `platforms/plugins/outbound/telegram.ts` — Outbound adapter
 
 **Features:**
 - 4096 char limit
@@ -125,7 +125,7 @@
 **Outbound:**
 - `outbound.ts` — Main outbound functions
 - `media.ts` — Media sending
-- `channels/plugins/outbound/whatsapp.ts` — Outbound adapter
+- `platforms/plugins/outbound/whatsapp.ts` — Outbound adapter
 
 **Features:**
 - ~4000 char limit
@@ -154,7 +154,7 @@
 **Outbound:**
 - `send.ts` — Main send functions
 - `actions.ts` — Action API (edit, delete, react, pin)
-- `channels/plugins/outbound/slack.ts` — Outbound adapter
+- `platforms/plugins/outbound/slack.ts` — Outbound adapter
 
 **Features:**
 - Socket Mode
@@ -181,7 +181,7 @@
 **Outbound:**
 - `send.ts` — Main send functions
 - `send-reactions.ts` — Reaction support
-- `channels/plugins/outbound/signal.ts` — Outbound adapter
+- `platforms/plugins/outbound/signal.ts` — Outbound adapter
 
 **Features:**
 - ~4000 char limit
@@ -207,7 +207,7 @@
 
 **Outbound:**
 - `send.ts` — Main send functions
-- `channels/plugins/outbound/imessage.ts` — Outbound adapter
+- `platforms/plugins/outbound/imessage.ts` — Outbound adapter
 
 **Features:**
 - ~4000 char limit
@@ -258,7 +258,7 @@
 **Outbound:**
 - `send.ts` — Main send functions
 - `streaming-card.ts` — Streaming card support
-- `channels/plugins/outbound/feishu.ts` — Outbound adapter
+- `platforms/plugins/outbound/feishu.ts` — Outbound adapter
 
 **Features:**
 - Bot API
@@ -584,7 +584,7 @@
 
 ## Plugin System
 
-**Location:** `src/channels/plugins/`
+**Location:** `src/platforms/plugins/`
 
 | Plugin Type | Channels |
 |-------------|----------|
@@ -599,7 +599,7 @@
 
 ## Channel Registry
 
-The core registry (`src/channels/registry.ts`) defines these chat channels:
+The core registry (`src/platforms/registry.ts`) defines these chat channels:
 
 ```typescript
 export const CHAT_CHANNEL_ORDER = [

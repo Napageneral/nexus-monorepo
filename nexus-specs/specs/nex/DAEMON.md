@@ -2,8 +2,8 @@
 
 **Status:** DESIGN SPEC  
 **Last Updated:** 2026-02-18
-**Related:** NEX.md, CONTROL_PLANE.md, ADAPTER_SYSTEM.md, SESSION_IMPORT_SERVICE.md, BUS_ARCHITECTURE.md, PLUGINS.md
-**Database layout:** See `../../data/DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
+**Related:** NEX.md, CONTROL_PLANE.md, `../delivery/ADAPTER_SYSTEM.md`, SESSION_IMPORT_SERVICE.md, BUS_ARCHITECTURE.md, PLUGINS.md
+**Database layout:** See `../DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
 
 ---
 
@@ -44,7 +44,7 @@ nexus daemon start
 └──────────────────────────────────────────────────────────┘
 ```
 
-**This spec covers:** How the process starts, what it supervises, how it handles signals, and how it shuts down. The *pipeline* is in `NEX.md`. The *adapter lifecycle* is in `ADAPTER_SYSTEM.md`. The *bus* is in `BUS_ARCHITECTURE.md`.
+**This spec covers:** How the process starts, what it supervises, how it handles signals, and how it shuts down. The *pipeline* is in `NEX.md`. The *adapter lifecycle* is in `../delivery/ADAPTER_SYSTEM.md`. The *bus* is in `BUS_ARCHITECTURE.md`.
 
 ---
 
@@ -154,7 +154,7 @@ Adapters start in parallel (no ordering dependency between adapters). Runtime re
 
 **Startup order within an adapter account is sequential:** credential check → spawn → confirm stdout is readable → mark running.
 
-See `ADAPTER_SYSTEM.md` for channel adapter lifecycle and `SESSION_IMPORT_SERVICE.md` for `aix` import adapter lifecycle.
+See `../delivery/ADAPTER_SYSTEM.md` for channel adapter lifecycle and `SESSION_IMPORT_SERVICE.md` for `aix` import adapter lifecycle.
 
 ### 5. Timer Adapter
 
@@ -318,7 +318,7 @@ Signal received
 
 **Timeout behavior:**
 - Active requests get 30s to complete. After that, they're cancelled and logged as interrupted.
-- Adapter processes get 5s after SIGTERM. This matches `ADAPTER_SYSTEM.md` shutdown spec.
+- Adapter processes get 5s after SIGTERM. This matches `../delivery/ADAPTER_SYSTEM.md` shutdown spec.
 - HTTP server gets 5s to drain active SSE connections.
 
 ### Config Hot-Reload (SIGUSR1)
@@ -510,7 +510,7 @@ If the daemon crashes (segfault, OOM, uncaught exception):
 
 ### On Adapter Crash
 
-Handled by the Adapter Manager's restart policy (see `ADAPTER_SYSTEM.md`):
+Handled by the Adapter Manager's restart policy (see `../delivery/ADAPTER_SYSTEM.md`):
 - Exponential backoff: 1s → 2s → 4s → 8s → ... → 5min max
 - Max 5 restarts before marking errored
 - Reset restart count after 10min healthy
@@ -580,10 +580,10 @@ Log rotation: not handled by daemon — use system logrotate or similar. The dae
 - `NEXUS_REQUEST.md` — The data bus flowing through the pipeline
 - `PLUGINS.md` — Plugin loading and hook points
 - `BUS_ARCHITECTURE.md` — Event bus and SSE streaming
-- `../adapters/ADAPTER_SYSTEM.md` — Adapter process supervision, restart, health
-- `../broker/SESSION_LIFECYCLE.md` — Session management within the pipeline
+- `../delivery/ADAPTER_SYSTEM.md` — Adapter process supervision, restart, health
+- `../agents/SESSION_LIFECYCLE.md` — Session management within the pipeline
 - `../../environment/` — Workspace layout and configuration
 
 ---
 
-*This document defines how the NEX daemon starts, runs, and stops. The pipeline it executes is in `NEX.md`. The adapters it supervises are in `ADAPTER_SYSTEM.md`.*
+*This document defines how the NEX daemon starts, runs, and stops. The pipeline it executes is in `NEX.md`. The adapters it supervises are in `../delivery/ADAPTER_SYSTEM.md`.*

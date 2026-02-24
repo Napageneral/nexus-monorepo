@@ -110,7 +110,7 @@ The following are intentionally unchanged:
 - `delivery.container_kind === "channel"`
 - `MessagingTargetKind = "user" | "channel"`
 - Config namespace `channels.*` (separate architecture decision; not part of this cutover)
-- Plugin registry terms under `src/channels/*` (adapter/plugin domain naming)
+- Plugin registry terms under `src/platforms/*` (adapter/plugin domain naming)
 
 Note: config namespace consolidation (`channels` -> `platforms`) is a separate major refactor and not required for this cutover.
 

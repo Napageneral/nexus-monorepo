@@ -52,11 +52,9 @@ This spec is a **hard cutover** design. No backward-compatibility paths are reta
 
 Current code reality (2026-02-24):
 
-1. runtime still starts **two HTTP listeners**:
-   - control-plane listener (UI/health/SSE/tools/canvas/WS upgrades)
-   - ingress listener (hooks/openai/openresponses/plugin-http/webchat/slack bridges)
-2. both listeners already dispatch agent ingress through `dispatchNexusEvent -> nex.processEvent` for most protocol paths.
-3. this spec keeps trust-zone separation conceptually, while Phase 1/2 can choose single-port internal routing if explicitly cut over.
+1. runtime exposes **control-plane** and **ingress** surface roles.
+2. agent ingress dispatches through `dispatchNexusEvent -> nex.processEvent` for protocol paths that represent event work.
+3. this spec keeps trust-zone separation by surface semantics; concrete listener/port topology is deploy-time configuration.
 
 ### 3.1 Frontdoor responsibilities (and only these)
 
@@ -128,7 +126,7 @@ Per-app API is namespaced for clarity and IAM policying:
 - `/api/control/*`
 - `/api/oracle/*`
 
-Ingress bridges remain on ingress listener, not control-plane listener.
+Ingress bridges remain ingress-surface owned, not control-plane-surface owned.
 
 ### 5.4 Runtime app catalog contract
 

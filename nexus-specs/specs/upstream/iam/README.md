@@ -21,7 +21,7 @@ OpenClaw handles access control through **inline configuration** rather than **d
 │                                                                 │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐  │
 │  │    Allowlists    │  │   DM/Group       │  │   Mention    │  │
-│  │   (per-channel)  │  │    Policies      │  │    Gating    │  │
+│  │   (per-platform)  │  │    Policies      │  │    Gating    │  │
 │  └────────┬─────────┘  └────────┬─────────┘  └──────┬───────┘  │
 │           │                     │                    │          │
 │           └─────────────────────┼────────────────────┘          │
@@ -70,7 +70,7 @@ Nexus consolidates these into a **declarative policy layer**:
 
 ### 1. Allowlists
 
-OpenClaw uses per-channel allowlists to control who can interact:
+OpenClaw uses per-platform allowlists to control who can interact:
 
 ```json
 {
@@ -153,13 +153,13 @@ Examples:
 
 | File | Purpose |
 |------|---------|
-| `src/channels/registry.ts` | Channel ID ordering, aliases |
-| `src/channels/dock.ts` | Channel capabilities metadata |
-| `src/channels/allowlist-match.ts` | Allowlist match types |
-| `src/channels/channel-config.ts` | Channel entry matching algorithm |
-| `src/channels/mention-gating.ts` | Mention requirement logic |
-| `src/channels/command-gating.ts` | Command authorization |
-| `src/channels/sender-identity.ts` | Sender validation |
+| `src/platforms/registry.ts` | Channel ID ordering, aliases |
+| `src/platforms/dock.ts` | Channel capabilities metadata |
+| `src/platforms/allowlist-match.ts` | Allowlist match types |
+| `src/platforms/channel-config.ts` | Channel entry matching algorithm |
+| `src/platforms/mention-gating.ts` | Mention requirement logic |
+| `src/platforms/command-gating.ts` | Command authorization |
+| `src/platforms/sender-identity.ts` | Sender validation |
 
 ### Routing Layer
 

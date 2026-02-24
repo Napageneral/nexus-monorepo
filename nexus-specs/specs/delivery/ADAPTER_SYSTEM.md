@@ -1,15 +1,21 @@
-# Adapter System
+# Event Adapter System
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-06
+**Last Updated:** 2026-02-24
 
 ---
 
 ## Overview
 
-The Adapter System defines how NEX discovers, configures, manages, and communicates with adapters — the external tools that connect Nexus to the outside world (iMessage, Gmail, Discord, etc.).
+This spec defines **event adapters**: components that emit/receive delivery events for channels and protocol bridges.
 
-**Core Principle:** Adapters are external executables that implement a CLI protocol. NEX manages them as processes. The adapter's job is to normalize platform-specific behavior into the unified NexusEvent format inbound, and handle platform-specific formatting outbound. NEX doesn't care what language the adapter is written in.
+Control-plane operation surfaces (`protocol/control/event` method taxonomy) are specified separately in `../nex/SURFACE_ADAPTER_V2.md`.
+
+Core principles:
+
+1. Process adapters are external executables implementing the CLI protocol.
+2. Internal event adapters are in-process modules managed with the same lifecycle semantics.
+3. Event adapters normalize platform-specific behavior into canonical `NexusEvent` inbound, and format outbound delivery per platform.
 
 ---
 
@@ -134,7 +140,7 @@ interface DeliveryError {
 
 Handle real-time streaming delivery. A long-running bidirectional process (like `monitor`). NEX pipes `StreamEvent` JSONL to stdin; the adapter emits delivery status JSONL on stdout.
 
-**Only required if adapter declares `"stream"` in supports.** Adapters without `stream` support fall back to NEX's block pipeline, which coalesces tokens into blocks and delivers via `send`. See `broker/STREAMING.md` for the full streaming architecture.
+**Only required if adapter declares `"stream"` in supports.** Adapters without `stream` support fall back to NEX's block pipeline, which coalesces tokens into blocks and delivers via `send`. See `STREAMING.md` for the full streaming architecture.
 
 ```bash
 <command> stream --account <account_id> --format jsonl
@@ -308,7 +314,7 @@ function getFormattingGuidance(platform: string): string | null {
 }
 ```
 
-**See:** `upstream/TOOL_HOOK_MECHANISM.md` for deeper investigation of this pattern.
+**See:** `../upstream/delivery/TOOL_HOOK_MECHANISM.md` for deeper investigation of this pattern.
 
 ---
 
@@ -470,7 +476,7 @@ Write to Events Ledger (async, idempotent)
 Create NexusRequest
      │
      ▼
-NEX Pipeline: ingest → resolveIdentity → resolveReceiver → resolveAccess → ...
+NEX Pipeline: receiveEvent → resolveIdentity → resolveReceiver → resolveAccess → ...
 ```
 
 Every JSONL line from the adapter becomes a NexusEvent, gets written to the Events Ledger, and enters the full NEX pipeline.
@@ -696,7 +702,7 @@ NEX reads delivery status
 
 Token events flow from Broker → NEX → adapter stream process in real time. The adapter owns platform-specific rendering: Discord edits a message every ~300ms, Telegram uses `editMessageText`, API adapters forward raw SSE events.
 
-See `broker/STREAMING.md` for the full streaming architecture.
+See `STREAMING.md` for the full streaming architecture.
 
 ### Block Fallback Path (adapters with `send` only)
 
@@ -952,9 +958,9 @@ Defines the canonical semantics for `thread_id` / `reply_to_id` and the required
 
 ### NEX Pipeline (OVERVIEW.md)
 
-Adapter events enter the pipeline at `ingest`. Outbound delivery happens at `processResponse`. This spec defines how events get from adapter to pipeline and back.
+Adapter events enter the pipeline at `receiveEvent`. Outbound delivery happens at `deliverResponse`. This spec defines how events get from adapter to pipeline and back.
 
-### Context Assembly (broker/CONTEXT_ASSEMBLY.md)
+### Context Assembly (`../agents/CONTEXT_ASSEMBLY.md`)
 
 Platform capabilities and available platforms are injected into event context during assembly. This spec defines where that data comes from (Adapter Manager).
 
@@ -980,13 +986,13 @@ Platform capabilities and available platforms are injected into event context du
 - `OUTBOUND_INTERFACE.md` — Delivery interface, formatting, chunking
 - `OUTBOUND_TARGETING.md` — Threading + reply semantics
 - `CHANNEL_DIRECTORY.md` — Directory of outbound targets per channel/account
-- `channels/` — Per-channel capability specs
+- `platforms/` — Per-platform capability specs
 - `../nex/NEXUS_REQUEST.md` — Request object adapters create/consume
-- `../broker/CONTEXT_ASSEMBLY.md` — How platform context feeds into agent prompts
-- `../../environment/capabilities/credentials/CREDENTIAL_SYSTEM.md` — Credential linking
-- `upstream/CHANNEL_INVENTORY.md` — OpenClaw channel implementations
-- `upstream/OPENCLAW_INBOUND.md` — OpenClaw inbound patterns
-- `upstream/OPENCLAW_OUTBOUND.md` — OpenClaw outbound patterns
+- `../agents/CONTEXT_ASSEMBLY.md` — How platform context feeds into agent prompts
+- `../environment/capabilities/credentials/CREDENTIAL_SYSTEM.md` — Credential linking
+- `../upstream/delivery/CHANNEL_INVENTORY.md` — OpenClaw channel implementations
+- `../upstream/delivery/OPENCLAW_INBOUND.md` — OpenClaw inbound patterns
+- `../upstream/delivery/OPENCLAW_OUTBOUND.md` — OpenClaw outbound patterns
 
 ---
 

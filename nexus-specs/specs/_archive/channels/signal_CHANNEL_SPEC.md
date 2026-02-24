@@ -300,7 +300,7 @@ Group IDs are base64-encoded. API uses them directly:
 - SSE reconnection: `sse-reconnect.ts`
 - Send functions: `send.ts`
 - Reactions: `send-reactions.ts`
-- Outbound adapter: `channels/plugins/outbound/signal.ts`
+- Outbound adapter: `platforms/plugins/outbound/signal.ts`
 
 ### Key Upstream Patterns
 ```typescript

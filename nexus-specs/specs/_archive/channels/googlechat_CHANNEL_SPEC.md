@@ -13,7 +13,7 @@
 
 | Component | Status |
 |-----------|--------|
-| Registry entry | ✅ `src/channels/registry.ts` |
+| Registry entry | ✅ `src/platforms/registry.ts` |
 | Config types | ✅ `config/types.googlechat.ts` |
 | Webhook path | ✅ `/googlechat` configured |
 | Monitor | ❌ Not implemented |
@@ -47,7 +47,7 @@ const GOOGLECHAT_CAPABILITIES: ChannelCapabilities = {
 
 ### Registry Entry
 ```typescript
-// src/channels/registry.ts
+// src/platforms/registry.ts
 {
   id: 'googlechat',
   name: 'Google Chat',

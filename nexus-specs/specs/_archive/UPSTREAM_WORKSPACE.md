@@ -499,7 +499,7 @@ export type OnboardOptions = {
 **Advanced:**
 - Prompts for port, bind address, auth mode
 - Tailscale integration options (off/serve/funnel)
-- Per-channel configuration
+- Per-platform configuration
 - DM policy selection
 
 ### Skills Setup
@@ -643,7 +643,7 @@ export async function finalizeOnboardingWizard(options) {
 
 ## Agent Bindings
 
-Bindings map channels/accounts to specific agents (multi-agent support).
+Bindings map platforms/accounts to specific agents (multi-agent support).
 
 ### Binding Structure
 

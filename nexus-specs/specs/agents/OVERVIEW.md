@@ -14,7 +14,7 @@ The Agent Broker is responsible for:
 4. **Agent Execution** — Wrapping pi-coding-agent with Nexus context
 5. **Ledger Writes** — Persisting sessions/turns to the Agents Ledger
 
-The Broker is invoked by NEX during the `routeSession` and `runAgent` pipeline stages. It does not handle inbound events directly — that's NEX's job.
+The Broker is invoked by NEX during the `assembleContext` and `runAgent` pipeline stages. It does not handle inbound events directly — that's NEX's job.
 
 ---
 
@@ -82,12 +82,12 @@ The Broker:
 │   ... → resolveAccess → runAutomations → ┌─────────────────────────────┐   │
 │                                           │       BROKER DOMAIN          │   │
 │                                           │  ┌────────────────────────┐  │   │
-│                                           │  │ routeSession           │  │   │
+│                                           │  │ assembleContext           │  │   │
 │                                           │  │ runAgent               │  │   │
 │                                           │  └────────────────────────┘  │   │
 │                                           └──────────────┬──────────────┘   │
 │                                                          ↓                   │
-│                                       processResponse → deliverResponse     │
+│                                       deliverResponse → deliverResponse     │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 

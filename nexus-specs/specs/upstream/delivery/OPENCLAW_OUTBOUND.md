@@ -8,7 +8,7 @@ Reference documentation for how OpenClaw handles outbound message delivery.
 - `src/auto-reply/reply/reply-dispatcher.ts` — Reply serialization
 - `src/auto-reply/reply/normalize-reply.ts` — Payload normalization
 - `src/auto-reply/chunk.ts` — Chunking system
-- `src/channels/plugins/outbound/*.ts` — Per-channel adapters
+- `src/platforms/plugins/outbound/*.ts` — Per-platform adapters
 
 ---
 

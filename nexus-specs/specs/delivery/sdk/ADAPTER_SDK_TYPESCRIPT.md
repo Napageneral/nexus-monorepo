@@ -1,14 +1,14 @@
-# Adapter SDK (TypeScript)
+# Event Adapter SDK (TypeScript)
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-17  
-**Related:** `ADAPTER_SDK.md`, `ADAPTER_SYSTEM.md`, `INBOUND_INTERFACE.md`, `OUTBOUND_INTERFACE.md`
+**Last Updated:** 2026-02-24  
+**Related:** `ADAPTER_SDK.md`, `ADAPTER_SYSTEM.md`, `INBOUND_INTERFACE.md`, `OUTBOUND_INTERFACE.md`, `../nex/SURFACE_ADAPTER_V2.md`
 
 ---
 
 ## Overview
 
-The TypeScript Adapter SDK (`@nexus/adapter-sdk`) provides shared infrastructure for building Nexus adapters in Node/TypeScript.
+The TypeScript SDK (`@nexus/adapter-sdk`) provides shared infrastructure for building Nexus **event adapters** in Node/TypeScript.
 
 **Goal:** Keep Discord/Telegram/Slack/WhatsApp adapters as *external processes* while avoiding per-adapter reimplementation of:
 
@@ -27,7 +27,7 @@ Adapters remain responsible for platform-specific work: connecting to APIs, norm
 
 - Defining the adapter protocol (that lives in `ADAPTER_SYSTEM.md`)
 - Implementing any platform logic (Discord Gateway, Telegram Bot API, etc.)
-- In-process integrations inside NEX
+- In-process control-surface operations inside NEX
 
 ---
 

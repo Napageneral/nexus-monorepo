@@ -231,7 +231,7 @@ OpenClaw passes tools to agent session, observes but can't intercept.
 | `src/auto-reply/reply/reply-dispatcher.ts` | Reply serialization |
 | `src/auto-reply/reply/normalize-reply.ts` | Payload normalization |
 | `src/auto-reply/chunk.ts` | Chunking system |
-| `src/channels/plugins/outbound/*.ts` | Per-channel outbound adapters |
+| `src/platforms/plugins/outbound/*.ts` | Per-platform outbound adapters |
 
 ### Streaming
 
@@ -293,7 +293,7 @@ Port the most-used channels first:
 | Adapter System | `../ADAPTER_SYSTEM.md` |
 | Inbound Interface | `../INBOUND_INTERFACE.md` |
 | Outbound Interface | `../OUTBOUND_INTERFACE.md` |
-| Per-Channel Specs | `../channels/*.md` |
+| Per-Channel Specs | `../platforms/*.md` |
 | NexusRequest | `../../nex/NEXUS_REQUEST.md` |
 
 ---

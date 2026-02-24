@@ -28,14 +28,14 @@ Event Arrives
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                          NEX PIPELINE                                    │
 │                                                                          │
-│  1. ingest()               →  [afterIngest]                             │
+│  1. receiveEvent()               →  [afterReceiveEvent]                             │
 │  2. resolveIdentity()      →  [afterResolveIdentity]                    │
 │  3. resolveReceiver()      →  [afterResolveReceiver]                    │
 │  4. resolveAccess()        →  [afterResolveAccess]                      │
 │  5. runAutomations()       →  [afterRunAutomations]  ← AUTOMATIONS     │
-│  6. routeSession()         →  [afterRouteSession]                       │
+│  6. assembleContext()         →  [afterAssembleContext]                       │
 │  7. runAgent()             →  [afterRunAgent]                           │
-│  8. processResponse()      →  [afterProcessResponse]                    │
+│  8. deliverResponse()      →  [afterDeliverResponse]                    │
 │  9. deliverResponse()      →  [onDeliverResponse]                       │
 │                                                                          │
 │  Error at any stage        →  [onError]                                 │
@@ -53,14 +53,14 @@ interface NEXPlugin {
   priority?: number;  // Lower runs first (default: 100)
 
   // Lifecycle hooks (after each stage)
-  afterIngest?(req: NexusRequest): Promise<void | 'skip'>;
+  afterReceiveEvent?(req: NexusRequest): Promise<void | 'skip'>;
   afterResolveIdentity?(req: NexusRequest): Promise<void | 'skip'>;
   afterResolveReceiver?(req: NexusRequest): Promise<void | 'skip'>;
   afterResolveAccess?(req: NexusRequest): Promise<void | 'skip'>;
   afterRunAutomations?(req: NexusRequest): Promise<void | 'skip'>;
-  afterRouteSession?(req: NexusRequest): Promise<void | 'skip'>;
+  afterAssembleContext?(req: NexusRequest): Promise<void | 'skip'>;
   afterRunAgent?(req: NexusRequest): Promise<void | 'skip'>;
-  afterProcessResponse?(req: NexusRequest): Promise<void | 'skip'>;
+  afterDeliverResponse?(req: NexusRequest): Promise<void | 'skip'>;
 
   onDeliverResponse?(req: NexusRequest): Promise<void>;
   onError?(req: NexusRequest, error: Error): Promise<void>;
@@ -110,7 +110,7 @@ See `automations/AUTOMATION_SYSTEM.md` for the full automation specification.
 const loggingPlugin: NEXPlugin = {
   name: 'logging',
 
-  afterIngest: async (req) => {
+  afterReceiveEvent: async (req) => {
     console.log(`[NEX] Received: ${req.event.event_id}`);
   },
 

@@ -527,7 +527,7 @@ Examples:
 |------|----------|
 | `main` | All DMs collapse to single session |
 | `per-peer` | Separate session per peer |
-| `per-channel-peer` | Per channel + peer |
+| `per-platform-peer` | Per channel + peer |
 | `per-account-channel-peer` | Full isolation |
 
 ---
@@ -658,11 +658,11 @@ Examples:
 | Routing | `resolveAgentRoute()` | Uses `OriginatingChannel`/`OriginatingTo` |
 
 **Shared between both:**
-- `src/channels/session.ts` — Session recording
+- `src/platforms/session.ts` — Session recording
 - `src/routing/resolve-route.ts` — Routing logic
 - `src/auto-reply/reply/reply-dispatcher.ts` — Reply dispatching
-- `src/channels/typing.ts` — Typing indicators
-- `src/channels/ack-reactions.ts` — Acknowledgment reactions
+- `src/platforms/typing.ts` — Typing indicators
+- `src/platforms/ack-reactions.ts` — Acknowledgment reactions
 
 ---
 

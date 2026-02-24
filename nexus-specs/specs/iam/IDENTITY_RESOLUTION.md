@@ -8,6 +8,9 @@
 
 Identity resolution is Stage 2 of the NEX pipeline. It transforms a raw `(platform, sender_id)` tuple from an adapter into a resolved entity with tags, group memberships, and access context.
 
+For canonical sender+receiver symmetry, account-bound receiver identity, persona binding separation, and continuity transfer behavior, see:
+`../nex/ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md`.
+
 The system handles two categories of identifiers:
 - **Universal identifiers** — phone numbers and emails that are meaningful across platforms
 - **Platform-local identifiers** — opaque IDs meaningful only within one platform (Discord snowflakes, Telegram numeric IDs, Slack user IDs)
@@ -136,17 +139,31 @@ Slack workspace B: sender_id="U123ABC", space_id="T222"
 ```
 Result: Two entities. Same Slack user ID across workspaces may be different people.
 
+## Sender Name Change Tracking
+
+`sender_name` is treated as mutable, untrusted display metadata.
+
+Required behavior:
+1. Contacts keep the latest seen name (`contacts.sender_name`) for fast reads.
+2. Name history is retained in `contact_name_observations` with first_seen/last_seen/seen_count.
+3. Name changes do not create new entities and do not affect canonicalization.
+4. Merge and policy logic uses entity identity; display names are observational metadata only.
+
 ## Entity Types
 
-All entities created through the delivery path have `type = 'person'`. Other entity types:
+Entity type is intentionally flexible. The delivery path defaults new external senders to `type = 'person'`, but entities are not restricted to a fixed closed set and can be re-typed as better information is learned.
 
-| Type | Created by | Description |
+Common types in active use:
+
+| Type | Typical creator | Description |
 |------|-----------|-------------|
 | `person` | Delivery pipeline, memory writer, manual | A human being (includes mentioned people who never send messages) |
-| `agent` | Bootstrap, agent registration | An AI agent/persona (Eve, Atlas, etc.) |
+| `agent` | Bootstrap, agent registration | An AI agent (Eve, Atlas, etc.) |
 | `group` | Manual, control plane | A group of entities (also has a row in `groups` table) |
 | `organization` | Memory writer, manual | A company, team, or institution |
 | `service` | Manual, delivery pipeline | External services and bots (GitHub Bot, Slack Bot, webhooks) |
+
+Additional domain-specific types are allowed when they improve modeling fidelity.
 
 ## Bootstrap Entities
 
@@ -155,21 +172,22 @@ On startup, the runtime creates:
 | Entity | entity_id | type | is_user | Tags | Purpose |
 |--------|-----------|------|---------|------|---------|
 | Owner | `entity-owner` | `person` | `true` | `owner` | The human user of this Nexus instance |
-| Agent personas | `entity-{persona_id}` | `agent` | `false` | `agent`, `persona:{name}` | Each registered agent persona |
+| Receiver entities | runtime-defined stable IDs | `agent` | `false` | `agent` | Local receiver identities bound to adapter accounts |
 
 **Owner contact (auth path only):**
 - `(login, "", "owner")` → `entity-owner`
 
 System-origin platforms (cron, runtime, boot, restart, node, clock) do NOT get contacts. They are resolved directly to `entity-owner` at the `resolveIdentity` stage without a contacts table lookup. See **System-Origin Resolution** below.
 
-**Agent persona bootstrap:**
+**Receiver bootstrap:**
 
-Each configured persona gets both an entity row and a contact row:
+For each configured adapter account, runtime must seed deterministic account receiver bindings:
 
-1. **Entity row:** `{ id: "entity-{persona_id}", name: "{persona_name}", type: "agent", source: "bootstrap" }`
-2. **Contact row:** `("agent", "", "{persona_id}")` → `"entity-{persona_id}"`
+1. **Entity row:** stable receiver entity (`type='agent'`, source bootstrap/import/manual).
+2. **Account binding row:** `(platform, account_id) -> receiver_entity_id`.
+3. Optional contact aliases may exist, but account binding is authoritative for receiver resolution.
 
-This makes the system symmetric: every message has a sender entity and a receiver entity in the same identity graph. Agent personas are first-class entities that can be looked up by contact (platform `"agent"`, sender_id `"{persona_id}"`) just like any other entity.
+Persona is a binding on top of receiver entity identity, not the identity key itself.
 
 ## SenderContext (replaces PrincipalContext)
 
@@ -194,20 +212,21 @@ Changes from PrincipalContext:
 
 ## ReceiverContext
 
-The resolved target of the message (agent/persona), attached to `NexusRequest.receiver`:
+The resolved target of the message (agent/system/entity), attached to `NexusRequest.receiver`:
 
 ```typescript
 interface ReceiverContext {
   type: 'agent' | 'system' | 'entity' | 'unknown';
-  entity_id?: string;                // Entity ID in identity.db (always set for 'agent' and 'entity' types)
-  persona_id?: string;               // If type is 'agent' — which persona (matches entity-{persona_id})
+  entity_id?: string;                // Canonical receiver entity ID (required for agent/entity)
+  agent_id?: string;                 // Runtime executor ID (when receiver is agent)
+  persona_ref?: string;              // Persona identity profile reference
   name?: string;
-  source: 'mention' | 'dm' | 'default' | 'config' | 'override';
+  source: 'account_binding' | 'hint_verified' | 'override' | 'system';
   metadata?: Record<string, unknown>;
 }
 ```
 
-An agent persona IS an entity with `type = 'agent'` in identity.db. When the receiver is an agent persona, `entity_id` references the agent's entity (e.g., `"entity-eve"`) and `persona_id` provides the persona key for config lookup.
+An agent receiver IS an entity with `type='agent'` in identity.db. `entity_id` identifies the receiver identity. `agent_id` and `persona_ref` come from binding resolution.
 
 Both sender and receiver resolve to entities in identity.db.
 
@@ -222,7 +241,7 @@ The core problem with writer-created entities is **dedup**, not contacts. The `c
 3. **If match above threshold** → return the existing `entity_id` instead of creating a duplicate
 4. **Only create if genuinely new** — no normalized name match and no embedding similarity above threshold
 
-Knowledge entities (writer-created, `source = 'inferred'`) and delivery entities (pipeline-created, `source = 'delivery'`) coexist in the same `entities` table. No contacts are created for knowledge entities — contacts are exclusively for entities that send or receive messages through adapters.
+Knowledge entities (writer-created, `source = 'inferred'`) and delivery entities (pipeline-created, `source = 'delivery'`) coexist in the same `entities` table. Contacts are optional metadata bindings and may exist for any entity type when operationally useful.
 
 **Co-occurrence data:** `link_fact_entity` records entity co-occurrences in the `entity_cooccurrences` table. This data is available to the consolidation agent for merge decisions (deferred — currently LLM-only merges).
 

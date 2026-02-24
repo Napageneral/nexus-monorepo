@@ -1,12 +1,12 @@
-# Channel Adapters
+# Platform Adapters
 
 **Last Updated:** 2026-02-06
 
 ---
 
-## Channel Inventory
+## Platform Inventory
 
-Full inventory of channels, their adapter status, and compliance level against the adapter protocol defined in `ADAPTER_SYSTEM.md`.
+Full inventory of platforms, their adapter status, and compliance level against the adapter protocol defined in `ADAPTER_SYSTEM.md`.
 
 ### Compliance Levels
 
@@ -19,9 +19,9 @@ Full inventory of channels, their adapter status, and compliance level against t
 
 ---
 
-### Core Channels (from OpenClaw + Nexus tools)
+### Core Platforms (from OpenClaw + Nexus tools)
 
-| Channel | Folder | Nexus Tool | Upstream | Compliance Target | Status |
+| Platform | Folder | Nexus Tool | Upstream | Compliance Target | Status |
 |---------|--------|------------|----------|-------------------|--------|
 | **Discord** | `discord/` | TBD (`discord-cli`) | `src/discord/` (66 files) | Complete + Extended | Review needed |
 | **Telegram** | `telegram/` | TBD (`telegram-cli`) | `src/telegram/` (87 files) | Complete + Extended | Review needed |
@@ -33,9 +33,9 @@ Full inventory of channels, their adapter status, and compliance level against t
 | **LINE** | `line/` | TBD | `src/line/` (34 files) | Standard | Review needed |
 | **Feishu/Lark** | `feishu/` | TBD | `src/feishu/` (17 files) | Standard | Placeholder |
 
-### Extension Channels (from OpenClaw extensions)
+### Extension Platforms (from OpenClaw extensions)
 
-| Channel | Folder | Upstream | Notes | Priority |
+| Platform | Folder | Upstream | Notes | Priority |
 |---------|--------|----------|-------|----------|
 | **Google Chat** | `googlechat/` | `extensions/googlechat/` | Config only upstream, full ext now | Phase 3 |
 | **MS Teams** | `msteams/` | `extensions/msteams/` | Config only upstream, full ext now | Phase 3 |
@@ -43,9 +43,9 @@ Full inventory of channels, their adapter status, and compliance level against t
 | **BlueBubbles** | `bluebubbles/` | `extensions/bluebubbles/` (26 files) | Recommended iMessage, replaces native | Phase 2 |
 | **Voice/Telephony** | `voice/` | `extensions/voice-call/` (41 files) | Twilio/Plivo/Telnyx | Phase 4 |
 
-### Nexus-Only Channels (not in OpenClaw)
+### Nexus-Only Platforms (not in OpenClaw)
 
-| Channel | Folder | Source | What it ingests | Priority |
+| Platform | Folder | Source | What it ingests | Priority |
 |---------|--------|--------|-----------------|----------|
 | **AIX** | `aix/` | mnemonic `aix_events.go`, `aix_agents.go` | IDE sessions (Cursor, Codex, Claude Code) | High |
 | **Calendar** | `calendar/` | mnemonic `calendar.go` + `gog` | Google Calendar events | Medium |
@@ -55,22 +55,22 @@ Full inventory of channels, their adapter status, and compliance level against t
 
 ## Folder Structure
 
-Each channel folder contains:
+Each platform folder contains:
 
 ```
-channels/{channel}/
+platforms/{platform}/
 ├── CHANNEL_SPEC.md          # Capabilities, formatting, inbound/outbound, media
 └── UPSTREAM_REVIEW.md        # Gap analysis: upstream code vs adapter protocol
 ```
 
-Some channels also include additional design/migration docs, for example:
+Some platforms also include additional design/migration docs, for example:
 
 - `ONBOARDING.md` (credential + account setup flow)
 - `POLICY_SURFACE.md` (what stays in adapter vs IAM vs Manager/automations)
 
-### CHANNEL_SPEC.md
+### PLATFORM_SPEC.md
 
-Per-channel documentation: capabilities object, formatting rules, inbound event normalization, outbound delivery specifics, media handling, platform quirks.
+Per-platform documentation: capabilities object, formatting rules, inbound event normalization, outbound delivery specifics, media handling, platform quirks.
 
 ### UPSTREAM_REVIEW.md
 
@@ -84,9 +84,9 @@ Gap analysis against the adapter protocol:
 
 ## Review Process
 
-For each channel:
+For each platform:
 
-1. **Read CHANNEL_SPEC.md** — Understand the platform
+1. **Read PLATFORM_SPEC.md** — Understand the platform
 2. **Review upstream code** — What exists in OpenClaw or Nexus tools
 3. **Write UPSTREAM_REVIEW.md** — Gap analysis against adapter protocol
 4. **Estimate effort** — What it takes to reach Standard, Complete, Extended
@@ -97,4 +97,4 @@ For each channel:
 
 - `../ADAPTER_SYSTEM.md` — Adapter protocol, registration, lifecycle
 - `../INBOUND_INTERFACE.md` / `../OUTBOUND_INTERFACE.md` — Data contracts (NexusEvent, DeliveryResult)
-- `../upstream/CHANNEL_INVENTORY.md` — Full OpenClaw channel inventory
+- `../upstream/CHANNEL_INVENTORY.md` — Full OpenClaw platform inventory

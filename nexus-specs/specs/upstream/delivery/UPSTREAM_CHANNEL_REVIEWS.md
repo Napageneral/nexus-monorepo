@@ -49,7 +49,7 @@ Consolidated upstream gap analysis for all channel adapters: protocol compliance
 
 **Light deps (extractable as-is):** `chunk.ts` (chunking), `send.shared.ts` (client factory), `send.messages.ts` (CRUD), `send.reactions.ts`, `monitor/threading.ts`.
 
-**Heavy deps (need rewrite):** `auto-reply/*`, `config/config.js`, `routing/*`, `channels/*`, `pairing/*`, `security/channel-metadata.js`.
+**Heavy deps (need rewrite):** `auto-reply/*`, `config/config.js`, `routing/*`, `platforms/*`, `pairing/*`, `security/channel-metadata.js`.
 
 ### What Must Be Built
 

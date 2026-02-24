@@ -563,7 +563,7 @@ Tags are stripped before sending.
 ```markdown
 ## Messaging
 - Replies are routed automatically to the current chat
-- Use `message` tool to send to specific channels/users
+- Use `message` tool to send to specific platforms/users
 - Inline buttons supported on some platforms
 ```
 
