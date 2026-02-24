@@ -82,5 +82,18 @@
     "defaultScopes": ["operator.admin"],
     "command": "node /Users/tyler/nexus/home/projects/nexus/nexus-frontdoor/scripts/provision-tenant-local.mjs",
     "commandTimeoutMs": 120000
+  },
+  "billing": {
+    "provider": "none",
+    "checkoutSuccessUrl": "https://frontdoor.example.com/billing/success",
+    "checkoutCancelUrl": "https://frontdoor.example.com/billing/cancel",
+    "webhookSecret": "change-me-frontdoor-billing-webhook-secret",
+    "stripeSecretKey": "change-me-stripe-secret-key",
+    "stripeApiBaseUrl": "https://api.stripe.com",
+    "stripePriceIdsByPlan": {
+      "starter": "price_starter",
+      "pro": "price_pro",
+      "business": "price_business"
+    }
   }
 }

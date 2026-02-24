@@ -3,23 +3,17 @@
 const {
   envConfig,
   parseCookies,
-  readRawBody,
-  enforceBrowserOrigin,
   sendJson,
   proxyToFrontdoor,
   passthroughJson,
 } = require("./_shared");
 
 module.exports = async function handler(req, res) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
+  if (req.method !== "GET") {
+    res.setHeader("Allow", "GET");
     sendJson(res, 405, { ok: false, error: "method_not_allowed" });
     return;
   }
-  if (!enforceBrowserOrigin(req, res)) {
-    return;
-  }
-
   const cfg = envConfig();
   if (!cfg.frontdoorOrigin) {
     sendJson(res, 500, { ok: false, error: "missing FRONTDOOR_ORIGIN" });
@@ -32,13 +26,10 @@ module.exports = async function handler(req, res) {
     return;
   }
   try {
-    const rawBody = await readRawBody(req);
     const proxied = await proxyToFrontdoor({
       frontdoorOrigin: cfg.frontdoorOrigin,
-      path: "/api/runtime/token",
-      method: "POST",
-      rawBody: rawBody || "{}",
-      contentType: req.headers["content-type"] || "application/json",
+      path: "/api/operator/workspaces",
+      method: "GET",
       sessionCookieName: cfg.frontdoorCookieName,
       sessionCookieValue: sessionValue,
     });

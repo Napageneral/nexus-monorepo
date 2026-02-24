@@ -4,8 +4,43 @@ const state = {
   session: null,
   workspaces: [],
   activeWorkspaceId: "",
+  frontdoorOrigin: "",
+  operatorWorkspaces: [],
 };
 const operatorMode = new URLSearchParams(window.location.search).get("operator") === "1";
+
+function hasOperatorAccess(session) {
+  if (!session || !Array.isArray(session.roles)) {
+    return false;
+  }
+  return session.roles.some((role) => String(role || "").trim() === "operator");
+}
+
+function hasWorkspaceAdminAccess(session) {
+  if (!session || !Array.isArray(session.roles)) {
+    return false;
+  }
+  const allowed = new Set(["workspace_owner", "workspace_admin", "operator"]);
+  return session.roles.some((role) => allowed.has(String(role || "").trim()));
+}
+
+function formatNumber(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "0";
+  }
+  return new Intl.NumberFormat().format(Math.max(0, Math.floor(value)));
+}
+
+function formatDate(valueMs) {
+  if (typeof valueMs !== "number" || !Number.isFinite(valueMs) || valueMs <= 0) {
+    return "-";
+  }
+  try {
+    return new Date(valueMs).toLocaleDateString();
+  } catch {
+    return "-";
+  }
+}
 
 function setPill(label, cls = "") {
   const pill = el("statusPill");
@@ -77,16 +112,62 @@ function updateWorkspaceSummary() {
   summary.textContent = `Active workspace: ${selected.display_name || selected.workspace_id}`;
 }
 
+function resetOwnerInsights() {
+  el("usageRequests30d").textContent = "0";
+  el("usageTokensIn30d").textContent = "0";
+  el("usageTokensOut30d").textContent = "0";
+  el("usageActiveMembers").textContent = "0";
+  el("billingPlan").textContent = "-";
+  el("billingStatus").textContent = "-";
+  el("billingProvider").textContent = "-";
+  el("billingPeriodEnd").textContent = "-";
+  el("billingInvoiceList").innerHTML = "";
+}
+
+function renderOperatorWorkspaceInventory(items) {
+  const list = el("operatorWorkspaceList");
+  list.innerHTML = "";
+  if (!Array.isArray(items) || items.length === 0) {
+    const empty = document.createElement("li");
+    empty.textContent = "No workspaces.";
+    list.appendChild(empty);
+    el("operatorWorkspaceCount").textContent = "0";
+    return;
+  }
+  el("operatorWorkspaceCount").textContent = String(items.length);
+  for (const item of items) {
+    const li = document.createElement("li");
+    const title = document.createElement("span");
+    title.className = "title";
+    title.textContent = `${item.display_name || item.workspace_id} (${item.workspace_id})`;
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    const requests = formatNumber(item?.usage_30d?.requests_total || 0);
+    const members = formatNumber(item?.member_count || 0);
+    const plan = String(item?.billing?.plan_id || "starter");
+    const status = String(item?.status || "active");
+    meta.textContent = `${status} • ${members} members • ${requests} requests/30d • plan ${plan}`;
+    li.appendChild(title);
+    li.appendChild(meta);
+    list.appendChild(li);
+  }
+}
+
 function updateUiFromSession(session, options = {}) {
   const authenticated = Boolean(session && session.authenticated);
   state.session = authenticated ? session : null;
   const keepStatus = options.keepStatus === true;
+  const operatorAllowed = authenticated && hasOperatorAccess(session);
+  const workspaceAdminAllowed = authenticated && hasWorkspaceAdminAccess(session);
 
   el("googleBtn").hidden = authenticated;
   el("logoutBtn").hidden = !authenticated;
   el("openTenantAppBtn").disabled = !authenticated || !state.activeWorkspaceId;
   el("workspacePanel").hidden = !authenticated;
   el("invitePanel").hidden = !authenticated;
+  el("ownerInsightsPanel").hidden = !workspaceAdminAllowed;
+  el("operatorWorkspacePanel").hidden = !operatorAllowed;
+  el("operatorPanel").hidden = !(operatorMode && operatorAllowed);
 
   if (authenticated) {
     const who =
@@ -106,6 +187,11 @@ function updateUiFromSession(session, options = {}) {
   renderWorkspaceSelect();
   updateWorkspaceSummary();
   el("workspaceCount").textContent = "0";
+  resetOwnerInsights();
+  renderOperatorWorkspaceInventory([]);
+  el("ownerInsightsPanel").hidden = true;
+  el("operatorWorkspacePanel").hidden = true;
+  el("operatorPanel").hidden = true;
   setPill("Not signed in", "err");
 }
 
@@ -122,6 +208,7 @@ async function loadWorkspaces() {
     renderWorkspaceSelect();
     updateWorkspaceSummary();
     el("workspaceCount").textContent = "0";
+    resetOwnerInsights();
     return;
   }
   const result = await api("/api/workspaces", { method: "GET" });
@@ -131,6 +218,7 @@ async function loadWorkspaces() {
     renderWorkspaceSelect();
     updateWorkspaceSummary();
     el("workspaceCount").textContent = "0";
+    resetOwnerInsights();
     setPill("Workspace list unavailable", "err");
     return;
   }
@@ -146,6 +234,152 @@ async function loadWorkspaces() {
   updateWorkspaceSummary();
   el("workspaceCount").textContent = String(state.workspaces.length);
   el("openTenantAppBtn").disabled = !state.session || !state.activeWorkspaceId;
+  await loadWorkspaceInsights();
+}
+
+async function loadWorkspaceInsights() {
+  if (!state.session || !hasWorkspaceAdminAccess(state.session)) {
+    resetOwnerInsights();
+    return;
+  }
+  const workspaceId = currentWorkspaceId();
+  if (!workspaceId) {
+    resetOwnerInsights();
+    return;
+  }
+  const usageResp = await api(`/api/workspace-usage?workspace_id=${encodeURIComponent(workspaceId)}`, {
+    method: "GET",
+  });
+  if (usageResp.ok) {
+    el("usageRequests30d").textContent = formatNumber(usageResp.body.requests_total || 0);
+    el("usageTokensIn30d").textContent = formatNumber(usageResp.body.tokens_in || 0);
+    el("usageTokensOut30d").textContent = formatNumber(usageResp.body.tokens_out || 0);
+    el("usageActiveMembers").textContent = formatNumber(usageResp.body.active_members || 0);
+  } else {
+    el("usageRequests30d").textContent = "-";
+    el("usageTokensIn30d").textContent = "-";
+    el("usageTokensOut30d").textContent = "-";
+    el("usageActiveMembers").textContent = "-";
+  }
+  const billingResp = await api(`/api/billing-subscription?workspace_id=${encodeURIComponent(workspaceId)}`, {
+    method: "GET",
+  });
+  if (billingResp.ok) {
+    el("billingPlan").textContent = String(billingResp.body?.plan_id || "-");
+    el("billingStatus").textContent = String(billingResp.body?.status || "-");
+    el("billingProvider").textContent = String(billingResp.body?.provider || "-");
+    el("billingPeriodEnd").textContent = formatDate(billingResp.body?.period_end_ms);
+    const selectedPlan = String(billingResp.body?.plan_id || "").trim();
+    if (selectedPlan) {
+      el("billingPlanSelect").value = selectedPlan;
+    }
+  } else if (billingResp.status === 403) {
+    el("billingPlan").textContent = "restricted";
+    el("billingStatus").textContent = "restricted";
+    el("billingProvider").textContent = "restricted";
+    el("billingPeriodEnd").textContent = "restricted";
+  } else {
+    el("billingPlan").textContent = "-";
+    el("billingStatus").textContent = "-";
+    el("billingProvider").textContent = "-";
+    el("billingPeriodEnd").textContent = "-";
+  }
+  await loadWorkspaceInvoices();
+}
+
+function renderBillingInvoices(items) {
+  const list = el("billingInvoiceList");
+  list.innerHTML = "";
+  if (!Array.isArray(items) || items.length === 0) {
+    const empty = document.createElement("li");
+    empty.textContent = "No invoices yet.";
+    list.appendChild(empty);
+    return;
+  }
+  for (const item of items) {
+    const li = document.createElement("li");
+    const title = document.createElement("span");
+    title.className = "title";
+    const amount = formatNumber(item.amount_due || 0);
+    const currency = String(item.currency || "usd").toUpperCase();
+    title.textContent = `${item.invoice_id} • ${currency} ${amount}`;
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    meta.textContent = `${item.status || "unknown"} • ${formatDate(item.created_at_ms)}`;
+    li.appendChild(title);
+    li.appendChild(meta);
+    if (item.hosted_invoice_url) {
+      const link = document.createElement("a");
+      link.href = String(item.hosted_invoice_url);
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = "Open invoice";
+      li.appendChild(link);
+    }
+    list.appendChild(li);
+  }
+}
+
+async function loadWorkspaceInvoices() {
+  if (!state.session || !hasWorkspaceAdminAccess(state.session)) {
+    renderBillingInvoices([]);
+    return;
+  }
+  const workspaceId = currentWorkspaceId();
+  if (!workspaceId) {
+    renderBillingInvoices([]);
+    return;
+  }
+  const invoicesResp = await api(`/api/billing-invoices?workspace_id=${encodeURIComponent(workspaceId)}`, {
+    method: "GET",
+  });
+  if (!invoicesResp.ok || !Array.isArray(invoicesResp.body?.items)) {
+    renderBillingInvoices([]);
+    return;
+  }
+  renderBillingInvoices(invoicesResp.body.items);
+}
+
+async function startCheckout() {
+  if (!state.session || !hasWorkspaceAdminAccess(state.session)) {
+    setPill("Billing access denied", "err");
+    return;
+  }
+  const workspaceId = currentWorkspaceId();
+  if (!workspaceId) {
+    setPill("Select a workspace first", "err");
+    return;
+  }
+  const planId = String(el("billingPlanSelect").value || "").trim() || "starter";
+  const result = await api("/api/billing-checkout-session", {
+    method: "POST",
+    body: JSON.stringify({
+      workspace_id: workspaceId,
+      plan_id: planId,
+    }),
+  });
+  if (!result.ok || !result.body?.checkout_url) {
+    setPill("Checkout launch failed", "err");
+    return;
+  }
+  window.open(String(result.body.checkout_url), "_blank", "noopener,noreferrer");
+  setPill("Checkout session ready", "ok");
+}
+
+async function loadOperatorInventory() {
+  if (!state.session || !hasOperatorAccess(state.session)) {
+    state.operatorWorkspaces = [];
+    renderOperatorWorkspaceInventory([]);
+    return;
+  }
+  const result = await api("/api/operator-workspaces", { method: "GET" });
+  if (!result.ok || !Array.isArray(result.body?.items)) {
+    state.operatorWorkspaces = [];
+    renderOperatorWorkspaceInventory([]);
+    return;
+  }
+  state.operatorWorkspaces = result.body.items;
+  renderOperatorWorkspaceInventory(state.operatorWorkspaces);
 }
 
 async function refreshSession() {
@@ -153,6 +387,7 @@ async function refreshSession() {
   if (result.ok && result.body.authenticated) {
     updateUiFromSession(result.body);
     await loadWorkspaces();
+    await loadOperatorInventory();
   } else {
     updateUiFromSession(null);
   }
@@ -205,6 +440,7 @@ async function selectWorkspace() {
   }
   state.activeWorkspaceId = workspaceId;
   await refreshSession();
+  await loadWorkspaceInsights();
   setPill("Workspace selected", "ok");
 }
 
@@ -273,25 +509,28 @@ async function openTenantControlUi() {
     setPill("Select a workspace first", "err");
     return;
   }
-  const result = await api("/api/runtime-token", {
+  const selected = await api("/api/workspaces-select", {
     method: "POST",
     body: JSON.stringify({
-      client_id: "nexus-frontdoor-web",
       workspace_id: workspaceId,
     }),
   });
-  if (!result.ok || !result.body?.access_token || !result.body?.runtime?.http_base_url) {
+  if (!selected.ok) {
+    setPill("Workspace selection failed", "err");
+    return;
+  }
+  const originResp = await api("/api/frontdoor-origin", {
+    method: "GET",
+  });
+  if (!originResp.ok || !originResp.body?.frontdoor_origin) {
     setPill("Workspace launch unavailable", "err");
     return;
   }
-  const httpBaseUrl = String(result.body.runtime.http_base_url).replace(/\/+$/, "");
-  const wsUrl = String(result.body.runtime.ws_url || "");
-  const launch = new URL(`${httpBaseUrl}/app/chat`);
+  const frontdoorOrigin = String(originResp.body.frontdoor_origin || "").replace(/\/+$/, "");
+  state.frontdoorOrigin = frontdoorOrigin;
+  const launch = new URL("/app/chat", frontdoorOrigin);
   launch.searchParams.set("session", "main");
-  launch.searchParams.set("token", result.body.access_token);
-  if (wsUrl) {
-    launch.searchParams.set("runtimeUrl", wsUrl);
-  }
+  launch.searchParams.set("workspace_id", workspaceId);
   window.location.href = launch.toString();
 }
 
@@ -299,6 +538,9 @@ function handleWorkspacePickerChange() {
   state.activeWorkspaceId = currentWorkspaceId();
   updateWorkspaceSummary();
   el("openTenantAppBtn").disabled = !state.session || !state.activeWorkspaceId;
+  loadWorkspaceInsights().catch(() => {
+    resetOwnerInsights();
+  });
 }
 
 el("googleBtn").addEventListener("click", startGoogle);
@@ -310,7 +552,10 @@ el("refreshWorkspacesBtn").addEventListener("click", loadWorkspaces);
 el("selectWorkspaceBtn").addEventListener("click", selectWorkspace);
 el("redeemInviteBtn").addEventListener("click", redeemInvite);
 el("createWorkspaceBtn").addEventListener("click", createWorkspace);
-el("operatorPanel").hidden = !operatorMode;
+el("refreshInsightsBtn").addEventListener("click", loadWorkspaceInsights);
+el("refreshOperatorBtn").addEventListener("click", loadOperatorInventory);
+el("startCheckoutBtn").addEventListener("click", startCheckout);
+el("operatorPanel").hidden = true;
 
 refreshSession().catch(() => {
   updateUiFromSession(null);

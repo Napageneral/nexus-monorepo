@@ -3,7 +3,7 @@ import {
   type IncomingMessage,
   type Server as HttpServer,
 } from "node:http";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { AddressInfo } from "node:net";
 import path from "node:path";
 import { tmpdir } from "node:os";
@@ -109,6 +109,15 @@ function baseConfig(runtimeUrl: string): FrontdoorConfig {
       defaultScopes: ["operator.admin"],
       command: undefined,
       commandTimeoutMs: 120000,
+    },
+    billing: {
+      provider: "mock",
+      webhookSecret: "billing-webhook-secret-test",
+      checkoutSuccessUrl: "https://frontdoor.test/billing/success",
+      checkoutCancelUrl: "https://frontdoor.test/billing/cancel",
+      stripeSecretKey: undefined,
+      stripeApiBaseUrl: "https://api.stripe.com",
+      stripePriceIdsByPlan: new Map(),
     },
   };
 }
@@ -349,14 +358,14 @@ describe("frontdoor scaffold", () => {
     expect(forwardedOriginHeader).toBe("https://frontend.example.com");
   });
 
-  it("bootstraps /app HTML routes with runtime token + runtimeUrl query params", async () => {
+  it("bootstraps /app HTML routes without leaking token or runtimeUrl in URL", async () => {
     let lastRuntimeUrl = "";
     const runtime = await listen(
       createHttpServer((req, res) => {
         lastRuntimeUrl = String(req.url ?? "");
         res.statusCode = 200;
-        res.setHeader("content-type", "application/json");
-        res.end(JSON.stringify({ ok: true, url: req.url }));
+        res.setHeader("content-type", "text/html; charset=utf-8");
+        res.end("<!doctype html><html><head><title>runtime</title></head><body>ok</body></html>");
       }),
     );
     const frontdoor = createFrontdoorServer({
@@ -366,32 +375,18 @@ describe("frontdoor scaffold", () => {
     const cookie = await login(frontdoorRunning.origin);
 
     const bootstrapResp = await fetch(`${frontdoorRunning.origin}/app/chat?session=main`, {
-      redirect: "manual",
       headers: {
         cookie,
         accept: "text/html",
       },
     });
-    expect(bootstrapResp.status).toBe(302);
-    const location = bootstrapResp.headers.get("location");
-    expect(location).toBeTruthy();
-    const next = new URL(String(location), frontdoorRunning.origin);
-    expect(next.pathname).toBe("/app/chat");
-    expect(next.searchParams.get("session")).toBe("main");
-    const token = next.searchParams.get("token") ?? "";
-    expect(token.split(".")).toHaveLength(3);
-    expect(next.searchParams.get("runtimeUrl")).toBe(`ws://${new URL(runtime.origin).host}/`);
-
-    const proxiedResp = await fetch(`${frontdoorRunning.origin}${next.pathname}${next.search}`, {
-      headers: {
-        cookie,
-        accept: "text/html",
-      },
-    });
-    expect(proxiedResp.status).toBe(200);
-    expect(lastRuntimeUrl.startsWith("/app/chat?session=main")).toBe(true);
-    expect(lastRuntimeUrl.includes("token=")).toBe(true);
-    expect(lastRuntimeUrl.includes("runtimeUrl=")).toBe(true);
+    expect(bootstrapResp.status).toBe(200);
+    const html = await bootstrapResp.text();
+    expect(html.includes("nexus.control.settings.v1")).toBe(true);
+    expect(html).toMatch(/runtimeUrl:"ws:\/\/127\.0\.0\.1:\d+\/app\?workspace_id=tenant-dev"/);
+    expect(lastRuntimeUrl).toBe("/app/chat?session=main");
+    expect(lastRuntimeUrl.includes("token=")).toBe(false);
+    expect(lastRuntimeUrl.includes("runtimeUrl=")).toBe(false);
   });
 
   it("proxies websocket upgrades with trusted-token header injection", async () => {
@@ -422,11 +417,12 @@ describe("frontdoor scaffold", () => {
     const frontdoorRunning = await listen(frontdoor.server);
     const cookie = await login(frontdoorRunning.origin);
     const wsUrl = frontdoorRunning.origin.replace("http://", "ws://");
+    const incomingOrigin = frontdoorRunning.origin;
     const message = await new Promise<string>((resolve, reject) => {
       const ws = new WebSocket(`${wsUrl}/runtime/ws`, {
         headers: {
           cookie,
-          origin: "https://frontend.example.com",
+          origin: incomingOrigin,
         },
       });
       ws.once("message", (data: RawData) => resolve(String(data)));
@@ -435,7 +431,7 @@ describe("frontdoor scaffold", () => {
     expect(message).toBe("ok");
     expect(wsAuthHeader.startsWith("Bearer ")).toBe(true);
     expect(wsOriginHeader).toBe(runtime.origin);
-    expect(wsForwardedOriginHeader).toBe("https://frontend.example.com");
+    expect(wsForwardedOriginHeader).toBe(incomingOrigin);
   });
 
   it("overwrites spoofed runtime identity headers from clients", async () => {
@@ -481,6 +477,64 @@ describe("frontdoor scaffold", () => {
       unknown
     >;
     expect(claims.tenant_id).toBe("tenant-dev");
+  });
+
+  it("rejects cross-origin mutation requests", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const frontdoor = createFrontdoorServer({
+      config: baseConfig(runtime.origin),
+    });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const response = await fetch(`${frontdoorRunning.origin}/api/runtime/token`, {
+      method: "POST",
+      headers: {
+        cookie,
+        origin: "https://evil.example",
+      },
+    });
+    expect(response.status).toBe(403);
+    const body = (await response.json()) as { ok?: boolean; error?: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toBe("origin_not_allowed");
+  });
+
+  it("rejects websocket upgrades from mismatched browser origins", async () => {
+    const runtimeServer = createHttpServer((_req, res) => {
+      res.statusCode = 404;
+      res.end("missing");
+    });
+    const runtime = await listen(runtimeServer);
+    const frontdoor = createFrontdoorServer({
+      config: baseConfig(runtime.origin),
+    });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+    const wsUrl = frontdoorRunning.origin.replace("http://", "ws://");
+
+    const result = await new Promise<string>((resolve) => {
+      const ws = new WebSocket(`${wsUrl}/runtime/ws`, {
+        headers: {
+          cookie,
+          origin: "https://evil.example",
+        },
+      });
+      ws.once("open", () => {
+        resolve("opened");
+        ws.close();
+      });
+      ws.once("error", (error: Error) => {
+        resolve(String(error.message || error));
+      });
+    });
+    expect(result.toLowerCase()).toContain("403");
   });
 
   it("rate limits repeated failed logins", async () => {
@@ -617,6 +671,439 @@ describe("frontdoor scaffold", () => {
       }),
     });
     expect(badWorkspaceResp.status).toBe(403);
+  });
+
+  it("supports operator workspace inventory and rejects non-operator access", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    const memberUser = {
+      id: "u-member",
+      username: "member",
+      passwordHash: createPasswordHash("memberpass"),
+      tenantId: "tenant-dev",
+      entityId: "entity-member",
+      displayName: "Member",
+      email: "member@example.com",
+      roles: ["workspace_member"],
+      scopes: ["chat.send"],
+      disabled: false,
+    };
+    config.usersByUsername.set("member", memberUser);
+    config.usersById.set("u-member", memberUser);
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+
+    const ownerCookie = await login(frontdoorRunning.origin);
+    const operatorResp = await fetch(`${frontdoorRunning.origin}/api/operator/workspaces`, {
+      headers: {
+        cookie: ownerCookie,
+      },
+    });
+    expect(operatorResp.status).toBe(200);
+    const operatorBody = (await operatorResp.json()) as {
+      ok: boolean;
+      total_workspaces: number;
+      items: Array<{
+        workspace_id: string;
+        member_count: number;
+        billing?: { plan_id?: string; status?: string };
+        usage_30d?: { requests_total?: number };
+      }>;
+    };
+    expect(operatorBody.ok).toBe(true);
+    expect(operatorBody.total_workspaces).toBeGreaterThanOrEqual(1);
+    expect(operatorBody.items.some((item) => item.workspace_id === "tenant-dev")).toBe(true);
+    const tenantDev = operatorBody.items.find((item) => item.workspace_id === "tenant-dev");
+    expect(tenantDev?.member_count).toBeGreaterThanOrEqual(2);
+    expect(tenantDev?.billing?.plan_id).toBe("starter");
+    expect(typeof tenantDev?.usage_30d?.requests_total).toBe("number");
+
+    const memberCookie = await login(frontdoorRunning.origin, {
+      username: "member",
+      password: "memberpass",
+    });
+    const forbiddenResp = await fetch(`${frontdoorRunning.origin}/api/operator/workspaces`, {
+      headers: {
+        cookie: memberCookie,
+      },
+    });
+    expect(forbiddenResp.status).toBe(403);
+    const forbiddenBody = (await forbiddenResp.json()) as { ok?: boolean; error?: string };
+    expect(forbiddenBody.ok).toBe(false);
+    expect(forbiddenBody.error).toBe("operator_forbidden");
+  });
+
+  it("supports workspace usage summary and protects billing summary for admins", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    const memberUser = {
+      id: "u-member",
+      username: "member",
+      passwordHash: createPasswordHash("memberpass"),
+      tenantId: "tenant-dev",
+      entityId: "entity-member",
+      displayName: "Member",
+      email: "member@example.com",
+      roles: ["workspace_member"],
+      scopes: ["chat.send"],
+      disabled: false,
+    };
+    config.usersByUsername.set("member", memberUser);
+    config.usersById.set("u-member", memberUser);
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+
+    const ownerCookie = await login(frontdoorRunning.origin);
+    const ownerUsageResp = await fetch(`${frontdoorRunning.origin}/api/workspaces/tenant-dev/usage`, {
+      headers: {
+        cookie: ownerCookie,
+      },
+    });
+    expect(ownerUsageResp.status).toBe(200);
+    const ownerUsageBody = (await ownerUsageResp.json()) as {
+      ok: boolean;
+      workspace_id: string;
+      window_days: number;
+      requests_total: number;
+      tokens_in: number;
+      tokens_out: number;
+      active_members: number;
+    };
+    expect(ownerUsageBody.ok).toBe(true);
+    expect(ownerUsageBody.workspace_id).toBe("tenant-dev");
+    expect(ownerUsageBody.window_days).toBe(30);
+    expect(typeof ownerUsageBody.requests_total).toBe("number");
+    expect(typeof ownerUsageBody.tokens_in).toBe("number");
+    expect(typeof ownerUsageBody.tokens_out).toBe("number");
+    expect(ownerUsageBody.active_members).toBeGreaterThanOrEqual(1);
+
+    const ownerBillingResp = await fetch(
+      `${frontdoorRunning.origin}/api/workspaces/tenant-dev/billing/summary`,
+      {
+        headers: {
+          cookie: ownerCookie,
+        },
+      },
+    );
+    expect(ownerBillingResp.status).toBe(200);
+    const ownerBillingBody = (await ownerBillingResp.json()) as {
+      ok: boolean;
+      billing?: { plan_id?: string; status?: string; provider?: string };
+      limits?: { max_members?: number; max_monthly_tokens?: number };
+    };
+    expect(ownerBillingBody.ok).toBe(true);
+    expect(ownerBillingBody.billing?.plan_id).toBe("starter");
+    expect(ownerBillingBody.billing?.status).toBe("trialing");
+    expect(ownerBillingBody.billing?.provider).toBe("none");
+    expect(typeof ownerBillingBody.limits?.max_members).toBe("number");
+    expect(typeof ownerBillingBody.limits?.max_monthly_tokens).toBe("number");
+
+    const memberCookie = await login(frontdoorRunning.origin, {
+      username: "member",
+      password: "memberpass",
+    });
+    const memberUsageResp = await fetch(`${frontdoorRunning.origin}/api/workspaces/tenant-dev/usage`, {
+      headers: {
+        cookie: memberCookie,
+      },
+    });
+    expect(memberUsageResp.status).toBe(200);
+
+    const memberBillingResp = await fetch(
+      `${frontdoorRunning.origin}/api/workspaces/tenant-dev/billing/summary`,
+      {
+        headers: {
+          cookie: memberCookie,
+        },
+      },
+    );
+    expect(memberBillingResp.status).toBe(403);
+    const memberBillingBody = (await memberBillingResp.json()) as { ok?: boolean; error?: string };
+    expect(memberBillingBody.ok).toBe(false);
+    expect(memberBillingBody.error).toBe("billing_forbidden");
+  });
+
+  it("supports billing checkout, signed webhook ingestion, and invoice/subscription reads", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const checkoutResp = await fetch(`${frontdoorRunning.origin}/api/billing/tenant-dev/checkout-session`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        plan_id: "pro",
+      }),
+    });
+    expect(checkoutResp.status).toBe(200);
+    const checkoutBody = (await checkoutResp.json()) as {
+      ok: boolean;
+      provider?: string;
+      checkout_url?: string;
+      session_id?: string;
+    };
+    expect(checkoutBody.ok).toBe(true);
+    expect(checkoutBody.provider).toBe("mock");
+    expect(checkoutBody.checkout_url).toContain("plan_id=pro");
+    expect(String(checkoutBody.session_id || "")).toContain("cs_mock_");
+
+    const beforeSubscriptionResp = await fetch(`${frontdoorRunning.origin}/api/billing/tenant-dev/subscription`, {
+      headers: {
+        cookie,
+      },
+    });
+    expect(beforeSubscriptionResp.status).toBe(200);
+    const beforeSubscriptionBody = (await beforeSubscriptionResp.json()) as {
+      ok: boolean;
+      plan_id?: string;
+      status?: string;
+    };
+    expect(beforeSubscriptionBody.ok).toBe(true);
+    expect(beforeSubscriptionBody.plan_id).toBe("starter");
+    expect(beforeSubscriptionBody.status).toBe("trialing");
+
+    const webhookPayload = {
+      id: "evt_mock_1",
+      type: "subscription.updated",
+      workspace_id: "tenant-dev",
+      plan_id: "pro",
+      status: "active",
+      customer_id: "cus_mock_1",
+      subscription_id: "sub_mock_1",
+      period_start_ms: 1_700_000_000_000,
+      period_end_ms: 1_702_600_000_000,
+      invoice: {
+        invoice_id: "in_mock_1",
+        status: "paid",
+        amount_due: 4200,
+        currency: "usd",
+        hosted_invoice_url: "https://billing.example.com/in_mock_1",
+        created_at_ms: 1_701_000_000_000,
+        paid_at_ms: 1_701_000_600_000,
+      },
+    };
+    const webhookRaw = JSON.stringify(webhookPayload);
+    const timestamp = String(Date.now());
+    const signature = createHmac("sha256", "billing-webhook-secret-test")
+      .update(`${timestamp}.${webhookRaw}`, "utf8")
+      .digest("base64");
+    const webhookResp = await fetch(`${frontdoorRunning.origin}/api/billing/webhook`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-frontdoor-webhook-timestamp": timestamp,
+        "x-frontdoor-webhook-signature": signature,
+      },
+      body: webhookRaw,
+    });
+    expect(webhookResp.status).toBe(200);
+    const webhookBody = (await webhookResp.json()) as {
+      ok: boolean;
+      status?: string;
+    };
+    expect(webhookBody.ok).toBe(true);
+    expect(webhookBody.status).toBe("processed");
+
+    const duplicateResp = await fetch(`${frontdoorRunning.origin}/api/billing/webhook`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-frontdoor-webhook-timestamp": timestamp,
+        "x-frontdoor-webhook-signature": signature,
+      },
+      body: webhookRaw,
+    });
+    expect(duplicateResp.status).toBe(200);
+    const duplicateBody = (await duplicateResp.json()) as { ok?: boolean; duplicate?: boolean };
+    expect(duplicateBody.ok).toBe(true);
+    expect(duplicateBody.duplicate).toBe(true);
+
+    const subscriptionResp = await fetch(`${frontdoorRunning.origin}/api/billing/tenant-dev/subscription`, {
+      headers: {
+        cookie,
+      },
+    });
+    expect(subscriptionResp.status).toBe(200);
+    const subscriptionBody = (await subscriptionResp.json()) as {
+      ok: boolean;
+      provider?: string;
+      plan_id?: string;
+      status?: string;
+      customer_id?: string;
+      subscription_id?: string;
+    };
+    expect(subscriptionBody.ok).toBe(true);
+    expect(subscriptionBody.provider).toBe("mock");
+    expect(subscriptionBody.plan_id).toBe("pro");
+    expect(subscriptionBody.status).toBe("active");
+    expect(subscriptionBody.customer_id).toBe("cus_mock_1");
+    expect(subscriptionBody.subscription_id).toBe("sub_mock_1");
+
+    const invoicesResp = await fetch(`${frontdoorRunning.origin}/api/billing/tenant-dev/invoices`, {
+      headers: {
+        cookie,
+      },
+    });
+    expect(invoicesResp.status).toBe(200);
+    const invoicesBody = (await invoicesResp.json()) as {
+      ok: boolean;
+      items: Array<{ invoice_id: string; status: string; amount_due: number; currency: string }>;
+    };
+    expect(invoicesBody.ok).toBe(true);
+    expect(invoicesBody.items.some((item) => item.invoice_id === "in_mock_1")).toBe(true);
+    const invoice = invoicesBody.items.find((item) => item.invoice_id === "in_mock_1");
+    expect(invoice?.status).toBe("paid");
+    expect(invoice?.amount_due).toBe(4200);
+    expect(invoice?.currency).toBe("usd");
+  });
+
+  it("rejects billing webhook events with invalid signatures", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+
+    const payload = JSON.stringify({
+      id: "evt_mock_invalid",
+      type: "subscription.updated",
+      workspace_id: "tenant-dev",
+      plan_id: "pro",
+      status: "active",
+    });
+    const response = await fetch(`${frontdoorRunning.origin}/api/billing/webhook`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-frontdoor-webhook-timestamp": String(Date.now()),
+        "x-frontdoor-webhook-signature": "invalid-signature",
+      },
+      body: payload,
+    });
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { ok?: boolean; error?: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toBe("Error: invalid_webhook_signature");
+  });
+
+  it("enforces billing admin permissions for checkout/subscription/invoices", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    const memberUser = {
+      id: "u-member",
+      username: "member",
+      passwordHash: createPasswordHash("memberpass"),
+      tenantId: "tenant-dev",
+      entityId: "entity-member",
+      displayName: "Member",
+      email: "member@example.com",
+      roles: ["workspace_member"],
+      scopes: ["chat.send"],
+      disabled: false,
+    };
+    config.usersByUsername.set("member", memberUser);
+    config.usersById.set("u-member", memberUser);
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const memberCookie = await login(frontdoorRunning.origin, {
+      username: "member",
+      password: "memberpass",
+    });
+
+    const checkoutResp = await fetch(`${frontdoorRunning.origin}/api/billing/tenant-dev/checkout-session`, {
+      method: "POST",
+      headers: {
+        cookie: memberCookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ plan_id: "pro" }),
+    });
+    expect(checkoutResp.status).toBe(403);
+
+    const subscriptionResp = await fetch(`${frontdoorRunning.origin}/api/billing/tenant-dev/subscription`, {
+      headers: {
+        cookie: memberCookie,
+      },
+    });
+    expect(subscriptionResp.status).toBe(403);
+
+    const invoicesResp = await fetch(`${frontdoorRunning.origin}/api/billing/tenant-dev/invoices`, {
+      headers: {
+        cookie: memberCookie,
+      },
+    });
+    expect(invoicesResp.status).toBe(403);
+  });
+
+  it("rejects creating a workspace bound to an already-used runtime URL", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const frontdoor = createFrontdoorServer({
+      config: baseConfig(runtime.origin),
+    });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const createResp = await fetch(`${frontdoorRunning.origin}/api/workspaces`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        workspace_id: "tenant-another",
+        display_name: "Tenant Another",
+        runtime_url: runtime.origin,
+      }),
+    });
+    expect(createResp.status).toBe(400);
+    const createBody = (await createResp.json()) as {
+      ok: boolean;
+      error?: string;
+      existing_workspace_id?: string;
+    };
+    expect(createBody.ok).toBe(false);
+    expect(createBody.error).toBe("runtime_url_already_bound");
+    expect(createBody.existing_workspace_id).toBe("tenant-dev");
   });
 
   it("supports invite create and redeem across workspaces", async () => {

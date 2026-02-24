@@ -104,6 +104,7 @@ export type FrontdoorConfig = {
   oidcProviders: Map<string, OidcProviderConfig>;
   oidcMappings: OidcMapping[];
   autoProvision: AutoProvisionConfig;
+  billing: BillingConfig;
 };
 
 export type Principal = {
@@ -164,4 +165,16 @@ export type OidcTransientState = {
   provider: string;
   createdAtMs: number;
   returnTo?: string;
+};
+
+export type BillingProvider = "none" | "mock" | "stripe";
+
+export type BillingConfig = {
+  provider: BillingProvider;
+  webhookSecret?: string;
+  checkoutSuccessUrl?: string;
+  checkoutCancelUrl?: string;
+  stripeSecretKey?: string;
+  stripeApiBaseUrl: string;
+  stripePriceIdsByPlan: Map<string, string>;
 };

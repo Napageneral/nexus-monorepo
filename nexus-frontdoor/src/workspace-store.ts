@@ -52,6 +52,22 @@ function nowMs(): number {
   return Date.now();
 }
 
+function canonicalizeRuntimeUrl(raw: string): string {
+  const value = raw.trim();
+  if (!value) {
+    return "";
+  }
+  try {
+    const parsed = new URL(value);
+    parsed.hash = "";
+    parsed.search = "";
+    const noTrailingSlash = parsed.toString().replace(/\/+$/g, "");
+    return noTrailingSlash.toLowerCase();
+  } catch {
+    return value.replace(/\/+$/g, "").toLowerCase();
+  }
+}
+
 export type FrontdoorUserRecord = {
   userId: string;
   username?: string;
@@ -91,6 +107,63 @@ export type InviteView = {
   redeemedAtMs?: number;
   revokedAtMs?: number;
 };
+
+export type WorkspaceBillingSummary = {
+  workspaceId: string;
+  planId: string;
+  status: string;
+  provider: string;
+  customerId?: string;
+  subscriptionId?: string;
+  periodStartMs: number;
+  periodEndMs: number;
+};
+
+export type WorkspaceLimitsSummary = {
+  workspaceId: string;
+  maxMembers: number;
+  maxMonthlyTokens: number;
+  maxAdapters: number;
+  maxConcurrentSessions: number;
+};
+
+export type WorkspaceUsageSummary = {
+  workspaceId: string;
+  windowDays: number;
+  requestsTotal: number;
+  tokensIn: number;
+  tokensOut: number;
+  activeMembers: number;
+  daysWithData: number;
+};
+
+export type WorkspaceInvoiceSummary = {
+  workspaceId: string;
+  invoiceId: string;
+  provider: string;
+  status: string;
+  amountDue: number;
+  currency: string;
+  hostedInvoiceUrl?: string;
+  periodStartMs?: number;
+  periodEndMs?: number;
+  createdAtMs: number;
+  paidAtMs?: number;
+};
+
+function startOfUtcMonthMs(ts: number): number {
+  const d = new Date(ts);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1, 0, 0, 0, 0);
+}
+
+function endOfUtcMonthMs(ts: number): number {
+  const d = new Date(ts);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1, 0, 0, 0, 0) - 1;
+}
+
+function toUtcDateKey(ts: number): string {
+  return new Date(ts).toISOString().slice(0, 10);
+}
 
 export class WorkspaceStore {
   private readonly db: DatabaseSync;
@@ -171,6 +244,80 @@ export class WorkspaceStore {
         ON frontdoor_invites(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_frontdoor_invites_expires
         ON frontdoor_invites(expires_at_ms);
+
+      CREATE TABLE IF NOT EXISTS frontdoor_workspace_billing (
+        workspace_id TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL DEFAULT 'starter',
+        status TEXT NOT NULL DEFAULT 'trialing',
+        provider TEXT NOT NULL DEFAULT 'none',
+        customer_id TEXT,
+        subscription_id TEXT,
+        period_start_ms INTEGER NOT NULL,
+        period_end_ms INTEGER NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        FOREIGN KEY(workspace_id) REFERENCES frontdoor_workspaces(workspace_id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS frontdoor_workspace_limits (
+        workspace_id TEXT PRIMARY KEY,
+        max_members INTEGER NOT NULL DEFAULT 10,
+        max_monthly_tokens INTEGER NOT NULL DEFAULT 1000000,
+        max_adapters INTEGER NOT NULL DEFAULT 20,
+        max_concurrent_sessions INTEGER NOT NULL DEFAULT 16,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        FOREIGN KEY(workspace_id) REFERENCES frontdoor_workspaces(workspace_id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS frontdoor_workspace_usage_daily (
+        workspace_id TEXT NOT NULL,
+        date_utc TEXT NOT NULL,
+        requests_total INTEGER NOT NULL DEFAULT 0,
+        tokens_in INTEGER NOT NULL DEFAULT 0,
+        tokens_out INTEGER NOT NULL DEFAULT 0,
+        active_members INTEGER NOT NULL DEFAULT 0,
+        updated_at_ms INTEGER NOT NULL,
+        PRIMARY KEY(workspace_id, date_utc),
+        FOREIGN KEY(workspace_id) REFERENCES frontdoor_workspaces(workspace_id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_frontdoor_workspace_usage_daily_workspace
+        ON frontdoor_workspace_usage_daily(workspace_id);
+
+      CREATE TABLE IF NOT EXISTS frontdoor_billing_events (
+        provider TEXT NOT NULL,
+        event_id TEXT NOT NULL,
+        workspace_id TEXT,
+        event_type TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        error_text TEXT,
+        received_at_ms INTEGER NOT NULL,
+        processed_at_ms INTEGER,
+        PRIMARY KEY(provider, event_id),
+        FOREIGN KEY(workspace_id) REFERENCES frontdoor_workspaces(workspace_id) ON DELETE SET NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_frontdoor_billing_events_workspace
+        ON frontdoor_billing_events(workspace_id);
+
+      CREATE TABLE IF NOT EXISTS frontdoor_workspace_invoices (
+        workspace_id TEXT NOT NULL,
+        invoice_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        status TEXT NOT NULL,
+        amount_due INTEGER NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'usd',
+        hosted_invoice_url TEXT,
+        period_start_ms INTEGER,
+        period_end_ms INTEGER,
+        created_at_ms INTEGER NOT NULL,
+        paid_at_ms INTEGER,
+        updated_at_ms INTEGER NOT NULL,
+        PRIMARY KEY(workspace_id, invoice_id),
+        FOREIGN KEY(workspace_id) REFERENCES frontdoor_workspaces(workspace_id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_frontdoor_workspace_invoices_workspace_created
+        ON frontdoor_workspace_invoices(workspace_id, created_at_ms DESC);
     `);
   }
 
@@ -298,6 +445,8 @@ export class WorkspaceStore {
         createdAt,
         createdAt,
       );
+    this.ensureWorkspaceBillingDefaults(record.workspaceId);
+    this.ensureWorkspaceLimitsDefaults(record.workspaceId);
     return this.getWorkspace(record.workspaceId) ?? record;
   }
 
@@ -357,6 +506,88 @@ export class WorkspaceStore {
         }
       | undefined;
     return row ? this.mapWorkspaceRow(row) : null;
+  }
+
+  listAllWorkspaces(): WorkspaceRecord[] {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT
+          workspace_id,
+          workspace_slug,
+          display_name,
+          runtime_url,
+          runtime_public_base_url,
+          runtime_ws_url,
+          runtime_sse_url,
+          status
+        FROM frontdoor_workspaces
+        ORDER BY display_name ASC
+      `,
+      )
+      .all() as Array<{
+      workspace_id: string;
+      workspace_slug: string;
+      display_name: string;
+      runtime_url: string;
+      runtime_public_base_url: string;
+      runtime_ws_url: string | null;
+      runtime_sse_url: string | null;
+      status: string;
+    }>;
+    return rows.map((row) => this.mapWorkspaceRow(row));
+  }
+
+  getWorkspaceByRuntimeBinding(params: {
+    runtimeUrl: string;
+    runtimePublicBaseUrl?: string;
+  }): WorkspaceRecord | null {
+    const targets = new Set<string>();
+    const runtimeUrlCanonical = canonicalizeRuntimeUrl(params.runtimeUrl);
+    const runtimePublicCanonical = canonicalizeRuntimeUrl(params.runtimePublicBaseUrl ?? "");
+    if (runtimeUrlCanonical) {
+      targets.add(runtimeUrlCanonical);
+    }
+    if (runtimePublicCanonical) {
+      targets.add(runtimePublicCanonical);
+    }
+    if (targets.size === 0) {
+      return null;
+    }
+    const rows = this.db
+      .prepare(
+        `
+        SELECT
+          workspace_id,
+          workspace_slug,
+          display_name,
+          runtime_url,
+          runtime_public_base_url,
+          runtime_ws_url,
+          runtime_sse_url,
+          status
+        FROM frontdoor_workspaces
+        WHERE status = 'active'
+      `,
+      )
+      .all() as Array<{
+      workspace_id: string;
+      workspace_slug: string;
+      display_name: string;
+      runtime_url: string;
+      runtime_public_base_url: string;
+      runtime_ws_url: string | null;
+      runtime_sse_url: string | null;
+      status: string;
+    }>;
+    for (const row of rows) {
+      const rowRuntime = canonicalizeRuntimeUrl(row.runtime_url);
+      const rowPublic = canonicalizeRuntimeUrl(row.runtime_public_base_url);
+      if (targets.has(rowRuntime) || targets.has(rowPublic)) {
+        return this.mapWorkspaceRow(row);
+      }
+    }
+    return null;
   }
 
   private upsertUser(record: FrontdoorUserRecord): FrontdoorUserRecord {
@@ -680,6 +911,20 @@ export class WorkspaceStore {
     return row?.count ?? 0;
   }
 
+  countMembersForWorkspace(workspaceId: string): number {
+    const row = this.db
+      .prepare(
+        `
+        SELECT count(*) AS count
+        FROM frontdoor_workspace_memberships m
+        JOIN frontdoor_workspaces w ON w.workspace_id = m.workspace_id
+        WHERE m.workspace_id = ? AND w.status = 'active'
+      `,
+      )
+      .get(workspaceId) as { count: number } | undefined;
+    return row?.count ?? 0;
+  }
+
   getMembership(userId: string, workspaceId: string): WorkspaceMembershipView | null {
     const rows = this.listWorkspacesForUser(userId);
     for (const row of rows) {
@@ -688,6 +933,479 @@ export class WorkspaceStore {
       }
     }
     return null;
+  }
+
+  private ensureWorkspaceBillingDefaults(workspaceId: string): void {
+    const createdAt = nowMs();
+    this.db
+      .prepare(
+        `
+        INSERT INTO frontdoor_workspace_billing (
+          workspace_id,
+          plan_id,
+          status,
+          provider,
+          customer_id,
+          subscription_id,
+          period_start_ms,
+          period_end_ms,
+          created_at_ms,
+          updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(workspace_id) DO NOTHING
+      `,
+      )
+      .run(
+        workspaceId,
+        "starter",
+        "trialing",
+        "none",
+        null,
+        null,
+        startOfUtcMonthMs(createdAt),
+        endOfUtcMonthMs(createdAt),
+        createdAt,
+        createdAt,
+      );
+  }
+
+  private ensureWorkspaceLimitsDefaults(workspaceId: string): void {
+    const createdAt = nowMs();
+    this.db
+      .prepare(
+        `
+        INSERT INTO frontdoor_workspace_limits (
+          workspace_id,
+          max_members,
+          max_monthly_tokens,
+          max_adapters,
+          max_concurrent_sessions,
+          created_at_ms,
+          updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(workspace_id) DO NOTHING
+      `,
+      )
+      .run(workspaceId, 10, 1_000_000, 20, 16, createdAt, createdAt);
+  }
+
+  getWorkspaceBillingSummary(workspaceId: string): WorkspaceBillingSummary {
+    this.ensureWorkspaceBillingDefaults(workspaceId);
+    const row = this.db
+      .prepare(
+        `
+        SELECT
+          workspace_id,
+          plan_id,
+          status,
+          provider,
+          customer_id,
+          subscription_id,
+          period_start_ms,
+          period_end_ms
+        FROM frontdoor_workspace_billing
+        WHERE workspace_id = ?
+        LIMIT 1
+      `,
+      )
+      .get(workspaceId) as
+      | {
+          workspace_id: string;
+          plan_id: string;
+          status: string;
+          provider: string;
+          customer_id: string | null;
+          subscription_id: string | null;
+          period_start_ms: number;
+          period_end_ms: number;
+        }
+      | undefined;
+    if (!row) {
+      const now = nowMs();
+      return {
+        workspaceId,
+        planId: "starter",
+        status: "trialing",
+        provider: "none",
+        periodStartMs: startOfUtcMonthMs(now),
+        periodEndMs: endOfUtcMonthMs(now),
+      };
+    }
+    return {
+      workspaceId: row.workspace_id,
+      planId: row.plan_id,
+      status: row.status,
+      provider: row.provider,
+      customerId: row.customer_id ?? undefined,
+      subscriptionId: row.subscription_id ?? undefined,
+      periodStartMs: row.period_start_ms,
+      periodEndMs: row.period_end_ms,
+    };
+  }
+
+  getWorkspaceLimitsSummary(workspaceId: string): WorkspaceLimitsSummary {
+    this.ensureWorkspaceLimitsDefaults(workspaceId);
+    const row = this.db
+      .prepare(
+        `
+        SELECT
+          workspace_id,
+          max_members,
+          max_monthly_tokens,
+          max_adapters,
+          max_concurrent_sessions
+        FROM frontdoor_workspace_limits
+        WHERE workspace_id = ?
+        LIMIT 1
+      `,
+      )
+      .get(workspaceId) as
+      | {
+          workspace_id: string;
+          max_members: number;
+          max_monthly_tokens: number;
+          max_adapters: number;
+          max_concurrent_sessions: number;
+        }
+      | undefined;
+    if (!row) {
+      return {
+        workspaceId,
+        maxMembers: 10,
+        maxMonthlyTokens: 1_000_000,
+        maxAdapters: 20,
+        maxConcurrentSessions: 16,
+      };
+    }
+    return {
+      workspaceId: row.workspace_id,
+      maxMembers: row.max_members,
+      maxMonthlyTokens: row.max_monthly_tokens,
+      maxAdapters: row.max_adapters,
+      maxConcurrentSessions: row.max_concurrent_sessions,
+    };
+  }
+
+  upsertWorkspaceUsageDaily(params: {
+    workspaceId: string;
+    dateUtc?: string;
+    requestsTotal: number;
+    tokensIn: number;
+    tokensOut: number;
+    activeMembers: number;
+  }): void {
+    const dateUtc = params.dateUtc?.trim() || toUtcDateKey(nowMs());
+    const updatedAt = nowMs();
+    this.db
+      .prepare(
+        `
+        INSERT INTO frontdoor_workspace_usage_daily (
+          workspace_id,
+          date_utc,
+          requests_total,
+          tokens_in,
+          tokens_out,
+          active_members,
+          updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(workspace_id, date_utc) DO UPDATE SET
+          requests_total = excluded.requests_total,
+          tokens_in = excluded.tokens_in,
+          tokens_out = excluded.tokens_out,
+          active_members = excluded.active_members,
+          updated_at_ms = excluded.updated_at_ms
+      `,
+      )
+      .run(
+        params.workspaceId,
+        dateUtc,
+        Math.max(0, Math.floor(params.requestsTotal)),
+        Math.max(0, Math.floor(params.tokensIn)),
+        Math.max(0, Math.floor(params.tokensOut)),
+        Math.max(0, Math.floor(params.activeMembers)),
+        updatedAt,
+      );
+  }
+
+  getWorkspaceUsageSummary(params: {
+    workspaceId: string;
+    windowDays?: number;
+  }): WorkspaceUsageSummary {
+    const windowDays = Math.max(1, Math.floor(params.windowDays ?? 30));
+    const sinceKey = toUtcDateKey(nowMs() - (windowDays - 1) * 24 * 60 * 60 * 1000);
+    const row = this.db
+      .prepare(
+        `
+        SELECT
+          COALESCE(sum(requests_total), 0) AS requests_total,
+          COALESCE(sum(tokens_in), 0) AS tokens_in,
+          COALESCE(sum(tokens_out), 0) AS tokens_out,
+          COALESCE(max(active_members), 0) AS active_members,
+          COALESCE(count(*), 0) AS days_with_data
+        FROM frontdoor_workspace_usage_daily
+        WHERE workspace_id = ? AND date_utc >= ?
+      `,
+      )
+      .get(params.workspaceId, sinceKey) as
+      | {
+          requests_total: number;
+          tokens_in: number;
+          tokens_out: number;
+          active_members: number;
+          days_with_data: number;
+        }
+      | undefined;
+    const memberCount = this.countMembersForWorkspace(params.workspaceId);
+    return {
+      workspaceId: params.workspaceId,
+      windowDays,
+      requestsTotal: row?.requests_total ?? 0,
+      tokensIn: row?.tokens_in ?? 0,
+      tokensOut: row?.tokens_out ?? 0,
+      activeMembers: Math.max(row?.active_members ?? 0, memberCount),
+      daysWithData: row?.days_with_data ?? 0,
+    };
+  }
+
+  recordBillingEvent(params: {
+    provider: string;
+    eventId: string;
+    workspaceId?: string;
+    eventType: string;
+    payloadJson: string;
+    status: string;
+    errorText?: string;
+  }): boolean {
+    const receivedAt = nowMs();
+    const result = this.db
+      .prepare(
+        `
+        INSERT INTO frontdoor_billing_events (
+          provider,
+          event_id,
+          workspace_id,
+          event_type,
+          payload_json,
+          status,
+          error_text,
+          received_at_ms,
+          processed_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(provider, event_id) DO NOTHING
+      `,
+      )
+      .run(
+        params.provider.trim(),
+        params.eventId.trim(),
+        params.workspaceId?.trim() || null,
+        params.eventType.trim() || "unknown",
+        params.payloadJson,
+        params.status.trim() || "received",
+        params.errorText?.trim() || null,
+        receivedAt,
+        null,
+      );
+    return (result.changes ?? 0) > 0;
+  }
+
+  markBillingEventProcessed(params: {
+    provider: string;
+    eventId: string;
+    status: string;
+    errorText?: string;
+  }): void {
+    this.db
+      .prepare(
+        `
+        UPDATE frontdoor_billing_events
+        SET status = ?, error_text = ?, processed_at_ms = ?
+        WHERE provider = ? AND event_id = ?
+      `,
+      )
+      .run(
+        params.status.trim() || "processed",
+        params.errorText?.trim() || null,
+        nowMs(),
+        params.provider.trim(),
+        params.eventId.trim(),
+      );
+  }
+
+  upsertWorkspaceBilling(params: {
+    workspaceId: string;
+    planId: string;
+    status: string;
+    provider: string;
+    customerId?: string;
+    subscriptionId?: string;
+    periodStartMs?: number;
+    periodEndMs?: number;
+  }): void {
+    const current = this.getWorkspaceBillingSummary(params.workspaceId);
+    const updatedAt = nowMs();
+    const periodStartMs =
+      typeof params.periodStartMs === "number" && Number.isFinite(params.periodStartMs)
+        ? Math.max(0, Math.floor(params.periodStartMs))
+        : current.periodStartMs;
+    const periodEndMs =
+      typeof params.periodEndMs === "number" && Number.isFinite(params.periodEndMs)
+        ? Math.max(periodStartMs, Math.floor(params.periodEndMs))
+        : current.periodEndMs;
+    this.db
+      .prepare(
+        `
+        INSERT INTO frontdoor_workspace_billing (
+          workspace_id,
+          plan_id,
+          status,
+          provider,
+          customer_id,
+          subscription_id,
+          period_start_ms,
+          period_end_ms,
+          created_at_ms,
+          updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(workspace_id) DO UPDATE SET
+          plan_id = excluded.plan_id,
+          status = excluded.status,
+          provider = excluded.provider,
+          customer_id = excluded.customer_id,
+          subscription_id = excluded.subscription_id,
+          period_start_ms = excluded.period_start_ms,
+          period_end_ms = excluded.period_end_ms,
+          updated_at_ms = excluded.updated_at_ms
+      `,
+      )
+      .run(
+        params.workspaceId,
+        params.planId || current.planId,
+        params.status || current.status,
+        params.provider || current.provider,
+        params.customerId ?? current.customerId ?? null,
+        params.subscriptionId ?? current.subscriptionId ?? null,
+        periodStartMs,
+        periodEndMs,
+        updatedAt,
+        updatedAt,
+      );
+  }
+
+  upsertWorkspaceInvoice(params: {
+    workspaceId: string;
+    invoiceId: string;
+    provider: string;
+    status: string;
+    amountDue: number;
+    currency: string;
+    hostedInvoiceUrl?: string;
+    periodStartMs?: number;
+    periodEndMs?: number;
+    createdAtMs?: number;
+    paidAtMs?: number;
+  }): void {
+    const updatedAt = nowMs();
+    const createdAtMs =
+      typeof params.createdAtMs === "number" && Number.isFinite(params.createdAtMs)
+        ? Math.max(0, Math.floor(params.createdAtMs))
+        : updatedAt;
+    this.db
+      .prepare(
+        `
+        INSERT INTO frontdoor_workspace_invoices (
+          workspace_id,
+          invoice_id,
+          provider,
+          status,
+          amount_due,
+          currency,
+          hosted_invoice_url,
+          period_start_ms,
+          period_end_ms,
+          created_at_ms,
+          paid_at_ms,
+          updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(workspace_id, invoice_id) DO UPDATE SET
+          provider = excluded.provider,
+          status = excluded.status,
+          amount_due = excluded.amount_due,
+          currency = excluded.currency,
+          hosted_invoice_url = excluded.hosted_invoice_url,
+          period_start_ms = excluded.period_start_ms,
+          period_end_ms = excluded.period_end_ms,
+          paid_at_ms = excluded.paid_at_ms,
+          updated_at_ms = excluded.updated_at_ms
+      `,
+      )
+      .run(
+        params.workspaceId,
+        params.invoiceId,
+        params.provider,
+        params.status,
+        Math.max(0, Math.floor(params.amountDue || 0)),
+        params.currency?.trim().toLowerCase() || "usd",
+        params.hostedInvoiceUrl?.trim() || null,
+        typeof params.periodStartMs === "number" ? Math.max(0, Math.floor(params.periodStartMs)) : null,
+        typeof params.periodEndMs === "number" ? Math.max(0, Math.floor(params.periodEndMs)) : null,
+        createdAtMs,
+        typeof params.paidAtMs === "number" ? Math.max(0, Math.floor(params.paidAtMs)) : null,
+        updatedAt,
+      );
+  }
+
+  listWorkspaceInvoices(params: {
+    workspaceId: string;
+    limit?: number;
+  }): WorkspaceInvoiceSummary[] {
+    const limit = Math.max(1, Math.min(200, Math.floor(params.limit ?? 50)));
+    const rows = this.db
+      .prepare(
+        `
+        SELECT
+          workspace_id,
+          invoice_id,
+          provider,
+          status,
+          amount_due,
+          currency,
+          hosted_invoice_url,
+          period_start_ms,
+          period_end_ms,
+          created_at_ms,
+          paid_at_ms
+        FROM frontdoor_workspace_invoices
+        WHERE workspace_id = ?
+        ORDER BY created_at_ms DESC
+        LIMIT ?
+      `,
+      )
+      .all(params.workspaceId, limit) as Array<{
+      workspace_id: string;
+      invoice_id: string;
+      provider: string;
+      status: string;
+      amount_due: number;
+      currency: string;
+      hosted_invoice_url: string | null;
+      period_start_ms: number | null;
+      period_end_ms: number | null;
+      created_at_ms: number;
+      paid_at_ms: number | null;
+    }>;
+    return rows.map((row) => ({
+      workspaceId: row.workspace_id,
+      invoiceId: row.invoice_id,
+      provider: row.provider,
+      status: row.status,
+      amountDue: row.amount_due,
+      currency: row.currency,
+      hostedInvoiceUrl: row.hosted_invoice_url ?? undefined,
+      periodStartMs: row.period_start_ms ?? undefined,
+      periodEndMs: row.period_end_ms ?? undefined,
+      createdAtMs: row.created_at_ms,
+      paidAtMs: row.paid_at_ms ?? undefined,
+    }));
   }
 
   getDefaultMembership(userId: string): WorkspaceMembershipView | null {

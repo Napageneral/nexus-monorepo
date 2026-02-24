@@ -99,6 +99,15 @@ function baseConfig(): FrontdoorConfig {
       command: undefined,
       commandTimeoutMs: 120000,
     },
+    billing: {
+      provider: "none",
+      webhookSecret: undefined,
+      checkoutSuccessUrl: undefined,
+      checkoutCancelUrl: undefined,
+      stripeSecretKey: undefined,
+      stripeApiBaseUrl: "https://api.stripe.com",
+      stripePriceIdsByPlan: new Map(),
+    },
   };
 }
 

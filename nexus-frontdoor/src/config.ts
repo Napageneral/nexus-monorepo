@@ -63,6 +63,15 @@ type RawFrontdoorConfig = {
     devCreatorEmails?: unknown;
     inviteTtlSeconds?: unknown;
   };
+  billing?: {
+    provider?: unknown;
+    webhookSecret?: unknown;
+    checkoutSuccessUrl?: unknown;
+    checkoutCancelUrl?: unknown;
+    stripeSecretKey?: unknown;
+    stripeApiBaseUrl?: unknown;
+    stripePriceIdsByPlan?: unknown;
+  };
 };
 
 function readNumber(input: unknown, fallback: number): number {
@@ -325,6 +334,22 @@ function parseStringArray(raw: unknown): string[] {
     .map((item) => item.trim());
 }
 
+function parseStringMap(raw: unknown): Map<string, string> {
+  const parsed = new Map<string, string>();
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return parsed;
+  }
+  for (const [key, value] of Object.entries(raw)) {
+    const mapKey = key.trim();
+    const mapValue = readString(value, "");
+    if (!mapKey || !mapValue) {
+      continue;
+    }
+    parsed.set(mapKey, mapValue);
+  }
+  return parsed;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): FrontdoorConfig {
   const configPath = env.FRONTDOOR_CONFIG_PATH?.trim() || DEFAULT_CONFIG_PATH;
   const rawText = fs.readFileSync(configPath, "utf8");
@@ -483,6 +508,41 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): FrontdoorConfi
     ),
   );
 
+  const billingProviderRaw = readString(
+    env.FRONTDOOR_BILLING_PROVIDER,
+    readString(raw.billing?.provider, "none"),
+  ).toLowerCase();
+  const billingProvider =
+    billingProviderRaw === "stripe" || billingProviderRaw === "mock" ? billingProviderRaw : "none";
+  const checkoutSuccessUrl =
+    readString(env.FRONTDOOR_BILLING_CHECKOUT_SUCCESS_URL, readString(raw.billing?.checkoutSuccessUrl, "")) ||
+    undefined;
+  const checkoutCancelUrl =
+    readString(env.FRONTDOOR_BILLING_CHECKOUT_CANCEL_URL, readString(raw.billing?.checkoutCancelUrl, "")) ||
+    undefined;
+  const webhookSecret =
+    readString(env.FRONTDOOR_BILLING_WEBHOOK_SECRET, readString(raw.billing?.webhookSecret, "")) ||
+    undefined;
+  const stripeSecretKey =
+    readString(env.FRONTDOOR_STRIPE_SECRET_KEY, readString(raw.billing?.stripeSecretKey, "")) || undefined;
+  const stripeApiBaseUrl = readString(
+    env.FRONTDOOR_STRIPE_API_BASE_URL,
+    readString(raw.billing?.stripeApiBaseUrl, "https://api.stripe.com"),
+  );
+  const stripePriceIdsByPlan = parseStringMap(raw.billing?.stripePriceIdsByPlan);
+  if (billingProvider === "stripe" && !stripeSecretKey) {
+    throw new Error("frontdoor config billing.provider=stripe requires FRONTDOOR_STRIPE_SECRET_KEY");
+  }
+  if (billingProvider !== "none" && !checkoutSuccessUrl) {
+    throw new Error("frontdoor config billing checkoutSuccessUrl is required when billing is enabled");
+  }
+  if (billingProvider !== "none" && !checkoutCancelUrl) {
+    throw new Error("frontdoor config billing checkoutCancelUrl is required when billing is enabled");
+  }
+  if (billingProvider !== "none" && !webhookSecret) {
+    throw new Error("frontdoor config billing webhookSecret is required when billing is enabled");
+  }
+
   if (tenants.size === 0 && !autoProvisionEnabled) {
     throw new Error("frontdoor config has no tenants");
   }
@@ -524,6 +584,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): FrontdoorConfi
       defaultScopes: autoProvisionDefaultScopes,
       command: autoProvisionCommand,
       commandTimeoutMs: autoProvisionCommandTimeoutMs,
+    },
+    billing: {
+      provider: billingProvider,
+      webhookSecret,
+      checkoutSuccessUrl,
+      checkoutCancelUrl,
+      stripeSecretKey,
+      stripeApiBaseUrl,
+      stripePriceIdsByPlan,
     },
   };
 }

@@ -33,6 +33,43 @@ function parseCookies(rawCookieHeader) {
   return out;
 }
 
+function isMutationMethod(method) {
+  const m = String(method || "").toUpperCase();
+  return m === "POST" || m === "PUT" || m === "PATCH" || m === "DELETE";
+}
+
+function normalizeOrigin(raw) {
+  const value = String(raw || "").trim();
+  if (!value) {
+    return "";
+  }
+  try {
+    return new URL(value).origin.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function resolveExpectedBrowserOrigin(req) {
+  const fromEnv = normalizeOrigin(process.env.FRONTDOOR_WEB_ORIGIN || "");
+  if (fromEnv) {
+    return fromEnv;
+  }
+  const protoForwarded = String(req.headers["x-forwarded-proto"] || "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+  const proto = protoForwarded === "https" ? "https" : protoForwarded === "http" ? "http" : "https";
+  const hostForwarded = String(req.headers["x-forwarded-host"] || "")
+    .split(",")[0]
+    .trim();
+  const host = hostForwarded || String(req.headers.host || "").trim();
+  if (!host) {
+    return "";
+  }
+  return `${proto}://${host}`.toLowerCase();
+}
+
 async function readRawBody(req) {
   const chunks = [];
   for await (const chunk of req) {
@@ -90,6 +127,27 @@ function sendJson(res, status, payload) {
   res.end(text);
 }
 
+function enforceBrowserOrigin(req, res) {
+  if (!isMutationMethod(req.method)) {
+    return true;
+  }
+  const expectedOrigin = resolveExpectedBrowserOrigin(req);
+  if (!expectedOrigin) {
+    return true;
+  }
+  const origin = normalizeOrigin(req.headers.origin);
+  const refererOrigin = normalizeOrigin(req.headers.referer);
+  if (origin && origin !== expectedOrigin) {
+    sendJson(res, 403, { ok: false, error: "origin_not_allowed" });
+    return false;
+  }
+  if (!origin && refererOrigin && refererOrigin !== expectedOrigin) {
+    sendJson(res, 403, { ok: false, error: "origin_not_allowed" });
+    return false;
+  }
+  return true;
+}
+
 async function proxyToFrontdoor(params) {
   const {
     frontdoorOrigin,
@@ -130,6 +188,7 @@ module.exports = {
   setSessionCookie,
   clearSessionCookie,
   sendJson,
+  enforceBrowserOrigin,
   proxyToFrontdoor,
   passthroughJson,
 };

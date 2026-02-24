@@ -44,6 +44,74 @@
           </div>
         </article>
 
+        <article id="ownerInsightsPanel" class="card" hidden>
+          <h2>Workspace insights</h2>
+          <p class="muted">Owner/admin visibility into usage and billing state.</p>
+          <div class="stats">
+            <div class="stat">
+              <span class="stat-label">Requests (30d)</span>
+              <span id="usageRequests30d" class="stat-value">0</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Tokens In (30d)</span>
+              <span id="usageTokensIn30d" class="stat-value">0</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Tokens Out (30d)</span>
+              <span id="usageTokensOut30d" class="stat-value">0</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Active Members</span>
+              <span id="usageActiveMembers" class="stat-value">0</span>
+            </div>
+          </div>
+          <div class="kv">
+            <span class="k">Plan</span>
+            <span id="billingPlan" class="v">-</span>
+          </div>
+          <div class="kv">
+            <span class="k">Status</span>
+            <span id="billingStatus" class="v">-</span>
+          </div>
+          <div class="kv">
+            <span class="k">Provider</span>
+            <span id="billingProvider" class="v">-</span>
+          </div>
+          <div class="kv">
+            <span class="k">Period End</span>
+            <span id="billingPeriodEnd" class="v">-</span>
+          </div>
+          <div class="row">
+            <button id="refreshInsightsBtn" type="button">Refresh insights</button>
+          </div>
+          <hr />
+          <h3>Billing actions</h3>
+          <p class="muted">Launch hosted checkout for this workspace plan.</p>
+          <label for="billingPlanSelect">Plan</label>
+          <select id="billingPlanSelect">
+            <option value="starter">Starter</option>
+            <option value="pro">Pro</option>
+            <option value="business">Business</option>
+          </select>
+          <div class="row">
+            <button id="startCheckoutBtn" class="primary" type="button">Start checkout</button>
+          </div>
+          <hr />
+          <h3>Invoices</h3>
+          <p class="muted">Recent invoices for this workspace.</p>
+          <ul id="billingInvoiceList" class="workspace-list"></ul>
+        </article>
+
+        <article id="operatorWorkspacePanel" class="card" hidden>
+          <h2>Operator inventory</h2>
+          <p class="muted">Platform-level workspace inventory for operators.</p>
+          <p class="muted">Total workspaces: <span id="operatorWorkspaceCount">0</span></p>
+          <ul id="operatorWorkspaceList" class="workspace-list"></ul>
+          <div class="row">
+            <button id="refreshOperatorBtn" type="button">Refresh inventory</button>
+          </div>
+        </article>
+
         <article id="invitePanel" class="card" hidden>
           <h2>Join by invite</h2>
           <p class="muted">Redeem a workspace invite token if you were invited by an admin.</p>

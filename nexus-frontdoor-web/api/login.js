@@ -3,6 +3,7 @@
 const {
   envConfig,
   readRawBody,
+  enforceBrowserOrigin,
   getSetCookieHeaders,
   extractCookieValueFromSetCookie,
   setSessionCookie,
@@ -15,6 +16,9 @@ module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     sendJson(res, 405, { ok: false, error: "method_not_allowed" });
+    return;
+  }
+  if (!enforceBrowserOrigin(req, res)) {
     return;
   }
 

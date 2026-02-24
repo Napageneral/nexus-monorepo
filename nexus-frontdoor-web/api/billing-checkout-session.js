@@ -19,7 +19,6 @@ module.exports = async function handler(req, res) {
   if (!enforceBrowserOrigin(req, res)) {
     return;
   }
-
   const cfg = envConfig();
   if (!cfg.frontdoorOrigin) {
     sendJson(res, 500, { ok: false, error: "missing FRONTDOOR_ORIGIN" });
@@ -31,14 +30,29 @@ module.exports = async function handler(req, res) {
     sendJson(res, 401, { ok: false, error: "unauthorized" });
     return;
   }
+  let body = {};
   try {
-    const rawBody = await readRawBody(req);
+    body = JSON.parse((await readRawBody(req)) || "{}");
+  } catch {
+    body = {};
+  }
+  const workspaceId = String(body.workspace_id || "").trim();
+  if (!workspaceId) {
+    sendJson(res, 400, { ok: false, error: "missing_workspace_id" });
+    return;
+  }
+  try {
     const proxied = await proxyToFrontdoor({
       frontdoorOrigin: cfg.frontdoorOrigin,
-      path: "/api/runtime/token",
+      path: `/api/billing/${encodeURIComponent(workspaceId)}/checkout-session`,
       method: "POST",
-      rawBody: rawBody || "{}",
-      contentType: req.headers["content-type"] || "application/json",
+      rawBody: JSON.stringify({
+        plan_id: body.plan_id,
+        price_id: body.price_id,
+        success_url: body.success_url,
+        cancel_url: body.cancel_url,
+      }),
+      contentType: "application/json",
       sessionCookieName: cfg.frontdoorCookieName,
       sessionCookieValue: sessionValue,
     });
