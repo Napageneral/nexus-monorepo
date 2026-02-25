@@ -405,15 +405,15 @@ async function sendWithRetry(
 | `eve` | iMessage | ✅ | macOS only |
 | `gog` | Gmail | ✅ | Via Google API |
 
-### To Port from Upstream
+### Migrated from Upstream
 
-| Platform | Upstream | Target Tool |
-|----------|----------|-------------|
-| Discord | `src/discord/send.ts` | `nexus-adapter-discord` |
-| Telegram | `src/telegram/send.ts` | `nexus-adapter-telegram` |
-| WhatsApp | `src/web/outbound.ts` | Baileys wrapper |
-| Signal | `src/signal/send.ts` | signal-cli wrapper |
-| Slack | `src/slack/send.ts` | `nexus-adapter-slack` |
+| Platform | Old Upstream (Removed) | NEX Adapter |
+|----------|----------------------|-------------|
+| Discord | ~~`src/discord/`~~ Deleted | `nexus-adapter-discord` |
+| Telegram | ~~`src/telegram/`~~ Deleted | `nexus-adapter-telegram` |
+| WhatsApp | ~~`src/web/`~~ Deleted | Baileys wrapper |
+| Signal | ~~`src/signal/`~~ Deleted | signal-cli wrapper |
+| Slack | ~~`src/slack/`~~ Deleted | `nexus-adapter-slack` |
 
 ---
 

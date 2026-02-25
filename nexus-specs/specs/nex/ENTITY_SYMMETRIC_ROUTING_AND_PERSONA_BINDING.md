@@ -88,8 +88,7 @@ When identity canonicalization or key-shape cutover retires one or more sessions
 1. Select primary session (latest activity time, tie-break by turn count).
 2. Generate transfer summary for each retired session.
 3. Append transfer summary into primary session as a structured system memory event.
-4. Create alias retired->primary.
-5. Archive retired sessions.
+4. Archive retired sessions.
 
 Summary transfer is mandatory. If model summarization fails, runtime must use deterministic fallback summary generation so transfer still occurs.
 
@@ -190,8 +189,7 @@ After merge canonicalization:
 1. canonical sender becomes one entity id.
 2. pick primary session (latest activity; tie by turn count).
 3. mandatory transfer summaries from retired sessions into primary.
-4. alias old keys -> primary key.
-5. retired sessions archived.
+4. retired sessions archived.
 
 ---
 
@@ -201,6 +199,7 @@ After merge canonicalization:
 2. Account->receiver binding is required for external ingress.
 3. Receiver/account mismatch is integrity violation and denied.
 4. Unresolved receiver must not escalate privileges or trigger default-agent execution.
+5. Session resolution must use exact canonical labels only; no alias/main/suffix compatibility lookup at runtime.
 
 ---
 
@@ -211,6 +210,7 @@ After merge canonicalization:
 3. Receiver resolution succeeds via `(platform, account_id)` binding for all enabled adapter accounts.
 4. Sender merge produces mandatory continuity transfer records and summary injection.
 5. Persona pointer swap keeps same session key and preserves history continuity.
+6. Runtime/session APIs do not resolve `main`, suffix, or alias session compatibility keys.
 
 ---
 

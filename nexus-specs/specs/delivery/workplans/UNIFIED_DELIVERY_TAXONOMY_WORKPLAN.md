@@ -25,7 +25,7 @@ This is a long-term, correctness-first migration. The target state is a clean in
   - `iam/*` (policy conditions and examples)
   - `RUNTIME_ROUTING.md` (contacts + identity resolution inputs)
   - `broker/SESSION_LIFECYCLE.md` (session key construction)
-- [x] Decide if internal ingress surfaces (`control-plane`, `webchat`) use `container_kind="direct"` or are modeled as `container_kind="dm"` with explicit routing overrides (must be consistent and documented).
+- [x] Decide if internal ingress surfaces (`control-plane`, `webchat`) use `container_kind="direct"` or are modeled as `container_kind="direct"` with explicit routing overrides (must be consistent and documented).
 - [x] Add a canonical mapping table for each platform: Discord/Slack/iMessage/Telegram/Gmail + internal ingress (control-plane/webchat).
 
 ### Bucket 2: Adapter Protocol Contract (schema + fixtures)

@@ -32,7 +32,7 @@ Consolidated reference for all channel adapters: capabilities, formatting rules,
 ## Discord
 
 **Nexus Tool:** `nexus-adapter-discord`
-**Upstream:** `src/discord/` (full implementation)
+**Upstream:** Removed (migrated to NEX adapter SDK — `extensions/discord/`)
 
 ### Capabilities
 
@@ -62,7 +62,7 @@ const DISCORD_CAPABILITIES: ChannelCapabilities = {
 ```typescript
 {
   platform: 'discord',
-  container_kind: message.channel.isDMBased() ? 'dm' : 'group',
+  container_kind: message.channel.isDMBased() ? 'direct' : 'group',
   thread_id: message.channel.isThread() ? message.channel.id : undefined,
   metadata: { guild_id: message.guildId, channel_name: message.channel.name },
 }
@@ -122,7 +122,7 @@ Required event metadata: `guild_id`, `guild_name`, `channel_name`, `channel_type
 ## Telegram
 
 **Nexus Tool:** `nexus-adapter-telegram` (TBD)
-**Upstream:** `src/telegram/` (full implementation, Grammy framework)
+**Upstream:** Removed (migrated to NEX adapter SDK — `extensions/telegram/`)
 
 ### Capabilities
 
@@ -153,7 +153,7 @@ const TELEGRAM_CAPABILITIES: ChannelCapabilities = {
 ```typescript
 {
   platform: 'telegram',
-  container_kind: ctx.chat.type === 'private' ? 'dm' : 'group',
+  container_kind: ctx.chat.type === 'private' ? 'direct' : 'group',
   thread_id: ctx.message.message_thread_id?.toString(),
   metadata: { chat_id: ctx.chat.id, chat_type: ctx.chat.type, is_forum: ctx.chat.is_forum },
 }
@@ -189,7 +189,7 @@ Supergroups with forum topics: each topic has `message_thread_id`. General topic
 ## WhatsApp
 
 **Nexus Tool:** Baileys integration (existing)
-**Upstream:** `src/web/` (full implementation)
+**Upstream:** Removed (migrated to NEX adapter SDK — `extensions/whatsapp/`)
 
 ### Capabilities
 
@@ -217,7 +217,7 @@ const WHATSAPP_CAPABILITIES: ChannelCapabilities = {
 ```typescript
 {
   platform: 'whatsapp',
-  container_kind: msg.key.remoteJid.endsWith('@g.us') ? 'group' : 'dm',
+  container_kind: msg.key.remoteJid.endsWith('@g.us') ? 'group' : 'direct',
   metadata: { jid: msg.key.remoteJid, participant: msg.key.participant, pushName: msg.pushName },
 }
 ```
@@ -257,7 +257,7 @@ Get metadata: `sock.groupMetadata(groupJid)`. Mentions: include `mentions` array
 
 **Status:** TODO
 **Nexus Tool:** `slack-cli` (TBD)
-**Upstream:** `src/slack/` (full implementation)
+**Upstream:** Removed (migrated to NEX adapter SDK — `extensions/slack/`)
 
 ### Capabilities
 
@@ -287,7 +287,7 @@ const SLACK_CAPABILITIES: ChannelCapabilities = {
 ```typescript
 {
   platform: 'slack',
-  container_kind: message.channel_type === 'im' ? 'dm' : 'group',
+  container_kind: message.channel_type === 'im' ? 'direct' : 'group',
   thread_id: message.thread_ts,
   metadata: { team_id: message.team, channel_name: message.channel, user_id: message.user },
 }
@@ -383,7 +383,7 @@ Any file type as attachment. Max 25MB (Gmail limit). Inline images in HTML email
 ## iMessage
 
 **Nexus Tool:** `eve` (BlueBubbles integration)
-**Upstream:** `src/imessage/` (full implementation)
+**Upstream:** Removed (migrated to NEX adapter SDK — `extensions/imessage/`)
 
 ### Capabilities
 
@@ -411,7 +411,7 @@ const IMESSAGE_CAPABILITIES: ChannelCapabilities = {
 ```typescript
 {
   platform: 'imessage',
-  container_kind: chat.participants.length > 2 ? 'group' : 'dm',
+  container_kind: chat.participants.length > 2 ? 'group' : 'direct',
   metadata: {
     chat_guid: chat.guid,
     handle_id: message.handle?.address,
@@ -467,7 +467,7 @@ Uses eve's warehouse ETL path (handles AttributedBody decoding, content normaliz
 
 **Status:** TODO
 **Nexus Tool:** `signal-cli` wrapper (TBD)
-**Upstream:** `src/signal/` (full implementation)
+**Upstream:** Removed (migrated to NEX adapter SDK — `extensions/signal/`)
 
 ### Capabilities
 
@@ -499,7 +499,7 @@ SSE event stream from signal-cli daemon:
 ```typescript
 {
   platform: 'signal',
-  container_kind: envelope.dataMessage?.groupInfo ? 'group' : 'dm',
+  container_kind: envelope.dataMessage?.groupInfo ? 'group' : 'direct',
   metadata: { source: envelope.source, source_uuid: envelope.sourceUuid, group_id: envelope.dataMessage?.groupInfo?.groupId },
 }
 ```
@@ -528,7 +528,7 @@ Images (JPG/PNG/GIF/WebP), Video (MP4), Audio (MP3/M4A/OGG), Voice notes (OGG Op
 
 **Status:** TODO
 **Nexus Tool:** TBD
-**Upstream:** `src/line/` (full implementation)
+**Upstream:** Removed (migrated to NEX adapter SDK — `extensions/line/`)
 
 ### Capabilities
 
@@ -558,7 +558,7 @@ Webhook-only (no socket/polling):
 ```typescript
 {
   platform: 'line',
-  container_kind: event.source.type === 'user' ? 'dm' : 'group',
+  container_kind: event.source.type === 'user' ? 'direct' : 'group',
   metadata: { user_id: event.source.userId, group_id: event.source.groupId, reply_token: event.replyToken },
 }
 ```

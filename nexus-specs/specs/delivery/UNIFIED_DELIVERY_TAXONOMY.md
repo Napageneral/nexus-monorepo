@@ -65,7 +65,7 @@ type DeliveryContext = {
   space_name?: string;            // best-effort (untrusted; for UI only)
 
   // The actual place messages happen
-  container_kind: ContainerKind;  // dm | group | channel | direct (internal-only)
+  container_kind: ContainerKind;  // direct | group | channel
   container_id: string;           // platform-native conversation container id
   container_name?: string;        // best-effort (untrusted; for UI only)
 
@@ -233,7 +233,7 @@ IAM policies MUST NOT match on:
 Examples (illustrative policy intent):
 
 - "Allow owner everywhere" should match principal, not delivery.
-- "Ask on unknown Discord DMs" should match `platform=discord` and `container_kind=dm`.
+- "Ask on unknown Discord DMs" should match `platform=discord` and `container_kind=direct`.
 - "Deny all Discord server channels except allowlisted spaces" should match `platform=discord`, `container_kind=channel`, then allow/deny by `space_id`.
 - "Deny a single problematic container" should match `platform`, `container_kind`, and `container_id`.
 
@@ -245,7 +245,7 @@ This spec intentionally treats `space_id` as a first-class normalized field rath
 
 Session keys should be built from this taxonomy:
 
-- If `container_kind` is `dm`: route to an identity-based session (see `RUNTIME_ROUTING.md`).
+- If `container_kind` is `direct`: route to an identity-based session (see `RUNTIME_ROUTING.md`).
 - If `container_kind` is `group` or `channel`: route to a container-based session keyed by `(platform, container_id)` and optionally `thread_id`.
 - Internal `direct` ingress is allowed to provide an already-resolved routing override and should not be treated as a container identity for external policy logic.
 

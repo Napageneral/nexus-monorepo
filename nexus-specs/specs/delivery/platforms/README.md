@@ -23,15 +23,15 @@ Full inventory of platforms, their adapter status, and compliance level against 
 
 | Platform | Folder | Nexus Tool | Upstream | Compliance Target | Status |
 |---------|--------|------------|----------|-------------------|--------|
-| **Discord** | `discord/` | TBD (`discord-cli`) | `src/discord/` (66 files) | Complete + Extended | Review needed |
-| **Telegram** | `telegram/` | TBD (`telegram-cli`) | `src/telegram/` (87 files) | Complete + Extended | Review needed |
-| **WhatsApp** | `whatsapp/` | Baileys wrapper | `src/web/` (78 files) | Complete + Extended | Review needed |
-| **iMessage** | `imessage/` | `eve` | `src/imessage/` (legacy) | Complete | Review needed |
+| **Discord** | `discord/` | TBD (`discord-cli`) | Removed (migrated to `extensions/discord/`) | Complete + Extended | Review needed |
+| **Telegram** | `telegram/` | TBD (`telegram-cli`) | Removed (migrated to `extensions/telegram/`) | Complete + Extended | Review needed |
+| **WhatsApp** | `whatsapp/` | Baileys wrapper | Removed (migrated to `extensions/whatsapp/`) | Complete + Extended | Review needed |
+| **iMessage** | `imessage/` | `eve` | Removed (migrated to `extensions/imessage/`) | Complete | Review needed |
 | **Gmail** | `gmail/` | `gog` | Hooks only | Complete | Review needed |
-| **Signal** | `signal/` | signal-cli wrapper | `src/signal/` (24 files) | Complete | Review needed |
-| **Slack** | `slack/` | TBD (`slack-cli`) | `src/slack/` (65 files) | Complete + Extended | Review needed |
-| **LINE** | `line/` | TBD | `src/line/` (34 files) | Standard | Review needed |
-| **Feishu/Lark** | `feishu/` | TBD | `src/feishu/` (17 files) | Standard | Placeholder |
+| **Signal** | `signal/` | signal-cli wrapper | Removed (migrated to `extensions/signal/`) | Complete | Review needed |
+| **Slack** | `slack/` | TBD (`slack-cli`) | Removed (migrated to `extensions/slack/`) | Complete + Extended | Review needed |
+| **LINE** | `line/` | TBD | Removed (migrated to `extensions/line/`) | Standard | Review needed |
+| **Feishu/Lark** | `feishu/` | TBD | Removed (migrated to `extensions/feishu/`) | Standard | Placeholder |
 
 ### Extension Platforms (from OpenClaw extensions)
 

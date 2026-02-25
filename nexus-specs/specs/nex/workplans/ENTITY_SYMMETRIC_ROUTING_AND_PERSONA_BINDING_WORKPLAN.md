@@ -70,7 +70,7 @@ Observed in runtime code (`/Users/tyler/nexus/home/projects/nexus/nex/src`):
 - Recompute DM labels with canonical sender + same receiver entity.
 - Select primary session per receiver scope.
 - Mandatory summary transfer from retired sessions into primary.
-- Alias retired labels to primary and archive retired sessions.
+- Archive retired sessions after transfer (no runtime alias compatibility).
 
 ---
 
@@ -86,8 +86,7 @@ When any session key is retired (`entity_merge`, `key_cutover`, `receiver_rebind
    - unresolved threads/actions
 3. Inject summary payload as a structured system memory event into the primary session.
 4. Record transfer row in `session_continuity_transfers`.
-5. Create alias retired -> primary.
-6. Archive retired session.
+5. Archive retired session.
 
 If LLM summarization fails, deterministic fallback summary must run (no skip path).
 
@@ -121,7 +120,7 @@ If LLM summarization fails, deterministic fallback summary must run (no skip pat
 1. Rewrite `buildSessionKey()` in `session.ts`:
    - remove `:agent:` suffix
    - remove `:thread:` canonical suffix
-2. Remove atlas compatibility converters and legacy runtime fallback readers.
+2. Remove all session compatibility readers (alias/main/suffix/agent-prefixed lookup).
 3. Ensure group thread events map to parent group session label.
 
 ### Phase D: Persona Binding Resolution
@@ -144,13 +143,13 @@ If LLM summarization fails, deterministic fallback summary must run (no skip pat
    - group by `receiver_entity_id`
    - choose primary by latest activity, tie-break turns
 2. Inject mandatory summaries and record transfer rows.
-3. Alias + archive retired sessions.
+3. Archive retired sessions after continuity transfer.
 
 ### Phase F: Cleanup + Spec/Code Parity
 
 1. Remove remaining runtime references to agent-scoped/thread-scoped canonical labels.
 2. Remove atlas fallback assumptions from IAM policy defaults where they imply implicit routing.
-3. Keep explicit `atlas` as a named persona only where configured intentionally, never as fallback.
+3. Remove residual fallback persona naming assumptions from runtime and tests.
 
 ---
 
@@ -211,7 +210,23 @@ Primary code files expected:
 
 ---
 
-## 10. Open Decisions To Confirm Before Coding
+## 10. Migration Runtime Invariants
+
+These invariants must hold before, during, and after cutover:
+
+1. External ingress must resolve both `sender_entity_id` and `receiver_entity_id` before agent execution.
+2. Receiver resolution is authoritative from `(platform, account_id) -> receiver_entity_id`; receiver hints are verification only.
+3. If receiver resolution fails (`missing binding`, `invalid binding`, `hint conflict`, `missing identity db`), access is denied (fail closed).
+4. Session labels are exact canonical labels only:
+   - `dm:{sender_entity_id}:{receiver_entity_id}`
+   - `group:{platform}:{container_id}:{receiver_entity_id}`
+5. Runtime session resolution does not accept compatibility aliases (`main`, suffix matches, `agent:` wrapper labels, `session_aliases` indirection).
+6. Persona routing is explicit from persona bindings; no implicit default persona fallback.
+7. Canonicalization/merge retirement always records continuity transfer and archives retired sessions.
+
+---
+
+## 11. Open Decisions To Confirm Before Coding
 
 1. Fresh-start policy on persona pointer swap:
    - default recommendation: keep same session, no implicit reset.
@@ -219,4 +234,3 @@ Primary code files expected:
    - JSON-only structured memory event vs human-readable system note + JSON metadata.
 3. Receiver unresolved behavior:
    - default recommendation: deny external ingress and log integrity violation.
-

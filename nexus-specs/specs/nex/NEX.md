@@ -36,34 +36,80 @@ NEX is a single TypeScript process. All stages are **functions**, not separate s
 
 ```
 NEX Process (TypeScript)
-├── receiveEvent()             // 1. Normalize NexusEvent, create NexusRequest
-├── resolveIdentity()    // 2. WHO sent this? Query Identity Graph
-├── resolveReceiver()    // 3. WHO is this addressed to? Resolve target agent/entity
-├── resolveAccess()      // 4. WHAT can they do? Policies → permissions, session routing
-├── runAutomations()     // 5. Default automation hookpoint (automations also run on other hookpoints)
-├── assembleContext()       // 6. Build AssembledContext (history, memory, config, formatting)
-├── runAgent()           // 7. Execute agent with assembled context (pi-coding-agent)
-├── deliverResponse()    // 8. Format, chunk, send via out-adapter
-└── finalize()           // 9. Persist final trace/audit status (always runs)
+│
+│  UNIVERSAL STAGES (always run)
+├── receiveEvent()        // 1. Normalize NexusEvent, create NexusRequest
+├── resolveIdentity()     // 2. WHO sent this? Query Identity Graph
+├── resolveReceiver()     // 3. WHO is this addressed to? Resolve target agent/entity
+├── resolveAccess()       // 4. WHAT can they do? Policies → permissions, session routing
+│
+│  ── [routing decision: receiver.type] ──
+│
+│  AGENT PATH (receiver.type = 'agent')
+├── assembleContext()     // 5. Build AssembledContext (history, memory, config, formatting)
+├── runAgent()            // 6. Execute agent with assembled context
+│   └── deliverResponse() //    Agent tool: format, chunk, send via out-adapter
+│
+│  API PATH (receiver.type = 'system' | programmatic callers)
+├── (handle directly)     //    Return result to caller, no agent execution
+│
+│  FINALIZE (always runs)
+└── finalize()            //    Persist final trace/audit status
 
 All function calls. No network hops.
+Automation hookpoints fire at every stage boundary (before/after any stage).
 ```
+
+### Pipeline Model
+
+The pipeline has **4 universal stages**, a **routing decision**, **conditional execution paths**, and a **finalize** that always runs. This is NOT a flat sequence of 9 stages — the agent execution path is conditional on the receiver type.
+
+**Automation hookpoints** are not a dedicated stage. Automations are configured to fire at any stage boundary (e.g., `afterResolveIdentity`, `beforeAssembleContext`, `onFinalize`). The old `runAutomations()` stage is replaced by the hookpoint system — automations can intercept the pipeline at any point, not just between resolveAccess and assembleContext.
+
+**deliverResponse** is an agent capability (tool), not a strict pipeline stage. The agent calls `send_message` which routes through the adapter system. For streaming adapters, delivery happens inline during `runAgent`. For non-streaming adapters, delivery happens after agent completion. Either way, it's part of the agent execution path, not a standalone stage.
 
 ### Stage Responsibilities
 
 | Stage | Input | Output on NexusRequest | May Exit Pipeline? |
 |-------|-------|------------------------|-------------------|
+| **Universal** | | | |
 | `receiveEvent()` | NexusEvent from adapter | `event`, `delivery` populated | No |
 | `resolveIdentity()` | NexusRequest | `sender` populated | Yes (unknown sender policy) |
 | `resolveReceiver()` | NexusRequest | `receiver` populated (type, entity_id, agent_id?, persona_ref?) | No |
 | `resolveAccess()` | NexusRequest | `access` populated (decision, permissions, routing) | Yes (access denied) |
-| `runAutomations()` | NexusRequest | `triggers` populated (automations fired, enrichment); represents the default runtime hookpoint | Yes (automation handles completely) |
+| **Agent Path** | | | |
 | `assembleContext()` | NexusRequest | `agent` populated (turn_id, model, token_budget); builds `AssembledContext` internally | No |
-| `runAgent()` | AssembledContext (from stage 6) | `response` populated (content, tool_calls, usage) | No |
-| `deliverResponse()` | NexusRequest | `delivery_result` populated | No |
-| `finalize()` | NexusRequest | `pipeline` trace complete, `status` set | No |
+| `runAgent()` | AssembledContext (from assembleContext) | `response` populated (content, tool_calls, usage) | No |
+| ↳ `deliverResponse()` | NexusRequest | `delivery_result` populated (agent tool, may be implicit via streaming) | No |
+| **Always** | | | |
+| `finalize()` | NexusRequest | `pipeline` trace complete, `status` set | No (always runs) |
 
 See `NEXUS_REQUEST.md` for the full typed schema per stage.
+
+### Automation Hookpoints
+
+Automations attach to stage boundaries, not to a dedicated pipeline slot. Any automation can be configured to fire at any hookpoint:
+
+```typescript
+interface AutomationHookpoint {
+  // Before-stage hooks (can short-circuit the pipeline)
+  beforeResolveIdentity?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+  beforeResolveAccess?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+  beforeAssembleContext?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+
+  // After-stage hooks (can observe, enrich, or short-circuit)
+  afterReceiveEvent?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+  afterResolveIdentity?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+  afterResolveReceiver?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+  afterResolveAccess?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+  afterRunAgent?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+
+  // Finalize hook (observe only, cannot short-circuit)
+  onFinalize?(req: NexusRequest): Promise<void>;
+}
+```
+
+When an automation returns `'handled'`, the pipeline skips to `finalize()` with `status = 'handled_by_automation'`. This replaces the old `runAutomations()` stage — automations now run wherever they're needed, not at a single fixed point.
 
 ---
 
@@ -94,101 +140,79 @@ See `NEXUS_REQUEST.md` for the full typed schema per stage.
 │                                      │ NexusEvent (JSONL from adapter process)   │
 │                                      ▼                                            │
 │  ┌────────────────────────────────────────────────────────────────────────────┐  │
-│  │                          SYNC PIPELINE (9 stages)                          │  │
+│  │                            SYNC PIPELINE                                    │  │
 │  │                                                                             │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 1. receiveEvent()                                                            │  │  │
-│  │  │    • Create NexusRequest from NexusEvent                             │  │  │
-│  │  │    • Populate: request_id, event, delivery                           │  │  │
-│  │  │    • Async: Write event to Events Ledger                             │  │  │
+│  │  │  UNIVERSAL STAGES (always run)                                       │  │  │
+│  │  │                                                                       │  │  │
+│  │  │  1. receiveEvent()                                                    │  │  │
+│  │  │     • Create NexusRequest from NexusEvent                            │  │  │
+│  │  │     • Populate: request_id, event, delivery                          │  │  │
+│  │  │     • Async: Write event to Events Ledger                            │  │  │
+│  │  │                  [hookpoint: afterReceiveEvent]                       │  │  │
+│  │  │                                                                       │  │  │
+│  │  │  2. resolveIdentity()                                                 │  │  │
+│  │  │     • WHO sent this?                                                  │  │  │
+│  │  │     • Query Identity Graph (contacts → entities)                     │  │  │
+│  │  │     • Populate: sender (type, entity_id, identity details)           │  │  │
+│  │  │     • If unknown → may exit based on deny policy                     │  │  │
+│  │  │                  [hookpoint: afterResolveIdentity]                    │  │  │
+│  │  │                                                                       │  │  │
+│  │  │  3. resolveReceiver()                                                 │  │  │
+│  │  │     • WHO is this addressed to?                                       │  │  │
+│  │  │     • Resolve target agent/entity from delivery context              │  │  │
+│  │  │     • Populate: receiver (type, entity_id, agent_id, name, source)   │  │  │
+│  │  │                  [hookpoint: afterResolveReceiver]                    │  │  │
+│  │  │                                                                       │  │  │
+│  │  │  4. resolveAccess()                                                   │  │  │
+│  │  │     • WHAT can they do?                                               │  │  │
+│  │  │     • Evaluate ACL policies against sender + receiver + conditions    │  │  │
+│  │  │     • Populate: access (decision, permissions, routing)              │  │  │
+│  │  │     • Routing: agent_id, persona_ref, session_label, queue_mode      │  │  │
+│  │  │     • If denied → skip to finalize (async: write denial to audit)    │  │  │
+│  │  │                  [hookpoint: afterResolveAccess]                      │  │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘  │  │
 │  │                                   │                                         │  │
-│  │                      [plugin: afterReceiveEvent]                           │  │
+│  │                    [routing decision: receiver.type]                        │  │
+│  │                          ┌────────┼────────┐                                │  │
+│  │                          ▼        │        ▼                                │  │
+│  │  ┌──────────────────────────┐     │  ┌──────────────────────────────────┐  │  │
+│  │  │  AGENT PATH              │     │  │  API / PROGRAMMATIC PATH         │  │  │
+│  │  │  (receiver.type='agent') │     │  │  (system, webhook, direct API)   │  │  │
+│  │  │                          │     │  │                                   │  │  │
+│  │  │  5. assembleContext()    │     │  │  • Return result to caller       │  │  │
+│  │  │     • Conversation       │     │  │  • No agent execution            │  │  │
+│  │  │       history            │     │  │  • Automations may have already  │  │  │
+│  │  │     • Memory context     │     │  │    handled via hookpoints        │  │  │
+│  │  │     • Agent config       │     │  │                                   │  │  │
+│  │  │     • Platform guidance  │     │  └──────────────────────────────────┘  │  │
+│  │  │     • Create/resume      │     │                                         │  │
+│  │  │       session + turn     │     │                                         │  │
+│  │  │     [hookpoint:          │     │                                         │  │
+│  │  │      afterAssemble]      │     │                                         │  │
+│  │  │                          │     │                                         │  │
+│  │  │  6. runAgent()           │     │                                         │  │
+│  │  │     • Execute agent      │     │                                         │  │
+│  │  │     • Streaming: tokens  │     │                                         │  │
+│  │  │       flow to adapter    │     │                                         │  │
+│  │  │     • Agent may call     │     │                                         │  │
+│  │  │       deliverResponse()  │     │                                         │  │
+│  │  │       as a tool (send    │     │                                         │  │
+│  │  │       message)           │     │                                         │  │
+│  │  │     [hookpoint:          │     │                                         │  │
+│  │  │      afterRunAgent]      │     │                                         │  │
+│  │  └──────────────────────────┘     │                                         │  │
+│  │                          └────────┘                                         │  │
 │  │                                   │                                         │  │
 │  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 2. resolveIdentity()                                                  │  │  │
-│  │  │    • WHO sent this?                                                   │  │  │
-│  │  │    • Query Identity Graph (contacts → mappings → entities)           │  │  │
-│  │  │    • Populate: sender (type, entity_id, identity details)            │  │  │
-│  │  │    • If unknown → may exit based on deny policy                      │  │  │
+│  │  │  FINALIZE (always runs)                                               │  │  │
+│  │  │                                                                       │  │  │
+│  │  │  finalize()                                                           │  │  │
+│  │  │     • Finalize NexusRequest with pipeline trace + timing              │  │  │
+│  │  │     • Persist final status + audit metadata to Nexus Ledger           │  │  │
+│  │  │     • Emit to Memory System for analysis (async)                      │  │  │
+│  │  │                  [hookpoint: onFinalize]                               │  │  │
 │  │  └──────────────────────────────────────────────────────────────────────┘  │  │
-│  │                                   │                                         │  │
-│  │                       [plugin: afterResolveIdentity]                       │  │
-│  │                                   │                                         │  │
-│  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 3. resolveReceiver()                                                  │  │  │
-│  │  │    • WHO is this addressed to?                                        │  │  │
-│  │  │    • Resolve target agent/entity from delivery context               │  │  │
-│  │  │    • Populate: receiver (type, entity_id, agent_id?, persona_ref?, name, source) │  │  │
-│  │  └──────────────────────────────────────────────────────────────────────┘  │  │
-│  │                                   │                                         │  │
-│  │                       [plugin: afterResolveReceiver]                       │  │
-│  │                                   │                                         │  │
-│  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 4. resolveAccess()                                                    │  │  │
-│  │  │    • WHAT can they do?                                                │  │  │
-│  │  │    • Evaluate ACL policies against sender + receiver + conditions     │  │  │
-│  │  │    • Populate: access (decision, permissions, routing)               │  │  │
-│  │  │    • Routing includes: agent_id, persona_ref, session_label, queue_mode │  │  │
-│  │  │    • If denied → exit pipeline (async: write denial to audit)        │  │  │
-│  │  └──────────────────────────────────────────────────────────────────────┘  │  │
-│  │                                   │                                         │  │
-│  │                        [plugin: afterResolveAccess]                        │  │
-│  │                                   │                                         │  │
-│  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 5. runAutomations()                                                   │  │  │
-│  │  │    • Match automations against event + sender + receiver + access     │  │  │
-│  │  │    • Execute matched automations (parallel where independent)        │  │  │
-│  │  │    • Populate: triggers (automations_fired, enrichment, overrides)   │  │  │
-│  │  │    • This is the default hookpoint; other hookpoints run around stages │  │  │
-│  │  │    • If automation handles completely → exit pipeline                 │  │  │
-│  │  └──────────────────────────────────────────────────────────────────────┘  │  │
-│  │                                   │                                         │  │
-│  │                       [plugin: afterRunAutomations]                        │  │
-│  │                                   │                                         │  │
-│  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 6. assembleContext()                                                │  │  │
-│  │  │    • Gather context for agent execution (parallel fetches):         │  │  │
-│  │  │      - Conversation history from Agents Ledger                        │  │  │
-│  │  │      - Relevant context from Memory System (memory.db, embeddings.db) │  │  │
-│  │  │      - Agent config (persona, model, tools)                           │  │  │
-│  │  │      - Platform formatting guidance                                    │  │  │
-│  │  │    • Create/resume session, create turn in Agents Ledger             │  │  │
-│  │  │    • Build AssembledContext (internal to Broker, NOT on NexusRequest) │  │  │
-│  │  │    • Populate: agent (turn_id, session_label, model, token_budget)   │  │  │
-│  │  └──────────────────────────────────────────────────────────────────────┘  │  │
-│  │                                   │                                         │  │
-│  │                      [plugin: afterAssembleContext]                        │  │
-│  │                                   │                                         │  │
-│  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 7. runAgent()                                                          │  │  │
-│  │  │    • Execute pi-coding-agent with AssembledContext                     │  │  │
-│  │  │    • Streaming: tokens flow to adapter via BrokerStreamHandle         │  │  │
-│  │  │    • Populate: response (content, tool_calls, usage, stop_reason)    │  │  │
-│  │  │    • Writes completion to Agents Ledger                               │  │  │
-│  │  └──────────────────────────────────────────────────────────────────────┘  │  │
-│  │                                   │                                         │  │
-│  │                          [plugin: afterRunAgent]                            │  │
-│  │                                   │                                         │  │
-│  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 8. deliverResponse()                                                   │  │  │
-│  │  │    • Format response for target platform                              │  │  │
-│  │  │    • Chunk if necessary (respects platform text limits)              │  │  │
-│  │  │    • Send via adapter's `send` command                                │  │  │
-│  │  │    • Populate: delivery_result (message_ids, success)                │  │  │
-│  │  │    • Note: may be no-op if native streaming already delivered         │  │  │
-│  │  └──────────────────────────────────────────────────────────────────────┘  │  │
-│  │                                   │                                         │  │
-│  │                       [plugin: afterDeliverResponse]                       │  │
-│  │                                   │                                         │  │
-│  │  ┌──────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │ 9. finalize()                                                          │  │  │
-│  │  │    • Finalize NexusRequest with pipeline trace + timing               │  │  │
-│  │  │    • Persist final status + audit metadata to Nexus Ledger            │  │  │
-│  │  │    • Emit to Memory System for analysis (async)                       │  │  │
-│  │  └──────────────────────────────────────────────────────────────────────┘  │  │
-│  │                                   │                                         │  │
-│  │                             [plugin: onFinalize]                            │  │
 │  │                                                                             │  │
 │  └────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                   │

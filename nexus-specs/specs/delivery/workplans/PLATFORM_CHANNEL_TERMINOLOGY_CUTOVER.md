@@ -30,7 +30,7 @@ This spec defines a **hard cutover** to canonical names with no legacy alias beh
 ### 2.1 Delivery Surface
 
 - Use `platform` for transport system identity (`discord`, `slack`, `imessage`, `gmail`, etc.).
-- Use `container_kind` for location kind (`dm`, `group`, `channel`, `direct`).
+- Use `container_kind` for location kind (`direct`, `group`, `channel`).
 - Use `container_id` for platform-native destination id.
 
 ### 2.2 Keep as Domain Terms (Do NOT Rename)

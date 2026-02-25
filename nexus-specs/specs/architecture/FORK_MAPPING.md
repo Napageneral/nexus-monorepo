@@ -381,14 +381,14 @@ Openclaw bundles channel handling in `src/`. Nexus moves these to `extensions/` 
 
 | Openclaw src/ | Nexus | Action |
 |---------------|-------|--------|
-| `src/imessage/` | `extensions/imessage/` | 🟡 Merge with extension, external CLI |
-| `src/discord/` | `extensions/discord/` | 🟡 Merge with extension, external CLI |
-| `src/telegram/` | `extensions/telegram/` | 🟡 Merge with extension, external CLI |
-| `src/slack/` | `extensions/slack/` | 🟡 Merge with extension, external CLI |
-| `src/signal/` | `extensions/signal/` | 🟡 Merge with extension, external CLI |
-| `src/whatsapp/` | `extensions/whatsapp/` | 🟡 Merge with extension, external CLI |
-| `src/line/` | `extensions/line/` | 🟡 Merge with extension, external CLI |
-| `src/web/` | `gateway/` (web inbound) | 🟡 Web channel → gateway |
+| `src/imessage/` | `extensions/imessage/` | ✅ Completed — upstream code removed, migrated to extensions |
+| `src/discord/` | `extensions/discord/` | ✅ Completed — upstream code removed, migrated to extensions |
+| `src/telegram/` | `extensions/telegram/` | ✅ Completed — upstream code removed, migrated to extensions |
+| `src/slack/` | `extensions/slack/` | ✅ Completed — upstream code removed, migrated to extensions |
+| `src/signal/` | `extensions/signal/` | ✅ Completed — upstream code removed, migrated to extensions |
+| `src/whatsapp/` | `extensions/whatsapp/` | ✅ Completed — upstream code removed, migrated to extensions |
+| `src/line/` | `extensions/line/` | ✅ Completed — upstream code removed, migrated to extensions |
+| `src/web/` | `gateway/` (web inbound) | ✅ Completed — upstream code removed, web inbound moved to gateway |
 | `src/platforms/` | `nex/adapters/types.ts` + extensions | 🟡 Channel types → shared, impls → extensions |
 | `src/canvas-host/` | 🔶 DEFER | Canvas/A2UI not V1 |
 
