@@ -188,9 +188,9 @@ The control-plane HTTP server currently hosts several protocol bridges that shou
 ## IAM Expectations
 
 - Every internal adapter must emit `NexusEvent` with an appropriate `delivery.platform`.
-- `resolveIdentity` should produce correct principals:
-  - `clock` → system principal `source=timer`
-  - `webhook` → webhook principal (not system)
+- `resolveIdentity` should produce correct sender contexts:
+  - `clock` → system sender `source=timer`
+  - `webhook` → webhook sender (not system)
   - local `runtime` → owner/known where appropriate
 
 ---

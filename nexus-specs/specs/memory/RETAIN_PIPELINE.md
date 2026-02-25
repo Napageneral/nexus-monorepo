@@ -489,10 +489,10 @@ When someone mentions "Tyler" in conversation and context makes it clear they're
 - Use conversation context, thread participants, and topic to disambiguate
 - If truly ambiguous, create a new entity and note the ambiguity — consolidation or human cleanup can resolve later
 
-**Delivery-sourced entities:**
+**Adapter-sourced entities:**
 When the writer sees a sender for the first time, the delivery pipeline has already created a sparse entity (just a platform handle). The writer MUST:
 - Search for existing entities matching the sender handle
-- Link facts to the existing delivery-sourced entity
+- Link facts to the existing adapter-sourced entity
 - Enrich it when real names are discovered (propose merge to create person entity)
 
 **Provenance tracking:**

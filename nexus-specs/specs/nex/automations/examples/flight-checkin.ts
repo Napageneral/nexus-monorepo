@@ -20,7 +20,7 @@ export const hook: Hook = {
   // ACL already verified this is the owner - we filter to email channel
   // ─────────────────────────────────────────────────────────────────────────
   triggers: {
-    principal: {
+    sender: {
       type: 'owner'
     },
     event: {

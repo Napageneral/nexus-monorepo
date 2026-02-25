@@ -12,7 +12,7 @@
 This document defines how messages flow from inbound delivery to session routing once a Nexus workspace is alive. It covers:
 
 1. **Contacts** — the delivery-driven directory that maps `(platform, space_id, sender_id)` to entities
-2. **Identity resolution** — how the pipeline resolves a sender to a principal at pipeline speed
+2. **Identity resolution** — how the pipeline resolves a sender at pipeline speed
 3. **Session key generation** — how sessions are keyed to identities
 4. **Entity merge propagation** — what happens to contacts and sessions when entities merge
 5. **Adapters-only runtime** — removing legacy platform plugins in favor of the adapter system
@@ -82,8 +82,8 @@ When a new `(platform, space_id, sender_id)` tuple is seen for the first time, t
 1. **Creates a corresponding entity** in `identity.db` with:
    - `name`: `{platform}:{sender_id}` (e.g., `discord:tyler#1234`)
      - If `space_id` is used for uniqueness (Slack), the name SHOULD include it: `{platform}:{space_id}:{sender_id}`
-   - `type`: `'person'` (delivery-sourced entities default to person type)
-   - `source`: `'delivery'`
+   - `type`: `'person'` (adapter-sourced entities default to person type)
+   - `source`: `'adapter'`
    - `merged_into`: `NULL` (canonical root — this IS the identity until merged)
 2. **Creates a contact row** in `identity.db` linking that delivery endpoint to the entity id
 
@@ -117,11 +117,11 @@ function ensureContact(
   // New contact: create entity + contact row in identity.db (same DB).
   const entityId = generateULID();
   const entityName = spaceId ? `${platform}:${spaceId}:${senderId}` : `${platform}:${senderId}`;
-  const entityType = 'person'; // delivery-sourced entities default to person; memory-writer may reclassify
+  const entityType = 'person'; // adapter-sourced entities default to person; memory-writer may reclassify
 
   identityDb.prepare(`
     INSERT INTO entities (id, name, type, source, normalized, first_seen, last_seen, created_at, updated_at)
-    VALUES (?, ?, ?, 'delivery', ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, 'adapter', ?, ?, ?, ?, ?)
   `).run(entityId, entityName, entityType, entityName.toLowerCase(), timestamp, timestamp, timestamp, timestamp);
 
   identityDb.prepare(`
@@ -172,9 +172,9 @@ Stage 2: resolveIdentity
             identities: [{ platform, identifier: sender_id }]  // from contacts table
 ```
 
-**Key change from old system:** There is no `unknown` principal type for external senders. Every sender gets an entity on first contact. The principal is always `known` (or `owner` if `is_user = true`). The entity may be sparse (just a channel handle, no real name), but it exists.
+**Key change from old system:** There is no `unknown` sender type for external senders. Every sender gets an entity on first contact. The sender is always `known` (or `owner` if `is_user = true`). The entity may be sparse (just a channel handle, no real name), but it exists.
 
-The `unknown` principal type still exists for edge cases:
+The `unknown` sender type still exists for edge cases:
 - Delivery context missing sender_id
 - System error during contact/entity creation
 - Explicit policy to deny un-enriched entities
@@ -463,22 +463,22 @@ The contacts table and auto-entity-creation pattern interact with the memory sys
 
 On first contact from a new sender:
 - A contact row in `identity.db`
-- An entity in `identity.db` with `source = 'delivery'`, `type` = platform-specific handle type
+- An entity in `identity.db` with `source = 'adapter'`, `type` = platform-specific handle type
 
-These delivery-sourced entities are **sparse** — they have a platform handle as a name and no enrichment. They exist so that:
+These adapter-sourced entities are **sparse** — they have a platform handle as a name and no enrichment. They exist so that:
 1. Session routing works from message one
 2. Facts extracted from the conversation can be linked to an entity
 3. The memory-writer can discover and enrich them
 
 ### What the Memory-Writer Does With Contacts
 
-The memory-writer's entity resolution flow should be aware of delivery-sourced entities:
+The memory-writer's entity resolution flow should be aware of adapter-sourced entities:
 
-1. **Discovery:** When extracting entities from a conversation, the writer should check for existing delivery-sourced entities (e.g., `discord:tyler#1234`) and link facts to them rather than creating duplicates.
+1. **Discovery:** When extracting entities from a conversation, the writer should check for existing adapter-sourced entities (e.g., `discord:tyler#1234`) and link facts to them rather than creating duplicates.
 
-2. **Enrichment:** When the writer learns a real name ("that Discord user is my friend Tyler"), it creates a `person` entity and merges the delivery entity into it:
+2. **Enrichment:** When the writer learns a real name ("that Discord user is my friend Tyler"), it creates a `person` entity and merges the adapter entity into it:
    ```
-   Before: discord:tyler#1234 (type=discord_handle, source=delivery)
+   Before: discord:tyler#1234 (type=discord_handle, source=adapter)
    After:  Tyler (type=person, source=inferred, merged_into=NULL)
            discord:tyler#1234 (merged_into=Tyler)
    ```
@@ -502,7 +502,7 @@ The memory system V2 memory tables (facts, fact_entities, episodes, etc. in memo
 
 1. A contacts table in `identity.db` that links to entities (same DB -- JOINable)
 2. A requirement that entity merges propagate to session aliases
-3. A contract about delivery-sourced entities and how the memory-writer should handle them
+3. A contract about adapter-sourced entities and how the memory-writer should handle them
 
 ---
 
@@ -548,9 +548,9 @@ The memory system V2 memory tables (facts, fact_entities, episodes, etc. in memo
 2. Send inbound message via adapter with `(platform='test', sender_id='user-001')`.
 3. **Assert:**
    - Contact row created in `identity.db` with `entity_id` set
-   - Entity created in `identity.db` with `name='test:user-001'`, `type='test_handle'`, `source='delivery'`
+   - Entity created in `identity.db` with `name='test:user-001'`, `type='test_handle'`, `source='adapter'`
    - Session created with label `dm:{sender_entity_id}:{receiver_entity_id}`
-   - Principal resolved as `known` (not `unknown`)
+   - Sender resolved as `known` (not `unknown`)
    - Response delivered back through the test adapter
 
 ### Scenario 7: Identity Merge + Session Aliasing (Extended, Phase 7+)

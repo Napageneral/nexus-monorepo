@@ -248,7 +248,7 @@ Bus.subscribeAll((event) => {
 
 | Event | Properties | Purpose |
 |-------|------------|---------|
-| `access.decision` | `request_id`, `principal`, `allowed` | Access decision |
+| `access.decision` | `request_id`, `sender`, `allowed` | Access decision |
 | `access.grant.requested` | `grant_id`, `permission` | Needs user grant |
 | `access.grant.resolved` | `grant_id`, `granted` | User responded |
 | `hook.fired` | `hook_id`, `event_id`, `result` | Hook triggered |

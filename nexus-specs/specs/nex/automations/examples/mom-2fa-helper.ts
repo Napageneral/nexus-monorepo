@@ -19,9 +19,9 @@ export const hook: Hook = {
   // The hook system checks these BEFORE calling the handler.
   // ─────────────────────────────────────────────────────────────────────────
   triggers: {
-    // Match against ACL-resolved principal
-    principal: {
-      name: 'Mom'  // Matches ctx.principal.name from ACL resolution
+    // Match against ACL-resolved sender
+    sender: {
+      name: 'Mom'  // Matches ctx.sender.name from ACL resolution
       // Could also use: relationship: 'family', entity_id: 'abc123'
     },
     // Match against event properties
@@ -36,9 +36,9 @@ export const hook: Hook = {
   // Only runs if triggers matched.
   // ─────────────────────────────────────────────────────────────────────────
   handler: async (ctx: HookContext): Promise<HookResult> => {
-    const { event, llm, principal } = ctx;
-    
-    // Principal is already resolved by ACL - we know it's mom
+    const { event, llm, sender } = ctx;
+
+    // Sender is already resolved by ACL - we know it's mom
     // Just analyze the CONTENT to decide if this is a 2FA request
     
     const response = await llm(`Is this message asking for help with a verification code, login code, 2FA code, or authentication code?
@@ -72,11 +72,11 @@ Return JSON: {"is_2fa": true/false, "service": "service name or null", "confiden
       fire: true,
       agent: 'browser-agent',
       context: {
-        prompt: `${principal.name} needs help with a 2FA code for ${result.service || 'unknown service'}.
+        prompt: `${sender.name} needs help with a 2FA code for ${result.service || 'unknown service'}.
 
 1. Check Tyler's email for recent verification codes from ${result.service || 'the service'}
 2. Find the most recent code (usually 6 digits)
-3. Text it back to ${principal.name}
+3. Text it back to ${sender.name}
 
 Original message: "${event.content}"
 

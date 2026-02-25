@@ -113,7 +113,7 @@ This section locks how each major platform maps into the taxonomy.
 Identity binding (normative):
 
 - `sender_id` MUST be derived from verified control-plane auth (session token), not caller-controlled request JSON.
-- In the simplest local-first mode, `sender_id` may be the owner's entity id. In hosted mode, `sender_id` should be a stable per-user subject that is mapped to an entity/principal by identity resolution.
+- In the simplest local-first mode, `sender_id` may be the owner's entity id. In hosted mode, `sender_id` should be a stable per-user subject that is mapped to an entity by identity resolution.
 
 ### Webchat (Internal Ingress)
 
@@ -232,7 +232,7 @@ IAM policies MUST NOT match on:
 
 Examples (illustrative policy intent):
 
-- "Allow owner everywhere" should match principal, not delivery.
+- "Allow owner everywhere" should match sender, not delivery.
 - "Ask on unknown Discord DMs" should match `platform=discord` and `container_kind=direct`.
 - "Deny all Discord server channels except allowlisted spaces" should match `platform=discord`, `container_kind=channel`, then allow/deny by `space_id`.
 - "Deny a single problematic container" should match `platform`, `container_kind`, and `container_id`.

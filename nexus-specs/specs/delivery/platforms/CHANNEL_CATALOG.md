@@ -99,7 +99,7 @@ The Discord adapter migration explicitly separates responsibilities:
 - Transport-safety filters only: self-loop prevention, dedupe by message ID
 
 **IAM (access control):**
-- `allow|deny|ask` decisions per principal
+- `allow|deny|ask` decisions per sender
 - DM from unknown sender -> `ask` (creates permission request)
 - Group/channel from unknown -> `deny`
 
@@ -110,7 +110,7 @@ The Discord adapter migration explicitly separates responsibilities:
 
 **Pairing flow (NEX-backed):**
 1. DM arrives -> adapter emits NexusEvent
-2. `resolveIdentity` can't map sender -> principal is `unknown`
+2. `resolveIdentity` can't map sender -> sender type is `unknown`
 3. IAM returns `ask` -> NEX creates permission request
 4. Owner approves via control plane -> identity mapping + allow grant created
 5. Subsequent DMs proceed normally

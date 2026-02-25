@@ -42,7 +42,7 @@ CREATE TABLE entities (
     merged_into     TEXT REFERENCES entities(id),  -- union-set parent pointer (NULL = canonical root)
     normalized      TEXT,                   -- lowercase/stripped name for fast matching
     is_user         BOOLEAN DEFAULT FALSE,  -- is this the Nexus owner?
-    source          TEXT DEFAULT 'inferred', -- 'manual', 'imported', 'inferred', 'delivery'
+    source          TEXT DEFAULT 'inferred', -- 'manual', 'imported', 'inferred', 'adapter'
     mention_count   INTEGER DEFAULT 0,      -- times this entity appears in facts
     first_seen      INTEGER,               -- unix ms
     last_seen       INTEGER,               -- unix ms
@@ -519,7 +519,7 @@ contacts (identity.db)
 
 Every inbound message from an unknown sender auto-creates two things:
 
-1. **A person entity** in `identity.db` -- with `type = 'person'`, `source = 'delivery'`, and `name` set to `sender_name` from the delivery context (or a placeholder like `'Unknown (platform:sender_id)'` if no name is available). The entity is always a person, never a phone number or handle.
+1. **A person entity** in `identity.db` -- with `type = 'person'`, `source = 'adapter'`, and `name` set to `sender_name` from the delivery context (or a placeholder like `'Unknown (platform:sender_id)'` if no name is available). The entity is always a person, never a phone number or handle.
 2. **A contact row** in `identity.db` -- `(platform, space_id, sender_id)` keyed for fast routing lookup, pointing to the new entity.
 
 This happens at delivery time, before any LLM processing, ensuring that every sender has a routable identity from their first message. Both the contact and entity live in the same database (`identity.db`), enabling FK integrity and efficient JOINs.
@@ -534,7 +534,7 @@ When entities merge via `union()`, the contact rows in `identity.db` are **not**
 
 ### Memory-writer enrichment
 
-The memory-writer discovers delivery-sourced entities (`source = 'delivery'`) and enriches them with context from conversations (real names, relationships, organizational affiliations). When a real name is discovered for a placeholder entity, the writer can either update the entity's name directly or create a new person entity and merge.
+The memory-writer discovers adapter-sourced entities (`source = 'adapter'`) and enriches them with context from conversations (real names, relationships, organizational affiliations). When a real name is discovered for a placeholder entity, the writer can either update the entity's name directly or create a new person entity and merge.
 
 ### Memory-writer entity creation (knowledge entities)
 
@@ -547,7 +547,7 @@ The core challenge is **dedup at creation time**. The `create_entity` tool shoul
 3. **If match above threshold** → return the existing `entity_id` instead of creating a duplicate
 4. **Only create if genuinely new** — no normalized name match and no embedding similarity above threshold
 
-Knowledge entities (`source = 'inferred'`) and delivery entities (`source = 'delivery'`) coexist in the same `entities` table. The writer should always search existing entities before creating new ones.
+Knowledge entities (`source = 'inferred'`) and adapter entities (`source = 'adapter'`) coexist in the same `entities` table. The writer should always search existing entities before creating new ones.
 
 ### Contacts vs. conversational mentions
 

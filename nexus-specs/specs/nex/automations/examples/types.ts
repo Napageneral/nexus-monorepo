@@ -5,18 +5,18 @@
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PRINCIPAL: Resolved by ACL, passed to hooks
+// SENDER: Resolved by ACL, passed to hooks
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type PrincipalType = 'owner' | 'known' | 'unknown' | 'system' | 'webhook' | 'agent';
+export type SenderType = 'owner' | 'known' | 'unknown' | 'system' | 'webhook' | 'agent';
 
-export interface Principal {
-  type: PrincipalType;
+export interface SenderContext {
+  type: SenderType;
   entity_id?: string;           // From entities table (if resolved)
   name?: string;                // "Mom", "Casey", etc.
   relationship?: string;        // "family", "partner", "work", "friend"
   source?: string;              // For webhooks: "stripe", "github", etc.
-  agent_id?: string;            // For agent principals
+  agent_id?: string;            // For agent senders
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -46,10 +46,10 @@ export interface Session {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface TriggerConditions {
-  // Match against ACL-resolved principal
-  principal?: {
-    type?: PrincipalType | PrincipalType[];
-    name?: string;              // Exact match on principal.name
+  // Match against ACL-resolved sender
+  sender?: {
+    type?: SenderType | SenderType[];
+    name?: string;              // Exact match on sender.name
     relationship?: string;      // Match on relationship
     entity_id?: string;         // Match specific entity
     source?: string;            // For webhooks: match source
@@ -93,7 +93,7 @@ export interface HookContext {
   event: NexusEvent;
   
   // ACL-resolved identity and permissions (NEW - from ACL layer)
-  principal: Principal;
+  sender: SenderContext;
   permissions: Permissions;
   session: Session;
   

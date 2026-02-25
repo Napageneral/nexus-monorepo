@@ -1,7 +1,7 @@
 # NEX — Nexus Event Exchange
 
 **Status:** DESIGN SPEC
-**Last Updated:** 2026-02-18
+**Last Updated:** 2026-02-24
 **Database layout:** See `../DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
 
 ---
@@ -22,8 +22,8 @@ Routing and identity language in this document follows:
 1. **Central orchestration** — One place owns the pipeline, not a chain of services
 2. **In-process stages** — All stages are functions in one process; no network hops
 3. **Sync pipeline, async persistence** — Critical path is sync; ledger writes are async
-4. **Plugin-friendly** — Before/after hooks at each stage
-5. **Modular** — Each stage (IAM, Automations, Broker, etc.) is a replaceable component
+4. **Hookpoint-driven** — Automations and plugins attach to stage boundaries, not a dedicated stage
+5. **Modular** — Each stage (IAM, Agent Broker, etc.) is a replaceable component
 6. **Observable** — Full trace of every request persisted to Nexus Ledger
 7. **Direct reads, orchestrated writes** — Reads go direct; request lifecycle writes go through NEX
 8. **Adapters are external** — Adapters are CLI executables managed by the Adapter Manager, not in-process objects
@@ -286,15 +286,19 @@ The `NexusRequest` is created at `receiveEvent()` and populated through each sta
 
 | Stage | Fields Populated |
 |-------|------------------|
-| **receiveEvent()** | `request_id`, `created_at`, `event`, `delivery` |
-| **resolveIdentity()** | `sender` (type, entity_id, display_name, is_user) |
-| **resolveReceiver()** | `receiver` (type, entity_id, agent_id, persona_ref, name, source) |
-| **resolveAccess()** | `access` (decision, permissions, routing: agent_id, persona_ref, session_label, queue_mode) |
-| **runAutomations()** | `triggers` (automations_evaluated, automations_fired, enrichment, routing_override, handled) |
-| **assembleContext()** | `agent` (turn_id, session_label, model, provider, token_budget, role, agent_id, persona_ref) |
-| **runAgent()** | `response` (content, tool_calls, usage, stop_reason, compaction, subagents_spawned) |
-| **deliverResponse()** | `delivery_result` (success, message_ids, chunks_sent, error) |
-| **finalize()** | `pipeline` (stage timings trace), `status` (completed/failed/denied/handled_by_automation) |
+| **Universal** | |
+| `receiveEvent()` | `request_id`, `created_at`, `event`, `delivery` |
+| `resolveIdentity()` | `sender` (type, entity_id, display_name, is_user) |
+| `resolveReceiver()` | `receiver` (type, entity_id, agent_id, persona_ref, name, source) |
+| `resolveAccess()` | `access` (decision, permissions, routing: agent_id, persona_ref, session_label, queue_mode) |
+| **Agent Path** (conditional) | |
+| `assembleContext()` | `agent` (turn_id, session_label, model, provider, token_budget, role, agent_id, persona_ref) |
+| `runAgent()` | `response` (content, tool_calls, usage, stop_reason, compaction, subagents_spawned) |
+| ↳ `deliverResponse()` | `delivery_result` (success, message_ids, chunks_sent, error) |
+| **Always** | |
+| `finalize()` | `pipeline` (stage timings trace), `status` (completed/failed/denied/handled_by_automation) |
+
+`triggers` (automations_evaluated, automations_fired, enrichment, routing_override, handled) is populated by automation hookpoints whenever they fire — not by a dedicated stage.
 
 See `NEXUS_REQUEST.md` for the complete typed schema.
 
@@ -304,13 +308,16 @@ See `NEXUS_REQUEST.md` for the complete typed schema.
 
 ### Sync (Critical Path)
 
-Each stage waits for the previous to complete:
+The universal stages run sequentially, then execution branches:
 
 ```
-receiveEvent → resolveIdentity → resolveReceiver → resolveAccess → runAutomations → assembleContext → runAgent → deliverResponse → finalize
+receiveEvent → resolveIdentity → resolveReceiver → resolveAccess
+    ├── [agent path] → assembleContext → runAgent (→ deliverResponse as tool)
+    └── [api path]   → handle directly
+    └── finalize (always)
 ```
 
-All 9 stages are sync because each depends on the output of the previous.
+Automation hookpoints fire at each stage boundary. If a hookpoint returns `'handled'`, the pipeline skips to `finalize()`.
 
 ### Async (Fire-and-Forget Writes)
 
@@ -320,25 +327,32 @@ After each sync stage, we dispatch an async write to persist current state:
 async function pipeline(event: NexusEvent): Promise<NexusRequest> {
   const req = createNexusRequest(event);
   asyncWrite(ledgers.events, req.event);     // Fire and forget
-  
+
+  // --- Universal stages ---
   await resolveIdentity(req);
   asyncWrite(ledgers.nexus, req);            // Checkpoint
-  
+
+  await resolveReceiver(req);
   await resolveAccess(req);
+
   if (req.access.decision === 'deny') {
-    await deliverResponse(req);
-    return finalize(req, 'denied');
+    return finalize(req, 'denied');           // finalize always runs
   }
-  
-  await runAutomations(req);
-  if (req.triggers.handled) {
-    await deliverResponse(req);
+
+  // Automation hookpoints may have set req.triggers.handled at any boundary
+  if (req.triggers?.handled) {
     return finalize(req, 'handled_by_automation');
   }
-  
-  // ... remaining stages
-  await deliverResponse(req);
-  return finalize(req, 'completed');
+
+  // --- Routing decision ---
+  if (req.receiver.type === 'agent') {
+    // Agent path
+    await assembleContext(req);
+    await runAgent(req);                      // agent calls deliverResponse as tool
+  }
+  // API/programmatic path: no agent execution, result returned to caller
+
+  return finalize(req, 'completed');          // finalize always runs
 }
 ```
 
@@ -439,27 +453,33 @@ See `../delivery/ADAPTER_SYSTEM.md` for the complete adapter specification.
 
 ## Plugin System
 
-Plugins attach to hook points throughout the pipeline. They can observe, modify, or short-circuit the request.
+Plugins and automations share the same hookpoint infrastructure. Plugins are developer-provided extensions; automations are user-configured rules. Both attach to the same stage boundaries.
 
 ```typescript
 interface NEXPlugin {
   name: string;
   priority?: number;  // Lower runs first (default: 100)
-  
-  // Lifecycle hooks (after each stage)
-  afterReceiveEvent?(req: NexusRequest): Promise<void | 'skip'>;
-  afterResolveIdentity?(req: NexusRequest): Promise<void | 'skip'>;
-  afterResolveReceiver?(req: NexusRequest): Promise<void | 'skip'>;
-  afterResolveAccess?(req: NexusRequest): Promise<void | 'skip'>;
-  afterRunAutomations?(req: NexusRequest): Promise<void | 'skip'>;
-  afterAssembleContext?(req: NexusRequest): Promise<void | 'skip'>;
-  afterRunAgent?(req: NexusRequest): Promise<void | 'skip'>;
-  afterDeliverResponse?(req: NexusRequest): Promise<void | 'skip'>;
 
+  // Before-stage hooks (can short-circuit)
+  beforeResolveIdentity?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+  beforeResolveAccess?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+  beforeAssembleContext?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+
+  // After-stage hooks (can observe, enrich, or short-circuit)
+  afterReceiveEvent?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+  afterResolveIdentity?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+  afterResolveReceiver?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+  afterResolveAccess?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+  afterAssembleContext?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+  afterRunAgent?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+
+  // Finalize + error hooks (observe only)
   onFinalize?(req: NexusRequest): Promise<void>;
   onError?(req: NexusRequest, error: Error): Promise<void>;
 }
 ```
+
+Returning `'handled'` from any hookpoint skips remaining stages and jumps to `finalize()`. This is how automations short-circuit the pipeline — they're hookpoints, not a dedicated stage.
 
 See `PLUGINS.md` for the full plugin specification.
 
@@ -547,15 +567,14 @@ src/
 │   │   ├── types.ts
 │   │   └── builtin/            # Built-in plugins
 │   ├── stages/                 # Pipeline stages
-│   │   ├── receiveEvent.ts
-│   │   ├── resolveIdentity.ts
-│   │   ├── resolveReceiver.ts
-│   │   ├── resolveAccess.ts
-│   │   ├── runAutomations.ts
-│   │   ├── assembleContext.ts
-│   │   ├── runAgent.ts
-│   │   ├── deliverResponse.ts
-│   │   └── finalize.ts
+│   │   ├── receiveEvent.ts       # Universal
+│   │   ├── resolveIdentity.ts    # Universal
+│   │   ├── resolveReceiver.ts    # Universal
+│   │   ├── resolveAccess.ts      # Universal
+│   │   ├── assembleContext.ts    # Agent path
+│   │   ├── runAgent.ts           # Agent path
+│   │   ├── deliverResponse.ts   # Agent tool (send_message routing)
+│   │   └── finalize.ts          # Always runs
 │   ├── adapters/               # Adapter Manager
 │   │   ├── manager.ts          # Spawn/supervise adapter processes
 │   │   ├── protocol.ts         # JSONL protocol handling
@@ -582,7 +601,7 @@ src/
 Clock events (heartbeat, cron, scheduled) come from the `clock` adapter — an external process like any other adapter. It emits timer events as `NexusEvent` objects that flow through the full pipeline. See the clock adapter spec for details.
 
 ### Agent-to-Agent
-When a Manager Agent (MA) spawns a Worker Agent (WA), the WA runs through the Broker's session system but bypasses the external NEX pipeline stages (identity, access, automations). The Broker still logs to the Agents Ledger. May revisit if inter-agent ACL is needed.
+When a Manager Agent (MA) spawns a Worker Agent (WA), the WA runs through the Broker's session system but bypasses the universal NEX pipeline stages (identity, receiver, access). The Broker still logs to the Agents Ledger. May revisit if inter-agent ACL is needed.
 
 ### Multi-Response
 The agent uses the `send message` tool, which routes through NEX to the appropriate out-adapter via its `send` command. The adapter handles chunking based on channel capabilities. Multiple tool calls = multiple messages.

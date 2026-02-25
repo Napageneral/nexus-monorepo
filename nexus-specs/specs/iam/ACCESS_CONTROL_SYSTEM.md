@@ -567,7 +567,7 @@ entities (
   merged_into TEXT,             -- union-find merge chain (NULL = canonical root)
   normalized TEXT,
   is_user INTEGER,              -- True for owner
-  source TEXT,                  -- 'delivery' | 'inferred' | 'manual'
+  source TEXT,                  -- 'adapter' | 'inferred' | 'manual'
   mention_count INTEGER,
   first_seen INTEGER,
   last_seen INTEGER

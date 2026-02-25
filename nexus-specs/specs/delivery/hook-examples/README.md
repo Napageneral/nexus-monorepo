@@ -35,7 +35,7 @@ This guide explains how to write hooks for the Nexus event system. Hooks work al
 │  │  • Blocks unauthorized events (deny effect)                         │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                    │                                         │
-│                    Event + Principal + Permissions + Session                 │
+│                    Event + Sender + Permissions + Session                   │
 │                                    │                                         │
 │                                    ▼                                         │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
@@ -91,7 +91,7 @@ export const hook: Hook = {
   // 1. TRIGGERS: When should this hook be invoked?
   //    Checked by hook system BEFORE calling handler.
   triggers: {
-    principal: {
+    sender: {
       name: 'Mom'  // Only invoke for messages from Mom
     },
     event: {
@@ -107,8 +107,8 @@ export const hook: Hook = {
   
   // 3. HANDLER: Content analysis (only runs if triggers match)
   handler: async (ctx: HookContext): Promise<HookResult> => {
-    // We already know WHO (ctx.principal) - just analyze WHAT
-    const { event, llm, principal } = ctx;
+    // We already know WHO (ctx.sender) - just analyze WHAT
+    const { event, llm, sender } = ctx;
     
     const result = await llm(`Is this a 2FA request? "${event.content}"`);
     
@@ -120,7 +120,7 @@ export const hook: Hook = {
       fire: true,
       agent: 'browser-agent',
       context: {
-        prompt: `Help ${principal.name} with their 2FA code...`
+        prompt: `Help ${sender.name} with their 2FA code...`
       }
     };
   }
@@ -133,26 +133,26 @@ export const hook: Hook = {
 
 Triggers are **declarative** - the hook system evaluates them before invoking your handler.
 
-### Principal Triggers (match ACL-resolved identity)
+### Sender Triggers (match ACL-resolved identity)
 
 ```typescript
 triggers: {
-  principal: {
+  sender: {
     // Match by type
     type: 'owner',              // owner, known, unknown, system, webhook, agent
     type: ['owner', 'known'],   // Multiple types (OR)
-    
+
     // Match by name
     name: 'Mom',                // Exact match on resolved name
-    
+
     // Match by relationship
     relationship: 'family',     // family, partner, work, friend
-    
+
     // Match specific entity
     entity_id: 'person_abc123',
-    
+
     // Match webhook source
-    source: 'stripe'            // For webhook principals
+    source: 'stripe'            // For webhook senders
   }
 }
 ```
@@ -187,7 +187,7 @@ All specified conditions must match (AND):
 ```typescript
 // Only fires for: Mom + iMessage/SMS + received
 triggers: {
-  principal: { name: 'Mom' },
+  sender: { name: 'Mom' },
   event: { channels: ['imessage', 'sms'], direction: 'received' }
 }
 ```
@@ -204,7 +204,7 @@ interface HookContext {
   event: NexusEvent;
   
   // ACL-resolved identity and permissions (already validated)
-  principal: Principal;       // { type, name, relationship, entity_id }
+  sender: SenderContext;      // { type, name, relationship, entity_id }
   permissions: Permissions;   // { tools, credentials, data_access, personas }
   session: Session;           // { session_key, persona, thread_id }
   
@@ -225,25 +225,25 @@ interface HookContext {
 }
 ```
 
-### Using the Principal
+### Using the Sender
 
-The principal is already resolved - no database queries needed:
+The sender is already resolved - no database queries needed:
 
 ```typescript
 handler: async (ctx: HookContext): Promise<HookResult> => {
-  const { principal } = ctx;
-  
+  const { sender } = ctx;
+
   // Already know who this is
-  console.log(principal.name);         // "Mom"
-  console.log(principal.relationship); // "family"
-  console.log(principal.type);         // "known"
-  
+  console.log(sender.name);         // "Mom"
+  console.log(sender.relationship); // "family"
+  console.log(sender.type);         // "known"
+
   // Use in prompts
   return {
     fire: true,
     agent: 'helper',
     context: {
-      prompt: `Help ${principal.name} with their request...`
+      prompt: `Help ${sender.name} with their request...`
     }
   };
 }
@@ -281,19 +281,19 @@ Use LLM to understand intent. Most common pattern.
 
 ```typescript
 handler: async (ctx: HookContext): Promise<HookResult> => {
-  const { event, llm, principal } = ctx;
-  
+  const { event, llm, sender } = ctx;
+
   const result = await llm(`Is this a 2FA request? Answer yes/no.
 Message: "${event.content}"`);
-  
+
   if (result.trim().toLowerCase() !== 'yes') {
     return { fire: false };
   }
-  
+
   return {
     fire: true,
     agent: 'browser-agent',
-    context: { prompt: `Help ${principal.name} with 2FA...` }
+    context: { prompt: `Help ${sender.name} with 2FA...` }
   };
 }
 ```
@@ -304,7 +304,7 @@ Fire based on time elapsed. Uses system timer events.
 
 ```typescript
 triggers: {
-  principal: { type: 'system' },
+  sender: { type: 'system' },
   event: { types: ['timer_tick'] }
 },
 
@@ -349,7 +349,7 @@ Filter webhook events by metadata.
 
 ```typescript
 triggers: {
-  principal: { type: 'webhook', source: 'stripe' },
+  sender: { type: 'webhook', source: 'stripe' },
   event: { metadata: { event_type: 'payment_intent.succeeded' } }
 },
 
@@ -390,10 +390,10 @@ These patterns are now handled by ACL policies, not hooks:
 
 | Old Hook Pattern | Now ACL Policy |
 |-----------------|----------------|
-| Check if sender is owner | `principal.type === 'owner'` policy |
-| Check if sender is family | `principal.relationship === 'family'` policy |
+| Check if sender is owner | `sender.type === 'owner'` policy |
+| Check if sender is family | `sender.relationship === 'family'` policy |
 | Route work messages to work persona | Work channel policy |
-| Block unknown senders | Unknown principal deny policy |
+| Block unknown senders | Unknown sender deny policy |
 | Rate limiting | Policy `rate_limit` field |
 
 **Example ACL policy (replaces routing hooks):**
@@ -402,7 +402,7 @@ These patterns are now handled by ACL policies, not hooks:
 # This replaces default-dm-routing.ts and work-whatsapp-routing.ts
 policies:
   - name: owner-full-access
-    principals: [owner]
+    senders: [owner]
     effect: allow
     permissions:
       tools: ["*"]
@@ -416,7 +416,7 @@ policies:
 
 ## Tips
 
-1. **Trust the ACL** - Principal is already resolved, don't re-query
+1. **Trust the ACL** - Sender is already resolved, don't re-query
 2. **Use triggers** - Let the hook system filter for you
 3. **Focus on content** - Hooks analyze WHAT, not WHO
 4. **Keep handlers simple** - Complex routing is ACL's job
@@ -431,4 +431,4 @@ See `types.ts` for full interface definitions:
 - `TriggerConditions` - Trigger specification
 - `HookContext` - What handlers receive
 - `HookResult` - What handlers return
-- `Principal`, `Permissions`, `Session` - ACL-resolved values
+- `SenderContext`, `Permissions`, `Session` - ACL-resolved values

@@ -241,7 +241,7 @@ The core problem with writer-created entities is **dedup**, not contacts. The `c
 3. **If match above threshold** → return the existing `entity_id` instead of creating a duplicate
 4. **Only create if genuinely new** — no normalized name match and no embedding similarity above threshold
 
-Knowledge entities (writer-created, `source = 'inferred'`) and delivery entities (pipeline-created, `source = 'delivery'`) coexist in the same `entities` table. Contacts are optional metadata bindings and may exist for any entity type when operationally useful.
+Knowledge entities (writer-created, `source = 'inferred'`) and adapter entities (pipeline-created, `source = 'adapter'`) coexist in the same `entities` table. Contacts are optional metadata bindings and may exist for any entity type when operationally useful.
 
 **Co-occurrence data:** `link_fact_entity` records entity co-occurrences in the `entity_cooccurrences` table. This data is available to the consolidation agent for merge decisions (deferred — currently LLM-only merges).
 

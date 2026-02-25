@@ -69,7 +69,7 @@ It does not become a monitor/send channel adapter.
 All non-protocol operations use one shared envelope:
 
 1. AuthN
-2. Principal resolution
+2. Sender resolution
 3. AuthZ
 4. Audit
 5. Hook/event emission
@@ -120,7 +120,7 @@ Use for synchronous runtime management operations:
 
 Rules:
 
-1. AuthN + principal resolution + IAM AuthZ required.
+1. AuthN + sender resolution + IAM AuthZ required.
 2. Produces synchronous request/response.
 3. Emits control audit + bus events.
 4. Does not require `NexusEvent` normalization.
@@ -136,7 +136,7 @@ Use for anything that represents ingress work:
 
 Rules:
 
-1. AuthN + principal resolution + IAM AuthZ required.
+1. AuthN + sender resolution + IAM AuthZ required.
 2. Must normalize to `NexusEvent`.
 3. Must enter `nex.processEvent(...)`.
 4. May or may not invoke agent path, based on receiver/access/automations.
@@ -148,7 +148,7 @@ Rules:
 For `control` and `event`, the required sequence is:
 
 1. **Authenticate caller** (AuthN).
-2. **Resolve effective principal** (entity + scopes/roles/tags).
+2. **Resolve effective sender** (entity + scopes/roles/tags).
 3. **Authorize operation** via IAM.
 4. **Write access audit** decision.
 5. **Emit operation hook/bus start signal**.
@@ -272,7 +272,7 @@ Payload includes:
 
 1. method
 2. action/resource/permission
-3. principal/entity_id
+3. sender/entity_id
 4. request_id
 5. latency + result metadata (on completion)
 
@@ -324,7 +324,7 @@ Example:
 
 ### Phase 3: Shared envelope enforcement
 
-1. Centralize AuthN/principal/AuthZ/audit/hook prelude for control+event.
+1. Centralize AuthN/sender/AuthZ/audit/hook prelude for control+event.
 2. Enforce branch-specific handler/pipeline execution paths.
 
 ### Phase 4: Observability hardening

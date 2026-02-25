@@ -20,7 +20,7 @@ export const hook: Hook = {
   // This hook doesn't care about incoming messages - it fires on time.
   // ─────────────────────────────────────────────────────────────────────────
   triggers: {
-    principal: {
+    sender: {
       type: 'system'  // Only timer ticks, not user messages
     },
     event: {

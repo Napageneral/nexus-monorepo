@@ -19,7 +19,7 @@ export const hook: Hook = {
   // ACL already verified the webhook source - we just filter event type
   // ─────────────────────────────────────────────────────────────────────────
   triggers: {
-    principal: {
+    sender: {
       type: 'webhook',
       source: 'stripe'  // Matches ACL-verified webhook source
     },

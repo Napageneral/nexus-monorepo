@@ -18,7 +18,7 @@ export const hook: Hook = {
   // TRIGGERS: System timer events
   // ─────────────────────────────────────────────────────────────────────────
   triggers: {
-    principal: {
+    sender: {
       type: 'system'
     },
     event: {

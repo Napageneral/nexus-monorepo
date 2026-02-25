@@ -80,7 +80,7 @@ Normative constraints:
 1. Adapter may supply source timestamp and external sender identifiers.
 2. Runtime stamps ingress source/account trust context and receive timestamp.
 3. Reserved internal platforms cannot be spoofed by external adapters.
-4. For HTTP/OpenAI/OpenResponses/webchat ingress, principal identity is credential/session-derived by daemon.
+4. For HTTP/OpenAI/OpenResponses/webchat ingress, sender identity is credential/session-derived by daemon.
 
 ---
 

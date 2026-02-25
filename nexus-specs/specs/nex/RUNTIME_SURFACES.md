@@ -21,7 +21,7 @@ Nexus uses one runtime with two execution kinds:
 1. `event` operations normalize to `NexusEvent` and run the event pipeline.
 2. `control` operations run direct handlers with IAM authorization and audit.
 
-Both share one security envelope (AuthN -> principal -> AuthZ -> audit/hooks). `protocol` operations are transport mechanics only.
+Both share one security envelope (AuthN -> sender resolution -> AuthZ -> audit/hooks). `protocol` operations are transport mechanics only.
 
 ### Design Principles
 
@@ -187,7 +187,7 @@ The control-plane WS/HTTP surface is runtime-core and uses `protocol | control |
 Rules:
 
 1. `protocol` methods are transport/session mechanics only.
-2. `control` and `event` methods share AuthN + principal + IAM + audit/hook prelude.
+2. `control` and `event` methods share AuthN + sender resolution + IAM + audit/hook prelude.
 3. `event` methods enter `nex.processEvent(...)`.
 4. `control` methods preserve synchronous request/response behavior.
 
@@ -411,7 +411,7 @@ Ports 18791-18792 are only used when `browser.enabled = true`.
 ### Phase 3: Surface Taxonomy Cutover
 - Replace legacy `transport|iam|pipeline` names with `protocol|control|event`
 - Keep control-plane as control surface (not channel-style event adapter)
-- Enforce shared AuthN/principal/AuthZ/audit envelope before kind-specific execution
+- Enforce shared AuthN/sender/AuthZ/audit envelope before kind-specific execution
 
 ### Phase 4: Internal Event Adapter Infrastructure
 - Implement internal adapter registry in the adapter manager

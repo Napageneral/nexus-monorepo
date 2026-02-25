@@ -396,7 +396,7 @@ Entities live in identity.db, shared with the routing system. When you create or
 you directly affect how messages get routed to sessions. The `merged_into` chain is a union-find
 structure — always follow it to find the canonical entity.
 
-Delivery-sourced entities (created when a message arrives from a new sender) are sparse — just a
+Adapter-sourced entities (created when a message arrives from a new sender) are sparse — just a
 platform handle. You ENRICH these by linking facts to them and merging them with person entities
 when you discover real names. Don't create duplicate entities for handles that already exist.
 

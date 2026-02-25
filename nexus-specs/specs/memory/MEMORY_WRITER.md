@@ -177,30 +177,30 @@ The full episode provides conversational context. Unlike the old per-event appro
 
 ---
 
-## Delivery-Sourced Entities and Contacts Contract
+## Adapter-Sourced Entities and Contacts Contract
 
 The memory-writer must cooperate with the delivery pipeline and the contacts/routing system. This section defines the contract.
 
-### Delivery-Sourced Entities Exist in identity.db
+### Adapter-Sourced Entities Exist in identity.db
 
 When a message arrives from a previously-unknown sender, the delivery pipeline auto-creates:
 
 1. **A person entity** in `identity.db` with:
-   - `source = 'delivery'`
+   - `source = 'adapter'`
    - `type = 'person'` (always — entities are identities, never identifiers)
    - `name` = `sender_name` from the delivery context, or a placeholder like `'Unknown (discord:coolgamer42)'` if no name is available
 
 2. **A contact row** in `identity.db` binding `(platform, space_id, sender_id)` to the entity.
 
-These delivery-sourced entities may be sparse — they might only have a display name. They exist so that the routing system can map a sender to a session immediately, and so that facts can start accumulating against the entity from the first message.
+These adapter-sourced entities may be sparse — they might only have a display name. They exist so that the routing system can map a sender to a session immediately, and so that facts can start accumulating against the entity from the first message.
 
-### Discovering and Enriching Delivery-Sourced Entities
+### Discovering and Enriching Adapter-Sourced Entities
 
-When extracting entities from a conversation, the memory-writer **must** check for existing delivery-sourced entities and prefer linking to them over creating new ones. Specifically:
+When extracting entities from a conversation, the memory-writer **must** check for existing adapter-sourced entities and prefer linking to them over creating new ones. Specifically:
 
-1. **Match on sender.** When the writer identifies an entity from a deliveryContext, search for the existing delivery-sourced person entity. The delivery pipeline already created it — look it up by searching for entities matching the `sender_name`, or use the contact lookup via `(platform, sender_id)`.
+1. **Match on sender.** When the writer identifies an entity from a deliveryContext, search for the existing adapter-sourced person entity. The adapter pipeline already created it — look it up by searching for entities matching the `sender_name`, or use the contact lookup via `(platform, sender_id)`.
 
-2. **Link facts to the existing entity.** If a delivery-sourced entity is found, all extracted facts about that sender should be linked to it via `link_fact_entity()`. Do not create a second entity for the same person.
+2. **Link facts to the existing entity.** If an adapter-sourced entity is found, all extracted facts about that sender should be linked to it via `link_fact_entity()`. Do not create a second entity for the same person.
 
 3. **Update name on real-name discovery.** When the writer learns a real name for a placeholder entity (e.g., a Discord message says "Hey, I'm Tyler" or context makes it clear), the writer should either:
    - Update the existing entity's name directly (if it's a placeholder like "Unknown (discord:coolgamer42)")
