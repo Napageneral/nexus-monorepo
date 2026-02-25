@@ -431,7 +431,7 @@ nexus start
 
 ### Adapter Configuration
 
-Adapter config lives in `config.json` (or `NEXUS_NEX_CONFIG_PATH`). Already specced and implemented:
+Adapter config lives in `config.json` (or `NEXUS_NEX_CONFIG_PATH`, adapter-specific config, distinct from the main `state/config.json` / `NEXUS_CONFIG_PATH`). Already specced and implemented:
 
 ```yaml
 adapters:

@@ -29,7 +29,7 @@ Scheduling behavior lives in automations and automation state.
 
 1. The ingress is called **clock**, not cron.
 2. Clock is intentionally dumb: fixed periodic ticks.
-3. Default tick interval is **30 seconds**.
+3. Default tick interval is **30 seconds** (configurable via `tickIntervalMs`).
 4. Runtime maintenance timers remain separate and internal.
 5. If users want heartbeat-like or scheduled behavior, they build it with automations triggered by `clock.tick`.
 

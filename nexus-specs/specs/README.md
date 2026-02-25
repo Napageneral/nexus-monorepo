@@ -259,7 +259,7 @@ Format and deliver responses:
 ### Example 3: Timer tick (heartbeat)
 
 ```
-1. timer adapter emits 60-second tick
+1. timer adapter emits 30-second tick (configurable via `tickIntervalMs`)
 2. NEX creates NexusRequest (sender: system)
 3. IAM: system sender, timer policies
 4. Hooks match: "email-check" (cron trigger)

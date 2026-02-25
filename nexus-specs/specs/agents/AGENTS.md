@@ -73,7 +73,7 @@ In Nexus MWP:
                               ┌────────────────────────────────────────┐
                               │      Sub-Worker Agent                  │
                               │      (WAs can spawn their own WAs)     │
-                              │      Depth limit: 3 (configurable)     │
+                              │      Depth limit: 3 (configurable via `agents.max_worker_depth` in config)     │
                               └────────────────────────────────────────┘
 ```
 
@@ -92,7 +92,7 @@ Workers can spawn their own sub-workers. Use cases:
 - Parallel sub-task execution
 - Vision/browser workers spawning analysis workers
 
-Broker tracks spawn depth. Default maximum: 3 levels.
+Broker tracks spawn depth. Default maximum: 3 levels (configurable via `agents.max_worker_depth`).
 
 ### 3. Bidirectional Communication
 

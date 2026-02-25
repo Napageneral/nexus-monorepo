@@ -214,7 +214,7 @@ interface Persona {
 | **Worker (WA)** | Task-focused, executes delegated work, reports back | MA (or other WA) via spawn tool |
 | **Unified** | Single agent handling both roles (simple deployments) | NEX pipeline |
 
-Workers can spawn nested workers. There is no depth limit.
+Workers can spawn nested workers. **Default depth limit: 3** (configurable via `agents.max_worker_depth` in config).
 
 ---
 

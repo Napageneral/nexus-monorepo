@@ -103,7 +103,7 @@ adapters:
       default:
         monitor: true
         config:
-          heartbeat_interval_ms: 60000
+          tickIntervalMs: 30000
           cron:
             - expr: "0 8 * * *"
               label: "morning-summary"
