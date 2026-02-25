@@ -19,13 +19,13 @@ No production code should land for this feature outside this spec's approved sco
 
 ---
 
-## Decision: Build On Existing NEX UI + Gateway
+## Decision: Build On Existing NEX UI + Control Plane
 
 ### Chosen direction
 
 Build the Command Center in:
 - UI: `nex/ui`
-- Backend surface: existing Gateway RPC + events in `nex/src/gateway`
+- Backend surface: existing control plane RPC + events in `nex/src/nex/control-plane`
 - Runtime/broker execution: existing NEX broker + pi-embedded integration
 
 ### Why this is the right baseline
@@ -93,7 +93,7 @@ Includes:
 2. Agent list and active-agent switching
 3. Chat panel using existing `chat.*` methods/events
 4. Session browser shortcut for opening sessions
-5. Session views that are ledger-backed (directly or via ledger-backed gateway adapters)
+5. Session views that are ledger-backed (directly or via ledger-backed control plane adapters)
 
 Excludes:
 1. Multi-select context injection
@@ -124,14 +124,14 @@ Includes:
 ## Current foundations reused
 
 1. `nex/ui/src/ui/controllers/chat.ts` for `chat.history`, `chat.send`, `chat.abort`
-2. `nex/ui/src/ui/app-gateway.ts` for event handling and stream updates
-3. `nex/src/gateway/server-methods/chat.ts` and `sessions.ts` for run/session control
-4. `nex/src/gateway/server-methods/agents.ts` for agent metadata/config access
+2. `nex/ui/src/ui/` event handling and stream updates
+3. `nex/src/nex/control-plane/server-methods/chat.ts` and `sessions.ts` for run/session control
+4. `nex/src/nex/control-plane/server-methods/agents.ts` for agent metadata/config access
 
 ## Planned additions
 
 1. New Command Center view/controller set under `nex/ui/src/ui/views|controllers`
-2. New Gateway `sessions.import` method for AIX ingestion
+2. New `sessions.import` RPC method for AIX ingestion
 3. Ledger-backed session query path for Command Center views
 
 ---
@@ -140,13 +140,13 @@ Includes:
 
 This is explicitly deferred and does **not** block Command Center Phase 0.
 
-When resumed, expected direction is still gateway-mediated context resolution (for security + path controls), but design is out of scope for current milestone.
+When resumed, expected direction is still control-plane-mediated context resolution (for security + path controls), but design is out of scope for current milestone.
 
 ---
 
 ## Decision: `sessions.import` for AIX
 
-Adopt **B1**: Gateway RPC `sessions.import`.
+Adopt **B1**: Control plane RPC `sessions.import`.
 
 Add method:
 - `sessions.import`
@@ -179,7 +179,7 @@ Goal:
 2. Keep transcript compatibility only where explicitly required as transitional behavior.
 
 Current risk snapshot:
-1. Runtime still has broad references to `sessions.json` and `*.jsonl` transcript workflows across gateway/auto-reply/infra codepaths.
+1. Runtime still has broad references to `sessions.json` and `*.jsonl` transcript workflows across control-plane/auto-reply/infra codepaths.
 2. Command Center correctness depends on eliminating split-brain between file-store and ledger views.
 
 Exit criteria:
@@ -276,4 +276,4 @@ Exit criteria:
 
 1. Confirm prerequisite sequencing owners/work order (Workstream 1 and 2)
 2. Implement Phase 0 Command Center tab in `nex/ui`
-3. Implement `sessions.import` in Gateway + tests
+3. Implement `sessions.import` in control plane + tests

@@ -30,7 +30,7 @@ Automated script to rebrand **openclaw** (formerly moltbot/clawdbot) → nexus. 
 | `CLAWDBOT_STATE_DIR` | `NEXUS_STATE_DIR` | Yes |
 | `CLAWDBOT_CONFIG_PATH` | `NEXUS_CONFIG_PATH` | Yes |
 | `CLAWDBOT_NIX_MODE` | `NEXUS_NIX_MODE` | Yes |
-| `CLAWDBOT_GATEWAY_PORT` | `NEXUS_GATEWAY_PORT` | Yes |
+| `CLAWDBOT_GATEWAY_PORT` | `NEXUS_RUNTIME_PORT` | Yes |
 | `CLAWDBOT_OAUTH_DIR` | `NEXUS_OAUTH_DIR` | Yes |
 
 **Strategy:** NEXUS_* is primary, CLAWDBOT_* fallback for migration.

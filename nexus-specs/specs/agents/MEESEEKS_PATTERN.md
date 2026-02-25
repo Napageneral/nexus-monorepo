@@ -64,7 +64,7 @@ Every hook point supports both **blocking** and **async** automations. The hook 
 |------------|------|-------------|
 | `command:new` | /new command issued | Session memory save |
 | `agent:bootstrap` | Agent startup | Workspace setup |
-| `gateway:startup` | Daemon starts | Service initialization |
+| `nex:startup` | Daemon starts | Service initialization |
 
 ---
 

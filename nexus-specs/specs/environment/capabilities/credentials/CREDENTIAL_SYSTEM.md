@@ -437,7 +437,7 @@ nexus runtime unblock google/tnapathy@gmail.com
 
 #### Level 2: Opt-In (Higher Security)
 
-Gateway cannot access ANY credentials by default. Must explicitly allow each one.
+Runtime cannot access ANY credentials by default. Must explicitly allow each one.
 
 **Config:**
 ```json
@@ -457,7 +457,7 @@ Gateway cannot access ANY credentials by default. Must explicitly allow each one
 
 **CLI:**
 ```bash
-nexus config set gateway.credentials.level 2
+nexus config set runtime.credentials.level 2
 nexus runtime allow discord/echo-bot
 nexus runtime allow "anthropic/*"   # Wildcard for all anthropic accounts
 ```
@@ -488,7 +488,7 @@ Credentials can have scope restrictions — only usable for specific purposes.
 
 Different agents have different access levels. Each agent has its own credential access config.
 
-**Gateway config (default for all):**
+**Runtime config (default for all):**
 ```json
 {
   "runtime": {
@@ -552,10 +552,10 @@ type CredentialAccessConfig = {
 ### Resolution Flow
 
 ```
-Gateway requests credential: "discord/echo-bot/token"
+Runtime requests credential: "discord/echo-bot/token"
        │
        ▼
-Check gateway.credentials.level
+Check runtime.credentials.level
        │
        ├─ Level 0 → Allow
        │
@@ -584,7 +584,7 @@ Nexus automatically imports credentials from external CLI tools.
 | Trigger | When |
 |---------|------|
 | `nexus status` | On every status check |
-| Gateway startup | When daemon starts |
+| Runtime startup | When daemon starts |
 | `nexus credential sync` | Manual trigger |
 | TTL expiry | 15 minutes since last sync |
 
@@ -1000,13 +1000,13 @@ nexus credential verify google/tnapathy@gmail.com        # Verify all credential
 nexus credential verify google/tnapathy@gmail.com/oauth  # Verify specific credential
 ```
 
-### Gateway Access Control
+### Runtime Access Control
 
-Policy management is at the Gateway level, not credential level:
+Policy management is at the runtime level, not credential level:
 
 ```bash
 # View current access config
-nexus gateway credentials
+nexus runtime credentials
 
 # Level 1: Block specific credentials (default allows all)
 nexus runtime block google/tnapathy@gmail.com
@@ -1014,7 +1014,7 @@ nexus runtime block "github/*"           # Wildcard: all github accounts
 nexus runtime unblock google/tnapathy@gmail.com
 
 # Level 2: Switch to opt-in mode
-nexus config set gateway.credentials.level 2
+nexus config set runtime.credentials.level 2
 nexus runtime allow discord/echo-bot
 nexus runtime allow "anthropic/*"
 
@@ -1058,10 +1058,10 @@ nexus credential remove anthropic/old-account
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `gateway.credentials.level` | `1` | Access control level (0-3) |
-| `gateway.credentials.blocked` | `[]` | Blocked credentials (level 1) |
-| `gateway.credentials.allowed` | `[]` | Allowed credentials (level 2+) |
-| `gateway.credentials.scopes` | `{}` | Scope restrictions (level 3) |
+| `runtime.credentials.level` | `1` | Access control level (0-3) |
+| `runtime.credentials.blocked` | `[]` | Blocked credentials (level 1) |
+| `runtime.credentials.allowed` | `[]` | Allowed credentials (level 2+) |
+| `runtime.credentials.scopes` | `{}` | Scope restrictions (level 3) |
 | `credentials.syncOnStatus` | `true` | Auto-sync on `nexus status` |
 | `credentials.syncTtlMinutes` | `15` | TTL for external CLI sync |
 | `credentials.defaultStorage` | `keychain` | Default storage provider |
@@ -1108,7 +1108,7 @@ resolveCredential({ service: "google", scope: "provider:google" })
 │ 2. For each credential:                                         │
 │    a. Skip if in cooldown                                       │
 │    b. Skip if status === "broken"                               │
-│    c. Check policy (if Gateway request)                         │
+│    c. Check policy (if runtime request)                          │
 │       - Level 1: blocked? → skip                                │
 │       - Level 2+: allowed? → continue, else skip                │
 │       - Level 3+: scope matches? → continue, else skip          │
@@ -1155,7 +1155,7 @@ resolveCredential({ service: "google", scope: "provider:google" })
 | Env var scanning | ✅ Known vars + deep pattern detection |
 | Opt-in rotation | ✅ Only for configured services (LLM APIs) |
 | Cooldown management | ✅ Exponential backoff per failure type |
-| Consumer-centric access control | ✅ Policies at Gateway/agent level |
+| Consumer-centric access control | ✅ Policies at runtime/agent level |
 | Access control levels | ✅ Levels 0-3, default Level 1 (opt-out) |
 | Skills integration | ✅ Via service name linking |
 
@@ -1164,7 +1164,7 @@ resolveCredential({ service: "google", scope: "provider:google" })
 | Decision | Rationale |
 |----------|-----------|
 | Credentials[] per account | Same account can have OAuth + API key |
-| Policies at consumer level | More intuitive — configure what Gateway/agent can access |
+| Policies at consumer level | More intuitive — configure what runtime/agent can access |
 | Opt-in rotation | Only LLM APIs need rotation; Google accounts are different data |
 | External storage pointers | CLI imports stay fresh without copying secrets |
 | Service as primary key | Links cleanly to skills `requires.credentials` |
@@ -1184,4 +1184,4 @@ resolveCredential({ service: "google", scope: "provider:google" })
 | `src/credentials/scan.ts` | Environment variable scanning |
 | `src/commands/credential.ts` | High-level operations |
 | `src/cli/credential-cli.ts` | CLI command registration |
-| `src/gateway/credentials.ts` | Gateway credential resolution |
+| `src/credentials/access.ts` | Runtime credential access control |

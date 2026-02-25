@@ -41,7 +41,7 @@ This makes approvals uniform across *all* sensitive actions, not just `exec`.
 In `nex`, exec approvals are currently implemented as:
 
 - In-memory pending approval queue:
-  - `src/gateway/exec-approval-manager.ts`
+  - `src/gateway/exec-approval-manager.ts` (removed — now IAM-native)
 - WS RPC methods:
   - `exec.approval.request` (blocks until resolved or timeout)
   - `exec.approval.resolve` (allow-once | allow-always | deny)
@@ -145,7 +145,7 @@ When the agent wants to execute a command and approval is required:
   - `expires_at` = short (e.g. 120s) for interactive exec approvals
   - include a structured JSON blob in `original_message` describing:
     - tool name (`exec`)
-    - command, cwd, host (gateway/node), sessionKey
+    - command, cwd, host (daemon/node), sessionKey
     - resolved paths used for allowlist resources
 
 - Notify owner:

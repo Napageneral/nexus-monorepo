@@ -56,7 +56,7 @@ The instructions file provides baseline Nexus awareness. Content is identical fo
 
 ```markdown
 ---
-summary: "Root AGENTS.md for Nexus workspaces - system behavior and CLI gateway"
+summary: "Root AGENTS.md for Nexus workspaces - system behavior and CLI runtime"
 read_when:
  - Bootstrapping a workspace
  - Fresh nexus install

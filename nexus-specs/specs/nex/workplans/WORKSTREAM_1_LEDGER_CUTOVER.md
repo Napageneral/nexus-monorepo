@@ -176,10 +176,10 @@ Session-level metric duplication is intentionally avoided.
 4. Session alias promotion and import reconciliation resolve to stable canonical sessions.
 5. `sessions.import` behavior is idempotent with deterministic `imported/upserted/skipped/failed` outcomes.
 6. Command Center can read session continuity from ledger-only semantics.
-7. Heartbeat subsystem and controls are removed from runtime, gateway, cron coupling, and web monitor paths.
+7. Heartbeat subsystem and controls are removed from runtime, control plane, cron coupling, and web monitor paths.
 8. Duplicate inbound events do not trigger duplicate pipeline behavior.
 9. Duplicate handling is observable with explicit trace semantics.
-10. A single canonical session resolver is used by pipeline, gateway, and import.
+10. A single canonical session resolver is used by pipeline, control plane, and import.
 11. Delivery target handling remains functional without heartbeat-specific wrappers.
 
 ---
@@ -216,11 +216,11 @@ Implementation contract:
 
 ### Canonical Session Resolver
 
-Broker-owned shared resolver module in NEX core (not gateway-only, not import-only).
+Broker-owned shared resolver module in NEX core (not control-plane-only, not import-only).
 
 Consumers:
 1. Pipeline stages (primary source for runtime turn/session writes)
-2. Gateway session methods (resolve/list/preview/path operations)
+2. Control plane session methods (resolve/list/preview/path operations)
 3. Import ingestion (`sessions.import` reconciliation)
 
 Required behavior:
@@ -241,4 +241,4 @@ Keep delivery target logic generic and explicit in broker delivery path. Remove 
 1. Implement orchestration dedupe short-circuit first (safety guard).
 2. Centralize session resolver and switch call sites.
 3. Remove heartbeat subsystem and wake coupling.
-4. Validate gateway + import + pipeline compatibility under resolver unification.
+4. Validate control plane + import + pipeline compatibility under resolver unification.
