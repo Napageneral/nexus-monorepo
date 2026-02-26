@@ -4,9 +4,25 @@
   "title": "Nexus Adapter Protocol (v2)",
   "type": "object",
   "$defs": {
-    "AdapterCapability": {
+    "AdapterOperation": {
       "type": "string",
-      "enum": ["monitor", "send", "stream", "backfill", "health", "accounts", "react", "edit", "delete", "poll"]
+      "enum": [
+        "adapter.info",
+        "adapter.health",
+        "adapter.accounts.list",
+        "adapter.monitor.start",
+        "adapter.setup.start",
+        "adapter.setup.submit",
+        "adapter.setup.status",
+        "adapter.setup.cancel",
+        "event.backfill",
+        "delivery.send",
+        "delivery.stream",
+        "delivery.react",
+        "delivery.edit",
+        "delivery.delete",
+        "delivery.poll"
+      ]
     },
     "ChannelCapabilities": {
       "type": "object",
@@ -50,20 +66,111 @@
       },
       "additionalProperties": true
     },
+    "AdapterAuthFieldOption": {
+      "type": "object",
+      "required": ["label", "value"],
+      "properties": {
+        "label": { "type": "string" },
+        "value": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "AdapterAuthField": {
+      "type": "object",
+      "required": ["name", "label", "type", "required"],
+      "properties": {
+        "name": { "type": "string" },
+        "label": { "type": "string" },
+        "type": { "type": "string", "enum": ["secret", "text", "select"] },
+        "required": { "type": "boolean" },
+        "placeholder": { "type": "string" },
+        "options": { "type": "array", "items": { "$ref": "#/$defs/AdapterAuthFieldOption" } }
+      },
+      "additionalProperties": false
+    },
+    "AdapterAuthMethodOAuth2": {
+      "type": "object",
+      "required": ["type", "label", "icon", "service", "scopes"],
+      "properties": {
+        "type": { "const": "oauth2" },
+        "label": { "type": "string" },
+        "icon": { "type": "string" },
+        "service": { "type": "string" },
+        "scopes": { "type": "array", "items": { "type": "string" } },
+        "platformCredentials": { "type": "boolean" },
+        "platformCredentialUrl": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "AdapterAuthMethodApiKey": {
+      "type": "object",
+      "required": ["type", "label", "icon", "service", "fields"],
+      "properties": {
+        "type": { "const": "api_key" },
+        "label": { "type": "string" },
+        "icon": { "type": "string" },
+        "service": { "type": "string" },
+        "fields": { "type": "array", "items": { "$ref": "#/$defs/AdapterAuthField" } }
+      },
+      "additionalProperties": false
+    },
+    "AdapterAuthMethodFileUpload": {
+      "type": "object",
+      "required": ["type", "label", "icon", "accept"],
+      "properties": {
+        "type": { "const": "file_upload" },
+        "label": { "type": "string" },
+        "icon": { "type": "string" },
+        "accept": { "type": "array", "items": { "type": "string" } },
+        "templateUrl": { "type": "string" },
+        "maxSize": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "AdapterAuthMethodCustomFlow": {
+      "type": "object",
+      "required": ["type", "label", "icon", "service"],
+      "properties": {
+        "type": { "const": "custom_flow" },
+        "label": { "type": "string" },
+        "icon": { "type": "string" },
+        "service": { "type": "string" },
+        "fields": { "type": "array", "items": { "$ref": "#/$defs/AdapterAuthField" } }
+      },
+      "additionalProperties": false
+    },
+    "AdapterAuthMethod": {
+      "oneOf": [
+        { "$ref": "#/$defs/AdapterAuthMethodOAuth2" },
+        { "$ref": "#/$defs/AdapterAuthMethodApiKey" },
+        { "$ref": "#/$defs/AdapterAuthMethodFileUpload" },
+        { "$ref": "#/$defs/AdapterAuthMethodCustomFlow" }
+      ]
+    },
+    "AdapterAuthManifest": {
+      "type": "object",
+      "required": ["methods"],
+      "properties": {
+        "methods": { "type": "array", "items": { "$ref": "#/$defs/AdapterAuthMethod" } },
+        "setupGuide": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
     "AdapterInfo": {
       "type": "object",
-      "required": ["platform", "name", "version", "supports", "multi_account", "platform_capabilities"],
+      "required": ["platform", "name", "version", "operations", "multi_account", "platform_capabilities"],
       "properties": {
         "platform": { "type": "string" },
         "name": { "type": "string" },
         "version": { "type": "string" },
-        "supports": {
+        "operations": {
           "type": "array",
-          "items": { "$ref": "#/$defs/AdapterCapability" }
+          "items": { "$ref": "#/$defs/AdapterOperation" }
         },
         "credential_service": { "type": "string" },
         "multi_account": { "type": "boolean" },
-        "platform_capabilities": { "$ref": "#/$defs/ChannelCapabilities" }
+        "platform_capabilities": { "$ref": "#/$defs/ChannelCapabilities" },
+        "auth": { "$ref": "#/$defs/AdapterAuthManifest" }
       },
       "additionalProperties": false
     },
@@ -193,11 +300,11 @@
       "oneOf": [
         {
           "type": "object",
-          "required": ["type", "runId", "sessionKey", "target"],
+          "required": ["type", "runId", "sessionLabel", "target"],
           "properties": {
             "type": { "const": "stream_start" },
             "runId": { "type": "string" },
-            "sessionKey": { "type": "string" },
+            "sessionLabel": { "type": "string" },
             "target": { "$ref": "#/$defs/DeliveryTarget" }
           },
           "additionalProperties": false
@@ -302,9 +409,15 @@
       "properties": {
         "kind": { "type": "string" },
         "value": { "type": "string" },
+        "fields": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
         "ref": { "type": "string" },
         "service": { "type": "string" },
-        "account": { "type": "string" }
+        "account": { "type": "string" },
+        "auth_id": { "type": "string" },
+        "type": { "type": "string" }
       },
       "additionalProperties": true
     },

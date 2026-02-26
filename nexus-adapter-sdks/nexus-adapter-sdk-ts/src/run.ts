@@ -4,12 +4,14 @@ import {
   AdapterAccountSchema,
   AdapterHealthSchema,
   AdapterInfoSchema,
+  AdapterSetupResultSchema,
   DeliveryResultSchema,
   NexusEventSchema,
   SendRequestSchema,
   type AdapterAccount,
   type AdapterHealth,
   type AdapterInfo,
+  type AdapterSetupResult,
   type DeliveryResult,
   type NexusEvent,
   type SendRequest,
@@ -29,18 +31,51 @@ export type AdapterContext = {
   stderr: NodeJS.WriteStream;
 };
 
-export type AdapterDefinition = {
-  info: () => AdapterInfo | Promise<AdapterInfo>;
-  monitor?: (ctx: AdapterContext, args: { account: string }, emit: (e: NexusEvent) => void) => void | Promise<void>;
-  backfill?: (
+export type AdapterSetupRequest = {
+  account?: string;
+  session_id?: string;
+  payload?: Record<string, unknown>;
+};
+
+export type AdapterOperations = {
+  "adapter.info"?: (ctx: AdapterContext) => AdapterInfo | Promise<AdapterInfo>;
+  "adapter.monitor.start"?: (
+    ctx: AdapterContext,
+    args: { account: string },
+    emit: (e: NexusEvent) => void,
+  ) => void | Promise<void>;
+  "event.backfill"?: (
     ctx: AdapterContext,
     args: { account: string; since: Date },
     emit: (e: NexusEvent) => void,
   ) => void | Promise<void>;
-  send?: (ctx: AdapterContext, req: SendRequest) => DeliveryResult | Promise<DeliveryResult>;
-  health?: (ctx: AdapterContext, args: { account: string }) => AdapterHealth | Promise<AdapterHealth>;
-  accounts?: (ctx: AdapterContext) => AdapterAccount[] | Promise<AdapterAccount[]>;
-  stream?: StreamHandlers;
+  "delivery.send"?: (ctx: AdapterContext, req: SendRequest) => DeliveryResult | Promise<DeliveryResult>;
+  "adapter.health"?: (
+    ctx: AdapterContext,
+    args: { account: string },
+  ) => AdapterHealth | Promise<AdapterHealth>;
+  "adapter.accounts.list"?: (ctx: AdapterContext) => AdapterAccount[] | Promise<AdapterAccount[]>;
+  "adapter.setup.start"?: (
+    ctx: AdapterContext,
+    req: AdapterSetupRequest,
+  ) => AdapterSetupResult | Promise<AdapterSetupResult>;
+  "adapter.setup.submit"?: (
+    ctx: AdapterContext,
+    req: AdapterSetupRequest,
+  ) => AdapterSetupResult | Promise<AdapterSetupResult>;
+  "adapter.setup.status"?: (
+    ctx: AdapterContext,
+    req: AdapterSetupRequest,
+  ) => AdapterSetupResult | Promise<AdapterSetupResult>;
+  "adapter.setup.cancel"?: (
+    ctx: AdapterContext,
+    req: AdapterSetupRequest,
+  ) => AdapterSetupResult | Promise<AdapterSetupResult>;
+  "delivery.stream"?: StreamHandlers;
+};
+
+export type AdapterDefinition = {
+  operations: AdapterOperations;
 };
 
 export type RunAdapterOptions = {
@@ -92,7 +127,13 @@ export async function runAdapter(adapter: AdapterDefinition, opts: RunAdapterOpt
   }
 
   let runtime: AdapterRuntimeContext | null = null;
-  if (command !== "info") {
+  const commandNeedsRuntimeContext =
+    command !== "adapter.info" &&
+    command !== "adapter.setup.start" &&
+    command !== "adapter.setup.submit" &&
+    command !== "adapter.setup.status" &&
+    command !== "adapter.setup.cancel";
+  if (commandNeedsRuntimeContext) {
     try {
       runtime = requireRuntimeContext ? requireAdapterRuntimeContext(env) : loadAdapterRuntimeContext(env);
     } catch (err) {
@@ -109,16 +150,23 @@ export async function runAdapter(adapter: AdapterDefinition, opts: RunAdapterOpt
     stderr,
   };
 
+  const operations = adapter.operations;
+
   try {
     switch (command) {
-      case "info": {
-        const info = await adapter.info();
+      case "adapter.info": {
+        const handler = operations["adapter.info"];
+        if (!handler) {
+          throw new Error("adapter.info not supported by this adapter");
+        }
+        const info = await handler(ctx);
         writeJSONLine(stdout, validateOutput ? AdapterInfoSchema.parse(info) : info);
         return 0;
       }
-      case "monitor": {
-        if (!adapter.monitor) {
-          throw new Error("monitor not supported by this adapter");
+      case "adapter.monitor.start": {
+        const handler = operations["adapter.monitor.start"];
+        if (!handler) {
+          throw new Error("adapter.monitor.start not supported by this adapter");
         }
         const account = requireFlag(filteredArgs, "--account");
         const emit = (event: NexusEvent) => {
@@ -126,13 +174,14 @@ export async function runAdapter(adapter: AdapterDefinition, opts: RunAdapterOpt
           writeJSONLine(stdout, payload);
         };
         ctx.log.info("monitor starting for account %s", JSON.stringify(account));
-        await adapter.monitor(ctx, { account }, emit);
+        await handler(ctx, { account }, emit);
         ctx.log.info("monitor stopped cleanly");
         return 0;
       }
-      case "backfill": {
-        if (!adapter.backfill) {
-          throw new Error("backfill not supported by this adapter");
+      case "event.backfill": {
+        const handler = operations["event.backfill"];
+        if (!handler) {
+          throw new Error("event.backfill not supported by this adapter");
         }
         const account = requireFlag(filteredArgs, "--account");
         const sinceRaw = requireFlag(filteredArgs, "--since");
@@ -146,13 +195,14 @@ export async function runAdapter(adapter: AdapterDefinition, opts: RunAdapterOpt
           JSON.stringify(account),
           since.toISOString(),
         );
-        await adapter.backfill(ctx, { account, since }, emit);
+        await handler(ctx, { account, since }, emit);
         ctx.log.info("backfill completed");
         return 0;
       }
-      case "send": {
-        if (!adapter.send) {
-          throw new Error("send not supported by this adapter");
+      case "delivery.send": {
+        const handler = operations["delivery.send"];
+        if (!handler) {
+          throw new Error("delivery.send not supported by this adapter");
         }
         const account = requireFlag(filteredArgs, "--account");
         const to = requireFlag(filteredArgs, "--to");
@@ -163,13 +213,13 @@ export async function runAdapter(adapter: AdapterDefinition, opts: RunAdapterOpt
         const threadID = readFlag(filteredArgs, "--thread");
 
         if (!text && !media) {
-          throw new Error("send requires --text or --media");
+          throw new Error("delivery.send requires --text or --media");
         }
         if (text && media) {
-          throw new Error("send must not specify both --text and --media");
+          throw new Error("delivery.send must not specify both --text and --media");
         }
         if (caption && !media) {
-          throw new Error("send --caption requires --media");
+          throw new Error("delivery.send --caption requires --media");
         }
 
         const req: SendRequest = {
@@ -184,7 +234,7 @@ export async function runAdapter(adapter: AdapterDefinition, opts: RunAdapterOpt
         const parsedReq = validateOutput ? SendRequestSchema.parse(req) : req;
 
         try {
-          const result = await adapter.send(ctx, parsedReq);
+          const result = await handler(ctx, parsedReq);
           writeJSONLine(stdout, validateOutput ? DeliveryResultSchema.parse(result) : result);
           return 0;
         } catch (err) {
@@ -202,13 +252,14 @@ export async function runAdapter(adapter: AdapterDefinition, opts: RunAdapterOpt
           return 0;
         }
       }
-      case "health": {
-        if (!adapter.health) {
-          throw new Error("health not supported by this adapter");
+      case "adapter.health": {
+        const handler = operations["adapter.health"];
+        if (!handler) {
+          throw new Error("adapter.health not supported by this adapter");
         }
         const account = requireFlag(filteredArgs, "--account");
         try {
-          const health = await adapter.health(ctx, { account });
+          const health = await handler(ctx, { account });
           writeJSONLine(stdout, validateOutput ? AdapterHealthSchema.parse(health) : health);
           return 0;
         } catch (err) {
@@ -221,32 +272,66 @@ export async function runAdapter(adapter: AdapterDefinition, opts: RunAdapterOpt
           return 0;
         }
       }
-      case "accounts": {
-        if (!adapter.accounts) {
-          throw new Error("accounts not supported by this adapter");
+      case "adapter.accounts.list": {
+        const handler = operations["adapter.accounts.list"];
+        if (!handler) {
+          throw new Error("adapter.accounts.list not supported by this adapter");
         }
-
-        const subcmd = readSubcommand(filteredArgs) ?? "list";
-        switch (subcmd) {
-          case "list": {
-            const accounts = await adapter.accounts(ctx);
-            const payload = validateOutput ? zArray(AdapterAccountSchema).parse(accounts) : accounts;
-            writeJSONLine(stdout, payload);
-            return 0;
-          }
-          default:
-            throw new Error(`unknown accounts subcommand: ${subcmd} (expected: list)`);
-        }
+        const accounts = await handler(ctx);
+        const payload = validateOutput ? zArray(AdapterAccountSchema).parse(accounts) : accounts;
+        writeJSONLine(stdout, payload);
+        return 0;
       }
-      case "stream": {
-        if (!adapter.stream) {
-          throw new Error("stream not supported by this adapter");
+      case "adapter.setup.start": {
+        const handler = operations["adapter.setup.start"];
+        if (!handler) {
+          throw new Error("adapter.setup.start not supported by this adapter");
         }
-        // `--account` is part of the protocol, but stream_start.target carries the canonical account_id.
-        // We still parse/validate it to keep the CLI contract consistent.
+        const req = readAdapterSetupRequest(filteredArgs, false);
+        const result = await handler(ctx, req);
+        writeJSONLine(stdout, validateOutput ? AdapterSetupResultSchema.parse(result) : result);
+        return 0;
+      }
+      case "adapter.setup.submit": {
+        const handler = operations["adapter.setup.submit"];
+        if (!handler) {
+          throw new Error("adapter.setup.submit not supported by this adapter");
+        }
+        const req = readAdapterSetupRequest(filteredArgs, true);
+        const result = await handler(ctx, req);
+        writeJSONLine(stdout, validateOutput ? AdapterSetupResultSchema.parse(result) : result);
+        return 0;
+      }
+      case "adapter.setup.status": {
+        const handler = operations["adapter.setup.status"];
+        if (!handler) {
+          throw new Error("adapter.setup.status not supported by this adapter");
+        }
+        const req = readAdapterSetupRequest(filteredArgs, true);
+        const result = await handler(ctx, req);
+        writeJSONLine(stdout, validateOutput ? AdapterSetupResultSchema.parse(result) : result);
+        return 0;
+      }
+      case "adapter.setup.cancel": {
+        const handler = operations["adapter.setup.cancel"];
+        if (!handler) {
+          throw new Error("adapter.setup.cancel not supported by this adapter");
+        }
+        const req = readAdapterSetupRequest(filteredArgs, true);
+        const result = await handler(ctx, req);
+        writeJSONLine(stdout, validateOutput ? AdapterSetupResultSchema.parse(result) : result);
+        return 0;
+      }
+      case "delivery.stream": {
+        const handler = operations["delivery.stream"];
+        if (!handler) {
+          throw new Error("delivery.stream not supported by this adapter");
+        }
+        // --account remains required by runtime process contract, even though stream_start.target
+        // carries canonical account_id for each stream request.
         void requireFlag(filteredArgs, "--account");
         ctx.log.info("stream handler starting");
-        await handleStream({ ctx, handlers: adapter.stream, stdin, stdout, validate: validateOutput });
+        await handleStream({ ctx, handlers: handler, stdin, stdout, validate: validateOutput });
         ctx.log.info("stream handler stopped cleanly");
         return 0;
       }
@@ -262,15 +347,19 @@ export async function runAdapter(adapter: AdapterDefinition, opts: RunAdapterOpt
 }
 
 function printUsage(name: string, stderr: NodeJS.WriteStream): void {
-  stderr.write(`Usage: ${name} <command> [flags]\n\n`);
-  stderr.write("Commands:\n");
-  stderr.write("  info                              Self-describe this adapter\n");
-  stderr.write("  monitor  --account <id>           Stream live events (JSONL)\n");
-  stderr.write("  send     --account <id> --to <target> --text \"...\"\n");
-  stderr.write("  backfill --account <id> --since <date>\n");
-  stderr.write("  health   --account <id>           Check connection status\n");
-  stderr.write("  accounts list                     List configured accounts\n");
-  stderr.write("  stream   --account <id>           Streaming delivery (stdin/stdout)\n\n");
+  stderr.write(`Usage: ${name} <operation> [flags]\n\n`);
+  stderr.write("Operations:\n");
+  stderr.write("  adapter.info\n");
+  stderr.write("  adapter.monitor.start --account <id>\n");
+  stderr.write("  event.backfill --account <id> --since <date>\n");
+  stderr.write("  delivery.send --account <id> --to <target> --text \"...\"\n");
+  stderr.write("  adapter.health --account <id>\n");
+  stderr.write("  adapter.accounts.list\n");
+  stderr.write("  adapter.setup.start [--account <id>] [--session-id <id>] [--payload-json <json>]\n");
+  stderr.write("  adapter.setup.submit --session-id <id> [--account <id>] [--payload-json <json>]\n");
+  stderr.write("  adapter.setup.status --session-id <id> [--account <id>]\n");
+  stderr.write("  adapter.setup.cancel --session-id <id> [--account <id>]\n");
+  stderr.write("  delivery.stream --account <id>\n\n");
   stderr.write("Global flags:\n");
   stderr.write("  --verbose, -v                     Enable debug logging\n");
 }
@@ -299,17 +388,31 @@ function requireFlag(args: string[], name: string): string {
   return v;
 }
 
-function readSubcommand(args: string[]): string | undefined {
-  for (const a of args) {
-    if (!a) {
-      continue;
-    }
-    if (a.startsWith("-")) {
-      continue;
-    }
-    return a;
+function parseJsonObjectFlag(raw: string, flagName: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`${flagName} must be valid JSON: ${errorToString(error)}`);
   }
-  return undefined;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${flagName} must decode to a JSON object`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function readAdapterSetupRequest(args: string[], requireSessionID: boolean): AdapterSetupRequest {
+  const account = readFlag(args, "--account");
+  const sessionID = requireSessionID
+    ? requireFlag(args, "--session-id")
+    : readFlag(args, "--session-id");
+  const payloadRaw = readFlag(args, "--payload-json");
+  const payload = payloadRaw ? parseJsonObjectFlag(payloadRaw, "--payload-json") : undefined;
+  return {
+    ...(account ? { account } : {}),
+    ...(sessionID ? { session_id: sessionID } : {}),
+    ...(payload ? { payload } : {}),
+  };
 }
 
 function parseDate(s: string): Date {

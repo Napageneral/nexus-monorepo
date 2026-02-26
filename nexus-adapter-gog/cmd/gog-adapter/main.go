@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	adapterName    = "gog-adapter"
-	adapterVersion = "0.1.0"
+	adapterName                  = "gog-adapter"
+	adapterVersion               = "0.1.0"
+	defaultPlatformCredentialURL = "https://hub.glowbot.com/api/platform-credentials"
 
 	defaultSubject          = "Message from Nexus"
 	defaultPollInterval     = 20 * time.Second
@@ -47,28 +48,83 @@ type backfillState struct {
 
 func main() {
 	nexadapter.Run(nexadapter.Adapter{
-		Info:     info,
-		Monitor:  monitor,
-		Send:     send,
-		Backfill: backfill,
-		Health:   health,
-		Accounts: accounts,
+		Operations: nexadapter.AdapterOperations{
+			AdapterInfo:         info,
+			AdapterMonitorStart: monitor,
+			DeliverySend:        send,
+			EventBackfill:       backfill,
+			AdapterHealth:       health,
+			AdapterAccountsList: accounts,
+			AdapterSetupStart:   setupStart,
+			AdapterSetupSubmit:  setupSubmit,
+			AdapterSetupStatus:  setupStatus,
+			AdapterSetupCancel:  setupCancel,
+		},
 	})
 }
 
-func info() *nexadapter.AdapterInfo {
+func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 	return &nexadapter.AdapterInfo{
 		Platform: "gmail",
 		Name:     adapterName,
 		Version:  adapterVersion,
-		Supports: []nexadapter.Capability{
-			nexadapter.CapMonitor,
-			nexadapter.CapSend,
-			nexadapter.CapBackfill,
-			nexadapter.CapHealth,
+		Operations: []nexadapter.AdapterOperation{
+			nexadapter.OpAdapterInfo,
+			nexadapter.OpAdapterMonitorStart,
+			nexadapter.OpDeliverySend,
+			nexadapter.OpEventBackfill,
+			nexadapter.OpAdapterHealth,
+			nexadapter.OpAdapterAccountsList,
+			nexadapter.OpAdapterSetupStart,
+			nexadapter.OpAdapterSetupSubmit,
+			nexadapter.OpAdapterSetupStatus,
+			nexadapter.OpAdapterSetupCancel,
 		},
 		CredentialService: "google",
 		MultiAccount:      true,
+		Auth: &nexadapter.AdapterAuthManifest{
+			Methods: []nexadapter.AdapterAuthMethod{
+				{
+					Type:                  "oauth2",
+					Label:                 "Connect Google Account",
+					Icon:                  "google",
+					Service:               "google",
+					PlatformCredentials:   true,
+					PlatformCredentialURL: platformCredentialURL(),
+					Scopes: []string{
+						"https://www.googleapis.com/auth/gmail.modify",
+						"https://www.googleapis.com/auth/gmail.send",
+						"https://www.googleapis.com/auth/gmail.readonly",
+					},
+				},
+				{
+					Type:    "custom_flow",
+					Label:   "Use Existing Gog Auth",
+					Icon:    "settings",
+					Service: "google",
+					Fields: []nexadapter.AdapterAuthField{
+						{
+							Name:        "account_email",
+							Label:       "Google account email (optional)",
+							Type:        "text",
+							Required:    false,
+							Placeholder: "you@example.com",
+						},
+						{
+							Name:     "confirm_auth_ready",
+							Label:    "I already authenticated with `gog auth add`",
+							Type:     "select",
+							Required: true,
+							Options: []nexadapter.AdapterAuthFieldOption{
+								{Label: "Yes", Value: "yes"},
+								{Label: "Not yet", Value: "no"},
+							},
+						},
+					},
+				},
+			},
+			SetupGuide: "Authenticate via Google OAuth, or use existing `gog auth add` credentials and complete custom setup.",
+		},
 		PlatformCapabilities: nexadapter.ChannelCapabilities{
 			TextLimit:             20000,
 			SupportsMarkdown:      true,
@@ -86,7 +142,14 @@ func info() *nexadapter.AdapterInfo {
 			SupportsVoiceNotes:    false,
 			SupportsStreamingEdit: false,
 		},
+	}, nil
+}
+
+func platformCredentialURL() string {
+	if v := strings.TrimSpace(os.Getenv("NEXUS_PLATFORM_CREDENTIAL_URL")); v != "" { //nolint:gosec // config
+		return v
 	}
+	return defaultPlatformCredentialURL
 }
 
 // ---------- Accounts ----------
@@ -124,6 +187,210 @@ func accounts(ctx context.Context) ([]nexadapter.AdapterAccount, error) {
 	}
 
 	return result, nil
+}
+
+func gogSetupFields() []nexadapter.AdapterAuthField {
+	return []nexadapter.AdapterAuthField{
+		{
+			Name:        "account_email",
+			Label:       "Google account email (optional)",
+			Type:        "text",
+			Required:    false,
+			Placeholder: "you@example.com",
+		},
+		{
+			Name:     "confirm_auth_ready",
+			Label:    "I already authenticated with `gog auth add`",
+			Type:     "select",
+			Required: true,
+			Options: []nexadapter.AdapterAuthFieldOption{
+				{Label: "Yes", Value: "yes"},
+				{Label: "Not yet", Value: "no"},
+			},
+		},
+	}
+}
+
+func setupSessionIDOrDefault(sessionID string) string {
+	trimmed := strings.TrimSpace(sessionID)
+	if trimmed == "" {
+		return fmt.Sprintf("gog-setup-%d", time.Now().UnixNano())
+	}
+	return trimmed
+}
+
+func setupAccountOrDefault(account string) string {
+	trimmed := strings.TrimSpace(strings.ToLower(account))
+	if trimmed == "" {
+		return "default"
+	}
+	return trimmed
+}
+
+func payloadString(payload map[string]any, key string) string {
+	if payload == nil {
+		return ""
+	}
+	raw, ok := payload[key]
+	if !ok {
+		return ""
+	}
+	switch value := raw.(type) {
+	case string:
+		return strings.TrimSpace(value)
+	default:
+		return ""
+	}
+}
+
+func payloadBool(payload map[string]any, key string) bool {
+	if payload == nil {
+		return false
+	}
+	raw, ok := payload[key]
+	if !ok {
+		return false
+	}
+	switch value := raw.(type) {
+	case bool:
+		return value
+	case string:
+		v := strings.ToLower(strings.TrimSpace(value))
+		return v == "true" || v == "yes" || v == "y" || v == "1" || v == "confirmed"
+	case float64:
+		return value == 1
+	case int:
+		return value == 1
+	case int64:
+		return value == 1
+	default:
+		return false
+	}
+}
+
+func selectSetupAccount(req nexadapter.AdapterSetupRequest, configured []nexadapter.AdapterAccount) (string, bool) {
+	requested := strings.TrimSpace(strings.ToLower(req.Account))
+	if requested == "" {
+		requested = strings.TrimSpace(strings.ToLower(payloadString(req.Payload, "account_email")))
+	}
+	if requested == "" {
+		requested = strings.TrimSpace(strings.ToLower(payloadString(req.Payload, "email")))
+	}
+
+	if len(configured) == 0 {
+		return setupAccountOrDefault(requested), false
+	}
+
+	if requested == "" {
+		return configured[0].ID, true
+	}
+
+	for _, row := range configured {
+		if strings.EqualFold(strings.TrimSpace(row.ID), requested) {
+			return row.ID, true
+		}
+	}
+	return requested, false
+}
+
+func buildGogSetupResult(ctx context.Context, req nexadapter.AdapterSetupRequest, requireConfirm bool) (*nexadapter.AdapterSetupResult, error) {
+	sessionID := setupSessionIDOrDefault(req.SessionID)
+
+	if requireConfirm && !payloadBool(req.Payload, "confirm_auth_ready") {
+		return &nexadapter.AdapterSetupResult{
+			Status:       nexadapter.SetupStatusRequiresInput,
+			SessionID:    sessionID,
+			Account:      setupAccountOrDefault(req.Account),
+			Service:      "google",
+			Message:      "Confirm when `gog auth add <email>` is complete.",
+			Instructions: "Run `gog auth add <email>` to authenticate Gmail access, then submit again.",
+			Fields:       gogSetupFields(),
+		}, nil
+	}
+
+	configured, err := accounts(ctx)
+	if err != nil {
+		return &nexadapter.AdapterSetupResult{
+			Status:       nexadapter.SetupStatusRequiresInput,
+			SessionID:    sessionID,
+			Account:      setupAccountOrDefault(req.Account),
+			Service:      "google",
+			Message:      "Unable to read Gog auth accounts.",
+			Instructions: "Ensure Gog CLI is installed and run `gog auth add <email>`.",
+			Fields:       gogSetupFields(),
+			Metadata: map[string]any{
+				"error": err.Error(),
+			},
+		}, nil
+	}
+
+	account, found := selectSetupAccount(req, configured)
+	if !found {
+		return &nexadapter.AdapterSetupResult{
+			Status:       nexadapter.SetupStatusRequiresInput,
+			SessionID:    sessionID,
+			Account:      setupAccountOrDefault(account),
+			Service:      "google",
+			Message:      "Requested Gog account is not authenticated yet.",
+			Instructions: "Run `gog auth add <email>` for this account, then submit again.",
+			Fields:       gogSetupFields(),
+			Metadata: map[string]any{
+				"configured_accounts": len(configured),
+			},
+		}, nil
+	}
+
+	healthResult, err := health(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	if healthResult.Connected {
+		return &nexadapter.AdapterSetupResult{
+			Status:    nexadapter.SetupStatusCompleted,
+			SessionID: sessionID,
+			Account:   account,
+			Service:   "google",
+			Message:   "Gog account is authenticated and ready.",
+			Metadata: map[string]any{
+				"configured_accounts": len(configured),
+			},
+		}, nil
+	}
+
+	return &nexadapter.AdapterSetupResult{
+		Status:       nexadapter.SetupStatusRequiresInput,
+		SessionID:    sessionID,
+		Account:      account,
+		Service:      "google",
+		Message:      "Gog account health check failed.",
+		Instructions: "Re-run `gog auth add <email>` and submit again.",
+		Fields:       gogSetupFields(),
+		Metadata: map[string]any{
+			"error": healthResult.Error,
+		},
+	}, nil
+}
+
+func setupStart(ctx context.Context, req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+	return buildGogSetupResult(ctx, req, false)
+}
+
+func setupSubmit(ctx context.Context, req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+	return buildGogSetupResult(ctx, req, true)
+}
+
+func setupStatus(ctx context.Context, req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+	return buildGogSetupResult(ctx, req, false)
+}
+
+func setupCancel(_ context.Context, req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+	return &nexadapter.AdapterSetupResult{
+		Status:    nexadapter.SetupStatusCancelled,
+		SessionID: setupSessionIDOrDefault(req.SessionID),
+		Account:   setupAccountOrDefault(req.Account),
+		Service:   "google",
+		Message:   "Setup cancelled.",
+	}, nil
 }
 
 // ---------- Health ----------

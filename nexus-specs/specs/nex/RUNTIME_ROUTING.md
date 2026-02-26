@@ -9,12 +9,18 @@
 
 ## Supersession Note
 
-Runtime operation semantics are now governed by `UNIFIED_RUNTIME_OPERATION_MODEL.md`.
+Runtime operation semantics are now governed by:
+
+1. `UNIFIED_RUNTIME_OPERATION_MODEL.md`
+2. `ADAPTER_INTERFACE_UNIFICATION.md`
+
 Use this document for routing-specific details, but apply unified operation terminology:
 
 1. `resolvePrincipals` instead of split sender/receiver stage naming
 2. `event.ingest` as canonical ingress operation
 3. `auth.tokens.ingress.*` naming for ingress token management
+4. no dual adapter-role terminology
+5. clock scheduling via `clock.schedule.*` (not `cron.*`/`wake`)
 
 If this document conflicts with `UNIFIED_RUNTIME_OPERATION_MODEL.md`, the unified model wins.
 
@@ -154,7 +160,7 @@ For external platforms where the owner is also a sender (e.g., outbound messages
 
 ---
 
-## Identity Resolution (Pipeline Stage 2)
+## Identity Resolution (`resolvePrincipals` sender sub-step)
 
 ### Flow
 
@@ -162,7 +168,7 @@ For external platforms where the owner is also a sender (e.g., outbound messages
 Message arrives with DeliveryContext:
   { platform: "discord", sender_id: "tyler#1234", sender_name: "Tyler", ... }
 
-Stage 2: resolveIdentity
+Stage 2: resolvePrincipals (sender branch)
   │
   ├── System/webhook platform? → system/webhook sender (no contact lookup)
   │
@@ -229,7 +235,7 @@ WHERE entity_id IN (?merged_leaf_entity_ids...);
 
 ---
 
-## Session Key Generation (Pipeline Stage 3)
+## Session Key Generation (`resolveAccess` routing output)
 
 ### Format
 

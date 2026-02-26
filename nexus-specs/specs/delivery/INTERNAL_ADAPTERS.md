@@ -1,71 +1,44 @@
-# Internal Event Adapters
+# Internal Adapters
 
 **Status:** ACTIVE  
-**Last Updated:** 2026-02-24  
-**Related:** `ADAPTER_SYSTEM.md`, `adapters/BUILTIN_ADAPTERS.md`, `INBOUND_INTERFACE.md`, `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`
+**Last Updated:** 2026-02-26  
+**Related:** `ADAPTER_SYSTEM.md`, `../nex/ADAPTER_INTERFACE_UNIFICATION.md`, `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`
 
 ---
 
-## Purpose
+## Canonical Position
 
-Define the contract for **internal event adapters** (in-process adapters) that are managed like normal adapters but run inside the NEX runtime process.
+Internal adapters use the same interface and operation set as every other adapter.
 
-This document is authoritative for:
-
-1. lifecycle semantics (`start/stop/health/state`)
-2. ingress normalization (`NexusEvent`)
-3. ownership boundaries with control surfaces
+There is no separate internal adapter role taxonomy.
 
 ---
 
-## Canonical Boundary
+## Bundled Internal Adapters
 
-1. Internal event adapters are event ingress components.
-2. Control-plane WS/HTTP methods are control-surface operations, not internal event adapters.
-3. Anything that can trigger agent work from an internal event adapter must emit `NexusEvent` and enter `nex.processEvent(...)`.
+1. `control.ws`
+2. `control.http`
+3. `ingress.http`
+4. `clock`
 
----
-
-## Internal Adapter Kinds
-
-```ts
-type InternalAdapterKind = "event_source" | "ingress_server";
-```
-
-Examples:
-
-1. `clock` (`event_source`)
-2. `http-ingress` (`ingress_server`)
+All four mount operations through the same operation registry + IAM + audit lifecycle.
 
 ---
 
-## Runtime Contract
+## Clock Ownership
 
-```ts
-type InternalAdapterDefinition = {
-  name: string;
-  platform: string;
-  kind: InternalAdapterKind;
-  supports: Array<"monitor" | "health" | "backfill" | "send" | "stream">;
-};
+Clock is the canonical scheduler/time source:
 
-type InternalAdapterContext = {
-  adapter: string;
-  account: string;
-  emitEvent: (event: NexusEvent) => Promise<void>;
-  now: () => number;
-  log: { info(msg: string): void; warn(msg: string): void; error(msg: string): void };
-};
-```
+1. emits tick ingress via `event.ingest`
+2. manages schedules via `clock.schedule.*`
 
-Rules:
-
-1. `emitEvent` is the only path for event ingress side effects.
-2. Internal adapters must follow ingress-integrity rules (`../nex/ingress/INGRESS_INTEGRITY.md`).
-3. Internal adapters are visible in adapter supervision/status endpoints.
+Legacy cron operations are removed.
 
 ---
 
-## Implementation Notes
+## Invariants
 
-For built-in adapter inventory and migration details, see `adapters/BUILTIN_ADAPTERS.md`.
+1. Internal adapters must not bypass operation registry dispatch.
+2. Internal adapters must not bypass principal resolution/IAM/audit.
+3. Internal adapters must follow ingress integrity field-stamping rules.
+

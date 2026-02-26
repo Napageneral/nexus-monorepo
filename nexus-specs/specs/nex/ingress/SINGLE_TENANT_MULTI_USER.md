@@ -62,7 +62,7 @@ Still required (not yet implemented):
   - `delivery.sender_id` is stable and meaningful for IAM policy matching + audit.
 - **Explicit trust zones**:
   - control-plane is privileged (operators)
-  - ingress surfaces are adapter-managed (may be external/untrusted)
+  - ingress listener endpoints are adapter-managed (may be external/untrusted)
 - **One IAM boundary**:
   - any request that can run an agent is IAM-authorized inside the NEX pipeline
   - control-plane operations are also IAM-authorized + audited (even if they are not `NexusEvent`s).
@@ -81,18 +81,18 @@ Still required (not yet implemented):
 
 - **Tenant**: a single Nexus workspace with shared ledgers/config/state.
 - **Principal**: identity making a request (owner/operator/member/customer/integration/system).
-- **Operator**: privileged principals that can access control-plane surfaces (UI/CLI/admin APIs).
+- **Operator**: privileged principals that can access control-plane endpoints (UI/CLI/admin APIs).
 - **Customer / untrusted principal**: a principal allowed to send ingress events but sandboxed by IAM (persona routing + tool/credential/data restrictions).
 - **Control-plane**: management surface (UI + CLI + WS RPC + health + bus stream).
 - **Ingress**: any surface that can trigger work (adapters + event sources).
 
 ---
 
-## Trust Zones (One Daemon, Two Surface Roles)
+## Trust Zones (One Daemon, Two Listener Trust Zones)
 
 This split is a *network/surface boundary*, not "two IAM systems". IAM remains one spectrum of permissions.
 
-### A) Control-Plane Surface (privileged)
+### A) Control-Plane Listener (privileged)
 
 Responsibilities:
 
@@ -107,7 +107,7 @@ Defaults:
 - authenticated
 - IAM-authorized for every operation
 
-### B) Ingress Surface (adapter-managed)
+### B) Ingress Listener (adapter-managed)
 
 All external protocol bridges are adapters (process or internal adapters) and MUST emit `NexusEvent`:
 
@@ -233,7 +233,7 @@ Default mapping:
 
 ## Preventing Spoofing (Integrity Rules)
 
-Spoofing opportunities are primarily at network-facing ingress surfaces (HTTP + WS), not platform adapters.
+Spoofing opportunities are primarily at network-facing ingress listener endpoints (HTTP + WS), not platform adapters.
 
 Normative rules:
 

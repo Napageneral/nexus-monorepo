@@ -54,22 +54,21 @@ NEX Process (TypeScript)
 │
 │  UNIVERSAL STAGES (always run)
 ├── receiveEvent()        // 1. Normalize NexusEvent, create NexusRequest
-├── resolveIdentity()     // 2. WHO sent this? Query Identity Graph
-├── resolveReceiver()     // 3. WHO is this addressed to? Resolve target agent/entity
-├── resolveAccess()       // 4. WHAT can they do? Policies → permissions, session routing
+├── resolvePrincipals()   // 2. AuthN + sender/receiver principal resolution
+├── resolveAccess()       // 3. WHAT can they do? Policies → permissions, session routing
 │
 │  ── [routing decision: receiver.type] ──
 │
 │  AGENT PATH (receiver.type = 'agent')
-├── assembleContext()     // 5. Build AssembledContext (history, memory, config, formatting)
-├── runAgent()            // 6. Execute agent with assembled context
+├── assembleContext()     // 4. Build AssembledContext (history, memory, config, formatting)
+├── runAgent()            // 5. Execute agent with assembled context
 │   └── deliverResponse() //    Agent tool: format, chunk, send via out-adapter
 │
 │  API PATH (receiver.type = 'system' | programmatic callers)
 ├── (handle directly)     //    Return result to caller, no agent execution
 │
 │  FINALIZE (always runs)
-└── finalize()            //    Persist final trace/audit status
+└── finalize()            // 6. Persist final trace/audit status
 
 All function calls. No network hops.
 Automation hookpoints fire at every stage boundary (before/after any stage).
@@ -77,9 +76,9 @@ Automation hookpoints fire at every stage boundary (before/after any stage).
 
 ### Pipeline Model
 
-The pipeline has **4 universal stages**, a **routing decision**, **conditional execution paths**, and a **finalize** that always runs. This is NOT a flat sequence of 9 stages — the agent execution path is conditional on the receiver type.
+The pipeline has **3 universal stages**, a **routing decision**, **conditional execution paths**, and a **finalize** that always runs. This is NOT a flat sequence of 9 stages — the agent execution path is conditional on the receiver type.
 
-**Automation hookpoints** are not a dedicated stage. Automations are configured to fire at any stage boundary (e.g., `afterResolveIdentity`, `beforeAssembleContext`, `onFinalize`). The old `runAutomations()` stage is replaced by the hookpoint system — automations can intercept the pipeline at any point, not just between resolveAccess and assembleContext.
+**Automation hookpoints** are not a dedicated stage. Automations are configured to fire at any stage boundary (e.g., `afterResolvePrincipals`, `beforeAssembleContext`, `onFinalize`). The old `runAutomations()` stage is replaced by the hookpoint system — automations can intercept the pipeline at any point, not just between resolveAccess and assembleContext.
 
 **deliverResponse** is an agent capability (tool), not a strict pipeline stage. The agent calls `send_message` which routes through the adapter system. For streaming adapters, delivery happens inline during `runAgent`. For non-streaming adapters, delivery happens after agent completion. Either way, it's part of the agent execution path, not a standalone stage.
 
@@ -89,8 +88,7 @@ The pipeline has **4 universal stages**, a **routing decision**, **conditional e
 |-------|-------|------------------------|-------------------|
 | **Universal** | | | |
 | `receiveEvent()` | NexusEvent from adapter | `event`, `delivery` populated | No |
-| `resolveIdentity()` | NexusRequest | `sender` populated | Yes (unknown sender policy) |
-| `resolveReceiver()` | NexusRequest | `receiver` populated (type, entity_id, agent_id?, persona_ref?) | No |
+| `resolvePrincipals()` | NexusRequest | `sender` populated and `receiver` resolved (runtime/system or target entity/agent) | Yes (unknown sender/invalid receiver policy) |
 | `resolveAccess()` | NexusRequest | `access` populated (decision, permissions, routing) | Yes (access denied) |
 | **Agent Path** | | | |
 | `assembleContext()` | NexusRequest | `agent` populated (turn_id, model, token_budget); builds `AssembledContext` internally | No |
@@ -108,14 +106,13 @@ Automations attach to stage boundaries, not to a dedicated pipeline slot. Any au
 ```typescript
 interface AutomationHookpoint {
   // Before-stage hooks (can short-circuit the pipeline)
-  beforeResolveIdentity?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+  beforeResolvePrincipals?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
   beforeResolveAccess?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
   beforeAssembleContext?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
 
   // After-stage hooks (can observe, enrich, or short-circuit)
   afterReceiveEvent?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
-  afterResolveIdentity?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
-  afterResolveReceiver?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+  afterResolvePrincipals?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
   afterResolveAccess?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
   afterRunAgent?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
 
@@ -166,20 +163,13 @@ When an automation returns `'handled'`, the pipeline skips to `finalize()` with 
 │  │  │     • Async: Write event to Events Ledger                            │  │  │
 │  │  │                  [hookpoint: afterReceiveEvent]                       │  │  │
 │  │  │                                                                       │  │  │
-│  │  │  2. resolveIdentity()                                                 │  │  │
-│  │  │     • WHO sent this?                                                  │  │  │
-│  │  │     • Query Identity Graph (contacts → entities)                     │  │  │
-│  │  │     • Populate: sender (type, entity_id, identity details)           │  │  │
-│  │  │     • If unknown → may exit based on deny policy                     │  │  │
-│  │  │                  [hookpoint: afterResolveIdentity]                    │  │  │
+│  │  │  2. resolvePrincipals()                                               │  │  │
+│  │  │     • AuthN + sender/receiver principal resolution                    │  │  │
+│  │  │     • Query Identity Graph (contacts → entities)                      │  │  │
+│  │  │     • Populate: sender + receiver                                     │  │  │
+│  │  │                  [hookpoint: afterResolvePrincipals]                  │  │  │
 │  │  │                                                                       │  │  │
-│  │  │  3. resolveReceiver()                                                 │  │  │
-│  │  │     • WHO is this addressed to?                                       │  │  │
-│  │  │     • Resolve target agent/entity from delivery context              │  │  │
-│  │  │     • Populate: receiver (type, entity_id, agent_id, name, source)   │  │  │
-│  │  │                  [hookpoint: afterResolveReceiver]                    │  │  │
-│  │  │                                                                       │  │  │
-│  │  │  4. resolveAccess()                                                   │  │  │
+│  │  │  3. resolveAccess()                                                   │  │  │
 │  │  │     • WHAT can they do?                                               │  │  │
 │  │  │     • Evaluate ACL policies against sender + receiver + conditions    │  │  │
 │  │  │     • Populate: access (decision, permissions, routing)              │  │  │
@@ -195,7 +185,7 @@ When an automation returns `'handled'`, the pipeline skips to `finalize()` with 
 │  │  │  AGENT PATH              │     │  │  API / PROGRAMMATIC PATH         │  │  │
 │  │  │  (receiver.type='agent') │     │  │  (system, webhook, direct API)   │  │  │
 │  │  │                          │     │  │                                   │  │  │
-│  │  │  5. assembleContext()    │     │  │  • Return result to caller       │  │  │
+│  │  │  4. assembleContext()    │     │  │  • Return result to caller       │  │  │
 │  │  │     • Conversation       │     │  │  • No agent execution            │  │  │
 │  │  │       history            │     │  │  • Automations may have already  │  │  │
 │  │  │     • Memory context     │     │  │    handled via hookpoints        │  │  │
@@ -206,7 +196,7 @@ When an automation returns `'handled'`, the pipeline skips to `finalize()` with 
 │  │  │     [hookpoint:          │     │                                         │  │
 │  │  │      afterAssemble]      │     │                                         │  │
 │  │  │                          │     │                                         │  │
-│  │  │  6. runAgent()           │     │                                         │  │
+│  │  │  5. runAgent()           │     │                                         │  │
 │  │  │     • Execute agent      │     │                                         │  │
 │  │  │     • Streaming: tokens  │     │                                         │  │
 │  │  │       flow to adapter    │     │                                         │  │
@@ -303,8 +293,7 @@ The `NexusRequest` is created at `receiveEvent()` and populated through each sta
 |-------|------------------|
 | **Universal** | |
 | `receiveEvent()` | `request_id`, `created_at`, `event`, `delivery` |
-| `resolveIdentity()` | `sender` (type, entity_id, display_name, is_user) |
-| `resolveReceiver()` | `receiver` (type, entity_id, agent_id, persona_ref, name, source) |
+| `resolvePrincipals()` | `sender` (type, entity_id, display_name, is_user) and `receiver` (type, entity_id, agent_id, persona_ref, name, source) |
 | `resolveAccess()` | `access` (decision, permissions, routing: agent_id, persona_ref, session_label, queue_mode) |
 | **Agent Path** (conditional) | |
 | `assembleContext()` | `agent` (turn_id, session_label, model, provider, token_budget, role, agent_id, persona_ref) |
@@ -326,7 +315,7 @@ See `NEXUS_REQUEST.md` for the complete typed schema.
 The universal stages run sequentially, then execution branches:
 
 ```
-receiveEvent → resolveIdentity → resolveReceiver → resolveAccess
+receiveEvent → resolvePrincipals → resolveAccess
     ├── [agent path] → assembleContext → runAgent (→ deliverResponse as tool)
     └── [api path]   → handle directly
     └── finalize (always)
@@ -344,10 +333,9 @@ async function pipeline(event: NexusEvent): Promise<NexusRequest> {
   asyncWrite(ledgers.events, req.event);     // Fire and forget
 
   // --- Universal stages ---
-  await resolveIdentity(req);
+  await resolvePrincipals(req); // resolves sender + receiver
   asyncWrite(ledgers.nexus, req);            // Checkpoint
 
-  await resolveReceiver(req);
   await resolveAccess(req);
 
   if (req.access.decision === 'deny') {
@@ -476,14 +464,13 @@ interface NEXPlugin {
   priority?: number;  // Lower runs first (default: 100)
 
   // Before-stage hooks (can short-circuit)
-  beforeResolveIdentity?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+  beforeResolvePrincipals?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
   beforeResolveAccess?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
   beforeAssembleContext?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
 
   // After-stage hooks (can observe, enrich, or short-circuit)
   afterReceiveEvent?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
-  afterResolveIdentity?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
-  afterResolveReceiver?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
+  afterResolvePrincipals?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
   afterResolveAccess?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
   afterAssembleContext?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;
   afterRunAgent?(req: NexusRequest): Promise<void | 'skip' | 'handled'>;

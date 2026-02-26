@@ -74,7 +74,7 @@ describe("telegram adapter contract smoke", () => {
     const stderr = createCaptureStream();
 
     const code = await runAdapter(telegramAdapter, {
-      argv: ["node", "adapter", "info"],
+      argv: ["node", "adapter", "adapter.info"],
       stdout: stdout.stream,
       stderr: stderr.stream,
       patchConsole: false,
@@ -91,8 +91,8 @@ describe("telegram adapter contract smoke", () => {
     expect(line).toBeTruthy();
     const parsed = JSON.parse(line ?? "{}");
     expect(parsed.platform).toBe("telegram");
-    expect(parsed.supports).toContain("monitor");
-    expect(parsed.supports).toContain("send");
+    expect(parsed.operations).toContain("adapter.monitor.start");
+    expect(parsed.operations).toContain("delivery.send");
     expect(parsed.platform_capabilities.supports_threads).toBe(true);
   });
 
@@ -126,7 +126,7 @@ describe("telegram adapter contract smoke", () => {
         argv: [
           "node",
           "adapter",
-          "send",
+          "delivery.send",
           "--account",
           "default",
           "--to",

@@ -15,8 +15,8 @@ Lock the concrete build plan for two decisions:
 
 This plan is the execution bridge from current runtime shape to one uniform model:
 
-- control-plane = authenticated admin/control runtime surface
-- ingress = adapter-managed event ingress to `NexusEvent -> nex.processEvent(...)`
+- control-plane listener = authenticated admin/control runtime operations
+- ingress listener = adapter-managed event ingress to `NexusEvent -> nex.processEvent(...)`
 - IAM/ACL = single authorization system across both
 
 Implementation snapshot (2026-02-19):
@@ -28,7 +28,7 @@ Implementation snapshot (2026-02-19):
 - `/api/ingress/webchat/session` moved into the `http-ingress` adapter (`webchat-session` submodule), removing direct handling from `server-http.ts`.
 - Hook HTTP parsing/auth/mapping handler moved out of `server-http.ts` into dedicated `hooks-http.ts` ingress module; `server-http.ts` now delegates through `http-ingress` adapter.
 - OpenAI/OpenResponses/webchat/hooks handler modules are now physically namespaced under `src/nex/control-plane/http-ingress/*` (ownership no longer mixed with generic control-plane modules).
-- Back-compat control-plane fallback for ingress bridges removed: control-plane no longer serves ingress HTTP routes when ingress surface handling is disabled.
+- Back-compat control-plane fallback for ingress bridges removed: control-plane no longer serves ingress HTTP routes when ingress listener handling is disabled.
 - Startup guard added: runtime now fails fast if ingress bridges are enabled while `runtime.ingress.enabled` is false.
 
 ---
@@ -98,9 +98,9 @@ Ingress bridges (OpenAI/OpenResponses/webhooks/webchat) should be managed like a
 ## Target Runtime Shape
 
 1. One daemon process.
-2. Two surface roles:
-   - **control-plane surface:** protocol/control/event methods for UI/CLI/admin
-   - **ingress surface:** adapter-owned external event ingress (`http-ingress`, channels)
+2. Two listener trust zones (same operation registry + same `NexusAdapter` interface):
+   - **control-plane listener:** protocol/control/event operations for UI/CLI/admin
+   - **ingress listener:** adapter-owned external event ingress (`http-ingress`, channels)
 3. Physical listener topology is configurable (one or more listeners); semantics are defined by operation kind.
 4. One IAM system for both:
    - control operations: direct authorize
@@ -162,7 +162,7 @@ Progress:
 - `webchat-session` cut over.
 - OpenAI/OpenResponses/hooks route handling is delegated through `http-ingress` modules.
 - Ingress bridge handlers are now organized under `control-plane/http-ingress/` (`openai-http.ts`, `openresponses-http.ts`, `webchat-session-http.ts`, `hooks-http.ts`), with adapter imports/tests updated.
-- Control-plane surface no longer serves ingress bridge routes; ingress bridge endpoints are owned by the ingress surface.
+- Control-plane listener no longer serves ingress bridge routes; ingress bridge endpoints are owned by the ingress listener.
 - Runtime now fails fast when ingress bridges are enabled while `runtime.ingress.enabled` is false.
 - E2E guard coverage added in `src/nex/control-plane/server.ingress-cutover.e2e.test.ts`.
 

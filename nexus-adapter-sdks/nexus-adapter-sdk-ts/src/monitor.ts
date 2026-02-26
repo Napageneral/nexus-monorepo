@@ -16,7 +16,7 @@ export type PollConfig = {
   maxConsecutiveErrors?: number;
 };
 
-export type MonitorHandler = NonNullable<AdapterDefinition["monitor"]>;
+export type MonitorHandler = NonNullable<AdapterDefinition["operations"]["adapter.monitor.start"]>;
 
 export function pollMonitor(config: PollConfig): MonitorHandler {
   return async (ctx: AdapterContext, args: { account: string }, emit: EmitFunc) => {

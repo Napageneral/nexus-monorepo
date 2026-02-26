@@ -6,7 +6,12 @@ export {
   requireAdapterRuntimeContext,
 } from "./runtime-context.js";
 
-export type { AdapterContext, AdapterDefinition, RunAdapterOptions } from "./run.js";
+export type {
+  AdapterContext,
+  AdapterDefinition,
+  AdapterSetupRequest,
+  RunAdapterOptions,
+} from "./run.js";
 export { runAdapter } from "./run.js";
 
 // Legacy export name (older prototype of this package).
@@ -14,7 +19,16 @@ export { runAdapter as runAdapterCLI } from "./run.js";
 
 export {
   AdapterAccountSchema,
-  AdapterCapabilitySchema,
+  AdapterAuthFieldSchema,
+  AdapterAuthManifestSchema,
+  AdapterAuthMethodApiKeySchema,
+  AdapterAuthMethodCustomFlowSchema,
+  AdapterAuthMethodFileUploadSchema,
+  AdapterAuthMethodOAuthSchema,
+  AdapterAuthMethodSchema,
+  AdapterOperationSchema,
+  AdapterSetupResultSchema,
+  AdapterSetupStatusSchema,
   AdapterHealthSchema,
   AdapterInfoSchema,
   AdapterStreamStatusSchema,
@@ -34,7 +48,16 @@ export {
 
 export type {
   AdapterAccount,
-  AdapterCapability,
+  AdapterAuthField,
+  AdapterAuthManifest,
+  AdapterAuthMethod,
+  AdapterAuthMethodApiKey,
+  AdapterAuthMethodCustomFlow,
+  AdapterAuthMethodFileUpload,
+  AdapterAuthMethodOAuth,
+  AdapterOperation,
+  AdapterSetupResult,
+  AdapterSetupStatus,
   AdapterHealth,
   AdapterInfo,
   AdapterStreamStatus,

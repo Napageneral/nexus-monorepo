@@ -3,7 +3,7 @@
 **Status:** DESIGN (authoritative)  
 **Date:** 2026-02-25  
 **Mode:** Hard cutover (no backwards compatibility)  
-**Related:** `NEX.md`, `NEXUS_REQUEST.md`, `RUNTIME_SURFACES.md`, `SURFACE_ADAPTER_V2.md`, `ingress/CONTROL_PLANE_AUTHZ_TAXONOMY.md`, `../delivery/ADAPTER_SYSTEM.md`
+**Related:** `ADAPTER_INTERFACE_UNIFICATION.md`, `NEX.md`, `NEXUS_REQUEST.md`, `RUNTIME_SURFACES.md`, `SURFACE_ADAPTER_V2.md`, `ingress/CONTROL_PLANE_AUTHZ_TAXONOMY.md`, `../delivery/ADAPTER_SYSTEM.md`
 
 ---
 
@@ -77,9 +77,15 @@ No special "finalize-only-at-end" semantics.
 
 1. Merge `chat.send` and `agent` ingress intent under one canonical operation path (`event.ingest`).
 2. Remove node-specific operation family for now (including `node.*`, `node.event`, `node.invoke.result`, `skills.bins`).
-3. Remove HTTP control-plane operation duplicates; WS/RPC is canonical control operation transport.
+3. Remove legacy `cron.*` and `wake`; replace with `clock.schedule.*` operations.
 4. Rename `ingress.credentials.*` to `auth.tokens.ingress.*`.
 5. Remove special-case webhook endpoints `/wake` and `/agent`; mapped webhook routes are canonical.
+
+### 3.7 One adapter interface + one SDK
+
+1. Do not encode dual adapter roles in canonical architecture.
+2. All runtime surfaces/channels use one adapter interface and one operation set.
+3. External CLI adapter commands are a transport bridge, not a separate conceptual API.
 
 ---
 
@@ -183,6 +189,10 @@ Canonical internal chain:
 
 The runtime owns a single `OperationRegistry`.
 
+Implementation source of truth:
+
+1. `nex/src/nex/control-plane/runtime-operations.ts`
+
 Each operation definition includes:
 
 1. `operation` id (string, stable)
@@ -205,6 +215,13 @@ type OperationDefinition = {
 };
 ```
 
+Surface defaulting rule:
+
+1. `protocol` + `control` + `event` operations default to `ws.control` only.
+2. `http.control` mounts must be explicit in the operation descriptor.
+3. `http.ingress` mounts must be explicit in the operation descriptor.
+4. Operations mounted by static HTTP routes (`http-control-routes.ts`) must explicitly include `http.control` in their descriptor surfaces.
+
 ### 6.1 Core operation families (v1)
 
 1. `auth.*`  
@@ -221,6 +238,8 @@ type OperationDefinition = {
 7. `event.ingest`  
    Canonical event ingress operation for user/channel/webhook/openai/openresponses/webchat/clock/system ingress.
 8. `event.backfill` (when enabled by adapter/system policy).
+9. Adapter capability operations: `adapter.info`, `adapter.health`, `adapter.accounts.list`, `adapter.monitor.start|stop`, `delivery.send|stream|react|edit|delete|poll`.
+10. Clock scheduling operations: `clock.schedule.list|status|create|update|remove|run|runs|wake`.
 
 ### 6.2 Hard cutover mapping (required)
 
@@ -229,46 +248,71 @@ type OperationDefinition = {
 3. `system-event` -> `event.ingest`
 4. `ingress.credentials.*` -> `auth.tokens.ingress.*`
 5. Remove `node.*`, `node.event`, `node.invoke.result`, `skills.bins` from active registry.
+6. `wake` -> `clock.schedule.wake`
+7. `cron.list` -> `clock.schedule.list`
+8. `cron.status` -> `clock.schedule.status`
+9. `cron.add` -> `clock.schedule.create`
+10. `cron.update` -> `clock.schedule.update`
+11. `cron.remove` -> `clock.schedule.remove`
+12. `cron.run` -> `clock.schedule.run`
+13. `cron.runs` -> `clock.schedule.runs`
+14. Remove internal pseudo-method dispatch ids (`_internal.event.ingest.chat|agent|system`); `event.ingest` delegates directly to internal handler functions.
 
 ---
 
-## 7. Surface and Adapter Model
+## 7. Single Adapter Model
 
-### 7.1 Canonical internal surfaces
+### 7.1 Canonical interface
 
-1. `control.ws` (internal control surface adapter)
-   - Canonical control/runtime operation ingress.
-   - Also supports `event.ingest` calls initiated from interactive chat clients.
-2. `ingress.http` (internal event ingress adapter)
-   - OpenAI/OpenResponses/webhooks/webchat ingress modules.
-   - Emits `event.ingest`.
-3. `ingress.clock` (internal event ingress adapter)
-   - Emits scheduled/tick `event.ingest`.
+All adapters implement one interface shape:
 
-### 7.2 External adapters
+1. `operations()`
+2. `operationFor()`
+3. `handle()`
+
+Operation execution mode (`protocol|sync|event`) is operation metadata, not adapter-role metadata.
+
+### 7.2 Canonical internal adapters
+
+1. `control.ws` (WS/RPC runtime adapter)
+2. `control.http` (HTTP runtime adapter for mounted control operations)
+3. `ingress.http` (HTTP ingress adapter modules mapped to runtime operations)
+4. `clock` (timer + schedule adapter mapped to `event.ingest` and `clock.schedule.*`)
+
+### 7.3 External adapters
 
 External adapters emit runtime operations through the same operation contract (primarily `event.ingest` / `event.backfill`) and consume outbound send/stream APIs.
 
-### 7.3 Listener topology
+### 7.4 Listener topology
 
 Two listeners are allowed for trust-boundary isolation:
 
 1. Control listener (operator/runtime control traffic).
 2. Ingress listener (external event ingress traffic).
 
-Both listeners feed the same operation dispatcher and IAM model.
+Both listeners feed the same operation dispatcher, IAM model, and audit lifecycle.
 
 ---
 
 ## 8. HTTP Routing Cutover Rules
 
-1. Remove HTTP control operation duplication; operation management lives on WS/RPC control surface.
+1. Remove bespoke HTTP handler bypasses; HTTP mounts operations through the same adapter interface contract.
 2. Keep HTTP on control listener only for:
    - UI/static app serving
    - auth callback/protocol plumbing
    - operational liveness endpoints as needed
-3. Ingress HTTP routes are adapter-owned and map to `event.ingest`.
+3. Ingress HTTP routes are adapter-owned and map to runtime operations (`event.ingest` and future ingress operations).
 4. Webhook mappings are canonical ingress pathing; remove fixed `/wake` and `/agent` behavior.
+5. Static HTTP control routes are centralized in one route table (`nex/src/nex/control-plane/http-control-routes.ts`) so operation mount points are not duplicated in `server-http.ts`.
+6. Static route table entries must map to canonical runtime operations and taxonomy kinds.
+7. Static HTTP control operation handlers are owned by a dedicated registry module (not inline in HTTP server bootstrap), and are wired by canonical operation id.
+8. Browser/canvas and app-open HTTP control handlers (`browser.request`, `apps.open.*`) are also owned by dedicated registry extensions, not inline transport bootstrap code.
+9. HTTP request path/method to operation mapping is resolved in a dedicated resolver module, not ad hoc branching in transport bootstrap.
+10. HTTP operation resolver enforces `http.control` surface declaration before returning an operation mount.
+11. HTTP control operation dispatch (kind-check + adapter invocation) is centralized in a dedicated dispatcher module, not duplicated inline per request.
+12. HTTP ingress operation dispatch (`event.ingest`) is centralized in a dedicated dispatcher module.
+13. Every explicit `http.control` mount must be reachable by a known resolver family (static route table or approved dynamic control handler).
+14. HTTP ingress dispatcher family operation ids are defined once in `runtime-operations.ts` (`HTTP_INGRESS_OPERATION_IDS`) and consumed by both ingress adapter and ingress dispatcher modules.
 
 ---
 
@@ -325,6 +369,16 @@ Initial trust posture:
 5. Chat test: interactive chat path also resolves through `event.ingest`.
 6. Audit test: started/outcome records for allow/deny/fail are emitted for all operations.
 7. RunAgent path test: receiver-agent and automation-triggered agent invocation both work via unified operation flow.
+8. Clock cutover test: `clock.schedule.*` passes lifecycle coverage (create/list/update/run/remove/runs/status/wake).
+9. Legacy cutover test: `cron.*` and `wake` are unsupported.
+10. Adapter operation conformance test:
+   1. External adapter operation ids are defined once in `nex/src/nex/control-plane/runtime-operations.ts` as `EXTERNAL_ADAPTER_OPERATION_IDS`.
+   2. Adapter process protocol schema in `nex/src/nex/adapters/protocol.ts` references that constant directly.
+   3. Tests assert zero drift between schema enum options and canonical ids.
+11. HTTP control route conformance tests:
+   1. Static route table entries are unique by `method + pathname`.
+   2. Every static route operation resolves in control-plane taxonomy with expected kind.
+   3. Runtime operations missing from WS/core handler registry must equal the explicit static HTTP control operation set.
 
 ---
 
@@ -332,9 +386,10 @@ Initial trust posture:
 
 Bundled by default:
 
-1. `control.ws` — runtime operation control surface (WS/RPC)
-2. `ingress.http` — event ingress adapter (webhooks, OpenAI compat, OpenResponses compat, webchat ingress)
-3. `ingress.clock` — timer/tick ingress adapter
+1. `control.ws` — runtime operation adapter (WS/RPC)
+2. `control.http` — runtime operation adapter (HTTP-mounted control operations)
+3. `ingress.http` — ingress adapter (webhooks, OpenAI compat, OpenResponses compat, webchat ingress)
+4. `clock` — timer + schedule adapter
 
 External (managed by adapter runtime):
 

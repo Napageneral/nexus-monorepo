@@ -21,32 +21,34 @@ describe("runAdapter", () => {
 
     const code = await runAdapter(
       {
-        info: () => ({
-          platform: "test",
-          name: "test-adapter",
-          version: "0.0.0",
-          supports: ["monitor"],
-          multi_account: false,
-          platform_capabilities: {
-            text_limit: 1,
-            supports_markdown: false,
-            supports_tables: false,
-            supports_code_blocks: false,
-            supports_embeds: false,
-            supports_threads: false,
-            supports_reactions: false,
-            supports_polls: false,
-            supports_buttons: false,
-            supports_edit: false,
-            supports_delete: false,
-            supports_media: false,
-            supports_voice_notes: false,
-            supports_streaming_edit: false,
-          },
-        }),
+        operations: {
+          "adapter.info": () => ({
+            platform: "test",
+            name: "test-adapter",
+            version: "0.0.0",
+            operations: ["adapter.info"],
+            multi_account: false,
+            platform_capabilities: {
+              text_limit: 1,
+              supports_markdown: false,
+              supports_tables: false,
+              supports_code_blocks: false,
+              supports_embeds: false,
+              supports_threads: false,
+              supports_reactions: false,
+              supports_polls: false,
+              supports_buttons: false,
+              supports_edit: false,
+              supports_delete: false,
+              supports_media: false,
+              supports_voice_notes: false,
+              supports_streaming_edit: false,
+            },
+          }),
+        },
       },
       {
-        argv: ["node", "adapter", "info"],
+        argv: ["node", "adapter", "adapter.info"],
         stdout: stdout.stream,
         stderr: stderr.stream,
         patchConsole: false,
@@ -68,35 +70,47 @@ describe("runAdapter", () => {
 
     const code = await runAdapter(
       {
-        info: () => ({
-          platform: "test",
-          name: "test-adapter",
-          version: "0.0.0",
-          supports: ["send"],
-          multi_account: false,
-          platform_capabilities: {
-            text_limit: 2000,
-            supports_markdown: false,
-            supports_tables: false,
-            supports_code_blocks: false,
-            supports_embeds: false,
-            supports_threads: false,
-            supports_reactions: false,
-            supports_polls: false,
-            supports_buttons: false,
-            supports_edit: false,
-            supports_delete: false,
-            supports_media: false,
-            supports_voice_notes: false,
-            supports_streaming_edit: false,
+        operations: {
+          "adapter.info": () => ({
+            platform: "test",
+            name: "test-adapter",
+            version: "0.0.0",
+            operations: ["adapter.info", "delivery.send"],
+            multi_account: false,
+            platform_capabilities: {
+              text_limit: 2000,
+              supports_markdown: false,
+              supports_tables: false,
+              supports_code_blocks: false,
+              supports_embeds: false,
+              supports_threads: false,
+              supports_reactions: false,
+              supports_polls: false,
+              supports_buttons: false,
+              supports_edit: false,
+              supports_delete: false,
+              supports_media: false,
+              supports_voice_notes: false,
+              supports_streaming_edit: false,
+            },
+          }),
+          "delivery.send": async () => {
+            throw new Error("boom");
           },
-        }),
-        send: async () => {
-          throw new Error("boom");
         },
       },
       {
-        argv: ["node", "adapter", "send", "--account", "default", "--to", "channel:1", "--text", "hi"],
+        argv: [
+          "node",
+          "adapter",
+          "delivery.send",
+          "--account",
+          "default",
+          "--to",
+          "channel:1",
+          "--text",
+          "hi",
+        ],
         stdout: stdout.stream,
         stderr: stderr.stream,
         requireRuntimeContext: false,
@@ -120,33 +134,43 @@ describe("runAdapter", () => {
 
     const code = await runAdapter(
       {
-        info: () => ({
-          platform: "test",
-          name: "test-adapter",
-          version: "0.0.0",
-          supports: ["monitor"],
-          multi_account: false,
-          platform_capabilities: {
-            text_limit: 1,
-            supports_markdown: false,
-            supports_tables: false,
-            supports_code_blocks: false,
-            supports_embeds: false,
-            supports_threads: false,
-            supports_reactions: false,
-            supports_polls: false,
-            supports_buttons: false,
-            supports_edit: false,
-            supports_delete: false,
-            supports_media: false,
-            supports_voice_notes: false,
-            supports_streaming_edit: false,
-          },
-        }),
-        monitor: async () => {},
+        operations: {
+          "adapter.info": () => ({
+            platform: "test",
+            name: "test-adapter",
+            version: "0.0.0",
+            operations: ["adapter.info", "adapter.monitor.start"],
+            multi_account: false,
+            platform_capabilities: {
+              text_limit: 1,
+              supports_markdown: false,
+              supports_tables: false,
+              supports_code_blocks: false,
+              supports_embeds: false,
+              supports_threads: false,
+              supports_reactions: false,
+              supports_polls: false,
+              supports_buttons: false,
+              supports_edit: false,
+              supports_delete: false,
+              supports_media: false,
+              supports_voice_notes: false,
+              supports_streaming_edit: false,
+            },
+          }),
+          "adapter.monitor.start": async () => {},
+        },
       },
       {
-        argv: ["node", "adapter", "monitor", "--account", "default", "--format", "jsonl"],
+        argv: [
+          "node",
+          "adapter",
+          "adapter.monitor.start",
+          "--account",
+          "default",
+          "--format",
+          "jsonl",
+        ],
         stdout: stdout.stream,
         stderr: stderr.stream,
         patchConsole: false,
@@ -158,5 +182,71 @@ describe("runAdapter", () => {
     expect(code).toBe(1);
     expect(stdout.read()).toBe("");
     expect(stderr.read()).toContain("Missing adapter runtime context");
+  });
+
+  it("custom setup start accepts payload JSON without runtime context", async () => {
+    const stdout = captureStream();
+    const stderr = captureStream();
+
+    const code = await runAdapter(
+      {
+        operations: {
+          "adapter.info": () => ({
+            platform: "test",
+            name: "test-adapter",
+            version: "0.0.0",
+            operations: ["adapter.info", "adapter.setup.start"],
+            multi_account: false,
+            platform_capabilities: {
+              text_limit: 1,
+              supports_markdown: false,
+              supports_tables: false,
+              supports_code_blocks: false,
+              supports_embeds: false,
+              supports_threads: false,
+              supports_reactions: false,
+              supports_polls: false,
+              supports_buttons: false,
+              supports_edit: false,
+              supports_delete: false,
+              supports_media: false,
+              supports_voice_notes: false,
+              supports_streaming_edit: false,
+            },
+          }),
+          "adapter.setup.start": async (_ctx, req) => ({
+            status: "pending",
+            session_id: req.session_id ?? "setup-1",
+            account: req.account ?? "default",
+            service: "test",
+            message: "ok",
+          }),
+        },
+      },
+      {
+        argv: [
+          "node",
+          "adapter",
+          "adapter.setup.start",
+          "--session-id",
+          "setup-1",
+          "--payload-json",
+          "{\"confirm\":\"yes\"}",
+        ],
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+        patchConsole: false,
+        installSignalHandlers: false,
+        env: {},
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(stderr.read()).toBe("");
+    expect(JSON.parse(stdout.read().trim())).toMatchObject({
+      status: "pending",
+      session_id: "setup-1",
+      service: "test",
+    });
   });
 });

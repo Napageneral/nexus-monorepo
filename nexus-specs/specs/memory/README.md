@@ -185,6 +185,7 @@ interface IdentityEnrichment {
 - `skills/MEMORY_INJECTION.md` — Memory injection into agent context
 - `RETAIN_PIPELINE.md` — Retain pipeline (events to facts)
 - `UNIFIED_ENTITY_STORE.md` — Entity store (lives in identity.db)
+- `workplans/MEMORY_V2_REVIEW_UI_DASHBOARD_SPEC.md` — Operator memory review UI spec (runs, episodes, outputs, provenance)
 - `../../runtime/broker/MEESEEKS_PATTERN.md` — Disposable role fork pattern
 - `../ledgers/` — System of Record (source data)
 - `../../runtime/nex/NEXUS_REQUEST.md` — Pipeline lifecycle

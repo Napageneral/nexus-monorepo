@@ -45,21 +45,23 @@ type PollConfig struct {
 // Example:
 //
 //	adapter := nexadapter.Adapter{
-//	    Monitor: nexadapter.PollMonitor(nexadapter.PollConfig{
-//	        Interval: 10 * time.Second,
-//	        Fetch: func(ctx context.Context, since time.Time) ([]NexusEvent, time.Time, error) {
-//	            rows := queryMessagesAfter(since)
-//	            var events []NexusEvent
-//	            var latest time.Time
-//	            for _, row := range rows {
-//	                events = append(events, convertToEvent(row))
-//	                if row.Date.After(latest) {
-//	                    latest = row.Date
+//	    Operations: nexadapter.AdapterOperations{
+//	        AdapterMonitorStart: nexadapter.PollMonitor(nexadapter.PollConfig{
+//	            Interval: 10 * time.Second,
+//	            Fetch: func(ctx context.Context, since time.Time) ([]NexusEvent, time.Time, error) {
+//	                rows := queryMessagesAfter(since)
+//	                var events []NexusEvent
+//	                var latest time.Time
+//	                for _, row := range rows {
+//	                    events = append(events, convertToEvent(row))
+//	                    if row.Date.After(latest) {
+//	                        latest = row.Date
+//	                    }
 //	                }
-//	            }
-//	            return events, latest, nil
-//	        },
-//	    }),
+//	                return events, latest, nil
+//	            },
+//	        }),
+//	    },
 //	}
 func PollMonitor(config PollConfig) func(ctx context.Context, account string, emit EmitFunc) error {
 	return func(ctx context.Context, account string, emit EmitFunc) error {

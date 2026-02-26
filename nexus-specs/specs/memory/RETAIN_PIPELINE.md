@@ -43,7 +43,7 @@ Episode Boundary Detection
     v
 Episode Assembled
   - All events from one thread/channel conversation window
-  - Formatted as sequence of NexusEvents with full metadata
+  - Formatted as writer payload contract (thread + participants + ordered events)
   - Target: 4-8K tokens per episode
     |
     v
@@ -235,38 +235,59 @@ Token estimation: `tokens ≈ chars / 4` (rough but sufficient for grouping).
 
 ### Episode Representation
 
-Each episode is formatted as a sequence of NexusEvents with full metadata, identical to how the live path formats events. This ensures the writer meeseeks sees the same input format regardless of whether the episode comes from live or backfill.
+Each episode is formatted as the writer payload contract (thread + participants + ordered events). This ensures live and backfill deliver identical extraction context with minimal metadata noise.
+
+```json
+{
+  "platform": "imessage",
+  "thread": {
+    "thread_id": "imessage:+15551234567",
+    "thread_name": "Mom",
+    "container_type": "direct"
+  },
+  "participants": [
+    {
+      "participant_id": "owner",
+      "display_name": "Tyler Brandt",
+      "is_owner": true,
+      "identity_type": "owner"
+    },
+    {
+      "participant_id": "+15551234567",
+      "display_name": "Mom",
+      "is_owner": false,
+      "identity_type": "phone"
+    }
+  ],
+  "events": [
+    {
+      "event_id": "evt_01HXY...",
+      "sender_id": "+15551234567",
+      "datetime_local": "Mon, Feb 23, 2026, 09:03:25 PM CST",
+      "content": { "type": "text", "value": "Hey are you coming to dinner tonight?" },
+      "reply_to_event_id": null,
+      "attachments": []
+    }
+  ]
+}
+```
+
+Writer extraction contract:
+- Facts/entities come from `events[].content` + `events[].attachments`.
+- Metadata identifiers (`thread_id`, participant IDs, platform IDs) are context/disambiguation only.
+
+For pipeline bookkeeping, runtime retains internal fields (episode_id, event_count, token_estimate, time_range) outside the writer-facing payload.
 
 ```json
 {
   "episode_id": "ep_01HXY...",
-  "platform": "imessage",
-  "thread_id": "+15551234567",
   "event_count": 23,
   "token_estimate": 5200,
   "time_range": {
     "start": 1708000000000,
     "end": 1708003600000
   },
-  "events": [
-    {
-      "event_id": "evt_01HXY...",
-      "timestamp": 1708000000000,
-      "content": "Hey are you coming to dinner tonight?",
-      "content_type": "text",
-      "direction": "inbound",
-      "delivery": {
-        "platform": "imessage",
-        "sender_id": "+15551234567",
-        "sender_name": "Mom",
-        "container_id": "+15551234567",
-        "container_kind": "direct",
-        "thread_id": "+15551234567"
-      },
-      "metadata": { ... }
-    },
-    ...
-  ]
+  "...": "internal scheduling/progress fields"
 }
 ```
 
@@ -422,7 +443,7 @@ The memory-writer meeseeks is scoped to **fact extraction, entity identification
 - `link_fact_entity` — link facts to entities
 - `propose_merge` — merge entities (with propagateMergeToSessions)
 
-**Input:** A complete episode — an array of NexusEvents in chronological order, with full delivery metadata per event. The writer prompt is framed as: "You are processing a conversation episode containing N messages from [platform] in [thread]. Extract durable knowledge from this conversation."
+**Input:** A complete episode payload contract (thread + participants + ordered events with content/attachments). The writer prompt is framed as: "You are processing a conversation episode containing N messages from [platform] in [thread]. Extract durable knowledge from this conversation."
 
 **Output:** Facts, entities, fact-entity links written to memory.db / identity.db.
 
@@ -432,6 +453,7 @@ The writer's task prompt shifts from "you received a raw event" to "you are proc
 - "Read the entire conversation before extracting facts — context from later messages may reframe earlier ones."
 - "Extract facts from the conversation as a whole, not per-message. A single exchange often produces one consolidated fact rather than N facts for N messages."
 - "If the conversation has no durable knowledge worth extracting, return zero facts. Not every conversation needs to produce facts."
+- "Extract only from message content + attachments; do not extract facts/entities from metadata identifiers."
 - For oversized episodes that were split at the token budget: "This is part of a longer conversation. Earlier context may have been processed in a prior episode."
 
 ### Episode-Level Retain Flow
@@ -454,12 +476,15 @@ Writer extracts facts from the ENTIRE episode at once
     v
 For each fact:
   - Dedup check: recall(fact_text, scope=['facts'], budget='low')
+  - Sparse-thread context (when needed): recall(..., thread_id, thread_lookback_events)
   - Entity identification: identify entities in the fact
   - Entity resolution: recall(entity_name, scope=['entities'])
     - Match found → use existing entity_id
     - No match → create_entity()
     - Ambiguous → create new + propose_merge if confident
   - insert_fact() + link_fact_entity() for each entity
+    - Runtime assigns source_episode_id automatically for episode runs
+    - source_event_id is optional when fact maps to one event
     |
     v
 Writer completes
@@ -490,8 +515,8 @@ When someone mentions "Tyler" in conversation and context makes it clear they're
 - If truly ambiguous, create a new entity and note the ambiguity — consolidation or human cleanup can resolve later
 
 **Adapter-sourced entities:**
-When the writer sees a sender for the first time, the delivery pipeline has already created a sparse entity (just a platform handle). The writer MUST:
-- Search for existing entities matching the sender handle
+When the writer sees a sender for the first time, the delivery pipeline has already created/linked contact identity. The writer MUST:
+- Search for existing entities matching the sender person/contact linkage
 - Link facts to the existing adapter-sourced entity
 - Enrich it when real names are discovered (propose merge to create person entity)
 
@@ -536,8 +561,8 @@ These serve different purposes and remain separate:
 | | Observations | Mental Models |
 |---|---|---|
 | **Created by** | Consolidation pipeline (automatic) | Agents via reflect skill (intentional) |
-| **Trigger** | New facts arrive that cluster together | Agent or user actively researches a topic |
-| **Scope** | Narrow — one cluster of related facts | Broad — comprehensive report on a topic |
+| **Trigger** | New facts arrive for a retained episode | Agent or user actively researches a topic |
+| **Scope** | Narrow — one episode-level consolidation unit | Broad — comprehensive report on a topic |
 | **Intent** | None — system's autonomous understanding | Deliberate — someone decided this synthesis is worth persisting |
 | **Example** | "Tyler and Sarah frequently discuss engineering projects" | "Tyler's Career History: work history, current role, interests, trajectory" |
 | **Mutability** | Versioned — updated when new related facts arrive | Versioned — refreshed on demand or when marked stale |
@@ -546,36 +571,33 @@ Observations are the system reflecting on itself automatically. Mental models ar
 
 ### Episode-Batched Consolidation (RESOLVED)
 
-Instead of consolidating facts one at a time, consolidate all facts from a given episode together. This aligns with the retain pipeline — when a retain job completes and produces N facts, those N facts are sent to consolidation as a batch.
+Instead of consolidating one fact at a time, consolidation runs exactly once per retain episode. The episode is the consolidation unit (no internal topic sub-cluster loop in runtime logic).
 
-**Why episode-batched is better (confirmed during design review):**
-- Facts from the same episode are likely related (same conversation) → the LLM sees them together and produces **better observations** with more context per call
-- Reduces redundant work — 5 facts about the same topic in one episode get one consolidation pass instead of 5
-- Aligns the batch boundary with the retain boundary → simpler to reason about
-- Total LLM calls are similar or fewer, but each call has higher quality because it sees the full cluster of related facts from the conversation
-- Accuracy is **improved** over per-fact consolidation because the LLM can see how facts from the same conversation relate to each other and to existing observations in a single reasoning pass
+**Why this is the target behavior:**
+- Deterministic: one retain episode -> one consolidation invocation.
+- Reliable/idempotent: reruns key off `(analysis_type_id='observation_v1', episode_id)`.
+- Simpler ops and observability: one session + one hook invocation per episode.
+- No hidden in-process cluster fan-out that can duplicate or fragment outputs.
 
-**Consolidation flow per episode batch:**
+**Consolidation flow per retain episode:**
 
 ```
 New facts from episode arrive (retain completed)
     |
     v
-1. Batch recall: For each fact in the batch:
+1. Consolidator meeseeks invocation (one session for episode E):
+   - input: episode_id + fact_ids for episode E
+   - toolset: recall + observation create/update + insert_causal_link + propose_merge
+    |
+    v
+2. Episode-level recall pass:
    - recall(fact_text, scope=['facts', 'observations'], budget='mid')
    - Collect related facts and observations from across ALL memory
      (not just this episode — this is where cross-platform connections emerge)
-   - Recall is batched across the episode's facts for efficiency:
-     shared entities and topics get deduplicated recall calls
+   - Optionally include thread lookback context for sparse episodes
     |
     v
-2. Cluster the batch facts + their recall results by topic/entity overlap
-   - Facts about the same topic/entities get clustered together
-   - This is lightweight — semantic similarity + shared entity_ids
-   - Most episodes produce 1-3 clusters; single-topic conversations produce 1
-    |
-    v
-3. For each cluster — single LLM call with the consolidation prompt:
+3. Single consolidation reasoning pass over the full episode fact set:
 
    PROMPT STRUCTURE:
    "You are reviewing N NEW FACTS extracted from a recent conversation,
@@ -591,8 +613,7 @@ New facts from episode arrive (retain completed)
     [facts from other conversations that share entities/topics]
 
     Instructions:
-    - For each topic cluster, decide: create a NEW observation, UPDATE an existing one, or do nothing
-    - Create SEPARATE observations per topic — don't merge unrelated topics into one observation
+    - Decide: create a NEW observation, UPDATE an existing one, or do nothing
     - When updating, preserve the existing observation's scope and add the new information
     - Look for CAUSAL RELATIONSHIPS between facts (explicit: 'because', 'therefore', 'led to';
       implicit: clear temporal-logical chains)
@@ -617,11 +638,8 @@ New facts from episode arrive (retain completed)
    - This catches cross-platform entity connections that the writer couldn't see
     |
     v
-6. Commit per cluster (crash-recoverable)
+6. Commit episode consolidation run (crash-recoverable, idempotent on episode_id)
 ```
-
-**Consolidation for large episodes (>20 facts):**
-Start with episode-aligned batching. If an episode produces >20 facts, the clustering step (step 2) naturally sub-batches them by topic. Each cluster gets its own LLM call. This handles the large-episode case without needing a separate sub-batching mechanism.
 
 ### Causal Link Detection in Consolidation
 
@@ -871,8 +889,8 @@ The following questions were open during initial design and have been resolved:
 1. **Episode grouping mechanics (live path):** → Scheduled-event timer approach. See "Live Episode Boundary Detection — Scheduled Events" section.
 2. **Short-term memory implementation:** → `is_retained` flag on events table, not a separate table. See "Implementation — Flag on Events Table" section.
 3. **Filter storage and composition:** → SQL WHERE clauses in `memory_filters` table in runtime.db. Exclude beats include at same priority. See "Filter Storage (RESOLVED)" section.
-4. **Writer input format for episodes:** → Array of NexusEvents in chronological order. Prompt framed as "conversation episode containing N messages." See "Writer Meeseeks — Scoped to Extraction" section.
-5. **Consolidation batching prompt design:** → Episode-batched is better for accuracy. Multiple NEW FACTS per prompt. Separate observations per topic cluster. See "Episode-Batched Consolidation (RESOLVED)" section.
+4. **Writer input format for episodes:** → Contract payload (thread + participants + ordered events with content/attachments). Prompt framed as "conversation episode containing N messages." See "Writer Meeseeks — Scoped to Extraction" section.
+5. **Consolidation invocation semantics:** → One consolidation agent call per retained episode. Episode is the consolidation unit (no runtime sub-cluster loop). See "Episode-Batched Consolidation (RESOLVED)" section.
 
 ## Remaining Open Questions
 

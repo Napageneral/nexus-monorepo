@@ -16,6 +16,9 @@ const AdapterRuntimeCredentialSchemaV2 = z
     // Spec shape.
     kind: z.string(),
     value: z.string(),
+    fields: z.record(z.string(), z.string()).optional(),
+    auth_id: z.string().optional(),
+    type: z.string().optional(),
   })
   .catchall(z.unknown());
 
@@ -30,12 +33,19 @@ const AdapterRuntimeContextFileSchema = z
   .catchall(z.unknown());
 
 export type AdapterRuntimeCredential =
-  | (z.infer<typeof AdapterRuntimeCredentialSchemaV2> & {
-      ref?: string;
-      service?: string;
-      account?: string;
-    })
-  | (z.infer<typeof AdapterRuntimeCredentialSchemaV1> & { kind: string });
+  // Canonical runtime fields.
+  {
+    kind: string;
+    value: string;
+    // Optional expanded fields injected by runtime for multi-field credentials.
+    fields?: Record<string, string>;
+    // Optional credential identity details for adapter introspection.
+    ref?: string;
+    service?: string;
+    account?: string;
+    auth_id?: string;
+    type?: string;
+  };
 
 export type AdapterRuntimeContext = {
   platform: string;
@@ -53,11 +63,33 @@ function normalizeCredential(cred: unknown): AdapterRuntimeCredential | undefine
 
   const v2 = AdapterRuntimeCredentialSchemaV2.safeParse(cred);
   if (v2.success) {
-    const rec = v2.data as { kind: string; value: string; [k: string]: unknown };
+    const rec = v2.data as {
+      kind: string;
+      value: string;
+      fields?: Record<string, string>;
+      auth_id?: string;
+      type?: string;
+      [k: string]: unknown;
+    };
     const ref = typeof rec.ref === "string" ? rec.ref : undefined;
     const service = typeof rec.service === "string" ? rec.service : undefined;
     const account = typeof rec.account === "string" ? rec.account : undefined;
-    return { kind: rec.kind, value: rec.value, ...(ref ? { ref } : {}), ...(service ? { service } : {}), ...(account ? { account } : {}) };
+    const fields =
+      rec.fields && typeof rec.fields === "object" && !Array.isArray(rec.fields)
+        ? rec.fields
+        : undefined;
+    const authID = typeof rec.auth_id === "string" ? rec.auth_id : undefined;
+    const type = typeof rec.type === "string" ? rec.type : undefined;
+    return {
+      kind: rec.kind,
+      value: rec.value,
+      ...(fields ? { fields } : {}),
+      ...(ref ? { ref } : {}),
+      ...(service ? { service } : {}),
+      ...(account ? { account } : {}),
+      ...(authID ? { auth_id: authID } : {}),
+      ...(type ? { type } : {}),
+    };
   }
 
   const v1 = AdapterRuntimeCredentialSchemaV1.safeParse(cred);

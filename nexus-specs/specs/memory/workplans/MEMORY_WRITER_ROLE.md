@@ -51,6 +51,7 @@ Ask: "Would this be useful to recall in 6 months?" If no, skip it.
 - Important context: projects, problems, constraints, decisions
 - Sensory and emotional details that characterize an experience or person
 - Identity information: phone numbers, emails, handles, addresses
+- Information present in attachments (images/files/links) when it contributes durable context
 
 ## What NOT to Extract
 
@@ -60,6 +61,7 @@ Ask: "Would this be useful to recall in 6 months?" If no, skip it.
 - Information already captured in a previous fact (dedup first)
 - Ephemeral state: current location, what someone is doing right now
 - The literal content of tool calls or code blocks (extract what was DECIDED, not the implementation)
+- Metadata identifiers as facts/entities (`thread_id`, `sender_id`, `container_id`, platform IDs)
 
 ## Fact Format
 
@@ -97,10 +99,9 @@ For every fact, identify the entities mentioned:
 
 **Entities are identities, not identifiers.** Do NOT create entities for phone numbers, email addresses, or platform handles. These are contact identifiers stored in the contacts table, not entities. When someone mentions a phone number or email in conversation, store it as a fact about the person (e.g., "Tyler's email is tyler@example.com"), not as a separate entity.
 
-Use the deliveryContext to identify the **sender as a person**:
-- The delivery pipeline already created a person entity for each sender. Search for it using `sender_name` or `sender_id`.
-- `sender_name` gives you the display name the platform provides — use it to find or name the person entity.
-- `sender_id` is stored in the contacts table, not as an entity. Use it for contact lookups, not entity creation.
+Use episode participants + sender mapping to identify the **sender as a person**:
+- Runtime supplies participants with stable IDs and display names.
+- Use sender mapping to resolve the person entity; do not create entities from raw metadata identifiers.
 
 Always include the user (is_user=TRUE entity) when the fact is about them.
 
@@ -108,7 +109,8 @@ Always include the user (is_user=TRUE entity) when the fact is about them.
 
 ### Step 1: Read the episode
 
-Read all events in the episode. Understand the conversation flow and what was discussed. Note the deliveryContext on each event (platform, sender, thread).
+Read all events in the episode. Understand the conversation flow and what was discussed.
+Use only message content + attachments for extraction decisions.
 
 ### Step 2: Gather context
 
@@ -116,6 +118,9 @@ Use recall() to gather relevant background:
 - Search for sender entities to understand who they are
 - Search for recent facts about topics mentioned in the episode
 - Search for any entities mentioned in the event content
+- For sparse episodes, use thread-aware lookback:
+  - `recall("thread context", thread_lookback_events=8)`
+  - include `thread_id` if not inferred by runtime
 
 This gives you background for better extraction and entity resolution.
 
@@ -149,7 +154,8 @@ Use entity co-occurrences to help resolve: if "Sarah" always appears alongside "
 ### Step 6: Write
 
 For each non-duplicate fact:
-1. `insert_fact(text, as_of, ingested_at, source_event_id, metadata)`
+1. `insert_fact(text, as_of, ingested_at, source_event_id?, metadata?)`
+   - `source_episode_id` is assigned by runtime automatically in writer sessions
 2. `link_fact_entity(fact_id, entity_id)` for each entity
 3. Co-occurrences updated automatically by `link_fact_entity`
 
@@ -213,9 +219,9 @@ These persist across invocations.
 ```
 recall(query, params)
     Search memory. Use for: dedup checks, entity resolution, gathering context.
-    Params: scope, entity, time_after, time_before, platform, max_results, budget
+    Params: scope, entity, time_after, time_before, platform, thread_id, thread_lookback_events, max_results, budget
 
-insert_fact(text, as_of, ingested_at, source_event_id, metadata)
+insert_fact(text, as_of, ingested_at, source_event_id?, metadata?)
     Store a new fact.
 
 create_entity(name, type, normalized, source)

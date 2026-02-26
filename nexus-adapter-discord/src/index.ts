@@ -7,6 +7,7 @@ import {
   runAdapter,
   sendWithChunking,
   type AdapterContext,
+  type AdapterDefinition,
   type DeliveryResult,
   type NexusEvent,
   type StreamHandlers,
@@ -163,6 +164,12 @@ function isDiscordDisallowedIntentsError(error: unknown): boolean {
 }
 
 function getDiscordToken(ctx: AdapterContext): string {
+  const runtimeFieldToken =
+    ctx.runtime?.credential?.fields?.bot_token?.trim() ??
+    ctx.runtime?.credential?.fields?.token?.trim();
+  if (runtimeFieldToken) {
+    return runtimeFieldToken;
+  }
   const runtimeToken = ctx.runtime?.credential?.value?.trim();
   if (runtimeToken) {
     return runtimeToken;
@@ -1069,69 +1076,99 @@ const discordStreamHandlers: StreamHandlers = {
   },
 };
 
-await runAdapter({
-  info: async () => ({
-    platform: "discord",
-    name: "nexus-discord-adapter",
-    version: "0.1.0",
-    supports: ["monitor", "send", "stream", "backfill", "health", "accounts"],
-    credential_service: "discord",
-    multi_account: true,
-    platform_capabilities: {
-      text_limit: DISCORD_TEXT_LIMIT,
-      supports_markdown: true,
-      markdown_flavor: "discord",
-      supports_tables: false,
-      supports_code_blocks: true,
-      supports_embeds: true,
-      supports_threads: true,
-      supports_reactions: true,
-      supports_polls: false,
-      supports_buttons: false,
-      supports_edit: true,
-      supports_delete: false,
-      supports_media: false,
-      supports_voice_notes: false,
-      supports_streaming_edit: true,
-    },
-  }),
-
-  accounts: async (ctx) => {
-    const accountID = ctx.runtime?.account_id?.trim() || "default";
-    return [
-      {
-        id: accountID,
-        display_name: accountID,
-        credential_ref: `discord/${accountID}`,
-        status: "ready",
+const discordAdapter: AdapterDefinition = {
+  operations: {
+    "adapter.info": async () => ({
+      platform: "discord",
+      name: "nexus-discord-adapter",
+      version: "0.1.0",
+      operations: [
+        "adapter.info",
+        "adapter.accounts.list",
+        "adapter.health",
+        "adapter.monitor.start",
+        "event.backfill",
+        "delivery.send",
+        "delivery.stream",
+      ],
+      credential_service: "discord",
+      multi_account: true,
+      auth: {
+        methods: [
+          {
+            type: "api_key",
+            label: "Enter Bot Token",
+            icon: "key",
+            service: "discord",
+            fields: [
+              {
+                name: "bot_token",
+                label: "Bot Token",
+                type: "secret",
+                required: true,
+                placeholder: "Discord bot token",
+              },
+            ],
+          },
+        ],
+        setupGuide:
+          "Create a bot token in Discord Developer Portal and paste it here. Keep this token secret.",
       },
-    ];
-  },
+      platform_capabilities: {
+        text_limit: DISCORD_TEXT_LIMIT,
+        supports_markdown: true,
+        markdown_flavor: "discord",
+        supports_tables: false,
+        supports_code_blocks: true,
+        supports_embeds: true,
+        supports_threads: true,
+        supports_reactions: true,
+        supports_polls: false,
+        supports_buttons: false,
+        supports_edit: true,
+        supports_delete: false,
+        supports_media: false,
+        supports_voice_notes: false,
+        supports_streaming_edit: true,
+      },
+    }),
 
-  health: async (ctx, args) => {
-    try {
-      const token = getDiscordToken(ctx);
-      const rest = restClient(token);
-      const me = (await rest.get(Routes.user())) as { id?: string; username?: string };
-      return {
-        connected: Boolean(me.id),
-        account: args.account,
-        last_event_at: Date.now(),
-        details: {
-          user_id: me.id ?? null,
-          username: me.username ?? null,
+    "adapter.accounts.list": async (ctx) => {
+      const accountID = ctx.runtime?.account_id?.trim() || "default";
+      return [
+        {
+          id: accountID,
+          display_name: accountID,
+          credential_ref: `discord/${accountID}`,
+          status: "ready",
         },
-      };
-    } catch (error) {
-      return {
-        connected: false,
-        account: args.account,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
-  },
+      ];
+    },
 
-  backfill: async (ctx, args, emit) => {
+    "adapter.health": async (ctx, args) => {
+      try {
+        const token = getDiscordToken(ctx);
+        const rest = restClient(token);
+        const me = (await rest.get(Routes.user())) as { id?: string; username?: string };
+        return {
+          connected: Boolean(me.id),
+          account: args.account,
+          last_event_at: Date.now(),
+          details: {
+            user_id: me.id ?? null,
+            username: me.username ?? null,
+          },
+        };
+      } catch (error) {
+        return {
+          connected: false,
+          account: args.account,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+
+    "event.backfill": async (ctx, args, emit) => {
     const token = getDiscordToken(ctx);
     const rest = restClient(token);
     const selfID = await fetchSelfUserID(rest);
@@ -1205,222 +1242,225 @@ await runAdapter({
     }
 
     ctx.log.info("discord backfill emitted %d event(s)", totalEmitted);
-  },
+    },
 
-  send: async (ctx, req) => {
-    if (req.media?.trim()) {
-      return {
-        success: false,
-        message_ids: [],
-        chunks_sent: 0,
-        error: {
-          type: "content_rejected",
-          message: "media send is not implemented in this adapter yet",
-          retry: false,
-        },
-      };
-    }
+    "delivery.send": async (ctx, req) => {
+      if (req.media?.trim()) {
+        return {
+          success: false,
+          message_ids: [],
+          chunks_sent: 0,
+          error: {
+            type: "content_rejected",
+            message: "media send is not implemented in this adapter yet",
+            retry: false,
+          },
+        };
+      }
 
-    const text = req.text?.trim();
-    if (!text) {
-      return {
-        success: false,
-        message_ids: [],
-        chunks_sent: 0,
-        error: {
-          type: "content_rejected",
-          message: "message text is required",
-          retry: false,
-        },
-      };
-    }
+      const text = req.text?.trim();
+      if (!text) {
+        return {
+          success: false,
+          message_ids: [],
+          chunks_sent: 0,
+          error: {
+            type: "content_rejected",
+            message: "message text is required",
+            retry: false,
+          },
+        };
+      }
 
-    try {
+      try {
+        const token = getDiscordToken(ctx);
+        const rest = restClient(token);
+        const channelID = await resolveSendChannelID(rest, req.to, req.thread_id);
+        return await sendDiscordText(rest, channelID, text, req.reply_to_id);
+      } catch (error) {
+        return {
+          success: false,
+          message_ids: [],
+          chunks_sent: 0,
+          error: {
+            type: "network",
+            message: error instanceof Error ? error.message : String(error),
+            retry: true,
+          },
+        };
+      }
+    },
+
+    "adapter.monitor.start": async (ctx, args, emit) => {
       const token = getDiscordToken(ctx);
-      const rest = restClient(token);
-      const channelID = await resolveSendChannelID(rest, req.to, req.thread_id);
-      return await sendDiscordText(rest, channelID, text, req.reply_to_id);
-    } catch (error) {
-      return {
-        success: false,
-        message_ids: [],
-        chunks_sent: 0,
-        error: {
-          type: "network",
-          message: error instanceof Error ? error.message : String(error),
-          retry: true,
-        },
+      const client = new Client({
+        intents: [
+          GatewayIntentBits.Guilds,
+          GatewayIntentBits.GuildMessages,
+          GatewayIntentBits.DirectMessages,
+          GatewayIntentBits.MessageContent,
+        ],
+        partials: [Partials.Channel],
+      });
+
+      let selfID = "";
+
+      let stopRequested = false;
+      let stopMonitor: (() => void) | null = null;
+      let disallowedIntentsLogged = false;
+
+      const requestMonitorStop = () => {
+        stopRequested = true;
+        stopMonitor?.();
       };
-    }
-  },
 
-  monitor: async (ctx, args, emit) => {
-    const token = getDiscordToken(ctx);
-    const client = new Client({
-      intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.DirectMessages,
-        GatewayIntentBits.MessageContent,
-      ],
-      partials: [Partials.Channel],
-    });
-
-    let selfID = "";
-
-    let stopRequested = false;
-    let stopMonitor: (() => void) | null = null;
-    let disallowedIntentsLogged = false;
-
-    const requestMonitorStop = () => {
-      stopRequested = true;
-      stopMonitor?.();
-    };
-
-    const logDisallowedIntents = () => {
-      if (disallowedIntentsLogged) {
-        return;
-      }
-      disallowedIntentsLogged = true;
-      ctx.log.error(
-        "discord: gateway closed with code 4014 (missing privileged gateway intents). Enable required intents in the Discord Developer Portal or disable them in adapter config.",
-      );
-    };
-
-    client.on("ready", () => {
-      selfID = client.user?.id ?? "";
-      ctx.log.info(
-        "discord monitor connected account=%s bot_id=%s",
-        JSON.stringify(args.account),
-        JSON.stringify(selfID),
-      );
-    });
-
-    client.on("shardDisconnect", (event, shardID) => {
-      const closeCode = extractDiscordCloseCode(event);
-      if (closeCode === DISCORD_DISALLOWED_INTENTS_CLOSE_CODE) {
-        logDisallowedIntents();
-        requestMonitorStop();
-        return;
-      }
-      const reason = extractDiscordCloseReason(event);
-      ctx.log.info(
-        "discord shard disconnected account=%s shard=%s code=%s reason=%s",
-        JSON.stringify(args.account),
-        String(shardID),
-        String(closeCode ?? "unknown"),
-        JSON.stringify(reason ?? ""),
-      );
-    });
-
-    client.on("error", (error) => {
-      if (isDiscordDisallowedIntentsError(error)) {
-        logDisallowedIntents();
-        requestMonitorStop();
-        return;
-      }
-      ctx.log.error(
-        "discord monitor error account=%s err=%s",
-        JSON.stringify(args.account),
-        error instanceof Error ? error.message : String(error),
-      );
-    });
-
-    client.on("shardError", (error, shardID) => {
-      if (isDiscordDisallowedIntentsError(error)) {
-        logDisallowedIntents();
-        requestMonitorStop();
-        return;
-      }
-      ctx.log.error(
-        "discord shard error account=%s shard=%s err=%s",
-        JSON.stringify(args.account),
-        String(shardID),
-        error instanceof Error ? error.message : String(error),
-      );
-    });
-
-    client.on("messageCreate", (message: Message) => {
-      if (message.author?.id && message.author.id === selfID) {
-        return;
-      }
-
-      const container = normalizeContainer(message);
-      const contentType = inferContentType(message);
-      const fallbackContent =
-        contentType === "text"
-          ? "(no content)"
-          : message.attachments.size > 0
-            ? `[${message.attachments.size} attachment(s)]`
-            : "(no content)";
-      const content = message.content.trim() || fallbackContent;
-      const replyToID = message.reference?.messageId ?? undefined;
-
-      const builder = newEvent("discord", `discord:${message.id}`)
-        .withTimestamp(message.createdAt)
-        .withContent(content)
-        .withContentType(contentType)
-        .withSender(
-          message.author?.id ?? "unknown",
-          message.member?.displayName ?? message.author?.displayName ?? message.author?.username,
-        )
-        .withContainer(container.container_id, container.container_kind)
-        .withAccount(args.account)
-        .withMetadata("message_id", message.id)
-        .withMetadata("channel_id", message.channel.id)
-        .withMetadata("guild_id", message.guildId ?? null)
-        .withMetadata("mentions_bot", selfID ? message.mentions.users.has(selfID) : false)
-        .withMetadata("author_is_bot", Boolean(message.author?.bot));
-
-      if (container.thread_id) {
-        builder.withThread(container.thread_id);
-      }
-      if (replyToID) {
-        builder.withReplyTo(replyToID);
-      }
-
-      for (const attachment of message.attachments.values()) {
-        builder.withAttachment({
-          id: attachment.id,
-          filename: attachment.name ?? attachment.id,
-          content_type: attachment.contentType ?? "application/octet-stream",
-          ...(typeof attachment.size === "number" ? { size_bytes: attachment.size } : {}),
-          ...(attachment.url ? { url: attachment.url } : {}),
-        });
-      }
-
-      const event = builder.build();
-      event.space_id = message.guildId ?? undefined;
-      event.space_name = message.guild?.name ?? undefined;
-      event.container_name = container.container_name;
-      event.thread_name = container.thread_name;
-      emit(event);
-    });
-
-    await client.login(token);
-
-    await new Promise<void>((resolve) => {
-      let settled = false;
-      const finish = () => {
-        if (settled) {
+      const logDisallowedIntents = () => {
+        if (disallowedIntentsLogged) {
           return;
         }
-        settled = true;
-        stopMonitor = null;
-        ctx.signal.removeEventListener("abort", onAbort);
-        resolve();
+        disallowedIntentsLogged = true;
+        ctx.log.error(
+          "discord: gateway closed with code 4014 (missing privileged gateway intents). Enable required intents in the Discord Developer Portal or disable them in adapter config.",
+        );
       };
-      const onAbort = () => finish();
-      stopMonitor = finish;
-      if (ctx.signal.aborted || stopRequested) {
-        finish();
-        return;
-      }
-      ctx.signal.addEventListener("abort", onAbort, { once: true });
-    });
 
-    await client.destroy();
+      client.on("ready", () => {
+        selfID = client.user?.id ?? "";
+        ctx.log.info(
+          "discord monitor connected account=%s bot_id=%s",
+          JSON.stringify(args.account),
+          JSON.stringify(selfID),
+        );
+      });
+
+      client.on("shardDisconnect", (event, shardID) => {
+        const closeCode = extractDiscordCloseCode(event);
+        if (closeCode === DISCORD_DISALLOWED_INTENTS_CLOSE_CODE) {
+          logDisallowedIntents();
+          requestMonitorStop();
+          return;
+        }
+        const reason = extractDiscordCloseReason(event);
+        ctx.log.info(
+          "discord shard disconnected account=%s shard=%s code=%s reason=%s",
+          JSON.stringify(args.account),
+          String(shardID),
+          String(closeCode ?? "unknown"),
+          JSON.stringify(reason ?? ""),
+        );
+      });
+
+      client.on("error", (error) => {
+        if (isDiscordDisallowedIntentsError(error)) {
+          logDisallowedIntents();
+          requestMonitorStop();
+          return;
+        }
+        ctx.log.error(
+          "discord monitor error account=%s err=%s",
+          JSON.stringify(args.account),
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+
+      client.on("shardError", (error, shardID) => {
+        if (isDiscordDisallowedIntentsError(error)) {
+          logDisallowedIntents();
+          requestMonitorStop();
+          return;
+        }
+        ctx.log.error(
+          "discord shard error account=%s shard=%s err=%s",
+          JSON.stringify(args.account),
+          String(shardID),
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+
+      client.on("messageCreate", (message: Message) => {
+        if (message.author?.id && message.author.id === selfID) {
+          return;
+        }
+
+        const container = normalizeContainer(message);
+        const contentType = inferContentType(message);
+        const fallbackContent =
+          contentType === "text"
+            ? "(no content)"
+            : message.attachments.size > 0
+              ? `[${message.attachments.size} attachment(s)]`
+              : "(no content)";
+        const content = message.content.trim() || fallbackContent;
+        const replyToID = message.reference?.messageId ?? undefined;
+
+        const builder = newEvent("discord", `discord:${message.id}`)
+          .withTimestamp(message.createdAt)
+          .withContent(content)
+          .withContentType(contentType)
+          .withSender(
+            message.author?.id ?? "unknown",
+            message.member?.displayName ?? message.author?.displayName ?? message.author?.username,
+          )
+          .withContainer(container.container_id, container.container_kind)
+          .withAccount(args.account)
+          .withMetadata("message_id", message.id)
+          .withMetadata("channel_id", message.channel.id)
+          .withMetadata("guild_id", message.guildId ?? null)
+          .withMetadata("mentions_bot", selfID ? message.mentions.users.has(selfID) : false)
+          .withMetadata("author_is_bot", Boolean(message.author?.bot));
+
+        if (container.thread_id) {
+          builder.withThread(container.thread_id);
+        }
+        if (replyToID) {
+          builder.withReplyTo(replyToID);
+        }
+
+        for (const attachment of message.attachments.values()) {
+          builder.withAttachment({
+            id: attachment.id,
+            filename: attachment.name ?? attachment.id,
+            content_type: attachment.contentType ?? "application/octet-stream",
+            ...(typeof attachment.size === "number" ? { size_bytes: attachment.size } : {}),
+            ...(attachment.url ? { url: attachment.url } : {}),
+          });
+        }
+
+        const event = builder.build();
+        event.space_id = message.guildId ?? undefined;
+        event.space_name = message.guild?.name ?? undefined;
+        event.container_name = container.container_name;
+        event.thread_name = container.thread_name;
+        emit(event);
+      });
+
+      await client.login(token);
+
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const finish = () => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          stopMonitor = null;
+          ctx.signal.removeEventListener("abort", onAbort);
+          resolve();
+        };
+        const onAbort = () => finish();
+        stopMonitor = finish;
+        if (ctx.signal.aborted || stopRequested) {
+          finish();
+          return;
+        }
+        ctx.signal.addEventListener("abort", onAbort, { once: true });
+      });
+
+      await client.destroy();
+    },
+
+    "delivery.stream": discordStreamHandlers,
   },
+};
 
-  stream: discordStreamHandlers,
-});
+await runAdapter(discordAdapter);

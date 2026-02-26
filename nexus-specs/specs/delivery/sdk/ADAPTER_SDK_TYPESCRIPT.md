@@ -1,8 +1,8 @@
-# Event Adapter SDK (TypeScript)
+# Event Adapter SDK (TypeScript, Historical)
 
-**Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-24  
-**Related:** `ADAPTER_SDK.md`, `ADAPTER_SYSTEM.md`, `INBOUND_INTERFACE.md`, `OUTBOUND_INTERFACE.md`, `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`
+**Status:** HISTORICAL (superseded)  
+**Last Updated:** 2026-02-26  
+**Related:** `ADAPTER_SDK_OPERATION_MODEL_CUTOVER.md`, `ADAPTER_SDK.md`
 
 ---
 

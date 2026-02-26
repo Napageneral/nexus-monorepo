@@ -83,17 +83,20 @@ func TestResolveMonitorStatePathUsesEnv(t *testing.T) {
 	}
 }
 
-func TestInfoIncludesBackfillCapability(t *testing.T) {
-	got := info()
+func TestInfoIncludesBackfillOperation(t *testing.T) {
+	got, err := info(t.Context())
+	if err != nil {
+		t.Fatalf("info() error: %v", err)
+	}
 	found := false
-	for _, capability := range got.Supports {
-		if capability == "backfill" {
+	for _, operation := range got.Operations {
+		if operation == "event.backfill" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("expected backfill capability in info.Supports, got %#v", got.Supports)
+		t.Fatalf("expected event.backfill operation in info.Operations, got %#v", got.Operations)
 	}
 }
 

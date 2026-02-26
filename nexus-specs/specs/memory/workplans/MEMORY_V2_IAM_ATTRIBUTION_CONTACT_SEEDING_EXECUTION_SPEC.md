@@ -104,9 +104,10 @@ Hard-cutover posture applies for this slice.
 
 1. Add `facts.source_episode_id TEXT` + index to memory schema + migration guard.
 2. Extend writer tool schema:
-   - `insert_fact(..., source_episode_id?: string, source_event_id?: string)`.
+   - `insert_fact(..., source_event_id?: string)`.
+   - `source_episode_id` is runtime-assigned in writer episode sessions (not agent-authored input).
 3. Episode writer flow requirements:
-   - episode runs must set `source_episode_id`.
+   - runtime must set `source_episode_id` for all writer episode inserts.
    - `source_event_id` remains optional for precise single-event facts.
 4. Update retain/consolidation selection and backfill metrics to query by `source_episode_id`.
 

@@ -1,8 +1,8 @@
 // Package nexadapter provides shared infrastructure for building Nexus adapters.
 //
-// Instead of each adapter reimplementing CLI parsing, JSONL emission, signal
-// handling, NexusEvent construction, text chunking, and streaming protocol
-// support, this SDK handles all of it. Adapter authors write only the
+// Instead of each adapter reimplementing operation dispatch, JSONL emission,
+// signal handling, NexusEvent construction, text chunking, and streaming
+// protocol support, this SDK handles all of it. Adapter authors write only the
 // platform-specific logic.
 //
 // # Quick Start
@@ -13,9 +13,11 @@
 //
 //	func main() {
 //	    nexadapter.Run(nexadapter.Adapter{
-//	        Info:    myInfo,
-//	        Monitor: myMonitor,  // or nexadapter.PollMonitor(config)
-//	        Send:    mySend,
+//	        Operations: nexadapter.AdapterOperations{
+//	            AdapterInfo: myInfo,
+//	            AdapterMonitorStart: myMonitor, // or nexadapter.PollMonitor(config)
+//	            DeliverySend: mySend,
+//	        },
 //	    })
 //	}
 //
@@ -25,51 +27,56 @@ package nexadapter
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
 
-// Adapter defines the handler functions for a Nexus adapter.
-// Implement the handlers for the capabilities your adapter supports.
-//
-// At minimum, Info and Monitor are required (Basic compliance).
-// Add Send for Standard, plus Backfill/Health/Accounts for Complete.
-type Adapter struct {
-	// Info returns the adapter's identity and capabilities.
+// AdapterOperations defines operation handlers for a Nexus adapter.
+type AdapterOperations struct {
+	// AdapterInfo returns adapter identity and supported operations.
 	// Required for all adapters.
-	Info func() *AdapterInfo
+	AdapterInfo func(ctx context.Context) (*AdapterInfo, error)
 
-	// Monitor streams live events. Called with a context that cancels on SIGTERM.
-	// Use the emit function to write NexusEvents — the SDK handles JSONL serialization.
-	// Should block until ctx is cancelled.
-	// Required for Basic+ compliance.
-	Monitor func(ctx context.Context, account string, emit EmitFunc) error
+	// AdapterMonitorStart streams live events and should block until ctx is cancelled.
+	AdapterMonitorStart func(ctx context.Context, account string, emit EmitFunc) error
 
-	// Send delivers a message to the platform.
-	// Required for Standard+ compliance.
-	Send func(ctx context.Context, req SendRequest) (*DeliveryResult, error)
+	// DeliverySend delivers a message to the platform.
+	DeliverySend func(ctx context.Context, req SendRequest) (*DeliveryResult, error)
 
-	// Backfill emits historical events. Same contract as Monitor but terminates
-	// when history is exhausted (exit 0). Events are idempotent — re-running is safe.
-	// Optional (Complete compliance).
-	Backfill func(ctx context.Context, account string, since time.Time, emit EmitFunc) error
+	// EventBackfill emits historical events and exits when history is exhausted.
+	EventBackfill func(ctx context.Context, account string, since time.Time, emit EmitFunc) error
 
-	// Health reports the current connection/account status.
-	// Optional (Complete compliance).
-	Health func(ctx context.Context, account string) (*AdapterHealth, error)
+	// AdapterHealth reports account connection status.
+	AdapterHealth func(ctx context.Context, account string) (*AdapterHealth, error)
 
-	// Accounts lists configured accounts for this adapter.
-	// Optional (Complete compliance).
-	Accounts func(ctx context.Context) ([]AdapterAccount, error)
+	// AdapterAccountsList lists configured accounts for the adapter.
+	AdapterAccountsList func(ctx context.Context) ([]AdapterAccount, error)
 
-	// Stream configures streaming delivery support.
-	// Only needed if the adapter declares CapStream in its supports.
-	// Optional (Extended compliance).
-	Stream *StreamConfig
+	// AdapterSetupStart starts adapter-defined onboarding/setup.
+	AdapterSetupStart func(ctx context.Context, req AdapterSetupRequest) (*AdapterSetupResult, error)
+
+	// AdapterSetupSubmit submits additional data for an in-progress setup session.
+	AdapterSetupSubmit func(ctx context.Context, req AdapterSetupRequest) (*AdapterSetupResult, error)
+
+	// AdapterSetupStatus checks status for an in-progress setup session.
+	AdapterSetupStatus func(ctx context.Context, req AdapterSetupRequest) (*AdapterSetupResult, error)
+
+	// AdapterSetupCancel cancels an in-progress setup session.
+	AdapterSetupCancel func(ctx context.Context, req AdapterSetupRequest) (*AdapterSetupResult, error)
+
+	// DeliveryStream configures streaming delivery support.
+	DeliveryStream *StreamConfig
+}
+
+// Adapter defines the operation handlers for a Nexus adapter.
+type Adapter struct {
+	Operations AdapterOperations
 }
 
 // Run is the main entry point for an adapter binary.
@@ -104,19 +111,27 @@ func Run(adapter Adapter) {
 
 	var err error
 	switch command {
-	case "info":
+	case "adapter.info":
 		err = runInfo(adapter)
-	case "monitor":
+	case "adapter.monitor.start":
 		err = runMonitor(adapter, filteredArgs)
-	case "send":
+	case "delivery.send":
 		err = runSend(adapter, filteredArgs)
-	case "backfill":
+	case "event.backfill":
 		err = runBackfill(adapter, filteredArgs)
-	case "health":
+	case "adapter.health":
 		err = runHealth(adapter, filteredArgs)
-	case "accounts":
+	case "adapter.accounts.list":
 		err = runAccounts(adapter, filteredArgs)
-	case "stream":
+	case "adapter.setup.start":
+		err = runSetup(adapter, filteredArgs, OpAdapterSetupStart)
+	case "adapter.setup.submit":
+		err = runSetup(adapter, filteredArgs, OpAdapterSetupSubmit)
+	case "adapter.setup.status":
+		err = runSetup(adapter, filteredArgs, OpAdapterSetupStatus)
+	case "adapter.setup.cancel":
+		err = runSetup(adapter, filteredArgs, OpAdapterSetupCancel)
+	case "delivery.stream":
 		err = runStream(adapter, filteredArgs)
 	case "help", "--help", "-h":
 		printUsage()
@@ -138,15 +153,19 @@ func printUsage() {
 	if len(os.Args) > 0 {
 		name = os.Args[0]
 	}
-	fmt.Fprintf(os.Stderr, "Usage: %s <command> [flags]\n\n", name)
-	fmt.Fprintf(os.Stderr, "Commands:\n")
-	fmt.Fprintf(os.Stderr, "  info                              Self-describe this adapter\n")
-	fmt.Fprintf(os.Stderr, "  monitor  --account <id>           Stream live events (JSONL)\n")
-	fmt.Fprintf(os.Stderr, "  send     --account <id> --to <target> --text \"...\"\n")
-	fmt.Fprintf(os.Stderr, "  backfill --account <id> --since <date>\n")
-	fmt.Fprintf(os.Stderr, "  health   --account <id>           Check connection status\n")
-	fmt.Fprintf(os.Stderr, "  accounts list                     List configured accounts\n")
-	fmt.Fprintf(os.Stderr, "  stream   --account <id>           Streaming delivery (stdin/stdout)\n")
+	fmt.Fprintf(os.Stderr, "Usage: %s <operation> [flags]\n\n", name)
+	fmt.Fprintf(os.Stderr, "Operations:\n")
+	fmt.Fprintf(os.Stderr, "  adapter.info\n")
+	fmt.Fprintf(os.Stderr, "  adapter.monitor.start --account <id>\n")
+	fmt.Fprintf(os.Stderr, "  delivery.send --account <id> --to <target> --text \"...\"\n")
+	fmt.Fprintf(os.Stderr, "  event.backfill --account <id> --since <date>\n")
+	fmt.Fprintf(os.Stderr, "  adapter.health --account <id>\n")
+	fmt.Fprintf(os.Stderr, "  adapter.accounts.list\n")
+	fmt.Fprintf(os.Stderr, "  adapter.setup.start [--account <id>] [--session-id <id>] [--payload-json <json>]\n")
+	fmt.Fprintf(os.Stderr, "  adapter.setup.submit --session-id <id> [--account <id>] [--payload-json <json>]\n")
+	fmt.Fprintf(os.Stderr, "  adapter.setup.status --session-id <id> [--account <id>]\n")
+	fmt.Fprintf(os.Stderr, "  adapter.setup.cancel --session-id <id> [--account <id>]\n")
+	fmt.Fprintf(os.Stderr, "  delivery.stream --account <id>\n")
 	fmt.Fprintf(os.Stderr, "\nGlobal flags:\n")
 	fmt.Fprintf(os.Stderr, "  --verbose, -v                     Enable debug logging\n")
 }
@@ -154,19 +173,22 @@ func printUsage() {
 // --- Command Handlers ---
 
 func runInfo(adapter Adapter) error {
-	if adapter.Info == nil {
-		return fmt.Errorf("info handler not implemented")
+	if adapter.Operations.AdapterInfo == nil {
+		return fmt.Errorf("adapter.info handler not implemented")
 	}
-	info := adapter.Info()
+	info, err := adapter.Operations.AdapterInfo(context.Background())
+	if err != nil {
+		return err
+	}
 	return writeJSON(info)
 }
 
 func runMonitor(adapter Adapter, args []string) error {
-	if adapter.Monitor == nil {
-		return fmt.Errorf("monitor not supported by this adapter")
+	if adapter.Operations.AdapterMonitorStart == nil {
+		return fmt.Errorf("adapter.monitor.start not supported by this adapter")
 	}
 
-	fs := flag.NewFlagSet("monitor", flag.ContinueOnError)
+	fs := flag.NewFlagSet("adapter.monitor.start", flag.ContinueOnError)
 	account := fs.String("account", "", "Account ID")
 	_ = fs.String("format", "jsonl", "Output format (always jsonl)")
 	if err := fs.Parse(args); err != nil {
@@ -178,20 +200,20 @@ func runMonitor(adapter Adapter, args []string) error {
 	emit := makeEmitFunc()
 
 	LogInfo("monitor starting for account %q", *account)
-	err := adapter.Monitor(ctx, *account, emit)
+	err := adapter.Operations.AdapterMonitorStart(ctx, *account, emit)
 	if err != nil {
-		return fmt.Errorf("monitor: %w", err)
+		return fmt.Errorf("adapter.monitor.start: %w", err)
 	}
 	LogInfo("monitor stopped cleanly")
 	return nil
 }
 
 func runSend(adapter Adapter, args []string) error {
-	if adapter.Send == nil {
-		return fmt.Errorf("send not supported by this adapter")
+	if adapter.Operations.DeliverySend == nil {
+		return fmt.Errorf("delivery.send not supported by this adapter")
 	}
 
-	fs := flag.NewFlagSet("send", flag.ContinueOnError)
+	fs := flag.NewFlagSet("delivery.send", flag.ContinueOnError)
 	account := fs.String("account", "", "Account ID")
 	to := fs.String("to", "", "Target (email, phone, channel:id)")
 	text := fs.String("text", "", "Message text")
@@ -206,16 +228,16 @@ func runSend(adapter Adapter, args []string) error {
 	ctx := signalContext()
 
 	req := SendRequest{
-		Account:  *account,
-		To:       *to,
-		Text:     *text,
-		Media:    *media,
-		Caption:  *caption,
-		ReplyToID:  *replyTo,
-		ThreadID: *threadID,
+		Account:   *account,
+		To:        *to,
+		Text:      *text,
+		Media:     *media,
+		Caption:   *caption,
+		ReplyToID: *replyTo,
+		ThreadID:  *threadID,
 	}
 
-	result, err := adapter.Send(ctx, req)
+	result, err := adapter.Operations.DeliverySend(ctx, req)
 	if err != nil {
 		// Return error as a structured DeliveryResult rather than crashing
 		return writeJSON(&DeliveryResult{
@@ -232,11 +254,11 @@ func runSend(adapter Adapter, args []string) error {
 }
 
 func runBackfill(adapter Adapter, args []string) error {
-	if adapter.Backfill == nil {
-		return fmt.Errorf("backfill not supported by this adapter")
+	if adapter.Operations.EventBackfill == nil {
+		return fmt.Errorf("event.backfill not supported by this adapter")
 	}
 
-	fs := flag.NewFlagSet("backfill", flag.ContinueOnError)
+	fs := flag.NewFlagSet("event.backfill", flag.ContinueOnError)
 	account := fs.String("account", "", "Account ID")
 	since := fs.String("since", "", "Backfill start date (ISO 8601 or YYYY-MM-DD)")
 	_ = fs.String("format", "jsonl", "Output format (always jsonl)")
@@ -253,27 +275,27 @@ func runBackfill(adapter Adapter, args []string) error {
 	emit := makeEmitFunc()
 
 	LogInfo("backfill starting for account %q since %s", *account, sinceTime.Format(time.RFC3339))
-	err = adapter.Backfill(ctx, *account, sinceTime, emit)
+	err = adapter.Operations.EventBackfill(ctx, *account, sinceTime, emit)
 	if err != nil {
-		return fmt.Errorf("backfill: %w", err)
+		return fmt.Errorf("event.backfill: %w", err)
 	}
 	LogInfo("backfill completed")
 	return nil
 }
 
 func runHealth(adapter Adapter, args []string) error {
-	if adapter.Health == nil {
-		return fmt.Errorf("health not supported by this adapter")
+	if adapter.Operations.AdapterHealth == nil {
+		return fmt.Errorf("adapter.health not supported by this adapter")
 	}
 
-	fs := flag.NewFlagSet("health", flag.ContinueOnError)
+	fs := flag.NewFlagSet("adapter.health", flag.ContinueOnError)
 	account := fs.String("account", "", "Account ID")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	ctx := context.Background()
-	health, err := adapter.Health(ctx, *account)
+	health, err := adapter.Operations.AdapterHealth(ctx, *account)
 	if err != nil {
 		// Return structured health error rather than crashing
 		return writeJSON(&AdapterHealth{
@@ -287,35 +309,84 @@ func runHealth(adapter Adapter, args []string) error {
 }
 
 func runAccounts(adapter Adapter, args []string) error {
-	if adapter.Accounts == nil {
-		return fmt.Errorf("accounts not supported by this adapter")
+	if adapter.Operations.AdapterAccountsList == nil {
+		return fmt.Errorf("adapter.accounts.list not supported by this adapter")
 	}
 
-	// Handle "accounts list" or bare "accounts"
-	subcmd := "list"
-	if len(args) > 0 && args[0] != "" && args[0][0] != '-' {
-		subcmd = args[0]
+	if len(args) > 0 {
+		return fmt.Errorf("adapter.accounts.list accepts no arguments")
 	}
 
-	switch subcmd {
-	case "list":
-		ctx := context.Background()
-		accounts, err := adapter.Accounts(ctx)
-		if err != nil {
-			return fmt.Errorf("accounts list: %w", err)
-		}
-		return writeJSON(accounts)
+	ctx := context.Background()
+	accounts, err := adapter.Operations.AdapterAccountsList(ctx)
+	if err != nil {
+		return fmt.Errorf("adapter.accounts.list: %w", err)
+	}
+	return writeJSON(accounts)
+}
+
+func runSetup(adapter Adapter, args []string, operation AdapterOperation) error {
+	var handler func(ctx context.Context, req AdapterSetupRequest) (*AdapterSetupResult, error)
+	switch operation {
+	case OpAdapterSetupStart:
+		handler = adapter.Operations.AdapterSetupStart
+	case OpAdapterSetupSubmit:
+		handler = adapter.Operations.AdapterSetupSubmit
+	case OpAdapterSetupStatus:
+		handler = adapter.Operations.AdapterSetupStatus
+	case OpAdapterSetupCancel:
+		handler = adapter.Operations.AdapterSetupCancel
 	default:
-		return fmt.Errorf("unknown accounts subcommand: %s (expected: list)", subcmd)
+		return fmt.Errorf("unsupported setup operation: %s", operation)
 	}
+	if handler == nil {
+		return fmt.Errorf("%s not supported by this adapter", operation)
+	}
+
+	fs := flag.NewFlagSet(string(operation), flag.ContinueOnError)
+	account := fs.String("account", "", "Account ID")
+	sessionID := fs.String("session-id", "", "Setup session ID")
+	payloadJSON := fs.String("payload-json", "", "JSON object payload")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	req := AdapterSetupRequest{}
+	if trimmed := strings.TrimSpace(*account); trimmed != "" {
+		req.Account = trimmed
+	}
+	if trimmed := strings.TrimSpace(*sessionID); trimmed != "" {
+		req.SessionID = trimmed
+	}
+
+	if operation != OpAdapterSetupStart && strings.TrimSpace(req.SessionID) == "" {
+		return fmt.Errorf("--session-id is required for %s", operation)
+	}
+
+	if raw := strings.TrimSpace(*payloadJSON); raw != "" {
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+			return fmt.Errorf("--payload-json must be a valid JSON object: %w", err)
+		}
+		if payload == nil {
+			return fmt.Errorf("--payload-json must decode to a JSON object")
+		}
+		req.Payload = payload
+	}
+
+	result, err := handler(signalContext(), req)
+	if err != nil {
+		return fmt.Errorf("%s: %w", operation, err)
+	}
+	return writeJSON(result)
 }
 
 func runStream(adapter Adapter, args []string) error {
-	if adapter.Stream == nil {
-		return fmt.Errorf("stream not supported by this adapter")
+	if adapter.Operations.DeliveryStream == nil {
+		return fmt.Errorf("delivery.stream not supported by this adapter")
 	}
 
-	fs := flag.NewFlagSet("stream", flag.ContinueOnError)
+	fs := flag.NewFlagSet("delivery.stream", flag.ContinueOnError)
 	_ = fs.String("account", "", "Account ID")
 	_ = fs.String("format", "jsonl", "Output format (always jsonl)")
 	if err := fs.Parse(args); err != nil {
@@ -325,9 +396,9 @@ func runStream(adapter Adapter, args []string) error {
 	ctx := signalContext()
 
 	LogInfo("stream handler starting")
-	err := handleStream(ctx, adapter.Stream)
+	err := handleStream(ctx, adapter.Operations.DeliveryStream)
 	if err != nil {
-		return fmt.Errorf("stream: %w", err)
+		return fmt.Errorf("delivery.stream: %w", err)
 	}
 	LogInfo("stream handler stopped cleanly")
 	return nil

@@ -504,181 +504,202 @@ const WHATSAPP_CHANNEL_CAPABILITIES = {
 } as const;
 
 export const whatsappAdapter: AdapterDefinition = {
-  info: async () => ({
-    platform: "whatsapp",
-    name: "nexus-adapter-whatsapp",
-    version: "0.1.0",
-    supports: ["monitor", "send", "health", "accounts"],
-    credential_service: "whatsapp",
-    multi_account: true,
-    platform_capabilities: WHATSAPP_CHANNEL_CAPABILITIES,
-  }),
-
-  accounts: async (ctx) => {
-    const accountID = ctx.runtime?.account_id || "default";
-    return [
-      {
-        id: accountID,
-        status: "ready" as const,
-        ...(ctx.runtime?.credential?.ref ? { credential_ref: ctx.runtime.credential.ref } : {}),
+  operations: {
+    "adapter.info": async () => ({
+      platform: "whatsapp",
+      name: "nexus-adapter-whatsapp",
+      version: "0.1.0",
+      operations: [
+        "adapter.info",
+        "adapter.accounts.list",
+        "adapter.health",
+        "delivery.send",
+        "adapter.monitor.start",
+      ],
+      credential_service: "whatsapp",
+      multi_account: true,
+      auth: {
+        methods: [
+          {
+            type: "file_upload",
+            label: "Upload WhatsApp Session",
+            icon: "upload",
+            accept: [".json", ".zip"],
+            templateUrl: "/templates/whatsapp-session.json",
+          },
+        ],
+        setupGuide:
+          "Provide an exported WhatsApp auth session bundle (Baileys creds/session files) to connect this account.",
       },
-    ];
-  },
+      platform_capabilities: WHATSAPP_CHANNEL_CAPABILITIES,
+    }),
 
-  health: async (ctx, args) => {
-    const authDir = resolveAuthDir(ctx, args.account);
-    const credsPath = path.join(authDir, "creds.json");
-    const connected = fs.existsSync(credsPath);
-    return {
-      connected,
-      account: args.account,
-      ...(connected ? { last_event_at: Date.now() } : { error: "missing WhatsApp auth session" }),
-      details: {
-        auth_dir: authDir,
-      },
-    };
-  },
+    "adapter.accounts.list": async (ctx) => {
+      const accountID = ctx.runtime?.account_id || "default";
+      return [
+        {
+          id: accountID,
+          status: "ready" as const,
+          ...(ctx.runtime?.credential?.ref ? { credential_ref: ctx.runtime.credential.ref } : {}),
+        },
+      ];
+    },
 
-  send: async (ctx, req) => {
-    if (req.media) {
+    "adapter.health": async (ctx, args) => {
+      const authDir = resolveAuthDir(ctx, args.account);
+      const credsPath = path.join(authDir, "creds.json");
+      const connected = fs.existsSync(credsPath);
       return {
-        success: false,
-        message_ids: [],
-        chunks_sent: 0,
-        error: {
-          type: "content_rejected",
-          message: "media send is not implemented in this adapter yet",
-          retry: false,
+        connected,
+        account: args.account,
+        ...(connected ? { last_event_at: Date.now() } : { error: "missing WhatsApp auth session" }),
+        details: {
+          auth_dir: authDir,
         },
       };
-    }
+    },
 
-    const text = req.text?.trim();
-    if (!text) {
-      return {
-        success: true,
-        message_ids: [],
-        chunks_sent: 0,
-        total_chars: 0,
-      };
-    }
-
-    const target = normalizeWhatsAppTarget(req.to);
-    const authDir = resolveAuthDir(ctx, req.account);
-    ensureAuthDir(authDir);
-
-    const connection = await connectSocket({
-      authDir,
-      signal: ctx.signal,
-      timeoutMs: 20_000,
-    });
-
-    try {
-      const quoted = req.reply_to_id
-        ? ({
-            key: {
-              remoteJid: target,
-              id: req.reply_to_id,
-              fromMe: false,
-            },
-            message: {
-              conversation: "",
-            },
-          } as unknown)
-        : undefined;
-
-      const result = await connection.sock.sendMessage(
-        target,
-        { text },
-        quoted ? { quoted } : undefined,
-      );
-
-      const messageID = asString(asRecord(result)?.key && asRecord(asRecord(result)?.key)?.id);
-      return {
-        success: true,
-        message_ids: messageID ? [messageID] : [],
-        chunks_sent: 1,
-        total_chars: text.length,
-      };
-    } finally {
-      connection.close();
-    }
-  },
-
-  monitor: async (ctx, args, emit) => {
-    const authDir = resolveAuthDir(ctx, args.account);
-    ensureAuthDir(authDir);
-    const credsPath = path.join(authDir, "creds.json");
-
-    while (!ctx.signal.aborted) {
-      let connection: Awaited<ReturnType<typeof connectSocket>> | null = null;
-      try {
-        connection = await connectSocket({ authDir, signal: ctx.signal, timeoutMs: 20_000 });
-        const sock = connection.sock;
-
-        const onMessages = (upsert: unknown) => {
-          const record = asRecord(upsert);
-          const messages = Array.isArray(record?.messages) ? record.messages : [];
-          for (const raw of messages) {
-            const parsed = buildEventFromBaileysMessage(asRecord(raw) ?? {}, args.account);
-            if (parsed) {
-              emit(parsed);
-            }
-          }
+    "delivery.send": async (ctx, req) => {
+      if (req.media) {
+        return {
+          success: false,
+          message_ids: [],
+          chunks_sent: 0,
+          error: {
+            type: "content_rejected",
+            message: "media send is not implemented in this adapter yet",
+            retry: false,
+          },
         };
+      }
 
-        const closed = new Promise<void>((resolve) => {
-          const onConnectionUpdate = (update: unknown) => {
-            const state = asString(asRecord(update)?.connection);
-            if (state === "close") {
-              sock.ev.off("connection.update", onConnectionUpdate);
-              resolve();
+      const text = req.text?.trim();
+      if (!text) {
+        return {
+          success: true,
+          message_ids: [],
+          chunks_sent: 0,
+          total_chars: 0,
+        };
+      }
+
+      const target = normalizeWhatsAppTarget(req.to);
+      const authDir = resolveAuthDir(ctx, req.account);
+      ensureAuthDir(authDir);
+
+      const connection = await connectSocket({
+        authDir,
+        signal: ctx.signal,
+        timeoutMs: 20_000,
+      });
+
+      try {
+        const quoted = req.reply_to_id
+          ? ({
+              key: {
+                remoteJid: target,
+                id: req.reply_to_id,
+                fromMe: false,
+              },
+              message: {
+                conversation: "",
+              },
+            } as unknown)
+          : undefined;
+
+        const result = await connection.sock.sendMessage(
+          target,
+          { text },
+          quoted ? { quoted } : undefined,
+        );
+
+        const messageID = asString(asRecord(result)?.key && asRecord(asRecord(result)?.key)?.id);
+        return {
+          success: true,
+          message_ids: messageID ? [messageID] : [],
+          chunks_sent: 1,
+          total_chars: text.length,
+        };
+      } finally {
+        connection.close();
+      }
+    },
+
+    "adapter.monitor.start": async (ctx, args, emit) => {
+      const authDir = resolveAuthDir(ctx, args.account);
+      ensureAuthDir(authDir);
+      const credsPath = path.join(authDir, "creds.json");
+
+      while (!ctx.signal.aborted) {
+        let connection: Awaited<ReturnType<typeof connectSocket>> | null = null;
+        try {
+          connection = await connectSocket({ authDir, signal: ctx.signal, timeoutMs: 20_000 });
+          const sock = connection.sock;
+
+          const onMessages = (upsert: unknown) => {
+            const record = asRecord(upsert);
+            const messages = Array.isArray(record?.messages) ? record.messages : [];
+            for (const raw of messages) {
+              const parsed = buildEventFromBaileysMessage(asRecord(raw) ?? {}, args.account);
+              if (parsed) {
+                emit(parsed);
+              }
             }
           };
-          sock.ev.on("connection.update", onConnectionUpdate);
-        });
 
-        sock.ev.on("messages.upsert", onMessages);
+          const closed = new Promise<void>((resolve) => {
+            const onConnectionUpdate = (update: unknown) => {
+              const state = asString(asRecord(update)?.connection);
+              if (state === "close") {
+                sock.ev.off("connection.update", onConnectionUpdate);
+                resolve();
+              }
+            };
+            sock.ev.on("connection.update", onConnectionUpdate);
+          });
 
-        await Promise.race([
-          closed,
-          new Promise<void>((resolve) => {
-            ctx.signal.addEventListener("abort", () => resolve(), { once: true });
-          }),
-        ]);
+          sock.ev.on("messages.upsert", onMessages);
 
-        sock.ev.off("messages.upsert", onMessages);
-      } catch (error) {
-        if (ctx.signal.aborted) {
-          break;
-        }
-        const status = extractStatusCode(error);
-        if (status === 401 || status === 403) {
-          clearAuthSession(authDir);
-          ctx.log.info(
-            "whatsapp auth session invalid (status=%s); cleared auth state, waiting for relink",
-            String(status),
-          );
-          while (!ctx.signal.aborted) {
-            if (fs.existsSync(credsPath)) {
-              break;
-            }
-            await sleep(5000);
+          await Promise.race([
+            closed,
+            new Promise<void>((resolve) => {
+              ctx.signal.addEventListener("abort", () => resolve(), { once: true });
+            }),
+          ]);
+
+          sock.ev.off("messages.upsert", onMessages);
+        } catch (error) {
+          if (ctx.signal.aborted) {
+            break;
           }
-          continue;
+          const status = extractStatusCode(error);
+          if (status === 401 || status === 403) {
+            clearAuthSession(authDir);
+            ctx.log.info(
+              "whatsapp auth session invalid (status=%s); cleared auth state, waiting for relink",
+              String(status),
+            );
+            while (!ctx.signal.aborted) {
+              if (fs.existsSync(credsPath)) {
+                break;
+              }
+              await sleep(5000);
+            }
+            continue;
+          }
+          ctx.log.info(
+            "whatsapp monitor loop error: %s",
+            error instanceof Error ? error.message : String(error),
+          );
+          await sleep(1500);
+        } finally {
+          connection?.close();
         }
-        ctx.log.info(
-          "whatsapp monitor loop error: %s",
-          error instanceof Error ? error.message : String(error),
-        );
-        await sleep(1500);
-      } finally {
-        connection?.close();
-      }
 
-      if (!ctx.signal.aborted) {
-        await sleep(1000);
+        if (!ctx.signal.aborted) {
+          await sleep(1000);
+        }
       }
-    }
+    },
   },
 };

@@ -1,97 +1,65 @@
-# Control-Plane Authorization Taxonomy (Action/Resource)
+# Runtime Operation AuthZ Taxonomy
 
-**Status:** SPEC LOCKED (legacy WS-method mapping; aligned to unified runtime operation model)
-**Last Updated:** 2026-02-24  
-**Related:** `../UNIFIED_RUNTIME_OPERATION_MODEL.md`, `SINGLE_TENANT_MULTI_USER.md`, `CONTROL_PLANE.md`, `../../iam/ACCESS_CONTROL_SYSTEM.md`, `../../iam/POLICIES.md`, `../../iam/AUDIT.md`
+**Status:** SPEC LOCKED (operation registry aligned)  
+**Last Updated:** 2026-02-26  
+**Related:** `../UNIFIED_RUNTIME_OPERATION_MODEL.md`, `../ADAPTER_INTERFACE_UNIFICATION.md`, `SINGLE_TENANT_MULTI_USER.md`, `../../iam/ACCESS_CONTROL_SYSTEM.md`, `../../iam/POLICIES.md`, `../../iam/AUDIT.md`
 
 ---
 
 ## Summary
 
-Control-plane authorization maps WS/RPC methods to canonical runtime operations and IAM permissions.
-This document preserves the legacy WS-method taxonomy mapping while the unified operation registry cutover lands.
+Authorization is operation-based.
+
+Every mounted operation maps to:
+
+1. `operation` (stable id)
+2. `action` (`read|write|admin|approve|pair`)
+3. `resource` (stable resource id)
+4. `permission` (`control.<resource>.<action>`)
+5. `mode` (`protocol|sync|event`)
+
+This taxonomy is shared across WS, HTTP, internal adapters, and external adapters.
 
 ---
 
-## Canonical Model
+## Rules
 
-Every control-plane WS/HTTP method maps to:
-
-1. `kind` (legacy dispatcher grouping)
-   - `protocol`: handshake/pairing/plumbing only
-   - `control`: synchronous runtime management operation
-   - `event`: maps to runtime `event.ingest` operation and executes event path
-2. `action`
-   - `read | write | admin | approve | pair`
-3. `resource`
-   - stable resource identifier (`config`, `sessions.history`, `pairing.devices.tokens`, `acl.requests`)
-4. `permission`
-   - stable IAM permission for `control`/`event`: `control.<resource>.<action>`
-
-Rules:
-
-1. `protocol` methods are AuthN-bound transport mechanics and must not trigger agent work.
-2. `control` methods are AuthN + principal + IAM AuthZ + audit, then direct handler execution.
-3. `event` methods are AuthN + principal + IAM AuthZ + audit, then dispatch runtime `event.ingest`.
-
-Examples:
-
-- `config.get` -> `kind=control`, `permission=control.config.read`
-- `config.patch` -> `kind=control`, `permission=control.config.admin`
-- `chat.send` -> `kind=event`, maps to runtime `event.ingest`
-- `connect.auth.challenge` -> `kind=protocol`
+1. All `sync` and `event` operations require IAM authorization.
+2. `protocol` operations are transport mechanics and must not perform business-state writes outside protocol/session semantics.
+3. `event` operations dispatch through canonical event normalization and `nex.processEvent(...)`.
+4. Every allow/deny/fail decision writes audit records.
 
 ---
 
-## Source Of Truth
+## Clock Cutover
 
-Runtime taxonomy source remains:
+Canonical scheduling operations are:
 
-- `/Users/tyler/nexus/home/projects/nexus/nex/src/nex/control-plane/authz-taxonomy.ts`
-- Coverage test:
-  - `/Users/tyler/nexus/home/projects/nexus/nex/src/nex/control-plane/authz-taxonomy.test.ts`
+1. `clock.schedule.list`
+2. `clock.schedule.status`
+3. `clock.schedule.create`
+4. `clock.schedule.update`
+5. `clock.schedule.remove`
+6. `clock.schedule.run`
+7. `clock.schedule.runs`
+8. `clock.schedule.wake`
 
-Until runtime cutover is complete, code may still contain the old enum names. This spec defines the target and blocks any new usage of legacy names.
+Legacy operations removed:
 
----
-
-## Enforcement Contract
-
-Dispatcher behavior (normative):
-
-1. `kind=control`
-   - authorize IAM before handler execution
-2. `kind=event`
-   - authorize IAM, then normalize and dispatch to `nex.processEvent(...)`
-3. `kind=protocol`
-   - transport-role checks only; no business-state control/event execution
-
-Centralized authorizer remains:
-
-- `/Users/tyler/nexus/home/projects/nexus/nex/src/nex/control-plane/iam-authorize.ts`
-- Tests:
-  - `/Users/tyler/nexus/home/projects/nexus/nex/src/nex/control-plane/iam-authorize.test.ts`
+1. `wake`
+2. `cron.list`
+3. `cron.status`
+4. `cron.add`
+5. `cron.update`
+6. `cron.remove`
+7. `cron.run`
+8. `cron.runs`
 
 ---
 
-## Audit Logging
+## Source Of Truth (Code)
 
-All `control` and `event` decisions must write to `acl_access_log` with:
+1. `/Users/tyler/nexus/home/projects/nexus/nex/src/nex/control-plane/authz-taxonomy.ts`
+2. `/Users/tyler/nexus/home/projects/nexus/nex/src/nex/control-plane/server-methods-list.ts`
+3. `/Users/tyler/nexus/home/projects/nexus/nex/src/nex/control-plane/server-methods.ts`
 
-- `operation_kind` (`"control-plane"` or `"event-ingress"`)
-- `operation` (method name)
-- `operation_resource`
-- `operation_action`
-- `operation_permission`
-
-Schema and inserts live in:
-
-- `/Users/tyler/nexus/home/projects/nexus/nex/src/iam/audit.ts`
-
----
-
-## Notes
-
-1. This taxonomy is for single-tenant, multi-user IAM: permissions vary by principal.
-2. Uniform IAM does not require turning synchronous control CRUD into chat events.
-3. Unified target is the operation registry in `../UNIFIED_RUNTIME_OPERATION_MODEL.md`; this doc remains as an implementation bridge for WS method classification.

@@ -52,7 +52,7 @@ This spec is a **hard cutover** design. No backward-compatibility paths are reta
 
 Current code reality (2026-02-24):
 
-1. runtime exposes **control-plane** and **ingress** surface roles.
+1. runtime exposes **control-plane** and **ingress** listener trust zones.
 2. agent ingress dispatches through `dispatchNexusEvent -> nex.processEvent` for protocol paths that represent event work.
 3. this spec keeps trust-zone separation by surface semantics; concrete listener/port topology is deploy-time configuration.
 

@@ -7,6 +7,11 @@
   },
   "credential": {
     "kind": "token",
-    "value": "REDACTED"
+    "value": "REDACTED",
+    "fields": {
+      "token": "REDACTED"
+    },
+    "auth_id": "token",
+    "type": "token"
   }
 }

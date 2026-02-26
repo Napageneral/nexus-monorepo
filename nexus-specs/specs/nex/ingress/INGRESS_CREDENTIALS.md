@@ -77,7 +77,7 @@ Multiple tabs can attach to the same conversation. Tabs do not imply different i
 
 ### Ingress credential
 
-An ingress credential is a token used on ingress surfaces. It maps deterministically to:
+An ingress credential is a token used on ingress listener endpoints. It maps deterministically to:
 
 - `audience = ingress`
 - `entity_id = <principal>`

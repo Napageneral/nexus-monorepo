@@ -1,7 +1,9 @@
-# Event Adapter SDK
+# Event Adapter SDK (Historical)
 
-**Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-24
+**Status:** HISTORICAL (superseded)  
+**Last Updated:** 2026-02-26
+
+Superseded by: `ADAPTER_SDK_OPERATION_MODEL_CUTOVER.md`
 
 ---
 

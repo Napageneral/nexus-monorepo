@@ -23,8 +23,8 @@ func contractDir(t *testing.T) string {
 	}
 
 	// Default assumes this repo is checked out next to `nexus-specs`.
-	// Workspace-relative: nexus-adapter-sdks/nexus-adapter-sdk-go/../../nexus-specs/specs/runtime/adapters/contract
-	p := filepath.Join("..", "..", "nexus-specs", "specs", "runtime", "adapters", "contract")
+	// Workspace-relative: nexus-adapter-sdks/nexus-adapter-sdk-go/../../nexus-specs/specs/delivery/contract
+	p := filepath.Join("..", "..", "nexus-specs", "specs", "delivery", "contract")
 	abs, err := filepath.Abs(p)
 	if err != nil {
 		t.Fatalf("abs(%s): %v", p, err)

@@ -19,11 +19,11 @@ go build ./cmd/gog-adapter
 ## Run
 
 ```bash
-go run ./cmd/gog-adapter info
-go run ./cmd/gog-adapter accounts list
-go run ./cmd/gog-adapter health --account you@example.com
-go run ./cmd/gog-adapter monitor --account you@example.com
-go run ./cmd/gog-adapter backfill --account you@example.com --since 2026-01-01
+go run ./cmd/gog-adapter adapter.info
+go run ./cmd/gog-adapter adapter.accounts.list
+go run ./cmd/gog-adapter adapter.health --account you@example.com
+go run ./cmd/gog-adapter adapter.monitor.start --account you@example.com
+go run ./cmd/gog-adapter event.backfill --account you@example.com --since 2026-01-01
 ```
 
 ## Monitor modes

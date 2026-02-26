@@ -2,20 +2,25 @@ import { z } from "zod";
 
 // --- Adapter Identity & Registration ---
 
-export const AdapterCapabilitySchema = z.enum([
-  "monitor",
-  "send",
-  "stream",
-  "backfill",
-  "health",
-  "accounts",
-  "react",
-  "edit",
-  "delete",
-  "poll",
+export const AdapterOperationSchema = z.enum([
+  "adapter.info",
+  "adapter.health",
+  "adapter.accounts.list",
+  "adapter.monitor.start",
+  "adapter.setup.start",
+  "adapter.setup.submit",
+  "adapter.setup.status",
+  "adapter.setup.cancel",
+  "event.backfill",
+  "delivery.send",
+  "delivery.stream",
+  "delivery.react",
+  "delivery.edit",
+  "delivery.delete",
+  "delivery.poll",
 ]);
 
-export type AdapterCapability = z.infer<typeof AdapterCapabilitySchema>;
+export type AdapterOperation = z.infer<typeof AdapterOperationSchema>;
 
 // ChannelCapabilities is for agent context + adapter self-description via `info`.
 // Keep this aligned with `nexus-adapter-sdk-go/types.go` JSON tags.
@@ -45,17 +50,86 @@ export const ChannelCapabilitiesSchema = z
 
 export type ChannelCapabilities = z.infer<typeof ChannelCapabilitiesSchema>;
 
+export const AdapterAuthFieldOptionSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+});
+
+export const AdapterAuthFieldSchema = z.object({
+  name: z.string(),
+  label: z.string(),
+  type: z.enum(["secret", "text", "select"]),
+  required: z.boolean(),
+  placeholder: z.string().optional(),
+  options: z.array(AdapterAuthFieldOptionSchema).optional(),
+});
+
+export const AdapterAuthMethodOAuthSchema = z.object({
+  type: z.literal("oauth2"),
+  label: z.string(),
+  icon: z.string(),
+  service: z.string(),
+  scopes: z.array(z.string()),
+  platformCredentials: z.boolean().optional(),
+  platformCredentialUrl: z.string().optional(),
+});
+
+export const AdapterAuthMethodApiKeySchema = z.object({
+  type: z.literal("api_key"),
+  label: z.string(),
+  icon: z.string(),
+  service: z.string(),
+  fields: z.array(AdapterAuthFieldSchema),
+});
+
+export const AdapterAuthMethodFileUploadSchema = z.object({
+  type: z.literal("file_upload"),
+  label: z.string(),
+  icon: z.string(),
+  accept: z.array(z.string()),
+  templateUrl: z.string().optional(),
+  maxSize: z.number().int().positive().optional(),
+});
+
+export const AdapterAuthMethodCustomFlowSchema = z.object({
+  type: z.literal("custom_flow"),
+  label: z.string(),
+  icon: z.string(),
+  service: z.string(),
+  fields: z.array(AdapterAuthFieldSchema).optional(),
+});
+
+export const AdapterAuthMethodSchema = z.discriminatedUnion("type", [
+  AdapterAuthMethodOAuthSchema,
+  AdapterAuthMethodApiKeySchema,
+  AdapterAuthMethodFileUploadSchema,
+  AdapterAuthMethodCustomFlowSchema,
+]);
+
+export const AdapterAuthManifestSchema = z.object({
+  methods: z.array(AdapterAuthMethodSchema),
+  setupGuide: z.string().optional(),
+});
+
 export const AdapterInfoSchema = z.object({
   platform: z.string(),
   name: z.string(),
   version: z.string(),
-  supports: z.array(AdapterCapabilitySchema),
+  operations: z.array(AdapterOperationSchema),
   credential_service: z.string().optional(),
   multi_account: z.boolean(),
   platform_capabilities: ChannelCapabilitiesSchema,
+  auth: AdapterAuthManifestSchema.optional(),
 });
 
 export type AdapterInfo = z.infer<typeof AdapterInfoSchema>;
+export type AdapterAuthField = z.infer<typeof AdapterAuthFieldSchema>;
+export type AdapterAuthMethodOAuth = z.infer<typeof AdapterAuthMethodOAuthSchema>;
+export type AdapterAuthMethodApiKey = z.infer<typeof AdapterAuthMethodApiKeySchema>;
+export type AdapterAuthMethodFileUpload = z.infer<typeof AdapterAuthMethodFileUploadSchema>;
+export type AdapterAuthMethodCustomFlow = z.infer<typeof AdapterAuthMethodCustomFlowSchema>;
+export type AdapterAuthMethod = z.infer<typeof AdapterAuthMethodSchema>;
+export type AdapterAuthManifest = z.infer<typeof AdapterAuthManifestSchema>;
 
 // --- NexusEvent (Inbound) ---
 
@@ -243,3 +317,28 @@ export const AdapterStreamStatusSchema = z.discriminatedUnion("type", [
 ]);
 
 export type AdapterStreamStatus = z.infer<typeof AdapterStreamStatusSchema>;
+
+export const AdapterSetupStatusSchema = z.enum([
+  "pending",
+  "requires_input",
+  "completed",
+  "failed",
+  "cancelled",
+]);
+
+export const AdapterSetupResultSchema = z
+  .object({
+    status: AdapterSetupStatusSchema,
+    session_id: z.string().optional(),
+    account: z.string().optional(),
+    service: z.string().optional(),
+    message: z.string().optional(),
+    instructions: z.string().optional(),
+    fields: z.array(AdapterAuthFieldSchema).optional(),
+    secret_fields: z.record(z.string(), z.string()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .catchall(z.unknown());
+
+export type AdapterSetupStatus = z.infer<typeof AdapterSetupStatusSchema>;
+export type AdapterSetupResult = z.infer<typeof AdapterSetupResultSchema>;

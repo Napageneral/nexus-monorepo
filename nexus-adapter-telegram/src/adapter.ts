@@ -320,6 +320,12 @@ function sleep(ms: number): Promise<void> {
 }
 
 function resolveTelegramToken(ctx: AdapterContext): string {
+  const runtimeFieldToken =
+    ctx.runtime?.credential?.fields?.bot_token?.trim() ??
+    ctx.runtime?.credential?.fields?.token?.trim();
+  if (runtimeFieldToken) {
+    return runtimeFieldToken;
+  }
   const runtimeToken = ctx.runtime?.credential?.value?.trim();
   if (runtimeToken) {
     return runtimeToken;
@@ -430,128 +436,157 @@ const TELEGRAM_CHANNEL_CAPABILITIES = {
 } as const;
 
 export const telegramAdapter: AdapterDefinition = {
-  info: async () => ({
-    platform: "telegram",
-    name: "nexus-adapter-telegram",
-    version: "0.1.0",
-    supports: ["monitor", "send", "health", "accounts"],
-    credential_service: "telegram",
-    multi_account: true,
-    platform_capabilities: TELEGRAM_CHANNEL_CAPABILITIES,
-  }),
-
-  accounts: async (ctx) => {
-    const accountID = ctx.runtime?.account_id || "default";
-    return [
-      {
-        id: accountID,
-        status: "ready" as const,
-        ...(ctx.runtime?.credential?.ref ? { credential_ref: ctx.runtime.credential.ref } : {}),
+  operations: {
+    "adapter.info": async () => ({
+      platform: "telegram",
+      name: "nexus-adapter-telegram",
+      version: "0.1.0",
+      operations: [
+        "adapter.info",
+        "adapter.accounts.list",
+        "adapter.health",
+        "delivery.send",
+        "adapter.monitor.start",
+      ],
+      credential_service: "telegram",
+      multi_account: true,
+      auth: {
+        methods: [
+          {
+            type: "api_key",
+            label: "Enter Bot Token",
+            icon: "key",
+            service: "telegram",
+            fields: [
+              {
+                name: "bot_token",
+                label: "Bot Token",
+                type: "secret",
+                required: true,
+                placeholder: "123456789:AA...",
+              },
+            ],
+          },
+        ],
+        setupGuide:
+          "Create a bot with BotFather, copy the bot token, and connect this adapter with that token.",
       },
-    ];
-  },
+      platform_capabilities: TELEGRAM_CHANNEL_CAPABILITIES,
+    }),
 
-  health: async (ctx, args) => {
-    const token = resolveTelegramToken(ctx);
-    const me = await telegramRequest<UnknownRecord>({
-      token,
-      method: "getMe",
-      body: {},
-      signal: ctx.signal,
-    });
-    return {
-      connected: true,
-      account: args.account,
-      last_event_at: Date.now(),
-      details: {
-        id: asInteger(me.id),
-        username: asString(me.username),
-      },
-    };
-  },
+    "adapter.accounts.list": async (ctx) => {
+      const accountID = ctx.runtime?.account_id || "default";
+      return [
+        {
+          id: accountID,
+          status: "ready" as const,
+          ...(ctx.runtime?.credential?.ref ? { credential_ref: ctx.runtime.credential.ref } : {}),
+        },
+      ];
+    },
 
-  send: async (ctx, req) => {
-    if (req.media) {
+    "adapter.health": async (ctx, args) => {
+      const token = resolveTelegramToken(ctx);
+      const me = await telegramRequest<UnknownRecord>({
+        token,
+        method: "getMe",
+        body: {},
+        signal: ctx.signal,
+      });
       return {
-        success: false,
-        message_ids: [],
-        chunks_sent: 0,
-        error: {
-          type: "content_rejected",
-          message: "media send is not implemented in this adapter yet",
-          retry: false,
+        connected: true,
+        account: args.account,
+        last_event_at: Date.now(),
+        details: {
+          id: asInteger(me.id),
+          username: asString(me.username),
         },
       };
-    }
+    },
 
-    const text = req.text?.trim();
-    if (!text) {
-      return {
-        success: true,
-        message_ids: [],
-        chunks_sent: 0,
-        total_chars: 0,
-      };
-    }
-
-    return await sendTelegramText({
-      ctx,
-      account: req.account,
-      to: req.to,
-      text,
-      threadID: req.thread_id,
-      replyToID: req.reply_to_id,
-    });
-  },
-
-  monitor: async (ctx, args, emit) => {
-    const token = resolveTelegramToken(ctx);
-    let offset = 0;
-
-    while (!ctx.signal.aborted) {
-      try {
-        const updates = await telegramRequest<unknown[]>({
-          token,
-          method: "getUpdates",
-          body: {
-            timeout: 25,
-            ...(offset > 0 ? { offset } : {}),
-            allowed_updates: ["message", "edited_message", "channel_post", "edited_channel_post"],
+    "delivery.send": async (ctx, req) => {
+      if (req.media) {
+        return {
+          success: false,
+          message_ids: [],
+          chunks_sent: 0,
+          error: {
+            type: "content_rejected",
+            message: "media send is not implemented in this adapter yet",
+            retry: false,
           },
-          signal: ctx.signal,
-        });
+        };
+      }
 
-        if (updates.length === 0) {
-          continue;
-        }
+      const text = req.text?.trim();
+      if (!text) {
+        return {
+          success: true,
+          message_ids: [],
+          chunks_sent: 0,
+          total_chars: 0,
+        };
+      }
 
-        for (const rawUpdate of updates) {
+      return await sendTelegramText({
+        ctx,
+        account: req.account,
+        to: req.to,
+        text,
+        threadID: req.thread_id,
+        replyToID: req.reply_to_id,
+      });
+    },
+
+    "adapter.monitor.start": async (ctx, args, emit) => {
+      const token = resolveTelegramToken(ctx);
+      let offset = 0;
+
+      while (!ctx.signal.aborted) {
+        try {
+          const updates = await telegramRequest<unknown[]>({
+            token,
+            method: "getUpdates",
+            body: {
+              timeout: 25,
+              ...(offset > 0 ? { offset } : {}),
+              allowed_updates: ["message", "edited_message", "channel_post", "edited_channel_post"],
+            },
+            signal: ctx.signal,
+          });
+
+          if (updates.length === 0) {
+            continue;
+          }
+
+          for (const rawUpdate of updates) {
+            if (ctx.signal.aborted) {
+              break;
+            }
+            const update = asRecord(rawUpdate);
+            if (!update) {
+              continue;
+            }
+            const updateID = asInteger(update.update_id);
+            if (updateID !== undefined) {
+              offset = Math.max(offset, updateID + 1);
+            }
+            const event = buildEventFromUpdate(update, args.account);
+            if (event) {
+              emit(event);
+            }
+          }
+        } catch (error) {
           if (ctx.signal.aborted) {
             break;
           }
-          const update = asRecord(rawUpdate);
-          if (!update) {
-            continue;
-          }
-          const updateID = asInteger(update.update_id);
-          if (updateID !== undefined) {
-            offset = Math.max(offset, updateID + 1);
-          }
-          const event = buildEventFromUpdate(update, args.account);
-          if (event) {
-            emit(event);
-          }
+          ctx.log.info(
+            "telegram monitor loop error: %s",
+            error instanceof Error ? error.message : String(error),
+          );
+          await sleep(1500);
         }
-      } catch (error) {
-        if (ctx.signal.aborted) {
-          break;
-        }
-        ctx.log.info(
-          "telegram monitor loop error: %s",
-          error instanceof Error ? error.message : String(error),
-        );
-        await sleep(1500);
       }
-    }
+    },
   },
 };

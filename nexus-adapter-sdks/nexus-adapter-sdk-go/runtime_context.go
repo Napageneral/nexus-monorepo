@@ -31,9 +31,13 @@ type RuntimeCredential struct {
 	Kind  string `json:"kind,omitempty"` // "token", "oauth", ...
 	Value string `json:"value"`
 
+	Fields map[string]string `json:"fields,omitempty"`
+
 	Ref     string `json:"ref,omitempty"`
 	Service string `json:"service,omitempty"`
 	Account string `json:"account,omitempty"`
+	AuthID  string `json:"auth_id,omitempty"`
+	Type    string `json:"type,omitempty"`
 }
 
 // LoadRuntimeContextFromEnv reads and parses the runtime context file pointed to by

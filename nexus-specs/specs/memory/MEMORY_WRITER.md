@@ -11,7 +11,7 @@
 
 ## Overview
 
-The Memory-Writer is a meeseeks that transforms NexusEvents into facts and entities. It replaces both the old 7-stage Go pipeline and the Hindsight 10-step retain pipeline with an agentic approach.
+The Memory-Writer is a meeseeks that transforms episode payloads (thread + participants + events) into facts and entities. It replaces both the old 7-stage Go pipeline and the Hindsight 10-step retain pipeline with an agentic approach.
 
 **The agent IS the extractor.** There is no `extract_facts()` tool. The agent's role prompt teaches it to read an episode of events, identify facts and entities, resolve entities, and check for duplicates. The tools it uses are for database operations (searching and writing), not for the extraction logic itself.
 
@@ -23,8 +23,8 @@ The Memory-Writer is a meeseeks that transforms NexusEvents into facts and entit
 
 The Memory-Writer is triggered per **episode**, not per event. Events accumulate in their thread/channel, and when an episode boundary is detected (90-minute conversation gap, token budget exceeded, or end-of-day flush), the writer receives:
 
-1. **The full episode** -- an array of NexusEvents in chronological order, with deliveryContext on each
-2. **Episode metadata** -- platform, thread_id, event count, token estimate
+1. **The full episode payload** -- thread + participants + events in chronological order
+2. **Per-event extraction fields** -- sender, local datetime, content object, reply link, attachments
 
 The same pipeline works for all event types: iMessages, emails, agent turns, Discord messages, etc. The writer's role prompt teaches it how to handle each type. Events are searchable in short-term memory (via recall) before the writer processes them.
 
@@ -38,7 +38,7 @@ The Memory-Writer is role-based. Its behavior comes from its ROLE.md prompt, not
 
 1. **Fact extraction** -- Read the event and surrounding context. Identify atomic facts (durable knowledge, not ephemeral state). Each fact is a natural language sentence.
 
-2. **Entity identification** -- Identify all entities mentioned: people, organizations, groups, projects, locations, concepts. Entities are identities (the "who"), not identifiers (phone numbers, emails, handles). Use `sender_name` from the deliveryContext to name person entities.
+2. **Entity identification** -- Identify all entities mentioned: people, organizations, groups, projects, locations, concepts. Entities are identities (the "who"), not identifiers (phone numbers, emails, handles). Use participant display names + sender mapping from the payload.
 
 3. **Deduplication** -- Before inserting a fact, search for similar existing facts. If a near-duplicate exists (semantically similar, same time period), skip it.
 
@@ -66,15 +66,17 @@ The Memory-Writer has access to a small set of database operation tools:
 ```
 recall(query, params)
     The unified memory search API.
-    Params: scope, entity, time_after, time_before, platform, max_results, budget
-    Used for: deduplication, finding related facts, entity resolution lookups
+    Params: scope, entity, time_after, time_before, platform, thread_id, thread_lookback_events, max_results, budget
+    Used for: deduplication, finding related facts, entity resolution lookups, sparse-thread lookback
 ```
 
 ### Write
 
 ```
-insert_fact(text, as_of, ingested_at, source_event_id, metadata)
+insert_fact(text, as_of, ingested_at, source_event_id?, metadata?)
     Store a new fact in the facts table.
+    Runtime assigns source_episode_id automatically for writer episode sessions.
+    source_event_id remains optional for precise single-event attribution.
     Returns: fact_id
 
 create_entity(name, type, normalized, source)
@@ -100,14 +102,14 @@ These may be exposed as tools, CLI commands, or direct API calls -- the exact me
 Episode boundary detected (conversation gap / token budget / EOD flush)
     |
     v
-Memory-Writer receives: episode (array of NexusEvents in chronological order)
+Memory-Writer receives: episode payload (thread + participants + events in chronological order)
     |
     v
-Agent reads all events in the episode, noting deliveryContext on each
+Agent reads all events in the episode, using participant/sender mapping on each event
     |
     v
 Agent extracts facts across the episode:
-    - Reads the content + conversation flow
+    - Reads event content + attachments + conversation flow
     - Identifies atomic durable knowledge (not ephemeral state)
     - Each fact is a natural language sentence
     - Consolidates related information from multiple messages into single facts
@@ -125,7 +127,8 @@ For each fact:
     |         If no match -> create_entity(name, type)
     |         If ambiguous -> propose_merge() or create new + merge_candidate
     |
-    +---> Insert fact: insert_fact(text, as_of, source_event_id, ...)
+    +---> Insert fact: insert_fact(text, as_of, source_event_id?, ...)
+    |         source_episode_id is attached by runtime automatically
     |
     +---> Link entities: link_fact_entity(fact_id, entity_id) for each entity
     |
@@ -141,9 +144,9 @@ Agent completes. System runs post-agent steps:
 
 ## Consolidation (Background Job)
 
-Consolidation runs as a background process after the Memory-Writer completes an episode. It synthesizes per-fact observations from accumulated evidence: new facts from the episode are clustered by topic, matched against existing observations, and processed through an LLM call that produces durable knowledge summaries. Observations are stored as `analysis_runs` with `type='observation'`, each chained to its predecessor via `parent_id` for history.
+Consolidation runs as a background process after the Memory-Writer completes an episode. It performs one consolidation agent invocation per retained episode, matches episode facts against existing observations/facts, and applies create/update/link actions. Observations are stored as `analysis_runs` with `type='observation'`, each chained to its predecessor via `parent_id` for history.
 
-The writer does NOT run consolidation directly -- it only queues the job. The consolidation pipeline handles topic clustering, causal link detection, cross-platform entity merge proposals, and mental model refresh triggers.
+The writer does NOT run consolidation directly -- it only queues the job. The consolidation pipeline runs one agent invocation per retained episode and handles observation create/update decisions, causal link detection, cross-platform entity merge proposals, and mental model refresh triggers.
 
 > **Full design:** See `RETAIN_PIPELINE.md` for the complete consolidation pipeline spec, including batching strategy, observation prompts, and execution details.
 
@@ -151,22 +154,50 @@ The writer does NOT run consolidation directly -- it only queues the job. The co
 
 ## Episode Context: What the Writer Receives
 
-The writer receives a full episode: an array of NexusEvents in chronological order. The prompt is framed as "This is a conversation episode containing N messages from [platform]. Extract durable knowledge."
+The writer receives a contract payload purpose-built for extraction (not raw delivery metadata):
 
-### NexusEvent DeliveryContext
+```json
+{
+  "platform": "imessage",
+  "thread": {
+    "thread_id": "imessage:+16319056994",
+    "thread_name": "Casey Adams",
+    "container_type": "direct"
+  },
+  "participants": [
+    {
+      "participant_id": "owner",
+      "display_name": "Tyler Brandt",
+      "is_owner": true,
+      "identity_type": "owner"
+    },
+    {
+      "participant_id": "+16319056994",
+      "display_name": "Casey Adams",
+      "is_owner": false,
+      "identity_type": "phone"
+    }
+  ],
+  "events": [
+    {
+      "event_id": "imessage:...",
+      "sender_id": "owner",
+      "datetime_local": "Mon, Feb 23, 2026, 09:03:25 PM CST",
+      "content": { "type": "text", "value": "Yes" },
+      "reply_to_event_id": "imessage:...",
+      "attachments": []
+    }
+  ]
+}
+```
 
-| Field | Example | Use |
-|-------|---------|-----|
-| `platform` | "discord" | Source platform metadata |
-| `sender_id` | "coolgamer42#1234" | Contact identifier (stored in contacts table, NOT as entity name) |
-| `sender_name` | "Cool Gamer" | Person entity name (used for entity creation/matching) |
-| `container_id` | "server/channel" | Thread context for pulling surrounding messages |
-| `container_kind` | "direct" / "group" | Context for extraction |
-| `thread_id` | "thread_abc" | Thread grouping |
+Extraction rule:
+- Facts/entities come from `events[].content` + `events[].attachments` only.
+- Thread/sender/platform IDs are context/disambiguation only, not extraction targets.
 
 ### Episode as Conversation Context
 
-The full episode provides conversational context. Unlike the old per-event approach (which needed separate "thread context" lookups), the episode already contains the full conversation window. For iMessages: a conversation with a 90-minute gap between episodes. For agent turns: a session or portion of a session. For email: a thread grouped by In-Reply-To headers.
+The full episode provides primary context. For sparse episodes, the writer can use `recall(..., thread_id, thread_lookback_events)` to pull recent prior thread events.
 
 ### What Does NOT Flow Through (Currently)
 
@@ -198,7 +229,7 @@ These adapter-sourced entities may be sparse — they might only have a display 
 
 When extracting entities from a conversation, the memory-writer **must** check for existing adapter-sourced entities and prefer linking to them over creating new ones. Specifically:
 
-1. **Match on sender.** When the writer identifies an entity from a deliveryContext, search for the existing adapter-sourced person entity. The adapter pipeline already created it — look it up by searching for entities matching the `sender_name`, or use the contact lookup via `(platform, sender_id)`.
+1. **Match on sender.** When the writer identifies an entity from event sender mapping, search for the existing adapter-sourced person entity. The adapter pipeline already created it — look it up by participant display name and contact linkage `(platform, sender_id)`.
 
 2. **Link facts to the existing entity.** If an adapter-sourced entity is found, all extracted facts about that sender should be linked to it via `link_fact_entity()`. Do not create a second entity for the same person.
 
@@ -258,8 +289,8 @@ These persist across invocations, making the writer more effective over time.
 | **Entity resolution** | Contact import + extracted | 3-signal scorer (name/cooccurrence/temporal) | Agentic: uses context, PII pipeline, co-occurrence |
 | **Deduplication** | UNIQUE constraints | Cosine >0.95 in 24hr window | Agent searches and decides |
 | **Links** | Relationships table (structured triples) | 4 link types in memory_links at write time | No links at write time; causal links detected by consolidation |
-| **Consolidation** | None (observation-log at read time) | Background job per fact, 1 LLM call each | Episode-batched: all facts from episode consolidated together |
-| **Input format** | Structured Go types | content + context string | Full episode (array of NexusEvents in chronological order) |
+| **Consolidation** | None (observation-log at read time) | Background job per fact, 1 LLM call each | One consolidation agent invocation per retained episode |
+| **Input format** | Structured Go types | content + context string | Contract payload with thread + participants + events |
 | **Self-improvement** | None | None | ROLE.md, scripts (no mental models — those belong to reflect skill) |
 
 ---

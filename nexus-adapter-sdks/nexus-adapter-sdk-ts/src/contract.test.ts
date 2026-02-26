@@ -19,7 +19,7 @@ function contractDir(): string {
     return path.resolve(env);
   }
   // Default assumes this repo is checked out next to `nexus-specs`.
-  return path.resolve(process.cwd(), "../../nexus-specs/specs/runtime/adapters/contract");
+  return path.resolve(process.cwd(), "../../nexus-specs/specs/delivery/contract");
 }
 
 function loadJSON(filePath: string): unknown {

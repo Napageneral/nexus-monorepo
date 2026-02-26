@@ -2,16 +2,16 @@ package nexadapter
 
 // --- Adapter Identity & Registration ---
 
-// AdapterInfo is returned by the `info` command. Describes the adapter's
-// identity, capabilities, and channel features to NEX.
+// AdapterInfo is returned by the `adapter.info` operation. Describes the
+// adapter's identity, supported operations, and channel features to NEX.
 type AdapterInfo struct {
 	// Identity
 	Platform string `json:"platform"` // "gmail", "imessage", "discord", etc.
 	Name     string `json:"name"`     // Human-friendly name
 	Version  string `json:"version"`  // Semver
 
-	// What this adapter implements
-	Supports []Capability `json:"supports"`
+	// Supported adapter operations
+	Operations []AdapterOperation `json:"operations"`
 
 	// Credential linking
 	CredentialService string `json:"credential_service,omitempty"` // Links to credential store service
@@ -19,22 +19,74 @@ type AdapterInfo struct {
 
 	// Platform capabilities (for agent context)
 	PlatformCapabilities ChannelCapabilities `json:"platform_capabilities"`
+
+	// Optional auth manifest used by runtime/control-plane credential orchestration.
+	Auth *AdapterAuthManifest `json:"auth,omitempty"`
 }
 
-// Capability identifies a command/feature the adapter supports.
-type Capability string
+// AdapterAuthManifest describes credential setup methods exposed by an adapter.
+type AdapterAuthManifest struct {
+	Methods    []AdapterAuthMethod `json:"methods"`
+	SetupGuide string              `json:"setupGuide,omitempty"`
+}
+
+type AdapterAuthFieldOption struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+type AdapterAuthField struct {
+	Name        string                   `json:"name"`
+	Label       string                   `json:"label"`
+	Type        string                   `json:"type"` // "secret" | "text" | "select"
+	Required    bool                     `json:"required"`
+	Placeholder string                   `json:"placeholder,omitempty"`
+	Options     []AdapterAuthFieldOption `json:"options,omitempty"`
+}
+
+type AdapterAuthMethod struct {
+	Type string `json:"type"` // "oauth2" | "api_key" | "file_upload" | "custom_flow"
+
+	// Shared display metadata
+	Label string `json:"label"`
+	Icon  string `json:"icon"`
+
+	// oauth2/api_key
+	Service string `json:"service,omitempty"`
+
+	// oauth2
+	Scopes                []string `json:"scopes,omitempty"`
+	PlatformCredentials   bool     `json:"platformCredentials,omitempty"`
+	PlatformCredentialURL string   `json:"platformCredentialUrl,omitempty"`
+
+	// api_key
+	Fields []AdapterAuthField `json:"fields,omitempty"`
+
+	// file_upload
+	Accept      []string `json:"accept,omitempty"`
+	TemplateURL string   `json:"templateUrl,omitempty"`
+	MaxSize     int      `json:"maxSize,omitempty"`
+}
+
+// AdapterOperation identifies a runtime operation the adapter supports.
+type AdapterOperation string
 
 const (
-	CapMonitor  Capability = "monitor"
-	CapSend     Capability = "send"
-	CapStream   Capability = "stream"
-	CapBackfill Capability = "backfill"
-	CapHealth   Capability = "health"
-	CapAccounts Capability = "accounts"
-	CapReact    Capability = "react"
-	CapEdit     Capability = "edit"
-	CapDelete   Capability = "delete"
-	CapPoll     Capability = "poll"
+	OpAdapterInfo         AdapterOperation = "adapter.info"
+	OpAdapterMonitorStart AdapterOperation = "adapter.monitor.start"
+	OpAdapterSetupStart   AdapterOperation = "adapter.setup.start"
+	OpAdapterSetupSubmit  AdapterOperation = "adapter.setup.submit"
+	OpAdapterSetupStatus  AdapterOperation = "adapter.setup.status"
+	OpAdapterSetupCancel  AdapterOperation = "adapter.setup.cancel"
+	OpEventBackfill       AdapterOperation = "event.backfill"
+	OpDeliverySend        AdapterOperation = "delivery.send"
+	OpAdapterHealth       AdapterOperation = "adapter.health"
+	OpAdapterAccountsList AdapterOperation = "adapter.accounts.list"
+	OpDeliveryStream      AdapterOperation = "delivery.stream"
+	OpDeliveryReact       AdapterOperation = "delivery.react"
+	OpDeliveryEdit        AdapterOperation = "delivery.edit"
+	OpDeliveryDelete      AdapterOperation = "delivery.delete"
+	OpDeliveryPoll        AdapterOperation = "delivery.poll"
 )
 
 // ChannelCapabilities describes what a channel supports. Reported by the
@@ -81,14 +133,14 @@ type NexusEvent struct {
 	Attachments []Attachment `json:"attachments,omitempty"`
 
 	// Routing context
-	Platform      string `json:"platform"`                // Platform name
-	AccountID     string `json:"account_id"`              // Which account received this
-	SenderID      string `json:"sender_id"`               // Platform-specific sender ID
+	Platform      string `json:"platform"`   // Platform name
+	AccountID     string `json:"account_id"` // Which account received this
+	SenderID      string `json:"sender_id"`  // Platform-specific sender ID
 	SenderName    string `json:"sender_name,omitempty"`
-	SpaceID       string `json:"space_id,omitempty"`      // Optional parent container scope (guild/workspace)
-	SpaceName     string `json:"space_name,omitempty"`    // Optional display name
-	ContainerID   string `json:"container_id"`            // Chat/channel/DM identifier
-	ContainerKind string `json:"container_kind"`          // "dm", "direct", "group", "channel"
+	SpaceID       string `json:"space_id,omitempty"`   // Optional parent container scope (guild/workspace)
+	SpaceName     string `json:"space_name,omitempty"` // Optional display name
+	ContainerID   string `json:"container_id"`         // Chat/channel/DM identifier
+	ContainerKind string `json:"container_kind"`       // "dm", "direct", "group", "channel"
 	ContainerName string `json:"container_name,omitempty"`
 	ThreadID      string `json:"thread_id,omitempty"`
 	ThreadName    string `json:"thread_name,omitempty"`
@@ -113,13 +165,13 @@ type Attachment struct {
 
 // SendRequest contains the parameters for a `send` command invocation.
 type SendRequest struct {
-	Account  string `json:"account"`
-	To       string `json:"to"`                  // Email, phone, channel:id, etc.
-	Text     string `json:"text,omitempty"`
-	Media    string `json:"media,omitempty"`      // File path
-	Caption  string `json:"caption,omitempty"`
-	ReplyToID  string `json:"reply_to_id,omitempty"` // Reply to event ID
-	ThreadID string `json:"thread_id,omitempty"`
+	Account   string `json:"account"`
+	To        string `json:"to"` // Email, phone, channel:id, etc.
+	Text      string `json:"text,omitempty"`
+	Media     string `json:"media,omitempty"` // File path
+	Caption   string `json:"caption,omitempty"`
+	ReplyToID string `json:"reply_to_id,omitempty"` // Reply to event ID
+	ThreadID  string `json:"thread_id,omitempty"`
 }
 
 // DeliveryResult is the structured output of a `send` command.
@@ -133,11 +185,11 @@ type DeliveryResult struct {
 
 // DeliveryError describes why a delivery failed.
 type DeliveryError struct {
-	Type         string `json:"type"`                    // "rate_limited", "permission_denied", "not_found", "content_rejected", "network", "unknown"
-	Message      string `json:"message"`
-	RetryAfterMs int    `json:"retry_after_ms,omitempty"` // For rate_limited
-	Retry        bool   `json:"retry"`                    // Whether NEX should retry
-	Details      map[string]any `json:"details,omitempty"` // Optional channel-specific debugging
+	Type         string         `json:"type"` // "rate_limited", "permission_denied", "not_found", "content_rejected", "network", "unknown"
+	Message      string         `json:"message"`
+	RetryAfterMs int            `json:"retry_after_ms,omitempty"` // For rate_limited
+	Retry        bool           `json:"retry"`                    // Whether NEX should retry
+	Details      map[string]any `json:"details,omitempty"`        // Optional channel-specific debugging
 }
 
 // --- Health ---
@@ -179,7 +231,7 @@ type StreamEvent struct {
 	// tool_status
 	ToolName   string `json:"toolName,omitempty"`
 	ToolCallID string `json:"toolCallId,omitempty"`
-	Status     string `json:"status,omitempty"`  // "started", "completed", "failed"
+	Status     string `json:"status,omitempty"` // "started", "completed", "failed"
 	Summary    string `json:"summary,omitempty"`
 
 	// stream_end
@@ -217,4 +269,35 @@ type AdapterStreamStatus struct {
 
 	// delivery_error
 	ErrorMsg string `json:"error,omitempty"`
+}
+
+// AdapterSetupStatus is the status emitted by adapter.setup.* operations.
+type AdapterSetupStatus string
+
+const (
+	SetupStatusPending       AdapterSetupStatus = "pending"
+	SetupStatusRequiresInput AdapterSetupStatus = "requires_input"
+	SetupStatusCompleted     AdapterSetupStatus = "completed"
+	SetupStatusFailed        AdapterSetupStatus = "failed"
+	SetupStatusCancelled     AdapterSetupStatus = "cancelled"
+)
+
+// AdapterSetupRequest is the generic input for adapter.setup.* operations.
+type AdapterSetupRequest struct {
+	Account   string         `json:"account,omitempty"`
+	SessionID string         `json:"session_id,omitempty"`
+	Payload   map[string]any `json:"payload,omitempty"`
+}
+
+// AdapterSetupResult is the generic output for adapter.setup.* operations.
+type AdapterSetupResult struct {
+	Status       AdapterSetupStatus `json:"status"`
+	SessionID    string             `json:"session_id,omitempty"`
+	Account      string             `json:"account,omitempty"`
+	Service      string             `json:"service,omitempty"`
+	Message      string             `json:"message,omitempty"`
+	Instructions string             `json:"instructions,omitempty"`
+	Fields       []AdapterAuthField `json:"fields,omitempty"`
+	SecretFields map[string]string  `json:"secret_fields,omitempty"`
+	Metadata     map[string]any     `json:"metadata,omitempty"`
 }

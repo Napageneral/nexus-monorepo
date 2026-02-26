@@ -29,9 +29,9 @@ From a user perspective, this phase enables:
 
 As of current `nex` branch:
 
-1. runtime has two **surface roles**:
-   - control-plane surface (protocol/control operations + selected event methods)
-   - ingress surface (adapter-owned event ingress)
+1. runtime has two listener trust zones:
+   - control-plane listener (protocol/control operations + selected event methods)
+   - ingress listener (adapter-owned event ingress)
 2. ingress bridge ownership is separated from control-plane route ownership.
 3. agent-triggering flows dispatch via:
    - `dispatchNexusEvent(...) -> nex.processEvent(...)`

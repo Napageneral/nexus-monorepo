@@ -40,7 +40,7 @@ describe("whatsapp adapter contract smoke", () => {
     const stderr = createCaptureStream();
 
     const code = await runAdapter(whatsappAdapter, {
-      argv: ["node", "adapter", "info"],
+      argv: ["node", "adapter", "adapter.info"],
       stdout: stdout.stream,
       stderr: stderr.stream,
       patchConsole: false,
@@ -56,8 +56,8 @@ describe("whatsapp adapter contract smoke", () => {
       .find(Boolean);
     const parsed = JSON.parse(line ?? "{}");
     expect(parsed.platform).toBe("whatsapp");
-    expect(parsed.supports).toContain("monitor");
-    expect(parsed.supports).toContain("send");
+    expect(parsed.operations).toContain("adapter.monitor.start");
+    expect(parsed.operations).toContain("delivery.send");
   });
 
   it("reports disconnected health when auth session is missing", async () => {
@@ -69,7 +69,7 @@ describe("whatsapp adapter contract smoke", () => {
 
     try {
       const code = await runAdapter(whatsappAdapter, {
-        argv: ["node", "adapter", "health", "--account", "default"],
+        argv: ["node", "adapter", "adapter.health", "--account", "default"],
         stdout: stdout.stream,
         stderr: stderr.stream,
         patchConsole: false,

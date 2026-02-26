@@ -9,7 +9,7 @@ import (
 )
 
 // StreamConfig configures the streaming delivery handler.
-// Only needed for adapters that declare "stream" in their supports.
+// Only needed for adapters that declare "delivery.stream" in adapter.info operations.
 type StreamConfig struct {
 	// OnStreamStart is called when a new streaming delivery begins.
 	// The adapter should create a platform message and prepare for token accumulation.

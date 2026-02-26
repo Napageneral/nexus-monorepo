@@ -24,9 +24,9 @@ Define the refined end state for Nexus communications data:
 1. There is exactly one canonical communications event table: `events.db.events`.
 2. `threads` are first-class in `events.db`.
 3. Participants are tracked per-event (not as a static thread roster); thread membership is reconstructed over time from event-level data.
-4. Attachments are both:
-   - Inline on event rows (`events.attachments` JSON, canonical payload), and
-   - Normalized in `events.db.attachments` for queryability/dedupe.
+4. Attachments are stored in both representations, but operational truth is explicit:
+   - `events.db.attachments` is the canonical operational read path for memory/retain/backfill and media workflows.
+   - `events.attachments` is a best-effort inline payload mirror for transport/debug portability.
 5. `reply_to` is a first-class event column (not metadata-only).
 6. Event state/tags remain in the primary event system (`events.db`), including event-time metadata (`viewed_at`, `archived_at`, etc.).
 7. `document_heads` and `retrieval_log` belong with the event ledger, not the memory system.
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS events (
 
     content TEXT NOT NULL,
     content_type TEXT NOT NULL DEFAULT 'text',
-    attachments TEXT,                    -- JSON array (canonical payload form)
+    attachments TEXT,                    -- JSON array (inline mirror; not canonical read path)
 
     -- NOTE: from_channel/from_identifier use legacy names for backward compatibility.
     -- Canonical terminology per the Unified Delivery Taxonomy:
@@ -323,11 +323,11 @@ CREATE TABLE IF NOT EXISTS retrieval_log (
 
 1. `events` is canonical communications truth.
 2. `threads`, `event_participants`, and normalized `attachments` are index/operational tables in the same database.
-3. Inline event fields remain required even when normalized tables exist:
+3. Inline event fields remain required even when normalized tables exist, except attachments:
    - `events.thread_id`
    - `events.from_identifier` (canonical: `sender_id`)
    - `events.to_recipients`
-   - `events.attachments`
+   - `events.attachments` is optional/best-effort and may be empty while normalized rows exist
 4. Rebuild tools may re-derive index tables from canonical event rows.
 
 ---
@@ -339,7 +339,9 @@ All official ingestion paths (pipeline + adapters) must:
 1. Upsert canonical event into `events`.
 2. Maintain `threads` aggregates when `thread_id` is present.
 3. Maintain `event_participants` from sender/recipient/member data.
-4. Maintain normalized `attachments` from `events.attachments` payload where available.
+4. Maintain normalized `attachments` directly from adapter/pipeline attachment payloads as canonical records.
+   - If `events.attachments` is populated, it should mirror normalized rows.
+   - Runtime readers (retain/backfill/memory) must not rely on `events.attachments` completeness.
 5. Persist `reply_to` in the explicit column whenever source data provides it.
 
 State/tag/document tables are maintained by higher-level workflows, not raw channel adapters.
@@ -424,4 +426,3 @@ State/tag/document tables are maintained by higher-level workflows, not raw chan
 1. Runtime/language consolidation (TS vs Go vs Rust) beyond schema and behavior compatibility.
 2. ~~Moving episodes/entities/embeddings out of the legacy memory DB.~~ **Done.** Entities are now in `identity.db`, embeddings in `embeddings.db`, and episodes/facts in `memory.db`. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md).
 3. Product UI policy decisions for state/tag semantics beyond storage contracts.
-

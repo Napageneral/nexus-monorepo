@@ -1,10 +1,16 @@
 # NEX Plugin System
 
-**Status:** DESIGN COMPLETE  
-**Last Updated:** 2026-02-09  
-**Related:** NEX.md, automations/AUTOMATION_SYSTEM.md
+**Status:** LEGACY BASELINE (hook naming aligned to current runtime)  
+**Last Updated:** 2026-02-26  
+**Related:** `UNIFIED_RUNTIME_OPERATION_MODEL.md`, `NEX.md`, `../_archive/AUTOMATION_SYSTEM.md`
 
 ---
+
+## Supersession Note
+
+Canonical runtime operation semantics live in `UNIFIED_RUNTIME_OPERATION_MODEL.md`.
+
+This document is retained for plugin/hook context only. If hook or stage naming conflicts with runtime code, runtime code and the unified model win.
 
 ## Overview
 
@@ -19,7 +25,7 @@ NEX exposes **hook points** throughout its pipeline where code can plug in to ob
 
 ## Hook Points
 
-NEX fires hooks after each pipeline stage:
+NEX fires hooks at defined pipeline boundaries:
 
 ```
 Event Arrives
@@ -28,15 +34,14 @@ Event Arrives
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                          NEX PIPELINE                                    │
 │                                                                          │
-│  1. receiveEvent()               →  [afterReceiveEvent]                             │
-│  2. resolveIdentity()      →  [afterResolveIdentity]                    │
-│  3. resolveReceiver()      →  [afterResolveReceiver]                    │
-│  4. resolveAccess()        →  [afterResolveAccess]                      │
-│  5. runAutomations()       →  [afterRunAutomations]  ← AUTOMATIONS     │
-│  6. assembleContext()         →  [afterAssembleContext]                       │
-│  7. runAgent()             →  [afterRunAgent]                           │
-│  8. deliverResponse()      →  [afterDeliverResponse]                    │
-│  9. deliverResponse()      →  [onDeliverResponse]                       │
+│  receiveEvent()            → [afterReceiveEvent]                        │
+│  resolvePrincipals()       → [afterResolvePrincipals]                   │
+│  resolveAccess()           → [afterResolveAccess]                       │
+│  runAutomations()          → [afterRunAutomations]                      │
+│  assembleContext()         → [afterAssembleContext]                     │
+│  runAgent()                → [afterRunAgent]                            │
+│  deliverResponse()         → [afterDeliverResponse]                     │
+│  finalize()                → [onFinalize]                               │
 │                                                                          │
 │  Error at any stage        →  [onError]                                 │
 │                                                                          │
@@ -54,15 +59,14 @@ interface NEXPlugin {
 
   // Lifecycle hooks (after each stage)
   afterReceiveEvent?(req: NexusRequest): Promise<void | 'skip'>;
-  afterResolveIdentity?(req: NexusRequest): Promise<void | 'skip'>;
-  afterResolveReceiver?(req: NexusRequest): Promise<void | 'skip'>;
+  afterResolvePrincipals?(req: NexusRequest): Promise<void | 'skip'>;
   afterResolveAccess?(req: NexusRequest): Promise<void | 'skip'>;
   afterRunAutomations?(req: NexusRequest): Promise<void | 'skip'>;
   afterAssembleContext?(req: NexusRequest): Promise<void | 'skip'>;
   afterRunAgent?(req: NexusRequest): Promise<void | 'skip'>;
   afterDeliverResponse?(req: NexusRequest): Promise<void | 'skip'>;
 
-  onDeliverResponse?(req: NexusRequest): Promise<void>;
+  onFinalize?(req: NexusRequest): Promise<void>;
   onError?(req: NexusRequest, error: Error): Promise<void>;
 }
 ```
@@ -83,7 +87,7 @@ Plugins can:
 | Plugin | Hook Point | Purpose |
 |--------|------------|---------|
 | **Logging** | All | Log request flow for debugging |
-| **Analytics** | onDeliverResponse | Track latency, token usage, costs |
+| **Analytics** | onFinalize | Track latency, token usage, costs |
 | **Automations** | afterRunAutomations | Evaluate automation triggers (stage 5) |
 
 ---
@@ -114,7 +118,7 @@ const loggingPlugin: NEXPlugin = {
     console.log(`[NEX] Received: ${req.event.event_id}`);
   },
 
-  onDeliverResponse: async (req) => {
+  onFinalize: async (req) => {
     console.log(`[NEX] Complete: ${req.request_id} in ${req.pipeline.duration_ms}ms`);
   },
 
@@ -130,7 +134,7 @@ const loggingPlugin: NEXPlugin = {
 const analyticsPlugin: NEXPlugin = {
   name: 'analytics',
 
-  onDeliverResponse: async (req) => {
+  onFinalize: async (req) => {
     await analytics.track('request_complete', {
       platform: req.delivery.platform,
       persona: req.access?.routing.persona,

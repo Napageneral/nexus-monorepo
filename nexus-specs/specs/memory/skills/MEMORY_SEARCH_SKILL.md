@@ -40,6 +40,8 @@ Parameters:
   time_after  integer             Only results after this timestamp (unix ms)
   time_before integer             Only results before this timestamp (unix ms)
   platform    string              Filter by source platform
+  thread_id   string              Thread scope hint for event retrieval/lookback
+  thread_lookback_events integer  Include up to N recent prior events from thread context
   max_results integer             Maximum results (default: 20)
   budget      string              Search depth: 'low', 'mid', 'high'
 
@@ -55,6 +57,8 @@ Returns:
 ```
 
 > **Short-term memory:** Very recent events that haven't been processed by the retain pipeline yet are searchable as `type: 'event'` results. These are raw events (not extracted facts), useful for answering questions about very recent context. See `RETAIN_PIPELINE.md`.
+
+> **Thread-aware lookback:** In memory retain/consolidation sessions, `recall()` can include prior thread context via `thread_id` + `thread_lookback_events`. If the runtime already knows the active thread, `thread_id` may be inferred automatically.
 
 ---
 
@@ -182,6 +186,11 @@ Question: "What happened in the last team standup?"
 Searches:
   1. recall("team standup", time_after=<last_week>, platform="slack")
   2. recall("standup meeting updates")
+
+Question: "Sparse 2-message episode; what does this reply refer to?"
+Searches:
+  1. recall("conversation context", scope=['facts','observations'], thread_lookback_events=8)
+  2. recall("prior messages in this thread", thread_id=<thread_id>, thread_lookback_events=12)
 ```
 
 ---
