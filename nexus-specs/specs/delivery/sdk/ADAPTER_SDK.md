@@ -9,7 +9,7 @@
 
 The SDK provides shared infrastructure for building **event adapters**. Instead of each adapter reimplementing CLI parsing, JSONL emission, signal handling, NexusEvent construction, text chunking, and streaming protocol support, the SDK handles all of it.
 
-Control-surface operations (`protocol/control/event` methods for WS/HTTP runtime control plane) are out of scope and specified in `../nex/SURFACE_ADAPTER_V2.md`.
+Control-surface/runtime operations are out of scope for this SDK and specified in `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`.
 
 **Rationale:** After reviewing 9 upstream channels, every single one shares the same boilerplate gaps — `info` command, `health` command, NexusEvent normalization, CLI routing, JSONL output, graceful shutdown. The SDK eliminates ~30-40% of per-adapter effort by extracting this into a shared library.
 

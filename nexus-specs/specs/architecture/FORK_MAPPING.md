@@ -368,7 +368,7 @@ These stay with minimal changes:
 | `src/compat/` | 🟢 ADAPT | Legacy compatibility (env var fallbacks) |
 | `src/types/` | 🟢 ADAPT | Type definitions |
 | `src/link-understanding/` | 🟢 ADAPT | URL/link analysis |
-| `src/plugin-sdk/` | 🟢 ADAPT | Plugin SDK for extensions |
+| `src/extensions-api/` | 🟢 ADAPT | Extensions API for extensions |
 | `src/scripts/` | 🟢 ADAPT | Build/utility scripts |
 | `src/test-helpers/` | 🟢 ADAPT | Test helpers (already fixed for rebrand) |
 | `src/test-utils/` | 🟢 ADAPT | Test utilities |

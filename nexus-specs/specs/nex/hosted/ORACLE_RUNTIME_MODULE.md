@@ -2,7 +2,7 @@
 
 **Status:** DRAFT (planning)  
 **Last Updated:** 2026-02-24  
-**Related:** `HOSTED_ORACLE_MULTI_UI_INTEGRATION.md`, `../SURFACE_ADAPTER_V2.md`, `../workplans/RUNTIME_MULTI_UI_CUTOVER.md`
+**Related:** `HOSTED_ORACLE_MULTI_UI_INTEGRATION.md`, `../UNIFIED_RUNTIME_OPERATION_MODEL.md`, `../workplans/RUNTIME_MULTI_UI_CUTOVER.md`
 
 ---
 

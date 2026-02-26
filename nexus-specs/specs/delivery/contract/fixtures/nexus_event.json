@@ -10,13 +10,14 @@
   "space_id": "guild111",
   "space_name": "Nexus Guild",
   "container_id": "chan456",
-  "container_kind": "channel",
+  "container_kind": "group",
   "container_name": "general",
   "thread_id": "thread789",
   "thread_name": "incident-room",
   "reply_to_id": "msg000",
   "metadata": {
-    "source": "adapter-fixture"
+    "source": "adapter-fixture",
+    "container_semantics": "workspace_channel"
   },
   "delivery_metadata": {
     "reply_token": "opaque-reply-token"

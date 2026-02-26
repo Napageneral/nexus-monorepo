@@ -491,7 +491,7 @@ From the NexusEvent deliveryContext (Zod schema):
 | `sender_name` | string? | Display name from platform |
 | `space_id` | string? | Server/workspace identifier |
 | `container_id` | string | Conversation/chat identifier |
-| `container_kind` | enum | 'direct', 'group', 'channel' |
+| `container_kind` | enum | 'direct', 'group' |
 | `thread_id` | string? | Thread ID for threaded conversations |
 | `reply_to_id` | string? | Message being replied to |
 | `capabilities` | object | Platform capabilities (markdown, message length, etc.) |

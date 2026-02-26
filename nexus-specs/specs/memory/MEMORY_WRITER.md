@@ -161,7 +161,7 @@ The writer receives a full episode: an array of NexusEvents in chronological ord
 | `sender_id` | "coolgamer42#1234" | Contact identifier (stored in contacts table, NOT as entity name) |
 | `sender_name` | "Cool Gamer" | Person entity name (used for entity creation/matching) |
 | `container_id` | "server/channel" | Thread context for pulling surrounding messages |
-| `container_kind` | "direct" / "group" / "channel" | Context for extraction |
+| `container_kind` | "direct" / "group" | Context for extraction |
 | `thread_id` | "thread_abc" | Thread grouping |
 
 ### Episode as Conversation Context

@@ -1,8 +1,8 @@
 # Inbound Event Adapter Interface
 
-**Status:** DESIGN LOCKED  
-**Last Updated:** 2026-02-24  
-**Related:** `ADAPTER_SYSTEM.md`, `OUTBOUND_INTERFACE.md`, `../nex/SURFACE_ADAPTER_V2.md`, `../nex/NEXUS_REQUEST.md`
+**Status:** DESIGN LOCKED
+**Last Updated:** 2026-02-25
+**Related:** `ADAPTER_SYSTEM.md`, `OUTBOUND_INTERFACE.md`, `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`, `../nex/NEXUS_REQUEST.md`
 
 ---
 
@@ -10,7 +10,7 @@
 
 This document defines inbound behavior for **event adapters** only.
 
-Control-plane WS/HTTP operations are specified by the control surface model (`protocol/control/event`) in `../nex/SURFACE_ADAPTER_V2.md` and are not part of this interface.
+Control-plane runtime operations are specified in `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md` and are not part of this event-adapter CLI interface.
 
 Inbound event adapters normalize external/platform input to canonical `NexusEvent` records.
 
@@ -52,7 +52,7 @@ type NexusEvent = {
   sender_name?: string;
   space_id?: string; // tenant/workspace/guild scope if applicable
   container_id: string; // channel/dm/thread root
-  container_kind: "direct" | "group" | "channel";
+  container_kind: "direct" | "group";
   thread_id?: string;
   reply_to_id?: string;
 
@@ -101,6 +101,7 @@ const event: NexusEvent = {
   space_id: "guild789",
   container_id: "chan456",
   container_kind: "group",
+  metadata: { container_semantics: "workspace_channel" },
 };
 ```
 
@@ -130,7 +131,7 @@ Inbound event adapters feed `NexusEvent` into runtime event processing:
 await nex.processEvent(event);
 ```
 
-This enters the standard event pipeline (`receiveEvent -> resolveIdentity -> resolveAccess -> ...`).
+This enters the unified runtime operation flow (`receiveOperation -> resolvePrincipals -> resolveAccess -> executeOperation`), with `event.ingest` selecting the event path.
 
 ---
 

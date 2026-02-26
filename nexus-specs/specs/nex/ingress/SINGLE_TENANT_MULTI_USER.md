@@ -2,7 +2,7 @@
 
 **Status:** PARTIALLY IMPLEMENTED (control-plane IAM authz + password login + ingress integrity telemetry + ingress credential WS methods)  
 **Last Updated:** 2026-02-18  
-**Related:** `CONTROL_PLANE.md`, `../hosted/HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md`, `../hosted/HOSTED_RUNTIME_PROFILE.md`, `../SURFACE_ADAPTER_V2.md`, `../../iam/ACCESS_CONTROL_SYSTEM.md`, `../../iam/POLICIES.md`, `../../delivery/INTERNAL_ADAPTERS.md`, `../../delivery/INBOUND_INTERFACE.md`
+**Related:** `CONTROL_PLANE.md`, `../hosted/HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md`, `../hosted/HOSTED_RUNTIME_PROFILE.md`, `../UNIFIED_RUNTIME_OPERATION_MODEL.md`, `../../iam/ACCESS_CONTROL_SYSTEM.md`, `../../iam/POLICIES.md`, `../../delivery/INTERNAL_ADAPTERS.md`, `../../delivery/INBOUND_INTERFACE.md`
 
 ---
 
@@ -38,10 +38,10 @@ Implemented in `nex`:
   - `auth.users.create`
   - `auth.users.setPassword`
 - Control-plane ingress credential WS methods:
-  - `ingress.credentials.list`
-  - `ingress.credentials.create`
-  - `ingress.credentials.revoke`
-  - `ingress.credentials.rotate`
+  - `auth.tokens.ingress.list`
+  - `auth.tokens.ingress.create`
+  - `auth.tokens.ingress.revoke`
+  - `auth.tokens.ingress.rotate`
 - System ingress channels reduced to the minimal internal set (`clock`, `boot`, `restart`).
 - Ingress HTTP routing has an internal adapter boundary (`http-ingress`) with submodule dispatch (hooks/slack/plugins/OpenAI/OpenResponses).
 
@@ -58,7 +58,7 @@ Still required (not yet implemented):
 - **Single-tenant, multi-user** is a core invariant (shared state, per-principal IAM).
 - **No spoofing**: clients cannot choose their principal; principals are derived from verified auth or trusted upstream identities.
 - **Canonical identity mapping**:
-  - `resolveIdentity` produces a real principal for all non-system ingress.
+  - `resolvePrincipals` produces a real principal for all non-system ingress.
   - `delivery.sender_id` is stable and meaningful for IAM policy matching + audit.
 - **Explicit trust zones**:
   - control-plane is privileged (operators)
@@ -130,7 +130,7 @@ Normative requirements:
 1. For any network-facing ingress (HTTP/webchat/OpenAI-compat/webhooks), `delivery.sender_id` MUST be **daemon-derived** from verified auth. It MUST NOT be user-controlled.
 2. For channel adapters, `delivery.sender_id` MUST be derived from the upstream platform identity (Discord user id, Telegram user id, phone number, etc).
 3. Any user-provided identity fields (example: OpenAI `user`) are metadata only and MUST NOT affect principal resolution.
-4. `resolveIdentity` MUST NOT default to "system" based on channel except for explicit internal event sources.
+4. `resolvePrincipals` MUST NOT default to "system" based on channel except for explicit internal event sources.
 
 ### Identity ledger mapping
 
@@ -325,7 +325,7 @@ Needed:
 ### 2) Remove system-by-channel shortcuts
 
 - Reduce system ingress channels to minimal set (`clock`, `boot`, `restart` [+ internal-only `runtime` if kept]).
-- Ensure `resolveIdentity` always consults identity mapping for all other channels.
+- Ensure `resolvePrincipals` always consults identity mapping for all other channels.
 - Delete/retire cron ingress and replace with clock adapter + automations.
 
 ### 3) Fix network-facing ingress identity derivation

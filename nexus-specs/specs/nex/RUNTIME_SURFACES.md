@@ -2,21 +2,37 @@
 
 > Canonical reference for all Nexus runtime access surfaces, the unified event pipeline, and the consolidation plan.
 
-**Status:** ACTIVE
-**Last Updated:** 2026-02-24
+**Status:** ACTIVE (legacy baseline; superseded direction for operation model)
+**Last Updated:** 2026-02-25
 **Related:**
 - [DATABASE_ARCHITECTURE.md](../../DATABASE_ARCHITECTURE.md)
 - [ADAPTER_SYSTEM.md](../delivery/ADAPTER_SYSTEM.md)
 - [INTERNAL_ADAPTERS.md](../delivery/INTERNAL_ADAPTERS.md)
 - [LIVE_E2E_HARNESS.md](../../environment/foundation/harnesses/LIVE_E2E_HARNESS.md)
 - [ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md](./ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md)
+- [UNIFIED_RUNTIME_OPERATION_MODEL.md](./UNIFIED_RUNTIME_OPERATION_MODEL.md)
 - [SURFACE_ADAPTER_V2.md](./SURFACE_ADAPTER_V2.md)
+
+---
+
+## Supersession Note
+
+This document is kept as detailed historical/runtime context. The canonical target for operation semantics is now `UNIFIED_RUNTIME_OPERATION_MODEL.md`.
+
+Key direction changes:
+
+1. one runtime operation model (not separate control/event products)
+2. unified `NexusEvent` envelope with top-level `operation`
+3. `resolvePrincipals` + `resolveAccess` as universal phases
+4. `event.ingest` as canonical event operation
+
+If sections in this document conflict with `UNIFIED_RUNTIME_OPERATION_MODEL.md`, the unified model wins.
 
 ---
 
 ## 1. Overview
 
-Nexus uses one runtime with two execution kinds:
+Historical baseline in this document describes runtime behavior with two execution kinds:
 
 1. `event` operations normalize to `NexusEvent` and run the event pipeline.
 2. `control` operations run direct handlers with IAM authorization and audit.
@@ -25,7 +41,7 @@ Both share one security envelope (AuthN -> sender resolution -> AuthZ -> audit/h
 
 ### Design Principles
 
-1. **Operation-kind taxonomy is canonical.** `protocol | control | event` (hard cutover from `transport | iam | pipeline`).
+1. **Historical taxonomy in this doc:** `protocol | control | event` (superseded direction by unified operation model).
 2. **Adapters own event ingress.** Event ingress is adapter-managed (`http-ingress`, clock, channels, etc.).
 3. **Control surfaces stay synchronous.** Control-plane management methods preserve request/response semantics.
 4. **Security and audit are uniform.** `control` and `event` operations use the same IAM/audit system.
@@ -36,24 +52,25 @@ Both share one security envelope (AuthN -> sender resolution -> AuthZ -> audit/h
 
 ## 2. Runtime Execution Model
 
-### 2.1 Event Pipeline Stages
+### 2.1 Event Pipeline Stages (Legacy Baseline)
 
-`event` operations flow through the 9-stage pipeline:
+`event` operations in the legacy baseline flow through the 8-stage pipeline:
 
 ```
 EVENT OPERATIONS
   │
   │  1. receiveEvent              Normalize event, create NexusRequest
-  │  2. resolveIdentity     Contact lookup: (platform, space_id, sender_id) → sender entity
-  │  3. resolveReceiver     Contact lookup: who is this addressed to? → receiver entity
-  │  4. resolveAccess       Does this sender have permission to reach this receiver?
-  │  5. runAutomations      Evaluate all matching automations
+  │  2. resolvePrincipals   Resolve sender + receiver principal contexts
+  │                         - sender: contact lookup (platform/space_id/sender_id) -> entity
+  │                         - receiver: trusted account binding (platform/account_id) -> entity
+  │  3. resolveAccess       Does this sender have permission to reach this receiver?
+  │  4. runAutomations      Evaluate all matching automations
   │
   ├── receiver is agent?
   │   │
-  │   YES ──→ 6. assembleContext → 7. runAgent → 8. deliverResponse → 9. finalize
+  │   YES ──→ 5. assembleContext → 6. runAgent → 7. deliverResponse → 8. finalize
   │   │
-  │   NO ──→ 8. deliverResponse (may be no-op) → 9. finalize
+  │   NO ──→ 7. deliverResponse (may be no-op) → 8. finalize
   │
 ```
 
@@ -178,9 +195,13 @@ The control-plane WS/HTTP surface is runtime-core and uses `protocol | control |
 | Method | Kind | Behavior |
 |-----------|-----------|-------------------|
 | `chat.send` | `event` | Normalize to `NexusEvent` -> event pipeline |
+| `auth.login` | `protocol` | Control-plane auth token issuance handshake (`POST /api/auth/login`) |
 | `config.set` | `control` | IAM authorize -> direct handler -> sync response |
 | `sessions.list` | `control` | IAM authorize -> direct handler -> sync response |
 | `health` | `control` | IAM authorize -> direct handler -> sync response |
+| `tools.invoke` | `control` | IAM authorize -> tool invoke dispatch via event ingress |
+| `browser.request` | `control` | IAM authorize -> canvas/a2ui HTTP access |
+| `apps.open.<app_id>` | `control` | IAM authorize -> app shell/static route access |
 | `chat.abort` | `control` | IAM authorize -> direct handler -> sync response |
 | `agents.reload` | `control` | IAM authorize -> direct handler -> sync response |
 
@@ -228,7 +249,7 @@ CLIENTS
 
 EXTERNAL/INTERNAL INGRESS ADAPTERS
   -> NexusEvent
-      -> event pipeline (9 stages)
+      -> event pipeline (8 stages)
 ```
 
 ---

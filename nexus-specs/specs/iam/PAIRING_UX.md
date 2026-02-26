@@ -27,11 +27,11 @@ These defaults are meant to be safe and unsurprising:
 
 - **Owner sender:** always allow.
 - **Unknown sender in DMs:** `ask` (create permission request).
-- **Unknown sender in groups/channels:** `deny` (no pairing prompts by default).
+- **Unknown sender in groups:** `deny` (no pairing prompts by default).
 - **Known sender in DMs:** allow according to policy.
-- **Known sender in groups/channels:** deny unless explicitly allowed by policy.
+- **Known sender in groups:** deny unless explicitly allowed by policy.
 
-Rationale: group/channel exposure is broader; DMs are the natural onboarding surface.
+Rationale: shared-group exposure is broader; DMs are the natural onboarding surface.
 
 ---
 
@@ -122,4 +122,3 @@ Pairing is therefore recommended even in an IAM-first system, but it remains a U
 1. Should “unknown in group” ever be `ask`? (Default: no.)
 2. Should “allow always” create an entity automatically if none exists, or require user naming/tagging? (Likely auto-create with later edit.)
 3. What is the canonical store for `(platform, space_id, sender_id) -> entity_id` mappings? (Resolved: contacts table in identity.db.)
-

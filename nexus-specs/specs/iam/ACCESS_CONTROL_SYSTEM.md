@@ -179,7 +179,7 @@ Conditions are additional context that modifies which policies match.
 | Condition | Description | Examples |
 |-----------|-------------|----------|
 | **platform** | Communication platform | `imessage`, `discord`, `slack` |
-| **container_kind** | Conversation type | `direct`, `group`, `channel` |
+| **container_kind** | Conversation type | `direct`, `group` |
 | **account** | Multi-account contexts | `slack:company-workspace` |
 | **guild** | Discord server | `discord:guild-123` |
 | **time** | Time-based rules | `23:00-08:00`, `weekends` |

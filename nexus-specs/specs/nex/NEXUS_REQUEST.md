@@ -1,7 +1,20 @@
-# NexusRequest Lifecycle
+# NexusRequest Lifecycle (Legacy Baseline)
 
-**Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-18
+**Status:** LEGACY BASELINE (superseded direction)
+**Last Updated:** 2026-02-25
+
+---
+
+## Supersession Note
+
+Canonical target semantics now live in `UNIFIED_RUNTIME_OPERATION_MODEL.md`:
+
+1. keep top-level envelope as `NexusEvent`
+2. add top-level `operation` discriminator
+3. unify lifecycle around runtime operations (`receiveOperation -> resolvePrincipals -> resolveAccess -> executeOperation -> finalizeJournal`)
+4. preserve this document as migration context for existing request/stage structures
+
+If this document conflicts with `UNIFIED_RUNTIME_OPERATION_MODEL.md`, the unified model wins.
 
 ---
 
@@ -187,8 +200,8 @@ interface DeliveryContext {
   receiver_name?: string;            // Display name of receiver if available
 
   // Conversation context
-  container_id: string;              // Chat/channel/user ID (reply target)
-  container_kind: 'direct' | 'group' | 'channel'; // 'direct' for DMs. Legacy 'dm' normalized to 'direct' at receiveEvent.
+  container_id: string;              // Conversation container ID (reply target)
+  container_kind: 'direct' | 'group'; // 'direct' for private 1:1 containers, 'group' for shared containers.
   thread_id?: string;                // Platform thread if applicable
   reply_to_id?: string;              // Message being replied to
 

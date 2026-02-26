@@ -30,7 +30,7 @@ CREATE TABLE access_log (
   event_id TEXT,                  -- FK to events ledger
   platform TEXT NOT NULL,
   sender_id TEXT NOT NULL,
-  container_kind TEXT,            -- direct, group, channel
+  container_kind TEXT,            -- direct, group
   account TEXT,
   
   -- Resolved sender
@@ -88,7 +88,7 @@ interface AccessLogEntry {
   event_id?: string;
   platform: string;
   sender_id: string;
-  container_kind?: 'direct' | 'group' | 'channel';
+  container_kind?: 'direct' | 'group';
   account?: string;
   
   // Resolved sender

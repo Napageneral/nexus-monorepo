@@ -1,7 +1,7 @@
 # Unified Delivery Taxonomy
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-18  
+**Last Updated:** 2026-02-26  
 **Related:**
 - `adapters/INBOUND_INTERFACE.md`
 - `sdk/OUTBOUND_TARGETING.md`
@@ -49,7 +49,7 @@ Important: messages never occur "at the space level" directly. A `space_id` exis
 This is the normalized delivery context carried on every `NexusEvent` and `NexusRequest`.
 
 ```ts
-type ContainerKind = "direct" | "group" | "channel";
+type ContainerKind = "direct" | "group";
 
 type DeliveryContext = {
   // Platform + account
@@ -65,7 +65,7 @@ type DeliveryContext = {
   space_name?: string;            // best-effort (untrusted; for UI only)
 
   // The actual place messages happen
-  container_kind: ContainerKind;  // direct | group | channel
+  container_kind: ContainerKind;  // direct | group
   container_id: string;           // platform-native conversation container id
   container_name?: string;        // best-effort (untrusted; for UI only)
 
@@ -79,6 +79,8 @@ type DeliveryContext = {
   // Platform-specific delivery data. This MUST NOT be used for IAM matching,
   // session keys, dedupe, or identity. It exists to carry non-portable handles
   // needed for outbound responses (example: ephemeral reply tokens).
+  // Optional subtype semantics (example: workspace channel vs group chat)
+  // can also be represented here via metadata.container_semantics.
   metadata?: Record<string, unknown>;
 };
 ```
@@ -91,7 +93,7 @@ Receiver separation (normative):
 
 Notes:
 
-- `direct` is reserved for internal NEX ingress surfaces (control-plane/webchat/runtime). External adapters MUST NOT emit `direct`.
+- External adapters MAY emit `direct` for private 1:1 conversations.
 - `*_name` fields are optional and intended for UI/logging/directory display only. Routing and IAM matching MUST be by ids, never by names.
 
 ---
@@ -138,12 +140,14 @@ Identity binding (normative):
   - present for server (guild) traffic (channels + threads inside a server)
   - absent for DMs and group DMs
 - `container_kind`:
-  - `dm`: 1:1 DM channel
-  - `group`: group DM channel
-  - `channel`: server channel (e.g. #general)
+  - `direct`: 1:1 DM channel
+  - `group`: group DM channel and server channel containers
 - `container_id`: Discord channel id for the container (DM channel id, group DM channel id, or server channel id).
 - `thread_id`: thread channel id when the message is inside a thread.
 - `reply_to_id`: message id referenced by the reply, when present.
+- `metadata.container_semantics` (recommended):
+  - `group_dm` for group DMs
+  - `workspace_channel` for server channels
 
 Recommended names:
 - `space_name`: server name (best-effort)
@@ -155,12 +159,14 @@ Recommended names:
 - `platform = "slack"`
 - `space_id`: Slack workspace/team id (always present for Slack traffic).
 - `container_kind`:
-  - `dm`: 1:1 DM conversation
-  - `group`: multi-person DM conversation
-  - `channel`: workspace channel
+  - `direct`: 1:1 DM conversation
+  - `group`: multi-person DM conversation and workspace channels
 - `container_id`: Slack conversation id (Slack uses the same identifier class for all three).
 - `thread_id`: Slack thread root identifier (the thread key used to reply within a thread).
 - `reply_to_id`: optional; if both are available, `thread_id` SHOULD be preferred as the canonical thread routing key.
+- `metadata.container_semantics` (recommended):
+  - `group_dm` for MPIMs
+  - `workspace_channel` for workspace channels
 
 Recommended names:
 - `space_name`: workspace name (best-effort)
@@ -171,12 +177,14 @@ Recommended names:
 - `platform = "telegram"`
 - `space_id`: none (Telegram does not have a server/workspace concept analogous to Discord/Slack).
 - `container_kind`:
-  - `dm`: private chat
-  - `group`: group/supergroup
-  - `channel`: broadcast channel
+  - `direct`: private chat
+  - `group`: group/supergroup and broadcast channel
 - `container_id`: chat id.
 - `thread_id`: forum topic id (`message_thread_id`) when applicable.
 - `reply_to_id`: message id being replied to when present.
+- `metadata.container_semantics` (recommended):
+  - `group_chat` for group/supergroup
+  - `broadcast_channel` for Telegram broadcast channels
 
 Recommended names:
 - `container_name`: chat title (groups/channels) when available
@@ -187,7 +195,7 @@ Recommended names:
 - `platform = "imessage"`
 - `space_id`: none.
 - `container_kind`:
-  - `dm`: 1:1 chat
+  - `direct`: 1:1 chat
   - `group`: group chat
 - `container_id`: chat guid (conversation identifier).
 - `thread_id`: none (no native threads).
@@ -203,15 +211,19 @@ Named vs unnamed group chats:
 
 - `platform = "gmail"` (provider-specific; a future adapter MAY choose a platform-agnostic `"email"` layer)
 - `space_id`: none.
-- `container_kind = "group"` (email threads are multi-party and membership can evolve).
+- `container_kind`: classified per message from envelope headers:
+  - `direct` when observed participants are exactly 2
+  - `group` when observed participants exceed 2
 - `container_id`: thread id.
 - `thread_id`: none (the email thread is already the container).
 - `reply_to_id`: message id being replied to, when available (provider id and/or RFC `Message-ID` should be emitted in metadata).
 
 Branching/forking:
 
+- Email classification uses strict per-message headers only (`from` + resolved recipients emitted by adapter).
+- Classification must not depend on inferred participants from previous messages in the thread.
+- Email routing must preserve thread/container boundaries regardless of `direct|group` classification.
 - Email threading semantics (References/In-Reply-To, participant changes, branch behavior) should be represented in event metadata and/or the agent ledger.
-- The delivery taxonomy only standardizes the stable routing identifiers needed for reply targeting.
 
 ---
 
@@ -234,7 +246,7 @@ Examples (illustrative policy intent):
 
 - "Allow owner everywhere" should match sender, not delivery.
 - "Ask on unknown Discord DMs" should match `platform=discord` and `container_kind=direct`.
-- "Deny all Discord server channels except allowlisted spaces" should match `platform=discord`, `container_kind=channel`, then allow/deny by `space_id`.
+- "Deny all Discord server channels except allowlisted spaces" should match `platform=discord`, `container_kind=group`, then allow/deny by `space_id` and optional `metadata.container_semantics=workspace_channel`.
 - "Deny a single problematic container" should match `platform`, `container_kind`, and `container_id`.
 
 This spec intentionally treats `space_id` as a first-class normalized field rather than hiding it in platform-specific metadata.
@@ -245,8 +257,9 @@ This spec intentionally treats `space_id` as a first-class normalized field rath
 
 Session keys should be built from this taxonomy:
 
-- If `container_kind` is `direct`: route to an identity-based session (see `RUNTIME_ROUTING.md`).
-- If `container_kind` is `group` or `channel`: route to a container-based session keyed by `(platform, container_id)` and optionally `thread_id`.
+- If `container_kind` is `direct`: route to an identity-based session (see `RUNTIME_ROUTING.md`), except email where thread/container routing is required.
+- If `container_kind` is `group`: route to a container-based session keyed by `(platform, container_id)` and optionally `thread_id`.
+- Email platforms SHOULD use `email:{platform}:{container_id}:{receiver_entity_id}` as the canonical session key family.
 - Internal `direct` ingress is allowed to provide an already-resolved routing override and should not be treated as a container identity for external policy logic.
 
 ---

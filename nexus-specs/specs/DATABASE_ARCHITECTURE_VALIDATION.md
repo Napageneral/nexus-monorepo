@@ -60,7 +60,7 @@ Search scope: `specs/` excluding `specs/data/_archive/` and any `upstream/` dire
 ### 2.4 Stale Terminology
 - [ ] `from_channel` as a field name — zero occurrences in spec prose (OK in actual events.db SQL schema since that column hasn't been renamed in code yet)
 - [ ] `from_identifier` as a field name — same caveat as above
-- [ ] `channel` used to mean "platform" — zero occurrences (note: `channel` in the context of `container_kind: "channel"` IS valid)
+- [ ] `channel` used to mean "platform" — zero occurrences (note: vendor/API nouns and target-kind labels may still use `channel`)
 - [ ] `identifier` used to mean "sender_id" — zero occurrences
 - [ ] `peer_kind` / `peer_id` — zero occurrences (replaced by delivery taxonomy)
 
@@ -101,7 +101,7 @@ Search scope: `specs/` excluding `specs/data/_archive/` and any `upstream/` dire
 - [ ] `platform` used instead of `channel` for adapter/source identification
 - [ ] `space_id` used for server/workspace scoping
 - [ ] `sender_id` used for sender identification
-- [ ] `container_id` / `container_kind` used for channel/DM/group identification
+- [ ] `container_id` / `container_kind` used for direct/group container identification
 - [ ] `DeliveryContext` type referenced where appropriate
 
 ### 3.4 Adapter Sync

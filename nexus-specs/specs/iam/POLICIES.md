@@ -39,9 +39,9 @@ Final runtime authorization is produced by the canonical compiler pipeline defin
     conditions:                   # Context conditions (array, any match)
       - platform: string           # imessage, discord, slack, etc.
         space_id: string          # workspace/server/tenant scope
-        container_id: string      # direct/group/channel container
+        container_id: string      # direct/group conversation container
         thread_id: string         # thread/topic id
-        container_kind: string    # direct, group, channel
+        container_kind: string    # direct, group
         account: string           # compatibility alias (maps to account context)
         guild: string             # compatibility alias (maps to space_id)
         time: string              # Time range "HH:MM-HH:MM"

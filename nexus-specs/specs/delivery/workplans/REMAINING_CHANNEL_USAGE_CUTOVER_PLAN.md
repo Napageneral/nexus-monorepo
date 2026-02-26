@@ -1,7 +1,7 @@
 # Remaining `channel` Usage Cutover Plan
 
-**Status:** IMPLEMENTED
-**Last Updated:** 2026-02-24
+**Status:** IMPLEMENTED (historical)
+**Last Updated:** 2026-02-26
 **Owner:** Runtime/Core
 **Related:**
 - `/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/delivery/UNIFIED_DELIVERY_TAXONOMY.md`
@@ -14,7 +14,12 @@
 Developers and operators must be able to infer semantics from names without mental translation.
 
 - `platform` means transport/provider identity (discord, slack, imessage, etc).
-- `channel` is only valid when it means container kind/value (`container_kind = "channel"`) or vendor/domain nouns.
+- `channel` is only valid when it refers to vendor/domain nouns, not canonical taxonomy or target-kind labels.
+
+Supersession note:
+
+- This plan predates the `container_kind` simplification decision.
+- Canonical `container_kind` is now `direct|group`; references to `container_kind=\"channel\"` in this file are historical context.
 
 Any remaining `channel` field that really means provider/platform creates routing and review confusion.
 
@@ -44,10 +49,8 @@ Plus required dependents for correctness:
 
 ### Valid (keep)
 
-1. `chatType: "channel"` and `container_kind = "channel"`.
-2. Session-key markers like `:channel:` when they represent container kind.
-3. Target-kind strings like `channel:<id>`.
-4. `channels.*` config namespace and plugin folder naming (`src/platforms/*`).
+1. Vendor/API nouns where providers use the word "channel" (for example Discord docs, Slack docs).
+2. `channels.*` config namespace and plugin folder naming (`src/platforms/*`) until separately migrated.
 
 ### Invalid (rename)
 
@@ -78,7 +81,7 @@ Conclusion: this is provider/platform data flowing under a legacy field name.
 
 ## 4.3 Taxonomy kind usage
 
-- In session key parsing, `kind === "group" || kind === "channel"` is container-kind logic and is correct.
+- Historical `kind === "group" || kind === "channel"` logic is obsolete after canonical `direct|group` cutover.
 
 ---
 
@@ -103,7 +106,7 @@ Conclusion: this is provider/platform data flowing under a legacy field name.
 - Change `AnnounceTarget.channel` -> `AnnounceTarget.platform`.
 - Update `resolveAnnounceTargetFromKey` and `resolveAnnounceTarget` return shapes.
 - Update A2A send path to call runtime send with `platform` param.
-- Keep container-kind parsing (`group|channel`) unchanged.
+- Remove legacy target-kind/session-marker parsing that assumes `channel`; canonical delivery taxonomy is `direct|group`.
 
 ## 5.3 Prompt/context text cutover
 
@@ -141,10 +144,10 @@ rg --line-number "match\.channel|AnnounceTarget\s*=\s*\{[\s\S]*channel|announceT
   /Users/tyler/nexus/home/projects/nexus/nex/src/agents/tools
 ```
 
-Confirm valid taxonomy channel usages remain:
+Confirm obsolete taxonomy channel usages are removed:
 
 ```bash
-rg --line-number "container_kind\s*=\s*\"channel\"|:channel:|kind\s*!==\s*\"group\"\s*&&\s*kind\s*!==\s*\"channel\"" \
+rg --line-number "container_kind\s*=\s*\"channel\"|:channel:|kind\s*===\s*\"channel\"|channel:<" \
   /Users/tyler/nexus/home/projects/nexus/nex/src
 ```
 
@@ -159,14 +162,14 @@ rg --line-number "container_kind\s*=\s*\"channel\"|:channel:|kind\s*!==\s*\"grou
 
 1. Renaming global `channels.*` config namespace.
 2. Renaming plugin registry/module folder names under `src/platforms/*`.
-3. Reworking container-kind taxonomy (`channel` as a valid kind remains intentional).
+3. Renaming global `channels.*` config namespace (separate work item).
 
 ---
 
 ## 9) Acceptance Criteria
 
 1. In this scope, provider/platform identity is represented by `platform` names only.
-2. `channel` remains only for valid container-kind/domain usage.
+2. `channel` remains only for vendor/domain nouns, not canonical container kind or outbound target tokens.
 3. No compatibility alias behavior is introduced for renamed fields.
 4. All touched tests pass.
 

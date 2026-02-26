@@ -110,7 +110,7 @@ The Discord adapter migration explicitly separates responsibilities:
 
 **Pairing flow (NEX-backed):**
 1. DM arrives -> adapter emits NexusEvent
-2. `resolveIdentity` can't map sender -> sender type is `unknown`
+2. `resolvePrincipals` can't map sender -> sender type is `unknown`
 3. IAM returns `ask` -> NEX creates permission request
 4. Owner approves via control plane -> identity mapping + allow grant created
 5. Subsequent DMs proceed normally
@@ -366,8 +366,10 @@ gog gmail label add <message-id> "IMPORTANT"
 ```typescript
 {
   platform: 'gmail',
-  container_kind: 'email',
-  thread_id: message.threadId,
+  container_id: message.threadId,
+  container_kind: threadParticipants(message).length > 2 ? 'group' : 'direct',
+  // Email classification is per-message from current headers only.
+  // Do not infer participants from prior thread messages for kind assignment.
   metadata: { message_id: message.id, from: message.from, to: message.to, subject: message.subject },
 }
 ```

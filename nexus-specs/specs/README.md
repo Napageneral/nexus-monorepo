@@ -1,7 +1,7 @@
 # Nexus Architecture Overview
 
-**Status:** CANONICAL
-**Last Updated:** 2026-02-18
+**Status:** CANONICAL OVERVIEW (legacy pipeline depiction; unified operation model is authoritative)
+**Last Updated:** 2026-02-25
 **Database Layout:** See `DATABASE_ARCHITECTURE.md` for the canonical 6-database layout
 
 ---
@@ -18,11 +18,17 @@ At the heart of Nexus is **NEX** (Nexus Event Exchange) — a central orchestrat
 
 **Key insight:** Everything is an event. A text message, an email, a calendar notification, a timer tick — all flow through NEX.
 
+Canonical direction update:
+
+1. Runtime operation semantics are authoritative in `nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`.
+2. This overview keeps historical diagrams/terminology for migration context.
+3. If this page conflicts with `nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`, the unified model wins.
+
 ---
 
-## The Pipeline (9 Stages)
+## The Pipeline (Legacy Rendering)
 
-NEX processes events through 9 sequential stages. Each stage is a verb describing what happens:
+NEX processes runtime operations through a staged flow. The diagram below is a migration-era rendering (superseded in detail by `nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -44,28 +50,25 @@ NEX processes events through 9 sequential stages. Each stage is a verb describin
 │  │   1. receiveEvent       Create NexusRequest from NexusEvent             │    │
 │  │        ↓                Write event to Events Ledger (async)            │    │
 │  │                                                                          │    │
-│  │   2. resolveIdentity    WHO sent this? Query Identity Graph             │    │
-│  │        ↓                Populate: sender                                │    │
+│  │   2. resolvePrincipals  WHO sent this / who is this for?                │    │
+│  │        ↓                Populate: sender + receiver                     │    │
 │  │                                                                          │    │
-│  │   3. resolveReceiver    WHO is this for? Resolve target agent/entity    │    │
-│  │        ↓                Populate: receiver                              │    │
-│  │                                                                          │    │
-│  │   4. resolveAccess      WHAT can they do? Evaluate ACL policies         │    │
+│  │   3. resolveAccess      WHAT can they do? Evaluate ACL policies         │    │
 │  │        ↓                Populate: access (permissions, routing)         │    │
 │  │                                                                          │    │
-│  │   5. runAutomations     Evaluate hook-triggered automations             │    │
+│  │   4. runAutomations     Evaluate hook-triggered automations             │    │
 │  │        ↓                Populate: triggers, may handle event            │    │
 │  │                                                                          │    │
-│  │   6. assembleContext    Gather context, create/resume session           │    │
+│  │   5. assembleContext    Gather context, create/resume session           │    │
 │  │        ↓                Build AssembledContext (history, memory, config) │    │
 │  │                                                                          │    │
-│  │   7. runAgent           Execute agent with assembled context            │    │
+│  │   6. runAgent           Execute agent with assembled context            │    │
 │  │        ↓                Generate response, call tools (streaming)       │    │
 │  │                                                                          │    │
-│  │   8. deliverResponse    Format and deliver via out-adapter              │    │
+│  │   7. deliverResponse    Format and deliver via out-adapter              │    │
 │  │        ↓                Handle formatting, chunking                     │    │
 │  │                                                                          │    │
-│  │   9. finalize           Write trace, emit outbound event                │    │
+│  │   8. finalize           Write trace, emit outbound event                │    │
 │  │                                                                          │    │
 │  └─────────────────────────────────────────────────────────────────────────┘    │
 │                                                                                  │
@@ -77,7 +80,7 @@ NEX processes events through 9 sequential stages. Each stage is a verb describin
 Hooks run after each stage and on terminal finalize:
 
 ```
-afterReceiveEvent → afterResolveIdentity → afterResolveReceiver → afterResolveAccess
+afterReceiveEvent → afterResolvePrincipals → afterResolveAccess
 → afterRunAutomations → afterAssembleContext → afterRunAgent → afterDeliverResponse
 → onFinalize
 ```
@@ -88,13 +91,12 @@ Hooks can observe, modify the NexusRequest, or skip remaining stages.
 
 ## Stages → Components
 
-The 9 pipeline stages map to core components:
+The pipeline stages map to core components:
 
 | Stage | Component | Description |
 |-------|-----------|-------------|
 | `receiveEvent` | **In-Adapters** | Create NexusRequest from NexusEvent |
-| `resolveIdentity` | **IAM** | WHO sent this? Query contacts → entities |
-| `resolveReceiver` | **IAM** | WHO is this for? Resolve target agent/entity |
+| `resolvePrincipals` | **IAM** | WHO sent this / WHO is this for? Resolve sender + receiver principals |
 | `resolveAccess` | **IAM** | WHAT can they do? Policy evaluation |
 | `runAutomations` | **Automations** | Evaluate automations at hook points |
 | `assembleContext` | **Broker** | Gather context, create/resume session |
@@ -154,8 +156,7 @@ Every event creates a `NexusRequest` object that flows through the pipeline, acc
 | Stage | Adds to NexusRequest |
 |-------|---------------------|
 | `receiveEvent` | `event`, `delivery` (channel, thread, etc.) |
-| `resolveIdentity` | `sender` (who sent this) |
-| `resolveReceiver` | `receiver` (type, persona_id, entity_id) |
+| `resolvePrincipals` | `sender` + `receiver` principals |
 | `resolveAccess` | `access` (decision, permissions, routing) |
 | `runAutomations` | `triggers` (which fired, enrichment, overrides) |
 | `assembleContext` | `agent` (turn_id, model, token_budget, context metadata) |
@@ -345,6 +346,7 @@ Specs are organized into domain-first folders:
 ## Related Documents
 
 - `nex/NEX.md` — Full NEX specification
-- `nex/NEXUS_REQUEST.md` — Data bus schema (NexusRequest lifecycle)
+- `nex/UNIFIED_RUNTIME_OPERATION_MODEL.md` — Canonical runtime operation model + envelope
+- `nex/NEXUS_REQUEST.md` — Legacy lifecycle baseline (superseded direction)
 - `agents/OVERVIEW.md` — Agent system architecture
 - `architecture/FORK_MAPPING.md` — Openclaw → Nexus mapping

@@ -90,7 +90,7 @@ If docs and schemas do not match this story, users cannot trust the architecture
 
 1. The delivery spec taxonomy folder is `platforms/`, not `platforms/`.
 2. Links and references to spec documents in that folder must use `platforms/...`.
-3. `container_kind = "channel"` remains valid domain data and is not renamed.
+3. Canonical delivery taxonomy uses `container_kind = "direct" | "group"`; any historical `container_kind = "channel"` references are legacy and non-canonical.
 
 ---
 
@@ -139,4 +139,3 @@ No compatibility aliases, no dual-write, no fallback reads.
 3. Spec validation:
    - core docs above use runtime stage names and new framing
    - no `delivery/platforms/` folder references remain for spec paths
-

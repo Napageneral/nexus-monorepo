@@ -109,7 +109,7 @@
         "space_id": { "type": "string" },
         "space_name": { "type": "string" },
         "container_id": { "type": "string" },
-        "container_kind": { "type": "string", "enum": ["direct", "group", "channel"] },
+        "container_kind": { "type": "string", "enum": ["direct", "group"] },
         "container_name": { "type": "string" },
         "thread_id": { "type": "string" },
         "thread_name": { "type": "string" },

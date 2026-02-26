@@ -147,7 +147,7 @@ Write rule:
 
 ---
 
-## Containers (DMs / Groups / Channels)
+## Containers (Direct / Group)
 
 Containers are the "place messages happen".
 
@@ -157,7 +157,7 @@ CREATE TABLE IF NOT EXISTS containers (
   account_id            TEXT NOT NULL,
 
   container_id          TEXT NOT NULL,
-  container_kind        TEXT NOT NULL,      -- direct | group | channel
+  container_kind        TEXT NOT NULL,      -- direct | group
 
   -- Use '' when not applicable.
   space_id              TEXT NOT NULL DEFAULT '',

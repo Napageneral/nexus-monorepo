@@ -1,8 +1,23 @@
 # NEX — Nexus Event Exchange
 
-**Status:** DESIGN SPEC
-**Last Updated:** 2026-02-24
+**Status:** DESIGN SPEC (legacy pipeline baseline; operation model superseded in direction)
+**Last Updated:** 2026-02-25
 **Database layout:** See `../DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
+
+---
+
+## Supersession Note
+
+Canonical runtime operation semantics now live in `UNIFIED_RUNTIME_OPERATION_MODEL.md`.
+
+This document remains valuable for runtime internals and component context, but operation-lifecycle decisions should follow the unified model:
+
+1. single runtime operation model
+2. unified `NexusEvent.operation` envelope
+3. universal `resolvePrincipals` + `resolveAccess`
+4. operation registry as the authoritative runtime interface
+
+If this document conflicts with `UNIFIED_RUNTIME_OPERATION_MODEL.md`, the unified model wins.
 
 ---
 

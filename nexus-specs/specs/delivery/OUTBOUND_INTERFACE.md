@@ -1,7 +1,7 @@
 # Outbound Adapter Interface
 
 **Status:** DESIGN COMPLETE  
-**Last Updated:** 2026-02-18
+**Last Updated:** 2026-02-26
 
 ---
 
@@ -104,11 +104,11 @@ interface DeliveryTarget {
 
 | Channel | Format | Examples |
 |---------|--------|----------|
-| Discord | `channel:{id}` or `user:{id}` | `channel:123456789` |
-| Telegram | `chat:{id}` | `chat:-1001234567` |
+| Discord | `group:{id}` or `direct:{id}` | `group:123456789` |
+| Telegram | `chat:{id}` (platform-native) or normalized `group:{id}` / `direct:{id}` | `chat:-1001234567` |
 | WhatsApp | `{phone}` or `{group_jid}` | `+14155551234` |
 | iMessage | `{phone}` or `{email}` | `+14155551234` |
-| Slack | `channel:{id}` or `user:{id}` | `channel:C1234567` |
+| Slack | `group:{id}` or `direct:{id}` | `group:C1234567` |
 
 ---
 

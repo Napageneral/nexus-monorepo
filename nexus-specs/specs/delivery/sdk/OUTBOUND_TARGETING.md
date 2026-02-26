@@ -1,7 +1,7 @@
 # Outbound Targeting (Threads + Replies)
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-18  
+**Last Updated:** 2026-02-26  
 **Related:** `INBOUND_INTERFACE.md`, `OUTBOUND_INTERFACE.md`, `ADAPTER_SYSTEM.md`
 
 ---
@@ -10,7 +10,7 @@
 
 Nexus must preserve enough delivery context to:
 
-- Reply into the correct *conversation container* (DM, group, channel)
+- Reply into the correct *conversation container* (direct or shared/group)
 - Reply into the correct *thread/topic* when the platform supports it
 - Reply to a specific message when the user replied to something
 
@@ -23,10 +23,14 @@ This is accomplished via structured delivery fields in `NexusEvent` (inbound) an
 These are the normalized fields that must exist on inbound events and must be preserved for outbound delivery:
 
 - `delivery.platform`: platform (`discord`, `telegram`, `imessage`, …)
-- `delivery.container_kind`: `direct | group | channel`
+- `delivery.container_kind`: `direct | group`
 - `delivery.container_id`: conversation container ID
 - `delivery.thread_id`: thread/topic ID (when applicable)
 - `delivery.reply_to_id`: message ID being replied to (when applicable)
+
+Email note:
+
+- Email containers are thread IDs; routing must stay thread/container scoped even when `container_kind = direct`.
 
 **Mapping:**
 
@@ -52,7 +56,7 @@ interface DeliveryTarget {
 
 **Notes:**
 
-- `to` uses the adapter conventions documented in `OUTBOUND_INTERFACE.md` (e.g. `discord channel:123`, `telegram chat:-100...`).
+- `to` uses adapter conventions documented in `OUTBOUND_INTERFACE.md` (e.g. normalized `group:123` / `direct:456`, or platform-native tokens such as `chat:-100...` when the adapter owns that format).
 - `thread_id` and `reply_to_id` are **platform-native IDs**. They are not required to be globally unique.
 - If NEX happens to have `{platform}:{id}`-style values, adapters **may** strip the prefix, but the canonical value is the platform ID.
 
@@ -90,7 +94,7 @@ Media sends follow the same targeting flags:
 For streaming adapters, `stream_start.target` MUST be a full `DeliveryTarget`:
 
 ```jsonl
-{"type":"stream_start","runId":"run_abc","sessionKey":"main","target":{"platform":"discord","account_id":"echo-bot","to":"channel:123","thread_id":"123456789012345678","reply_to_id":"987654321098765432"}}
+{"type":"stream_start","runId":"run_abc","sessionKey":"main","target":{"platform":"discord","account_id":"echo-bot","to":"group:123","thread_id":"123456789012345678","reply_to_id":"987654321098765432"}}
 ```
 
 ---
@@ -115,11 +119,11 @@ When both are present:
 - Route into the thread/topic (`thread_id`)
 - Reply to the message (`reply_to_id`) if the platform supports a “reply inside thread/topic” concept
 
-If the platform cannot satisfy both, the adapter should prefer thread correctness over reply correctness and report a structured warning via `DeliveryResult.error` (type `content_rejected` or `unknown` depending on channel semantics).
+If the platform cannot satisfy both, the adapter should prefer thread correctness over reply correctness and report a structured warning via `DeliveryResult.error` (type `content_rejected` or `unknown` depending on platform semantics).
 
 ---
 
-## Channel Notes
+## Platform Notes
 
 ### Discord
 

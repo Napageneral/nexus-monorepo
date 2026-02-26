@@ -1,7 +1,7 @@
 # Platform/Channel Terminology Cutover
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-24  
+**Last Updated:** 2026-02-25  
 **Scope:** Runtime terminology normalization across NEX, IAM, control-plane, and memory ledgers  
 **Related:**
 - `../UNIFIED_DELIVERY_TAXONOMY.md`
@@ -16,7 +16,7 @@
 Runtime currently overloads the word `channel` for multiple unrelated meanings:
 
 1. **Platform alias** (`from_channel`, `message_channel`, `requester_channel`)  
-2. **Domain container kind** (`container_kind = "channel"`)  
+2. **Domain container taxonomy terms** (`container_kind`)  
 3. **Vendor/API noun** (`channelAccessToken`, update channel)
 
 This causes implementation drift, audit ambiguity, and recurring prompt/runtime confusion.
@@ -30,15 +30,15 @@ This spec defines a **hard cutover** to canonical names with no legacy alias beh
 ### 2.1 Delivery Surface
 
 - Use `platform` for transport system identity (`discord`, `slack`, `imessage`, `gmail`, etc.).
-- Use `container_kind` for location kind (`direct`, `group`, `channel`).
+- Use `container_kind` for location kind (`direct`, `group`).
 - Use `container_id` for platform-native destination id.
 
 ### 2.2 Keep as Domain Terms (Do NOT Rename)
 
 These are semantically correct and remain:
 
-- `container_kind = "channel"` (taxonomy value)
-- `MessagingTargetKind = "channel"` (target type)
+- `container_kind` (taxonomy value; canonical kinds are `direct|group`)
+- `MessagingTargetKind = "direct" | "group"` (target type)
 - Discord/Slack concept names that genuinely refer to channel containers
 
 ### 2.3 Keep as Vendor/API Terms (Do NOT Rename)
@@ -56,7 +56,7 @@ These remain because they are external contract language:
 1. No read/write compatibility aliases for renamed platform fields.
 2. No fallback parsing of legacy request keys (for renamed keys in this spec).
 3. Runtime reset/migration is required at deployment boundary.
-4. Domain `channel` semantics (container kind/target kind) are preserved.
+4. Domain `channel` wording is preserved only for vendor/API nouns, not canonical taxonomy or target kinds.
 
 ---
 
@@ -107,8 +107,8 @@ These remain because they are external contract language:
 
 The following are intentionally unchanged:
 
-- `delivery.container_kind === "channel"`
-- `MessagingTargetKind = "user" | "channel"`
+- `delivery.container_kind` checks remain valid under canonical `direct|group` taxonomy.
+- `MessagingTargetKind = "direct" | "group"`
 - Config namespace `channels.*` (separate architecture decision; not part of this cutover)
 - Plugin registry terms under `src/platforms/*` (adapter/plugin domain naming)
 
@@ -221,9 +221,7 @@ For `access_log.channel` removal:
 1. Static search checks:
    - No platform-alias field names remain:
      - `from_channel`, `message_channel`, `requester_channel`, `response_channel`, `lastChannel`, `replyChannel`
-   - Domain-only uses of `channel` remain:
-     - `container_kind = "channel"`
-     - `MessagingTargetKind = "channel"`
+   - Domain-only uses of `channel` remain only for vendor/API nouns.
 2. Schema checks:
    - `events` has `platform`, not `from_channel`
    - `episodes` has `platform`, not `channel`
@@ -252,6 +250,6 @@ For `access_log.channel` removal:
 Cutover is complete when:
 
 1. Platform semantics are represented only with `platform`-named fields.
-2. `channel` remains only for domain-kind and vendor/API nouns.
+2. `channel` remains only for vendor/API nouns.
 3. No compatibility aliasing exists for renamed platform fields.
 4. Runtime + memory + IAM tests and backfill smoke are green on the new naming.

@@ -1,20 +1,15 @@
 # Control-Plane Authorization Taxonomy (Action/Resource)
 
-**Status:** SPEC LOCKED (runtime cutover pending)  
+**Status:** SPEC LOCKED (legacy WS-method mapping; aligned to unified runtime operation model)
 **Last Updated:** 2026-02-24  
-**Related:** `../SURFACE_ADAPTER_V2.md`, `SINGLE_TENANT_MULTI_USER.md`, `CONTROL_PLANE.md`, `../../iam/ACCESS_CONTROL_SYSTEM.md`, `../../iam/POLICIES.md`, `../../iam/AUDIT.md`
+**Related:** `../UNIFIED_RUNTIME_OPERATION_MODEL.md`, `SINGLE_TENANT_MULTI_USER.md`, `CONTROL_PLANE.md`, `../../iam/ACCESS_CONTROL_SYSTEM.md`, `../../iam/POLICIES.md`, `../../iam/AUDIT.md`
 
 ---
 
 ## Summary
 
-Control-plane authorization uses one canonical operation taxonomy:
-
-1. `protocol`
-2. `control`
-3. `event`
-
-This is the hard-cutover replacement for the previous `transport | iam | pipeline` naming.
+Control-plane authorization maps WS/RPC methods to canonical runtime operations and IAM permissions.
+This document preserves the legacy WS-method taxonomy mapping while the unified operation registry cutover lands.
 
 ---
 
@@ -22,10 +17,10 @@ This is the hard-cutover replacement for the previous `transport | iam | pipelin
 
 Every control-plane WS/HTTP method maps to:
 
-1. `kind`
+1. `kind` (legacy dispatcher grouping)
    - `protocol`: handshake/pairing/plumbing only
    - `control`: synchronous runtime management operation
-   - `event`: normalize to `NexusEvent` and execute event pipeline
+   - `event`: maps to runtime `event.ingest` operation and executes event path
 2. `action`
    - `read | write | admin | approve | pair`
 3. `resource`
@@ -37,13 +32,13 @@ Rules:
 
 1. `protocol` methods are AuthN-bound transport mechanics and must not trigger agent work.
 2. `control` methods are AuthN + principal + IAM AuthZ + audit, then direct handler execution.
-3. `event` methods are AuthN + principal + IAM AuthZ + audit, then `NexusEvent -> nex.processEvent(...)`.
+3. `event` methods are AuthN + principal + IAM AuthZ + audit, then dispatch runtime `event.ingest`.
 
 Examples:
 
 - `config.get` -> `kind=control`, `permission=control.config.read`
 - `config.patch` -> `kind=control`, `permission=control.config.admin`
-- `chat.send` -> `kind=event`, pipeline authority
+- `chat.send` -> `kind=event`, maps to runtime `event.ingest`
 - `connect.auth.challenge` -> `kind=protocol`
 
 ---
@@ -99,4 +94,4 @@ Schema and inserts live in:
 
 1. This taxonomy is for single-tenant, multi-user IAM: permissions vary by principal.
 2. Uniform IAM does not require turning synchronous control CRUD into chat events.
-3. Legacy taxonomy names are non-canonical and must be removed in runtime implementation.
+3. Unified target is the operation registry in `../UNIFIED_RUNTIME_OPERATION_MODEL.md`; this doc remains as an implementation bridge for WS method classification.

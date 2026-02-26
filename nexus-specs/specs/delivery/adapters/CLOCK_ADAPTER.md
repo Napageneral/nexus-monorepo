@@ -61,7 +61,7 @@ Clock emits canonical `NexusEvent` payloads.
     account_id: "default",
     sender_id: "clock:tick",
     sender_name: "Clock",
-    container_kind: "channel",
+    container_kind: "group",
     container_id: "clock:tick",
     capabilities: { supports_streaming: false },
     available_channels: []

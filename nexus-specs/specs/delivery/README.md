@@ -11,7 +11,7 @@ Event adapters connect Nexus to external platforms (and internal event sources).
 - **Inbound:** Receiving messages, normalizing to `NexusEvent`
 - **Outbound:** Formatting and delivering responses
 
-Control-plane WS/HTTP surfaces are specified separately as control surfaces (`protocol/control/event`) in `../nex/SURFACE_ADAPTER_V2.md`.
+Runtime operation semantics are specified in `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md` (single operation model with `NexusEvent.operation`).
 
 ---
 
@@ -32,7 +32,7 @@ Control-plane WS/HTTP surfaces are specified separately as control surfaces (`pr
 | `platforms/` | ✅ Done | Per-platform specs (9 platforms) |
 | `sdk/ADAPTER_CREDENTIALS.md` | ✅ Active | How adapter accounts link to credentials + how NEX injects secrets |
 | `sdk/ADAPTER_SDK_TYPESCRIPT.md` | ✅ Active | Detailed spec for the TypeScript adapter SDK |
-| `../nex/SURFACE_ADAPTER_V2.md` | ✅ Locked | Canonical runtime surface model (`protocol/control/event`) and boundary between control surfaces and event adapters |
+| `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md` | ✅ Locked | Canonical runtime operation model (single `NexusEvent` envelope + operation registry) and boundary between runtime surfaces and event adapters |
 
 ### Upstream Reference
 
@@ -49,7 +49,7 @@ Control-plane WS/HTTP surfaces are specified separately as control surfaces (`pr
 
 **Read `ADAPTER_SYSTEM.md`** for the full event-adapter operational system (registration, lifecycle, accounts).  
 **Read `INBOUND_INTERFACE.md`** and **`OUTBOUND_INTERFACE.md`** for data contracts (NexusEvent, DeliveryResult, ChannelCapabilities).
-**Read `../nex/SURFACE_ADAPTER_V2.md`** for control-surface operation semantics.
+**Read `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`** for runtime operation semantics and surface boundaries.
 
 ---
 
@@ -82,7 +82,7 @@ Inbound and outbound are separate for event adapters. One adapter can implement 
 | `gog` | ✅ | ✅ | Gmail |
 | `aix` | ✅ | ❌ | AI sessions |
 
-Control-plane management operations are not modeled as channel-style monitor/send adapters; they use the control surface contract in `../nex/SURFACE_ADAPTER_V2.md`.
+Control-plane management operations are runtime operations through the unified registry and are not channel-style monitor/send adapter methods.
 
 ### 3. Capabilities
 
@@ -97,11 +97,11 @@ capabilities: {
 }
 ```
 
-### 4. NexusRequest Integration
+### 4. NexusEvent Envelope Integration
 
-Adapters create/consume `NexusRequest`:
-- Inbound adapter creates request with delivery context
-- Outbound adapter uses request to route response
+Adapters create/consume `NexusEvent` envelopes:
+- Inbound adapter emits canonical event payloads (typically `operation=event.ingest`)
+- Outbound adapter consumes runtime delivery requests to route/send responses
 
 ---
 
@@ -130,6 +130,7 @@ Per-platform details are consolidated in:
 
 ## Related Specs
 
-- `../nex/NEXUS_REQUEST.md` — Request object adapters create/consume
+- `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md` — Canonical operation envelope and lifecycle
+- `../nex/NEXUS_REQUEST.md` — Legacy lifecycle baseline (superseded direction)
 - `../iam/` — IAM processes events from adapters
 - `../broker/` — Broker routes to adapters

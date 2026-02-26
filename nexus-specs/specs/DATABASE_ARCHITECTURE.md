@@ -118,7 +118,7 @@ This is the largest change from the legacy layout. It unifies:
 |-------|---------|
 | `contacts` | Pipeline-speed identity resolution: `(platform, space_id, sender_id) → entity_id`. PK: `(platform, space_id, sender_id)`. |
 | `spaces` | Server/workspace directory: `(platform, account_id, space_id)`. |
-| `containers` | Channel/DM/group directory: `(platform, account_id, container_id)`. Includes `container_kind` (direct, group, channel). |
+| `containers` | Direct/group container directory: `(platform, account_id, container_id)`. Includes `container_kind` (direct, group). |
 | `container_participants` | Observed participants per container/thread. |
 | `membership_events` | Explicit join/leave/kick events (when available from platform). |
 | `names` | **Unified name-history table** for spaces, containers, and threads. Replaces the three separate `delivery_space_names`, `delivery_container_names`, `delivery_thread_names` tables. |

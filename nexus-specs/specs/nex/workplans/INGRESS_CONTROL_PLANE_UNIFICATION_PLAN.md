@@ -2,7 +2,7 @@
 
 **Status:** IN PROGRESS  
 **Last Updated:** 2026-02-19  
-**Related:** `../ingress/CONTROL_PLANE.md`, `../ingress/SINGLE_TENANT_MULTI_USER.md`, `../ingress/INGRESS_CREDENTIALS.md`, `../ingress/INGRESS_INTEGRITY.md`, `../ingress/CONTROL_PLANE_AUTHZ_TAXONOMY.md`, `../SURFACE_ADAPTER_V2.md`, `../../delivery/INTERNAL_ADAPTERS.md`
+**Related:** `../ingress/CONTROL_PLANE.md`, `../ingress/SINGLE_TENANT_MULTI_USER.md`, `../ingress/INGRESS_CREDENTIALS.md`, `../ingress/INGRESS_INTEGRITY.md`, `../ingress/CONTROL_PLANE_AUTHZ_TAXONOMY.md`, `../UNIFIED_RUNTIME_OPERATION_MODEL.md`, `../../delivery/INTERNAL_ADAPTERS.md`
 
 ---
 
@@ -10,12 +10,12 @@
 
 Lock the concrete build plan for two decisions:
 
-1. **Control-plane management operations use direct IAM authorization** (`kind=control`, not `NexusEvent` pipeline).
-2. **HTTP protocol ingress is consolidated into one internal `http-ingress` adapter** with pluggable submodules (`kind=event`).
+1. **Control-plane management operations use direct IAM authorization** (runtime operation handlers, not chat/event ingress semantics).
+2. **HTTP protocol ingress is consolidated into one internal `http-ingress` adapter** with pluggable submodules (canonical `event.ingest` producer).
 
 This plan is the execution bridge from current runtime shape to one uniform model:
 
-- control-plane = authenticated admin/control API (`protocol` + `control` + selected `event` methods)
+- control-plane = authenticated admin/control runtime surface
 - ingress = adapter-managed event ingress to `NexusEvent -> nex.processEvent(...)`
 - IAM/ACL = single authorization system across both
 
@@ -115,13 +115,13 @@ Ingress bridges (OpenAI/OpenResponses/webhooks/webchat) should be managed like a
 Deliver:
 
 - New WS methods:
-  - `ingress.credentials.list`
-  - `ingress.credentials.create`
-  - `ingress.credentials.revoke`
-  - `ingress.credentials.rotate`
+  - `auth.tokens.ingress.list`
+  - `auth.tokens.ingress.create`
+  - `auth.tokens.ingress.revoke`
+  - `auth.tokens.ingress.rotate`
 - Taxonomy entries and IAM permissions:
-  - `control.ingress.credentials.read`
-  - `control.ingress.credentials.admin`
+  - `control.auth.tokens.ingress.read`
+  - `control.auth.tokens.ingress.admin`
 - Protocol schemas + validation
 - Tests:
   - method coverage in taxonomy test

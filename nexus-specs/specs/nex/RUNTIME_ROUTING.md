@@ -1,9 +1,22 @@
 # Runtime Routing
 
-**Status:** DESIGN SPEC
-**Last Updated:** 2026-02-18
+**Status:** DESIGN SPEC (legacy routing baseline; operation model superseded in direction)
+**Last Updated:** 2026-02-26
 **Resolves:** LIVE_E2E_HARNESS.md Bundle B (Items 3, 4)
 **Related:** `../agents/SESSION_LIFECYCLE.md`, `../../DATABASE_ARCHITECTURE.md`, `../../memory/MEMORY_SYSTEM.md`, `../delivery/ADAPTER_SYSTEM.md`
+
+---
+
+## Supersession Note
+
+Runtime operation semantics are now governed by `UNIFIED_RUNTIME_OPERATION_MODEL.md`.
+Use this document for routing-specific details, but apply unified operation terminology:
+
+1. `resolvePrincipals` instead of split sender/receiver stage naming
+2. `event.ingest` as canonical ingress operation
+3. `auth.tokens.ingress.*` naming for ingress token management
+
+If this document conflicts with `UNIFIED_RUNTIME_OPERATION_MODEL.md`, the unified model wins.
 
 ---
 
@@ -225,13 +238,19 @@ Session keys are produced by `buildSessionKey()` at `resolveAccess`:
 | Scenario | Format | Example |
 |----------|--------|---------|
 | DM | `dm:{sender_entity_id}:{receiver_entity_id}` | `dm:ent_mom:ent_eve` |
-| Group/channel container | `group:{platform}:{container_id}:{receiver_entity_id}` | `group:discord:general:ent_eve` |
+| Shared container (`group`) | `group:{platform}:{container_id}:{receiver_entity_id}` | `group:discord:general:ent_eve` |
+| Email thread container | `email:{platform}:{container_id}:{receiver_entity_id}` | `email:gmail:189a2d...:ent_eve` |
 | Worker/meeseeks | `worker:{ulid}` | `worker:01HWXYZ...` |
 | System | `system:{purpose}` | `system:compaction` |
 
-**Key change:** Session identity is entity-pair based. `:agent:` and `:thread:` are not part of canonical keys.
+**Key change:** Canonical session identity uses three key families (`dm`, `group`, `email`). `:agent:` and ad-hoc `:thread:` suffixes are not part of canonical keys.
 
 Group thread messages route to the same group session key as the parent container.
+
+Email note:
+
+- Email always uses the `email:` key family with `container_id = thread_id`.
+- This prevents unrelated 1:1 email threads from collapsing into a single DM entity-pair session.
 
 Hard cutover:
 
@@ -260,8 +279,13 @@ export function buildSessionKey(input: SessionKeyInput): string {
     return `system:${receiver?.source ?? delivery.platform}`;
   }
 
-  // Group / channel conversations (threads collapse into container session)
-  if (delivery.container_kind === "group" || delivery.container_kind === "channel") {
+  // Email is always thread/container scoped regardless of direct/group classification.
+  if (delivery.platform === "gmail" || delivery.platform === "email") {
+    return `email:${delivery.platform}:${delivery.container_id}:${receiverEntity}`;
+  }
+
+  // Shared conversations (threads collapse into container session)
+  if (delivery.container_kind === "group") {
     return `group:${delivery.platform}:${delivery.container_id}:${receiverEntity}`;
   }
 
@@ -527,7 +551,7 @@ The memory system V2 memory tables (facts, fact_entities, episodes, etc. in memo
 
 - `resolveIdentity.ts`: Continue delivery-driven sender resolution via contacts + canonicalization; keep sender/receiver substrate symmetry.
 - `resolveReceiver.ts`: Resolve receiver from `(platform, account_id)` account binding first, verify optional receiver hints, remove implicit default/atlas fallback paths.
-- `resolveAccess.ts`: Route by entity-based keys only (`dm:{sender_entity}:{receiver_entity}` and `group:{platform}:{container}:{receiver_entity}`), no thread-split canonical key.
+- `resolveAccess.ts`: Route by canonical key families only (`dm:{sender_entity}:{receiver_entity}`, `group:{platform}:{container}:{receiver_entity}`, and `email:{platform}:{container_id}:{receiver_entity}`).
 - `session.ts`: Replace `:agent:` grouping logic with receiver-entity grouping and make continuity transfer + aliasing mandatory on canonicalization.
 - `assembleContext.ts` / `runAgent.ts`: require resolved agent/persona binding; no implicit atlas fallback.
 

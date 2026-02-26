@@ -1,7 +1,7 @@
 # NEX — Nexus Event Exchange
 
 **Status:** ACTIVE  
-**Last Updated:** 2026-02-18
+**Last Updated:** 2026-02-25
 
 ---
 
@@ -15,7 +15,8 @@ This folder contains the core NEX orchestrator specifications — the central pi
 
 | Spec | Status | Description |
 |------|--------|-------------|
-| **`NEX.md`** | ✅ Complete | **START HERE** — Central orchestrator (8-stage pipeline) |
+| **`UNIFIED_RUNTIME_OPERATION_MODEL.md`** | 🧭 Design | **START HERE (authoritative)** — single runtime operation model, `NexusEvent` envelope with `operation`, unified pipeline, operation registry, adapter inventory, and hard-cutover removals |
+| **`NEX.md`** | ✅ Complete | Legacy baseline for core orchestrator internals (kept for migration context) |
 | `DAEMON.md` | ✅ Complete | Process lifecycle — startup, signals, shutdown, supervision |
 | `ingress/CONTROL_PLANE.md` | 🧭 Design | Single-daemon control-plane (Gateway removal) — WS RPC + HTTP endpoints live inside NEX |
 | `ingress/SINGLE_TENANT_MULTI_USER.md` | 🧭 Design | Single-tenant, multi-user runtime — trust zones, auth, identity mapping, and anti-spoofing requirements |
@@ -32,7 +33,7 @@ This folder contains the core NEX orchestrator specifications — the central pi
 | `hosted/ORACLE_E2E_VALIDATION_PLAN.md` | 🚧 Plan | End-to-end hosted validation matrix for Oracle onboarding + runtime integration |
 | `workplans/RUNTIME_MULTI_UI_CUTOVER.md` | 🚧 Plan | Phase 1 runtime app-model implementation: `/app/<app_id>` mount contract, `/api/apps` catalog, and hard cutover away from bare `/app/*` |
 | `hosted/FRONTDOOR_MULTI_UI_LAUNCH.md` | 🚧 Plan | Phase 2 frontdoor shell implementation: workspace+app selection, runtime-driven app catalog, and app-aware launch routing |
-| `SURFACE_ADAPTER_V2.md` | 🧭 Design | Canonical `protocol/control/event` operation model and adapter/surface contracts for hard cutover away from `transport/iam/pipeline` |
+| `SURFACE_ADAPTER_V2.md` | 🧭 Design | Historical step toward operation unification (`protocol/control/event`); superseded in direction by `UNIFIED_RUNTIME_OPERATION_MODEL.md` |
 | `ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md` | 🧭 Design | Canonical sender/receiver symmetry, entity-based session identity, no-atlas-fallback routing, persona binding model, and mandatory continuity transfer rules |
 | `workplans/ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING_WORKPLAN.md` | 🚧 Plan | Detailed hard-cutover execution plan: schema, runtime stage changes, migration, and validation matrix |
 | `workplans/SESSION_IMPORT_SERVICE.md` | 🧭 Design | Gateway-free AIX import adapter plan — NEX-owned session import/chunk service |
@@ -44,7 +45,9 @@ This folder contains the core NEX orchestrator specifications — the central pi
 
 ---
 
-## Core Concept: NexusRequest
+## Core Concept: NexusRequest (Legacy Baseline)
+
+Note: The evolving canonical target is now in `UNIFIED_RUNTIME_OPERATION_MODEL.md` (single runtime operation model with top-level `NexusEvent.operation`). Keep this section as historical context until full cutover is complete.
 
 The `NexusRequest` is an accumulating context object that flows through the entire pipeline. Each stage adds its context, and by the end we have a complete record of everything that happened.
 

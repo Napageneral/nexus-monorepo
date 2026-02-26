@@ -9,7 +9,7 @@
 
 This spec defines **event adapters**: components that emit/receive delivery events for channels and protocol bridges.
 
-Control-plane operation surfaces (`protocol/control/event` method taxonomy) are specified separately in `../nex/SURFACE_ADAPTER_V2.md`.
+Canonical runtime operation semantics are specified in `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`.
 
 Core principles:
 
@@ -149,7 +149,7 @@ Handle real-time streaming delivery. A long-running bidirectional process (like 
 **Stdin:** StreamEvents as JSONL from NEX:
 
 ```jsonl
-{"type":"stream_start","runId":"run_abc","target":{"platform":"discord","account_id":"echo-bot","to":"channel:123","thread_id":"123456789012345678","reply_to_id":"987654321098765432"},"sessionKey":"main"}
+{"type":"stream_start","runId":"run_abc","target":{"platform":"discord","account_id":"echo-bot","to":"group:123","thread_id":"123456789012345678","reply_to_id":"987654321098765432"},"sessionKey":"main"}
 {"type":"token","text":"Hello "}
 {"type":"token","text":"world!"}
 {"type":"tool_status","toolName":"Read","toolCallId":"tc_1","status":"started"}
@@ -473,10 +473,10 @@ Adapter stdout (JSONL)
 Write to Events Ledger (async, idempotent)
      │
      ▼
-Create NexusRequest
+Stamp/route unified NexusEvent envelope
      │
      ▼
-NEX Pipeline: receiveEvent → resolveIdentity → resolveReceiver → resolveAccess → ...
+Runtime operation flow: receiveOperation → resolvePrincipals → resolveAccess → executeOperation → finalizeJournal
 ```
 
 Every JSONL line from the adapter becomes a NexusEvent, gets written to the Events Ledger, and enters the full NEX pipeline.
@@ -678,7 +678,7 @@ Agent generates response
 Broker streams raw token events to NEX
      │
      ▼
-NEX resolves outbound adapter from NexusRequest.delivery
+NEX resolves outbound adapter from `NexusEvent.payload.delivery` (for `operation=event.ingest`)
      │
      ├── Adapter supports "stream"?
      │
@@ -694,7 +694,7 @@ NEX resolves outbound adapter from NexusRequest.delivery
 NEX reads delivery status
      │
      ├── Write outbound event to Events Ledger (closes the loop)
-     ├── Update NexusRequest with delivery_result
+     ├── Update operation envelope with `result` / delivery outcome
      └── Continue to deliverResponse stage
 ```
 
@@ -723,13 +723,13 @@ No streaming is involved — the message content is complete when the tool is ca
 When the agent uses the `message` tool to send to a platform other than the originating one:
 
 ```
-Agent calls: message({ action: "send", platform: "discord", to: "channel:123", text: "..." })
+Agent calls: message({ action: "send", platform: "discord", to: "group:123", text: "..." })
      │
      ▼
 Message tool resolves: adapter=discord-cli, account=echo-bot
      │
      ▼
-NEX calls: discord-cli send --account echo-bot --to "channel:123" [--thread <thread_id>] [--reply-to <reply_to_id>] --text "..."
+NEX calls: discord-cli send --account echo-bot --to "group:123" [--thread <thread_id>] [--reply-to <reply_to_id>] --text "..."
      │
      ▼
 Same flow as above
@@ -751,9 +751,9 @@ Target format is adapter-specific but follows conventions:
 |----------|---------------|----------|
 | gmail | Email address | `tyler@example.com` |
 | imessage | Phone or email | `+14155551234`, `tyler@icloud.com` |
-| discord | `channel:<id>` or `user:<id>` | `channel:123456789` |
+| discord | `group:<id>` or `direct:<id>` | `group:123456789` |
 | telegram | `chat:<id>` | `chat:-1001234567` |
-| slack | `channel:<id>` or `user:<id>` | `channel:C1234567` |
+| slack | `group:<id>` or `direct:<id>` | `group:C1234567` |
 
 ---
 
@@ -987,7 +987,8 @@ Platform capabilities and available platforms are injected into event context du
 - `sdk/OUTBOUND_TARGETING.md` — Threading + reply semantics
 - `adapters/CHANNEL_DIRECTORY.md` — Directory of outbound targets per channel/account
 - `platforms/` — Per-platform capability specs
-- `../nex/NEXUS_REQUEST.md` — Request object adapters create/consume
+- `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md` — Canonical operation envelope adapters create/consume
+- `../nex/NEXUS_REQUEST.md` — Legacy lifecycle baseline (superseded direction)
 - `../agents/CONTEXT_ASSEMBLY.md` — How platform context feeds into agent prompts
 - `../environment/capabilities/credentials/CREDENTIAL_SYSTEM.md` — Credential linking
 - `../upstream/delivery/CHANNEL_INVENTORY.md` — OpenClaw channel implementations

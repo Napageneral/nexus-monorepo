@@ -1,7 +1,7 @@
 # Unified Delivery Taxonomy: Migration Workplan
 
 **Status:** WORKPLAN  
-**Last Updated:** 2026-02-18  
+**Last Updated:** 2026-02-25  
 **Canonical spec:** `UNIFIED_DELIVERY_TAXONOMY.md`
 
 ---
@@ -63,7 +63,7 @@ This is a long-term, correctness-first migration. The target state is a clean in
 - [ ] Update adapters to emit canonical `NexusEvent` lines with delivery taxonomy fields.
 - [ ] Update outbound to accept canonical target fields and preserve `thread_id` and `reply_to_id`.
 - [ ] Ensure adapters emit optional display fields (`space_name/container_name/thread_name`) when available.
-- [ ] Ensure adapters never emit internal-only `container_kind="direct"`.
+- [ ] Ensure adapters emit `container_kind` using canonical `direct|group` semantics (including email thread classification rules).
 
 ### Bucket 6: Directory + Storage
 

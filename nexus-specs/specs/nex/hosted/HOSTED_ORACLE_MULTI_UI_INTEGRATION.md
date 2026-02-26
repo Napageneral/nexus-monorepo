@@ -228,7 +228,7 @@ Canonical flow for Oracle API requests:
 
 1. ingress/control API receives request
 2. normalize -> `NexusEvent`
-3. `receiveEvent -> resolveIdentity -> resolveReceiver -> resolveAccess -> runAutomations`
+3. `receiveOperation -> resolvePrincipals -> resolveAccess -> executeOperation (event.ingest path)`
 4. if operation is handled (query/status/sync) -> finalize/deliver without `runAgent`
 5. only workflows requiring agent reasoning continue to `assembleContext -> runAgent`
 

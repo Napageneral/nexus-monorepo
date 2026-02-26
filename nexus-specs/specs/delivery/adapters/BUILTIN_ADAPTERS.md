@@ -2,7 +2,7 @@
 
 **Status:** DESIGN + IMPLEMENTATION TRACKER
 **Last Updated:** 2026-02-24
-**Related:** `../ADAPTER_SYSTEM.md`, `../INBOUND_INTERFACE.md`, `../OUTBOUND_INTERFACE.md`, `../workplans/CHANNEL_MIGRATION_TRACKER.md`, `./CLOCK_ADAPTER.md`, `../../nex/ingress/CONTROL_PLANE.md`, `../../nex/DAEMON.md`, `../../nex/NEX.md`, `../../nex/SURFACE_ADAPTER_V2.md`
+**Related:** `../ADAPTER_SYSTEM.md`, `../INBOUND_INTERFACE.md`, `../OUTBOUND_INTERFACE.md`, `../workplans/CHANNEL_MIGRATION_TRACKER.md`, `./CLOCK_ADAPTER.md`, `../../nex/ingress/CONTROL_PLANE.md`, `../../nex/DAEMON.md`, `../../nex/NEX.md`, `../../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`
 
 ---
 
@@ -16,7 +16,7 @@ Define which integrations are shipped "with NEX" as **built-in event adapters**,
 
 **Control surface** — privileged runtime interface for user/operator interaction.
 - Transport: WebSocket RPC + control-plane HTTP (UI, avatars, health, SSE bus stream).
-- Operation kinds: `protocol`, `control`, `event`.
+- Operations are runtime registry operations (see unified model), with transport/protocol concerns separated from business operation dispatch.
 - Default binding: loopback unless explicitly exposed with strict auth.
 - Control operations are direct IAM-authorized methods; event operations normalize to `NexusEvent`.
 
@@ -134,7 +134,7 @@ Canonical event shape:
     sender_id: "clock:tick",
     sender_name: "Clock",
     container_id: "clock:tick",
-    container_kind: "channel",
+    container_kind: "group",
     capabilities: {},
     available_platforms: []
   }
@@ -188,7 +188,7 @@ The control-plane HTTP server currently hosts several protocol bridges that shou
 ## IAM Expectations
 
 - Every internal adapter must emit `NexusEvent` with an appropriate `delivery.platform`.
-- `resolveIdentity` should produce correct sender contexts:
+- sender branch of `resolvePrincipals` should produce correct sender contexts:
   - `clock` → system sender `source=timer`
   - `webhook` → webhook sender (not system)
   - local `runtime` → owner/known where appropriate

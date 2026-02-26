@@ -2,7 +2,7 @@
 
 **Status:** ACTIVE  
 **Last Updated:** 2026-02-24  
-**Related:** `ADAPTER_SYSTEM.md`, `adapters/BUILTIN_ADAPTERS.md`, `INBOUND_INTERFACE.md`, `../nex/SURFACE_ADAPTER_V2.md`
+**Related:** `ADAPTER_SYSTEM.md`, `adapters/BUILTIN_ADAPTERS.md`, `INBOUND_INTERFACE.md`, `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`
 
 ---
 

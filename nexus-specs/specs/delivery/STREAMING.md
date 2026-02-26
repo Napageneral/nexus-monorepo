@@ -154,7 +154,7 @@ NEX receives StreamEvents from the Broker and routes them based on adapter capab
 
 ```typescript
 async function routeStreamEvent(delivery: DeliveryContext, event: StreamEvent): Promise<void> {
-  const adapter = adapterManager.getOutboundAdapter(delivery.channel, delivery.account_id);
+  const adapter = adapterManager.getOutboundAdapter(delivery.platform, delivery.account_id);
   
   if (adapter.supports.includes('stream')) {
     // Path 1: Adapter handles streaming natively
@@ -186,7 +186,7 @@ Adapters that support streaming implement a `stream` command — a long-running 
 NEX pipes StreamEvents directly to the adapter's stdin:
 
 ```jsonl
-{"type":"stream_start","runId":"run_abc","target":{"to":"channel:123456","thread_id":"789"},"sessionKey":"main"}
+{"type":"stream_start","runId":"run_abc","target":{"to":"group:123456","thread_id":"789"},"sessionKey":"main"}
 {"type":"token","text":"Let me "}
 {"type":"token","text":"check "}
 {"type":"token","text":"that for you."}

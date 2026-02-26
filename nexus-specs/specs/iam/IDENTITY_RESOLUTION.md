@@ -2,11 +2,11 @@
 
 **Status:** DESIGN SPEC
 **Updated:** 2026-02-23
-**Related:** `UNIFIED_ENTITY_STORE.md`, `ACCESS_CONTROL_SYSTEM.md`, `../adapters/INBOUND_INTERFACE.md`, `../nex/NEXUS_REQUEST.md`
+**Related:** `UNIFIED_ENTITY_STORE.md`, `ACCESS_CONTROL_SYSTEM.md`, `../delivery/INBOUND_INTERFACE.md`, `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`, `../nex/NEXUS_REQUEST.md`
 
 ## Overview
 
-Identity resolution is Stage 2 of the NEX pipeline. It transforms a raw `(platform, sender_id)` tuple from an adapter into a resolved entity with tags, group memberships, and access context.
+Identity resolution is part of `resolvePrincipals` in the unified runtime operation flow. It transforms a raw `(platform, sender_id)` tuple from an adapter into a resolved entity with tags, group memberships, and access context.
 
 For canonical sender+receiver symmetry, account-bound receiver identity, persona binding separation, and continuity transfer behavior, see:
 `../nex/ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md`.
@@ -177,7 +177,7 @@ On startup, the runtime creates:
 **Owner contact (auth path only):**
 - `(login, "", "owner")` → `entity-owner`
 
-System-origin platforms (cron, runtime, boot, restart, node, clock) do NOT get contacts. They are resolved directly to `entity-owner` at the `resolveIdentity` stage without a contacts table lookup. See **System-Origin Resolution** below.
+System-origin platforms (cron, runtime, boot, restart, node, clock) do NOT get contacts. They are resolved directly to `entity-owner` in the sender branch of `resolvePrincipals` without a contacts table lookup. See **System-Origin Resolution** below.
 
 **Receiver bootstrap:**
 
@@ -247,7 +247,7 @@ Knowledge entities (writer-created, `source = 'inferred'`) and adapter entities 
 
 ## System-Origin Resolution
 
-System-origin platforms represent internal event sources that are not real external senders. The `resolveIdentity` stage recognizes these platforms and short-circuits the normal contacts lookup.
+System-origin platforms represent internal event sources that are not real external senders. The sender branch of `resolvePrincipals` recognizes these platforms and short-circuits the normal contacts lookup.
 
 **System-origin platforms:** `"cron"`, `"runtime"`, `"boot"`, `"restart"`, `"node"`, `"clock"`
 
@@ -257,7 +257,7 @@ System-origin platforms represent internal event sources that are not real exter
 3. Set `sender.type = 'system'` and `sender.source = delivery.platform`
 
 ```
-resolveIdentity(delivery):
+resolvePrincipals.sender(delivery):
   if delivery.platform in ["cron", "runtime", "boot", "restart", "node", "clock"]:
     return SenderContext {
       type: 'system',
@@ -274,13 +274,12 @@ This is cleaner than creating fake contacts for internal event sources. Crons an
 
 ## Container Kind
 
-Three canonical values:
+Two canonical values:
 
 | Value | Meaning | Example |
 |-------|---------|---------|
 | `direct` | 1:1 conversation | iMessage DM, Discord DM, API call, control plane |
-| `group` | Multi-party conversation | Group chat, server channel |
-| `channel` | Broadcast/public channel | Discord server channel, Slack public channel |
+| `group` | Shared conversation container | Group chat, server channel, broadcast channel |
 
 Legacy `"dm"` normalizes to `"direct"` at ingest.
 

@@ -34,7 +34,7 @@ This spec is the source of truth for this workstream and supersedes conflicting 
 
 ## D1. Sender And Receiver Resolution Are Symmetric
 
-`resolveIdentity` and `resolveReceiver` must use the same identity substrate (`identity.db`) and canonicalization chain (`merged_into` union-find walk).
+`resolvePrincipals` (sender + receiver branches) must use the same identity substrate (`identity.db`) and canonicalization chain (`merged_into` union-find walk).
 
 Both must produce canonical entity ids.
 
@@ -150,8 +150,8 @@ Purpose: auditable proof that mandatory transfer happened.
 ## 5. Runtime Flow (Target)
 
 1. `receiveEvent`: ingress integrity stamping (`platform/account_id` trusted from adapter context).
-2. `resolveIdentity`: sender entity resolution + canonicalization.
-3. `resolveReceiver`: receiver entity from account binding + optional receiver hint verification + canonicalization.
+2. `resolvePrincipals.sender`: sender entity resolution + canonicalization.
+3. `resolvePrincipals.receiver`: receiver entity from account binding + optional receiver hint verification + canonicalization.
 4. `resolveAccess`: policy with sender+receiver entities.
 5. `resolveSessionKey`: build DM/group key from sender+receiver entity.
 6. `resolvePersonaBinding`: choose `(agent_id, persona_ref)` from receiver default/override binding.

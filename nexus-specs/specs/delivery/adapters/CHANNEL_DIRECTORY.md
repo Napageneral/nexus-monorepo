@@ -1,7 +1,7 @@
 # Channel Directory (Targets + Threads)
 
 **Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-18  
+**Last Updated:** 2026-02-25  
 **Related:** `../ADAPTER_SYSTEM.md`, `../INBOUND_INTERFACE.md`, `../sdk/OUTBOUND_TARGETING.md`, `../../data/memory/v2/UNIFIED_ENTITY_STORE.md`
 
 ---
@@ -47,7 +47,7 @@ type ChannelDirectoryEntry = {
   platform: string;
   account_id: string;
 
-  container_kind: "direct" | "group" | "channel";
+  container_kind: "direct" | "group";
   container_id: string;               // platform-native container id
   thread_id?: string;            // platform-native thread/topic id
 
@@ -58,7 +58,7 @@ type ChannelDirectoryEntry = {
   last_message_id?: string;      // platform-native message id
 
   // Channel-specific non-authoritative metadata
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown>; // optional subtype detail (e.g. container_semantics)
 };
 ```
 

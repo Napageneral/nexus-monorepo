@@ -1,9 +1,23 @@
 # Surface Adapter V2
 
-**Status:** SPEC FOR FINAL REVIEW  
+**Status:** HISTORICAL (superseded direction)
 **Date:** 2026-02-24  
 **Mode:** Hard cutover (no backwards compatibility)  
-**Related:** `RUNTIME_SURFACES.md`, `ingress/CONTROL_PLANE_AUTHZ_TAXONOMY.md`, `ingress/INGRESS_INTEGRITY.md`, `ingress/SINGLE_TENANT_MULTI_USER.md`, `hosted/HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md`
+**Related:** `UNIFIED_RUNTIME_OPERATION_MODEL.md`, `RUNTIME_SURFACES.md`, `ingress/CONTROL_PLANE_AUTHZ_TAXONOMY.md`, `ingress/INGRESS_INTEGRITY.md`, `ingress/SINGLE_TENANT_MULTI_USER.md`, `hosted/HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md`
+
+---
+
+## Supersession Note
+
+This document is retained for migration context.
+Authoritative target semantics are now in `UNIFIED_RUNTIME_OPERATION_MODEL.md`:
+
+1. single runtime operation model
+2. top-level `NexusEvent.operation` discriminator
+3. unified operation registry and lifecycle
+4. hard-cutover cleanup (`event.ingest`, `auth.tokens.ingress.*`, node family removal)
+
+If this file conflicts with `UNIFIED_RUNTIME_OPERATION_MODEL.md`, the unified model wins.
 
 ---
 
@@ -336,6 +350,23 @@ Example:
 
 1. Remove old taxonomy terms and any fallback compatibility shims.
 2. Fail build if old terms appear in runtime taxonomy code.
+
+### Implementation Status (2026-02-25)
+
+1. `protocol | control | event` taxonomy is the V2 baseline preserved for migration context.
+2. `ControlSurfaceAdapter` abstraction is implemented and bound in runtime WS request dispatch.
+3. Shared AuthN/AuthZ envelope is enforced before control/event dispatch paths.
+4. `control.operation.started|completed|failed` bus events are emitted for WS control operations and control-plane HTTP control endpoints (`health`, `events.stream`, `apps.list`, `tools.invoke`, `browser.request`, `apps.open.*`).
+5. Control-plane HTTP hard cutover completed: `/api/auth/login` now routes through HTTP `ControlSurfaceAdapter` as `auth.login` (`protocol`), and all remaining runtime control HTTP operations route through `ControlSurfaceAdapter` (`control`).
+6. Legacy taxonomy guard tests are in place (no `transport|iam|pipeline` kinds in runtime taxonomy).
+7. Event pipeline naming cutover is live: principal resolution stage is now `resolvePrincipals` (sender + receiver resolution in one canonical stage).
+
+Validation executed:
+
+1. `pnpm -s vitest run src/nex/control-plane/surface-adapter.test.ts src/nex/control-plane/server-methods.pipeline-dispatch.test.ts src/nex/control-plane/authz-taxonomy.test.ts src/nex/control-plane/server-methods.scope-authz.test.ts src/nex/control-plane/iam-authorize.test.ts src/nex/events.test.ts`
+2. `pnpm -s vitest run --config vitest.e2e.config.ts src/nex/control-plane/server.nex-http.e2e.test.ts src/nex/control-plane/server.ingress-cutover.e2e.test.ts src/nex/control-plane/server.hosted-mode.e2e.test.ts`
+3. `pnpm -s vitest run src/nex/control-plane/tools-invoke-http.test.ts`
+4. `pnpm -s vitest run --config vitest.e2e.config.ts src/nex/control-plane/server.auth.login.e2e.test.ts src/nex/control-plane/server.canvas-auth.e2e.test.ts src/nex/control-plane/server.apps.e2e.test.ts src/nex/control-plane/server.cors-hosted.e2e.test.ts`
 
 ---
 
