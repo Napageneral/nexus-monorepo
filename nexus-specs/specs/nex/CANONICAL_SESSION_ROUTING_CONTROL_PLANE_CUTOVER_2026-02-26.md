@@ -313,3 +313,157 @@ Validation executed:
 
 1. `pnpm vitest run src/sessions/send-policy.test.ts src/reply/status.test.ts src/agents/nexus-tools.sessions.test.ts src/agents/tools/memory-tool.citations.test.ts src/memory/qmd-manager.test.ts src/agents/workspace-run.test.ts` (pass)
 2. `pnpm tsc --noEmit` (currently blocked by unrelated pre-existing control-plane typing error in `src/nex/control-plane/server-methods/adapter-connections.ts` at line 1212)
+
+---
+
+## 18. Implementation Update (2026-02-26, Tools Invoke Session-Key Hard-Cut Slice)
+
+Implemented:
+
+1. Removed legacy `main` session-key compatibility mapping in tools invoke HTTP ingress:
+   - `nex/control-plane/tools-invoke-http.ts` no longer maps missing/`"main"` to `resolveMainSessionKey(...)`.
+2. Added canonical default when caller omits `sessionKey`:
+   - default is now `dm:{caller_entity_id}:{default_agent_id}`.
+3. Added explicit hard-cut rejection for removed alias:
+   - `sessionKey: "main"` now returns `400 invalid_request`.
+4. Removed legacy `main` alias fallback in tool invoke execution path:
+   - `nex/tool-invoke.ts` now requires canonical `session_key`; missing/`"main"` returns `400 invalid_request`.
+5. Updated tools-invoke control-plane tests to canonical session labels.
+
+Validation executed:
+
+1. `pnpm vitest run src/nex/control-plane/tools-invoke-http.test.ts` (pass)
+2. `pnpm vitest run src/nex/control-plane/http-control-routes.test.ts src/nex/control-plane/server-methods/agent.test.ts` (pass)
+3. `pnpm tsc --noEmit` (pass)
+
+---
+
+## 19. Implementation Update (2026-02-26, System Ingest Session-Key Canonicalization Slice)
+
+Implemented:
+
+1. Removed default main-session routing for control-plane system ingest:
+   - `nex/control-plane/server-methods/system.ts` no longer calls `resolveMainSessionKeyFromConfig()`.
+2. System presence/system-ingest events now route through deterministic canonical system label:
+   - `session_label = "system:presence"`.
+
+Validation executed:
+
+1. `pnpm vitest run src/nex/control-plane/server-node-events.test.ts` (pass)
+2. `pnpm tsc --noEmit` (pass)
+3. Note: `*.e2e.test.ts` suites are excluded by default in current Vitest config and were not run in this slice.
+
+---
+
+## 20. Implementation Update (2026-02-26, Hooks System Session-Key Canonicalization Slice)
+
+Implemented:
+
+1. Removed hooks system-event writes to legacy main-session label:
+   - `nex/control-plane/server/hooks.ts` no longer calls `resolveMainSessionKeyFromConfig()`.
+2. Hooks wake/agent status system events now route to deterministic canonical system label:
+   - `session_label = "system:hooks"`.
+3. Updated hooks e2e test expectations to the canonical system session label.
+
+Validation executed:
+
+1. `pnpm vitest run src/nex/control-plane/server-node-events.test.ts src/nex/control-plane/tools-invoke-http.test.ts` (pass)
+2. `pnpm tsc --noEmit` (pass)
+3. Note: `src/nex/control-plane/server.hooks.e2e.test.ts` is currently excluded by default Vitest config (`**/*.e2e.test.ts`).
+
+---
+
+## 21. Implementation Update (2026-02-26, Restart Sentinel Default-Session Hard-Cut Slice)
+
+Implemented:
+
+1. Removed restart sentinel fallback to config-derived main session key:
+   - `nex/control-plane/server-restart-sentinel.ts` no longer imports/calls `resolveMainSessionKeyFromConfig()`.
+2. Added deterministic canonical system routing for restart sentinel wake events with missing `payload.sessionKey`:
+   - fallback `session_label = "system:restart"` instead of legacy main-session routing.
+
+Validation executed:
+
+1. `pnpm vitest run src/nex/control-plane/server-node-events.test.ts src/nex/control-plane/tools-invoke-http.test.ts` (pass)
+2. `pnpm tsc --noEmit` (pass)
+
+---
+
+## 22. Implementation Update (2026-02-26, Boot Runtime Session-Key Canonicalization Slice)
+
+Implemented:
+
+1. Removed BOOT runtime dispatch fallback to config main session:
+   - `nex/control-plane/boot.ts` no longer imports/calls `resolveMainSessionKey(...)`.
+2. BOOT wake events now route through deterministic canonical system label:
+   - `session_label = "system:boot"`.
+3. Updated BOOT control-plane unit expectations to canonical system routing.
+
+Validation executed:
+
+1. `pnpm vitest run src/nex/control-plane/boot.test.ts src/nex/control-plane/server-node-events.test.ts src/nex/control-plane/tools-invoke-http.test.ts` (pass)
+2. `pnpm tsc --noEmit` (pass)
+
+---
+
+## 23. Implementation Update (2026-02-26, Main-Session Residue Removal Slice)
+
+Implemented:
+
+1. Removed control-plane snapshot exposure of legacy main-session defaults:
+   - `sessionDefaults` now includes only:
+     - `defaultAgentId`
+     - optional `scope`
+   - removed `mainKey` and `mainSessionKey` from:
+     - `nex/control-plane/server/health-state.ts`
+     - `nex/control-plane/protocol/schema/snapshot.ts`
+2. Removed UI alias canonicalization logic that depended on legacy main-session defaults:
+   - `ui/app-runtime.ts` no longer rewrites `"main"` / `agent:*:main` aliases via snapshot defaults.
+   - `ui/app-render.helpers.ts` no longer derives a special “main” session from snapshot defaults.
+3. Removed legacy main-session delete protection in control-plane session API:
+   - `nex/control-plane/server-methods/sessions.ts` now allows deleting any resolved session key, including former main labels.
+4. Removed status-summary assumption that system events are keyed only to legacy main session:
+   - added `peekAllSystemEvents()` in `infra/system-events.ts`.
+   - `commands/status.summary.ts` now reports queued system events across all session keys.
+5. Removed fallback runtime-label classification in `reply/status.ts` that inferred non-main status via `resolveMainSessionKey(...)` when config was absent.
+   - no non-test runtime callsites of `resolveMainSessionKey(...)` remain outside `config/sessions/main-session.ts`.
+6. Updated session delete e2e expectation file to match hard-cut semantics:
+   - `server.sessions.runtime-server-sessions-a.e2e.test.ts` now expects main-key delete path to succeed.
+
+Validation executed:
+
+1. `pnpm vitest run src/reply/status.test.ts src/infra/system-events.test.ts src/commands/status.test.ts src/nex/control-plane/server-node-events.test.ts src/nex/control-plane/tools-invoke-http.test.ts` (pass)
+2. `pnpm tsc --noEmit` (pass)
+3. Note: `*.e2e.test.ts` files are excluded by current Vitest include/exclude config and were not executable in this run.
+
+---
+
+## 24. Implementation Update (2026-02-26, Final Main-Alias/UI Bootstrap Hard-Cut Closure)
+
+Implemented:
+
+1. UI session defaults no longer initialize to `"main"`:
+   - `ui/storage.ts` defaults now initialize `sessionKey` / `lastActiveSessionKey` as empty.
+   - `ui/app-settings.ts` no longer falls back to `"main"` when normalizing session settings.
+2. UI boot now resolves session key from canonical ledger sessions list:
+   - `ui/controllers/sessions.ts` promotes first returned canonical session key when current key is blank/stale.
+   - `ui/app-chat.ts` now loads sessions before chat history to avoid startup requests with stale/empty legacy session aliases.
+3. Removed legacy `config/sessions/main-session.ts` module entirely (hard cut):
+   - deleted `src/config/sessions/main-session.ts`.
+   - removed re-export from `src/config/sessions.ts`.
+   - migrated remaining runtime callsites to canonical key builders:
+     - `cron/isolated-agent/run.ts`
+     - `cron/isolated-agent/delivery-target.ts`
+     - `commands/agent/session.ts`
+     - `agents/sandbox/runtime-status.ts`
+     - `infra/state-migrations.ts` (local migration-only alias canonicalization helper retained).
+4. Updated control-plane test helper to remove reliance on config main-session resolver:
+   - `nex/control-plane/test-helpers.server.ts` now resets/reads system events via all-queue helpers.
+5. Preserved required shared behavior by exporting `resolveAgentIdFromSessionKey` directly from routing in `config/sessions.ts`.
+
+Validation executed:
+
+1. `pnpm tsc --noEmit` (pass)
+2. `pnpm vitest run src/reply/status.test.ts src/infra/system-events.test.ts src/commands/status.test.ts src/nex/control-plane/server-node-events.test.ts src/nex/control-plane/tools-invoke-http.test.ts` (pass)
+3. `pnpm --dir ui test` (pass)
+4. `pnpm vitest run --config vitest.e2e.config.ts src/nex/control-plane/server.sessions.runtime-server-sessions-a.e2e.test.ts` (pass)
