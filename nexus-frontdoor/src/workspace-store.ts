@@ -81,10 +81,12 @@ export type WorkspaceRecord = {
   workspaceId: string;
   workspaceSlug: string;
   displayName: string;
+  productId?: string;
   runtimeUrl: string;
   runtimePublicBaseUrl: string;
   runtimeWsUrl?: string;
   runtimeSseUrl?: string;
+  runtimeAuthToken?: string;
   status: "active" | "disabled";
 };
 
@@ -93,6 +95,19 @@ export type WorkspaceMembershipView = WorkspaceRecord & {
   roles: string[];
   scopes: string[];
   isDefault: boolean;
+};
+
+export type WorkspaceMemberView = {
+  userId: string;
+  username?: string;
+  email?: string;
+  displayName?: string;
+  entityId: string;
+  roles: string[];
+  scopes: string[];
+  isDefault: boolean;
+  createdAtMs: number;
+  updatedAtMs: number;
 };
 
 export type InviteView = {
@@ -151,6 +166,47 @@ export type WorkspaceInvoiceSummary = {
   paidAtMs?: number;
 };
 
+export type ProductRecord = {
+  productId: string;
+  displayName: string;
+  tagline?: string;
+  accentColor?: string;
+  logoSvg?: string;
+  homepageUrl?: string;
+  onboardingOrigin?: string;
+};
+
+export type ProductPlanRecord = {
+  planId: string;
+  productId: string;
+  displayName: string;
+  description?: string;
+  priceMonthly: number;
+  priceYearly?: number;
+  stripePriceIdMonthly?: string;
+  stripePriceIdYearly?: string;
+  featuresJson?: string;
+  limitsJson?: string;
+  isDefault: boolean;
+  sortOrder: number;
+};
+
+export type ProductEntitlementRecord = {
+  workspaceId: string;
+  productId: string;
+  entitlementKey: string;
+  entitlementValue: string;
+  source: "plan" | "override" | "trial";
+  expiresAtMs?: number;
+};
+
+export type ResolvedEntitlements = {
+  productId: string;
+  planId: string;
+  entitlements: Record<string, string>;
+  usage: Record<string, string>;
+};
+
 function startOfUtcMonthMs(ts: number): number {
   const d = new Date(ts);
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1, 0, 0, 0, 0);
@@ -163,6 +219,24 @@ function endOfUtcMonthMs(ts: number): number {
 
 function toUtcDateKey(ts: number): string {
   return new Date(ts).toISOString().slice(0, 10);
+}
+
+function parseEntitlementCountLimit(raw: string | undefined): number | null {
+  if (typeof raw !== "string") {
+    return null;
+  }
+  const normalized = raw.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (normalized === "unlimited" || normalized === "infinite" || normalized === "infinity") {
+    return null;
+  }
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return Math.max(0, Math.floor(parsed));
 }
 
 export class WorkspaceStore {
@@ -205,6 +279,7 @@ export class WorkspaceStore {
         runtime_public_base_url TEXT NOT NULL,
         runtime_ws_url TEXT,
         runtime_sse_url TEXT,
+        runtime_auth_token TEXT,
         status TEXT NOT NULL DEFAULT 'active',
         created_at_ms INTEGER NOT NULL,
         updated_at_ms INTEGER NOT NULL
@@ -318,7 +393,70 @@ export class WorkspaceStore {
       );
       CREATE INDEX IF NOT EXISTS idx_frontdoor_workspace_invoices_workspace_created
         ON frontdoor_workspace_invoices(workspace_id, created_at_ms DESC);
+
+      CREATE TABLE IF NOT EXISTS frontdoor_products (
+        product_id TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        tagline TEXT,
+        accent_color TEXT,
+        logo_svg TEXT,
+        homepage_url TEXT,
+        onboarding_origin TEXT,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS frontdoor_product_plans (
+        plan_id TEXT PRIMARY KEY,
+        product_id TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        description TEXT,
+        price_monthly INTEGER NOT NULL DEFAULT 0,
+        price_yearly INTEGER,
+        stripe_price_id_monthly TEXT,
+        stripe_price_id_yearly TEXT,
+        features_json TEXT,
+        limits_json TEXT,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        FOREIGN KEY(product_id) REFERENCES frontdoor_products(product_id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_frontdoor_product_plans_product
+        ON frontdoor_product_plans(product_id, sort_order);
+
+      CREATE TABLE IF NOT EXISTS frontdoor_product_entitlements (
+        workspace_id TEXT NOT NULL,
+        product_id TEXT NOT NULL,
+        entitlement_key TEXT NOT NULL,
+        entitlement_value TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'plan',
+        expires_at_ms INTEGER,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        PRIMARY KEY(workspace_id, product_id, entitlement_key),
+        FOREIGN KEY(workspace_id) REFERENCES frontdoor_workspaces(workspace_id) ON DELETE CASCADE,
+        FOREIGN KEY(product_id) REFERENCES frontdoor_products(product_id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_frontdoor_product_entitlements_workspace
+        ON frontdoor_product_entitlements(workspace_id);
     `);
+    try {
+      this.db.exec("ALTER TABLE frontdoor_workspaces ADD COLUMN runtime_auth_token TEXT");
+    } catch {
+      // Already exists.
+    }
+    try {
+      this.db.exec("ALTER TABLE frontdoor_workspaces ADD COLUMN product_id TEXT");
+    } catch {
+      // Already exists.
+    }
+    try {
+      this.db.exec("ALTER TABLE frontdoor_workspace_billing ADD COLUMN product_id TEXT");
+    } catch {
+      // Already exists.
+    }
   }
 
   close(): void {
@@ -326,6 +464,7 @@ export class WorkspaceStore {
   }
 
   seedFromConfig(config: FrontdoorConfig): void {
+    this.seedProducts();
     for (const tenant of config.tenants.values()) {
       this.upsertWorkspace({
         workspaceId: tenant.id,
@@ -335,6 +474,7 @@ export class WorkspaceStore {
         runtimePublicBaseUrl: tenant.runtimePublicBaseUrl,
         runtimeWsUrl: tenant.runtimeWsUrl,
         runtimeSseUrl: tenant.runtimeSseUrl,
+        runtimeAuthToken: tenant.runtimeAuthToken,
         status: "active",
       });
     }
@@ -369,20 +509,24 @@ export class WorkspaceStore {
     workspace_id: string;
     workspace_slug: string;
     display_name: string;
+    product_id?: string | null;
     runtime_url: string;
     runtime_public_base_url: string;
     runtime_ws_url: string | null;
     runtime_sse_url: string | null;
+    runtime_auth_token: string | null;
     status: string;
   }): WorkspaceRecord {
     return {
       workspaceId: row.workspace_id,
       workspaceSlug: row.workspace_slug,
       displayName: row.display_name,
+      productId: row.product_id ?? undefined,
       runtimeUrl: row.runtime_url,
       runtimePublicBaseUrl: row.runtime_public_base_url,
       runtimeWsUrl: row.runtime_ws_url ?? undefined,
       runtimeSseUrl: row.runtime_sse_url ?? undefined,
+      runtimeAuthToken: row.runtime_auth_token ?? undefined,
       status: row.status === "disabled" ? "disabled" : "active",
     };
   }
@@ -414,21 +558,25 @@ export class WorkspaceStore {
           workspace_id,
           workspace_slug,
           display_name,
+          product_id,
           runtime_url,
           runtime_public_base_url,
           runtime_ws_url,
           runtime_sse_url,
+          runtime_auth_token,
           status,
           created_at_ms,
           updated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(workspace_id) DO UPDATE SET
           workspace_slug = excluded.workspace_slug,
           display_name = excluded.display_name,
+          product_id = COALESCE(excluded.product_id, frontdoor_workspaces.product_id),
           runtime_url = excluded.runtime_url,
           runtime_public_base_url = excluded.runtime_public_base_url,
           runtime_ws_url = excluded.runtime_ws_url,
           runtime_sse_url = excluded.runtime_sse_url,
+          runtime_auth_token = excluded.runtime_auth_token,
           status = excluded.status,
           updated_at_ms = excluded.updated_at_ms
       `,
@@ -437,10 +585,12 @@ export class WorkspaceStore {
         record.workspaceId,
         toSlug(record.workspaceSlug || record.displayName || record.workspaceId),
         record.displayName,
+        record.productId ?? null,
         record.runtimeUrl,
         record.runtimePublicBaseUrl || record.runtimeUrl,
         record.runtimeWsUrl ?? null,
         record.runtimeSseUrl ?? null,
+        record.runtimeAuthToken ?? null,
         record.status,
         createdAt,
         createdAt,
@@ -453,26 +603,34 @@ export class WorkspaceStore {
   createWorkspace(input: {
     workspaceId?: string;
     displayName: string;
+    productId?: string;
     runtimeUrl: string;
     runtimePublicBaseUrl?: string;
     runtimeWsUrl?: string;
     runtimeSseUrl?: string;
+    runtimeAuthToken?: string;
   }): WorkspaceRecord {
     const baseId = input.workspaceId?.trim() || "";
     const workspaceId = baseId || `ws-${toSlug(input.displayName)}-${randomUUID().slice(0, 8)}`;
     if (this.getWorkspace(workspaceId)) {
       throw new Error("workspace_already_exists");
     }
-    return this.upsertWorkspace({
+    const workspace = this.upsertWorkspace({
       workspaceId,
       workspaceSlug: toSlug(input.displayName || workspaceId),
       displayName: input.displayName.trim() || workspaceId,
+      productId: input.productId?.trim() || undefined,
       runtimeUrl: input.runtimeUrl.trim(),
       runtimePublicBaseUrl: input.runtimePublicBaseUrl?.trim() || input.runtimeUrl.trim(),
       runtimeWsUrl: input.runtimeWsUrl?.trim() || undefined,
       runtimeSseUrl: input.runtimeSseUrl?.trim() || undefined,
+      runtimeAuthToken: input.runtimeAuthToken?.trim() || undefined,
       status: "active",
     });
+    if (input.productId?.trim()) {
+      this.initializeEntitlementsFromDefaultPlan(workspaceId, input.productId.trim());
+    }
+    return workspace;
   }
 
   getWorkspace(workspaceId: string): WorkspaceRecord | null {
@@ -483,10 +641,12 @@ export class WorkspaceStore {
           workspace_id,
           workspace_slug,
           display_name,
+          product_id,
           runtime_url,
           runtime_public_base_url,
           runtime_ws_url,
           runtime_sse_url,
+          runtime_auth_token,
           status
         FROM frontdoor_workspaces
         WHERE workspace_id = ?
@@ -498,10 +658,12 @@ export class WorkspaceStore {
           workspace_id: string;
           workspace_slug: string;
           display_name: string;
+          product_id: string | null;
           runtime_url: string;
           runtime_public_base_url: string;
           runtime_ws_url: string | null;
           runtime_sse_url: string | null;
+          runtime_auth_token: string | null;
           status: string;
         }
       | undefined;
@@ -516,10 +678,12 @@ export class WorkspaceStore {
           workspace_id,
           workspace_slug,
           display_name,
+          product_id,
           runtime_url,
           runtime_public_base_url,
           runtime_ws_url,
           runtime_sse_url,
+          runtime_auth_token,
           status
         FROM frontdoor_workspaces
         ORDER BY display_name ASC
@@ -529,10 +693,12 @@ export class WorkspaceStore {
       workspace_id: string;
       workspace_slug: string;
       display_name: string;
+      product_id: string | null;
       runtime_url: string;
       runtime_public_base_url: string;
       runtime_ws_url: string | null;
       runtime_sse_url: string | null;
+      runtime_auth_token: string | null;
       status: string;
     }>;
     return rows.map((row) => this.mapWorkspaceRow(row));
@@ -561,10 +727,12 @@ export class WorkspaceStore {
           workspace_id,
           workspace_slug,
           display_name,
+          product_id,
           runtime_url,
           runtime_public_base_url,
           runtime_ws_url,
           runtime_sse_url,
+          runtime_auth_token,
           status
         FROM frontdoor_workspaces
         WHERE status = 'active'
@@ -574,10 +742,12 @@ export class WorkspaceStore {
       workspace_id: string;
       workspace_slug: string;
       display_name: string;
+      product_id: string | null;
       runtime_url: string;
       runtime_public_base_url: string;
       runtime_ws_url: string | null;
       runtime_sse_url: string | null;
+      runtime_auth_token: string | null;
       status: string;
     }>;
     for (const row of rows) {
@@ -852,10 +1022,12 @@ export class WorkspaceStore {
           w.workspace_id,
           w.workspace_slug,
           w.display_name,
+          w.product_id,
           w.runtime_url,
           w.runtime_public_base_url,
           w.runtime_ws_url,
           w.runtime_sse_url,
+          w.runtime_auth_token,
           w.status,
           m.entity_id,
           m.roles_json,
@@ -871,10 +1043,12 @@ export class WorkspaceStore {
       workspace_id: string;
       workspace_slug: string;
       display_name: string;
+      product_id: string | null;
       runtime_url: string;
       runtime_public_base_url: string;
       runtime_ws_url: string | null;
       runtime_sse_url: string | null;
+      runtime_auth_token: string | null;
       status: string;
       entity_id: string;
       roles_json: string;
@@ -885,10 +1059,12 @@ export class WorkspaceStore {
       workspaceId: row.workspace_id,
       workspaceSlug: row.workspace_slug,
       displayName: row.display_name,
+      productId: row.product_id ?? undefined,
       runtimeUrl: row.runtime_url,
       runtimePublicBaseUrl: row.runtime_public_base_url,
       runtimeWsUrl: row.runtime_ws_url ?? undefined,
       runtimeSseUrl: row.runtime_sse_url ?? undefined,
+      runtimeAuthToken: row.runtime_auth_token ?? undefined,
       status: row.status === "disabled" ? "disabled" : "active",
       entityId: row.entity_id,
       roles: parseJsonArray(row.roles_json),
@@ -925,6 +1101,54 @@ export class WorkspaceStore {
     return row?.count ?? 0;
   }
 
+  listMembersForWorkspace(workspaceId: string): WorkspaceMemberView[] {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT
+          m.user_id,
+          u.username,
+          u.email,
+          u.display_name,
+          m.entity_id,
+          m.roles_json,
+          m.scopes_json,
+          m.is_default,
+          m.created_at_ms,
+          m.updated_at_ms
+        FROM frontdoor_workspace_memberships m
+        JOIN frontdoor_users u ON u.user_id = m.user_id
+        JOIN frontdoor_workspaces w ON w.workspace_id = m.workspace_id
+        WHERE m.workspace_id = ? AND w.status = 'active'
+        ORDER BY m.is_default DESC, COALESCE(u.display_name, u.email, u.username, u.user_id) ASC
+      `,
+      )
+      .all(workspaceId) as Array<{
+      user_id: string;
+      username: string | null;
+      email: string | null;
+      display_name: string | null;
+      entity_id: string;
+      roles_json: string;
+      scopes_json: string;
+      is_default: number;
+      created_at_ms: number;
+      updated_at_ms: number;
+    }>;
+    return rows.map((row) => ({
+      userId: row.user_id,
+      username: row.username ?? undefined,
+      email: row.email ?? undefined,
+      displayName: row.display_name ?? undefined,
+      entityId: row.entity_id,
+      roles: parseJsonArray(row.roles_json),
+      scopes: parseJsonArray(row.scopes_json),
+      isDefault: row.is_default === 1,
+      createdAtMs: row.created_at_ms,
+      updatedAtMs: row.updated_at_ms,
+    }));
+  }
+
   getMembership(userId: string, workspaceId: string): WorkspaceMembershipView | null {
     const rows = this.listWorkspacesForUser(userId);
     for (const row of rows) {
@@ -937,6 +1161,18 @@ export class WorkspaceStore {
 
   private ensureWorkspaceBillingDefaults(workspaceId: string): void {
     const createdAt = nowMs();
+    // Resolve product-aware default plan if workspace has a product binding
+    let defaultPlanId = "starter";
+    const row = this.db
+      .prepare("SELECT product_id FROM frontdoor_workspaces WHERE workspace_id = ? LIMIT 1")
+      .get(workspaceId) as { product_id: string | null } | undefined;
+    const productId = row?.product_id ?? null;
+    if (productId) {
+      const plan = this.getDefaultPlanForProduct(productId);
+      if (plan) {
+        defaultPlanId = plan.planId;
+      }
+    }
     this.db
       .prepare(
         `
@@ -947,21 +1183,23 @@ export class WorkspaceStore {
           provider,
           customer_id,
           subscription_id,
+          product_id,
           period_start_ms,
           period_end_ms,
           created_at_ms,
           updated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(workspace_id) DO NOTHING
       `,
       )
       .run(
         workspaceId,
-        "starter",
+        defaultPlanId,
         "trialing",
         "none",
         null,
         null,
+        productId,
         startOfUtcMonthMs(createdAt),
         endOfUtcMonthMs(createdAt),
         createdAt,
@@ -1690,6 +1928,16 @@ export class WorkspaceStore {
     }
 
     const membership = this.getMembership(params.userId, row.workspace_id);
+    if (!membership) {
+      const resolved = this.resolveWorkspaceEntitlements(row.workspace_id);
+      const maxMembers = parseEntitlementCountLimit(resolved?.entitlements["members.max_count"]);
+      if (maxMembers !== null) {
+        const currentMembers = this.countMembersForWorkspace(row.workspace_id);
+        if (currentMembers >= maxMembers) {
+          throw new Error("members_limit_reached");
+        }
+      }
+    }
     const nextRoles = dedupe([...(membership?.roles ?? []), row.role]);
     const nextScopes = dedupe([...(membership?.scopes ?? []), ...parseJsonArray(row.scopes_json)]);
     const ensured = this.ensureMembership({
@@ -1727,6 +1975,629 @@ export class WorkspaceStore {
       },
     };
   }
+
+  // ── Product Registry ──────────────────────────────────────────────
+
+  upsertProduct(record: ProductRecord): ProductRecord {
+    const createdAt = nowMs();
+    this.db
+      .prepare(
+        `
+        INSERT INTO frontdoor_products (
+          product_id,
+          display_name,
+          tagline,
+          accent_color,
+          logo_svg,
+          homepage_url,
+          onboarding_origin,
+          created_at_ms,
+          updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(product_id) DO UPDATE SET
+          display_name = excluded.display_name,
+          tagline = excluded.tagline,
+          accent_color = excluded.accent_color,
+          logo_svg = excluded.logo_svg,
+          homepage_url = excluded.homepage_url,
+          onboarding_origin = excluded.onboarding_origin,
+          updated_at_ms = excluded.updated_at_ms
+      `,
+      )
+      .run(
+        record.productId,
+        record.displayName,
+        record.tagline ?? null,
+        record.accentColor ?? null,
+        record.logoSvg ?? null,
+        record.homepageUrl ?? null,
+        record.onboardingOrigin ?? null,
+        createdAt,
+        createdAt,
+      );
+    return this.getProduct(record.productId) ?? record;
+  }
+
+  getProduct(productId: string): ProductRecord | null {
+    const row = this.db
+      .prepare(
+        `
+        SELECT
+          product_id,
+          display_name,
+          tagline,
+          accent_color,
+          logo_svg,
+          homepage_url,
+          onboarding_origin
+        FROM frontdoor_products
+        WHERE product_id = ?
+        LIMIT 1
+      `,
+      )
+      .get(productId) as
+      | {
+          product_id: string;
+          display_name: string;
+          tagline: string | null;
+          accent_color: string | null;
+          logo_svg: string | null;
+          homepage_url: string | null;
+          onboarding_origin: string | null;
+        }
+      | undefined;
+    if (!row) {
+      return null;
+    }
+    return {
+      productId: row.product_id,
+      displayName: row.display_name,
+      tagline: row.tagline ?? undefined,
+      accentColor: row.accent_color ?? undefined,
+      logoSvg: row.logo_svg ?? undefined,
+      homepageUrl: row.homepage_url ?? undefined,
+      onboardingOrigin: row.onboarding_origin ?? undefined,
+    };
+  }
+
+  listProducts(): ProductRecord[] {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT
+          product_id,
+          display_name,
+          tagline,
+          accent_color,
+          logo_svg,
+          homepage_url,
+          onboarding_origin
+        FROM frontdoor_products
+        ORDER BY display_name ASC
+      `,
+      )
+      .all() as Array<{
+      product_id: string;
+      display_name: string;
+      tagline: string | null;
+      accent_color: string | null;
+      logo_svg: string | null;
+      homepage_url: string | null;
+      onboarding_origin: string | null;
+    }>;
+    return rows.map((row) => ({
+      productId: row.product_id,
+      displayName: row.display_name,
+      tagline: row.tagline ?? undefined,
+      accentColor: row.accent_color ?? undefined,
+      logoSvg: row.logo_svg ?? undefined,
+      homepageUrl: row.homepage_url ?? undefined,
+      onboardingOrigin: row.onboarding_origin ?? undefined,
+    }));
+  }
+
+  // ── Product Plans ─────────────────────────────────────────────────
+
+  upsertProductPlan(record: ProductPlanRecord): ProductPlanRecord {
+    const createdAt = nowMs();
+    this.db
+      .prepare(
+        `
+        INSERT INTO frontdoor_product_plans (
+          plan_id,
+          product_id,
+          display_name,
+          description,
+          price_monthly,
+          price_yearly,
+          stripe_price_id_monthly,
+          stripe_price_id_yearly,
+          features_json,
+          limits_json,
+          is_default,
+          sort_order,
+          created_at_ms,
+          updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(plan_id) DO UPDATE SET
+          product_id = excluded.product_id,
+          display_name = excluded.display_name,
+          description = excluded.description,
+          price_monthly = excluded.price_monthly,
+          price_yearly = excluded.price_yearly,
+          stripe_price_id_monthly = excluded.stripe_price_id_monthly,
+          stripe_price_id_yearly = excluded.stripe_price_id_yearly,
+          features_json = excluded.features_json,
+          limits_json = excluded.limits_json,
+          is_default = excluded.is_default,
+          sort_order = excluded.sort_order,
+          updated_at_ms = excluded.updated_at_ms
+      `,
+      )
+      .run(
+        record.planId,
+        record.productId,
+        record.displayName,
+        record.description ?? null,
+        record.priceMonthly,
+        record.priceYearly ?? null,
+        record.stripePriceIdMonthly ?? null,
+        record.stripePriceIdYearly ?? null,
+        record.featuresJson ?? null,
+        record.limitsJson ?? null,
+        record.isDefault ? 1 : 0,
+        record.sortOrder,
+        createdAt,
+        createdAt,
+      );
+    return this.getProductPlan(record.planId) ?? record;
+  }
+
+  getProductPlan(planId: string): ProductPlanRecord | null {
+    const row = this.db
+      .prepare(
+        `
+        SELECT
+          plan_id,
+          product_id,
+          display_name,
+          description,
+          price_monthly,
+          price_yearly,
+          stripe_price_id_monthly,
+          stripe_price_id_yearly,
+          features_json,
+          limits_json,
+          is_default,
+          sort_order
+        FROM frontdoor_product_plans
+        WHERE plan_id = ?
+        LIMIT 1
+      `,
+      )
+      .get(planId) as
+      | {
+          plan_id: string;
+          product_id: string;
+          display_name: string;
+          description: string | null;
+          price_monthly: number;
+          price_yearly: number | null;
+          stripe_price_id_monthly: string | null;
+          stripe_price_id_yearly: string | null;
+          features_json: string | null;
+          limits_json: string | null;
+          is_default: number;
+          sort_order: number;
+        }
+      | undefined;
+    if (!row) {
+      return null;
+    }
+    return {
+      planId: row.plan_id,
+      productId: row.product_id,
+      displayName: row.display_name,
+      description: row.description ?? undefined,
+      priceMonthly: row.price_monthly,
+      priceYearly: row.price_yearly ?? undefined,
+      stripePriceIdMonthly: row.stripe_price_id_monthly ?? undefined,
+      stripePriceIdYearly: row.stripe_price_id_yearly ?? undefined,
+      featuresJson: row.features_json ?? undefined,
+      limitsJson: row.limits_json ?? undefined,
+      isDefault: row.is_default === 1,
+      sortOrder: row.sort_order,
+    };
+  }
+
+  listProductPlans(productId: string): ProductPlanRecord[] {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT
+          plan_id,
+          product_id,
+          display_name,
+          description,
+          price_monthly,
+          price_yearly,
+          stripe_price_id_monthly,
+          stripe_price_id_yearly,
+          features_json,
+          limits_json,
+          is_default,
+          sort_order
+        FROM frontdoor_product_plans
+        WHERE product_id = ?
+        ORDER BY sort_order ASC
+      `,
+      )
+      .all(productId) as Array<{
+      plan_id: string;
+      product_id: string;
+      display_name: string;
+      description: string | null;
+      price_monthly: number;
+      price_yearly: number | null;
+      stripe_price_id_monthly: string | null;
+      stripe_price_id_yearly: string | null;
+      features_json: string | null;
+      limits_json: string | null;
+      is_default: number;
+      sort_order: number;
+    }>;
+    return rows.map((row) => ({
+      planId: row.plan_id,
+      productId: row.product_id,
+      displayName: row.display_name,
+      description: row.description ?? undefined,
+      priceMonthly: row.price_monthly,
+      priceYearly: row.price_yearly ?? undefined,
+      stripePriceIdMonthly: row.stripe_price_id_monthly ?? undefined,
+      stripePriceIdYearly: row.stripe_price_id_yearly ?? undefined,
+      featuresJson: row.features_json ?? undefined,
+      limitsJson: row.limits_json ?? undefined,
+      isDefault: row.is_default === 1,
+      sortOrder: row.sort_order,
+    }));
+  }
+
+  getDefaultPlanForProduct(productId: string): ProductPlanRecord | null {
+    const plans = this.listProductPlans(productId);
+    const defaultPlan = plans.find((p) => p.isDefault);
+    return defaultPlan ?? plans[0] ?? null;
+  }
+
+  // ── Product Entitlements ──────────────────────────────────────────
+
+  upsertProductEntitlement(params: {
+    workspaceId: string;
+    productId: string;
+    entitlementKey: string;
+    entitlementValue: string;
+    source: "plan" | "override" | "trial";
+    expiresAtMs?: number;
+  }): void {
+    const createdAt = nowMs();
+    this.db
+      .prepare(
+        `
+        INSERT INTO frontdoor_product_entitlements (
+          workspace_id,
+          product_id,
+          entitlement_key,
+          entitlement_value,
+          source,
+          expires_at_ms,
+          created_at_ms,
+          updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(workspace_id, product_id, entitlement_key) DO UPDATE SET
+          entitlement_value = excluded.entitlement_value,
+          source = excluded.source,
+          expires_at_ms = excluded.expires_at_ms,
+          updated_at_ms = excluded.updated_at_ms
+      `,
+      )
+      .run(
+        params.workspaceId,
+        params.productId,
+        params.entitlementKey,
+        params.entitlementValue,
+        params.source,
+        params.expiresAtMs ?? null,
+        createdAt,
+        createdAt,
+      );
+  }
+
+  listProductEntitlements(workspaceId: string, productId?: string): ProductEntitlementRecord[] {
+    const now = nowMs();
+    const query = productId
+      ? `
+        SELECT
+          workspace_id,
+          product_id,
+          entitlement_key,
+          entitlement_value,
+          source,
+          expires_at_ms
+        FROM frontdoor_product_entitlements
+        WHERE workspace_id = ? AND product_id = ?
+          AND (expires_at_ms IS NULL OR expires_at_ms > ?)
+        ORDER BY entitlement_key ASC
+      `
+      : `
+        SELECT
+          workspace_id,
+          product_id,
+          entitlement_key,
+          entitlement_value,
+          source,
+          expires_at_ms
+        FROM frontdoor_product_entitlements
+        WHERE workspace_id = ?
+          AND (expires_at_ms IS NULL OR expires_at_ms > ?)
+        ORDER BY entitlement_key ASC
+      `;
+    const args = productId ? [workspaceId, productId, now] : [workspaceId, now];
+    const rows = this.db.prepare(query).all(...args) as Array<{
+      workspace_id: string;
+      product_id: string;
+      entitlement_key: string;
+      entitlement_value: string;
+      source: string;
+      expires_at_ms: number | null;
+    }>;
+    return rows.map((row) => ({
+      workspaceId: row.workspace_id,
+      productId: row.product_id,
+      entitlementKey: row.entitlement_key,
+      entitlementValue: row.entitlement_value,
+      source: row.source as "plan" | "override" | "trial",
+      expiresAtMs: row.expires_at_ms ?? undefined,
+    }));
+  }
+
+  initializeEntitlementsFromDefaultPlan(workspaceId: string, productId: string): void {
+    const plan = this.getDefaultPlanForProduct(productId);
+    if (!plan?.limitsJson) {
+      return;
+    }
+    let limits: Record<string, unknown> = {};
+    try {
+      limits = JSON.parse(plan.limitsJson) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    for (const [key, value] of Object.entries(limits)) {
+      if (key && value !== undefined && value !== null) {
+        this.upsertProductEntitlement({
+          workspaceId,
+          productId,
+          entitlementKey: key,
+          entitlementValue: String(value),
+          source: "plan",
+        });
+      }
+    }
+  }
+
+  resolveWorkspaceEntitlements(workspaceId: string): ResolvedEntitlements | null {
+    const workspace = this.getWorkspace(workspaceId);
+    if (!workspace) {
+      return null;
+    }
+    const productId = workspace.productId;
+    if (!productId) {
+      return null;
+    }
+    const billing = this.getWorkspaceBillingSummary(workspaceId);
+    const planId = billing.planId;
+
+    // Start with plan defaults from the plan's limits_json
+    const entitlements: Record<string, string> = {};
+    const plan = this.getProductPlan(planId);
+    if (plan?.limitsJson) {
+      try {
+        const planLimits = JSON.parse(plan.limitsJson) as Record<string, unknown>;
+        for (const [key, value] of Object.entries(planLimits)) {
+          if (key && value !== undefined && value !== null) {
+            entitlements[key] = String(value);
+          }
+        }
+      } catch {
+        // Ignore malformed JSON.
+      }
+    }
+
+    // Layer on stored entitlements (overrides and trials take precedence)
+    const stored = this.listProductEntitlements(workspaceId, productId);
+    for (const ent of stored) {
+      entitlements[ent.entitlementKey] = ent.entitlementValue;
+    }
+
+    // Usage placeholder — actual usage comes from runtime counters, not stored here
+    const usage: Record<string, string> = {};
+
+    return {
+      productId,
+      planId,
+      entitlements,
+      usage,
+    };
+  }
+
+  // ── Product Seeding ───────────────────────────────────────────────
+
+  seedProducts(): void {
+    // Spike
+    this.upsertProduct({
+      productId: "spike",
+      displayName: "Spike",
+      tagline: "Code Oracle Platform",
+      accentColor: "#10b981",
+      homepageUrl: "https://spike.fyi",
+      onboardingOrigin: "https://spike.fyi",
+    });
+    this.upsertProductPlan({
+      planId: "spike-free",
+      productId: "spike",
+      displayName: "Free",
+      description: "For trying Spike on public repos",
+      priceMonthly: 0,
+      isDefault: true,
+      sortOrder: 0,
+      limitsJson: JSON.stringify({
+        "repos.max_count": "3",
+        "repos.private_allowed": "false",
+        "hydration.max_monthly": "10",
+        "ask.max_monthly": "50",
+        "mcp.enabled": "false",
+        "members.max_count": "1",
+      }),
+      featuresJson: JSON.stringify([
+        "3 public repositories",
+        "10 hydrations/month",
+        "50 asks/month",
+      ]),
+    });
+    this.upsertProductPlan({
+      planId: "spike-pro",
+      productId: "spike",
+      displayName: "Pro",
+      description: "For individual developers and small teams",
+      priceMonthly: 2900,
+      priceYearly: 29000,
+      isDefault: false,
+      sortOrder: 10,
+      limitsJson: JSON.stringify({
+        "repos.max_count": "25",
+        "repos.private_allowed": "true",
+        "hydration.max_monthly": "100",
+        "ask.max_monthly": "500",
+        "mcp.enabled": "true",
+        "members.max_count": "5",
+      }),
+      featuresJson: JSON.stringify([
+        "25 repositories (public + private)",
+        "100 hydrations/month",
+        "500 asks/month",
+        "MCP server access",
+        "Up to 5 team members",
+      ]),
+    });
+    this.upsertProductPlan({
+      planId: "spike-team",
+      productId: "spike",
+      displayName: "Team",
+      description: "For engineering teams with shared workspaces",
+      priceMonthly: 7900,
+      priceYearly: 79000,
+      isDefault: false,
+      sortOrder: 20,
+      limitsJson: JSON.stringify({
+        "repos.max_count": "unlimited",
+        "repos.private_allowed": "true",
+        "hydration.max_monthly": "unlimited",
+        "ask.max_monthly": "unlimited",
+        "mcp.enabled": "true",
+        "members.max_count": "25",
+      }),
+      featuresJson: JSON.stringify([
+        "Unlimited repositories",
+        "Unlimited hydrations",
+        "Unlimited asks",
+        "MCP server access",
+        "Up to 25 team members",
+        "Priority support",
+      ]),
+    });
+
+    // GlowBot
+    this.upsertProduct({
+      productId: "glowbot",
+      displayName: "GlowBot",
+      tagline: "Growth Intelligence for Aesthetic Clinics",
+      accentColor: "#d4a853",
+      homepageUrl: "https://glowbot.app",
+      onboardingOrigin: "https://shell.nexushub.sh",
+    });
+    this.upsertProductPlan({
+      planId: "glowbot-starter",
+      productId: "glowbot",
+      displayName: "Starter",
+      description: "Connect your first clinic and see your funnel",
+      priceMonthly: 0,
+      isDefault: true,
+      sortOrder: 0,
+      limitsJson: JSON.stringify({
+        "clinics.max_count": "1",
+        "adapters.max_count": "2",
+        "pipeline.runs_monthly": "30",
+        "agents.enabled": "false",
+        "benchmarking.enabled": "false",
+        "members.max_count": "2",
+      }),
+      featuresJson: JSON.stringify([
+        "1 clinic",
+        "2 adapters",
+        "30 pipeline runs/month",
+        "Up to 2 members",
+      ]),
+    });
+    this.upsertProductPlan({
+      planId: "glowbot-clinic",
+      productId: "glowbot",
+      displayName: "Clinic",
+      description: "Full funnel intelligence for a single clinic",
+      priceMonthly: 14900,
+      priceYearly: 149000,
+      isDefault: false,
+      sortOrder: 10,
+      limitsJson: JSON.stringify({
+        "clinics.max_count": "1",
+        "adapters.max_count": "6",
+        "pipeline.runs_monthly": "unlimited",
+        "agents.enabled": "true",
+        "benchmarking.enabled": "false",
+        "members.max_count": "10",
+      }),
+      featuresJson: JSON.stringify([
+        "1 clinic",
+        "6 adapters",
+        "Unlimited pipeline runs",
+        "AI growth agents",
+        "Up to 10 members",
+      ]),
+    });
+    this.upsertProductPlan({
+      planId: "glowbot-multi",
+      productId: "glowbot",
+      displayName: "Multi-Clinic",
+      description: "Cross-clinic benchmarking and growth optimization",
+      priceMonthly: 39900,
+      priceYearly: 399000,
+      isDefault: false,
+      sortOrder: 20,
+      limitsJson: JSON.stringify({
+        "clinics.max_count": "10",
+        "adapters.max_count": "6",
+        "pipeline.runs_monthly": "unlimited",
+        "agents.enabled": "true",
+        "benchmarking.enabled": "true",
+        "members.max_count": "50",
+      }),
+      featuresJson: JSON.stringify([
+        "Up to 10 clinics",
+        "6 adapters per clinic",
+        "Unlimited pipeline runs",
+        "AI growth agents",
+        "Cross-clinic benchmarking",
+        "Up to 50 members",
+      ]),
+    });
+  }
 }
 
 export function workspaceToTenantConfig(workspace: WorkspaceRecord): TenantConfig {
@@ -1736,5 +2607,6 @@ export function workspaceToTenantConfig(workspace: WorkspaceRecord): TenantConfi
     runtimePublicBaseUrl: workspace.runtimePublicBaseUrl,
     runtimeWsUrl: workspace.runtimeWsUrl,
     runtimeSseUrl: workspace.runtimeSseUrl,
+    runtimeAuthToken: workspace.runtimeAuthToken,
   };
 }

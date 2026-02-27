@@ -158,4 +158,143 @@ process.stdin.on("end", () => {
 
     provisioner.close();
   });
+
+  it("fails when provision command omits runtime_public_base_url", async () => {
+    const tempDir = mkTempDir();
+    const storePath = path.join(tempDir, "autoprovision.db");
+    const scriptPath = path.join(tempDir, "provision-invalid.mjs");
+    fs.writeFileSync(
+      scriptPath,
+      `
+let raw = "";
+process.stdin.on("data", (chunk) => { raw += chunk.toString(); });
+process.stdin.on("end", () => {
+  const payload = JSON.parse(raw || "{}");
+  process.stdout.write(JSON.stringify({
+    tenant_id: payload.tenant_id,
+    runtime_url: "http://127.0.0.1:42000"
+  }));
+});
+`,
+      "utf8",
+    );
+    const config = baseConfig(storePath);
+    config.autoProvision.command = `${quoteShell(process.execPath)} ${quoteShell(scriptPath)}`;
+
+    const provisioner = new TenantAutoProvisioner(config);
+    await expect(
+      provisioner.resolveOrProvision({
+        provider: "google",
+        claims: {
+          sub: "google-sub-bad",
+          email: "bad@example.com",
+          name: "Bad",
+        },
+        fallbackPrincipal: null,
+      }),
+    ).rejects.toThrow(/autoprovision_runtime_public_base_url_missing/);
+
+    const request = provisioner.getLatestProvisionRequestByOidcIdentity({
+      provider: "google",
+      subject: "google-sub-bad",
+    });
+    expect(request).toBeTruthy();
+    expect(request?.status).toBe("failed");
+    expect(String(request?.errorText || "")).toContain("autoprovision_runtime_public_base_url_missing");
+    provisioner.close();
+  });
+
+  it("creates separate tenant mappings per product for the same OIDC identity", async () => {
+    const tempDir = mkTempDir();
+    const storePath = path.join(tempDir, "autoprovision.db");
+    const scriptPath = path.join(tempDir, "provision-product-aware.mjs");
+    const callCountPath = path.join(tempDir, "calls.txt");
+    const payloadLogPath = path.join(tempDir, "payloads.jsonl");
+    fs.writeFileSync(callCountPath, "0\n", "utf8");
+    fs.writeFileSync(payloadLogPath, "", "utf8");
+    fs.writeFileSync(
+      scriptPath,
+      `
+import fs from "node:fs";
+let raw = "";
+process.stdin.on("data", (chunk) => { raw += chunk.toString(); });
+process.stdin.on("end", () => {
+  const payload = JSON.parse(raw || "{}");
+  const product = String(payload.product_id || "none").trim().toLowerCase();
+  const count = Number(fs.readFileSync(${JSON.stringify(callCountPath)}, "utf8").trim() || "0");
+  fs.writeFileSync(${JSON.stringify(callCountPath)}, String(count + 1) + "\\n", "utf8");
+  fs.appendFileSync(${JSON.stringify(payloadLogPath)}, JSON.stringify({ product_id: payload.product_id ?? null }) + "\\n", "utf8");
+  const port = product === "spike" ? 7422 : 7423;
+  process.stdout.write(JSON.stringify({
+    tenant_id: payload.tenant_id,
+    runtime_url: \`http://127.0.0.1:\${port}\`,
+    runtime_public_base_url: \`https://\${product || "none"}.example.com\`
+  }));
+});
+`,
+      "utf8",
+    );
+    const config = baseConfig(storePath);
+    config.autoProvision.command = `${quoteShell(process.execPath)} ${quoteShell(scriptPath)}`;
+
+    const provisioner = new TenantAutoProvisioner(config);
+    const glowbotFirst = await provisioner.resolveOrProvision({
+      provider: "google",
+      claims: {
+        sub: "google-sub-abc",
+        email: "alice@example.com",
+        name: "Alice",
+      },
+      fallbackPrincipal: null,
+      productId: "glowbot",
+    });
+    const glowbotSecond = await provisioner.resolveOrProvision({
+      provider: "google",
+      claims: {
+        sub: "google-sub-abc",
+        email: "alice@example.com",
+        name: "Alice",
+      },
+      fallbackPrincipal: null,
+      productId: "glowbot",
+    });
+    const spikeFirst = await provisioner.resolveOrProvision({
+      provider: "google",
+      claims: {
+        sub: "google-sub-abc",
+        email: "alice@example.com",
+        name: "Alice",
+      },
+      fallbackPrincipal: null,
+      productId: "spike",
+    });
+    const spikeSecond = await provisioner.resolveOrProvision({
+      provider: "google",
+      claims: {
+        sub: "google-sub-abc",
+        email: "alice@example.com",
+        name: "Alice",
+      },
+      fallbackPrincipal: null,
+      productId: "spike",
+    });
+
+    expect(glowbotFirst?.tenantId).toMatch(/^tenant-glowbot-/);
+    expect(glowbotSecond?.tenantId).toBe(glowbotFirst?.tenantId);
+    expect(spikeFirst?.tenantId).toMatch(/^tenant-spike-/);
+    expect(spikeSecond?.tenantId).toBe(spikeFirst?.tenantId);
+    expect(spikeFirst?.tenantId).not.toBe(glowbotFirst?.tenantId);
+
+    const callCount = Number(fs.readFileSync(callCountPath, "utf8").trim() || "0");
+    expect(callCount).toBe(2);
+    const payloadProducts = fs
+      .readFileSync(payloadLogPath, "utf8")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { product_id: string | null })
+      .map((item) => item.product_id);
+    expect(payloadProducts).toEqual(["glowbot", "spike"]);
+    provisioner.close();
+  });
 });

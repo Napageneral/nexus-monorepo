@@ -3,364 +3,1389 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Nexus | Sign in</title>
+    <title>Nexus — Workspace Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
       :root {
-        --bg: #f3f7ff;
-        --ink: #0b1f3a;
-        --muted: #496180;
-        --line: #c8d6ec;
-        --panel: #ffffff;
-        --brand: #0b7a6e;
-        --brand-ink: #ffffff;
-        --brand-strong: #07574f;
-        --accent: #19418a;
+        --bg: #0c0e14;
+        --bg-raised: #12151e;
+        --bg-card: #171b26;
+        --bg-input: #1c2030;
+        --border: #222838;
+        --border-bright: #2e3650;
+        --text: #e2e8f0;
+        --text-muted: #7c8ba5;
+        --text-dim: #4e5b73;
+        --accent: #6366f1;
+        --accent-hover: #818cf8;
+        --accent-glow: rgba(99, 102, 241, 0.12);
+        --green: #10b981;
+        --green-glow: rgba(16, 185, 129, 0.12);
+        --red: #ef4444;
+        --red-glow: rgba(239, 68, 68, 0.12);
+        --amber: #f59e0b;
+        --radius: 14px;
+        --radius-sm: 10px;
       }
 
-      * {
-        box-sizing: border-box;
-      }
-
-      html,
       body {
-        margin: 0;
-        min-height: 100%;
-        color: var(--ink);
-        font-family:
-          "Avenir Next",
-          Manrope,
-          "SF Pro Text",
-          "Segoe UI",
-          sans-serif;
-        background:
-          radial-gradient(1200px 600px at 85% -10%, #d8e8ff 0%, rgba(216, 232, 255, 0) 58%),
-          radial-gradient(900px 500px at -10% 100%, #c9f2ea 0%, rgba(201, 242, 234, 0) 55%),
-          var(--bg);
+        font-family: 'Inter', -apple-system, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        -webkit-font-smoothing: antialiased;
+        min-height: 100vh;
       }
 
-      .shell {
-        max-width: 980px;
-        margin: 0 auto;
-        padding: 32px 20px 48px;
-      }
+      /* ── Layout ── */
+      .layout { display: flex; min-height: 100vh; }
 
-      .brand {
+      .sidebar {
+        position: fixed;
+        top: 0; left: 0; bottom: 0;
+        width: 240px;
+        background: var(--bg-raised);
+        border-right: 1px solid var(--border);
         display: flex;
-        align-items: baseline;
-        gap: 10px;
+        flex-direction: column;
+        z-index: 50;
+        padding: 20px 0;
+      }
+
+      .sidebar-brand {
+        display: flex; align-items: center; gap: 10px;
+        padding: 0 20px;
         margin-bottom: 28px;
       }
 
-      .brand-mark {
-        font-size: 22px;
-        font-weight: 800;
-        letter-spacing: 0.02em;
+      .sidebar-brand svg { flex-shrink: 0; }
+
+      .sidebar-brand span {
+        font-weight: 800; font-size: 1.05rem; letter-spacing: -0.01em;
       }
 
-      .brand-meta {
-        font-size: 12px;
-        letter-spacing: 0.08em;
-        color: var(--muted);
-        text-transform: uppercase;
+      .sidebar-brand small {
+        font-size: 0.62rem; font-weight: 600;
+        color: var(--text-dim); text-transform: uppercase;
+        letter-spacing: 0.08em; display: block;
+        margin-top: 1px;
       }
 
-      .panel {
-        background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
-        border: 1px solid var(--line);
-        border-radius: 22px;
-        padding: 28px;
-        box-shadow: 0 18px 40px rgba(17, 39, 77, 0.07);
+      .sidebar-nav { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 0 8px; }
+
+      .sidebar-section {
+        font-size: 0.62rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.1em;
+        color: var(--text-dim); padding: 16px 12px 6px;
       }
 
-      h1 {
-        margin: 0 0 10px;
-        font-size: clamp(28px, 5vw, 46px);
-        letter-spacing: -0.03em;
+      .nav-item {
+        display: flex; align-items: center; gap: 10px;
+        padding: 9px 12px; border-radius: 8px;
+        font-size: 0.84rem; font-weight: 500;
+        color: var(--text-muted); cursor: pointer;
+        border: none; background: none; width: 100%;
+        text-align: left; transition: all 0.12s;
       }
 
-      .lead {
-        margin: 0 0 20px;
-        color: var(--muted);
-        font-size: 17px;
-        line-height: 1.5;
-        max-width: 62ch;
+      .nav-item:hover { background: var(--bg-card); color: var(--text); }
+      .nav-item.active { background: var(--accent-glow); color: var(--accent); }
+      .nav-item svg { flex-shrink: 0; opacity: 0.6; }
+      .nav-item.active svg { opacity: 1; }
+
+      .sidebar-footer {
+        padding: 12px 16px; border-top: 1px solid var(--border);
+        margin-top: auto;
       }
 
-      .status {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        border-radius: 999px;
-        border: 1px solid var(--line);
-        padding: 6px 12px;
-        background: #f4f8ff;
-        color: var(--muted);
-        font-size: 13px;
-        margin-bottom: 18px;
+      .sidebar-user {
+        font-size: 0.78rem; color: var(--text-muted);
+        margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
-      .status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 999px;
-        background: #8aa1c2;
+      .sidebar-actions { display: flex; gap: 6px; }
+
+      .main-content {
+        margin-left: 240px;
+        flex: 1;
+        padding: 28px 32px;
+        max-width: 1000px;
       }
 
-      .status.ok .status-dot {
-        background: #0b7a6e;
+      /* ── Header ── */
+      .page-header { margin-bottom: 24px; }
+
+      .page-header h1 {
+        font-size: 1.5rem; font-weight: 800;
+        letter-spacing: -0.03em; color: #fff;
       }
 
-      .status.err .status-dot {
-        background: #c13d3d;
+      .page-header p {
+        margin-top: 4px; font-size: 0.88rem;
+        color: var(--text-muted);
       }
 
-      .actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
+      .status-pill {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 6px 14px; border-radius: 999px;
+        font-size: 0.78rem; font-weight: 600;
+        border: 1px solid var(--border);
+        background: var(--bg-card); color: var(--text-muted);
+        margin-top: 12px;
       }
 
-      button {
-        border: 1px solid var(--line);
-        background: #fff;
-        color: var(--ink);
-        border-radius: 10px;
-        padding: 11px 14px;
-        font-size: 14px;
-        font-weight: 600;
+      .status-pill .dot {
+        width: 8px; height: 8px; border-radius: 999px;
+        background: var(--text-dim);
+      }
+
+      .status-pill.ok .dot { background: var(--green); }
+      .status-pill.ok { color: var(--green); border-color: rgba(16, 185, 129, 0.25); background: var(--green-glow); }
+      .status-pill.err .dot { background: var(--red); }
+      .status-pill.err { color: var(--red); border-color: rgba(239, 68, 68, 0.25); background: var(--red-glow); }
+      .status-pill.warn .dot { background: var(--amber); }
+      .status-pill.warn { color: var(--amber); }
+
+      /* ── Cards ── */
+      .card-grid { display: grid; gap: 16px; grid-template-columns: repeat(2, 1fr); }
+      .card-grid .wide { grid-column: 1 / -1; }
+
+      .card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 22px;
+        transition: border-color 0.15s;
+      }
+
+      .card:hover { border-color: var(--border-bright); }
+
+      .card-title {
+        font-size: 0.95rem; font-weight: 700;
+        color: #fff; margin-bottom: 4px;
+      }
+
+      .card-desc {
+        font-size: 0.8rem; color: var(--text-dim);
+        margin-bottom: 14px; line-height: 1.4;
+      }
+
+      /* ── Forms ── */
+      label {
+        display: block; margin: 10px 0 5px;
+        font-size: 0.68rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.06em;
+        color: var(--text-dim);
+      }
+
+      input, select, textarea {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 9px 12px;
+        background: var(--bg-input);
+        color: var(--text);
+        font: inherit; font-size: 0.85rem;
+        transition: border-color 0.15s;
+      }
+
+      input:focus, select:focus, textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-glow);
+      }
+
+      textarea { min-height: 72px; resize: vertical; }
+
+      /* ── Buttons ── */
+      button, .btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        gap: 6px;
+        border: 1px solid var(--border-bright);
+        border-radius: 8px;
+        padding: 8px 14px;
+        font-family: inherit; font-size: 0.82rem; font-weight: 600;
+        color: var(--text);
+        background: var(--bg-raised);
         cursor: pointer;
+        transition: all 0.14s ease;
+        white-space: nowrap;
       }
 
-      button:hover {
-        border-color: #abc1e2;
-      }
+      button:hover { background: var(--bg-card); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
 
       button.primary {
-        background: linear-gradient(180deg, #0b8b7d 0%, var(--brand) 100%);
-        border-color: var(--brand-strong);
-        color: var(--brand-ink);
+        background: linear-gradient(135deg, var(--accent), #4f46e5);
+        border-color: #4338ca; color: #fff;
       }
 
       button.primary:hover {
-        background: linear-gradient(180deg, #0a7f72 0%, var(--brand-strong) 100%);
+        background: linear-gradient(135deg, var(--accent-hover), #6366f1);
+        box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
       }
 
-      button.subtle {
-        color: var(--accent);
+      button.danger { background: rgba(239, 68, 68, 0.1); border-color: #7f1d1d; color: var(--red); }
+      button.danger:hover { background: rgba(239, 68, 68, 0.2); }
+
+      button.subtle { background: transparent; border-color: var(--border); color: var(--text-muted); }
+      button.subtle:hover { background: var(--bg-card); color: var(--text); }
+
+      button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+      .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+      /* ── KV Pairs ── */
+      .kv {
+        display: grid; grid-template-columns: 130px 1fr;
+        gap: 6px; padding: 8px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 0.82rem;
       }
 
-      .hint {
-        margin-top: 16px;
-        font-size: 13px;
-        color: var(--muted);
+      .kv:last-child { border-bottom: none; }
+
+      .kv .k {
+        font-size: 0.68rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.05em;
+        color: var(--text-dim); padding-top: 2px;
       }
 
-      .operator {
-        margin-top: 22px;
-        border-top: 1px dashed var(--line);
-        padding-top: 16px;
+      .kv .v { font-weight: 600; color: var(--text); }
+
+      /* ── Stats ── */
+      .stats-row {
+        display: grid; grid-template-columns: repeat(4, 1fr);
+        gap: 8px; margin-bottom: 14px;
       }
 
-      .operator-toggle {
-        border: none;
-        background: transparent;
-        color: var(--muted);
-        font-size: 12px;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        padding: 0;
+      .stat {
+        background: var(--bg-raised);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 10px;
       }
 
-      .operator-form {
-        display: none;
-        margin-top: 12px;
-        max-width: 420px;
+      .stat .stat-label {
+        font-size: 0.62rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.05em;
+        color: var(--text-dim);
       }
 
-      .operator-form.visible {
-        display: block;
+      .stat .stat-value {
+        display: block; margin-top: 4px;
+        font-size: 1.1rem; font-weight: 800; color: #fff;
       }
 
-      label {
-        display: block;
-        margin: 8px 0 6px;
-        font-size: 12px;
-        color: var(--muted);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
+      /* ── Lists ── */
+      .list { list-style: none; display: grid; gap: 6px; }
+
+      .list li {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--bg-raised);
+        padding: 10px 12px;
       }
 
-      input {
-        width: 100%;
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        padding: 10px 11px;
-        font-size: 14px;
-        color: var(--ink);
-        background: #fff;
+      .list .title { display: block; font-weight: 600; font-size: 0.85rem; }
+      .list .meta { display: block; margin-top: 3px; color: var(--text-dim); font-size: 0.75rem; }
+
+      /* ── Token box ── */
+      .token-box {
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 0.75rem;
+        background: var(--bg);
       }
 
-      @media (max-width: 640px) {
-        .shell {
-          padding: 20px 14px 32px;
-        }
+      /* ── Auth gate ── */
+      .auth-gate {
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        min-height: 100vh; text-align: center;
+        padding: 40px 20px;
+      }
 
-        .panel {
-          padding: 18px;
-          border-radius: 16px;
-        }
+      .auth-gate h1 {
+        font-size: 2rem; font-weight: 800;
+        letter-spacing: -0.03em; color: #fff;
+        margin-bottom: 8px;
+      }
+
+      .auth-gate p { color: var(--text-muted); margin-bottom: 28px; max-width: 400px; }
+
+      .auth-gate .logo-big {
+        margin-bottom: 32px; opacity: 0.5;
+      }
+
+      /* ── Utility ── */
+      .hidden { display: none !important; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; }
+      .row > * { flex: 1; }
+
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      .card { animation: fadeIn 0.25s ease both; }
+
+      /* ── Mobile ── */
+      @media (max-width: 900px) {
+        .sidebar { display: none; }
+        .main-content { margin-left: 0; padding: 20px 16px; }
+        .card-grid { grid-template-columns: 1fr; }
+        .stats-row { grid-template-columns: repeat(2, 1fr); }
       }
     </style>
   </head>
   <body>
-    <main class="shell">
-      <div class="brand">
-        <div class="brand-mark">NEXUS</div>
-        <div class="brand-meta">Hosted Control Plane</div>
-      </div>
+    <!-- Auth gate (shown when signed out) -->
+    <div id="authGate" class="auth-gate">
+      <svg class="logo-big" width="48" height="48" viewBox="0 0 24 24" fill="none">
+        <rect x="3" y="3" width="18" height="18" rx="4" stroke="#6366f1" stroke-width="1.5"/>
+        <path d="M8 12h8M12 8v8" stroke="#6366f1" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <h1>Nexus</h1>
+      <p>Sign in to manage your workspaces, team access, runtime configuration, and more.</p>
+      <button id="googleBtn" class="primary" style="padding: 12px 28px; font-size: 0.92rem;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.76h3.56c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.56-2.76c-.98.66-2.24 1.05-3.72 1.05-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.1a6.82 6.82 0 010-4.24V7.02H2.18A11.96 11.96 0 001 12c0 1.93.46 3.76 1.18 5.38l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.02l3.66 2.84c.87-2.6 3.3-4.48 6.16-4.48z" fill="#EA4335"/></svg>
+        Continue with Google
+      </button>
+    </div>
 
-      <section class="panel">
-        <h1>Sign in to your workspace</h1>
-        <p class="lead">
-          Secure access to your tenant runtime. No debug controls or token plumbing are exposed in this customer
-          surface.
-        </p>
-
-        <div id="status" class="status">
-          <span class="status-dot"></span>
-          <span id="statusText">Checking session</span>
+    <!-- Main dashboard (shown when signed in) -->
+    <div id="dashLayout" class="layout hidden">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="3" width="18" height="18" rx="4" stroke="#6366f1" stroke-width="1.5"/>
+            <path d="M8 12h8M12 8v8" stroke="#6366f1" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <div>
+            <span>Nexus</span>
+            <small>Control Plane</small>
+          </div>
         </div>
 
-        <div class="actions">
-          <button id="googleBtn" class="primary">Continue with Google</button>
-          <button id="openBtn" class="primary" hidden>Open Workspace</button>
-          <button id="logoutBtn" class="subtle" hidden>Sign out</button>
-        </div>
-        <p class="hint" id="hintText">Use Google login to continue. You will be routed to your tenant runtime.</p>
+        <nav class="sidebar-nav">
+          <div class="sidebar-section">Workspace</div>
+          <button class="nav-item active" data-section="overview">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            Overview
+          </button>
+          <button class="nav-item" data-section="launch">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15.5 3.5H21V9M14 10l7-7M10 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-5"/></svg>
+            Launch App
+          </button>
 
-        <section id="operatorPanel" class="operator" hidden>
-          <div class="operator-toggle">Operator access</div>
-          <form id="operatorForm" class="operator-form visible">
-            <label for="username">Username</label>
-            <input id="username" value="owner" />
-            <label for="password">Password</label>
-            <input id="password" type="password" value="" />
-            <div class="actions" style="margin-top: 10px;">
-              <button id="operatorLoginBtn" type="submit">Sign in</button>
+          <div class="sidebar-section">Admin</div>
+          <button class="nav-item" data-section="settings" data-admin>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            Settings
+          </button>
+          <button class="nav-item" data-section="keys" data-admin>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+            Access Keys
+          </button>
+          <button class="nav-item" data-section="members" data-admin>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+            Members
+          </button>
+          <button class="nav-item" data-section="invites" data-admin>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            Invites
+          </button>
+          <button class="nav-item" data-section="billing" data-admin>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            Billing
+          </button>
+          <button class="nav-item" data-section="operator" data-operator>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Operator
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div id="sidebarUser" class="sidebar-user">Not signed in</div>
+          <div class="sidebar-actions">
+            <button id="refreshBtn" class="subtle" style="flex:1; font-size: 0.75rem;">Refresh</button>
+            <button id="logoutBtn" class="subtle" style="flex:1; font-size: 0.75rem;">Sign out</button>
+          </div>
+        </div>
+      </aside>
+
+      <div class="main-content">
+        <div class="page-header">
+          <h1 id="pageTitle">Dashboard</h1>
+          <p id="pageDesc">Manage your workspace and team.</p>
+          <div id="statusPill" class="status-pill"><span class="dot"></span> Checking session</div>
+        </div>
+
+        <section id="sectionOverview" class="card-grid">
+          <article class="card">
+            <div class="card-title">Workspace</div>
+            <div class="card-desc">Select or switch your active workspace.</div>
+            <label for="workspaceSelect">Active workspace</label>
+            <select id="workspaceSelect"></select>
+            <div class="btn-row">
+              <button id="refreshWorkspacesBtn" class="subtle">Refresh</button>
+              <button id="setActiveWorkspaceBtn">Set active</button>
             </div>
-          </form>
+            <div class="kv" style="margin-top: 12px;">
+              <span class="k">Count</span>
+              <span class="v" id="workspaceCount">0</span>
+            </div>
+            <div class="kv">
+              <span class="k">Active</span>
+              <span class="v" id="workspaceSummary">None</span>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-title">Provisioning</div>
+            <div class="card-desc">Latest auto-provision request for your account.</div>
+            <div class="kv">
+              <span class="k">Status</span>
+              <span class="v" id="provisionStatus">-</span>
+            </div>
+            <div class="kv">
+              <span class="k">Stage</span>
+              <span class="v" id="provisionStage">-</span>
+            </div>
+            <div class="kv">
+              <span class="k">Tenant</span>
+              <span class="v" id="provisionTenant">-</span>
+            </div>
+            <div class="kv">
+              <span class="k">Error</span>
+              <span class="v" id="provisionError">-</span>
+            </div>
+            <div class="btn-row">
+              <button id="refreshProvisionBtn" class="subtle">Refresh</button>
+            </div>
+          </article>
+
+          <article class="card wide">
+            <div class="card-title">Redeem Invite</div>
+            <div class="card-desc">Join another workspace with an invite token.</div>
+            <label for="redeemInviteToken">Invite token</label>
+            <input id="redeemInviteToken" placeholder="inv_xxx.yyy" />
+            <div class="btn-row">
+              <button id="redeemInviteBtn">Redeem invite</button>
+            </div>
+          </article>
         </section>
-      </section>
-    </main>
+
+        <section id="sectionLaunch" class="card-grid hidden">
+          <article class="card wide">
+            <div class="card-title">Launch App</div>
+            <div class="card-desc">Open a registered app for your active workspace through frontdoor routing.</div>
+            <label for="appSelect">Launchable apps</label>
+            <select id="appSelect"></select>
+            <div class="btn-row">
+              <button id="refreshAppsBtn" class="subtle">Refresh apps</button>
+              <button id="openWorkspaceBtn" class="primary">Launch workspace</button>
+            </div>
+            <div class="kv" style="margin-top: 12px;">
+              <span class="k">App status</span>
+              <span class="v" id="appSummary">No app loaded</span>
+            </div>
+          </article>
+        </section>
+
+        <section id="sectionSettings" class="card-grid hidden">
+          <article id="runtimeSettingsCard" class="card wide">
+            <div class="card-title">Runtime Settings</div>
+            <div class="card-desc">Workspace runtime binding and lifecycle configuration.</div>
+            <label for="settingsDisplayName">Display name</label>
+            <input id="settingsDisplayName" placeholder="Workspace display name" />
+            <label for="settingsStatus">Status</label>
+            <select id="settingsStatus">
+              <option value="active">active</option>
+              <option value="disabled">disabled</option>
+            </select>
+            <label for="settingsRuntimeUrl">Runtime URL</label>
+            <input id="settingsRuntimeUrl" placeholder="https://runtime.example.com" />
+            <label for="settingsRuntimePublic">Runtime public base URL</label>
+            <input id="settingsRuntimePublic" placeholder="https://runtime.example.com" />
+            <label for="settingsRuntimeWs">Runtime WS URL (optional)</label>
+            <input id="settingsRuntimeWs" placeholder="wss://runtime.example.com/" />
+            <label for="settingsRuntimeSse">Runtime SSE URL (optional)</label>
+            <input id="settingsRuntimeSse" placeholder="https://runtime.example.com/api/events/stream" />
+            <div class="btn-row">
+              <button id="saveSettingsBtn" class="primary">Save settings</button>
+              <button id="reloadSettingsBtn" class="subtle">Reload</button>
+            </div>
+            <div class="kv" style="margin-top: 12px;">
+              <span class="k">Runtime auth</span>
+              <span class="v" id="settingsHasToken">-</span>
+            </div>
+          </article>
+        </section>
+
+        <section id="sectionKeys" class="card-grid hidden">
+          <article id="runtimeKeysCard" class="card wide">
+            <div class="card-title">Access Keys</div>
+            <div class="card-desc">Manage workspace runtime authentication tokens.</div>
+            <label for="customRuntimeToken">Set custom runtime auth token</label>
+            <input id="customRuntimeToken" placeholder="paste token" />
+            <div class="btn-row">
+              <button id="setRuntimeTokenBtn">Set token</button>
+              <button id="rotateRuntimeTokenBtn">Rotate token</button>
+              <button id="clearRuntimeTokenBtn" class="danger">Clear token</button>
+            </div>
+            <label for="runtimeTokenOutput">Last generated token (shown once)</label>
+            <textarea id="runtimeTokenOutput" class="token-box" readonly></textarea>
+          </article>
+        </section>
+
+        <section id="sectionMembers" class="card-grid hidden">
+          <article id="membersCard" class="card wide">
+            <div class="card-title">Workspace Members</div>
+            <div class="card-desc">View and manage member access for this workspace.</div>
+            <ul id="memberList" class="list"></ul>
+            <div class="btn-row">
+              <button id="refreshMembersBtn" class="subtle">Refresh members</button>
+            </div>
+          </article>
+        </section>
+
+        <section id="sectionInvites" class="card-grid hidden">
+          <article id="invitesCard" class="card wide">
+            <div class="card-title">Invites</div>
+            <div class="card-desc">Create and revoke workspace invites.</div>
+            <div class="row">
+              <div>
+                <label for="inviteRole">Role</label>
+                <select id="inviteRole">
+                  <option value="workspace_member">workspace_member</option>
+                  <option value="workspace_admin">workspace_admin</option>
+                  <option value="workspace_owner">workspace_owner</option>
+                </select>
+              </div>
+              <div>
+                <label for="inviteTtl">Invite TTL</label>
+                <select id="inviteTtl">
+                  <option value="3600">1 hour</option>
+                  <option value="86400">24 hours</option>
+                  <option value="604800" selected>7 days</option>
+                  <option value="2592000">30 days</option>
+                </select>
+              </div>
+            </div>
+            <label for="inviteScopes">Scopes (comma-separated)</label>
+            <input id="inviteScopes" placeholder="chat.send, repo.read" />
+            <div class="btn-row">
+              <button id="createInviteBtn" class="primary">Create invite</button>
+              <button id="refreshInvitesBtn" class="subtle">Refresh invites</button>
+            </div>
+            <label for="latestInviteToken">Latest invite token (copy now)</label>
+            <textarea id="latestInviteToken" class="token-box" readonly></textarea>
+            <ul id="inviteList" class="list" style="margin-top: 12px;"></ul>
+          </article>
+        </section>
+
+        <section id="sectionBilling" class="card-grid hidden">
+          <article id="insightsCard" class="card wide">
+            <div id="billingProductBadge" style="display: none; margin-bottom: 14px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-raised); align-items: center; gap: 8px;">
+              <span id="billingProductDot" style="width: 10px; height: 10px; border-radius: 999px; background: var(--accent);"></span>
+              <span id="billingProductName" style="font-weight: 700; font-size: 0.85rem;">Product</span>
+              <span id="billingProductTagline" style="color: var(--text-dim); font-size: 0.75rem;"></span>
+            </div>
+            <div class="card-title">Usage & Billing</div>
+            <div class="card-desc">Workspace usage summary and billing controls.</div>
+            <div class="stats-row">
+              <div class="stat"><span class="stat-label">Requests (30d)</span><span id="usageRequests" class="stat-value">0</span></div>
+              <div class="stat"><span class="stat-label">Tokens In</span><span id="usageTokensIn" class="stat-value">0</span></div>
+              <div class="stat"><span class="stat-label">Tokens Out</span><span id="usageTokensOut" class="stat-value">0</span></div>
+              <div class="stat"><span class="stat-label">Active Members</span><span id="usageMembers" class="stat-value">0</span></div>
+            </div>
+            <div class="kv"><span class="k">Plan</span><span id="billingPlan" class="v">-</span></div>
+            <div class="kv"><span class="k">Status</span><span id="billingStatus" class="v">-</span></div>
+            <div class="kv"><span class="k">Provider</span><span id="billingProvider" class="v">-</span></div>
+            <div class="kv"><span class="k">Period End</span><span id="billingPeriodEnd" class="v">-</span></div>
+
+            <div id="entitlementsBlock" style="margin-top: 14px;">
+              <div class="card-title" style="font-size: 0.85rem;">Entitlements</div>
+              <div id="entitlementsList" style="display: grid; gap: 4px; margin-top: 6px;"></div>
+            </div>
+
+            <label for="checkoutPlan">Upgrade / change plan</label>
+            <select id="checkoutPlan"></select>
+            <div class="btn-row">
+              <button id="startCheckoutBtn">Start checkout</button>
+              <button id="refreshInsightsBtn" class="subtle">Refresh</button>
+            </div>
+            <div class="card-title" style="margin-top: 18px;">Invoices</div>
+            <ul id="invoiceList" class="list"></ul>
+          </article>
+        </section>
+
+        <section id="sectionOperator" class="card-grid hidden">
+          <article id="operatorCard" class="card wide">
+            <div class="card-title">Operator Inventory</div>
+            <div class="card-desc">Global workspace inventory and manual creation.</div>
+            <div class="kv"><span class="k">Total workspaces</span><span class="v" id="operatorWorkspaceCount">0</span></div>
+            <ul id="operatorWorkspaceList" class="list" style="margin: 12px 0;"></ul>
+            <div class="card-title" style="margin-top: 18px;">Create Workspace</div>
+            <label for="newWorkspaceName">Display name</label>
+            <input id="newWorkspaceName" placeholder="Acme Workspace" />
+            <label for="newWorkspaceId">Workspace ID (optional)</label>
+            <input id="newWorkspaceId" placeholder="tenant-acme" />
+            <label for="newWorkspaceRuntimeUrl">Runtime URL</label>
+            <input id="newWorkspaceRuntimeUrl" placeholder="https://tenant.example.com" />
+            <label for="newWorkspaceRuntimePublic">Runtime public base URL (optional)</label>
+            <input id="newWorkspaceRuntimePublic" placeholder="https://tenant.example.com" />
+            <div class="btn-row">
+              <button id="createWorkspaceBtn" class="primary">Create workspace</button>
+              <button id="refreshOperatorBtn" class="subtle">Refresh inventory</button>
+            </div>
+          </article>
+        </section>
+      </div>
+    </div>
 
     <script>
-      const state = {
-        session: null,
+      /* ── Navigation ── */
+      const sections = ['overview','launch','settings','keys','members','invites','billing','operator'];
+      const sectionTitles = {
+        overview: ['Dashboard', 'Manage your workspace and team.'],
+        launch: ['Launch App', 'Open workspace apps through frontdoor routing.'],
+        settings: ['Runtime Settings', 'Configure workspace runtime bindings.'],
+        keys: ['Access Keys', 'Manage runtime authentication tokens.'],
+        members: ['Members', 'View and manage workspace members.'],
+        invites: ['Invites', 'Create and manage workspace invitations.'],
+        billing: ['Usage & Billing', 'Monitor workspace usage and billing.'],
+        operator: ['Operator', 'Global workspace inventory and management.'],
       };
-      const operatorMode = new URLSearchParams(window.location.search).get("operator") === "1";
+      const initialUrlParams = new URLSearchParams(window.location.search);
+      const initialSectionHint = (initialUrlParams.get('section') || '').trim().toLowerCase();
+      const initialWorkspaceHint = (initialUrlParams.get('workspace_id') || '').trim();
+      const initialProductHint = (initialUrlParams.get('product') || '').trim().toLowerCase();
+      const initialPlanHint = (initialUrlParams.get('plan') || '').trim();
+      let initialWorkspaceApplied = false;
+      let initialPlanApplied = false;
 
+      function showSection(name) {
+        sections.forEach(s => {
+          const el = document.getElementById('section' + s.charAt(0).toUpperCase() + s.slice(1));
+          if (el) el.classList.toggle('hidden', s !== name);
+        });
+        document.querySelectorAll('.nav-item').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.section === name);
+        });
+        const titles = sectionTitles[name] || ['Dashboard', ''];
+        document.getElementById('pageTitle').textContent = titles[0];
+        document.getElementById('pageDesc').textContent = titles[1];
+      }
+
+      document.querySelectorAll('.nav-item[data-section]').forEach(btn => {
+        btn.addEventListener('click', () => showSection(btn.dataset.section));
+      });
+
+      /* ── State ── */
+      const state = {
+        session: null, workspaces: [], selectedWorkspaceId: '',
+        apps: [], selectedAppId: '', settings: null,
+        members: [], invites: [], invoices: [], operatorWorkspaces: [],
+        billingProductId: '',
+      };
+
+      const ADMIN_ROLES = new Set(['workspace_owner', 'workspace_admin', 'operator']);
       const el = (id) => document.getElementById(id);
 
-      function setStatus(kind, text) {
-        const status = el("status");
-        status.classList.remove("ok", "err");
-        if (kind) {
-          status.classList.add(kind);
+      function asText(v) { return typeof v === 'string' ? v.trim() : ''; }
+      function formatNumber(v) { return typeof v === 'number' && Number.isFinite(v) ? new Intl.NumberFormat().format(Math.max(0, Math.floor(v))) : '0'; }
+      function formatDate(v) { if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) return '-'; try { return new Date(v).toLocaleString(); } catch { return '-'; } }
+      function formatUsdFromCents(v) {
+        if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return '$0';
+        try {
+          return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v / 100);
+        } catch {
+          return `$${Math.floor(v / 100)}`;
         }
-        el("statusText").textContent = text;
+      }
+      function parseJsonArray(input) { return Array.isArray(input) ? input.map(i => asText(String(i||''))).filter(i => i.length > 0) : []; }
+      function normalizeLimitValue(v) {
+        const s = asText(String(v ?? ''));
+        if (s === '-1') return 'unlimited';
+        if (s.toLowerCase() === 'true') return 'enabled';
+        if (s.toLowerCase() === 'false') return 'disabled';
+        return s || '-';
       }
 
-      function applySession(session) {
-        state.session = session;
-        const authed = Boolean(session && session.authenticated);
-        el("googleBtn").hidden = authed;
-        el("openBtn").hidden = !authed;
-        el("logoutBtn").hidden = !authed;
+      function resetBillingBranding() {
+        const badge = el('billingProductBadge');
+        badge.style.display = 'none';
+        el('billingProductDot').style.background = 'var(--accent)';
+        el('billingProductName').textContent = 'Product';
+        el('billingProductName').style.color = '';
+        el('billingProductTagline').textContent = '';
+      }
 
-        if (authed) {
-          const who = session.display_name || session.email || session.username || session.entity_id || "user";
-          setStatus("ok", `Signed in as ${who}`);
-          el("hintText").textContent = "Launch opens your tenant control UI with a signed runtime token.";
+      function renderBillingBranding(planBody) {
+        const product = planBody && typeof planBody === 'object' ? planBody.product : null;
+        const productId = asText(planBody?.product_id || '');
+        if (!product && !productId) {
+          state.billingProductId = '';
+          resetBillingBranding();
           return;
         }
-
-        setStatus("err", "Not signed in");
-        el("hintText").textContent = "Use Google login to continue. You will be routed to your tenant runtime.";
+        const displayName = asText(product?.display_name || productId || 'Product');
+        const tagline = asText(product?.tagline || '');
+        const accentColor = asText(product?.accent_color || '');
+        state.billingProductId = productId;
+        const badge = el('billingProductBadge');
+        badge.style.display = 'inline-flex';
+        if (accentColor) {
+          badge.style.borderColor = accentColor;
+          badge.style.boxShadow = `0 0 0 1px ${accentColor}22 inset`;
+          el('billingProductDot').style.background = accentColor;
+          el('billingProductName').style.color = accentColor;
+        } else {
+          badge.style.borderColor = '';
+          badge.style.boxShadow = '';
+          el('billingProductDot').style.background = 'var(--accent)';
+          el('billingProductName').style.color = '';
+        }
+        el('billingProductName').textContent = displayName;
+        el('billingProductTagline').textContent = tagline;
       }
 
-      async function readJson(res) {
-        const text = await res.text();
-        if (!text) return {};
-        try {
-          return JSON.parse(text);
-        } catch {
-          return { raw: text };
+      function renderEntitlements(entitlements, usage) {
+        const list = el('entitlementsList');
+        list.innerHTML = '';
+        const entitlementEntries = entitlements && typeof entitlements === 'object' ? Object.entries(entitlements) : [];
+        const usageEntries = usage && typeof usage === 'object' ? Object.entries(usage) : [];
+        if (entitlementEntries.length === 0 && usageEntries.length === 0) {
+          const row = document.createElement('div');
+          row.textContent = 'No entitlement data available.';
+          row.style.color = 'var(--text-dim)';
+          row.style.fontSize = '0.8rem';
+          list.appendChild(row);
+          return;
+        }
+        for (const [key, value] of entitlementEntries.sort(([a], [b]) => String(a).localeCompare(String(b)))) {
+          const row = document.createElement('div');
+          row.style.display = 'flex';
+          row.style.justifyContent = 'space-between';
+          row.style.gap = '10px';
+          row.style.fontSize = '0.8rem';
+          const k = document.createElement('span');
+          k.style.color = 'var(--text-muted)';
+          k.textContent = String(key);
+          const v = document.createElement('span');
+          v.style.color = 'var(--text)';
+          v.style.fontWeight = '600';
+          v.textContent = normalizeLimitValue(value);
+          row.appendChild(k);
+          row.appendChild(v);
+          list.appendChild(row);
+        }
+        if (usageEntries.length > 0) {
+          const sep = document.createElement('div');
+          sep.style.marginTop = '6px';
+          sep.style.paddingTop = '6px';
+          sep.style.borderTop = '1px solid var(--border)';
+          sep.style.color = 'var(--text-dim)';
+          sep.style.fontSize = '0.74rem';
+          sep.style.textTransform = 'uppercase';
+          sep.style.letterSpacing = '0.06em';
+          sep.textContent = 'Current Usage';
+          list.appendChild(sep);
+          for (const [key, value] of usageEntries.sort(([a], [b]) => String(a).localeCompare(String(b)))) {
+            const row = document.createElement('div');
+            row.style.display = 'flex';
+            row.style.justifyContent = 'space-between';
+            row.style.gap = '10px';
+            row.style.fontSize = '0.78rem';
+            const k = document.createElement('span');
+            k.style.color = 'var(--text-dim)';
+            k.textContent = String(key);
+            const v = document.createElement('span');
+            v.style.color = 'var(--text-muted)';
+            v.textContent = normalizeLimitValue(value);
+            row.appendChild(k);
+            row.appendChild(v);
+            list.appendChild(row);
+          }
+        }
+      }
+
+      function renderCheckoutPlans(plans, selectedPlanId) {
+        const select = el('checkoutPlan');
+        select.innerHTML = '';
+        const items = Array.isArray(plans) ? plans : [];
+        if (items.length === 0) {
+          const fallback = document.createElement('option');
+          fallback.value = asText(selectedPlanId || '');
+          fallback.textContent = fallback.value || 'No plans available';
+          select.appendChild(fallback);
+          select.disabled = true;
+          return;
+        }
+        const sorted = [...items].sort((a, b) => Number(a?.sort_order || 0) - Number(b?.sort_order || 0));
+        for (const item of sorted) {
+          const planId = asText(item?.plan_id || '');
+          if (!planId) continue;
+          const displayName = asText(item?.display_name || planId) || planId;
+          const monthly = typeof item?.price_monthly === 'number' ? item.price_monthly : 0;
+          const option = document.createElement('option');
+          option.value = planId;
+          option.textContent = `${displayName} (${formatUsdFromCents(monthly)}/mo)`;
+          select.appendChild(option);
+        }
+        if (!select.options.length) {
+          const fallback = document.createElement('option');
+          fallback.value = asText(selectedPlanId || '');
+          fallback.textContent = fallback.value || 'No plans available';
+          select.appendChild(fallback);
+          select.disabled = true;
+          return;
+        }
+        const selected = asText(selectedPlanId || '');
+        const hintedPlan = asText(initialPlanHint || '');
+        if (!initialPlanApplied && hintedPlan && Array.from(select.options).some((opt) => opt.value === hintedPlan)) {
+          select.value = hintedPlan;
+          initialPlanApplied = true;
+          select.disabled = false;
+          return;
+        }
+        const hasSelected = selected && Array.from(select.options).some((opt) => opt.value === selected);
+        select.value = hasSelected ? selected : select.options[0].value;
+        select.disabled = false;
+      }
+
+      function setStatus(kind, text) {
+        const pill = el('statusPill');
+        pill.className = 'status-pill';
+        if (kind) pill.classList.add(kind);
+        pill.innerHTML = '<span class="dot"></span> ' + text;
+      }
+
+      function selectedWorkspace() { return state.workspaces.find(i => i.workspace_id === state.selectedWorkspaceId) || null; }
+      function hasGlobalOperator() { return parseJsonArray(state.session?.roles || []).includes('operator'); }
+      function canAdminSelectedWorkspace() {
+        const w = selectedWorkspace();
+        if (!w) return false;
+        if (hasGlobalOperator()) return true;
+        return parseJsonArray(w.roles || []).some(r => ADMIN_ROLES.has(r));
+      }
+
+      function applyAuthUi() {
+        const authed = Boolean(state.session?.authenticated);
+        el('authGate').classList.toggle('hidden', authed);
+        el('dashLayout').classList.toggle('hidden', !authed);
+        if (!authed) return;
+
+        const who = asText(state.session?.display_name) || asText(state.session?.email) || asText(state.session?.username) || 'user';
+        el('sidebarUser').textContent = who;
+
+        const isAdmin = canAdminSelectedWorkspace();
+        document.querySelectorAll('[data-admin]').forEach(e => e.style.display = isAdmin ? '' : 'none');
+        document.querySelectorAll('[data-operator]').forEach(e => e.style.display = hasGlobalOperator() ? '' : 'none');
+      }
+
+      async function readJson(r) { const t = await r.text(); if (!t) return {}; try { return JSON.parse(t); } catch { return { raw: t }; } }
+      async function api(path, opts = {}) {
+        const method = opts.method || 'GET';
+        const headers = { ...(opts.headers || {}) };
+        if (opts.body && !headers['content-type']) headers['content-type'] = 'application/json';
+        const r = await fetch(path, { ...opts, method, headers });
+        return { ok: r.ok, status: r.status, body: await readJson(r) };
+      }
+
+      function renderWorkspaceOptions() {
+        const select = el('workspaceSelect');
+        select.innerHTML = '';
+        if (!Array.isArray(state.workspaces) || state.workspaces.length === 0) {
+          const opt = document.createElement('option'); opt.value = ''; opt.textContent = 'No workspace access';
+          select.appendChild(opt); state.selectedWorkspaceId = '';
+          el('workspaceCount').textContent = '0'; el('workspaceSummary').textContent = 'None'; return;
+        }
+        for (const w of state.workspaces) {
+          const opt = document.createElement('option'); opt.value = w.workspace_id;
+          opt.textContent = w.display_name || w.workspace_id; select.appendChild(opt);
+        }
+        if (!state.selectedWorkspaceId || !state.workspaces.some(i => i.workspace_id === state.selectedWorkspaceId)) {
+          const def = state.workspaces.find(i => i.is_default === true);
+          state.selectedWorkspaceId = asText(def?.workspace_id || '') || asText(state.workspaces[0]?.workspace_id || '');
+        }
+        select.value = state.selectedWorkspaceId;
+        el('workspaceCount').textContent = String(state.workspaces.length);
+        const cur = selectedWorkspace();
+        if (!cur) { el('workspaceSummary').textContent = 'None'; return; }
+        el('workspaceSummary').textContent = `${cur.display_name || cur.workspace_id} (${parseJsonArray(cur.roles || []).join(', ') || 'member'})`;
+      }
+
+      function renderAppOptions() {
+        const select = el('appSelect'); select.innerHTML = '';
+        if (!Array.isArray(state.apps) || state.apps.length === 0) {
+          const opt = document.createElement('option'); opt.value = ''; opt.textContent = 'No launchable app';
+          select.appendChild(opt); state.selectedAppId = '';
+          el('appSummary').textContent = 'No /app entries for this workspace'; return;
+        }
+        for (const a of state.apps) {
+          const opt = document.createElement('option'); opt.value = a.app_id;
+          opt.textContent = a.display_name || a.app_id; select.appendChild(opt);
+        }
+        if (!state.selectedAppId || !state.apps.some(i => i.app_id === state.selectedAppId)) state.selectedAppId = state.apps[0].app_id;
+        select.value = state.selectedAppId;
+        const cur = state.apps.find(i => i.app_id === state.selectedAppId);
+        el('appSummary').textContent = cur ? `${cur.display_name || cur.app_id} -> ${cur.entry_path}` : 'No app';
+      }
+
+      function renderMembers() {
+        const list = el('memberList'); list.innerHTML = '';
+        if (!Array.isArray(state.members) || state.members.length === 0) {
+          const li = document.createElement('li'); li.textContent = 'No members found.'; list.appendChild(li); return;
+        }
+        for (const m of state.members) {
+          const li = document.createElement('li');
+          const title = document.createElement('span'); title.className = 'title';
+          title.textContent = m.display_name || m.email || m.username || m.user_id;
+          const meta = document.createElement('span'); meta.className = 'meta';
+          meta.textContent = `${m.user_id} | roles: ${parseJsonArray(m.roles || []).join(', ') || 'member'} | default: ${m.is_default ? 'yes' : 'no'}`;
+          li.appendChild(title); li.appendChild(meta); list.appendChild(li);
+        }
+      }
+
+      function renderInvites() {
+        const list = el('inviteList'); list.innerHTML = '';
+        if (!Array.isArray(state.invites) || state.invites.length === 0) {
+          const li = document.createElement('li'); li.textContent = 'No invites found.'; list.appendChild(li); return;
+        }
+        for (const inv of state.invites) {
+          const li = document.createElement('li');
+          const title = document.createElement('span'); title.className = 'title';
+          title.textContent = `${inv.invite_id} | ${inv.role}`;
+          const meta = document.createElement('span'); meta.className = 'meta';
+          const bits = [];
+          if (inv.revoked_at_ms) bits.push('revoked');
+          else if (inv.redeemed_at_ms) bits.push('redeemed');
+          else bits.push('active');
+          bits.push(`expires: ${formatDate(inv.expires_at_ms)}`);
+          meta.textContent = bits.join(' | ');
+          li.appendChild(title); li.appendChild(meta);
+          if (!inv.revoked_at_ms && !inv.redeemed_at_ms) {
+            const row = document.createElement('div'); row.className = 'btn-row';
+            const btn = document.createElement('button'); btn.className = 'danger'; btn.textContent = 'Revoke';
+            btn.dataset.inviteId = inv.invite_id; row.appendChild(btn); li.appendChild(row);
+          }
+          list.appendChild(li);
+        }
+      }
+
+      function renderInvoices() {
+        const list = el('invoiceList'); list.innerHTML = '';
+        if (!Array.isArray(state.invoices) || state.invoices.length === 0) {
+          const li = document.createElement('li'); li.textContent = 'No invoices yet.'; list.appendChild(li); return;
+        }
+        for (const inv of state.invoices) {
+          const li = document.createElement('li');
+          const title = document.createElement('span'); title.className = 'title';
+          title.textContent = `${inv.invoice_id} | ${String(inv.currency || 'usd').toUpperCase()} ${formatNumber(inv.amount_due || 0)}`;
+          const meta = document.createElement('span'); meta.className = 'meta';
+          meta.textContent = `${inv.status || 'unknown'} | created: ${formatDate(inv.created_at_ms)}`;
+          li.appendChild(title); li.appendChild(meta);
+          if (inv.hosted_invoice_url) {
+            const row = document.createElement('div'); row.className = 'btn-row';
+            const btn = document.createElement('button'); btn.textContent = 'Open invoice';
+            btn.addEventListener('click', () => window.open(String(inv.hosted_invoice_url), '_blank', 'noopener,noreferrer'));
+            row.appendChild(btn); li.appendChild(row);
+          }
+          list.appendChild(li);
+        }
+      }
+
+      function renderOperatorInventory() {
+        const list = el('operatorWorkspaceList'); list.innerHTML = '';
+        const items = Array.isArray(state.operatorWorkspaces) ? state.operatorWorkspaces : [];
+        el('operatorWorkspaceCount').textContent = String(items.length);
+        if (items.length === 0) {
+          const li = document.createElement('li'); li.textContent = 'No workspaces.'; list.appendChild(li); return;
+        }
+        for (const item of items) {
+          const li = document.createElement('li');
+          const title = document.createElement('span'); title.className = 'title';
+          title.textContent = `${item.display_name || item.workspace_id} (${item.workspace_id})`;
+          const meta = document.createElement('span'); meta.className = 'meta';
+          const productId = asText(item.product_id || '') || 'unassigned';
+          meta.textContent = `${item.status || 'active'} | product: ${productId} | members: ${formatNumber(item.member_count || 0)} | requests30d: ${formatNumber(item.usage_30d?.requests_total || 0)}`;
+          li.appendChild(title); li.appendChild(meta); list.appendChild(li);
         }
       }
 
       async function refreshSession() {
-        try {
-          const res = await fetch("/api/auth/session", { method: "GET" });
-          const body = await readJson(res);
-          applySession(body);
-        } catch {
-          applySession(null);
-          setStatus("err", "Session unavailable");
+        const r = await api('/api/auth/session', { method: 'GET' });
+        if (!r.ok || !r.body?.authenticated) {
+          state.session = null; state.workspaces = []; state.selectedWorkspaceId = '';
+          state.apps = []; state.selectedAppId = '';
+          applyAuthUi(); renderWorkspaceOptions(); renderAppOptions();
+          setStatus('err', 'Not signed in'); return false;
         }
+        state.session = r.body;
+        const who = asText(r.body.display_name) || asText(r.body.email) || asText(r.body.username) || asText(r.body.entity_id) || 'user';
+        setStatus('ok', `Signed in as ${who}`);
+        applyAuthUi(); return true;
       }
 
-      async function operatorLogin(event) {
-        event.preventDefault();
-        const username = String(el("username").value || "").trim();
-        const password = String(el("password").value || "");
-        try {
-          const res = await fetch("/api/auth/login", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ username, password }),
-          });
-          const body = await readJson(res);
-          if (!res.ok || !body?.ok) {
-            setStatus("err", "Operator login failed");
-            return;
+      async function loadProvisioning() {
+        if (!state.session) return;
+        const r = await api('/api/workspaces/provisioning/status', { method: 'GET' });
+        if (!r.ok) { el('provisionStatus').textContent = 'unavailable'; el('provisionStage').textContent = '-'; el('provisionTenant').textContent = '-'; el('provisionError').textContent = '-'; return; }
+        const req = r.body.request || null;
+        el('provisionStatus').textContent = asText(r.body.status || 'none') || 'none';
+        el('provisionStage').textContent = asText(req?.stage || '-') || '-';
+        el('provisionTenant').textContent = asText(req?.tenant_id || '-') || '-';
+        el('provisionError').textContent = asText(req?.error || '-') || '-';
+      }
+
+      async function loadWorkspaces() {
+        if (!state.session) return;
+        const r = await api('/api/workspaces', { method: 'GET' });
+        if (!r.ok || !Array.isArray(r.body?.items)) { state.workspaces = []; renderWorkspaceOptions(); state.apps = []; renderAppOptions(); setStatus('err', 'Workspace list unavailable'); return; }
+        state.workspaces = r.body.items;
+        if (!initialWorkspaceApplied) {
+          if (initialWorkspaceHint && state.workspaces.some(i => i.workspace_id === initialWorkspaceHint)) {
+            state.selectedWorkspaceId = initialWorkspaceHint;
+            initialWorkspaceApplied = true;
+          } else if (initialProductHint) {
+            const matching = state.workspaces.filter(i => asText(i.product_id || '').toLowerCase() === initialProductHint);
+            if (matching.length > 0) {
+              const preferred = matching.find(i => i.is_default === true) || matching[0];
+              state.selectedWorkspaceId = asText(preferred?.workspace_id || '');
+              initialWorkspaceApplied = Boolean(state.selectedWorkspaceId);
+            }
           }
-          await refreshSession();
-        } catch {
-          setStatus("err", "Operator login failed");
         }
+        if (!initialWorkspaceApplied) {
+          const active = asText(state.session.active_workspace_id || '');
+          if (active && state.workspaces.some(i => i.workspace_id === active)) state.selectedWorkspaceId = active;
+        }
+        renderWorkspaceOptions();
+      }
+
+      async function setActiveWorkspace(id) {
+        const target = asText(id || ''); if (!target) return false;
+        const r = await api('/api/workspaces/select', { method: 'POST', body: JSON.stringify({ workspace_id: target }) });
+        if (!r.ok) return false;
+        state.selectedWorkspaceId = target;
+        if (state.session) { state.session.active_workspace_id = target; state.session.active_workspace_display_name = asText(r.body?.active_workspace_display_name || ''); }
+        return true;
+      }
+
+      async function loadApps() {
+        const wid = asText(state.selectedWorkspaceId || '');
+        if (!wid) { state.apps = []; renderAppOptions(); return; }
+        const r = await api(`/runtime/api/apps?workspace_id=${encodeURIComponent(wid)}`, { method: 'GET' });
+        if (!r.ok || !Array.isArray(r.body?.items)) { state.apps = []; renderAppOptions(); return; }
+        state.apps = r.body.items.filter(i => i && typeof i === 'object').map(i => ({ app_id: asText(i.app_id||''), display_name: asText(i.display_name||i.app_id||''), entry_path: asText(i.entry_path||'') })).filter(i => i.app_id && i.entry_path.startsWith('/app/'));
+        renderAppOptions();
+      }
+
+      async function loadWorkspaceSettings() {
+        if (!canAdminSelectedWorkspace()) { state.settings = null; return; }
+        const wid = asText(state.selectedWorkspaceId || ''); if (!wid) return;
+        const r = await api(`/api/workspaces/${encodeURIComponent(wid)}/settings`, { method: 'GET' });
+        if (!r.ok || !r.body?.workspace) { state.settings = null; return; }
+        state.settings = r.body.workspace;
+        el('settingsDisplayName').value = asText(state.settings.display_name || '');
+        el('settingsStatus').value = asText(state.settings.status || 'active') || 'active';
+        el('settingsRuntimeUrl').value = asText(state.settings.runtime_url || '');
+        el('settingsRuntimePublic').value = asText(state.settings.runtime_public_base_url || '');
+        el('settingsRuntimeWs').value = asText(state.settings.runtime_ws_url || '');
+        el('settingsRuntimeSse').value = asText(state.settings.runtime_sse_url || '');
+        el('settingsHasToken').textContent = state.settings.has_runtime_auth_token ? 'configured' : 'not configured';
+      }
+
+      async function loadMembers() {
+        if (!canAdminSelectedWorkspace()) { state.members = []; renderMembers(); return; }
+        const wid = asText(state.selectedWorkspaceId || ''); if (!wid) { state.members = []; renderMembers(); return; }
+        const r = await api(`/api/workspaces/${encodeURIComponent(wid)}/members`, { method: 'GET' });
+        state.members = r.ok && Array.isArray(r.body?.items) ? r.body.items : [];
+        renderMembers();
+      }
+
+      async function loadInvites() {
+        if (!canAdminSelectedWorkspace()) { state.invites = []; renderInvites(); return; }
+        const wid = asText(state.selectedWorkspaceId || ''); if (!wid) { state.invites = []; renderInvites(); return; }
+        const r = await api(`/api/workspaces/${encodeURIComponent(wid)}/invites`, { method: 'GET' });
+        state.invites = r.ok && Array.isArray(r.body?.items) ? r.body.items : [];
+        renderInvites();
+      }
+
+      async function loadInsights() {
+        if (!canAdminSelectedWorkspace()) {
+          ['usageRequests','usageTokensIn','usageTokensOut','usageMembers'].forEach(id => el(id).textContent = '-');
+          ['billingPlan','billingStatus','billingProvider','billingPeriodEnd'].forEach(id => el(id).textContent = '-');
+          renderEntitlements({}, {});
+          renderCheckoutPlans([], '');
+          state.billingProductId = '';
+          resetBillingBranding();
+          state.invoices = []; renderInvoices(); return;
+        }
+        const wid = asText(state.selectedWorkspaceId || ''); if (!wid) return;
+        const ur = await api(`/api/workspaces/${encodeURIComponent(wid)}/usage`, { method: 'GET' });
+        if (ur.ok) {
+          el('usageRequests').textContent = formatNumber(ur.body.requests_total || 0);
+          el('usageTokensIn').textContent = formatNumber(ur.body.tokens_in || 0);
+          el('usageTokensOut').textContent = formatNumber(ur.body.tokens_out || 0);
+          el('usageMembers').textContent = formatNumber(ur.body.active_members || 0);
+        }
+        const br = await api(`/api/billing/${encodeURIComponent(wid)}/subscription`, { method: 'GET' });
+        if (br.ok) {
+          el('billingPlan').textContent = asText(br.body.plan_id || '-') || '-';
+          el('billingStatus').textContent = asText(br.body.status || '-') || '-';
+          el('billingProvider').textContent = asText(br.body.provider || '-') || '-';
+          el('billingPeriodEnd').textContent = formatDate(br.body.period_end_ms);
+        } else if (br.status === 403) {
+          ['billingPlan','billingStatus','billingProvider','billingPeriodEnd'].forEach(id => el(id).textContent = 'restricted');
+          renderEntitlements({}, {});
+          renderCheckoutPlans([], '');
+          state.billingProductId = '';
+          resetBillingBranding();
+        }
+        const pr = await api(`/api/billing/${encodeURIComponent(wid)}/plan`, { method: 'GET' });
+        const currentPlanId = asText(pr.body?.plan_id || br.body?.plan_id || '');
+        if (pr.ok) {
+          const displayPlan = asText(pr.body.plan_display_name || pr.body.plan_id || '');
+          if (displayPlan) {
+            el('billingPlan').textContent = displayPlan;
+          }
+          el('billingStatus').textContent = asText(pr.body.billing_status || el('billingStatus').textContent || '-') || '-';
+          el('billingPeriodEnd').textContent = formatDate(pr.body.period_end_ms);
+          renderBillingBranding(pr.body || {});
+        } else {
+          state.billingProductId = '';
+          resetBillingBranding();
+        }
+        const er = await api(`/api/billing/${encodeURIComponent(wid)}/entitlements`, { method: 'GET' });
+        if (er.ok) {
+          renderEntitlements(er.body?.entitlements || {}, er.body?.usage || {});
+          if (!state.billingProductId) {
+            state.billingProductId = asText(er.body?.product_id || '');
+          }
+        } else {
+          renderEntitlements({}, {});
+        }
+        if (!state.billingProductId) {
+          const fromWorkspace = asText(selectedWorkspace()?.product_id || '');
+          const fromHint = asText(initialProductHint || '');
+          state.billingProductId = fromWorkspace || fromHint || '';
+        }
+        if (state.billingProductId) {
+          const plansResp = await api(`/api/products/${encodeURIComponent(state.billingProductId)}/plans`, { method: 'GET' });
+          if (plansResp.ok && Array.isArray(plansResp.body?.items)) {
+            renderCheckoutPlans(plansResp.body.items, currentPlanId);
+          } else {
+            renderCheckoutPlans([], currentPlanId);
+          }
+        } else {
+          renderCheckoutPlans([], currentPlanId);
+        }
+        const ir = await api(`/api/billing/${encodeURIComponent(wid)}/invoices`, { method: 'GET' });
+        state.invoices = ir.ok && Array.isArray(ir.body?.items) ? ir.body.items : [];
+        renderInvoices();
+      }
+
+      async function loadOperatorInventory() {
+        if (!hasGlobalOperator()) { state.operatorWorkspaces = []; renderOperatorInventory(); return; }
+        const r = await api('/api/operator/workspaces', { method: 'GET' });
+        state.operatorWorkspaces = r.ok && Array.isArray(r.body?.items) ? r.body.items : [];
+        renderOperatorInventory();
+      }
+
+      async function hydrateSelectedWorkspacePanels() {
+        applyAuthUi();
+        await Promise.all([loadApps(), loadWorkspaceSettings(), loadMembers(), loadInvites(), loadInsights(), loadOperatorInventory()]);
+      }
+
+      async function refreshAll() {
+        const ok = await refreshSession();
+        if (!ok) return;
+        await Promise.all([loadWorkspaces(), loadProvisioning()]);
+        const preferred = asText(state.selectedWorkspaceId || '');
+        if (preferred && asText(state.session?.active_workspace_id || '') !== preferred) {
+          await setActiveWorkspace(preferred);
+        }
+        await hydrateSelectedWorkspacePanels();
       }
 
       function startGoogle() {
-        const query = new URLSearchParams({
-          provider: "google",
-          return_to: "/app/chat?session=main",
-        });
-        window.location.href = `/api/auth/oidc/start?${query.toString()}`;
+        const returnTo = `${window.location.pathname}${window.location.search}` || '/';
+        const q = new URLSearchParams({ provider: 'google', return_to: returnTo });
+        window.location.href = `/api/auth/oidc/start?${q.toString()}`;
       }
 
-      function openWorkspace() {
-        window.location.href = "/app/chat?session=main";
+      async function signOut() { await api('/api/auth/logout', { method: 'POST', body: '{}' }); await refreshAll(); }
+
+      async function handleSetActiveWorkspace() {
+        const wid = asText(el('workspaceSelect').value || '');
+        if (!wid) { setStatus('err', 'No workspace selected'); return; }
+        if (!await setActiveWorkspace(wid)) { setStatus('err', 'Failed to set active workspace'); return; }
+        state.selectedWorkspaceId = wid; renderWorkspaceOptions();
+        await hydrateSelectedWorkspacePanels();
+        setStatus('ok', 'Active workspace updated');
       }
 
-      async function logout() {
-        try {
-          await fetch("/api/auth/logout", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: "{}",
-          });
-        } finally {
-          await refreshSession();
-        }
+      async function handleWorkspaceChange() { state.selectedWorkspaceId = asText(el('workspaceSelect').value || ''); renderWorkspaceOptions(); await hydrateSelectedWorkspacePanels(); }
+      async function handleAppChange() { state.selectedAppId = asText(el('appSelect').value || ''); renderAppOptions(); }
+
+      async function handleOpenWorkspace() {
+        if (!state.session) { setStatus('err', 'Not signed in'); return; }
+        const wid = asText(state.selectedWorkspaceId || '');
+        if (!wid) { setStatus('err', 'No workspace selected'); return; }
+        if (!await setActiveWorkspace(wid)) { setStatus('err', 'Workspace launch failed'); return; }
+        if (!state.apps.length) { setStatus('warn', 'No launchable app for this workspace'); return; }
+        const app = state.apps.find(i => i.app_id === state.selectedAppId) || state.apps[0];
+        if (!app?.entry_path) { setStatus('warn', 'No launch target'); return; }
+        const target = new URL(app.entry_path, window.location.origin);
+        target.searchParams.set('workspace_id', wid);
+        setStatus('ok', `Launching ${app.display_name || app.app_id}`);
+        window.location.assign(target.toString());
       }
 
-      el("googleBtn").addEventListener("click", startGoogle);
-      el("openBtn").addEventListener("click", openWorkspace);
-      el("logoutBtn").addEventListener("click", logout);
-      el("operatorForm").addEventListener("submit", operatorLogin);
-      el("operatorPanel").hidden = !operatorMode;
+      async function handleSaveSettings() {
+        if (!canAdminSelectedWorkspace()) { setStatus('err', 'Admin access required'); return; }
+        const wid = asText(state.selectedWorkspaceId || ''); if (!wid) return;
+        const payload = {
+          display_name: asText(el('settingsDisplayName').value || ''),
+          status: asText(el('settingsStatus').value || 'active') || 'active',
+          runtime_url: asText(el('settingsRuntimeUrl').value || ''),
+          runtime_public_base_url: asText(el('settingsRuntimePublic').value || ''),
+          runtime_ws_url: asText(el('settingsRuntimeWs').value || '') || null,
+          runtime_sse_url: asText(el('settingsRuntimeSse').value || '') || null,
+        };
+        const r = await api(`/api/workspaces/${encodeURIComponent(wid)}/settings`, { method: 'PATCH', body: JSON.stringify(payload) });
+        if (!r.ok) { setStatus('err', 'Failed to save settings'); return; }
+        await loadWorkspaces(); await hydrateSelectedWorkspacePanels();
+        setStatus('ok', 'Settings saved');
+      }
 
-      refreshSession();
+      async function handleSetRuntimeToken() {
+        if (!canAdminSelectedWorkspace()) { setStatus('err', 'Admin access required'); return; }
+        const wid = asText(state.selectedWorkspaceId || '');
+        const token = asText(el('customRuntimeToken').value || '');
+        if (!wid || !token) { setStatus('err', 'Token is required'); return; }
+        const r = await api(`/api/workspaces/${encodeURIComponent(wid)}/runtime-auth-token/set`, { method: 'POST', body: JSON.stringify({ token }) });
+        if (!r.ok) { setStatus('err', 'Failed to set token'); return; }
+        el('customRuntimeToken').value = ''; el('runtimeTokenOutput').value = 'Token stored.';
+        await loadWorkspaceSettings(); setStatus('ok', 'Token updated');
+      }
+
+      async function handleRotateRuntimeToken() {
+        if (!canAdminSelectedWorkspace()) { setStatus('err', 'Admin access required'); return; }
+        const wid = asText(state.selectedWorkspaceId || ''); if (!wid) return;
+        const r = await api(`/api/workspaces/${encodeURIComponent(wid)}/runtime-auth-token/rotate`, { method: 'POST', body: '{}' });
+        if (!r.ok) { setStatus('err', 'Failed to rotate token'); return; }
+        el('runtimeTokenOutput').value = asText(r.body?.runtime_auth_token || '') || 'Rotated.';
+        await loadWorkspaceSettings(); setStatus('ok', 'Token rotated');
+      }
+
+      async function handleClearRuntimeToken() {
+        if (!canAdminSelectedWorkspace()) { setStatus('err', 'Admin access required'); return; }
+        const wid = asText(state.selectedWorkspaceId || ''); if (!wid) return;
+        const r = await api(`/api/workspaces/${encodeURIComponent(wid)}/runtime-auth-token`, { method: 'DELETE' });
+        if (!r.ok) { setStatus('err', 'Failed to clear token'); return; }
+        el('runtimeTokenOutput').value = 'Cleared.';
+        await loadWorkspaceSettings(); setStatus('ok', 'Token cleared');
+      }
+
+      async function handleCreateInvite() {
+        if (!canAdminSelectedWorkspace()) { setStatus('err', 'Admin access required'); return; }
+        const wid = asText(state.selectedWorkspaceId || ''); if (!wid) return;
+        const role = asText(el('inviteRole').value || 'workspace_member') || 'workspace_member';
+        const scopes = asText(el('inviteScopes').value || '').split(',').map(s => asText(s)).filter(s => s.length > 0);
+        const ttl = Number(el('inviteTtl').value || '604800');
+        const r = await api(`/api/workspaces/${encodeURIComponent(wid)}/invites`, { method: 'POST', body: JSON.stringify({ role, scopes, expires_in_seconds: Number.isFinite(ttl) ? Math.max(60, Math.floor(ttl)) : 604800 }) });
+        if (!r.ok) { setStatus('err', 'Invite creation failed'); return; }
+        el('latestInviteToken').value = asText(r.body?.invite_token || '') || 'Created.';
+        await loadInvites(); setStatus('ok', 'Invite created');
+      }
+
+      async function handleRevokeInvite(inviteId) {
+        if (!canAdminSelectedWorkspace()) { setStatus('err', 'Admin access required'); return; }
+        const wid = asText(state.selectedWorkspaceId || ''); if (!wid || !inviteId) return;
+        const r = await api(`/api/workspaces/${encodeURIComponent(wid)}/invites/${encodeURIComponent(inviteId)}`, { method: 'DELETE' });
+        if (!r.ok) { setStatus('err', 'Invite revoke failed'); return; }
+        await loadInvites(); setStatus('ok', 'Invite revoked');
+      }
+
+      async function handleRedeemInvite() {
+        if (!state.session) { setStatus('err', 'Sign in first'); return; }
+        const token = asText(el('redeemInviteToken').value || '');
+        if (!token) { setStatus('err', 'Token required'); return; }
+        const r = await api('/api/invites/redeem', { method: 'POST', body: JSON.stringify({ token }) });
+        if (!r.ok) { setStatus('err', 'Redeem failed'); return; }
+        el('redeemInviteToken').value = '';
+        await refreshAll(); setStatus('ok', 'Invite redeemed');
+      }
+
+      async function handleStartCheckout() {
+        if (!canAdminSelectedWorkspace()) { setStatus('err', 'Admin access required'); return; }
+        const wid = asText(state.selectedWorkspaceId || '');
+        const plan = asText(el('checkoutPlan').value || '');
+        if (!wid) return;
+        if (!plan) { setStatus('err', 'Select a plan first'); return; }
+        const selected = selectedWorkspace();
+        const productId = asText(state.billingProductId || selected?.product_id || '');
+        const body = { plan_id: plan, ...(productId ? { product_id: productId } : {}) };
+        const r = await api(`/api/billing/${encodeURIComponent(wid)}/checkout-session`, { method: 'POST', body: JSON.stringify(body) });
+        if (!r.ok || !r.body?.checkout_url) { setStatus('err', 'Checkout failed'); return; }
+        window.open(String(r.body.checkout_url), '_blank', 'noopener,noreferrer');
+        setStatus('ok', 'Checkout session created');
+      }
+
+      async function handleCreateWorkspace() {
+        if (!hasGlobalOperator()) { setStatus('err', 'Operator access required'); return; }
+        const displayName = asText(el('newWorkspaceName').value || '');
+        const runtimeUrl = asText(el('newWorkspaceRuntimeUrl').value || '');
+        const workspaceId = asText(el('newWorkspaceId').value || '');
+        const runtimePublic = asText(el('newWorkspaceRuntimePublic').value || '');
+        if (!displayName || !runtimeUrl) { setStatus('err', 'Name and runtime URL required'); return; }
+        const payload = { display_name: displayName, runtime_url: runtimeUrl, runtime_public_base_url: runtimePublic || runtimeUrl, ...(workspaceId ? { workspace_id: workspaceId } : {}) };
+        const r = await api('/api/workspaces', { method: 'POST', body: JSON.stringify(payload) });
+        if (!r.ok) { setStatus('err', 'Workspace creation failed'); return; }
+        ['newWorkspaceName','newWorkspaceRuntimeUrl','newWorkspaceRuntimePublic','newWorkspaceId'].forEach(id => el(id).value = '');
+        await refreshAll();
+        const created = asText(r.body?.workspace?.workspace_id || '');
+        if (created) { state.selectedWorkspaceId = created; renderWorkspaceOptions(); await setActiveWorkspace(created); await hydrateSelectedWorkspacePanels(); }
+        setStatus('ok', 'Workspace created');
+      }
+
+      /* ── Wire events ── */
+      el('googleBtn').addEventListener('click', () => void startGoogle());
+      el('logoutBtn').addEventListener('click', () => void signOut());
+      el('refreshBtn').addEventListener('click', () => void refreshAll());
+      el('refreshWorkspacesBtn').addEventListener('click', () => void loadWorkspaces().then(() => hydrateSelectedWorkspacePanels()));
+      el('workspaceSelect').addEventListener('change', () => void handleWorkspaceChange());
+      el('setActiveWorkspaceBtn').addEventListener('click', () => void handleSetActiveWorkspace());
+      el('refreshAppsBtn').addEventListener('click', () => void loadApps());
+      el('appSelect').addEventListener('change', () => void handleAppChange());
+      el('openWorkspaceBtn').addEventListener('click', () => void handleOpenWorkspace());
+      el('refreshProvisionBtn').addEventListener('click', () => void loadProvisioning());
+      el('saveSettingsBtn').addEventListener('click', () => void handleSaveSettings());
+      el('reloadSettingsBtn').addEventListener('click', () => void loadWorkspaceSettings());
+      el('setRuntimeTokenBtn').addEventListener('click', () => void handleSetRuntimeToken());
+      el('rotateRuntimeTokenBtn').addEventListener('click', () => void handleRotateRuntimeToken());
+      el('clearRuntimeTokenBtn').addEventListener('click', () => void handleClearRuntimeToken());
+      el('refreshMembersBtn').addEventListener('click', () => void loadMembers());
+      el('createInviteBtn').addEventListener('click', () => void handleCreateInvite());
+      el('refreshInvitesBtn').addEventListener('click', () => void loadInvites());
+      el('inviteList').addEventListener('click', (e) => { const t = e.target; if (!(t instanceof HTMLButtonElement)) return; const id = asText(t.dataset.inviteId || ''); if (id) void handleRevokeInvite(id); });
+      el('redeemInviteBtn').addEventListener('click', () => void handleRedeemInvite());
+      el('startCheckoutBtn').addEventListener('click', () => void handleStartCheckout());
+      el('refreshInsightsBtn').addEventListener('click', () => void loadInsights());
+      el('createWorkspaceBtn').addEventListener('click', () => void handleCreateWorkspace());
+      el('refreshOperatorBtn').addEventListener('click', () => void loadOperatorInventory());
+
+      const initialSection = sections.includes(initialSectionHint) ? initialSectionHint : 'overview';
+      showSection(initialSection);
+      void refreshAll();
     </script>
   </body>
 </html>

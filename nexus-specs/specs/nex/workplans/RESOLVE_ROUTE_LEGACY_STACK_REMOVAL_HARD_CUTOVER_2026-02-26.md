@@ -145,6 +145,48 @@ Follow-up completion in this pass:
    - `pnpm tsc --noEmit` passes.
    - targeted control-plane suites pass.
 
+Further cleanup completion in this pass:
+1. Removed dead legacy routing/session-key helper exports from `src/routing/session-key.ts`:
+   - `toAgentRequestSessionKey`
+   - `toAgentStoreSessionKey`
+   - `classifySessionKeyShape`
+   - `buildAgentPeerSessionKey`
+   - `buildGroupHistoryKey`
+2. Preserved required behavior by:
+   - inlining malformed `agent:*` key detection in `src/agents/workspace-run.ts`.
+   - adding a local test-only key normalizer in `src/nex/control-plane/test-helpers.server.ts`.
+3. Updated and retained tests:
+   - `src/routing/session-key.test.ts` now validates parser compatibility + canonical owner resolution.
+   - `src/agents/workspace-run.test.ts`, control-plane tests, and guardrails continue passing.
+4. Validation after this cleanup:
+   - `pnpm tsc --noEmit` passes.
+   - targeted suites covering routing/workspace/control-plane pass.
+
+Additional hard-cut cleanup completion in this pass:
+1. Removed legacy LINE/plugin-runtime exposure from plugin runtime surface:
+   - deleted `channel.line` API block from:
+     - `src/plugins/runtime/index.ts`
+     - `src/plugins/runtime/types.ts`
+2. Removed legacy plugin runtime type export from extension SDK surface:
+   - removed `PluginRuntime` export from `src/extensions-api/index.ts`
+3. Validation after this cleanup:
+   - `pnpm tsc --noEmit` passes.
+   - `pnpm vitest run src/extensions-api/index.test.ts src/plugins/loader.test.ts src/channels/plugins/index.test.ts src/channels/registry.test.ts` passes.
+
+Further hard-cut cleanup completion in this pass:
+1. Removed legacy LINE ingress stack files from core:
+   - `src/line/bot-message-context.ts`
+   - `src/line/bot-handlers.ts`
+   - `src/line/bot.ts`
+   - `src/line/monitor.ts`
+2. Removed orphaned tests for deleted ingress stack:
+   - `src/line/bot-message-context.test.ts`
+   - `src/line/bot-handlers.test.ts`
+3. Removed legacy exports tied to deleted ingress stack from `src/line/index.ts`.
+4. Validation after this cleanup:
+   - `pnpm tsc --noEmit` passes.
+   - `pnpm vitest run src/line/**/*.test.ts src/extensions-api/index.test.ts src/plugins/loader.test.ts src/channels/plugins/index.test.ts src/channels/registry.test.ts` passes.
+
 ---
 
 ## 5. Validation Plan

@@ -13,6 +13,7 @@ import { SessionStore } from "./session-store.js";
 import { TenantAutoProvisioner } from "./tenant-autoprovision.js";
 import {
   WorkspaceStore,
+  type WorkspaceRecord,
   type WorkspaceMembershipView,
   workspaceToTenantConfig,
 } from "./workspace-store.js";
@@ -62,7 +63,9 @@ function setCookie(params: {
   res: ServerResponse;
   name: string;
   value: string;
+  domain?: string;
   maxAgeSeconds?: number;
+  secure?: boolean;
 }): void {
   const attrs = [
     `${params.name}=${encodeURIComponent(params.value)}`,
@@ -70,16 +73,34 @@ function setCookie(params: {
     "HttpOnly",
     "SameSite=Lax",
   ];
+  if (params.domain) {
+    attrs.push(`Domain=${params.domain}`);
+  }
+  if (params.secure) {
+    attrs.push("Secure");
+  }
   if (typeof params.maxAgeSeconds === "number") {
     attrs.push(`Max-Age=${Math.max(0, Math.floor(params.maxAgeSeconds))}`);
   }
   params.res.setHeader("Set-Cookie", attrs.join("; "));
 }
 
-function clearCookie(params: { res: ServerResponse; name: string }): void {
+function clearCookie(params: {
+  res: ServerResponse;
+  name: string;
+  domain?: string;
+  secure?: boolean;
+}): void {
+  const attrs = [`${params.name}=`, "Path=/", "HttpOnly", "SameSite=Lax", "Max-Age=0"];
+  if (params.domain) {
+    attrs.push(`Domain=${params.domain}`);
+  }
+  if (params.secure) {
+    attrs.push("Secure");
+  }
   params.res.setHeader(
     "Set-Cookie",
-    `${params.name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+    attrs.join("; "),
   );
 }
 
@@ -247,29 +268,64 @@ function isSameOriginBrowserMutation(req: IncomingMessage, baseUrl: string): boo
   return refererOrigin ? originMatchesExpected(refererOrigin) : false;
 }
 
-function applySecurityHeaders(res: ServerResponse): void {
+function applySecurityHeaders(
+  res: ServerResponse,
+  params: {
+    config: FrontdoorConfig;
+    requestSecure: boolean;
+  },
+): void {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
+  const hstsEnabled = params.config.hstsEnabled ?? true;
+  if (!hstsEnabled || !params.requestSecure) {
+    return;
+  }
+  const directives = [`max-age=${Math.max(0, params.config.hstsMaxAgeSeconds ?? 31536000)}`];
+  if (params.config.hstsIncludeSubDomains ?? true) {
+    directives.push("includeSubDomains");
+  }
+  if (params.config.hstsPreload ?? true) {
+    directives.push("preload");
+  }
+  res.setHeader("Strict-Transport-Security", directives.join("; "));
 }
 
-function resolveRequestWsProtocol(req: IncomingMessage, baseUrl: string): "ws" | "wss" {
+function resolveRequestSecureContext(req: IncomingMessage, baseUrl: string): boolean {
   const forwardedProto = readHeaderValue(req.headers["x-forwarded-proto"])
     .split(",")
     .map((item) => item.trim().toLowerCase())
     .find(Boolean);
   if (forwardedProto === "https") {
-    return "wss";
+    return true;
   }
   if (forwardedProto === "http") {
-    return "ws";
+    return false;
+  }
+  const forwardedScheme = readHeaderValue(req.headers["x-forwarded-scheme"])
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .find(Boolean);
+  if (forwardedScheme === "https") {
+    return true;
+  }
+  if (forwardedScheme === "http") {
+    return false;
+  }
+  const forwardedSsl = readHeaderValue(req.headers["x-forwarded-ssl"]).toLowerCase();
+  if (forwardedSsl === "on") {
+    return true;
   }
   try {
-    const origin = new URL(baseUrl);
-    return origin.protocol === "https:" ? "wss" : "ws";
+    return new URL(baseUrl).protocol.toLowerCase() === "https:";
   } catch {
-    return "ws";
+    return false;
   }
+}
+
+function resolveRequestWsProtocol(req: IncomingMessage, baseUrl: string): "ws" | "wss" {
+  return resolveRequestSecureContext(req, baseUrl) ? "wss" : "ws";
 }
 
 function buildFrontdoorRuntimeWsUrl(params: {
@@ -342,6 +398,75 @@ function hasGlobalOperatorAccess(principal: Principal): boolean {
   return false;
 }
 
+type OidcIdentityRef = {
+  provider: string;
+  subject: string;
+};
+
+function parseOidcIdentityFromEntityId(entityId: string | undefined): OidcIdentityRef | null {
+  const raw = typeof entityId === "string" ? entityId.trim() : "";
+  if (!raw) {
+    return null;
+  }
+  const parts = raw.split(":");
+  if (parts.length < 3) {
+    return null;
+  }
+  if (parts[0]?.trim().toLowerCase() !== "entity") {
+    return null;
+  }
+  const provider = (parts[1] ?? "").trim().toLowerCase();
+  const subject = parts
+    .slice(2)
+    .join(":")
+    .trim()
+    .toLowerCase();
+  if (!provider || !subject) {
+    return null;
+  }
+  return {
+    provider,
+    subject,
+  };
+}
+
+function getLatestProvisionRequestForPrincipal(params: {
+  autoProvisioner: TenantAutoProvisioner | null;
+  principal: Principal;
+}) {
+  const autoProvisioner = params.autoProvisioner;
+  if (!autoProvisioner) {
+    return null;
+  }
+  const byUser = autoProvisioner.getLatestProvisionRequestByUser(params.principal.userId);
+  if (byUser) {
+    return byUser;
+  }
+  const oidc = parseOidcIdentityFromEntityId(params.principal.entityId);
+  if (!oidc) {
+    return null;
+  }
+  return autoProvisioner.getLatestProvisionRequestByOidcIdentity(oidc);
+}
+
+function provisionRequestOwnedByPrincipal(params: {
+  record: {
+    userId: string;
+    provider: string;
+    subject: string;
+  };
+  principal: Principal;
+}): boolean {
+  if (params.record.userId === params.principal.userId) {
+    return true;
+  }
+  const oidc = parseOidcIdentityFromEntityId(params.principal.entityId);
+  if (!oidc) {
+    return false;
+  }
+  return params.record.provider === oidc.provider && params.record.subject === oidc.subject;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -368,6 +493,21 @@ function readOptionalString(value: unknown): string | undefined {
   }
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function parseEntitlementCountLimit(value: string | undefined): number | null {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (normalized === "unlimited" || normalized === "infinite" || normalized === "infinity") {
+    return null;
+  }
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return Math.max(0, Math.floor(parsed));
 }
 
 function resolveBillingPlanFromStripeObject(object: Record<string, unknown>): string {
@@ -430,6 +570,24 @@ function buildRuntimeTokenResponse(params: {
     runtime: resolveRuntimeDescriptor(params.tenant),
     connection_mode: "direct",
   };
+}
+
+function resolveRuntimeUpstreamBearerToken(params: {
+  config: FrontdoorConfig;
+  principal: Principal;
+  session: SessionRecord;
+  runtime: TenantConfig;
+}): string {
+  const configured = params.runtime.runtimeAuthToken?.trim();
+  if (configured) {
+    return configured;
+  }
+  const access = mintRuntimeAccessToken({
+    config: params.config,
+    principal: params.principal,
+    sessionId: params.session.id,
+  });
+  return access.token;
 }
 
 function serveUiShell(res: ServerResponse): void {
@@ -583,6 +741,50 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     return tenant;
   }
 
+  function resolveWorkspaceAdminAccess(params: {
+    session: SessionRecord;
+    workspaceId: string;
+  }):
+    | {
+        ok: true;
+        workspace: WorkspaceRecord;
+        membership: WorkspaceMembershipView | null;
+      }
+    | {
+        ok: false;
+        status: number;
+        error: string;
+      } {
+    const workspace = workspaceStore.getWorkspace(params.workspaceId);
+    if (!workspace) {
+      return {
+        ok: false,
+        status: 404,
+        error: "workspace_not_found",
+      };
+    }
+    const membership = workspaceStore.getMembership(
+      params.session.principal.userId,
+      params.workspaceId,
+    );
+    const canAdmin =
+      hasWorkspaceAdminRole(membership) ||
+      hasGlobalOperatorAccess(params.session.principal) ||
+      isWorkspaceCreatorAuthorized(params.session.principal);
+    if (!canAdmin) {
+      return {
+        ok: false,
+        status: 403,
+        error: "workspace_admin_forbidden",
+      };
+    }
+    return {
+      ok: true,
+      workspace,
+      membership,
+    };
+  }
+
   function resolveActiveWorkspaceContext(params: {
     session: SessionRecord;
     requestedWorkspaceId?: string;
@@ -681,6 +883,35 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     };
   }
 
+  function syncEntitlementsFromPlan(workspaceId: string, planId: string): void {
+    const plan = workspaceStore.getProductPlan(planId);
+    if (!plan?.limitsJson) {
+      return;
+    }
+    const workspace = workspaceStore.getWorkspace(workspaceId);
+    const productId = workspace?.productId || plan.productId;
+    if (!productId) {
+      return;
+    }
+    let limits: Record<string, unknown> = {};
+    try {
+      limits = JSON.parse(plan.limitsJson) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    for (const [key, value] of Object.entries(limits)) {
+      if (key && value !== undefined && value !== null) {
+        workspaceStore.upsertProductEntitlement({
+          workspaceId,
+          productId,
+          entitlementKey: key,
+          entitlementValue: String(value),
+          source: "plan",
+        });
+      }
+    }
+  }
+
   function processBillingWebhookEvent(event: BillingWebhookEvent): {
     workspaceId?: string;
     status: string;
@@ -707,6 +938,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         periodStartMs: readOptionalNumber(payload.period_start_ms),
         periodEndMs: readOptionalNumber(payload.period_end_ms),
       });
+      syncEntitlementsFromPlan(workspaceId, planId);
       const invoice = asRecord(payload.invoice);
       const invoiceId = readOptionalString(invoice?.invoice_id) || readOptionalString(payload.invoice_id);
       if (invoiceId) {
@@ -736,9 +968,10 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     }
 
     if (event.eventType.startsWith("customer.subscription.")) {
+      const resolvedPlanId = resolveBillingPlanFromStripeObject(object ?? {});
       workspaceStore.upsertWorkspaceBilling({
         workspaceId,
-        planId: resolveBillingPlanFromStripeObject(object ?? {}),
+        planId: resolvedPlanId,
         status: readOptionalString(object?.status) || "active",
         provider: "stripe",
         customerId: readOptionalString(object?.customer),
@@ -746,18 +979,21 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         periodStartMs: msFromUnixSeconds(object?.current_period_start),
         periodEndMs: msFromUnixSeconds(object?.current_period_end),
       });
+      syncEntitlementsFromPlan(workspaceId, resolvedPlanId);
       return { workspaceId, status: "processed" };
     }
 
     if (event.eventType === "checkout.session.completed") {
+      const checkoutPlanId = readOptionalString(metadata?.plan_id) || "starter";
       workspaceStore.upsertWorkspaceBilling({
         workspaceId,
-        planId: readOptionalString(metadata?.plan_id) || "starter",
+        planId: checkoutPlanId,
         status: "active",
         provider: "stripe",
         customerId: readOptionalString(object?.customer),
         subscriptionId: readOptionalString(object?.subscription),
       });
+      syncEntitlementsFromPlan(workspaceId, checkoutPlanId);
       return { workspaceId, status: "processed" };
     }
 
@@ -810,12 +1046,13 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     route: "runtime" | "app";
   }): void {
     const targetOrigin = resolveTargetOrigin(params.runtime.runtimeUrl);
-    const access = mintRuntimeAccessToken({
+    const upstreamBearer = resolveRuntimeUpstreamBearerToken({
       config,
       principal: params.principal,
-      sessionId: params.session.id,
+      session: params.session,
+      runtime: params.runtime,
     });
-    params.req.headers.authorization = `Bearer ${access.token}`;
+    params.req.headers.authorization = `Bearer ${upstreamBearer}`;
     params.req.headers["x-nexus-frontdoor-tenant"] = params.runtime.id;
     params.req.headers["x-nexus-frontdoor-session"] = params.session.id;
     params.req.headers["x-request-id"] = params.req.headers["x-request-id"] ?? randomToken(10);
@@ -835,6 +1072,80 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     proxy.web(params.req, params.res, {
       target: params.runtime.runtimeUrl,
     });
+  }
+
+  async function probeRuntimeJsonEndpoint(params: {
+    runtime: TenantConfig;
+    session: SessionRecord;
+    principal: Principal;
+    path: string;
+    requestId: string;
+  }): Promise<{
+    ok: boolean;
+    httpStatus: number;
+    error?: string;
+    body: unknown;
+  }> {
+    const target = new URL(params.path, params.runtime.runtimeUrl);
+    const upstreamBearer = resolveRuntimeUpstreamBearerToken({
+      config,
+      principal: params.principal,
+      session: params.session,
+      runtime: params.runtime,
+    });
+    const headers = new Headers();
+    headers.set("authorization", `Bearer ${upstreamBearer}`);
+    headers.set("x-nexus-frontdoor-tenant", params.runtime.id);
+    headers.set("x-nexus-frontdoor-session", params.session.id);
+    headers.set("x-request-id", params.requestId);
+    try {
+      const response = await fetch(target, {
+        method: "GET",
+        headers,
+      });
+      const contentType = (response.headers.get("content-type") || "").toLowerCase();
+      const text = await response.text();
+      let body: unknown = null;
+      if (text) {
+        if (contentType.includes("application/json")) {
+          try {
+            body = JSON.parse(text) as unknown;
+          } catch {
+            body = {
+              raw: text.slice(0, 1024),
+            };
+          }
+        } else {
+          body = {
+            raw: text.slice(0, 1024),
+          };
+        }
+      }
+      if (!response.ok) {
+        const bodyRecord = asRecord(body);
+        const code = readOptionalString(bodyRecord?.error) || `runtime_http_${response.status}`;
+        return {
+          ok: false,
+          httpStatus: response.status,
+          error: code,
+          body,
+        };
+      }
+      return {
+        ok: true,
+        httpStatus: response.status,
+        body,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        httpStatus: 0,
+        error: "runtime_unreachable",
+        body: {
+          detail: String(error),
+        },
+      };
+    }
   }
 
   function buildForwardedRuntimePath(params: {
@@ -870,6 +1181,8 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       sessionId: params.session.id,
       clientId: "nexus-control-ui",
     });
+    const upstreamBearer =
+      params.runtime.runtimeAuthToken?.trim() || access.token;
     const targetPath = buildForwardedRuntimePath({
       url: params.url,
       route: "app",
@@ -877,7 +1190,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     });
     const runtimeTarget = new URL(targetPath, params.runtime.runtimeUrl);
     const headers = new Headers();
-    headers.set("authorization", `Bearer ${access.token}`);
+    headers.set("authorization", `Bearer ${upstreamBearer}`);
     headers.set("x-nexus-frontdoor-tenant", params.runtime.id);
     headers.set("x-nexus-frontdoor-session", params.session.id);
     headers.set("x-request-id", readHeaderValue(params.req.headers["x-request-id"]) || randomToken(10));
@@ -936,8 +1249,13 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     const clientIp = getClientIp(req);
     const cookies = parseCookies(req);
     const cookieSessionId = cookies[config.sessionCookieName] ?? null;
+    const requestSecure = resolveRequestSecureContext(req, config.baseUrl);
+    const cookieSecure = config.sessionCookieSecure === true || requestSecure;
     res.setHeader("x-request-id", requestId);
-    applySecurityHeaders(res);
+    applySecurityHeaders(res, {
+      config,
+      requestSecure,
+    });
     res.on("finish", () => {
       logFrontdoorEvent("http_request", {
         request_id: requestId,
@@ -1009,6 +1327,10 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           workspace_count: workspaces.length,
           active_workspace_id: activeWorkspace?.workspaceId ?? null,
           active_workspace_display_name: activeWorkspace?.displayName ?? null,
+          latest_provisioning: getLatestProvisionRequestForPrincipal({
+            autoProvisioner,
+            principal: session.principal,
+          }),
         });
         return;
       }
@@ -1068,7 +1390,9 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           res,
           name: config.sessionCookieName,
           value: session.id,
+          domain: config.sessionCookieDomain,
           maxAgeSeconds: config.sessionTtlSeconds,
+          secure: cookieSecure,
         });
         sendJson(res, 200, {
           ok: true,
@@ -1096,8 +1420,94 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         if (session) {
           sessions.deleteSession(session.id);
         }
-        clearCookie({ res, name: config.sessionCookieName });
+        clearCookie({
+          res,
+          name: config.sessionCookieName,
+          domain: config.sessionCookieDomain,
+          secure: cookieSecure,
+        });
         sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      // ── Public Product Registry ────────────────────────────────────
+      if (method === "GET" && pathname === "/api/products") {
+        const products = workspaceStore.listProducts();
+        sendJson(res, 200, {
+          ok: true,
+          items: products.map((p) => ({
+            product_id: p.productId,
+            display_name: p.displayName,
+            tagline: p.tagline ?? null,
+            accent_color: p.accentColor ?? null,
+            homepage_url: p.homepageUrl ?? null,
+          })),
+        });
+        return;
+      }
+
+      const productDetailRouteMatch = pathname.match(/^\/api\/products\/([^/]+)$/);
+      if (method === "GET" && productDetailRouteMatch) {
+        const productId = decodeURIComponent(productDetailRouteMatch[1] ?? "").trim();
+        if (!productId) {
+          sendJson(res, 400, { ok: false, error: "missing_product_id" });
+          return;
+        }
+        const product = workspaceStore.getProduct(productId);
+        if (!product) {
+          sendJson(res, 404, { ok: false, error: "product_not_found" });
+          return;
+        }
+        const plans = workspaceStore.listProductPlans(productId);
+        sendJson(res, 200, {
+          ok: true,
+          product_id: product.productId,
+          display_name: product.displayName,
+          tagline: product.tagline ?? null,
+          accent_color: product.accentColor ?? null,
+          homepage_url: product.homepageUrl ?? null,
+          plans: plans.map((p) => ({
+            plan_id: p.planId,
+            display_name: p.displayName,
+            description: p.description ?? null,
+            price_monthly: p.priceMonthly,
+            price_yearly: p.priceYearly ?? null,
+            features: p.featuresJson ? JSON.parse(p.featuresJson) : [],
+            is_default: p.isDefault,
+            sort_order: p.sortOrder,
+          })),
+        });
+        return;
+      }
+
+      const productPlansRouteMatch = pathname.match(/^\/api\/products\/([^/]+)\/plans$/);
+      if (method === "GET" && productPlansRouteMatch) {
+        const productId = decodeURIComponent(productPlansRouteMatch[1] ?? "").trim();
+        if (!productId) {
+          sendJson(res, 400, { ok: false, error: "missing_product_id" });
+          return;
+        }
+        const product = workspaceStore.getProduct(productId);
+        if (!product) {
+          sendJson(res, 404, { ok: false, error: "product_not_found" });
+          return;
+        }
+        const plans = workspaceStore.listProductPlans(productId);
+        sendJson(res, 200, {
+          ok: true,
+          product_id: productId,
+          items: plans.map((p) => ({
+            plan_id: p.planId,
+            display_name: p.displayName,
+            description: p.description ?? null,
+            price_monthly: p.priceMonthly,
+            price_yearly: p.priceYearly ?? null,
+            features: p.featuresJson ? JSON.parse(p.featuresJson) : [],
+            limits: p.limitsJson ? JSON.parse(p.limitsJson) : {},
+            is_default: p.isDefault,
+            sort_order: p.sortOrder,
+          })),
+        });
         return;
       }
 
@@ -1117,11 +1527,364 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             workspace_id: item.workspaceId,
             display_name: item.displayName,
             workspace_slug: item.workspaceSlug,
+            product_id: item.productId ?? null,
             status: item.status,
             is_default: item.isDefault,
             roles: item.roles,
             scopes: item.scopes,
           })),
+        });
+        return;
+      }
+
+      const workspaceMembersRouteMatch = pathname.match(/^\/api\/workspaces\/([^/]+)\/members$/);
+      if (method === "GET" && workspaceMembersRouteMatch) {
+        const session = readSession({ req, config, sessions });
+        if (!session) {
+          sendJson(res, 401, {
+            ok: false,
+            error: "unauthorized",
+          });
+          return;
+        }
+        const workspaceId = decodeURIComponent(workspaceMembersRouteMatch[1] ?? "").trim();
+        if (!workspaceId) {
+          sendJson(res, 400, {
+            ok: false,
+            error: "missing_workspace_id",
+          });
+          return;
+        }
+        const access = resolveWorkspaceAdminAccess({
+          session,
+          workspaceId,
+        });
+        if (!access.ok) {
+          sendJson(res, access.status, {
+            ok: false,
+            error: access.error,
+          });
+          return;
+        }
+        const members = workspaceStore.listMembersForWorkspace(access.workspace.workspaceId);
+        sendJson(res, 200, {
+          ok: true,
+          workspace_id: access.workspace.workspaceId,
+          total_members: members.length,
+          items: members.map((item) => ({
+            user_id: item.userId,
+            username: item.username ?? null,
+            email: item.email ?? null,
+            display_name: item.displayName ?? null,
+            entity_id: item.entityId,
+            roles: item.roles,
+            scopes: item.scopes,
+            is_default: item.isDefault,
+            created_at_ms: item.createdAtMs,
+            updated_at_ms: item.updatedAtMs,
+          })),
+        });
+        return;
+      }
+
+      const workspaceSettingsRouteMatch = pathname.match(/^\/api\/workspaces\/([^/]+)\/settings$/);
+      if (workspaceSettingsRouteMatch) {
+        const session = readSession({ req, config, sessions });
+        if (!session) {
+          sendJson(res, 401, {
+            ok: false,
+            error: "unauthorized",
+          });
+          return;
+        }
+        const workspaceId = decodeURIComponent(workspaceSettingsRouteMatch[1] ?? "").trim();
+        if (!workspaceId) {
+          sendJson(res, 400, {
+            ok: false,
+            error: "missing_workspace_id",
+          });
+          return;
+        }
+        const access = resolveWorkspaceAdminAccess({
+          session,
+          workspaceId,
+        });
+        if (!access.ok) {
+          sendJson(res, access.status, {
+            ok: false,
+            error: access.error,
+          });
+          return;
+        }
+
+        if (method === "GET") {
+          sendJson(res, 200, {
+            ok: true,
+            workspace: {
+              workspace_id: access.workspace.workspaceId,
+              display_name: access.workspace.displayName,
+              workspace_slug: access.workspace.workspaceSlug,
+              status: access.workspace.status,
+              runtime_url: access.workspace.runtimeUrl,
+              runtime_public_base_url: access.workspace.runtimePublicBaseUrl,
+              runtime_ws_url: access.workspace.runtimeWsUrl ?? null,
+              runtime_sse_url: access.workspace.runtimeSseUrl ?? null,
+              has_runtime_auth_token: Boolean(access.workspace.runtimeAuthToken?.trim()),
+            },
+          });
+          return;
+        }
+
+        if (method === "PATCH") {
+          const body =
+            (await readJsonBody<{
+              display_name?: string;
+              status?: string;
+              runtime_url?: string;
+              runtime_public_base_url?: string;
+              runtime_ws_url?: string | null;
+              runtime_sse_url?: string | null;
+            }>(req)) ?? {};
+
+          const displayName =
+            typeof body.display_name === "string" && body.display_name.trim()
+              ? body.display_name.trim()
+              : access.workspace.displayName;
+          const runtimeUrl =
+            typeof body.runtime_url === "string" && body.runtime_url.trim()
+              ? body.runtime_url.trim()
+              : access.workspace.runtimeUrl;
+          if (!runtimeUrl) {
+            sendJson(res, 400, {
+              ok: false,
+              error: "missing_runtime_url",
+            });
+            return;
+          }
+          const runtimePublicBaseUrl =
+            typeof body.runtime_public_base_url === "string"
+              ? body.runtime_public_base_url.trim() || runtimeUrl
+              : access.workspace.runtimePublicBaseUrl || runtimeUrl;
+          const runtimeWsUrl =
+            body.runtime_ws_url === null
+              ? undefined
+              : typeof body.runtime_ws_url === "string"
+                ? body.runtime_ws_url.trim() || undefined
+                : access.workspace.runtimeWsUrl;
+          const runtimeSseUrl =
+            body.runtime_sse_url === null
+              ? undefined
+              : typeof body.runtime_sse_url === "string"
+                ? body.runtime_sse_url.trim() || undefined
+                : access.workspace.runtimeSseUrl;
+          const status =
+            body.status === "disabled"
+              ? "disabled"
+              : body.status === "active"
+                ? "active"
+                : access.workspace.status;
+
+          const updated = workspaceStore.upsertWorkspace({
+            workspaceId: access.workspace.workspaceId,
+            workspaceSlug: access.workspace.workspaceSlug,
+            displayName,
+            runtimeUrl,
+            runtimePublicBaseUrl,
+            runtimeWsUrl,
+            runtimeSseUrl,
+            runtimeAuthToken: access.workspace.runtimeAuthToken,
+            status,
+          });
+          config.tenants.set(updated.workspaceId, workspaceToTenantConfig(updated));
+          sendJson(res, 200, {
+            ok: true,
+            workspace: {
+              workspace_id: updated.workspaceId,
+              display_name: updated.displayName,
+              workspace_slug: updated.workspaceSlug,
+              status: updated.status,
+              runtime_url: updated.runtimeUrl,
+              runtime_public_base_url: updated.runtimePublicBaseUrl,
+              runtime_ws_url: updated.runtimeWsUrl ?? null,
+              runtime_sse_url: updated.runtimeSseUrl ?? null,
+              has_runtime_auth_token: Boolean(updated.runtimeAuthToken?.trim()),
+            },
+          });
+          logFrontdoorEvent("workspace_settings_updated", {
+            request_id: requestId,
+            user_id: session.principal.userId,
+            workspace_id: updated.workspaceId,
+          });
+          return;
+        }
+
+        sendJson(res, 405, {
+          ok: false,
+          error: "method_not_allowed",
+        });
+        return;
+      }
+
+      const workspaceRuntimeTokenRouteMatch = pathname.match(
+        /^\/api\/workspaces\/([^/]+)\/runtime-auth-token$/,
+      );
+      if (workspaceRuntimeTokenRouteMatch) {
+        const session = readSession({ req, config, sessions });
+        if (!session) {
+          sendJson(res, 401, {
+            ok: false,
+            error: "unauthorized",
+          });
+          return;
+        }
+        const workspaceId = decodeURIComponent(workspaceRuntimeTokenRouteMatch[1] ?? "").trim();
+        if (!workspaceId) {
+          sendJson(res, 400, {
+            ok: false,
+            error: "missing_workspace_id",
+          });
+          return;
+        }
+        const access = resolveWorkspaceAdminAccess({
+          session,
+          workspaceId,
+        });
+        if (!access.ok) {
+          sendJson(res, access.status, {
+            ok: false,
+            error: access.error,
+          });
+          return;
+        }
+        if (method === "DELETE") {
+          const updated = workspaceStore.upsertWorkspace({
+            ...access.workspace,
+            runtimeAuthToken: undefined,
+          });
+          config.tenants.set(updated.workspaceId, workspaceToTenantConfig(updated));
+          sendJson(res, 200, {
+            ok: true,
+            workspace_id: updated.workspaceId,
+            has_runtime_auth_token: false,
+          });
+          logFrontdoorEvent("workspace_runtime_auth_token_cleared", {
+            request_id: requestId,
+            user_id: session.principal.userId,
+            workspace_id: updated.workspaceId,
+          });
+          return;
+        }
+        sendJson(res, 405, {
+          ok: false,
+          error: "method_not_allowed",
+        });
+        return;
+      }
+
+      const workspaceRuntimeTokenSetRouteMatch = pathname.match(
+        /^\/api\/workspaces\/([^/]+)\/runtime-auth-token\/set$/,
+      );
+      if (method === "POST" && workspaceRuntimeTokenSetRouteMatch) {
+        const session = readSession({ req, config, sessions });
+        if (!session) {
+          sendJson(res, 401, {
+            ok: false,
+            error: "unauthorized",
+          });
+          return;
+        }
+        const workspaceId = decodeURIComponent(workspaceRuntimeTokenSetRouteMatch[1] ?? "").trim();
+        if (!workspaceId) {
+          sendJson(res, 400, {
+            ok: false,
+            error: "missing_workspace_id",
+          });
+          return;
+        }
+        const access = resolveWorkspaceAdminAccess({
+          session,
+          workspaceId,
+        });
+        if (!access.ok) {
+          sendJson(res, access.status, {
+            ok: false,
+            error: access.error,
+          });
+          return;
+        }
+        const body = (await readJsonBody<{ token?: string }>(req)) ?? {};
+        const token = typeof body.token === "string" ? body.token.trim() : "";
+        if (!token) {
+          sendJson(res, 400, {
+            ok: false,
+            error: "missing_runtime_auth_token",
+          });
+          return;
+        }
+        const updated = workspaceStore.upsertWorkspace({
+          ...access.workspace,
+          runtimeAuthToken: token,
+        });
+        config.tenants.set(updated.workspaceId, workspaceToTenantConfig(updated));
+        sendJson(res, 200, {
+          ok: true,
+          workspace_id: updated.workspaceId,
+          has_runtime_auth_token: true,
+        });
+        logFrontdoorEvent("workspace_runtime_auth_token_set", {
+          request_id: requestId,
+          user_id: session.principal.userId,
+          workspace_id: updated.workspaceId,
+        });
+        return;
+      }
+
+      const workspaceRuntimeTokenRotateRouteMatch = pathname.match(
+        /^\/api\/workspaces\/([^/]+)\/runtime-auth-token\/rotate$/,
+      );
+      if (method === "POST" && workspaceRuntimeTokenRotateRouteMatch) {
+        const session = readSession({ req, config, sessions });
+        if (!session) {
+          sendJson(res, 401, {
+            ok: false,
+            error: "unauthorized",
+          });
+          return;
+        }
+        const workspaceId = decodeURIComponent(workspaceRuntimeTokenRotateRouteMatch[1] ?? "").trim();
+        if (!workspaceId) {
+          sendJson(res, 400, {
+            ok: false,
+            error: "missing_workspace_id",
+          });
+          return;
+        }
+        const access = resolveWorkspaceAdminAccess({
+          session,
+          workspaceId,
+        });
+        if (!access.ok) {
+          sendJson(res, access.status, {
+            ok: false,
+            error: access.error,
+          });
+          return;
+        }
+        const rotatedToken = randomToken(40);
+        const updated = workspaceStore.upsertWorkspace({
+          ...access.workspace,
+          runtimeAuthToken: rotatedToken,
+        });
+        config.tenants.set(updated.workspaceId, workspaceToTenantConfig(updated));
+        sendJson(res, 200, {
+          ok: true,
+          workspace_id: updated.workspaceId,
+          runtime_auth_token: rotatedToken,
+        });
+        logFrontdoorEvent("workspace_runtime_auth_token_rotated", {
+          request_id: requestId,
+          user_id: session.principal.userId,
+          workspace_id: updated.workspaceId,
         });
         return;
       }
@@ -1153,6 +1916,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             workspace_id: workspace.workspaceId,
             display_name: workspace.displayName,
             workspace_slug: workspace.workspaceSlug,
+            product_id: workspace.productId ?? null,
             status: workspace.status,
             runtime_public_base_url: workspace.runtimePublicBaseUrl,
             member_count: memberCount,
@@ -1173,6 +1937,129 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           ok: true,
           total_workspaces: items.length,
           items,
+        });
+        return;
+      }
+
+      const launchDiagnosticsRouteMatch = pathname.match(/^\/api\/workspaces\/([^/]+)\/launch-diagnostics$/);
+      if (method === "GET" && launchDiagnosticsRouteMatch) {
+        const session = readSession({ req, config, sessions });
+        if (!session) {
+          sendJson(res, 401, {
+            ok: false,
+            error: "unauthorized",
+          });
+          return;
+        }
+        const workspaceId = decodeURIComponent(launchDiagnosticsRouteMatch[1] ?? "").trim();
+        if (!workspaceId) {
+          sendJson(res, 400, {
+            ok: false,
+            error: "missing_workspace_id",
+          });
+          return;
+        }
+        const context = resolveActiveWorkspaceContext({
+          session,
+          requestedWorkspaceId: workspaceId,
+        });
+        if (!context.ok) {
+          sendJson(res, context.status, {
+            ok: false,
+            error: context.error,
+          });
+          return;
+        }
+        const [runtimeHealthInitial, runtimeApps] = await Promise.all([
+          probeRuntimeJsonEndpoint({
+            runtime: context.workspaceRuntime,
+            session: context.session,
+            principal: context.principal,
+            path: "/health",
+            requestId,
+          }),
+          probeRuntimeJsonEndpoint({
+            runtime: context.workspaceRuntime,
+            session: context.session,
+            principal: context.principal,
+            path: "/api/apps",
+            requestId,
+          }),
+        ]);
+        let runtimeHealth = runtimeHealthInitial;
+        if (!runtimeHealth.ok && runtimeHealth.httpStatus === 404) {
+          const runtimeStatus = await probeRuntimeJsonEndpoint({
+            runtime: context.workspaceRuntime,
+            session: context.session,
+            principal: context.principal,
+            path: "/status",
+            requestId,
+          });
+          if (runtimeStatus.ok || runtimeStatus.httpStatus !== 404) {
+            runtimeHealth = runtimeStatus;
+          }
+        }
+        const appsBody = asRecord(runtimeApps.body);
+        const appsListRaw = Array.isArray(appsBody?.items) ? appsBody.items : [];
+        const launchableApps = appsListRaw
+          .filter((item) => item && typeof item === "object" && !Array.isArray(item))
+          .map((item) => {
+            const record = item as Record<string, unknown>;
+            return {
+              app_id: readOptionalString(record.app_id) || "",
+              display_name: readOptionalString(record.display_name) || readOptionalString(record.app_id) || "",
+              entry_path: readOptionalString(record.entry_path) || "",
+            };
+          })
+          .filter((item) => item.app_id && item.entry_path.startsWith("/app/"));
+        const appCatalogPayloadError =
+          runtimeApps.ok && !Array.isArray(appsBody?.items) ? "invalid_apps_payload" : undefined;
+        const appCatalogOk = runtimeApps.ok && !appCatalogPayloadError;
+        const runtimeHealthBody = asRecord(runtimeHealth.body);
+        const runtimeHealthErrorCode =
+          readOptionalString(runtimeHealthBody?.error) || runtimeHealth.error || "";
+        const runtimeHealthLaunchCapable =
+          runtimeHealth.ok || runtimeHealthErrorCode === "nex_runtime_unavailable";
+        const launchReady = runtimeHealthLaunchCapable && appCatalogOk && launchableApps.length > 0;
+        const provisioningRecord = getLatestProvisionRequestForPrincipal({
+          autoProvisioner,
+          principal: context.principal,
+        });
+        sendJson(res, 200, {
+          ok: true,
+          workspace_id: context.workspace.workspaceId,
+          launch_ready: launchReady,
+          workspace: {
+            workspace_id: context.workspace.workspaceId,
+            display_name: context.workspace.displayName,
+            status: context.workspace.status,
+            runtime_url: context.workspaceRuntime.runtimeUrl,
+            runtime_public_base_url: context.workspaceRuntime.runtimePublicBaseUrl,
+            has_runtime_auth_token: Boolean(context.workspaceRuntime.runtimeAuthToken?.trim()),
+          },
+          provisioning: provisioningRecord
+            ? {
+                request_id: provisioningRecord.requestId,
+                status: provisioningRecord.status,
+                stage: provisioningRecord.stage ?? null,
+                error: provisioningRecord.errorText ?? null,
+                tenant_id: provisioningRecord.tenantId ?? null,
+                updated_at_ms: provisioningRecord.updatedAtMs,
+              }
+            : null,
+          runtime_health: {
+            ok: runtimeHealth.ok,
+            http_status: runtimeHealth.httpStatus || null,
+            error: runtimeHealth.error ?? null,
+            body: runtimeHealth.body,
+          },
+          app_catalog: {
+            ok: appCatalogOk,
+            http_status: runtimeApps.httpStatus || null,
+            error: appCatalogPayloadError ?? runtimeApps.error ?? null,
+            app_count: launchableApps.length,
+            items: launchableApps,
+          },
         });
         return;
       }
@@ -1332,15 +2219,21 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         const body =
           (await readJsonBody<{
             plan_id?: string;
+            product_id?: string;
             price_id?: string;
             success_url?: string;
             cancel_url?: string;
           }>(req)) ?? {};
         try {
+          const checkoutProductId =
+            (typeof body.product_id === "string" ? body.product_id.trim() : "") ||
+            context.workspace.productId ||
+            undefined;
           const created = await createCheckoutSession({
             config,
             workspaceId: context.workspace.workspaceId,
             planId: typeof body.plan_id === "string" ? body.plan_id : undefined,
+            productId: checkoutProductId,
             priceId: typeof body.price_id === "string" ? body.price_id : undefined,
             successUrl: typeof body.success_url === "string" ? body.success_url : undefined,
             cancelUrl: typeof body.cancel_url === "string" ? body.cancel_url : undefined,
@@ -1489,6 +2382,98 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         return;
       }
 
+      // ── Billing Entitlements + Plan ─────────────────────────────────
+      const billingEntitlementsRouteMatch = pathname.match(/^\/api\/billing\/([^/]+)\/entitlements$/);
+      if (method === "GET" && billingEntitlementsRouteMatch) {
+        const session = readSession({ req, config, sessions });
+        if (!session) {
+          sendJson(res, 401, { ok: false, error: "unauthorized" });
+          return;
+        }
+        const workspaceId = decodeURIComponent(billingEntitlementsRouteMatch[1] ?? "").trim();
+        if (!workspaceId) {
+          sendJson(res, 400, { ok: false, error: "missing_workspace_id" });
+          return;
+        }
+        const context = resolveActiveWorkspaceContext({
+          session,
+          requestedWorkspaceId: workspaceId,
+        });
+        if (!context.ok) {
+          sendJson(res, context.status, { ok: false, error: context.error });
+          return;
+        }
+        const resolved = workspaceStore.resolveWorkspaceEntitlements(context.workspace.workspaceId);
+        if (!resolved) {
+          sendJson(res, 200, {
+            ok: true,
+            workspace_id: context.workspace.workspaceId,
+            product_id: null,
+            plan_id: null,
+            entitlements: {},
+            usage: {},
+          });
+          return;
+        }
+        sendJson(res, 200, {
+          ok: true,
+          workspace_id: context.workspace.workspaceId,
+          product_id: resolved.productId,
+          plan_id: resolved.planId,
+          entitlements: resolved.entitlements,
+          usage: resolved.usage,
+        });
+        return;
+      }
+
+      const billingPlanRouteMatch = pathname.match(/^\/api\/billing\/([^/]+)\/plan$/);
+      if (method === "GET" && billingPlanRouteMatch) {
+        const session = readSession({ req, config, sessions });
+        if (!session) {
+          sendJson(res, 401, { ok: false, error: "unauthorized" });
+          return;
+        }
+        const workspaceId = decodeURIComponent(billingPlanRouteMatch[1] ?? "").trim();
+        if (!workspaceId) {
+          sendJson(res, 400, { ok: false, error: "missing_workspace_id" });
+          return;
+        }
+        const context = resolveActiveWorkspaceContext({
+          session,
+          requestedWorkspaceId: workspaceId,
+        });
+        if (!context.ok) {
+          sendJson(res, context.status, { ok: false, error: context.error });
+          return;
+        }
+        const billing = workspaceStore.getWorkspaceBillingSummary(context.workspace.workspaceId);
+        const plan = workspaceStore.getProductPlan(billing.planId);
+        const productId = context.workspace.productId ?? null;
+        const product = productId ? workspaceStore.getProduct(productId) : null;
+        sendJson(res, 200, {
+          ok: true,
+          workspace_id: context.workspace.workspaceId,
+          product_id: productId,
+          plan_id: billing.planId,
+          plan_display_name: plan?.displayName ?? billing.planId,
+          plan_description: plan?.description ?? null,
+          price_monthly: plan?.priceMonthly ?? 0,
+          price_yearly: plan?.priceYearly ?? null,
+          features: plan?.featuresJson ? JSON.parse(plan.featuresJson) : [],
+          billing_status: billing.status,
+          period_start_ms: billing.periodStartMs,
+          period_end_ms: billing.periodEndMs,
+          product: product
+            ? {
+                display_name: product.displayName,
+                accent_color: product.accentColor ?? null,
+                tagline: product.tagline ?? null,
+              }
+            : null,
+        });
+        return;
+      }
+
       if (method === "POST" && pathname === "/api/billing/webhook") {
         if (config.billing.provider === "none") {
           sendJson(res, 404, {
@@ -1628,10 +2613,12 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           (await readJsonBody<{
             workspace_id?: string;
             display_name?: string;
+            product_id?: string;
             runtime_url?: string;
             runtime_public_base_url?: string;
             runtime_ws_url?: string;
             runtime_sse_url?: string;
+            runtime_auth_token?: string;
             owner_user_id?: string;
           }>(req)) ?? {};
         const displayName =
@@ -1658,6 +2645,17 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           typeof body.workspace_id === "string" && body.workspace_id.trim()
             ? body.workspace_id.trim()
             : undefined;
+        const requestedProductId =
+          typeof body.product_id === "string" && body.product_id.trim()
+            ? body.product_id.trim()
+            : undefined;
+        if (requestedProductId && !workspaceStore.getProduct(requestedProductId)) {
+          sendJson(res, 400, {
+            ok: false,
+            error: "invalid_product_id",
+          });
+          return;
+        }
         if (
           existingByRuntime &&
           (!requestedWorkspaceId || existingByRuntime.workspaceId !== requestedWorkspaceId)
@@ -1679,12 +2677,17 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           const workspace = workspaceStore.createWorkspace({
             workspaceId: requestedWorkspaceId,
             displayName,
+            productId: requestedProductId,
             runtimeUrl,
             runtimePublicBaseUrl: runtimePublicBaseUrl || undefined,
             runtimeWsUrl:
               typeof body.runtime_ws_url === "string" ? body.runtime_ws_url.trim() : undefined,
             runtimeSseUrl:
               typeof body.runtime_sse_url === "string" ? body.runtime_sse_url.trim() : undefined,
+            runtimeAuthToken:
+              typeof body.runtime_auth_token === "string"
+                ? body.runtime_auth_token.trim()
+                : undefined,
           });
           config.tenants.set(workspace.workspaceId, workspaceToTenantConfig(workspace));
           workspaceStore.ensureMembership({
@@ -1714,6 +2717,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             workspace: {
               workspace_id: workspace.workspaceId,
               display_name: workspace.displayName,
+              product_id: workspace.productId ?? null,
               runtime_url: workspace.runtimeUrl,
               runtime_public_base_url: workspace.runtimePublicBaseUrl,
               runtime_ws_url: workspace.runtimeWsUrl,
@@ -1731,6 +2735,123 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             error: String(error),
           });
         }
+        return;
+      }
+
+      if (method === "GET" && pathname === "/api/workspaces/provisioning/status") {
+        const session = readSession({ req, config, sessions });
+        if (!session) {
+          sendJson(res, 401, {
+            ok: false,
+            error: "unauthorized",
+          });
+          return;
+        }
+        if (!autoProvisioner) {
+          sendJson(res, 200, {
+            ok: true,
+            status: "disabled",
+            request: null,
+          });
+          return;
+        }
+        const requestId = (url.searchParams.get("request_id") ?? "").trim();
+        const record = requestId
+          ? autoProvisioner.getProvisionRequest(requestId)
+          : getLatestProvisionRequestForPrincipal({
+              autoProvisioner,
+              principal: session.principal,
+            });
+        if (!record) {
+          sendJson(res, 200, {
+            ok: true,
+            status: "none",
+            request: null,
+          });
+          return;
+        }
+        if (
+          !provisionRequestOwnedByPrincipal({
+            record,
+            principal: session.principal,
+          })
+        ) {
+          sendJson(res, 404, {
+            ok: false,
+            error: "request_not_found",
+          });
+          return;
+        }
+        sendJson(res, 200, {
+          ok: true,
+          status: record.status,
+          request: {
+            request_id: record.requestId,
+            user_id: record.userId,
+            provider: record.provider,
+            subject: record.subject,
+            tenant_id: record.tenantId ?? null,
+            status: record.status,
+            stage: record.stage ?? null,
+            error: record.errorText ?? null,
+            created_at_ms: record.createdAtMs,
+            updated_at_ms: record.updatedAtMs,
+            completed_at_ms: record.completedAtMs ?? null,
+          },
+        });
+        return;
+      }
+
+      const inviteRevokeRouteMatch = pathname.match(/^\/api\/workspaces\/([^/]+)\/invites\/([^/]+)$/);
+      if (method === "DELETE" && inviteRevokeRouteMatch) {
+        const session = readSession({ req, config, sessions });
+        if (!session) {
+          sendJson(res, 401, {
+            ok: false,
+            error: "unauthorized",
+          });
+          return;
+        }
+        const workspaceId = decodeURIComponent(inviteRevokeRouteMatch[1] ?? "").trim();
+        const inviteId = decodeURIComponent(inviteRevokeRouteMatch[2] ?? "").trim();
+        if (!workspaceId) {
+          sendJson(res, 400, {
+            ok: false,
+            error: "missing_workspace_id",
+          });
+          return;
+        }
+        if (!inviteId) {
+          sendJson(res, 400, {
+            ok: false,
+            error: "missing_invite_id",
+          });
+          return;
+        }
+        const access = resolveWorkspaceAdminAccess({
+          session,
+          workspaceId,
+        });
+        if (!access.ok) {
+          sendJson(res, access.status, {
+            ok: false,
+            error: access.error,
+          });
+          return;
+        }
+        const revoked = workspaceStore.revokeInvite(inviteId);
+        sendJson(res, revoked ? 200 : 404, {
+          ok: revoked,
+          workspace_id: access.workspace.workspaceId,
+          invite_id: inviteId,
+        });
+        logFrontdoorEvent("workspace_invite_revoked", {
+          request_id: requestId,
+          user_id: session.principal.userId,
+          workspace_id: access.workspace.workspaceId,
+          invite_id: inviteId,
+          revoked,
+        });
         return;
       }
 
@@ -1752,11 +2873,14 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           });
           return;
         }
-        const actorMembership = workspaceStore.getMembership(session.principal.userId, workspaceId);
-        if (!hasWorkspaceAdminRole(actorMembership) && !isWorkspaceCreatorAuthorized(session.principal)) {
-          sendJson(res, 403, {
+        const access = resolveWorkspaceAdminAccess({
+          session,
+          workspaceId,
+        });
+        if (!access.ok) {
+          sendJson(res, access.status, {
             ok: false,
-            error: "invite_forbidden",
+            error: access.error,
           });
           return;
         }
@@ -1793,6 +2917,21 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             typeof body.expires_in_seconds === "number" && Number.isFinite(body.expires_in_seconds)
               ? Math.max(60, Math.floor(body.expires_in_seconds))
               : config.workspaceInviteTtlSeconds;
+          const resolved = workspaceStore.resolveWorkspaceEntitlements(workspaceId);
+          const maxMembers = parseEntitlementCountLimit(resolved?.entitlements["members.max_count"]);
+          if (maxMembers !== null) {
+            const currentMembers = workspaceStore.countMembersForWorkspace(workspaceId);
+            if (currentMembers >= maxMembers) {
+              sendJson(res, 403, {
+                ok: false,
+                error: "members_limit_reached",
+                workspace_id: workspaceId,
+                current_members: currentMembers,
+                max_members: maxMembers,
+              });
+              return;
+            }
+          }
           try {
             const invite = workspaceStore.createInvite({
               workspaceId,
@@ -1876,9 +3015,11 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             invite_id: redeemed.invite.inviteId,
           });
         } catch (error) {
-          sendJson(res, 400, {
+          const message = String(error);
+          const status = message.includes("members_limit_reached") ? 403 : 400;
+          sendJson(res, status, {
             ok: false,
-            error: String(error),
+            error: message,
           });
         }
         return;
@@ -1893,11 +3034,13 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           return;
         }
         const provider = url.searchParams.get("provider") ?? "default";
+        const oidcProductId = url.searchParams.get("product") ?? url.searchParams.get("flavor") ?? undefined;
         try {
           const started = oidc.begin({
             config,
             provider,
             returnTo: url.searchParams.get("return_to") ?? undefined,
+            productId: oidcProductId,
           });
           res.statusCode = 302;
           res.setHeader("location", started.redirectUrl);
@@ -1935,7 +3078,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             provider,
             state,
             code,
-            resolvePrincipal: async ({ provider: oidcProvider, claims, fallbackPrincipal }) => {
+            resolvePrincipal: async ({ provider: oidcProvider, claims, fallbackPrincipal, productId }) => {
               if (!autoProvisioner) {
                 return fallbackPrincipal;
               }
@@ -1943,9 +3086,27 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
                 provider: oidcProvider,
                 claims,
                 fallbackPrincipal,
+                productId,
               });
             },
           });
+          if (completed.principal?.tenantId) {
+            const tenant = config.tenants.get(completed.principal.tenantId);
+            if (tenant) {
+              workspaceStore.upsertWorkspace({
+                workspaceId: tenant.id,
+                workspaceSlug: tenant.id,
+                displayName: tenant.id,
+                productId: completed.productId,
+                runtimeUrl: tenant.runtimeUrl,
+                runtimePublicBaseUrl: tenant.runtimePublicBaseUrl,
+                runtimeWsUrl: tenant.runtimeWsUrl,
+                runtimeSseUrl: tenant.runtimeSseUrl,
+                runtimeAuthToken: tenant.runtimeAuthToken,
+                status: "active",
+              });
+            }
+          }
           const oidcUser = workspaceStore.resolveOrCreateOidcUser({
             provider,
             subject: completed.claims.sub ?? "",
@@ -1953,7 +3114,15 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             displayName: completed.claims.name,
             fallbackPrincipal: completed.principal,
           });
-          const oidcMembership = workspaceStore.getDefaultMembership(oidcUser.userId);
+          let oidcMembership =
+            completed.principal?.tenantId && completed.principal.tenantId.trim()
+              ? workspaceStore.getMembership(oidcUser.userId, completed.principal.tenantId)
+              : null;
+          if (oidcMembership?.workspaceId) {
+            workspaceStore.setDefaultWorkspace(oidcUser.userId, oidcMembership.workspaceId);
+          } else {
+            oidcMembership = workspaceStore.getDefaultMembership(oidcUser.userId);
+          }
           const principal = workspaceStore.toPrincipal({
             user: oidcUser,
             membership: oidcMembership,
@@ -1964,7 +3133,9 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             res,
             name: config.sessionCookieName,
             value: session.id,
+            domain: config.sessionCookieDomain,
             maxAgeSeconds: config.sessionTtlSeconds,
+            secure: cookieSecure,
           });
           res.statusCode = 302;
           res.setHeader("location", completed.returnTo || "/");
@@ -2145,6 +3316,58 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         return;
       }
 
+      if (pathname.startsWith("/auth/")) {
+        if (method !== "GET") {
+          sendJson(res, 405, {
+            ok: false,
+            error: "method_not_allowed",
+          });
+          return;
+        }
+        const session = readSession({ req, config, sessions });
+        if (!session) {
+          sendJson(res, 401, {
+            ok: false,
+            error: "unauthorized",
+          });
+          return;
+        }
+        if (
+          !applyRateLimit({
+            req,
+            res,
+            limiter: proxyRequestLimiter,
+            key: `proxy:${session.id}`,
+            error: "proxy_rate_limited",
+          })
+        ) {
+          return;
+        }
+        const requestedWorkspaceId = (url.searchParams.get("workspace_id") ?? "").trim() || undefined;
+        const context = resolveActiveWorkspaceContext({
+          session,
+          requestedWorkspaceId,
+        });
+        if (!context.ok) {
+          sendJson(res, context.status, {
+            ok: false,
+            error: context.error,
+            workspace_count: context.workspaceCount,
+          });
+          return;
+        }
+        proxyRuntimeRequest({
+          req,
+          res,
+          url,
+          session: context.session,
+          principal: context.principal,
+          runtime: context.workspaceRuntime,
+          route: "app",
+        });
+        return;
+      }
+
       if (
         pathname === "/runtime" ||
         pathname.startsWith("/runtime/") ||
@@ -2278,12 +3501,13 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         return;
       }
       const targetOrigin = resolveTargetOrigin(context.workspaceRuntime.runtimeUrl);
-      const access = mintRuntimeAccessToken({
+      const upstreamBearer = resolveRuntimeUpstreamBearerToken({
         config,
         principal: context.principal,
-        sessionId: context.session.id,
+        session: context.session,
+        runtime: context.workspaceRuntime,
       });
-      req.headers.authorization = `Bearer ${access.token}`;
+      req.headers.authorization = `Bearer ${upstreamBearer}`;
       req.headers["x-nexus-frontdoor-tenant"] = context.workspaceRuntime.id;
       req.headers["x-nexus-frontdoor-session"] = context.session.id;
       req.headers["x-request-id"] = req.headers["x-request-id"] ?? randomToken(10);

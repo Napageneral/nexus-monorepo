@@ -683,11 +683,14 @@ Check the Nex TS event bus and hook infrastructure for existing patterns. (Go `i
 - `RETAIN_PIPELINE.md` -- Episode-based retain architecture (short-term memory, episode grouping, filtering, consolidation batching, backfill)
 - `workplans/INFRASTRUCTURE_WORKPLAN.md` -- Recall parity, embedding provider abstraction, writer scope changes, skill enrichment
 - `UNIFIED_ENTITY_STORE.md` -- Entity unification and IAM integration
+- `FACT_GRAPH_TRAVERSAL.md` -- Relationship query patterns using fact graph (replaces typed relationship table)
 - `MEMORY_WRITER.md` -- Agentic retain flow
 - `workplans/MEMORY_WRITER_ROLE.md` -- The writer's role prompt
 - `skills/MEMORY_INJECTION.md` -- Automated memory injection (read path)
 - `skills/MEMORY_SEARCH_SKILL.md` -- Agent search skill
 - `skills/MEMORY_REFLECT_SKILL.md` -- Deep research and mental model creation
+- `../CRM_ANALYSIS_AND_WORK_SYSTEM.md` -- CRM analysis, four-model pattern, work.db schema
+- `../ENTITY_ACTIVITY_DASHBOARD.md` -- Per-entity CRM metrics and aggregate dashboards
 - `../../ledgers/EVENTS_LEDGER.md` -- Source event schema
 - `../../ledgers/IDENTITY_GRAPH.md` -- Previous identity system (superseded)
 - `../MEMORY_SYSTEM.md` -- Previous memory system (superseded)

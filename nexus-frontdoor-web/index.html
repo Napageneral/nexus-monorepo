@@ -4,14 +4,29 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Nexus Shell | Workspace Access</title>
+    <script>
+      (() => {
+        const host = window.location.hostname.toLowerCase();
+        const isLocalHost = host === "localhost" || host === "127.0.0.1";
+        const bypassRedirect = window.location.search.includes("legacy_shell=1");
+        if (isLocalHost || bypassRedirect || host === "frontdoor.nexushub.sh") {
+          return;
+        }
+        const destination = new URL(window.location.href);
+        destination.protocol = "https:";
+        destination.hostname = "frontdoor.nexushub.sh";
+        destination.port = "";
+        window.location.replace(destination.toString());
+      })();
+    </script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <main class="wrap">
       <header class="hero">
-        <p class="eyebrow">Nexus Shell</p>
-        <h1>Customer workspace access</h1>
-        <p class="lead">Authenticate, then launch your tenant control plane in one click.</p>
+        <p id="heroEyebrow" class="eyebrow">Nexus Shell</p>
+        <h1 id="heroHeadline">Customer workspace access</h1>
+        <p id="heroLead" class="lead">Authenticate, then launch your tenant control plane in one click.</p>
       </header>
 
       <div class="status-row">
@@ -20,17 +35,34 @@
 
       <section class="grid">
         <article class="card">
-          <h2>Sign in</h2>
-          <p class="muted">Use your Google account to access your Nexus tenant.</p>
+          <h2 id="signInTitle">Sign in</h2>
+          <p id="signInBlurb" class="muted">Use your Google account to access your Nexus tenant.</p>
+          <p id="authWarning" class="warn" hidden></p>
           <div class="row">
             <button id="googleBtn" class="primary">Continue with Google</button>
             <button id="logoutBtn" class="ghost" hidden>Sign out</button>
           </div>
         </article>
 
+        <article id="offerPanel" class="card">
+          <h2 id="offerTitle">NexusHub workspace plan</h2>
+          <p id="offerDescription" class="muted">
+            NexusHub is where AI app workspaces are provisioned and operated.
+          </p>
+          <p id="infraDescription" class="muted">
+            You are purchasing dedicated server capacity and attaching an app flavor package.
+          </p>
+          <p class="muted">
+            Pricing:
+            <span id="pricingLabel" class="pricing-label">Contact sales for launch pricing.</span>
+          </p>
+          <p id="entryContext" class="muted" hidden></p>
+        </article>
+
         <article id="workspacePanel" class="card" hidden>
           <h2>Workspace</h2>
           <p class="muted">Select the workspace and app you want to open.</p>
+          <p id="provisioningSummary" class="muted" hidden></p>
           <label for="workspaceSelect">Available workspaces</label>
           <select id="workspaceSelect"></select>
           <div class="row">

@@ -1,5 +1,6 @@
 import { createAdapterLogger, patchConsoleToStderr, type AdapterLogger } from "./logger.js";
 import { writeJSONLine } from "./io.js";
+import { createAdapterControlSession, type AdapterControlSession } from "./control.js";
 import {
   AdapterAccountSchema,
   AdapterHealthSchema,
@@ -71,6 +72,11 @@ export type AdapterOperations = {
     ctx: AdapterContext,
     req: AdapterSetupRequest,
   ) => AdapterSetupResult | Promise<AdapterSetupResult>;
+  "adapter.control.start"?: (
+    ctx: AdapterContext,
+    args: { account: string },
+    session: AdapterControlSession,
+  ) => void | Promise<void>;
   "delivery.stream"?: StreamHandlers;
 };
 
@@ -322,6 +328,22 @@ export async function runAdapter(adapter: AdapterDefinition, opts: RunAdapterOpt
         writeJSONLine(stdout, validateOutput ? AdapterSetupResultSchema.parse(result) : result);
         return 0;
       }
+      case "adapter.control.start": {
+        const handler = operations["adapter.control.start"];
+        if (!handler) {
+          throw new Error("adapter.control.start not supported by this adapter");
+        }
+        const account = requireFlag(filteredArgs, "--account");
+        const session = createAdapterControlSession({
+          stdin,
+          stdout,
+          signal: ctx.signal,
+          validateFrames: validateOutput,
+          log: ctx.log,
+        });
+        await handler(ctx, { account }, session);
+        return 0;
+      }
       case "delivery.stream": {
         const handler = operations["delivery.stream"];
         if (!handler) {
@@ -359,6 +381,7 @@ function printUsage(name: string, stderr: NodeJS.WriteStream): void {
   stderr.write("  adapter.setup.submit --session-id <id> [--account <id>] [--payload-json <json>]\n");
   stderr.write("  adapter.setup.status --session-id <id> [--account <id>]\n");
   stderr.write("  adapter.setup.cancel --session-id <id> [--account <id>]\n");
+  stderr.write("  adapter.control.start --account <id>\n");
   stderr.write("  delivery.stream --account <id>\n\n");
   stderr.write("Global flags:\n");
   stderr.write("  --verbose, -v                     Enable debug logging\n");

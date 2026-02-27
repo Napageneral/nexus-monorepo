@@ -15,6 +15,8 @@ ALLOWED_ORIGIN="${ALLOWED_ORIGIN:-https://nexus-frontdoor-web.vercel.app}"
 FRONTDOOR_PUBLIC_ORIGIN="${FRONTDOOR_PUBLIC_ORIGIN:-}"
 FRONTDOOR_GOOGLE_CLIENT_ID="${FRONTDOOR_GOOGLE_CLIENT_ID:-}"
 FRONTDOOR_GOOGLE_CLIENT_SECRET="${FRONTDOOR_GOOGLE_CLIENT_SECRET:-}"
+BILLING_PROVIDER="${FRONTDOOR_BILLING_PROVIDER:-mock}"
+BILLING_WEBHOOK_SECRET="${FRONTDOOR_BILLING_WEBHOOK_SECRET:-frontdoor-demo-billing-webhook-secret}"
 AUTOPROVISION_ENABLED="${FRONTDOOR_AUTOPROVISION_ENABLED:-}"
 if [[ -z "${AUTOPROVISION_ENABLED}" ]]; then
   if [[ -n "${FRONTDOOR_GOOGLE_CLIENT_ID}" ]] && [[ -n "${FRONTDOOR_PUBLIC_ORIGIN}" ]]; then
@@ -258,6 +260,12 @@ cat > "${STACK_ROOT}/frontdoor.config.json" <<JSON
     "defaultScopes": ["operator.admin"],
     "command": "node ${ROOT_DIR}/scripts/provision-tenant-local.mjs",
     "commandTimeoutMs": 120000
+  },
+  "billing": {
+    "provider": "${BILLING_PROVIDER}",
+    "webhookSecret": "${BILLING_WEBHOOK_SECRET}",
+    "checkoutSuccessUrl": "${FRONTDOOR_PUBLIC_ORIGIN:-http://127.0.0.1:${FRONTDOOR_PORT}}/?section=billing&status=success",
+    "checkoutCancelUrl": "${FRONTDOOR_PUBLIC_ORIGIN:-http://127.0.0.1:${FRONTDOOR_PORT}}/?section=billing&status=cancel"
   }
 }
 JSON
@@ -313,6 +321,7 @@ ALLOWED_ORIGIN=${ALLOWED_ORIGIN}
 FRONTDOOR_PUBLIC_ORIGIN=${FRONTDOOR_PUBLIC_ORIGIN}
 AUTOPROVISION_ENABLED=${AUTOPROVISION_ENABLED}
 OIDC_ENABLED=${OIDC_ENABLED}
+BILLING_PROVIDER=${BILLING_PROVIDER}
 ENV
 
 echo "[demo-stack] ready"

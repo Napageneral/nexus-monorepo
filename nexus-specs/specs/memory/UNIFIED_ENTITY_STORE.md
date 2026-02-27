@@ -165,13 +165,14 @@ CREATE INDEX idx_entity_cooccurrences_count ON entity_cooccurrences(count DESC);
 
 ### Entity Tags
 
-For ACL scoping and lightweight classification.
+For ACL scoping, lightweight classification, and CRM lifecycle tracking.
 
 ```sql
 CREATE TABLE entity_tags (
     entity_id   TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
-    tag         TEXT NOT NULL,              -- 'trusted', 'family', 'team:engineering', 'org:anthropic'
+    tag         TEXT NOT NULL,              -- 'trusted', 'family', 'team:engineering', 'lifecycle:active'
     created_at  INTEGER NOT NULL,
+    deleted_at  INTEGER,                    -- NULL = active, set = soft-deleted
     PRIMARY KEY (entity_id, tag)
 );
 
@@ -179,6 +180,10 @@ CREATE INDEX idx_entity_tags_tag ON entity_tags(tag);
 ```
 
 Tags are for lightweight classification and ACL anchoring. For structured membership with roles and nesting, use Groups (below).
+
+**Tag transition history:** The `entity_tag_events` table (see `../CRM_ANALYSIS_AND_WORK_SYSTEM.md` §3) provides an immutable audit log of all tag additions and removals, enabling full lifecycle tracking for CRM workflows.
+
+**Tag naming conventions:** Tags use namespaced conventions for CRM-style segmentation: `lifecycle:active`, `pipeline:lead`, `relationship:family`, etc. Any tag string is valid — these are conventions, not schema constraints. See `../CRM_ANALYSIS_AND_WORK_SYSTEM.md` §3 for the full convention list.
 
 ### Groups
 
@@ -410,7 +415,7 @@ When "Tyler" appears in a message, the agent:
 
 On startup, the runtime ensures certain foundational entities exist before any messages are processed:
 
-1. **Entity-owner** -- A `person` entity with `is_user=true` representing the Nexus owner. This is the identity that all owner-originated messages resolve to, and the anchor for personal memory. A single contact is seeded for the auth login path: `(login, "", "owner")` → `entity-owner`. System-origin platforms (cron, runtime, boot, restart, node, clock) do NOT get contacts — they resolve directly to entity-owner at the `resolveIdentity` stage without a contacts lookup.
+1. **Entity-owner** -- A `person` entity with `is_user=true` representing the Nexus owner. This is the identity that all owner-originated messages resolve to, and the anchor for personal memory. A single contact is seeded for the auth login path: `(login, "", "owner")` → `entity-owner`. System-origin platforms (`clock`, `boot`, `restart`, internal `runtime`) do NOT get contacts — they resolve directly to entity-owner at the `resolveIdentity` stage without a contacts lookup. Device hosts are first-class entities and must resolve via `delivery.platform="device"` mappings.
 
 2. **Agent persona entities** -- One `agent` entity per configured agent persona (e.g., the default "nexus" agent, "eve", "atlas"). These have `type='agent'` and `source='bootstrap'`. Each persona also gets a contact row: `("agent", "", "{persona_id}")` → `"entity-{persona_id}"`. This makes the system symmetric — every message has both a sender entity and a receiver entity in the same identity graph.
 
@@ -584,5 +589,8 @@ This distinction matters: a contact means "we can route messages to/from this id
 
 - `MEMORY_SYSTEM.md` -- Full memory architecture
 - `MEMORY_WRITER.md` -- How entity resolution works in the retain flow
+- `FACT_GRAPH_TRAVERSAL.md` -- Relationship query patterns using fact graph
+- `../CRM_ANALYSIS_AND_WORK_SYSTEM.md` -- CRM analysis, entity tag events, work.db schema
+- `../ENTITY_ACTIVITY_DASHBOARD.md` -- Per-entity CRM metrics and aggregate dashboards
 - `../../_archive/IDENTITY_GRAPH.md` -- Previous identity system (superseded)
 - `../nex/RUNTIME_ROUTING.md` -- Runtime routing and session resolution

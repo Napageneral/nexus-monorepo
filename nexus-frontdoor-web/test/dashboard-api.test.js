@@ -4,6 +4,8 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const operatorWorkspacesHandler = require("../api/operator-workspaces");
+const runtimeAppsHandler = require("../api/runtime/apps");
+const workspaceLaunchDiagnosticsHandler = require("../api/workspace-launch-diagnostics");
 const workspaceUsageHandler = require("../api/workspace-usage");
 const workspaceBillingSummaryHandler = require("../api/workspace-billing-summary");
 const billingCheckoutSessionHandler = require("../api/billing-checkout-session");
@@ -32,6 +34,161 @@ test("operator-workspaces requires app session cookie", async (t) => {
   const body = await response.json();
   assert.equal(body.ok, false);
   assert.equal(body.error, "unauthorized");
+});
+
+test("runtime apps endpoint requires app session cookie", async (t) => {
+  const frontdoor = await startServer((_req, res) => {
+    res.statusCode = 500;
+    res.end("should-not-be-called");
+  });
+  const restore = withEnv({
+    FRONTDOOR_ORIGIN: frontdoor.origin,
+    APP_SESSION_COOKIE_NAME: "app_sid",
+    FRONTDOOR_SESSION_COOKIE_NAME: "fd_sid",
+  });
+  const app = await startServer(runtimeAppsHandler);
+  t.after(async () => {
+    restore();
+    await app.close();
+    await frontdoor.close();
+  });
+  const response = await fetch(`${app.origin}/api/runtime/apps?workspace_id=tenant-dev`);
+  assert.equal(response.status, 401);
+  const body = await response.json();
+  assert.equal(body.ok, false);
+  assert.equal(body.error, "unauthorized");
+});
+
+test("runtime apps endpoint requires workspace_id query", async (t) => {
+  const frontdoor = await startServer((_req, res) => {
+    res.statusCode = 500;
+    res.end("should-not-be-called");
+  });
+  const restore = withEnv({
+    FRONTDOOR_ORIGIN: frontdoor.origin,
+    APP_SESSION_COOKIE_NAME: "app_sid",
+    FRONTDOOR_SESSION_COOKIE_NAME: "fd_sid",
+  });
+  const app = await startServer(runtimeAppsHandler);
+  t.after(async () => {
+    restore();
+    await app.close();
+    await frontdoor.close();
+  });
+  const response = await fetch(`${app.origin}/api/runtime/apps`, {
+    headers: { cookie: "app_sid=session-123" },
+  });
+  assert.equal(response.status, 400);
+  const body = await response.json();
+  assert.equal(body.ok, false);
+  assert.equal(body.error, "missing_workspace_id");
+});
+
+test("runtime apps endpoint proxies app inventory route and forwards cookie", async (t) => {
+  const seen = {
+    path: "",
+    cookie: "",
+  };
+  const frontdoor = await startServer((req, res) => {
+    seen.path = String(req.url || "");
+    seen.cookie = String(req.headers.cookie || "");
+    res.statusCode = 200;
+    res.setHeader("content-type", "application/json; charset=utf-8");
+    res.end(
+      JSON.stringify({
+        ok: true,
+        items: [{ app_id: "glowbot", display_name: "GlowBot", entry_path: "/app/glowbot/" }],
+      }),
+    );
+  });
+  const restore = withEnv({
+    FRONTDOOR_ORIGIN: frontdoor.origin,
+    APP_SESSION_COOKIE_NAME: "app_sid",
+    FRONTDOOR_SESSION_COOKIE_NAME: "fd_sid",
+  });
+  const app = await startServer(runtimeAppsHandler);
+  t.after(async () => {
+    restore();
+    await app.close();
+    await frontdoor.close();
+  });
+  const response = await fetch(`${app.origin}/api/runtime/apps?workspace_id=tenant-dev`, {
+    headers: { cookie: "app_sid=session-123" },
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.items.length, 1);
+  assert.equal(body.items[0].app_id, "glowbot");
+  assert.equal(seen.path, "/runtime/api/apps?workspace_id=tenant-dev");
+  assert.equal(seen.cookie, "fd_sid=session-123");
+});
+
+test("workspace launch diagnostics endpoint requires workspace_id query", async (t) => {
+  const frontdoor = await startServer((_req, res) => {
+    res.statusCode = 500;
+    res.end("should-not-be-called");
+  });
+  const restore = withEnv({
+    FRONTDOOR_ORIGIN: frontdoor.origin,
+    APP_SESSION_COOKIE_NAME: "app_sid",
+    FRONTDOOR_SESSION_COOKIE_NAME: "fd_sid",
+  });
+  const app = await startServer(workspaceLaunchDiagnosticsHandler);
+  t.after(async () => {
+    restore();
+    await app.close();
+    await frontdoor.close();
+  });
+  const response = await fetch(`${app.origin}/api/workspace-launch-diagnostics`, {
+    headers: { cookie: "app_sid=session-123" },
+  });
+  assert.equal(response.status, 400);
+  const body = await response.json();
+  assert.equal(body.ok, false);
+  assert.equal(body.error, "missing_workspace_id");
+});
+
+test("workspace launch diagnostics endpoint proxies frontdoor diagnostics route", async (t) => {
+  const seen = {
+    path: "",
+    cookie: "",
+  };
+  const frontdoor = await startServer((req, res) => {
+    seen.path = String(req.url || "");
+    seen.cookie = String(req.headers.cookie || "");
+    res.statusCode = 200;
+    res.setHeader("content-type", "application/json; charset=utf-8");
+    res.end(
+      JSON.stringify({
+        ok: true,
+        launch_ready: false,
+        app_catalog: { ok: false, error: "not_found" },
+      }),
+    );
+  });
+  const restore = withEnv({
+    FRONTDOOR_ORIGIN: frontdoor.origin,
+    APP_SESSION_COOKIE_NAME: "app_sid",
+    FRONTDOOR_SESSION_COOKIE_NAME: "fd_sid",
+  });
+  const app = await startServer(workspaceLaunchDiagnosticsHandler);
+  t.after(async () => {
+    restore();
+    await app.close();
+    await frontdoor.close();
+  });
+  const response = await fetch(`${app.origin}/api/workspace-launch-diagnostics?workspace_id=tenant-dev`, {
+    headers: { cookie: "app_sid=session-123" },
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.launch_ready, false);
+  assert.equal(body.app_catalog.ok, false);
+  assert.equal(body.app_catalog.error, "not_found");
+  assert.equal(seen.path, "/api/workspaces/tenant-dev/launch-diagnostics");
+  assert.equal(seen.cookie, "fd_sid=session-123");
 });
 
 test("workspace usage and billing proxy correct workspace routes", async (t) => {

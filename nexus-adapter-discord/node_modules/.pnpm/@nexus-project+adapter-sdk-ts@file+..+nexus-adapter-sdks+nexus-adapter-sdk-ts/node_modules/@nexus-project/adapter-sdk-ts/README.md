@@ -5,6 +5,7 @@ This package is the TypeScript/Node SDK for Nexus external adapter binaries.
 It provides:
 - The adapter CLI protocol types + zod schemas (aligned with the Go SDK + adapter specs)
 - A `runAdapter()` harness for implementing runtime operations (`adapter.info`, `adapter.monitor.start`, `delivery.send`, etc.)
+- Control-session helpers for `adapter.control.start` (endpoint registry + invoke responder loop)
 - Helpers for reading runtime context injected by Nex via `NEXUS_ADAPTER_CONTEXT_PATH`
 - Common utilities: `pollMonitor()`, `chunkText()`, `sendWithChunking()`, `newEvent()`
 

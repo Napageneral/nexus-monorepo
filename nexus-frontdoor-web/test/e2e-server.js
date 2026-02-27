@@ -207,6 +207,22 @@ async function frontdoorHandler(req, res) {
         icon: "tree",
         order: 20,
       });
+      items.push({
+        app_id: "glowbot",
+        display_name: "GlowBot",
+        entry_path: "/app/glowbot/",
+        api_base: "/api/glowbot",
+        icon: "spark",
+        order: 30,
+      });
+      items.push({
+        app_id: "spike",
+        display_name: "Spike",
+        entry_path: "/app/spike/",
+        api_base: "/api/spike",
+        icon: "bolt",
+        order: 40,
+      });
     }
     sendJson(res, 200, { ok: true, items });
     return;
@@ -247,6 +263,19 @@ async function frontdoorHandler(req, res) {
       ok: true,
       active_workspace_id: session.active_workspace_id,
       items: workspaceItems,
+    });
+    return;
+  }
+  if (method === "GET" && pathname === "/api/workspaces/provisioning/status") {
+    const session = getSession(req);
+    if (!session) {
+      sendJson(res, 401, { ok: false, error: "unauthorized" });
+      return;
+    }
+    sendJson(res, 200, {
+      ok: true,
+      status: "none",
+      request: null,
     });
     return;
   }
@@ -518,6 +547,11 @@ function contentTypeFor(filePath) {
 async function shellHandler(req, res) {
   const parsed = new URL(req.url || "/", SHELL_ORIGIN);
   const pathname = parsed.pathname;
+
+  if (pathname.startsWith("/runtime/")) {
+    await frontdoorHandler(req, res);
+    return;
+  }
 
   if (pathname.startsWith("/api/")) {
     const name = pathname.slice("/api/".length);

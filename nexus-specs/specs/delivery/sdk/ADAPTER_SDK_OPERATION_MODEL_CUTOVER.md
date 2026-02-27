@@ -50,6 +50,7 @@ This spec removes the legacy verb model and moves external adapters to operation
 5. `adapter.monitor.stop` remains runtime-managed (process supervision), not required as adapter binary command.
 6. Stream transport remains JSONL stdin/stdout for `delivery.stream`.
 7. External adapter operation ids are single-sourced from runtime in `nex/src/nex/control-plane/runtime-operations.ts` via `EXTERNAL_ADAPTER_OPERATION_IDS`.
+8. Device-style duplex command/control is part of the adapter SDK contract via `adapter.control.start`.
 
 ---
 
@@ -61,13 +62,14 @@ External adapters implement the subset they support:
 2. `adapter.health`
 3. `adapter.accounts.list`
 4. `adapter.monitor.start`
-5. `event.backfill`
-6. `delivery.send`
-7. `delivery.stream`
-8. `delivery.react`
-9. `delivery.edit`
-10. `delivery.delete`
-11. `delivery.poll`
+5. `adapter.control.start`
+6. `event.backfill`
+7. `delivery.send`
+8. `delivery.stream`
+9. `delivery.react`
+10. `delivery.edit`
+11. `delivery.delete`
+12. `delivery.poll`
 
 `event.ingest` is runtime-owned; adapters emit normalized events as JSONL output of `adapter.monitor.start` and `event.backfill`.
 
@@ -81,6 +83,7 @@ SDK contract becomes operation-centric:
 2. Runtime context loading remains shared.
 3. Output parsing/validation helpers remain shared.
 4. Stream helpers remain shared for `delivery.stream`.
+5. Control-session helpers are added for `adapter.control.start` (invoke request/result frames, endpoint upsert/remove frames, canonical event ingest frames).
 
 TypeScript target shape:
 
@@ -117,6 +120,7 @@ func Run(adapter Adapter)
 5. `runBackfill` -> `event.backfill`
 6. `send` -> `delivery.send`
 7. `stream` / `streamLive` -> `delivery.stream`
+8. `control` / device control session -> `adapter.control.start`
 
 Payload transport:
 
@@ -133,6 +137,10 @@ Required in this cutover:
 2. `nexus-adapter-telegram`
 3. `nexus-adapter-whatsapp`
 4. `nexus-adapter-gog`
+5. `nexus-adapter-device-headless`
+6. `nexus-adapter-device-ios`
+7. `nexus-adapter-device-macos`
+8. `nexus-adapter-device-android`
 
 Each adapter must:
 
@@ -164,12 +172,15 @@ Required validation for completion:
 5. Conformance guard:
    1. `nex/src/nex/adapters/protocol.ts` uses `EXTERNAL_ADAPTER_OPERATION_IDS` directly (no duplicated enum literals).
    2. `nex/src/nex/adapters/protocol.test.ts` asserts schema options equal `EXTERNAL_ADAPTER_OPERATION_IDS`.
+6. Control-session contract validation:
+   1. `adapter.control.start` stream framing is validated in SDK tests (TS + Go).
+   2. Adapter manager control-session tests cover endpoint lifecycle and invoke correlation/timeouts.
 
-Node-specific runtime test failures are tracked separately and are not part of this SDK cutover scope.
+Legacy node-runtime deletion is tracked in the node redesign workplan and must consume this SDK contract.
 
 ---
 
 ## 9. Out of Scope (Separate Cutover)
 
-1. Removing node operation family.
-2. In-process app/plugin operation registry SDK.
+1. In-process app/plugin operation registry SDK.
+2. Multi-hop app-on-app composition.

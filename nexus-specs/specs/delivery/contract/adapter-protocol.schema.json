@@ -11,6 +11,7 @@
         "adapter.health",
         "adapter.accounts.list",
         "adapter.monitor.start",
+        "adapter.control.start",
         "adapter.setup.start",
         "adapter.setup.submit",
         "adapter.setup.status",
@@ -284,6 +285,122 @@
       },
       "additionalProperties": false
     },
+    "AdapterControlEndpoint": {
+      "type": "object",
+      "required": ["endpoint_id", "caps", "commands"],
+      "properties": {
+        "endpoint_id": { "type": "string" },
+        "display_name": { "type": "string" },
+        "platform": { "type": "string" },
+        "caps": { "type": "array", "items": { "type": "string" } },
+        "commands": { "type": "array", "items": { "type": "string" } },
+        "permissions": {
+          "type": "object",
+          "additionalProperties": { "type": "boolean" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdapterControlInvokeError": {
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "AdapterControlInvokeRequestFrame": {
+      "type": "object",
+      "required": ["type", "request_id", "endpoint_id", "command"],
+      "properties": {
+        "type": { "const": "invoke.request" },
+        "request_id": { "type": "string" },
+        "endpoint_id": { "type": "string" },
+        "command": { "type": "string" },
+        "payload": {},
+        "timeout_ms": { "type": "integer", "minimum": 0 },
+        "idempotency_key": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "AdapterControlInvokeCancelFrame": {
+      "type": "object",
+      "required": ["type", "request_id"],
+      "properties": {
+        "type": { "const": "invoke.cancel" },
+        "request_id": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "AdapterControlInputFrame": {
+      "oneOf": [
+        { "$ref": "#/$defs/AdapterControlInvokeRequestFrame" },
+        { "$ref": "#/$defs/AdapterControlInvokeCancelFrame" }
+      ]
+    },
+    "AdapterControlEndpointUpsertFrame": {
+      "type": "object",
+      "required": ["type", "endpoint_id", "caps", "commands"],
+      "properties": {
+        "type": { "const": "endpoint.upsert" },
+        "endpoint_id": { "type": "string" },
+        "display_name": { "type": "string" },
+        "platform": { "type": "string" },
+        "caps": { "type": "array", "items": { "type": "string" } },
+        "commands": { "type": "array", "items": { "type": "string" } },
+        "permissions": {
+          "type": "object",
+          "additionalProperties": { "type": "boolean" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdapterControlEndpointRemoveFrame": {
+      "type": "object",
+      "required": ["type", "endpoint_id"],
+      "properties": {
+        "type": { "const": "endpoint.remove" },
+        "endpoint_id": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "AdapterControlInvokeResultFrame": {
+      "type": "object",
+      "required": ["type", "request_id", "ok"],
+      "properties": {
+        "type": { "const": "invoke.result" },
+        "request_id": { "type": "string" },
+        "ok": { "type": "boolean" },
+        "payload": {},
+        "error": {
+          "oneOf": [
+            { "type": "string" },
+            { "$ref": "#/$defs/AdapterControlInvokeError" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdapterControlEventIngestFrame": {
+      "type": "object",
+      "required": ["type", "event"],
+      "properties": {
+        "type": { "const": "event.ingest" },
+        "event": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdapterControlOutputFrame": {
+      "oneOf": [
+        { "$ref": "#/$defs/AdapterControlEndpointUpsertFrame" },
+        { "$ref": "#/$defs/AdapterControlEndpointRemoveFrame" },
+        { "$ref": "#/$defs/AdapterControlInvokeResultFrame" },
+        { "$ref": "#/$defs/AdapterControlEventIngestFrame" }
+      ]
+    },
     "DeliveryTarget": {
       "type": "object",
       "required": ["platform", "account_id", "to"],
@@ -440,6 +557,8 @@
     "DeliveryResult": { "$ref": "#/$defs/DeliveryResult" },
     "AdapterHealth": { "$ref": "#/$defs/AdapterHealth" },
     "AdapterAccount": { "$ref": "#/$defs/AdapterAccount" },
+    "AdapterControlInputFrame": { "$ref": "#/$defs/AdapterControlInputFrame" },
+    "AdapterControlOutputFrame": { "$ref": "#/$defs/AdapterControlOutputFrame" },
     "StreamEvent": { "$ref": "#/$defs/StreamEvent" },
     "AdapterStreamStatus": { "$ref": "#/$defs/AdapterStreamStatus" },
     "RuntimeContext": { "$ref": "#/$defs/RuntimeContext" }

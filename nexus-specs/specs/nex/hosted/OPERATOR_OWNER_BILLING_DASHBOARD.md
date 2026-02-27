@@ -148,6 +148,54 @@ Still pending:
 - Real Stripe live mode rollout (non-mock) and env productionization
 - Billing plan entitlement enforcement against runtime quotas
 - Operator billing exception workflows
+- Product registry integration (see below)
+
+## Product Registry Integration
+
+> See: `nexus-frontdoor/docs/specs/FRONTDOOR_PRODUCT_REGISTRY_AND_BRANDED_BILLING_2026-02-26.md`
+
+The billing system is being extended with product awareness:
+
+### Key additions
+
+1. **Product registry** — `frontdoor_products` and `frontdoor_product_plans` tables define per-product plans, pricing, branding, and entitlements.
+
+2. **Product-branded billing UI** — Checkout, plan management, and receipt pages render with product-specific branding (logo, accent color, plan names, feature lists). This maintains visual trust from product landing page through payment.
+
+3. **Entitlements system** — `frontdoor_product_entitlements` table stores resolved entitlements per workspace. Runtimes check `GET /api/billing/:workspaceId/entitlements` to gate features. Entitlements are derived from plan + operator overrides + trials.
+
+4. **Product binding** — Each workspace has a `product_id` set at creation. Product is determined from the OIDC flow origin or flavor parameter. Workspaces belong to exactly one product.
+
+5. **Checkout flow** — Product shells redirect to `frontdoor/billing/checkout?workspace_id=X&plan=Y`. Frontdoor loads product branding and renders a branded checkout confirmation before redirecting to Stripe.
+
+### Registered products
+
+| Product | ID | Accent | Plans |
+|---------|----|--------|-------|
+| Spike | `spike` | `#10b981` (green) | Free, Pro ($29/mo), Team ($79/mo) |
+| GlowBot | `glowbot` | `#d4a853` (gold) | Starter (free), Clinic ($149/mo), Multi-Clinic ($399/mo) |
+
+### Updated API taxonomy
+
+Billing APIs now require `product_id` context:
+
+- `POST /api/billing/:workspaceId/checkout-session` — extended with `product_id` and `plan_id`
+- `GET /api/billing/:workspaceId/entitlements` — returns product-scoped entitlements + usage
+- `GET /api/billing/:workspaceId/plan` — returns current plan with product branding metadata
+- `GET /api/products` — public product catalog (no auth)
+- `GET /api/products/:productId/plans` — public plan comparison (no auth)
+
+### Dashboard updates
+
+Workspace owner dashboard groups workspaces by product and shows product-branded billing info:
+- Plan name with product context ("Spike Pro" not just "Pro")
+- Product-specific usage meters
+- Upgrade/downgrade with product-branded plan comparison
+
+Operator dashboard gets product-level views:
+- Revenue by product
+- Subscriber counts by product x plan
+- Entitlement override management per product
 
 ## Testing Requirements
 
@@ -155,3 +203,5 @@ Still pending:
 - Integration tests: webhook signature verification + idempotency.
 - Browser e2e: role-based route visibility and mutation authorization.
 - Security tests: cross-origin mutation rejection and privilege escalation attempts.
+- Product registry: product CRUD, plan resolution, entitlement derivation.
+- Branded billing: correct branding renders for each product in checkout and plan management pages.

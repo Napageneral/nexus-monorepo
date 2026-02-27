@@ -359,6 +359,7 @@ export class OidcFlowManager {
     config: FrontdoorConfig;
     provider: string;
     returnTo?: string;
+    productId?: string;
   }): { state: string; redirectUrl: string } {
     const provider = params.config.oidcProviders.get(params.provider);
     if (!provider) {
@@ -375,6 +376,7 @@ export class OidcFlowManager {
       provider: params.provider,
       createdAtMs: Date.now(),
       returnTo: params.returnTo,
+      productId: params.productId,
     };
     this.states.set(state, record);
 
@@ -403,8 +405,9 @@ export class OidcFlowManager {
       provider: string;
       claims: OidcClaims;
       fallbackPrincipal: Principal | null;
+      productId?: string;
     }) => Promise<Principal | null> | Principal | null;
-  }): Promise<{ principal: Principal; claims: OidcClaims; returnTo?: string }> {
+  }): Promise<{ principal: Principal; claims: OidcClaims; returnTo?: string; productId?: string }> {
     const provider = params.config.oidcProviders.get(params.provider);
     if (!provider) {
       throw new Error(`unknown oidc provider: ${params.provider}`);
@@ -481,6 +484,7 @@ export class OidcFlowManager {
           provider: params.provider,
           claims,
           fallbackPrincipal,
+          productId: stateRecord.productId,
         })
       : fallbackPrincipal;
     if (!principal) {
@@ -490,6 +494,7 @@ export class OidcFlowManager {
       principal,
       claims,
       returnTo: stateRecord.returnTo,
+      productId: stateRecord.productId,
     };
   }
 }

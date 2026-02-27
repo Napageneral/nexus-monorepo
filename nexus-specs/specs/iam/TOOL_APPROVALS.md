@@ -10,8 +10,8 @@
 
 Replace the legacy exec approval system (in-memory queue + file allowlist + WS RPC) with the IAM approval primitives:
 
-- `acl_permission_requests` = canonical pending approval queue
-- `acl_grants` = canonical standing approvals (time-bounded or permanent)
+- `permission_requests` = canonical pending approval queue
+- `grants` = canonical standing approvals (time-bounded or permanent)
 - audit log = canonical history of approvals and resulting access
 
 This makes approvals uniform across *all* sensitive actions, not just `exec`.
@@ -20,19 +20,19 @@ This makes approvals uniform across *all* sensitive actions, not just `exec`.
 
 ## Implementation Status
 
-**As of 2026-02-13 (in `nex`):**
+**As of 2026-02-26 (in `nex`):**
 
-- **Parity implemented:** `exec.approval.request` / `exec.approval.resolve` persist to `acl_permission_requests` and “allow always” creates `acl_grants`.
+- **Parity implemented:** `acl.approval.request` / `acl.requests.approve|deny` persist to `permission_requests`, and “allow always” creates `grants`.
 - **Exec tool integrated:** the `exec` tool consults IAM grants (`exec:<path>`) to satisfy allowlist checks and suppress future prompts.
 - **Strictly-better implemented:**
-  - Structured fields on `acl_permission_requests` (kind, tool/tool call/session/request IDs, summary, context JSON).
+  - Structured fields on `permission_requests` (kind, tool/tool call/session/request IDs, summary, context JSON).
   - Generic approvals RPC: `acl.approval.request` and `acl.requests.*` (list/show/approve/deny).
   - Control-plane UI inbox for pending approvals (approve once/day/forever, deny).
   - Control-plane broadcast events: `acl.approval.requested` / `acl.approval.resolved`.
 
 **Remaining to be strictly better than legacy:**
 
-- Optional: provide a one-time import of any existing `exec-approvals.json` allowlist entries into IAM grants (or delete/ignore the legacy file).
+- Extend IAM-native approval UX parity across all legacy companion UI surfaces (where still applicable).
 
 ---
 
@@ -91,7 +91,7 @@ Tool approvals are not a separate authorization system. They are part of the can
 
 1. ACL policy layer determines baseline tool permissions.
 2. Compiler checks grants for resource-level authorization (`exec:<path>` etc.).
-3. If required resource is missing and policy indicates approval flow, create `acl_permission_requests`.
+3. If required resource is missing and policy indicates approval flow, create `permission_requests`.
 4. Approval resolution may create grant(s).
 5. Next compiler run includes new grant(s) and authorizes tool execution.
 
@@ -102,7 +102,7 @@ This keeps approvals and standard IAM decisions in one path with one provenance 
 | Area | Old layered behavior | New canonical behavior |
 |------|-----------------------|------------------------|
 | Approval decisioning | Exec-specific queue + side channel | IAM compiler + permission requests + grants |
-| Standing approval storage | File allowlist (`exec-approvals.json`) | `acl_grants` |
+| Standing approval storage | File allowlist (`exec-approvals.json`) | `grants` |
 | Authorization provenance | Split across subsystems | Single IAM provenance chain |
 | Path consistency | Could differ by invocation path | Same compiler/enforcement path for all tool invocations |
 
@@ -138,14 +138,14 @@ Behavior:
 
 When the agent wants to execute a command and approval is required:
 
-- Create (or reuse idempotently) an `acl_permission_requests` row:
+- Create (or reuse idempotently) a `permission_requests` row:
   - `id` is stable per tool call/attempt
   - `requester_id` = `agentId` (or derived from `sessionKey`)
   - `resources` = derived from resolved executable paths (e.g. `exec:/usr/bin/git`)
   - `expires_at` = short (e.g. 120s) for interactive exec approvals
   - include a structured JSON blob in `original_message` describing:
     - tool name (`exec`)
-    - command, cwd, host (daemon/node), sessionKey
+    - command, cwd, host (daemon/device-host), sessionKey
     - resolved paths used for allowlist resources
 
 - Notify owner:
@@ -160,7 +160,7 @@ Owner resolves a request:
   - mark request `approved`, no grant created
 - `allow always`:
   - mark request `approved`
-  - create an `acl_grants` row for the requester agent with `resources` copied from the request
+  - create a `grants` row for the requester agent with `resources` copied from the request
 - `deny`:
   - mark request `denied`
 
@@ -178,7 +178,7 @@ The tool caller waits for resolution:
 - Unified approvals for *all* tools/actions (not bespoke systems per tool)
 - Durable approvals and standing grants in one DB (easy to query/export/UI)
 - Full audit trail
-- Works for local and remote nodes (all approvals happen in the control-plane)
+- Works for local and remote device-host adapters (all approvals happen in the control-plane)
 - Allows richer scoping (time-bound grants, session/channel scoping, future constraints)
 
 ---
@@ -187,9 +187,9 @@ The tool caller waits for resolution:
 
 ### Parity (Must-Have)
 
-- Implement `exec.approval.request` / `exec.approval.resolve` on top of IAM:
-  - request creates `acl_permission_requests`
-  - resolve updates request + optionally creates `acl_grants`
+- Implement generic IAM request/resolve surfaces for tool approvals:
+  - request creates `permission_requests`
+  - resolve updates request + optionally creates `grants`
   - request blocks waiting for request resolution (timeout -> null decision)
 - Add grant-based allowlist short-circuit:
   - if `exec:<path>` grant matches requested command, `exec.approval.request` returns immediately (no new request)

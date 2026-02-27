@@ -14,7 +14,7 @@ There is no separate "gateway" daemon/service.
 
 The NEX daemon includes the **control-plane** (formerly implemented as `src/gateway/`):
 
-- WebSocket RPC (CLI + Control UI + nodes/devices)
+- WebSocket RPC (CLI + Control UI + device-host apps)
 - Control-plane HTTP endpoints (health, SSE bus stream, UI hosting, avatars, privileged tool services)
 - Discovery/exposure (LAN/Tailnet) for the control-plane when enabled
 - Operational lifecycle (PID lock, hot reload, graceful shutdown)
@@ -55,7 +55,7 @@ Today `nex` contains **two** server concepts:
    - HTTP surface is currently small (health + SSE + a few service endpoints).
 
 2. `src/gateway/` (legacy control-plane server)
-   - Owns: WebSocket RPC methods, Control UI hosting, OpenAI/OpenResponses HTTP bridges, tools invoke endpoint, hooks endpoint, discovery/tailscale, node/device pairing, cron, approvals, etc.
+   - Owns: WebSocket RPC methods, Control UI hosting, OpenAI/OpenResponses HTTP bridges, tools invoke endpoint, hooks endpoint, discovery/tailscale, device pairing, cron, approvals, etc.
    - Executes agent turns via legacy command-style entrypoints rather than the NEX pipeline.
 
 This split is a primary source of drift and confusion. The goal is to delete (2) as a separate server by migrating its capabilities into the NEX daemon.
@@ -69,7 +69,7 @@ graph TB
   subgraph "Control-Plane Clients (local-first)"
     CLI["CLI (nexus runtime ...)"]
     UI["Control UI (web)"]
-    Nodes["Nodes/Devices"]
+    DeviceHosts["Device Host Apps"]
   end
 
   subgraph "External Clients (adapter-facing)"
@@ -94,7 +94,7 @@ graph TB
 
   CLI --> CPWS
   UI --> CPWS
-  Nodes --> CPWS
+  DeviceHosts --> CPWS
   UI --> CPHTTP
 
   Webhooks --> Ingress
@@ -119,7 +119,7 @@ graph TB
 
 The daemon provides a WS interface for:
 
-- authenticated client connections (CLI/UI/nodes/devices)
+- authenticated client connections (CLI/UI/device-host apps)
 - request/response RPC method calls
 - push events (system status, approvals, pairing, streaming status, etc)
 
@@ -224,7 +224,7 @@ Migrate from `src/gateway/` into `src/nex/control-plane/`:
 - protocol types + frame parsing
 - connection/auth handshake
 - method dispatch
-- method handler modules by domain (config, sessions, nodes, etc)
+- method handler modules by domain (config, sessions, devices, etc)
 - push-event broadcaster
 
 ### 3. Migrate HTTP Endpoints

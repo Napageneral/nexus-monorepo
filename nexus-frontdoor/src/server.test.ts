@@ -3,12 +3,14 @@ import {
   type IncomingMessage,
   type Server as HttpServer,
 } from "node:http";
-import { createHmac, randomUUID } from "node:crypto";
+import fs from "node:fs";
+import { createHmac, generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { AddressInfo } from "node:net";
 import path from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
+import { AutoProvisionStore } from "./autoprovision-store.js";
 import { createPasswordHash } from "./crypto.js";
 import { createFrontdoorServer } from "./server.js";
 import type { FrontdoorConfig } from "./types.js";
@@ -149,6 +151,44 @@ function decodeJwtHeader(token: string): Record<string, unknown> {
   return JSON.parse(Buffer.from(headerPart, "base64url").toString("utf8")) as Record<string, unknown>;
 }
 
+type TestSigningKey = {
+  privateKey: ReturnType<typeof generateKeyPairSync>["privateKey"];
+  publicJwk: Record<string, unknown>;
+};
+
+function buildSigningKey(kid: string): TestSigningKey {
+  const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const publicJwk = pair.publicKey.export({ format: "jwk" }) as Record<string, unknown>;
+  return {
+    privateKey: pair.privateKey,
+    publicJwk: {
+      ...publicJwk,
+      kid,
+      use: "sig",
+      alg: "RS256",
+    },
+  };
+}
+
+function signRs256Jwt(params: {
+  privateKey: TestSigningKey["privateKey"];
+  kid: string;
+  claims: Record<string, unknown>;
+}): string {
+  const header = {
+    alg: "RS256",
+    typ: "JWT",
+    kid: params.kid,
+  };
+  const headerPart = Buffer.from(JSON.stringify(header), "utf8").toString("base64url");
+  const payloadPart = Buffer.from(JSON.stringify(params.claims), "utf8").toString("base64url");
+  const signingInput = `${headerPart}.${payloadPart}`;
+  const signature = sign("RSA-SHA256", Buffer.from(signingInput, "utf8"), params.privateKey).toString(
+    "base64url",
+  );
+  return `${signingInput}.${signature}`;
+}
+
 afterEach(async () => {
   while (running.length > 0) {
     const item = running.pop();
@@ -157,6 +197,8 @@ afterEach(async () => {
     }
     await new Promise<void>((resolve) => item.server.close(() => resolve()));
   }
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("frontdoor scaffold", () => {
@@ -241,6 +283,47 @@ describe("frontdoor scaffold", () => {
       }),
     });
     expect(refreshAfterRevoke.status).toBe(401);
+  });
+
+  it("sets secure session cookie and HSTS when request is HTTPS", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    config.sessionCookieSecure = true;
+    config.sessionCookieDomain = "glowbot.test";
+    config.hstsEnabled = true;
+    config.hstsMaxAgeSeconds = 31536000;
+    config.hstsIncludeSubDomains = true;
+    config.hstsPreload = true;
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+
+    const response = await fetch(`${frontdoorRunning.origin}/api/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-proto": "https",
+      },
+      body: JSON.stringify({
+        username: "owner",
+        password: "changeme",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const setCookie = response.headers.get("set-cookie") ?? "";
+    expect(setCookie).toContain("Secure");
+    expect(setCookie).toContain("Domain=glowbot.test");
+
+    const hsts = response.headers.get("strict-transport-security") ?? "";
+    expect(hsts).toContain("max-age=31536000");
+    expect(hsts).toContain("includeSubDomains");
+    expect(hsts).toContain("preload");
   });
 
   it("includes JWT kid when runtime token keys are configured", async () => {
@@ -356,6 +439,48 @@ describe("frontdoor scaffold", () => {
     expect(lastAuthorization.startsWith("Bearer ")).toBe(true);
     expect(lastOriginHeader).toBe(runtime.origin);
     expect(forwardedOriginHeader).toBe("https://frontend.example.com");
+
+    const glowbotResp = await fetch(`${frontdoorRunning.origin}/app/glowbot/?tab=overview`, {
+      headers: {
+        cookie,
+        origin: "https://frontend.example.com",
+      },
+    });
+    expect(glowbotResp.status).toBe(200);
+    expect(lastRuntimeUrl).toBe("/app/glowbot/?tab=overview");
+  });
+
+  it("proxies /auth callback paths to runtime with tenant headers", async () => {
+    let lastAuthorization = "";
+    let lastTenantHeader = "";
+    let lastRuntimeUrl = "";
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        lastAuthorization = String(req.headers.authorization ?? "");
+        lastTenantHeader = String(req.headers["x-nexus-frontdoor-tenant"] ?? "");
+        lastRuntimeUrl = String(req.url ?? "");
+        res.statusCode = 302;
+        res.setHeader("location", "/app/integrations?connected=github");
+        res.end();
+      }),
+    );
+    const frontdoor = createFrontdoorServer({
+      config: baseConfig(runtime.origin),
+    });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const resp = await fetch(`${frontdoorRunning.origin}/auth/github/callback?code=abc&state=good`, {
+      headers: {
+        cookie,
+      },
+      redirect: "manual",
+    });
+    expect(resp.status).toBe(302);
+    expect(resp.headers.get("location")).toBe("/app/integrations?connected=github");
+    expect(lastTenantHeader).toBe("tenant-dev");
+    expect(lastRuntimeUrl).toBe("/auth/github/callback?code=abc&state=good");
+    expect(lastAuthorization.startsWith("Bearer ")).toBe(true);
   });
 
   it("bootstraps /app HTML routes without leaking token or runtimeUrl in URL", async () => {
@@ -835,6 +960,224 @@ describe("frontdoor scaffold", () => {
     expect(memberBillingBody.error).toBe("billing_forbidden");
   });
 
+  it("returns launch diagnostics with runtime health and launchable app inventory", async () => {
+    const seenPaths: string[] = [];
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        const url = String(req.url || "");
+        seenPaths.push(url);
+        if (url === "/health") {
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end('{"ok":true,"runtime":"healthy"}');
+          return;
+        }
+        if (url === "/api/apps") {
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end(
+            JSON.stringify({
+              ok: true,
+              items: [
+                { app_id: "control", display_name: "Control", entry_path: "/app/control/chat" },
+                { app_id: "api-only", display_name: "API Only", entry_path: "/api/only" },
+              ],
+            }),
+          );
+          return;
+        }
+        res.statusCode = 404;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":false,"error":"not_found"}');
+      }),
+    );
+    const frontdoor = createFrontdoorServer({ config: baseConfig(runtime.origin) });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const response = await fetch(`${frontdoorRunning.origin}/api/workspaces/tenant-dev/launch-diagnostics`, {
+      headers: {
+        cookie,
+      },
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      ok: boolean;
+      launch_ready?: boolean;
+      workspace?: { workspace_id?: string };
+      runtime_health?: { ok?: boolean; http_status?: number };
+      app_catalog?: {
+        ok?: boolean;
+        app_count?: number;
+        items?: Array<{ app_id?: string; entry_path?: string }>;
+      };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.launch_ready).toBe(true);
+    expect(body.workspace?.workspace_id).toBe("tenant-dev");
+    expect(body.runtime_health?.ok).toBe(true);
+    expect(body.runtime_health?.http_status).toBe(200);
+    expect(body.app_catalog?.ok).toBe(true);
+    expect(body.app_catalog?.app_count).toBe(1);
+    expect(body.app_catalog?.items?.[0]?.app_id).toBe("control");
+    expect(body.app_catalog?.items?.[0]?.entry_path).toBe("/app/control/chat");
+    expect(seenPaths.includes("/health")).toBe(true);
+    expect(seenPaths.includes("/api/apps")).toBe(true);
+  });
+
+  it("reports launch diagnostics app-catalog failure when runtime lacks /api/apps", async () => {
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        const url = String(req.url || "");
+        if (url === "/health") {
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end('{"ok":true}');
+          return;
+        }
+        if (url === "/api/apps") {
+          res.statusCode = 404;
+          res.setHeader("content-type", "application/json");
+          res.end('{"ok":false,"error":"not_found"}');
+          return;
+        }
+        res.statusCode = 404;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":false,"error":"not_found"}');
+      }),
+    );
+    const frontdoor = createFrontdoorServer({ config: baseConfig(runtime.origin) });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const response = await fetch(`${frontdoorRunning.origin}/api/workspaces/tenant-dev/launch-diagnostics`, {
+      headers: {
+        cookie,
+      },
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      ok: boolean;
+      launch_ready?: boolean;
+      runtime_health?: { ok?: boolean };
+      app_catalog?: { ok?: boolean; error?: string | null; app_count?: number };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.launch_ready).toBe(false);
+    expect(body.runtime_health?.ok).toBe(true);
+    expect(body.app_catalog?.ok).toBe(false);
+    expect(body.app_catalog?.error).toBe("not_found");
+    expect(body.app_catalog?.app_count).toBe(0);
+  });
+
+  it("falls back to /status probe when /health is not available", async () => {
+    const seenPaths: string[] = [];
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        const url = String(req.url || "");
+        seenPaths.push(url);
+        if (url === "/health") {
+          res.statusCode = 404;
+          res.setHeader("content-type", "application/json");
+          res.end('{"ok":false,"error":"not_found"}');
+          return;
+        }
+        if (url === "/status") {
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end('{"status":"healthy"}');
+          return;
+        }
+        if (url === "/api/apps") {
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end(
+            JSON.stringify({
+              ok: true,
+              items: [{ app_id: "spike-runtime", display_name: "Spike Runtime", entry_path: "/app/spike" }],
+            }),
+          );
+          return;
+        }
+        res.statusCode = 404;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":false,"error":"not_found"}');
+      }),
+    );
+    const frontdoor = createFrontdoorServer({ config: baseConfig(runtime.origin) });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const response = await fetch(`${frontdoorRunning.origin}/api/workspaces/tenant-dev/launch-diagnostics`, {
+      headers: { cookie },
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      ok: boolean;
+      launch_ready?: boolean;
+      runtime_health?: { ok?: boolean; http_status?: number };
+      app_catalog?: { ok?: boolean; app_count?: number };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.launch_ready).toBe(true);
+    expect(body.runtime_health?.ok).toBe(true);
+    expect(body.runtime_health?.http_status).toBe(200);
+    expect(body.app_catalog?.ok).toBe(true);
+    expect(body.app_catalog?.app_count).toBe(1);
+    expect(seenPaths.includes("/health")).toBe(true);
+    expect(seenPaths.includes("/status")).toBe(true);
+    expect(seenPaths.includes("/api/apps")).toBe(true);
+  });
+
+  it("treats nex_runtime_unavailable health as launch-capable when apps are launchable", async () => {
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        const url = String(req.url || "");
+        if (url === "/health") {
+          res.statusCode = 503;
+          res.setHeader("content-type", "application/json");
+          res.end('{"status":"unhealthy","error":"nex_runtime_unavailable"}');
+          return;
+        }
+        if (url === "/api/apps") {
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end(
+            JSON.stringify({
+              ok: true,
+              items: [{ app_id: "control", display_name: "Control", entry_path: "/app/control/chat" }],
+            }),
+          );
+          return;
+        }
+        res.statusCode = 404;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":false,"error":"not_found"}');
+      }),
+    );
+    const frontdoor = createFrontdoorServer({ config: baseConfig(runtime.origin) });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const response = await fetch(`${frontdoorRunning.origin}/api/workspaces/tenant-dev/launch-diagnostics`, {
+      headers: { cookie },
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      ok: boolean;
+      launch_ready?: boolean;
+      runtime_health?: { ok?: boolean; http_status?: number; error?: string | null };
+      app_catalog?: { ok?: boolean; app_count?: number };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.launch_ready).toBe(true);
+    expect(body.runtime_health?.ok).toBe(false);
+    expect(body.runtime_health?.http_status).toBe(503);
+    expect(body.runtime_health?.error).toBe("nex_runtime_unavailable");
+    expect(body.app_catalog?.ok).toBe(true);
+    expect(body.app_catalog?.app_count).toBe(1);
+  });
+
   it("supports billing checkout, signed webhook ingestion, and invoice/subscription reads", async () => {
     const runtime = await listen(
       createHttpServer((_req, res) => {
@@ -1188,5 +1531,696 @@ describe("frontdoor scaffold", () => {
     const ids = new Set(workspacesBody.items.map((item) => item.workspace_id));
     expect(ids.has("tenant-alt")).toBe(true);
     expect(ids.has("tenant-dev")).toBe(true);
+  });
+
+  it("enforces members.max_count entitlement when creating invites", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const runtimeSecondary = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true,"runtime":"secondary"}');
+      }),
+    );
+    const frontdoor = createFrontdoorServer({
+      config: baseConfig(runtime.origin),
+    });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const ownerCookie = await login(frontdoorRunning.origin);
+
+    const createWorkspaceResp = await fetch(`${frontdoorRunning.origin}/api/workspaces`, {
+      method: "POST",
+      headers: {
+        cookie: ownerCookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        workspace_id: "tenant-spike-limit",
+        display_name: "Spike Limit Workspace",
+        runtime_url: runtimeSecondary.origin,
+        runtime_public_base_url: runtimeSecondary.origin,
+        product_id: "spike",
+      }),
+    });
+    expect(createWorkspaceResp.status).toBe(200);
+
+    const inviteResp = await fetch(`${frontdoorRunning.origin}/api/workspaces/tenant-spike-limit/invites`, {
+      method: "POST",
+      headers: {
+        cookie: ownerCookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        role: "workspace_member",
+      }),
+    });
+    expect(inviteResp.status).toBe(403);
+    const inviteBody = (await inviteResp.json()) as {
+      ok: boolean;
+      error?: string;
+      current_members?: number;
+      max_members?: number;
+    };
+    expect(inviteBody.ok).toBe(false);
+    expect(inviteBody.error).toBe("members_limit_reached");
+    expect(inviteBody.current_members).toBe(1);
+    expect(inviteBody.max_members).toBe(1);
+  });
+
+  it("supports workspace admin settings, members, runtime key actions, and invite revoke", async () => {
+    const runtimePrimary = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const runtimeSecondary = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true,"runtime":"secondary"}');
+      }),
+    );
+
+    const frontdoor = createFrontdoorServer({
+      config: baseConfig(runtimePrimary.origin),
+    });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const ownerCookie = await login(frontdoorRunning.origin);
+
+    const membersResp = await fetch(`${frontdoorRunning.origin}/api/workspaces/tenant-dev/members`, {
+      headers: {
+        cookie: ownerCookie,
+      },
+    });
+    expect(membersResp.status).toBe(200);
+    const membersBody = (await membersResp.json()) as {
+      ok: boolean;
+      workspace_id: string;
+      total_members: number;
+      items: Array<{ user_id: string }>;
+    };
+    expect(membersBody.ok).toBe(true);
+    expect(membersBody.workspace_id).toBe("tenant-dev");
+    expect(membersBody.total_members).toBeGreaterThanOrEqual(1);
+    expect(membersBody.items.some((item) => item.user_id === "u-owner")).toBe(true);
+
+    const patchSettingsResp = await fetch(`${frontdoorRunning.origin}/api/workspaces/tenant-dev/settings`, {
+      method: "PATCH",
+      headers: {
+        cookie: ownerCookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        display_name: "Tenant Dev Updated",
+        runtime_url: runtimeSecondary.origin,
+        runtime_public_base_url: runtimeSecondary.origin,
+      }),
+    });
+    expect(patchSettingsResp.status).toBe(200);
+    const patchSettingsBody = (await patchSettingsResp.json()) as {
+      ok: boolean;
+      workspace?: {
+        display_name?: string;
+        runtime_url?: string;
+        runtime_public_base_url?: string;
+      };
+    };
+    expect(patchSettingsBody.ok).toBe(true);
+    expect(patchSettingsBody.workspace?.display_name).toBe("Tenant Dev Updated");
+    expect(patchSettingsBody.workspace?.runtime_url).toBe(runtimeSecondary.origin);
+
+    const getSettingsResp = await fetch(`${frontdoorRunning.origin}/api/workspaces/tenant-dev/settings`, {
+      headers: {
+        cookie: ownerCookie,
+      },
+    });
+    expect(getSettingsResp.status).toBe(200);
+    const getSettingsBody = (await getSettingsResp.json()) as {
+      ok: boolean;
+      workspace?: {
+        display_name?: string;
+        runtime_url?: string;
+        has_runtime_auth_token?: boolean;
+      };
+    };
+    expect(getSettingsBody.ok).toBe(true);
+    expect(getSettingsBody.workspace?.display_name).toBe("Tenant Dev Updated");
+    expect(getSettingsBody.workspace?.runtime_url).toBe(runtimeSecondary.origin);
+    expect(getSettingsBody.workspace?.has_runtime_auth_token).toBe(false);
+
+    const setTokenResp = await fetch(
+      `${frontdoorRunning.origin}/api/workspaces/tenant-dev/runtime-auth-token/set`,
+      {
+        method: "POST",
+        headers: {
+          cookie: ownerCookie,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          token: "runtime-auth-token-manual",
+        }),
+      },
+    );
+    expect(setTokenResp.status).toBe(200);
+    const setTokenBody = (await setTokenResp.json()) as {
+      ok: boolean;
+      has_runtime_auth_token?: boolean;
+    };
+    expect(setTokenBody.ok).toBe(true);
+    expect(setTokenBody.has_runtime_auth_token).toBe(true);
+
+    const rotateTokenResp = await fetch(
+      `${frontdoorRunning.origin}/api/workspaces/tenant-dev/runtime-auth-token/rotate`,
+      {
+        method: "POST",
+        headers: {
+          cookie: ownerCookie,
+          "content-type": "application/json",
+        },
+        body: "{}",
+      },
+    );
+    expect(rotateTokenResp.status).toBe(200);
+    const rotateTokenBody = (await rotateTokenResp.json()) as {
+      ok: boolean;
+      runtime_auth_token?: string;
+    };
+    expect(rotateTokenBody.ok).toBe(true);
+    expect(typeof rotateTokenBody.runtime_auth_token).toBe("string");
+    expect((rotateTokenBody.runtime_auth_token ?? "").length).toBeGreaterThan(10);
+
+    const clearTokenResp = await fetch(`${frontdoorRunning.origin}/api/workspaces/tenant-dev/runtime-auth-token`, {
+      method: "DELETE",
+      headers: {
+        cookie: ownerCookie,
+      },
+    });
+    expect(clearTokenResp.status).toBe(200);
+    const clearTokenBody = (await clearTokenResp.json()) as {
+      ok: boolean;
+      has_runtime_auth_token?: boolean;
+    };
+    expect(clearTokenBody.ok).toBe(true);
+    expect(clearTokenBody.has_runtime_auth_token).toBe(false);
+
+    const inviteCreateResp = await fetch(`${frontdoorRunning.origin}/api/workspaces/tenant-dev/invites`, {
+      method: "POST",
+      headers: {
+        cookie: ownerCookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        role: "workspace_member",
+        scopes: ["chat.send"],
+      }),
+    });
+    expect(inviteCreateResp.status).toBe(200);
+    const inviteCreateBody = (await inviteCreateResp.json()) as {
+      ok: boolean;
+      invite_id?: string;
+    };
+    expect(inviteCreateBody.ok).toBe(true);
+    expect(typeof inviteCreateBody.invite_id).toBe("string");
+
+    const inviteId = String(inviteCreateBody.invite_id || "");
+    const inviteRevokeResp = await fetch(
+      `${frontdoorRunning.origin}/api/workspaces/tenant-dev/invites/${encodeURIComponent(inviteId)}`,
+      {
+        method: "DELETE",
+        headers: {
+          cookie: ownerCookie,
+        },
+      },
+    );
+    expect(inviteRevokeResp.status).toBe(200);
+    const inviteRevokeBody = (await inviteRevokeResp.json()) as { ok: boolean };
+    expect(inviteRevokeBody.ok).toBe(true);
+
+    const inviteListResp = await fetch(`${frontdoorRunning.origin}/api/workspaces/tenant-dev/invites`, {
+      headers: {
+        cookie: ownerCookie,
+      },
+    });
+    expect(inviteListResp.status).toBe(200);
+    const inviteListBody = (await inviteListResp.json()) as {
+      ok: boolean;
+      items: Array<{ invite_id: string; revoked_at_ms?: number | null }>;
+    };
+    expect(inviteListBody.ok).toBe(true);
+    const revokedInvite = inviteListBody.items.find((item) => item.invite_id === inviteId);
+    expect(Boolean(revokedInvite && revokedInvite.revoked_at_ms)).toBe(true);
+  });
+
+  it("returns provisioning status via OIDC identity fallback when session user_id differs", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    const storePath = path.join(tmpdir(), `nexus-frontdoor-autoprovision-${randomUUID()}.db`);
+    config.autoProvision = {
+      ...config.autoProvision,
+      enabled: true,
+      storePath,
+      providers: ["google"],
+    };
+    const owner = config.usersById.get("u-owner");
+    expect(owner).toBeTruthy();
+    if (!owner) {
+      throw new Error("missing_owner_user");
+    }
+    owner.entityId = "entity:google:google-sub-123";
+    config.usersByUsername.set(owner.username, owner);
+    config.usersById.set(owner.id, owner);
+
+    const store = new AutoProvisionStore(storePath);
+    store.startProvisionRequest({
+      requestId: "req-google-1",
+      userId: "oidc:google:google-sub-123",
+      provider: "google",
+      subject: "google-sub-123",
+      tenantId: "tenant-dev",
+      status: "provisioning",
+      stage: "run_command",
+    });
+    store.updateProvisionRequest({
+      requestId: "req-google-1",
+      status: "ready",
+      stage: "complete",
+      tenantId: "tenant-dev",
+    });
+    store.close();
+
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const ownerCookie = await login(frontdoorRunning.origin);
+
+    const response = await fetch(`${frontdoorRunning.origin}/api/workspaces/provisioning/status`, {
+      headers: {
+        cookie: ownerCookie,
+      },
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      ok: boolean;
+      status?: string;
+      request?: {
+        request_id?: string;
+        user_id?: string;
+        provider?: string;
+        subject?: string;
+      };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.status).toBe("ready");
+    expect(body.request?.request_id).toBe("req-google-1");
+    expect(body.request?.user_id).toBe("oidc:google:google-sub-123");
+    expect(body.request?.provider).toBe("google");
+    expect(body.request?.subject).toBe("google-sub-123");
+  });
+
+  it("provisions and selects product-scoped workspace on OIDC callback for existing users", async () => {
+    const legacyRuntime = await listen(
+      createHttpServer((req, res) => {
+        const pathname = new URL(req.url || "/", "http://127.0.0.1").pathname;
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        if (pathname === "/api/apps") {
+          res.end(
+            JSON.stringify({
+              ok: true,
+              items: [{ app_id: "glowbot", display_name: "GlowBot", entry_path: "/app/glowbot/" }],
+            }),
+          );
+          return;
+        }
+        res.end('{"ok":true}');
+      }),
+    );
+    const spikeRuntime = await listen(
+      createHttpServer((req, res) => {
+        const pathname = new URL(req.url || "/", "http://127.0.0.1").pathname;
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        if (pathname === "/api/apps") {
+          res.end(
+            JSON.stringify({
+              ok: true,
+              items: [{ app_id: "spike-runtime", display_name: "Spike", entry_path: "/app/spike" }],
+            }),
+          );
+          return;
+        }
+        res.end('{"ok":true}');
+      }),
+    );
+    const config = baseConfig(legacyRuntime.origin);
+    const storePath = path.join(tmpdir(), `nexus-frontdoor-autoprovision-${randomUUID()}.db`);
+    const scriptPath = path.join(tmpdir(), `nexus-frontdoor-provision-script-${randomUUID()}.mjs`);
+    fs.writeFileSync(
+      scriptPath,
+      `
+let raw = "";
+process.stdin.on("data", (chunk) => { raw += chunk.toString(); });
+process.stdin.on("end", () => {
+  const payload = JSON.parse(raw || "{}");
+  process.stdout.write(JSON.stringify({
+    tenant_id: payload.tenant_id,
+    runtime_url: ${JSON.stringify(spikeRuntime.origin)},
+    runtime_public_base_url: ${JSON.stringify(spikeRuntime.origin)}
+  }));
+});
+`,
+      "utf8",
+    );
+    config.oidcEnabled = true;
+    config.autoProvision = {
+      ...config.autoProvision,
+      enabled: true,
+      storePath,
+      providers: ["google"],
+      command: `${JSON.stringify(process.execPath)} ${JSON.stringify(scriptPath)}`,
+    };
+    const key = buildSigningKey("kid-spike");
+    config.oidcProviders.set("google", {
+      clientId: "frontdoor-client",
+      clientSecret: "frontdoor-secret",
+      issuer: "https://issuer.example.com",
+      jwksUrl: "https://issuer.example.com/.well-known/jwks.json",
+      authorizeUrl: "https://issuer.example.com/oauth2/auth",
+      tokenUrl: "https://issuer.example.com/oauth2/token",
+      redirectUri: "http://127.0.0.1/api/auth/oidc/callback/google",
+      scope: "openid profile email",
+    });
+
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const provider = config.oidcProviders.get("google");
+    if (!provider) {
+      throw new Error("missing_oidc_provider");
+    }
+    provider.redirectUri = `${frontdoorRunning.origin}/api/auth/oidc/callback/google`;
+
+    const startResp = await fetch(
+      `${frontdoorRunning.origin}/api/auth/oidc/start?provider=google&product=spike&return_to=%2F`,
+      {
+        redirect: "manual",
+      },
+    );
+    expect(startResp.status).toBe(302);
+    const location = startResp.headers.get("location") ?? "";
+    expect(location).toContain("https://issuer.example.com/oauth2/auth");
+    const redirect = new URL(location);
+    const state = redirect.searchParams.get("state");
+    const nonce = redirect.searchParams.get("nonce");
+    expect(state).toBeTruthy();
+    expect(nonce).toBeTruthy();
+
+    const now = Math.floor(Date.now() / 1000);
+    const idToken = signRs256Jwt({
+      privateKey: key.privateKey,
+      kid: "kid-spike",
+      claims: {
+        iss: "https://issuer.example.com",
+        aud: "frontdoor-client",
+        exp: now + 300,
+        iat: now - 5,
+        nonce,
+        sub: "google-sub-owner",
+        email: "owner@example.com",
+        name: "Owner",
+      },
+    });
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith(frontdoorRunning.origin)) {
+          return await realFetch(input, init);
+        }
+        if (url === "https://issuer.example.com/oauth2/token") {
+          expect(init?.method).toBe("POST");
+          return new Response(JSON.stringify({ id_token: idToken, access_token: "token-123" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        if (url === "https://issuer.example.com/.well-known/jwks.json") {
+          return new Response(JSON.stringify({ keys: [key.publicJwk] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        throw new Error(`unexpected fetch url: ${url}`);
+      }) as typeof fetch,
+    );
+
+    const callbackResp = await fetch(
+      `${frontdoorRunning.origin}/api/auth/oidc/callback/google?state=${encodeURIComponent(String(state))}&code=auth-code`,
+      {
+        redirect: "manual",
+      },
+    );
+    expect(callbackResp.status).toBe(302);
+    expect(callbackResp.headers.get("location")).toBe("/");
+    const setCookie = callbackResp.headers.get("set-cookie");
+    expect(setCookie).toBeTruthy();
+    const cookie = String(setCookie).split(";")[0];
+
+    const sessionResp = await fetch(`${frontdoorRunning.origin}/api/auth/session`, {
+      headers: {
+        cookie,
+      },
+    });
+    expect(sessionResp.status).toBe(200);
+    const sessionBody = (await sessionResp.json()) as {
+      authenticated?: boolean;
+      tenant_id?: string;
+      active_workspace_id?: string | null;
+    };
+    expect(sessionBody.authenticated).toBe(true);
+    expect(sessionBody.tenant_id).toMatch(/^tenant-spike-/);
+    expect(sessionBody.active_workspace_id).toBe(sessionBody.tenant_id);
+
+    const workspacesResp = await fetch(`${frontdoorRunning.origin}/api/workspaces`, {
+      headers: {
+        cookie,
+      },
+    });
+    expect(workspacesResp.status).toBe(200);
+    const workspacesBody = (await workspacesResp.json()) as {
+      ok?: boolean;
+      items: Array<{ workspace_id: string; product_id: string | null }>;
+    };
+    expect(workspacesBody.ok).toBe(true);
+    const spikeWorkspace = workspacesBody.items.find((item) => item.workspace_id === sessionBody.tenant_id);
+    expect(spikeWorkspace?.product_id).toBe("spike");
+
+    const appsResp = await fetch(`${frontdoorRunning.origin}/runtime/api/apps`, {
+      headers: {
+        cookie,
+      },
+    });
+    expect(appsResp.status).toBe(200);
+    const appsBody = (await appsResp.json()) as {
+      ok?: boolean;
+      items?: Array<{ app_id?: string }>;
+    };
+    expect(appsBody.ok).toBe(true);
+    expect((appsBody.items ?? []).some((item) => item.app_id === "spike-runtime")).toBe(true);
+
+  });
+
+  it("blocks non-admin users from workspace admin endpoints", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    const memberUser = {
+      id: "u-member",
+      username: "member",
+      passwordHash: createPasswordHash("memberpass"),
+      tenantId: "tenant-dev",
+      entityId: "entity-member",
+      displayName: "Member",
+      email: "member@example.com",
+      roles: ["workspace_member"],
+      scopes: ["chat.send"],
+      disabled: false,
+    };
+    config.usersByUsername.set("member", memberUser);
+    config.usersById.set("u-member", memberUser);
+
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const memberCookie = await login(frontdoorRunning.origin, {
+      username: "member",
+      password: "memberpass",
+    });
+
+    const membersResp = await fetch(`${frontdoorRunning.origin}/api/workspaces/tenant-dev/members`, {
+      headers: {
+        cookie: memberCookie,
+      },
+    });
+    expect(membersResp.status).toBe(403);
+
+    const settingsResp = await fetch(`${frontdoorRunning.origin}/api/workspaces/tenant-dev/settings`, {
+      headers: {
+        cookie: memberCookie,
+      },
+    });
+    expect(settingsResp.status).toBe(403);
+
+    const rotateTokenResp = await fetch(
+      `${frontdoorRunning.origin}/api/workspaces/tenant-dev/runtime-auth-token/rotate`,
+      {
+        method: "POST",
+        headers: {
+          cookie: memberCookie,
+          "content-type": "application/json",
+        },
+        body: "{}",
+      },
+    );
+    expect(rotateTokenResp.status).toBe(403);
+  });
+
+  it("resolves provisioning status by OIDC identity when principal user_id differs", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    const provider = "google";
+    const subject = "sub-123";
+    const owner = config.usersByUsername.get("owner");
+    if (!owner) {
+      throw new Error("owner_user_missing");
+    }
+    const mappedOwner = {
+      ...owner,
+      entityId: `entity:${provider}:${subject}`,
+    };
+    config.usersByUsername.set(mappedOwner.username, mappedOwner);
+    config.usersById.set(mappedOwner.id, mappedOwner);
+
+    const storePath = path.join(tmpdir(), `nexus-frontdoor-autoprovision-${randomUUID()}.db`);
+    config.autoProvision.enabled = true;
+    config.autoProvision.storePath = storePath;
+    config.autoProvision.providers = [provider];
+    const autoProvisionStore = new AutoProvisionStore(storePath);
+    const ownedRequestID = randomUUID();
+    autoProvisionStore.startProvisionRequest({
+      requestId: ownedRequestID,
+      userId: `oidc:${provider}:${subject}`,
+      provider,
+      subject,
+      tenantId: "tenant-dev",
+      status: "provisioning",
+      stage: "run_command",
+    });
+    autoProvisionStore.updateProvisionRequest({
+      requestId: ownedRequestID,
+      status: "ready",
+      stage: "complete",
+      tenantId: "tenant-dev",
+    });
+    const foreignRequestID = randomUUID();
+    autoProvisionStore.startProvisionRequest({
+      requestId: foreignRequestID,
+      userId: "oidc:google:foreign-sub",
+      provider,
+      subject: "foreign-sub",
+      tenantId: "tenant-dev",
+      status: "provisioning",
+      stage: "run_command",
+    });
+    autoProvisionStore.updateProvisionRequest({
+      requestId: foreignRequestID,
+      status: "ready",
+      stage: "complete",
+      tenantId: "tenant-dev",
+    });
+    autoProvisionStore.close();
+
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const sessionResp = await fetch(`${frontdoorRunning.origin}/api/auth/session`, {
+      headers: { cookie },
+    });
+    expect(sessionResp.status).toBe(200);
+    const sessionBody = (await sessionResp.json()) as {
+      latest_provisioning?: { requestId?: string; request_id?: string; status?: string } | null;
+    };
+    expect(sessionBody.latest_provisioning).toBeTruthy();
+    expect(
+      String(
+        sessionBody.latest_provisioning?.request_id ?? sessionBody.latest_provisioning?.requestId ?? "",
+      ),
+    ).toBe(ownedRequestID);
+    expect(sessionBody.latest_provisioning?.status).toBe("ready");
+
+    const statusResp = await fetch(`${frontdoorRunning.origin}/api/workspaces/provisioning/status`, {
+      headers: { cookie },
+    });
+    expect(statusResp.status).toBe(200);
+    const statusBody = (await statusResp.json()) as {
+      ok: boolean;
+      status: string;
+      request?: { request_id?: string; status?: string };
+    };
+    expect(statusBody.ok).toBe(true);
+    expect(statusBody.status).toBe("ready");
+    expect(statusBody.request?.request_id).toBe(ownedRequestID);
+    expect(statusBody.request?.status).toBe("ready");
+
+    const byIDResp = await fetch(
+      `${frontdoorRunning.origin}/api/workspaces/provisioning/status?request_id=${encodeURIComponent(ownedRequestID)}`,
+      {
+        headers: { cookie },
+      },
+    );
+    expect(byIDResp.status).toBe(200);
+    const byIDBody = (await byIDResp.json()) as {
+      ok: boolean;
+      status: string;
+      request?: { request_id?: string };
+    };
+    expect(byIDBody.ok).toBe(true);
+    expect(byIDBody.status).toBe("ready");
+    expect(byIDBody.request?.request_id).toBe(ownedRequestID);
+
+    const foreignResp = await fetch(
+      `${frontdoorRunning.origin}/api/workspaces/provisioning/status?request_id=${encodeURIComponent(foreignRequestID)}`,
+      {
+        headers: { cookie },
+      },
+    );
+    expect(foreignResp.status).toBe(404);
+    const foreignBody = (await foreignResp.json()) as { ok?: boolean; error?: string };
+    expect(foreignBody.ok).toBe(false);
+    expect(foreignBody.error).toBe("request_not_found");
   });
 });

@@ -6,6 +6,7 @@ export type TenantConfig = {
   runtimePublicBaseUrl: string;
   runtimeWsUrl?: string;
   runtimeSseUrl?: string;
+  runtimeAuthToken?: string;
 };
 
 export type UserConfig = {
@@ -62,7 +63,13 @@ export type FrontdoorConfig = {
   port: number;
   baseUrl: string;
   sessionCookieName: string;
+  sessionCookieDomain?: string;
+  sessionCookieSecure?: boolean;
   sessionTtlSeconds: number;
+  hstsEnabled?: boolean;
+  hstsMaxAgeSeconds?: number;
+  hstsIncludeSubDomains?: boolean;
+  hstsPreload?: boolean;
   sessionStorePath?: string;
   workspaceStorePath?: string;
   workspaceOwnerUserIds: Set<string>;
@@ -165,6 +172,7 @@ export type OidcTransientState = {
   provider: string;
   createdAtMs: number;
   returnTo?: string;
+  productId?: string;
 };
 
 export type BillingProvider = "none" | "mock" | "stripe";

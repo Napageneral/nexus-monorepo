@@ -177,7 +177,7 @@ On startup, the runtime creates:
 **Owner contact (auth path only):**
 - `(login, "", "owner")` → `entity-owner`
 
-System-origin platforms (cron, runtime, boot, restart, node, clock) do NOT get contacts. They are resolved directly to `entity-owner` in the sender branch of `resolvePrincipals` without a contacts table lookup. See **System-Origin Resolution** below.
+System-origin platforms (`clock`, `boot`, `restart`, and internal `runtime`) do NOT get contacts. They are resolved directly to `entity-owner` in the sender branch of `resolvePrincipals` without a contacts table lookup. Device-host traffic is not system-origin and must resolve through identity mappings (`delivery.platform="device"`). See **System-Origin Resolution** below.
 
 **Receiver bootstrap:**
 
@@ -249,7 +249,7 @@ Knowledge entities (writer-created, `source = 'inferred'`) and adapter entities 
 
 System-origin platforms represent internal event sources that are not real external senders. The sender branch of `resolvePrincipals` recognizes these platforms and short-circuits the normal contacts lookup.
 
-**System-origin platforms:** `"cron"`, `"runtime"`, `"boot"`, `"restart"`, `"node"`, `"clock"`
+**System-origin platforms:** `"clock"`, `"boot"`, `"restart"`, `"runtime"` (internal only)
 
 **Resolution behavior:**
 1. If `delivery.platform` is in the system-origin set, skip the contacts table lookup entirely
@@ -258,7 +258,7 @@ System-origin platforms represent internal event sources that are not real exter
 
 ```
 resolvePrincipals.sender(delivery):
-  if delivery.platform in ["cron", "runtime", "boot", "restart", "node", "clock"]:
+  if delivery.platform in ["clock", "boot", "restart", "runtime"]:
     return SenderContext {
       type: 'system',
       entity_id: 'entity-owner',
@@ -270,7 +270,7 @@ resolvePrincipals.sender(delivery):
   // ... normal contacts lookup for external platforms
 ```
 
-This is cleaner than creating fake contacts for internal event sources. Crons and system events inherit the owner's identity because the owner configured them — they act on the owner's behalf, not as independent entities.
+This is cleaner than creating fake contacts for internal event sources. Clock/system events inherit the owner's identity because the owner configured them — they act on the owner's behalf, not as independent entities.
 
 ## Container Kind
 

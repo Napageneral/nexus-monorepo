@@ -7,6 +7,7 @@ export const AdapterOperationSchema = z.enum([
   "adapter.health",
   "adapter.accounts.list",
   "adapter.monitor.start",
+  "adapter.control.start",
   "adapter.setup.start",
   "adapter.setup.submit",
   "adapter.setup.status",
@@ -261,6 +262,107 @@ export const AdapterAccountSchema = z.object({
 });
 
 export type AdapterAccount = z.infer<typeof AdapterAccountSchema>;
+
+// --- Adapter Control Session Protocol ---
+
+export const AdapterControlEndpointSchema = z.object({
+  endpoint_id: z.string(),
+  display_name: z.string().optional(),
+  platform: z.string().optional(),
+  caps: z.array(z.string()),
+  commands: z.array(z.string()),
+  permissions: z.record(z.string(), z.boolean()).optional(),
+});
+
+export type AdapterControlEndpoint = z.infer<typeof AdapterControlEndpointSchema>;
+
+export const AdapterControlInvokeErrorSchema = z.object({
+  code: z.string().optional(),
+  message: z.string().optional(),
+});
+
+export type AdapterControlInvokeError = z.infer<typeof AdapterControlInvokeErrorSchema>;
+
+export const AdapterControlInvokeRequestFrameSchema = z.object({
+  type: z.literal("invoke.request"),
+  request_id: z.string(),
+  endpoint_id: z.string(),
+  command: z.string(),
+  payload: z.unknown().optional(),
+  timeout_ms: z.number().int().nonnegative().optional(),
+  idempotency_key: z.string().optional(),
+});
+
+export type AdapterControlInvokeRequestFrame = z.infer<
+  typeof AdapterControlInvokeRequestFrameSchema
+>;
+
+export const AdapterControlInvokeCancelFrameSchema = z.object({
+  type: z.literal("invoke.cancel"),
+  request_id: z.string(),
+});
+
+export type AdapterControlInvokeCancelFrame = z.infer<
+  typeof AdapterControlInvokeCancelFrameSchema
+>;
+
+export const AdapterControlInputFrameSchema = z.discriminatedUnion("type", [
+  AdapterControlInvokeRequestFrameSchema,
+  AdapterControlInvokeCancelFrameSchema,
+]);
+
+export type AdapterControlInputFrame = z.infer<typeof AdapterControlInputFrameSchema>;
+
+export const AdapterControlEndpointUpsertFrameSchema = z.object({
+  type: z.literal("endpoint.upsert"),
+  endpoint_id: z.string(),
+  display_name: z.string().optional(),
+  platform: z.string().optional(),
+  caps: z.array(z.string()),
+  commands: z.array(z.string()),
+  permissions: z.record(z.string(), z.boolean()).optional(),
+});
+
+export type AdapterControlEndpointUpsertFrame = z.infer<
+  typeof AdapterControlEndpointUpsertFrameSchema
+>;
+
+export const AdapterControlEndpointRemoveFrameSchema = z.object({
+  type: z.literal("endpoint.remove"),
+  endpoint_id: z.string(),
+});
+
+export type AdapterControlEndpointRemoveFrame = z.infer<
+  typeof AdapterControlEndpointRemoveFrameSchema
+>;
+
+export const AdapterControlInvokeResultFrameSchema = z.object({
+  type: z.literal("invoke.result"),
+  request_id: z.string(),
+  ok: z.boolean(),
+  payload: z.unknown().optional(),
+  error: z.union([z.string(), AdapterControlInvokeErrorSchema]).optional(),
+});
+
+export type AdapterControlInvokeResultFrame = z.infer<
+  typeof AdapterControlInvokeResultFrameSchema
+>;
+
+export const AdapterControlEventIngestFrameSchema = z.object({
+  type: z.literal("event.ingest"),
+  event: z.record(z.string(), z.unknown()),
+});
+
+export type AdapterControlEventIngestFrame = z.infer<typeof AdapterControlEventIngestFrameSchema>;
+
+export const AdapterControlOutputFrameSchema = z.discriminatedUnion("type", [
+  AdapterControlEndpointUpsertFrameSchema,
+  AdapterControlEndpointRemoveFrameSchema,
+  AdapterControlInvokeResultFrameSchema,
+  AdapterControlEventIngestFrameSchema,
+]);
+
+export type AdapterControlOutputFrame = z.infer<typeof AdapterControlOutputFrameSchema>;
 
 // --- Streaming Protocol ---
 

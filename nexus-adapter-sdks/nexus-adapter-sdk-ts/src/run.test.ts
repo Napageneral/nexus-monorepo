@@ -249,4 +249,106 @@ describe("runAdapter", () => {
       service: "test",
     });
   });
+
+  it("adapter.control.start serves invoke requests with control-session helpers", async () => {
+    const stdout = captureStream();
+    const stderr = captureStream();
+    const stdin = new PassThrough();
+
+    const runPromise = runAdapter(
+      {
+        operations: {
+          "adapter.info": () => ({
+            platform: "test",
+            name: "test-adapter",
+            version: "0.0.0",
+            operations: ["adapter.info", "adapter.control.start"],
+            multi_account: false,
+            platform_capabilities: {
+              text_limit: 1,
+              supports_markdown: false,
+              supports_tables: false,
+              supports_code_blocks: false,
+              supports_embeds: false,
+              supports_threads: false,
+              supports_reactions: false,
+              supports_polls: false,
+              supports_buttons: false,
+              supports_edit: false,
+              supports_delete: false,
+              supports_media: false,
+              supports_voice_notes: false,
+              supports_streaming_edit: false,
+            },
+          }),
+          "adapter.control.start": async (_ctx, { account }, session) => {
+            const registry = session.createEndpointRegistry();
+            await registry.upsert({
+              endpoint_id: "device-host-1",
+              display_name: "Device Host",
+              platform: "ios",
+              caps: ["camera"],
+              commands: ["camera.snap"],
+            });
+            await session.serve({
+              onInvoke: async (frame) => ({
+                ok: true,
+                payload: {
+                  account,
+                  endpoint_id: frame.endpoint_id,
+                  command: frame.command,
+                },
+              }),
+            });
+          },
+        },
+      },
+      {
+        argv: ["node", "adapter", "adapter.control.start", "--account", "acct-1"],
+        stdin: stdin as unknown as NodeJS.ReadableStream,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+        requireRuntimeContext: false,
+        patchConsole: false,
+        installSignalHandlers: false,
+      },
+    );
+
+    stdin.write(
+      `${JSON.stringify({
+        type: "invoke.request",
+        request_id: "req-1",
+        endpoint_id: "device-host-1",
+        command: "camera.snap",
+        payload: { quality: "high" },
+      })}\n`,
+    );
+    stdin.end();
+
+    const code = await runPromise;
+    expect(code).toBe(0);
+    const lines = stdout
+      .read()
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatchObject({
+      type: "endpoint.upsert",
+      endpoint_id: "device-host-1",
+      commands: ["camera.snap"],
+    });
+    expect(lines[1]).toMatchObject({
+      type: "invoke.result",
+      request_id: "req-1",
+      ok: true,
+      payload: {
+        account: "acct-1",
+        endpoint_id: "device-host-1",
+        command: "camera.snap",
+      },
+    });
+    expect(stderr.read()).toBe("");
+  });
 });

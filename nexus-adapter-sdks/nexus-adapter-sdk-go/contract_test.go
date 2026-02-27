@@ -119,6 +119,12 @@ func TestAdapterProtocolContract_FixturesValidate(t *testing.T) {
 	for _, s := range loadFixtureJSONL(t, "stream_statuses.jsonl") {
 		requireValid(t, compileContractRef(t, "AdapterStreamStatus"), s)
 	}
+	for _, f := range loadFixtureJSONL(t, "control_input_frames.jsonl") {
+		requireValid(t, compileContractRef(t, "AdapterControlInputFrame"), f)
+	}
+	for _, f := range loadFixtureJSONL(t, "control_output_frames.jsonl") {
+		requireValid(t, compileContractRef(t, "AdapterControlOutputFrame"), f)
+	}
 }
 
 func TestAdapterProtocolContract_GoTypesRoundTrip(t *testing.T) {

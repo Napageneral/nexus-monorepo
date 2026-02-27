@@ -107,6 +107,41 @@ Important env overrides:
 - `FRONTDOOR_TENANT_CONTROL_UI_ROOT=/abs/path/to/nex/dist/control-ui`
 - `FRONTDOOR_TENANT_BUILD_UI_IF_MISSING=1`
 
+## Provisioner Smoke Check
+
+Validate the configured auto-provision command output schema before deploy:
+
+```bash
+cd /Users/tyler/nexus/home/projects/nexus/nexus-frontdoor
+pnpm smoke:provisioner
+```
+
+Notes:
+
+- The smoke runner executes `autoProvision.command` (or `FRONTDOOR_AUTOPROVISION_COMMAND` override).
+- It sets `FRONTDOOR_PROVISIONER_DRY_RUN=1` so provisioners can validate payload/output without creating real runtimes.
+- Required output fields are validated strictly: `tenant_id`, `runtime_url`, and `runtime_public_base_url` (+ optional ws/sse URL validation).
+
+Validate launch contract for a running frontdoor instance:
+
+```bash
+cd /Users/tyler/nexus/home/projects/nexus/nexus-frontdoor
+pnpm smoke:launch
+```
+
+Optional envs for launch smoke:
+
+- `FRONTDOOR_SMOKE_ORIGIN` (default `http://127.0.0.1:4789`)
+- `FRONTDOOR_SMOKE_USERNAME` / `FRONTDOOR_SMOKE_PASSWORD` (default `owner/changeme`)
+- `FRONTDOOR_SMOKE_WORKSPACE_ID` (default `tenant-dev`)
+- `FRONTDOOR_SMOKE_SESSION_ID` or `FRONTDOOR_SMOKE_SESSION_COOKIE` (skip password login and use an existing frontdoor session)
+
+Combined deploy smoke:
+
+```bash
+pnpm smoke:deploy
+```
+
 ## Password Hash Utility
 
 ```bash
@@ -140,3 +175,11 @@ This scaffold targets Nexus runtime hosted mode with:
 - Keep frontdoor and runtime on private/internal network boundaries.
 - Rotate runtime signing keys with `runtimeToken.activeKid` + `runtimeToken.keys`.
 - OIDC callback verifies ID token signature + claims (`iss`/`aud`/`exp`/`nonce`) against provider JWKs (`issuer` + `jwksUrl` required per provider).
+- Run frontdoor behind TLS termination in production (`https` externally, internal hop as needed). This is required for secure session cookies and HSTS behavior.
+- Session cookie hardening is configurable via `security.sessionCookieSecure` or `FRONTDOOR_SESSION_COOKIE_SECURE`.
+- Session cookie domain for cross-subdomain shells is configurable via `session.cookieDomain` or `FRONTDOOR_SESSION_COOKIE_DOMAIN`.
+- HSTS is configurable via `security.hsts.*` or:
+  - `FRONTDOOR_SECURITY_HSTS_ENABLED`
+  - `FRONTDOOR_SECURITY_HSTS_MAX_AGE_SECONDS`
+  - `FRONTDOOR_SECURITY_HSTS_INCLUDE_SUBDOMAINS`
+  - `FRONTDOOR_SECURITY_HSTS_PRELOAD`

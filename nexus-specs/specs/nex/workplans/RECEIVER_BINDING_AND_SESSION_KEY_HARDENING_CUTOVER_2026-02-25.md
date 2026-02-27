@@ -30,7 +30,7 @@ Out of scope:
 
 ## 3. Current Gaps
 
-1. `account_receiver_bindings` exists and is enforced by receiver resolution, but adapter account startup does not generally populate it from adapter account config.
+1. Receiver resolution uses the same `contacts -> entities` lookup as sender resolution (symmetric identity resolution). Adapter account startup must seed the appropriate contacts row for each account.
 2. Queue lane setup still has a provisional session-key fallback path (`deriveProvisionalSessionKey`) that can create non-canonical labels when `access.routing.session_label` is absent.
 3. Legacy thread-suffix helper remains in outbound session routing paths.
 
@@ -38,18 +38,18 @@ Out of scope:
 
 ### D1. Receiver binding source of truth
 
-`account_receiver_bindings(platform, account_id) -> receiver_entity_id` remains the authoritative receiver resolution map.
+Receiver resolution uses the same `contacts -> entities` lookup path as sender resolution (symmetric identity resolution). A contacts row with `(platform, space_id='', sender_id=<account_id>)` maps the adapter account to its receiver entity. No separate `account_receiver_bindings` table is needed.
 
 Rationale:
 
 1. Incoming events always include account context.
 2. Receiver identity must be deterministic and non-heuristic.
-3. This is the receiver-side equivalent of sender contact resolution keying.
+3. This is exactly the same lookup path as sender contact resolution -- identity resolution is fully symmetric.
 
-### D2. Adapter account config supports explicit receiver binding
+### D2. Adapter account config supports explicit receiver entity seeding
 
 Adapter account bootstrap config accepts `receiver_entity_id`.
-Runtime startup writes this to `account_receiver_bindings` for each configured account.
+Runtime startup seeds a contacts row mapping `(platform, account_id)` to the receiver entity for each configured account -- using the same contacts table as sender resolution.
 
 ### D3. Queue lane key must use canonical access routing
 
@@ -66,10 +66,10 @@ Outbound helper usage should not append thread suffixes for group/channels in co
 
 ## 5. Implementation Plan
 
-### P1. Adapter config + receiver binding write
+### P1. Adapter config + receiver contact seeding
 
 1. Extend adapter account schema with optional `receiver_entity_id`.
-2. In `NEX.startMonitorsFromConfig`, upsert account receiver binding when the field is present.
+2. In `NEX.startMonitorsFromConfig`, upsert a contacts row mapping `(platform, account_id)` to the receiver entity when the field is present.
 3. Use source tag `control-plane` for these writes.
 
 ### P2. Remove queue provisional key fallback
@@ -95,7 +95,7 @@ Invariants:
 
 1. No runtime `atlas` fallback paths in `src/nex/**` non-test files.
 2. Queue lane labels for processing requests are canonical and sourced from access routing.
-3. Receiver account binding can be seeded from adapter account config.
+3. Receiver contact mapping can be seeded from adapter account config (same contacts table as sender resolution).
 
 ## 7. Risks And Mitigations
 

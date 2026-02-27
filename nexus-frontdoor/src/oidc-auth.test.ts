@@ -205,6 +205,79 @@ describe("OIDC JWK verification", () => {
     expect(completed.returnTo).toBe("/");
   });
 
+  it("forwards product from begin state into resolvePrincipal callback and completion payload", async () => {
+    const key = buildKeyPair("kid-product");
+    const config = baseConfig();
+    config.oidcProviders.set("mock", {
+      clientId: "client-frontdoor",
+      clientSecret: "secret",
+      issuer: "https://issuer.example.com",
+      jwksUrl: "https://issuer.example.com/.well-known/jwks.json",
+      authorizeUrl: "https://issuer.example.com/oauth2/auth",
+      tokenUrl: "https://issuer.example.com/oauth2/token",
+      redirectUri: "http://127.0.0.1:4789/api/auth/oidc/callback/mock",
+      scope: "openid profile email",
+    });
+
+    const oidc = new OidcFlowManager();
+    const started = oidc.begin({
+      config,
+      provider: "mock",
+      returnTo: "/",
+      productId: "spike",
+    });
+    const nonce = new URL(started.redirectUrl).searchParams.get("nonce");
+    expect(nonce).toBeTruthy();
+    const now = Math.floor(Date.now() / 1000);
+    const idToken = signRs256Jwt({
+      privateKey: key.privateKey,
+      kid: "kid-product",
+      claims: {
+        iss: "https://issuer.example.com",
+        aud: "client-frontdoor",
+        exp: now + 300,
+        iat: now - 5,
+        nonce,
+        sub: "user-xyz",
+        email: "alice@example.com",
+        name: "Alice",
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        if (url === "https://issuer.example.com/oauth2/token") {
+          return new Response(JSON.stringify({ id_token: idToken, access_token: "at" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        if (url === "https://issuer.example.com/.well-known/jwks.json") {
+          return new Response(JSON.stringify({ keys: [key.publicJwk] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        throw new Error(`unexpected fetch url: ${url}`);
+      }) as typeof fetch,
+    );
+
+    let seenProductId: string | undefined;
+    const completed = await oidc.complete({
+      config,
+      provider: "mock",
+      state: started.state,
+      code: "auth-code",
+      resolvePrincipal: ({ fallbackPrincipal, productId }) => {
+        seenProductId = productId;
+        return fallbackPrincipal;
+      },
+    });
+    expect(seenProductId).toBe("spike");
+    expect(completed.productId).toBe("spike");
+  });
+
   it("rejects ID token with invalid signature", async () => {
     const signingKey = buildKeyPair("kid-1");
     const jwkKey = buildKeyPair("kid-1");

@@ -104,6 +104,7 @@ export async function createCheckoutSession(params: {
   config: FrontdoorConfig;
   workspaceId: string;
   planId?: string;
+  productId?: string;
   successUrl?: string;
   cancelUrl?: string;
   priceId?: string;
@@ -125,9 +126,10 @@ export async function createCheckoutSession(params: {
 
   if (provider === "mock") {
     const sessionId = `cs_mock_${Math.random().toString(36).slice(2, 12)}`;
+    const productParam = params.productId ? `&product_id=${encodeURIComponent(params.productId)}` : "";
     const checkoutUrl = `${params.config.baseUrl.replace(/\/+$/, "")}/billing/mock-checkout?workspace_id=${encodeURIComponent(
       params.workspaceId,
-    )}&plan_id=${encodeURIComponent(planId)}&session_id=${encodeURIComponent(sessionId)}`;
+    )}&plan_id=${encodeURIComponent(planId)}&session_id=${encodeURIComponent(sessionId)}${productParam}`;
     return {
       provider: "mock",
       checkoutUrl,
@@ -156,6 +158,9 @@ export async function createCheckoutSession(params: {
   body.set("line_items[0][quantity]", "1");
   body.set("metadata[workspace_id]", params.workspaceId);
   body.set("metadata[plan_id]", planId);
+  if (params.productId?.trim()) {
+    body.set("metadata[product_id]", params.productId.trim());
+  }
   if (params.customerEmail?.trim()) {
     body.set("customer_email", params.customerEmail.trim());
   }

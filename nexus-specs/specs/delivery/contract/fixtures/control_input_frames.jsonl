@@ -1,0 +1,2 @@
+{"type":"invoke.request","request_id":"req-1","endpoint_id":"device-host-1","command":"camera.snap","payload":{"quality":"high"},"timeout_ms":10000,"idempotency_key":"idem-1"}
+{"type":"invoke.cancel","request_id":"req-1"}

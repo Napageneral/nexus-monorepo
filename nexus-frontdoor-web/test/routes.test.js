@@ -7,6 +7,7 @@ const frontdoorOriginHandler = require("../api/frontdoor-origin");
 const oidcStartHandler = require("../api/oidc-start");
 const sessionHandler = require("../api/session");
 const workspacesHandler = require("../api/workspaces");
+const workspaceProvisioningStatusHandler = require("../api/workspaces/provisioning/status");
 
 const { startServer, withEnv } = require("./helpers/http");
 
@@ -52,6 +53,30 @@ test("oidc-start redirects to frontdoor provider start with return path", async 
   );
 });
 
+test("oidc-start preserves flavor query values in return_to", async (t) => {
+  const restore = withEnv({
+    FRONTDOOR_ORIGIN: "https://frontdoor.nexushub.sh",
+  });
+  const app = await startServer(oidcStartHandler);
+  t.after(async () => {
+    restore();
+    await app.close();
+  });
+
+  const response = await fetch(
+    `${app.origin}/api/oidc-start?provider=google&return_to=%2F%3Fflavor%3Dglowbot%26entry%3Dglowbot-demo`,
+    {
+      redirect: "manual",
+    },
+  );
+  assert.equal(response.status, 302);
+  const location = response.headers.get("location") || "";
+  assert.equal(
+    location,
+    "https://frontdoor.nexushub.sh/api/auth/oidc/start?provider=google&return_to=%2F%3Fflavor%3Dglowbot%26entry%3Dglowbot-demo",
+  );
+});
+
 test("session endpoint returns unauthenticated without app cookie", async (t) => {
   const frontdoor = await startServer((_req, res) => {
     res.statusCode = 500;
@@ -93,6 +118,30 @@ test("workspaces endpoint returns unauthorized without app cookie", async (t) =>
   });
 
   const response = await fetch(`${app.origin}/api/workspaces`);
+  assert.equal(response.status, 401);
+  const body = await response.json();
+  assert.equal(body.ok, false);
+  assert.equal(body.error, "unauthorized");
+});
+
+test("workspaces provisioning status endpoint returns unauthorized without app cookie", async (t) => {
+  const frontdoor = await startServer((_req, res) => {
+    res.statusCode = 500;
+    res.end("should-not-be-called");
+  });
+  const restore = withEnv({
+    FRONTDOOR_ORIGIN: frontdoor.origin,
+    APP_SESSION_COOKIE_NAME: "app_sid",
+    FRONTDOOR_SESSION_COOKIE_NAME: "fd_sid",
+  });
+  const app = await startServer(workspaceProvisioningStatusHandler);
+  t.after(async () => {
+    restore();
+    await app.close();
+    await frontdoor.close();
+  });
+
+  const response = await fetch(`${app.origin}/api/workspaces/provisioning/status`);
   assert.equal(response.status, 401);
   const body = await response.json();
   assert.equal(body.ok, false);

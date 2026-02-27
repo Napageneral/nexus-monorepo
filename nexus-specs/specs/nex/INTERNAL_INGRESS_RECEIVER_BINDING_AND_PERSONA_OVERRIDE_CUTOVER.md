@@ -11,7 +11,7 @@
 
 ## 1. Customer Experience Target
 
-1. Control-plane chat, webchat, OpenAI, OpenResponses, hooks, and node ingress all execute through the same NEX pipeline and produce real agent runs (not silent no-op responses).
+1. Control-plane chat, webchat, OpenAI, OpenResponses, hooks, and device ingress all execute through the same NEX pipeline and produce real agent runs (not silent no-op responses).
 2. Ingress remains fail-closed for unknown receiver ownership; no implicit default-agent fallback is reintroduced.
 3. Trusted operator flows can still intentionally target a specific agent/persona (for example via control-plane/OpenAI headers where allowed by ingress integrity rules).
 4. Anonymous/customer ingress remains constrained by IAM policy envelope; trusted operator override behavior is not granted to customer ingress tokens.
@@ -22,9 +22,9 @@
 
 Observed behavior in current code:
 
-1. `resolveReceiver` hard-requires `(platform, account_id)` account receiver binding and fails closed when missing.
+1. `resolveReceiver` resolves receiver identity from `contacts -> entities` (same path as sender resolution, symmetric identity resolution) and fails closed when missing.
 2. `resolveAccess` requires persona binding for `receiver.type="entity"`; without binding it denies and runAgent does not execute.
-3. Runtime bootstrap seeds owner + contacts, but does not seed account receiver bindings or default persona bindings for internal ingress platforms.
+3. Runtime bootstrap seeds owner + contacts, but does not seed contacts-based receiver mappings or default persona bindings for internal ingress platforms.
 4. Explicit trusted ingress routing overrides (`_nex_ingress.routing_override.agent_id/persona_ref`) are currently overwritten by persona binding selection.
 
 Impact:
@@ -36,7 +36,7 @@ Impact:
 ## 3. Locked Decisions
 
 1. **No compatibility fallback in `resolveReceiver`.** Keep fail-closed behavior.
-2. **Bootstrap deterministic internal account receiver bindings** for internal ingress platform/account pairs used by runtime dispatch.
+2. **Bootstrap deterministic internal receiver contacts rows** for internal ingress platform/account pairs used by runtime dispatch (same contacts table as sender resolution -- symmetric identity resolution).
 3. **Bootstrap default persona binding** for the canonical internal receiver entity.
 4. **Trusted explicit routing override precedence:**
    - For trusted senders (owner/system/control-plane trusted path), explicit ingress routing identity (`agent_id/persona_ref`) may supersede default persona binding.
@@ -56,20 +56,19 @@ Seed a canonical internal receiver entity:
 - `source = "bootstrap"`
 - `is_user = 0`
 
-### 4.2 Internal account receiver bindings
+### 4.2 Internal receiver contacts rows (symmetric with sender resolution)
 
-Seed `(platform, account_id) -> receiver_entity_id` for internal ingress platforms with `account_id="default"`:
+Seed contacts rows mapping `(platform, sender_id=<account_id>)` to `entity_id="entity-assistant"` for internal ingress platforms with `account_id="default"`:
 
 - `control-plane`
 - `webchat`
 - `openai`
 - `openresponses`
 - `hooks`
-- `node`
+- `clock`
 - `runtime`
-- `cron`
 
-All bind to `receiver_entity_id="entity-assistant"`.
+All map to `entity_id="entity-assistant"` via the same contacts table used for sender resolution. No separate `account_receiver_bindings` table is needed.
 
 ### 4.3 Default persona binding
 
@@ -84,7 +83,7 @@ Seed a default persona binding for `entity-assistant`:
 
 ## 5. Runtime Resolution Rules After Cutover
 
-1. `resolveReceiver` remains account-binding authoritative.
+1. `resolveReceiver` remains contacts-based authoritative (symmetric with sender resolution).
 2. `resolveAccess` resolves persona in this order:
    - trusted explicit routing identity override (if present and authorized)
    - sender-specific persona binding
@@ -98,10 +97,10 @@ Seed a default persona binding for `entity-assistant`:
 
 1. Update bootstrap identity seeding to include:
    - internal receiver entity
-   - internal account receiver bindings
+   - internal receiver contacts rows (same contacts table as sender resolution -- no separate binding table)
    - default persona binding
 2. Keep bootstrap idempotent:
-   - do not destroy/replace non-bootstrap manual bindings.
+   - do not destroy/replace non-bootstrap manual mappings.
 3. Update `resolveAccess` precedence logic so trusted explicit ingress routing identity is not clobbered by default persona binding.
 4. Ensure receiver promotion to `type="agent"` occurs for trusted explicit routing identity paths.
 5. Update e2e expectations where canonical DM key shape changed (`dm:{sender_entity_id}:{receiver_entity_id}`).
@@ -123,7 +122,7 @@ Seed a default persona binding for `entity-assistant`:
 ### Focus assertions
 
 1. Primary `agentCommand` call exists for accepted runs.
-2. No `system:missing_account_receiver_binding` canonical session labels in accepted ingress flows.
+2. No `system:missing_receiver_contact` canonical session labels in accepted ingress flows.
 3. Control-plane/OpenAI trusted override paths still route to requested `agent_id` where allowed.
 4. Unknown/default-deny policy remains denied.
 
@@ -132,5 +131,5 @@ Seed a default persona binding for `entity-assistant`:
 ## 8. Non-Goals
 
 1. Do not weaken ingress integrity or allow caller-controlled identity spoofing.
-2. Do not add backward-compatibility bypasses in receiver resolution.
+2. Do not add backward-compatibility bypasses in receiver resolution. No separate `account_receiver_bindings` table; use contacts (symmetric with sender).
 3. Do not broaden customer ingress privileges in this cutover.

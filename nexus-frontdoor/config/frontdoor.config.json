@@ -19,6 +19,13 @@
     "refreshTtlSeconds": 2592000
   },
   "security": {
+    "sessionCookieSecure": false,
+    "hsts": {
+      "enabled": true,
+      "maxAgeSeconds": 31536000,
+      "includeSubDomains": true,
+      "preload": true
+    },
     "rateLimits": {
       "loginAttempts": { "windowSeconds": 60, "maxAttempts": 30, "blockSeconds": 60 },
       "loginFailures": { "windowSeconds": 900, "maxAttempts": 8, "blockSeconds": 900 },

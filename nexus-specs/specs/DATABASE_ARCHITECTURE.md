@@ -11,7 +11,7 @@
 
 Nexus uses a multi-database SQLite architecture. Each database file has a clear, single-sentence purpose and well-defined ownership boundaries. This spec defines:
 
-- The **6 canonical databases**, their names, locations, and table inventories
+- The **7 canonical databases**, their names, locations, and table inventories
 - **What gets deleted** from the legacy layout (legacy memory DB duplication, stale tables, sync_watermarks)
 - **What gets relocated** (entities → identity.db, legacy agent tables → gone, Go adapter sync → adapter-owned)
 - **Migration paths** for each change
@@ -39,6 +39,7 @@ All databases live under `{workspace}/state/data/`.
 | 4 | `memory.db` | What the AI remembers — facts, episodes, mental models, analysis pipeline. | Nex TS |
 | 5 | `embeddings.db` | Semantic vector index — shared by all subsystems that need similarity search. | Nex TS |
 | 6 | `runtime.db` | How the system is running — request tracking, adapters, automations, bus. | Nex TS |
+| 7 | `work.db` | What should happen — task definitions, work items, workflows, sequences for planned and scheduled work. | Nex TS |
 
 ### Legacy files to DELETE
 
@@ -262,6 +263,29 @@ Renamed from `nexus.db`. Captures all runtime orchestration state.
 | `aix_import_jobs` | `aix_import_jobs` | `import_jobs` | Dropped `aix_` prefix since it's the only import type |
 
 **Schema sources:** `nex/src/db/nexus.ts` (requests, import_jobs), `nex/src/db/hooks.ts` (automations, hook_invocations), `nex/src/nex/adapters/adapter-state-db.ts` (adapter_instances), `nex/src/nex/bus.ts` (bus_events).
+
+---
+
+### 3.7 work.db — Work Management
+
+Tracks future work: task definitions, work items, workflow definitions, and sequences. See `CRM_ANALYSIS_AND_WORK_SYSTEM.md` for full schema and design rationale.
+
+| Table | Purpose |
+|-------|---------|
+| `tasks` | Atom definitions: templates for kinds of work (follow_up, outreach, review, etc.). |
+| `workflows` | Collection definitions: templates for sequences of tasks with ordered steps. |
+| `workflow_steps` | Ordered task references within a workflow, with dependencies and overrides. |
+| `work_items` | Atom instances: specific work to be done, with immutable core + mutable state cache. |
+| `work_item_events` | Immutable audit log of all work item state changes. |
+| `sequences` | Collection instances: specific sequences of work items, self-referential for nesting (campaigns). |
+
+**Design principles:**
+- Immutable core record + mutable state cache + immutable event log (same pattern as events.db `event_state`/`event_state_log`).
+- Entity binding is optional — work items can exist independently of entities.
+- The clock/cron adapter reads work.db directly as a schedule source, firing due work items as NexusEvents.
+- Sequences nest via `parent_sequence_id` for campaigns.
+
+**Schema source:** `CRM_ANALYSIS_AND_WORK_SYSTEM.md` §4 (to be implemented as `nex/src/db/work.ts`).
 
 ---
 
@@ -496,7 +520,8 @@ After migration, memory.db tables that reference `entity_id` (e.g., `fact_entiti
 ├── identity.db        # ~1 MB  — contacts, directory, entities, auth, ACL (~16 tables)
 ├── memory.db          # ~2 MB  — facts, episodes, analysis (14 tables)
 ├── embeddings.db      # ~1 MB  — vector index (2 tables + sqlite-vec internals)
-└── runtime.db         # ~250 KB — requests, adapters, automations, bus (6 tables)
+├── runtime.db         # ~250 KB — requests, adapters, automations, bus (6 tables)
+└── work.db            # ~0 KB  — tasks, work items, workflows, sequences (6 tables)
 ```
 
 **Deleted:**
@@ -522,12 +547,13 @@ Create or update TypeScript schema files for each database:
 | Create embeddings.db schema | `nex/src/db/embeddings.ts` | New file. embeddings + vec_embeddings. |
 | Update runtime.db schema | `nex/src/db/nexus.ts` | Remove ACL tables (moved to identity). Rename `aix_import_jobs` → `import_jobs`. Remove `sync_watermarks` if present. |
 | Update hooks schema | `nex/src/db/hooks.ts` | No changes needed — automations + hook_invocations stay in runtime.db. |
+| Create work.db schema | `nex/src/db/work.ts` | New file. Tasks, workflows, workflow_steps, work_items, work_item_events, sequences. See `CRM_ANALYSIS_AND_WORK_SYSTEM.md` §4. |
 
 ### Phase 2: Ledger Manager Updates
 
 Update `nex/src/db/ledgers.ts` to:
-- Open 6 databases instead of 5
-- Use new file names (`memory.db`, `embeddings.db`, `runtime.db`)
+- Open 7 databases instead of 5
+- Use new file names (`memory.db`, `embeddings.db`, `runtime.db`, `work.db`)
 - Add migration logic for existing workspaces (detect old file names, migrate)
 
 ### Phase 3: Data Migrations
@@ -591,6 +617,7 @@ For comprehension purposes, here are the high-level conceptual groupings of all 
 | **Memory Pipeline** | Episodes + analysis | memory.db |
 | **Embeddings** | Semantic vector index | embeddings.db |
 | **Runtime Operations** | Request tracking, adapters, automations, bus | runtime.db |
+| **Work Management** | Task definitions, work items, workflows, sequences | work.db |
 
 ---
 

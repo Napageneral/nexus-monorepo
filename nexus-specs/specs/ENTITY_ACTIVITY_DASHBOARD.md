@@ -389,6 +389,7 @@ interface EntityProfile {
 
 ## See Also
 
+- `CRM_ANALYSIS_AND_WORK_SYSTEM.md` — CRM analysis, work.db schema, four-model pattern
 - `memory/UNIFIED_ENTITY_STORE.md` — Entity schema
 - `memory/FACT_GRAPH_TRAVERSAL.md` — Relationship query patterns
 - `ledgers/EVENTS_LEDGER.md` — Event schema

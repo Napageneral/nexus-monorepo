@@ -2,7 +2,7 @@
 
 **Status:** CANONICAL OVERVIEW (legacy pipeline depiction; unified operation model is authoritative)
 **Last Updated:** 2026-02-25
-**Database Layout:** See `DATABASE_ARCHITECTURE.md` for the canonical 6-database layout
+**Database Layout:** See `DATABASE_ARCHITECTURE.md` for the canonical 7-database layout
 
 ---
 
@@ -128,8 +128,9 @@ Primary data stores:
 | **memory.db** | What the AI remembers | Facts, episodes, analysis pipeline |
 | **embeddings.db** | Semantic search | Vector representations for similarity search |
 | **runtime.db** | Pipeline traces | NexusRequest lifecycle, adapters, automations, bus |
+| **work.db** | What should happen | Tasks, work items, workflows, sequences |
 
-All databases are SQLite files in `{workspace}/state/data/`. See `DATABASE_ARCHITECTURE.md` for the canonical 6-database inventory and migration plan.
+All databases are SQLite files in `{workspace}/state/data/`. See `DATABASE_ARCHITECTURE.md` for the canonical 7-database inventory and migration plan.
 
 **See:** `ledgers/`, `DATABASE_ARCHITECTURE.md`
 
@@ -291,7 +292,7 @@ Format and deliver responses:
 | **Central orchestrator** | NEX | One place owns the pipeline |
 | **Data bus** | NexusRequest | Context accumulates through stages |
 | **Broker writes directly** | To Agents Ledger (no JSONL) | Avoids sync loops with AIX |
-| **6-database layout** | SQLite (events, agents, identity, memory, embeddings, runtime) | Write contention isolation, single owner per table |
+| **7-database layout** | SQLite (events, agents, identity, memory, embeddings, runtime, work) | Write contention isolation, single owner per table |
 | **IAM before Hooks** | Policies (WHO) before scripts (WHAT) | Security first |
 | **All agents persistent** | No ephemeral agents | Every session can be resumed |
 | **Nested spawning allowed** | WAs (MA = Manager Agent, WA = Worker Agent) can spawn sub-WAs | Removed upstream restriction |
@@ -322,7 +323,9 @@ Specs are organized into domain-first folders:
 |--------|--------|-------------|
 | **ledgers/** | ✅ Current | System of Record schemas (Events, Agents, Identity) |
 | **memory/** | ✅ Current | Memory system (facts, episodes, embeddings, analysis) |
-| **DATABASE_ARCHITECTURE.md** | ✅ Current | Canonical 6-database layout and migration plan |
+| **DATABASE_ARCHITECTURE.md** | ✅ Current | Canonical 7-database layout and migration plan |
+| **CRM_ANALYSIS_AND_WORK_SYSTEM.md** | ✅ Current | CRM analysis, four-model pattern, work.db schema and execution model |
+| **ENTITY_ACTIVITY_DASHBOARD.md** | ✅ Current | Per-entity and aggregate CRM metrics, queries, visualizations |
 
 ### Agent Environment (`environment/`)
 

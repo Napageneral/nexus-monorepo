@@ -1,15 +1,97 @@
 const el = (id) => document.getElementById(id);
 
+function sanitizeQueryToken(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+  if (!/^[a-z0-9][a-z0-9_-]{0,63}$/u.test(normalized)) {
+    return "";
+  }
+  return normalized;
+}
+
+const pageParams = new URLSearchParams(window.location.search);
+const requestedFlavor = sanitizeQueryToken(pageParams.get("flavor"));
+const requestedEntry = sanitizeQueryToken(pageParams.get("entry"));
+const authReturn = pageParams.get("auth_return") === "1";
+
+const FLAVOR_CONFIGS = {
+  default: {
+    key: "default",
+    eyebrow: "NexusHub Shell",
+    headline: "Build and launch AI workspaces",
+    lead: "Authenticate, then launch the workspace and app package provisioned for your team.",
+    signInTitle: "Sign in",
+    signinBlurb: "Use your Google account to access your NexusHub workspace.",
+    offerTitle: "NexusHub infrastructure + app package",
+    offerDescription: "NexusHub provisions dedicated server capacity and routes you into your workspace control plane.",
+    infraDescription:
+      "Your plan combines server footprint with the app flavor package you selected (GlowBot, Spike, or another build).",
+    pricingLabel: "Pricing is quote-based: server count + app flavor package.",
+    preferredAppId: "control",
+    launchButtonLabel: "Open workspace",
+  },
+  glowbot: {
+    key: "glowbot",
+    eyebrow: "GlowBot on NexusHub",
+    headline: "Launch your GlowBot workspace",
+    lead: "Sign in to provision or open your GlowBot tenant and route directly into the clinic growth workspace.",
+    signInTitle: "Sign in to GlowBot",
+    signinBlurb: "Continue with Google to access your GlowBot workspace on NexusHub.",
+    offerTitle: "GlowBot package + dedicated infrastructure",
+    offerDescription:
+      "NexusHub provides the shared onboarding, tenancy, and runtime routing while GlowBot provides the clinic app flavor.",
+    infraDescription:
+      "You purchase server capacity for your tenant and attach the GlowBot runtime package for operations and reporting.",
+    pricingLabel: "GlowBot pricing is quote-based by server footprint and package tier.",
+    preferredAppId: "glowbot",
+    launchButtonLabel: "Open GlowBot workspace",
+  },
+  spike: {
+    key: "spike",
+    eyebrow: "Spike on NexusHub",
+    headline: "Launch your Spike workspace",
+    lead: "Authenticate once, then open your Spike tenant workspace through NexusHub routing.",
+    signInTitle: "Sign in to Spike",
+    signinBlurb: "Continue with Google to access your Spike workspace on NexusHub.",
+    offerTitle: "Spike package + dedicated infrastructure",
+    offerDescription:
+      "NexusHub handles onboarding, auth, and workspace routing while Spike provides the market and execution app flavor.",
+    infraDescription:
+      "Your subscription combines server capacity with the Spike runtime package chosen for your team.",
+    pricingLabel: "Spike pricing is quote-based by server footprint and package tier.",
+    preferredAppId: "spike",
+    launchButtonLabel: "Open Spike workspace",
+  },
+};
+
+function resolveFlavorConfig(flavorKey) {
+  if (!flavorKey) {
+    return FLAVOR_CONFIGS.default;
+  }
+  return FLAVOR_CONFIGS[flavorKey] || FLAVOR_CONFIGS.default;
+}
+
 const state = {
   session: null,
   workspaces: [],
   activeWorkspaceId: "",
   workspaceApps: [],
+  workspaceAppsError: "",
+  launchDiagnostics: null,
   activeAppId: "",
+  provisioningStatus: "",
+  provisioningRequest: null,
   frontdoorOrigin: "",
   operatorWorkspaces: [],
+  flavor: resolveFlavorConfig(requestedFlavor),
+  entry: requestedEntry,
 };
-const operatorMode = new URLSearchParams(window.location.search).get("operator") === "1";
+const operatorMode = pageParams.get("operator") === "1";
 
 function hasOperatorAccess(session) {
   if (!session || !Array.isArray(session.roles)) {
@@ -70,6 +152,154 @@ async function api(path, options = {}) {
     status: res.status,
     body,
   };
+}
+
+function setTextContent(id, value) {
+  const node = el(id);
+  if (!node) {
+    return;
+  }
+  node.textContent = String(value || "");
+}
+
+function applyFlavorCopy() {
+  const flavor = state.flavor;
+  setTextContent("heroEyebrow", flavor.eyebrow);
+  setTextContent("heroHeadline", flavor.headline);
+  setTextContent("heroLead", flavor.lead);
+  setTextContent("signInTitle", flavor.signInTitle);
+  setTextContent("signInBlurb", flavor.signinBlurb);
+  setTextContent("offerTitle", flavor.offerTitle);
+  setTextContent("offerDescription", flavor.offerDescription);
+  setTextContent("infraDescription", flavor.infraDescription);
+  setTextContent("pricingLabel", flavor.pricingLabel);
+  setTextContent("openTenantAppBtn", flavor.launchButtonLabel);
+
+  const entryContext = el("entryContext");
+  if (!entryContext) {
+    return;
+  }
+  if (state.entry) {
+    entryContext.hidden = false;
+    entryContext.textContent = `Entry source: ${state.entry}`;
+    return;
+  }
+  entryContext.hidden = true;
+  entryContext.textContent = "";
+}
+
+function preferredAppId() {
+  return String(state.flavor?.preferredAppId || "").trim();
+}
+
+function setAuthWarning(message = "") {
+  const node = el("authWarning");
+  if (!node) {
+    return;
+  }
+  const text = String(message || "").trim();
+  if (!text) {
+    node.hidden = true;
+    node.textContent = "";
+    return;
+  }
+  node.hidden = false;
+  node.textContent = text;
+}
+
+function setProvisioningSummary(message = "", tone = "") {
+  const node = el("provisioningSummary");
+  if (!node) {
+    return;
+  }
+  const text = String(message || "").trim();
+  if (!text) {
+    node.hidden = true;
+    node.textContent = "";
+    node.className = "muted";
+    return;
+  }
+  node.hidden = false;
+  node.textContent = text;
+  node.className = tone === "err" ? "warn" : "muted";
+}
+
+function summarizeProvisioning(status, request) {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (!normalized || normalized === "none" || normalized === "disabled") {
+    return { message: "", tone: "" };
+  }
+  if (normalized === "failed") {
+    const stage = String(request?.stage || "").trim();
+    const error = String(request?.error || "provision_failed").trim();
+    return {
+      message: `Provisioning failed${stage ? ` (${stage})` : ""}: ${error}`,
+      tone: "err",
+    };
+  }
+  if (normalized === "ready") {
+    const tenantId = String(request?.tenant_id || "").trim();
+    if (tenantId) {
+      return {
+        message: `Provisioning complete for ${tenantId}. Refresh workspaces if launch options are missing.`,
+        tone: "",
+      };
+    }
+    return {
+      message: "Provisioning complete. Refresh workspaces if launch options are missing.",
+      tone: "",
+    };
+  }
+  const stage = String(request?.stage || "").trim();
+  return {
+    message: `Provisioning in progress${stage ? ` (${stage})` : ""}.`,
+    tone: "",
+  };
+}
+
+function summarizeLaunchBlocker(diagnostics) {
+  if (!diagnostics || typeof diagnostics !== "object") {
+    return "";
+  }
+  const appCatalog =
+    diagnostics.app_catalog && typeof diagnostics.app_catalog === "object" ? diagnostics.app_catalog : null;
+  const runtimeHealth =
+    diagnostics.runtime_health && typeof diagnostics.runtime_health === "object"
+      ? diagnostics.runtime_health
+      : null;
+  const provisioning =
+    diagnostics.provisioning && typeof diagnostics.provisioning === "object" ? diagnostics.provisioning : null;
+
+  if (provisioning) {
+    const status = String(provisioning.status || "").trim().toLowerCase();
+    const stage = String(provisioning.stage || "").trim();
+    if (status && status !== "ready") {
+      return `provisioning ${status}${stage ? ` (${stage})` : ""}`;
+    }
+  }
+  if (runtimeHealth && runtimeHealth.ok === false) {
+    const code = String(runtimeHealth.error || runtimeHealth.http_status || "runtime_unavailable").trim();
+    return `runtime health unavailable (${code})`;
+  }
+  if (appCatalog && appCatalog.ok === false) {
+    const code = String(appCatalog.error || appCatalog.http_status || "app_catalog_unavailable").trim();
+    return `runtime app catalog unavailable (${code})`;
+  }
+  const appCount = Number(appCatalog?.app_count || 0);
+  if (Number.isFinite(appCount) && appCount <= 0) {
+    return "runtime returned no launchable /app entries";
+  }
+  return "";
+}
+
+function clearAuthReturnQueryFlag() {
+  if (!authReturn) {
+    return;
+  }
+  const next = new URL(window.location.href);
+  next.searchParams.delete("auth_return");
+  const relative = `${next.pathname}${next.search}${next.hash}`;
+  window.history.replaceState(null, "", relative);
 }
 
 function renderWorkspaceSelect() {
@@ -136,9 +366,12 @@ function renderAppSelect() {
     option.textContent = item.display_name || item.app_id;
     select.appendChild(option);
   }
+  const preferredId = preferredAppId();
   const selected =
     state.activeAppId && items.some((item) => item.app_id === state.activeAppId)
       ? state.activeAppId
+      : preferredId && items.some((item) => item.app_id === preferredId)
+        ? preferredId
       : items[0].app_id;
   state.activeAppId = selected;
   select.value = selected;
@@ -151,6 +384,10 @@ function updateAppSummary() {
   }
   const selected = state.workspaceApps.find((item) => item.app_id === state.activeAppId);
   if (!selected) {
+    if (state.workspaceAppsError) {
+      summary.textContent = `App catalog unavailable: ${state.workspaceAppsError}`;
+      return;
+    }
     summary.textContent = "No app selected.";
     return;
   }
@@ -215,6 +452,8 @@ function updateUiFromSession(session, options = {}) {
   el("operatorPanel").hidden = !(operatorMode && operatorAllowed);
 
   if (authenticated) {
+    setAuthWarning("");
+    clearAuthReturnQueryFlag();
     const who =
       session.display_name ||
       session.email ||
@@ -231,6 +470,9 @@ function updateUiFromSession(session, options = {}) {
   state.activeWorkspaceId = "";
   state.workspaceApps = [];
   state.activeAppId = "";
+  state.provisioningStatus = "";
+  state.provisioningRequest = null;
+  setProvisioningSummary("");
   renderWorkspaceSelect();
   updateWorkspaceSummary();
   renderAppSelect();
@@ -241,7 +483,16 @@ function updateUiFromSession(session, options = {}) {
   el("ownerInsightsPanel").hidden = true;
   el("operatorWorkspacePanel").hidden = true;
   el("operatorPanel").hidden = true;
-  setPill("Not signed in", "err");
+  if (authReturn) {
+    setPill("Not signed in after OAuth return", "err");
+    setAuthWarning(
+      "OAuth completed but no shared session cookie was available on shell.nexushub.sh. " +
+        "Set FRONTDOOR_SESSION_COOKIE_DOMAIN=.nexushub.sh on frontdoor and redeploy.",
+    );
+  } else {
+    setPill("Not signed in", "err");
+    setAuthWarning("");
+  }
 }
 
 function currentWorkspaceId() {
@@ -261,9 +512,42 @@ function currentAppDescriptor() {
   return state.workspaceApps.find((item) => item.app_id === appId) || null;
 }
 
+async function loadProvisioningStatus(options = {}) {
+  const silent = options.silent === true;
+  if (!state.session) {
+    state.provisioningStatus = "";
+    state.provisioningRequest = null;
+    setProvisioningSummary("");
+    return null;
+  }
+  const result = await api("/api/workspaces/provisioning/status", {
+    method: "GET",
+  });
+  if (!result.ok) {
+    state.provisioningStatus = "";
+    state.provisioningRequest = null;
+    if (!silent && result.status !== 404 && result.status !== 401) {
+      setProvisioningSummary("Provisioning status unavailable.", "err");
+    }
+    return null;
+  }
+  state.provisioningStatus = String(result.body?.status || "").trim().toLowerCase();
+  state.provisioningRequest =
+    result.body?.request && typeof result.body.request === "object" ? result.body.request : null;
+  const summary = summarizeProvisioning(state.provisioningStatus, state.provisioningRequest);
+  const shouldShow = summary.message && (state.workspaces.length === 0 || state.provisioningStatus !== "ready");
+  setProvisioningSummary(shouldShow ? summary.message : "", summary.tone);
+  return {
+    status: state.provisioningStatus,
+    request: state.provisioningRequest,
+  };
+}
+
 async function loadWorkspaceApps() {
   if (!state.session) {
     state.workspaceApps = [];
+    state.workspaceAppsError = "";
+    state.launchDiagnostics = null;
     state.activeAppId = "";
     renderAppSelect();
     updateAppSummary();
@@ -273,23 +557,30 @@ async function loadWorkspaceApps() {
   const workspaceId = currentWorkspaceId();
   if (!workspaceId) {
     state.workspaceApps = [];
+    state.workspaceAppsError = "";
+    state.launchDiagnostics = null;
     state.activeAppId = "";
     renderAppSelect();
     updateAppSummary();
     el("openTenantAppBtn").disabled = true;
     return;
   }
-  const result = await api(`/runtime/api/apps?workspace_id=${encodeURIComponent(workspaceId)}`, {
+  const result = await api(`/api/runtime/apps?workspace_id=${encodeURIComponent(workspaceId)}`, {
     method: "GET",
   });
   if (!result.ok || !Array.isArray(result.body?.items)) {
     state.workspaceApps = [];
+    const code = String(result.body?.error || "").trim();
+    state.workspaceAppsError = code || `runtime_apps_request_failed_${result.status}`;
+    state.launchDiagnostics = null;
     state.activeAppId = "";
     renderAppSelect();
     updateAppSummary();
     el("openTenantAppBtn").disabled = true;
     return;
   }
+  state.workspaceAppsError = "";
+  state.launchDiagnostics = null;
   state.workspaceApps = result.body.items
     .filter((item) => item && typeof item === "object")
     .map((item) => ({
@@ -303,6 +594,22 @@ async function loadWorkspaceApps() {
   el("openTenantAppBtn").disabled = !state.session || !state.activeWorkspaceId || !state.activeAppId;
 }
 
+async function loadWorkspaceLaunchDiagnostics(workspaceId) {
+  if (!workspaceId) {
+    state.launchDiagnostics = null;
+    return null;
+  }
+  const result = await api(`/api/workspace-launch-diagnostics?workspace_id=${encodeURIComponent(workspaceId)}`, {
+    method: "GET",
+  });
+  if (!result.ok || !result.body || typeof result.body !== "object") {
+    state.launchDiagnostics = null;
+    return null;
+  }
+  state.launchDiagnostics = result.body;
+  return result.body;
+}
+
 async function loadWorkspaces() {
   if (!state.session) {
     state.workspaces = [];
@@ -310,7 +617,12 @@ async function loadWorkspaces() {
     renderWorkspaceSelect();
     updateWorkspaceSummary();
     state.workspaceApps = [];
+    state.workspaceAppsError = "";
+    state.launchDiagnostics = null;
     state.activeAppId = "";
+    state.provisioningStatus = "";
+    state.provisioningRequest = null;
+    setProvisioningSummary("");
     renderAppSelect();
     updateAppSummary();
     el("workspaceCount").textContent = "0";
@@ -324,7 +636,10 @@ async function loadWorkspaces() {
     renderWorkspaceSelect();
     updateWorkspaceSummary();
     state.workspaceApps = [];
+    state.workspaceAppsError = "";
+    state.launchDiagnostics = null;
     state.activeAppId = "";
+    setProvisioningSummary("Workspace list unavailable.", "err");
     renderAppSelect();
     updateAppSummary();
     el("workspaceCount").textContent = "0";
@@ -343,6 +658,11 @@ async function loadWorkspaces() {
   renderWorkspaceSelect();
   updateWorkspaceSummary();
   el("workspaceCount").textContent = String(state.workspaces.length);
+  if (state.workspaces.length > 0) {
+    setProvisioningSummary("");
+  } else {
+    await loadProvisioningStatus({ silent: true });
+  }
   await loadWorkspaceApps();
   el("openTenantAppBtn").disabled = !state.session || !state.activeWorkspaceId || !state.activeAppId;
   await loadWorkspaceInsights();
@@ -497,6 +817,7 @@ async function refreshSession() {
   const result = await api("/api/session", { method: "GET" });
   if (result.ok && result.body.authenticated) {
     updateUiFromSession(result.body);
+    await loadProvisioningStatus({ silent: true });
     await loadWorkspaces();
     await loadOperatorInventory();
   } else {
@@ -505,9 +826,12 @@ async function refreshSession() {
 }
 
 function startGoogle() {
+  const returnToUrl = new URL(window.location.href || "/", window.location.origin);
+  returnToUrl.searchParams.set("auth_return", "1");
+  const returnTo = returnToUrl.toString();
   const query = new URLSearchParams({
     provider: "google",
-    return_to: "/",
+    return_to: returnTo,
   });
   window.location.href = `/api/oidc-start?${query.toString()}`;
 }
@@ -617,36 +941,92 @@ async function createWorkspace(event) {
 async function openTenantControlUi() {
   const workspaceId = currentWorkspaceId();
   if (!workspaceId) {
-    setPill("Select a workspace first", "err");
+    await loadProvisioningStatus({ silent: true });
+    const summary = String(el("provisioningSummary")?.textContent || "").trim();
+    if (summary) {
+      setPill(`Workspace not ready: ${summary}`, "err");
+    } else {
+      setPill("Select a workspace first", "err");
+    }
     return;
   }
   const app = currentAppDescriptor();
   if (!app) {
-    setPill("Select an app first", "err");
+    await loadWorkspaceApps();
+    const refreshed = currentAppDescriptor();
+    if (!refreshed) {
+      const diagnostics = await loadWorkspaceLaunchDiagnostics(workspaceId);
+      const blocker = summarizeLaunchBlocker(diagnostics);
+      if (blocker) {
+        setPill(`Workspace launch blocked: ${blocker}`, "err");
+        return;
+      }
+      if (state.workspaceAppsError) {
+        setPill(`Workspace app discovery failed (${state.workspaceAppsError})`, "err");
+      } else {
+        setPill("No launchable app is registered for this workspace.", "err");
+      }
+      return;
+    }
+    state.activeAppId = refreshed.app_id;
+  }
+  const activeApp = currentAppDescriptor();
+  if (!activeApp) {
+    const diagnostics = await loadWorkspaceLaunchDiagnostics(workspaceId);
+    const blocker = summarizeLaunchBlocker(diagnostics);
+    if (blocker) {
+      setPill(`Workspace launch blocked: ${blocker}`, "err");
+      return;
+    }
+    if (state.workspaceAppsError) {
+      setPill(`Workspace app discovery failed (${state.workspaceAppsError})`, "err");
+    } else {
+      setPill("No launchable app is registered for this workspace.", "err");
+    }
     return;
   }
-  const selected = await api("/api/workspaces-select", {
-    method: "POST",
-    body: JSON.stringify({
-      workspace_id: workspaceId,
-    }),
-  });
-  if (!selected.ok) {
-    setPill("Workspace selection failed", "err");
-    return;
+  const openButton = el("openTenantAppBtn");
+  openButton.disabled = true;
+  setPill("Preparing workspace launch...");
+  let launched = false;
+  try {
+    const selected = await api("/api/workspaces-select", {
+      method: "POST",
+      body: JSON.stringify({
+        workspace_id: workspaceId,
+      }),
+    });
+    if (!selected.ok) {
+      const code = String(selected.body?.error || `workspace_select_failed_${selected.status}`);
+      setPill(`Workspace selection failed (${code})`, "err");
+      return;
+    }
+    const originResp = await api("/api/frontdoor-origin", {
+      method: "GET",
+    });
+    if (!originResp.ok || !originResp.body?.frontdoor_origin) {
+      const code = String(originResp.body?.error || `frontdoor_origin_unavailable_${originResp.status}`);
+      setPill(`Workspace launch unavailable (${code})`, "err");
+      return;
+    }
+    const frontdoorOrigin = String(originResp.body.frontdoor_origin || "").replace(/\/+$/, "");
+    state.frontdoorOrigin = frontdoorOrigin;
+    const launch = new URL(activeApp.entry_path || "/app/control/chat", frontdoorOrigin);
+    launch.searchParams.set("workspace_id", workspaceId);
+    setPill(
+      `Opening ${(activeApp.display_name || activeApp.app_id || "workspace app").trim()}...`,
+      "ok",
+    );
+    launched = true;
+    window.location.href = launch.toString();
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    setPill(`Workspace launch failed (${detail})`, "err");
+  } finally {
+    if (!launched) {
+      openButton.disabled = !state.session || !state.activeWorkspaceId || !state.activeAppId;
+    }
   }
-  const originResp = await api("/api/frontdoor-origin", {
-    method: "GET",
-  });
-  if (!originResp.ok || !originResp.body?.frontdoor_origin) {
-    setPill("Workspace launch unavailable", "err");
-    return;
-  }
-  const frontdoorOrigin = String(originResp.body.frontdoor_origin || "").replace(/\/+$/, "");
-  state.frontdoorOrigin = frontdoorOrigin;
-  const launch = new URL(app.entry_path || "/app/control/chat", frontdoorOrigin);
-  launch.searchParams.set("workspace_id", workspaceId);
-  window.location.href = launch.toString();
 }
 
 async function handleWorkspacePickerChange() {
@@ -664,6 +1044,8 @@ function handleAppPickerChange() {
   updateAppSummary();
   el("openTenantAppBtn").disabled = !state.session || !state.activeWorkspaceId || !state.activeAppId;
 }
+
+applyFlavorCopy();
 
 el("googleBtn").addEventListener("click", startGoogle);
 el("logoutBtn").addEventListener("click", logout);

@@ -26,7 +26,7 @@ The user should never need to think in terms of separate "control plane vs event
 As of this spec, code and specs show mixed models:
 
 1. Control taxonomy exists as `protocol | control | event` in `/Users/tyler/nexus/home/projects/nexus/nex/src/nex/control-plane/authz-taxonomy.ts`.
-2. Runtime methods include duplicated/legacy entries (notably node and dual chat/agent ingress) in `/Users/tyler/nexus/home/projects/nexus/nex/src/nex/control-plane/server-methods-list.ts`.
+2. Runtime methods include duplicated/legacy entries (notably legacy node namespace and dual chat/agent ingress) in `/Users/tyler/nexus/home/projects/nexus/nex/src/nex/control-plane/server-methods-list.ts`.
 3. HTTP control and WS control are both mounted today (`/Users/tyler/nexus/home/projects/nexus/nex/src/nex/control-plane/server-http.ts`, `/Users/tyler/nexus/home/projects/nexus/nex/src/nex/control-plane/server-methods.ts`).
 4. `NexusRequest` and `NexusEvent` are currently split and message-centric in `/Users/tyler/nexus/home/projects/nexus/nex/src/nex/request.ts`.
 5. Existing specs still encode older split language (`SURFACE_ADAPTER_V2.md`, `RUNTIME_SURFACES.md`, `NEXUS_REQUEST.md`).
@@ -76,7 +76,7 @@ No special "finalize-only-at-end" semantics.
 ### 3.6 Hard cutover operation cleanup
 
 1. Merge `chat.send` and `agent` ingress intent under one canonical operation path (`event.ingest`).
-2. Remove node-specific operation family for now (including `node.*`, `node.event`, `node.invoke.result`, `skills.bins`).
+2. Remove legacy node operation family (`node.*`, `node.event`, `node.invoke.result`, `skills.bins`) and replace with canonical device-host operations (`device.host.list|describe|invoke`) plus adapter control session (`adapter.control.start`).
 3. Remove legacy `cron.*` and `wake`; replace with `clock.schedule.*` operations.
 4. Rename `ingress.credentials.*` to `auth.tokens.ingress.*`.
 5. Remove special-case webhook endpoints `/wake` and `/agent`; mapped webhook routes are canonical.
@@ -238,8 +238,9 @@ Surface defaulting rule:
 7. `event.ingest`  
    Canonical event ingress operation for user/channel/webhook/openai/openresponses/webchat/clock/system ingress.
 8. `event.backfill` (when enabled by adapter/system policy).
-9. Adapter capability operations: `adapter.info`, `adapter.health`, `adapter.accounts.list`, `adapter.monitor.start|stop`, `delivery.send|stream|react|edit|delete|poll`.
-10. Clock scheduling operations: `clock.schedule.list|status|create|update|remove|run|runs|wake`.
+9. Device operations: `device.pair.*`, `device.token.*`, `device.host.list|describe|invoke`.
+10. Adapter capability operations: `adapter.info`, `adapter.health`, `adapter.accounts.list`, `adapter.monitor.start|stop`, `adapter.control.start`, `delivery.send|stream|react|edit|delete|poll`.
+11. Clock scheduling operations: `clock.schedule.list|status|create|update|remove|run|runs|wake`.
 
 ### 6.2 Hard cutover mapping (required)
 
@@ -247,16 +248,20 @@ Surface defaulting rule:
 2. `agent` -> `event.ingest`
 3. `system-event` -> `event.ingest`
 4. `ingress.credentials.*` -> `auth.tokens.ingress.*`
-5. Remove `node.*`, `node.event`, `node.invoke.result`, `skills.bins` from active registry.
-6. `wake` -> `clock.schedule.wake`
-7. `cron.list` -> `clock.schedule.list`
-8. `cron.status` -> `clock.schedule.status`
-9. `cron.add` -> `clock.schedule.create`
-10. `cron.update` -> `clock.schedule.update`
-11. `cron.remove` -> `clock.schedule.remove`
-12. `cron.run` -> `clock.schedule.run`
-13. `cron.runs` -> `clock.schedule.runs`
-14. Remove internal pseudo-method dispatch ids (`_internal.event.ingest.chat|agent|system`); `event.ingest` delegates directly to internal handler functions.
+5. `node.list` -> `device.host.list`
+6. `node.describe` -> `device.host.describe`
+7. `node.invoke` -> `device.host.invoke`
+8. `node.pair.*` -> `device.pair.*` + `device.token.*`
+9. Legacy node wire control (`node.invoke.request/result`, `node.event`) -> `adapter.control.start` stream frames.
+10. `wake` -> `clock.schedule.wake`
+11. `cron.list` -> `clock.schedule.list`
+12. `cron.status` -> `clock.schedule.status`
+13. `cron.add` -> `clock.schedule.create`
+14. `cron.update` -> `clock.schedule.update`
+15. `cron.remove` -> `clock.schedule.remove`
+16. `cron.run` -> `clock.schedule.run`
+17. `cron.runs` -> `clock.schedule.runs`
+18. Remove internal pseudo-method dispatch ids (`_internal.event.ingest.chat|agent|system`); `event.ingest` delegates directly to internal handler functions.
 
 ---
 
@@ -398,7 +403,11 @@ External (managed by adapter runtime):
 3. `whatsapp`
 4. `eve`
 5. `gogcli`
-6. future adapter packages
+6. `device-headless`
+7. `device-ios`
+8. `device-macos`
+9. `device-android`
+10. future adapter packages
 
 ---
 

@@ -40,13 +40,15 @@ Both must produce canonical entity ids.
 
 No heuristic-only receiver resolution paths are allowed in the default path.
 
-## D2. Receiver Is Resolved From Account Ownership
+## D2. Receiver Is Resolved From Contacts (Symmetric With Sender)
 
-For external adapter ingress, receiver identity is resolved from `(platform, account_id)` using explicit account-to-entity bindings.
+Receiver identity resolution uses the same `contacts -> entities` lookup path as sender resolution. The adapter config knows which `account_id` it runs as; a contacts row maps `(platform, account_id)` to an entity, which is then canonicalized via the `merged_into` chain -- exactly the same as sender resolution.
+
+No separate `account_receiver_bindings` table is needed. Identity resolution is fully symmetric.
 
 `delivery.receiver_id` is optional and used as a verification/corroboration signal, not as the primary source of truth.
 
-If account binding is missing or conflicts with verified receiver hints, ingress is denied (fail closed).
+If the contacts-based receiver lookup is missing or conflicts with verified receiver hints, ingress is denied (fail closed).
 
 ## D3. Remove All Atlas Fallbacks
 
@@ -96,25 +98,17 @@ Summary transfer is mandatory. If model summarization fails, runtime must use de
 
 No long-lived dual-write or runtime fallback behavior.
 
-Migration is one-way: canonical keys, explicit receiver account bindings, explicit persona bindings.
+Migration is one-way: canonical keys, contacts-based receiver resolution (symmetric with sender), explicit persona bindings.
 
 ---
 
 ## 4. Required Data Model Additions
 
-## 4.1 identity.db: account receiver bindings
+## 4.1 identity.db: receiver identity via contacts (symmetric)
 
-`account_receiver_bindings`
+Receiver identity resolution uses the existing `contacts` table -- the same path used for sender resolution. A contacts row with `(platform, space_id='', sender_id=<account_id>)` maps the adapter account to its receiver entity. No separate `account_receiver_bindings` table is needed; identity resolution is fully symmetric between sender and receiver.
 
-1. `platform TEXT NOT NULL`
-2. `account_id TEXT NOT NULL`
-3. `receiver_entity_id TEXT NOT NULL`
-4. `source TEXT NOT NULL` (`bootstrap|manual|import|control-plane`)
-5. `created_at INTEGER NOT NULL`
-6. `updated_at INTEGER NOT NULL`
-7. PK `(platform, account_id)`
-
-Purpose: deterministic receiver identity from verified ingress account.
+Bootstrap and adapter startup seed the appropriate contacts row for each adapter account.
 
 ## 4.2 identity.db: persona bindings
 
@@ -151,7 +145,7 @@ Purpose: auditable proof that mandatory transfer happened.
 
 1. `receiveEvent`: ingress integrity stamping (`platform/account_id` trusted from adapter context).
 2. `resolvePrincipals.sender`: sender entity resolution + canonicalization.
-3. `resolvePrincipals.receiver`: receiver entity from account binding + optional receiver hint verification + canonicalization.
+3. `resolvePrincipals.receiver`: receiver entity from contacts lookup (symmetric with sender) + optional receiver hint verification + canonicalization.
 4. `resolveAccess`: policy with sender+receiver entities.
 5. `resolveSessionKey`: build DM/group key from sender+receiver entity.
 6. `resolvePersonaBinding`: choose `(agent_id, persona_ref)` from receiver default/override binding.
@@ -196,7 +190,7 @@ After merge canonicalization:
 ## 7. Security And Integrity
 
 1. Receiver cannot be inferred via implicit default persona fallback.
-2. Account->receiver binding is required for external ingress.
+2. A contacts-based receiver mapping is required for external ingress (symmetric with sender resolution).
 3. Receiver/account mismatch is integrity violation and denied.
 4. Unresolved receiver must not escalate privileges or trigger default-agent execution.
 5. Session resolution must use exact canonical labels only; no alias/main/suffix compatibility lookup at runtime.
@@ -207,7 +201,7 @@ After merge canonicalization:
 
 1. No runtime references that default routing/context to `atlas`.
 2. No canonical session key contains `:agent:` or `:thread:`.
-3. Receiver resolution succeeds via `(platform, account_id)` binding for all enabled adapter accounts.
+3. Receiver resolution succeeds via `contacts -> entities` lookup (symmetric with sender) for all enabled adapter accounts.
 4. Sender merge produces mandatory continuity transfer records and summary injection.
 5. Persona pointer swap keeps same session key and preserves history continuity.
 6. Runtime/session APIs do not resolve `main`, suffix, or alias session compatibility keys.

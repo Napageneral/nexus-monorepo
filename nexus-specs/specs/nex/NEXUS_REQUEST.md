@@ -895,7 +895,7 @@ CREATE INDEX idx_nex_traces_created ON nex_traces(created_at);
 
 3. **Multiple responses per request?** If the agent sends multiple messages (e.g., text + image), how is that captured? (Proposal: `response.content` is the primary response. Multiple delivery results captured as array.)
 
-4. **Webhook/timer events that skip most stages?** Timer ticks may not need identity resolution. **Resolved:** System-origin platforms (cron, runtime, boot, restart, node, clock) are recognized at Stage 2 and short-circuit to entity-owner without a contacts lookup. See `IDENTITY_RESOLUTION.md` System-Origin Resolution.
+4. **Webhook/timer events that skip most stages?** Timer ticks may not need identity resolution. **Resolved:** System-origin platforms (`clock`, `boot`, `restart`, internal `runtime`) are recognized at Stage 2 and short-circuit to entity-owner without a contacts lookup. Device-host ingress is not system-origin and resolves through identity mappings. See `IDENTITY_RESOLUTION.md` System-Origin Resolution.
 
 ---
 

@@ -20,6 +20,7 @@ type RawFrontdoorConfig = {
   baseUrl?: unknown;
   session?: {
     cookieName?: unknown;
+    cookieDomain?: unknown;
     ttlSeconds?: unknown;
     storePath?: unknown;
   };
@@ -33,6 +34,13 @@ type RawFrontdoorConfig = {
     refreshTtlSeconds?: unknown;
   };
   security?: {
+    sessionCookieSecure?: unknown;
+    hsts?: {
+      enabled?: unknown;
+      maxAgeSeconds?: unknown;
+      includeSubDomains?: unknown;
+      preload?: unknown;
+    };
     rateLimits?: {
       loginAttempts?: unknown;
       loginFailures?: unknown;
@@ -94,6 +102,25 @@ function readString(input: unknown, fallback: string): string {
   return fallback;
 }
 
+function readBoolean(input: unknown, fallback: boolean): boolean {
+  if (typeof input === "boolean") {
+    return input;
+  }
+  if (typeof input === "string") {
+    const normalized = input.trim().toLowerCase();
+    if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on") {
+      return true;
+    }
+    if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off") {
+      return false;
+    }
+  }
+  if (typeof input === "number" && Number.isFinite(input)) {
+    return input !== 0;
+  }
+  return fallback;
+}
+
 function assertNonEmpty(value: string, label: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -111,21 +138,31 @@ function parseTenants(raw: unknown): Map<string, TenantConfig> {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       continue;
     }
-    const runtimeUrl = readString((value as Record<string, unknown>).runtimeUrl, "");
+    const record = value as Record<string, unknown>;
+    const runtimeUrl =
+      readString(record.runtimeUrl, "") || readString(record.runtime_url, "");
     if (!runtimeUrl) {
       continue;
     }
     const runtimePublicBaseUrl =
-      readString((value as Record<string, unknown>).runtimePublicBaseUrl, "") || runtimeUrl;
-    const runtimeWsUrl = readString((value as Record<string, unknown>).runtimeWsUrl, "") || undefined;
+      readString(record.runtimePublicBaseUrl, "") ||
+      readString(record.runtime_public_base_url, "") ||
+      runtimeUrl;
+    const runtimeWsUrl =
+      readString(record.runtimeWsUrl, "") || readString(record.runtime_ws_url, "") || undefined;
     const runtimeSseUrl =
-      readString((value as Record<string, unknown>).runtimeSseUrl, "") || undefined;
+      readString(record.runtimeSseUrl, "") || readString(record.runtime_sse_url, "") || undefined;
+    const runtimeAuthToken =
+      readString(record.runtimeAuthToken, "") ||
+      readString(record.runtime_auth_token, "") ||
+      undefined;
     tenants.set(id, {
       id,
       runtimeUrl,
       runtimePublicBaseUrl,
       runtimeWsUrl,
       runtimeSseUrl,
+      runtimeAuthToken,
     });
   }
   return tenants;
@@ -350,6 +387,25 @@ function parseStringMap(raw: unknown): Map<string, string> {
   return parsed;
 }
 
+function readCookieDomain(input: unknown, fallback: unknown): string | undefined {
+  const raw = readString(input, readString(fallback, ""));
+  if (!raw) {
+    return undefined;
+  }
+  const value = raw.trim().toLowerCase();
+  if (!value) {
+    return undefined;
+  }
+  if (/[;\s,]/u.test(value)) {
+    throw new Error("frontdoor config session cookie domain contains illegal characters");
+  }
+  const normalized = value.startsWith(".") ? value.slice(1) : value;
+  if (!normalized || !/^[a-z0-9.-]+$/u.test(normalized) || !normalized.includes(".")) {
+    throw new Error("frontdoor config session cookie domain must be a valid DNS domain");
+  }
+  return normalized;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): FrontdoorConfig {
   const configPath = env.FRONTDOOR_CONFIG_PATH?.trim() || DEFAULT_CONFIG_PATH;
   const rawText = fs.readFileSync(configPath, "utf8");
@@ -359,13 +415,41 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): FrontdoorConfi
   const host = readString(env.FRONTDOOR_HOST, readString(raw.host, "127.0.0.1"));
   const port = readNumber(env.FRONTDOOR_PORT, readNumber(raw.port, 4789));
   const baseUrl = readString(env.FRONTDOOR_BASE_URL, readString(raw.baseUrl, `http://${host}:${port}`));
+  const baseIsHttps = /^https:\/\//i.test(baseUrl);
   const sessionCookieName = readString(
     env.FRONTDOOR_SESSION_COOKIE,
     readString(raw.session?.cookieName, "nexus_fd_session"),
   );
+  const sessionCookieDomain = readCookieDomain(
+    env.FRONTDOOR_SESSION_COOKIE_DOMAIN,
+    raw.session?.cookieDomain,
+  );
+  const sessionCookieSecure = readBoolean(
+    env.FRONTDOOR_SESSION_COOKIE_SECURE,
+    readBoolean(raw.security?.sessionCookieSecure, baseIsHttps),
+  );
   const sessionTtlSeconds = readNumber(
     env.FRONTDOOR_SESSION_TTL_SECONDS,
     readNumber(raw.session?.ttlSeconds, 7 * 24 * 60 * 60),
+  );
+  const hstsEnabled = readBoolean(
+    env.FRONTDOOR_SECURITY_HSTS_ENABLED,
+    readBoolean(raw.security?.hsts?.enabled, true),
+  );
+  const hstsMaxAgeSeconds = Math.max(
+    0,
+    readNumber(
+      env.FRONTDOOR_SECURITY_HSTS_MAX_AGE_SECONDS,
+      readNumber(raw.security?.hsts?.maxAgeSeconds, 31536000),
+    ),
+  );
+  const hstsIncludeSubDomains = readBoolean(
+    env.FRONTDOOR_SECURITY_HSTS_INCLUDE_SUBDOMAINS,
+    readBoolean(raw.security?.hsts?.includeSubDomains, true),
+  );
+  const hstsPreload = readBoolean(
+    env.FRONTDOOR_SECURITY_HSTS_PRELOAD,
+    readBoolean(raw.security?.hsts?.preload, true),
   );
   const sessionStorePathRaw = readString(
     env.FRONTDOOR_SESSION_STORE_PATH,
@@ -555,7 +639,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): FrontdoorConfi
     port,
     baseUrl,
     sessionCookieName,
+    sessionCookieDomain,
+    sessionCookieSecure,
     sessionTtlSeconds,
+    hstsEnabled,
+    hstsMaxAgeSeconds,
+    hstsIncludeSubDomains,
+    hstsPreload,
     sessionStorePath,
     workspaceStorePath,
     workspaceOwnerUserIds,

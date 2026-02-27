@@ -9,6 +9,7 @@ export {
 export type {
   AdapterContext,
   AdapterDefinition,
+  AdapterOperations,
   AdapterSetupRequest,
   RunAdapterOptions,
 } from "./run.js";
@@ -26,6 +27,16 @@ export {
   AdapterAuthMethodFileUploadSchema,
   AdapterAuthMethodOAuthSchema,
   AdapterAuthMethodSchema,
+  AdapterControlEndpointSchema,
+  AdapterControlEndpointRemoveFrameSchema,
+  AdapterControlEndpointUpsertFrameSchema,
+  AdapterControlEventIngestFrameSchema,
+  AdapterControlInputFrameSchema,
+  AdapterControlInvokeCancelFrameSchema,
+  AdapterControlInvokeErrorSchema,
+  AdapterControlInvokeRequestFrameSchema,
+  AdapterControlInvokeResultFrameSchema,
+  AdapterControlOutputFrameSchema,
   AdapterOperationSchema,
   AdapterSetupResultSchema,
   AdapterSetupStatusSchema,
@@ -55,6 +66,16 @@ export type {
   AdapterAuthMethodCustomFlow,
   AdapterAuthMethodFileUpload,
   AdapterAuthMethodOAuth,
+  AdapterControlEndpoint,
+  AdapterControlEndpointRemoveFrame,
+  AdapterControlEndpointUpsertFrame,
+  AdapterControlEventIngestFrame,
+  AdapterControlInputFrame,
+  AdapterControlInvokeCancelFrame,
+  AdapterControlInvokeError,
+  AdapterControlInvokeRequestFrame,
+  AdapterControlInvokeResultFrame,
+  AdapterControlOutputFrame,
   AdapterOperation,
   AdapterSetupResult,
   AdapterSetupStatus,
@@ -79,6 +100,17 @@ export { emitStreamStatus, handleStream } from "./stream.js";
 
 export type { PollConfig, EmitFunc, MonitorHandler } from "./monitor.js";
 export { pollMonitor } from "./monitor.js";
+
+export type {
+  AdapterControlInvokeReply,
+  AdapterControlServeHandlers,
+  AdapterControlSessionOptions,
+} from "./control.js";
+export {
+  AdapterControlEndpointRegistry,
+  AdapterControlSession,
+  createAdapterControlSession,
+} from "./control.js";
 
 export { chunkText, sendWithChunking } from "./send.js";
 

@@ -26,9 +26,9 @@ Observed in runtime code (`/Users/tyler/nexus/home/projects/nexus/nex/src`):
    - `resolveAccess.ts` defaults routing persona to `"atlas"`.
    - `assembleContext.ts` and `runAgent.ts` fall back to `"atlas"`.
    - `session.ts` still has atlas compatibility conversion (`toAtlasScopedSessionKey`).
-2. Receiver resolution is not yet account-binding authoritative:
-   - `resolveReceiver.ts` prioritizes explicit agent hints and contact heuristics.
-   - No dedicated `(platform, account_id) -> receiver_entity_id` table exists yet.
+2. Receiver resolution should use the same `contacts -> entities` lookup as sender resolution (symmetric identity resolution):
+   - `resolveReceiver.ts` should resolve via contacts, not explicit agent hints or heuristics.
+   - No separate `account_receiver_bindings` table is needed -- contacts already maps `(platform, account_id)` to an entity.
 3. Session keys are still agent/thread-scoped in code:
    - DM: `dm:{sender}:agent:{agent}`
    - Group thread split: `...:thread:{thread_id}`
@@ -39,7 +39,7 @@ Observed in runtime code (`/Users/tyler/nexus/home/projects/nexus/nex/src`):
 ## 3. Target Decisions (Locked)
 
 1. Sender and receiver are symmetric identity outcomes in the same identity substrate (`identity.db`).
-2. Receiver resolves from account binding first; receiver hints are verification signals only.
+2. Receiver resolves from contacts lookup first (symmetric with sender); receiver hints are verification signals only.
 3. Canonical session labels:
    - DM: `dm:{sender_entity_id}:{receiver_entity_id}`
    - Group: `group:{platform}:{container_id}:{receiver_entity_id}`
@@ -97,9 +97,9 @@ If LLM summarization fails, deterministic fallback summary must run (no skip pat
 ### Phase A: Schema + Contracts
 
 1. `identity.db` add:
-   - `account_receiver_bindings`
    - `persona_bindings`
    - `persona_binding_events`
+   - Receiver resolution uses existing `contacts` table (symmetric with sender; no separate binding table needed)
 2. `agents.db` add:
    - `session_continuity_transfers`
 3. Update `NexusRequest` contracts to use:
@@ -109,7 +109,7 @@ If LLM summarization fails, deterministic fallback summary must run (no skip pat
 ### Phase B: Receiver Resolution Cutover
 
 1. Rewrite `resolveReceiver.ts`:
-   - primary lookup: `(platform, account_id)` binding
+   - primary lookup: `contacts` table with `(platform, sender_id=account_id)` -- same path as sender resolution
    - canonicalize entity via `merged_into`
    - verify optional receiver hints (if present)
    - fail closed on missing/conflict
@@ -157,10 +157,10 @@ If LLM summarization fails, deterministic fallback summary must run (no skip pat
 
 Primary code files expected:
 
-1. `src/db/identity.ts` (new binding tables + helpers)
+1. `src/db/identity.ts` (persona binding tables + helpers; receiver uses existing contacts table)
 2. `src/iam/identity.ts` (canonicalization helpers reused by receiver path)
 3. `src/nex/request.ts` (schema field alignment)
-4. `src/nex/stages/resolveReceiver.ts` (authoritative account binding resolver)
+4. `src/nex/stages/resolveReceiver.ts` (contacts-based receiver resolver, symmetric with sender)
 5. `src/nex/stages/resolveAccess.ts` (remove implicit persona fallback)
 6. `src/nex/session.ts` (canonical key shape + aliasing behavior)
 7. `src/nex/stages/assembleContext.ts` (no atlas fallback; require resolved binding)
@@ -174,8 +174,8 @@ Primary code files expected:
 
 ### Unit
 
-1. Receiver resolves only from account binding, with verified hints.
-2. Missing/conflicting binding fails closed.
+1. Receiver resolves from contacts lookup (symmetric with sender), with verified hints.
+2. Missing/conflicting contacts mapping fails closed.
 3. Session labels for DM/group match canonical formats.
 4. Thread message uses group session label (no thread split).
 5. Atlas/default fallback is absent in routing/context stages.
@@ -188,7 +188,7 @@ Primary code files expected:
 2. Merge senders; next message routes to canonical primary session with transferred summary present.
 3. Persona content edit keeps same session.
 4. Persona pointer swap keeps same session unless explicit new-session action.
-5. Unknown receiver binding cannot invoke agent execution.
+5. Unknown receiver contacts mapping cannot invoke agent execution.
 
 ### E2E
 
@@ -201,7 +201,7 @@ Primary code files expected:
 ## 9. Cutover Execution Checklist
 
 1. Land schema migrations first.
-2. Backfill account receiver bindings for all enabled adapter accounts.
+2. Backfill contacts rows for receiver identity for all enabled adapter accounts (symmetric with sender resolution).
 3. Backfill default persona bindings per receiver entity.
 4. Run one-time session label migration + continuity transfer.
 5. Deploy runtime cutover with fallback paths already removed.
@@ -215,7 +215,7 @@ Primary code files expected:
 These invariants must hold before, during, and after cutover:
 
 1. External ingress must resolve both `sender_entity_id` and `receiver_entity_id` before agent execution.
-2. Receiver resolution is authoritative from `(platform, account_id) -> receiver_entity_id`; receiver hints are verification only.
+2. Receiver resolution is authoritative from `contacts -> entities` lookup (symmetric with sender resolution); receiver hints are verification only.
 3. If receiver resolution fails (`missing binding`, `invalid binding`, `hint conflict`, `missing identity db`), access is denied (fail closed).
 4. Session labels are exact canonical labels only:
    - `dm:{sender_entity_id}:{receiver_entity_id}`

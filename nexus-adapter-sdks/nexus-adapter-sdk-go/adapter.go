@@ -70,6 +70,9 @@ type AdapterOperations struct {
 	// AdapterSetupCancel cancels an in-progress setup session.
 	AdapterSetupCancel func(ctx context.Context, req AdapterSetupRequest) (*AdapterSetupResult, error)
 
+	// AdapterControlStart starts a long-lived duplex control session.
+	AdapterControlStart func(ctx context.Context, account string, session *ControlSession) error
+
 	// DeliveryStream configures streaming delivery support.
 	DeliveryStream *StreamConfig
 }
@@ -115,6 +118,8 @@ func Run(adapter Adapter) {
 		err = runInfo(adapter)
 	case "adapter.monitor.start":
 		err = runMonitor(adapter, filteredArgs)
+	case "adapter.control.start":
+		err = runControl(adapter, filteredArgs)
 	case "delivery.send":
 		err = runSend(adapter, filteredArgs)
 	case "event.backfill":
@@ -157,6 +162,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "Operations:\n")
 	fmt.Fprintf(os.Stderr, "  adapter.info\n")
 	fmt.Fprintf(os.Stderr, "  adapter.monitor.start --account <id>\n")
+	fmt.Fprintf(os.Stderr, "  adapter.control.start --account <id>\n")
 	fmt.Fprintf(os.Stderr, "  delivery.send --account <id> --to <target> --text \"...\"\n")
 	fmt.Fprintf(os.Stderr, "  event.backfill --account <id> --since <date>\n")
 	fmt.Fprintf(os.Stderr, "  adapter.health --account <id>\n")
@@ -379,6 +385,32 @@ func runSetup(adapter Adapter, args []string, operation AdapterOperation) error 
 		return fmt.Errorf("%s: %w", operation, err)
 	}
 	return writeJSON(result)
+}
+
+func runControl(adapter Adapter, args []string) error {
+	if adapter.Operations.AdapterControlStart == nil {
+		return fmt.Errorf("adapter.control.start not supported by this adapter")
+	}
+
+	fs := flag.NewFlagSet("adapter.control.start", flag.ContinueOnError)
+	account := fs.String("account", "", "Account ID")
+	_ = fs.String("format", "jsonl", "Output format (always jsonl)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*account) == "" {
+		return fmt.Errorf("missing required flag: --account")
+	}
+
+	ctx := signalContext()
+	session := NewControlSession(os.Stdin, os.Stdout)
+
+	LogInfo("control session starting for account %q", *account)
+	if err := adapter.Operations.AdapterControlStart(ctx, strings.TrimSpace(*account), session); err != nil {
+		return fmt.Errorf("adapter.control.start: %w", err)
+	}
+	LogInfo("control session stopped cleanly")
+	return nil
 }
 
 func runStream(adapter Adapter, args []string) error {

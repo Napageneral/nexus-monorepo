@@ -336,3 +336,5 @@ The tradeoff is query speed for typed lookups. But with proper indexes on `fact_
 - `UNIFIED_ENTITY_STORE.md` — Entity schema and merge mechanics
 - `MEMORY_SYSTEM.md` — Fact extraction and recall API
 - `../iam/IDENTITY_RESOLUTION.md` — Contact-to-entity resolution
+- `../CRM_ANALYSIS_AND_WORK_SYSTEM.md` — CRM analysis, work.db schema, four-model pattern
+- `../ENTITY_ACTIVITY_DASHBOARD.md` — Per-entity CRM metrics and aggregate dashboards

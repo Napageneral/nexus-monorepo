@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import Ajv2020 from "ajv/dist/2020";
 import {
   AdapterAccountSchema,
+  AdapterControlInputFrameSchema,
+  AdapterControlOutputFrameSchema,
   AdapterHealthSchema,
   AdapterInfoSchema,
   AdapterStreamStatusSchema,
@@ -100,6 +102,18 @@ describe("adapter protocol contract (nexus-specs)", () => {
     for (const s of streamStatuses) {
       expect(get("AdapterStreamStatus")(s)).toBe(true);
       AdapterStreamStatusSchema.parse(s);
+    }
+
+    const controlInputs = loadJSONL(path.join(fixturesDir, "control_input_frames.jsonl"));
+    for (const frame of controlInputs) {
+      expect(get("AdapterControlInputFrame")(frame)).toBe(true);
+      AdapterControlInputFrameSchema.parse(frame);
+    }
+
+    const controlOutputs = loadJSONL(path.join(fixturesDir, "control_output_frames.jsonl"));
+    for (const frame of controlOutputs) {
+      expect(get("AdapterControlOutputFrame")(frame)).toBe(true);
+      AdapterControlOutputFrameSchema.parse(frame);
     }
   });
 });

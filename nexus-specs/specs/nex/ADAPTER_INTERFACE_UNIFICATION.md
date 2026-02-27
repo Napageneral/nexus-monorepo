@@ -32,7 +32,7 @@ Current code/spec state is mixed and creates cognitive debt:
    - `nexus-adapter-sdks/*`
 3. Legacy dual-role language still exists in historical docs (`SURFACE_ADAPTER_V2.md`) and some delivery docs must stay synchronized with this spec.
 4. Clock is active for tick ingress and schedule operations (`clock.schedule.*`), but runtime scheduler implementation still lives in `server-cron.ts` internals.
-5. Node-specific operations remain in code paths/tests not yet cut over to the unified operation set and are currently treated as quarantine scope.
+5. Legacy node/device control behavior still exists as a parallel stack and must converge into the canonical adapter model (`device.host.*` + `adapter.control.start`).
 
 This spec removes that split model.
 
@@ -52,6 +52,10 @@ This spec removes that split model.
    No aliases, no compatibility shims.
 6. **Single in-repo contract file.**  
    Runtime operations are defined in one canonical file: `nex/src/nex/control-plane/runtime-operations.ts`.
+7. **Device control is canonical runtime surface.**  
+   Legacy `node.*` is replaced by `device.host.list|describe|invoke`.
+8. **Duplex device control is an adapter contract.**  
+   External adapter surface includes `adapter.control.start` for runtime-initiated invoke + endpoint lifecycle + canonical event ingest frames.
 
 ---
 
@@ -116,6 +120,7 @@ The SDK is operation-centric. CLI adapter commands become an implementation deta
 4. Event normalization helpers
 5. Delivery helpers (send/stream/reaction/edit/delete)
 6. Backfill helpers
+7. Control-session helpers for long-lived duplex device adapters (`adapter.control.start`)
 
 ### 5.2 External adapter bridge
 
@@ -129,6 +134,7 @@ Existing CLI verbs (`info|monitor|send|stream|backfill|health|accounts`) remain 
 6. `health` -> `adapter.health`
 7. `accounts` -> `adapter.accounts.list`
 8. optional verbs -> `delivery.react|delivery.edit|delivery.delete|delivery.poll`
+9. control-session stream -> `adapter.control.start`
 
 ---
 
@@ -156,13 +162,14 @@ This is one registry (single source of truth), grouped only for readability.
 11. `sessions.list`, `sessions.resolve`, `sessions.preview`, `sessions.import`, `sessions.import.chunk`, `sessions.patch`, `sessions.reset`, `sessions.delete`, `sessions.compact`
 12. `chat.history`, `chat.abort`, `chat.inject`
 13. `device.pair.list`, `device.pair.approve`, `device.pair.reject`, `device.token.rotate`, `device.token.revoke`
-14. `browser.request`
-15. `talk.mode`
-16. `tts.status`, `tts.providers`, `tts.enable`, `tts.disable`, `tts.convert`, `tts.setProvider`
-17. `voicewake.get`, `voicewake.set`
-18. `acl.requests.list`, `acl.requests.show`, `acl.requests.approve`, `acl.requests.deny`, `acl.approval.request`
-19. `tools.invoke`
-20. `update.run`
+14. `device.host.list`, `device.host.describe`, `device.host.invoke`
+15. `browser.request`
+16. `talk.mode`
+17. `tts.status`, `tts.providers`, `tts.enable`, `tts.disable`, `tts.convert`, `tts.setProvider`
+18. `voicewake.get`, `voicewake.set`
+19. `acl.requests.list`, `acl.requests.show`, `acl.requests.approve`, `acl.requests.deny`, `acl.approval.request`
+20. `tools.invoke`
+21. `update.run`
 
 ### 6.3 Event operations
 
@@ -175,12 +182,13 @@ This is one registry (single source of truth), grouped only for readability.
 2. `adapter.health`
 3. `adapter.accounts.list`
 4. `adapter.monitor.start`, `adapter.monitor.stop`
-5. `delivery.send`
-6. `delivery.stream`
-7. `delivery.react`
-8. `delivery.edit`
-9. `delivery.delete`
-10. `delivery.poll`
+5. `adapter.control.start`
+6. `delivery.send`
+7. `delivery.stream`
+8. `delivery.react`
+9. `delivery.edit`
+10. `delivery.delete`
+11. `delivery.poll`
 
 ---
 
@@ -281,12 +289,12 @@ Remove `cron.*` runtime config usage.
 12. `event.ingest` and `event.backfill` are exercised through adapter and internal ingress paths.
 13. Adapter capability operations (`adapter.info`, `delivery.send`, `delivery.stream`, etc.) are IAM-audited and tested.
 14. `event.ingest` chat/agent/system delegation uses internal handler functions, not pseudo runtime method ids.
-15. Runtime cutover gate excludes node-surface tests (`node-*`, `server-node-*`, `server.nodes.*`) until node reintegration work starts.
+15. Legacy node-surface tests are removed or rewritten to canonical `device.host.*` behavior.
 
 ---
 
 ## 10. Out Of Scope
 
 1. OIDC provider expansion details.
-2. Node ecosystem reintegration.
-3. Channel migration sequencing per platform.
+2. Channel migration sequencing per platform.
+3. Multi-hop app-on-app composition.

@@ -74,6 +74,7 @@ type AdapterOperation string
 const (
 	OpAdapterInfo         AdapterOperation = "adapter.info"
 	OpAdapterMonitorStart AdapterOperation = "adapter.monitor.start"
+	OpAdapterControlStart AdapterOperation = "adapter.control.start"
 	OpAdapterSetupStart   AdapterOperation = "adapter.setup.start"
 	OpAdapterSetupSubmit  AdapterOperation = "adapter.setup.submit"
 	OpAdapterSetupStatus  AdapterOperation = "adapter.setup.status"
@@ -211,6 +212,68 @@ type AdapterAccount struct {
 	DisplayName   string `json:"display_name,omitempty"`
 	CredentialRef string `json:"credential_ref,omitempty"` // "google/tnapathy@gmail.com"
 	Status        string `json:"status"`                   // "ready", "active", "error"
+}
+
+// --- Adapter Control Session Protocol ---
+
+// AdapterControlEndpoint is emitted via endpoint.upsert to declare an invokable endpoint.
+type AdapterControlEndpoint struct {
+	EndpointID  string          `json:"endpoint_id"`
+	DisplayName string          `json:"display_name,omitempty"`
+	Platform    string          `json:"platform,omitempty"`
+	Caps        []string        `json:"caps"`
+	Commands    []string        `json:"commands"`
+	Permissions map[string]bool `json:"permissions,omitempty"`
+}
+
+// AdapterControlInvokeError is an optional structured error for invoke.result.
+type AdapterControlInvokeError struct {
+	Code    string `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+// AdapterControlInvokeRequestFrame is sent from runtime -> adapter over adapter.control.start stdin.
+type AdapterControlInvokeRequestFrame struct {
+	Type           string `json:"type"` // "invoke.request"
+	RequestID      string `json:"request_id"`
+	EndpointID     string `json:"endpoint_id"`
+	Command        string `json:"command"`
+	Payload        any    `json:"payload,omitempty"`
+	TimeoutMS      int    `json:"timeout_ms,omitempty"`
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
+}
+
+// AdapterControlInvokeCancelFrame is sent from runtime -> adapter to cancel an invoke.
+type AdapterControlInvokeCancelFrame struct {
+	Type      string `json:"type"` // "invoke.cancel"
+	RequestID string `json:"request_id"`
+}
+
+// AdapterControlEndpointUpsertFrame is sent adapter -> runtime to register/update an endpoint.
+type AdapterControlEndpointUpsertFrame struct {
+	Type string `json:"type"` // "endpoint.upsert"
+	AdapterControlEndpoint
+}
+
+// AdapterControlEndpointRemoveFrame is sent adapter -> runtime to remove an endpoint.
+type AdapterControlEndpointRemoveFrame struct {
+	Type       string `json:"type"` // "endpoint.remove"
+	EndpointID string `json:"endpoint_id"`
+}
+
+// AdapterControlInvokeResultFrame is sent adapter -> runtime to resolve invoke requests.
+type AdapterControlInvokeResultFrame struct {
+	Type      string                     `json:"type"` // "invoke.result"
+	RequestID string                     `json:"request_id"`
+	OK        bool                       `json:"ok"`
+	Payload   any                        `json:"payload,omitempty"`
+	Error     *AdapterControlInvokeError `json:"error,omitempty"`
+}
+
+// AdapterControlEventIngestFrame is sent adapter -> runtime to ingest canonical event envelopes.
+type AdapterControlEventIngestFrame struct {
+	Type  string         `json:"type"` // "event.ingest"
+	Event map[string]any `json:"event"`
 }
 
 // --- Streaming Protocol ---

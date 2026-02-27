@@ -26,6 +26,66 @@ Captured during spec cohesion reviews:
 
 ---
 
+## Active Hard Cutover TODO: Node -> Device Adapter Model
+
+Source of truth:
+
+1. `specs/nex/workplans/NODE_ECOSYSTEM_REDESIGN_FOR_NEX_CORE_2026-02-26.md`
+
+Execution checklist:
+
+- [x] Phase A: spec/contract freeze
+- [x] Add canonical runtime operations: `device.host.list`, `device.host.describe`, `device.host.invoke`
+- [x] Add canonical external adapter control-session operation: `adapter.control.start`
+- [x] Align `specs/nex/UNIFIED_RUNTIME_OPERATION_MODEL.md` to new device-host surface
+- [x] Align `specs/nex/ADAPTER_INTERFACE_UNIFICATION.md` to new device-host surface
+- [x] Align `specs/delivery/sdk/ADAPTER_SDK_OPERATION_MODEL_CUTOVER.md` to include device-control session
+- [x] Align IAM + identity specs to device entities (`type='device'`) and remove `node` system-origin shortcut
+- [x] Phase B: runtime implementation (`device.host.*` handlers + adapter-control session manager)
+  - [x] `device.host.*` handlers implemented and wired through control-plane taxonomy
+  - [x] `adapter.control.start` runtime handler + adapter manager control-session path implemented
+- [x] Phase C: IAM/entity implementation (device entity creation on pair approval + contact bindings)
+  - [x] Replace node-pair persistence usage with device-pair persistence
+  - [x] Create/update device entities + `platform=device` contacts on pairing approval (manual + silent)
+  - [x] Remove `node` from IAM system-origin shortcut set
+  - [x] Remove bootstrap identity seeding from legacy node-pair store
+- [x] Phase D: SDK implementation (TS + Go control-session APIs + conformance tests)
+- [ ] Phase E: adapter project split and migration (`ios`, `macos`, `android`, `headless`)
+  - [x] Create dedicated device adapter projects:
+    - [x] `nexus-adapter-device-headless`
+    - [x] `nexus-adapter-device-ios`
+    - [x] `nexus-adapter-device-macos`
+    - [x] `nexus-adapter-device-android`
+  - [x] Implement canonical operation surface in each device adapter project (`adapter.info`, `adapter.health`, `adapter.accounts.list`, `adapter.control.start`, `adapter.setup.*`)
+  - [x] Validate adapter repo suites:
+    - [x] `go test ./...` passes in each dedicated device adapter project
+    - [x] CLI smoke for `adapter.info` + `adapter.control.start` invoke lifecycle per project
+  - [x] Migrate app-side runtime clients off legacy WS `node.invoke.request/result` + `node.event` wire semantics
+  - [x] Replace in-app `role=node` command/control coupling with dedicated device adapter control sessions
+  - [ ] Validate parity for chat/talk subscriptions and invoke response lifecycle on canonical adapter-control path
+    - [x] Runtime e2e: ws-host `device.host.invoke` -> `invoke.request` -> `invoke.result` lifecycle
+    - [x] Runtime e2e: dedicated adapter projects matrix (`ios`/`macos`/`android`/`headless`) covering `adapter.info`, `adapter.setup.*`, `adapter.control.start`, `device.host.list/describe/invoke`
+    - [ ] App/device e2e: chat/talk subscription parity on iOS/macOS/Android clients
+- [x] Phase F: legacy deletion (`node.*` handlers, node-pair store, node-only CLI/tool residue)
+  - [x] Delete legacy node-pair store module (`src/infra/node-pairing.ts`)
+  - [x] Remove runtime startup wiring to legacy remote skill/node-pair probing
+  - [x] Migrate remaining user-facing `/ptt` runtime callsite from `node.*` to `device.host.*`/`device.pair.*`
+  - [x] Delete unreachable in-tree `nexus node` CLI + `src/node-host/*` legacy host stack
+  - [x] Remove orphaned `nodeHost` config schema/types surface
+  - [x] Remove legacy runtime node command allow/deny policy (`runtime.nodes.allowCommands` / `runtime.nodes.denyCommands`) and onboarding seeding
+  - [x] Migrate Control UI node inventory fetch from `node.list` to `device.host.list`
+  - [x] Remove macOS legacy node pairing approval path (`node.pair.*`) and keep canonical `device.pair.*` prompter flow
+  - [x] Migrate macOS node inventory polling from `node.list` to `device.host.list`
+  - [x] Remove dead legacy node event plumbing (`server-node-events*`) from control-plane core
+  - [x] Remove legacy `Node*` protocol schema/validator exports from runtime protocol surface
+  - [x] Remove legacy node subscription manager (`server-node-subscriptions*`) and replace runtime hooks with explicit no-op stubs
+  - [x] Remove runtime `NodeRegistry`/legacy node invoke fallback and keep `device.host.*` on canonical adapter-control endpoints only
+- [ ] End-to-end validation across all device adapter targets
+  - [x] Non-live validation matrix complete (runtime e2e + dedicated adapter repo unit/smoke suites)
+  - [ ] True companion-app/device E2E on physical hosts (explicitly deferred for now)
+
+---
+
 ## Spec Completion Summary
 
 ### Core Architecture — DONE
@@ -68,6 +128,7 @@ All high-priority specs are complete and aligned. Ready for implementation.
 | **Oracle + Multi-UI Tenant Integration** | `specs/nex/HOSTED_ORACLE_MULTI_UI_INTEGRATION.md` | Design lock for Oracle GitHub App + Oracle UI in tenant runtime, runtime multi-app mounts, and frontdoor workspace/app launch model (hard cutover, no frontdoor Oracle data plane). |
 | **Runtime Multi-UI Cutover (Phase 1)** | `specs/nex/RUNTIME_MULTI_UI_CUTOVER.md` | Implement runtime app registry + `/api/apps` + strict `/app/<app_id>` mount routing; remove bare `/app/*` fallback. |
 | **Frontdoor Multi-UI Launch (Phase 2)** | `specs/nex/FRONTDOOR_MULTI_UI_LAUNCH.md` | Implement workspace+app selector in hosted shell, runtime-driven app catalog fetch, and app-aware launch path (replace hardcoded `/app/chat`). |
+| **Legacy Node + Session Surface Hard Cutover** | `specs/nex/workplans/LEGACY_NODE_AND_SESSION_SURFACE_HARD_CUTOVER_2026-02-26.md` | In progress: re-baselined green suites after CLI node quarantine cut (unit 708/4294, e2e 66/268+13 skipped). Top-level `nodes`/`node` CLI exposure removed; remaining node redesign scope is isolated/deferred. |
 
 ### Next Steps
 

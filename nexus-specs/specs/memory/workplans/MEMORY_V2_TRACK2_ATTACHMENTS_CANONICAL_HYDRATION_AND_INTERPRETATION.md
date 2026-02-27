@@ -84,6 +84,12 @@ Design intent:
 2. Add write/read API surface for interpretation text.
 3. Update writer/consolidator role/task guidance to inspect attachments and persist interpretation when useful.
 
+### Phase C (hard reliability cutover for real runtime)
+1. Stage out-of-sandbox attachment files into writer sandbox workspace before retain dispatch payload assembly.
+2. Rewrite attachment `local_path` to sandbox-relative path (`media/inbound-memory/...`) for tool compatibility.
+3. Strip `local_path` from payload when source file cannot be staged (avoid guaranteed tool failures on impossible paths).
+4. Emit staging counters in retain logs for QA (`staged`, `stripped`).
+
 ## Files in Phase A
 - `/Users/tyler/nexus/home/projects/nexus/nex/src/memory/retain-live.ts`
 - `/Users/tyler/nexus/home/projects/nexus/nex/src/cli/memory-backfill-cli.ts`
@@ -104,3 +110,8 @@ Design intent:
 2. No attachment loss between `loadEpisodesForTrigger`/backfill and writer task payload.
 3. Existing retain behavior remains functional.
 
+## Acceptance Criteria (Phase C)
+1. Writer no longer receives absolute host paths that escape sandbox root.
+2. Runtime logs do not show `Path escapes sandbox root` errors for staged attachments.
+3. Attachment tool calls operate on sandbox-local paths when source files exist.
+4. Missing/unreadable attachment files fail cleanly via stripped `local_path` (no repeated sandbox-path tool failures).

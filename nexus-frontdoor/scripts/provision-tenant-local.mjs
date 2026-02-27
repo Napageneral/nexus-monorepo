@@ -3,7 +3,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import net from "node:net";
-import { DatabaseSync } from "node:sqlite";
 
 function readStdin() {
   return new Promise((resolve, reject) => {
@@ -25,6 +24,39 @@ function parseCsv(input) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function parseBool(value, fallback = false) {
+  const raw = normalizeText(value).toLowerCase();
+  if (!raw) {
+    return fallback;
+  }
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
+function buildSpikeRuntimeBinding({ tenantId, stateDir }) {
+  const runtimeUrl = normalizeText(process.env.FRONTDOOR_SPIKE_RUNTIME_URL) || "http://127.0.0.1:7422";
+  const runtimePublicBaseUrl =
+    normalizeText(process.env.FRONTDOOR_SPIKE_RUNTIME_PUBLIC_BASE_URL) || runtimeUrl;
+  const trimmedBase = runtimePublicBaseUrl.replace(/\/+$/, "");
+  const runtimeWsUrl =
+    normalizeText(process.env.FRONTDOOR_SPIKE_RUNTIME_WS_URL) ||
+    `${trimmedBase.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:")}/`;
+  const runtimeSseUrl =
+    normalizeText(process.env.FRONTDOOR_SPIKE_RUNTIME_SSE_URL) ||
+    `${trimmedBase}/api/events/stream`;
+  const runtimeAuthToken =
+    normalizeText(process.env.FRONTDOOR_SPIKE_RUNTIME_AUTH_TOKEN) ||
+    normalizeText(process.env.SPIKE_AUTH_TOKEN);
+  return {
+    tenant_id: tenantId,
+    runtime_url: runtimeUrl,
+    runtime_public_base_url: runtimePublicBaseUrl,
+    runtime_ws_url: runtimeWsUrl,
+    runtime_sse_url: runtimeSseUrl,
+    runtime_auth_token: runtimeAuthToken || undefined,
+    state_dir: stateDir,
+  };
 }
 
 async function runCommand(command, args, options = {}) {
@@ -183,6 +215,80 @@ function renderTemplate(template, params) {
     .trim();
 }
 
+function adapterBinarySpecs() {
+  return [
+    { id: "google-ads", platform: "google-ads", binary: "gog-ads-adapter" },
+    { id: "gog-places", platform: "google-business-profile", binary: "gog-places-adapter" },
+    { id: "meta-ads", platform: "meta-ads", binary: "meta-ads-adapter" },
+    { id: "patient-now-emr", platform: "patient-now-emr", binary: "patient-now-emr-adapter" },
+    { id: "zenoti-emr", platform: "zenoti-emr", binary: "zenoti-emr-adapter" },
+    { id: "apple-maps", platform: "apple-maps", binary: "apple-maps-adapter" },
+    { id: "github", platform: "github", binary: "github-adapter" },
+  ];
+}
+
+function resolveAdapterBinDir(repoRoot) {
+  const explicit = normalizeText(process.env.FRONTDOOR_TENANT_ADAPTER_BIN_DIR);
+  if (explicit) {
+    return path.resolve(explicit);
+  }
+  return path.join(repoRoot, "adapters");
+}
+
+function buildNexAdapterConfigYaml(entries) {
+  const lines = ["adapters:"];
+  for (const entry of entries) {
+    lines.push(`  ${entry.id}:`);
+    lines.push(`    command: ${JSON.stringify(entry.command)}`);
+    lines.push(`    platform: ${JSON.stringify(entry.platform)}`);
+    lines.push("    accounts: {}");
+  }
+  lines.push("");
+  return `${lines.join("\n")}\n`;
+}
+
+function writeTenantAdapterConfig(params) {
+  const enableAdapters = parseBool(process.env.FRONTDOOR_TENANT_ENABLE_ADAPTERS, true);
+  if (!enableAdapters) {
+    return {
+      configPath: null,
+      registered: 0,
+      missing: [],
+    };
+  }
+
+  const binDir = resolveAdapterBinDir(params.repoRoot);
+  const entries = [];
+  const missing = [];
+  for (const spec of adapterBinarySpecs()) {
+    const commandPath = path.join(binDir, spec.binary);
+    if (!fs.existsSync(commandPath)) {
+      missing.push(commandPath);
+      continue;
+    }
+    entries.push({
+      id: spec.id,
+      platform: spec.platform,
+      command: commandPath,
+    });
+  }
+
+  if (entries.length === 0) {
+    return {
+      configPath: null,
+      registered: 0,
+      missing,
+    };
+  }
+
+  fs.writeFileSync(params.configPath, buildNexAdapterConfigYaml(entries), "utf8");
+  return {
+    configPath: params.configPath,
+    registered: entries.length,
+    missing,
+  };
+}
+
 async function seedIdentity({
   stateDir,
   entityId,
@@ -203,40 +309,72 @@ async function seedIdentity({
   if (!fs.existsSync(identityDbPath)) {
     return;
   }
+  let DatabaseSync;
+  try {
+    ({ DatabaseSync } = await import("node:sqlite"));
+  } catch {
+    return;
+  }
   const now = Date.now();
   const display = displayName || email || entityId;
   const platformId = `${provider}:${subject}`;
   const db = new DatabaseSync(identityDbPath);
   try {
     db.exec("PRAGMA foreign_keys = ON");
-    db.prepare(
-      `
-      INSERT INTO entities (
-        id, name, type, merged_into, normalized, is_user, source,
-        mention_count, first_seen, last_seen, created_at, updated_at
-      ) VALUES (?, ?, 'person', NULL, ?, 1, 'imported', 0, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        name = excluded.name,
-        normalized = excluded.normalized,
-        is_user = 1,
-        source = 'imported',
-        last_seen = excluded.last_seen,
-        updated_at = excluded.updated_at
-    `,
-    ).run(entityId, display, display.toLowerCase(), now, now, now, now);
+    try {
+      db.prepare(
+        `
+        INSERT INTO entities (
+          id, name, type, merged_into, normalized, is_user, source,
+          mention_count, first_seen, last_seen, created_at, updated_at
+        ) VALUES (?, ?, 'person', NULL, ?, 1, 'imported', 0, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name,
+          normalized = excluded.normalized,
+          is_user = 1,
+          source = 'imported',
+          last_seen = excluded.last_seen,
+          updated_at = excluded.updated_at
+      `,
+      ).run(entityId, display, display.toLowerCase(), now, now, now, now);
+    } catch {
+      // Older identity schemas may not have `source`; fall back to the minimal column set.
+      try {
+        db.prepare(
+          `
+          INSERT INTO entities (
+            id, name, type, merged_into, normalized, is_user,
+            mention_count, first_seen, last_seen, created_at, updated_at
+          ) VALUES (?, ?, 'person', NULL, ?, 1, 0, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            normalized = excluded.normalized,
+            is_user = 1,
+            last_seen = excluded.last_seen,
+            updated_at = excluded.updated_at
+        `,
+        ).run(entityId, display, display.toLowerCase(), now, now, now, now);
+      } catch {
+        // Best-effort identity seeding only.
+      }
+    }
 
-    db.prepare(
-      `
-      INSERT INTO contacts (
-        platform, space_id, sender_id, entity_id,
-        first_seen, last_seen, message_count, sender_name, avatar_url
-      ) VALUES ('frontdoor_oidc', '', ?, ?, ?, ?, 0, ?, NULL)
-      ON CONFLICT(platform, space_id, sender_id) DO UPDATE SET
-        entity_id = excluded.entity_id,
-        last_seen = excluded.last_seen,
-        sender_name = COALESCE(excluded.sender_name, contacts.sender_name)
-    `,
-    ).run(platformId, entityId, now, now, display);
+    try {
+      db.prepare(
+        `
+        INSERT INTO contacts (
+          platform, space_id, sender_id, entity_id,
+          first_seen, last_seen, message_count, sender_name, avatar_url
+        ) VALUES ('frontdoor_oidc', '', ?, ?, ?, ?, 0, ?, NULL)
+        ON CONFLICT(platform, space_id, sender_id) DO UPDATE SET
+          entity_id = excluded.entity_id,
+          last_seen = excluded.last_seen,
+          sender_name = COALESCE(excluded.sender_name, contacts.sender_name)
+      `,
+      ).run(platformId, entityId, now, now, display);
+    } catch {
+      // Best-effort identity seeding only.
+    }
 
     const tags = new Set(
       Array.isArray(roles)
@@ -248,13 +386,17 @@ async function seedIdentity({
     if (tags.size === 0) {
       tags.add("customer");
     }
-    const insertTag = db.prepare(
-      `INSERT INTO entity_tags (entity_id, tag, created_at)
-       VALUES (?, ?, ?)
-       ON CONFLICT(entity_id, tag) DO NOTHING`,
-    );
-    for (const tag of tags) {
-      insertTag.run(entityId, tag, now);
+    try {
+      const insertTag = db.prepare(
+        `INSERT INTO entity_tags (entity_id, tag, created_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(entity_id, tag) DO NOTHING`,
+      );
+      for (const tag of tags) {
+        insertTag.run(entityId, tag, now);
+      }
+    } catch {
+      // Best-effort identity seeding only.
     }
   } finally {
     db.close();
@@ -265,6 +407,7 @@ async function main() {
   const raw = await readStdin();
   const payload = raw.trim() ? JSON.parse(raw) : {};
   const tenantId = normalizeText(payload.tenant_id);
+  const productId = normalizeText(payload.product_id).toLowerCase();
   const provider = normalizeText(payload.provider) || "google";
   const subject = normalizeText(payload.sub);
   const entityId = normalizeText(payload.entity_id);
@@ -276,6 +419,7 @@ async function main() {
   const tokenIssuer = normalizeText(payload.runtime_token?.issuer);
   const tokenAudience = normalizeText(payload.runtime_token?.audience);
   const tokenSecret = normalizeText(payload.runtime_token?.secret);
+  const dryRun = parseBool(process.env.FRONTDOOR_PROVISIONER_DRY_RUN, false);
 
   if (!tenantId || !subject || !entityId || !tokenSecret) {
     throw new Error("missing_required_fields");
@@ -291,15 +435,58 @@ async function main() {
   const pidPath = path.join(tenantRoot, "runtime.pid");
   const portPath = path.join(tenantRoot, "runtime.port");
   const configPath = path.join(stateDir, "config.json");
+  const nexAdapterConfigPath = path.join(stateDir, "nex.adapters.yaml");
   const nexusBin = normalizeText(process.env.FRONTDOOR_TENANT_NEXUS_BIN) || "nexus";
+
+  if (productId === "spike") {
+    if (!dryRun) {
+      fs.mkdirSync(tenantRoot, { recursive: true });
+      fs.mkdirSync(stateDir, { recursive: true });
+    }
+    process.stdout.write(`${JSON.stringify(buildSpikeRuntimeBinding({ tenantId, stateDir }))}\n`);
+    return;
+  }
+
   const controlUiRoot = await resolveControlUiRoot(repoRoot);
   const controlUiAllowedOrigins = parseCsv(
     normalizeText(process.env.FRONTDOOR_TENANT_CONTROL_UI_ALLOWED_ORIGINS),
   );
   const basePort = Number(process.env.FRONTDOOR_TENANT_BASE_PORT || "32000");
 
+  if (dryRun) {
+    const runtimeUrl =
+      normalizeText(process.env.FRONTDOOR_PROVISIONER_DRY_RUN_RUNTIME_URL) ||
+      "http://127.0.0.1:7422";
+    const publicTemplate = normalizeText(process.env.FRONTDOOR_TENANT_RUNTIME_PUBLIC_BASE_TEMPLATE);
+    const runtimePublicBaseUrl = publicTemplate
+      ? renderTemplate(publicTemplate, { tenantId, port: 7422 })
+      : normalizeText(process.env.FRONTDOOR_PROVISIONER_DRY_RUN_RUNTIME_PUBLIC_BASE_URL) || runtimeUrl;
+    const trimmedBase = runtimePublicBaseUrl.replace(/\/+$/, "");
+    process.stdout.write(
+      `${JSON.stringify({
+        tenant_id: tenantId,
+        runtime_url: runtimeUrl,
+        runtime_public_base_url: runtimePublicBaseUrl,
+        runtime_ws_url: trimmedBase.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:") + "/",
+        runtime_sse_url: `${trimmedBase}/api/events/stream`,
+        state_dir: stateDir,
+      })}\n`,
+    );
+    return;
+  }
+
   fs.mkdirSync(tenantRoot, { recursive: true });
   fs.mkdirSync(stateDir, { recursive: true });
+
+  const adapterBootstrap = writeTenantAdapterConfig({
+    repoRoot,
+    configPath: nexAdapterConfigPath,
+  });
+  if (adapterBootstrap.missing.length > 0) {
+    process.stderr.write(
+      `provision-tenant-local warning: missing adapter binaries (${adapterBootstrap.missing.length}) in ${resolveAdapterBinDir(repoRoot)}\n`,
+    );
+  }
 
   let port = 0;
   if (fs.existsSync(portPath)) {
@@ -321,6 +508,34 @@ async function main() {
           allowedOrigins: controlUiAllowedOrigins.length > 0 ? controlUiAllowedOrigins : undefined,
         }
       : undefined;
+  const enableGlowbotApp =
+    normalizeText(process.env.FRONTDOOR_TENANT_ENABLE_GLOWBOT_APP || "0") === "1" ||
+    normalizeText(process.env.FRONTDOOR_TENANT_ENABLE_GLOWBOT_APP || "").toLowerCase() === "true";
+  const glowbotAppRoot = normalizeText(process.env.FRONTDOOR_TENANT_GLOWBOT_APP_ROOT);
+  const allowGlowbotControlUiRootReuse = parseBool(
+    process.env.FRONTDOOR_TENANT_ALLOW_GLOWBOT_CONTROL_UI_ROOT,
+    false,
+  );
+  if (
+    enableGlowbotApp &&
+    glowbotAppRoot &&
+    controlUiRoot &&
+    path.resolve(glowbotAppRoot) === path.resolve(controlUiRoot) &&
+    !allowGlowbotControlUiRootReuse
+  ) {
+    throw new Error(
+      "glowbot_app_root_conflicts_with_control_ui_root:set FRONTDOOR_TENANT_GLOWBOT_APP_ROOT to GlowBot app assets (not control UI) or set FRONTDOOR_TENANT_ALLOW_GLOWBOT_CONTROL_UI_ROOT=1 to override",
+    );
+  }
+  const glowbotAppConfig = enableGlowbotApp
+    ? {
+        enabled: true,
+        displayName: "GlowBot",
+        entryPath: "/app/glowbot/",
+        apiBase: "/api/glowbot",
+        ...(glowbotAppRoot ? { root: glowbotAppRoot } : {}),
+      }
+    : undefined;
 
   const config = {
     runtime: {
@@ -339,6 +554,13 @@ async function main() {
         },
       },
       controlUi: controlUiConfig,
+      ...(glowbotAppConfig
+        ? {
+            apps: {
+              glowbot: glowbotAppConfig,
+            },
+          }
+        : {}),
     },
   };
   fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
@@ -357,18 +579,30 @@ async function main() {
     }
   }
 
+  const disableNexAdapters = parseBool(process.env.FRONTDOOR_TENANT_DISABLE_NEX_ADAPTERS, false);
+
   if (!runtimeHealthy) {
+    const runtimeEnv = {
+      ...process.env,
+      NEXUS_STATE_DIR: stateDir,
+      NEXUS_CONFIG_PATH: configPath,
+    };
+    if (adapterBootstrap.configPath) {
+      runtimeEnv.NEXUS_NEX_CONFIG_PATH = adapterBootstrap.configPath;
+    } else {
+      delete runtimeEnv.NEXUS_NEX_CONFIG_PATH;
+    }
+    if (disableNexAdapters) {
+      runtimeEnv.NEXUS_DISABLE_NEX_ADAPTERS = "1";
+    } else {
+      delete runtimeEnv.NEXUS_DISABLE_NEX_ADAPTERS;
+    }
     const logFd = fs.openSync(logPath, "a");
     const child = spawn(
       nexusBin,
       ["runtime", "run", "--port", String(port), "--bind", "loopback", "--auth", "trusted_token", "--force"],
       {
-        env: {
-          ...process.env,
-          NEXUS_STATE_DIR: stateDir,
-          NEXUS_CONFIG_PATH: configPath,
-          NEXUS_DISABLE_NEX_ADAPTERS: "1",
-        },
+        env: runtimeEnv,
         detached: true,
         stdio: ["ignore", logFd, logFd],
       },
@@ -405,6 +639,7 @@ async function main() {
     runtime_ws_url: runtimePublicBaseUrl.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:") + "/",
     runtime_sse_url: `${runtimePublicBaseUrl.replace(/\/+$/, "")}/api/events/stream`,
     state_dir: stateDir,
+    adapter_count: adapterBootstrap.registered,
   };
   process.stdout.write(`${JSON.stringify(out)}\n`);
 }

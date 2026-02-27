@@ -167,7 +167,7 @@ Everything else MUST resolve to a real principal via identity mapping:
 - `webchat` (customer webchat, or operator chat if explicitly scoped)
 - `openai`, `openresponses`
 - `hooks` (webhooks/integrations)
-- `node` (paired nodes/devices)
+- `device` (paired device hosts)
 - channel adapters (`discord`, `telegram`, `whatsapp`, `imessage`, ...)
 
 Cron is non-canonical; use the clock adapter + automations.
@@ -197,15 +197,16 @@ Default mode can remain "local owner only", but it must still behave like the ca
 - local owner connections map to a stable owner identity (seeded mapping is OK)
 - hosted mode MUST disable any local-direct auth bypasses
 
-### Node events (paired nodes/devices)
+### Device-host events (paired device adapters)
 
-- `delivery.platform`: `node`
-- `delivery.sender_id`: stable node id derived from pairing (example: `node:<device_id>`)
-- principal mapping: `identity_mappings(node, node:<device_id>) -> entity`
+- `delivery.platform`: `device`
+- `delivery.sender_id`: stable device id derived from pairing (example: `device:<device_id>`)
+- principal mapping: `identity_mappings(device, device:<device_id>) -> entity`
 
 Default mapping:
 
-- a newly paired node maps to the pairing operator (often the owner) unless explicitly re-assigned.
+- pair approval creates (or reuses) a `type='device'` entity and maps `identity_mappings(device, device:<device_id>)` to that entity.
+- relationships between device entity and pairing operator are tracked as metadata/edges, not by collapsing identity to operator principal.
 
 ### Webhooks / hooks ingress
 
@@ -267,13 +268,13 @@ Needed:
 
 Today:
 
-- multiple channels are considered "system ingress" (including `openai`, `openresponses`, `node`, `hooks`, etc)
+- multiple channels are considered "system ingress" (including `openai`, `openresponses`, `device`, `hooks`, etc)
 - identity resolution short-circuits to a system principal for these channels
 
 Needed:
 
 - reduce "system ingress" channels to: `clock`, `boot`, `restart` (and optionally internal-only `runtime`)
-- ensure `openai/openresponses/node/hooks/webchat/control-plane` resolve via identity mapping
+- ensure `openai/openresponses/device/hooks/webchat/control-plane` resolve via identity mapping
 - remove cron as a system ingress concept
 
 ### C) Owner default is hardcoded for control-plane chat/webchat
@@ -360,7 +361,7 @@ Needed:
 ## Migration Strategy (Big Bang)
 
 1. Land control-plane per-user auth (subject-bearing sessions), keep local bootstrap mode for owner.
-2. Remove system-ingress classification for `openai/openresponses/node/hooks/webchat/control-plane`.
+2. Remove system-ingress classification for `openai/openresponses/device/hooks/webchat/control-plane`.
 3. Implement ingress credentials (API keys, webhook secrets, webchat sessions) and derive sender_id exclusively from them.
 4. Add adapter ingress integrity checks.
 5. Tighten customer sandbox enforcement (tools/credentials/data).
@@ -372,7 +373,7 @@ Needed:
 1. Provisioning policy for new control-plane users:
    - invite-only (operators pre-created)
    - or auto-provision with a restricted default role/tag requiring approval
-2. Node identity semantics in multi-user:
-   - nodes as separate principals vs nodes acting "on behalf of" a paired operator
+2. Device-host default authorization posture:
+   - newly paired device entities default to restricted capability grants vs owner-equivalent grants
 3. Customer identity model:
    - anonymous sessions vs always-authenticated customers vs hybrid
