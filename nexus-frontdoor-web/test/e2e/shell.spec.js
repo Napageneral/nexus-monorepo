@@ -30,6 +30,8 @@ test("google sign-in preserves flavor and entry in return_to", async ({ page }) 
   await page.locator("#googleBtn").click();
   await page.waitForURL(/\/api\/auth\/oidc\/start\?/);
   expect(page.url()).toContain("provider=google");
+  expect(page.url()).toContain("product=glowbot");
+  expect(page.url()).toContain("flavor=glowbot");
   expect(page.url()).toContain(
     "return_to=http%3A%2F%2F127.0.0.1%3A4310%2F%3Fflavor%3Dglowbot%26entry%3Dglowbot-demo%26auth_return%3D1",
   );
@@ -130,4 +132,43 @@ test("flavor query updates shell copy and preferred app selection", async ({ pag
   await expect(page.locator("#appSelect")).toHaveValue("glowbot");
   await expect(page.locator("#appSummary")).toContainText("GlowBot");
   await expect(page.locator("#openTenantAppBtn")).toContainText("Open GlowBot workspace");
+});
+
+test("authenticated user with no workspace sees provisioning-in-progress diagnostics", async ({ page, context }) => {
+  await setSessionCookie(context, "sid-provisioning");
+  await page.goto("/?flavor=glowbot&entry=glowbot-demo");
+
+  await expect(page.locator("#statusPill")).toContainText("Signed in as Provisioning User");
+  await expect(page.locator("#workspaceCount")).toHaveText("0");
+  await expect(page.locator("#workspaceSummary")).toContainText("No active workspace selected.");
+  await expect(page.locator("#provisioningSummary")).toContainText("Provisioning in progress (tenant_bootstrap).");
+  await expect(page.locator("#openTenantAppBtn")).toBeDisabled();
+});
+
+test("workspace with no launchable app surfaces explicit launch blocker", async ({ page, context }) => {
+  await setSessionCookie(context, "sid-noapp");
+  await page.goto("/");
+
+  await expect(page.locator("#workspaceSummary")).toContainText("Tenant No App");
+  await expect(page.locator("#statusPill")).toContainText(
+    "Workspace launch blocked: runtime returned no launchable /app entries",
+  );
+  await expect(page.locator("#appSummary")).toContainText(
+    "Launch blocked: runtime returned no launchable /app entries",
+  );
+  await expect(page.locator("#openTenantAppBtn")).toBeDisabled();
+});
+
+test("runtime unhealthy diagnostics are surfaced before launch click", async ({ page, context }) => {
+  await setSessionCookie(context, "sid-runtime-down");
+  await page.goto("/");
+
+  await expect(page.locator("#workspaceSummary")).toContainText("Tenant Runtime Down");
+  await expect(page.locator("#statusPill")).toContainText(
+    "Workspace launch blocked: runtime health unavailable (nex_runtime_unavailable)",
+  );
+  await expect(page.locator("#appSummary")).toContainText(
+    "Launch blocked: runtime health unavailable (nex_runtime_unavailable)",
+  );
+  await expect(page.locator("#openTenantAppBtn")).toBeDisabled();
 });

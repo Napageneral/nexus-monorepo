@@ -71,9 +71,17 @@ export type FrontdoorConfig = {
   hstsIncludeSubDomains?: boolean;
   hstsPreload?: boolean;
   sessionStorePath?: string;
+  frontdoorStorePath?: string;
+  /** @deprecated Use frontdoorStorePath. Kept for config backwards compat. */
   workspaceStorePath?: string;
+  operatorUserIds?: Set<string>;
+  /** @deprecated Use operatorUserIds. */
   workspaceOwnerUserIds: Set<string>;
+  devCreatorEmails?: Set<string>;
+  /** @deprecated Use devCreatorEmails. */
   workspaceDevCreatorEmails: Set<string>;
+  inviteTtlSeconds?: number;
+  /** @deprecated Use inviteTtlSeconds. */
   workspaceInviteTtlSeconds: number;
   runtimeTokenIssuer: string;
   runtimeTokenAudience: string;
@@ -124,6 +132,7 @@ export type Principal = {
   roles: string[];
   scopes: string[];
   amr: string[];
+  accountId?: string;
 };
 
 export type RefreshTokenRecord = {
@@ -172,6 +181,8 @@ export type OidcTransientState = {
   provider: string;
   createdAtMs: number;
   returnTo?: string;
+  appId?: string;
+  /** @deprecated Use appId. */
   productId?: string;
 };
 

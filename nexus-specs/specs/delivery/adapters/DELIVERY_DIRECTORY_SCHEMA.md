@@ -46,7 +46,7 @@ Rationale:
 
 ## Contacts (Delivery Endpoints)
 
-Contacts map a sender identifier to an entity id at pipeline speed.
+Contacts map a contact identifier to an entity id at pipeline speed.
 
 This is the minimal form required by `RUNTIME_ROUTING.md`, adapted to the unified taxonomy.
 
@@ -54,24 +54,24 @@ This is the minimal form required by `RUNTIME_ROUTING.md`, adapted to the unifie
 CREATE TABLE IF NOT EXISTS contacts (
   platform       TEXT NOT NULL,             -- discord/slack/imessage/telegram/gmail/control-plane/webchat/...
 
-  -- Optional scoping for platforms where sender_id is not globally unique (Slack).
+  -- Optional scoping for platforms where contact_id is not globally unique (Slack).
   -- Use '' when not applicable.
   space_id       TEXT NOT NULL DEFAULT '',
 
-  sender_id      TEXT NOT NULL,             -- platform-native sender identity
+  contact_id     TEXT NOT NULL,             -- platform-native contact identity
   entity_id      TEXT NOT NULL,             -- entity id (canonical or merged leaf; resolve via identity.db merge chain)
 
   first_seen     INTEGER NOT NULL,          -- unix ms
   last_seen      INTEGER NOT NULL,          -- unix ms
   message_count  INTEGER NOT NULL DEFAULT 0,
 
-  sender_name    TEXT,                      -- best-effort display name (untrusted)
+  contact_name   TEXT,                      -- best-effort display name (untrusted)
   avatar_url     TEXT,                      -- best-effort (untrusted)
 
   label          TEXT,                      -- 'personal', 'work', 'shared', 'org' (like SCIM's multi-valued type)
   owner_id       TEXT REFERENCES entities(id), -- org/group entity that owns this contact point, if any
 
-  PRIMARY KEY (platform, space_id, sender_id)
+  PRIMARY KEY (platform, space_id, contact_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_contacts_entity_id ON contacts(entity_id);
@@ -80,11 +80,11 @@ CREATE INDEX IF NOT EXISTS idx_contacts_last_seen ON contacts(last_seen DESC);
 
 Notes:
 
-- For Discord: `space_id` SHOULD be '' for contacts if `sender_id` is globally unique and we want a single contact per user.
+- For Discord: `space_id` SHOULD be '' for contacts if `contact_id` is globally unique and we want a single contact per user.
   - Per-space nicknames should be tracked in `container_participants.last_sender_name`.
-- For Slack: `space_id` SHOULD be the workspace id because `sender_id` is only meaningful within a workspace.
+- For Slack: `space_id` SHOULD be the workspace id because `contact_id` is only meaningful within a workspace.
 - `space_id` is `NOT NULL` with a default of `''` because SQLite `UNIQUE`/`PRIMARY KEY` constraints treat `NULL` values as distinct.
-  - Using `''` ensures `(platform, space_id, sender_id)` is truly unique even when a platform has no `space_id`.
+  - Using `''` ensures `(platform, space_id, contact_id)` is truly unique even when a platform has no `space_id`.
 - **Universal identifier contacts:** Contacts with `platform="phone"` or `platform="email"` are pseudo-platform entries that represent cross-platform reachable identifiers (e.g. a phone number usable via iMessage, WhatsApp, and Signal). These are not tied to a specific adapter but serve as canonical contact points for identity resolution. See `UNIFIED_ENTITY_STORE.md` for the full contact model.
 - `label` classifies the contact point (like SCIM's `type` on multi-valued attributes). A phone number might be `'personal'` or `'work'` or `'shared'`.
 - `owner_id` tracks organizational ownership. A shared phone line or team email can point to the org entity that owns it, even though `entity_id` points to the person currently using it.
@@ -342,8 +342,8 @@ ORDER BY first_seen ASC;
 
 ## Open Questions
 
-1. Should `contacts` be keyed by `(platform, sender_id)` (Discord-style global ids) or `(platform, space_id, sender_id)` (workspace/server scoped)?
-   - This spec uses `(platform, space_id, sender_id)` with `space_id=''` as the general solution.
+1. Should `contacts` be keyed by `(platform, contact_id)` (Discord-style global ids) or `(platform, space_id, contact_id)` (workspace/server scoped)?
+   - This spec uses `(platform, space_id, contact_id)` with `space_id=''` as the general solution.
 2. Should container primary keys include `space_id` as well, or is `(platform, account_id, container_id)` sufficient?
    - This spec uses `(platform, account_id, container_id)` to keep directory ownership per adapter account.
 3. Should we store canonical entity ids (post-merge) in these tables, or store observed ids and resolve via identity.db entity chain at query time?

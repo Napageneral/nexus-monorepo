@@ -32,7 +32,7 @@ This is a **big-bang** migration plan:
 | W2 | Runtime rename completion | Remove/rename `gateway` terminology and command surface where still user-facing | IN PROGRESS |
 | W3 | Canonical init/bootstrap | Implement `nexus init` and align created files/directories to canonical workspace layout | COMPLETE |
 | W4 | Branding/type cleanup | Remove `OpenClaw` naming and legacy env/dir aliases from code paths and types | IN PROGRESS |
-| W5 | Memory System DB layout | Ensure 6-DB layout under `state/data/` is implemented per DATABASE_ARCHITECTURE.md (memory.db, identity.db, embeddings.db) | NOT STARTED |
+| W5 | Memory System DB layout | Ensure 7-DB layout under `state/data/` is implemented per DATABASE_ARCHITECTURE.md (memory.db, identity.db, embeddings.db) | NOT STARTED |
 | W6 | Canonical config schema | Align top-level config domains to canonical namespaced contract | NOT STARTED |
 
 ---
@@ -115,7 +115,7 @@ Deliverables:
 
 - `nexus init` implemented
 - canonical layout creation:
-  - `state/data/` (all 6 databases)
+  - `state/data/` (all 7 databases)
   - `state/agents/`
   - `state/user/`
   - `state/credentials/`
@@ -143,7 +143,7 @@ Exit criteria:
 
 Deliverables:
 
-- 6-DB layout under `state/data/` implemented per DATABASE_ARCHITECTURE.md
+- 7-DB layout under `state/data/` implemented per DATABASE_ARCHITECTURE.md
 - memory.db, identity.db (entities), and embeddings.db for Memory System
 - runtime.db replaces legacy nexus.db
 - runtime integrations (hooks/automation/pipeline) read/write through canonical DB contracts
@@ -151,7 +151,7 @@ Deliverables:
 Exit criteria:
 
 - Memory System databases (memory.db, identity.db, embeddings.db) are the source for derived artifacts
-- runtime starts and operates correctly with canonical 6-DB layout
+- runtime starts and operates correctly with canonical 7-DB layout
 
 ### Phase F - Config Schema Canonicalization (W6)
 
@@ -175,7 +175,7 @@ Exit criteria:
 | Runtime naming | e2e contract tests for status/doctor/runtime outputs |
 | Init/layout | filesystem integration tests against canonical directory/file set |
 | Branding cleanup | static grep checks for forbidden legacy terms in public surfaces |
-| Memory System | runtime integration tests using 6-DB layout under `state/data/` |
+| Memory System | runtime integration tests using 7-DB layout under `state/data/` |
 | Config schema | schema validation tests + CLI read/write tests |
 
 ---
@@ -207,7 +207,7 @@ Exit criteria:
 - [ ] Add regression checks for reintroduction.
 
 ### W5 - Memory System DB layout
-- [ ] Implement 6-DB layout under `state/data/` per DATABASE_ARCHITECTURE.md.
+- [ ] Implement 7-DB layout under `state/data/` per DATABASE_ARCHITECTURE.md.
 - [ ] Implement memory.db, identity.db, and embeddings.db schemas per DATABASE_ARCHITECTURE.md.
 - [ ] Rename nexus.db to runtime.db.
 - [ ] Align runtime services to new DB contracts.

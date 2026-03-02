@@ -1,17 +1,18 @@
-# Nexus Frontdoor (Scaffold)
+# Nexus Frontdoor
 
-Frontdoor service for hosted Nexus with one runtime per tenant.
+Canonical gateway for the Nexus hosted platform. Single entry point for all authenticated user interactions.
 
-Implements:
+See `docs/specs/FRONTDOOR_ARCHITECTURE.md` for the full architecture spec.
 
-- password login now, pluggable OIDC flow
-- tenant resolution from authenticated principal
-- short-lived runtime token minting (HS256 JWT)
-- refresh/revoke lifecycle for runtime tokens
-- runtime endpoint descriptor bootstrap in token responses for direct browser -> runtime
-- reverse proxy for tenant runtime HTTP + WS + SSE under `/runtime/*`
-- control UI passthrough under `/app` and WS upgrades for hosted control UI
-- shared UI shell served from frontdoor (`/`)
+### What Frontdoor Does
+
+- **Auth**: Google OIDC, session management (`.nexushub.sh` domain cookies)
+- **Servers**: Provisioning and lifecycle of isolated nex runtime instances
+- **Apps**: Product registry, entitlements, installation on servers, launch routing
+- **Adapters**: Adapter catalog, installation on servers
+- **Billing**: Product-branded checkout, plan management, entitlement enforcement
+- **Runtime proxy**: Reverse proxy for tenant runtime HTTP + WS + SSE under `/runtime/*`, `/app/*`
+- **UI shell**: Server dashboard, app library/store, adapter management, admin controls
 
 ## Quick Start
 
@@ -159,7 +160,7 @@ pnpm password:hash -- 'my-password'
 - `POST /api/runtime/token/refresh` (same response schema with rotated refresh token)
 - `POST /api/runtime/token/revoke`
 - `ALL /runtime/*` (proxied to tenant runtime with minted bearer token)
-- `ALL /app/*` (proxied to runtime control UI path)
+- `ALL /app/*` (proxied to runtime app routes)
 
 ## Runtime Compatibility
 

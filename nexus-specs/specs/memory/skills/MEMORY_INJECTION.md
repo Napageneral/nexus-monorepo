@@ -1,71 +1,55 @@
-# Memory Injection (Memory Reader V2)
+# Memory Injection — Pre-Execution Meeseeks
 
-**Status:** DESIGN SPEC
-**Last Updated:** 2026-02-20
-**Supersedes:** ../roles/MEMORY_READER.md
-**Related:** MEMORY_SYSTEM.md, MEMORY_SEARCH_SKILL.md, MEMORY_WRITER.md
+**Status:** CANONICAL SPEC
+**Last Updated:** 2026-03-02
+**Related:** ../MEMORY_SYSTEM.md, MEMORY_SEARCH_SKILL.md
 
 ---
 
 ## Overview
 
-Memory Injection is a lightweight meeseeks at `worker:pre_execution` that decides what memory context to inject into a worker's session. It replaces the V1 Memory Reader — still a meeseeks, but radically simpler: a fast cheap model, one tool (recall), and a single job: "is any of this worth injecting?"
+Memory Injection is a lightweight meeseeks at `worker:pre_execution` that fires on every worker dispatch. It is forked from the primary session, carrying the full context of what's happening. Its job: use memory search to find relevant information that the main session doesn't already know, and either dispatch it or stay silent.
 
 **Two mechanisms for memory access:**
-
-1. **Memory Injection meeseeks** (this doc) — automatic, fires on every worker dispatch, uses a fast model to triage recall results
-2. **Memory Search skill** — on-demand, any agent imports the skill and searches directly during its session
-
----
-
-## Why Still a Meeseeks?
-
-The pure function-call approach (just run recall on the task description and inject whatever comes back) risks injecting junk — irrelevant facts that pollute the agent's context and waste tokens. A lightweight LLM triage step solves this:
-
-- Runs recall() on the latest message / task description
-- Looks at what came back
-- Decides: "Is any of this actually relevant? Which items are worth injecting?"
-- Returns only the useful items, or nothing if recall returned noise
-
-This is a small fast model with zero chain-of-thought reasoning. Just pattern match on relevance. Think gpt-5.3-codex-spark or equivalent — optimized for speed, not deep thinking.
+1. **Memory Injection meeseeks** (this doc) — automatic, fires on every worker dispatch
+2. **Memory Search skill** — on-demand, any agent imports the skill and searches during its session
 
 ---
 
-## Architecture
+## How It Works
+
+The injection meeseeks is a **copy of the main session's self**, dispatched with a specific goal: use the memory search functionality to discover relevant information that isn't already understood by the main session.
+
+It knows what the main session is about to do. It's not a dumb search bot — it understands the full situational context (because it's forked from the session) and can reason about what additional context would materially change how the main session responds.
+
+### Architecture
 
 ```
-MA dispatches worker
-    |
-    v
-assembleContext(workerRequest)
+Manager dispatches worker
     |
     v
 worker:pre_execution hook
     |
-    +---> Memory Injection meeseeks forks
+    +---> Memory Injection meeseeks forks from session
     |       |
     |       v
-    |     Fast model receives: latest message + task description
+    |     Meeseeks has full session context
+    |     + task description
     |       |
     |       v
-    |     recall() calls as needed (budget='low')
+    |     Uses recall() to search memory
     |       |
     |       v
-    |     Model triages results: relevant? worth injecting?
+    |     Decision:
     |       |
-    |       +-- YES: returns selected items as <memory_context>
-    |       +-- NO:  returns nothing (no injection)
+    |       +-- Nothing useful found → call wait() (don't interrupt)
+    |       +-- Found relevant info → call send_message() with discoveries
     |       |
     |       v
-    |     Enrichment injected into worker's currentMessage
-    |
-    v
-startBrokerExecution(enrichedContext)
+    |     Post-processing handles wrapping and injection
     |
     v
 Worker runs (with or without memory context)
-    |
-    (if worker needs more memory, it uses the Memory Search skill)
 ```
 
 ---
@@ -74,159 +58,69 @@ Worker runs (with or without memory context)
 
 ### Model
 
-Use a fast, cheap model optimized for speed over reasoning depth. Zero thinking budget. The model's only job is relevance triage — not synthesis, not reasoning, not search strategy.
+Use a fast, cheap model optimized for speed. The model's job is relevance assessment — not deep synthesis.
 
-Target: gpt-5.3-codex-spark or equivalent fast-inference model.
+Target: gpt-5.3-codex-spark or equivalent fast-inference model (when available in API). Use whatever fast model is available in the meantime.
 
-### Tool
+### Two Exit Paths
 
-One tool: `recall(query, params)`
+The meeseeks has exactly two ways to complete:
 
-The meeseeks uses its judgment on how many recall() calls to make — zero for purely computational tasks, multiple for entity-rich inputs.
+1. **`wait()`** — No relevant information found, or everything found is already known by the main session. Don't interrupt. The main session proceeds without memory context.
 
-### Role Prompt (Minimal)
+2. **`send_message()`** — Found relevant information that materially changes or impacts how the main session would respond. Send the raw discovered information back.
 
-```
-You are the Memory Injection agent. Your job:
+### Post-Processing
 
-1. Read the worker's task description
-2. Search memory with recall() for relevant context — use as many searches as needed
-3. Decide which results are worth injecting
-4. Return ONLY facts that are directly relevant to the task
+The meeseeks sends raw information. **Post-processing handles:**
+- Wrapping results in `<memory_context>` tags
+- Injecting into the main session's context
+- Steering the main session to consider the memory context
 
-Rules:
-- If nothing relevant comes back, return empty. Do NOT inject noise.
-- Be selective. 3-5 highly relevant facts beat 15 tangential ones.
-- Include entity identifiers (emails, names) when they help the task.
-- Include temporal context (dates) when recent information matters.
-- recall() may return short-term event results (type: 'event') for very recent context — include these when relevant.
-- Do NOT synthesize or summarize. Just select and return the relevant items.
-```
-
-### Max Turns
-
-Unconstrained — the meeseeks uses its judgment. Typically 2-5 turns:
-1. Initial recall on task description
-2. Optional targeted recall on specific entities or topics
-3. Additional searches if the input is rich with context
-4. Triage and return
+The meeseeks is NOT responsible for formatting, wrapping, or steering. Keep the agent's job as small and well-scoped as possible.
 
 ### Timeout
 
-60 seconds. If exceeded, worker proceeds without memory. Typical latency is under 10 seconds. The fast model handles most cases in a few turns; the generous timeout ensures complex entity-rich inputs aren't cut off.
+60 seconds. If exceeded, worker proceeds without memory. Typical latency should be well under 10 seconds with a fast model.
 
 ---
 
-## Output Format
+## CLI Tools Used
 
-```xml
-<memory_context>
-Tyler works at Anthropic building Nexus (2026-02-01)
-Sarah leads the engineering team on Project X (2026-02-10)
-Project X deadline is March 15, scope was cut to meet timeline (2026-02-11)
-</memory_context>
-```
+One tool: `recall(query, params)` — the same recall available to all agents.
 
-Or if nothing relevant:
-
-```
-(no enrichment returned — worker proceeds without memory context)
-```
-
-Injected as a prefix to `currentMessage`, same as V1.
+The meeseeks uses its judgment on how many recall calls to make:
+- **Zero** for purely computational tasks or tasks with no personal context
+- **One** for straightforward task descriptions with a clear entity or topic
+- **Multiple** for entity-rich inputs that span multiple topics or people
 
 ---
 
-## Differences from Memory Reader V1
+## Role Prompt Guidance
 
-| Aspect | Memory Reader V1 | Memory Injection V2 |
-|--------|-----------------|---------------------|
-| **Architecture** | Full meeseeks, heavy model | Lightweight meeseeks, fast model |
-| **Model** | Same as main session | Fast cheap model (gpt-5.3-codex-spark) |
-| **Latency** | 3-10 seconds | Under 10 seconds typical |
-| **Search strategy** | Agentic: SQL, shell search, multiple iterations | Unconstrained recall() calls + triage |
-| **Output** | Synthesized narrative with headers and sections | Flat list of selected facts with timestamps |
-| **Iteration** | Up to 3 turns of complex search | Typically 2-5 turns of recall + triage |
-| **Self-improvement** | SKILLS.md, PATTERNS.md, ERRORS.md | Minimal — fast model, simple task |
-| **Timeout** | 10 seconds | 60 seconds |
-| **Junk filtering** | N/A (always injects something) | Core feature — returns nothing if irrelevant |
+The injection meeseeks should understand:
+
+1. You are a copy of the main session, dispatched to search memory for relevant context
+2. The main session is proceeding with exactly the same context you have
+3. Your goal: find information that isn't already understood that would materially improve the response
+4. Sometimes there's no additional information needed — that's fine, call `wait()` and don't interrupt
+5. When you find relevant information, compile it together and call `send_message()`
+6. Be selective: 3-5 highly relevant facts beat 15 tangential ones
+7. Include entity identifiers (emails, names) when they help the task
+8. Include temporal context (dates) when recent information matters
+9. Do NOT synthesize or summarize — just select and return the relevant items
 
 ---
 
 ## When Agents Need More Memory
 
-The injection provides a lightweight baseline. For agents that need deeper memory access:
-
-### Import the Memory Search Skill
-
-Any agent can import `MEMORY_SEARCH_SKILL.md` which teaches:
-- How to use recall() with all parameters (scope, entity, time, channel, budget)
-- Hierarchical retrieval (mental models -> observations -> facts)
-- Query decomposition (break complex questions into targeted searches)
-- Staleness awareness
-- Budget management
-
-The agent uses recall() as a tool during its execution, same as any other tool. This is the "pull" model — the agent actively searches when it knows it needs more context.
-
-### Example: Agent Needs More
-
-```
-Worker receives task: "Plan Tyler's birthday dinner"
-
-Memory injection provides:
-  <memory_context>
-  Tyler's birthday is March 12 (2025-06-01)
-  Tyler likes Italian food (2025-08-15)
-  </memory_context>
-
-Agent thinks: "I need more about dietary restrictions and favorite restaurants"
-
-Agent calls: recall("Tyler dietary restrictions allergies", entity="Tyler")
-  -> "Tyler is lactose intolerant (2025-09-20)"
-
-Agent calls: recall("Tyler favorite restaurants", entity="Tyler")
-  -> "Tyler loves Osteria Mozza, went there for anniversary (2025-11-10)"
-
-Now the agent has enough context to plan the dinner.
-```
-
----
-
-## Hook Registration
-
-```sql
-INSERT INTO automations (
-  name, hook_point, mode, status, blocking, script_path,
-  workspace_dir, timeout_ms
-) VALUES (
-  'memory-injection',
-  'worker:pre_execution',
-  'persistent',
-  'active',
-  1,                                                     -- blocking
-  '~/.nexus/state/hooks/scripts/memory-injection.ts',
-  '~/.nexus/state/meeseeks/memory-injection/',
-  60000                                                  -- 60s timeout
-);
-```
-
----
-
-## What This Replaces
-
-| Previous Component | Status |
-|-------------------|--------|
-| Memory Reader meeseeks (heavy) | **Replaced** by lightweight injection meeseeks |
-| `memory-reader/` workspace (full) | **Replaced** by minimal `memory-injection/` workspace |
-| `MEMORY_READER.md` role spec | **Superseded** by this document |
-| Legacy search script | **Absorbed** into recall() implementation |
-| Reader's SKILLS.md, PATTERNS.md | **Simplified** — fast model, minimal workspace |
+Injection provides a lightweight automatic baseline. For deeper memory access during a session, agents import the **Memory Search Skill** which teaches hierarchical retrieval, query decomposition, and budget management. See `MEMORY_SEARCH_SKILL.md`.
 
 ---
 
 ## See Also
 
-- `MEMORY_SEARCH_SKILL.md` -- How agents do deeper search when injection isn't enough
-- `MEMORY_REFLECT_SKILL.md` -- Deep research and mental model creation
-- `MEMORY_SYSTEM.md` -- Full memory architecture
-- `MEMORY_WRITER.md` -- How memory gets written
+- `MEMORY_SEARCH_SKILL.md` — How agents do deeper search when injection isn't enough
+- `MEMORY_REFLECT_SKILL.md` — Deep research and mental model creation
+- `../MEMORY_SYSTEM.md` — Full memory architecture
+- `../MEMORY_RECALL.md` — Recall API specification

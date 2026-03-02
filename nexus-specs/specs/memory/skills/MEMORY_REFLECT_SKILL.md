@@ -1,41 +1,38 @@
 # Memory Reflect Skill
 
-**Status:** DESIGN SPEC
-**Last Updated:** 2026-02-20
-**Related:** MEMORY_SEARCH_SKILL.md, MEMORY_SYSTEM.md
+**Status:** CANONICAL SPEC
+**Last Updated:** 2026-03-02
+**Related:** MEMORY_SEARCH_SKILL.md, ../MEMORY_SYSTEM.md, ../MEMORY_RECALL.md
 
 ---
 
 ## Overview
 
-The Memory Reflect skill teaches an agent how to perform deep research across memory and persist the results as mental models. It builds on the Memory Search skill, adding the "think deeply and remember what you learned" capability.
+The Memory Reflect skill teaches an agent how to perform deep research across the full memory graph and persist results as mental models. It builds on the Memory Search skill, adding the "think deeply and remember what you learned" capability.
 
-**This skill is the successor to Hindsight's `reflect()` agent.** It takes the hierarchical retrieval, evidence guardrails, and structured output patterns from Hindsight and adapts them to the Nexus memory architecture.
-
----
-
-## When to Import This Skill
-
-Agents that need to do more than simple search:
-
-- **Any agent** that wants to deeply research a topic and produce a synthesized report
-- **Any agent** that wants to persist research results for future use
-- **User-triggered reflection** -- when the user asks "What do you know about X?" and wants a thorough answer
-
-This skill **requires** the Memory Search skill. It uses `recall()` extensively.
-
-> **Note:** The Memory-Writer does NOT import this skill. The writer focuses on fact extraction, entity identification, and deduplication. Mental model CRUD belongs exclusively to agents using the reflect skill. See `MEMORY_WRITER.md`.
+**This is a skill prompt, not a meeseeks.** It runs within the importing agent's session. It does not have self-improvement capability (only meeseeks have persistent workspaces).
 
 ---
 
 ## What This Skill Adds Over Memory Search
 
 | Memory Search | Memory Reflect |
-|---------------|---------------|
+|---|---|
 | Single-shot searches | Multi-step research loops |
-| Returns raw results | Synthesizes results into coherent reports |
-| No persistence | Can persist results as mental models |
-| Any agent, any context | Deep research and analysis |
+| Returns raw results | Synthesizes into coherent reports |
+| No persistence | Persists results as mental models |
+| Any agent, any context | Deep research and pattern identification |
+
+---
+
+## When to Import This Skill
+
+This is the deep pattern-identification layer. It's not about recalling a specific fact or observation — it's about **identifying patterns across entities, facts, episodes, observations, and the full memory graph.**
+
+- **Deep research** — "What do you know about Tyler's career trajectory?"
+- **Pattern discovery** — "What communication patterns does the team have?"
+- **Synthesis** — "What are the key decisions made on Project Nexus?"
+- **User-triggered reflection** — "What do you know about X?" requiring a thorough answer
 
 ---
 
@@ -44,63 +41,30 @@ This skill **requires** the Memory Search skill. It uses `recall()` extensively.
 ### Step 1: Assess the Question
 
 Before searching, reason about what kind of research this requires:
-
-```
-What is the question really asking?
-  |
-  v
-What entities are involved?
-What time periods matter?
-What types of knowledge would answer this? (facts, patterns, history, status)
-  |
-  v
-Plan 2-5 targeted searches
-```
+- What entities are involved?
+- What time periods matter?
+- What types of knowledge would answer this? (facts, patterns, history, status)
+- Plan 2-5 targeted searches
 
 ### Step 2: Hierarchical Search
 
-Follow the Memory Search skill's hierarchical strategy, but with deeper exploration:
+Follow the Memory Search skill's hierarchical strategy with deeper exploration:
 
-```
-1. Check mental models first
-   - Is there an existing mental model on this topic?
-   - Is it fresh or stale?
-   - If fresh and comprehensive -> may be sufficient
-   - If stale -> use as starting context, verify with lower layers
-
-2. Search observations
-   - Multiple queries with different angles
-   - Note staleness on each result
-   - Gather related observations even if tangential
-
-3. Search raw facts
-   - Fill gaps not covered by observations
-   - Verify stale observation claims
-   - Get specific details, dates, names
-   - Use entity filters and time ranges
-
-4. Synthesize
-   - Combine findings across all layers
-   - Resolve contradictions (prefer more recent facts)
-   - Note confidence levels and gaps
-```
+1. **Check mental models first** — is there an existing model on this topic? Is it current?
+2. **Search observations** — multiple queries with different angles. Note staleness (follow revision chains to heads).
+3. **Search raw facts** — fill gaps not covered by observations. Get specific details, dates, names. Use entity filters and time ranges.
+4. **Synthesize** — combine findings across all layers. Resolve contradictions (prefer more recent facts). Note confidence levels and gaps.
 
 ### Step 3: Synthesis
 
-Combine all search results into a coherent answer:
+Combine all search results into a coherent answer.
 
-**Rules for synthesis:**
+**Rules:**
 - **Only use retrieved information.** Never fabricate names, events, or details.
 - **Infer and reason.** If memories mention someone attended cooking classes, you can infer they're interested in cooking. Connect related facts into a narrative.
-- **Handle contradictions.** When facts conflict, prefer the most recent. Note the change: "Previously X, but as of [date] Y."
-- **Acknowledge gaps.** If the search didn't find information about part of the question, say so. Don't fill gaps with guesses.
-- **Be specific.** Preserve names, dates, numbers, and details from the source facts. Don't abstract into vague generalizations.
-
-**Synthesis format:**
-- Use markdown for structure (headers, lists, bold, tables)
-- Organize by topic, not by search call
-- Don't include memory IDs or search metadata in the answer
-- Focus on answering the question, not describing what you searched
+- **Handle contradictions.** When facts conflict, prefer the most recent. Note the change.
+- **Acknowledge gaps.** If the search didn't find information about part of the question, say so.
+- **Be specific.** Preserve names, dates, numbers, and details from source facts.
 
 ---
 
@@ -110,251 +74,75 @@ The core capability this skill adds: persisting research results as mental model
 
 ### What is a Mental Model?
 
-A mental model is a high-level report stored in the database. It spans many observations and facts, synthesizing them into a coherent document about a specific topic.
+A high-level report stored in the database that spans many observations and facts, synthesizing them into a coherent document about a specific topic.
 
-```
 Examples:
-  - "Tyler's Career" -- work history, current role, career interests
-  - "Project Nexus Status" -- what it is, current state, key decisions
-  - "Family Relationships" -- who's who, dynamics, important facts
-  - "Entity Disambiguation Rules" -- (self-improvement) patterns for resolving ambiguous entities
-```
+- "Tyler's Career" — work history, current role, career interests
+- "Project Nexus Status" — what it is, current state, key decisions
+- "Family Relationships" — who's who, dynamics, important facts
 
 ### When to Create a Mental Model
 
-Create a mental model when:
+Create when:
+1. Research produced substantial synthesized knowledge worth preserving
+2. The topic is likely to be queried again (saves future search effort)
+3. The user explicitly requests it ("Remember this analysis")
 
-1. **The research produced substantial synthesized knowledge** -- more than a few facts, worth preserving
-2. **The topic is likely to be queried again** -- saves future search effort
-3. **The user explicitly requests it** -- "Remember this analysis" or "Create a summary of X"
-4. **Self-improvement** -- the agent identifies a pattern worth capturing for future use
-
-Do NOT create a mental model for:
-
+Do NOT create for:
 1. Simple factual lookups (one-shot answers)
-2. Ephemeral questions ("What's the weather?")
+2. Ephemeral questions
 3. Topics with very little supporting data
-4. Questions that are unlikely to recur
 
-### How to Create a Mental Model
+### How to Create / Update
 
-```
-create_mental_model(name, description, entity_id?, tags?)
-
-Parameters:
-  name          string (required)   Short descriptive title
-  description   string (required)   Full report (markdown)
-  entity_id     string              Primary entity this model is about
-  tags          string[]            ACL tags for scoping
-  subtype       string              'structural', 'emergent', 'pinned'
-
-Returns:
-  mental_model_id
-```
-
-### How to Update a Mental Model
-
-When refreshing an existing mental model with new information:
+Invoked as `nexus memory create-mental-model` and `nexus memory update-mental-model` CLI commands. The function signatures below describe the core contract; the CLI maps parameters to `--flag` arguments (see `environment/interface/cli/COMMANDS.md`).
 
 ```
-update_mental_model(id, description)
-
-This creates a new version (parent_id chain):
-  - Old version preserved for history
-  - New version becomes current
-  - is_stale set to FALSE on the new version
-  - last_refreshed updated
+create_mental_model(name, content, entity_id?, pinned?)
+update_mental_model(id, content)
 ```
 
-### Mental Model Subtypes
+Update creates a new version (parent_id chain). Old versions preserved for history. New version becomes the current head.
 
-| Subtype | Description | Example |
-|---------|-------------|---------|
-| `structural` | Organized knowledge about a well-defined topic | "Tyler's Career", "Project Nexus Architecture" |
-| `emergent` | Patterns discovered through reflection | "Communication Patterns in the Team" |
-| `pinned` | User-created, manually maintained | "Important Contacts", "Key Decisions" |
+### Pinned Attribute
+
+Mental models have one special attribute: **`pinned`** (boolean).
+- `pinned = false` (default) — agent-created, can be auto-refreshed
+- `pinned = true` — user-created or user-curated, shown specially in UI, not auto-overwritten
 
 ---
 
 ## Evidence Guardrails
 
-Adapted from Hindsight's reflect agent. These prevent hallucination and ensure quality.
-
 ### Must Search Before Answering
 
-The agent **must** perform at least one search before providing an answer. If the agent attempts to answer without searching:
-
-```
-Error: "You must search for information first. Use recall() before providing your final answer."
-```
-
-This prevents the agent from answering from its training data instead of from stored memory.
+The agent MUST perform at least one search before providing an answer. This prevents answering from training data instead of stored memory.
 
 ### Citation Tracking
 
-Track which facts, observations, and mental models support the answer:
-
-```
-The agent maintains three sets during research:
-  - available_fact_ids      -- facts retrieved by recall()
-  - available_observation_ids -- observations retrieved
-  - available_mental_model_ids -- mental models retrieved
-
-When producing the final answer:
-  - Only cite IDs that were actually retrieved
-  - Silently drop any hallucinated IDs
-  - Citations enable provenance tracking
-```
+Track which facts, observations, and mental models support the answer. Only cite IDs that were actually retrieved. Citations enable provenance tracking.
 
 ### Staleness Verification
 
-When an observation or mental model has `is_stale = true`:
-
-1. Don't treat it as current truth
-2. Use it as context for further searching
-3. Search raw facts to verify or update key claims
-4. Note any contradictions in the synthesized answer
+When an observation has a `successor_id` (meaning a newer revision exists):
+1. Use `resolve_element_head` to follow the chain to the current head
+2. Use the head version as context for further searching if needed
+3. Note any contradictions in the synthesized answer
 
 ---
 
 ## Budget-Aware Research
 
-The reflection depth should match the budget:
-
-### Low Budget Reflection
-
-```
-- 1-2 search calls
-- Check mental models and observations only
-- Accept results without deep verification
-- Produce a brief answer
-- Don't create a mental model (not enough depth)
-```
-
-### Mid Budget Reflection
-
-```
-- 3-5 search calls
-- Follow the full hierarchical strategy
-- Verify stale results if central to the answer
-- Produce a thorough answer
-- Create a mental model if the topic warrants it
-```
-
-### High Budget Reflection
-
-```
-- 5-10 search calls
-- Comprehensive exploration with multiple query angles
-- Verify all stale results
-- Cross-reference across entities and time ranges
-- Produce a detailed, well-structured report
-- Create or refresh a mental model
-```
-
----
-
-## Self-Improvement via Mental Models
-
-Agents can use the reflect skill to create mental models that improve their own future performance.
-
-### Agent Self-Improvement Examples
-
-Agents that import this skill can create mental models for their own domains:
-
-```
-"Entity Disambiguation Rules"
-  - When "Tyler" appears, check context for work vs personal
-  - Tyler Shaver (is_user=TRUE) vs Tyler Johnson (friend)
-  - Discord handle coolgamer42 -> resolved to John Smith on Day 5
-
-"Common Extraction Patterns"
-  - Greetings ("hey how are you") rarely contain extractable facts
-  - Automated messages (bot notifications) can be skipped
-  - "I'll do X" is a plan, not a fact -- extract cautiously
-```
-
-These mental models persist across invocations, making agents more effective over time. Any agent can search mental models at the start of each invocation to load learned patterns.
-
-> **Note:** The Memory-Writer does NOT create mental models. It uses ROLE.md updates and workspace scripts for self-improvement instead. See `MEMORY_WRITER.md`.
-
-### Any Agent Self-Improvement
-
-Any agent that imports this skill can create mental models for its own use:
-
-```
-"User Preferences for Code Reviews"
-  - Prefers functional style over OOP
-  - Wants tests for all public methods
-  - Uses TypeScript strict mode
-
-"Project Architecture Decisions"
-  - Chose SQLite over Postgres for simplicity
-  - Union-set for entity resolution
-  - Agentic extraction over fixed pipelines
-```
-
----
-
-## Workflow Example
-
-```
-User: "What do you know about Tyler's relationship with the engineering team?"
-
-Agent imports: Memory Search Skill + Memory Reflect Skill
-
-Step 1: Assess
-  - Entities: Tyler, engineering team (and individual members)
-  - Concepts: relationship, collaboration, communication
-  - Budget: mid (conversational question, moderate depth)
-
-Step 2: Search
-  recall("Tyler engineering team", scope=['mental_models'])
-    -> No mental model found
-
-  recall("Tyler engineering team", scope=['observations'])
-    -> 2 observations found (1 stale)
-
-  recall("Tyler engineering collaboration", entity="Tyler")
-    -> 5 facts about Tyler working with engineers
-
-  recall("engineering team members", scope=['facts'])
-    -> 3 facts about team composition
-
-Step 3: Synthesize
-  Combine observations + facts into coherent narrative:
-  - Tyler works closely with the engineering team on Project Nexus
-  - Regular standups on Mondays
-  - Collaborates most with Sarah (design) and Mike (backend)
-  - [Stale observation noted Tyler's role as "tech lead" -- verified by recent fact confirming this]
-
-Step 4: Decide on persistence
-  - Moderate amount of information gathered
-  - Topic likely to recur
-  -> Create mental model: "Tyler's Engineering Team Relationships"
-
-Output: Synthesized markdown answer + mental model created
-```
-
----
-
-## Differences from Hindsight reflect()
-
-| Aspect | Hindsight reflect() | Nexus Memory Reflect |
-|--------|--------------------|--------------------|
-| **Architecture** | Standalone agent with 5 fixed tools | Reusable skill, composes with recall() |
-| **Search tools** | 3 separate tools (search_mental_models, search_observations, recall) | Single recall() with scope parameter |
-| **Expand** | expand(memory_ids, depth) for chunk/document context | Not needed -- facts are self-contained sentences |
-| **Done tool** | Structured done() with answer + ID arrays | Agent produces answer naturally, skill teaches citation |
-| **Mental model creation** | Separate API, not part of reflect | Integrated: create_mental_model() is part of the skill |
-| **Directives** | Injected as hard rules with compliance checking | Handled by the agent's role, not the skill |
-| **Budget** | Guidance in system prompt | Explicit parameter, skill teaches depth calibration |
-| **Self-improvement** | Not supported | Core feature -- agents create mental models for themselves |
+| Budget | Behavior | Mental Model? |
+|---|---|---|
+| `low` | 1-2 searches. Mental models and observations only. Brief answer. | No |
+| `mid` | 3-5 searches. Full hierarchical strategy. Verify stale results. | If warranted |
+| `high` | 5-10 searches. Comprehensive exploration. Cross-reference everything. | Yes, create or refresh |
 
 ---
 
 ## See Also
 
-- `MEMORY_SEARCH_SKILL.md` -- The search foundation this skill builds on
-- `MEMORY_SYSTEM.md` -- Full memory architecture (mental models schema)
-- `MEMORY_WRITER.md` -- How the Memory-Writer uses these skills for self-improvement
+- `MEMORY_SEARCH_SKILL.md` — The search foundation this skill builds on
+- `../MEMORY_SYSTEM.md` — Full memory architecture
+- `../MEMORY_RECALL.md` — Recall API and strategies

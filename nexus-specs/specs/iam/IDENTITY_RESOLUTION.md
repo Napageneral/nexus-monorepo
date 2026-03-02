@@ -67,8 +67,8 @@ Every `sender_id` is classified at ingest time:
 
 When a message arrives with a universal identifier (phone or email), the system creates TWO contact rows:
 
-1. **Universal contact** — `(platform="phone"/"email", space_id="", sender_id=canonical)` → `entity_id`
-2. **Platform contact** — `(platform="imessage"/"whatsapp"/etc, space_id="", sender_id=raw)` → same `entity_id`
+1. **Universal contact** — `(platform="phone"/"email", space_id="", contact_id=canonical)` → `entity_id`
+2. **Platform contact** — `(platform="imessage"/"whatsapp"/etc, space_id="", contact_id=raw)` → same `entity_id`
 
 The universal contact enables cross-platform matching. The platform contact preserves the raw mapping for delivery routing.
 
@@ -81,7 +81,7 @@ The universal contact enables cross-platform matching. The platform contact pres
    b. If found → reuse entity, add platform contact if missing
    c. If not found → create new entity, create BOTH universal + platform contacts
 3. If kind is "platform_id" or "shortcode":
-   a. Look up platform contact: (platform, space_id, sender_id) → entity_id?
+   a. Look up platform contact: (platform, space_id, contact_id) → entity_id?
    b. If found → reuse entity
    c. If not found → create new entity, create platform contact only
 4. Follow merged_into chain to canonical entity
@@ -141,10 +141,10 @@ Result: Two entities. Same Slack user ID across workspaces may be different peop
 
 ## Sender Name Change Tracking
 
-`sender_name` is treated as mutable, untrusted display metadata.
+`contact_name` is treated as mutable, untrusted display metadata.
 
 Required behavior:
-1. Contacts keep the latest seen name (`contacts.sender_name`) for fast reads.
+1. Contacts keep the latest seen name (`contacts.contact_name`) for fast reads.
 2. Name history is retained in `contact_name_observations` with first_seen/last_seen/seen_count.
 3. Name changes do not create new entities and do not affect canonicalization.
 4. Merge and policy logic uses entity identity; display names are observational metadata only.
@@ -243,7 +243,7 @@ The core problem with writer-created entities is **dedup**, not contacts. The `c
 
 Knowledge entities (writer-created, `source = 'inferred'`) and adapter entities (pipeline-created, `source = 'adapter'`) coexist in the same `entities` table. Contacts are optional metadata bindings and may exist for any entity type when operationally useful.
 
-**Co-occurrence data:** `link_fact_entity` records entity co-occurrences in the `entity_cooccurrences` table. This data is available to the consolidation agent for merge decisions (deferred — currently LLM-only merges).
+**Co-occurrence data:** Entity co-occurrences are derived at query time from the `element_entities` junction table in memory.db — no denormalized co-occurrence table. See `UNIFIED_ENTITY_STORE.md` § Entity Co-occurrence Queries and `FACT_GRAPH_TRAVERSAL.md` for the full query patterns. This data is available to the consolidation agent for merge decisions.
 
 ## System-Origin Resolution
 

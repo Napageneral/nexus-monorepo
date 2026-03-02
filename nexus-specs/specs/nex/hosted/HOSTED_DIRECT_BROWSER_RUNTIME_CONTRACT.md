@@ -1,7 +1,7 @@
 # Hosted Frontdoor -> Direct Browser Runtime Contract
 
-**Status:** DESIGN (locked direction, implementation pass pending)  
-**Last Updated:** 2026-02-23  
+**Status:** DESIGN (direct-mode profile; product-flow canon superseded)  
+**Last Updated:** 2026-02-27  
 **Related:**
 - `../_archive/HOSTED_FRONTDOOR_PER_TENANT_RUNTIME.md`
 - `HOSTED_RUNTIME_PROFILE.md`
@@ -17,13 +17,18 @@ Hosted Nexus uses:
 
 1. one public frontdoor (`app.<domain>`) for login/session orchestration
 2. one isolated runtime per tenant/workspace
-3. direct browser -> tenant runtime control-plane connection (no frontdoor runtime proxy in steady state)
+3. direct browser -> tenant runtime control-plane connection (this document describes that profile)
 
 This keeps tenant execution/data isolated while preserving a single user-facing website entrypoint.
 
+Alignment note:
+
+1. For product app onboarding/launch flows, frontdoor-routed app/runtime paths may be canonical.
+2. This document remains authoritative for the direct-mode profile only.
+
 ---
 
-## Decision (Locked)
+## Decision (Profile-Scoped)
 
 Connection mode for hosted control-plane is **direct**:
 
@@ -31,7 +36,7 @@ Connection mode for hosted control-plane is **direct**:
 - frontdoor mints short-lived runtime bearer token
 - browser calls tenant runtime HTTP/WS/SSE directly with that token
 
-Frontdoor runtime proxy routes (`/runtime/*`, `/app/*`) are compatibility/dev-only and not canonical for production.
+Frontdoor runtime proxy routes (`/runtime/*`, `/app/*`) remain valid in frontdoor-routed product flows; this direct-mode profile does not supersede that architecture choice.
 
 ---
 
@@ -176,7 +181,7 @@ Response:
 Purpose:
 
 - Mint runtime access/refresh token pair for the authenticated frontdoor session.
-- Return canonical runtime endpoints for direct browser connection.
+- Return runtime endpoints for direct browser connection in this profile.
 
 Request:
 
@@ -409,7 +414,7 @@ This is mandatory for browser safety when UI origin and runtime origin differ.
 1. Extend `/api/runtime/token*` responses with `runtime` descriptor fields.
 2. Add runtime hosted CORS config and enforcement for allowed UI origins.
 3. Set control UI client to consume direct runtime URLs/tokens (instead of `/runtime/*` proxy paths).
-4. Keep `/runtime/*` proxy only as temporary fallback; remove from canonical hosted path after cutover.
+4. Keep `/runtime/*` proxy compatibility available where product flows require frontdoor-routed transport.
 
 ---
 

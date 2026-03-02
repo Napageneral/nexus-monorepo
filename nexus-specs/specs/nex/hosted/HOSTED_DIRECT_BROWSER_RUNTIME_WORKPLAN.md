@@ -1,7 +1,7 @@
 # Hosted Direct Browser Runtime Workplan
 
-**Status:** ACTIVE  
-**Last Updated:** 2026-02-23  
+**Status:** ACTIVE (direct-mode profile plan)  
+**Last Updated:** 2026-02-27  
 **Depends On:**
 - `HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md`
 - `HOSTED_RUNTIME_PROFILE.md`
@@ -12,14 +12,17 @@
 
 ## Goal
 
-Implement the canonical hosted model:
+Implement the direct-mode hosted profile:
 
 1. user logs in at frontdoor
 2. frontdoor issues short-lived runtime token + runtime endpoint descriptor
 3. browser connects directly to tenant runtime HTTP/WS/SSE
 4. runtime enforces trusted-token auth + IAM
 
-No control-plane runtime proxy in steady-state production path.
+Alignment note:
+
+1. This workplan targets direct mode as one supported profile.
+2. Product app onboarding/launch flows may remain frontdoor-routed by canonical architecture.
 
 ---
 
@@ -54,7 +57,7 @@ Already implemented:
 
 Main gap:
 
-- canonical direct browser -> runtime data path is not yet the default/UI-integrated path.
+- direct browser -> runtime data path is not yet integrated where this profile is enabled.
 
 ---
 
@@ -114,7 +117,7 @@ Implementation:
 
 1. Extend `/api/runtime/token` and `/api/runtime/token/refresh` to return `runtime` descriptor.
 2. Ensure tenant resolution returns canonical runtime public endpoints for browser clients.
-3. Keep `/runtime/*` + `/app/*` as temporary compatibility routes (not default).
+3. Keep `/runtime/*` + `/app/*` available for frontdoor-routed product flows.
 4. Add explicit version marker in response:
    - `runtime.connection_mode: "direct"` for new clients.
 
@@ -173,7 +176,7 @@ Implementation:
 4. Implement automatic refresh on:
    - `401` HTTP/SSE responses
    - WS connect auth failures / token expiry reconnect loop
-5. Remove default reliance on `/runtime/*` and `/app/*` proxy paths.
+5. Enable direct runtime transport for clients that opt into this profile.
 
 Acceptance:
 
@@ -232,7 +235,7 @@ Required test suites:
 Success criteria:
 
 1. All direct-mode suites pass consistently.
-2. Proxy-only assumptions are removed from hosted happy-path tests.
+2. Direct-mode behavior is validated without regressing frontdoor-routed product flows.
 
 ---
 
@@ -251,8 +254,8 @@ Cutover sequence:
 2. Deploy runtime CORS/origin allowlist.
 3. Roll out UI client direct mode for internal tenants first.
 4. Observe auth errors/reconnect behavior.
-5. Promote direct mode to default.
-6. Decommission runtime proxy paths from canonical hosted docs and codepath (optional final cleanup release).
+5. Promote direct mode where profile policy requires it.
+6. Keep frontdoor-routed proxy paths for product onboarding/launch flows unless a separate canonical decision supersedes them.
 
 Rollback:
 
@@ -282,5 +285,4 @@ All are true:
 3. Runtime validates trusted tokens + tenant pinning and enforces IAM.
 4. Hosted cross-origin access is explicitly allowlisted (HTTP + WS).
 5. Cross-tenant isolation is proven by automated tests.
-6. Proxy mode is no longer the primary hosted path.
-
+6. Direct mode can coexist with frontdoor-routed product app flows without ambiguity.

@@ -202,6 +202,27 @@ afterEach(async () => {
 });
 
 describe("frontdoor scaffold", () => {
+  it("serves shell actions for install-on-selected-server and explicit new-server install", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const frontdoor = createFrontdoorServer({
+      config: baseConfig(runtime.origin),
+    });
+    const frontdoorRunning = await listen(frontdoor.server);
+
+    const shellResp = await fetch(`${frontdoorRunning.origin}/`);
+    expect(shellResp.status).toBe(200);
+    const shellHtml = await shellResp.text();
+    expect(shellHtml).toContain("Install app on selected server");
+    expect(shellHtml).toContain("Create another server + install app");
+    expect(shellHtml).not.toContain("Provision product workspace");
+  });
+
   it("supports login and runtime token mint/refresh/revoke", async () => {
     const runtime = await listen(
       createHttpServer((_req, res) => {
@@ -324,6 +345,7 @@ describe("frontdoor scaffold", () => {
     expect(hsts).toContain("max-age=31536000");
     expect(hsts).toContain("includeSubDomains");
     expect(hsts).toContain("preload");
+    expect(response.headers.get("referrer-policy")).toBe("same-origin");
   });
 
   it("includes JWT kid when runtime token keys are configured", async () => {
@@ -450,6 +472,63 @@ describe("frontdoor scaffold", () => {
     expect(lastRuntimeUrl).toBe("/app/glowbot/?tab=overview");
   });
 
+  it("proxies /_next assets through app context inferred from referer", async () => {
+    let lastRuntimeUrl = "";
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        lastRuntimeUrl = String(req.url ?? "");
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/javascript; charset=utf-8");
+        res.end("console.log('ok');");
+      }),
+    );
+    const frontdoor = createFrontdoorServer({
+      config: baseConfig(runtime.origin),
+    });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const resp = await fetch(
+      `${frontdoorRunning.origin}/_next/static/chunks/app/app/glowbot/integrations/page-chunk.js?v=1`,
+      {
+        headers: {
+          cookie,
+          referer: `${frontdoorRunning.origin}/app/glowbot/integrations`,
+        },
+      },
+    );
+
+    expect(resp.status).toBe(200);
+    expect(lastRuntimeUrl).toBe(
+      "/app/glowbot/_next/static/chunks/app/app/glowbot/integrations/page-chunk.js?v=1",
+    );
+  });
+
+  it("rejects /_next asset request without app referer context", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/javascript; charset=utf-8");
+        res.end("console.log('ok');");
+      }),
+    );
+    const frontdoor = createFrontdoorServer({
+      config: baseConfig(runtime.origin),
+    });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const resp = await fetch(`${frontdoorRunning.origin}/_next/static/chunks/app/layout.js`, {
+      headers: {
+        cookie,
+      },
+    });
+    expect(resp.status).toBe(404);
+    const body = (await resp.json()) as { ok?: boolean; error?: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toBe("app_asset_context_missing");
+  });
+
   it("proxies /auth callback paths to runtime with tenant headers", async () => {
     let lastAuthorization = "";
     let lastTenantHeader = "";
@@ -483,7 +562,7 @@ describe("frontdoor scaffold", () => {
     expect(lastAuthorization.startsWith("Bearer ")).toBe(true);
   });
 
-  it("bootstraps /app HTML routes without leaking token or runtimeUrl in URL", async () => {
+  it("bootstraps control app HTML routes without leaking token or runtimeUrl in URL", async () => {
     let lastRuntimeUrl = "";
     const runtime = await listen(
       createHttpServer((req, res) => {
@@ -499,7 +578,7 @@ describe("frontdoor scaffold", () => {
     const frontdoorRunning = await listen(frontdoor.server);
     const cookie = await login(frontdoorRunning.origin);
 
-    const bootstrapResp = await fetch(`${frontdoorRunning.origin}/app/chat?session=main`, {
+    const bootstrapResp = await fetch(`${frontdoorRunning.origin}/app/control/chat?session=main`, {
       headers: {
         cookie,
         accept: "text/html",
@@ -509,9 +588,35 @@ describe("frontdoor scaffold", () => {
     const html = await bootstrapResp.text();
     expect(html.includes("nexus.control.settings.v1")).toBe(true);
     expect(html).toMatch(/runtimeUrl:"ws:\/\/127\.0\.0\.1:\d+\/app\?workspace_id=tenant-dev"/);
-    expect(lastRuntimeUrl).toBe("/app/chat?session=main");
+    expect(lastRuntimeUrl).toBe("/app/control/chat?session=main");
     expect(lastRuntimeUrl.includes("token=")).toBe(false);
     expect(lastRuntimeUrl.includes("runtimeUrl=")).toBe(false);
+  });
+
+  it("does not inject control bootstrap into non-control app HTML routes", async () => {
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/html; charset=utf-8");
+        res.end("<!doctype html><html><head><title>glowbot</title></head><body>app</body></html>");
+      }),
+    );
+    const frontdoor = createFrontdoorServer({
+      config: baseConfig(runtime.origin),
+    });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const resp = await fetch(`${frontdoorRunning.origin}/app/glowbot/?tab=overview`, {
+      headers: {
+        cookie,
+        accept: "text/html",
+      },
+    });
+    expect(resp.status).toBe(200);
+    const html = await resp.text();
+    expect(html.includes("nexus.control.settings.v1")).toBe(false);
+    expect(html.includes("runtimeUrl:")).toBe(false);
   });
 
   it("proxies websocket upgrades with trusted-token header injection", async () => {
@@ -1850,7 +1955,7 @@ describe("frontdoor scaffold", () => {
     expect(body.request?.subject).toBe("google-sub-123");
   });
 
-  it("provisions and selects product-scoped workspace on OIDC callback for existing users", async () => {
+  it("provisions a product workspace on product OIDC callback for existing users", async () => {
     const legacyRuntime = await listen(
       createHttpServer((req, res) => {
         const pathname = new URL(req.url || "/", "http://127.0.0.1").pathname;
@@ -1860,24 +1965,10 @@ describe("frontdoor scaffold", () => {
           res.end(
             JSON.stringify({
               ok: true,
-              items: [{ app_id: "glowbot", display_name: "GlowBot", entry_path: "/app/glowbot/" }],
-            }),
-          );
-          return;
-        }
-        res.end('{"ok":true}');
-      }),
-    );
-    const spikeRuntime = await listen(
-      createHttpServer((req, res) => {
-        const pathname = new URL(req.url || "/", "http://127.0.0.1").pathname;
-        res.statusCode = 200;
-        res.setHeader("content-type", "application/json");
-        if (pathname === "/api/apps") {
-          res.end(
-            JSON.stringify({
-              ok: true,
-              items: [{ app_id: "spike-runtime", display_name: "Spike", entry_path: "/app/spike" }],
+              items: [
+                { app_id: "glowbot", display_name: "GlowBot", entry_path: "/app/glowbot/" },
+                { app_id: "spike-runtime", display_name: "Spike", entry_path: "/app/spike" },
+              ],
             }),
           );
           return;
@@ -1888,17 +1979,22 @@ describe("frontdoor scaffold", () => {
     const config = baseConfig(legacyRuntime.origin);
     const storePath = path.join(tmpdir(), `nexus-frontdoor-autoprovision-${randomUUID()}.db`);
     const scriptPath = path.join(tmpdir(), `nexus-frontdoor-provision-script-${randomUUID()}.mjs`);
+    const callCountPath = path.join(tmpdir(), `nexus-frontdoor-provision-calls-${randomUUID()}.txt`);
+    fs.writeFileSync(callCountPath, "0\n", "utf8");
     fs.writeFileSync(
       scriptPath,
       `
+import fs from "node:fs";
 let raw = "";
 process.stdin.on("data", (chunk) => { raw += chunk.toString(); });
 process.stdin.on("end", () => {
   const payload = JSON.parse(raw || "{}");
+  const count = Number(fs.readFileSync(${JSON.stringify(callCountPath)}, "utf8").trim() || "0");
+  fs.writeFileSync(${JSON.stringify(callCountPath)}, String(count + 1) + "\\n", "utf8");
   process.stdout.write(JSON.stringify({
     tenant_id: payload.tenant_id,
-    runtime_url: ${JSON.stringify(spikeRuntime.origin)},
-    runtime_public_base_url: ${JSON.stringify(spikeRuntime.origin)}
+    runtime_url: ${JSON.stringify(legacyRuntime.origin)},
+    runtime_public_base_url: ${JSON.stringify(legacyRuntime.origin)}
   }));
 });
 `,
@@ -2011,7 +2107,8 @@ process.stdin.on("end", () => {
       active_workspace_id?: string | null;
     };
     expect(sessionBody.authenticated).toBe(true);
-    expect(sessionBody.tenant_id).toMatch(/^tenant-spike-/);
+    expect(String(sessionBody.tenant_id || "")).toMatch(/^tenant-owner-example-com-/);
+    expect(sessionBody.tenant_id).not.toBe("tenant-dev");
     expect(sessionBody.active_workspace_id).toBe(sessionBody.tenant_id);
 
     const workspacesResp = await fetch(`${frontdoorRunning.origin}/api/workspaces`, {
@@ -2027,6 +2124,8 @@ process.stdin.on("end", () => {
     expect(workspacesBody.ok).toBe(true);
     const spikeWorkspace = workspacesBody.items.find((item) => item.workspace_id === sessionBody.tenant_id);
     expect(spikeWorkspace?.product_id).toBe("spike");
+    const callCount = Number(fs.readFileSync(callCountPath, "utf8").trim() || "0");
+    expect(callCount).toBe(1);
 
     const appsResp = await fetch(`${frontdoorRunning.origin}/runtime/api/apps`, {
       headers: {
@@ -2222,5 +2321,675 @@ process.stdin.on("end", () => {
     const foreignBody = (await foreignResp.json()) as { ok?: boolean; error?: string };
     expect(foreignBody.ok).toBe(false);
     expect(foreignBody.error).toBe("request_not_found");
+  });
+
+  it("supports server-first app catalog, ownership, install, and entry resolution APIs", async () => {
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        if (req.url?.startsWith("/api/apps")) {
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end(
+            JSON.stringify({
+              ok: true,
+              items: [
+                { app_id: "control", display_name: "Control", entry_path: "/app/control/chat" },
+                {
+                  app_id: "glowbot",
+                  display_name: "GlowBot",
+                  entry_path: "/app/glowbot/",
+                  kind: "proxy",
+                },
+              ],
+            }),
+          );
+          return;
+        }
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ ok: true }));
+      }),
+    );
+    const frontdoor = createFrontdoorServer({ config: baseConfig(runtime.origin) });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const serversResp = await fetch(`${frontdoorRunning.origin}/api/servers`, {
+      headers: { cookie },
+    });
+    expect(serversResp.status).toBe(200);
+    const serversBody = (await serversResp.json()) as {
+      ok: boolean;
+      items: Array<{ server_id: string; generated_name: string }>;
+    };
+    expect(serversBody.ok).toBe(true);
+    expect(serversBody.items.some((item) => item.server_id === "tenant-dev")).toBe(true);
+    expect(serversBody.items[0]?.generated_name.length).toBeGreaterThan(0);
+
+    const initialResolveResp = await fetch(
+      `${frontdoorRunning.origin}/api/entry/resolve?app_id=glowbot&entry_source=test-suite`,
+      { headers: { cookie } },
+    );
+    expect(initialResolveResp.status).toBe(200);
+    const initialResolveBody = (await initialResolveResp.json()) as {
+      ok: boolean;
+      action: string;
+      has_active_entitlement: boolean;
+    };
+    expect(initialResolveBody.ok).toBe(true);
+    expect(initialResolveBody.has_active_entitlement).toBe(false);
+    expect(initialResolveBody.action).toBe("purchase_app_then_install");
+
+    const purchaseResp = await fetch(`${frontdoorRunning.origin}/api/apps/glowbot/purchase`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ install: false }),
+    });
+    expect(purchaseResp.status).toBe(200);
+
+    const ownedResp = await fetch(`${frontdoorRunning.origin}/api/apps/owned`, {
+      headers: { cookie },
+    });
+    expect(ownedResp.status).toBe(200);
+    const ownedBody = (await ownedResp.json()) as {
+      ok: boolean;
+      items: Array<{ app_id: string; status: string }>;
+    };
+    expect(ownedBody.ok).toBe(true);
+    expect(ownedBody.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          app_id: "glowbot",
+          status: "active",
+        }),
+      ]),
+    );
+
+    const installWithoutEntitlementResp = await fetch(
+      `${frontdoorRunning.origin}/api/servers/tenant-dev/apps/spike/install`,
+      {
+        method: "POST",
+        headers: { cookie },
+      },
+    );
+    expect(installWithoutEntitlementResp.status).toBe(403);
+    const installWithoutEntitlementBody = (await installWithoutEntitlementResp.json()) as {
+      ok?: boolean;
+      error?: string;
+    };
+    expect(installWithoutEntitlementBody.ok).toBe(false);
+    expect(installWithoutEntitlementBody.error).toBe("app_entitlement_required");
+
+    const installResp = await fetch(
+      `${frontdoorRunning.origin}/api/servers/tenant-dev/apps/glowbot/install`,
+      {
+        method: "POST",
+        headers: { cookie },
+      },
+    );
+    expect(installResp.status).toBe(200);
+    const installBody = (await installResp.json()) as { ok: boolean; install_status: string };
+    expect(installBody.ok).toBe(true);
+    expect(installBody.install_status).toBe("installed");
+
+    const serverAppsResp = await fetch(`${frontdoorRunning.origin}/api/servers/tenant-dev/apps`, {
+      headers: { cookie },
+    });
+    expect(serverAppsResp.status).toBe(200);
+    const serverAppsBody = (await serverAppsResp.json()) as {
+      ok: boolean;
+      items: Array<{ app_id: string; install_status: string; launchable: boolean }>;
+    };
+    expect(serverAppsBody.ok).toBe(true);
+    expect(serverAppsBody.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          app_id: "glowbot",
+          install_status: "installed",
+          launchable: true,
+        }),
+      ]),
+    );
+
+    const installStatusResp = await fetch(
+      `${frontdoorRunning.origin}/api/servers/tenant-dev/apps/glowbot/install-status`,
+      {
+        headers: { cookie },
+      },
+    );
+    expect(installStatusResp.status).toBe(200);
+    const installStatusBody = (await installStatusResp.json()) as {
+      ok: boolean;
+      entitlement_status: string;
+      install_status: string;
+    };
+    expect(installStatusBody.ok).toBe(true);
+    expect(installStatusBody.entitlement_status).toBe("active");
+    expect(installStatusBody.install_status).toBe("installed");
+
+    const postInstallResolveResp = await fetch(
+      `${frontdoorRunning.origin}/api/entry/resolve?app_id=glowbot&entry_source=test-suite`,
+      { headers: { cookie } },
+    );
+    expect(postInstallResolveResp.status).toBe(200);
+    const postInstallResolveBody = (await postInstallResolveResp.json()) as {
+      ok: boolean;
+      action: string;
+      has_active_entitlement: boolean;
+      installed_server_ids: string[];
+    };
+    expect(postInstallResolveBody.ok).toBe(true);
+    expect(postInstallResolveBody.has_active_entitlement).toBe(true);
+    expect(postInstallResolveBody.action).toBe("dashboard_only");
+    expect(postInstallResolveBody.installed_server_ids).toContain("tenant-dev");
+  });
+
+  it("fails app purchase install when runtime attach is unavailable on unmanaged server", async () => {
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        if (req.url?.startsWith("/api/apps")) {
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end(
+            JSON.stringify({
+              ok: true,
+              items: [{ app_id: "control", display_name: "Control", entry_path: "/app/control/chat" }],
+            }),
+          );
+          return;
+        }
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ ok: true }));
+      }),
+    );
+    const frontdoor = createFrontdoorServer({ config: baseConfig(runtime.origin) });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const purchaseResp = await fetch(`${frontdoorRunning.origin}/api/apps/spike/purchase`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        server_id: "tenant-dev",
+        install: true,
+      }),
+    });
+    expect(purchaseResp.status).toBe(409);
+    const purchaseBody = (await purchaseResp.json()) as {
+      ok?: boolean;
+      error?: string;
+      app_id?: string;
+      server_id?: string;
+    };
+    expect(purchaseBody.ok).toBe(false);
+    expect(purchaseBody.error).toBe("runtime_attach_state_unavailable");
+    expect(purchaseBody.app_id).toBe("spike");
+    expect(purchaseBody.server_id).toBe("tenant-dev");
+
+    const installStatusResp = await fetch(
+      `${frontdoorRunning.origin}/api/servers/tenant-dev/apps/spike/install-status`,
+      {
+        headers: { cookie },
+      },
+    );
+    expect(installStatusResp.status).toBe(200);
+    const installStatusBody = (await installStatusResp.json()) as {
+      ok: boolean;
+      install_status: string;
+      last_error?: string | null;
+    };
+    expect(installStatusBody.ok).toBe(true);
+    expect(installStatusBody.install_status).toBe("failed");
+    expect(installStatusBody.last_error).toBe("runtime_attach_state_unavailable");
+  });
+
+  it("executes create_server_and_install for signed-in users with no remaining servers", async () => {
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        if (req.url?.startsWith("/api/apps")) {
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end(
+            JSON.stringify({
+              ok: true,
+              items: [
+                { app_id: "control", display_name: "Control", entry_path: "/app/control/chat" },
+                { app_id: "glowbot", display_name: "GlowBot", entry_path: "/app/glowbot/" },
+              ],
+            }),
+          );
+          return;
+        }
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ ok: true }));
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    const storePath = path.join(tmpdir(), `nexus-frontdoor-autoprovision-${randomUUID()}.db`);
+    const scriptPath = path.join(tmpdir(), `nexus-frontdoor-entry-provision-script-${randomUUID()}.mjs`);
+    const callCountPath = path.join(tmpdir(), `nexus-frontdoor-entry-provision-calls-${randomUUID()}.txt`);
+    fs.writeFileSync(callCountPath, "0\n", "utf8");
+    fs.writeFileSync(
+      scriptPath,
+      `
+import fs from "node:fs";
+let raw = "";
+process.stdin.on("data", (chunk) => { raw += chunk.toString(); });
+process.stdin.on("end", () => {
+  const payload = JSON.parse(raw || "{}");
+  const count = Number(fs.readFileSync(${JSON.stringify(callCountPath)}, "utf8").trim() || "0");
+  fs.writeFileSync(${JSON.stringify(callCountPath)}, String(count + 1) + "\\n", "utf8");
+  process.stdout.write(JSON.stringify({
+    tenant_id: payload.tenant_id,
+    runtime_url: ${JSON.stringify(runtime.origin)},
+    runtime_public_base_url: ${JSON.stringify(runtime.origin)}
+  }));
+});
+`,
+      "utf8",
+    );
+    config.autoProvision = {
+      ...config.autoProvision,
+      enabled: true,
+      storePath,
+      providers: ["password"],
+      command: `${JSON.stringify(process.execPath)} ${JSON.stringify(scriptPath)}`,
+    };
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const disableServerResp = await fetch(`${frontdoorRunning.origin}/api/servers/tenant-dev`, {
+      method: "DELETE",
+      headers: { cookie },
+    });
+    expect(disableServerResp.status).toBe(200);
+
+    const serversBeforeResp = await fetch(`${frontdoorRunning.origin}/api/servers`, {
+      headers: { cookie },
+    });
+    expect(serversBeforeResp.status).toBe(200);
+    const serversBeforeBody = (await serversBeforeResp.json()) as {
+      ok: boolean;
+      items: Array<{ server_id: string }>;
+    };
+    expect(serversBeforeBody.ok).toBe(true);
+    expect(serversBeforeBody.items).toHaveLength(0);
+
+    const executeResp = await fetch(`${frontdoorRunning.origin}/api/entry/execute`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        app_id: "glowbot",
+        entry_source: "test-suite",
+      }),
+    });
+    expect(executeResp.status).toBe(200);
+    const executeBody = (await executeResp.json()) as {
+      ok: boolean;
+      action_requested: string;
+      action_taken: string;
+      has_active_entitlement: boolean;
+      install_status: string;
+      launch_ready: boolean;
+      server_id?: string;
+    };
+    expect(executeBody.ok).toBe(true);
+    expect(executeBody.action_requested).toBe("create_server_and_install");
+    expect(executeBody.action_taken).toBe("create_server_and_install");
+    expect(executeBody.has_active_entitlement).toBe(true);
+    expect(executeBody.install_status).toBe("installed");
+    expect(executeBody.launch_ready).toBe(true);
+    expect(String(executeBody.server_id || "")).toMatch(/^tenant-owner-example-com-/);
+    expect(executeBody.server_id).not.toBe("tenant-dev");
+
+    const callCount = Number(fs.readFileSync(callCountPath, "utf8").trim() || "0");
+    expect(callCount).toBe(1);
+
+    const sessionResp = await fetch(`${frontdoorRunning.origin}/api/auth/session`, {
+      headers: { cookie },
+    });
+    expect(sessionResp.status).toBe(200);
+    const sessionBody = (await sessionResp.json()) as {
+      authenticated?: boolean;
+      tenant_id?: string;
+      active_workspace_id?: string | null;
+    };
+    expect(sessionBody.authenticated).toBe(true);
+    expect(sessionBody.tenant_id).toBe(executeBody.server_id);
+    expect(sessionBody.active_workspace_id).toBe(executeBody.server_id);
+  });
+
+  it("returns autoprovision_identity_unavailable when create_server_and_install has no allowed identity", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ ok: true }));
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    const storePath = path.join(tmpdir(), `nexus-frontdoor-autoprovision-${randomUUID()}.db`);
+    config.autoProvision = {
+      ...config.autoProvision,
+      enabled: true,
+      storePath,
+      providers: ["google"],
+      command: `${JSON.stringify(process.execPath)} -e ${JSON.stringify("process.stdout.write('{}')")}`,
+    };
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const disableServerResp = await fetch(`${frontdoorRunning.origin}/api/servers/tenant-dev`, {
+      method: "DELETE",
+      headers: { cookie },
+    });
+    expect(disableServerResp.status).toBe(200);
+
+    const executeResp = await fetch(`${frontdoorRunning.origin}/api/entry/execute`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        app_id: "glowbot",
+        entry_source: "test-suite",
+      }),
+    });
+    expect(executeResp.status).toBe(409);
+    const executeBody = (await executeResp.json()) as {
+      ok?: boolean;
+      error?: string;
+    };
+    expect(executeBody.ok).toBe(false);
+    expect(executeBody.error).toBe("autoprovision_identity_unavailable");
+  });
+
+  it("supports explicit create_new_server entry execution for signed-in users with existing servers", async () => {
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        if (req.url?.startsWith("/api/apps")) {
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end(
+            JSON.stringify({
+              ok: true,
+              items: [
+                { app_id: "control", display_name: "Control", entry_path: "/app/control/chat" },
+                { app_id: "glowbot", display_name: "GlowBot", entry_path: "/app/glowbot/" },
+              ],
+            }),
+          );
+          return;
+        }
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ ok: true }));
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    const storePath = path.join(tmpdir(), `nexus-frontdoor-autoprovision-${randomUUID()}.db`);
+    const scriptPath = path.join(tmpdir(), `nexus-frontdoor-entry-new-server-script-${randomUUID()}.mjs`);
+    const callCountPath = path.join(tmpdir(), `nexus-frontdoor-entry-new-server-calls-${randomUUID()}.txt`);
+    fs.writeFileSync(callCountPath, "0\n", "utf8");
+    fs.writeFileSync(
+      scriptPath,
+      `
+import fs from "node:fs";
+let raw = "";
+process.stdin.on("data", (chunk) => { raw += chunk.toString(); });
+process.stdin.on("end", () => {
+  const payload = JSON.parse(raw || "{}");
+  const count = Number(fs.readFileSync(${JSON.stringify(callCountPath)}, "utf8").trim() || "0");
+  fs.writeFileSync(${JSON.stringify(callCountPath)}, String(count + 1) + "\\n", "utf8");
+  process.stdout.write(JSON.stringify({
+    tenant_id: payload.tenant_id,
+    runtime_url: ${JSON.stringify(runtime.origin)},
+    runtime_public_base_url: ${JSON.stringify(runtime.origin)}
+  }));
+});
+`,
+      "utf8",
+    );
+    config.autoProvision = {
+      ...config.autoProvision,
+      enabled: true,
+      storePath,
+      providers: ["password"],
+      command: `${JSON.stringify(process.execPath)} ${JSON.stringify(scriptPath)}`,
+    };
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const beforeServersResp = await fetch(`${frontdoorRunning.origin}/api/servers`, {
+      headers: { cookie },
+    });
+    expect(beforeServersResp.status).toBe(200);
+    const beforeServersBody = (await beforeServersResp.json()) as {
+      ok: boolean;
+      items: Array<{ server_id: string }>;
+    };
+    expect(beforeServersBody.ok).toBe(true);
+    expect(beforeServersBody.items).toHaveLength(1);
+    expect(beforeServersBody.items[0]?.server_id).toBe("tenant-dev");
+
+    const executeResp = await fetch(`${frontdoorRunning.origin}/api/entry/execute`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        app_id: "glowbot",
+        entry_source: "test-suite",
+        create_new_server: true,
+      }),
+    });
+    expect(executeResp.status).toBe(200);
+    const executeBody = (await executeResp.json()) as {
+      ok: boolean;
+      create_new_server: boolean;
+      action_requested: string;
+      action_taken: string;
+      server_id?: string;
+      launch_ready: boolean;
+    };
+    expect(executeBody.ok).toBe(true);
+    expect(executeBody.create_new_server).toBe(true);
+    expect(executeBody.action_requested).toBe("create_server_and_install");
+    expect(executeBody.action_taken).toBe("create_server_and_install");
+    expect(String(executeBody.server_id || "")).toMatch(/^tenant-owner-example-com-/);
+    expect(executeBody.server_id).not.toBe("tenant-dev");
+    expect(executeBody.launch_ready).toBe(true);
+
+    const afterServersResp = await fetch(`${frontdoorRunning.origin}/api/servers`, {
+      headers: { cookie },
+    });
+    expect(afterServersResp.status).toBe(200);
+    const afterServersBody = (await afterServersResp.json()) as {
+      ok: boolean;
+      items: Array<{ server_id: string }>;
+    };
+    expect(afterServersBody.ok).toBe(true);
+    expect(afterServersBody.items).toHaveLength(2);
+    expect(afterServersBody.items.some((item) => item.server_id === "tenant-dev")).toBe(true);
+    expect(afterServersBody.items.some((item) => item.server_id === executeBody.server_id)).toBe(true);
+
+    const callCount = Number(fs.readFileSync(callCountPath, "utf8").trim() || "0");
+    expect(callCount).toBe(1);
+  });
+
+  it("fails install when runtime app is absent and workspace cannot be runtime-attached", async () => {
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        if (req.url?.startsWith("/api/apps")) {
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end(
+            JSON.stringify({
+              ok: true,
+              items: [
+                { app_id: "control", display_name: "Control", entry_path: "/app/control/chat" },
+                { app_id: "glowbot", display_name: "GlowBot", entry_path: "/app/glowbot/" },
+              ],
+            }),
+          );
+          return;
+        }
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ ok: true }));
+      }),
+    );
+    const frontdoor = createFrontdoorServer({ config: baseConfig(runtime.origin) });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const executeResp = await fetch(`${frontdoorRunning.origin}/api/entry/execute`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        app_id: "spike",
+        entry_source: "test-suite",
+        server_id: "tenant-dev",
+      }),
+    });
+    expect(executeResp.status).toBe(409);
+    const executeBody = (await executeResp.json()) as {
+      ok: boolean;
+      error?: string;
+      app_id?: string;
+      server_id?: string;
+    };
+    expect(executeBody.ok).toBe(false);
+    expect(executeBody.error).toBe("runtime_attach_state_unavailable");
+    expect(executeBody.app_id).toBe("spike");
+    expect(executeBody.server_id).toBe("tenant-dev");
+
+    const serverAppsResp = await fetch(`${frontdoorRunning.origin}/api/servers/tenant-dev/apps`, {
+      headers: { cookie },
+    });
+    expect(serverAppsResp.status).toBe(200);
+    const serverAppsBody = (await serverAppsResp.json()) as {
+      ok: boolean;
+      items: Array<{
+        app_id: string;
+        install_status: string;
+        launchable: boolean;
+        blocked_reason?: string | null;
+      }>;
+    };
+    expect(serverAppsBody.ok).toBe(true);
+    expect(serverAppsBody.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          app_id: "spike",
+          install_status: "failed",
+          launchable: false,
+        }),
+      ]),
+    );
+  });
+
+  it("does not alias runtime spike-runtime app slot to spike product launch readiness", async () => {
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        if (req.url?.startsWith("/api/apps")) {
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end(
+            JSON.stringify({
+              ok: true,
+              items: [
+                { app_id: "control", display_name: "Control", entry_path: "/app/control/chat" },
+                {
+                  app_id: "spike-runtime",
+                  display_name: "Spike Runtime",
+                  entry_path: "/app/spike",
+                  kind: "proxy",
+                },
+              ],
+            }),
+          );
+          return;
+        }
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ ok: true }));
+      }),
+    );
+    const frontdoor = createFrontdoorServer({ config: baseConfig(runtime.origin) });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const executeResp = await fetch(`${frontdoorRunning.origin}/api/entry/execute`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        app_id: "spike",
+        entry_source: "test-suite",
+        server_id: "tenant-dev",
+      }),
+    });
+    expect(executeResp.status).toBe(409);
+    const executeBody = (await executeResp.json()) as {
+      ok: boolean;
+      error?: string;
+      app_id?: string;
+      server_id?: string;
+    };
+    expect(executeBody.ok).toBe(false);
+    expect(executeBody.error).toBe("runtime_attach_state_unavailable");
+    expect(executeBody.app_id).toBe("spike");
+    expect(executeBody.server_id).toBe("tenant-dev");
+
+    const serverAppsResp = await fetch(`${frontdoorRunning.origin}/api/servers/tenant-dev/apps`, {
+      headers: { cookie },
+    });
+    expect(serverAppsResp.status).toBe(200);
+    const serverAppsBody = (await serverAppsResp.json()) as {
+      ok: boolean;
+      items: Array<{
+        app_id: string;
+        launchable: boolean;
+        blocked_reason?: string | null;
+        kind?: string | null;
+      }>;
+    };
+    expect(serverAppsBody.ok).toBe(true);
+    expect(serverAppsBody.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          app_id: "spike",
+          install_status: "failed",
+          launchable: false,
+        }),
+        expect.objectContaining({
+          app_id: "spike-runtime",
+          launchable: false,
+          kind: "proxy",
+        }),
+      ]),
+    );
   });
 });

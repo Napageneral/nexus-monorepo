@@ -21,7 +21,8 @@
     │   ├── events.db                  # Event ledger
     │   ├── agents.db                  # Agent sessions
     │   ├── identity.db                # Contacts, directory, entities, auth, ACL
-    │   ├── memory.db                  # Facts, episodes, analysis (Memory System)
+    │   ├── memory.db                  # Elements, sets, jobs (Memory System)
+    │   ├── work.db                    # Work items, tasks, queue
     │   ├── embeddings.db              # Semantic vector index
     │   └── runtime.db                 # Request traces, adapters, automations, bus
     ├── agents/
@@ -64,7 +65,7 @@ All runtime state, visible and inspectable.
 
 | Path | Purpose |
 |------|---------|
-| `state/data/` | All 6 databases (created eagerly by init) |
+| `state/data/` | All 7 databases (created eagerly by init) |
 | `state/agents/` | Agent bootstrap template + per-agent persona directories |
 | `state/user/` | User identity and preferences |
 | `state/credentials/` | Credential index and storage pointers |
@@ -95,7 +96,8 @@ Agent persona directories (`state/agents/{name}/`) and automation workspaces (`s
 | Event ledger | `state/data/events.db` |
 | Agent sessions | `state/data/agents.db` |
 | Contacts, directory, entities, auth, ACL | `state/data/identity.db` |
-| Facts, episodes, analysis (Memory System) | `state/data/memory.db` |
+| Elements, sets, jobs (Memory System) | `state/data/memory.db` |
+| Work items, tasks, queue | `state/data/work.db` |
 | Semantic vector index | `state/data/embeddings.db` |
 | Request traces, adapters, automations, bus | `state/data/runtime.db` |
 | Credential storage | `state/credentials/` |
@@ -120,12 +122,12 @@ Agent persona directories (`state/agents/{name}/`) and automation workspaces (`s
 
 ## Design Decisions
 
-- **DBs created eagerly** -- All 6 databases under `state/data/` are created by `nexus init`, not lazily on first use.
+- **DBs created eagerly** -- All 7 databases under `state/data/` are created by `nexus init`, not lazily on first use.
 - **Flat skills directory** -- `skills/` has no subdirectories. Skill type (tool, connector, guide) is tracked in metadata.
 - **Standalone config** -- `state/config.json` is a standalone file, not nested under a `nexus/` subdirectory.
 - **BOOTSTRAP.md is permanent** -- `state/agents/BOOTSTRAP.md` is the onboarding template and is NEVER deleted.
 - **Visible state** -- `state/` is a visible system directory for transparency and inspectability.
-- **6-DB layout** -- Separate databases isolate write paths and reduce contention. Memory System spans memory.db + identity.db + embeddings.db.
+- **7-DB layout** -- Separate databases isolate write paths and reduce contention. Memory System spans memory.db + identity.db + embeddings.db.
 - **No TOOLS.md** -- Tool discovery is handled through skills metadata, not a manifest file.
 - **No runtime.mode** -- Config does not include a `runtime.mode` field.
 

@@ -218,18 +218,60 @@ export class TenantAutoProvisioner {
     this.store = new AutoProvisionStore(config.autoProvision.storePath);
   }
 
+  private setTenantInConfig(tenant: TenantConfig): void {
+    this.config.tenants.set(tenant.id, {
+      id: tenant.id,
+      runtimeUrl: tenant.runtimeUrl,
+      runtimePublicBaseUrl: tenant.runtimePublicBaseUrl,
+      runtimeWsUrl: tenant.runtimeWsUrl,
+      runtimeSseUrl: tenant.runtimeSseUrl,
+      runtimeAuthToken: tenant.runtimeAuthToken,
+    });
+  }
+
+  private resolveKnownTenant(tenantId: string): TenantRecord | null {
+    const normalizedTenantId = normalizeText(tenantId);
+    if (!normalizedTenantId) {
+      return null;
+    }
+
+    const storedTenant = this.store.getTenant(normalizedTenantId);
+    if (storedTenant) {
+      this.setTenantInConfig(storedTenant);
+      return storedTenant;
+    }
+
+    const configuredTenant = this.config.tenants.get(normalizedTenantId);
+    if (!configuredTenant) {
+      return null;
+    }
+
+    const tenantRecord: TenantRecord = {
+      id: configuredTenant.id,
+      runtimeUrl: configuredTenant.runtimeUrl,
+      runtimePublicBaseUrl: configuredTenant.runtimePublicBaseUrl,
+      runtimeWsUrl: configuredTenant.runtimeWsUrl,
+      runtimeSseUrl: configuredTenant.runtimeSseUrl,
+      runtimeAuthToken: configuredTenant.runtimeAuthToken,
+    };
+    this.store.upsertTenant(tenantRecord);
+    this.setTenantInConfig(tenantRecord);
+    return tenantRecord;
+  }
+
   seedTenantsIntoConfig(): void {
     const tenants = this.store.listTenants();
     for (const tenant of tenants) {
-      this.config.tenants.set(tenant.id, {
-        id: tenant.id,
-        runtimeUrl: tenant.runtimeUrl,
-        runtimePublicBaseUrl: tenant.runtimePublicBaseUrl,
-        runtimeWsUrl: tenant.runtimeWsUrl,
-        runtimeSseUrl: tenant.runtimeSseUrl,
-        runtimeAuthToken: tenant.runtimeAuthToken,
-      });
+      this.setTenantInConfig(tenant);
     }
+  }
+
+  getTenantRecord(tenantId: string): TenantRecord | null {
+    const normalizedTenantId = normalizeText(tenantId);
+    if (!normalizedTenantId) {
+      return null;
+    }
+    return this.store.getTenant(normalizedTenantId);
   }
 
   getLatestProvisionRequestByUser(userId: string): ProvisionRequestRecord | null {
@@ -274,51 +316,10 @@ export class TenantAutoProvisioner {
     }
 
     const existing = this.store.getOidcAccount({ provider, subject });
-    if (existing) {
-      if (productId) {
-        const productTenant = this.store.getUserProductTenant({
-          userId: existing.userId,
-          productId,
-        });
-        if (productTenant) {
-          const mappedTenant = this.store.getTenant(productTenant.tenantId);
-          if (mappedTenant) {
-            this.config.tenants.set(mappedTenant.id, {
-              id: mappedTenant.id,
-              runtimeUrl: mappedTenant.runtimeUrl,
-              runtimePublicBaseUrl: mappedTenant.runtimePublicBaseUrl,
-              runtimeWsUrl: mappedTenant.runtimeWsUrl,
-              runtimeSseUrl: mappedTenant.runtimeSseUrl,
-              runtimeAuthToken: mappedTenant.runtimeAuthToken,
-            });
-            return principalFromAccount(existing, params.claims, mappedTenant.id);
-          }
-        }
-      } else {
-        const tenant = this.store.getTenant(existing.tenantId);
-        if (tenant) {
-          this.config.tenants.set(existing.tenantId, {
-            id: tenant.id,
-            runtimeUrl: tenant.runtimeUrl,
-            runtimePublicBaseUrl: tenant.runtimePublicBaseUrl,
-            runtimeWsUrl: tenant.runtimeWsUrl,
-            runtimeSseUrl: tenant.runtimeSseUrl,
-            runtimeAuthToken: tenant.runtimeAuthToken,
-          });
-          return principalFromAccount(existing, params.claims);
-        }
-      }
-    }
-
-    const baseIdentity = normalizeText(params.claims.email) || subject;
-    const tenantPrefix = productId
-      ? `${this.config.autoProvision.tenantIdPrefix}-${toSlug(productId)}`
-      : this.config.autoProvision.tenantIdPrefix;
-    const tenantId = `${tenantPrefix}-${toSlug(baseIdentity)}-${randomUUID().slice(0, 8)}`;
     const fallbackUserId = normalizeText(params.fallbackPrincipal?.userId);
     const fallbackEntityId = normalizeText(params.fallbackPrincipal?.entityId);
-    const entityId = existing?.entityId || fallbackEntityId || `entity:${provider}:${subject}`;
-    const userId = existing?.userId || fallbackUserId || `oidc:${provider}:${subject}`;
+    const entityId = normalizeText(existing?.entityId) || fallbackEntityId || `entity:${provider}:${subject}`;
+    const userId = normalizeText(existing?.userId) || fallbackUserId || `oidc:${provider}:${subject}`;
     const roles =
       existing?.roles && existing.roles.length > 0
         ? [...existing.roles]
@@ -335,6 +336,55 @@ export class TenantAutoProvisioner {
         : this.config.autoProvision.defaultScopes.length > 0
           ? [...this.config.autoProvision.defaultScopes]
           : ["operator.admin"];
+    const accountEmail = normalizeText(existing?.email) || normalizeText(params.claims.email) || undefined;
+    const accountDisplayName =
+      normalizeText(existing?.displayName) || normalizeText(params.claims.name) || undefined;
+
+    const candidateTenantIds: string[] = [];
+    if (productId && existing) {
+      const productTenant = this.store.getUserProductTenant({
+        userId: existing.userId,
+        productId,
+      });
+      if (productTenant) {
+        candidateTenantIds.push(productTenant.tenantId);
+      }
+    } else if (!productId && existing?.tenantId) {
+      candidateTenantIds.push(existing.tenantId);
+    }
+
+    for (const candidateTenantId of candidateTenantIds) {
+      const tenant = this.resolveKnownTenant(candidateTenantId);
+      if (!tenant) {
+        continue;
+      }
+      const account: OidcAccountRecord = {
+        provider,
+        subject,
+        userId,
+        tenantId: tenant.id,
+        entityId,
+        email: accountEmail,
+        displayName: accountDisplayName,
+        roles,
+        scopes,
+      };
+      this.store.upsertOidcAccount(account);
+      if (productId) {
+        this.store.upsertUserProductTenant({
+          userId: account.userId,
+          productId,
+          tenantId: tenant.id,
+        });
+      }
+      return principalFromAccount(account, params.claims, tenant.id);
+    }
+
+    const baseIdentity = normalizeText(params.claims.email) || subject;
+    const tenantId = `${this.config.autoProvision.tenantIdPrefix}-${toSlug(baseIdentity)}-${randomUUID().slice(
+      0,
+      8,
+    )}`;
 
     const command = this.config.autoProvision.command;
     if (!command) {
@@ -396,14 +446,7 @@ export class TenantAutoProvisioner {
         productId: productId || undefined,
         stage: "complete",
       });
-      this.config.tenants.set(tenant.id, {
-        id: tenant.id,
-        runtimeUrl: tenant.runtimeUrl,
-        runtimePublicBaseUrl: tenant.runtimePublicBaseUrl,
-        runtimeWsUrl: tenant.runtimeWsUrl,
-        runtimeSseUrl: tenant.runtimeSseUrl,
-        runtimeAuthToken: tenant.runtimeAuthToken,
-      });
+      this.setTenantInConfig(tenant);
       return principalFromAccount(account, params.claims);
     } catch (error) {
       this.store.updateProvisionRequest({

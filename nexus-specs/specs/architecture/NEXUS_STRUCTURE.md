@@ -8,7 +8,7 @@
 
 ## Design Principles
 
-1. **Database-centric** — Six databases are the system of record; all state flows through them
+1. **Database-centric** — Seven databases are the system of record; all state flows through them
 2. **Component isolation** — Each module maps to a clear responsibility boundary
 3. **Interface-driven** — Components communicate via defined interfaces and the event bus
 4. **Adapters are processes** — External CLI executables, not in-process objects
@@ -98,7 +98,7 @@ nexus/
 │   ├── db/                         # Ledger Access Layer
 │   │   ├── connection.ts           # SQLite connection (Bun SQLite)
 │   │   ├── migrations/             # Migration files
-│   │   ├── schema.sql              # Unified DDL for all six databases
+│   │   ├── schema.sql              # Unified DDL for all seven databases
 │   │   ├── events/                 # Event Ledger queries
 │   │   │   ├── write.ts
 │   │   │   └── read.ts
@@ -190,18 +190,19 @@ nexus/
 
 ---
 
-## Six Databases
+## Seven Databases
 
-All persistent state lives in six SQLite databases under `state/data/`, accessed through `src/db/`.
+All persistent state lives in seven SQLite databases under `state/data/`, accessed through `src/db/`.
 
 | Database | Purpose | Key Tables |
 |----------|---------|------------|
 | **events.db** | Every inbound/outbound event normalized and stored. FTS5 full-text index. | `events`, `threads`, `event_participants`, `attachments` |
 | **agents.db** | Session lifecycle, turns, messages, tool calls, compactions, artifacts. | `sessions`, `turns`, `messages`, `tool_calls`, `compactions`, `artifacts` |
 | **identity.db** | Entities, identity resolution, contacts, auth tokens, the Identity Graph. | `contacts`, `entities`, `entity_tags`, `auth_tokens` |
-| **memory.db** | Knowledge graph: facts, episodes, mental models. | `facts`, `fact_entities`, `episodes`, `episode_events`, `mental_models` |
+| **memory.db** | Knowledge graph: elements, sets, jobs. | `elements`, `sets`, `jobs` |
 | **embeddings.db** | Vector embeddings for semantic search (sqlite-vec). | `embeddings` |
 | **runtime.db** | Pipeline requests, automations, adapter state, import jobs. | `nexus_requests`, `automations`, `adapter_instances` |
+| **work.db** | Work tracking: tasks, projects, goals, dependencies. | `tasks`, `projects`, `goals`, `dependencies` |
 
 SQLite WAL mode enables concurrent reads. Write contention is isolated by database -- hot-path writes to events.db, agents.db, and identity.db don't block each other.
 
@@ -241,7 +242,7 @@ openclaw:  Storage.set(["session", projectID, sessionID], data)
 nexus:     db.insert(agent_sessions).values(session)
 ```
 
-All state flows through the six databases. No file-based session storage.
+All state flows through the seven databases. No file-based session storage.
 
 ### 3. IAM Owns Routing
 
@@ -267,7 +268,7 @@ The memory system (recall, search, entity extraction, embeddings, consolidation)
 - Zero serialization overhead for memory operations
 - Single process simplicity -- no subprocess management or health checking
 - Direct function calls instead of HTTP/IPC roundtrips
-- One connection pool for all 6 SQLite databases
+- One connection pool for all 7 SQLite databases
 
 ### 6. MA/WA Agent Hierarchy
 

@@ -3,7 +3,7 @@
 **Status:** ACTIVE
 **Last Updated:** 2026-02-20
 **Canonical Lifecycle Spec:** `specs/environment/foundation/WORKSPACE_LIFECYCLE.md`
-**Database Layout:** See `specs/data/DATABASE_ARCHITECTURE.md` for the canonical 6-database layout
+**Database Layout:** See `specs/data/DATABASE_ARCHITECTURE.md` for the canonical 7-database layout
 
 ## Purpose
 
@@ -39,16 +39,16 @@ The 7 original clarification items are grouped into 3 bundles. Bundle A is **res
 
 All decisions captured in `specs/environment/foundation/WORKSPACE_LIFECYCLE.md`:
 
-- **Item 1 (`nexus init` contract):** Init creates all dirs, all 6 DBs (eagerly, with schema: events.db, agents.db, identity.db, memory.db, embeddings.db, runtime.db), generates auth token, writes config to `state/config.json`. Flat `skills/` dir. `BOOTSTRAP.md` is permanent.
+- **Item 1 (`nexus init` contract):** Init creates all dirs, all 7 DBs (eagerly, with schema: events.db, agents.db, identity.db, memory.db, embeddings.db, runtime.db, work.db), generates auth token, writes config to `state/config.json`. Flat `skills/` dir. `BOOTSTRAP.md` is permanent.
 - **Item 2 (onboarding identity + completion):** Always MWP. Bootstrap detected by absence of agent persona dirs in `state/agents/`. `BOOTSTRAP.md` content injected into MA system prompt. Identity files at `state/agents/{name}/IDENTITY.md` + `SOUL.md`, `state/user/IDENTITY.md`. Completion = persona dir exists with `IDENTITY.md`.
 - **Item 6 (credential scan):** External CLI auto-sync at runtime startup. Agent-driven env var scan during onboarding (MA dispatches worker). `BOOTSTRAP.md` template instructs MA to do this.
-- **Item 7 (default automations):** Ships memory-reader, memory-writer (retain-episode path), command-logger, boot-md. Seeded at runtime startup. Workspaces at `state/workspace/{name}/`. Legacy `session-memory` and `soul-evil` dropped.
+- **Item 7 (default automations):** Ships memory-injection, memory-writer (retain-episode path), command-logger, boot-md. Seeded at runtime startup. Workspaces at `state/workspace/{name}/`. Legacy `session-memory` and `soul-evil` dropped.
 
 ### Bundle B: Runtime Routing (Items 3, 4) — RESOLVED
 
 All decisions captured in `specs/runtime/RUNTIME_ROUTING.md`:
 
-- **Item 3 (session keys + routing):** Contacts table in `identity.db` maps `(platform, sender_id)` → `entity_id`. Every sender gets an entity from first contact (auto-created in identity.db). Session keys are always entity-based: `dm:{canonical_entity_id}`. No `dm:{platform}:{sender_id}` fallback. Entity merges propagate to session aliases synchronously. Turn trees are never merged — memory bridges across sessions.
+- **Item 3 (session keys + routing):** Contacts table in `identity.db` maps `(platform, contact_id)` → `entity_id`. Every sender gets an entity from first contact (auto-created in identity.db). Session keys are always entity-based: `dm:{canonical_entity_id}`. No `dm:{platform}:{sender_id}` fallback. Entity merges propagate to session aliases synchronously. Turn trees are never merged — memory bridges across sessions.
 - **Item 4 (adapters-only runtime):** Big-bang removal of legacy channels, gmail-watcher, cron. Adapter manager is the sole external ingest/delivery path. `chat.send` is a direct dispatch (not an adapter). Adapter config in `config.json`.
 
 ### Bundle C: Optional Runtime Surfaces (Item 5) — RESOLVED
@@ -77,7 +77,7 @@ All decisions captured in `specs/runtime/RUNTIME_SURFACES.md`:
 - Context assembly: `nex/src/nex/stages/assembleContext.ts`
 - Automations runtime: `nex/src/nex/automations/hooks-runtime.ts`
 - Automations DB: `nex/src/db/hooks.ts`
-- Memory reader/writer: `nex/src/nex/automations/meeseeks/memory-reader.ts`, `memory-writer.ts`
+- Memory injection/writer: `nex/src/nex/automations/meeseeks/memory-injection.ts`, `memory-writer.ts`
 
 ## Harness Interface
 
@@ -118,7 +118,7 @@ Each scenario is chat-driven (messages sent to the runtime) and validated by rea
 - `state/data/agents.db` — sessions, turns, messages, tool_calls, queue_items
 - `state/data/identity.db` — identity mappings
 - `state/data/runtime.db` — `nexus_requests` trace rows, `automations` table
-- `state/data/memory.db` — facts, episodes, analysis
+- `state/data/memory.db` — elements, sets, jobs
 - `state/data/identity.db` — contacts, entities, auth, ACL
 - `state/data/embeddings.db` — semantic vector index
 - `runtime.log` — startup logs, crashes, warnings
@@ -131,7 +131,7 @@ Each scenario is chat-driven (messages sent to the runtime) and validated by rea
 3. **Assert post-init state:**
    - Directory structure matches `WORKSPACE_LIFECYCLE.md` Phase 1
    - `state/config.json` has `runtime.auth.token` (non-empty)
-   - All 6 DB files exist (events.db, agents.db, identity.db, memory.db, embeddings.db, runtime.db)
+   - All 7 DB files exist (events.db, agents.db, identity.db, memory.db, embeddings.db, runtime.db, work.db)
    - `state/agents/BOOTSTRAP.md` exists
    - `state/workspace/` is empty
    - `state/user/` is empty
@@ -225,7 +225,7 @@ Changes:
 
 ### Phase 3: Default Automations Seeding + Validation
 
-Goal: Memory-reader, memory-writer, command-logger, boot-md seeded at startup. Memory-reader fires at `worker:pre_execution`; memory-writer fires at `memory:retain-episode`.
+Goal: Memory-injection, memory-writer, command-logger, boot-md seeded at startup. Memory-injection fires at `worker:pre_execution`; memory-writer fires at `episode-created`.
 
 Changes:
 - Add automation seeder to startup sequence
@@ -289,7 +289,7 @@ Ledgers:
 - `specs/data/ledgers/NEXUS_LEDGER.md`
 
 Database architecture:
-- `specs/data/DATABASE_ARCHITECTURE.md` **(primary, canonical for all 6 databases)**
+- `specs/data/DATABASE_ARCHITECTURE.md` **(primary, canonical for all 7 databases)**
 
 Memory:
 - `specs/data/memory/MEMORY_SYSTEM.md`

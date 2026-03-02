@@ -2,8 +2,8 @@
 
 **Status:** DESIGN SPEC  
 **Last Updated:** 2026-02-18
-**Related:** NEX.md, ingress/CONTROL_PLANE.md, `../delivery/ADAPTER_SYSTEM.md`, workplans/SESSION_IMPORT_SERVICE.md, BUS_ARCHITECTURE.md, PLUGINS.md
-**Database layout:** See `../DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
+**Related:** [NEXUS_REQUEST_TARGET.md](./NEXUS_REQUEST_TARGET.md), ingress/CONTROL_PLANE.md, `../delivery/ADAPTER_SYSTEM.md`
+**Database layout:** See `../DATABASE_ARCHITECTURE.md` for canonical database inventory
 
 ---
 
@@ -31,7 +31,7 @@ nexus daemon start
 │                                                           │
 │  ┌──────────────┐  ┌────────────┐  ┌──────────────────┐ │
 │  │  Pipeline     │  │  Plugins   │  │  HTTP Server     │ │
-│  │  (9 stages)   │  │  (loaded)  │  │  (health + SSE)  │ │
+│  │  (5 stages)   │  │  (loaded)  │  │  (health + SSE)  │ │
 │  └──────────────┘  └────────────┘  └──────────────────┘ │
 │                                                           │
 │  ┌──────────────┐  ┌────────────────────────────────────┐│
@@ -44,7 +44,7 @@ nexus daemon start
 └──────────────────────────────────────────────────────────┘
 ```
 
-**This spec covers:** How the process starts, what it supervises, how it handles signals, and how it shuts down. The *pipeline* is in `NEX.md`. The *adapter lifecycle* is in `../delivery/ADAPTER_SYSTEM.md`. The *bus* is in `BUS_ARCHITECTURE.md`.
+**This spec covers:** How the process starts, what it supervises, how it handles signals, and how it shuts down. The *pipeline* is in `NEXUS_REQUEST_TARGET.md`. The *adapter lifecycle* is in `../delivery/ADAPTER_SYSTEM.md`.
 
 ---
 
@@ -59,7 +59,7 @@ When `nexus daemon start` executes:
 4. Databases                   Open/migrate ledger databases
 5. Event Bus                   Initialize in-memory pub/sub
 6. Plugin Loader               Load plugins from plugins/ directory
-7. Pipeline                    Wire up 9-stage pipeline with loaded plugins
+7. Pipeline                    Wire up 5-stage pipeline with loaded plugins
 8. Control-Plane Server        Start HTTP + WS (health + SSE + UI + endpoints + RPC)
 9. Adapter Manager             Start enabled adapter accounts (spawn processes)
 10. Timer                      Start internal heartbeat/cron adapter
@@ -114,9 +114,10 @@ state/data/
 ├── events.db        # Event Ledger — inbound/outbound events
 ├── agents.db        # Agents Ledger — sessions, turns, messages, tool_calls
 ├── identity.db      # Identity — contacts, directory, entities, auth, ACL
-├── memory.db        # Memory System — facts, episodes, analysis
+├── memory.db        # Memory System — elements, sets, jobs
 ├── embeddings.db    # Semantic vector index (sqlite-vec)
-└── runtime.db       # Runtime Operations — requests, adapters, automations, bus
+├── runtime.db       # Runtime Operations — requests, adapters, automations, bus
+└── work.db          # Work Management — tasks, work items, workflows, sequences
 ```
 
 Migration strategy: each database has a `schema_version` table. On open, check version and apply any pending migrations. If migration fails, daemon exits with error — never run with stale schema.
@@ -250,6 +251,7 @@ interface HealthResponse {
     memory_db: "ok" | "error";
     embeddings_db: "ok" | "error";
     runtime_db: "ok" | "error";
+    work_db: "ok" | "error";
   };
 }
 ```
@@ -280,7 +282,7 @@ Once all subsystems are initialized:
     discord-cli/echo-bot  discord   ● running
   Plugins:   2 loaded (logging, analytics)
   Timer:     heartbeat every 60s
-  Ledgers:   6/6 ok
+  Ledgers:   7/7 ok
 ```
 
 ---
@@ -382,7 +384,7 @@ kill -USR1 $(cat ~/nexus/state/nex.pid)
 | Adapter `stream` | Adapter Manager | Long-running, auto-restart |
 | Adapter `backfill` | Adapter Manager | Terminates on completion |
 | Adapter `health` | Adapter Manager | Short-lived per check |
-| Adapter `send` | Pipeline (stage 7) | Short-lived per delivery |
+| Adapter `send` | Agent delivery tool (via broker) | Short-lived per delivery |
 
 All child processes are tracked by PID. On daemon shutdown, all children are cleaned up.
 
@@ -456,7 +458,7 @@ nexus daemon status
 #
 # Plugins: logging, analytics
 # Timer: heartbeat 60s, 2 cron jobs
-# Ledgers: 6/6 ok
+# Ledgers: 7/7 ok
 ```
 
 If not running:
@@ -523,7 +525,7 @@ Pipeline errors are per-request, not daemon-level:
 - `onError` plugins fire
 - Error trace written to Nexus Ledger
 - Daemon continues processing other events
-- See `NEX.md` for pipeline error handling
+- See `NEXUS_REQUEST_TARGET.md` for pipeline error handling
 
 ### On Database Error
 
@@ -569,21 +571,20 @@ Log rotation: not handled by daemon — use system logrotate or similar. The dae
 ├── identity.db
 ├── memory.db
 ├── embeddings.db
-└── runtime.db
+├── runtime.db
+└── work.db
 ```
 
 ---
 
 ## Related Documents
 
-- `NEX.md` — The 9-stage pipeline this daemon runs
-- `NEXUS_REQUEST.md` — The data bus flowing through the pipeline
-- `PLUGINS.md` — Plugin loading and hook points
-- `BUS_ARCHITECTURE.md` — Event bus and SSE streaming
+- `NEXUS_REQUEST_TARGET.md` — The canonical NexusRequest data bus and 5-stage pipeline
+- `AGENT_DELIVERY.md` — Agent-driven delivery model
 - `../delivery/ADAPTER_SYSTEM.md` — Adapter process supervision, restart, health
 - `../agents/SESSION_LIFECYCLE.md` — Session management within the pipeline
 - `../../environment/` — Workspace layout and configuration
 
 ---
 
-*This document defines how the NEX daemon starts, runs, and stops. The pipeline it executes is in `NEX.md`. The adapters it supervises are in `../delivery/ADAPTER_SYSTEM.md`.*
+*This document defines how the NEX daemon starts, runs, and stops. The pipeline it executes is defined in `NEXUS_REQUEST_TARGET.md`. The adapters it supervises are in `../delivery/ADAPTER_SYSTEM.md`.*

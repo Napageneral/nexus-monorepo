@@ -16,6 +16,7 @@ function sanitizeQueryToken(value) {
 
 const pageParams = new URLSearchParams(window.location.search);
 const requestedFlavor = sanitizeQueryToken(pageParams.get("flavor"));
+const requestedProduct = sanitizeQueryToken(pageParams.get("product")) || requestedFlavor;
 const requestedEntry = sanitizeQueryToken(pageParams.get("entry"));
 const authReturn = pageParams.get("auth_return") === "1";
 
@@ -83,12 +84,14 @@ const state = {
   workspaceApps: [],
   workspaceAppsError: "",
   launchDiagnostics: null,
+  launchBlocker: "",
   activeAppId: "",
   provisioningStatus: "",
   provisioningRequest: null,
   frontdoorOrigin: "",
   operatorWorkspaces: [],
   flavor: resolveFlavorConfig(requestedFlavor),
+  productId: requestedProduct,
   entry: requestedEntry,
 };
 const operatorMode = pageParams.get("operator") === "1";
@@ -182,14 +185,28 @@ function applyFlavorCopy() {
   if (state.entry) {
     entryContext.hidden = false;
     entryContext.textContent = `Entry source: ${state.entry}`;
+    syncProductProvisionSelection();
     return;
   }
   entryContext.hidden = true;
   entryContext.textContent = "";
+  syncProductProvisionSelection();
 }
 
 function preferredAppId() {
   return String(state.flavor?.preferredAppId || "").trim();
+}
+
+function preferredProductId() {
+  const fromState = sanitizeQueryToken(state.productId);
+  if (fromState) {
+    return fromState;
+  }
+  const flavorKey = sanitizeQueryToken(state.flavor?.key || "");
+  if (flavorKey && flavorKey !== "default") {
+    return flavorKey;
+  }
+  return "";
 }
 
 function setAuthWarning(message = "") {
@@ -222,6 +239,31 @@ function setProvisioningSummary(message = "", tone = "") {
   node.hidden = false;
   node.textContent = text;
   node.className = tone === "err" ? "warn" : "muted";
+}
+
+function setProductProvisionSummary(message = "", tone = "") {
+  const node = el("productProvisionSummary");
+  if (!node) {
+    return;
+  }
+  const text = String(message || "").trim();
+  node.textContent = text;
+  node.className = tone === "err" ? "warn" : "muted";
+}
+
+function syncProductProvisionSelection() {
+  const select = el("productProvisionSelect");
+  if (!select) {
+    return;
+  }
+  const preferred = preferredProductId();
+  if (preferred && Array.from(select.options).some((option) => option.value === preferred)) {
+    select.value = preferred;
+    return;
+  }
+  if (select.options.length > 0) {
+    select.value = select.options[0].value;
+  }
 }
 
 function summarizeProvisioning(status, request) {
@@ -384,8 +426,16 @@ function updateAppSummary() {
   }
   const selected = state.workspaceApps.find((item) => item.app_id === state.activeAppId);
   if (!selected) {
+    if (state.launchBlocker) {
+      summary.textContent = `Launch blocked: ${state.launchBlocker}`;
+      return;
+    }
     if (state.workspaceAppsError) {
       summary.textContent = `App catalog unavailable: ${state.workspaceAppsError}`;
+      return;
+    }
+    if (state.workspaceApps.length === 0 && state.activeWorkspaceId) {
+      summary.textContent = "No launchable app is registered for this workspace.";
       return;
     }
     summary.textContent = "No app selected.";
@@ -445,6 +495,7 @@ function updateUiFromSession(session, options = {}) {
   el("googleBtn").hidden = authenticated;
   el("logoutBtn").hidden = !authenticated;
   el("openTenantAppBtn").disabled = !authenticated || !state.activeWorkspaceId || !state.activeAppId;
+  el("provisionProductWorkspaceBtn").disabled = !authenticated;
   el("workspacePanel").hidden = !authenticated;
   el("invitePanel").hidden = !authenticated;
   el("ownerInsightsPanel").hidden = !workspaceAdminAllowed;
@@ -470,9 +521,11 @@ function updateUiFromSession(session, options = {}) {
   state.activeWorkspaceId = "";
   state.workspaceApps = [];
   state.activeAppId = "";
+  state.launchBlocker = "";
   state.provisioningStatus = "";
   state.provisioningRequest = null;
   setProvisioningSummary("");
+  setProductProvisionSummary("");
   renderWorkspaceSelect();
   updateWorkspaceSummary();
   renderAppSelect();
@@ -548,6 +601,7 @@ async function loadWorkspaceApps() {
     state.workspaceApps = [];
     state.workspaceAppsError = "";
     state.launchDiagnostics = null;
+    state.launchBlocker = "";
     state.activeAppId = "";
     renderAppSelect();
     updateAppSummary();
@@ -559,6 +613,7 @@ async function loadWorkspaceApps() {
     state.workspaceApps = [];
     state.workspaceAppsError = "";
     state.launchDiagnostics = null;
+    state.launchBlocker = "";
     state.activeAppId = "";
     renderAppSelect();
     updateAppSummary();
@@ -572,15 +627,21 @@ async function loadWorkspaceApps() {
     state.workspaceApps = [];
     const code = String(result.body?.error || "").trim();
     state.workspaceAppsError = code || `runtime_apps_request_failed_${result.status}`;
-    state.launchDiagnostics = null;
+    const diagnostics = await loadWorkspaceLaunchDiagnostics(workspaceId);
+    const blocker = summarizeLaunchBlocker(diagnostics);
+    state.launchBlocker = blocker;
     state.activeAppId = "";
     renderAppSelect();
     updateAppSummary();
     el("openTenantAppBtn").disabled = true;
+    if (blocker) {
+      setPill(`Workspace launch blocked: ${blocker}`, "err");
+    }
     return;
   }
   state.workspaceAppsError = "";
   state.launchDiagnostics = null;
+  state.launchBlocker = "";
   state.workspaceApps = result.body.items
     .filter((item) => item && typeof item === "object")
     .map((item) => ({
@@ -589,6 +650,12 @@ async function loadWorkspaceApps() {
       entry_path: String(item.entry_path || "").trim(),
     }))
     .filter((item) => item.app_id && item.entry_path.startsWith("/app/"));
+  if (state.workspaceApps.length < 1) {
+    const diagnostics = await loadWorkspaceLaunchDiagnostics(workspaceId);
+    const blocker = summarizeLaunchBlocker(diagnostics) || "runtime returned no launchable /app entries";
+    state.launchBlocker = blocker;
+    setPill(`Workspace launch blocked: ${blocker}`, "err");
+  }
   renderAppSelect();
   updateAppSummary();
   el("openTenantAppBtn").disabled = !state.session || !state.activeWorkspaceId || !state.activeAppId;
@@ -619,6 +686,7 @@ async function loadWorkspaces() {
     state.workspaceApps = [];
     state.workspaceAppsError = "";
     state.launchDiagnostics = null;
+    state.launchBlocker = "";
     state.activeAppId = "";
     state.provisioningStatus = "";
     state.provisioningRequest = null;
@@ -638,6 +706,7 @@ async function loadWorkspaces() {
     state.workspaceApps = [];
     state.workspaceAppsError = "";
     state.launchDiagnostics = null;
+    state.launchBlocker = "";
     state.activeAppId = "";
     setProvisioningSummary("Workspace list unavailable.", "err");
     renderAppSelect();
@@ -648,8 +717,25 @@ async function loadWorkspaces() {
     return;
   }
   state.workspaces = result.body.items;
+  const requestedProductId = preferredProductId();
+  const productMatchedWorkspaces = requestedProductId
+    ? state.workspaces.filter(
+        (item) => sanitizeQueryToken(item?.product_id || "") === requestedProductId,
+      )
+    : [];
   const activeFromSession = String(state.session.active_workspace_id || "").trim();
-  if (activeFromSession && state.workspaces.some((item) => item.workspace_id === activeFromSession)) {
+  if (
+    requestedProductId &&
+    productMatchedWorkspaces.length > 0 &&
+    activeFromSession &&
+    productMatchedWorkspaces.some((item) => item.workspace_id === activeFromSession)
+  ) {
+    state.activeWorkspaceId = activeFromSession;
+  } else if (requestedProductId && productMatchedWorkspaces.length > 0) {
+    const defaultProductWorkspace = productMatchedWorkspaces.find((item) => item.is_default);
+    state.activeWorkspaceId =
+      defaultProductWorkspace?.workspace_id || productMatchedWorkspaces[0]?.workspace_id || "";
+  } else if (activeFromSession && state.workspaces.some((item) => item.workspace_id === activeFromSession)) {
     state.activeWorkspaceId = activeFromSession;
   } else {
     const defaultWorkspace = state.workspaces.find((item) => item.is_default);
@@ -659,9 +745,24 @@ async function loadWorkspaces() {
   updateWorkspaceSummary();
   el("workspaceCount").textContent = String(state.workspaces.length);
   if (state.workspaces.length > 0) {
-    setProvisioningSummary("");
+    if (requestedProductId && productMatchedWorkspaces.length === 0) {
+      setProvisioningSummary(
+        `No ${requestedProductId} workspace found for this account. Use \"Provision product workspace\" below.`,
+        "err",
+      );
+    } else {
+      setProvisioningSummary("");
+    }
   } else {
     await loadProvisioningStatus({ silent: true });
+  }
+  if (requestedProductId && productMatchedWorkspaces.length === 0) {
+    setProductProvisionSummary(
+      `Provision a ${requestedProductId} workspace to launch the ${requestedProductId} app.`,
+      "err",
+    );
+  } else {
+    setProductProvisionSummary("");
   }
   await loadWorkspaceApps();
   el("openTenantAppBtn").disabled = !state.session || !state.activeWorkspaceId || !state.activeAppId;
@@ -825,15 +926,50 @@ async function refreshSession() {
   }
 }
 
-function startGoogle() {
+function beginProductOidcRedirect(productId) {
+  const normalizedProduct = sanitizeQueryToken(productId);
   const returnToUrl = new URL(window.location.href || "/", window.location.origin);
   returnToUrl.searchParams.set("auth_return", "1");
-  const returnTo = returnToUrl.toString();
-  const query = new URLSearchParams({
-    provider: "google",
-    return_to: returnTo,
-  });
+  if (normalizedProduct) {
+    returnToUrl.searchParams.set("product", normalizedProduct);
+    returnToUrl.searchParams.set("flavor", normalizedProduct);
+  }
+
+  const query = new URLSearchParams();
+  query.set("provider", "google");
+  query.set("return_to", returnToUrl.toString());
+  if (normalizedProduct) {
+    query.set("product", normalizedProduct);
+    query.set("flavor", normalizedProduct);
+  } else if (requestedFlavor) {
+    query.set("flavor", requestedFlavor);
+  }
   window.location.href = `/api/oidc-start?${query.toString()}`;
+}
+
+function startProductProvisioning() {
+  if (!state.session) {
+    setPill("Sign in first", "err");
+    return;
+  }
+  const selectedProduct = sanitizeQueryToken(el("productProvisionSelect")?.value || "");
+  if (!selectedProduct) {
+    setPill("Select a product first", "err");
+    setProductProvisionSummary("Select GlowBot or Spike to continue.", "err");
+    return;
+  }
+  state.productId = selectedProduct;
+  state.flavor = resolveFlavorConfig(selectedProduct);
+  applyFlavorCopy();
+  setPill(`Provisioning ${selectedProduct} workspace...`);
+  setProductProvisionSummary(`Redirecting to Google to provision/select ${selectedProduct} workspace.`);
+  beginProductOidcRedirect(selectedProduct);
+}
+
+function startGoogle() {
+  const productId =
+    sanitizeQueryToken(state.productId) || (state.flavor?.key === "default" ? "" : state.flavor?.key);
+  beginProductOidcRedirect(productId);
 }
 
 async function loginPassword(event) {
@@ -1057,6 +1193,7 @@ el("workspaceSelect").addEventListener("change", () => {
 el("appSelect").addEventListener("change", handleAppPickerChange);
 el("refreshWorkspacesBtn").addEventListener("click", loadWorkspaces);
 el("selectWorkspaceBtn").addEventListener("click", selectWorkspace);
+el("provisionProductWorkspaceBtn").addEventListener("click", startProductProvisioning);
 el("redeemInviteBtn").addEventListener("click", redeemInvite);
 el("createWorkspaceBtn").addEventListener("click", createWorkspace);
 el("refreshInsightsBtn").addEventListener("click", loadWorkspaceInsights);

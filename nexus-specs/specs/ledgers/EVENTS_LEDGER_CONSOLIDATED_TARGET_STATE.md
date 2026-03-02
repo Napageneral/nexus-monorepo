@@ -5,7 +5,7 @@
 **Related:** `EVENTS_LEDGER.md`, `../_archive/EVENT_LEDGER_UNIFICATION.md` (archived), `../_archive/CORTEX_NEX_MIGRATION.md`
 
 > **Canonical Reference:** See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the
-> authoritative 6-database inventory, table ownership, and migration plan.
+> authoritative 7-database inventory, table ownership, and migration plan.
 
 ---
 
@@ -15,7 +15,7 @@ Define the refined end state for Nexus communications data:
 
 1. `events.db` is the single source of truth for communications events.
 2. Useful legacy event features (threads, normalized attachments, event state/tags, reply links, document indexing) move into `events.db`.
-3. `memory.db` does not own communications infrastructure; it contains the memory system (facts, episodes, analysis).
+3. `memory.db` does not own communications infrastructure; it contains the memory system (elements, sets, jobs).
 
 ---
 
@@ -47,9 +47,9 @@ Define the refined end state for Nexus communications data:
 
 ### `memory.db` owns
 
-- Episodes and episode relationships
-- Facts, mental models, causal links, facets
-- Analysis pipeline outputs
+- Elements (facts, observations, mental models)
+- Sets and set membership
+- Jobs (memory pipeline processing tasks)
 
 ### `identity.db` owns
 
@@ -361,10 +361,10 @@ State/tag/document tables are maintained by higher-level workflows, not raw chan
 > **Note:** The legacy memory DB has been superseded by `memory.db`, `identity.db` (entities),
 > and `embeddings.db`. See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md).
 
-1. `memory.db` keeps episodes, facts, mental models, and analysis pipeline.
+1. `memory.db` keeps elements (facts, observations, mental models), sets, and jobs.
 2. `identity.db` keeps entities, entity_tags, cooccurrences, and merge_candidates.
 3. `embeddings.db` keeps vector embeddings (sqlite-vec).
-4. `episode_events.event_id` logically references `events.db.events.id`.
+4. `set_members.member_id` logically references `events.db.events.id`.
 5. Memory system readers join events through attached `events_ledger`.
 6. `document_heads` and `retrieval_log` live in `events.db`.
 

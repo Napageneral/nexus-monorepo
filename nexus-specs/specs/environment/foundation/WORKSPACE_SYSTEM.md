@@ -29,7 +29,7 @@ This contract is **big-bang**:
 
 | Area | Canonical Contract |
 |------|--------------------|
-| State data | 6 databases in `state/data/*.db` (events, agents, identity, memory, embeddings, runtime) |
+| State data | 7 databases in `state/data/*.db` (events, agents, identity, memory, embeddings, runtime, work) |
 | Memory system | Memory System via memory.db + identity.db + embeddings.db |
 | Config | Single file at `state/config.json` |
 | CLI boundary | `nexus status` for orientation, `nexus runtime ...` for control-plane |
@@ -76,9 +76,10 @@ The runtime/control-plane serves health, automation, hooks, channel delivery, an
     │   ├── events.db                  # Event ledger
     │   ├── agents.db                  # Agent sessions
     │   ├── identity.db                # Contacts, directory, entities, auth, ACL
-    │   ├── memory.db                  # Facts, episodes, analysis (Memory System)
+    │   ├── memory.db                  # Elements, sets, jobs (Memory System)
     │   ├── embeddings.db              # Semantic vector index
-    │   └── runtime.db                 # Request traces, adapters, automations, bus
+    │   ├── runtime.db                 # Request traces, adapters, automations, bus
+    │   └── work.db                    # Work items, tasks, projects
     ├── agents/
     │   ├── BOOTSTRAP.md               # Permanent onboarding template
     │   └── {name}/                    # Agent persona directories
@@ -88,7 +89,7 @@ The runtime/control-plane serves health, automation, hooks, channel delivery, an
     │   └── IDENTITY.md                # User profile
     ├── credentials/                   # Credential index + pointers
     ├── workspace/                     # Automation workspaces (meeseeks pattern)
-    │   ├── memory-reader/             # Memory reader meeseeks workspace
+    │   ├── memory-injection/           # Memory injection meeseeks workspace
     │   └── memory-writer/             # Memory writer meeseeks workspace
     └── config.json                    # Runtime config with auth token
 ```
@@ -124,7 +125,7 @@ Automation workspaces are **accumulated knowledge stores** for a specific functi
 
 ```
 state/workspace/
-├── memory-reader/                     # Memory search specialist
+├── memory-injection/                  # Memory injection specialist
 │   ├── ROLE.md                        # Role instructions
 │   ├── SKILLS.md                      # Accumulated skills (self-improving)
 │   ├── PATTERNS.md                    # Common patterns (self-improving)
@@ -140,13 +141,13 @@ state/workspace/
 
 ### The Relationship
 
-Personas are hierarchical ABOVE workspaces. Echo (a persona) might be the identity applied to a memory-reader meeseeks execution. The persona says "who I am," the workspace says "what I know about this job."
+Personas are hierarchical ABOVE workspaces. Echo (a persona) might be the identity applied to a memory-injection meeseeks execution. The persona says "who I am," the workspace says "what I know about this job."
 
 ```
 Agent Persona (state/agents/echo/)
   = "I am Echo, a helpful assistant who values precision"
 
-Automation Workspace (state/workspace/memory-reader/)
+Automation Workspace (state/workspace/memory-injection/)
   = "I know how to search memory, these queries work well, these patterns fail"
 
 During execution:
@@ -159,13 +160,14 @@ During execution:
 
 ### All databases: `state/data/*.db`
 
-All 6 databases live under `state/data/`:
+All 7 databases live under `state/data/`:
 - `events.db` for inbound/outbound event records
 - `agents.db` for sessions, turns, tool calls, and agent interaction state
 - `identity.db` for contacts, directory, entities, auth, and ACL
-- `memory.db` for facts, episodes, mental models, and analysis pipeline (Memory System)
+- `memory.db` for elements, sets, and jobs (Memory System)
 - `embeddings.db` for semantic vector index (shared across subsystems)
 - `runtime.db` for request traces, adapter instances, automations, and bus (replaces legacy nexus.db)
+- `work.db` for work items, tasks, and projects
 
 All DBs are created eagerly by `nexus init` with current schemas applied.
 
@@ -173,7 +175,7 @@ All DBs are created eagerly by `nexus init` with current schemas applied.
 
 The Memory System spans three databases:
 
-- **memory.db** -- facts, episodes, facets, analyses, mental models
+- **memory.db** -- elements, sets, jobs
 - **identity.db** -- entities and knowledge graph (co-located with contacts, auth, ACL)
 - **embeddings.db** -- semantic vector index (shared by memory recall, entity search, event search)
 
@@ -210,6 +212,7 @@ nexus init [--workspace <path>]
 - `{workspace_root}/state/data/memory.db` (with schema applied)
 - `{workspace_root}/state/data/embeddings.db` (with schema applied)
 - `{workspace_root}/state/data/runtime.db` (with schema applied)
+- `{workspace_root}/state/data/work.db` (with schema applied)
 
 ### Config shape
 
@@ -285,7 +288,7 @@ Runtime command surfaces include:
 
 This spec is considered aligned when all are true:
 - subordinate foundation docs point to `state/config.json` only (not `state/nexus/config.json`)
-- subordinate foundation docs describe 6 databases under `state/data/*.db`
+- subordinate foundation docs describe 7 databases under `state/data/*.db`
 - subordinate foundation docs describe Memory System via memory.db + identity.db + embeddings.db
 - foundation docs use runtime/control-plane terminology instead of gateway terminology
 - `skills/` is described as flat (no `tools/`, `connectors/`, `guides/` subdirectories)

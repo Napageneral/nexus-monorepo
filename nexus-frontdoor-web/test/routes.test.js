@@ -77,6 +77,30 @@ test("oidc-start preserves flavor query values in return_to", async (t) => {
   );
 });
 
+test("oidc-start forwards explicit flavor/product context to frontdoor", async (t) => {
+  const restore = withEnv({
+    FRONTDOOR_ORIGIN: "https://frontdoor.nexushub.sh",
+  });
+  const app = await startServer(oidcStartHandler);
+  t.after(async () => {
+    restore();
+    await app.close();
+  });
+
+  const response = await fetch(
+    `${app.origin}/api/oidc-start?provider=google&flavor=glowbot&product=glowbot&return_to=%2F%3Fflavor%3Dglowbot`,
+    {
+      redirect: "manual",
+    },
+  );
+  assert.equal(response.status, 302);
+  const location = response.headers.get("location") || "";
+  assert.equal(
+    location,
+    "https://frontdoor.nexushub.sh/api/auth/oidc/start?provider=google&return_to=%2F%3Fflavor%3Dglowbot&product=glowbot&flavor=glowbot",
+  );
+});
+
 test("session endpoint returns unauthenticated without app cookie", async (t) => {
   const frontdoor = await startServer((_req, res) => {
     res.statusCode = 500;

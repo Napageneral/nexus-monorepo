@@ -3,7 +3,7 @@
 **Status:** IN PROGRESS (authoritative for adapter/interface cutover)  
 **Date:** 2026-02-26  
 **Mode:** Hard cutover (no backwards compatibility)  
-**Related:** `UNIFIED_RUNTIME_OPERATION_MODEL.md`, `NEXUS_REQUEST.md`, `RUNTIME_SURFACES.md`, `../delivery/ADAPTER_SYSTEM.md`, `../delivery/INTERNAL_ADAPTERS.md`, `../delivery/sdk/ADAPTER_SDK_OPERATION_MODEL_CUTOVER.md`
+**Related:** [NEXUS_REQUEST_TARGET.md](./NEXUS_REQUEST_TARGET.md), `../delivery/ADAPTER_SYSTEM.md`, `../delivery/sdk/ADAPTER_SDK_OPERATION_MODEL_CUTOVER.md`
 
 ---
 

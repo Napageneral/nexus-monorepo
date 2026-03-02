@@ -2,7 +2,7 @@
 
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-26
-**Related:** `DATABASE_ARCHITECTURE.md`, `ENTITY_ACTIVITY_DASHBOARD.md`, `nex/workplans/COMMAND_CENTER.md`, `nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`
+**Related:** `DATABASE_ARCHITECTURE.md`, `work-system/ENTITY_ACTIVITY_DASHBOARD.md`, `nex/workplans/COMMAND_CENTER.md`, `nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`
 
 ---
 
@@ -30,7 +30,7 @@ The Nex Control UI is being redesigned from the ground up to align with the new 
 | 3 | **Directory** | `users` | `/directory` | Everyone the system knows — entities, contacts, platform directory |
 | 4 | **Access** | `shield` | `/access` | IAM — roles, groups, grants, policies, pending requests, audit log |
 | 5 | **Adapters** | `plug` | `/adapters` | Platform connections, health, credential/secret setup |
-| 6 | **Memory** | `brain` | `/memory` | Search facts, observations, mental models, episodes, events |
+| 6 | **Memory** | `brain` | `/memory` | Search facts, observations, mental models, sets, events |
 | 7 | **Automations** | `zap` | `/automations` | Hooks, triggers, cron jobs, meeseeks automation configs |
 
 ### 2.2 System Menu (Gear Icon, Not a Tab)
@@ -94,13 +94,13 @@ These are the first-class objects in the UI. Each has a collection view and a de
 **Related objects (shown in detail view):**
 - Contacts (via `contacts.entity_id`)
 - Grants/Access (via `grants` scoped to entity)
-- Facts (via `fact_entities.entity_id`)
-- Observations (via `observations` referencing entity facts)
-- Mental Models (via `mental_models.entity_id`)
+- Facts (via `element_entities.entity_id`)
+- Observations (via `elements WHERE type = 'observation'` referencing entity facts)
+- Mental Models (via `elements WHERE type = 'mental_model'` + `element_entities.entity_id`)
 - Sessions (via session keys containing entity id)
 - Events (via `event_participants.entity_id`)
 - Entity Tags (via `entity_tags.entity_id`)
-- Co-occurrences (via `entity_cooccurrences`)
+- Co-occurrences (derived from `element_entities` joins in memory.db)
 
 ### 3.2 Contact
 
@@ -111,9 +111,9 @@ These are the first-class objects in the UI. Each has a collection view and a de
 |---|---|---|
 | `platform` | string | `imessage`, `discord`, `email`, `slack`, etc. |
 | `space_id` | string | Server/workspace scope |
-| `sender_id` | string | Platform-specific identifier |
+| `contact_id` | string | Platform-specific identifier |
 | `entity_id` | string | → entities.id |
-| `sender_name` | string? | Display name on platform |
+| `contact_name` | string? | Display name on platform |
 | `message_count` | number | Messages seen from this contact |
 | `first_seen` | number | Unix ms |
 | `last_seen` | number | Unix ms |
@@ -143,63 +143,63 @@ These are the first-class objects in the UI. Each has a collection view and a de
 
 ### 3.4 Fact
 
-**Source:** `memory.db` — `facts` table
+**Source:** `memory.db` — `elements WHERE type = 'fact'`
 
 | Field | Type | Notes |
 |---|---|---|
 | `id` | string | |
-| `text` | string | The fact content |
+| `text` | string | The fact content (stored in `elements.content`) |
 | `context` | string? | Additional context |
 | `as_of` | number | When this fact was true |
 | `ingested_at` | number | When we learned it |
-| `source_episode_id` | string? | Episode that produced this fact |
+| `source_set_id` | string? | Set that produced this fact |
 | `source_event_id` | string? | Original event that contained this info |
 | `is_consolidated` | boolean | Whether this is a consolidated/merged fact |
 
 **Related objects:**
-- Entities (via `fact_entities`)
-- Source Episode (via `source_episode_id`)
+- Entities (via `element_entities`)
+- Source Set (via `source_set_id`)
 - Source Event (via `source_event_id`)
-- Observations (via `observation_facts`)
-- Causal Links (via `causal_links`)
+- Observations (via `set_members`)
+- Element Links (via `element_links`)
 
 ### 3.5 Observation
 
-**Source:** `memory.db` — `analysis_runs` table (observations are analysis run outputs)
+**Source:** `memory.db` — `elements WHERE type = 'observation'` (content) + `jobs` (execution state)
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | string | |
-| `episode_id` | string? | Source episode |
+| `id` | string | Element ID |
+| `set_id` | string? | Source set |
 | `parent_id` | string? | Previous version (version chain) |
-| `status` | string | |
-| `output_text` | string? | The observation content |
+| `status` | string | From associated `jobs` row |
+| `content` | string? | The observation content (stored in `elements.content`) |
 | `is_stale` | boolean | Whether newer data may invalidate this |
 | `created_at` | number | |
-| `completed_at` | number? | |
+| `completed_at` | number? | From associated `jobs` row |
 
 **Related objects:**
-- Supporting Facts (via `observation_facts`)
+- Supporting Facts (via `set_members`)
 - Supporting Entities (derived from supporting facts)
-- Source Episode
+- Source Set
 - Version Chain (via `parent_id`)
 
 ### 3.6 Mental Model
 
-**Source:** `memory.db` — `mental_models` table
+**Source:** `memory.db` — `elements WHERE type = 'mental_model'`
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | string | |
-| `entity_id` | string | The entity this model is about |
-| `name` | string | Model title |
-| `description` | string | Full markdown content |
+| `id` | string | Element ID |
+| `entity_id` | string | The entity this model is about (via `element_entities`) |
+| `name` | string | Model title (stored in `elements.label`) |
+| `content` | string | Full markdown content (stored in `elements.content`) |
 | `last_refreshed` | number | |
 | `is_stale` | boolean | |
 | `updated_at` | number | |
 
 **Related objects:**
-- Entity (via `entity_id`)
+- Entity (via `element_entities`)
 
 **UI note:** Mental models are larger documents. The collection/embedded view shows a table with name, last_refreshed, and staleness indicator. Clicking opens a rendered markdown view.
 
@@ -223,8 +223,8 @@ These are the first-class objects in the UI. Each has a collection view and a de
 - Thread (via `threads`)
 - Attachments (via `attachments`)
 - Tags (via `event_tags`)
-- Facts derived from this event (via `facts.source_event_id`)
-- Episodes containing this event (via `episode_events`)
+- Facts derived from this event (via `elements WHERE type = 'fact'` + `source_event_id`)
+- Sets containing this event (via `set_members WHERE member_type = 'event'`)
 
 ### 3.8 Adapter Instance
 
@@ -293,24 +293,24 @@ Existing `CronJob` type is well-defined. Lives under Automations as a sub-view.
 - Target session/agent
 - Run log entries
 
-### 3.12 Episode
+### 3.12 Set (formerly Episode)
 
-**Source:** `memory.db` — `episodes` table
+**Source:** `memory.db` — `sets` table
 
 | Field | Type | Notes |
 |---|---|---|
 | `id` | string | |
 | `platform` | string? | |
 | `thread_id` | string? | |
-| `event_count` | number | |
+| `member_count` | number | |
 | `status` | string | |
 | `start_time` | number? | |
 | `end_time` | number? | |
-| `definition_id` | string? | Episode type |
+| `definition_id` | string? | Set type |
 
 **Related objects:**
-- Events (via `episode_events`)
-- Facts produced (via `facts.source_episode_id`)
+- Events (via `set_members WHERE member_type = 'event'`)
+- Facts produced (via `elements WHERE type = 'fact'` + `source_set_id`)
 - Observations produced
 
 ---
@@ -429,7 +429,7 @@ Each tab presents a collection view as its primary surface.
 **Layout:** Unified search interface with type tabs
 
 - **Global search bar** at top — searches across all memory types
-- **Type filter tabs**: All | Facts | Observations | Mental Models | Episodes | Events
+- **Type filter tabs**: All | Facts | Observations | Mental Models | Sets | Events
 - **Results area**: Mixed results ranked by relevance, or filtered to single type
 - Each result is clickable → opens detail view for that object
 
@@ -437,7 +437,7 @@ Each tab presents a collection view as its primary surface.
 - **Facts**: Filterable table (entity, date range, consolidated status, source)
 - **Observations**: Table with staleness indicator, version chain depth
 - **Mental Models**: Table with entity, last refreshed, stale indicator → click opens rendered markdown
-- **Episodes**: Table with platform, event count, processing status, date range
+- **Sets**: Table with platform, member count, processing status, date range
 - **Events**: Full event stream browser with direction/platform/entity/date filters
 
 ### 5.7 Automations
@@ -466,7 +466,7 @@ Detail views are the heart of graph navigation. Each shows the object's own data
 │                                                             │
 │ ┌─ Contacts ──────────────────────────────────────────────┐ │
 │ │ <contacts-table entity_id={id} />                       │ │
-│ │ Columns: platform, sender_id, sender_name,              │ │
+│ │ Columns: platform, contact_id, contact_name,             │ │
 │ │          message_count, first_seen, last_seen            │ │
 │ │ [Add Contact]                                            │ │
 │ └─────────────────────────────────────────────────────────┘ │
@@ -576,15 +576,15 @@ Extends Entity Detail with agent-specific sections:
 │ └─────────────────────────────────────────────────────────┘ │
 │                                                             │
 │ ┌─ Source ────────────────────────────────────────────────┐ │
-│ │ Episode: {episode link} · Event: {event link}          │ │
-│ │ Click → Episode detail or Event detail                  │ │
+│ │ Set: {set link} · Event: {event link}                  │ │
+│ │ Click → Set detail or Event detail                      │ │
 │ └─────────────────────────────────────────────────────────┘ │
 │                                                             │
 │ ┌─ Observations Using This Fact ──────────────────────────┐ │
 │ │ <observations-table fact_id={id} />                     │ │
 │ └─────────────────────────────────────────────────────────┘ │
 │                                                             │
-│ ┌─ Causal Links ──────────────────────────────────────────┐ │
+│ ┌─ Element Links ─────────────────────────────────────────┐ │
 │ │ Causes: [linked facts with strength]                    │ │
 │ │ Caused by: [linked facts with strength]                 │ │
 │ │ Click any → Fact detail                                  │ │
@@ -611,7 +611,7 @@ Extends Entity Detail with agent-specific sections:
 │                                                             │
 │ ┌─ Derived Knowledge ─────────────────────────────────────┐ │
 │ │ Facts extracted from this event: [list]                 │ │
-│ │ Episodes containing this event: [list]                  │ │
+│ │ Sets containing this event: [list]                      │ │
 │ └─────────────────────────────────────────────────────────┘ │
 └───────────────────────────────────────────────────────────┘
 ```
@@ -675,8 +675,8 @@ Extends Entity Detail with agent-specific sections:
 │ │ Click → Entity detail                                    │ │
 │ └─────────────────────────────────────────────────────────┘ │
 │                                                             │
-│ ┌─ Source Episode ────────────────────────────────────────┐ │
-│ │ Click → Episode detail                                   │ │
+│ ┌─ Source Set ─────────────────────────────────────────────┐ │
+│ │ Click → Set detail                                       │ │
 │ └─────────────────────────────────────────────────────────┘ │
 └───────────────────────────────────────────────────────────┘
 ```
@@ -689,16 +689,16 @@ These are the reusable UI components that appear in both collection views and em
 
 | Widget | Props | Used In |
 |---|---|---|
-| `<entities-table>` | `filter?: { fact_id, event_id, group_id, ... }` | Directory, Fact detail, Event detail, Observation detail, Co-occurrences |
+| `<entities-table>` | `filter?: { fact_id, event_id, group_id, ... }` | Directory, Fact detail, Event detail, Observation detail, Set detail, Co-occurrences |
 | `<contacts-table>` | `entity_id?: string` | Entity detail, Directory |
 | `<grants-table>` | `entity_id?: string, receiver_entity_id?: string` | Access tab, Entity detail, Agent detail |
-| `<facts-table>` | `entity_id?: string, observation_id?: string, episode_id?: string` | Memory tab, Entity detail, Observation detail, Episode detail |
+| `<facts-table>` | `entity_id?: string, observation_id?: string, set_id?: string` | Memory tab, Entity detail, Observation detail, Set detail |
 | `<observations-table>` | `entity_id?: string, fact_id?: string` | Memory tab, Entity detail, Fact detail |
 | `<mental-models-table>` | `entity_id?: string` | Memory tab, Entity detail |
 | `<sessions-table>` | `entity_id?: string, receiver_entity_id?: string` | Command Center, Entity detail, Agent detail |
-| `<events-table>` | `entity_id?: string, thread_id?: string, episode_id?: string` | Memory tab, Entity detail, Episode detail |
+| `<events-table>` | `entity_id?: string, thread_id?: string, set_id?: string` | Memory tab, Entity detail, Set detail |
 | `<adapter-card>` | `adapter_id?: string` | Adapters tab, Agent detail (as accounts) |
-| `<episodes-table>` | `entity_id?: string, platform?: string` | Memory tab |
+| `<sets-table>` | `entity_id?: string, platform?: string` | Memory tab |
 | `<hook-invocations-table>` | `automation_id?: string` | Automations tab, Automation detail |
 | `<cron-table>` | `agent_id?: string` | Automations tab |
 | `<directory-table>` | `platform?: string` | Adapters detail, Directory sub-view |
@@ -786,8 +786,8 @@ The active tab in the nav updates to reflect where you are. The breadcrumb shows
 /memory/observations                     # Observations collection
 /memory/observations/{observation_id}    # Observation detail
 /memory/mental-models/{model_id}         # Mental model rendered view
-/memory/episodes                         # Episodes collection
-/memory/episodes/{episode_id}            # Episode detail
+/memory/sets                             # Sets collection
+/memory/sets/{set_id}                    # Set detail
 /memory/events                           # Events collection
 /memory/events/{event_id}               # Event detail
 
@@ -812,8 +812,8 @@ The active tab in the nav updates to reflect where you are. The breadcrumb shows
 
 Entity detail requires queries across multiple databases. Since SQLite doesn't support cross-database JOINs without ATTACH, the application layer performs separate queries and joins in code:
 
-1. `identity.db`: entity row, contacts, entity_tags, grants, entity_cooccurrences
-2. `memory.db`: facts (via fact_entities), mental_models, episodes
+1. `identity.db`: entity row, contacts, entity_tags, grants
+2. `memory.db`: facts (via element_entities), mental models (via elements WHERE type = 'mental_model'), sets
 3. `events.db`: recent events (via event_participants), thread aggregates
 4. `agents.db`: sessions (key contains entity_id)
 5. `embeddings.db`: (only for semantic search, not displayed directly)
@@ -822,7 +822,7 @@ Entity detail requires queries across multiple databases. Since SQLite doesn't s
 
 Unified search queries:
 
-1. `memory.db`: FTS on facts_fts, mental_models, observation output_text
+1. `memory.db`: FTS on elements_fts (facts, mental models, observation content)
 2. `events.db`: FTS on events_fts
 3. `embeddings.db`: Semantic similarity via vec_embeddings
 4. `identity.db`: Entity name matching for entity-scoped results
@@ -835,7 +835,7 @@ Results are merged and ranked by relevance at the application layer.
 
 **Critical architectural decision:** Sender and receiver identity resolution use the exact same code path.
 
-Both resolve through: `contacts(platform, space_id, sender_id) → entity_id → entities(id)`
+Both resolve through: `contacts(platform, space_id, contact_id) → entity_id → entities(id)`
 
 - **Sender resolution**: Platform event arrives with sender metadata → look up contact → resolve entity
 - **Receiver resolution**: Adapter config declares account_id → contact row maps account to agent entity → resolve entity

@@ -2,7 +2,7 @@
 
 Date: 2026-02-26
 Owners: Nexus Frontdoor
-Status: Design spec — pending implementation
+Status: Design spec — pending implementation (aligned 2026-02-27)
 Depends on: FRONTDOOR_WORKSPACE_ADMIN_CONTROL_PLANE_HARD_CUTOVER_2026-02-27, OPERATOR_OWNER_BILLING_DASHBOARD
 
 ## 1. Problem
@@ -109,24 +109,30 @@ frontdoor_product_entitlements
 #### Product-aware workspace creation
 
 - `POST /api/workspaces` — EXTEND existing endpoint:
-  - Add required `product_id` field to request body.
+  - Add `product_id` context field to request body.
   - Auto-assign default plan for that product.
   - Initialize entitlements from default plan.
 
 - Auto-provisioner EXTEND:
   - `product_id` determined from onboarding origin or flavor parameter during OIDC flow.
-  - Passed through to workspace creation.
+  - Passed through to workspace resolution/allocation and billing context selection.
 
-### 3.3 Workspace-product binding
+### 3.3 Workspace-product billing binding
 
-Each workspace belongs to exactly one product. This is set at creation time and cannot change.
+Product billing context is bound at the subscription/entitlement level and may be associated with any workspace that hosts the app slot.
 
-```
-workspace.product_id = "spike"    -- this workspace is a Spike workspace
-workspace.product_id = "glowbot"  -- this workspace is a GlowBot workspace
-```
+Rules:
 
-A single user can have workspaces across multiple products. The frontdoor dashboard groups workspaces by product.
+1. A workspace can host multiple product app slots.
+2. Billing and entitlements remain product-scoped per workspace (`workspace_id + product_id`).
+3. Product mapping is a launch/billing context, not a universal requirement to create one workspace per product.
+4. A single user can still have multiple workspaces, and those workspaces may each host one or many products.
+
+---
+
+Alignment note:
+
+This supersedes older "one workspace = one product" wording for product app flows.
 
 ## 4. Product-Branded Billing Pages
 
@@ -263,13 +269,13 @@ Response:
 When a user signs up via a product shell, the product identity flows through the OIDC process:
 
 1. **spike.fyi** calls `frontdoor/api/auth/oidc/start?provider=google&return_to=/&product=spike`
-2. **GlowBot shell** redirects to shared onboarding with `flavor=glowbot`
+2. **GlowBot shell** routes to frontdoor canonical onboarding with `flavor=glowbot` (legacy shell domain may redirect).
 3. Frontdoor stores `product_id` in the OIDC state parameter.
-4. On callback, auto-provisioner creates workspace with the correct `product_id`.
+4. On callback, frontdoor resolves workspace using allocation policy, then applies product-scoped billing context for checkout/entitlements.
 5. Default plan for that product is auto-assigned.
 6. Entitlements are initialized from default plan.
 
-This ensures every workspace has a product binding from the moment it is created.
+This ensures every billing/entitlement operation has explicit product context without forcing one-workspace-per-product.
 
 ## 7. Product Shell Integration Contract
 
@@ -361,7 +367,7 @@ const plan = await fetch('/api/billing/{workspaceId}/plan');
   "tagline": "Growth Intelligence for Aesthetic Clinics",
   "accent_color": "#d4a853",
   "homepage_url": "https://glowbot.app",
-  "onboarding_origin": "https://shell.nexushub.sh"
+  "onboarding_origin": "https://frontdoor.nexushub.sh"
 }
 ```
 
@@ -401,12 +407,12 @@ const plan = await fetch('/api/billing/{workspaceId}/plan');
 
 ## 9. Migration Path
 
-### Phase 1: Product registry + workspace binding
+### Phase 1: Product registry + workspace billing context
 1. Add `frontdoor_products` and `frontdoor_product_plans` tables.
 2. Seed Spike and GlowBot product data.
-3. Add `product_id` to workspace creation flow.
+3. Add `product_id` billing context to workspace creation and checkout flow.
 4. Add `product_id` to auto-provisioner (inferred from OIDC state/flavor).
-5. Backfill existing workspaces with correct `product_id`.
+5. Backfill billing context/mappings where missing; do not force per-product tenant fan-out.
 
 ### Phase 2: Entitlements system
 1. Add `frontdoor_product_entitlements` table.
@@ -437,13 +443,13 @@ const plan = await fetch('/api/billing/{workspaceId}/plan');
 
 1. Self-service product registration (operator-only for now).
 2. Custom domain per product for billing pages (all on frontdoor domain).
-3. Multi-product workspaces (one workspace = one product).
+3. Billing model redesign beyond product-scoped entitlements.
 4. Usage-based billing metering (flat plan tiers first).
 5. Billing for nex runtime directly (products bill, not the platform).
 
 ## 11. Acceptance Criteria
 
-1. Every workspace has a `product_id` set at creation.
+1. Billing and entitlements are resolved with explicit `workspace_id + product_id` context.
 2. Product shells can initiate checkout that renders in product branding.
 3. Checkout completion updates entitlements visible to runtime.
 4. Runtimes can check entitlements via API and gate features.

@@ -204,7 +204,7 @@ process.stdin.on("end", () => {
     provisioner.close();
   });
 
-  it("creates separate tenant mappings per product for the same OIDC identity", async () => {
+  it("reuses existing tenant and creates per-product mappings for the same OIDC identity", async () => {
     const tempDir = mkTempDir();
     const storePath = path.join(tempDir, "autoprovision.db");
     const scriptPath = path.join(tempDir, "provision-product-aware.mjs");
@@ -224,7 +224,7 @@ process.stdin.on("end", () => {
   const count = Number(fs.readFileSync(${JSON.stringify(callCountPath)}, "utf8").trim() || "0");
   fs.writeFileSync(${JSON.stringify(callCountPath)}, String(count + 1) + "\\n", "utf8");
   fs.appendFileSync(${JSON.stringify(payloadLogPath)}, JSON.stringify({ product_id: payload.product_id ?? null }) + "\\n", "utf8");
-  const port = product === "spike" ? 7422 : 7423;
+  const port = product === "glowbot" ? 7422 : 7423;
   process.stdout.write(JSON.stringify({
     tenant_id: payload.tenant_id,
     runtime_url: \`http://127.0.0.1:\${port}\`,
@@ -279,11 +279,11 @@ process.stdin.on("end", () => {
       productId: "spike",
     });
 
-    expect(glowbotFirst?.tenantId).toMatch(/^tenant-glowbot-/);
+    expect(glowbotFirst?.tenantId).toMatch(/^tenant-/);
     expect(glowbotSecond?.tenantId).toBe(glowbotFirst?.tenantId);
-    expect(spikeFirst?.tenantId).toMatch(/^tenant-spike-/);
-    expect(spikeSecond?.tenantId).toBe(spikeFirst?.tenantId);
+    expect(spikeFirst?.tenantId).toMatch(/^tenant-/);
     expect(spikeFirst?.tenantId).not.toBe(glowbotFirst?.tenantId);
+    expect(spikeSecond?.tenantId).toBe(spikeFirst?.tenantId);
 
     const callCount = Number(fs.readFileSync(callCountPath, "utf8").trim() || "0");
     expect(callCount).toBe(2);
@@ -295,6 +295,83 @@ process.stdin.on("end", () => {
       .map((line) => JSON.parse(line) as { product_id: string | null })
       .map((item) => item.product_id);
     expect(payloadProducts).toEqual(["glowbot", "spike"]);
+    provisioner.close();
+  });
+
+  it("provisions product-specific tenant when only fallback tenant is available", async () => {
+    const tempDir = mkTempDir();
+    const storePath = path.join(tempDir, "autoprovision.db");
+    const scriptPath = path.join(tempDir, "provision-should-not-run.mjs");
+    const callCountPath = path.join(tempDir, "calls.txt");
+    fs.writeFileSync(callCountPath, "0\n", "utf8");
+    fs.writeFileSync(
+      scriptPath,
+      `
+import fs from "node:fs";
+let raw = "";
+process.stdin.on("data", (chunk) => { raw += chunk.toString(); });
+process.stdin.on("end", () => {
+  const payload = JSON.parse(raw || "{}");
+  const count = Number(fs.readFileSync(${JSON.stringify(callCountPath)}, "utf8").trim() || "0");
+  fs.writeFileSync(${JSON.stringify(callCountPath)}, String(count + 1) + "\\n", "utf8");
+  process.stdout.write(JSON.stringify({
+    tenant_id: payload.tenant_id,
+    runtime_url: "http://127.0.0.1:7522",
+    runtime_public_base_url: "https://tenant.example.com"
+  }));
+});
+`,
+      "utf8",
+    );
+
+    const config = baseConfig(storePath);
+    config.tenants.set("tenant-existing", {
+      id: "tenant-existing",
+      runtimeUrl: "http://127.0.0.1:7000",
+      runtimePublicBaseUrl: "https://tenant-existing.example.com",
+    });
+    config.autoProvision.command = `${quoteShell(process.execPath)} ${quoteShell(scriptPath)}`;
+
+    const provisioner = new TenantAutoProvisioner(config);
+    const first = await provisioner.resolveOrProvision({
+      provider: "google",
+      claims: {
+        sub: "google-sub-fallback",
+        email: "owner@example.com",
+        name: "Owner",
+      },
+      fallbackPrincipal: {
+        userId: "u-owner",
+        tenantId: "tenant-existing",
+        entityId: "entity-owner",
+        displayName: "Owner",
+        email: "owner@example.com",
+        roles: ["operator"],
+        scopes: ["operator.admin"],
+        amr: ["password"],
+      },
+      productId: "spike",
+    });
+    expect(first?.tenantId).toMatch(/^tenant-/);
+    expect(first?.tenantId).not.toBe("tenant-existing");
+    expect(first?.userId).toBe("u-owner");
+    expect(first?.entityId).toBe("entity-owner");
+
+    const second = await provisioner.resolveOrProvision({
+      provider: "google",
+      claims: {
+        sub: "google-sub-fallback",
+        email: "owner@example.com",
+        name: "Owner",
+      },
+      fallbackPrincipal: null,
+      productId: "spike",
+    });
+    expect(second?.tenantId).toBe(first?.tenantId);
+    expect(second?.userId).toBe("u-owner");
+
+    const callCount = Number(fs.readFileSync(callCountPath, "utf8").trim() || "0");
+    expect(callCount).toBe(1);
     provisioner.close();
   });
 });

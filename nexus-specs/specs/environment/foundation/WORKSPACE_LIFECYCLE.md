@@ -3,7 +3,7 @@
 **Status:** CANONICAL
 **Last Updated:** 2026-02-17
 **Supersedes:** Portions of `INIT_REFERENCE.md`, `BOOTSTRAP_ONBOARDING.md`, `BOOTSTRAP_FILES_REFERENCE.md`, `WORKSPACE_SYSTEM.md`
-**Database Layout:** See `specs/data/DATABASE_ARCHITECTURE.md` for the canonical 6-database layout
+**Database Layout:** See `specs/data/DATABASE_ARCHITECTURE.md` for the canonical 7-database layout
 
 ## Purpose
 
@@ -36,7 +36,8 @@ A workspace goes from **zero to operational** with `nexus init` + `nexus start` 
     │   ├── events.db                  # Event ledger (empty, schema applied)
     │   ├── agents.db                  # Agent sessions (empty, schema applied)
     │   ├── identity.db                # Contacts, directory, entities, auth, ACL (empty, schema applied)
-    │   ├── memory.db                  # Facts, episodes, analysis (empty, schema applied)
+    │   ├── memory.db                  # Elements, sets, jobs (empty, schema applied)
+    │   ├── work.db                    # Tasks, work items, workflows, sequences (empty, schema applied)
     │   ├── embeddings.db              # Semantic vector index (empty, schema applied)
     │   └── runtime.db                 # Request traces, adapters, automations, bus (empty, schema applied)
     ├── agents/
@@ -49,7 +50,7 @@ A workspace goes from **zero to operational** with `nexus init` + `nexus start` 
 
 ### Design Decisions
 
-**6 DBs are created eagerly.** Init owns the workspace shape. The runtime owns schemas and migrations, but the files themselves exist from init so the workspace is a complete artifact on disk. Init applies the current schema version to each of the 6 databases (events.db, agents.db, identity.db, memory.db, embeddings.db, runtime.db). See `specs/data/DATABASE_ARCHITECTURE.md` for the canonical database inventory.
+**7 DBs are created eagerly.** Init owns the workspace shape. The runtime owns schemas and migrations, but the files themselves exist from init so the workspace is a complete artifact on disk. Init applies the current schema version to each of the 7 databases (events.db, agents.db, identity.db, memory.db, work.db, embeddings.db, runtime.db). See `specs/data/DATABASE_ARCHITECTURE.md` for the canonical database inventory.
 
 **Auth token is generated.** Setting `auth.mode: "token"` without a token value creates a workspace that cannot boot an authenticated runtime without manual intervention. Init generates a token via `crypto.randomBytes(24).toString('hex')` and writes it into config.
 
@@ -59,7 +60,7 @@ A workspace goes from **zero to operational** with `nexus init` + `nexus start` 
 
 **`BOOTSTRAP.md` is permanent.** It is never deleted. It serves as the reusable template for creating new agent personas at any time. Bootstrap detection uses a different signal (see Phase 3).
 
-**`state/workspace/` is for automation workspaces.** Not for agent persona files. Meeseeks-pattern automations (memory-reader, memory-writer, etc.) get their own subdirectory here. See "Directory Concepts" below.
+**`state/workspace/` is for automation workspaces.** Not for agent persona files. Meeseeks-pattern automations (memory-injection, memory-writer, etc.) get their own subdirectory here. See "Directory Concepts" below.
 
 ### Default Config
 
@@ -87,7 +88,7 @@ Running `nexus init` twice is safe. It creates missing paths and files without o
 ### Startup Sequence
 
 1. **Read config** — `state/config.json`
-2. **Open/migrate DBs** — Run schema migrations on all 6 databases (events.db, agents.db, identity.db, memory.db, embeddings.db, runtime.db). Runtime owns migration logic.
+2. **Open/migrate DBs** — Run schema migrations on all 7 databases (events.db, agents.db, identity.db, memory.db, work.db, embeddings.db, runtime.db). Runtime owns migration logic.
 3. **Auto-sync external CLI credentials** — Import provider credentials from Claude CLI, Codex CLI, Qwen CLI via keychain/file pointers. Uses 15-minute TTL cache. This is critical: the system cannot have a conversation without a provider.
 4. **Seed owner entity** — Insert a placeholder owner entity in identity.db (`type: "person"`, `name: "Owner"`). Enriched with real details by the memory-writer during conversation.
 5. **Seed default automations** — Check the automations table for canonical shipped automations. Insert missing ones. Create workspace directories under `state/workspace/` with seed files. See Phase 5 for details.
@@ -240,41 +241,41 @@ This is a one-time conditional context injection in `assembleContext`, not an au
 
 | Automation | Hook Point | Blocking | Timeout | Workspace |
 |-----------|-----------|----------|---------|-----------|
-| `memory-reader` | `worker:pre_execution` | Yes | 10s | `state/workspace/memory-reader/` |
-| `memory-writer` | `after:runAgent` | No (async) | 30s | `state/workspace/memory-writer/` |
+| `memory-injection` | `worker:pre_execution` | Yes | 10s | `state/workspace/memory-injection/` |
+| `memory-writer` | `episode-created` | No (async) | 30s | `state/workspace/memory-writer/` |
 | `command-logger` | `command:execute` | No (async) | — | — |
 | `boot-md` | `runtime:startup` | No (async) | — | — |
 
-### Memory Reader
+### Memory Injection
 
 Fires before every worker execution. Searches memory (via recall against memory.db + embeddings.db) for context relevant to the worker's task. Returns enrichment that gets injected into the worker's assembled context.
 
 - Hook: `worker:pre_execution`
 - Blocking: yes — the worker waits for memory context
 - Timeout: 10s (latency-sensitive)
-- Workspace: `state/workspace/memory-reader/` with `ROLE.md`, `SKILLS.md`, `PATTERNS.md`, `ERRORS.md`, `skills/memory/`
+- Workspace: `state/workspace/memory-injection/` with `ROLE.md`, `SKILLS.md`, `PATTERNS.md`, `ERRORS.md`, `skills/memory/`
 
 ### Memory Writer
 
-Fires after every agent turn completes. Extracts entities, relationships, and episodes from the completed turn. Writes to memory.db (facts, episodes) + identity.db (entities) + embeddings.db (vectors) asynchronously.
+Fires when an episode clips (token budget exceeded or 90-minute silence timer). Extracts facts and entities from the episode's events. Writes to memory.db (elements, sets, jobs) + identity.db (entities) + embeddings.db (vectors) asynchronously.
 
-- Hook: `after:runAgent`
+- Hook: `episode-created`
 - Blocking: no — fire-and-forget
 - Timeout: 30s (background, has time)
 - Workspace: `state/workspace/memory-writer/` with same structure
 
-### Memory Reader/Writer Collaboration
+### Memory Injection/Writer Collaboration
 
 These two automations are linked by peer workspaces. Each can read the other's workspace files:
 
 ```
 state/workspace/
-├── memory-reader/
+├── memory-injection/
 │   ├── ROLE.md
 │   ├── SKILLS.md              ← writer reads to understand entity patterns
 │   ├── PATTERNS.md
 │   ├── ERRORS.md              ← writer reads to learn what searches fail
-│   ├── NOTES_FOR_WRITER.md    ← reader leaves notes
+│   ├── NOTES_FOR_WRITER.md    ← injection leaves notes
 │   └── skills/memory/
 │       ├── SCHEMA.md
 │       ├── QUERIES.md
@@ -286,7 +287,7 @@ state/workspace/
 │   ├── SKILLS.md
 │   ├── PATTERNS.md
 │   ├── ERRORS.md
-│   ├── NOTES_FOR_READER.md    ← writer leaves notes
+│   ├── NOTES_FOR_INJECTION.md ← writer leaves notes
 │   └── skills/memory/...
 └── {future-automation}/        ← new automation workspaces go here
 ```
@@ -303,7 +304,7 @@ If a `BOOT.md` file exists in the workspace root, dispatches its contents as a c
 
 ### Dropped (Not Shipped)
 
-- **session-memory** — Replaced by the memory-reader/writer system.
+- **session-memory** — Replaced by the memory-injection/writer system.
 - **soul-evil** — Not shipping.
 
 ### How Automations Are Seeded
@@ -325,7 +326,7 @@ nex/src/nex/automations/
 ├── hooks-runtime.hookpoints.test.ts
 ├── cli.ts                             # Automation management CLI
 └── bundled/                           # ALL shipped automations
-    ├── memory-reader/
+    ├── memory-injection/
     │   ├── automation.ts              # Handler implementation
     │   ├── automation.test.ts
     │   └── seed/                      # Seed files for workspace
@@ -373,7 +374,7 @@ Automation workspaces are **accumulated knowledge stores** for a specific functi
 
 ```
 state/workspace/
-├── memory-reader/                     # Memory search specialist
+├── memory-injection/                  # Memory search specialist
 │   ├── ROLE.md                        # Role instructions
 │   ├── SKILLS.md                      # Accumulated skills (self-improving)
 │   ├── PATTERNS.md                    # Common patterns (self-improving)
@@ -385,7 +386,7 @@ state/workspace/
 
 - Created by the automation seeder at runtime startup
 - One directory per automation that has `workspace_dir` set
-- Agent personas are applied ON TOP of these workspaces — Echo (a persona) might be the identity applied to a memory-reader execution. The persona says "who I am," the workspace says "what I know about this job."
+- Agent personas are applied ON TOP of these workspaces — Echo (a persona) might be the identity applied to a memory-injection execution. The persona says "who I am," the workspace says "what I know about this job."
 - Self-improvement updates these files over time
 
 ### The Relationship
@@ -394,7 +395,7 @@ state/workspace/
 Agent Persona (state/agents/echo/)
   = "I am Echo, a helpful assistant who values precision"
 
-Automation Workspace (state/workspace/memory-reader/)
+Automation Workspace (state/workspace/memory-injection/)
   = "I know how to search memory, these queries work well, these patterns fail"
 
 During execution:
@@ -471,7 +472,7 @@ This section defines what the E2E harness should validate at each lifecycle phas
 
 - Directory structure exists as specified above
 - `state/config.json` exists with `runtime.port`, `runtime.bind: "loopback"`, `runtime.auth.mode: "token"`, `runtime.auth.token` (non-empty string)
-- All 6 DB files exist: `events.db`, `agents.db`, `identity.db`, `memory.db`, `embeddings.db`, `runtime.db`
+- All 7 DB files exist: `events.db`, `agents.db`, `identity.db`, `memory.db`, `work.db`, `embeddings.db`, `runtime.db`
 - `state/agents/BOOTSTRAP.md` exists and is non-empty
 - `AGENTS.md` exists at workspace root
 - `skills/` directory exists (empty)
@@ -483,8 +484,8 @@ This section defines what the E2E harness should validate at each lifecycle phas
 
 - External CLI credentials synced (at least one provider credential exists if Claude CLI / env vars are available)
 - Owner entity exists in identity.db
-- Automations table has rows for: `memory-reader`, `memory-writer`, `command-logger`, `boot-md`
-- `state/workspace/memory-reader/` exists with seed files
+- Automations table has rows for: `memory-injection`, `memory-writer`, `command-logger`, `boot-md`
+- `state/workspace/memory-injection/` exists with seed files
 - `state/workspace/memory-writer/` exists with seed files
 
 ### After Onboarding Conversation
@@ -502,8 +503,8 @@ This section defines what the E2E harness should validate at each lifecycle phas
 
 - MA dispatched >= 1 worker via `agent_send op=dispatch`
 - Worker turn recorded in agents ledger
-- Memory-reader fired at `worker:pre_execution` (check automation invocation records)
-- Memory-writer fired at `after:runAgent` (check automation invocation records)
+- Memory-injection fired at `worker:pre_execution` (check automation invocation records)
+- Memory-writer fired at `episode-created` (check automation invocation records)
 - MA produced a user-facing response
 
 ---
@@ -512,7 +513,7 @@ This section defines what the E2E harness should validate at each lifecycle phas
 
 ### `nex/src/commands/init.ts`
 
-- Create all 6 DBs eagerly (events.db, agents.db, identity.db, memory.db, embeddings.db, runtime.db) with current schema
+- Create all 7 DBs eagerly (events.db, agents.db, identity.db, memory.db, work.db, embeddings.db, runtime.db) with current schema
 - Generate `runtime.auth.token` via `crypto.randomBytes(24).toString('hex')`
 - Remove `runtime.mode` from default config
 - Change `skills/` to flat directory (remove `tools/`, `connectors/`, `guides/` subdirs)
@@ -539,7 +540,7 @@ This section defines what the E2E harness should validate at each lifecycle phas
 ### `nex/src/nex/automations/bundled/`
 
 - Create this directory structure with all shipped automations
-- Move `memory-reader` and `memory-writer` from `meeseeks/` to `bundled/`
+- Move `memory-injection` and `memory-writer` from `meeseeks/` to `bundled/`
 - Add `command-logger` (migrated from `hooks/bundled/`)
 - Add `boot-md` (migrated from `hooks/bundled/`)
 - Remove `session-memory` (replaced by memory system)
@@ -566,6 +567,6 @@ This section defines what the E2E harness should validate at each lifecycle phas
 - `specs/environment/capabilities/credentials/CREDENTIAL_SYSTEM.md` — Credential system
 - `specs/runtime/broker/MEESEEKS_PATTERN.md` — Meeseeks automation pattern
 - `specs/runtime/broker/CONTEXT_ASSEMBLY.md` — Context assembly for MWP
-- `specs/data/DATABASE_ARCHITECTURE.md` — Canonical 6-database layout
+- `specs/data/DATABASE_ARCHITECTURE.md` — Canonical 7-database layout
 - `specs/data/memory/MEMORY_SYSTEM.md` — Memory system architecture
 - `specs/environment/foundation/harnesses/LIVE_E2E_HARNESS.md` — E2E harness workplan

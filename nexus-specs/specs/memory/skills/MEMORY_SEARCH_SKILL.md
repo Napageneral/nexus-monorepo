@@ -1,70 +1,77 @@
 # Memory Search Skill
 
-**Status:** DESIGN SPEC
-**Last Updated:** 2026-02-20
-**Related:** MEMORY_SYSTEM.md, MEMORY_WRITER.md, MEMORY_REFLECT_SKILL.md
+**Status:** CANONICAL SPEC
+**Last Updated:** 2026-03-02
+**Related:** ../MEMORY_SYSTEM.md, ../MEMORY_RECALL.md, MEMORY_REFLECT_SKILL.md
 
 ---
 
 ## Overview
 
-The Memory Search skill teaches any agent how to search Nexus memory effectively. It provides the hierarchical retrieval strategy, query decomposition techniques, staleness awareness, and budget management.
+The Memory Search skill teaches any agent how to search Nexus memory effectively. It provides hierarchical retrieval strategy, query decomposition techniques, staleness awareness, and budget management.
 
-**This is a pure search skill.** It does not create or modify memory -- it only reads. Any agent that needs context from memory imports this skill. The separate Memory Reflect skill handles deep research and mental model persistence.
+**This is a pure search skill.** It does not create or modify memory — it only reads. Any agent that needs context from memory imports this skill. The separate Memory Reflect skill handles deep research and mental model persistence.
+
+This is a **skill prompt**, not a meeseeks. It runs within the importing agent's session.
 
 ---
 
 ## When to Import This Skill
 
 Any agent that needs to answer questions using stored memory:
-
-- **Conversational agents** -- answering user questions with personal context
-- **Memory-Writer** -- deduplication checks and entity resolution during retain
-- **Task agents** -- gathering context before executing work
-- **Any meeseeks** -- that needs to know things about the user's world
+- Conversational agents — answering user questions with personal context
+- Memory Writer — entity resolution during retain
+- Task agents — gathering context before executing work
+- Any meeseeks that needs to know things about the user's world
 
 ---
 
-## The Tool: recall()
+## The Tool: `nexus memory recall`
 
-A single search interface with tunable parameters. All memory search goes through this one tool.
+A single search interface with tunable parameters. Available to all agents as a CLI command (`nexus memory recall`). The CLI sends an IPC request to the NEX daemon, which executes the core recall function and returns JSON to stdout.
+
+The function signature below describes the core contract. The CLI surface maps parameters to `--flag` arguments (see `environment/interface/cli/COMMANDS.md`).
 
 ```
 recall(query, params)
 
 Parameters:
-  query       string (required)   Natural language search query
-  scope       string[]            What to search: ['facts', 'observations', 'mental_models', 'entities']
-                                  Default: facts+observations+mental_models (entities only when explicitly requested)
-  entity      string              Filter by entity name or ID
-  time_after  integer             Only results after this timestamp (unix ms)
-  time_before integer             Only results before this timestamp (unix ms)
-  platform    string              Filter by source platform
-  thread_id   string              Thread scope hint for event retrieval/lookback
-  thread_lookback_events integer  Include up to N recent prior events from thread context
-  max_results integer             Maximum results (default: 20)
-  budget      string              Search depth: 'low', 'mid', 'high'
+  query                    string (required)   Natural language search query
+  scope                    string[]            What to search: ['facts', 'observations', 'mental_models', 'entities']
+                                               Default: facts + observations + mental_models
+  entity                   string              Filter by entity name or ID
+  time_after               integer             Only results after this timestamp (unix ms)
+  time_before              integer             Only results before this timestamp (unix ms)
+  platform                 string              Filter by source platform
+  thread_id                string              Thread scope hint for event retrieval/lookback
+  thread_lookback_events   integer             Include up to N recent prior events from thread
+  max_results              integer             Maximum results (default: 20)
+  budget                   string              Search depth: 'low', 'mid', 'high'
 
 Returns:
-  results[]   Array of matched items with:
-    - id, text, type ('fact' | 'observation' | 'mental_model' | 'entity' | 'event')
-    - as_of (when it happened), relevance score
-    - is_stale (for observations/mental models)
-    - entity_ids[] (linked entities)
-    - source metadata
-    - For entity results: name, type, aliases[], mention_count
+  RecallResult with:
+    ranked[]    All result types interleaved by relevance score
+    facts[]     FactResult items
+    observations[]  ObservationResult items
+    mental_models[] MentalModelResult items
+    entities[]  EntityResult items
+    events[]    EventResult items
+
+  Each result item has:
+    - id, content, type ('fact' | 'observation' | 'mental_model' | 'entity' | 'event')
+    - score (relevance)
+    - as_of (timestamp)
+    - entity_ids[]
+    - For observations: successor_id (non-null means this version is stale — a newer revision exists)
+    - For entity results: name, type, mention_count
     - For event results: raw unretained events from short-term memory
 ```
-
-> **Short-term memory:** Very recent events that haven't been processed by the retain pipeline yet are searchable as `type: 'event'` results. These are raw events (not extracted facts), useful for answering questions about very recent context. See `RETAIN_PIPELINE.md`.
-
-> **Thread-aware lookback:** In memory retain/consolidation sessions, `recall()` can include prior thread context via `thread_id` + `thread_lookback_events`. If the runtime already knows the active thread, `thread_id` may be inferred automatically.
 
 ---
 
 ## Hierarchical Retrieval Strategy
 
-Memory is organized in layers of increasing abstraction. **Search top-down** -- start with the highest-quality, most synthesized knowledge and drill down only when needed.
+Memory is organized in layers of increasing abstraction. **Search top-down** — start with the highest-quality, most synthesized knowledge and drill down only when needed.
 
 ### Layer 3: Mental Models (Highest Quality)
 
@@ -73,11 +80,10 @@ recall(query, scope=['mental_models'])
 ```
 
 - User-curated or agent-generated reports about specific topics
-- Highest quality -- manually created, periodically refreshed
-- If a relevant mental model exists and is **fresh**, it may fully answer the question
-- Check `is_stale` -- if stale, verify key claims against lower layers
+- Highest quality — periodically refreshed
+- If a relevant mental model exists and is current, it may fully answer the question
 
-**When to start here:** Broad questions about a topic, person, or project. "What's the status of Project X?" or "Tell me about Tyler's career."
+**When to start here:** Broad questions about a topic, person, or project.
 
 ### Layer 2: Observations (Consolidated Knowledge)
 
@@ -87,10 +93,9 @@ recall(query, scope=['observations'])
 
 - Auto-consolidated durable knowledge synthesized from facts
 - Good for patterns, summaries, and synthesized understanding
-- Check `is_stale` -- if stale, also search raw facts to verify
-- Each observation tracks its contributing facts via `observation_facts`
+- Check for staleness — if the observation has a `successor_id`, a newer revision exists. Use `resolve_element_head` to follow the chain to the current head.
 
-**When to start here:** Questions about patterns, preferences, or consolidated knowledge. "What does Tyler like to eat?" or "How does the team communicate?"
+**When to start here:** Questions about patterns, preferences, or consolidated knowledge.
 
 ### Layer 1: Facts (Ground Truth)
 
@@ -99,11 +104,10 @@ recall(query, scope=['facts'])
 ```
 
 - Atomic extracted knowledge from source events
-- Immutable -- never changes once written
-- This is the source of truth that all higher layers are built from
-- Use for specific details, recent information, or verification
+- Immutable — never changes once written
+- Source of truth that all higher layers are built from
 
-**When to start here:** Specific factual questions, recent events, or verifying stale higher-layer data. "When did Tyler last meet with Sarah?" or "What was discussed in yesterday's standup?"
+**When to start here:** Specific factual questions, recent events, verification.
 
 ### Layer 0: Short-Term Events (Most Recent)
 
@@ -111,26 +115,43 @@ recall(query, scope=['facts'])
 recall(query)  -- event results included automatically
 ```
 
-- Raw unretained events from the last few hours (not yet processed by the retain pipeline)
-- Useful for very recent context: "What was just said?" or "What happened in the last conversation?"
-- These are raw event text, not extracted facts — may be noisy
-- Included automatically in recall() results as `type: 'event'`
-
-**When these help:** Questions about very recent activity that the retain pipeline hasn't processed yet.
+- Raw unretained events from episodes that haven't closed yet
+- Useful for very recent context before the retain pipeline processes it
 
 ### Choosing Your Entry Point
 
 ```
 Is the question about a broad topic with a known mental model?
-  YES -> Start at Layer 3 (mental models)
-  NO  -> Is it about a pattern or consolidated knowledge?
-           YES -> Start at Layer 2 (observations)
-           NO  -> Start at Layer 1 (facts)
-
-Did the result have is_stale = true?
-  YES -> Drill down to verify against the next layer
-  NO  -> Use the result
+  YES → Start at Layer 3 (mental models)
+  NO  → Is it about a pattern or consolidated knowledge?
+         YES → Start at Layer 2 (observations)
+         NO  → Start at Layer 1 (facts)
 ```
+
+---
+
+## Staleness Awareness
+
+Observations form **revision chains** via `parent_id`. When an observation is updated, the new version is created with `parent_id` pointing to the previous version, and the new version becomes the head. If a recalled observation has a `successor_id` (meaning a newer revision exists that points back to this one), it's stale.
+
+### How to Handle Stale Observations
+
+When you retrieve an observation and it has a more recent revision:
+1. Follow the chain to the current head immediately — this tells you what changed
+2. If the current head answers your question, use it
+3. If the head is also outdated relative to your question, drill down to raw facts to verify
+
+### When Staleness Matters Most
+
+- Current status questions ("What is Tyler working on?")
+- Relationship questions ("Who does Tyler work with?")
+- Preference questions ("What does Tyler like?")
+
+### When Staleness Matters Least
+
+- Historical facts ("When did Tyler start at Anthropic?")
+- Definitions ("What is Project Nexus?")
+- Biographical facts ("Where did Tyler go to school?")
 
 ---
 
@@ -142,17 +163,12 @@ recall() uses semantic search. **Never just echo the user's question.** Break co
 
 ```
 User: "What are the recurring themes in Tyler's conversations with Sarah?"
-
 BAD:  recall("recurring themes in Tyler's conversations with Sarah")
 ```
-
-This searches for a single semantic embedding that matches the entire question. It will miss relevant results that use different phrasing.
 
 ### Good: Decompose Into Components
 
 ```
-User: "What are the recurring themes in Tyler's conversations with Sarah?"
-
 GOOD:
   1. recall("Tyler Sarah conversations", entity="Sarah")
   2. recall("Tyler Sarah discussions topics")
@@ -161,249 +177,38 @@ GOOD:
 
 ### Decomposition Rules
 
-1. **Identify entities** -- search for each entity separately when useful
-2. **Identify concepts** -- search for each key concept with varied phrasing
-3. **Use filters** -- entity, time range, and platform filters narrow results better than cramming everything into the query string
-4. **Try synonyms** -- "meeting" vs "discussion" vs "call" vs "conversation"
-5. **Start broad, then narrow** -- a broad search followed by a filtered one is better than one overly-specific search
-
-### Examples
-
-```
-Question: "What projects is the engineering team working on?"
-Searches:
-  1. recall("engineering team projects")
-  2. recall("current projects", entity="engineering")
-  3. recall("sprint work in progress")
-
-Question: "Has Tyler mentioned anything about moving?"
-Searches:
-  1. recall("Tyler moving", entity="Tyler")
-  2. recall("Tyler relocation apartment house")
-  3. recall("Tyler new place", time_after=<3_months_ago>)
-
-Question: "What happened in the last team standup?"
-Searches:
-  1. recall("team standup", time_after=<last_week>, platform="slack")
-  2. recall("standup meeting updates")
-
-Question: "Sparse 2-message episode; what does this reply refer to?"
-Searches:
-  1. recall("conversation context", scope=['facts','observations'], thread_lookback_events=8)
-  2. recall("prior messages in this thread", thread_id=<thread_id>, thread_lookback_events=12)
-```
-
----
-
-## Staleness Awareness
-
-Observations and mental models can become stale as new facts arrive. The `is_stale` field indicates that new information has been added since the last consolidation or refresh.
-
-### How to Handle Stale Results
-
-```
-Got a result with is_stale = true?
-  |
-  v
-Is the staleness likely to affect the answer?
-  |
-  +-- YES (e.g., "current status", "latest update")
-  |     -> Search facts to verify/supplement
-  |     -> Use the stale result as context, facts as ground truth
-  |     -> Note any contradictions
-  |
-  +-- NO (e.g., "what is X's birthday", historical fact)
-        -> Use the stale result as-is
-        -> Staleness doesn't affect immutable information
-```
-
-### Staleness Matters Most For
-
-- Current status questions ("What is Tyler working on?")
-- Relationship questions ("Who does Tyler work with?")
-- Preference questions ("What does Tyler like?")
-- Project status ("What's the state of Project X?")
-
-### Staleness Matters Least For
-
-- Historical facts ("When did Tyler start at Anthropic?")
-- Definitions ("What is Project Nexus?")
-- Biographical facts ("Where did Tyler go to school?")
+1. **Identify entities** — search for each entity separately when useful
+2. **Identify concepts** — search for each key concept with varied phrasing
+3. **Use filters** — entity, time range, and platform filters narrow results better than cramming everything into the query
+4. **Try synonyms** — "meeting" vs "discussion" vs "call" vs "conversation"
+5. **Start broad, then narrow** — broad search followed by filtered one beats one overly-specific search
 
 ---
 
 ## Budget Management
 
-The `budget` parameter controls search depth. Use it to balance thoroughness against speed and cost.
-
-### Low Budget (Quick Response)
-
-```
-recall(query, budget='low')
-```
-
-- Prioritize speed over completeness
-- If the first result looks good, stop there
-- Don't drill down through multiple layers unless clearly necessary
-- Good for: simple factual lookups, context gathering, dedup checks
-
-### Mid Budget (Balanced)
-
-```
-recall(query, budget='mid')
-```
-
-- Check multiple sources when the question warrants it
-- Verify stale data if it's central to the answer
-- Don't over-explore, but ensure reasonable coverage
-- Good for: most conversational queries, entity resolution
-
-### High Budget (Thorough)
-
-```
-recall(query, budget='high')
-```
-
-- Explore comprehensively before answering
-- Search across all layers
-- Use multiple query variations for coverage
-- Verify information across layers
-- Good for: complex questions, building mental models, deep reflection
-
-### Budget Selection Heuristic
-
-```
-Is this a simple factual lookup?           -> low
-Is this a conversational question?         -> mid
-Is this building a report or analysis?     -> high
-Is this a dedup check during retain?       -> low
-Is this entity resolution during retain?   -> mid
-```
-
----
-
-## Searching Entities
-
-Use `scope=['entities']` to search the entity store directly. This returns entity records — useful for finding related or similar entities, resolving identities, and understanding who/what exists in memory.
-
-```
-recall("Tyler", scope=['entities'])
-  -> Tyler Shaver (person, is_user=TRUE, mention_count=842)
-  -> Tyler Johnson (person, mention_count=15)
-  -> tyler@anthropic.com (email, merged_into -> Tyler Shaver)
-
-recall("engineering team", scope=['entities'])
-  -> Engineering (org, mention_count=200)
-  -> Sarah Chen (person, tagged 'team:engineering')
-  -> Mike Torres (person, tagged 'team:engineering')
-```
-
-### When to Search Entities
-
-- **Entity resolution during retain** — finding if an entity already exists before creating a new one
-- **Disambiguation** — multiple entities share a name, need to see all candidates
-- **Exploration** — "who are all the people linked to this project?"
-- **Merge candidate discovery** — finding entities that might be the same person/thing
-
-Entity search uses name matching (normalized) and semantic similarity on entity names. It follows `merged_into` chains to return canonical entities. Results include aliases (all entities merged into the canonical one).
-
-**Entity search is NOT in the default scope.** You must explicitly request `scope=['entities']`. This keeps normal recall() queries focused on knowledge (facts/observations/models) rather than identity records.
-
----
-
-## Entity-Scoped Search
-
-Use the `entity` parameter to search within a specific entity's context. This is more precise than including the entity name in the query string.
-
-```
-# These are different:
-recall("projects", entity="Tyler")           # Facts linked to Tyler about projects
-recall("Tyler's projects")                   # Semantic search for "Tyler's projects"
-
-# The entity filter uses the fact_entities junction:
-#   facts -> fact_entities -> entities WHERE entity.name = "Tyler"
-# This is exact, not semantic.
-```
-
-### When to Use Entity Filters
-
-- When you know the exact entity and want their facts
-- When the entity name is common and would pollute semantic search
-- When you want to find all knowledge about a specific person/project
-
-### When to Use Query-Only
-
-- When exploring broadly
-- When the entity relationship is uncertain
-- When you want semantically similar results even about other entities
-
----
-
-## Combining Parameters
-
-Parameters compose naturally:
-
-```
-# Recent facts about Tyler from Slack
-recall("standup updates",
-       scope=['facts'],
-       entity="Tyler",
-       platform="slack",
-       time_after=1707955200000)
-
-# Observations about the engineering team
-recall("engineering team dynamics",
-       scope=['observations'],
-       entity="engineering")
-
-# Everything about a project in the last month
-recall("Project Nexus",
-       time_after=1705363200000,
-       budget='high')
-```
+| Budget | Behavior | Use Case |
+|---|---|---|
+| `low` | Prioritize speed. 1-2 searches. Stop at first good result. | Simple lookups, dedup checks |
+| `mid` | Check multiple sources. Verify stale data if central. | Most queries, entity resolution |
+| `high` | Explore comprehensively. Multiple query variations. Cross-layer verification. | Complex questions, deep research |
 
 ---
 
 ## Anti-Patterns
 
-### Don't Hallucinate Before Searching
+**Don't hallucinate before searching.** Always search before claiming knowledge. If no results, say you don't have that information.
 
-```
-BAD:  "Tyler likes pizza" (without searching first)
-GOOD: recall("Tyler food preferences") -> then answer based on results
-```
+**Don't over-search.** Match search effort to question complexity and budget.
 
-**Always search before claiming knowledge.** If no results come back, say you don't have that information.
+**Don't ignore staleness.** When an observation has a `successor_id`, follow the chain to the head.
 
-### Don't Over-Search
-
-```
-BAD:  10 recall() calls for "What's Tyler's favorite color?"
-GOOD: 1-2 recall() calls, then answer or say "I don't know"
-```
-
-Match search effort to question complexity and budget.
-
-### Don't Ignore Staleness
-
-```
-BAD:  Return a stale observation as current fact
-GOOD: Note that the observation may be outdated, verify if needed
-```
-
-### Don't Echo Questions as Queries
-
-```
-BAD:  recall("Can you tell me about the relationship between Tyler and Sarah?")
-GOOD: recall("Tyler Sarah relationship") or recall("Tyler Sarah", entity="Tyler")
-```
-
-Strip conversational framing. Search for entities and concepts, not questions.
+**Don't echo questions as queries.** Strip conversational framing. Search for entities and concepts, not questions.
 
 ---
 
 ## See Also
 
-- `MEMORY_SYSTEM.md` -- Full memory architecture and schemas
-- `MEMORY_REFLECT_SKILL.md` -- Deep research and mental model creation
-- `MEMORY_WRITER.md` -- How memory is written (uses this skill for dedup)
+- `../MEMORY_SYSTEM.md` — Full memory architecture
+- `../MEMORY_RECALL.md` — Recall API and strategies
+- `MEMORY_REFLECT_SKILL.md` — Deep research and mental model creation

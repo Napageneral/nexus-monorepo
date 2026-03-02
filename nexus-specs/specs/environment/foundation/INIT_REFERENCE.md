@@ -41,7 +41,8 @@ nexus init [--workspace <path>]
     │   ├── events.db                  # Event ledger (empty, schema applied)
     │   ├── agents.db                  # Agent sessions (empty, schema applied)
     │   ├── identity.db                # Contacts, directory, entities, auth, ACL (empty, schema applied)
-    │   ├── memory.db                  # Facts, episodes, analysis (empty, schema applied)
+    │   ├── memory.db                  # Elements, sets, jobs (empty, schema applied)
+    │   ├── work.db                    # Work items, tasks, queue (empty, schema applied)
     │   ├── embeddings.db              # Semantic vector index (empty, schema applied)
     │   └── runtime.db                 # Request traces, adapters, automations, bus (empty, schema applied)
     ├── agents/
@@ -57,7 +58,7 @@ nexus init [--workspace <path>]
 | Path | Purpose |
 |------|---------|
 | `skills/` | Flat skills directory — no subdirectories. Internal metadata on each skill tracks its type (tool, connector, guide). |
-| `state/data/` | All 6 databases |
+| `state/data/` | All 7 databases |
 | `state/agents/` | Agent bootstrap template; agent persona subdirectories created during onboarding |
 | `state/user/` | User identity files (created during onboarding) |
 | `state/credentials/` | Credential pointers/index (populated during credential sync/scan) |
@@ -81,7 +82,8 @@ All databases are created eagerly by init with their current schema applied. The
 | `events.db` | `state/data/events.db` | Event ledger |
 | `agents.db` | `state/data/agents.db` | Agent sessions |
 | `identity.db` | `state/data/identity.db` | Contacts, directory, entities, auth, ACL |
-| `memory.db` | `state/data/memory.db` | Facts, episodes, analysis (Memory System) |
+| `memory.db` | `state/data/memory.db` | Elements, sets, jobs (Memory System) |
+| `work.db` | `state/data/work.db` | Work items, tasks, queue |
 | `embeddings.db` | `state/data/embeddings.db` | Semantic vector index |
 | `runtime.db` | `state/data/runtime.db` | Request traces, adapters, automations, bus |
 
@@ -124,7 +126,7 @@ crypto.randomBytes(24).toString('hex')
 
 **`BOOTSTRAP.md` is permanent.** It is never deleted after onboarding. It serves as a reusable template for creating new agent personas at any time. Bootstrap detection uses a different signal — the absence of agent persona subdirectories in `state/agents/`.
 
-**`state/workspace/` is for automation workspaces.** Not for agent persona files. Meeseeks-pattern automations (memory-reader, memory-writer, etc.) get their own subdirectory here at runtime startup. Agent personas go in `state/agents/{name}/` with `IDENTITY.md` and `SOUL.md`.
+**`state/workspace/` is for automation workspaces.** Not for agent persona files. Meeseeks-pattern automations (memory-injection, memory-writer, etc.) get their own subdirectory here at runtime startup. Agent personas go in `state/agents/{name}/` with `IDENTITY.md` and `SOUL.md`.
 
 **`config.json` is standalone.** Located at `state/config.json`, not nested under `state/nexus/`.
 
@@ -179,7 +181,7 @@ See `WORKSPACE_LIFECYCLE.md` Phase 3 for the full onboarding flow.
 
 - Directory structure matches the tree above
 - `state/config.json` exists with `runtime.port`, `runtime.bind: "loopback"`, `runtime.auth.mode: "token"`, `runtime.auth.token` (non-empty string)
-- All 6 DB files exist under `state/data/`: `events.db`, `agents.db`, `identity.db`, `memory.db`, `embeddings.db`, `runtime.db`
+- All 7 DB files exist under `state/data/`: `events.db`, `agents.db`, `identity.db`, `memory.db`, `work.db`, `embeddings.db`, `runtime.db`
 - `state/agents/BOOTSTRAP.md` exists and is non-empty
 - `AGENTS.md` exists at workspace root
 - `skills/` directory exists (flat, no subdirectories)

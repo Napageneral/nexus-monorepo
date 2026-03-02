@@ -86,7 +86,7 @@ Same semantic function in two different places.
 - `sender`: resolved sender identity
 - `receiver`: resolved target (agent/system/entity)
 - `delivery`: platform/space/container/thread context
-- `operation`: event/hook/method metadata (e.g. `memory:retain-episode`, control-plane method)
+- `operation`: event/hook/method metadata (e.g. `episode-created`, control-plane method)
 - `agent_request`: desired role/persona/session/model/toolset hints
 - `timestamp`: authoritative runtime receive time
 
@@ -191,7 +191,7 @@ To support permissions across contacts/entities/personas/roles, policy matching 
 
 ### 7.4 Operation Selectors (What path)
 
-- hook point (`memory:retain-episode`, etc.)
+- hook point (`episode-created`, `worker:pre_execution`, etc.)
 - event type
 - control-plane method
 - session class (`main`, `worker`, `automation`, etc.)

@@ -40,7 +40,8 @@ Init is fully deterministic. Everything below is created eagerly (no lazy creati
 | `state/data/events.db` | Event ledger |
 | `state/data/agents.db` | Agent sessions |
 | `state/data/identity.db` | Contacts, directory, entities, auth, ACL |
-| `state/data/memory.db` | Facts, episodes, analysis (Memory System) |
+| `state/data/memory.db` | Elements, sets, jobs (Memory System) |
+| `state/data/work.db` | Work items, tasks, queue |
 | `state/data/embeddings.db` | Semantic vector index |
 | `state/data/runtime.db` | Request traces, adapters, automations, bus |
 
@@ -82,14 +83,14 @@ Seeded automations:
 
 | Workspace | Path |
 |-----------|------|
-| memory-reader | `state/workspace/memory-reader/` |
+| memory-injection | `state/workspace/memory-injection/` |
 | memory-writer | `state/workspace/memory-writer/` |
 
 ### Database rows (automations table)
 
 | Row | Purpose |
 |-----|---------|
-| `memory-reader` | Reads and surfaces relevant memory |
+| `memory-injection` | Reads and surfaces relevant memory |
 | `memory-writer` | Writes new memories to memory system |
 | `command-logger` | Logs commands/events |
 | `boot-md` | Boot-time markdown generation |
@@ -132,7 +133,7 @@ These are common misconceptions. None of these paths are valid in a Nexus worksp
 
 - **BOOTSTRAP.md is permanent.** It is never deleted after onboarding. Assertions should expect it to exist at all times.
 - **`state/workspace/` is exclusively for automation workspaces.** No agent identity or user files belong here.
-- **All 6 databases exist after init.** Do not wait for runtime to assert DB file existence; assert immediately after init.
+- **All 7 databases exist after init.** Do not wait for runtime to assert DB file existence; assert immediately after init.
 - **`state/config.json` contains a generated auth token.** Validate it exists and has a non-empty `auth` field (or equivalent).
 - **Phase ordering matters.** Init must complete before runtime startup. Runtime startup must complete before onboarding assertions on automation workspaces.
 

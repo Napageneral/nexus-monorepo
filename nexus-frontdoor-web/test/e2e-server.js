@@ -60,6 +60,48 @@ const sessions = new Map([
       active_workspace_id: "tenant-dev",
     },
   ],
+  [
+    "sid-provisioning",
+    {
+      user_id: "u-provisioning",
+      entity_id: "ent-provisioning",
+      username: "provisioning",
+      display_name: "Provisioning User",
+      email: "provisioning@example.com",
+      tenant_id: "",
+      roles: ["workspace_owner"],
+      scopes: ["runtime.connect", "workspace.read", "workspace.select"],
+      active_workspace_id: "",
+    },
+  ],
+  [
+    "sid-noapp",
+    {
+      user_id: "u-noapp",
+      entity_id: "ent-noapp",
+      username: "noapp",
+      display_name: "No App User",
+      email: "noapp@example.com",
+      tenant_id: "tenant-noapp",
+      roles: ["workspace_owner"],
+      scopes: ["runtime.connect", "workspace.read", "workspace.select"],
+      active_workspace_id: "tenant-noapp",
+    },
+  ],
+  [
+    "sid-runtime-down",
+    {
+      user_id: "u-runtime-down",
+      entity_id: "ent-runtime-down",
+      username: "runtime-down",
+      display_name: "Runtime Down User",
+      email: "runtime-down@example.com",
+      tenant_id: "tenant-runtime-down",
+      roles: ["workspace_owner"],
+      scopes: ["runtime.connect", "workspace.read", "workspace.select"],
+      active_workspace_id: "tenant-runtime-down",
+    },
+  ],
 ]);
 
 const workspaceItems = [
@@ -76,6 +118,38 @@ const workspaceItems = [
     is_default: false,
   },
 ];
+
+function sessionIdFromRequest(req) {
+  const cookies = parseCookies(req.headers.cookie);
+  return String(cookies[SESSION_COOKIE] || "").trim();
+}
+
+function workspacesForSessionId(sessionId) {
+  if (sessionId === "sid-provisioning") {
+    return [];
+  }
+  if (sessionId === "sid-noapp") {
+    return [
+      {
+        workspace_id: "tenant-noapp",
+        display_name: "Tenant No App",
+        role: "workspace_owner",
+        is_default: true,
+      },
+    ];
+  }
+  if (sessionId === "sid-runtime-down") {
+    return [
+      {
+        workspace_id: "tenant-runtime-down",
+        display_name: "Tenant Runtime Down",
+        role: "workspace_owner",
+        is_default: true,
+      },
+    ];
+  }
+  return workspaceItems;
+}
 
 const workspaceBilling = new Map([
   [
@@ -188,6 +262,14 @@ async function frontdoorHandler(req, res) {
       return;
     }
     const workspaceId = String(parsed.searchParams.get("workspace_id") || session.active_workspace_id || "").trim();
+    if (workspaceId === "tenant-runtime-down") {
+      sendJson(res, 503, { ok: false, error: "nex_runtime_unavailable" });
+      return;
+    }
+    if (workspaceId === "tenant-noapp") {
+      sendJson(res, 200, { ok: true, items: [] });
+      return;
+    }
     const items = [
       {
         app_id: "control",
@@ -259,10 +341,15 @@ async function frontdoorHandler(req, res) {
       sendJson(res, 401, { ok: false, error: "unauthorized" });
       return;
     }
+    const sessionId = sessionIdFromRequest(req);
+    const items = workspacesForSessionId(sessionId);
+    const activeWorkspaceId = items.some((item) => item.workspace_id === session.active_workspace_id)
+      ? session.active_workspace_id
+      : "";
     sendJson(res, 200, {
       ok: true,
-      active_workspace_id: session.active_workspace_id,
-      items: workspaceItems,
+      active_workspace_id: activeWorkspaceId,
+      items,
     });
     return;
   }
@@ -270,6 +357,22 @@ async function frontdoorHandler(req, res) {
     const session = getSession(req);
     if (!session) {
       sendJson(res, 401, { ok: false, error: "unauthorized" });
+      return;
+    }
+    const sessionId = sessionIdFromRequest(req);
+    if (sessionId === "sid-provisioning") {
+      sendJson(res, 200, {
+        ok: true,
+        status: "running",
+        request: {
+          request_id: "req-provisioning-1",
+          status: "running",
+          stage: "tenant_bootstrap",
+          error: null,
+          tenant_id: null,
+          updated_at_ms: Date.now(),
+        },
+      });
       return;
     }
     sendJson(res, 200, {
@@ -345,6 +448,91 @@ async function frontdoorHandler(req, res) {
           provider: "stripe",
         },
       })),
+    });
+    return;
+  }
+  const launchDiagnosticsMatch = pathname.match(/^\/api\/workspaces\/([^/]+)\/launch-diagnostics$/);
+  if (method === "GET" && launchDiagnosticsMatch) {
+    const session = getSession(req);
+    if (!session) {
+      sendJson(res, 401, { ok: false, error: "unauthorized" });
+      return;
+    }
+    const workspaceId = decodeURIComponent(launchDiagnosticsMatch[1] || "").trim();
+    if (!workspaceId) {
+      sendJson(res, 400, { ok: false, error: "missing_workspace_id" });
+      return;
+    }
+    if (workspaceId === "tenant-noapp") {
+      sendJson(res, 200, {
+        ok: true,
+        workspace_id: workspaceId,
+        launch_ready: false,
+        provisioning: null,
+        runtime_health: {
+          ok: true,
+          http_status: 200,
+          error: null,
+          body: { ok: true, status: "healthy" },
+        },
+        app_catalog: {
+          ok: true,
+          http_status: 200,
+          error: null,
+          app_count: 0,
+          items: [],
+        },
+      });
+      return;
+    }
+    if (workspaceId === "tenant-runtime-down") {
+      sendJson(res, 200, {
+        ok: true,
+        workspace_id: workspaceId,
+        launch_ready: false,
+        provisioning: null,
+        runtime_health: {
+          ok: false,
+          http_status: 503,
+          error: "nex_runtime_unavailable",
+          body: null,
+        },
+        app_catalog: {
+          ok: false,
+          http_status: 503,
+          error: "nex_runtime_unavailable",
+          app_count: 0,
+          items: [],
+        },
+      });
+      return;
+    }
+    sendJson(res, 200, {
+      ok: true,
+      workspace_id: workspaceId,
+      launch_ready: true,
+      provisioning: null,
+      runtime_health: {
+        ok: true,
+        http_status: 200,
+        error: null,
+        body: { ok: true, status: "healthy" },
+      },
+      app_catalog: {
+        ok: true,
+        http_status: 200,
+        error: null,
+        app_count: workspaceId === "tenant-ops" ? 4 : 1,
+        items:
+          workspaceId === "tenant-ops"
+            ? [
+                { app_id: "control", entry_path: "/app/control/chat" },
+                { app_id: "oracle", entry_path: "/app/oracle/" },
+                { app_id: "glowbot", entry_path: "/app/glowbot/" },
+                { app_id: "spike", entry_path: "/app/spike/" },
+              ]
+            : [{ app_id: "control", entry_path: "/app/control/chat" }],
+      },
     });
     return;
   }

@@ -124,7 +124,7 @@ Event: { platform: "imessage", sender_id: "+15551234567" }
          │  FROM contacts c             │
          │  WHERE c.platform =          │
          │  'imessage' AND              │
-         │  c.sender_id =              │
+         │  c.contact_id =             │
          │  '+15551234567'              │
          │                              │
          │  → Then resolve entity via   │
@@ -577,14 +577,14 @@ entities (
 contacts (
   platform TEXT NOT NULL,       -- imessage, discord, etc.
   space_id TEXT NOT NULL DEFAULT '',
-  sender_id TEXT NOT NULL,      -- +1234567, @atlas_bot
+  contact_id TEXT NOT NULL,     -- +1234567, @atlas_bot
   entity_id TEXT NOT NULL,
   first_seen INTEGER NOT NULL,
   last_seen INTEGER NOT NULL,
   message_count INTEGER NOT NULL DEFAULT 0,
-  sender_name TEXT,
+  contact_name TEXT,
   avatar_url TEXT,
-  PRIMARY KEY (platform, space_id, sender_id),
+  PRIMARY KEY (platform, space_id, contact_id),
   FOREIGN KEY (entity_id) REFERENCES entities(id)
 );
 
@@ -596,7 +596,7 @@ entity_tags (
 );
 ```
 
-> **Note (DATABASE_ARCHITECTURE.md):** The old `entity_identities` table is superseded by the `contacts` table, which uses `(platform, space_id, sender_id)` instead of `(channel, identifier)`. Entities, contacts, and entity_tags all live in `identity.db`.
+> **Note (DATABASE_ARCHITECTURE.md):** The old `entity_identities` table is superseded by the `contacts` table, which uses `(platform, space_id, contact_id)` instead of `(channel, identifier)`. Entities, contacts, and entity_tags all live in `identity.db`.
 
 **Key insight:** Personas are entities that OWN identities (bot accounts). People HAVE identities (contact info).
 

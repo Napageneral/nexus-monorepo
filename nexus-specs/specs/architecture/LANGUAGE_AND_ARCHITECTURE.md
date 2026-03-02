@@ -32,9 +32,9 @@ TypeScript (nex daemon -- single process)
 | Automations         Consolidation    |
 +------------------+-------------------+
                    |
-     6 SQLite databases under state/data/
+     7 SQLite databases under state/data/
      (events, agents, identity, memory,
-      embeddings, runtime)
+      embeddings, runtime, work)
 ```
 
 ### What Changed
@@ -43,18 +43,19 @@ The old Go memory subprocess has been eliminated. All memory pipeline, recall, s
 
 The memory system is a unified subsystem inside nex -- not a separate component.
 
-### Single Process, 6 Databases
+### Single Process, 7 Databases
 
-The nex process reads and writes all 6 SQLite databases:
+The nex process reads and writes all 7 SQLite databases:
 
 | Database | Purpose |
 |----------|---------|
 | **events.db** | Every inbound/outbound event, normalized and stored. FTS5 full-text index. |
 | **agents.db** | Session lifecycle, turns, messages, tool calls, compactions, artifacts. |
 | **identity.db** | Entities, identity resolution, contacts, auth tokens, the Identity Graph. |
-| **memory.db** | Knowledge graph: entities, relationships, episodes, observations, mental models. |
+| **memory.db** | Knowledge graph: elements (facts, observations, mental models), sets, jobs. |
 | **embeddings.db** | Vector embeddings for semantic search (sqlite-vec). |
 | **runtime.db** | Pipeline requests, automations, IAM grants/audit, adapter state, import jobs. |
+| **work.db** | Task definitions, work items, workflows, sequences for planned and scheduled work. |
 
 SQLite WAL mode enables concurrent reads. Write contention is isolated by database -- hot-path writes to events.db, agents.db, and identity.db don't block each other.
 

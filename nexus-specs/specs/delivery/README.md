@@ -11,7 +11,7 @@ Event adapters connect Nexus to external platforms (and internal event sources).
 - **Inbound:** Receiving messages, normalizing to `NexusEvent`
 - **Outbound:** Formatting and delivering responses
 
-Runtime operation semantics are specified in `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md` (single operation model with `NexusEvent.operation`).
+Runtime operation semantics are specified in `../nex/NEXUS_REQUEST_TARGET.md` (canonical pipeline and data bus).
 
 ---
 
@@ -32,7 +32,7 @@ Runtime operation semantics are specified in `../nex/UNIFIED_RUNTIME_OPERATION_M
 | `platforms/` | ✅ Done | Per-platform specs (9 platforms) |
 | `sdk/ADAPTER_CREDENTIALS.md` | ✅ Active | How adapter accounts link to credentials + how NEX injects secrets |
 | `sdk/ADAPTER_SDK_TYPESCRIPT.md` | ✅ Active | Detailed spec for the TypeScript adapter SDK |
-| `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md` | ✅ Locked | Canonical runtime operation model (single `NexusEvent` envelope + operation registry) and boundary between runtime surfaces and event adapters |
+| `../nex/NEXUS_REQUEST_TARGET.md` | ✅ Locked | Canonical NexusRequest data bus, 5-stage pipeline, and boundary between runtime and event adapters |
 
 ### Upstream Reference
 
@@ -49,7 +49,7 @@ Runtime operation semantics are specified in `../nex/UNIFIED_RUNTIME_OPERATION_M
 
 **Read `ADAPTER_SYSTEM.md`** for the full event-adapter operational system (registration, lifecycle, accounts).  
 **Read `INBOUND_INTERFACE.md`** and **`OUTBOUND_INTERFACE.md`** for data contracts (NexusEvent, DeliveryResult, ChannelCapabilities).
-**Read `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`** for runtime operation semantics and surface boundaries.
+**Read `../nex/NEXUS_REQUEST_TARGET.md`** for runtime operation semantics and the pipeline data bus.
 
 ---
 
@@ -130,7 +130,7 @@ Per-platform details are consolidated in:
 
 ## Related Specs
 
-- `../nex/UNIFIED_RUNTIME_OPERATION_MODEL.md` — Canonical operation envelope and lifecycle
-- `../nex/NEXUS_REQUEST.md` — Legacy lifecycle baseline (superseded direction)
+- `../nex/NEXUS_REQUEST_TARGET.md` — Canonical NexusRequest data bus and pipeline
+- `../nex/AGENT_DELIVERY.md` — Agent-driven delivery model
 - `../iam/` — IAM processes events from adapters
-- `../broker/` — Broker routes to adapters
+- `../agents/` — Broker orchestrates agent execution

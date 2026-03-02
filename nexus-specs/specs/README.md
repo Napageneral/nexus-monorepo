@@ -1,7 +1,7 @@
 # Nexus Architecture Overview
 
-**Status:** CANONICAL OVERVIEW (legacy pipeline depiction; unified operation model is authoritative)
-**Last Updated:** 2026-02-25
+**Status:** CANONICAL OVERVIEW
+**Last Updated:** 2026-03-02
 **Database Layout:** See `DATABASE_ARCHITECTURE.md` for the canonical 7-database layout
 
 ---
@@ -18,17 +18,13 @@ At the heart of Nexus is **NEX** (Nexus Event Exchange) — a central orchestrat
 
 **Key insight:** Everything is an event. A text message, an email, a calendar notification, a timer tick — all flow through NEX.
 
-Canonical direction update:
-
-1. Runtime operation semantics are authoritative in `nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`.
-2. This overview keeps historical diagrams/terminology for migration context.
-3. If this page conflicts with `nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`, the unified model wins.
+The canonical pipeline and data bus specification is in `nex/NEXUS_REQUEST_TARGET.md`.
 
 ---
 
-## The Pipeline (Legacy Rendering)
+## The Pipeline
 
-NEX processes runtime operations through a staged flow. The diagram below is a migration-era rendering (superseded in detail by `nex/UNIFIED_RUNTIME_OPERATION_MODEL.md`):
+NEX processes all operations through a 5-stage pipeline. The canonical spec is `nex/NEXUS_REQUEST_TARGET.md`.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -47,45 +43,34 @@ NEX processes runtime operations through a staged flow. The diagram below is a m
 │  ┌─────────────────────────────────────────────────────────────────────────┐    │
 │  │                              PIPELINE                                    │    │
 │  │                                                                          │    │
-│  │   1. receiveEvent       Create NexusRequest from NexusEvent             │    │
-│  │        ↓                Write event to Events Ledger (async)            │    │
+│  │   1. acceptRequest      Parse envelope, assign IDs, normalize,          │    │
+│  │        ↓                deduplicate, write event to events.db           │    │
 │  │                                                                          │    │
 │  │   2. resolvePrincipals  WHO sent this / who is this for?                │    │
-│  │        ↓                Populate: sender + receiver                     │    │
+│  │        ↓                Resolve sender + receiver to Entities           │    │
 │  │                                                                          │    │
 │  │   3. resolveAccess      WHAT can they do? Evaluate ACL policies         │    │
-│  │        ↓                Populate: access (permissions, routing)         │    │
+│  │        ↓                Produce allow/deny decision with permissions    │    │
 │  │                                                                          │    │
-│  │   4. runAutomations     Evaluate hook-triggered automations             │    │
-│  │        ↓                Populate: triggers, may handle event            │    │
+│  │   4. executeOperation   Dispatch to operation handler.                  │    │
+│  │        ↓                For event.ingest: broker assembles context,     │    │
+│  │                         runs agent. Agent invokes delivery tools.       │    │
 │  │                                                                          │    │
-│  │   5. assembleContext    Gather context, create/resume session           │    │
-│  │        ↓                Build AssembledContext (history, memory, config) │    │
-│  │                                                                          │    │
-│  │   6. runAgent           Execute agent with assembled context            │    │
-│  │        ↓                Generate response, call tools (streaming)       │    │
-│  │                                                                          │    │
-│  │   7. deliverResponse    Format and deliver via out-adapter              │    │
-│  │        ↓                Handle formatting, chunking                     │    │
-│  │                                                                          │    │
-│  │   8. finalize           Write trace, emit outbound event                │    │
+│  │   5. finalizeRequest    Persist pipeline trace, set final status        │    │
 │  │                                                                          │    │
 │  └─────────────────────────────────────────────────────────────────────────┘    │
 │                                                                                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Pipeline Hooks
+### Automation Hookpoints
 
-Hooks run after each stage and on terminal finalize:
+Automations fire at stage boundaries — they are NOT a separate pipeline stage. Hooks can inspect the request, contribute context enrichment, override agent configuration, or fully handle a request (skipping the agent entirely).
 
-```
-afterReceiveEvent → afterResolvePrincipals → afterResolveAccess
-→ afterRunAutomations → afterAssembleContext → afterRunAgent → afterDeliverResponse
-→ onFinalize
-```
-
-Hooks can observe, modify the NexusRequest, or skip remaining stages.
+Key hookpoints:
+- `worker:pre_execution` — before every agent execution (memory injection)
+- `episode-created` — when an episode clips (memory writer dispatch)
+- `episode-retained` — after writer completes (consolidation dispatch)
 
 ---
 
@@ -95,22 +80,21 @@ The pipeline stages map to core components:
 
 | Stage | Component | Description |
 |-------|-----------|-------------|
-| `receiveEvent` | **In-Adapters** | Create NexusRequest from NexusEvent |
-| `resolvePrincipals` | **IAM** | WHO sent this / WHO is this for? Resolve sender + receiver principals |
-| `resolveAccess` | **IAM** | WHAT can they do? Policy evaluation |
-| `runAutomations` | **Automations** | Evaluate automations at hook points |
-| `assembleContext` | **Broker** | Gather context, create/resume session |
-| `runAgent` | **Broker** | Execute agent with assembled context |
-| `deliverResponse` | **Out-Adapters** | Format and deliver to platforms |
-| `finalize` | **NEX** | Always write terminal trace and emit outbound event |
+| `acceptRequest` | **NEX** | Parse envelope, assign IDs, normalize, deduplicate, write event |
+| `resolvePrincipals` | **IAM** | Resolve sender + receiver raw identifiers to Entity objects |
+| `resolveAccess` | **IAM** | Evaluate ACL policies, produce allow/deny with permissions |
+| `executeOperation` | **Broker** | Assemble context, run agent. Agent invokes delivery tools directly |
+| `finalizeRequest` | **NEX** | Persist pipeline trace, set final status |
 
 **Component view:**
 ```
 NEX orchestrates:
-  In-Adapters → IAM → Automations → Broker → Out-Adapters
+  Adapters → NEX → IAM → Broker (agent delivers via tools) → NEX
                               ↓
                     System of Record + Memory
 ```
+
+**Key:** There is no separate delivery stage. The agent decides if/when/where to respond using delivery tools during `executeOperation`. See `nex/AGENT_DELIVERY.md`.
 
 ---
 
@@ -125,7 +109,7 @@ Primary data stores:
 | **events.db** | What happened | All inbound/outbound events (permanent) |
 | **agents.db** | AI conversations | Sessions, turns, messages, tool calls |
 | **identity.db** | Who is involved | Contacts, directory, entities, auth, ACL |
-| **memory.db** | What the AI remembers | Facts, episodes, analysis pipeline |
+| **memory.db** | What the AI remembers | Elements, sets, jobs |
 | **embeddings.db** | Semantic search | Vector representations for similarity search |
 | **runtime.db** | Pipeline traces | NexusRequest lifecycle, adapters, automations, bus |
 | **work.db** | What should happen | Tasks, work items, workflows, sequences |
@@ -140,11 +124,11 @@ Mutable analysis layer that makes raw data useful:
 
 | Component | Database | Purpose |
 |-----------|----------|---------|
-| **Facts** | memory.db | Extracted knowledge about entities |
-| **Episodes** | memory.db | Chunks of events grouped for analysis |
+| **Elements** | memory.db | Facts, observations, mental models about entities |
+| **Sets** | memory.db | Grouped collections of elements for analysis |
+| **Jobs** | memory.db | Memory pipeline processing tasks |
 | **Entities** | identity.db | Named entities, knowledge graph, merge candidates |
 | **Embeddings** | embeddings.db | Vector representations for semantic search |
-| **Analysis** | memory.db | Insights, patterns, learned relationships |
 
 **Key insight:** System of Record is facts. Memory is understanding.
 
@@ -156,14 +140,11 @@ Every event creates a `NexusRequest` object that flows through the pipeline, acc
 
 | Stage | Adds to NexusRequest |
 |-------|---------------------|
-| `receiveEvent` | `event`, `delivery` (channel, thread, etc.) |
-| `resolvePrincipals` | `sender` + `receiver` principals |
-| `resolveAccess` | `access` (decision, permissions, routing) |
-| `runAutomations` | `triggers` (which fired, enrichment, overrides) |
-| `assembleContext` | `agent` (turn_id, model, token_budget, context metadata) |
-| `runAgent` | `response` (content, tool_calls, usage) |
-| `deliverResponse` | `delivery_result` (message IDs, success) |
-| `finalize` | `pipeline` (timing, trace), `status` |
+| `acceptRequest` | `routing` (platform, sender, receiver, container), `payload` (content, attachments, recipients) |
+| `resolvePrincipals` | `sender` + `receiver` Entity objects |
+| `resolveAccess` | `access` (decision, permissions) |
+| `executeOperation` | `agent` (session, turn, response, tool_calls, usage) |
+| `finalizeRequest` | `pipeline` (timing, trace), `status` |
 
 The complete NexusRequest is persisted to runtime.db for debugging and audit.
 
@@ -197,31 +178,31 @@ Determines WHO can interact and WHAT they can do:
 
 ### Automations
 
-Programmatic event handlers:
-- **Pipeline Hooks** — Run at NEX pipeline stages
-- **Event Automations** — User/agent-created automation scripts
+Hookpoint-triggered handlers:
+- Fire at stage boundaries (not a separate pipeline stage)
 - Match events via declarative triggers
-- Execute TypeScript handlers in parallel
-- Can extract data, enrich context, or handle events entirely
+- Execute TypeScript handlers
+- Can extract data, enrich context, or handle events entirely (skipping the agent)
+- Memory meeseeks (writer, consolidator, injection) are automations
 
 **See:** `nex/automations/`
 
 ### Broker
 
-Orchestrates agent execution:
+Orchestrates agent execution within `executeOperation`:
 - Assembles conversation context (history + memory)
 - Manages sessions, threads, turns
-- Coordinates streaming to out-adapters
+- Runs the agent — agent invokes delivery tools directly
 - Writes directly to Agents Ledger
 
-**See:** `agents/`
+**See:** `agents/`, `nex/AGENT_DELIVERY.md`
 
-### Out-Adapters
+### Adapters (Delivery)
 
-Format and deliver responses:
+Connect to platforms for inbound events and outbound delivery:
 - Platform-specific formatting (char limits, markdown support)
-- Message chunking if needed
-- Response becomes an event (closes the loop)
+- Message chunking and streaming
+- Agent invokes a single delivery tool; adapter owns formatting/chunking
 
 **See:** `delivery/`
 
@@ -233,42 +214,37 @@ Format and deliver responses:
 
 ```
 1. eve receives iMessage from +1-555-MOM
-2. NEX creates NexusRequest
-3. IAM resolves +1-555-MOM → entity "Mom" (relationship: family)
-4. IAM grants: minimal tools, no shell, route to persona "Atlas"
-5. Hooks match: "mom-2fa-helper" triggers on Mom + content match
-6. Hook extracts: looking for Amazon code, checks email
-7. Hook handles: responds directly with code (skips agent)
-8. Deliver: sends via eve
-9. Complete: traces logged
+2. acceptRequest: NEX creates NexusRequest, writes event to events.db
+3. resolvePrincipals: resolves +1-555-MOM → entity "Mom" (relationship: family)
+4. resolveAccess: grants minimal tools, no shell, route to persona "Atlas"
+5. executeOperation: automation "mom-2fa-helper" triggers on Mom + content match
+6. Automation handles: checks email, responds directly with code (skips agent)
+7. finalizeRequest: traces logged
 ```
 
 ### Example 2: Colleague asks question on Discord
 
 ```
 1. discord-cli receives message in #general
-2. NEX creates NexusRequest
-3. IAM resolves discord:user123 → entity "Alex" (relationship: work)
-4. IAM grants: web search, calendar read, route to "Atlas"
-5. Hooks: none match
-6. Broker prepares: fetches conversation history, relevant context from memory
-7. Agent executes: generates response, calls web_search
-8. Deliver: sends to Discord (chunks if needed)
-9. Complete: traces logged
-10. Memory system (background): extracts entities from conversation
+2. acceptRequest: NEX creates NexusRequest, writes event to events.db
+3. resolvePrincipals: resolves discord:user123 → entity "Alex" (relationship: work)
+4. resolveAccess: grants web search, calendar read, route to "Atlas"
+5. executeOperation: broker assembles context, runs agent
+6. Agent calls web_search, then invokes delivery tool → adapter sends to Discord
+7. finalizeRequest: traces logged
+8. Memory system (background): episode clips, writer extracts facts
 ```
 
 ### Example 3: Timer tick (heartbeat)
 
 ```
-1. timer adapter emits 30-second tick (configurable via `tickIntervalMs`)
-2. NEX creates NexusRequest (sender: system)
-3. IAM: system sender, timer policies
-4. Hooks match: "email-check" (cron trigger)
-5. Hook executes: checks email, finds nothing urgent
-6. Hook returns: no action needed
-7. Pipeline exits early
-8. Complete: traces logged
+1. timer adapter emits cron event (configurable intervals)
+2. acceptRequest: NEX creates NexusRequest (sender: system)
+3. resolvePrincipals: system sender resolved
+4. resolveAccess: system sender, timer policies
+5. executeOperation: automation "email-check" triggers, checks email, finds nothing urgent
+6. Automation returns: no action needed, pipeline exits early
+7. finalizeRequest: traces logged
 ```
 
 ---
@@ -322,10 +298,9 @@ Specs are organized into domain-first folders:
 | Folder | Status | Description |
 |--------|--------|-------------|
 | **ledgers/** | ✅ Current | System of Record schemas (Events, Agents, Identity) |
-| **memory/** | ✅ Current | Memory system (facts, episodes, embeddings, analysis) |
+| **memory/** | ✅ Current | Memory system (elements, sets, jobs, embeddings) |
 | **DATABASE_ARCHITECTURE.md** | ✅ Current | Canonical 7-database layout and migration plan |
-| **CRM_ANALYSIS_AND_WORK_SYSTEM.md** | ✅ Current | CRM analysis, four-model pattern, work.db schema and execution model |
-| **ENTITY_ACTIVITY_DASHBOARD.md** | ✅ Current | Per-entity and aggregate CRM metrics, queries, visualizations |
+| **work-system/** | ✅ Current | CRM analysis, work.db schema, entity activity dashboard, workplans |
 
 ### Agent Environment (`environment/`)
 
@@ -348,8 +323,9 @@ Specs are organized into domain-first folders:
 
 ## Related Documents
 
-- `nex/NEX.md` — Full NEX specification
-- `nex/UNIFIED_RUNTIME_OPERATION_MODEL.md` — Canonical runtime operation model + envelope
-- `nex/NEXUS_REQUEST.md` — Legacy lifecycle baseline (superseded direction)
-- `agents/OVERVIEW.md` — Agent system architecture
-- `architecture/FORK_MAPPING.md` — Openclaw → Nexus mapping
+- `nex/NEXUS_REQUEST_TARGET.md` — Canonical NexusRequest data bus and 5-stage pipeline
+- `nex/AGENT_DELIVERY.md` — Agent-driven delivery model
+- `nex/DAEMON.md` — NEX daemon lifecycle (startup, signals, shutdown)
+- `agents/OVERVIEW.md` — Agent system architecture (Broker)
+- `memory/MEMORY_SYSTEM.md` — Memory system architecture
+- `architecture/NEXUS_STRUCTURE.md` — Codebase layout

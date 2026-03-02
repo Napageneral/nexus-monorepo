@@ -77,6 +77,20 @@
           <div class="row">
             <button id="openTenantAppBtn" class="primary">Open workspace</button>
           </div>
+          <hr />
+          <h3>Add product workspace</h3>
+          <p class="muted">
+            Provision another product workspace from this same account (for example: Spike in addition to GlowBot).
+          </p>
+          <label for="productProvisionSelect">Product</label>
+          <select id="productProvisionSelect">
+            <option value="glowbot">GlowBot</option>
+            <option value="spike">Spike</option>
+          </select>
+          <div class="row">
+            <button id="provisionProductWorkspaceBtn" type="button">Provision product workspace</button>
+          </div>
+          <p id="productProvisionSummary" class="muted"></p>
         </article>
 
         <article id="ownerInsightsPanel" class="card" hidden>

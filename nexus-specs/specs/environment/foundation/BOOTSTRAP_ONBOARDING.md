@@ -146,7 +146,7 @@ Define **who the agent is** -- identity, personality, values, boundaries.
 
 ### Automation Workspaces (`state/workspace/{name}/`)
 
-**Accumulated knowledge stores** for a specific function/role (memory-reader, memory-writer, etc.).
+**Accumulated knowledge stores** for a specific function/role (memory-injection, memory-writer, etc.).
 
 - Created by the automation seeder at runtime startup
 - One directory per automation that has `workspace_dir` set

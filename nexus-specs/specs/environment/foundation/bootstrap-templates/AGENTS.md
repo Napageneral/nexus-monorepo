@@ -126,7 +126,8 @@ If you encounter credentials (env vars, config files, CLI auth, .env files), **c
     │   ├── events.db      # Event ledger
     │   ├── agents.db      # Agent sessions
     │   ├── identity.db    # Contacts, directory, entities, auth, ACL
-    │   ├── memory.db      # Facts, episodes, analysis (Memory System)
+    │   ├── memory.db      # Elements, sets, jobs (Memory System)
+    │   ├── work.db        # Work items, tasks, queue
     │   ├── embeddings.db  # Semantic vector index
     │   └── runtime.db     # Request traces, adapters, automations, bus
     ├── agents/            # Agent personas

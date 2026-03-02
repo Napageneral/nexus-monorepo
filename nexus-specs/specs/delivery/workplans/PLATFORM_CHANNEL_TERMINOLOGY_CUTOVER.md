@@ -78,9 +78,9 @@ These remain because they are external contract language:
 
 | Current | Canonical | Meaning |
 |---|---|---|
-| `episodes.channel` | `episodes.platform` | Episode platform |
-| `episode_definitions.channel` | `episode_definitions.platform` | Definition scope platform |
-| `idx_episodes_channel` | `idx_episodes_platform` | Index rename |
+| `sets.channel` | `sets.platform` | Set platform |
+| `set_definitions.channel` | `set_definitions.platform` | Definition scope platform |
+| `idx_sets_channel` | `idx_sets_platform` | Index rename |
 
 ## 4.3 IAM Ledger (`identity.db`)
 
@@ -126,7 +126,7 @@ Minimum impacted areas (non-exhaustive):
    - `nex/src/db/memory.ts`
    - `nex/src/memory/recall.ts`
    - `nex/src/memory/retain-live.ts`
-   - `nex/src/memory/retain-episodes.ts`
+   - `nex/src/memory/retain-sets.ts`
    - `nex/src/cli/memory-backfill-cli.ts`
 3. IAM schema + audit:
    - `nex/src/db/identity.ts`
@@ -193,10 +193,10 @@ After column rename, all triggers referencing `from_channel` or JSON key `$.chan
 
 ```sql
 BEGIN;
-ALTER TABLE episodes RENAME COLUMN channel TO platform;
-ALTER TABLE episode_definitions RENAME COLUMN channel TO platform;
-DROP INDEX IF EXISTS idx_episodes_channel;
-CREATE INDEX IF NOT EXISTS idx_episodes_platform ON episodes(platform);
+ALTER TABLE sets RENAME COLUMN channel TO platform;
+ALTER TABLE set_definitions RENAME COLUMN channel TO platform;
+DROP INDEX IF EXISTS idx_sets_channel;
+CREATE INDEX IF NOT EXISTS idx_sets_platform ON sets(platform);
 COMMIT;
 ```
 
@@ -224,7 +224,7 @@ For `access_log.channel` removal:
    - Domain-only uses of `channel` remain only for vendor/API nouns.
 2. Schema checks:
    - `events` has `platform`, not `from_channel`
-   - `episodes` has `platform`, not `channel`
+   - `sets` has `platform`, not `channel`
    - `permission_requests` has `requester_platform` and `response_platform`
    - `access_log` has only `platform` for transport dimension
 3. Runtime checks:

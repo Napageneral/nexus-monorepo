@@ -1,696 +1,299 @@
-# Memory System
+# Memory System — Canonical Architecture
 
-**Status:** DESIGN SPEC
-**Last Updated:** 2026-02-20
-**Supersedes:** ../MEMORY_SYSTEM.md
-**Related:** UNIFIED_ENTITY_STORE.md, MEMORY_WRITER.md, ../../ledgers/EVENTS_LEDGER.md, ../../ledgers/IDENTITY_GRAPH.md
-
-> **Canonical reference:** See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the authoritative database layout. Memory tables live in `memory.db`. Entity tables (`entities`, `entity_tags`, `entity_cooccurrences`, `merge_candidates`) live in `identity.db`. Embeddings live in `embeddings.db`.
+**Status:** CANONICAL SPEC
+**Last Updated:** 2026-03-02
+**Related:** MEMORY_STORAGE_MODEL.md, UNIFIED_ENTITY_STORE.md, MEMORY_WRITER.md, MEMORY_CONSOLIDATION.md, RETAIN_PIPELINE.md, MEMORY_RECALL.md, skills/MEMORY_INJECTION.md, skills/MEMORY_SEARCH_SKILL.md, skills/MEMORY_REFLECT_SKILL.md
 
 ---
 
 ## Overview
 
-The Nexus memory system is a 4-layer architecture that transforms raw events into progressively higher levels of understanding. It draws from Hindsight's fact-extraction and consolidation pipeline, the episode-analysis framework, and a unified entity store.
+The Nexus memory system transforms raw events into progressively higher levels of understanding through a 4-layer architecture. Dedicated meeseeks agents handle extraction and consolidation automatically — agents do not need to "remember to remember."
 
-Two parallel pipelines operate over the same event stream and shared entity store:
-1. **Events -> Episodes -> Analyses** (temporal grouping + structured analysis)
-2. **Events -> Facts -> Observations -> Mental Models** (knowledge extraction + consolidation)
+Memory tools are exposed as `nexus memory <subcommand>` CLI commands and are always available to all agents. Each CLI command sends an IPC request to the NEX daemon, which executes the core function and returns JSON to stdout. The meeseeks that perform memory work (writer, consolidator, injection) are distinguished by their **role prompts and workflow instructions**, not by having special tools injected. This preserves prompt cache stability across all agent sessions.
 
-Memory is read and written by dedicated meeseeks roles. Agents do not need to "remember to remember" -- memory operations are automatic.
+**Storage model:** All derived knowledge (facts, observations, mental models) is stored in a unified **elements** table, processed by **jobs** operating on **sets** of inputs. This is a recursively composable model — elements form sets, jobs process sets into new elements. See `MEMORY_STORAGE_MODEL.md` for the complete storage schema, design decisions, and example flows.
 
 ---
 
 ## The Four Layers
 
 ```
-Layer 4:  MENTAL MODELS     High-level reports, refreshable, persisted
+Layer 3:  MENTAL MODELS     High-level reports, refreshable, pinned or auto-generated
               |
-Layer 3:  OBSERVATIONS       Synthesized durable knowledge (a type of analysis)
+Layer 2:  OBSERVATIONS       Synthesized durable knowledge, version-chained
               |
-Layer 2:  FACTS + EPISODES   Extracted atomic knowledge + grouped events
+Layer 1:  FACTS              Atomic extracted knowledge, immutable once written
               |
-Layer 1:  EVENTS             Raw immutable event stream (Events Ledger)
+Layer 0:  EVENTS             Raw immutable messages from all platforms
 ```
 
-| Layer | What | Mutability | Created By |
-|-------|------|------------|------------|
-| **Events** | Raw inbound/outbound communications | Immutable, append-only | Adapters (iMessage, Gmail, Discord, etc.) |
-| **Facts** | Atomic extracted knowledge ("Tyler works at Anthropic") | Immutable | Memory-Writer meeseeks (agentic extraction) |
-| **Episodes** | Grouped events (by time, thread, session, topic) | Immutable (new version via parent_id) | Algorithmic grouping + consolidation |
-| **Observations** | Synthesized durable knowledge with history | Mutable (versioned via parent_id on analysis_runs) | Consolidation (background LLM job) |
-| **Mental Models** | High-level reports spanning many observations | Mutable (versioned via parent_id) | Agent skill (reflect/search) or user-triggered |
+### Layer 0: Events
+
+Raw immutable messages from all platforms (iMessage, Discord, Gmail, agent turns). Every message that flows through Nexus becomes an event in `events.db`. Events are never modified. This is the ground truth that everything else is built from.
+
+Very recent events that haven't been processed by the retain pipeline are searchable as **short-term memory** — they show up as `type: 'event'` results in recall. These are events in episodes that haven't closed yet (neither the silence window nor the token budget has been reached).
+
+### Layer 1: Facts
+
+Atomic pieces of knowledge expressed as natural language sentences. Each fact is immutable once written.
+
+Examples of good facts:
+- "Tyler works at Anthropic building Nexus"
+- "Sarah prefers window seats on flights"
+- "Emily married Jake in a garden ceremony in June 2025"
+
+Facts have **two stored timestamps** plus one derived temporal dimension:
+
+| Timestamp | Stored? | What it represents | Example |
+|---|---|---|---|
+| `as_of` | ✅ Stored on fact | When the thing actually happened | ~2016 (Bob got married) |
+| `ingested_at` | ✅ Stored on fact | When the system processed it | 2026-02-27 (backfill ran today) |
+| Event timestamp | ❌ Derived via link | When the source event was created | ~2021 (the iMessage was sent) |
+
+**When each matters for recall:**
+- **`as_of`** — for "when did things happen" queries. "When did Bob get married?" → use `as_of`.
+- **Event timestamp** — for "what was discussed when" queries. Derived via `source_event_id` → `events.timestamp`. "What did Tyler and Casey talk about last January?" → filter by event timestamp.
+- **`ingested_at`** — for operational queries. "What did the last backfill produce?" → use `ingested_at`.
+
+> **Design Decision: Why `event_date` is NOT stored on the fact.**
+>
+> We considered adding an `event_date` column to the facts table to denormalize the source event's timestamp. We chose not to because:
+> 1. Every fact already has `source_event_id` linking to the source event, which has a `timestamp` field.
+> 2. The temporal dimension is always derivable via this link — no information loss.
+> 3. Adding a denormalized copy creates sync risk and schema bloat for marginal benefit.
+> 4. The cross-DB join (memory.db → events.db) is already performed in the writer tools and recall system.
+> 5. Since we operate hard-cutover with no migration burden, we can add it later if performance demands it.
+
+Each fact links to one or more entities via the `element_entities` junction table. Facts are attributable to their source job (which knows its input set/episode) and optionally `source_event_id` (when the fact maps to a single event).
+
+Facts are stored as `elements WHERE type = 'fact'` in `memory.db`. See `MEMORY_STORAGE_MODEL.md` for the unified schema.
+
+### Layer 2: Observations
+
+Synthesized durable knowledge created by the consolidation pipeline. An observation takes multiple facts and distills them into higher-level understanding — patterns, summaries, and consolidated knowledge.
+
+Observations are **version-chained**: when an observation is updated, a new version is created with `parent_id` pointing to the previous version. This forms a revision history. The latest version in a chain is the **head**.
+
+**Staleness** is determined by the revision chain: if an observation has a successor (more recent revision where `parent_id` = this observation's id), the original is stale. Agents can follow the chain to the current head immediately, which is more useful than a boolean flag — it tells you both that something changed AND what it changed to. The HEAD of a chain is the observation with no successor.
+
+> **Design Decision: Why no `is_stale` boolean flag.**
+>
+> We considered adding an `is_stale` boolean to observations and mental models for O(1) staleness checks. We chose revision chains instead because:
+> 1. `parent_id` already exists and is used for version chaining — `is_stale` would be redundant denormalization.
+> 2. A boolean tells you "something is stale" but not what replaced it. The chain gives you the full story.
+> 3. Proactive staling (marking models stale when related facts change) conflates "explicitly superseded" with "might be outdated" — two different signals using one flag.
+> 4. HEAD detection is a simple LEFT JOIN: `WHERE successor.id IS NULL`. With an index on `parent_id`, this is fast.
+> 5. Removing the flag eliminates the `staleMentalModelsForFacts()` side-effect that proactively marked mental models when facts changed, which nothing consumed anyway.
+
+Each observation tracks which facts support it via the input set's membership — the facts that went into consolidation are members of the set that the consolidation job processed. Observations are stored as `elements WHERE type = 'observation'` in `memory.db`.
+
+### Layer 3: Mental Models
+
+High-level reports that span many observations and facts, synthesizing them into coherent documents about specific topics.
+
+Examples:
+- "Tyler's Career" — work history, current role, career interests
+- "Project Nexus Status" — what it is, current state, key decisions
+- "Family Relationships" — who's who, dynamics, important facts
+
+Mental models have one attribute beyond their content: **`pinned`** (boolean).
+- `pinned = false` — agent-created, can be auto-refreshed by the reflect skill
+- `pinned = true` — user-created or user-curated, displayed specially in UI, not auto-overwritten
+
+Mental models are created and maintained by agents using the **Reflect skill** (see `skills/MEMORY_REFLECT_SKILL.md`). They are NOT created by the writer or consolidator.
+
+Mental models are stored as `elements WHERE type = 'mental_model'` in `memory.db`.
 
 ---
 
-## Data Model
+## Entity Dependency (Identity Layer)
 
-### Layer 1: Events
+The memory system depends on the **identity layer** (`identity.db`) for entity and contact resolution. The memory system links elements to entities and trusts the identity layer to have done its resolution work.
 
-The Events Ledger is unchanged. See `../../ledgers/EVENTS_LEDGER.md`.
+**Entities** represent the WHO and WHAT that knowledge is about: people, organizations, projects, locations, concepts. Entities are **identities, not identifiers** — a phone number is not an entity, it's a contact binding to a person entity.
 
-Events are the immutable source of truth. Everything else is derived from events.
+**Contacts** bind platform identifiers (phone numbers, email addresses, Discord handles) to entities. Each contact has a `contact_id` (platform-specific identifier), a `contact_name` (display name from the platform), and an `origin` indicating which adapter created it. A single person entity can have multiple contact bindings across platforms.
 
----
+**Entity resolution** uses a union-find merge chain. When two entities are discovered to be the same person/thing, one gets `merged_into` pointing at the other. All queries follow the merge chain to the canonical entity.
 
-### Layer 2a: Facts
+**Identifier policy:** All identifiers are stored WITHOUT platform prefix. The `(platform, space_id, contact_id)` compound unique key in the contacts table prevents collisions. Universal identifiers (phone, email) use `phone` or `email` as the platform value — NOT the specific service (iMessage, Gmail, WhatsApp). This ensures the same phone number across iMessage and WhatsApp resolves to one contact/entity. Platform-local identifiers (Discord IDs, Slack IDs) use their platform name (`discord`, `slack`) and the raw identifier. The `space_id` dimension handles workspace-scoped platforms like Slack where user IDs are only unique within a workspace.
 
-Facts are atomic pieces of knowledge extracted from events by the Memory-Writer meeseeks. Each fact is a natural language sentence linked to its source event and to the entities it mentions.
+The identifier policy is owned by the identity layer, not the memory system. See `UNIFIED_ENTITY_STORE.md` for full details.
 
-**Facts are immutable.** Once extracted, a fact never changes. New information creates new facts; the consolidation process synthesizes them into observations.
-
-```sql
-CREATE TABLE facts (
-    id              TEXT PRIMARY KEY,       -- ULID
-    text            TEXT NOT NULL,          -- "Tyler works at Anthropic"
-    context         TEXT,                   -- "career discussion with Sarah"
-
-    -- Temporal
-    as_of           INTEGER NOT NULL,       -- when the thing happened (unix ms)
-    ingested_at     INTEGER NOT NULL,       -- when it could've been known (unix ms)
-                                            -- For real-time: ~= as_of
-                                            -- For backfill: set to original event time
-
-    -- Provenance
-    source_event_id TEXT,                   -- FK -> events.id in events ledger
-
-    -- State
-    is_consolidated BOOLEAN DEFAULT FALSE,  -- has consolidation processed this fact?
-    access_count    INTEGER DEFAULT 0,      -- incremented on recall retrieval
-
-    -- Metadata
-    metadata        TEXT,                   -- JSON: {source_channel, direction, thread_id, ...}
-
-    created_at      INTEGER NOT NULL        -- when row was physically inserted
-);
-
-CREATE INDEX idx_facts_as_of ON facts(as_of DESC);
-CREATE INDEX idx_facts_ingested_at ON facts(ingested_at DESC);
-CREATE INDEX idx_facts_source_event ON facts(source_event_id);
-CREATE INDEX idx_facts_unconsolidated ON facts(is_consolidated) WHERE is_consolidated = FALSE;
-CREATE INDEX idx_facts_access ON facts(access_count DESC);
-```
-
-#### Knowledge Graph: fact_entities
-
-The knowledge graph is a simple junction table linking facts to entities. This replaces both Hindsight's `unit_entities` and the old structured `relationships` table.
-
-A fact like "Tyler works at Anthropic building Nexus" gets linked to three entities: Tyler, Anthropic, Nexus. The relationship between them is encoded in the natural language of the fact itself -- no structured triples needed.
-
-> **Note:** `fact_entities` lives in `memory.db`. The `entity_id` column references `entities.id` in `identity.db` by convention (no cross-database FK enforcement). See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md).
-
-```sql
-CREATE TABLE fact_entities (
-    fact_id     TEXT NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
-    entity_id   TEXT NOT NULL,  -- references entities.id in identity.db by convention
-    PRIMARY KEY (fact_id, entity_id)
-);
-
-CREATE INDEX idx_fact_entities_entity ON fact_entities(entity_id);
-CREATE INDEX idx_fact_entities_fact ON fact_entities(fact_id);
-```
-
-**Graph traversal at read time:** To find all facts about entity X, join through `fact_entities`. To find entities related to X, join `fact_entities` twice (facts mentioning X -> other entities in those facts). No pre-computed entity links needed.
-
-#### Causal Links
-
-The only link type stored at write time. Causal relationships ("X caused Y") require inference and cannot be derived from timestamps, embeddings, or shared entities.
-
-```sql
-CREATE TABLE causal_links (
-    from_fact_id TEXT NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
-    to_fact_id   TEXT NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
-    strength     REAL NOT NULL CHECK (strength >= 0.0 AND strength <= 1.0),
-    created_at   INTEGER NOT NULL,
-    PRIMARY KEY (from_fact_id, to_fact_id)
-);
-
-CREATE INDEX idx_causal_links_to ON causal_links(to_fact_id);
-```
-
-Causal links are identified by the **consolidation pipeline** (not the writer). The consolidation pipeline sees the full fact graph across episodes and platforms, enabling it to detect causal relationships the writer couldn't see in isolation. See `RETAIN_PIPELINE.md` for details.
-
-#### Observation-Fact Linkage
-
-Direct link from observations (analysis_runs) to the facts that support them. Created during consolidation.
-
-```sql
-CREATE TABLE observation_facts (
-    analysis_run_id TEXT NOT NULL REFERENCES analysis_runs(id) ON DELETE CASCADE,
-    fact_id         TEXT NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
-    PRIMARY KEY (analysis_run_id, fact_id)
-);
-
-CREATE INDEX idx_observation_facts_fact ON observation_facts(fact_id);
-CREATE INDEX idx_observation_facts_run ON observation_facts(analysis_run_id);
-```
-
-#### Memory Processing Log
-
-Tracks which events have been processed by the Memory-Writer. Separate table to avoid polluting the events schema. Enables backfill queries (`SELECT FROM events WHERE id NOT IN memory_processing_log`) and auditability.
-
-```sql
-CREATE TABLE memory_processing_log (
-    event_id        TEXT PRIMARY KEY,       -- FK -> events.id in events ledger
-    processed_at    INTEGER NOT NULL,       -- when the writer processed this event (unix ms)
-    writer_run_id   TEXT,                   -- which writer invocation processed it
-    created_at      INTEGER NOT NULL
-);
-
-CREATE INDEX idx_memory_processing_log_processed ON memory_processing_log(processed_at DESC);
-```
-
-Used by both trigger paths:
-- **Path 1 (agent turn complete):** Writer marks all event IDs from the turn as processed after extraction.
-- **Path 2 (eventIngested):** Hook checks this table first — if event already processed (by Path 1), skip. Otherwise fork writer.
+**Adapter contact seeding** is a prerequisite for quality memory extraction. When an adapter is connected and begins its backfill, it seeds contacts into the identity store. This happens as part of adapter setup, before any memory processing starts. The memory system depends on contacts already existing when it runs. See `UNIFIED_ENTITY_STORE.md` § Adapter Contact Seeding for the required contract.
 
 ---
 
-#### Why No Temporal, Semantic, or Entity Links at Write Time
+## The Lifecycle
 
-All three can be computed at read time via existing indexes:
+### Ingest: Events Arrive
 
-| Link Type | Write-Time (Hindsight) | Read-Time (Nexus V2) |
-|-----------|----------------------|---------------------|
-| **Temporal** | Pre-computed edges in memory_links, 24hr window, linear decay | `WHERE as_of BETWEEN $t - 24h AND $t + 24h ORDER BY as_of` |
-| **Semantic** | Pre-computed top-5 cosine >= 0.7 in memory_links | Vector similarity search via embeddings table |
-| **Entity** | Bidirectional edges between facts sharing entities, capped at 50 | `JOIN fact_entities fe1 ON ... JOIN fact_entities fe2 ON fe1.entity_id = fe2.entity_id` |
+Messages flow in from platforms via adapters. Each message becomes an event in `events.db`. Events are slotted into active episodes (sets with `definition_id = 'retain'`) in real-time as they arrive.
 
-Pre-computed links cause write amplification (entity links are O(n^2)), require explosion caps (50/entity, 10 temporal neighbors), and become stale as new facts arrive. Read-time computation is fast with proper indexes and always current.
+Episode boundaries are detected via a hybrid mechanism: **inline token-budget checking** during `event.ingest` + **per-episode cron timers** for 90-minute silence detection. When a timer fires, it invokes the episode timeout handler directly as an internal runtime event — this does NOT go through the full pipeline (no principals to resolve, no access to check). Whichever threshold fires first (token budget or silence timer) clips the episode, and `episode-created` fires. The memory-writer automation subscribes to this hookpoint.
 
----
+See `RETAIN_PIPELINE.md` § Episode Grouping.
 
-### Layer 2b: Episodes
+### Retain: Events → Facts
 
-Episodes are unchanged from the current memory system, with one addition: `parent_id` for version history.
+The **Memory Writer** meeseeks is dispatched when the `episode-created` hookpoint fires. It extracts facts and entities from the episode's content — reading the conversation, identifying durable knowledge, resolving entities against the existing store, and writing facts with entity links.
 
-```sql
-CREATE TABLE episodes (
-    id              TEXT PRIMARY KEY,
-    definition_id   TEXT NOT NULL REFERENCES episode_definitions(id),
-    platform        TEXT,
-    thread_id       TEXT,
-    start_time      INTEGER NOT NULL,
-    end_time        INTEGER NOT NULL,
-    event_count     INTEGER NOT NULL,
-    first_event_id  TEXT,
-    last_event_id   TEXT,
-    parent_id       TEXT REFERENCES episodes(id),  -- version chain
-    created_at      INTEGER NOT NULL
-);
+See `RETAIN_PIPELINE.md` for the full pipeline spec. See `MEMORY_WRITER.md` for the writer meeseeks spec.
 
-CREATE INDEX idx_episodes_definition ON episodes(definition_id);
-CREATE INDEX idx_episodes_platform ON episodes(platform);
-CREATE INDEX idx_episodes_thread ON episodes(thread_id);
-CREATE INDEX idx_episodes_time ON episodes(start_time, end_time);
-CREATE INDEX idx_episodes_parent ON episodes(parent_id);
-```
+### Consolidate: Facts → Observations
 
-`episode_definitions`, `episode_events`, `episode_entity_mentions` remain as-is.
+The **Memory Consolidator** meeseeks is dispatched when the `episode-retained` hookpoint fires (after the writer completes successfully). It receives the episode's facts and connects them into the broader memory graph — creating or updating observations, detecting causal relationships, and proposing entity merges.
 
-**Episode versioning:** When an episode is extended with new events (e.g., new messages in a thread), a new episode row is created with `parent_id` pointing to the previous version. The old episode is preserved. Analysis runs against the old version stay; new analyses run against the new version.
+See `MEMORY_CONSOLIDATION.md` for the full spec.
 
-**Knowledge-cluster episodes:** The consolidation process can create episodes grouped by topic (not just time/thread). This uses a new episode definition with `strategy = 'consolidation'`. These episodes group the source events behind related facts.
+### Recall: Search Across All Layers
+
+A unified search interface with multiple retrieval strategies (semantic, keyword, entity traversal, causal traversal, temporal, short-term events, thread lookback) running in parallel and fused via Reciprocal Rank Fusion.
+
+See `MEMORY_RECALL.md` for the full spec.
+
+### Inject: Automatic Context for Agents
+
+A lightweight **Memory Injection** automation hookpoint handler fires at `worker:pre_execution` on every agent execution. It's forked from the primary session, uses memory search to find relevant context the main session doesn't have, and either interrupts with discovered information or stays silent.
+
+See `skills/MEMORY_INJECTION.md` for the full spec.
+
+### Reflect: Deep Research → Mental Models
+
+The **Reflect skill** teaches agents to perform deep research across the full memory graph and persist results as mental models. This is not a meeseeks — it's a skill that any agent can import.
+
+See `skills/MEMORY_REFLECT_SKILL.md` for the full spec.
 
 ---
 
-### Layer 3: Observations (Analysis Type)
+## Tool Architecture
 
-Observations are a type of analysis. They use the existing `analysis_types`, `analysis_runs`, and `facets` infrastructure.
+**Critical design decision:** Memory tools are exposed as CLI commands (`nexus memory <subcommand>`) that are always available to all agents. They are NOT injected as agent-specific `tool_use` tools that change the tool inventory.
 
-```sql
--- analysis_types: add an observation type
--- INSERT INTO analysis_types (id, name, version, output_type, prompt_template)
--- VALUES ('observation_v1', 'observation_v1', '1.0', 'freeform',
---         '<consolidation prompt>');
+This means:
+- The tool surface is identical across all agent sessions → **prompt cache is never busted** by memory tool changes
+- The **role prompt** for each meeseeks (writer, consolidator, injection) teaches the agent which CLI commands to use and how
+- Any agent can use memory tools at any time if it knows how
 
--- analysis_runs: add parent_id for version history + access_count
-CREATE TABLE analysis_runs (
-    id               TEXT PRIMARY KEY,
-    analysis_type_id TEXT NOT NULL REFERENCES analysis_types(id),
-    episode_id       TEXT NOT NULL REFERENCES episodes(id),
-    parent_id        TEXT REFERENCES analysis_runs(id),  -- version chain
-    status           TEXT NOT NULL,
-    started_at       INTEGER,
-    completed_at     INTEGER,
-    output_text      TEXT,
-    error_message    TEXT,
-    blocked_reason   TEXT,
-    retry_count      INTEGER DEFAULT 0,
-    access_count     INTEGER DEFAULT 0,
-    is_stale         BOOLEAN DEFAULT FALSE,  -- set TRUE when new facts arrive that affect this observation
-    created_at       INTEGER NOT NULL,
-    UNIQUE(analysis_type_id, episode_id)
-);
+### Execution Model: CLI → IPC → Daemon
 
-CREATE INDEX idx_analysis_runs_type ON analysis_runs(analysis_type_id);
-CREATE INDEX idx_analysis_runs_episode ON analysis_runs(episode_id);
-CREATE INDEX idx_analysis_runs_status ON analysis_runs(status);
-CREATE INDEX idx_analysis_runs_parent ON analysis_runs(parent_id);
-CREATE INDEX idx_analysis_runs_stale ON analysis_runs(is_stale) WHERE is_stale = TRUE;
+Memory CLI commands follow a three-layer architecture:
+
+```
+┌─────────────────────────────────────────────┐
+│  Agent (LLM in code/bash mode)              │
+│  Executes: nexus memory recall --query ...  │
+├─────────────────────────────────────────────┤
+│  CLI layer (thin wrapper)                   │
+│  Parses --flags, sends IPC request to NEX   │
+│  daemon, prints JSON result to stdout       │
+├─────────────────────────────────────────────┤
+│  NEX daemon (executes core function)        │
+│  recall(query, params) → memory.db,         │
+│  embeddings.db, identity.db                 │
+│  Can emit events, enforce ordering,         │
+│  trigger downstream automations             │
+└─────────────────────────────────────────────┘
 ```
 
-**Observation staleness:** The `is_stale` field is set by the consolidation worker. When new facts arrive that share entities with an existing observation, the consolidation process marks that observation as stale (is_stale = TRUE). When the observation is re-consolidated with the new facts, a new version is created (parent_id chain) with is_stale = FALSE.
+All memory operations go through the daemon via IPC. The CLI never accesses SQLite directly. This ensures the daemon can:
+- **Coordinate writes** — serialized through the daemon, no concurrent writer conflicts
+- **Emit events** — memory writes can trigger automations (e.g., embedding generation after `insert-fact`)
+- **Enforce ordering** — the daemon controls operation sequencing
+- **Maintain consistency** — cross-database operations (memory.db + identity.db + embeddings.db) are coordinated in one place
 
-**How observations work:**
-1. Consolidation takes an unconsolidated fact
-2. Recalls related observations (via embedding search)
-3. If related facts found: creates/extends a knowledge-episode, runs the observation analysis
-4. If no related facts: marks fact as consolidated, no episode/observation created
-5. The observation text is stored as `output_text` on the analysis_run. No facet duplication needed — `output_text` is the canonical source for observation content.
-6. When new facts arrive and update an observation, a new episode version is created (parent_id chain), and a new analysis_run is created against it (parent_id chain). Old versions preserved.
+The function signatures described in the per-tool specs (e.g., `recall(query, params)`, `insert_fact(text, as_of, ...)`) define the **core function contract** — what the operation does, its parameters, and its return type. The CLI surface maps these to `--flag` arguments. See `environment/interface/cli/COMMANDS.md` for the full CLI command tree.
 
-**Existing analysis types continue to work.** Summary analyses, PII extraction, conversation analysis -- all keep running as before against their episodes. Observations are just another analysis type.
+### Memory CLI Tools
 
-```sql
--- facets: unchanged (used by other analysis types; observation text lives in analysis_runs.output_text)
-CREATE TABLE facets (
-    id              TEXT PRIMARY KEY,
-    analysis_run_id TEXT NOT NULL REFERENCES analysis_runs(id) ON DELETE CASCADE,
-    episode_id      TEXT NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
-    facet_type      TEXT NOT NULL,       -- 'entity', 'topic', 'observation', 'summary', 'pii_email', ...
-    value           TEXT NOT NULL,       -- the extracted value or markdown document
-    entity_id       TEXT,                    -- references entities.id in identity.db by convention
-    confidence      REAL,
-    metadata_json   TEXT,
-    created_at      INTEGER NOT NULL
-);
-```
+| Tool | Purpose | Primary User |
+|---|---|---|
+| `recall` | Search memory across all layers | All agents |
+| `insert_fact` | Store a new fact (creates element with type='fact') | Writer meeseeks |
+| `create_entity` | Create entity (proactively suggests similar canonical entities) | Writer meeseeks |
+| `confirm_entity` | Confirm entity decision after create_entity finds matches | Writer meeseeks |
+| `link_element_entity` | Link an element to an entity | Writer meeseeks |
+| `propose_merge` | Propose or execute entity merge | Writer + Consolidator |
+| `consolidate_facts` | Create/update observation or skip facts (3 patterns) | Consolidator meeseeks |
+| `insert_element_link` | Record typed relationship between elements (causal, supports, etc.) | Consolidator meeseeks |
+| `resolve_element_head` | Find latest version of a version-chained element | Consolidator meeseeks |
+| `create_mental_model` | Create a mental model (creates element with type='mental_model') | Agents using Reflect skill |
+| `update_mental_model` | Update a mental model (creates new version with parent_id chain) | Agents using Reflect skill |
+| `write_attachment_interpretation` | Store interpretation of an attachment (composite key: event_id, attachment_id) | Writer meeseeks |
+| `read_attachment_interpretation` | Read existing interpretation of an attachment | Writer meeseeks |
+
+### Agent Roles
+
+| Agent | Type | When | Purpose |
+|---|---|---|---|
+| Memory Writer | Meeseeks (forked from manager) | `episode-created` hookpoint fires | Extract facts + entities |
+| Memory Consolidator | Meeseeks (forked from manager) | `episode-retained` hookpoint fires (after writer completes) | Build observations, link facts, propose merges |
+| Memory Injection | Meeseeks (forked from session) | `worker:pre_execution` hookpoint on every agent execution | Find relevant memory context |
+
+All meeseeks are forked from their parent session (typically a manager agent turn), inheriting the full context of what's happening. This gives them situational awareness beyond just their specific task.
+
+### Meeseeks Self-Improvement
+
+Each meeseeks has a dedicated workspace directory that persists across invocations. After any meeseeks run completes, there is an optional follow-on step where the agent can update its own workspace files — modify ROLE.md, create scripts, document patterns, record disambiguation rules. This is how agents improve across sessions.
+
+Self-improvement is exclusive to meeseeks (the writer, consolidator, and injection agents). Skills (Search, Reflect) do not have this capability since they run within existing agent sessions.
 
 ---
 
-### Layer 4: Mental Models
+## Storage Schema
 
-High-level reports built by querying across observations, facts, and episodes. Stored in the database for provenance tracking and staleness detection.
+The complete storage schema is defined in `MEMORY_STORAGE_MODEL.md`. Here is a summary of the key tables in `memory.db`:
 
-```sql
-CREATE TABLE mental_models (
-    id              TEXT PRIMARY KEY,       -- ULID
-    name            TEXT NOT NULL,          -- "Tyler's Career", "Project Nexus Status"
-    description     TEXT NOT NULL,          -- full report (markdown)
-    subtype         TEXT,                   -- 'structural', 'emergent', 'pinned'
-    entity_id       TEXT,                   -- references entities.id in identity.db by convention
-    tags            TEXT,                   -- JSON array for ACL scoping
-    parent_id       TEXT REFERENCES mental_models(id),  -- version chain
-    is_stale        BOOLEAN DEFAULT FALSE,
-    refresh_trigger TEXT,                   -- JSON: {"refresh_after_consolidation": true}
-    last_refreshed  INTEGER,
-    access_count    INTEGER DEFAULT 0,
-    created_at      INTEGER NOT NULL,
-    updated_at      INTEGER NOT NULL
-);
+| Table | Purpose |
+|---|---|
+| **`elements`** | All derived knowledge: facts, observations, mental models (unified by `type` discriminator) |
+| **`elements_fts`** | FTS5 full-text search across ALL element types |
+| **`element_entities`** | Many-to-many entity links for any element (generalizes old `fact_entities`) |
+| **`element_links`** | Typed directed links between elements: causal, supports, contradicts, supersedes, derived_from |
+| **`sets`** | Collections of events/elements/sets, with definition references |
+| **`set_members`** | Polymorphic membership: events, elements, or sub-sets |
+| **`set_definitions`** | Templates describing how sets are constructed (strategies, configs) |
+| **`job_types`** | Processing operation definitions (retain, consolidate, reflect, extensible) |
+| **`jobs`** | Job execution records with status, retry, raw output |
+| **`job_outputs`** | Which elements each job produced (provenance) |
+| **`processing_log`** | "Has target X been processed by job type Y?" (replaces `is_consolidated`) |
+| **`resolution_log`** | Entity resolution audit trail (creation, linking, merging decisions) |
+| **`access_log`** | Telemetry: which elements/sets were accessed and when |
 
-CREATE INDEX idx_mental_models_entity ON mental_models(entity_id);
-CREATE INDEX idx_mental_models_parent ON mental_models(parent_id);
-CREATE INDEX idx_mental_models_stale ON mental_models(is_stale) WHERE is_stale = TRUE;
-```
-
-**Who creates mental models:**
-- Agents using the memory reflect skill can persist results as mental models
-- Users can explicitly request mental model creation
-- The consolidation system can trigger refreshes on existing models when related observations update
-
-> **Note:** The Memory-Writer meeseeks does NOT create or update mental models. Mental model CRUD belongs exclusively in the reflect skill. The writer focuses on fact extraction, entity identification, and deduplication. See `workplans/INFRASTRUCTURE_WORKPLAN.md` Item 9.
-
-**Versioning:** When a mental model is refreshed, a new row is created with `parent_id` pointing to the previous version. The old version stays for history.
-
----
-
-### Embeddings
-
-Separate table for swappable models and multi-model support.
+### embeddings + vec_embeddings (embeddings.db)
 
 ```sql
 CREATE TABLE embeddings (
-    id           TEXT PRIMARY KEY,
-    target_type  TEXT NOT NULL,             -- 'fact', 'observation', 'entity', 'episode', 'mental_model'
-    target_id    TEXT NOT NULL,
-    model        TEXT NOT NULL,             -- 'text-embedding-3-small', 'gemini-embedding-004', etc.
-    embedding    BLOB NOT NULL,             -- binary vector
-    dimension    INTEGER NOT NULL,
-    created_at   INTEGER NOT NULL,
-    UNIQUE(target_type, target_id, model)
+    id          TEXT PRIMARY KEY,
+    target_id   TEXT NOT NULL,
+    target_type TEXT NOT NULL,                  -- matches elements.type
+    model       TEXT NOT NULL,
+    vector      BLOB NOT NULL,
+    created_at  INTEGER NOT NULL
 );
 
-CREATE INDEX idx_embeddings_target ON embeddings(target_type, target_id);
-CREATE INDEX idx_embeddings_model ON embeddings(model);
-```
-
----
-
-## Parallel Pipelines
-
-```
-Events Ledger (immutable, append-only)
-    |
-    +---> Short-Term Memory Index (is_retained=FALSE on events table)
-    |       - Immediately searchable via recall()
-    |       - FTS + semantic search over unretained events
-    |
-    +---> Episode Grouping (algorithmic)
-    |         |
-    |         v
-    |     Episodes (time/thread/session grouped)
-    |         |
-    |         v
-    |     Analysis Runs (summary, pii, convo_all, ...)
-    |         |
-    |         v
-    |     Facets (structured outputs)
-    |
-    +---> Retain Pipeline (episode-based)
-              |
-              v
-          Memory-Writer Meeseeks (agentic, receives full episode)
-              |
-              v
-          Facts + fact_entities (writer does NOT create causal_links)
-              |
-              v
-          Embeddings (algorithmic, post-agent)
-              |
-              v
-          Events marked is_retained=TRUE
-              |
-              v
-          Consolidation (background, episode-batched)
-              |
-              +---> Causal link detection (cross-episode/cross-platform)
-              |
-              +---> Find/extend knowledge-episode
-              |         |
-              |         v
-              |     Observation analysis_run (output_text)
-              |
-              +---> Cross-platform entity merge proposals
-              |
-              +---> Mental Model staleness flagging (if triggered)
-
-Both pipelines share:
-  - Events Ledger (Layer 1)
-  - Unified Entity Store
-  - Embeddings table
-```
-
-The pipelines are independent. Episodes group events temporally. Facts extract knowledge from events. Observations synthesize facts into durable knowledge. They operate on the same data but produce different outputs for different query patterns.
-
-> **See also:** `RETAIN_PIPELINE.md` for the full episode-based retain architecture, including short-term memory, episode grouping, filtering, and consolidation batching.
-
----
-
-## Recall API
-
-A single search interface with tunable parameters. Used by agents via a skill/tool.
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `query` | string (required) | Natural language search query |
-| `scope` | string[] | What to search: `['facts', 'observations', 'mental_models', 'entities']` (default: facts+observations+mental_models) |
-| `entity` | string | Filter by entity name or ID |
-| `time_after` | integer | Only results with as_of after this timestamp |
-| `time_before` | integer | Only results with as_of before this timestamp |
-| `platform` | string | Filter by source platform |
-| `max_results` | integer | Maximum number of results (default: 20) |
-| `budget` | string | Search depth: 'low', 'mid', 'high' |
-
-**Retrieval strategies (executed in parallel, results fused via RRF):**
-1. **Semantic search** -- embedding cosine similarity via vec extension
-2. **Keyword search** -- FTS5 over fact text
-3. **Entity traversal** -- facts linked to queried entities via fact_entities
-4. **Causal traversal** -- facts connected via causal_links
-5. **Short-term events** -- unretained events (`is_retained = FALSE` on events table) searched via FTS + semantic. Returns `type: 'event'` results. See `RETAIN_PIPELINE.md`.
-
-Temporal and platform filtering are applied as WHERE clauses on results. Dedicated temporal retrieval (proximity-based decay scoring) is planned — see `workplans/INFRASTRUCTURE_WORKPLAN.md` Item 5.
-
-**Fusion:** Reciprocal Rank Fusion (RRF) with k=60 across strategies. Post-fusion MMR (Maximal Marginal Relevance) for diversity (λ=0.7). No cross-encoder reranking initially.
-
-**Budget controls which strategies run:**
-- `low`: semantic search only (single vector query, fastest)
-- `mid`: semantic + keyword + entity traversal + short-term events + link expansion (see workplans/INFRASTRUCTURE_WORKPLAN.md Item 6)
-- `high`: all strategies including MPFP graph traversal (see workplans/INFRASTRUCTURE_WORKPLAN.md Item 4) + higher result limits
-
-**Hierarchical retrieval strategy (taught via skill):**
-1. Search mental models first (highest quality, if applicable)
-2. Search observations (consolidated knowledge, check staleness)
-3. Search raw facts (ground truth, for specifics or stale verification)
-
----
-
-## Memory Search Skill
-
-A reusable skill that any agent can import for searching memory. Equivalent to Hindsight's reflect() but implemented as a Nexus skill.
-
-The skill teaches:
-- Hierarchical retrieval strategy (mental models -> observations -> facts)
-- Query decomposition (break complex questions into targeted searches)
-- Staleness awareness (verify stale observations against raw facts)
-- Budget management (low/mid/high search depth)
-- How to use recall() parameters for filtered search
-
-For persisting search results as mental models, see the Memory Reflect skill (`skills/MEMORY_REFLECT_SKILL.md`).
-
-Agents that import this skill: Memory-Writer (for dedup/resolution during retain), any conversational agent (for searching when automated injection isn't enough), any meeseeks that needs context.
-
----
-
-## Memory Injection (Read Path)
-
-Memory retrieval is split into two mechanisms:
-
-### 1. Memory Injection Meeseeks (automatic, every worker dispatch)
-
-A lightweight meeseeks at `worker:pre_execution`. Uses a fast cheap model (gpt-5.3-codex-spark or equivalent) with zero thinking budget. Its only job: run recall() on the task, triage the results, and inject only what's relevant. Returns nothing if recall returns noise — avoids junk injection. Timeout: 60 seconds. Typical latency under 10 seconds. The meeseeks uses its judgment on how many recall calls to make — zero for purely computational tasks, multiple for entity-rich inputs.
-
-### 2. Memory Search Skill (on-demand, by any agent)
-
-Any agent can import the Memory Search skill and call `recall()` with targeted parameters during its session. This is the "pull" model — the agent actively searches when it knows it needs more context beyond what the injection provided.
-
-See `skills/MEMORY_INJECTION.md` for full details.
-
----
-
-## Trigger Mechanism (Write Path) — Episode-Based Retain
-
-> **Note:** The original per-event dual-path trigger design has been replaced by an episode-based retain pipeline. See `RETAIN_PIPELINE.md` for the full design.
-
-Events no longer trigger the writer individually. Instead:
-
-1. **Events arrive** → indexed in short-term memory (`is_retained = FALSE`), immediately searchable via recall()
-2. **Events accumulate** in their thread/channel conversation
-3. **Episode boundary detected** (90-minute conversation gap, token budget exceeded, or end-of-day flush) → episode assembled from all unretained events in that thread
-4. **Episode sent to retain pipeline** → Memory-Writer meeseeks receives the full episode and extracts facts
-5. **Post-retain** → events marked `is_retained = TRUE`, facts embedded, consolidation triggered
-
-```
-Event arrives
-    → Indexed in short-term memory (is_retained=FALSE, searchable via recall)
-    → Scheduled retain trigger updated for this thread (now + 90min)
-    |
-    v
-Episode boundary detected (gap timeout / token budget / EOD flush)
-    → Episode assembled from unretained events in thread
-    → Memory-Writer meeseeks forks with full episode
-    → Writer extracts facts, entities, dedup, entity resolution
-    → Post-retain: embed facts, mark is_retained=TRUE, trigger consolidation
-```
-
-Both agent turns and standalone events flow through the same episode-based pipeline. Agent turns accumulate in their thread like any other event. The writer's role prompt has guidance for extracting from agent turns (what was DECIDED, not the mechanics).
-
----
-
-## Backfill Strategy
-
-> **Full design:** See `RETAIN_PIPELINE.md` for the complete episode-based backfill architecture.
-
-Backfill uses the **same episode-based retain pipeline** as live. The key differences: episodes are pre-computed from historical events, higher parallelism (4+ concurrent retain jobs), and pre-episode filtering removes obvious noise before grouping.
-
-**Summary flow:**
-1. **Scan + filter** → query events.db, apply pre-episode filters (SQL WHERE clauses from `memory_filters` table in runtime.db), skip already-retained events
-2. **Group into episodes** → group by (platform, thread_id), split at 90-minute conversation gaps + 6000-token budget
-3. **Estimate** → show episode count, time/cost estimate, confirm before proceeding
-4. **Retain** → process episodes through the same writer meeseeks pipeline in parallel (configurable concurrency)
-5. **Consolidate** → episode-batched consolidation runs in parallel as facts are produced
-6. **Embed** → batch embedding alongside retain
-
-**Key properties:**
-- **No strict chronological order required** — episodes are independent, parallel is safe
-- **Crash-recoverable** — tracked via `backfill_runs` and `backfill_episodes` tables, supports pause/resume
-- **Idempotent** — `memory_processing_log` + fact dedup prevents duplicates on re-run
-
-**Temporal fields:** Set `ingested_at` to the original event time for all backfilled data.
-
-**Runtime:** Multiple days for full personal history (50K+ episodes). Designed for overnight/weekend runs.
-
----
-
-## Implementation Hints
-
-These are notes for implementing agents. Each is straightforward but documenting the approach saves investigation time.
-
-### SQLite Vec Extension (Embeddings)
-
-The memory system uses SQLite. For vector similarity search, use the `sqlite-vec` extension (in `embeddings.db`). Virtual table:
-
-```sql
+-- Virtual table for KNN search (sqlite-vec)
 CREATE VIRTUAL TABLE vec_embeddings USING vec0(
+    target_id   TEXT,
     target_type TEXT,
-    target_id TEXT,
-    embedding float[384]   -- dimension matches embedding provider (default: BAAI/bge-small-en-v1.5 = 384)
+    embedding   FLOAT[384]                     -- dimension matches provider
 );
 ```
 
-> **Note:** The dimension is determined by the embedding provider abstraction (see `workplans/INFRASTRUCTURE_WORKPLAN.md` Item 1). On model change, the vec table is rebuilt from the `embeddings` table.
-
-Query with cosine similarity:
-```sql
-SELECT target_id, distance
-FROM vec_embeddings
-WHERE embedding MATCH ?query_vector
-  AND k = 20
-ORDER BY distance;
-```
-
-The embeddings table (non-virtual) stores the canonical embeddings with model metadata. The vec table is a search index derived from it. When models change, rebuild the vec table from the embeddings table.
-
-Reference: Hindsight uses pgvector with `<=>` cosine distance. Translate to sqlite-vec's `MATCH` operator.
-
-### FTS5 (Keyword Search)
-
-SQLite FTS5 for keyword search over facts:
-
-```sql
-CREATE VIRTUAL TABLE facts_fts USING fts5(
-    text,
-    content='facts',
-    content_rowid='rowid'
-);
-
--- Triggers to keep FTS in sync
-CREATE TRIGGER facts_fts_insert AFTER INSERT ON facts
-BEGIN
-    INSERT INTO facts_fts(rowid, text) VALUES (NEW.rowid, NEW.text);
-END;
-```
-
-Query:
-```sql
-SELECT f.id, f.text, bm25(facts_fts) AS score
-FROM facts_fts
-JOIN facts f ON f.rowid = facts_fts.rowid
-WHERE facts_fts MATCH ?query
-ORDER BY score
-LIMIT 20;
-```
-
-### Reciprocal Rank Fusion (RRF)
-
-Combine results from multiple retrieval strategies:
-
-```python
-def rrf_fuse(ranked_lists: list[list[str]], k: int = 60) -> list[tuple[str, float]]:
-    """Fuse multiple ranked result lists using RRF."""
-    scores = {}
-    for ranked_list in ranked_lists:
-        for rank, item_id in enumerate(ranked_list):
-            scores[item_id] = scores.get(item_id, 0) + 1.0 / (k + rank + 1)
-    return sorted(scores.items(), key=lambda x: x[1], reverse=True)
-```
-
-Reference: Hindsight's `memory_engine.py` implements this. Port directly.
-
-### Maximal Marginal Relevance (MMR)
-
-Post-RRF diversity filter. Prevents redundant results (e.g., 10 facts all saying "Tyler works at Anthropic"):
-
-```python
-def mmr_rerank(candidates, selected, embeddings, lambda_param=0.7):
-    """Select next item balancing relevance and diversity."""
-    best_score = -inf
-    best_id = None
-    for cid in candidates:
-        relevance = rrf_score[cid]
-        max_sim = max(cosine_sim(embeddings[cid], embeddings[sid]) for sid in selected) if selected else 0
-        score = lambda_param * relevance - (1 - lambda_param) * max_sim
-        if score > best_score:
-            best_score = score
-            best_id = cid
-    return best_id
-```
-
-Apply iteratively: pick best, add to selected, repeat until max_results.
-
-Reference: Hindsight implements MMR in its recall pipeline. Standard algorithm, well-documented in IR literature.
-
-### Embedding Model
-
-The old memory system used Gemini embeddings but these are expensive per-call. For V2, use the same local model as Hindsight:
-
-- **Default:** `BAAI/bge-small-en-v1.5` via node-llama-cpp GGUF (Q8_0). 384 dimensions. Runs locally, zero API cost.
-- **Provider abstraction:** The embedding provider is swappable via env vars (`NEXUS_EMBEDDINGS_PROVIDER`, `NEXUS_EMBEDDINGS_MODEL`). Supports local, OpenAI, Cohere, LiteLLM. See `workplans/INFRASTRUCTURE_WORKPLAN.md` Item 1.
-- **Dimension:** Auto-detected from provider at initialization. The `embeddings` table stores model metadata; the `vec_embeddings` virtual table is rebuilt on model change.
-- **Hindsight reference:** `hindsight_api/config.py` — `DEFAULT_EMBEDDINGS_LOCAL_MODEL = "BAAI/bge-small-en-v1.5"`, `DEFAULT_EMBEDDING_DIMENSION = 384`. Hindsight supports 6 providers via abstract interface.
-
-### Meeseeks Workspace Layout
-
-Follow existing conventions in `~/.nexus/state/meeseeks/`:
-
-```
-~/.nexus/state/meeseeks/memory-writer/
-    ROLE.md              -- Role prompt (see workplans/MEMORY_WRITER_ROLE.md)
-    skills/
-        memory/
-            recall.ts    -- recall() tool implementation
-            write.ts     -- insert_fact, create_entity, etc.
-
-~/.nexus/state/meeseeks/memory-injection/
-    ROLE.md              -- Minimal triage prompt
-    skills/
-        memory/
-            recall.ts    -- recall() tool only (read-only)
-```
-
-### Hook Registration
-
-Follow existing patterns in `~/.nexus/state/hooks/`.
-
-**Memory-writer:** Triggered by the episode boundary detection system (scheduled-event approach). When a retain trigger fires (conversation gap, token budget, or end-of-day flush), the writer meeseeks is forked with the assembled episode. See `RETAIN_PIPELINE.md` for the `pending_retain_triggers` table and trigger mechanism.
-
-**Memory-injection:** Hooks into `worker:pre_execution` (blocking, 60s timeout).
-
-Check the Nex TS event bus and hook infrastructure for existing patterns. (Go `internal/bus/bus.go` has been eliminated.)
-
 ---
 
-## Tables Dropped from V1
+## Related Specs
 
-| Table | Reason |
-|-------|--------|
-| `relationships` | Replaced by `fact_entities` junction -- facts ARE the relationships |
-| `entity_aliases` | Unified into single `entities` table |
-| `identity_mappings` | Absorbed into `entities` table (contact handles are entities in identity.db; routable contacts in the delivery/routing system are a separate concept — see MEMORY_WRITER.md "Contacts Contract") |
-| `persons` | Unified into `entities` table |
-| `person_contact_links` | Contact handles are entities in identity.db, merge handles linking |
-| `person_facts` | Facts about people live in `facts` table |
-| `unattributed_facts` | Unresolved entities handled by merge_candidates |
-| `merge_events` | Simplified, audit via entity merged_into chain |
-
----
-
-## See Also
-
-- `RETAIN_PIPELINE.md` -- Episode-based retain architecture (short-term memory, episode grouping, filtering, consolidation batching, backfill)
-- `workplans/INFRASTRUCTURE_WORKPLAN.md` -- Recall parity, embedding provider abstraction, writer scope changes, skill enrichment
-- `UNIFIED_ENTITY_STORE.md` -- Entity unification and IAM integration
-- `FACT_GRAPH_TRAVERSAL.md` -- Relationship query patterns using fact graph (replaces typed relationship table)
-- `MEMORY_WRITER.md` -- Agentic retain flow
-- `workplans/MEMORY_WRITER_ROLE.md` -- The writer's role prompt
-- `skills/MEMORY_INJECTION.md` -- Automated memory injection (read path)
-- `skills/MEMORY_SEARCH_SKILL.md` -- Agent search skill
-- `skills/MEMORY_REFLECT_SKILL.md` -- Deep research and mental model creation
-- `../CRM_ANALYSIS_AND_WORK_SYSTEM.md` -- CRM analysis, four-model pattern, work.db schema
-- `../ENTITY_ACTIVITY_DASHBOARD.md` -- Per-entity CRM metrics and aggregate dashboards
-- `../../ledgers/EVENTS_LEDGER.md` -- Source event schema
-- `../../ledgers/IDENTITY_GRAPH.md` -- Previous identity system (superseded)
-- `../MEMORY_SYSTEM.md` -- Previous memory system (superseded)
+| Document | Covers |
+|---|---|
+| `MEMORY_STORAGE_MODEL.md` | **Storage schema**: elements, sets, jobs — the unified storage model with full SQL and design decisions |
+| `RETAIN_PIPELINE.md` | Episode lifecycle, filtering, payload assembly, writer dispatch, post-processing |
+| `MEMORY_WRITER.md` | Writer meeseeks: workflow, extraction rules, entity resolution, coreference |
+| `MEMORY_CONSOLIDATION.md` | Consolidation meeseeks: observations, causal links, entity merges |
+| `MEMORY_RECALL.md` | Recall API: strategies, parameters, budget control, fusion |
+| `UNIFIED_ENTITY_STORE.md` | Identity layer: entities, contacts, merge chains, identifier policy |
+| `FACT_GRAPH_TRAVERSAL.md` | Graph traversal patterns for relationship queries |
+| `skills/MEMORY_INJECTION.md` | Pre-execution memory injection meeseeks |
+| `skills/MEMORY_SEARCH_SKILL.md` | Search skill: hierarchical retrieval, query decomposition, staleness |
+| `skills/MEMORY_REFLECT_SKILL.md` | Reflect skill: deep research, mental model creation |

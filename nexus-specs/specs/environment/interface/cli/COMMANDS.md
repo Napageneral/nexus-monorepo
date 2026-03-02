@@ -48,6 +48,20 @@ nexus
 │   ├── get <key>
 │   └── set <key> <value>
 ├── init [--workspace <path>]
+├── memory
+│   ├── recall --query <text> [--scope <types>] [--entity <name|id>] [--time-after <ts>] [--time-before <ts>] [--platform <platform>] [--thread-id <id>] [--thread-lookback <n>] [--max-results <n>] [--budget <low|mid|high>]
+│   ├── insert-fact --text <text> --as-of <timestamp> [--source-event-id <id>] [--metadata <json>]
+│   ├── create-entity --name <name> --type <type>
+│   ├── confirm-entity --use-existing <entity_id> [--alias <name>] | --create-new --name <name> --type <type>
+│   ├── link-element-entity --element-id <id> --entity-id <id>
+│   ├── propose-merge --entity-a <id> --entity-b <id> --confidence <float> --reason <text>
+│   ├── consolidate-facts --fact-ids <id,...> [--text <text>] [--observation-id <id>]
+│   ├── insert-element-link --from <id> --to <id> --link-type <type> [--strength <float>] [--reason <text>]
+│   ├── resolve-element-head --element-id <id>
+│   ├── create-mental-model --name <name> --content <text> [--entity-id <id>] [--pinned]
+│   ├── update-mental-model --id <id> --content <text>
+│   ├── write-attachment-interpretation --event-id <id> --attachment-id <id> --interpretation <text>
+│   └── read-attachment-interpretation --event-id <id> --attachment-id <id>
 ├── runtime
 │   ├── health
 │   ├── status
@@ -99,7 +113,7 @@ Canonical examples:
 - `nexus runtime call ...`
 - `nexus runtime wake`
 
-Domain control-plane command groups (`hooks`, `automation`, `acl`, `nex`) are part of this plane.
+Domain control-plane command groups (`memory`, `hooks`, `automation`, `acl`, `nex`) are part of this plane.
 
 ---
 
@@ -124,6 +138,12 @@ Credential indexing, verification, import, and exposure controls.
 ### `nexus config ...`
 
 Read/write operations for canonical config in `state/nexus/config.json`.
+
+### `nexus memory ...`
+
+Memory operations: search, write facts, manage entities, create observations, and maintain mental models. All memory CLI commands are IPC calls to the running NEX daemon — the CLI parses arguments, sends a request to the daemon over IPC, the daemon executes the core function against memory.db/identity.db/embeddings.db, and the CLI prints the result as JSON to stdout. This keeps all database writes coordinated through the daemon and allows the daemon to emit events, enforce ordering, and trigger downstream automations when memory state changes.
+
+Available to all agents via bash. The meeseeks role prompts teach each agent which commands to use and when.
 
 ### `nexus runtime ...`
 

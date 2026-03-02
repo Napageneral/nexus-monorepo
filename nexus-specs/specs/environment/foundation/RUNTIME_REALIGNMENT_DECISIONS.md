@@ -24,7 +24,7 @@ These are **big-bang** decisions.
 
 | Area | Decision |
 |------|----------|
-| State layout | Use 6 split databases under `state/data/*.db` (events, agents, identity, memory, embeddings, runtime) |
+| State layout | Use 7 split databases under `state/data/*.db` (events, agents, identity, memory, work, embeddings, runtime) |
 | Memory system | Memory System databases (memory.db, identity.db, embeddings.db) |
 | Config | Use one canonical config file at `state/config.json` |
 | CLI ownership | `nex` owns both runtime engine and CLI control plane |
@@ -47,7 +47,8 @@ These are **big-bang** decisions.
     │   ├── events.db          # Event ledger
     │   ├── agents.db          # Agent sessions
     │   ├── identity.db        # Contacts, directory, entities, auth, ACL
-    │   ├── memory.db          # Facts, episodes, analysis (Memory System)
+    │   ├── memory.db          # Elements, sets, jobs (Memory System)
+    │   ├── work.db            # Work items, tasks, queue
     │   ├── embeddings.db      # Semantic vector index
     │   └── runtime.db         # Request traces, adapters, automations, bus
     ├── agents/
@@ -66,7 +67,7 @@ These are **big-bang** decisions.
 
 The Memory System uses three databases under `state/data/`:
 
-- **memory.db** -- facts, episodes, facets, analyses, mental models (Memory System)
+- **memory.db** -- elements, sets, jobs (Memory System)
 - **embeddings.db** -- semantic vector index (shared across subsystems)
 - **identity.db** -- entities and knowledge graph (co-located with contacts, auth, ACL)
 
@@ -188,7 +189,7 @@ Implications:
 
 This decision is implemented when all are true:
 
-- All 6 databases are read/written only from `state/data/*.db`
+- All 7 databases are read/written only from `state/data/*.db`
 - Memory System data is read/written via memory.db, identity.db, and embeddings.db under `state/data/`
 - Config reads/writes use only `state/config.json`
 - `nexus status` is orientation-first

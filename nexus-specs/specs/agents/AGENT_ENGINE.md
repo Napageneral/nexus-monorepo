@@ -1,7 +1,7 @@
 # Agent Engine Interface
 
-**Status:** DESIGN SPEC  
-**Last Updated:** 2026-02-05
+**Status:** DESIGN SPEC
+**Last Updated:** 2026-03-02
 
 ---
 
@@ -407,6 +407,21 @@ Agent Engine                     Broker                         NEX             
 **Streaming and persistence are separate.** Streaming happens DURING execution via callbacks → StreamEvents. Ledger writes happen AFTER execution from the final `AgentResult`. NEX routes StreamEvents to the adapter (if it supports `stream`) or coalesces into blocks (fallback for adapters with `send` only).
 
 See `STREAMING.md` for the full streaming architecture.
+
+### Transport Resolution
+
+WebSocket is the global default transport for all broker/agent executions. This is centralized in `resolveAgentStreamParams()` (in `nex/src/commands/agent.ts`), which runs once per execution and applies to both `runCliAgent()` and `runEmbeddedPiAgent()`.
+
+| Caller-provided transport | Resolved transport |
+|---------------------------|-------------------|
+| (none / unspecified)      | `websocket`       |
+| `"websocket"`             | `websocket`       |
+| `"sse"`                   | `sse`             |
+| `"auto"`                  | `auto`            |
+
+**No per-automation wiring needed.** Previous implementations required memory meeseeks and other automations to wire websocket defaults individually. The centralized resolver eliminates this fragmentation.
+
+**Hard cutover — no legacy compatibility branch.** There is no fallback to non-websocket defaults.
 
 ---
 

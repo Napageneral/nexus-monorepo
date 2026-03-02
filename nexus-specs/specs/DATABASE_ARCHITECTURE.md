@@ -36,7 +36,7 @@ All databases live under `{workspace}/state/data/`.
 | 1 | `events.db` | Raw inbound/outbound message events — the canonical event ledger. | Nex TS |
 | 2 | `agents.db` | All agent session state: turns, messages, tool calls, artifacts. | Nex TS |
 | 3 | `identity.db` | Who sent this, where do they live, can they access this — contacts, directory, entities, auth, ACL. | Nex TS |
-| 4 | `memory.db` | What the AI remembers — facts, episodes, mental models, analysis pipeline. | Nex TS |
+| 4 | `memory.db` | What the AI remembers — elements (facts, observations, mental models), sets (episodes, clusters), jobs (retain, consolidate, reflect). | Nex TS |
 | 5 | `embeddings.db` | Semantic vector index — shared by all subsystems that need similarity search. | Nex TS |
 | 6 | `runtime.db` | How the system is running — request tracking, adapters, automations, bus. | Nex TS |
 | 7 | `work.db` | What should happen — task definitions, work items, workflows, sequences for planned and scheduled work. | Nex TS |
@@ -55,23 +55,20 @@ All databases live under `{workspace}/state/data/`.
 
 ### 3.1 events.db — Event Ledger
 
-No changes from current state. Clean and well-scoped.
+Rebuilt per `nex/workplans/CUTOVER_03_EVENTS_DB.md`. Uses the canonical event schema from `NEXUS_REQUEST_TARGET.md`.
 
 | Table | Purpose |
 |-------|---------|
-| `events` | Every inbound/outbound message. PK: `id`, UNIQUE: `(source, source_id)`. |
+| `events` | Every inbound/outbound message. PK: `id`, UNIQUE: `(platform, event_id)`. Schema: `id, event_id, content, content_type, attachments (JSON), recipients (JSON), timestamp, received_at, platform, sender_id, receiver_id, space_id, container_kind, container_id, thread_id, reply_to_id, request_id, metadata`. |
 | `events_fts` | FTS5 full-text search index on event content. |
-| `threads` | Auto-maintained thread aggregates (trigger-populated from events). |
-| `event_participants` | Denormalized sender/recipient/member per event (trigger-populated). |
+| `attachments` | Relational attachment rows. PK: `(event_id, id)`. Application-code populated (no SQL triggers). See `ATTACHMENTS.md`. |
+| `attachment_interpretations` | Media understanding results (transcriptions, vision descriptions). PK: `(event_id, attachment_id)`. |
 | `event_state` | Per-event flags: viewed, archived, pinned, flagged. |
 | `event_state_log` | Audit log for event state changes. |
 | `tags` | Tag definitions (id, name, normalized). |
 | `event_tags` | Many-to-many: events ↔ tags. |
-| `attachments` | File/media attachments per event (trigger-populated). |
-| `document_heads` | Deduplicated document tracking (latest version per doc_key). |
-| `retrieval_log` | Tracks when documents are retrieved/queried. |
 
-**Removed:** `sync_watermarks` — see §5.
+**Removed:** `sync_watermarks` (see §5), `threads` (moved to identity.db), `event_participants` (replaced by `recipients` JSON column on events + `container_participants` in identity.db), `document_heads`, `retrieval_log`. Old `UNIQUE(source, source_id)` replaced by `UNIQUE(platform, event_id)`.
 
 **Schema source:** `nex/src/db/events.ts`
 
@@ -117,7 +114,7 @@ This is the largest change from the legacy layout. It unifies:
 
 | Table | Purpose |
 |-------|---------|
-| `contacts` | Pipeline-speed identity resolution: `(platform, space_id, sender_id) → entity_id`. PK: `(platform, space_id, sender_id)`. |
+| `contacts` | Pipeline-speed identity resolution: `(platform, space_id, contact_id) → entity_id`. PK: `(platform, space_id, contact_id)`. |
 | `spaces` | Server/workspace directory: `(platform, account_id, space_id)`. |
 | `containers` | Direct/group container directory: `(platform, account_id, container_id)`. Includes `container_kind` (direct, group). |
 | `container_participants` | Observed participants per container/thread. |
@@ -149,9 +146,8 @@ CREATE INDEX IF NOT EXISTS idx_names_target ON names(kind, platform, account_id,
 
 | Table | Purpose |
 |-------|---------|
-| `entities` | Named entities (people, orgs, places, concepts). V2 schema: `(id, name, type, merged_into, normalized, is_user, source, mention_count, first_seen, last_seen)`. Union-find merge chain via `merged_into`. |
-| `entity_tags` | Tags on entities. |
-| `entity_cooccurrences` | Entity co-occurrence statistics for merge candidate discovery. |
+| `entities` | Named entities (people, orgs, places, concepts). Schema: `(id, name, type, merged_into, normalized, is_user, origin, mention_count, created_at, updated_at)`. Union-find merge chain via `merged_into`. |
+| `entity_tags` | Tags on entities. Lifecycle pattern: `(id, entity_id, tag, created_at, deleted_at)`. |
 | `merge_candidates` | Potential entity merges awaiting resolution. |
 
 **Key:** `contacts.entity_id` → `entities.id`. Both in the same DB, so JOINs and FK integrity are possible.
@@ -180,41 +176,68 @@ CREATE INDEX IF NOT EXISTS idx_names_target ON names(kind, platform, account_id,
 
 ### 3.4 memory.db — Memory System
 
-Successor to the legacy memory DB. Contains only the memory/knowledge tables. All sync, bus, and agent duplication removed.
+Successor to the legacy memory DB. Uses the **Elements/Sets/Jobs** unified storage model. All derived knowledge lives in a single `elements` table with a `type` discriminator. Collections are modeled as `sets` with polymorphic membership. Processing operations are tracked as `jobs` with typed outputs. See `MEMORY_STORAGE_MODEL.md` for full schema and design rationale.
+
+#### Elements (derived knowledge)
 
 | Table | Purpose |
 |-------|---------|
-| `facts` | Extracted facts about entities. |
-| `fact_entities` | Join: facts ↔ entities (entity_id references identity.db by convention). |
-| `facts_fts` | FTS5 full-text search on facts. |
-| `observation_facts` | Observation → fact linkage. |
-| `mental_models` | Per-entity mental models. |
-| `causal_links` | Causal reasoning chains between facts. |
-| `facets` | Structured attributes on entities. |
-| `episodes` | Conversation episode records. |
-| `episode_definitions` | Episode type definitions (e.g., observation_v1). |
-| `episode_events` | Events within episodes. |
-| `analysis_types` | Analysis pipeline type definitions. |
-| `analysis_runs` | Analysis execution records. |
-| `memory_processing_log` | Processing pipeline log for idempotency and debugging. |
-| `schema_version` | Schema version tracking for migrations. |
+| `elements` | Unified table for all derived knowledge: facts (`type='fact'`), observations (`type='observation'`), mental models (`type='mental_model'`). Version chains via `parent_id`. |
+| `elements_fts` | FTS5 full-text search across ALL element types (replaces fact-only `facts_fts`). |
+| `element_entities` | Join: elements ↔ entities (entity_id references identity.db by convention). Generalizes old `fact_entities` to all element types. |
+| `element_links` | Typed directed links between elements: `causal`, `supports`, `contradicts`, `supersedes`, `derived_from`. Generalizes old `causal_links`. |
 
-**Removed from old legacy memory DB:**
+#### Sets (collections)
 
-| Removed Table | Why |
-|---------------|-----|
+| Table | Purpose |
+|-------|---------|
+| `sets` | Collections of events/elements/sets. Episodes are sets with `definition_id='retain'`. |
+| `set_members` | Polymorphic membership: `member_type` = `'event'`, `'element'`, or `'set'`. Position-ordered. |
+| `set_definitions` | Templates describing how sets are constructed (strategy + config). |
+
+#### Jobs (processing operations)
+
+| Table | Purpose |
+|-------|---------|
+| `job_types` | Processing operation type definitions (e.g., `retain_v1`, `consolidate_v1`). |
+| `jobs` | Processing execution records with status tracking, model info, raw output. Idempotent: `UNIQUE(type_id, input_set_id)`. |
+| `job_outputs` | Join: jobs ↔ elements. Tracks which elements a job produced (full provenance). |
+
+#### Provenance & tracking
+
+| Table | Purpose |
+|-------|---------|
+| `processing_log` | Tracks "has target X been processed by job type Y?" — replaces `is_consolidated` boolean. PK: `(target_type, target_id, job_type_id)`. |
+| `resolution_log` | Entity resolution audit trail: creation, linking, merging, retyping decisions with evidence. |
+| `access_log` | Lightweight access tracking for elements, sets, and jobs. |
+| `schema_version` | Schema version tracking. |
+
+**Superseded tables (removed from old schema):**
+
+| Removed Table | Replaced By |
+|---------------|-------------|
+| `facts` | `elements WHERE type = 'fact'` |
+| `fact_entities` | `element_entities` |
+| `facts_fts` | `elements_fts` |
+| `observation_facts` | `set_members` |
+| `mental_models` | `elements WHERE type = 'mental_model'` |
+| `causal_links` | `element_links` |
+| `facets` | Removed (unused at runtime) |
+| `episodes` | `sets` |
+| `episode_definitions` | `set_definitions` |
+| `episode_events` | `set_members WHERE member_type = 'event'` |
+| `analysis_types` | `job_types` |
+| `analysis_runs` | `jobs` + `elements WHERE type = 'observation'` |
+| `memory_processing_log` | `processing_log` |
 | `bus_events` | Nex bus is the single bus. Old Go bus eliminated. |
 | `sync_watermarks` | Adapters own their sync state. See §5. |
-| `sync_jobs` | Go sync pipeline eliminated. Adapters own their sync. |
-| `adapter_state` | Go adapter key-value store eliminated. Adapters own their state. |
-| `agent_sessions` | Duplicate of agents.db. Eliminated. |
-| `agent_turns` | Duplicate of agents.db. Eliminated. |
-| `agent_messages` | Duplicate of agents.db. Eliminated. |
-| `agent_tool_calls` | Duplicate of agents.db. Eliminated. |
+| `sync_jobs` | Go sync pipeline eliminated. |
+| `adapter_state` | Go adapter key-value store eliminated. |
+| `agent_sessions/turns/messages/tool_calls` | Duplicates of agents.db. Eliminated. |
 
-**Note on memory pipeline reads:** The memory extraction pipeline (entity extraction, fact extraction, etc.) reads from `agents.db` directly (for turn/message data) and `events.db` (for event data). The old legacy agent tables in the memory DB have been eliminated.
+**Note on memory pipeline reads:** The memory extraction pipeline reads from `agents.db` (for turn/message data) and `events.db` (for event data) via cross-DB ATTACH. Three meeseeks automations (writer, consolidator, injection) produce and consume elements/sets/jobs.
 
-**Schema source:** `nex/src/db/memory.ts` (TS-owned schema file).
+**Schema source:** `nex/src/db/memory.ts` (TS-owned schema file). Full SQL in `MEMORY_STORAGE_MODEL.md`.
 
 ---
 
@@ -268,7 +291,7 @@ Renamed from `nexus.db`. Captures all runtime orchestration state.
 
 ### 3.7 work.db — Work Management
 
-Tracks future work: task definitions, work items, workflow definitions, and sequences. See `CRM_ANALYSIS_AND_WORK_SYSTEM.md` for full schema and design rationale.
+Tracks future work: task definitions, work items, workflow definitions, and sequences. See `work-system/CRM_ANALYSIS_AND_WORK_SYSTEM.md` for full schema and design rationale.
 
 | Table | Purpose |
 |-------|---------|
@@ -285,7 +308,7 @@ Tracks future work: task definitions, work items, workflow definitions, and sequ
 - The clock/cron adapter reads work.db directly as a schedule source, firing due work items as NexusEvents.
 - Sequences nest via `parent_sequence_id` for campaigns.
 
-**Schema source:** `CRM_ANALYSIS_AND_WORK_SYSTEM.md` §4 (to be implemented as `nex/src/db/work.ts`).
+**Schema source:** `work-system/CRM_ANALYSIS_AND_WORK_SYSTEM.md` §4 (to be implemented as `nex/src/db/work.ts`).
 
 ---
 
@@ -355,7 +378,7 @@ This must be ported to TypeScript. It currently uses Gemini for extraction — t
 events.db (raw events) ──read──→ Memory Pipeline (TS)
 agents.db (agent turns) ──read──→ Memory Pipeline (TS)
                                        │
-                                       ├──write──→ memory.db (facts, episodes, analysis)
+                                       ├──write──→ memory.db (elements, sets, jobs, processing_log)
                                        ├──write──→ identity.db (entities, entity_tags, merge_candidates)
                                        └──write──→ embeddings.db (vec_embeddings)
 ```
@@ -431,7 +454,7 @@ The old identity.db had:
 - `entities` (id, name, type) — local copy of memory system entities → **DROPPED** (entities move to identity.db with the V2 schema)
 - `identity_mappings` (channel, identifier → entity_id) — superseded by new `contacts` table → **DROPPED**
 - `entity_tags` — local copy → **DROPPED** (entity_tags move to identity.db from legacy memory DB)
-- `contacts` (old format) → **REPLACED** by new `contacts` with `(platform, space_id, sender_id)` PK
+- `contacts` (old format) → **REPLACED** by new `contacts` with `(platform, space_id, contact_id)` PK
 - `auth_tokens` → **PRESERVED** (data migrated)
 - `auth_passwords` → **PRESERVED** (data migrated)
 
@@ -444,7 +467,7 @@ The old identity.db had:
 
 ### Additional Migrations Needed
 
-1. **Entities from legacy memory DB → identity.db:** The `entities`, `entity_tags`, `entity_cooccurrences`, `merge_candidates` tables previously lived in the legacy memory DB (schema v22). They have been migrated to identity.db.
+1. **Entities from legacy memory DB → identity.db:** The `entities`, `entity_tags`, `merge_candidates` tables previously lived in the legacy memory DB (schema v22). They have been migrated to identity.db. Entity co-occurrence is derived at query time from `element_entities` in memory.db — no denormalized table needed.
 
 2. **ACL from nexus.db → identity.db:** The `acl_grants`, `acl_grant_log`, `acl_access_log`, `acl_permission_requests` tables move from nexus.db to identity.db, dropping the `acl_` prefix.
 
@@ -458,15 +481,17 @@ The old identity.db had:
 
 `memory.db` is the successor to the legacy `state/data/cortex/cortex.db`.
 
-**Tables that move to memory.db (kept):**
-- `facts`, `fact_entities`, `facts_fts`, `observation_facts`
-- `mental_models`, `causal_links`, `facets`
-- `episodes`, `episode_definitions`, `episode_events`
-- `analysis_types`, `analysis_runs`, `memory_processing_log`
+**Tables that move to memory.db (rewritten as Elements/Sets/Jobs):**
+- `elements`, `elements_fts`, `element_entities`, `element_links`
+- `sets`, `set_members`, `set_definitions`
+- `job_types`, `jobs`, `job_outputs`
+- `processing_log`, `resolution_log`, `access_log`
 - `schema_version`
 
+Note: The old tables (`facts`, `fact_entities`, `mental_models`, `causal_links`, `episodes`, `episode_events`, `analysis_types`, `analysis_runs`, etc.) are superseded by the unified schema above. See `MEMORY_STORAGE_MODEL.md` for the full mapping.
+
 **Tables that move to identity.db:**
-- `entities`, `entity_tags`, `entity_cooccurrences`, `merge_candidates`
+- `entities`, `entity_tags`, `merge_candidates`
 
 **Tables that move to embeddings.db:**
 - `embeddings`, `vec_embeddings`
@@ -480,7 +505,7 @@ The old identity.db had:
 
 ### Cross-DB Reference Updates
 
-After migration, memory.db tables that reference `entity_id` (e.g., `fact_entities.entity_id`, `mental_models.entity_id`) will reference entities in **identity.db** by convention. No foreign key enforcement across databases — the application layer ensures consistency.
+After migration, memory.db tables that reference `entity_id` (e.g., `element_entities.entity_id`, `elements.entity_id`) will reference entities in **identity.db** by convention. No foreign key enforcement across databases — the application layer ensures consistency.
 
 ---
 
@@ -518,7 +543,7 @@ After migration, memory.db tables that reference `entity_id` (e.g., `fact_entiti
 ├── events.db          # 578 MB — event ledger (11 tables)
 ├── agents.db          # 8.0 GB — agent sessions (16 tables)
 ├── identity.db        # ~1 MB  — contacts, directory, entities, auth, ACL (~16 tables)
-├── memory.db          # ~2 MB  — facts, episodes, analysis (14 tables)
+├── memory.db          # ~2 MB  — elements, sets, jobs (14 tables)
 ├── embeddings.db      # ~1 MB  — vector index (2 tables + sqlite-vec internals)
 ├── runtime.db         # ~250 KB — requests, adapters, automations, bus (6 tables)
 └── work.db            # ~0 KB  — tasks, work items, workflows, sequences (6 tables)
@@ -542,12 +567,12 @@ Create or update TypeScript schema files for each database:
 | Task | File | Notes |
 |------|------|-------|
 | Update events.db schema | `nex/src/db/events.ts` | Remove `sync_watermarks` from schema SQL |
-| Update identity.db schema | `nex/src/db/identity.ts` | Add entities, entity_tags, entity_cooccurrences, merge_candidates, ACL tables, unified `names` table. Rename `delivery_*` tables. |
+| Update identity.db schema | `nex/src/db/identity.ts` | Add entities, entity_tags, merge_candidates, ACL tables, unified `names` table. Rename `delivery_*` tables. |
 | Create memory.db schema | `nex/src/db/memory.ts` | New file. Facts, episodes, analysis tables from legacy memory DB schema. |
 | Create embeddings.db schema | `nex/src/db/embeddings.ts` | New file. embeddings + vec_embeddings. |
 | Update runtime.db schema | `nex/src/db/nexus.ts` | Remove ACL tables (moved to identity). Rename `aix_import_jobs` → `import_jobs`. Remove `sync_watermarks` if present. |
 | Update hooks schema | `nex/src/db/hooks.ts` | No changes needed — automations + hook_invocations stay in runtime.db. |
-| Create work.db schema | `nex/src/db/work.ts` | New file. Tasks, workflows, workflow_steps, work_items, work_item_events, sequences. See `CRM_ANALYSIS_AND_WORK_SYSTEM.md` §4. |
+| Create work.db schema | `nex/src/db/work.ts` | New file. Tasks, workflows, workflow_steps, work_items, work_item_events, sequences. See `work-system/CRM_ANALYSIS_AND_WORK_SYSTEM.md` §4. |
 
 ### Phase 2: Ledger Manager Updates
 
@@ -574,7 +599,7 @@ Update `nex/src/db/ledgers.ts` to:
 |------|--------------|
 | Memory pipeline | Reads from agents.db + events.db. Writes to memory.db + identity.db (entities) + embeddings.db. |
 | Identity resolution | Uses contacts + entities from identity.db (same DB = JOINable). |
-| Runtime boot | Opens 6 DBs. Seeds owner entity in identity.db. |
+| Runtime boot | Opens 7 DBs. Seeds owner entity in identity.db. |
 | Adapter manager | Queries `getSyncStatus()` on adapters instead of reading `sync_watermarks`. Updates `backfill_cursor` snapshot on `adapter_instances`. |
 | ACL checks | Reads from identity.db instead of nexus.db (runtime.db). |
 | Recall/search endpoints | Port from Go to TS. Query memory.db + embeddings.db + identity.db (entities). |
@@ -613,8 +638,8 @@ For comprehension purposes, here are the high-level conceptual groupings of all 
 | **Auth** | Tokens + passwords | identity.db |
 | **Access Control** | Grants + audit | identity.db |
 | **Entities & Knowledge Graph** | Named entities, merges, co-occurrence | identity.db |
-| **Memory / Facts** | Extracted knowledge | memory.db |
-| **Memory Pipeline** | Episodes + analysis | memory.db |
+| **Memory / Elements** | Derived knowledge (facts, observations, mental models) | memory.db |
+| **Memory Pipeline** | Sets (episodes, clusters) + jobs (retain, consolidate, reflect) | memory.db |
 | **Embeddings** | Semantic vector index | embeddings.db |
 | **Runtime Operations** | Request tracking, adapters, automations, bus | runtime.db |
 | **Work Management** | Task definitions, work items, workflows, sequences | work.db |

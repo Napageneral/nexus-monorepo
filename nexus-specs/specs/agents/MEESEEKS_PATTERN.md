@@ -3,7 +3,7 @@
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-18
 **Related:** AGENTS.md, DATA_MODEL.md, ../../data/memory/roles/
-**Database layout:** See `../../data/DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
+**Database layout:** See `../../data/DATABASE_ARCHITECTURE.md` for canonical database inventory (7 databases)
 
 ---
 
@@ -48,7 +48,8 @@ Every hook point supports both **blocking** and **async** automations. The hook 
 | `after:resolveAccess` | After IAM | Access policy augmentation |
 | `runAutomations` | Stage 5 — first safe decision point | General-purpose automations, routing overrides |
 | `after:assembleContext` | After session routing | Context augmentation |
-| `after:runAgent` | After agent turn completes | Post-turn processing (memory writes, analytics) |
+| `episode-created` | When an episode clips (token budget or silence timer) | Memory writer dispatch |
+| `episode-retained` | After memory writer completes successfully | Memory consolidator dispatch |
 | `after:deliverResponse` | After response processed | Analytics, logging |
 | `deliverResponse` | Pipeline delivery/finalization | Cleanup, persistence |
 
@@ -121,7 +122,7 @@ SELECT * FROM automations WHERE workspace_dir IS NOT NULL AND self_improvement =
 SELECT * FROM automations WHERE peer_workspaces IS NOT NULL;
 
 -- Blocking automations at a hook
-SELECT * FROM automations WHERE hook_point = 'after:runAgent' AND blocking = 1;
+SELECT * FROM automations WHERE hook_point = 'worker:pre_execution' AND blocking = 1;
 ```
 
 ---
@@ -131,29 +132,25 @@ SELECT * FROM automations WHERE hook_point = 'after:runAgent' AND blocking = 1;
 Automations can be granted read/write access to other automations' workspaces via the `peer_workspaces` column. This is the primary mechanism for cross-role coordination — each automation has its own workspace, its own lifecycle, its own context loading. Collaboration happens by reading and writing into each other's directories.
 
 ```sql
--- Memory reader can access the memory writer's workspace (and vice versa)
+-- Memory consolidator can access the writer's workspace
 UPDATE automations
 SET peer_workspaces = '["~/.nexus/state/meeseeks/memory-writer/"]'
-WHERE name = 'memory-reader';
+WHERE name = 'memory-consolidator';
 
+-- Memory injection can access the writer's workspace
 UPDATE automations
-SET peer_workspaces = '["~/.nexus/state/meeseeks/memory-reader/"]'
+SET peer_workspaces = '["~/.nexus/state/meeseeks/memory-writer/"]'
+WHERE name = 'memory-injection';
+
+-- Memory writer can access consolidator and injection workspaces
+UPDATE automations
+SET peer_workspaces = '["~/.nexus/state/meeseeks/memory-consolidator/", "~/.nexus/state/meeseeks/memory-injection/"]'
 WHERE name = 'memory-writer';
 ```
 
-This is the canonical pattern: **two automations that collaborate, not one automation that does two things.** Each has its own hook point, its own blocking behavior, its own timeout, its own workspace, its own context loading script. They coordinate through peer workspace access — reading each other's SKILLS.md, leaving notes, providing feedback.
+This is the canonical pattern: **separate automations that collaborate, not one automation that does many things.** Each has its own hook point, its own blocking behavior, its own timeout, its own workspace, its own context loading script. They coordinate through peer workspace access — reading each other's SKILLS.md, leaving notes, providing feedback.
 
-**Why two automations instead of one multi-hook?** The reader and writer have genuinely different execution profiles:
-
-| | Memory Reader | Memory Writer |
-|---|---|---|
-| Hook point | `worker:pre_execution` | `after:runAgent` |
-| Blocking | Yes (hot path, worker waits) | No (async, fire-and-forget) |
-| Timeout | 10s (latency-sensitive) | 30s (background, has time) |
-| Session | Fresh (no history needed) | Full history (needs context for extraction) |
-| Skill | Search, traverse, synthesize | Extract, resolve, write |
-
-Forcing these into one automation adds complexity (hook branching, config overrides, role-switching dispatch scripts) to solve a problem that peer_workspaces already solves cleanly. Two simple automations linked by peer access is the correct and cleaner approach.
+Forcing the writer, consolidator, and injection meeseeks into one automation adds complexity (hook branching, config overrides, role-switching dispatch scripts) to solve a problem that peer_workspaces already solves cleanly. Three simple automations linked by peer access is the correct and cleaner approach.
 
 At runtime, the workspace context includes both the home directory and any peer directories:
 
@@ -180,61 +177,53 @@ interface AutomationWorkspaceContext {
 ```
 
 **Use cases for peer workspaces:**
-- Memory reader reads the writer's SKILLS.md to understand what entity patterns it creates
-- Memory writer reads the reader's ERRORS.md to learn what searches are failing
-- Either can leave notes for the other (e.g., `NOTES_FOR_WRITER.md`, `NOTES_FOR_READER.md`)
+- Memory consolidator reads the writer's SKILLS.md to understand entity patterns it creates
+- Memory injection reads the writer's PATTERNS.md to learn what entity patterns exist for better search
+- Memory writer reads the injection meeseeks' ERRORS.md to learn what searches are failing and what users ask about
+- Any meeseeks can leave notes for others (e.g., `NOTES_FOR_WRITER.md`, `NOTES_FOR_CONSOLIDATOR.md`)
 - Link any two meeseeks together after the fact — add peer access to already-running automations without changing their code
 
 ---
 
-## Tooling Model: Skills + Direct SQLite
+## Tooling Model: CLI Commands + Skills
 
-Meeseeks agents operate in **code mode** — they have bash/filesystem access and can read, write, grep, and query anything in their workspace and the databases directly.
+Meeseeks agents operate in **code mode** — they have bash/filesystem access and can read, write, grep, and query anything in their workspace.
 
-### Skills over structured tools
+### CLI commands over structured tools
 
-Instead of defining a thick layer of bespoke tool_use tools (memory_entity_search, memory_relationship_query, etc.), meeseeks agents get **skills** -- workspace files that contain schemas, query patterns, write helpers, and scripts. The agent uses these skills with its existing code mode capabilities.
+Instead of defining a thick layer of bespoke `tool_use` tools (memory_entity_search, memory_relationship_query, etc.), meeseeks agents use **CLI commands** (`nexus memory <subcommand>`) that are always available in bash. The CLI sends IPC requests to the NEX daemon, which executes the core function, coordinates database writes, and returns JSON to stdout.
 
-**Why skills instead of tools?**
+**Why CLI over `tool_use`?**
 
-- **Skills evolve independently** — Update a skill file in the workspace, not a tool implementation in runtime code. The agent can even update its own skills via self-improvement.
-- **Skills have no ceiling** — Structured tools are a ceiling — the agent can only do what the tool interface allows. Skills are a floor — the agent starts there and grows.
-- **Skills can include scripts** — A skill folder can contain bash scripts that wrap `sqlite3` with the right pragmas (WAL mode, foreign keys), handle write-behind embedding triggers, or coordinate multi-step operations.
-- **The agent learns** — The agent gets better at using skills over time via self-improvement. It discovers new query patterns, faster search strategies, edge cases — and writes them down.
+- **Prompt cache stability** — CLI commands don't change the tool inventory. Every agent session has the same tool surface. Adding a new memory operation means adding a new CLI subcommand, not changing what tools are injected into agents.
+- **Code mode natural** — Agents already have bash access. `nexus memory recall --query "..."` composes with pipes, scripts, and other CLI tools.
+- **Uniform interface** — One `nexus memory` namespace for all memory operations. Agents learn the command tree, not a fragmented set of structured tools.
+- **Daemon-coordinated** — All operations go through the daemon via IPC, ensuring writes are serialized, events are emitted, and downstream automations can trigger.
 
-### Database access via skills
+### Skills as knowledge, not execution
 
-Instead of HTTP-backed tools, meeseeks get **direct SQLite database paths** and **schemas** as part of their skill files. The agent uses `sqlite3` CLI or any other mechanism to compose queries directly.
+Meeseeks agents get **skills** — workspace files that contain schemas, query patterns, usage guidance, and scripts. Skills teach the agent *how* to use the CLI commands effectively, not replace them.
 
 ```
-~/.nexus/state/meeseeks/memory-reader/
+~/.nexus/state/meeseeks/memory-injection/
   skills/
     memory/
-      SCHEMA.md           # Full CREATE TABLE statements for memory.db + identity.db (entities)
-      QUERIES.md          # Common query patterns with examples
-      memory-search.sh    # Script that runs semantic + FTS search (embedding computation)
-      memory-write.sh     # Script that handles writes with side-effect coordination
-      DB_PATHS            # Paths: memory.db, identity.db, embeddings.db
+      SCHEMA.md           # Database schemas — teaches agent what data structures exist
+      QUERIES.md          # Common query patterns and CLI command recipes
+      PATTERNS.md         # Learned search strategies, entity disambiguation patterns
 ```
 
-The agent's ROLE.md references the skill folder. The agent reads the schema, writes SQL, runs scripts. Everything it needs is in the workspace.
+**Why skills alongside CLI?**
 
-### Semantic search: the one thing SQL can't do
+- **Skills evolve independently** — Update a skill file in the workspace, not a tool implementation in runtime code. The agent can even update its own skills via self-improvement.
+- **Skills have no ceiling** — Structured tools constrain what the agent can do. Skills teach the agent to compose CLI commands in novel ways — piping recall results into further queries, batching writes, combining memory operations with filesystem analysis.
+- **The agent learns** — The agent gets better at using CLI commands over time via self-improvement. It discovers effective query patterns, search strategies, edge cases — and writes them down in skill files.
 
-`memory_search` (semantic + text search) requires computing query embeddings at runtime and doing vector similarity across heterogeneous tables. SQL alone can't express this. Two options:
+### Read-only direct SQLite access
 
-1. **Skill script** -- `memory-search.sh` that calls an embedding service, computes similarity, ranks results, returns JSON. The agent calls it via bash.
-2. **One structured tool** -- `memory_search` as a real tool_use tool backed by a TS endpoint.
+For **read-only** queries that don't require embedding computation or daemon coordination, meeseeks agents can also query SQLite directly using `sqlite3` CLI in WAL mode. This provides maximum composability for ad-hoc analytical queries — CTEs, joins, aggregations, window functions — without IPC overhead.
 
-Either works. The skill script approach is more consistent with the overall model. The structured tool approach is more ergonomic for the LLM. Both remain valid — the right choice depends on implementation experience.
-
-### Why direct SQLite?
-
-- **Maximum composability** — Agent writes any query it can imagine. CTEs, joins, aggregations, window functions.
-- **Zero latency** — No HTTP round-trip. SQLite reads are microseconds.
-- **Code mode natural** — The agent already has bash/filesystem access. SQLite is just another resource.
-- **WAL mode** — Concurrent readers. Multiple meeseeks can read simultaneously.
-- **Single-writer serialization** — SQLite's single-writer model naturally serializes writes. Write scripts coordinate this.
+**All writes go through the daemon** via `nexus memory` CLI commands. Direct SQLite is read-only. This preserves the daemon's ability to coordinate writes, emit events, and maintain consistency across databases.
 
 ---
 
@@ -253,7 +242,7 @@ export default async function memoryReaderAutomation(ctx: AutomationContext) {
 
   // 1. Derive a meeseeks session key from the parent request.
   //    Own session for broker queue isolation, but same request for lineage.
-  const meeseeksSession = `meeseeks:memory-reader:${ctx.request.agent?.session_key || ctx.request.request_id}`;
+  const meeseeksSession = `meeseeks:memory-injection:${ctx.request.agent?.session_key || ctx.request.request_id}`;
 
   // 2. Assemble context — same request, meeseeks session key, focused task.
   const assembled = await ctx.assembleContext({
@@ -300,39 +289,18 @@ All meeseeks run through the broker using the user's existing Anthropic OAuth su
 
 ---
 
-## Memory Reader and Writer: Two Collaborating Automations
+## Memory Meeseeks: Three Collaborating Automations
 
-The canonical meeseeks pair. Two separate automations, each at its own hook point, linked by peer workspaces.
+The canonical memory meeseeks trio. Three separate automations, each at its own hook point, linked by peer workspaces.
 
-### Memory Reader
-
-Registered at `worker:pre_execution` (blocking). Fires in the worker dispatch path — searches memory and injects context into the worker's assembled context before the broker begins execution.
-
-See `../../data/memory/roles/MEMORY_READER.md` for full role spec.
-
-```sql
-INSERT INTO automations (
-  name, hook_point, mode, status, blocking, script_path,
-  workspace_dir, peer_workspaces, self_improvement, timeout_ms
-) VALUES (
-  'memory-reader',
-  'worker:pre_execution',
-  'persistent',
-  'active',
-  1,                                                    -- blocking: worker waits
-  '~/.nexus/state/hooks/scripts/memory-reader.ts',
-  '~/.nexus/state/meeseeks/memory-reader/',
-  '["~/.nexus/state/meeseeks/memory-writer/"]',         -- peer: can read writer's workspace
-  1,
-  10000                                                  -- 10s timeout
-);
-```
+See `../../memory/MEMORY_SYSTEM.md` for the full memory architecture.
+See `../../memory/MEMORY_STORAGE_MODEL.md` for the unified elements/sets/jobs storage model.
 
 ### Memory Writer
 
-Registered at `after:runAgent` (async). Fires after the agent turn completes -- extracts entities, relationships, and episodes from the completed turn and writes to memory.db + identity.db (entities) + embeddings.db.
+Registered at `episode-created` (async). Dispatched when an episode clips (silence window or token budget) — extracts facts and entities from the episode's events. Writes elements (`type='fact'`), creates/resolves entities, and links elements to entities.
 
-See `../../data/memory/roles/MEMORY_WRITER.md` for full role spec.
+See `../../memory/MEMORY_WRITER.md` for full role spec.
 
 ```sql
 INSERT INTO automations (
@@ -340,38 +308,91 @@ INSERT INTO automations (
   workspace_dir, peer_workspaces, self_improvement, timeout_ms
 ) VALUES (
   'memory-writer',
-  'after:runAgent',
+  'episode-created',
   'persistent',
   'active',
   0,                                                    -- async: fire-and-forget
   '~/.nexus/state/hooks/scripts/memory-writer.ts',
   '~/.nexus/state/meeseeks/memory-writer/',
-  '["~/.nexus/state/meeseeks/memory-reader/"]',         -- peer: can read reader's workspace
+  '["~/.nexus/state/meeseeks/memory-consolidator/", "~/.nexus/state/meeseeks/memory-injection/"]',
   1,
   30000                                                  -- 30s timeout
+);
+```
+
+### Memory Consolidator
+
+Registered at `episode-retained` (async). Dispatched after the writer completes successfully for the same episode. Receives the episode's facts and connects them into the broader memory graph — creating or updating observations (elements with `type='observation'`), detecting causal relationships (element links), and proposing entity merges.
+
+See `../../memory/MEMORY_CONSOLIDATION.md` for full role spec.
+
+```sql
+INSERT INTO automations (
+  name, hook_point, mode, status, blocking, script_path,
+  workspace_dir, peer_workspaces, self_improvement, timeout_ms
+) VALUES (
+  'memory-consolidator',
+  'episode-retained',
+  'persistent',
+  'active',
+  0,                                                    -- async: fire-and-forget
+  '~/.nexus/state/hooks/scripts/memory-consolidator.ts',
+  '~/.nexus/state/meeseeks/memory-consolidator/',
+  '["~/.nexus/state/meeseeks/memory-writer/"]',         -- peer: can read writer's workspace
+  1,
+  60000                                                  -- 60s timeout (consolidation is heavier)
+);
+```
+
+### Memory Injection
+
+Registered at `worker:pre_execution` (blocking). Fires on every worker dispatch — forked from the primary session, uses memory search to find relevant context the main session doesn't have, and either interrupts with discovered information or stays silent.
+
+See `../../memory/skills/MEMORY_INJECTION.md` for full role spec.
+
+```sql
+INSERT INTO automations (
+  name, hook_point, mode, status, blocking, script_path,
+  workspace_dir, peer_workspaces, self_improvement, timeout_ms
+) VALUES (
+  'memory-injection',
+  'worker:pre_execution',
+  'persistent',
+  'active',
+  1,                                                    -- blocking: worker waits
+  '~/.nexus/state/hooks/scripts/memory-injection.ts',
+  '~/.nexus/state/meeseeks/memory-injection/',
+  '["~/.nexus/state/meeseeks/memory-writer/"]',         -- peer: can read writer's workspace
+  1,
+  10000                                                  -- 10s timeout (latency-sensitive)
 );
 ```
 
 ### How They Collaborate
 
 ```
-Reader workspace                         Writer workspace
-~/.nexus/state/meeseeks/memory-reader/   ~/.nexus/state/meeseeks/memory-writer/
-  ROLE.md                                  ROLE.md
-  SKILLS.md  ←──── writer reads ────────── SKILLS.md
-  PATTERNS.md                              PATTERNS.md
-  ERRORS.md  ←──── writer reads ────────── ERRORS.md
-  skills/                                  skills/
-    memory/                                  memory/
-      SCHEMA.md                                SCHEMA.md
-      QUERIES.md                               QUERIES.md
-      memory-search.sh                         memory-search.sh
-      memory-write.sh                          memory-write.sh
-  NOTES_FOR_WRITER.md ──── writer reads ──→
-                     ←──── reader reads ─── NOTES_FOR_READER.md
+Writer workspace                            Consolidator workspace                     Injection workspace
+~/.nexus/state/meeseeks/memory-writer/      ~/.nexus/state/meeseeks/memory-consolidator/   ~/.nexus/state/meeseeks/memory-injection/
+  ROLE.md                                     ROLE.md                                        ROLE.md
+  SKILLS.md                                   SKILLS.md                                      SKILLS.md
+  PATTERNS.md                                 PATTERNS.md                                    PATTERNS.md
+  ERRORS.md                                   ERRORS.md                                      ERRORS.md
+  skills/memory/                              skills/memory/                                 skills/memory/
 ```
 
-Self-improvement on the reader updates `memory-reader/SKILLS.md`. The writer's next invocation can read it via peer access. And vice versa. They evolve independently but stay aware of each other.
+**Why three automations instead of one or two?** Each has genuinely different execution profiles:
+
+| | Memory Writer | Memory Consolidator | Memory Injection |
+|---|---|---|---|
+| Hook point | `episode-created` | `episode-retained` (after writer) | `worker:pre_execution` |
+| Blocking | No (async) | No (async) | Yes (hot path, worker waits) |
+| Timeout | 30s | 60s | 10s (latency-sensitive) |
+| Session | Full history (needs context) | Fresh (just the facts) | Forked from session |
+| Skill | Extract, resolve, write | Synthesize, link, merge | Search, retrieve, inject |
+| Input | Episode events (set) | Episode facts (set) | Query-driven (no input set) |
+| Output | Facts (elements) | Observations + links (elements) | Context injection (no persistent output) |
+
+Self-improvement on each meeseeks updates its own workspace. Peer access allows cross-pollination — the consolidator can read the writer's SKILLS.md to understand entity patterns, the injection meeseeks can read the writer's patterns to improve search strategies. They evolve independently but stay aware of each other.
 
 ---
 
@@ -395,8 +416,8 @@ Path convention: `~/.nexus/state/meeseeks/{name}/` derived from automation name.
 ### Registration
 
 ```bash
-nexus automations register memory-reader.ts \
-  --name "memory-reader" \
+nexus automations register memory-injection.ts \
+  --name "memory-injection" \
   --hook-point "worker:pre_execution" \
   --blocking \
   --workspace \
@@ -521,7 +542,7 @@ This function is called at every hook point in the pipeline and broker dispatch 
 | Table rename + migration | Small | `hooks` → `automations`, add 6 new columns |
 | Hook point runner | Medium | Generic `evaluateAutomationsAtHook()` function |
 | `worker:pre_execution` hook | Medium | Insert hook in worker dispatch path (runAgent.ts lines 1501-1504 and 1718-1721) |
-| `after:runAgent` hook | Medium | Insert hook in pipeline.ts after stage 7, async fire-and-forget |
+| `episode-created` / `episode-retained` hooks | Medium | Wire up hookpoints for memory writer and consolidator dispatch |
 | Automation context extension | Medium | Expose `request`, `assembleContext`, `startBrokerExecution`, `workspace` on AutomationContext |
 | Peer workspace loading | Small | Read `peer_workspaces` JSON, provide `peers` array on workspace context |
 | Per-automation timeout | Small | Check `automation.timeout_ms` in timeout resolver |
@@ -545,7 +566,7 @@ This function is called at every hook point in the pipeline and broker dispatch 
 
 5. **Event ledger unification:** Resolved -- see `../../data/_archive/EVENT_LEDGER_UNIFICATION.md` (archived). One events ledger (`events.db`), legacy events table removed. Pipeline already captures inbound + outbound. AIX adapters already built.
 
-6. **Semantic search delivery:** Should `memory_search` (embedding + FTS hybrid search) be a structured tool_use tool, or a skill script (`memory-search.sh`) the agent calls via bash? Skill script is more consistent; structured tool is more ergonomic for the LLM.
+6. **Semantic search delivery:** ~~Should `memory_search` be a structured tool_use tool, or a skill script?~~ **Resolved: CLI command.** All memory operations (including semantic search via `nexus memory recall`) are CLI commands that send IPC requests to the NEX daemon. The daemon executes the core function (including embedding computation and vector search) and returns JSON. This keeps all database access coordinated through the daemon while giving agents a uniform `nexus memory <subcommand>` interface. See `../../memory/MEMORY_SYSTEM.md` § Tool Architecture for the full execution model.
 
 ---
 
@@ -553,7 +574,8 @@ This function is called at every hook point in the pipeline and broker dispatch 
 
 - `AGENTS.md` — Manager-Worker Pattern, worker dispatch
 - `DATA_MODEL.md` — Core data model
-- `../../data/memory/roles/MEMORY_READER.md` — Memory reader meeseeks role spec
-- `../../data/memory/roles/MEMORY_WRITER.md` — Memory writer meeseeks role spec
-- `../../data/memory/MEMORY_SYSTEM.md` — Tripartite memory model
-- `../../data/memory/MEMORY_AGENT_INTERFACE.md` — Memory System tool/API surface
+- `../../memory/MEMORY_SYSTEM.md` — Memory system architecture (4-layer model)
+- `../../memory/MEMORY_STORAGE_MODEL.md` — Unified elements/sets/jobs storage model
+- `../../memory/MEMORY_WRITER.md` — Memory writer meeseeks role spec
+- `../../memory/MEMORY_CONSOLIDATION.md` — Memory consolidator meeseeks role spec
+- `../../memory/skills/MEMORY_INJECTION.md` — Memory injection meeseeks role spec

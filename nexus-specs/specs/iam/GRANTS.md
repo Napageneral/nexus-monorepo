@@ -99,7 +99,6 @@ interface Grant {
   // Who gets the grant
   sender_query: {                // Query to match senders
     person_id?: string;          // Specific person
-    relationship?: string;       // All family members
     tags?: string[];             // People with tags
   };
   
@@ -555,7 +554,7 @@ Prevent spam:
 # Created via CLI or agent
 id: grant_partner_calendar
 sender_query:
-  relationship: partner
+  tags: [partner]
 resources:
   - calendar_read
 expires_at: null  # Permanent

@@ -4,7 +4,7 @@
 **Last Updated:** 2026-02-18
 
 > **Rename notice:** This database has been renamed from `nexus.db` to `runtime.db`.
-> See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the canonical 6-database
+> See [DATABASE_ARCHITECTURE.md](../DATABASE_ARCHITECTURE.md) for the canonical 7-database
 > inventory, table ownership, and migration plan.
 >
 > **Relocated tables:**
@@ -211,7 +211,7 @@ ORDER BY times_fired DESC;
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                        6-DATABASE ARCHITECTURE                        │
+│                        7-DATABASE ARCHITECTURE                        │
 │                                                                       │
 │  ┌────────────┐  ┌────────────┐  ┌──────────────┐                   │
 │  │ events.db  │  │ agents.db  │  │ identity.db  │                   │
@@ -231,10 +231,11 @@ ORDER BY times_fired DESC;
 │  └───────────────────────────────────────────────────────────────┘   │
 │                                                                       │
 │  ┌────────────┐  ┌───────────────┐                                   │
-│  │ memory.db  │  │ embeddings.db │                                   │
-│  │ (facts,    │  │ (sqlite-vec)  │                                   │
-│  │  episodes) │  │               │                                   │
-│  └────────────┘  └───────────────┘                                   │
+│  │ memory.db  │  │ embeddings.db │  │  work.db   │                   │
+│  │ (elements, │  │ (sqlite-vec)  │  │ (tasks,    │                   │
+│  │  sets,     │  │               │  │  workflows)│                   │
+│  │  jobs)     │  │               │  │            │                   │
+│  └────────────┘  └───────────────┘  └────────────┘                   │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -268,7 +269,7 @@ This keeps the ledger performant for recent debugging while preserving long-term
 
 ## Related Documents
 
-- `../DATABASE_ARCHITECTURE.md` — Canonical 6-database spec (authoritative table inventory and ownership)
+- `../DATABASE_ARCHITECTURE.md` — Canonical 7-database spec (authoritative table inventory and ownership)
 - `README.md` — System of Record overview
 - `../../runtime/nex/NEXUS_REQUEST.md` — NexusRequest schema
 - `../../runtime/nex/NEX.md` — Pipeline stages

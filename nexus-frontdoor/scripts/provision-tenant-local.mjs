@@ -34,31 +34,6 @@ function parseBool(value, fallback = false) {
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 
-function buildSpikeRuntimeBinding({ tenantId, stateDir }) {
-  const runtimeUrl = normalizeText(process.env.FRONTDOOR_SPIKE_RUNTIME_URL) || "http://127.0.0.1:7422";
-  const runtimePublicBaseUrl =
-    normalizeText(process.env.FRONTDOOR_SPIKE_RUNTIME_PUBLIC_BASE_URL) || runtimeUrl;
-  const trimmedBase = runtimePublicBaseUrl.replace(/\/+$/, "");
-  const runtimeWsUrl =
-    normalizeText(process.env.FRONTDOOR_SPIKE_RUNTIME_WS_URL) ||
-    `${trimmedBase.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:")}/`;
-  const runtimeSseUrl =
-    normalizeText(process.env.FRONTDOOR_SPIKE_RUNTIME_SSE_URL) ||
-    `${trimmedBase}/api/events/stream`;
-  const runtimeAuthToken =
-    normalizeText(process.env.FRONTDOOR_SPIKE_RUNTIME_AUTH_TOKEN) ||
-    normalizeText(process.env.SPIKE_AUTH_TOKEN);
-  return {
-    tenant_id: tenantId,
-    runtime_url: runtimeUrl,
-    runtime_public_base_url: runtimePublicBaseUrl,
-    runtime_ws_url: runtimeWsUrl,
-    runtime_sse_url: runtimeSseUrl,
-    runtime_auth_token: runtimeAuthToken || undefined,
-    state_dir: stateDir,
-  };
-}
-
 async function runCommand(command, args, options = {}) {
   const child = spawn(command, args, {
     stdio: "pipe",
@@ -438,20 +413,154 @@ async function main() {
   const nexAdapterConfigPath = path.join(stateDir, "nex.adapters.yaml");
   const nexusBin = normalizeText(process.env.FRONTDOOR_TENANT_NEXUS_BIN) || "nexus";
 
-  if (productId === "spike") {
-    if (!dryRun) {
-      fs.mkdirSync(tenantRoot, { recursive: true });
-      fs.mkdirSync(stateDir, { recursive: true });
-    }
-    process.stdout.write(`${JSON.stringify(buildSpikeRuntimeBinding({ tenantId, stateDir }))}\n`);
-    return;
-  }
-
   const controlUiRoot = await resolveControlUiRoot(repoRoot);
   const controlUiAllowedOrigins = parseCsv(
     normalizeText(process.env.FRONTDOOR_TENANT_CONTROL_UI_ALLOWED_ORIGINS),
   );
   const basePort = Number(process.env.FRONTDOOR_TENANT_BASE_PORT || "32000");
+  const controlUiConfig =
+    controlUiRoot || controlUiAllowedOrigins.length > 0
+      ? {
+          root: controlUiRoot || undefined,
+          allowedOrigins: controlUiAllowedOrigins.length > 0 ? controlUiAllowedOrigins : undefined,
+        }
+      : undefined;
+  const enableGlowbotApp =
+    normalizeText(process.env.FRONTDOOR_TENANT_ENABLE_GLOWBOT_APP || "0") === "1" ||
+    normalizeText(process.env.FRONTDOOR_TENANT_ENABLE_GLOWBOT_APP || "").toLowerCase() === "true";
+  const glowbotAppKindRaw = normalizeText(
+    process.env.FRONTDOOR_TENANT_GLOWBOT_APP_KIND || "static",
+  ).toLowerCase();
+  const glowbotAppKind =
+    glowbotAppKindRaw === "static" || glowbotAppKindRaw === "proxy" ? glowbotAppKindRaw : null;
+  const glowbotAppRoot = normalizeText(process.env.FRONTDOOR_TENANT_GLOWBOT_APP_ROOT);
+  const glowbotProxyBaseUrl = normalizeText(process.env.FRONTDOOR_TENANT_GLOWBOT_PROXY_BASE_URL);
+  const allowGlowbotControlUiRootReuse = parseBool(
+    process.env.FRONTDOOR_TENANT_ALLOW_GLOWBOT_CONTROL_UI_ROOT,
+    false,
+  );
+  if (
+    enableGlowbotApp &&
+    !glowbotAppKind
+  ) {
+    throw new Error(
+      "invalid_glowbot_app_kind:set FRONTDOOR_TENANT_GLOWBOT_APP_KIND to static or proxy",
+    );
+  }
+  if (enableGlowbotApp && glowbotAppKind === "static" && !glowbotAppRoot) {
+    throw new Error(
+      "glowbot_static_root_missing:set FRONTDOOR_TENANT_GLOWBOT_APP_ROOT when FRONTDOOR_TENANT_GLOWBOT_APP_KIND=static",
+    );
+  }
+  if (enableGlowbotApp && glowbotAppKind === "proxy" && !glowbotProxyBaseUrl) {
+    throw new Error(
+      "glowbot_proxy_base_url_missing:set FRONTDOOR_TENANT_GLOWBOT_PROXY_BASE_URL when FRONTDOOR_TENANT_GLOWBOT_APP_KIND=proxy",
+    );
+  }
+  if (enableGlowbotApp && glowbotAppKind === "proxy" && glowbotAppRoot) {
+    throw new Error(
+      "glowbot_proxy_static_conflict:unset FRONTDOOR_TENANT_GLOWBOT_APP_ROOT when FRONTDOOR_TENANT_GLOWBOT_APP_KIND=proxy",
+    );
+  }
+  if (
+    enableGlowbotApp &&
+    glowbotAppKind === "static" &&
+    glowbotAppRoot &&
+    controlUiRoot &&
+    path.resolve(glowbotAppRoot) === path.resolve(controlUiRoot) &&
+    !allowGlowbotControlUiRootReuse
+  ) {
+    throw new Error(
+      "glowbot_app_root_conflicts_with_control_ui_root:set FRONTDOOR_TENANT_GLOWBOT_APP_ROOT to GlowBot app assets (not control UI) or set FRONTDOOR_TENANT_ALLOW_GLOWBOT_CONTROL_UI_ROOT=1 to override",
+    );
+  }
+  const glowbotAppConfig = enableGlowbotApp
+    ? {
+        enabled: true,
+        displayName: "GlowBot",
+        entryPath: "/app/glowbot/",
+        apiBase: "/api/glowbot",
+        kind: glowbotAppKind,
+        ...(glowbotAppKind === "static"
+          ? { root: glowbotAppRoot }
+          : {
+              proxy: {
+                baseUrl: glowbotProxyBaseUrl,
+              },
+            }),
+      }
+    : undefined;
+  const enableSpikeApp = parseBool(
+    process.env.FRONTDOOR_TENANT_ENABLE_SPIKE_APP,
+    productId === "spike",
+  );
+  const spikeAppKindRaw = normalizeText(
+    process.env.FRONTDOOR_TENANT_SPIKE_APP_KIND || "proxy",
+  ).toLowerCase();
+  const spikeAppKind = spikeAppKindRaw === "static" || spikeAppKindRaw === "proxy" ? spikeAppKindRaw : null;
+  const spikeAppRoot = normalizeText(process.env.FRONTDOOR_TENANT_SPIKE_APP_ROOT);
+  const spikeProxyBaseUrl =
+    normalizeText(process.env.FRONTDOOR_TENANT_SPIKE_PROXY_BASE_URL) ||
+    normalizeText(process.env.FRONTDOOR_SPIKE_RUNTIME_PUBLIC_BASE_URL);
+  const allowSpikeControlUiRootReuse = parseBool(
+    process.env.FRONTDOOR_TENANT_ALLOW_SPIKE_CONTROL_UI_ROOT,
+    false,
+  );
+  if (enableSpikeApp && !spikeAppKind) {
+    throw new Error(
+      "invalid_spike_app_kind:set FRONTDOOR_TENANT_SPIKE_APP_KIND to static or proxy",
+    );
+  }
+  if (enableSpikeApp && spikeAppKind === "static" && !spikeAppRoot) {
+    throw new Error(
+      "spike_static_root_missing:set FRONTDOOR_TENANT_SPIKE_APP_ROOT when FRONTDOOR_TENANT_SPIKE_APP_KIND=static",
+    );
+  }
+  if (enableSpikeApp && spikeAppKind === "proxy" && !spikeProxyBaseUrl) {
+    throw new Error(
+      "spike_proxy_base_url_missing:set FRONTDOOR_TENANT_SPIKE_PROXY_BASE_URL (or FRONTDOOR_SPIKE_RUNTIME_PUBLIC_BASE_URL) when FRONTDOOR_TENANT_SPIKE_APP_KIND=proxy",
+    );
+  }
+  if (enableSpikeApp && spikeAppKind === "proxy" && spikeAppRoot) {
+    throw new Error(
+      "spike_proxy_static_conflict:unset FRONTDOOR_TENANT_SPIKE_APP_ROOT when FRONTDOOR_TENANT_SPIKE_APP_KIND=proxy",
+    );
+  }
+  if (
+    enableSpikeApp &&
+    spikeAppKind === "static" &&
+    spikeAppRoot &&
+    controlUiRoot &&
+    path.resolve(spikeAppRoot) === path.resolve(controlUiRoot) &&
+    !allowSpikeControlUiRootReuse
+  ) {
+    throw new Error(
+      "spike_app_root_conflicts_with_control_ui_root:set FRONTDOOR_TENANT_SPIKE_APP_ROOT to Spike app assets (not control UI) or set FRONTDOOR_TENANT_ALLOW_SPIKE_CONTROL_UI_ROOT=1 to override",
+    );
+  }
+  const spikeAppConfig = enableSpikeApp
+    ? {
+        enabled: true,
+        displayName: "Spike",
+        entryPath: "/app/spike",
+        apiBase: "/api/spike",
+        kind: spikeAppKind,
+        ...(spikeAppKind === "static"
+          ? { root: spikeAppRoot }
+          : {
+              proxy: {
+                baseUrl: spikeProxyBaseUrl,
+              },
+            }),
+      }
+    : undefined;
+  const appsConfig = {};
+  if (glowbotAppConfig) {
+    appsConfig.glowbot = glowbotAppConfig;
+  }
+  if (spikeAppConfig) {
+    appsConfig.spike = spikeAppConfig;
+  }
 
   if (dryRun) {
     const runtimeUrl =
@@ -501,42 +610,6 @@ async function main() {
     fs.writeFileSync(portPath, `${port}\n`, "utf8");
   }
 
-  const controlUiConfig =
-    controlUiRoot || controlUiAllowedOrigins.length > 0
-      ? {
-          root: controlUiRoot || undefined,
-          allowedOrigins: controlUiAllowedOrigins.length > 0 ? controlUiAllowedOrigins : undefined,
-        }
-      : undefined;
-  const enableGlowbotApp =
-    normalizeText(process.env.FRONTDOOR_TENANT_ENABLE_GLOWBOT_APP || "0") === "1" ||
-    normalizeText(process.env.FRONTDOOR_TENANT_ENABLE_GLOWBOT_APP || "").toLowerCase() === "true";
-  const glowbotAppRoot = normalizeText(process.env.FRONTDOOR_TENANT_GLOWBOT_APP_ROOT);
-  const allowGlowbotControlUiRootReuse = parseBool(
-    process.env.FRONTDOOR_TENANT_ALLOW_GLOWBOT_CONTROL_UI_ROOT,
-    false,
-  );
-  if (
-    enableGlowbotApp &&
-    glowbotAppRoot &&
-    controlUiRoot &&
-    path.resolve(glowbotAppRoot) === path.resolve(controlUiRoot) &&
-    !allowGlowbotControlUiRootReuse
-  ) {
-    throw new Error(
-      "glowbot_app_root_conflicts_with_control_ui_root:set FRONTDOOR_TENANT_GLOWBOT_APP_ROOT to GlowBot app assets (not control UI) or set FRONTDOOR_TENANT_ALLOW_GLOWBOT_CONTROL_UI_ROOT=1 to override",
-    );
-  }
-  const glowbotAppConfig = enableGlowbotApp
-    ? {
-        enabled: true,
-        displayName: "GlowBot",
-        entryPath: "/app/glowbot/",
-        apiBase: "/api/glowbot",
-        ...(glowbotAppRoot ? { root: glowbotAppRoot } : {}),
-      }
-    : undefined;
-
   const config = {
     runtime: {
       hostedMode: true,
@@ -554,11 +627,9 @@ async function main() {
         },
       },
       controlUi: controlUiConfig,
-      ...(glowbotAppConfig
+      ...(Object.keys(appsConfig).length > 0
         ? {
-            apps: {
-              glowbot: glowbotAppConfig,
-            },
+            apps: appsConfig,
           }
         : {}),
     },
@@ -580,6 +651,15 @@ async function main() {
   }
 
   const disableNexAdapters = parseBool(process.env.FRONTDOOR_TENANT_DISABLE_NEX_ADAPTERS, false);
+  const allowDisabledNexAdapters = parseBool(
+    process.env.FRONTDOOR_TENANT_ALLOW_DISABLED_NEX_ADAPTERS,
+    false,
+  );
+  if (disableNexAdapters && !allowDisabledNexAdapters) {
+    throw new Error(
+      "nex_adapters_disabled_not_allowed (set FRONTDOOR_TENANT_ALLOW_DISABLED_NEX_ADAPTERS=1 to override intentionally)",
+    );
+  }
 
   if (!runtimeHealthy) {
     const runtimeEnv = {

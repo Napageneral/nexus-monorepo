@@ -3,7 +3,7 @@
 **Status:** DESIGN SPEC
 **Last Updated:** 2026-02-26
 **Canonical routing spec:** `../nex/ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md`
-**Database layout:** See `../../data/DATABASE_ARCHITECTURE.md` for canonical database inventory (6 databases)
+**Database layout:** See `../../data/DATABASE_ARCHITECTURE.md` for canonical database inventory (7 databases)
 
 ---
 
@@ -174,7 +174,7 @@ After merge:
   Next message from Discord DM:
     Contact (discord, user-123) → ent_003 → merged_into → ent_002
     Session key: dm:ent_002:ent_eve_main → alias → dm:ent_001:ent_eve_main
-    Memory-reader finds facts from both conversations
+    Memory-injection meeseeks surfaces relevant memories from both conversations
     Agent responds via Discord adapter (outbound uses inbound delivery context)
 ```
 
@@ -183,7 +183,7 @@ Email note:
 - `propagateMergeToSessions()` handles DM alias continuity.
 - Email sessions remain keyed by thread container (`email:{platform}:{container_id}:{receiver}`) and are not collapsed into DM aliases.
 
-**Turn trees are never merged.** Merging divergent conversation histories is lossy and complex. Non-primary sessions stop receiving new messages but their turn trees remain intact and queryable. Memory bridges the knowledge gap — facts extracted from all sessions are linked to the canonical entity and surfaced by the memory-reader.
+**Turn trees are never merged.** Merging divergent conversation histories is lossy and complex. Non-primary sessions stop receiving new messages but their turn trees remain intact and queryable. Memory bridges the knowledge gap — facts extracted from all sessions are linked to the canonical entity and surfaced by the memory-injection meeseeks.
 
 See `../RUNTIME_ROUTING.md` for the full `propagateMergeToSessions()` implementation.
 
