@@ -1,0 +1,4 @@
+node_modules/
+.next/
+consumer/dist/
+consumer-ui/.next/

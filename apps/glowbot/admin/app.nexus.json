@@ -1,0 +1,48 @@
+{
+  "id": "glowbot-admin",
+  "version": "1.0.0",
+  "displayName": "GlowBot Admin",
+  "description": "Administrative console for managing GlowBot clinic instances",
+  "handler": "methods/index.ts",
+  "ui": {
+    "root": "dist",
+    "entryPath": "/app/glowbot-admin/",
+    "spa": true
+  },
+  "methods": {
+    "glowbot-admin.clinics.list": {
+      "description": "List all clinic instances and their status",
+      "handler": "methods/clinics-list.ts",
+      "access": "admin"
+    },
+    "glowbot-admin.clinics.detail": {
+      "description": "Get detailed info for a specific clinic instance",
+      "handler": "methods/clinics-detail.ts",
+      "params": {
+        "type": "object",
+        "properties": {
+          "clinicId": { "type": "string" }
+        },
+        "required": ["clinicId"]
+      },
+      "access": "admin"
+    },
+    "glowbot-admin.credentials": {
+      "description": "Manage platform OAuth credentials (Google, Meta)",
+      "handler": "methods/credentials.ts",
+      "access": "admin"
+    },
+    "glowbot-admin.benchmarks": {
+      "description": "Aggregate benchmark data across clinic instances",
+      "handler": "methods/benchmarks.ts",
+      "access": "admin"
+    }
+  },
+  "hooks": {
+    "onInstall": "hooks/install.ts",
+    "onActivate": "hooks/activate.ts",
+    "onDeactivate": "hooks/deactivate.ts",
+    "onUpgrade": "hooks/upgrade.ts",
+    "onUninstall": "hooks/uninstall.ts"
+  }
+}
