@@ -182,6 +182,13 @@
       }
       .badge-degraded .dot, .badge-failed .dot, .badge-error .dot { background: var(--red); }
 
+      .badge-info {
+        color: #818cf8;
+        border-color: rgba(99, 102, 241, 0.25);
+        background: rgba(99, 102, 241, 0.08);
+      }
+      .badge-info .dot { background: #818cf8; }
+
       /* ── Cards ── */
       .card-grid {
         display: grid; gap: 16px;
@@ -450,6 +457,50 @@
 
       .auth-gate .logo-big { margin-bottom: 32px; opacity: 0.5; }
 
+      .auth-gate .product-dot {
+        display: inline-block; width: 16px; height: 16px; border-radius: 50%;
+        margin-right: 8px; vertical-align: middle;
+      }
+
+      /* ── Auth form styles ── */
+      .auth-form {
+        display: flex; flex-direction: column; gap: 12px;
+        width: 100%; max-width: 340px; margin-bottom: 20px;
+      }
+      .auth-form input {
+        padding: 10px 14px; border-radius: 8px;
+        border: 1px solid var(--border); background: var(--bg-card);
+        color: #fff; font-size: 0.92rem; outline: none;
+        transition: border-color 0.15s;
+      }
+      .auth-form input:focus { border-color: var(--accent); }
+      .auth-form input::placeholder { color: var(--text-dim); }
+      .auth-form .auth-submit {
+        padding: 10px 14px; border-radius: 8px;
+        background: var(--accent); color: #fff; border: none;
+        font-size: 0.92rem; font-weight: 600; cursor: pointer;
+        transition: opacity 0.15s;
+      }
+      .auth-form .auth-submit:hover { opacity: 0.9; }
+      .auth-form .auth-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+      .auth-error {
+        color: #f87171; font-size: 0.82rem; min-height: 1.2em;
+        margin-bottom: 4px;
+      }
+      .auth-divider {
+        display: flex; align-items: center; gap: 12px;
+        color: var(--text-dim); font-size: 0.82rem;
+        margin: 8px 0; width: 100%; max-width: 340px;
+      }
+      .auth-divider::before, .auth-divider::after {
+        content: ''; flex: 1; height: 1px; background: var(--border);
+      }
+      .auth-toggle {
+        color: var(--accent); cursor: pointer; font-size: 0.85rem;
+        margin-top: 4px; background: none; border: none; padding: 0;
+      }
+      .auth-toggle:hover { text-decoration: underline; }
+
       /* ── Empty state ── */
       .empty-state {
         text-align: center;
@@ -522,16 +573,41 @@
   <body>
     <!-- Auth gate (shown when signed out) -->
     <div id="authGate" class="auth-gate">
-      <svg class="logo-big" width="48" height="48" viewBox="0 0 24 24" fill="none">
-        <rect x="3" y="3" width="18" height="18" rx="4" stroke="#6366f1" stroke-width="1.5"/>
-        <path d="M8 12h8M12 8v8" stroke="#6366f1" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-      <h1>Nexus</h1>
-      <p>Sign in to manage your servers, apps, and team.</p>
-      <button id="googleBtn" class="primary" style="padding: 12px 28px; font-size: 0.92rem;">
+      <div id="authLogo">
+        <svg class="logo-big" width="48" height="48" viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="3" width="18" height="18" rx="4" stroke="#6366f1" stroke-width="1.5"/>
+          <path d="M8 12h8M12 8v8" stroke="#6366f1" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <h1 id="authTitle">Nexus</h1>
+      <p id="authSubtitle">Sign in to manage your servers, apps, and team.</p>
+
+      <!-- Login form (default) -->
+      <div id="authLoginForm" class="auth-form">
+        <input type="text" id="loginEmail" placeholder="Email or username" autocomplete="username" />
+        <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password" />
+        <div id="loginError" class="auth-error"></div>
+        <button class="auth-submit" id="loginSubmitBtn" onclick="doLogin()">Sign in</button>
+      </div>
+
+      <!-- Signup form (hidden by default) -->
+      <div id="authSignupForm" class="auth-form hidden">
+        <input type="email" id="signupEmail" placeholder="Email" autocomplete="email" />
+        <input type="text" id="signupDisplayName" placeholder="Display name (optional)" autocomplete="name" />
+        <input type="password" id="signupPassword" placeholder="Password (6+ characters)" autocomplete="new-password" />
+        <input type="password" id="signupPasswordConfirm" placeholder="Confirm password" autocomplete="new-password" />
+        <div id="signupError" class="auth-error"></div>
+        <button class="auth-submit" id="signupSubmitBtn" onclick="doSignup()">Create account</button>
+      </div>
+
+      <div class="auth-divider">or</div>
+
+      <button id="googleBtn" class="primary" style="padding: 12px 28px; font-size: 0.92rem; width: 100%; max-width: 340px;">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.76h3.56c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.56-2.76c-.98.66-2.24 1.05-3.72 1.05-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.1a6.82 6.82 0 010-4.24V7.02H2.18A11.96 11.96 0 001 12c0 1.93.46 3.76 1.18 5.38l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.02l3.66 2.84c.87-2.6 3.3-4.48 6.16-4.48z" fill="#EA4335"/></svg>
         Continue with Google
       </button>
+
+      <button class="auth-toggle" id="authModeToggle" onclick="toggleAuthMode()">Don't have an account? Create one</button>
     </div>
 
     <!-- Main dashboard (shown when signed in) -->
@@ -577,6 +653,27 @@
         <!-- ════════════════════════════════════════════════════════════
              SECTION: SERVERS (default view)
              ════════════════════════════════════════════════════════════ -->
+        <!-- Provisioning status banner (shown while server is being created) -->
+        <div id="provisionBanner" class="hidden" style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin:0 0 20px;display:flex;align-items:center;gap:16px;">
+          <div id="provisionSpinner" style="width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--accent,#3b82f6);border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;"></div>
+          <div>
+            <div id="provisionTitle" style="font-weight:600;font-size:15px;">Setting up your server…</div>
+            <div id="provisionDetail" style="color:var(--text-muted);font-size:13px;margin-top:2px;">This usually takes 30–60 seconds. You can stay on this page.</div>
+          </div>
+        </div>
+        <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+
+        <!-- App ready modal (shown when provisioning completes) -->
+        <div id="appReadyOverlay" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;">
+          <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:32px;max-width:420px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+            <div style="font-size:40px;margin-bottom:12px;">🚀</div>
+            <h2 id="appReadyTitle" style="margin:0 0 8px;font-size:20px;">Your app is ready!</h2>
+            <p id="appReadyDesc" style="color:var(--text-muted);margin:0 0 24px;font-size:14px;">Your server has been provisioned and your app is installed.</p>
+            <button id="appReadyLaunchBtn" class="primary" style="min-width:160px;padding:10px 24px;font-size:15px;">Open App</button>
+            <button id="appReadyDismissBtn" style="display:block;margin:12px auto 0;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:13px;">Stay on dashboard</button>
+          </div>
+        </div>
+
         <section id="viewServers">
           <div class="page-header">
             <div class="page-header-left">
@@ -796,9 +893,9 @@
 
       /* ── URL Params ── */
       const initialUrlParams = new URLSearchParams(window.location.search);
-      const initialAppHint = asText(initialUrlParams.get('app_id') || '').toLowerCase();
+      const initialAppHint = asText(initialUrlParams.get('app_id') || initialUrlParams.get('app') || initialUrlParams.get('flavor') || initialUrlParams.get('product') || '').toLowerCase();
       const initialServerHint = asText(initialUrlParams.get('server_id') || '').trim();
-      const initialEntrySource = asText(initialUrlParams.get('entry_source') || '');
+      const initialEntrySource = asText(initialUrlParams.get('entry_source') || initialUrlParams.get('entry') || '');
 
       /* ── State ── */
       const state = {
@@ -940,10 +1037,10 @@
       }
 
       function startGoogle() {
-        const returnTo = window.location.pathname + window.location.search || '/';
+        const returnTo = initialAppHint ? `/app/${initialAppHint}/` : '/';
         const q = new URLSearchParams({ provider: 'google', return_to: returnTo });
         if (initialAppHint) {
-          q.set('app_id', initialAppHint);
+          q.set('product', initialAppHint);
         }
         window.location.href = `/api/auth/oidc/start?${q.toString()}`;
       }
@@ -952,6 +1049,129 @@
         await api('/api/auth/logout', { method: 'POST', body: '{}' });
         state.session = null;
         applyAuthUi();
+      }
+
+      /* ── Auth mode toggle (login / signup) ── */
+      let authMode = 'login';
+
+      function toggleAuthMode() {
+        authMode = authMode === 'login' ? 'signup' : 'login';
+        el('authLoginForm').classList.toggle('hidden', authMode !== 'login');
+        el('authSignupForm').classList.toggle('hidden', authMode !== 'signup');
+        el('loginError').textContent = '';
+        el('signupError').textContent = '';
+        el('authModeToggle').textContent = authMode === 'login'
+          ? "Don't have an account? Create one"
+          : 'Already have an account? Sign in';
+      }
+
+      async function doLogin() {
+        const emailOrUser = (el('loginEmail').value || '').trim();
+        const password = el('loginPassword').value || '';
+        el('loginError').textContent = '';
+        if (!emailOrUser || !password) {
+          el('loginError').textContent = 'Please enter email/username and password.';
+          return;
+        }
+        el('loginSubmitBtn').disabled = true;
+        try {
+          const r = await api('/api/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ username: emailOrUser, password }),
+          });
+          if (r.ok && r.body?.ok) {
+            const authed = await refreshSession();
+            if (authed && initialAppHint) {
+              window.location.assign('/app/' + initialAppHint + '/');
+              return;
+            }
+          } else {
+            const errMap = {
+              invalid_credentials: 'Invalid email/username or password.',
+              login_rate_limited: 'Too many attempts. Please wait and try again.',
+            };
+            el('loginError').textContent = errMap[r.body?.error] || r.body?.error || 'Login failed.';
+          }
+        } catch (e) {
+          el('loginError').textContent = 'Network error. Please try again.';
+        } finally {
+          el('loginSubmitBtn').disabled = false;
+        }
+      }
+
+      async function doSignup() {
+        const email = (el('signupEmail').value || '').trim();
+        const displayName = (el('signupDisplayName').value || '').trim();
+        const password = el('signupPassword').value || '';
+        const confirmPassword = el('signupPasswordConfirm').value || '';
+        el('signupError').textContent = '';
+
+        if (!email || !email.includes('@')) {
+          el('signupError').textContent = 'Please enter a valid email.';
+          return;
+        }
+        if (password.length < 6) {
+          el('signupError').textContent = 'Password must be at least 6 characters.';
+          return;
+        }
+        if (password !== confirmPassword) {
+          el('signupError').textContent = 'Passwords do not match.';
+          return;
+        }
+
+        el('signupSubmitBtn').disabled = true;
+        try {
+          const body = { email, password, display_name: displayName || undefined };
+          if (initialAppHint) body.intent_app = initialAppHint;
+
+          const r = await api('/api/auth/signup', {
+            method: 'POST',
+            body: JSON.stringify(body),
+          });
+          if (r.ok && r.body?.ok) {
+            const redirectTo = r.body.redirect_to || '/';
+            window.location.assign(redirectTo);
+            return;
+          } else {
+            const errMap = {
+              email_already_registered: 'An account with this email already exists. Try signing in.',
+              username_already_taken: 'This username is taken. Try a different email.',
+              invalid_email: 'Please enter a valid email address.',
+              password_too_short: 'Password must be at least 6 characters.',
+              signup_rate_limited: 'Too many attempts. Please wait and try again.',
+            };
+            el('signupError').textContent = errMap[r.body?.error] || r.body?.error || 'Signup failed.';
+          }
+        } catch (e) {
+          el('signupError').textContent = 'Network error. Please try again.';
+        } finally {
+          el('signupSubmitBtn').disabled = false;
+        }
+      }
+
+      /* ── Product-branded auth gate ── */
+      async function applyProductBranding() {
+        if (!initialAppHint) return;
+        try {
+          const r = await api('/api/products/' + encodeURIComponent(initialAppHint));
+          if (!r.ok || !r.body?.ok) return;
+          const accent = r.body.accent_color || '#6366f1';
+          const name = r.body.display_name || initialAppHint;
+          const tagline = r.body.tagline || '';
+
+          // Update logo — show colored dot instead of Nexus icon
+          el('authLogo').innerHTML =
+            '<div class="product-dot" style="width:48px;height:48px;border-radius:12px;background:' +
+            accent + ';display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:800;color:#fff;margin-bottom:32px;">' +
+            name.charAt(0).toUpperCase() + '</div>';
+          el('authTitle').textContent = name;
+          el('authSubtitle').textContent = tagline
+            ? 'Get started with ' + name
+            : 'Sign in to get started with ' + name;
+
+          // Switch to signup mode by default for product-specific landing
+          if (authMode === 'login') toggleAuthMode();
+        } catch { /* ignore — fall back to neutral branding */ }
       }
 
       /* ═════════════════════════════════════════════════════════════
@@ -1117,7 +1337,9 @@
         // Render
         const server = state.serverDetail;
         const name = asText(server.generated_name || server.display_name || server.server_id);
-        el('serverDetailName').value = asText(server.display_name || name);
+        // Prefer generated name as displayed name; display_name is user-editable override
+        const editableName = asText(server.display_name && server.display_name !== server.server_id ? server.display_name : name);
+        el('serverDetailName').value = editableName;
         const status = asText(server.status || 'active');
         const badge = el('serverDetailBadge');
         badge.className = `badge ${statusBadgeClass(status)}`;
@@ -1132,21 +1354,36 @@
       function renderServerApps() {
         const grid = el('serverAppGrid');
         grid.innerHTML = '';
-        const apps = state.serverApps.filter(a => a.app_id !== 'control');
+        // Sort: control always first (slot 1), then other apps alphabetically
+        const apps = [...state.serverApps].sort((a, b) => {
+          if (a.app_id === 'control') return -1;
+          if (b.app_id === 'control') return 1;
+          return (a.display_name || a.app_id).localeCompare(b.display_name || b.app_id);
+        });
 
+        // Always show Control Panel even if no other apps
         if (apps.length === 0) {
-          grid.innerHTML = `<div class="empty-state" style="grid-column: 1 / -1;"><p>No apps installed on this server yet.</p></div>`;
-          return;
+          // Inject a synthetic Control Panel card
+          apps.push({
+            app_id: 'control',
+            display_name: 'Control Panel',
+            install_status: 'installed',
+            entitlement_status: 'active',
+            launchable: true,
+            entry_path: '/app/control/chat',
+            accent_color: '#6366f1',
+          });
         }
 
         for (const app of apps) {
           const appId = asText(app.app_id);
-          const displayName = asText(app.display_name || appId);
-          const installStatus = asText(app.install_status || 'not_installed');
-          const entitlementStatus = asText(app.entitlement_status || 'inactive');
-          const launchable = Boolean(app.launchable);
-          const entryPath = asText(app.entry_path || '');
-          const accentColor = asText(app.accent_color || '') || getDefaultAccentColor(appId);
+          const isControl = appId === 'control';
+          const displayName = isControl ? 'Control Panel' : asText(app.display_name || appId);
+          const installStatus = isControl ? 'installed' : asText(app.install_status || 'not_installed');
+          const entitlementStatus = isControl ? 'active' : asText(app.entitlement_status || 'inactive');
+          const launchable = isControl ? true : Boolean(app.launchable);
+          const entryPath = isControl ? '/app/control/chat' : asText(app.entry_path || '');
+          const accentColor = isControl ? '#6366f1' : (asText(app.accent_color || '') || getDefaultAccentColor(appId));
 
           const card = document.createElement('div');
           card.className = 'card app-card';
@@ -1163,14 +1400,18 @@
             actionBtn = `<button class="small danger" data-install-app="${escHtml(appId)}">Retry Install</button>`;
           }
 
+          const badgeLabel = isControl ? 'Always available' : statusLabel(installStatus);
+          const badgeClass = isControl ? 'badge-info' : statusBadgeClass(installStatus);
+          const metaLabel = isControl ? 'Core platform' : `Entitlement: ${statusLabel(entitlementStatus)}`;
+
           card.innerHTML = `
             <div class="card-title">
               <span class="app-dot" style="background: ${accentColor}; width: 10px; height: 10px; border-radius: 50; flex-shrink: 0;"></span>
               ${escHtml(displayName)}
-              <span class="badge ${statusBadgeClass(installStatus)}"><span class="dot"></span>${statusLabel(installStatus)}</span>
+              <span class="badge ${badgeClass}"><span class="dot"></span>${badgeLabel}</span>
             </div>
             <div class="card-meta" style="margin-top: 6px;">
-              <span class="card-meta-item">Entitlement: ${statusLabel(entitlementStatus)}</span>
+              <span class="card-meta-item">${metaLabel}</span>
             </div>
             <div class="btn-row">${actionBtn}</div>`;
           grid.appendChild(card);
@@ -1725,8 +1966,112 @@
          GLOBAL EVENTS
          ═════════════════════════════════════════════════════════════ */
       el('googleBtn').addEventListener('click', () => startGoogle());
+      // Enter key submits auth forms
+      el('loginPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+      el('loginEmail').addEventListener('keydown', (e) => { if (e.key === 'Enter') el('loginPassword').focus(); });
+      el('signupPasswordConfirm').addEventListener('keydown', (e) => { if (e.key === 'Enter') doSignup(); });
       el('logoutBtn').addEventListener('click', () => signOut());
       el('refreshBtn').addEventListener('click', () => refreshAll());
+
+      /* ═════════════════════════════════════════════════════════════
+         PROVISIONING STATUS POLLING
+         ═════════════════════════════════════════════════════════════ */
+      let provisionPollTimer = null;
+      let provisionIntentProductId = '';
+
+      function showProvisionBanner(message, detail) {
+        const banner = el('provisionBanner');
+        banner.classList.remove('hidden');
+        el('provisionTitle').textContent = message || 'Setting up your server…';
+        el('provisionDetail').textContent = detail || 'This usually takes 30–60 seconds. You can stay on this page.';
+      }
+
+      function hideProvisionBanner() {
+        el('provisionBanner').classList.add('hidden');
+      }
+
+      function showAppReadyModal(appId) {
+        const overlay = el('appReadyOverlay');
+        overlay.classList.remove('hidden');
+        const displayName = appId ? appId.charAt(0).toUpperCase() + appId.slice(1) : 'Your app';
+        el('appReadyTitle').textContent = displayName + ' is ready!';
+        el('appReadyDesc').textContent = 'Your server has been provisioned and ' + displayName + ' is installed.';
+        el('appReadyLaunchBtn').onclick = function() {
+          overlay.classList.add('hidden');
+          window.location.href = '/app/' + encodeURIComponent(appId) + '/';
+        };
+        el('appReadyDismissBtn').onclick = function() {
+          overlay.classList.add('hidden');
+          void refreshAll();
+        };
+      }
+
+      async function pollProvisionStatus() {
+        try {
+          const sessionResp = await api('/api/auth/session');
+          if (!sessionResp.ok || !sessionResp.body?.authenticated) return;
+
+          const prov = sessionResp.body.latest_provisioning;
+          const provStatus = asText(prov?.status).toLowerCase();
+          const hasServer = !!sessionResp.body.active_server_id;
+
+          if (hasServer || provStatus === 'ready' || provStatus === 'complete') {
+            // Provisioning completed!
+            hideProvisionBanner();
+            if (provisionPollTimer) {
+              clearInterval(provisionPollTimer);
+              provisionPollTimer = null;
+            }
+            // Clean up provisioning URL params
+            const cleanUrl = new URL(window.location.href);
+            if (cleanUrl.searchParams.has('provisioning')) {
+              cleanUrl.searchParams.delete('provisioning');
+              cleanUrl.searchParams.delete('product');
+              window.history.replaceState({}, '', cleanUrl.pathname + (cleanUrl.search || ''));
+            }
+            // Refresh everything so dashboard shows the new server
+            await refreshAll();
+            // Show the "app ready" modal
+            if (provisionIntentProductId) {
+              showAppReadyModal(provisionIntentProductId);
+            }
+            return;
+          }
+
+          if (provStatus === 'failed') {
+            hideProvisionBanner();
+            if (provisionPollTimer) {
+              clearInterval(provisionPollTimer);
+              provisionPollTimer = null;
+            }
+            const errText = asText(prov?.error_text || 'Unknown error');
+            showProvisionBanner('Server setup failed', 'Error: ' + errText + '. You can try again from the dashboard.');
+            el('provisionSpinner').style.display = 'none';
+            return;
+          }
+
+          // Still provisioning — update banner
+          const stage = asText(prov?.stage).toLowerCase();
+          if (stage === 'run_command') {
+            showProvisionBanner('Setting up your server…', 'Starting your server runtime. This usually takes 30–60 seconds.');
+          } else if (stage) {
+            showProvisionBanner('Setting up your server…', 'Stage: ' + stage);
+          }
+        } catch {
+          // Ignore polling errors
+        }
+      }
+
+      function startProvisionPolling(productId) {
+        provisionIntentProductId = productId || '';
+        // Force the Servers tab so the provisioning banner is visible
+        showView('servers');
+        showProvisionBanner();
+        if (provisionPollTimer) clearInterval(provisionPollTimer);
+        provisionPollTimer = setInterval(pollProvisionStatus, 3000);
+        // Also poll immediately after a short delay
+        setTimeout(pollProvisionStatus, 1000);
+      }
 
       /* ═════════════════════════════════════════════════════════════
          BOOTSTRAP
@@ -1749,10 +2094,29 @@
         renderServerGrid();
         showView('servers');
 
+        // Check if provisioning is in progress (new user, server being created).
+        // If user has no servers, provisioning may be happening in the background.
+        // The provision record might not exist yet (background task is starting).
+        const isProvisioningRedirect = initialUrlParams.get('provisioning') === '1';
+        if (state.session && state.servers.length === 0 && !provisionPollTimer) {
+          const prov = state.session.latest_provisioning;
+          const provStatus = asText(prov?.status).toLowerCase();
+          const intentApp = initialAppHint || asText(prov?.product_id || '');
+          if (provStatus === 'provisioning' || provStatus === 'run_command' || provStatus === 'queued') {
+            startProvisionPolling(intentApp);
+          } else if (isProvisioningRedirect || (!prov && initialAppHint)) {
+            // Redirected from OIDC with provisioning=1, or no provision record yet
+            // but user came from a product page — wait for background provisioning
+            startProvisionPolling(intentApp || initialAppHint);
+          }
+        }
+
         // Resolve entry intent if applicable
         await maybeResolveEntryIntent();
       }
 
+      // Apply product branding to auth gate if ?app= parameter present
+      void applyProductBranding();
       void refreshAll();
     </script>
   </body>

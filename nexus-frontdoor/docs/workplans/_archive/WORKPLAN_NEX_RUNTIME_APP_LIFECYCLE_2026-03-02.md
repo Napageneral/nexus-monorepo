@@ -23,10 +23,12 @@ Hard cutover. The legacy `config.runtime.apps` system for product apps is killed
 
 | Decision | Outcome |
 |----------|---------|
-| Handler execution | In-process via jiti (V1). Trusted first-party apps only. |
+| Handler execution | **Two modes**: Service-routed (binary IS the handler, language-agnostic) for apps with services. Inline-TS (jiti, in-process) for lightweight TS-only apps. |
 | Control app | Stays special. Not manifest-driven. |
 | Config-driven apps | Killed for product apps. Manifest only. Hard cutover. |
-| Services concept | New `services` section supports app backend binaries (Go, Rust, etc.) |
+| Service-routed mode | Primary model. Runtime dispatches operations directly to service binary via HTTP. No TS proxy layer. See NEX_ARCHITECTURE_AND_SDK_MODEL.md. |
+| Inline-TS mode | Optimization for lightweight apps (e.g., GlowBot) that don't need an external process. |
+| App package location | `nexus/apps/` — top-level directory, decoupled from runtime repo. |
 
 ---
 
@@ -64,7 +66,7 @@ Hard cutover. The legacy `config.runtime.apps` system for product apps is killed
 
 ---
 
-### GAP-R04: No Method Handler Loading
+### GAP-R04: No Method Handler Loading / Routing
 
 **Current state:** All method handlers are statically imported in `server-methods.ts`:
 ```typescript
@@ -74,11 +76,18 @@ export const coreRuntimeHandlers = { ...glowbotHandlers, ...otherHandlers };
 
 Method handlers are compiled into the nex binary. No dynamic loading.
 
-**Target state:** Method handler modules loaded dynamically from app packages via `jiti`. The handler file (e.g., `./methods/index.ts`) exports a map of method name → handler function. The runtime loads this module, validates the exports, and wires each handler to the method router.
+**Target state:** Two routing modes based on manifest configuration:
 
-**New file:** `nex/src/apps/method-loader.ts`
+**Service-routed mode** (primary, e.g., Spike): The runtime constructs an HTTP dispatch handler for each declared method. When `spike.ask` arrives, the runtime POSTs the operation request to the service binary at `http://localhost:{port}/operations/spike.ask`. No TypeScript handler loading needed.
 
-**Existing infrastructure:** `plugins/loader.ts` already uses jiti for dynamic TypeScript loading. Reuse the same approach.
+**Inline-TS mode** (e.g., GlowBot): Method handler modules loaded dynamically from app packages via `jiti`. The handler file (e.g., `./methods/index.ts`) exports a map of method name → handler function.
+
+**Mode detection:** If manifest has `services` and no `handler` → service-routed. If manifest has `handler` and no `services` → inline-TS.
+
+**New file:** `nex/src/apps/method-loader.ts` (inline-TS mode)
+**New file:** `nex/src/apps/service-dispatch.ts` (service-routed mode — constructs HTTP dispatch handlers)
+
+**Existing infrastructure:** `plugins/loader.ts` already uses jiti for dynamic TypeScript loading. Reuse for inline-TS mode.
 
 ---
 
@@ -156,21 +165,30 @@ Config-driven. The function looks up `config.runtime.apps[appId].root`.
 
 ---
 
-### GAP-R09: No Service Management
+### GAP-R09: No Service Management + Operation Dispatch
 
-**Current state:** No concept of app-managed services anywhere in the runtime. No process management for app backend binaries.
+**Current state:** No concept of app-managed services anywhere in the runtime. No process management for app backend binaries. No operation dispatch to external processes.
 
-**Target state:** Full service lifecycle management:
+**Target state:** Full service lifecycle management AND operation dispatch routing:
+
+**Process management:**
 - Spawn service process on app activate
-- Port assignment and `{{port}}` substitution
+- Port assignment and `{{port}}`/`{{dataDir}}` substitution
 - Health check monitoring (periodic HTTP GET)
 - Automatic restart on crash (3 retries)
 - Graceful shutdown on app deactivate
-- Service client construction (`ctx.app.service(name)`)
+
+**Operation dispatch (service-routed mode):**
+- For each method in a service-routed app, construct an HTTP dispatch handler
+- Dispatch format: `POST http://localhost:{port}/operations/{method.name}` with operation request body
+- Standard request envelope: `{ operation, payload, user, account, requestId }`
+- Standard response envelope: `{ result }` or `{ error }`
+- Timeout handling (default 30s, configurable per method)
 
 **New files:**
 - `nex/src/apps/service-manager.ts` — Process spawning, health checking, restart logic
-- `nex/src/apps/service-client.ts` — HTTP client for method handlers to call services
+- `nex/src/apps/service-client.ts` — HTTP client for runtime → service communication
+- `nex/src/apps/service-dispatch.ts` — Constructs operation dispatch handlers for service-routed methods
 
 ---
 
@@ -262,20 +280,25 @@ Config-driven. The function looks up `config.runtime.apps[appId].root`.
 - Invalid manifests produce clear error messages
 - App context can be constructed from manifest + runtime state
 
-### Phase 2: Method Loading + IAM
+### Phase 2: Method Routing + IAM
 
-**Goal:** App methods are dynamically loaded from manifest and have auto-generated IAM.
+**Goal:** App methods are routed (service-routed OR inline-TS) and have auto-generated IAM.
 
 | Task | Gap | Estimate |
 |------|-----|----------|
-| Write method handler loader (jiti-based dynamic import) | GAP-R04 | 1 day |
+| Write method handler loader for inline-TS mode (jiti-based dynamic import) | GAP-R04 | 1 day |
+| Write service-dispatch module for service-routed mode (HTTP dispatch handler construction) | GAP-R04, R09 | 1 day |
+| Write handler mode detection logic (services vs handler field) | GAP-R04 | 0.5 day |
 | Write IAM auto-generator from manifest methods | GAP-R06 | 1 day |
-| Wire loaded handlers into runtime request router | GAP-R04 | 1 day |
+| Wire both routing modes into runtime request router | GAP-R04 | 1 day |
 | Support dynamic operation registration in taxonomy | GAP-R06 | 0.5 day |
-| Integration test: load app, call method, verify IAM check | — | 0.5 day |
+| Integration test: inline-TS app method call with IAM check | — | 0.5 day |
+| Integration test: service-routed app method dispatch with IAM check | — | 0.5 day |
 
 **Exit criteria:**
-- Method handlers loaded dynamically from TypeScript modules
+- Inline-TS handlers loaded dynamically from TypeScript modules (GlowBot path)
+- Service-routed operations dispatched to service binary via HTTP (Spike path)
+- Handler mode correctly detected from manifest
 - IAM entries auto-generated from manifest
 - Method calls go through standard authz pipeline
 - Namespace collision with core methods is rejected
@@ -297,24 +320,28 @@ Config-driven. The function looks up `config.runtime.apps[appId].root`.
 - Adapters registered and manageable through runtime adapter system
 - `/_next/` asset rewriting works for Next.js apps
 
-### Phase 4: Service Management
+### Phase 4: Service Management + Dispatch
 
-**Goal:** App backend services (Go binaries, etc.) are managed by the runtime.
+**Goal:** App backend services are managed by the runtime. Service-routed operations dispatch to them.
 
 | Task | Gap | Estimate |
 |------|-----|----------|
 | Write service manager (spawn, health check, restart, shutdown) | GAP-R09 | 2 days |
-| Write service client (HTTP client for handler → service communication) | GAP-R09 | 0.5 day |
-| Port assignment and {{port}} substitution | GAP-R09 | 0.5 day |
-| Wire service client into app context (`ctx.app.service()`) | GAP-R09, R11 | 0.5 day |
-| Integration test: start service, health check, call from handler | — | 0.5 day |
+| Write service client (HTTP client for runtime → service communication) | GAP-R09 | 0.5 day |
+| Port assignment, {{port}} and {{dataDir}} substitution | GAP-R09 | 0.5 day |
+| Define operation request/response envelope format | GAP-R09 | 0.5 day |
+| Wire service-dispatch handlers into method router for service-routed apps | GAP-R04, R09 | 1 day |
+| Wire service client into app context for inline-TS apps (`ctx.app.service()`) | GAP-R09, R11 | 0.5 day |
+| Integration test: start service, health check, dispatch operation, get response | — | 0.5 day |
 
 **Exit criteria:**
 - Services spawned on app activate, stopped on deactivate
 - Health checks running on configured interval
 - Automatic restart on crash (with retry limit)
-- Method handlers can call services via `ctx.app.service()`
+- Service-routed operations dispatched to service binary and response returned to caller
+- Inline-TS apps can still call services via `ctx.app.service()` (GlowBot future-proofing)
 - Unhealthy service returns ServiceUnavailable to callers
+- Standard operation envelope documented and implemented
 
 ### Phase 5: Lifecycle Hooks
 
@@ -384,17 +411,18 @@ All new files live under `nex/src/apps/`:
 
 | File | Purpose | Phase |
 |------|---------|-------|
-| `manifest.ts` | Parse and validate `app.nexus.json` | 1 |
+| `manifest.ts` | Parse and validate `app.nexus.json` (including handler mode detection) | 1 |
 | `discovery.ts` | Scan appsDir for manifests | 1 |
 | `registry.ts` | App registry with lifecycle state | 1 |
 | `context.ts` | Construct `NexAppMethodContext` and `NexAppHookContext` | 1 |
 | `schema-validator.ts` | JSON Schema validation for method params | 1 |
-| `method-loader.ts` | Dynamic TypeScript module loading via jiti | 2 |
+| `method-loader.ts` | Dynamic TypeScript module loading via jiti (inline-TS mode) | 2 |
+| `service-dispatch.ts` | Construct HTTP dispatch handlers for service-routed methods | 2 |
 | `iam-generator.ts` | Auto-generate IAM entries from manifest | 2 |
 | `ui-registrar.ts` | Register static file serving routes | 3 |
 | `adapter-registrar.ts` | Register adapters from manifest | 3 |
 | `service-manager.ts` | Spawn, health-check, restart services | 4 |
-| `service-client.ts` | HTTP client for handler → service calls | 4 |
+| `service-client.ts` | HTTP client for runtime → service communication | 4 |
 | `hooks.ts` | Lifecycle hook execution | 5 |
 | `management-api.ts` | HTTP API for install/uninstall/upgrade/list | 6 |
 

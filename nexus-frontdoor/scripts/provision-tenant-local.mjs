@@ -538,6 +538,9 @@ async function main() {
       "spike_app_root_conflicts_with_control_ui_root:set FRONTDOOR_TENANT_SPIKE_APP_ROOT to Spike app assets (not control UI) or set FRONTDOOR_TENANT_ALLOW_SPIKE_CONTROL_UI_ROOT=1 to override",
     );
   }
+  const spikeProxyAuthToken =
+    normalizeText(process.env.FRONTDOOR_TENANT_SPIKE_PROXY_AUTH_TOKEN) ||
+    normalizeText(process.env.FRONTDOOR_SPIKE_RUNTIME_AUTH_TOKEN);
   const spikeAppConfig = enableSpikeApp
     ? {
         enabled: true,
@@ -550,6 +553,7 @@ async function main() {
           : {
               proxy: {
                 baseUrl: spikeProxyBaseUrl,
+                ...(spikeProxyAuthToken ? { authToken: spikeProxyAuthToken } : {}),
               },
             }),
       }
@@ -561,6 +565,7 @@ async function main() {
   if (spikeAppConfig) {
     appsConfig.spike = spikeAppConfig;
   }
+  const configuredApps = Object.keys(appsConfig);
 
   if (dryRun) {
     const runtimeUrl =
@@ -579,6 +584,7 @@ async function main() {
         runtime_ws_url: trimmedBase.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:") + "/",
         runtime_sse_url: `${trimmedBase}/api/events/stream`,
         state_dir: stateDir,
+        configured_apps: configuredApps,
       })}\n`,
     );
     return;
@@ -720,6 +726,7 @@ async function main() {
     runtime_sse_url: `${runtimePublicBaseUrl.replace(/\/+$/, "")}/api/events/stream`,
     state_dir: stateDir,
     adapter_count: adapterBootstrap.registered,
+    configured_apps: configuredApps,
   };
   process.stdout.write(`${JSON.stringify(out)}\n`);
 }

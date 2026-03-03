@@ -2,7 +2,7 @@
 
 Date: 2026-03-02
 Status: confirmed
-Updated: 2026-03-02 (added services, locked decisions, removed Stripe IDs from manifest)
+Updated: 2026-03-02 (reconciled with NEX_ARCHITECTURE_AND_SDK_MODEL; two handler modes; eliminated TS proxy layer for service-backed apps)
 Owners: Nexus Platform
 
 ---
@@ -11,42 +11,52 @@ Owners: Nexus Platform
 
 A nex app is a self-contained full-stack application that runs entirely inside the nex runtime. Apps are the primary unit of functionality in the Nexus ecosystem — every product (GlowBot, Spike, admin dashboards) is a nex app.
 
-A nex app is composed of three core building blocks:
+A nex app is composed of:
 
 - **Nex UI** — Pre-built static web frontend (Next.js static export, React SPA, etc.) served by the nex runtime
-- **Nex Service** — Optional app-specific backend process (Go binary, Python server, etc.) managed by the runtime, accessed by method handlers via HTTP
+- **Operation Handlers** — The code that processes the app's operations. Two modes (see below).
 - **Nex Adapters** — Optional bundled data adapters (Go binaries using the Nex Adapter SDK) that connect to external data sources
-
-Additionally, an app includes:
-- **Method Handlers** — TypeScript/JavaScript backend logic that runs in-process inside the nex runtime, defining the app's API surface
 - **Assets** — Icons, logos, and other static resources
 - **Lifecycle Hooks** — Install, upgrade, activate, deactivate, uninstall scripts
 
 Apps declare their capabilities in an `app.nexus.json` manifest. The nex runtime discovers, loads, and manages apps based on this manifest.
 
+### Two Handler Modes
+
+Apps handle operations in one of two ways:
+
+| Mode | When | How | Example |
+|------|------|-----|---------|
+| **Service-routed** | App declares `services` section, methods have no `handler` field | Runtime dispatches operations directly to the service binary via HTTP. The service IS the handler. Language-agnostic. | Spike (Go engine) |
+| **Inline-TS** | Methods have a `handler` field pointing to a TS module, no service | Runtime loads TypeScript handler via jiti, executes in-process. | GlowBot (TS handlers) |
+
+**Service-routed mode** is the primary model. The service binary receives operation requests from the runtime, processes them, and returns responses. The binary can be Go, Rust, Python, Node.js — anything that speaks HTTP. The runtime manages the binary's lifecycle. See [NEX_ARCHITECTURE_AND_SDK_MODEL.md](../../nexus-specs/specs/nex/NEX_ARCHITECTURE_AND_SDK_MODEL.md).
+
+**Inline-TS mode** is an optimization for lightweight apps that don't need an external process. The runtime hosts the TypeScript handlers directly in its Node.js process. This is functionally equivalent to "the service is the nex runtime itself."
+
 ### Conceptual Model
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                    Nex App                           │
-│                                                     │
-│  ┌──────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │  Nex UI  │  │ Nex Service  │  │ Nex Adapters │  │
-│  │ (static  │  │ (optional    │  │ (external    │  │
-│  │  files)  │  │  binary,     │  │  data source │  │
-│  │          │  │  HTTP API)   │  │  connectors) │  │
-│  └────┬─────┘  └──────┬───────┘  └──────┬───────┘  │
-│       │               │                 │           │
-│  ┌────┴───────────────┴─────────────────┴────────┐  │
-│  │          Method Handlers (TypeScript)          │  │
-│  │      App's API surface, runs in nex process    │  │
-│  └───────────────────────────────────────────────┘  │
-│                                                     │
-│  ┌───────────────────────────────────────────────┐  │
-│  │          Lifecycle Hooks (TypeScript)          │  │
-│  │    install / upgrade / activate / deactivate   │  │
-│  └───────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────┘
+Service-Routed App (Spike):              Inline-TS App (GlowBot):
+
+┌─────────────────────────────┐          ┌─────────────────────────────┐
+│        spike-app/           │          │       glowbot-app/          │
+│                             │          │                             │
+│  ┌───────┐  ┌───────────┐  │          │  ┌───────┐  ┌───────────┐  │
+│  │Nex UI │  │ Nex       │  │          │  │Nex UI │  │ Nex       │  │
+│  │(dist/)│  │ Adapters  │  │          │  │(dist/)│  │ Adapters  │  │
+│  └───┬───┘  └─────┬─────┘  │          │  └───┬───┘  └─────┬─────┘  │
+│      │            │         │          │      │            │         │
+│  ┌───┴────────────┴──────┐  │          │  ┌───┴────────────┴──────┐  │
+│  │   Service Binary      │  │          │  │  Inline TS Handlers   │  │
+│  │   (Go, Rust, etc.)    │  │          │  │  (loaded via jiti)    │  │
+│  │   IS the handler      │  │          │  │  run in nex process   │  │
+│  └───────────────────────┘  │          │  └───────────────────────┘  │
+│                             │          │                             │
+│  ┌───────────────────────┐  │          │  ┌───────────────────────┐  │
+│  │   Lifecycle Hooks     │  │          │  │   Lifecycle Hooks     │  │
+│  └───────────────────────┘  │          │  └───────────────────────┘  │
+└─────────────────────────────┘          └─────────────────────────────┘
 ```
 
 ### Design Principles
@@ -58,7 +68,7 @@ Apps declare their capabilities in an `app.nexus.json` manifest. The nex runtime
 5. **Static UI served by nex** — All UIs are pre-built static files served by the nex runtime; app services provide backend compute, not UI serving
 6. **OpenAPI schemas** — Method inputs/outputs are fully schema-defined (JSON Schema)
 7. **Hard cutover** — No backwards compatibility with legacy config-based app registration; config-driven `runtime.apps` is killed for product apps
-8. **In-process handlers** — Method handlers execute in the nex Node.js process (V1); sandboxing is a future concern for untrusted third-party apps
+8. **Language-agnostic** — Apps handle operations via service binaries in any language. Inline-TS is an optimization for lightweight apps, not the primary model.
 
 ### What is NOT a nex app
 
@@ -90,14 +100,18 @@ Apps declare their capabilities in an `app.nexus.json` manifest. The nex runtime
   },
 
   // =========================================================================
-  // Method Handlers
+  // Handler Mode (exactly one of these two patterns)
   // =========================================================================
-  "handler": "./methods/index.ts",     // module exporting method handler map
 
-  // =========================================================================
-  // Services (Nex Services — optional app backend processes)
-  // =========================================================================
-  // "services": { ... }               // see Section 2.1 below (GlowBot has no services)
+  // INLINE-TS MODE (GlowBot pattern): handler field present, no services
+  "handler": "./methods/index.ts",     // TS module exporting handler map (inline-TS mode)
+
+  // SERVICE-ROUTED MODE (Spike pattern): services section present, no handler field
+  // "services": { ... }               // see Section 2.1 below
+  //
+  // Rule: if "services" is declared and "handler" is absent, ALL methods
+  // route to the app's primary service. If "handler" is present, methods
+  // are loaded in-process via jiti. You cannot mix modes in V1.
 
   // =========================================================================
   // Methods (OpenAPI-style JSON Schema definitions)
@@ -419,25 +433,52 @@ Apps declare their capabilities in an `app.nexus.json` manifest. The nex runtime
 }
 ```
 
-### 2.1 Services Section
+### 2.1 Services Section (Service-Routed Mode)
 
-The `services` section declares app-specific backend processes (Nex Services) that the runtime manages alongside the app. Services are distinct from adapters — adapters connect to external data sources, services provide app-specific compute.
+The `services` section declares the app's backend process. In service-routed mode, the service binary IS the handler — the runtime dispatches operations directly to it. No intermediate TypeScript proxy layer.
 
 ```jsonc
-// Example: Spike app with a Go engine service
+// Example: Spike app — Go engine handles ALL operations directly
 {
   "id": "spike",
-  "handler": "./methods/index.ts",
+  // NOTE: no "handler" field — this is service-routed mode
 
   "services": {
     "engine": {
       "command": "./bin/spike-engine",       // binary path relative to app package
       "args": ["serve", "--port", "{{port}}"], // {{port}} is substituted by runtime
-      "port": 3100,                           // port the service listens on
+      "port": 0,                              // 0 = runtime assigns a free port
       "protocol": "http",                     // communication protocol (http only for V1)
       "healthCheck": "/health"                // HTTP GET endpoint for health monitoring
     }
+  },
+
+  "methods": {
+    "spike.ask": {
+      // NOTE: no "handler" field — routed to the service binary
+      "action": "write",
+      "description": "Ask a question about code in a repository tree",
+      "params": { ... }
+    }
   }
+}
+```
+
+**How service routing works:**
+
+1. Runtime receives `spike.ask` operation
+2. Pipeline runs: auth → IAM → validate params
+3. Runtime dispatches to Spike's engine service: `POST http://localhost:{port}/operations/spike.ask`
+4. Service binary processes the request, returns response
+5. Runtime forwards response through pipeline to caller
+
+The service binary receives a standard operation request:
+```json
+{
+  "operation": "spike.ask",
+  "payload": { "query": "...", "tree_id": "..." },
+  "user": { "userId": "...", "accountId": "..." },
+  "requestId": "req_abc123"
 }
 ```
 
@@ -446,10 +487,11 @@ The `services` section declares app-specific backend processes (Nex Services) th
 | Property | Type | Required | Description |
 |----------|------|----------|-------------|
 | `command` | string | yes | Binary path relative to app package directory |
-| `args` | string[] | no | Command-line arguments. `{{port}}` is substituted with assigned port |
-| `port` | number | yes | Port the service listens on (runtime may remap if conflicting) |
+| `args` | string[] | no | Command-line arguments. `{{port}}` substituted with assigned port. `{{dataDir}}` substituted with app data directory. |
+| `port` | number | yes | Port the service listens on. `0` = runtime assigns a free port. |
 | `protocol` | string | yes | Communication protocol. V1: `"http"` only |
 | `healthCheck` | string | no | HTTP GET path for health monitoring. Runtime calls this periodically. |
+| `env` | object | no | Additional environment variables. Supports `{{port}}` and `{{dataDir}}` substitution. |
 
 **Service lifecycle:**
 
@@ -457,17 +499,18 @@ The `services` section declares app-specific backend processes (Nex Services) th
 - Health-checked periodically (configurable interval, default 30s)
 - Restarted automatically on crash (up to 3 retries, then marked unhealthy)
 - Stopped on `onDeactivate` (before lifecycle hook runs)
-- App-scoped: only the app's method handlers can reach the service (bound to localhost)
+- Bound to localhost — only the runtime can reach the service
 
-**Service access from handlers:**
+**Service callback to runtime:**
 
-```typescript
-export const handleHydrate: NexAppMethodHandler = async (ctx) => {
-  // ctx.app.service("engine") returns an HTTP client pre-configured for the service
-  const result = await ctx.app.service("engine").post("/api/hydrate", ctx.params);
-  return result;
-};
+Service binaries can call back into the runtime to use platform capabilities:
+
 ```
+Service binary → Nex SDK (HTTP/gRPC/stdio) → Runtime pipeline
+                 e.g., check entitlements, emit events, audit log
+```
+
+The service uses the Nex SDK (available in Go, TypeScript, Python) to dispatch operations back to the runtime. This replaces the old `ctx.nex.*` pattern — the service binary owns its own SDK client.
 
 ### 2.2 Stripe Price IDs and Operator Config
 
@@ -479,10 +522,12 @@ The sync pipeline creates plan records from the manifest. Stripe ID mapping is a
 
 ## 3) App Package Structure
 
-### 3.1 GlowBot (TypeScript-only app — no services)
+App packages live at `nexus/apps/` — a dedicated top-level directory alongside `nex/`, `nexus-frontdoor/`, etc. Apps are standalone packages decoupled from the runtime.
+
+### 3.1 GlowBot (Inline-TS App — no services)
 
 ```
-glowbot-app/
+apps/glowbot-app/
 ├── app.nexus.json              # manifest (required)
 ├── methods/                    # method handler code (required)
 │   ├── index.ts                # exports handler map
@@ -526,25 +571,19 @@ glowbot-app/
     └── ...
 ```
 
-### 3.2 Spike (App with Go service backend)
+### 3.2 Spike (Service-Routed App — Go engine handles all operations)
 
 ```
 spike-app/
-├── app.nexus.json              # manifest (required)
-├── methods/                    # TS method handlers (thin proxies to Go engine)
-│   ├── index.ts                # exports handler map
-│   ├── repos.ts                # spike.repos.* handlers
-│   ├── hydrate.ts              # spike.hydrate.* handlers
-│   ├── ask.ts                  # spike.ask handler
-│   ├── prlm.ts                 # spike.prlm.* handlers
-│   └── profile.ts              # spike.profile.* handlers
-├── hooks/                      # lifecycle hooks
-│   ├── install.ts
-│   ├── activate.ts             # also starts/verifies service health
-│   ├── deactivate.ts
-│   └── upgrade.ts
+├── app.nexus.json              # manifest (required) — NO handler field
+├── hooks/                      # lifecycle hooks (TypeScript, loaded via jiti)
+│   ├── install.ts              # verify binaries exist
+│   ├── activate.ts             # log activation
+│   ├── deactivate.ts           # log deactivation
+│   ├── upgrade.ts              # Go engine handles its own migrations
+│   └── uninstall.ts            # archive data directory
 ├── bin/                        # binaries
-│   ├── spike-engine            # Go PRLM engine (Nex Service)
+│   ├── spike-engine            # Go PRLM engine (Nex Service — IS the handler)
 │   └── github-code-adapter     # GitHub connector (Nex Adapter)
 ├── assets/
 │   ├── icon.svg
@@ -553,6 +592,8 @@ spike-app/
     ├── index.html
     └── ...
 ```
+
+Note: No `methods/` directory. The Go engine binary handles all operations directly. The runtime dispatches `spike.*` operations to the engine service via HTTP. Lifecycle hooks remain TypeScript (loaded via jiti) because they run at install/activate time, not per-request.
 
 ---
 
@@ -574,12 +615,21 @@ For each method declared in the manifest:
 1. Auto-generate IAM/authz entry: `apps.<appId>.<capability>` with the declared action (read/write)
    - Example: `"glowbot.overview"` → `{ kind: "control", action: "read", resource: "apps.glowbot.overview" }`
 2. Validate method name starts with `<appId>.` (enforced namespacing)
-3. Load handler module from `handler` path (in-process, via jiti dynamic TypeScript import)
-4. Wire handler function to the method name in the runtime's request router
-5. If the manifest includes JSON Schema for params → validate incoming requests against the schema
-6. Core runtime methods are reserved — any app method conflicting with core methods is rejected
+3. Register the method's routing target based on handler mode:
+   - **Service-routed**: Method routes to the app's service binary via HTTP (`POST /operations/<method>`)
+   - **Inline-TS**: Load handler module from `handler` path via jiti, wire to request router
+4. If the manifest includes JSON Schema for params → validate incoming requests against the schema
+5. Core runtime methods are reserved — any app method conflicting with core methods is rejected
 
-**Handler execution model (V1):** Method handlers run in the nex Node.js process. No sandboxing. All first-party apps are trusted code. Sandboxing (process isolation, V8 isolates) is a future concern for untrusted third-party apps.
+**Handler mode detection:**
+- If manifest has `services` section AND no `handler` field → **service-routed mode**
+- If manifest has `handler` field AND no `services` section → **inline-TS mode**
+- If both are present → error (not supported in V1)
+- If neither is present → error (app has no handler)
+
+**Service-routed execution:** The runtime dispatches the operation to the service binary, which runs as a separate process. The service can be any language. Process-level isolation is inherent.
+
+**Inline-TS execution:** The handler runs in the nex Node.js process. No sandboxing. All first-party apps using this mode are trusted code.
 
 ### 4.3 UI Serving
 
@@ -670,28 +720,35 @@ export const handleOverview: NexAppMethodHandler = async (ctx: NexAppMethodConte
 };
 ```
 
-### 5.2 Service-Backed Method Handler (Spike pattern)
+### 5.2 Service-Routed Handler (Spike pattern — Go binary)
 
-```typescript
-import type { NexAppMethodHandler, NexAppMethodContext } from "@nexus/app-sdk";
+In service-routed mode, there are NO TypeScript handlers. The Go binary handles operations directly:
 
-// Thin proxy handler — delegates heavy compute to the Go engine service
-export const handleHydrate: NexAppMethodHandler = async (ctx: NexAppMethodContext) => {
-  // Check entitlements before calling service
-  ctx.nex.entitlements.enforce("repos.max_count", await getRepoCount(ctx));
+```go
+// Inside spike-engine Go binary
+func handleAsk(w http.ResponseWriter, r *http.Request) {
+    var req OperationRequest
+    json.NewDecoder(r.Body).Decode(&req)
 
-  // Call the app's managed service
-  const result = await ctx.app.service("engine").post("/api/hydrate", {
-    repo: ctx.params.repo,
-    branch: ctx.params.branch,
-  });
+    // Check entitlements via Nex SDK callback
+    limit, _ := nexClient.Dispatch("entitlements.check", map[string]any{
+        "key": "asks_per_day",
+    })
 
-  // Audit log the action
-  ctx.nex.audit.log("spike.hydrate", { repo: ctx.params.repo });
+    // Execute core logic
+    result := prlm.Ask(req.Payload.Query, req.Payload.TreeID)
 
-  return result;
-};
+    // Audit log via Nex SDK callback
+    nexClient.Dispatch("audit.log", map[string]any{
+        "action": "spike.ask",
+        "tree_id": req.Payload.TreeID,
+    })
+
+    json.NewEncoder(w).Encode(result)
+}
 ```
+
+The service binary owns entitlement checking, audit logging, and all business logic. It calls back to the runtime via the Nex SDK for platform capabilities.
 
 ### 5.3 SDK Interface
 

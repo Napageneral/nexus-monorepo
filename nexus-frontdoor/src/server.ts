@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import net from "node:net";
@@ -7,12 +8,13 @@ import { URL } from "node:url";
 import httpProxy from "http-proxy";
 import { createCheckoutSession, verifyWebhookAndParseEvent, type BillingWebhookEvent } from "./billing.js";
 import { loadConfig, resolveProjectRoot } from "./config.js";
-import { randomToken } from "./crypto.js";
+import { randomToken, createPasswordHash } from "./crypto.js";
 import { OidcFlowManager, type OidcClaims } from "./oidc-auth.js";
 import { SlidingWindowRateLimiter } from "./rate-limit.js";
 import { mintRuntimeAccessToken } from "./runtime-token.js";
 import { SessionStore } from "./session-store.js";
 import { TenantAutoProvisioner } from "./tenant-autoprovision.js";
+import { syncProductFromManifest } from "./product-sync.js";
 import {
   FrontdoorStore,
   type ServerRecord,
@@ -1216,7 +1218,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     sqlitePath: config.sessionStorePath,
   });
   const store = new FrontdoorStore(
-    config.frontdoorStorePath ?? path.resolve(resolveProjectRoot(), "state", "frontdoor.db"),
+    config.frontdoorStorePath ?? config.workspaceStorePath ?? path.resolve(resolveProjectRoot(), "state", "frontdoor.db"),
   );
   const loginAttemptLimiter = new SlidingWindowRateLimiter(
     rateLimits.loginAttempts.windowSeconds * 1000,
@@ -1246,6 +1248,25 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     autoProvisioner.seedTenantsIntoConfig();
   }
   store.seedFromConfig(config);
+
+  // ── Startup product sync: auto-sync app manifests into the product catalog ──
+  const productManifestPathsRaw = (process.env.FRONTDOOR_PRODUCT_MANIFEST_PATHS ?? "").trim();
+  if (productManifestPathsRaw) {
+    const manifestPaths = productManifestPathsRaw.split(",").map((p) => p.trim()).filter(Boolean);
+    for (const manifestPath of manifestPaths) {
+      try {
+        // syncProductFromManifest is async but uses sync I/O; await resolves immediately
+        void syncProductFromManifest(store, manifestPath).then((result) => {
+          console.log(`[startup] product sync: ${result.appId} — ${result.productsUpserted} products, ${result.plansUpserted} plans`);
+        }).catch((err) => {
+          console.error(`[startup] product sync failed for ${manifestPath}: ${String(err)}`);
+        });
+      } catch (err) {
+        console.error(`[startup] product sync failed for ${manifestPath}: ${String(err)}`);
+      }
+    }
+  }
+
   const proxy = httpProxy.createProxyServer({
     ws: true,
     changeOrigin: true,
@@ -2445,16 +2466,119 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       headers.set("origin", targetOrigin);
     }
 
-    // Buffer the runtime response
-    const runtimeResponse = await fetch(runtimeTarget, {
-      method: "GET",
-      headers,
-    });
-    const contentType = (runtimeResponse.headers.get("content-type") || "").toLowerCase();
-    const bodyText = await runtimeResponse.text();
+    // Buffer the runtime response (wrap in try-catch for connection failures)
+    let runtimeResponse: Response;
+    let contentType: string;
+    let bodyText: string;
+    try {
+      runtimeResponse = await fetch(runtimeTarget, {
+        method: "GET",
+        headers,
+      });
+      contentType = (runtimeResponse.headers.get("content-type") || "").toLowerCase();
+      bodyText = await runtimeResponse.text();
+    } catch (fetchError) {
+      // Runtime is unreachable — synthesize a 502 so the error-page path below handles it
+      runtimeResponse = new Response("Runtime unreachable", { status: 502 });
+      contentType = "text/plain";
+      bodyText = `Could not connect to runtime: ${String(fetchError)}`;
+    }
 
-    // Non-HTML or non-200: pass through without injection
-    if (runtimeResponse.status !== 200 || !contentType.includes("text/html")) {
+    // Non-200: generate friendly error page WITH app frame so user can navigate
+    if (runtimeResponse.status !== 200) {
+      const errorAppIdMatch = params.url.pathname.match(/^\/app\/([^/]+)/);
+      const errorAppId = errorAppIdMatch ? decodeURIComponent(errorAppIdMatch[1]) : "unknown";
+      const errorProduct = store.getProduct(errorAppId);
+      const errorAppName = errorProduct?.displayName ?? errorAppId;
+      const errorAccent = errorProduct?.accentColor ?? "#6366f1";
+      const errorStatus = runtimeResponse.status;
+      const errorBodyPreview = bodyText.trim().slice(0, 500);
+
+      const errorPageHtml = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escHtml(errorAppName)} — Error ${errorStatus}</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0e0e11;color:#c5c5d0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column}
+  .error-container{flex:1;display:flex;align-items:center;justify-content:center;padding:40px 24px}
+  .error-card{text-align:center;max-width:480px;width:100%}
+  .error-code{font-size:72px;font-weight:800;color:#3b3b4f;line-height:1}
+  .error-title{font-size:20px;font-weight:600;color:#e4e4ec;margin:16px 0 8px}
+  .error-desc{font-size:14px;color:#8888a0;margin-bottom:24px;line-height:1.5}
+  .error-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .error-btn{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:500;text-decoration:none;cursor:pointer;border:none;transition:background 0.15s}
+  .error-btn-primary{background:#6366f1;color:#fff}.error-btn-primary:hover{background:#5558e6}
+  .error-btn-secondary{background:#1e1e2a;color:#c5c5d0;border:1px solid #2a2a3a}.error-btn-secondary:hover{background:#252536}
+  details{margin-top:24px;text-align:left}
+  summary{font-size:12px;color:#6668a0;cursor:pointer;padding:8px 0}
+  pre{font-size:12px;color:#6668a0;background:#111118;border:1px solid #1e1e2a;border-radius:8px;padding:12px;margin-top:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto}
+</style>
+</head><body>
+<div class="error-container">
+  <div class="error-card">
+    <div class="error-code">${errorStatus}</div>
+    <div class="error-title">This app couldn't be loaded</div>
+    <div class="error-desc">${escHtml(errorAppName)} returned an error. This may be temporary — try again in a moment.</div>
+    <div class="error-actions">
+      <a href="/" class="error-btn error-btn-primary">Back to Dashboard</a>
+      <button onclick="location.reload()" class="error-btn error-btn-secondary">Try Again</button>
+    </div>
+    ${errorBodyPreview ? `<details><summary>Technical Details</summary><pre>Status: ${errorStatus}\nApp: ${escHtml(errorAppId)}\nPath: ${escHtml(params.url.pathname)}\n\n${escHtml(errorBodyPreview)}</pre></details>` : ""}
+  </div>
+</div>
+</body></html>`;
+
+      // Gather frame context for the error page
+      const errorUser = store.getUserById(params.session.principal.userId);
+      const errorUserDisplayName = errorUser?.displayName ?? errorUser?.email ?? "";
+      const errorUserEmail = errorUser?.email ?? "";
+      const errorAccount = store.getAccount(params.accountId);
+      const errorAccountName = errorAccount?.displayName ?? "";
+      const errorAllServers = store.getServersForUser(params.session.principal.userId);
+      const errorServers = errorAllServers.map((s) => ({
+        serverId: s.serverId,
+        displayName: s.displayName || s.generatedName,
+        status: s.status === "active" ? "active" : s.status === "provisioning" ? "degraded" : "down",
+      }));
+      const errorAppInstalls = store.getServerEffectiveAppInstalls(params.serverId);
+      const errorInstalledApps = errorAppInstalls.map((install) => {
+        const prod = store.getProduct(install.appId);
+        return {
+          appId: install.appId,
+          displayName: prod?.displayName ?? install.appId,
+          accentColor: prod?.accentColor ?? "#6366f1",
+          entryPath: install.entryPath ?? defaultEntryPathForApp(install.appId),
+          status: install.status,
+        };
+      });
+
+      const framedError = injectAppFrame(errorPageHtml, {
+        appId: errorAppId,
+        appDisplayName: errorAppName,
+        appAccentColor: errorAccent,
+        serverId: params.serverId,
+        serverDisplayName: params.server.displayName || params.server.generatedName,
+        serverStatus: params.server.status === "active" ? "active" : params.server.status === "provisioning" ? "degraded" : "down",
+        servers: errorServers,
+        installedApps: errorInstalledApps,
+        userDisplayName: errorUserDisplayName,
+        userEmail: errorUserEmail,
+        accountName: errorAccountName,
+        dashboardUrl: "/",
+        logoutUrl: "/api/auth/logout",
+      });
+
+      const framedErrorBuffer = Buffer.from(framedError, "utf8");
+      params.res.statusCode = errorStatus;
+      params.res.setHeader("content-type", "text/html; charset=utf-8");
+      params.res.setHeader("content-length", String(framedErrorBuffer.byteLength));
+      params.res.setHeader("cache-control", "no-store");
+      params.res.end(framedErrorBuffer);
+      return;
+    }
+
+    // Non-HTML 200: pass through without frame injection (API/JSON responses)
+    if (!contentType.includes("text/html")) {
       params.res.statusCode = runtimeResponse.status;
       params.res.setHeader(
         "content-type",
@@ -2622,6 +2746,27 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         return;
       }
 
+      if (method === "GET" && pathname === "/api/auth/me") {
+        const session = readSession({ req, config, sessions });
+        if (!session) {
+          sendJson(res, 401, { ok: false, error: "not_authenticated" });
+          return;
+        }
+        const user = store.getUserById(session.principal.userId);
+        sendJson(res, 200, {
+          ok: true,
+          user_id: session.principal.userId,
+          username: session.principal.username,
+          display_name: session.principal.displayName,
+          email: session.principal.email ?? user?.email ?? null,
+          roles: session.principal.roles,
+          scopes: session.principal.scopes,
+          account_id: session.principal.accountId || null,
+          tenant_id: session.principal.tenantId || null,
+        });
+        return;
+      }
+
       if (method === "POST" && pathname === "/api/auth/login") {
         if (
           !applyRateLimit({
@@ -2702,6 +2847,210 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           request_id: requestId,
           user_id: principal.userId,
           tenant_id: principal.tenantId || null,
+          client_ip: clientIp,
+        });
+        return;
+      }
+
+      // ── Signup (password-based registration) ──────────────────────
+      if (method === "POST" && pathname === "/api/auth/signup") {
+        if (
+          !applyRateLimit({
+            req,
+            res,
+            limiter: loginAttemptLimiter,
+            key: `signup:attempt:${clientIp}`,
+            error: "signup_rate_limited",
+          })
+        ) {
+          return;
+        }
+        const body =
+          (await readJsonBody<{
+            email?: string;
+            username?: string;
+            password?: string;
+            display_name?: string;
+            intent_app?: string;
+          }>(req)) ?? {};
+        const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+        const username =
+          typeof body.username === "string"
+            ? body.username.trim().toLowerCase()
+            : email.split("@")[0]?.replace(/[^a-z0-9_-]/g, "") || "";
+        const password = typeof body.password === "string" ? body.password : "";
+        const displayName =
+          typeof body.display_name === "string" ? body.display_name.trim() : username;
+        const intentApp =
+          typeof body.intent_app === "string" ? body.intent_app.trim().toLowerCase() : "";
+
+        // Validate required fields
+        if (!email || !email.includes("@")) {
+          sendJson(res, 400, { ok: false, error: "invalid_email" });
+          return;
+        }
+        if (!password || password.length < 6) {
+          sendJson(res, 400, {
+            ok: false,
+            error: "password_too_short",
+            detail: "Password must be at least 6 characters",
+          });
+          return;
+        }
+        if (!username || username.length < 2) {
+          sendJson(res, 400, { ok: false, error: "invalid_username" });
+          return;
+        }
+
+        // Check for existing user with same email or username
+        const existingByEmail = store.getUserByEmail(email);
+        if (existingByEmail) {
+          sendJson(res, 409, { ok: false, error: "email_already_registered" });
+          return;
+        }
+        const existingByUsername = store.getUserByUsername(username);
+        if (existingByUsername) {
+          sendJson(res, 409, { ok: false, error: "username_already_taken" });
+          return;
+        }
+
+        // Create user
+        const userId = `user-${randomUUID().slice(0, 12)}`;
+        const passwordHash = createPasswordHash(password);
+        const user = store.upsertUser({
+          userId,
+          username,
+          passwordHash,
+          email,
+          displayName: displayName || username,
+          disabled: false,
+        });
+
+        // Create account
+        const account = store.createAccount(displayName || username, userId);
+
+        // Auto-provision server + auto-install app if intent_app specified
+        let serverId: string | null = null;
+        let redirectTo = "/";
+
+        // Map user to a server — use auto-provisioner if available, else first tenant
+        const firstTenantId = Array.from(config.tenants.keys())[0];
+        const tenant = firstTenantId ? config.tenants.get(firstTenantId) : undefined;
+
+        if (tenant) {
+          const server = store.upsertServer({
+            serverId: tenant.id,
+            accountId: account.accountId,
+            displayName: tenant.id,
+            generatedName: deterministicServerNameFromId(tenant.id),
+            runtimeUrl: tenant.runtimeUrl,
+            runtimePublicBaseUrl: tenant.runtimePublicBaseUrl,
+            runtimeWsUrl: tenant.runtimeWsUrl,
+            runtimeSseUrl: tenant.runtimeSseUrl,
+            runtimeAuthToken: tenant.runtimeAuthToken,
+            status: "active",
+            tier: "standard",
+            createdAtMs: Date.now(),
+            updatedAtMs: Date.now(),
+          });
+          serverId = server.serverId;
+
+          if (intentApp) {
+            // Create free app subscription
+            store.createAppSubscription({
+              accountId: account.accountId,
+              appId: intentApp,
+              planId: `${intentApp}-free`,
+              status: "active",
+              provider: "none",
+            });
+
+            // Build session early so ensureRuntimeAppInstalled can use it
+            const earlyPrincipal = store.toPrincipal({
+              user,
+              server,
+              accountId: account.accountId,
+              amr: ["pwd"],
+            });
+            const earlySession = sessions.createSession(earlyPrincipal);
+
+            // Install the app on the server
+            try {
+              await ensureRuntimeAppInstalled({
+                session: earlySession,
+                appId: intentApp,
+                serverId: server.serverId,
+                source: "purchase",
+                requestId,
+              });
+            } catch {
+              // Non-fatal — user can install from dashboard
+            }
+
+            redirectTo = `/app/${intentApp}/`;
+
+            // Set cookie and respond using the early session
+            setCookie({
+              res,
+              name: config.sessionCookieName,
+              value: earlySession.id,
+              domain: config.sessionCookieDomain,
+              maxAgeSeconds: config.sessionTtlSeconds,
+              secure: cookieSecure,
+            });
+            sendJson(res, 201, {
+              ok: true,
+              session_id: earlySession.id,
+              user_id: userId,
+              account_id: account.accountId,
+              server_id: serverId,
+              redirect_to: redirectTo,
+            });
+            logFrontdoorEvent("auth_signup_succeeded", {
+              request_id: requestId,
+              user_id: userId,
+              intent_app: intentApp || null,
+              client_ip: clientIp,
+            });
+            return;
+          }
+        }
+
+        // Create session (no auto-provision path)
+        const userServers = store.getServersForUser(userId);
+        const defaultServer = userServers.length > 0 ? userServers[0] : null;
+        const principal = store.toPrincipal({
+          user,
+          server: defaultServer,
+          accountId: account.accountId,
+          amr: ["pwd"],
+        });
+        const session = sessions.createSession(principal);
+        setCookie({
+          res,
+          name: config.sessionCookieName,
+          value: session.id,
+          domain: config.sessionCookieDomain,
+          maxAgeSeconds: config.sessionTtlSeconds,
+          secure: cookieSecure,
+        });
+
+        if (intentApp) {
+          redirectTo = `/app/${intentApp}/`;
+        }
+
+        sendJson(res, 201, {
+          ok: true,
+          session_id: session.id,
+          user_id: userId,
+          account_id: account.accountId,
+          server_id: serverId,
+          redirect_to: redirectTo,
+        });
+        logFrontdoorEvent("auth_signup_succeeded", {
+          request_id: requestId,
+          user_id: userId,
+          intent_app: intentApp || null,
           client_ip: clientIp,
         });
         return;
@@ -2995,6 +3344,52 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
                 .map((item) => item.appId),
             };
           }),
+        });
+        return;
+      }
+
+      if (method === "POST" && pathname === "/api/servers/select") {
+        const session = readSession({ req, config, sessions });
+        if (!session) {
+          sendJson(res, 401, { ok: false, error: "unauthorized" });
+          return;
+        }
+        const selectBody =
+          (await readJsonBody<{ server_id?: string }>(req)) ?? {};
+        const selectServerId =
+          typeof selectBody.server_id === "string"
+            ? selectBody.server_id.trim()
+            : "";
+        if (!selectServerId) {
+          sendJson(res, 400, {
+            ok: false,
+            error: "missing_server_id",
+          });
+          return;
+        }
+        const userServers = store.getServersForUser(
+          session.principal.userId,
+        );
+        const targetServer = userServers.find(
+          (s) => s.serverId === selectServerId,
+        );
+        if (!targetServer) {
+          sendJson(res, 404, {
+            ok: false,
+            error: "server_not_found",
+          });
+          return;
+        }
+        const selectPrincipal: Principal = {
+          ...session.principal,
+          tenantId: targetServer.serverId,
+          accountId: targetServer.accountId,
+        };
+        sessions.updateSessionPrincipal(session.id, selectPrincipal);
+        sendJson(res, 200, {
+          ok: true,
+          server_id: targetServer.serverId,
+          display_name: targetServer.displayName,
         });
         return;
       }
@@ -4863,6 +5258,11 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           return;
         }
         try {
+          // Phase 1 — resolve identity WITHOUT blocking on provisioning.
+          // For existing users with a tenant this is instant.  For brand-new
+          // users we still call resolveOrProvision so account+tenant records
+          // are created, BUT only if the user already has a known tenant.
+          // If provisioning is required we defer it to a background task.
           const completed = await oidc.complete({
             config,
             provider,
@@ -4872,21 +5272,47 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
               if (!autoProvisioner) {
                 return fallbackPrincipal;
               }
-              return await autoProvisioner.resolveOrProvision({
+              // Quick path: check if this user already has a provisioned tenant
+              const existingAccount = autoProvisioner.getOidcAccount({
                 provider: oidcProvider,
-                claims,
-                fallbackPrincipal,
-                productId,
+                subject: claims.sub ?? "",
               });
+              if (existingAccount?.tenantId) {
+                // Existing user — resolve instantly (no provisioning needed)
+                return await autoProvisioner.resolveOrProvision({
+                  provider: oidcProvider,
+                  claims,
+                  fallbackPrincipal,
+                  productId,
+                });
+              }
+              // New user — return a principal built from OIDC claims (no tenant yet).
+              // Provisioning will run in the background after redirect.
+              if (fallbackPrincipal) return fallbackPrincipal;
+              const sub = (claims.sub ?? "").trim();
+              return {
+                userId: `oidc:${oidcProvider}:${sub}`,
+                entityId: `entity:${oidcProvider}:${sub}`,
+                displayName: claims.name,
+                email: claims.email,
+                roles: config.autoProvision?.defaultRoles?.length
+                  ? [...config.autoProvision.defaultRoles]
+                  : ["operator"],
+                scopes: config.autoProvision?.defaultScopes?.length
+                  ? [...config.autoProvision.defaultScopes]
+                  : ["operator.admin"],
+                amr: ["oidc"],
+              } as Principal;
             },
           });
-          // If provisioning created a tenant, ensure there's a server record for it
+
+          // If the principal already has a tenant (existing user), wire up
+          // server records synchronously — this is instant.
           if (completed.principal?.tenantId) {
             const tenant = config.tenants.get(completed.principal.tenantId);
             if (tenant) {
               const existingServer = store.getServer(completed.principal.tenantId);
               if (!existingServer) {
-                // Auto-provisioned: ensure the user has an account
                 const oidcUserPre = store.resolveOrCreateOidcUser({
                   provider,
                   subject: completed.claims.sub ?? "",
@@ -4908,10 +5334,27 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
                     runtimeSseUrl: tenant.runtimeSseUrl,
                     runtimeAuthToken: tenant.runtimeAuthToken,
                   });
+                  store.updateServer(tenant.id, { status: "ready" });
+                  const intentAppId = completed.productId?.trim().toLowerCase();
+                  if (intentAppId) {
+                    try {
+                      store.createAppSubscription({
+                        accountId,
+                        appId: intentAppId,
+                        planId: "default",
+                        status: "active",
+                        provider: "oidc_auto",
+                      });
+                    } catch {
+                      // Subscription may already exist
+                    }
+                  }
                 }
               }
             }
           }
+
+          // Create user + session immediately.
           const oidcUser = store.resolveOrCreateOidcUser({
             provider,
             subject: completed.claims.sub ?? "",
@@ -4919,7 +5362,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             displayName: completed.claims.name,
             fallbackPrincipal: completed.principal,
           });
-          // Find the user's servers to establish a default session context
           const oidcServers = store.getServersForUser(oidcUser.userId);
           let oidcServer: ServerRecord | null = null;
           let oidcAccountId: string | undefined;
@@ -4946,9 +5388,140 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             maxAgeSeconds: config.sessionTtlSeconds,
             secure: cookieSecure,
           });
+
+          // Determine where to redirect.
+          // If the user already has a server + the intent app, go straight to the app.
+          // Otherwise redirect to the dashboard — provisioning will continue in background.
+          const hasTenant = !!completed.principal?.tenantId;
+          const needsProvision = !hasTenant && !!autoProvisioner && !!completed.productId;
+          let oidcRedirect = completed.returnTo || "/";
+          if (hasTenant && oidcRedirect === "/" && completed.productId) {
+            oidcRedirect = `/app/${completed.productId}/`;
+          }
+          // For users that need provisioning, always land on the dashboard
+          // so they can see the provisioning progress.
+          if (needsProvision && completed.productId) {
+            oidcRedirect = `/?product=${encodeURIComponent(completed.productId)}&provisioning=1`;
+          } else if (needsProvision) {
+            oidcRedirect = "/?provisioning=1";
+          }
           res.statusCode = 302;
-          res.setHeader("location", completed.returnTo || "/");
+          res.setHeader("location", oidcRedirect);
           res.end();
+
+          // Phase 2 — background provisioning for new users.
+          // The user has already been redirected to the dashboard.
+          if (needsProvision && autoProvisioner) {
+            void (async () => {
+              const bgRequestId = requestId ?? randomToken(10);
+              try {
+                const provisionedPrincipal = await autoProvisioner.resolveOrProvision({
+                  provider,
+                  claims: completed.claims,
+                  fallbackPrincipal: completed.principal,
+                  productId: completed.productId,
+                });
+                if (!provisionedPrincipal?.tenantId) {
+                  return;
+                }
+                // Create server record
+                const tenant = config.tenants.get(provisionedPrincipal.tenantId);
+                if (tenant) {
+                  const existingServer = store.getServer(provisionedPrincipal.tenantId);
+                  if (!existingServer) {
+                    const accounts = store.getAccountsForUser(oidcUser.userId);
+                    const accountId = provisionedPrincipal.accountId || accounts[0]?.accountId;
+                    if (accountId) {
+                      store.createServer({
+                        serverId: tenant.id,
+                        accountId,
+                        displayName: tenant.id,
+                        generatedName: deterministicServerNameFromId(tenant.id),
+                        runtimeUrl: tenant.runtimeUrl,
+                        runtimePublicBaseUrl: tenant.runtimePublicBaseUrl,
+                        runtimeWsUrl: tenant.runtimeWsUrl,
+                        runtimeSseUrl: tenant.runtimeSseUrl,
+                        runtimeAuthToken: tenant.runtimeAuthToken,
+                      });
+                      store.updateServer(tenant.id, { status: "ready" });
+                      // Auto-grant subscriptions for ALL configured apps (not just intent)
+                      const configuredApps = autoProvisioner!.lastConfiguredApps;
+                      const intentAppId = completed.productId?.trim().toLowerCase();
+                      // Build de-duplicated list: configured apps + intent app
+                      const allApps = new Set(configuredApps);
+                      if (intentAppId) allApps.add(intentAppId);
+                      for (const appId of allApps) {
+                        try {
+                          store.createAppSubscription({
+                            accountId,
+                            appId,
+                            planId: "default",
+                            status: "active",
+                            provider: "oidc_auto",
+                          });
+                        } catch {
+                          // Subscription may already exist
+                        }
+                      }
+                    }
+                  }
+                }
+                // Update the session principal with the new tenant
+                const updatedPrincipal: Principal = {
+                  ...session.principal,
+                  tenantId: provisionedPrincipal.tenantId,
+                  accountId: provisionedPrincipal.accountId || session.principal.accountId,
+                };
+                sessions.updateSessionPrincipal(session.id, updatedPrincipal);
+                // Auto-install ALL configured apps on the new server
+                if (provisionedPrincipal.tenantId) {
+                  const configuredApps = autoProvisioner!.lastConfiguredApps;
+                  const intentAppId = completed.productId?.trim().toLowerCase();
+                  const allApps = new Set(configuredApps);
+                  if (intentAppId) allApps.add(intentAppId);
+                  const autoServerId = provisionedPrincipal.tenantId;
+                  // Re-read session after principal update
+                  const updatedSession = sessions.getSession(session.id);
+                  if (updatedSession) {
+                    for (const appId of allApps) {
+                      try {
+                        await ensureRuntimeAppInstalled({
+                          session: updatedSession,
+                          appId,
+                          serverId: autoServerId,
+                          source: "purchase",
+                          requestId: bgRequestId,
+                        });
+                      } catch {
+                        // Best-effort auto-install
+                      }
+                    }
+                  }
+                }
+              } catch (bgError) {
+                console.error(
+                  `[oidc] background provisioning failed: ${String(bgError)}`,
+                );
+              }
+            })();
+          }
+          // For existing users with servers, auto-install intent app synchronously
+          // (already have a server, this is fast)
+          if (hasTenant && completed.productId && completed.principal?.tenantId) {
+            const autoAppId = completed.productId.trim().toLowerCase();
+            const autoServerId = completed.principal.tenantId;
+            try {
+              await ensureRuntimeAppInstalled({
+                session,
+                appId: autoAppId,
+                serverId: autoServerId,
+                source: "purchase",
+                requestId: requestId ?? randomToken(10),
+              });
+            } catch {
+              // Best-effort auto-install
+            }
+          }
         } catch (error) {
           sendJson(res, 401, {
             ok: false,

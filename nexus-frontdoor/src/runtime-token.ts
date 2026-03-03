@@ -17,6 +17,10 @@ export function mintRuntimeAccessToken(params: {
   const signingSecret =
     (keyId ? params.config.runtimeTokenSecretsByKid.get(keyId) : undefined) ??
     params.config.runtimeTokenSecret;
+  // Map frontdoor roles to runtime roles.  The runtime IAM treats "operator"
+  // as the owner-level role that grants full control-plane access.
+  const frontdoorRole = params.principal.roles[0] ?? "member";
+  const runtimeRole = frontdoorRole === "owner" ? "operator" : frontdoorRole;
   const claims = {
     iss: params.config.runtimeTokenIssuer,
     aud: params.config.runtimeTokenAudience,
@@ -26,7 +30,7 @@ export function mintRuntimeAccessToken(params: {
     tenant_id: params.principal.tenantId,
     entity_id: params.principal.entityId,
     scopes: params.principal.scopes,
-    role: params.principal.roles[0] ?? "member",
+    role: runtimeRole,
     roles: params.principal.roles,
     session_id: params.sessionId,
     amr: params.principal.amr,

@@ -654,6 +654,14 @@ export class FrontdoorStore {
     if (existing) {
       return existing;
     }
+    // Ensure the system user exists before creating the system account (FK constraint)
+    this.upsertUser({
+      userId: "system",
+      username: "system",
+      email: "system@localhost",
+      displayName: "System",
+      disabled: true,
+    });
     return this.createAccountWithId("system-account", "System", "system");
   }
 
@@ -894,7 +902,11 @@ export class FrontdoorStore {
   }
 
   authenticatePassword(username: string, password: string): FrontdoorUserRecord | null {
-    const user = this.getUserByUsername(username);
+    // Try username first, then fall back to email lookup
+    let user = this.getUserByUsername(username);
+    if (!user && username.includes("@")) {
+      user = this.getUserByEmail(username);
+    }
     if (!user || user.disabled || !user.passwordHash) {
       return null;
     }
@@ -2916,6 +2928,23 @@ export class FrontdoorStore {
     accountId?: string;
     amr: string[];
   }): Principal {
+    // Derive roles/scopes from account membership if available
+    let roles: string[] = [];
+    let scopes: string[] = [];
+    if (params.accountId) {
+      const membership = this.getAccountMembership(params.accountId, params.user.userId);
+      if (membership) {
+        roles = [membership.role];
+        // Grant scopes based on role
+        if (membership.role === "owner" || membership.role === "admin") {
+          scopes = ["*"];
+        } else if (membership.role === "member") {
+          scopes = ["chat.send", "chat.history", "apps.use"];
+        } else {
+          scopes = ["chat.send"];
+        }
+      }
+    }
     return {
       userId: params.user.userId,
       tenantId: params.server?.serverId ?? "",
@@ -2925,8 +2954,8 @@ export class FrontdoorStore {
       username: params.user.username,
       displayName: params.user.displayName,
       email: params.user.email,
-      roles: [],
-      scopes: [],
+      roles,
+      scopes,
       amr: [...params.amr],
       accountId: params.accountId,
     };

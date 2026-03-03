@@ -1,0 +1,501 @@
+{
+  "id": "spike",
+  "version": "1.0.0",
+  "displayName": "Spike",
+  "description": "AI-powered code intelligence and repository analysis",
+  "ui": {
+    "root": "dist",
+    "entryPath": "/app/spike/",
+    "spa": true
+  },
+  "services": {
+    "engine": {
+      "command": "bin/spike-engine",
+      "args": ["serve", "--port", "{{port}}"],
+      "port": 0,
+      "protocol": "http",
+      "healthCheck": {
+        "path": "/health",
+        "intervalSeconds": 30
+      },
+      "env": {
+        "NEX_APP_DATA_DIR": "{{dataDir}}",
+        "NEX_SERVICE_PORT": "{{port}}"
+      }
+    }
+  },
+  "adapters": [
+    {
+      "id": "github-code",
+      "name": "GitHub Code",
+      "platform": "github",
+      "command": "bin/github-code-adapter",
+      "description": "GitHub repository connector for code intelligence"
+    }
+  ],
+  "methods": {
+    "spike.ask": {
+      "description": "Ask a question about code in a repository tree",
+      "action": "write",
+      "params": {
+        "type": "object",
+        "required": ["query", "tree_id"],
+        "properties": {
+          "query": { "type": "string", "description": "Natural language question about the code" },
+          "tree_id": { "type": "string", "description": "Tree identifier" },
+          "json": { "type": "boolean", "description": "Return structured JSON response" }
+        }
+      }
+    },
+    "spike.status": {
+      "description": "Get engine health and status information",
+      "action": "read",
+      "params": { "type": "object", "properties": {} }
+    },
+    "spike.sync": {
+      "description": "Synchronize a repository tree with remote source",
+      "action": "write",
+      "params": {
+        "type": "object",
+        "required": ["tree_id"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "hydrate": { "type": "boolean" },
+          "repo_id": { "type": "string" },
+          "remote_url": { "type": "string" },
+          "ref": { "type": "string" }
+        }
+      }
+    },
+    "spike.jobs.get": {
+      "description": "Get details of a specific job",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "required": ["job_id"],
+        "properties": { "job_id": { "type": "string" } }
+      }
+    },
+    "spike.jobs.list": {
+      "description": "List jobs for a tree",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "properties": {
+          "tree_id": { "type": "string" },
+          "status": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      }
+    },
+    "spike.repositories.get": {
+      "description": "Get details of a specific repository",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "required": ["repo_id"],
+        "properties": { "repo_id": { "type": "string" } }
+      }
+    },
+    "spike.repositories.list": {
+      "description": "List repositories",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "properties": {
+          "repo_id": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      }
+    },
+    "spike.repo-refs.get": {
+      "description": "Get details of a repository reference",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "required": ["repo_id", "ref_name"],
+        "properties": {
+          "repo_id": { "type": "string" },
+          "ref_name": { "type": "string" }
+        }
+      }
+    },
+    "spike.repo-refs.list": {
+      "description": "List repository references",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "properties": {
+          "repo_id": { "type": "string" },
+          "ref_name": { "type": "string" },
+          "commit_sha": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      }
+    },
+    "spike.tree-versions.get": {
+      "description": "Get details of a specific tree version",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "required": ["id"],
+        "properties": { "id": { "type": "string" } }
+      }
+    },
+    "spike.tree-versions.list": {
+      "description": "List tree versions",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "properties": {
+          "tree_id": { "type": "string" },
+          "repo_id": { "type": "string" },
+          "ref_name": { "type": "string" },
+          "commit_sha": { "type": "string" },
+          "status": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      }
+    },
+    "spike.ask-requests.get": {
+      "description": "Get details of a specific ask request",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "required": ["tree_id", "request_id"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "request_id": { "type": "string" }
+        }
+      }
+    },
+    "spike.ask-requests.list": {
+      "description": "List ask requests for a tree",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "properties": {
+          "tree_id": { "type": "string" },
+          "status": { "type": "string" },
+          "scope_key": { "type": "string" },
+          "ref_name": { "type": "string" },
+          "commit_sha": { "type": "string" },
+          "tree_version_id": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      }
+    },
+    "spike.ask-requests.inspect": {
+      "description": "Inspect detailed ask request execution data",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "required": ["tree_id", "request_id"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "request_id": { "type": "string" }
+        }
+      }
+    },
+    "spike.ask-requests.timeline": {
+      "description": "Get timeline of ask request execution",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "required": ["tree_id", "request_id"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "request_id": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      }
+    },
+    "spike.sessions.list": {
+      "description": "List sessions for a tree",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "properties": {
+          "tree_id": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      }
+    },
+    "spike.sessions.resolve": {
+      "description": "Resolve session data with scope",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "required": ["tree_id", "key"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "key": { "type": "string" },
+          "scope": { "type": "string" }
+        }
+      }
+    },
+    "spike.sessions.preview": {
+      "description": "Preview session data without applying changes",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "required": ["tree_id", "key"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "key": { "type": "string" }
+        }
+      }
+    },
+    "spike.sessions.patch": {
+      "description": "Apply patch operations to session",
+      "action": "write",
+      "params": {
+        "type": "object",
+        "required": ["tree_id", "key", "operations"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "key": { "type": "string" },
+          "operations": { "type": "array" }
+        }
+      }
+    },
+    "spike.sessions.reset": {
+      "description": "Reset session to initial state",
+      "action": "write",
+      "params": {
+        "type": "object",
+        "required": ["tree_id", "key"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "key": { "type": "string" }
+        }
+      }
+    },
+    "spike.sessions.delete": {
+      "description": "Delete a session",
+      "action": "write",
+      "params": {
+        "type": "object",
+        "required": ["tree_id", "key"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "key": { "type": "string" }
+        }
+      }
+    },
+    "spike.sessions.compact": {
+      "description": "Compact session data to optimize storage",
+      "action": "write",
+      "params": {
+        "type": "object",
+        "required": ["tree_id", "key"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "key": { "type": "string" }
+        }
+      }
+    },
+    "spike.sessions.import": {
+      "description": "Import session data from external source",
+      "action": "write",
+      "params": {
+        "type": "object",
+        "required": ["tree_id", "key", "data"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "key": { "type": "string" },
+          "data": { "type": "object" }
+        }
+      }
+    },
+    "spike.sessions.import-chunk": {
+      "description": "Import session data chunk for large imports",
+      "action": "write",
+      "params": {
+        "type": "object",
+        "required": ["tree_id", "key", "chunk"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "key": { "type": "string" },
+          "chunk": { "type": "object" }
+        }
+      }
+    },
+    "spike.connectors.github.bind": {
+      "description": "Bind GitHub connector to tree",
+      "action": "write",
+      "params": {
+        "type": "object",
+        "required": ["tree_id", "service", "account"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "service": { "type": "string" },
+          "account": { "type": "string" },
+          "auth_id": { "type": "string" },
+          "metadata": { "type": "object" }
+        }
+      }
+    },
+    "spike.connectors.github.get": {
+      "description": "Get GitHub connector configuration for tree",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "required": ["tree_id"],
+        "properties": { "tree_id": { "type": "string" } }
+      }
+    },
+    "spike.connectors.github.install.start": {
+      "description": "Start GitHub App installation flow",
+      "action": "write",
+      "params": {
+        "type": "object",
+        "required": ["tree_id"],
+        "properties": { "tree_id": { "type": "string" } }
+      }
+    },
+    "spike.connectors.github.install.callback": {
+      "description": "Handle GitHub App installation callback",
+      "action": "write",
+      "params": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string" },
+          "installation_id": { "type": "string" },
+          "setup_action": { "type": "string" },
+          "state": { "type": "string" }
+        }
+      }
+    },
+    "spike.connectors.github.repos": {
+      "description": "List GitHub repositories accessible to connector",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "required": ["tree_id"],
+        "properties": { "tree_id": { "type": "string" } }
+      }
+    },
+    "spike.connectors.github.branches": {
+      "description": "List branches for a GitHub repository",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "required": ["tree_id", "repo_id"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "repo_id": { "type": "string" }
+        }
+      }
+    },
+    "spike.connectors.github.commits": {
+      "description": "List commits for a GitHub repository reference",
+      "action": "read",
+      "params": {
+        "type": "object",
+        "required": ["tree_id", "repo_id", "ref"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "repo_id": { "type": "string" },
+          "ref": { "type": "string" }
+        }
+      }
+    },
+    "spike.connectors.github.remove": {
+      "description": "Remove GitHub connector from tree",
+      "action": "write",
+      "params": {
+        "type": "object",
+        "required": ["tree_id"],
+        "properties": { "tree_id": { "type": "string" } }
+      }
+    },
+    "spike.connectors.github.setup": {
+      "description": "Setup GitHub connector with installation details",
+      "action": "write",
+      "params": {
+        "type": "object",
+        "required": ["tree_id", "account", "auth_id"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "account": { "type": "string" },
+          "auth_id": { "type": "string" },
+          "app_id": { "type": "string" },
+          "installation_id": { "type": "string" },
+          "metadata": { "type": "object" }
+        }
+      }
+    },
+    "spike.github.webhook": {
+      "description": "Handle GitHub webhook events",
+      "action": "write",
+      "access": "admin",
+      "params": {
+        "type": "object",
+        "properties": {
+          "event": { "type": "string" },
+          "payload": { "type": "object" }
+        }
+      }
+    }
+  },
+  "hooks": {
+    "onInstall": "hooks/install.ts",
+    "onActivate": "hooks/activate.ts",
+    "onDeactivate": "hooks/deactivate.ts",
+    "onUpgrade": "hooks/upgrade.ts",
+    "onUninstall": "hooks/uninstall.ts"
+  },
+  "product": {
+    "icon": "assets/icon.svg",
+    "color": "#10b981",
+    "tagline": "AI-powered code intelligence",
+    "plans": [
+      {
+        "id": "spike-free",
+        "name": "Free",
+        "tier": "free",
+        "entitlements": {
+          "repositories_max": "3",
+          "asks_per_day": "10",
+          "retention_days": "30"
+        }
+      },
+      {
+        "id": "spike-pro",
+        "name": "Pro",
+        "tier": "professional",
+        "price": {
+          "amount": 49,
+          "currency": "usd",
+          "interval": "month"
+        },
+        "entitlements": {
+          "repositories_max": "unlimited",
+          "asks_per_day": "unlimited",
+          "retention_days": "365"
+        }
+      }
+    ]
+  },
+  "entitlements": {
+    "repositories_max": {
+      "description": "Maximum repositories",
+      "type": "number",
+      "default": "3"
+    },
+    "asks_per_day": {
+      "description": "Daily ask limit",
+      "type": "number",
+      "default": "10"
+    },
+    "retention_days": {
+      "description": "Data retention in days",
+      "type": "number",
+      "default": "30"
+    }
+  },
+  "requires": {
+    "nex": ">=0.9.0"
+  }
+}

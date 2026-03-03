@@ -43,7 +43,7 @@
     {
       "id": "user-owner",
       "username": "owner",
-      "passwordHash": "scrypt-sha256-v1$Q2Pk_UGb_MWMHj_iNKt5mw$9LMyZ85W_i5G5yK-q22uow7_jL3ule5gyrXxlXE3C0g",
+      "passwordHash": "scrypt-sha256-v1$aDWr_n1zbh8eMF5XU1cdiw$OIdv8VqypOyqHnm3-BbfAXPId4UEAWQldLfb08gX0-E",
       "tenantId": "tenant-dev",
       "entityId": "entity-owner",
       "displayName": "Owner",

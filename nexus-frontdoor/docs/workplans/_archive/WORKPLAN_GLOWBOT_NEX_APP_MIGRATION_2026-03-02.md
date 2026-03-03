@@ -11,6 +11,8 @@ Depends on: WORKPLAN_NEX_RUNTIME_APP_LIFECYCLE (runtime must support manifest-dr
 
 Migrate GlowBot from its current state — handlers hardcoded in the nex runtime + Next.js app with API route bridges — to a proper self-contained nex app package driven by `app.nexus.json`.
 
+**Handler mode:** GlowBot uses **inline-TS mode** (not service-routed). GlowBot has no service binary — it's a UI built on top of the base nex runtime adapters. Its TypeScript handlers ARE the implementation, loaded via jiti in-process. This is the correct mode per the architecture spec for lightweight apps without an external compute backend.
+
 ### Current Architecture
 
 ```
@@ -37,9 +39,11 @@ Migrate GlowBot from its current state — handlers hardcoded in the nex runtime
 
 ```
 ┌──────────────────────────────────────┐
-│        glowbot-app/ (Nex App)        │
+│   apps/glowbot-app/ (Nex App)       │
 │                                      │
 │  app.nexus.json (manifest)           │
+│   → handler: ./methods/index.ts      │
+│   → inline-TS mode (no services)     │
 │                                      │
 │  methods/        (13 handlers)       │
 │  pipeline/       (business logic)    │
@@ -53,6 +57,7 @@ Migrate GlowBot from its current state — handlers hardcoded in the nex runtime
 ┌──────────────────────────────────────┐
 │          Nex Runtime                 │
 │  (zero GlowBot code in core)        │
+│  loads TS handlers via jiti          │
 └──────────────────────────────────────┘
 ```
 
@@ -158,7 +163,7 @@ Migrate GlowBot from its current state — handlers hardcoded in the nex runtime
 
 | Task | Gap | Estimate |
 |------|-----|----------|
-| Create `glowbot-app/` directory structure | — | 0.5 day |
+| Create `apps/glowbot-app/` directory structure | — | 0.5 day |
 | Write `app.nexus.json` manifest | GAP-G07 | 0.5 day |
 | Copy adapter binaries to `bin/` | GAP-G04 | 0.5 day |
 | Create `assets/` with icon and logo | — | 0.5 day |

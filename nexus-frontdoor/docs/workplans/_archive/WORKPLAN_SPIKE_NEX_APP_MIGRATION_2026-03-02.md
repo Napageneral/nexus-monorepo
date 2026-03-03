@@ -10,7 +10,9 @@ Scope: Infrastructure impact only. Deep Spike product work deferred.
 
 ## 1) Purpose
 
-Migrate Spike from a standalone Go server to a nex app package with a TypeScript frontend, Go backend service, and extracted GitHub adapter. This workplan focuses on the **infrastructure and interface decisions** that affect the shared nex platform — not on deep Spike product work.
+Migrate Spike from a standalone Go server to a nex app package with a TypeScript frontend, Go backend service (using **service-routed mode** — no TS proxy layer), and extracted GitHub adapter. This workplan focuses on the **infrastructure and interface decisions** that affect the shared nex platform — not on deep Spike product work.
+
+**Key architectural decision:** Spike uses service-routed mode per `NEX_ARCHITECTURE_AND_SDK_MODEL.md`. The Go engine binary IS the handler. The runtime dispatches operations directly to it. No TypeScript proxy handlers.
 
 ### Current Architecture
 
@@ -31,27 +33,27 @@ Migrate Spike from a standalone Go server to a nex app package with a TypeScript
 
 ```
 ┌──────────────────────────────────────────┐
-│          spike-app/ (Nex App)            │
+│     apps/spike-app/ (Nex App)            │
 │                                          │
 │  app.nexus.json         (manifest)       │
+│   → services.engine = bin/spike-engine   │
+│   → NO handler field (service-routed)    │
 │                                          │
 │  dist/                  (Nex UI)         │
 │    TypeScript/React static frontend      │
-│                                          │
-│  methods/               (TS handlers)    │
-│    Thin proxies to Go engine service     │
 │                                          │
 │  bin/                                    │
 │    spike-engine         (Nex Service)    │
 │    github-code-adapter  (Nex Adapter)    │
 │                                          │
-│  hooks/                 (lifecycle)      │
+│  hooks/                 (lifecycle, TS)  │
 └──────────────────────────────────────────┘
         │
         ▼ discovered by
 ┌──────────────────────────────────────────┐
 │            Nex Runtime                   │
-│  (manages Go service + adapter + UI)     │
+│  dispatches spike.* operations directly  │
+│  to Go engine via HTTP. No TS proxy.     │
 └──────────────────────────────────────────┘
 ```
 
@@ -72,7 +74,7 @@ Migrate Spike from a standalone Go server to a nex app package with a TypeScript
 **Current state:** Single Go binary does everything: HTTP server, UI serving, session management, SQLite persistence, PRLM computation, GitHub integration, webhook handling, MCP server mode.
 
 **Target state:** The binary splits into:
-- **spike-engine** — Focused Go binary: PRLM engine, hydration pipeline, code intelligence. Exposes HTTP API on localhost for TS handlers to call. No UI serving, no session management (nex handles that).
+- **spike-engine** — Focused Go binary: PRLM engine, hydration pipeline, code intelligence. Exposes HTTP API on localhost. **IS the handler** — the runtime dispatches operations directly to it. No UI serving, no session management (nex handles that).
 - **github-code-adapter** — Extracted GitHub connector. Standalone Go binary using Nex Adapter SDK protocol (JSONL stdin/stdout or HTTP).
 
 **What gets removed from the Go binary:**
@@ -86,7 +88,8 @@ Migrate Spike from a standalone Go server to a nex app package with a TypeScript
 - Hydration pipeline
 - Code intelligence and analysis
 - SQLite persistence for indexed data
-- HTTP API surface for method handlers to call
+- HTTP API surface accepting standard operation request envelope from runtime
+- `/operations/*` route handler for nex operation dispatch
 
 ---
 
@@ -106,20 +109,24 @@ Migrate Spike from a standalone Go server to a nex app package with a TypeScript
 
 ---
 
-### GAP-S03: ~30 HTTP Endpoints → Nex Methods
+### GAP-S03: ~30 HTTP Endpoints → Nex Methods (Service-Routed)
 
 **Current state:** `serve.go` defines ~30 REST endpoints (GET/POST/PUT/DELETE) for repos, hydration, ask, profiles, sessions, etc.
 
-**Target state:** Each endpoint becomes a nex method declared in the manifest. TypeScript method handlers are thin proxies that call the Go engine service:
+**Target state:** Each endpoint becomes a nex method declared in the manifest. The runtime dispatches operations directly to the Go engine binary — **no TypeScript proxy handlers**.
 
-```typescript
-// methods/ask.ts
-export const handle: NexAppMethodHandler = async (ctx) => {
-  return ctx.app.service("engine").post("/ask", ctx.params);
-};
+```
+spike.ask request → Runtime pipeline (auth, IAM, validate)
+    → POST http://localhost:{port}/operations/spike.ask
+    → Go engine processes request, returns response
+    → Runtime forwards response to caller
 ```
 
-**Why nex methods (not direct HTTP)?** Every method gets IAM, audit logging, entitlement checking, JSON Schema validation, MCP tool exposure, CLI access — for free. The thin proxy cost is minimal (3-5 lines per handler).
+The Go engine adds a `/operations/*` route handler that accepts the standard operation envelope and dispatches to the appropriate internal handler based on the operation name.
+
+**Why nex methods (not direct HTTP)?** Every method gets IAM, audit logging, entitlement checking, JSON Schema validation, MCP tool exposure, CLI access — for free. And there is zero overhead — no intermediate TS proxy layer.
+
+**Key implication:** The Go engine must understand the standard operation request/response envelope format. This is the contract between the runtime and the service binary.
 
 ---
 
@@ -141,7 +148,7 @@ export const handle: NexAppMethodHandler = async (ctx) => {
 
 **Current state:** Spike manages its own sessions, auth tokens, and user profiles.
 
-**Target state:** Authentication and session management are handled by nex (via frontdoor OIDC). Spike's method handlers receive user context via `ctx.user` and `ctx.account`. Spike's user profile becomes account-scoped configuration, not a separate auth system.
+**Target state:** Authentication and session management are handled by nex (via frontdoor OIDC). The runtime passes user context to the Go engine in the operation request envelope (`user` and `account` fields). Spike's user profile becomes account-scoped configuration, not a separate auth system.
 
 ---
 
@@ -149,13 +156,14 @@ export const handle: NexAppMethodHandler = async (ctx) => {
 
 **Current state:** No `app.nexus.json` exists.
 
-**Target state:** Full manifest with:
-- ~30 method declarations
-- 1 service (spike-engine)
+**Target state:** Full manifest in **service-routed mode** with:
+- ~30 method declarations (NO `handler` fields — service-routed)
+- `services.engine` section pointing to Go binary
 - 1 adapter (github-code-adapter)
-- Lifecycle hooks
+- Lifecycle hooks (TypeScript, loaded via jiti)
 - Product registry (plans, pricing, branding)
 - Entitlement definitions
+- NO `handler` field at top level (no inline-TS mode)
 
 ---
 
@@ -165,9 +173,10 @@ export const handle: NexAppMethodHandler = async (ctx) => {
 
 | Task | Gap | Estimate |
 |------|-----|----------|
-| Create `spike-app/` directory structure | — | 0.5 day |
-| Write `app.nexus.json` manifest (~30 methods, 1 service, 1 adapter) | GAP-S06 | 1 day |
+| Create `apps/spike-app/` directory structure | — | 0.5 day |
+| Write `app.nexus.json` manifest (~30 methods, service-routed, NO handler field) | GAP-S06 | 1 day |
 | Define entitlements and product plans | GAP-S06 | 0.5 day |
+| **Delete existing TS proxy handlers** (34 files in methods/) | GAP-S03 | 0.5 day |
 
 ### Phase 2: Shrink the Go Binary → spike-engine
 
@@ -175,9 +184,11 @@ export const handle: NexAppMethodHandler = async (ctx) => {
 |------|-----|----------|
 | Create `cmd/spike-engine/` focused binary | GAP-S01 | 2 days |
 | Remove UI serving, session management, auth from engine | GAP-S01 | 1 day |
-| Define HTTP API surface for TS handlers | GAP-S01 | 1 day |
+| **Add `/operations/*` route handler** accepting standard operation envelope | GAP-S01, S03 | 1 day |
+| Implement operation dispatch to internal handlers (map operation name → handler function) | GAP-S03 | 1 day |
 | Add `/health` endpoint for service monitoring | GAP-S01 | 0.5 day |
 | Remove GitHub connector from main binary | GAP-S04 | 0.5 day |
+| **Add Nex SDK client** for callbacks to runtime (entitlements, audit, events) | GAP-S05 | 1 day |
 
 ### Phase 3: Extract GitHub Adapter
 
@@ -188,15 +199,11 @@ export const handle: NexAppMethodHandler = async (ctx) => {
 | Migrate cloning, webhook, PR event logic | GAP-S04 | 1 day |
 | Integration test: adapter connects, events flow | GAP-S04 | 0.5 day |
 
-### Phase 4: TypeScript Method Handlers
+### ~~Phase 4: TypeScript Method Handlers~~ — ELIMINATED
 
-| Task | Gap | Estimate |
-|------|-----|----------|
-| Write thin proxy handlers for all ~30 methods | GAP-S03 | 1.5 days |
-| Write `methods/index.ts` handler map | GAP-S03 | 0.5 day |
-| Add entitlement checks to appropriate handlers | GAP-S03 | 0.5 day |
+**This phase no longer exists.** Under the service-routed model, the Go engine handles all operations directly. No TypeScript proxy handlers to write. This saves ~2.5 days of work and eliminates 34 boilerplate files.
 
-### Phase 5: TypeScript Frontend
+### Phase 4: TypeScript Frontend (renumbered from Phase 5)
 
 | Task | Gap | Estimate |
 |------|-----|----------|
@@ -204,12 +211,12 @@ export const handle: NexAppMethodHandler = async (ctx) => {
 | Rebuild as React static app with nex client SDK | GAP-S02 | 3-5 days |
 | Static export to dist/ | GAP-S02 | 0.5 day |
 
-### Phase 6: Lifecycle Hooks + Integration
+### Phase 5: Lifecycle Hooks + Integration (renumbered from Phase 6)
 
 | Task | Gap | Estimate |
 |------|-----|----------|
 | Write lifecycle hooks (install, activate, deactivate, upgrade) | — | 1 day |
-| End-to-end test: install Spike app, verify service starts, methods work | — | 1 day |
+| End-to-end test: install Spike app, verify service starts, runtime dispatches operations | — | 1 day |
 | Verify frontdoor app frame works with Spike UI | — | 0.5 day |
 | Verify GitHub adapter registered and manageable | — | 0.5 day |
 
@@ -219,13 +226,14 @@ export const handle: NexAppMethodHandler = async (ctx) => {
 
 These are the aspects of Spike migration that directly affect the shared nex platform:
 
-### 4.1 Service Manager Requirements
+### 4.1 Service Manager + Operation Dispatch Requirements
 
-Spike's Go engine is the primary use case for the Nex Service concept. The runtime service manager (built in WORKPLAN_NEX_RUNTIME_APP_LIFECYCLE Phase 4) must support:
+Spike's Go engine is the primary use case for the Nex Service concept AND for service-routed operation dispatch. The runtime service manager (built in WORKPLAN_NEX_RUNTIME_APP_LIFECYCLE Phase 4) must support:
 - Spawning a Go binary as a managed process
 - Port assignment and health check monitoring
 - Graceful shutdown (SIGTERM → wait → SIGKILL)
-- Service client in app context (`ctx.app.service("engine")`)
+- **Operation dispatch**: Constructing HTTP dispatch handlers that POST operation requests to the service binary
+- **Standard operation envelope**: `{ operation, payload, user, account, requestId }` format
 
 ### 4.2 Adapter SDK for Go
 
@@ -259,5 +267,6 @@ Recommended: Add env var `NEX_APP_DATA_DIR` to the service's environment, set by
 | Go engine binary is complex to extract from monolith | High | Incremental extraction. Start with core PRLM, add endpoints iteratively. |
 | GitHub connector has tight coupling to Spike internals | Medium | Define clean interface boundary. Adapter communicates via events, not internal APIs. |
 | TypeScript frontend rebuild is significant work | Medium | Can be phased. Start with basic UI, iterate. |
-| 30 thin proxy handlers feel like boilerplate | Low | Worth it for IAM, audit, entitlements. Could code-gen from manifest later. |
+| Go engine must implement operation envelope format | Low | Standard HTTP contract. Well-defined JSON schema. One router handler. |
+| Go engine needs Nex SDK for callbacks (entitlements, audit) | Medium | Use Go Nex SDK. If SDK doesn't exist yet, implement HTTP calls directly to runtime. |
 | Go engine needs runtime env vars (data dir, port) | Low | Standard pattern: NEX_APP_DATA_DIR, NEX_SERVICE_PORT env vars. |

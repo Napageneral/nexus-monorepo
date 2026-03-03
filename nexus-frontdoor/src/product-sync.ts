@@ -6,19 +6,25 @@ import { FrontdoorStore } from "./frontdoor-store.js";
 
 interface ManifestPlan {
   id: string;
-  displayName: string;
-  priceMonthly: number;
+  displayName?: string;
+  name?: string;
+  priceMonthly?: number;
   priceYearly?: number;
+  price?: { amount?: number; currency?: string; interval?: string };
   isDefault?: boolean;
   sortOrder?: number;
   features?: string[];
   limits?: Record<string, string>;
+  entitlements?: Record<string, string>;
+  tier?: string;
 }
 
 interface ManifestProduct {
   tagline?: string;
   accentColor?: string;
+  color?: string;
   logoSvg?: string;
+  icon?: string;
   homepageUrl?: string;
   onboardingOrigin?: string;
   plans?: ManifestPlan[];
@@ -27,7 +33,8 @@ interface ManifestProduct {
 interface AppManifest {
   id: string;
   version: string;
-  displayName: string;
+  displayName?: string;
+  name?: string;
   description?: string;
   icon?: string;
   product?: ManifestProduct;
@@ -105,9 +112,11 @@ export async function syncProductFromManifest(
   if (!manifest.version || typeof manifest.version !== "string") {
     throw new Error("Manifest is missing required 'version' field");
   }
-  if (!manifest.displayName || typeof manifest.displayName !== "string") {
-    throw new Error("Manifest is missing required 'displayName' field");
+  const displayName = manifest.displayName || manifest.name;
+  if (!displayName || typeof displayName !== "string") {
+    throw new Error("Manifest is missing required 'displayName' or 'name' field");
   }
+  manifest.displayName = displayName;
 
   const result: ProductSyncResult = {
     appId: manifest.id,
@@ -126,8 +135,8 @@ export async function syncProductFromManifest(
   const product = manifest.product;
 
   // 3. Read SVG files
-  const logoSvg = tryReadSvg(packageDir, product.logoSvg);
-  const iconSvg = tryReadSvg(packageDir, manifest.icon);
+  const logoSvg = tryReadSvg(packageDir, product.logoSvg || product.icon);
+  const iconSvg = tryReadSvg(packageDir, manifest.icon || product.icon);
 
   if (product.logoSvg && !logoSvg) {
     result.changes.push(`${manifest.id}: logo SVG not found at ${product.logoSvg}`);
@@ -139,9 +148,9 @@ export async function syncProductFromManifest(
   // 4. Upsert product record
   store.upsertProduct({
     productId: manifest.id,
-    displayName: manifest.displayName,
+    displayName: manifest.displayName!,
     tagline: product.tagline,
-    accentColor: product.accentColor,
+    accentColor: product.accentColor || product.color,
     logoSvg: logoSvg,
     iconSvg: iconSvg,
     manifestVersion: manifest.version,
@@ -160,23 +169,35 @@ export async function syncProductFromManifest(
       result.changes.push(`${manifest.id}: skipping plan with missing 'id'`);
       continue;
     }
-    if (!plan.displayName || typeof plan.displayName !== "string") {
-      result.changes.push(`${manifest.id}: skipping plan "${plan.id}" with missing 'displayName'`);
+    const planDisplayName = plan.displayName || plan.name;
+    if (!planDisplayName || typeof planDisplayName !== "string") {
+      result.changes.push(`${manifest.id}: skipping plan "${plan.id}" with missing 'displayName' or 'name'`);
       continue;
     }
 
     manifestPlanIds.add(plan.id);
 
+    // Support both flat priceMonthly and nested price.amount formats
+    let priceMonthly = plan.priceMonthly ?? 0;
+    let priceYearly = plan.priceYearly;
+    if (plan.price && typeof plan.price.amount === "number") {
+      if (plan.price.interval === "month") {
+        priceMonthly = plan.price.amount;
+      } else if (plan.price.interval === "year") {
+        priceYearly = plan.price.amount;
+      }
+    }
+
     store.upsertProductPlan({
       planId: plan.id,
       productId: manifest.id,
-      displayName: plan.displayName,
-      priceMonthly: plan.priceMonthly ?? 0,
-      priceYearly: plan.priceYearly,
+      displayName: planDisplayName,
+      priceMonthly,
+      priceYearly,
       isDefault: plan.isDefault ?? false,
       sortOrder: plan.sortOrder ?? 0,
       featuresJson: plan.features ? JSON.stringify(plan.features) : undefined,
-      limitsJson: plan.limits ? JSON.stringify(plan.limits) : undefined,
+      limitsJson: plan.limits || plan.entitlements ? JSON.stringify(plan.limits || plan.entitlements) : undefined,
       // NOTE: stripePriceIdMonthly and stripePriceIdYearly are NOT set here.
       // They are operator config and are preserved by the upsert's COALESCE logic.
     });

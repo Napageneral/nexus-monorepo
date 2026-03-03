@@ -17,6 +17,7 @@ type ProvisionCommandResult = {
   runtime_sse_url?: string;
   runtime_auth_token?: string;
   state_dir?: string;
+  configured_apps?: string[];
 };
 
 type ValidatedProvisionCommandResult = {
@@ -27,6 +28,7 @@ type ValidatedProvisionCommandResult = {
   runtimeSseUrl?: string;
   runtimeAuthToken?: string;
   stateDir?: string;
+  configuredApps: string[];
 };
 
 function normalizeText(value: unknown): string {
@@ -118,6 +120,9 @@ function validateProvisionCommandResult(
     result.runtime_sse_url,
     new Set(["http:", "https:"]),
   );
+  const configuredApps = Array.isArray(result.configured_apps)
+    ? result.configured_apps.filter((a): a is string => typeof a === "string" && a.trim().length > 0).map((a) => a.trim().toLowerCase())
+    : [];
   return {
     tenantId: normalizeText(result.tenant_id) || undefined,
     runtimeUrl,
@@ -126,6 +131,7 @@ function validateProvisionCommandResult(
     runtimeSseUrl,
     runtimeAuthToken: normalizeText(result.runtime_auth_token) || undefined,
     stateDir: normalizeText(result.state_dir) || undefined,
+    configuredApps,
   };
 }
 
@@ -210,6 +216,13 @@ function principalFromAccount(
 
 export class TenantAutoProvisioner {
   private readonly store: AutoProvisionStore;
+  /** Apps configured by the most recent successful provision command. */
+  private _lastConfiguredApps: string[] = [];
+
+  /** Apps configured by the most recent successful provision command. */
+  get lastConfiguredApps(): string[] {
+    return this._lastConfiguredApps;
+  }
 
   constructor(private readonly config: FrontdoorConfig) {
     if (!config.autoProvision.storePath) {
@@ -272,6 +285,11 @@ export class TenantAutoProvisioner {
       return null;
     }
     return this.store.getTenant(normalizedTenantId);
+  }
+
+  /** Check if an OIDC account already exists (i.e. user has been provisioned before). */
+  getOidcAccount(params: { provider: string; subject: string }): OidcAccountRecord | null {
+    return this.store.getOidcAccount(params);
   }
 
   getLatestProvisionRequestByUser(userId: string): ProvisionRequestRecord | null {
@@ -426,7 +444,17 @@ export class TenantAutoProvisioner {
         timeoutMs: this.config.autoProvision.commandTimeoutMs,
       });
       const commandTenantId = normalizeText(commandResult.tenant_id) || tenantId;
-      const tenant = buildTenantConfigFromCommand(commandResult, commandTenantId);
+      const validated = validateProvisionCommandResult(commandResult);
+      const tenant: TenantRecord = {
+        id: commandTenantId,
+        runtimeUrl: validated.runtimeUrl,
+        runtimePublicBaseUrl: validated.runtimePublicBaseUrl,
+        runtimeWsUrl: validated.runtimeWsUrl,
+        runtimeSseUrl: validated.runtimeSseUrl,
+        runtimeAuthToken: validated.runtimeAuthToken,
+        stateDir: validated.stateDir,
+      };
+      this._lastConfiguredApps = validated.configuredApps;
 
       const account: OidcAccountRecord = {
         provider,
