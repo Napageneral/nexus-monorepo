@@ -308,8 +308,38 @@
       .modal-overlay.hidden { display: none; }
       .modal-box {
         background: var(--bg-card); border: 1px solid var(--border-bright);
-        border-radius: var(--radius); padding: 24px; width: 100%; max-width: 420px;
+        border-radius: var(--radius); padding: 24px; width: 100%; max-width: 480px;
         box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        max-height: 80vh; overflow-y: auto;
+      }
+
+      /* ── Plan Cards ── */
+      .plan-card {
+        display: flex; align-items: center; gap: 12px;
+        padding: 12px 16px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: border-color 0.15s;
+      }
+      .plan-card:hover { border-color: var(--border-bright); }
+      .plan-card.selected { border-color: var(--accent); background: var(--accent-glow); }
+      .plan-card input[type="radio"] { display: none; }
+      .plan-card-content { display: flex; flex-direction: column; gap: 2px; }
+      .plan-specs { font-size: 0.8rem; color: var(--text-muted); }
+      .plan-price { font-size: 0.85rem; font-weight: 600; color: var(--accent); }
+
+      /* ── Token display ── */
+      .token-reveal {
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        font-family: monospace;
+        font-size: 0.8rem;
+        word-break: break-all;
+        color: var(--green);
+        margin: 8px 0;
       }
 
       /* ── Forms ── */
@@ -815,6 +845,7 @@
           <div class="subtabs">
             <button class="subtab active" data-subtab="team">Team</button>
             <button class="subtab" data-subtab="billing">Billing</button>
+            <button class="subtab" data-subtab="tokens">API Tokens</button>
             <button class="subtab" data-subtab="account">Account</button>
           </div>
 
@@ -896,6 +927,18 @@
             </div>
           </div>
 
+          <!-- Admin > API Tokens -->
+          <div id="subtabTokens" class="hidden">
+            <div class="card" style="margin-bottom: 16px;">
+              <div class="card-title">API Tokens</div>
+              <div class="card-subtitle">Use API tokens for programmatic access via MCP or CLI tools.</div>
+              <div class="btn-row" style="margin-bottom: 12px;">
+                <button class="primary small" onclick="showCreateTokenModal()">Create Token</button>
+              </div>
+              <ul id="tokensList" class="list"></ul>
+            </div>
+          </div>
+
           <!-- Admin > Account -->
           <div id="subtabAccount" class="hidden">
             <div class="card">
@@ -908,6 +951,64 @@
             </div>
           </div>
         </section>
+
+        <!-- ════════════════════════════════════════════════════════════
+             MODAL: CREATE SERVER (with plan selection)
+             ════════════════════════════════════════════════════════════ -->
+        <div id="createServerModal" class="modal-overlay hidden">
+          <div class="modal-box">
+            <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 12px;">Create Server</h3>
+            <label>Server name (optional)</label>
+            <input type="text" id="serverNameInput" placeholder="Auto-generated if empty" />
+            <label>Server size</label>
+            <div id="planOptions" style="display:flex;flex-direction:column;gap:8px;margin:8px 0 16px;"></div>
+            <div class="btn-row" style="justify-content: flex-end;">
+              <button id="cancelCreateServerBtn" class="subtle small" onclick="hideCreateServerModal()">Cancel</button>
+              <button id="submitCreateServerBtn" class="primary small" onclick="submitCreateServer()">Create Server</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════════
+             MODAL: CREATE API TOKEN
+             ════════════════════════════════════════════════════════════ -->
+        <div id="createTokenModal" class="modal-overlay hidden">
+          <div class="modal-box">
+            <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 12px;">Create API Token</h3>
+            <label>Token name</label>
+            <input type="text" id="tokenNameInput" placeholder="e.g. CLI access, MCP integration" />
+            <label>Expires</label>
+            <select id="tokenExpirySelect">
+              <option value="7">7 days</option>
+              <option value="30" selected>30 days</option>
+              <option value="90">90 days</option>
+              <option value="365">1 year</option>
+              <option value="0">Never</option>
+            </select>
+            <div class="btn-row" style="justify-content: flex-end; margin-top: 16px;">
+              <button class="subtle small" onclick="hideCreateTokenModal()">Cancel</button>
+              <button id="submitCreateTokenBtn" class="primary small" onclick="submitCreateToken()">Create Token</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════════
+             MODAL: TOKEN CREATED (shows token once)
+             ════════════════════════════════════════════════════════════ -->
+        <div id="tokenCreatedModal" class="modal-overlay hidden">
+          <div class="modal-box">
+            <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 8px;">Token Created</h3>
+            <p style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 12px;">
+              Copy this token now. You will not be able to see it again.
+            </p>
+            <div id="tokenCreatedValue" class="token-reveal"></div>
+            <div class="btn-row" style="justify-content: flex-end; margin-top: 12px;">
+              <button class="small" onclick="copyCreatedToken()">Copy</button>
+              <button class="primary small" onclick="hideTokenCreatedModal()">Done</button>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -963,8 +1064,9 @@
       /* ── Status badge helper ── */
       function statusBadgeClass(status) {
         const s = asText(status).toLowerCase();
-        if (s === 'ready' || s === 'active') return 'badge-ready';
+        if (s === 'ready' || s === 'active' || s === 'running') return 'badge-ready';
         if (s === 'provisioning') return 'badge-provisioning';
+        if (s === 'deprovisioning') return 'badge-provisioning';
         if (s === 'installing') return 'badge-installing';
         if (s === 'installed') return 'badge-installed';
         if (s === 'degraded') return 'badge-degraded';
@@ -975,7 +1077,11 @@
 
       function statusLabel(status) {
         const s = asText(status).toLowerCase();
-        if (s === 'active') return 'Ready';
+        if (s === 'running') return 'Running';
+        if (s === 'active') return 'Running';
+        if (s === 'provisioning') return 'Provisioning...';
+        if (s === 'deprovisioning') return 'Deleting...';
+        if (s === 'failed') return 'Failed';
         if (s === 'blocked_no_entitlement') return 'No Entitlement';
         return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
       }
@@ -1050,6 +1156,7 @@
           } else if (parentSection.id === 'viewAdmin') {
             el('subtabTeam').classList.add('hidden');
             el('subtabBilling').classList.add('hidden');
+            el('subtabTokens').classList.add('hidden');
             el('subtabAccount').classList.add('hidden');
             if (tabName === 'team') {
               el('subtabTeam').classList.remove('hidden');
@@ -1058,6 +1165,10 @@
               el('subtabBilling').classList.remove('hidden');
               state.adminSubtab = 'billing';
               loadBillingData();
+            } else if (tabName === 'tokens') {
+              el('subtabTokens').classList.remove('hidden');
+              state.adminSubtab = 'tokens';
+              loadTokens();
             } else if (tabName === 'account') {
               el('subtabAccount').classList.remove('hidden');
               state.adminSubtab = 'account';
@@ -1968,47 +2079,238 @@
       /* ═════════════════════════════════════════════════════════════
          NEW SERVER
          ═════════════════════════════════════════════════════════════ */
-      el('newServerBtn').addEventListener('click', async () => {
+      el('newServerBtn').addEventListener('click', () => {
         if (!state.session) return;
-        // Ensure owned apps are loaded
-        if (state.ownedApps.length === 0) {
-          await loadOwnedApps();
+        showCreateServerModal();
+      });
+
+      /* ═════════════════════════════════════════════════════════════
+         CREATE SERVER MODAL + PLAN SELECTION
+         ═════════════════════════════════════════════════════════════ */
+      async function showCreateServerModal() {
+        const modal = el('createServerModal');
+        if (!modal) return;
+        modal.classList.remove('hidden');
+        el('serverNameInput').value = '';
+        await renderPlanOptions();
+      }
+
+      function hideCreateServerModal() {
+        const modal = el('createServerModal');
+        if (modal) modal.classList.add('hidden');
+      }
+
+      async function renderPlanOptions() {
+        const container = el('planOptions');
+        if (!container) return;
+        container.innerHTML = '<span style="color:var(--text-muted);font-size:0.82rem;">Loading plans...</span>';
+        try {
+          const res = await api('/api/plans');
+          const plans = res.body?.plans || [];
+          if (plans.length === 0) {
+            container.innerHTML = '<span style="color:var(--text-muted);font-size:0.82rem;">No plans available.</span>';
+            return;
+          }
+          container.innerHTML = plans.map((plan, i) => `
+            <label class="plan-card ${i === 0 ? 'selected' : ''}">
+              <input type="radio" name="plan" value="${escHtml(plan.id || plan.plan_id || '')}" ${i === 0 ? 'checked' : ''} />
+              <div class="plan-card-content">
+                <strong>${escHtml(plan.name || plan.displayName || plan.display_name || plan.id || plan.plan_id || 'Plan')}</strong>
+                <span class="plan-specs">${plan.vcpus || '?'} vCPU &middot; ${Math.round((plan.memoryMb || plan.memory_mb || 0) / 1024)} GB RAM &middot; ${plan.diskGb || plan.disk_gb || 0} GB</span>
+                <span class="plan-price">&euro;${(plan.priceMonthlyEur || (plan.monthlyCostCents || plan.monthly_cost_cents || 0) / 100).toFixed(2)}/mo</span>
+              </div>
+            </label>
+          `).join('');
+
+          container.querySelectorAll('input[name="plan"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+              container.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
+              radio.closest('.plan-card').classList.add('selected');
+            });
+          });
+        } catch (err) {
+          console.error('Failed to load plans:', err);
+          container.innerHTML = '<span style="color:var(--red);font-size:0.82rem;">Failed to load plans.</span>';
         }
-        // Use entry execute to create a new server
-        const appId = initialAppHint || (state.ownedApps.length > 0 ? state.ownedApps[0].app_id : '');
-        if (!appId) {
-          // No owned apps — guide user to the App Store first
-          showView('apps');
-          const storeTab = document.querySelector('[data-subtab="store"]');
-          if (storeTab) storeTab.click();
+      }
+
+      async function submitCreateServer() {
+        const btn = el('submitCreateServerBtn');
+        const name = el('serverNameInput').value.trim();
+        const plan = document.querySelector('input[name="plan"]:checked')?.value || 'cax11';
+
+        btn.disabled = true;
+        btn.textContent = 'Creating...';
+
+        try {
+          const body = { plan };
+          if (name) body.display_name = name;
+
+          const res = await api('/api/servers/create', {
+            method: 'POST',
+            body: JSON.stringify(body),
+          });
+
+          if (!res.ok) {
+            alert('Failed to create server: ' + (res.body?.error || 'Unknown error'));
+            return;
+          }
+
+          hideCreateServerModal();
+
+          // Start provision polling if we got a server ID
+          const newServerId = asText(res.body?.server_id || '');
+          if (newServerId) {
+            startProvisionPolling(initialAppHint || '');
+          }
+
+          // Refresh the server list
+          await loadServers();
+          renderServerGrid();
+          if (newServerId) {
+            await openServerDetail(newServerId);
+          }
+
+        } catch (err) {
+          console.error('Create server failed:', err);
+          alert('Failed to create server. Please try again.');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Create Server';
+        }
+      }
+
+      /* ═════════════════════════════════════════════════════════════
+         API TOKENS
+         ═════════════════════════════════════════════════════════════ */
+      async function loadTokens() {
+        const list = el('tokensList');
+        if (!list) return;
+        list.innerHTML = '<li style="color:var(--text-muted);">Loading...</li>';
+        try {
+          const res = await api('/api/tokens');
+          const tokens = res.body?.tokens || [];
+          if (tokens.length === 0) {
+            list.innerHTML = '<li style="color:var(--text-muted);">No API tokens yet.</li>';
+            return;
+          }
+          list.innerHTML = '';
+          for (const token of tokens) {
+            const li = document.createElement('li');
+            const name = escHtml(asText(token.name || token.token_name || 'Unnamed'));
+            const created = formatDate(token.created_at || token.createdAt || 0);
+            const lastUsed = token.last_used_at || token.lastUsedAt ? formatDate(token.last_used_at || token.lastUsedAt) : 'Never';
+            const expiresAt = token.expires_at || token.expiresAt;
+            const expires = expiresAt ? formatDate(expiresAt) : 'Never';
+            const tokenId = escHtml(asText(token.token_id || token.id || ''));
+            li.innerHTML = `
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                  <span class="title">${name}</span>
+                  <span class="meta">Created: ${created} &middot; Last used: ${lastUsed} &middot; Expires: ${expires}</span>
+                </div>
+                <button class="small danger" onclick="revokeToken('${tokenId}')">Revoke</button>
+              </div>`;
+            list.appendChild(li);
+          }
+        } catch (err) {
+          console.error('Failed to load tokens:', err);
+          list.innerHTML = '<li style="color:var(--red);">Failed to load tokens.</li>';
+        }
+      }
+
+      function showCreateTokenModal() {
+        const modal = el('createTokenModal');
+        if (!modal) return;
+        modal.classList.remove('hidden');
+        el('tokenNameInput').value = '';
+        el('tokenExpirySelect').value = '30';
+      }
+
+      function hideCreateTokenModal() {
+        const modal = el('createTokenModal');
+        if (modal) modal.classList.add('hidden');
+      }
+
+      async function submitCreateToken() {
+        const btn = el('submitCreateTokenBtn');
+        const name = el('tokenNameInput').value.trim();
+        const expiryDays = parseInt(el('tokenExpirySelect').value, 10);
+
+        if (!name) {
+          alert('Please enter a token name.');
           return;
         }
-        const btn = el('newServerBtn');
+
         btn.disabled = true;
-        btn.textContent = 'Creating…';
-        // Start provision polling immediately — server creation can take 30-90+ seconds
-        startProvisionPolling(appId);
-        // Fire entry/execute in background (don't await — it may take a long time)
-        api('/api/entry/execute', { method: 'POST', body: JSON.stringify({
-          app_id: appId,
-          entry_source: 'dashboard-new-server',
-          create_new_server: true,
-        })}).then(async (r) => {
-          if (r.ok) {
-            await loadServers();
-            renderServerGrid();
-            const newServerId = asText(r.body?.server_id || '');
-            if (newServerId) {
-              await openServerDetail(newServerId);
-            }
+        btn.textContent = 'Creating...';
+
+        try {
+          const body = { name };
+          if (expiryDays > 0) body.expires_in_days = expiryDays;
+
+          const res = await api('/api/tokens', {
+            method: 'POST',
+            body: JSON.stringify(body),
+          });
+
+          if (!res.ok) {
+            alert('Failed to create token: ' + (res.body?.error || 'Unknown error'));
+            return;
           }
-        }).catch((err) => {
-          console.error('[new-server] entry/execute error:', err);
-        }).finally(() => {
+
+          hideCreateTokenModal();
+
+          // Show the created token
+          const tokenValue = asText(res.body?.token || res.body?.token_value || '');
+          if (tokenValue) {
+            el('tokenCreatedValue').textContent = tokenValue;
+            el('tokenCreatedModal').classList.remove('hidden');
+          }
+
+          // Refresh the tokens list
+          await loadTokens();
+
+        } catch (err) {
+          console.error('Create token failed:', err);
+          alert('Failed to create token. Please try again.');
+        } finally {
           btn.disabled = false;
-          btn.textContent = '+ New Server';
-        });
-      });
+          btn.textContent = 'Create Token';
+        }
+      }
+
+      function copyCreatedToken() {
+        const value = el('tokenCreatedValue').textContent;
+        if (value && navigator.clipboard) {
+          navigator.clipboard.writeText(value).then(() => {
+            const btn = event.target;
+            btn.textContent = 'Copied!';
+            setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+          }).catch(() => {});
+        }
+      }
+
+      function hideTokenCreatedModal() {
+        const modal = el('tokenCreatedModal');
+        if (modal) modal.classList.add('hidden');
+      }
+
+      async function revokeToken(tokenId) {
+        if (!tokenId) return;
+        if (!confirm('Revoke this token? This cannot be undone.')) return;
+        try {
+          const res = await api('/api/tokens/' + encodeURIComponent(tokenId), { method: 'DELETE' });
+          if (!res.ok) {
+            alert('Failed to revoke token: ' + (res.body?.error || 'Unknown error'));
+            return;
+          }
+          await loadTokens();
+        } catch (err) {
+          console.error('Revoke token failed:', err);
+          alert('Failed to revoke token.');
+        }
+      }
 
       /* ═════════════════════════════════════════════════════════════
          SAVE SERVER NAME

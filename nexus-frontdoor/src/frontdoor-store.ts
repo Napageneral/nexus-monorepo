@@ -150,20 +150,53 @@ export type AccountMemberView = AccountMemberRecord & {
   displayName?: string;
 };
 
+export type ServerStatus = "provisioning" | "running" | "failed" | "deprovisioning" | "deleted";
+
 export type ServerRecord = {
   serverId: string;
   accountId: string;
+  tenantId: string;
   displayName: string;
   generatedName: string;
-  runtimeUrl: string;
-  runtimePublicBaseUrl: string;
-  runtimeWsUrl?: string;
-  runtimeSseUrl?: string;
-  runtimeAuthToken?: string;
-  status: "provisioning" | "active" | "disabled";
-  tier: string;
+  status: ServerStatus;
+  plan: string;
+  provider: string;
+  providerServerId: string | null;
+  privateIp: string | null;
+  publicIp: string | null;
+  runtimePort: number;
+  runtimeAuthToken: string | null;
+  provisionToken: string | null;
   createdAtMs: number;
   updatedAtMs: number;
+  deletedAtMs: number | null;
+};
+
+export function getServerRuntimeUrl(server: ServerRecord): string | null {
+  if (!server.privateIp || !server.runtimePort) return null;
+  return `http://${server.privateIp}:${server.runtimePort}`;
+}
+
+export function getServerRuntimeWsUrl(server: ServerRecord): string | null {
+  if (!server.privateIp || !server.runtimePort) return null;
+  return `ws://${server.privateIp}:${server.runtimePort}`;
+}
+
+export function getServerPublicUrl(server: ServerRecord): string {
+  return `https://${server.tenantId}.nexushub.sh`;
+}
+
+export type ApiTokenRecord = {
+  tokenId: string;
+  tokenHash: string;
+  userId: string;
+  accountId: string;
+  displayName: string;
+  scopes: string;
+  lastUsedMs: number | null;
+  expiresAtMs: number | null;
+  createdAtMs: number;
+  revokedAtMs: number | null;
 };
 
 export type AccountMembershipView = ServerRecord & {
@@ -375,22 +408,40 @@ export class FrontdoorStore {
 
       -- Servers (nex runtime instances, owned by accounts)
       CREATE TABLE IF NOT EXISTS frontdoor_servers (
-        server_id TEXT PRIMARY KEY,
-        account_id TEXT NOT NULL REFERENCES frontdoor_accounts(account_id),
-        display_name TEXT NOT NULL,
-        generated_name TEXT NOT NULL,
-        runtime_url TEXT NOT NULL,
-        runtime_public_base_url TEXT NOT NULL,
-        runtime_ws_url TEXT,
-        runtime_sse_url TEXT,
-        runtime_auth_token TEXT,
-        status TEXT NOT NULL DEFAULT 'provisioning',
-        tier TEXT NOT NULL DEFAULT 'standard',
-        created_at_ms INTEGER NOT NULL,
-        updated_at_ms INTEGER NOT NULL
+        server_id            TEXT PRIMARY KEY,
+        account_id           TEXT NOT NULL,
+        tenant_id            TEXT NOT NULL UNIQUE,
+        display_name         TEXT NOT NULL,
+        generated_name       TEXT NOT NULL,
+        status               TEXT NOT NULL DEFAULT 'provisioning',
+        plan                 TEXT NOT NULL DEFAULT 'cax11',
+        provider             TEXT NOT NULL DEFAULT 'hetzner',
+        provider_server_id   TEXT,
+        private_ip           TEXT,
+        public_ip            TEXT,
+        runtime_port         INTEGER DEFAULT 8080,
+        runtime_auth_token   TEXT,
+        provision_token      TEXT,
+        created_at_ms        INTEGER NOT NULL,
+        updated_at_ms        INTEGER NOT NULL,
+        deleted_at_ms        INTEGER
       );
       CREATE INDEX IF NOT EXISTS idx_frontdoor_servers_account
         ON frontdoor_servers(account_id);
+
+      -- API Tokens (per-user API keys)
+      CREATE TABLE IF NOT EXISTS frontdoor_api_tokens (
+        token_id      TEXT PRIMARY KEY,
+        token_hash    TEXT NOT NULL,
+        user_id       TEXT NOT NULL,
+        account_id    TEXT NOT NULL,
+        display_name  TEXT NOT NULL,
+        scopes        TEXT NOT NULL DEFAULT '*',
+        last_used_ms  INTEGER,
+        expires_at_ms INTEGER,
+        created_at_ms INTEGER NOT NULL,
+        revoked_at_ms INTEGER
+      );
 
       -- Server Subscriptions (per-server billing)
       CREATE TABLE IF NOT EXISTS frontdoor_server_subscriptions (
@@ -611,29 +662,32 @@ export class FrontdoorStore {
       const systemAccount = this.ensureSystemAccount();
       const existingServer = this.getServer(tenant.id);
       if (!existingServer) {
-        this.upsertServer({
-          serverId: tenant.id,
-          accountId: systemAccount.accountId,
-          displayName: tenant.id,
-          generatedName: tenant.id,
-          runtimeUrl: tenant.runtimeUrl,
-          runtimePublicBaseUrl: tenant.runtimePublicBaseUrl,
-          runtimeWsUrl: tenant.runtimeWsUrl,
-          runtimeSseUrl: tenant.runtimeSseUrl,
-          runtimeAuthToken: tenant.runtimeAuthToken,
-          status: "active",
-          tier: "standard",
-          createdAtMs: nowMs(),
-          updatedAtMs: nowMs(),
-        });
+        // Use a direct INSERT for seeded servers since they are pre-provisioned
+        const now = nowMs();
+        this.db
+          .prepare(
+            `
+            INSERT INTO frontdoor_servers (
+              server_id, account_id, tenant_id, display_name, generated_name,
+              status, plan, provider, runtime_port, runtime_auth_token,
+              created_at_ms, updated_at_ms
+            ) VALUES (?, ?, ?, ?, ?, 'running', 'seed', 'config', 8080, ?, ?, ?)
+            ON CONFLICT(server_id) DO NOTHING
+          `,
+          )
+          .run(
+            tenant.id,
+            systemAccount.accountId,
+            tenant.id,
+            tenant.id,
+            tenant.id,
+            tenant.runtimeAuthToken ?? null,
+            now,
+            now,
+          );
       } else {
         this.updateServer(tenant.id, {
-          runtimeUrl: tenant.runtimeUrl,
-          runtimePublicBaseUrl: tenant.runtimePublicBaseUrl,
-          runtimeWsUrl: tenant.runtimeWsUrl,
-          runtimeSseUrl: tenant.runtimeSseUrl,
-          runtimeAuthToken: tenant.runtimeAuthToken,
-          status: "active",
+          status: "running",
         });
       }
       // Ensure configured users have membership on this server's account
@@ -1199,32 +1253,43 @@ export class FrontdoorStore {
   private mapServerRow(row: {
     server_id: string;
     account_id: string;
+    tenant_id: string;
     display_name: string;
     generated_name: string;
-    runtime_url: string;
-    runtime_public_base_url: string;
-    runtime_ws_url: string | null;
-    runtime_sse_url: string | null;
-    runtime_auth_token: string | null;
     status: string;
-    tier: string;
+    plan: string;
+    provider: string;
+    provider_server_id: string | null;
+    private_ip: string | null;
+    public_ip: string | null;
+    runtime_port: number | null;
+    runtime_auth_token: string | null;
+    provision_token: string | null;
     created_at_ms: number;
     updated_at_ms: number;
+    deleted_at_ms: number | null;
   }): ServerRecord {
+    const status = row.status;
     return {
       serverId: row.server_id,
       accountId: row.account_id,
+      tenantId: row.tenant_id,
       displayName: row.display_name,
       generatedName: row.generated_name,
-      runtimeUrl: row.runtime_url,
-      runtimePublicBaseUrl: row.runtime_public_base_url,
-      runtimeWsUrl: row.runtime_ws_url ?? undefined,
-      runtimeSseUrl: row.runtime_sse_url ?? undefined,
-      runtimeAuthToken: row.runtime_auth_token ?? undefined,
-      status: row.status === "provisioning" ? "provisioning" : row.status === "disabled" ? "disabled" : "active",
-      tier: row.tier || "standard",
+      status: (status === "provisioning" || status === "running" || status === "failed" || status === "deprovisioning" || status === "deleted")
+        ? status
+        : "provisioning",
+      plan: row.plan,
+      provider: row.provider,
+      providerServerId: row.provider_server_id ?? null,
+      privateIp: row.private_ip ?? null,
+      publicIp: row.public_ip ?? null,
+      runtimePort: row.runtime_port ?? 8080,
+      runtimeAuthToken: row.runtime_auth_token ?? null,
+      provisionToken: row.provision_token ?? null,
       createdAtMs: row.created_at_ms,
       updatedAtMs: row.updated_at_ms,
+      deletedAtMs: row.deleted_at_ms ?? null,
     };
   }
 
@@ -1234,48 +1299,47 @@ export class FrontdoorStore {
       .prepare(
         `
         INSERT INTO frontdoor_servers (
-          server_id,
-          account_id,
-          display_name,
-          generated_name,
-          runtime_url,
-          runtime_public_base_url,
-          runtime_ws_url,
-          runtime_sse_url,
-          runtime_auth_token,
-          status,
-          tier,
-          created_at_ms,
-          updated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          server_id, account_id, tenant_id, display_name, generated_name,
+          status, plan, provider, provider_server_id,
+          private_ip, public_ip, runtime_port, runtime_auth_token,
+          provision_token, created_at_ms, updated_at_ms, deleted_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(server_id) DO UPDATE SET
           account_id = excluded.account_id,
+          tenant_id = excluded.tenant_id,
           display_name = excluded.display_name,
           generated_name = excluded.generated_name,
-          runtime_url = excluded.runtime_url,
-          runtime_public_base_url = excluded.runtime_public_base_url,
-          runtime_ws_url = excluded.runtime_ws_url,
-          runtime_sse_url = excluded.runtime_sse_url,
-          runtime_auth_token = excluded.runtime_auth_token,
           status = excluded.status,
-          tier = excluded.tier,
-          updated_at_ms = excluded.updated_at_ms
+          plan = excluded.plan,
+          provider = excluded.provider,
+          provider_server_id = excluded.provider_server_id,
+          private_ip = excluded.private_ip,
+          public_ip = excluded.public_ip,
+          runtime_port = excluded.runtime_port,
+          runtime_auth_token = excluded.runtime_auth_token,
+          provision_token = excluded.provision_token,
+          updated_at_ms = excluded.updated_at_ms,
+          deleted_at_ms = excluded.deleted_at_ms
       `,
       )
       .run(
         record.serverId,
         record.accountId,
+        record.tenantId,
         record.displayName,
         record.generatedName || record.displayName,
-        record.runtimeUrl,
-        record.runtimePublicBaseUrl || record.runtimeUrl,
-        record.runtimeWsUrl ?? null,
-        record.runtimeSseUrl ?? null,
-        record.runtimeAuthToken ?? null,
         record.status,
-        record.tier || "standard",
+        record.plan || "cax11",
+        record.provider || "hetzner",
+        record.providerServerId ?? null,
+        record.privateIp ?? null,
+        record.publicIp ?? null,
+        record.runtimePort ?? 8080,
+        record.runtimeAuthToken ?? null,
+        record.provisionToken ?? null,
         createdAt,
         createdAt,
+        record.deletedAtMs ?? null,
       );
     this.ensureServerLimitsDefaults(record.serverId);
     return this.getServer(record.serverId) ?? record;
@@ -1284,35 +1348,60 @@ export class FrontdoorStore {
   createServer(input: {
     serverId?: string;
     accountId: string;
+    tenantId: string;
     displayName: string;
     generatedName: string;
-    runtimeUrl: string;
-    runtimePublicBaseUrl?: string;
-    runtimeWsUrl?: string;
-    runtimeSseUrl?: string;
+    plan?: string;
+    provider?: string;
+    provisionToken?: string;
     runtimeAuthToken?: string;
-    tier?: string;
   }): ServerRecord {
-    const baseId = input.serverId?.trim() || "";
-    const serverId = baseId || `srv-${toSlug(input.displayName)}-${randomUUID().slice(0, 8)}`;
+    const serverId = input.serverId?.trim() || randomUUID();
     if (this.getServer(serverId)) {
       throw new Error("server_already_exists");
     }
-    return this.upsertServer({
-      serverId,
-      accountId: input.accountId,
-      displayName: input.displayName.trim() || serverId,
-      generatedName: input.generatedName.trim() || input.displayName.trim() || serverId,
-      runtimeUrl: input.runtimeUrl.trim(),
-      runtimePublicBaseUrl: input.runtimePublicBaseUrl?.trim() || input.runtimeUrl.trim(),
-      runtimeWsUrl: input.runtimeWsUrl?.trim() || undefined,
-      runtimeSseUrl: input.runtimeSseUrl?.trim() || undefined,
-      runtimeAuthToken: input.runtimeAuthToken?.trim() || undefined,
-      status: "provisioning",
-      tier: input.tier?.trim() || "standard",
-      createdAtMs: nowMs(),
-      updatedAtMs: nowMs(),
-    });
+    const now = nowMs();
+    const plan = input.plan?.trim() || "cax11";
+    const provider = input.provider?.trim() || "hetzner";
+    this.db
+      .prepare(
+        `
+        INSERT INTO frontdoor_servers (
+          server_id,
+          account_id,
+          tenant_id,
+          display_name,
+          generated_name,
+          status,
+          plan,
+          provider,
+          runtime_port,
+          runtime_auth_token,
+          provision_token,
+          created_at_ms,
+          updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, 'provisioning', ?, ?, 8080, ?, ?, ?, ?)
+      `,
+      )
+      .run(
+        serverId,
+        input.accountId,
+        input.tenantId,
+        input.displayName.trim() || serverId,
+        input.generatedName.trim() || input.displayName.trim() || serverId,
+        plan,
+        provider,
+        input.runtimeAuthToken?.trim() || null,
+        input.provisionToken?.trim() || null,
+        now,
+        now,
+      );
+    this.ensureServerLimitsDefaults(serverId);
+    const created = this.getServer(serverId);
+    if (!created) {
+      throw new Error("failed_to_create_server");
+    }
+    return created;
   }
 
   getServer(serverId: string): ServerRecord | null {
@@ -1320,19 +1409,10 @@ export class FrontdoorStore {
       .prepare(
         `
         SELECT
-          server_id,
-          account_id,
-          display_name,
-          generated_name,
-          runtime_url,
-          runtime_public_base_url,
-          runtime_ws_url,
-          runtime_sse_url,
-          runtime_auth_token,
-          status,
-          tier,
-          created_at_ms,
-          updated_at_ms
+          server_id, account_id, tenant_id, display_name, generated_name,
+          status, plan, provider, provider_server_id,
+          private_ip, public_ip, runtime_port, runtime_auth_token,
+          provision_token, created_at_ms, updated_at_ms, deleted_at_ms
         FROM frontdoor_servers
         WHERE server_id = ?
         LIMIT 1
@@ -1342,17 +1422,21 @@ export class FrontdoorStore {
       | {
           server_id: string;
           account_id: string;
+          tenant_id: string;
           display_name: string;
           generated_name: string;
-          runtime_url: string;
-          runtime_public_base_url: string;
-          runtime_ws_url: string | null;
-          runtime_sse_url: string | null;
-          runtime_auth_token: string | null;
           status: string;
-          tier: string;
+          plan: string;
+          provider: string;
+          provider_server_id: string | null;
+          private_ip: string | null;
+          public_ip: string | null;
+          runtime_port: number | null;
+          runtime_auth_token: string | null;
+          provision_token: string | null;
           created_at_ms: number;
           updated_at_ms: number;
+          deleted_at_ms: number | null;
         }
       | undefined;
     return row ? this.mapServerRow(row) : null;
@@ -1363,29 +1447,33 @@ export class FrontdoorStore {
       .prepare(
         `
         SELECT
-          server_id, account_id, display_name, generated_name,
-          runtime_url, runtime_public_base_url, runtime_ws_url,
-          runtime_sse_url, runtime_auth_token, status, tier,
-          created_at_ms, updated_at_ms
+          server_id, account_id, tenant_id, display_name, generated_name,
+          status, plan, provider, provider_server_id,
+          private_ip, public_ip, runtime_port, runtime_auth_token,
+          provision_token, created_at_ms, updated_at_ms, deleted_at_ms
         FROM frontdoor_servers
-        WHERE account_id = ?
+        WHERE account_id = ? AND (deleted_at_ms IS NULL AND status != 'deleted')
         ORDER BY display_name ASC
       `,
       )
       .all(accountId) as Array<{
       server_id: string;
       account_id: string;
+      tenant_id: string;
       display_name: string;
       generated_name: string;
-      runtime_url: string;
-      runtime_public_base_url: string;
-      runtime_ws_url: string | null;
-      runtime_sse_url: string | null;
-      runtime_auth_token: string | null;
       status: string;
-      tier: string;
+      plan: string;
+      provider: string;
+      provider_server_id: string | null;
+      private_ip: string | null;
+      public_ip: string | null;
+      runtime_port: number | null;
+      runtime_auth_token: string | null;
+      provision_token: string | null;
       created_at_ms: number;
       updated_at_ms: number;
+      deleted_at_ms: number | null;
     }>;
     return rows.map((row) => this.mapServerRow(row));
   }
@@ -1395,28 +1483,33 @@ export class FrontdoorStore {
       .prepare(
         `
         SELECT
-          server_id, account_id, display_name, generated_name,
-          runtime_url, runtime_public_base_url, runtime_ws_url,
-          runtime_sse_url, runtime_auth_token, status, tier,
-          created_at_ms, updated_at_ms
+          server_id, account_id, tenant_id, display_name, generated_name,
+          status, plan, provider, provider_server_id,
+          private_ip, public_ip, runtime_port, runtime_auth_token,
+          provision_token, created_at_ms, updated_at_ms, deleted_at_ms
         FROM frontdoor_servers
+        WHERE deleted_at_ms IS NULL AND status != 'deleted'
         ORDER BY display_name ASC
       `,
       )
       .all() as Array<{
       server_id: string;
       account_id: string;
+      tenant_id: string;
       display_name: string;
       generated_name: string;
-      runtime_url: string;
-      runtime_public_base_url: string;
-      runtime_ws_url: string | null;
-      runtime_sse_url: string | null;
-      runtime_auth_token: string | null;
       status: string;
-      tier: string;
+      plan: string;
+      provider: string;
+      provider_server_id: string | null;
+      private_ip: string | null;
+      public_ip: string | null;
+      runtime_port: number | null;
+      runtime_auth_token: string | null;
+      provision_token: string | null;
       created_at_ms: number;
       updated_at_ms: number;
+      deleted_at_ms: number | null;
     }>;
     return rows.map((row) => this.mapServerRow(row));
   }
@@ -1430,17 +1523,17 @@ export class FrontdoorStore {
     return servers;
   }
 
-  updateServer(serverId: string, updates: {
-    displayName?: string;
-    generatedName?: string;
-    runtimeUrl?: string;
-    runtimePublicBaseUrl?: string;
-    runtimeWsUrl?: string;
-    runtimeSseUrl?: string;
-    runtimeAuthToken?: string;
-    status?: string;
-    tier?: string;
-  }): void {
+  updateServer(serverId: string, updates: Partial<{
+    displayName: string;
+    status: ServerStatus;
+    providerServerId: string;
+    privateIp: string;
+    publicIp: string;
+    runtimePort: number;
+    runtimeAuthToken: string | null;
+    provisionToken: string | null;
+    deletedAtMs: number;
+  }>): void {
     const updatedAt = nowMs();
     const fields: string[] = [];
     const values: (string | number | null)[] = [];
@@ -1448,37 +1541,37 @@ export class FrontdoorStore {
       fields.push("display_name = ?");
       values.push(updates.displayName.trim());
     }
-    if (updates.generatedName !== undefined) {
-      fields.push("generated_name = ?");
-      values.push(updates.generatedName.trim());
-    }
-    if (updates.runtimeUrl !== undefined) {
-      fields.push("runtime_url = ?");
-      values.push(updates.runtimeUrl.trim());
-    }
-    if (updates.runtimePublicBaseUrl !== undefined) {
-      fields.push("runtime_public_base_url = ?");
-      values.push(updates.runtimePublicBaseUrl.trim());
-    }
-    if (updates.runtimeWsUrl !== undefined) {
-      fields.push("runtime_ws_url = ?");
-      values.push(updates.runtimeWsUrl?.trim() || null);
-    }
-    if (updates.runtimeSseUrl !== undefined) {
-      fields.push("runtime_sse_url = ?");
-      values.push(updates.runtimeSseUrl?.trim() || null);
-    }
-    if (updates.runtimeAuthToken !== undefined) {
-      fields.push("runtime_auth_token = ?");
-      values.push(updates.runtimeAuthToken?.trim() || null);
-    }
     if (updates.status !== undefined) {
       fields.push("status = ?");
       values.push(updates.status);
     }
-    if (updates.tier !== undefined) {
-      fields.push("tier = ?");
-      values.push(updates.tier);
+    if (updates.providerServerId !== undefined) {
+      fields.push("provider_server_id = ?");
+      values.push(updates.providerServerId);
+    }
+    if (updates.privateIp !== undefined) {
+      fields.push("private_ip = ?");
+      values.push(updates.privateIp);
+    }
+    if (updates.publicIp !== undefined) {
+      fields.push("public_ip = ?");
+      values.push(updates.publicIp);
+    }
+    if (updates.runtimePort !== undefined) {
+      fields.push("runtime_port = ?");
+      values.push(updates.runtimePort);
+    }
+    if (updates.runtimeAuthToken !== undefined) {
+      fields.push("runtime_auth_token = ?");
+      values.push(updates.runtimeAuthToken);
+    }
+    if (updates.provisionToken !== undefined) {
+      fields.push("provision_token = ?");
+      values.push(updates.provisionToken);
+    }
+    if (updates.deletedAtMs !== undefined) {
+      fields.push("deleted_at_ms = ?");
+      values.push(updates.deletedAtMs);
     }
     if (fields.length === 0) {
       return;
@@ -1489,57 +1582,299 @@ export class FrontdoorStore {
     this.db.prepare(`UPDATE frontdoor_servers SET ${fields.join(", ")} WHERE server_id = ?`).run(...values);
   }
 
-  getServerByRuntimeBinding(params: {
-    runtimeUrl: string;
-    runtimePublicBaseUrl?: string;
-  }): ServerRecord | null {
-    const targets = new Set<string>();
-    const runtimeUrlCanonical = canonicalizeRuntimeUrl(params.runtimeUrl);
-    const runtimePublicCanonical = canonicalizeRuntimeUrl(params.runtimePublicBaseUrl ?? "");
-    if (runtimeUrlCanonical) {
-      targets.add(runtimeUrlCanonical);
-    }
-    if (runtimePublicCanonical) {
-      targets.add(runtimePublicCanonical);
-    }
-    if (targets.size === 0) {
-      return null;
-    }
+  getServerByTenantId(tenantId: string): ServerRecord | null {
+    const row = this.db
+      .prepare(
+        `
+        SELECT
+          server_id, account_id, tenant_id, display_name, generated_name,
+          status, plan, provider, provider_server_id,
+          private_ip, public_ip, runtime_port, runtime_auth_token,
+          provision_token, created_at_ms, updated_at_ms, deleted_at_ms
+        FROM frontdoor_servers
+        WHERE tenant_id = ?
+        LIMIT 1
+      `,
+      )
+      .get(tenantId) as
+      | {
+          server_id: string;
+          account_id: string;
+          tenant_id: string;
+          display_name: string;
+          generated_name: string;
+          status: string;
+          plan: string;
+          provider: string;
+          provider_server_id: string | null;
+          private_ip: string | null;
+          public_ip: string | null;
+          runtime_port: number | null;
+          runtime_auth_token: string | null;
+          provision_token: string | null;
+          created_at_ms: number;
+          updated_at_ms: number;
+          deleted_at_ms: number | null;
+        }
+      | undefined;
+    return row ? this.mapServerRow(row) : null;
+  }
+
+  getServerByProvisionToken(token: string): ServerRecord | null {
+    const row = this.db
+      .prepare(
+        `
+        SELECT
+          server_id, account_id, tenant_id, display_name, generated_name,
+          status, plan, provider, provider_server_id,
+          private_ip, public_ip, runtime_port, runtime_auth_token,
+          provision_token, created_at_ms, updated_at_ms, deleted_at_ms
+        FROM frontdoor_servers
+        WHERE provision_token = ? AND status = 'provisioning'
+        LIMIT 1
+      `,
+      )
+      .get(token) as
+      | {
+          server_id: string;
+          account_id: string;
+          tenant_id: string;
+          display_name: string;
+          generated_name: string;
+          status: string;
+          plan: string;
+          provider: string;
+          provider_server_id: string | null;
+          private_ip: string | null;
+          public_ip: string | null;
+          runtime_port: number | null;
+          runtime_auth_token: string | null;
+          provision_token: string | null;
+          created_at_ms: number;
+          updated_at_ms: number;
+          deleted_at_ms: number | null;
+        }
+      | undefined;
+    return row ? this.mapServerRow(row) : null;
+  }
+
+  getRunningServers(): ServerRecord[] {
     const rows = this.db
       .prepare(
         `
         SELECT
-          server_id, account_id, display_name, generated_name,
-          runtime_url, runtime_public_base_url, runtime_ws_url,
-          runtime_sse_url, runtime_auth_token, status, tier,
-          created_at_ms, updated_at_ms
+          server_id, account_id, tenant_id, display_name, generated_name,
+          status, plan, provider, provider_server_id,
+          private_ip, public_ip, runtime_port, runtime_auth_token,
+          provision_token, created_at_ms, updated_at_ms, deleted_at_ms
         FROM frontdoor_servers
-        WHERE status != 'disabled'
+        WHERE status = 'running'
+        ORDER BY display_name ASC
       `,
       )
       .all() as Array<{
       server_id: string;
       account_id: string;
+      tenant_id: string;
       display_name: string;
       generated_name: string;
-      runtime_url: string;
-      runtime_public_base_url: string;
-      runtime_ws_url: string | null;
-      runtime_sse_url: string | null;
-      runtime_auth_token: string | null;
       status: string;
-      tier: string;
+      plan: string;
+      provider: string;
+      provider_server_id: string | null;
+      private_ip: string | null;
+      public_ip: string | null;
+      runtime_port: number | null;
+      runtime_auth_token: string | null;
+      provision_token: string | null;
       created_at_ms: number;
       updated_at_ms: number;
+      deleted_at_ms: number | null;
     }>;
-    for (const row of rows) {
-      const rowRuntime = canonicalizeRuntimeUrl(row.runtime_url);
-      const rowPublic = canonicalizeRuntimeUrl(row.runtime_public_base_url);
-      if (targets.has(rowRuntime) || targets.has(rowPublic)) {
-        return this.mapServerRow(row);
-      }
+    return rows.map((row) => this.mapServerRow(row));
+  }
+
+  getStuckProvisioningServers(timeoutMs: number): ServerRecord[] {
+    const cutoff = Date.now() - timeoutMs;
+    const rows = this.db
+      .prepare(
+        `
+        SELECT
+          server_id, account_id, tenant_id, display_name, generated_name,
+          status, plan, provider, provider_server_id,
+          private_ip, public_ip, runtime_port, runtime_auth_token,
+          provision_token, created_at_ms, updated_at_ms, deleted_at_ms
+        FROM frontdoor_servers
+        WHERE status = 'provisioning' AND created_at_ms < ?
+        ORDER BY created_at_ms ASC
+      `,
+      )
+      .all(cutoff) as Array<{
+      server_id: string;
+      account_id: string;
+      tenant_id: string;
+      display_name: string;
+      generated_name: string;
+      status: string;
+      plan: string;
+      provider: string;
+      provider_server_id: string | null;
+      private_ip: string | null;
+      public_ip: string | null;
+      runtime_port: number | null;
+      runtime_auth_token: string | null;
+      provision_token: string | null;
+      created_at_ms: number;
+      updated_at_ms: number;
+      deleted_at_ms: number | null;
+    }>;
+    return rows.map((row) => this.mapServerRow(row));
+  }
+
+  // ── API Token Methods ─────────────────────────────────────────────
+
+  createApiToken(input: {
+    tokenId: string;
+    tokenHash: string;
+    userId: string;
+    accountId: string;
+    displayName: string;
+    expiresAtMs?: number;
+  }): ApiTokenRecord {
+    const now = nowMs();
+    this.db
+      .prepare(
+        `
+        INSERT INTO frontdoor_api_tokens (
+          token_id, token_hash, user_id, account_id, display_name,
+          scopes, created_at_ms, expires_at_ms
+        ) VALUES (?, ?, ?, ?, ?, '*', ?, ?)
+      `,
+      )
+      .run(
+        input.tokenId,
+        input.tokenHash,
+        input.userId,
+        input.accountId,
+        input.displayName.trim(),
+        now,
+        input.expiresAtMs ?? null,
+      );
+    return {
+      tokenId: input.tokenId,
+      tokenHash: input.tokenHash,
+      userId: input.userId,
+      accountId: input.accountId,
+      displayName: input.displayName.trim(),
+      scopes: "*",
+      lastUsedMs: null,
+      expiresAtMs: input.expiresAtMs ?? null,
+      createdAtMs: now,
+      revokedAtMs: null,
+    };
+  }
+
+  getApiTokenByHash(hash: string): ApiTokenRecord | null {
+    const row = this.db
+      .prepare(
+        `
+        SELECT
+          token_id, token_hash, user_id, account_id, display_name,
+          scopes, last_used_ms, expires_at_ms, created_at_ms, revoked_at_ms
+        FROM frontdoor_api_tokens
+        WHERE token_hash = ? AND revoked_at_ms IS NULL
+        LIMIT 1
+      `,
+      )
+      .get(hash) as
+      | {
+          token_id: string;
+          token_hash: string;
+          user_id: string;
+          account_id: string;
+          display_name: string;
+          scopes: string;
+          last_used_ms: number | null;
+          expires_at_ms: number | null;
+          created_at_ms: number;
+          revoked_at_ms: number | null;
+        }
+      | undefined;
+    if (!row) {
+      return null;
     }
-    return null;
+    return {
+      tokenId: row.token_id,
+      tokenHash: row.token_hash,
+      userId: row.user_id,
+      accountId: row.account_id,
+      displayName: row.display_name,
+      scopes: row.scopes,
+      lastUsedMs: row.last_used_ms ?? null,
+      expiresAtMs: row.expires_at_ms ?? null,
+      createdAtMs: row.created_at_ms,
+      revokedAtMs: row.revoked_at_ms ?? null,
+    };
+  }
+
+  listApiTokens(userId: string): Omit<ApiTokenRecord, "tokenHash">[] {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT
+          token_id, user_id, account_id, display_name,
+          scopes, last_used_ms, expires_at_ms, created_at_ms, revoked_at_ms
+        FROM frontdoor_api_tokens
+        WHERE user_id = ?
+        ORDER BY created_at_ms DESC
+      `,
+      )
+      .all(userId) as Array<{
+      token_id: string;
+      user_id: string;
+      account_id: string;
+      display_name: string;
+      scopes: string;
+      last_used_ms: number | null;
+      expires_at_ms: number | null;
+      created_at_ms: number;
+      revoked_at_ms: number | null;
+    }>;
+    return rows.map((row) => ({
+      tokenId: row.token_id,
+      userId: row.user_id,
+      accountId: row.account_id,
+      displayName: row.display_name,
+      scopes: row.scopes,
+      lastUsedMs: row.last_used_ms ?? null,
+      expiresAtMs: row.expires_at_ms ?? null,
+      createdAtMs: row.created_at_ms,
+      revokedAtMs: row.revoked_at_ms ?? null,
+    }));
+  }
+
+  revokeApiToken(tokenId: string): void {
+    this.db
+      .prepare(
+        `
+        UPDATE frontdoor_api_tokens
+        SET revoked_at_ms = ?
+        WHERE token_id = ? AND revoked_at_ms IS NULL
+      `,
+      )
+      .run(nowMs(), tokenId);
+  }
+
+  touchApiToken(tokenId: string): void {
+    this.db
+      .prepare(
+        `
+        UPDATE frontdoor_api_tokens
+        SET last_used_ms = ?
+        WHERE token_id = ?
+      `,
+      )
+      .run(nowMs(), tokenId);
   }
 
   // ── Server Subscription Methods ───────────────────────────────────
@@ -3293,12 +3628,14 @@ export class FrontdoorStore {
 // ── Conversion Helpers ──────────────────────────────────────────────
 
 export function serverToTenantConfig(server: ServerRecord): TenantConfig {
+  const runtimeUrl = getServerRuntimeUrl(server) ?? `http://localhost:${server.runtimePort}`;
+  const wsUrl = getServerRuntimeWsUrl(server) ?? undefined;
   return {
     id: server.serverId,
-    runtimeUrl: server.runtimeUrl,
-    runtimePublicBaseUrl: server.runtimePublicBaseUrl,
-    runtimeWsUrl: server.runtimeWsUrl,
-    runtimeSseUrl: server.runtimeSseUrl,
-    runtimeAuthToken: server.runtimeAuthToken,
+    runtimeUrl,
+    runtimePublicBaseUrl: getServerPublicUrl(server),
+    runtimeWsUrl: wsUrl,
+    runtimeSseUrl: undefined,
+    runtimeAuthToken: server.runtimeAuthToken ?? undefined,
   };
 }

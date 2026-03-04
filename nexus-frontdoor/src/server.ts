@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import net from "node:net";
@@ -9,6 +9,7 @@ import httpProxy from "http-proxy";
 import { createCheckoutSession, verifyWebhookAndParseEvent, type BillingWebhookEvent } from "./billing.js";
 import { loadConfig, resolveProjectRoot } from "./config.js";
 import { randomToken, createPasswordHash } from "./crypto.js";
+import { HetznerProvider, renderCloudInitScript, type CloudProvider } from "./cloud-provider.js";
 import { OidcFlowManager, type OidcClaims } from "./oidc-auth.js";
 import { SlidingWindowRateLimiter } from "./rate-limit.js";
 import { mintRuntimeAccessToken } from "./runtime-token.js";
@@ -24,7 +25,11 @@ import {
   type AccountMemberView,
   type AccountInvoiceSummary,
   type FrontdoorUserRecord,
+  type ServerStatus,
   serverToTenantConfig,
+  getServerRuntimeUrl,
+  getServerRuntimeWsUrl,
+  getServerPublicUrl,
 } from "./frontdoor-store.js";
 import type {
   FrontdoorConfig,
@@ -145,6 +150,18 @@ function sendText(res: ServerResponse, status: number, body: string): void {
   res.statusCode = status;
   res.setHeader("content-type", "text/plain; charset=utf-8");
   res.end(body);
+}
+
+function generateApiToken(): string {
+  return `nex_t_${randomBytes(32).toString("base64url")}`;
+}
+
+function generateTokenId(): string {
+  return `tok-${randomBytes(8).toString("hex")}`;
+}
+
+function hashApiToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
 }
 
 function logFrontdoorEvent(event: string, fields: Record<string, unknown>): void {
@@ -678,6 +695,12 @@ function normalizeEmail(value: string | undefined): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
+function extractTenantId(host: string | undefined): string | null {
+  if (!host) return null;
+  const hostname = host.split(":")[0];
+  const match = hostname.match(/^(t-[a-z0-9-]+)\.nexushub\.sh$/);
+  return match ? match[1] : null;
+}
 
 function hasGlobalOperatorAccess(principal: Principal): boolean {
   const operatorRoles = new Set(["operator"]);
@@ -1284,6 +1307,62 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     }
   });
 
+  // ── Cloud Provider ──
+  const cloudProvider: CloudProvider | null = process.env.HETZNER_API_TOKEN ? new HetznerProvider({
+    apiToken: process.env.HETZNER_API_TOKEN,
+    networkId: process.env.HETZNER_NETWORK_ID || "",
+    firewallId: process.env.HETZNER_FIREWALL_ID || "",
+    sshKeyIds: (process.env.HETZNER_SSH_KEY_IDS || "").split(",").filter(Boolean),
+    snapshotId: process.env.HETZNER_SNAPSHOT_ID || "",
+    datacenter: "nbg1-dc3",
+  }) : null;
+
+  // ── Routing Table ──
+  interface TenantRoute {
+    tenantId: string;
+    serverId: string;
+    privateIp: string;
+    runtimePort: number;
+    runtimeAuthToken: string | null;
+    status: "running" | "stopping";
+  }
+
+  const routingTable = new Map<string, TenantRoute>();
+
+  function initRoutingTable() {
+    const servers = store.getRunningServers();
+    for (const server of servers) {
+      if (server.privateIp && server.runtimePort) {
+        routingTable.set(server.tenantId, {
+          tenantId: server.tenantId,
+          serverId: server.serverId,
+          privateIp: server.privateIp,
+          runtimePort: server.runtimePort,
+          runtimeAuthToken: server.runtimeAuthToken,
+          status: "running",
+        });
+      }
+    }
+    console.log(`[routing] Initialized ${routingTable.size} tenant routes`);
+  }
+
+  initRoutingTable();
+
+  // ── Provisioning Timeout Handler ──
+  setInterval(() => {
+    const timeoutMs = Number(process.env.PROVISION_TIMEOUT_MS) || 300000;
+    const stuckServers = store.getStuckProvisioningServers(timeoutMs);
+    for (const server of stuckServers) {
+      console.error(`[provision-timeout] Server ${server.serverId} timed out after ${timeoutMs}ms`);
+      store.updateServer(server.serverId, { status: "failed" });
+      if (server.providerServerId && cloudProvider) {
+        cloudProvider.destroyServer(server.providerServerId).catch((err) => {
+          console.error(`[provision-timeout] Failed to cleanup VPS ${server.providerServerId}:`, err);
+        });
+      }
+    }
+  }, 30000);
+
   function applyRateLimit(params: {
     req: IncomingMessage;
     res: ServerResponse;
@@ -1813,17 +1892,21 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     const server = store.upsertServer({
       serverId: tenant.id,
       accountId: account.accountId,
+      tenantId: tenant.id,
       displayName: tenant.id,
       generatedName: deterministicServerNameFromId(tenant.id),
-      runtimeUrl: tenant.runtimeUrl,
-      runtimePublicBaseUrl: tenant.runtimePublicBaseUrl,
-      runtimeWsUrl: tenant.runtimeWsUrl,
-      runtimeSseUrl: tenant.runtimeSseUrl,
-      runtimeAuthToken: tenant.runtimeAuthToken,
-      status: "active",
-      tier: "standard",
+      status: "running",
+      plan: "cax11",
+      provider: "hetzner",
+      providerServerId: null,
+      privateIp: null,
+      publicIp: null,
+      runtimePort: 8080,
+      runtimeAuthToken: tenant.runtimeAuthToken ?? null,
+      provisionToken: null,
       createdAtMs: Date.now(),
       updatedAtMs: Date.now(),
+      deletedAtMs: null,
     });
 
     // Ensure account membership
@@ -2538,7 +2621,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       const errorServers = errorAllServers.map((s) => ({
         serverId: s.serverId,
         displayName: s.displayName || s.generatedName,
-        status: s.status === "active" ? "active" : s.status === "provisioning" ? "degraded" : "down",
+        status: s.status === "running" ? "active" : s.status === "provisioning" ? "degraded" : "down",
       }));
       const errorAppInstalls = store.getServerEffectiveAppInstalls(params.serverId);
       const errorInstalledApps = errorAppInstalls.map((install) => {
@@ -2558,7 +2641,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         appAccentColor: errorAccent,
         serverId: params.serverId,
         serverDisplayName: params.server.displayName || params.server.generatedName,
-        serverStatus: params.server.status === "active" ? "active" : params.server.status === "provisioning" ? "degraded" : "down",
+        serverStatus: params.server.status === "running" ? "active" : params.server.status === "provisioning" ? "degraded" : "down",
         servers: errorServers,
         installedApps: errorInstalledApps,
         userDisplayName: errorUserDisplayName,
@@ -2609,7 +2692,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     const servers = allServers.map((s) => ({
       serverId: s.serverId,
       displayName: s.displayName || s.generatedName,
-      status: s.status === "active" ? "active" : s.status === "provisioning" ? "degraded" : "down",
+      status: s.status === "running" ? "active" : s.status === "provisioning" ? "degraded" : "down",
     }));
 
     const appInstalls = store.getServerEffectiveAppInstalls(params.serverId);
@@ -2631,7 +2714,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       appAccentColor,
       serverId: params.serverId,
       serverDisplayName: params.server.displayName || params.server.generatedName,
-      serverStatus: params.server.status === "active" ? "active" : params.server.status === "provisioning" ? "degraded" : "down",
+      serverStatus: params.server.status === "running" ? "active" : params.server.status === "provisioning" ? "degraded" : "down",
       servers,
       installedApps,
       userDisplayName,
@@ -2678,6 +2761,60 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       });
     });
     try {
+      // ── Tenant subdomain routing ──
+      const tenantIdFromHost = extractTenantId(req.headers.host);
+      if (tenantIdFromHost) {
+        // Tenant subdomain request — proxy to VPS
+        const route = routingTable.get(tenantIdFromHost);
+        if (!route || route.status !== "running") {
+          sendJson(res, 503, { error: "server_not_available", message: "This server is not currently running." });
+          return;
+        }
+
+        // Add proxy headers
+        req.headers["x-forwarded-for"] = getClientIp(req);
+        req.headers["x-forwarded-proto"] = "https";
+        req.headers["x-forwarded-host"] = req.headers.host || "";
+        req.headers["x-nexus-tenant-id"] = route.tenantId;
+        req.headers["x-nexus-server-id"] = route.serverId;
+
+        // Check for platform auth (session cookie or nex_t_ token)
+        const tenantCookies = parseCookies(req);
+        const tenantSessionId = tenantCookies[config.sessionCookieName];
+        if (tenantSessionId) {
+          const tenantSession = sessions.getSession(tenantSessionId);
+          if (tenantSession && tenantSession.expiresAtMs > Date.now()) {
+            req.headers["x-nexus-user-id"] = tenantSession.principal.userId;
+            if (tenantSession.principal.accountId) {
+              req.headers["x-nexus-account-id"] = tenantSession.principal.accountId;
+            }
+            if (route.runtimeAuthToken) {
+              req.headers["authorization"] = `Bearer ${route.runtimeAuthToken}`;
+            }
+          }
+        }
+        // If Authorization header is nex_t_*, validate as API token
+        const tenantAuthHeader = req.headers["authorization"];
+        if (typeof tenantAuthHeader === "string" && tenantAuthHeader.startsWith("Bearer nex_t_")) {
+          const tokenStr = tenantAuthHeader.slice(7);
+          const hash = createHash("sha256").update(tokenStr).digest("hex");
+          const tokenRecord = store.getApiTokenByHash(hash);
+          if (tokenRecord && !tokenRecord.revokedAtMs && (!tokenRecord.expiresAtMs || tokenRecord.expiresAtMs > Date.now())) {
+            store.touchApiToken(tokenRecord.tokenId);
+            req.headers["x-nexus-user-id"] = tokenRecord.userId;
+            req.headers["x-nexus-account-id"] = tokenRecord.accountId;
+            if (route.runtimeAuthToken) {
+              req.headers["authorization"] = `Bearer ${route.runtimeAuthToken}`;
+            }
+          }
+        }
+        // No platform auth — pass through (Tier 2, VPS decides)
+
+        const targetUrl = `http://${route.privateIp}:${route.runtimePort}`;
+        proxy.web(req, res, { target: targetUrl, changeOrigin: true });
+        return;
+      }
+
       if (isMutationMethod(method) && !isSameOriginBrowserMutation(req, config.baseUrl)) {
         sendJson(res, 403, {
           ok: false,
@@ -2941,17 +3078,21 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           const server = store.upsertServer({
             serverId: tenant.id,
             accountId: account.accountId,
+            tenantId: tenant.id,
             displayName: tenant.id,
             generatedName: deterministicServerNameFromId(tenant.id),
-            runtimeUrl: tenant.runtimeUrl,
-            runtimePublicBaseUrl: tenant.runtimePublicBaseUrl,
-            runtimeWsUrl: tenant.runtimeWsUrl,
-            runtimeSseUrl: tenant.runtimeSseUrl,
-            runtimeAuthToken: tenant.runtimeAuthToken,
-            status: "active",
-            tier: "standard",
+            status: "running",
+            plan: "cax11",
+            provider: "local",
+            providerServerId: null,
+            privateIp: null,
+            publicIp: null,
+            runtimePort: 8080,
+            runtimeAuthToken: tenant.runtimeAuthToken ?? null,
+            provisionToken: null,
             createdAtMs: Date.now(),
             updatedAtMs: Date.now(),
+            deletedAtMs: null,
           });
           serverId = server.serverId;
 
@@ -3365,7 +3506,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           return;
         }
         const allServers = store.getServersForUser(session.principal.userId);
-        const servers = allServers.filter((s) => s.status !== "disabled");
+        const servers = allServers.filter((s) => s.status !== "deleted");
         sendJson(res, 200, {
           ok: true,
           items: servers.map((server) => {
@@ -3376,7 +3517,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
               generated_name: server.generatedName || deterministicServerNameFromId(server.serverId),
               account_id: server.accountId,
               status: server.status,
-              tier: server.tier,
+              plan: server.plan,
               app_count: appInstalls.length,
               installed_app_ids: appInstalls
                 .filter((item) => item.status === "installed")
@@ -3453,10 +3594,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           (await readJsonBody<{
             server_id?: string;
             display_name?: string;
-            runtime_url?: string;
-            runtime_public_base_url?: string;
-            runtime_ws_url?: string;
-            runtime_sse_url?: string;
             runtime_auth_token?: string;
             app_id?: string;
           }>(req)) ?? {};
@@ -3464,14 +3601,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           typeof body.display_name === "string" && body.display_name.trim()
             ? body.display_name.trim()
             : "Server";
-        const runtimeUrl = typeof body.runtime_url === "string" ? body.runtime_url.trim() : "";
-        if (!runtimeUrl) {
-          sendJson(res, 400, {
-            ok: false,
-            error: "missing_runtime_url",
-          });
-          return;
-        }
         const requestedServerId =
           typeof body.server_id === "string" && body.server_id.trim()
             ? body.server_id.trim()
@@ -3484,20 +3613,13 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             sendJson(res, 400, { ok: false, error: "no_account" });
             return;
           }
+          const tenantId = `t-${randomUUID().slice(0, 12)}`;
           const server = store.createServer({
             serverId: requestedServerId,
             accountId,
+            tenantId,
             displayName,
             generatedName: deterministicServerNameFromId(requestedServerId ?? displayName),
-            runtimeUrl,
-            runtimePublicBaseUrl:
-              typeof body.runtime_public_base_url === "string"
-                ? body.runtime_public_base_url.trim() || undefined
-                : undefined,
-            runtimeWsUrl:
-              typeof body.runtime_ws_url === "string" ? body.runtime_ws_url.trim() : undefined,
-            runtimeSseUrl:
-              typeof body.runtime_sse_url === "string" ? body.runtime_sse_url.trim() : undefined,
             runtimeAuthToken:
               typeof body.runtime_auth_token === "string"
                 ? body.runtime_auth_token.trim()
@@ -3535,7 +3657,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       const serverRouteMatch = pathname.match(/^\/api\/servers\/([^/]+)$/);
-      if (serverRouteMatch) {
+      if (serverRouteMatch && serverRouteMatch[1] !== "create" && serverRouteMatch[1] !== "provisioning") {
         const session = readSession({ req, config, sessions });
         if (!session) {
           sendJson(res, 401, {
@@ -3573,8 +3695,8 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
               generated_name: context.server.generatedName || deterministicServerNameFromId(context.server.serverId),
               account_id: context.server.accountId,
               status: context.server.status,
-              tier: context.server.tier,
-              runtime_public_base_url: context.server.runtimePublicBaseUrl,
+              plan: context.server.plan,
+              runtime_public_base_url: getServerPublicUrl(context.server),
               installed_app_ids: installs
                 .filter((item) => item.status === "installed")
                 .map((item) => item.appId),
@@ -3594,14 +3716,48 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             });
             return;
           }
+          // Remove from routing table
+          routingTable.delete(access.server.tenantId);
+          // Set status to deprovisioning
           store.updateServer(access.server.serverId, {
-            status: "disabled",
+            status: "deprovisioning",
           });
           config.tenants.delete(access.server.serverId);
+          // Destroy cloud VPS if available
+          if (access.server.providerServerId && cloudProvider) {
+            cloudProvider.destroyServer(access.server.providerServerId).then(() => {
+              store.updateServer(access.server.serverId, {
+                status: "deleted",
+                deletedAtMs: Date.now(),
+              });
+              // Reset app installs for this server
+              const installs = store.getServerEffectiveAppInstalls(access.server.serverId);
+              for (const install of installs) {
+                store.upsertServerAppInstall({
+                  serverId: access.server.serverId,
+                  appId: install.appId,
+                  status: "not_installed",
+                  source: "system",
+                });
+              }
+              console.log(`[delete-server] VPS ${access.server.providerServerId} destroyed for server ${access.server.serverId}`);
+            }).catch((err) => {
+              console.error(`[delete-server] Failed to destroy VPS ${access.server.providerServerId}:`, err);
+              store.updateServer(access.server.serverId, {
+                status: "failed",
+              });
+            });
+          } else {
+            // No cloud VPS — mark as deleted immediately
+            store.updateServer(access.server.serverId, {
+              status: "deleted",
+              deletedAtMs: Date.now(),
+            });
+          }
           sendJson(res, 200, {
             ok: true,
             server_id: access.server.serverId,
-            status: "disabled",
+            status: "deprovisioning",
           });
           return;
         }
@@ -4446,8 +4602,8 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             display_name: server.displayName,
             account_id: server.accountId,
             status: server.status,
-            tier: server.tier,
-            runtime_public_base_url: server.runtimePublicBaseUrl,
+            plan: server.plan,
+            runtime_public_base_url: getServerPublicUrl(server),
             member_count: memberCount,
             usage_30d: {
               requests_total: usage.requestsTotal,
@@ -4564,8 +4720,8 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             server_id: context.server.serverId,
             display_name: context.server.displayName,
             status: context.server.status,
-            runtime_url: context.serverRuntime.runtimeUrl,
-            runtime_public_base_url: context.serverRuntime.runtimePublicBaseUrl,
+            runtime_url: getServerRuntimeUrl(context.server) || context.serverRuntime.runtimeUrl,
+            runtime_public_base_url: getServerPublicUrl(context.server),
             has_runtime_auth_token: Boolean(context.serverRuntime.runtimeAuthToken?.trim()),
           },
           provisioning: provisioningRecord
@@ -5021,6 +5177,144 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         return;
       }
 
+      // ── Cloud Provisioning Endpoints ──────────────────────────────
+
+      if (method === "POST" && pathname === "/api/servers/create") {
+        const session = readSession({ req, config, sessions });
+        if (!session) {
+          sendJson(res, 401, { ok: false, error: "unauthorized" });
+          return;
+        }
+        const accountId = session.principal.accountId;
+        if (!accountId) {
+          sendJson(res, 400, { ok: false, error: "no_account" });
+          return;
+        }
+        if (!cloudProvider) {
+          sendJson(res, 500, { ok: false, error: "cloud_provider_not_configured" });
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        const bodyRecord = asRecord(body);
+        const plan = typeof bodyRecord?.plan === "string" ? bodyRecord.plan : "cax11";
+        const displayName = typeof bodyRecord?.display_name === "string" ? (bodyRecord.display_name as string).trim() : "";
+
+        const serverId = `srv-${randomUUID().slice(0, 12)}`;
+        const tenantId = `t-${randomUUID().slice(0, 12)}`;
+        const provisionToken = `prov-${randomToken(32)}`;
+        const runtimeAuthToken = `rt-${randomToken(32)}`;
+        const generatedName = `Server ${Date.now().toString(36)}`;
+
+        const createdServer = store.createServer({
+          serverId,
+          accountId,
+          tenantId,
+          displayName: displayName || generatedName,
+          generatedName,
+          plan,
+          provider: "hetzner",
+          provisionToken,
+          runtimeAuthToken,
+        });
+
+        // Get user's entitled apps
+        const entitlementAccounts = store.getAccountsForUser(session.principal.userId);
+        const appsToInstall: string[] = [];
+        for (const entAccount of entitlementAccounts) {
+          const subs = store.getAppSubscriptionsForAccount(entAccount.accountId);
+          for (const sub of subs) {
+            if (sub.status === "active" && !appsToInstall.includes(sub.appId)) {
+              appsToInstall.push(sub.appId);
+            }
+          }
+        }
+
+        // Render cloud-init
+        const cloudInitScript = renderCloudInitScript({
+          tenantId,
+          serverId,
+          authToken: runtimeAuthToken,
+          provisionToken,
+          frontdoorUrl: config.baseUrl,
+          appsToInstall,
+        });
+
+        // Create VPS (async but we await the initial API call)
+        try {
+          const result = await cloudProvider.createServer({
+            tenantId,
+            planId: plan,
+            cloudInitScript,
+          });
+          store.updateServer(serverId, {
+            providerServerId: result.providerServerId,
+            privateIp: result.privateIp || undefined,
+            publicIp: result.publicIp || undefined,
+          });
+        } catch (err) {
+          console.error(`[create-server] Hetzner API failed:`, err);
+          store.updateServer(serverId, { status: "failed" });
+          sendJson(res, 500, { ok: false, error: "cloud_create_failed", message: String(err) });
+          return;
+        }
+
+        sendJson(res, 200, { ok: true, server_id: serverId, tenant_id: tenantId, status: "provisioning" });
+        return;
+      }
+
+      if (method === "POST" && pathname === "/api/internal/provision-callback") {
+        const cbAuthHeader = req.headers["authorization"];
+        if (typeof cbAuthHeader !== "string" || !cbAuthHeader.startsWith("Bearer prov-")) {
+          sendJson(res, 401, { ok: false, error: "invalid_provision_token" });
+          return;
+        }
+        const provisionToken = cbAuthHeader.slice(7);
+        const cbServer = store.getServerByProvisionToken(provisionToken);
+        if (!cbServer) {
+          sendJson(res, 401, { ok: false, error: "invalid_provision_token" });
+          return;
+        }
+        if (cbServer.status !== "provisioning") {
+          sendJson(res, 409, { ok: false, error: "server_not_provisioning" });
+          return;
+        }
+
+        const cbBody = await readJsonBody(req);
+        const cbBodyRecord = asRecord(cbBody);
+        const cbPrivateIp = typeof cbBodyRecord?.private_ip === "string" ? cbBodyRecord.private_ip as string : cbServer.privateIp;
+        const cbRuntimePort = typeof cbBodyRecord?.runtime_port === "number" ? cbBodyRecord.runtime_port as number : cbServer.runtimePort;
+
+        store.updateServer(cbServer.serverId, {
+          status: "running",
+          privateIp: cbPrivateIp || undefined,
+          runtimePort: cbRuntimePort || undefined,
+          provisionToken: null,
+        });
+
+        // Add to routing table
+        if (cbPrivateIp) {
+          routingTable.set(cbServer.tenantId, {
+            tenantId: cbServer.tenantId,
+            serverId: cbServer.serverId,
+            privateIp: cbPrivateIp,
+            runtimePort: cbRuntimePort || 8080,
+            runtimeAuthToken: cbServer.runtimeAuthToken,
+            status: "running",
+          });
+          console.log(`[provision-callback] Server ${cbServer.serverId} is running at ${cbPrivateIp}:${cbRuntimePort}`);
+        }
+
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (method === "GET" && pathname === "/api/plans") {
+        const plans = cloudProvider ? cloudProvider.listPlans() : [];
+        sendJson(res, 200, { plans });
+        return;
+      }
+
       if (method === "GET" && pathname === "/api/servers/provisioning/status") {
         const session = readSession({ req, config, sessions });
         if (!session) {
@@ -5438,15 +5732,12 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
                   store.createServer({
                     serverId: tenant.id,
                     accountId,
+                    tenantId: tenant.id,
                     displayName: tenant.id,
                     generatedName: deterministicServerNameFromId(tenant.id),
-                    runtimeUrl: tenant.runtimeUrl,
-                    runtimePublicBaseUrl: tenant.runtimePublicBaseUrl,
-                    runtimeWsUrl: tenant.runtimeWsUrl,
-                    runtimeSseUrl: tenant.runtimeSseUrl,
                     runtimeAuthToken: tenant.runtimeAuthToken,
                   });
-                  store.updateServer(tenant.id, { status: "ready" });
+                  store.updateServer(tenant.id, { status: "running" });
                   const intentAppId = completed.productId?.trim().toLowerCase();
                   if (intentAppId) {
                     try {
@@ -5547,15 +5838,12 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
                       store.createServer({
                         serverId: tenant.id,
                         accountId,
+                        tenantId: tenant.id,
                         displayName: tenant.id,
                         generatedName: deterministicServerNameFromId(tenant.id),
-                        runtimeUrl: tenant.runtimeUrl,
-                        runtimePublicBaseUrl: tenant.runtimePublicBaseUrl,
-                        runtimeWsUrl: tenant.runtimeWsUrl,
-                        runtimeSseUrl: tenant.runtimeSseUrl,
                         runtimeAuthToken: tenant.runtimeAuthToken,
                       });
-                      store.updateServer(tenant.id, { status: "ready" });
+                      store.updateServer(tenant.id, { status: "running" });
                       // Auto-grant subscriptions for ALL configured apps (not just intent)
                       const configuredApps = autoProvisioner!.lastConfiguredApps;
                       const intentAppId = completed.productId?.trim().toLowerCase();
@@ -5812,6 +6100,65 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         return;
       }
 
+      // -----------------------------------------------------------------------
+      // API Token CRUD
+      // -----------------------------------------------------------------------
+
+      if (method === "POST" && pathname === "/api/tokens/create") {
+        const session = readSession({ req, config, sessions });
+        if (!session) return sendJson(res, 401, { error: "unauthorized" });
+        const accountId = session.principal.accountId;
+        if (!accountId) return sendJson(res, 400, { error: "no_account" });
+
+        const body = await readJsonBody(req);
+        const displayName = typeof (body as any)?.display_name === "string" ? (body as any).display_name.trim() || "Unnamed Token" : "Unnamed Token";
+        const expiresInDays = typeof (body as any)?.expires_in_days === "number" ? (body as any).expires_in_days : null;
+
+        const token = generateApiToken();
+        const tokenId = generateTokenId();
+        const tokenHash = hashApiToken(token);
+        const expiresAtMs = expiresInDays ? Date.now() + expiresInDays * 86400000 : undefined;
+
+        store.createApiToken({
+          tokenId,
+          tokenHash,
+          userId: session.principal.userId,
+          accountId,
+          displayName,
+          expiresAtMs,
+        });
+
+        return sendJson(res, 200, {
+          token,
+          token_id: tokenId,
+          display_name: displayName,
+          expires_at: expiresAtMs || null,
+        });
+      }
+
+      if (method === "GET" && pathname === "/api/tokens") {
+        const session = readSession({ req, config, sessions });
+        if (!session) return sendJson(res, 401, { error: "unauthorized" });
+        const tokens = store.listApiTokens(session.principal.userId);
+        return sendJson(res, 200, {
+          tokens: tokens.map((t) => ({
+            token_id: t.tokenId,
+            display_name: t.displayName,
+            last_used: t.lastUsedMs,
+            expires_at: t.expiresAtMs,
+            created_at: t.createdAtMs,
+          })),
+        });
+      }
+
+      if (method === "DELETE" && pathname.startsWith("/api/tokens/") && pathname.split("/").length === 4) {
+        const session = readSession({ req, config, sessions });
+        if (!session) return sendJson(res, 401, { error: "unauthorized" });
+        const tokenId = pathname.split("/")[3];
+        store.revokeApiToken(tokenId);
+        return sendJson(res, 200, { ok: true });
+      }
+
       if (pathname.startsWith("/auth/")) {
         if (method !== "GET") {
           sendJson(res, 405, {
@@ -5998,6 +6345,24 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
   });
 
   server.on("upgrade", (req, socket, head) => {
+    // ── Tenant subdomain WebSocket support ──
+    const wsTenanIdFromHost = extractTenantId(req.headers.host);
+    if (wsTenanIdFromHost) {
+      const wsRoute = routingTable.get(wsTenanIdFromHost);
+      if (!wsRoute || wsRoute.status !== "running") {
+        socket.destroy();
+        return;
+      }
+      req.headers["x-nexus-tenant-id"] = wsRoute.tenantId;
+      req.headers["x-nexus-server-id"] = wsRoute.serverId;
+      if (wsRoute.runtimeAuthToken) {
+        req.headers["authorization"] = `Bearer ${wsRoute.runtimeAuthToken}`;
+      }
+      const wsTargetUrl = `http://${wsRoute.privateIp}:${wsRoute.runtimePort}`;
+      proxy.ws(req, socket, head, { target: wsTargetUrl, changeOrigin: true });
+      return;
+    }
+
     const url = new URL(req.url ?? "/", config.baseUrl);
     const isRuntimePath = url.pathname === "/runtime" || url.pathname.startsWith("/runtime/");
     const isAppPath = url.pathname === "/" || url.pathname === "/app" || url.pathname.startsWith("/app/");
