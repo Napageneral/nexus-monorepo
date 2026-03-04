@@ -183,13 +183,23 @@ This registry drives:
 
 ## 8) Provisioning Model
 
-### 8.1 Server provisioning
+### 8.1 Server provisioning (Cloud VPS)
 
-1. Servers are provisioned as neutral runtime profiles.
-2. No product-shaped runtime. The runtime starts with control baseline + app-slot capability.
-3. Apps install after provisioning via the app install flow.
+1. Each server maps to a dedicated cloud VPS (one VPS per tenant).
+2. Frontdoor is the provisioning orchestrator — creates VPS via cloud provider API.
+3. Golden snapshot images have nex runtime pre-installed; cloud-init handles tenant-specific config.
+4. VPS phones home to frontdoor when ready (provision callback with one-time token).
+5. Frontdoor adds VPS to routing table and marks server as "running".
+6. Full architecture: `CLOUD_PROVISIONING_ARCHITECTURE_2026-03-04.md`
 
-### 8.2 App install flow
+### 8.2 Tenant networking and routing
+
+1. Wildcard DNS (`*.nexushub.sh`) routes all tenant traffic through frontdoor.
+2. Frontdoor terminates TLS, reverse-proxies to tenant VPS over private network.
+3. Two-tier auth: platform auth (frontdoor validates) + app-level auth (VPS validates).
+4. Full architecture: `TENANT_NETWORKING_AND_ROUTING_2026-03-04.md`
+
+### 8.3 App install flow
 
 1. Validate entitlement and server access.
 2. Set install status: `installing`.
@@ -228,6 +238,11 @@ This registry drives:
 1. `nexus-specs/specs/nex/hosted/HOSTED_RUNTIME_PROFILE.md` — hosted runtime invariants.
 2. `nexus-specs/specs/nex/hosted/HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md` — direct-mode runtime profile (not canonical for product flows).
 3. `nexus-specs/specs/nex/adapters/ADAPTER_CONNECTION_SERVICE.md` — adapter auth manifests and connection lifecycle.
+
+### Infrastructure specs (in this directory)
+
+1. `CLOUD_PROVISIONING_ARCHITECTURE_2026-03-04.md` — cloud provider abstraction, Hetzner/AWS, snapshot strategy, provisioning/deprovisioning flows.
+2. `TENANT_NETWORKING_AND_ROUTING_2026-03-04.md` — DNS, TLS, reverse proxy, two-tier auth, API tokens.
 
 ### Future specs (TODO)
 

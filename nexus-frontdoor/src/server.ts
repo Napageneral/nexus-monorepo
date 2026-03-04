@@ -3317,6 +3317,44 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         return;
       }
 
+      // Subscription cancel: POST /api/apps/:appId/cancel
+      const appCancelRouteMatch = pathname.match(/^\/api\/apps\/([^/]+)\/cancel$/);
+      if (method === "POST" && appCancelRouteMatch) {
+        const session = readSession({ req, config, sessions });
+        if (!session) {
+          sendJson(res, 401, { ok: false, error: "unauthorized" });
+          return;
+        }
+        const appId = normalizeAppId(decodeURIComponent(appCancelRouteMatch[1] ?? ""));
+        if (!isValidAppId(appId)) {
+          sendJson(res, 400, { ok: false, error: "invalid_app_id" });
+          return;
+        }
+        const accounts = store.getAccountsForUser(session.principal.userId);
+        let cancelled = false;
+        for (const account of accounts) {
+          const sub = store.getAppSubscription(account.accountId, appId);
+          if (sub && sub.status === "active") {
+            store.updateAppSubscription(account.accountId, appId, {
+              status: "cancelled",
+              cancelledAtMs: Date.now(),
+            });
+            cancelled = true;
+            break;
+          }
+        }
+        if (!cancelled) {
+          sendJson(res, 404, { ok: false, error: "subscription_not_found" });
+          return;
+        }
+        sendJson(res, 200, {
+          ok: true,
+          app_id: appId,
+          status: "cancelled",
+        });
+        return;
+      }
+
       if (method === "GET" && pathname === "/api/servers") {
         const session = readSession({ req, config, sessions });
         if (!session) {
@@ -3326,7 +3364,8 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           });
           return;
         }
-        const servers = store.getServersForUser(session.principal.userId);
+        const allServers = store.getServersForUser(session.principal.userId);
+        const servers = allServers.filter((s) => s.status !== "disabled");
         sendJson(res, 200, {
           ok: true,
           items: servers.map((server) => {
@@ -3566,6 +3605,41 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           });
           return;
         }
+        if (method === "PATCH") {
+          const access = resolveServerAdminAccess({
+            session,
+            serverId,
+          });
+          if (!access.ok) {
+            sendJson(res, access.status, {
+              ok: false,
+              error: access.error,
+            });
+            return;
+          }
+          const patchBody =
+            (await readJsonBody<{ display_name?: string }>(req)) ?? {};
+          const newDisplayName =
+            typeof patchBody.display_name === "string" && patchBody.display_name.trim()
+              ? patchBody.display_name.trim()
+              : null;
+          if (!newDisplayName) {
+            sendJson(res, 400, {
+              ok: false,
+              error: "missing_display_name",
+            });
+            return;
+          }
+          store.updateServer(access.server.serverId, {
+            displayName: newDisplayName,
+          });
+          sendJson(res, 200, {
+            ok: true,
+            server_id: access.server.serverId,
+            display_name: newDisplayName,
+          });
+          return;
+        }
         sendJson(res, 405, {
           ok: false,
           error: "method_not_allowed",
@@ -3714,6 +3788,44 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           app_id: appId,
           install_status: install?.status ?? "installed",
           entry_path: install?.entryPath ?? defaultEntryPathForApp(appId),
+        });
+        return;
+      }
+
+      // App uninstall: DELETE /api/servers/:id/apps/:appId/install
+      if (method === "DELETE" && serverAppInstallRouteMatch) {
+        const session = readSession({ req, config, sessions });
+        if (!session) {
+          sendJson(res, 401, { ok: false, error: "unauthorized" });
+          return;
+        }
+        const serverId = decodeURIComponent(serverAppInstallRouteMatch[1] ?? "").trim();
+        const appId = normalizeAppId(decodeURIComponent(serverAppInstallRouteMatch[2] ?? ""));
+        if (!serverId || !isValidAppId(appId)) {
+          sendJson(res, 400, { ok: false, error: "invalid_uninstall_request" });
+          return;
+        }
+        if (appId === "control") {
+          sendJson(res, 400, { ok: false, error: "system_app_uninstall_not_allowed" });
+          return;
+        }
+        const access = resolveServerAdminAccess({ session, serverId });
+        if (!access.ok) {
+          sendJson(res, access.status, { ok: false, error: access.error });
+          return;
+        }
+        // Mark as uninstalling, then set to not_installed
+        store.upsertServerAppInstall({
+          serverId,
+          appId,
+          status: "not_installed",
+          source: "manual",
+        });
+        sendJson(res, 200, {
+          ok: true,
+          server_id: serverId,
+          app_id: appId,
+          install_status: "not_installed",
         });
         return;
       }
