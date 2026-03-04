@@ -220,13 +220,22 @@ This registry drives:
 
 ### Platform specs (in this directory)
 
-1. `FRONTDOOR_CANONICAL_APP_SLOT_ARCHITECTURE_HARD_CUTOVER_2026-02-27.md` — detailed app-slot design with option analysis.
-2. `SPEC_FRONTDOOR_SERVER_FIRST_APP_ENTITLEMENT_AND_INSTALL_HARD_CUTOVER_2026-02-27.md` — server-first data model and API contracts.
-3. `SPEC_FRONTDOOR_ONE_SERVER_MULTI_APP_INSTALL_AND_LAUNCH_HARD_CUTOVER_2026-02-27.md` — multi-app per server UX and install orchestration.
-4. `SPEC_FRONTDOOR_PROXY_NEXT_CHUNK_ROUTING_AND_SIGNED_IN_PRODUCT_PROVISIONING_HARD_CUTOVER_2026-02-27.md` — Next.js chunk routing fix and signed-in product provisioning.
+1. `CRITICAL_CUSTOMER_FLOWS_2026-03-02.md` — all user flows (F1–F29) from signup through admin.
+2. `BILLING_ARCHITECTURE_ACCOUNT_MODEL_2026-03-02.md` — account model, server/app subscriptions, billing separation.
+3. `FRONTDOOR_APP_FRAME_AND_DOCK_2026-03-02.md` — app frame injection, navigation dock.
+4. `NEX_APP_MANIFEST_AND_LIFECYCLE_2026-03-02.md` — app manifest format, handler modes, lifecycle hooks.
 5. `FRONTDOOR_WORKSPACE_ADMIN_CONTROL_PLANE_HARD_CUTOVER_2026-02-27.md` — admin control plane UI spec.
 6. `FRONTDOOR_PRODUCT_REGISTRY_AND_BRANDED_BILLING_2026-02-26.md` — product registry and billing design.
-7. `FRONTDOOR_SPIKE_E2E_GAP_CLOSURE_TODO_2026-02-27.md` — execution tracker.
+
+### Archived specs (in `_archive/`)
+
+Superseded by the specs above. Kept for historical reference:
+1. `FRONTDOOR_CANONICAL_APP_SLOT_ARCHITECTURE_HARD_CUTOVER_2026-02-27.md` — app-slot option analysis (decisions captured in this doc).
+2. `SPEC_FRONTDOOR_SERVER_FIRST_APP_ENTITLEMENT_AND_INSTALL_HARD_CUTOVER_2026-02-27.md` — server-first data model (captured in billing spec).
+3. `SPEC_FRONTDOOR_ONE_SERVER_MULTI_APP_INSTALL_AND_LAUNCH_HARD_CUTOVER_2026-02-27.md` — multi-app orchestration (captured in customer flows).
+4. `SPEC_FRONTDOOR_PROXY_NEXT_CHUNK_ROUTING_AND_SIGNED_IN_PRODUCT_PROVISIONING_HARD_CUTOVER_2026-02-27.md` — implemented bug fixes.
+5. `FRONTDOOR_SPIKE_E2E_GAP_CLOSURE_TODO_2026-02-27.md` — completed execution tracker.
+6. `CROSS_DOC_ALIGNMENT_FRONTDOOR_APP_SLOT_2026-02-27.md` — alignment directive (decisions baked into architecture).
 
 ### Product specs
 

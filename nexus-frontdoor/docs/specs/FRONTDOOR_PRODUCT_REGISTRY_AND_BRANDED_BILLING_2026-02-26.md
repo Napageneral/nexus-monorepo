@@ -3,6 +3,8 @@
 Date: 2026-02-26
 Owners: Nexus Frontdoor
 Status: Design spec — pending implementation (aligned 2026-02-27)
+
+> **Terminology note (2026-03-04):** This spec uses "workspace" in places. In the current system, "workspace" = "server". The canonical terminology is "server" (see FRONTDOOR_ARCHITECTURE.md). Content is still valid.
 Depends on: FRONTDOOR_WORKSPACE_ADMIN_CONTROL_PLANE_HARD_CUTOVER_2026-02-27, OPERATOR_OWNER_BILLING_DASHBOARD
 
 ## 1. Problem

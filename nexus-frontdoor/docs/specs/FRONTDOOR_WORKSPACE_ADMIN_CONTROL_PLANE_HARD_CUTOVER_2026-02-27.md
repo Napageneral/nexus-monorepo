@@ -4,6 +4,8 @@ Date: 2026-02-27
 Owners: Nexus Frontdoor
 Status: Approved for implementation
 
+> **Terminology note (2026-03-04):** This spec uses "workspace" throughout. In the current system, "workspace" = "server". The canonical terminology is "server" (see FRONTDOOR_ARCHITECTURE.md). Content is still valid.
+
 ## 1. Customer Experience Goal
 
 Frontdoor must be a functional control plane, not a thin login shell.
