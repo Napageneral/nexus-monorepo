@@ -177,13 +177,46 @@ function readSession(params: {
   req: IncomingMessage;
   config: FrontdoorConfig;
   sessions: SessionStore;
+  store?: FrontdoorStore;
 }): SessionRecord | null {
+  // 1. Try session cookie first
   const cookies = parseCookies(params.req);
   const sessionId = cookies[params.config.sessionCookieName];
-  if (!sessionId) {
-    return null;
+  if (sessionId) {
+    const session = params.sessions.getSession(sessionId);
+    if (session) return session;
   }
-  return params.sessions.getSession(sessionId);
+
+  // 2. Try API token (Bearer nex_t_...)
+  if (params.store) {
+    const authHeader = params.req.headers["authorization"];
+    if (typeof authHeader === "string" && authHeader.startsWith("Bearer nex_t_")) {
+      const tokenStr = authHeader.slice(7); // Remove "Bearer "
+      const hash = createHash("sha256").update(tokenStr).digest("hex");
+      const tokenRecord = params.store.getApiTokenByHash(hash);
+      if (tokenRecord && !tokenRecord.revokedAtMs && (!tokenRecord.expiresAtMs || tokenRecord.expiresAtMs > Date.now())) {
+        params.store.touchApiToken(tokenRecord.tokenId);
+        // Synthesize a SessionRecord from the API token
+        return {
+          id: `api-token:${tokenRecord.tokenId}`,
+          principal: {
+            userId: tokenRecord.userId,
+            tenantId: "", // API tokens are cross-tenant
+            entityId: tokenRecord.userId,
+            roles: ["operator"],
+            scopes: tokenRecord.scopes === "*" ? ["*"] : tokenRecord.scopes.split(","),
+            amr: ["api_token"],
+            accountId: tokenRecord.accountId,
+          },
+          createdAtMs: tokenRecord.createdAtMs,
+          expiresAtMs: tokenRecord.expiresAtMs ?? Date.now() + 86400000,
+          refreshTokens: new Map(),
+        };
+      }
+    }
+  }
+
+  return null;
 }
 
 function resolveRuntimeDescriptor(tenant: TenantConfig): RuntimeDescriptor {
@@ -2847,7 +2880,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (method === "GET" && pathname === "/api/auth/session") {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 200, {
             authenticated: false,
@@ -2884,7 +2917,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (method === "GET" && pathname === "/api/auth/me") {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, { ok: false, error: "not_authenticated" });
           return;
@@ -3198,7 +3231,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (method === "POST" && pathname === "/api/auth/logout") {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (session) {
           sessions.deleteSession(session.id);
         }
@@ -3309,7 +3342,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (method === "GET" && pathname === "/api/apps/owned") {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -3366,7 +3399,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       const appPurchaseRouteMatch = pathname.match(/^\/api\/apps\/([^/]+)\/purchase$/);
       if (method === "POST" && appPurchaseRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -3461,7 +3494,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       // Subscription cancel: POST /api/apps/:appId/cancel
       const appCancelRouteMatch = pathname.match(/^\/api\/apps\/([^/]+)\/cancel$/);
       if (method === "POST" && appCancelRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, { ok: false, error: "unauthorized" });
           return;
@@ -3497,7 +3530,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (method === "GET" && pathname === "/api/servers") {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -3529,7 +3562,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (method === "POST" && pathname === "/api/servers/select") {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, { ok: false, error: "unauthorized" });
           return;
@@ -3575,7 +3608,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (method === "POST" && pathname === "/api/servers") {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -3658,7 +3691,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       const serverRouteMatch = pathname.match(/^\/api\/servers\/([^/]+)$/);
       if (serverRouteMatch && serverRouteMatch[1] !== "create" && serverRouteMatch[1] !== "provisioning") {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -3807,7 +3840,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         /^\/api\/servers\/([^/]+)\/apps\/([^/]+)\/install-status$/,
       );
       if (method === "GET" && serverAppInstallStatusRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -3860,7 +3893,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       const serverAppInstallRouteMatch = pathname.match(/^\/api\/servers\/([^/]+)\/apps\/([^/]+)\/install$/);
       if (method === "POST" && serverAppInstallRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -3950,7 +3983,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       // App uninstall: DELETE /api/servers/:id/apps/:appId/install
       if (method === "DELETE" && serverAppInstallRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, { ok: false, error: "unauthorized" });
           return;
@@ -3988,7 +4021,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       const serverAppsRouteMatch = pathname.match(/^\/api\/servers\/([^/]+)\/apps$/);
       if (method === "GET" && serverAppsRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -4099,7 +4132,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (method === "POST" && pathname === "/api/entry/execute") {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -4357,7 +4390,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (method === "GET" && pathname === "/api/entry/resolve") {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -4414,7 +4447,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         /^\/api\/servers\/([^/]+)\/runtime-auth-token$/,
       );
       if (serverRuntimeTokenRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -4470,7 +4503,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         /^\/api\/servers\/([^/]+)\/runtime-auth-token\/set$/,
       );
       if (method === "POST" && serverRuntimeTokenSetRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -4528,7 +4561,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         /^\/api\/servers\/([^/]+)\/runtime-auth-token\/rotate$/,
       );
       if (method === "POST" && serverRuntimeTokenRotateRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -4575,7 +4608,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (method === "GET" && pathname === "/api/operator/servers") {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -4630,7 +4663,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       const launchDiagnosticsRouteMatch = pathname.match(/^\/api\/servers\/([^/]+)\/launch-diagnostics$/);
       if (method === "GET" && launchDiagnosticsRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -4753,7 +4786,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       const usageRouteMatch = pathname.match(/^\/api\/servers\/([^/]+)\/usage$/);
       if (method === "GET" && usageRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -4799,7 +4832,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       const billingCheckoutRouteMatch = pathname.match(/^\/api\/billing\/([^/]+)\/checkout-session$/);
       if (method === "POST" && billingCheckoutRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -4883,7 +4916,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       const billingSubscriptionRouteMatch = pathname.match(/^\/api\/billing\/([^/]+)\/subscription$/);
       if (method === "GET" && billingSubscriptionRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -4941,7 +4974,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       const billingInvoicesRouteMatch = pathname.match(/^\/api\/billing\/([^/]+)\/invoices$/);
       if (method === "GET" && billingInvoicesRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -5002,7 +5035,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       // ── Billing Entitlements + Plan ─────────────────────────────────
       const billingEntitlementsRouteMatch = pathname.match(/^\/api\/billing\/([^/]+)\/entitlements$/);
       if (method === "GET" && billingEntitlementsRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, { ok: false, error: "unauthorized" });
           return;
@@ -5051,7 +5084,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       const billingPlanRouteMatch = pathname.match(/^\/api\/billing\/([^/]+)\/plan$/);
       if (method === "GET" && billingPlanRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, { ok: false, error: "unauthorized" });
           return;
@@ -5180,7 +5213,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       // ── Cloud Provisioning Endpoints ──────────────────────────────
 
       if (method === "POST" && pathname === "/api/servers/create") {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, { ok: false, error: "unauthorized" });
           return;
@@ -5316,7 +5349,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (method === "GET" && pathname === "/api/servers/provisioning/status") {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -5381,7 +5414,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       const inviteRevokeRouteMatch = pathname.match(/^\/api\/servers\/([^/]+)\/invites\/([^/]+)$/);
       if (method === "DELETE" && inviteRevokeRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -5434,7 +5467,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       const inviteRouteMatch = pathname.match(/^\/api\/servers\/([^/]+)\/invites$/);
       if (inviteRouteMatch) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -5558,7 +5591,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (method === "POST" && pathname === "/api/invites/redeem") {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -5932,7 +5965,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (method === "POST" && pathname === "/api/runtime/token") {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -6105,7 +6138,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       // -----------------------------------------------------------------------
 
       if (method === "POST" && pathname === "/api/tokens/create") {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) return sendJson(res, 401, { error: "unauthorized" });
         const accountId = session.principal.accountId;
         if (!accountId) return sendJson(res, 400, { error: "no_account" });
@@ -6137,7 +6170,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (method === "GET" && pathname === "/api/tokens") {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) return sendJson(res, 401, { error: "unauthorized" });
         const tokens = store.listApiTokens(session.principal.userId);
         return sendJson(res, 200, {
@@ -6152,7 +6185,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (method === "DELETE" && pathname.startsWith("/api/tokens/") && pathname.split("/").length === 4) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) return sendJson(res, 401, { error: "unauthorized" });
         const tokenId = pathname.split("/")[3];
         store.revokeApiToken(tokenId);
@@ -6167,7 +6200,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           });
           return;
         }
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -6219,7 +6252,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       ) {
         const isRuntimeRoute = pathname === "/runtime" || pathname.startsWith("/runtime/");
         const isAppRoute = !isRuntimeRoute;
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -6278,7 +6311,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (pathname.startsWith("/_next/")) {
-        const session = readSession({ req, config, sessions });
+        const session = readSession({ req, config, sessions, store });
         if (!session) {
           sendJson(res, 401, {
             ok: false,
@@ -6371,7 +6404,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       socket.destroy();
       return;
     }
-    const session = readSession({ req, config, sessions });
+    const session = readSession({ req, config, sessions, store });
     if (!session) {
       socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
       socket.destroy();
