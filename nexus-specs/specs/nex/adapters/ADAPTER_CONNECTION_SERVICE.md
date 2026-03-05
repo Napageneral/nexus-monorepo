@@ -1,8 +1,16 @@
 # Adapter Connection Service
 
-**Status:** IN PROGRESS (decision-locked)
-**Last Updated:** 2026-02-26
+**Status:** SUPERSEDED BY WORKPLANS — See WP2 and WP10
+**Last Updated:** 2026-03-04
 **Depends On:** `CREDENTIAL_SYSTEM.md`, `ADAPTER_CREDENTIALS.md`, `ADAPTER_INTERFACE_UNIFICATION.md`
+
+> **⚠️ Superseded (2026-03-04):** The credential system and adapter connection model have been fully specified in:
+> - [WP_CREDENTIAL_SYSTEM.md](../workplans/WP_CREDENTIAL_SYSTEM.md) — Credential DB, vault, 6 storage types, adapter_connections table
+> - [WP_ADAPTERS_CHANNELS_DELIVERY.md](../workplans/WP_ADAPTERS_CHANNELS_DELIVERY.md) — 13 adapter connection operations, channel→account resolution
+> - [API_DESIGN_BATCH_2.md](../API_DESIGN_BATCH_2.md) — Canonical operation definitions
+> - [CREDENTIAL_AND_ADAPTER_CONNECTION_SYSTEM.md](../CREDENTIAL_AND_ADAPTER_CONNECTION_SYSTEM.md) — Design decisions
+>
+> The auth manifest concept and OAuth callback flow described here remain valid design ideas; the operation names and schema details should come from the workplans above.
 
 ---
 

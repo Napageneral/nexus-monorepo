@@ -1,6 +1,6 @@
 # Agent-Driven Delivery Model
 
-**Status:** DESIGN (authoritative target)
+**Status:** CANONICAL
 **Last Updated:** 2026-03-01
 **Related:** [NEXUS_REQUEST_TARGET.md](./NEXUS_REQUEST_TARGET.md)
 

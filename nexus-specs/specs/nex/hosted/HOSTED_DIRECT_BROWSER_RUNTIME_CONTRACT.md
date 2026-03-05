@@ -1,6 +1,6 @@
 # Hosted Frontdoor -> Direct Browser Runtime Contract
 
-**Status:** DESIGN (direct-mode profile; product-flow canon superseded)  
+**Status:** DESIGN
 **Last Updated:** 2026-02-27  
 **Related:**
 - `../_archive/HOSTED_FRONTDOOR_PER_TENANT_RUNTIME.md`

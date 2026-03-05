@@ -1,13 +1,27 @@
 # Nex Operation Taxonomy
 
-**Status:** DESIGN (authoritative target — all tiers documented, pending review)
-**Last Updated:** 2026-03-02
+**Status:** SUPERSEDED — See batch specs and SPEC_INDEX.md
+**Last Updated:** 2026-03-04
+
+> **⚠️ Superseded (2026-03-04):** This document has been superseded by the 6-batch API design specs and the canonical operation index. Use these instead:
+> - **[SPEC_INDEX.md](./SPEC_INDEX.md)** — Authoritative catalog of all ~196 operations across 22 domains
+> - **[API_DESIGN_BATCH_1.md](./API_DESIGN_BATCH_1.md)** through **[API_DESIGN_BATCH_6.md](./API_DESIGN_BATCH_6.md)** — Detailed operation specs per domain
+> - **[RESOLVED_DECISIONS.md](./RESOLVED_DECISIONS.md)** — All design decisions resolved during the redesign
+>
+> **Key naming changes since this doc was written:**
+> - `health` → `runtime.health` (under `runtime.*` namespace)
+> - `SessionLabel` → `SessionKey` (renamed in session routing unification)
+> - `clock.schedule.*` → `cron.*` (Batch 6 authoritative)
+> - All domain names are plural (`events.*`, `agents.*`, `adapters.*`)
+> - `event.ingest` → `events.ingest` (plural)
+>
+> This document is preserved for historical reference of the input/output schema patterns. The operation names and groupings are no longer authoritative.
 
 ---
 
 ## Overview
 
-This document is the canonical catalog of every operation the Nex runtime supports. Each operation defines a name, input schema, output schema, IAM metadata, and error cases. This catalog is the single source of truth from which SDKs, CLI commands, and documentation are generated.
+This document was the canonical catalog of every operation the Nex runtime supports. Each operation defines a name, input schema, output schema, IAM metadata, and error cases. **See SPEC_INDEX.md for the current authoritative catalog.**
 
 See [NEX_ARCHITECTURE_AND_SDK_MODEL.md](./NEX_ARCHITECTURE_AND_SDK_MODEL.md) for how this catalog fits into the 4-layer architecture.
 

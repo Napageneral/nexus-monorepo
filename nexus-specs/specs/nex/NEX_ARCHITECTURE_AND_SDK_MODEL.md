@@ -376,7 +376,7 @@ This document defines the conceptual architecture. Other specs define the detail
 | [NEXUS_REQUEST_TARGET.md](./NEXUS_REQUEST_TARGET.md) | The pipeline, NexusRequest bus, data model, ledger schemas | Core layer internals |
 | [ADAPTER_INTERFACE_UNIFICATION.md](./ADAPTER_INTERFACE_UNIFICATION.md) | Adapter protocol, operation catalog, SDK contract | Adapter SDK details + operation catalog |
 | [NEX_APP_MANIFEST_AND_LIFECYCLE](../../nexus-frontdoor/docs/specs/NEX_APP_MANIFEST_AND_LIFECYCLE_2026-03-02.md) | App manifest format, lifecycle hooks, service management | App model details |
-| `OPERATION_TAXONOMY.md` (to be written) | Complete operation catalog with input/output schemas | Core layer — the definitive API contract |
+| [OPERATION_TAXONOMY.md](./OPERATION_TAXONOMY.md) | Complete operation catalog with input/output schemas (Tier 1 done) | Core layer — the definitive API contract |
 | [CONTROL_PLANE_AUTHZ_TAXONOMY.md](./ingress/CONTROL_PLANE_AUTHZ_TAXONOMY.md) | IAM resource/action taxonomy for operations | Core layer — access control |
 | [CONTROL_PLANE.md](./ingress/CONTROL_PLANE.md) | WebSocket and HTTP surface implementation | Transport layer details |
 
@@ -407,7 +407,7 @@ The following existing specs need updates to align with this architecture model:
 | [CONTROL_PLANE.md](./ingress/CONTROL_PLANE.md) | Describes WebSocket and HTTP surfaces. Should reference this doc for the transport layer model. Surface-specific operation restrictions should be removed (all ops on all surfaces). | Not yet updated |
 | [CONTROL_PLANE_AUTHZ_TAXONOMY.md](./ingress/CONTROL_PLANE_AUTHZ_TAXONOMY.md) | `RuntimeOperationSurface` type needs alignment with transport layer model. | Not yet updated |
 | GlowBot operations in runtime taxonomy | `glowbot.*` operations (13 total) need to be removed from the core taxonomy and declared in GlowBot's app manifest instead. | Not yet updated |
-| `OPERATION_TAXONOMY.md` | **Does not exist yet.** Needs to be written: complete catalog of all core operations with input/output JSON Schemas. This is the next major spec effort. | To be written |
+| [OPERATION_TAXONOMY.md](./OPERATION_TAXONOMY.md) | Tier 1 (55 ops) complete with full input/output schemas. Tiers 2-4 pending. | Partially complete |
 
 ---
 

@@ -1,6 +1,6 @@
 # Cutover 01 — NexusRequest Bus Rewrite
 
-**Status:** ACTIVE
+**Status:** COMPLETE (ARCHIVED)
 **Phase:** 1 (foundation — everything depends on this)
 **Target Spec:** [NEXUS_REQUEST_TARGET.md](../NEXUS_REQUEST_TARGET.md) · [ATTACHMENTS.md](../ATTACHMENTS.md)
 **Source File:** `src/nex/request.ts` (369 lines → rewrite entirely)

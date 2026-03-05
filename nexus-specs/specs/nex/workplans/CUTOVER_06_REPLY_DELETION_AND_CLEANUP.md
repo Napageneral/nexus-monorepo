@@ -1,16 +1,17 @@
 # Cutover 06 — Reply Deletion, Automations, Memory Decouple, Cleanup
 
-**Status:** ACTIVE
+**Status:** ACTIVE — Parts A–D ✅ Complete, Part E in progress
 **Phase:** 0, 7–10 (executes last, after Phases 1–6)
 **Target Spec:** [NEXUS_REQUEST_TARGET.md](../NEXUS_REQUEST_TARGET.md) · [AGENT_DELIVERY.md](../AGENT_DELIVERY.md)
 **Source Directories:**
 - `src/reply/` (90+ source files, hundreds of test files — DELETE)
 - `src/nex/automations/hooks-runtime.ts` (targeted changes)
 - `src/nex/pipeline.ts` (memory code removal — done in Phase 2)
+**Last Audited:** 2026-03-03
 
 ---
 
-## Part A: Reply Module Archive & Deletion
+## Part A: Reply Module Archive & Deletion ✅ COMPLETE
 
 ### Background
 
@@ -68,7 +69,7 @@ Fix every broken import. Most will be in:
 
 ---
 
-## Part B: Automations — Collapse evaluateDurableAutomations
+## Part B: Automations — Collapse evaluateDurableAutomations ✅ COMPLETE
 
 ### Current State
 
@@ -155,7 +156,7 @@ After all Phase 2 + reply deletion, the only callers are pipeline hookpoints usi
 
 ---
 
-## Part C: Memory Decouple
+## Part C: Memory Decouple ✅ COMPLETE
 
 ### What to remove from pipeline.ts (covered in Phase 2, listed here for completeness)
 
@@ -195,15 +196,15 @@ import { buildEpisodeConsolidationNexusEvent, buildEpisodeRetainNexusEvent, list
 
 ### What stays
 
-- `pending_retain_triggers` table in runtime.db — stays (episode detection workstream uses it)
+- `pending_retain_triggers` table in runtime.db — **eliminated in Phase 7** (see `memory/workplans/07_EPISODE_DETECTION.md`). Replaced by per-episode CronService timers in `cron_jobs` table.
 - Memory system itself (`src/memory/`) — stays, becomes event-driven subscriber
-- The hookpoint `worker:pre_execution` (memory-reader) — stays but fires via hookpoint system, not inline
+- The hookpoint `worker:pre_execution` (memory-injection) — stays but fires via hookpoint system, not inline
 
 ### Memory architecture in target state
 
-1. Event ingested → stored in events table
-2. Episode detection runs (using pending_retain_triggers — separate workstream)
-3. When episode boundary detected → `episode-created` event fires
+1. Event ingested → stored in events table → `slotEventIntoEpisode()` manages episode set + cron timer
+2. Token budget exceeded → episode clips immediately → `episode-created` hookpoint fires
+3. Silence timer fires → CronService emits `episode.timeout` internal event → episode clips → `episode-created` hookpoint fires
 4. `memory-writer` automation subscribes → runs retain
 5. After retain → `memory-consolidator` chains off results
 
@@ -211,7 +212,7 @@ The pipeline has ZERO memory code. Memory is fully decoupled.
 
 ---
 
-## Part D: Delivery Tool Consolidation
+## Part D: Delivery Tool Consolidation ✅ COMPLETE
 
 ### Current state
 
@@ -246,7 +247,38 @@ agent_deliver({
 
 ---
 
-## Part E: Final Cleanup
+## Part E: Final Cleanup — 🔴 IN PROGRESS
+
+### Outstanding: SenderContext/ReceiverContext Removal
+
+**Status:** ~52 references remain across ~15 non-test production files. These legacy wrapper types need to be replaced with the canonical `Entity` type from `request.ts`.
+
+**SenderContext — 35 occurrences in 13 files:**
+- `src/iam/access-resolution.ts` (3)
+- `src/iam/audit.ts` (2)
+- `src/iam/compiler.ts` (2)
+- `src/iam/authorize.ts` (3)
+- `src/iam/types.ts` (2)
+- `src/iam/grants.ts` (4)
+- `src/iam/policies.ts` (6)
+- `src/iam/identity.ts` (4)
+- `src/cli/memory-backfill-cli.ts` (2)
+- `src/agents/bash-tools.exec.ts` (2)
+- `src/memory/adapter-contact-preload.ts` (2)
+- `src/nex/index.ts` (1)
+- `src/nex/session.ts` (2)
+
+**ReceiverContext — 17 occurrences in 8 files:**
+- `src/iam/access-resolution.ts` (2)
+- `src/iam/compiler.ts` (2)
+- `src/iam/authorize.ts` (3)
+- `src/iam/types.ts` (2)
+- `src/iam/policies.ts` (2)
+- `src/nex/index.ts` (1)
+- `src/nex/session.ts` (3)
+- `src/nex/control-plane/iam-authorize.ts` (2)
+
+**Strategy:** The IAM subsystem (`src/iam/`) is the primary consumer. These functions take `SenderContext`/`ReceiverContext` as parameters — they need to be updated to accept `Entity` (or the relevant fields from `NexusRequest.principals`). This is a mechanical refactor: replace the wrapper types with direct Entity references, update function signatures, and update all callers.
 
 ### Dead import sweep
 
@@ -286,39 +318,39 @@ grep -r "handled_by_automation" src/ --include="*.ts"
 
 ## Mechanical Checklist
 
-### Reply Module
-- [ ] Archive `src/reply/` to reference location
-- [ ] Document adapter SDK patterns from archive
-- [ ] Delete `src/reply/` directory
-- [ ] Fix all broken imports across codebase
-- [ ] Remove all reply-related exports from barrel files
+### Reply Module ✅
+- [x] Archive `src/reply/` to reference location
+- [x] Document adapter SDK patterns from archive
+- [x] Delete `src/reply/` directory
+- [x] Fix all broken imports across codebase
+- [x] Remove all reply-related exports from barrel files
 
-### Automations
-- [ ] Make `broker` parameter optional in `evaluateAutomationsAtHook`
-- [ ] Widen return type to `AutomationsOutcome`
-- [ ] Move outcome-assembly logic from `evaluateDurableAutomations` into unified function
-- [ ] Delete `evaluateDurableAutomations` function
-- [ ] Rename `DurableAutomationsOutcome` → `AutomationsOutcome`
-- [ ] Remove `routing_override` from automation output
-- [ ] Rename TriggerContext → AutomationContext in all remaining references
-- [ ] Update all callers
+### Automations ✅
+- [x] Make `broker` parameter optional in `evaluateAutomationsAtHook`
+- [x] Widen return type to `AutomationsOutcome`
+- [x] Move outcome-assembly logic from `evaluateDurableAutomations` into unified function
+- [x] Delete `evaluateDurableAutomations` function
+- [x] Rename `DurableAutomationsOutcome` → `AutomationsOutcome`
+- [x] Remove `routing_override` from automation output
+- [x] Rename TriggerContext → AutomationContext in all remaining references
+- [x] Update all callers
 
-### Memory
-- [ ] Delete `queueRetainEvent()` call from pipeline (Phase 2)
-- [ ] Delete background retain flush from pipeline (Phase 2)
-- [ ] Delete memory imports from pipeline (Phase 2)
-- [ ] Delete `retainFlushInFlight` module state (Phase 2)
-- [ ] Verify memory system still works as event-driven subscriber
+### Memory ✅
+- [x] Delete `queueRetainEvent()` call from pipeline (Phase 2)
+- [x] Delete background retain flush from pipeline (Phase 2)
+- [x] Delete memory imports from pipeline (Phase 2)
+- [x] Delete `retainFlushInFlight` module state (Phase 2)
+- [x] Verify memory system still works as event-driven subscriber
 
-### Delivery
-- [ ] Update AGENT_DELIVERY.md — consolidate two tools into one
-- [ ] Update architecture diagram in spec
+### Delivery ✅
+- [x] Update AGENT_DELIVERY.md — consolidate two tools into one
+- [x] Update architecture diagram in spec
 
-### Final Sweep
-- [ ] Grep for all broken imports and fix
-- [ ] Grep for all deleted type references and fix
-- [ ] Grep for old field access patterns and fix
-- [ ] Update all test files for new types
-- [ ] Replace "handled_by_automation" status with new pattern
-- [ ] Run full test suite
+### Final Sweep 🔴
+- [x] Grep for all broken imports and fix
+- [ ] Grep for all deleted type references and fix — **SenderContext/ReceiverContext remain in ~15 files (see Part E above)**
+- [x] Grep for old field access patterns and fix
+- [ ] Update all test files for new types — **blocked on 06_TESTS.md**
+- [x] Replace "handled_by_automation" status with new pattern
+- [ ] Run full test suite — **blocked on test updates**
 - [ ] Fix all failures

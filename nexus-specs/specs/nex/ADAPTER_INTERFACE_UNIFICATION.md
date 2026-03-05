@@ -1,9 +1,16 @@
 # Adapter Interface Unification
 
-**Status:** IN PROGRESS (authoritative for adapter/interface cutover)  
-**Date:** 2026-02-26  
-**Mode:** Hard cutover (no backwards compatibility)  
+**Status:** PARTIALLY SUPERSEDED — Clock/cron section updated, adapter principles still valid
+**Date:** 2026-03-04
+**Mode:** Hard cutover (no backwards compatibility)
 **Related:** [NEXUS_REQUEST_TARGET.md](./NEXUS_REQUEST_TARGET.md), `../delivery/ADAPTER_SYSTEM.md`, `../delivery/sdk/ADAPTER_SDK_OPERATION_MODEL_CUTOVER.md`
+
+> **⚠️ Alignment Notes (2026-03-04):**
+> - **Section 7 (Clock Scheduling)**: Superseded — `clock.schedule.*` naming replaced by `cron.*` per [API_DESIGN_BATCH_6.md](./API_DESIGN_BATCH_6.md). See [WP_WORK_DOMAIN_UNIFICATION.md](./workplans/WP_WORK_DOMAIN_UNIFICATION.md) for implementation.
+> - **Principle 4** ("Clock replaces cron"): Reversed — `cron.*` is the canonical namespace. Clock adapter still exists as the tick source, but scheduling operations are `cron.*`.
+> - **Adapter namespace**: `adapter.*` → `adapters.*` (plural). See [RESOLVED_DECISIONS.md](./RESOLVED_DECISIONS.md).
+> - **Channels/delivery**: `delivery.*` → `channels.*`. See [WP_ADAPTERS_CHANNELS_DELIVERY.md](./workplans/WP_ADAPTERS_CHANNELS_DELIVERY.md).
+> - The adapter unification model (one operation contract for internal+external adapters, event normalization, capability protocol) remains valid and canonical.
 
 ---
 

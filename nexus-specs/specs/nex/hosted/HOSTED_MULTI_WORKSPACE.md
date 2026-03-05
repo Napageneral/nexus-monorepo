@@ -1,6 +1,6 @@
 # Hosted Multi-Workspace Architecture
 
-**Status:** DESIGN (review before implementation)
+**Status:** DESIGN
 **Last Updated:** 2026-02-23
 **Related:**
 - `HOSTED_RUNTIME_PROFILE.md`

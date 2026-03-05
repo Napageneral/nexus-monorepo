@@ -1,8 +1,14 @@
 # Single-Tenant, Multi-User Runtime
 
-**Status:** PARTIALLY IMPLEMENTED (control-plane IAM authz + password login + ingress integrity telemetry + ingress credential WS methods)  
-**Last Updated:** 2026-02-18  
+**Status:** DESIGN — ALIGNMENT NOTES ADDED
+**Last Updated:** 2026-03-04
 **Related:** `CONTROL_PLANE.md`, `../hosted/HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md`, `../hosted/HOSTED_RUNTIME_PROFILE.md`, `../UNIFIED_RUNTIME_OPERATION_MODEL.md`, `../../iam/ACCESS_CONTROL_SYSTEM.md`, `../../iam/POLICIES.md`, `../../delivery/INTERNAL_ADAPTERS.md`, `../../delivery/INBOUND_INTERFACE.md`
+
+> **⚠️ Alignment Notes (2026-03-04):**
+> - **`audience` field**: Being removed per [WP_AUTH_UNIFICATION.md](../workplans/WP_AUTH_UNIFICATION.md) (131 occurrences across 28 files). Token-based auth no longer uses audience discrimination.
+> - **`data_access`** (referenced in §5 sandbox enforcement): This concept is being dropped. Access control is enforced through ACL policies, not a separate `data_access` field. See [WP_IDENTITY_DB_OVERHAUL.md](../workplans/WP_IDENTITY_DB_OVERHAUL.md) for the canonical policy system.
+> - **Cron ingress**: Line 173 correctly notes cron is non-canonical. The canonical scheduling system is `cron.*` operations per [WP_WORK_DOMAIN_UNIFICATION.md](../workplans/WP_WORK_DOMAIN_UNIFICATION.md), triggered through the clock adapter + hook system.
+> - The trust zone model (control-plane vs ingress), identity resolution model, and anti-spoofing rules remain valid and canonical.
 
 ---
 

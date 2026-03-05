@@ -1,7 +1,9 @@
 # Nex API Design Decisions
 
-**Status:** IN PROGRESS — Batch 1 complete, remaining batches pending discussion
-**Last Updated:** 2026-03-03
+**Status:** COMPLETE — All 6 batches designed, all decisions resolved
+**Last Updated:** 2026-03-04
+
+> **Note (2026-03-04):** All 6 batches of API design are complete. The authoritative operation catalog is [SPEC_INDEX.md](./SPEC_INDEX.md) (~196 operations across 22 domains). All open design decisions have been resolved and captured in [RESOLVED_DECISIONS.md](./RESOLVED_DECISIONS.md). The 12 implementation workplans are indexed in [CUTOVER_INDEX.md](./workplans/CUTOVER_INDEX.md). This document preserves the Batch 1 design rationale; Batches 2–6 rationale is in their respective `API_DESIGN_BATCH_*.md` docs.
 
 ---
 
@@ -25,7 +27,7 @@ These principles govern all design decisions:
 
 4. **Immutable-first data model.** Append-only where possible. Events are immutable. Sessions are immutable logs. Turns are immutable. Messages are immutable. The turn tree is append-only (like git commits).
 
-5. **Singular vs. plural domain names** — needs final decision. Current code uses plural (`sessions.list`). Under discussion.
+5. **Plural domain names everywhere.** Resolved: all domain names are plural (`events.ingest`, `agents.wait`, `adapters.connections.*`). See [RESOLVED_DECISIONS.md](./RESOLVED_DECISIONS.md).
 
 ---
 
@@ -39,9 +41,9 @@ These principles govern all design decisions:
 
 The `event.ingest` operation is a single unified handler. Sync/async behavior is controlled by `request.sync`, not by event origin.
 
-#### Decision: events.emit deferred
+#### Decision: events.emit dropped
 
-Investigate `events.emit` as a separate operation for internal subsystem events. Deferred to deep pass.
+~~Investigate `events.emit` as a separate operation for internal subsystem events. Deferred to deep pass.~~ **Resolved:** `events.emit` dropped — this IS pubsub. Internal subsystem events use `pubsub.publish`. See [RESOLVED_DECISIONS.md](./RESOLVED_DECISIONS.md).
 
 #### Operations (target)
 
@@ -71,7 +73,7 @@ We chose `pubsub` because "bus" is overloaded and too generic. "pubsub" precisel
 | `pubsub.publish` | write | Publish an event to the bus |
 | `pubsub.unsubscribe` | write | Remove a subscription |
 
-**Open question:** Should `pubsub.publish` be client-facing or internal-only? Exposing it over RPC makes it distributed pub/sub — significant complexity increase.
+**Resolved:** `pubsub.publish` is client-facing — everything on the API, locked down through ACL. See [RESOLVED_DECISIONS.md](./RESOLVED_DECISIONS.md).
 
 ---
 

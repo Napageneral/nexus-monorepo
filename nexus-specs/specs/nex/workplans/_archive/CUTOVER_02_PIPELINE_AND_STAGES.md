@@ -1,6 +1,6 @@
 # Cutover 02 — Pipeline & Stages Rewrite
 
-**Status:** ACTIVE
+**Status:** COMPLETE (ARCHIVED)
 **Phase:** 2 (depends on Phase 1)
 **Target Spec:** [NEXUS_REQUEST_TARGET.md](../NEXUS_REQUEST_TARGET.md) · [AGENT_DELIVERY.md](../AGENT_DELIVERY.md)
 **Source Files:**

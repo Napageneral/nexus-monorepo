@@ -1,6 +1,6 @@
 # Cutover 04 — Identity DB & Nexus DB Changes
 
-**Status:** ACTIVE
+**Status:** COMPLETE (ARCHIVED)
 **Phase:** 4–5 (parallel with Phases 2–3, depends on Phase 1)
 **Target Spec:** [NEXUS_REQUEST_TARGET.md](../NEXUS_REQUEST_TARGET.md)
 **Source Files:**
@@ -144,9 +144,9 @@ CREATE TABLE IF NOT EXISTS persona_binding_events (
 
 **Action:** DELETE entirely. History captured by immutable rows on `entity_persona`.
 
-### 5. entities table — One addition
+### 5. entities table — Final locked schema
 
-The current entities table schema already matches the target, with one addition:
+**Current schema (before cutover):**
 ```sql
 CREATE TABLE IF NOT EXISTS entities (
   id              TEXT PRIMARY KEY,
@@ -164,10 +164,29 @@ CREATE TABLE IF NOT EXISTS entities (
 );
 ```
 
-**Changes:**
-- ADD `origin TEXT` — tracks who created the entity. Values: `'adapter'`, `'writer'`, `'manual'`.
+**Target schema:**
+```sql
+CREATE TABLE IF NOT EXISTS entities (
+  id              TEXT PRIMARY KEY,
+  name            TEXT NOT NULL,
+  type            TEXT NOT NULL,
+  merged_into     TEXT REFERENCES entities(id),
+  normalized      TEXT,
+  is_user         INTEGER DEFAULT 0,
+  origin          TEXT,
+  created_at      INTEGER NOT NULL,
+  updated_at      INTEGER
+);
+```
 
-The rest of the entities table stays the same. This maps directly to the canonical Entity type.
+**Changes:**
+- CHANGE `type TEXT` → `type TEXT NOT NULL` — every entity must have a type
+- CHANGE `is_user BOOLEAN DEFAULT FALSE` → `is_user INTEGER DEFAULT 0` — use integer boolean like the rest of the codebase
+- DROP `mention_count INTEGER DEFAULT 0` — removed entirely
+- DROP `first_seen INTEGER` — removed entirely
+- DROP `last_seen INTEGER` — removed entirely
+- CHANGE `updated_at INTEGER NOT NULL` → `updated_at INTEGER` — make nullable
+- Do NOT add `metadata TEXT` — not needed
 
 **Note:** `persona_path` is NOT a column on the entities table. It's hydrated from the `entity_persona` table during `resolvePrincipals` and placed on the Entity object in memory.
 

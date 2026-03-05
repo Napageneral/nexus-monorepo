@@ -1,6 +1,6 @@
 # Hosted Runtime Profile (Per-Tenant Nexus)
 
-**Status:** IMPLEMENTED (runtime-side v1 + hosted frontdoor hardening v2)  
+**Status:** DESIGN
 **Last Updated:** 2026-02-20  
 **Related:**
 - `HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md`

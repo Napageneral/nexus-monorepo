@@ -1,8 +1,10 @@
 # Runtime Operation AuthZ Taxonomy
 
-**Status:** SPEC LOCKED (operation registry aligned)  
-**Last Updated:** 2026-02-26  
+**Status:** DESIGN — PARTIALLY SUPERSEDED
+**Last Updated:** 2026-03-04
 **Related:** `../UNIFIED_RUNTIME_OPERATION_MODEL.md`, `../ADAPTER_INTERFACE_UNIFICATION.md`, `SINGLE_TENANT_MULTI_USER.md`, `../../iam/ACCESS_CONTROL_SYSTEM.md`, `../../iam/POLICIES.md`, `../../iam/AUDIT.md`
+
+> **⚠️ Supersession Note (2026-03-04):** The "Clock Cutover" section below is **outdated**. Per [RESOLVED_DECISIONS.md](../RESOLVED_DECISIONS.md) decision #7, the canonical naming is `cron.*` (not `clock.schedule.*`). The `clock.schedule.*` naming was replaced by `cron.*` as defined in [API_DESIGN_BATCH_6.md](../API_DESIGN_BATCH_6.md). The full work domain (jobs, cron, DAGs) is specified in [WP_WORK_DOMAIN_UNIFICATION.md](../workplans/WP_WORK_DOMAIN_UNIFICATION.md). The authZ taxonomy pattern (operation → action → resource → permission) remains valid.
 
 ---
 

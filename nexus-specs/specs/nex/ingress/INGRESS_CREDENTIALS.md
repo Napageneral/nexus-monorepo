@@ -1,6 +1,6 @@
 # Ingress Credentials (API Keys + Webchat Sessions)
 
-**Status:** DESIGN SPEC  
+**Status:** DESIGN
 **Last Updated:** 2026-02-18  
 **Related:**
 - `SINGLE_TENANT_MULTI_USER.md` (trust zones + multi-user story)

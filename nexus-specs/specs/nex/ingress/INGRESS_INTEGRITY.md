@@ -1,6 +1,6 @@
 # Ingress Integrity (Field Stamping Contract)
 
-**Status:** PARTIALLY IMPLEMENTED (core enforcement + integrity telemetry)  
+**Status:** DESIGN
 **Last Updated:** 2026-02-18  
 **Related:**
 - `SINGLE_TENANT_MULTI_USER.md` (single-tenant, multi-user + anti-spoofing)

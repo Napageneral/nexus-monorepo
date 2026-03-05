@@ -11,6 +11,7 @@ These are the authoritative target-state definitions. Everything in the codebase
 | Spec | Description |
 |------|-------------|
 | [NEX_ARCHITECTURE_AND_SDK_MODEL.md](./NEX_ARCHITECTURE_AND_SDK_MODEL.md) | **Start here.** The 4-layer architecture (Core, Transport, Client, SDK), app model, operation taxonomy as API, Nex SDK vs Adapter SDK. |
+| [OPERATION_TAXONOMY.md](./OPERATION_TAXONOMY.md) | **The API contract.** Complete catalog of every operation with input/output schemas. Tier 1 (55 ops) complete; Tiers 2-4 pending. |
 | [NEXUS_REQUEST_TARGET.md](./NEXUS_REQUEST_TARGET.md) | **The core spec.** NexusRequest data bus, 5-stage pipeline, Entity model, events table, identity DB schema, backfill design, memory integration. |
 | [AGENT_DELIVERY.md](./AGENT_DELIVERY.md) | Agent-driven delivery model. The pipeline doesn't deliver — the agent invokes tools. Adapter owns typing, chunking, streaming. |
 | [ATTACHMENTS.md](./ATTACHMENTS.md) | Unified attachment schema across all layers. Zero translation from adapter protocol to events table. |

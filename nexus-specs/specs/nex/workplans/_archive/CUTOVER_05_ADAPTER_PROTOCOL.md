@@ -1,6 +1,6 @@
 # Cutover 05 — Adapter Protocol Update
 
-**Status:** ACTIVE
+**Status:** COMPLETE (ARCHIVED)
 **Phase:** 6 (parallel with Phases 2–5, depends on Phase 1)
 **Target Spec:** [NEXUS_REQUEST_TARGET.md](../NEXUS_REQUEST_TARGET.md) · [ATTACHMENTS.md](../ATTACHMENTS.md)
 **Source File:** `src/nex/adapters/protocol.ts`

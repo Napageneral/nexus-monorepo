@@ -1,6 +1,6 @@
 # NEX Daemon
 
-**Status:** DESIGN SPEC  
+**Status:** CANONICAL
 **Last Updated:** 2026-02-18
 **Related:** [NEXUS_REQUEST_TARGET.md](./NEXUS_REQUEST_TARGET.md), ingress/CONTROL_PLANE.md, `../delivery/ADAPTER_SYSTEM.md`
 **Database layout:** See `../DATABASE_ARCHITECTURE.md` for canonical database inventory

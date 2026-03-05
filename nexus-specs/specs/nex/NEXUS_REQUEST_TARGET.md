@@ -1,6 +1,6 @@
 # NexusRequest — The Pipeline Data Bus
 
-**Status:** DESIGN (authoritative target)
+**Status:** CANONICAL
 **Last Updated:** 2026-03-02
 
 ---

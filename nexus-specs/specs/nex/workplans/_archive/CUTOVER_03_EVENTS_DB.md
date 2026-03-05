@@ -1,6 +1,6 @@
 # Cutover 03 — Events DB Nuke & Rebuild
 
-**Status:** ACTIVE
+**Status:** COMPLETE (ARCHIVED)
 **Phase:** 3 (parallel with Phase 2, depends on Phase 1)
 **Target Spec:** [NEXUS_REQUEST_TARGET.md](../NEXUS_REQUEST_TARGET.md) · [ATTACHMENTS.md](../ATTACHMENTS.md)
 **Source File:** `src/db/events.ts` (1112 lines → rewrite entirely)
