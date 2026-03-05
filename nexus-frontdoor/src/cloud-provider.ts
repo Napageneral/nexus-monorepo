@@ -296,7 +296,6 @@ export function renderCloudInitScript(opts: {
   authToken: string;
   provisionToken: string;
   frontdoorUrl: string;
-  appsToInstall: string[];
 }): string {
   const configJson = JSON.stringify(
     {
@@ -305,7 +304,6 @@ export function renderCloudInitScript(opts: {
       authToken: opts.authToken,
       provisionToken: opts.provisionToken,
       frontdoorUrl: opts.frontdoorUrl,
-      appsToInstall: opts.appsToInstall,
     },
     null,
     2,

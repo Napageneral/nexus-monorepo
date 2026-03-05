@@ -1,6 +1,6 @@
 # Nexus CLI Commands Specification
 
-**Status:** CANONICAL (Environment Contract)  
+**Status:** CANONICAL
 **Last Updated:** 2026-02-12  
 **Source of Truth:** `nex` project CLI surfaces
 

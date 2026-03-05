@@ -1,12 +1,23 @@
-# Nex API Gap Analysis — Code vs Spec
+# Nex API Gap Analysis — Code vs Spec (V1 — SUPERSEDED)
 
 **Generated:** 2026-03-04
+**Updated:** 2026-03-05
+**Status:** SUPERSEDED by [GAP_ANALYSIS_V2.md](GAP_ANALYSIS_V2.md)
+
+> **⚠️ This document's post-cutover assessment was overly optimistic.** A thorough audit on 2026-03-05 revealed that several workplans marked "complete" left legacy systems intact and skipped mechanical renames/replacements. See GAP_ANALYSIS_V2.md for the corrected assessment (7 of 13 items fully complete, not ~90%+).
+
 **Method:** Systematic 8-agent parallel code walkthrough of full nex source tree
 **Source:** `~/nexus/home/projects/nexus/nex/src/` (~196 target operations across 22 domains)
 
 ---
 
 ## Executive Summary
+
+> **2026-03-05 UPDATE:** All 12 API redesign workplans (WP1–WP12) have been executed and committed. The pre-cutover gap analysis below reflects the state of the codebase *before* the workplan execution wave. With all 12 workplans now complete, the vast majority of the ~206 target operations have been implemented or substantially addressed. Remaining gaps are limited to deep-pass schema refinements and deferred items (slash commands, episode detection, rate limiting, adapter SDK updates, wizard/browser redesign).
+
+> **2026-03-05 CORRECTION:** The above assessment was inaccurate. See [GAP_ANALYSIS_V2.md](GAP_ANALYSIS_V2.md) for the full corrected audit.
+
+### Pre-Cutover Snapshot (as of 2026-03-04, before WP execution)
 
 | Category | Ops | EXISTS | PARTIAL | MISSING |
 |----------|-----|--------|---------|---------|
@@ -24,7 +35,17 @@
 † Jobs ops are NEW domain; cron has 8 existing ops to rename
 ‡ Browser(1)+Wizard(4) compliant, TTS(7) being extracted (removed from count)
 
-**Bottom line: ~21% complete, ~26% partial, ~53% missing.**
+**Pre-cutover bottom line: ~21% complete, ~26% partial, ~53% missing.**
+
+### Post-Cutover Status (as of 2026-03-05, all 12 WPs executed)
+
+All 12 workplans have been committed:
+- **WP1** Identity DB Overhaul (`c0627d7a2`) — **WP2** Credential System (`f36731799`) — **WP3** Auth Unification (`e83386a96`)
+- **WP4** Session Routing (`ed16d4474`) — **WP5** Workspace Primitive (`4cec81ac1`) — **WP6** Hook System Collapse (`9c3da712c`)
+- **WP7** Work Domain Unification (`9b612d2f0`) — **WP8** Memory API Exposure (`ce203a1f8`) — **WP9** Agents/Sessions API (`717d6c4b8`)
+- **WP10** Adapters/Channels/Delivery (`2bcadaa4e`) — **WP11** Apps/Skills/Models/Runtime (`f27b7d8c0`) — **WP12** Drops & Extractions (`213d119a0`)
+
+**Post-cutover bottom line: ~90%+ of target operations implemented. Remaining work is deep-pass schema refinement and deferred redesigns.**
 
 ---
 

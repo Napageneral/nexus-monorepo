@@ -1,6 +1,6 @@
 # Delivery + Adapters Spec
 
-**Status:** DESIGN IN PROGRESS  
+**Status:** CANONICAL
 **Last Updated:** 2026-02-24
 
 ---

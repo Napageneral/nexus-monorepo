@@ -1,17 +1,21 @@
 # Critical Customer Flows
 
-Date: 2026-03-02
+Date: 2026-03-02 (updated 2026-03-04)
 Status: confirmed
 Owners: Nexus Platform
 
+> **Update (2026-03-04):** Server provisioning is now cloud-based (Hetzner VPSes). App installation uses SSH/SCP tarball delivery + runtime HTTP API (replaces config injection). Server billing uses prepaid credits with 7-day free tier. MCP server enables agentic platform management. See: `APP_INSTALLATION_PIPELINE_2026-03-04.md`, `FRONTDOOR_MCP_SERVER_AND_AGENTIC_ACCESS_2026-03-04.md`.
+
 ## Confirmed Design Decisions
 
-- **Billing model**: Servers and apps are billed separately. Servers have per-server subscriptions. Apps have per-account subscriptions. Once you buy an app, you can install it on any of your account's servers.
+- **Billing model**: Servers billed via prepaid credits (hourly usage deduction). Apps billed via per-account subscriptions. Once you buy an app, you can install it on any of your account's servers.
 - **Account entity**: Exists from the start (B2B — clinics, engineering teams). Sits between users and servers. An account owns servers and app subscriptions. Users are members of accounts.
-- **Server tiers**: Design for multiple tiers (small/medium/large). Currently only one tier (cheapest Hetzner). No free servers.
-- **Free tier handling**: Free app tiers create an active subscription record with the free plan ID.
+- **Server tiers**: Design for multiple tiers (small/medium/large). Currently three tiers: cax11 (Starter), cax21 (Standard), cax31 (Performance). 7-day free tier for first cax11 server.
+- **Free tier handling**: Free app tiers create an active subscription record with the free plan ID. Free server tier uses 7-day trial with `free_tier_expires_at_ms` on the credit record.
+- **App installation**: Frontdoor serves tarballs from app registry, SCPs to VPS via private network, calls runtime's `POST /api/apps/install` HTTP API. Auto-install on provisioning.
 - **App frame**: Frontdoor injects a persistent dock/bar when user is inside an app, allowing navigation back to dashboard, switching apps, account management.
 - **All app UIs hosted on nex runtime**: No external proxies. Apps serve static built UI files through nex, with method handlers running inside nex for backend logic.
+- **Programmatic access**: MCP server at `POST /mcp` for agent platform management. API tokens (`nex_t_...`) for headless workflows. Human OIDC signup required (agents operate after account creation).
 
 ---
 
@@ -143,11 +147,20 @@ Owners: Nexus Platform
    - Post-purchase prompt
    - "My Apps" → app card → "Install on Server"
    - Server detail → "Install App" → pick from entitled apps
+   - Auto-install on server provisioning (entitled apps install automatically)
+   - API: `POST /api/servers/{serverId}/apps/{appId}/install`
+   - MCP: `tools/call nexus.apps.install`
 2. User selects target server (if not already selected)
-3. Click "Install"
-4. Status transitions: not_installed → installing → installed (or failed)
-5. Visual progress during installation
-6. Once installed, app card on server detail shows "Launch" button
+3. Click "Install" (or auto-triggered)
+4. Installation mechanics (see `APP_INSTALLATION_PIPELINE_2026-03-04.md`):
+   a. Entitlement validated via `frontdoor_app_subscriptions`
+   b. App tarball SCPed to VPS via SSH over private network
+   c. Tarball extracted to `/opt/nex/apps/{appId}/`
+   d. Runtime HTTP API called: `POST /api/apps/install`
+   e. Runtime validates manifest, registers handlers, runs lifecycle hooks
+5. Status transitions: not_installed → installing → installed (or failed)
+6. Visual progress during installation
+7. Once installed, app card on server detail shows "Launch" button
 
 ### F12: Uninstall App from a Server
 
@@ -338,8 +351,47 @@ F1/F2 (Signup) → F4 (Server Provisioned) → F6 (View Server)
                                           → F8 (Browse Store) → F10 (Purchase) → F11 (Install) → F13 (Launch)
 
 F5 (New Server) requires active account from F1/F2
-F10 (Purchase) requires Stripe integration for paid plans  
-F11 (Install) requires app manifest + install hooks in nex runtime
+F10 (Purchase) requires Stripe integration for paid plans
+F11 (Install) requires app tarball + SSH/SCP + runtime install API
 F13 (Launch) requires app frame/dock in frontdoor + static serving in nex
 F22 (Invite) requires account entity + membership model
+F30 (Agent Connect) requires F1/F2 (human signup) + API token
 ```
+
+---
+
+## Agentic Flows (F30–F33)
+
+> Added 2026-03-04. See `FRONTDOOR_MCP_SERVER_AND_AGENTIC_ACCESS_2026-03-04.md` for full spec.
+
+### F30: Agent Connects via MCP
+
+1. Human user signs up via OIDC (F1 or F2) — required, no programmatic signup
+2. Human creates API token from dashboard: "Settings" → "API Tokens" → "Create Token"
+3. Human configures MCP client (Claude Desktop, Cursor, etc.) with:
+   ```json
+   { "url": "https://frontdoor.nexushub.sh/mcp", "headers": { "Authorization": "Bearer nex_t_..." } }
+   ```
+4. Agent sends `initialize` → frontdoor returns server info and tool list
+5. Agent can now manage platform via MCP tools
+
+### F31: Agent Creates and Manages Server
+
+1. Agent calls `nexus.servers.list` → sees existing servers
+2. Agent calls `nexus.servers.create` with `{ name, planId }` → server provisions
+3. Agent polls `nexus.servers.get` until status = "running"
+4. Entitled apps auto-install on provisioning
+5. Agent calls `nexus.servers.get` → sees installed apps
+6. Agent can delete server with `nexus.servers.delete` (requires `confirm: true`)
+
+### F32: Agent Manages Apps
+
+1. Agent calls `nexus.apps.catalog` → sees available apps
+2. Agent calls `nexus.apps.install` → installs app on server
+3. Agent calls `nexus.apps.uninstall` → removes app from server
+
+### F33: Agent Manages Credits
+
+1. Agent calls `nexus.account.credits` → sees balance and usage
+2. Agent calls `nexus.account.usage` → sees cost breakdown
+3. Human deposits credits via Stripe checkout (agent cannot make payments)

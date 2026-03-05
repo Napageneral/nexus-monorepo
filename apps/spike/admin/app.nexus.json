@@ -1,0 +1,20 @@
+{
+  "id": "spike-admin",
+  "version": "1.0.0",
+  "displayName": "Spike Admin",
+  "description": "Administration console for Spike",
+  "handler": "methods/index.ts",
+  "ui": {
+    "root": "ui",
+    "entryPath": "/app/spike-admin/",
+    "spa": true
+  },
+  "methods": {},
+  "hooks": {
+    "onInstall": "hooks/install.ts",
+    "onActivate": "hooks/activate.ts",
+    "onDeactivate": "hooks/deactivate.ts",
+    "onUpgrade": "hooks/upgrade.ts",
+    "onUninstall": "hooks/uninstall.ts"
+  }
+}

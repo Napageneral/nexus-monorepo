@@ -1,6 +1,6 @@
 # Unified Skills System Overview
 
-**Status:** SPEC COMPLETE  
+**Status:** DESIGN
 **Last Updated:** 2026-01-22
 
 This document ties together all skills-related specs and provides a single coherent view of how the skills system works.

@@ -1,8 +1,8 @@
 # Meeseeks Pattern (Disposable Role Forks)
 
-**Status:** DESIGN SPEC
+**Status:** DESIGN
 **Last Updated:** 2026-02-18
-**Related:** AGENTS.md, DATA_MODEL.md, ../../data/memory/roles/
+**Related:** BROKER.md, DATA_MODEL.md, ../../data/memory/roles/
 **Database layout:** See `../../data/DATABASE_ARCHITECTURE.md` for canonical database inventory (7 databases)
 
 ---
@@ -40,18 +40,18 @@ Every hook point supports both **blocking** and **async** automations. The hook 
 
 #### Pipeline hooks
 
+Hookpoints fire at stage boundaries in the 5-stage pipeline (`acceptRequest → resolvePrincipals → resolveAccess → executeOperation → finalizeRequest`).
+
 | Hook point | When | Typical use |
 |------------|------|-------------|
-| `after:ingest` | After event parsing | Event transformation |
-| `after:resolveIdentity` | After identity resolution | Identity enrichment |
-| `after:resolveReceiver` | After receiver resolution | Receiver enrichment |
-| `after:resolveAccess` | After IAM | Access policy augmentation |
-| `runAutomations` | Stage 5 — first safe decision point | General-purpose automations, routing overrides |
-| `after:assembleContext` | After session routing | Context augmentation |
+| `after:acceptRequest` | After event parsing + NexusRequest created | Event transformation |
+| `after:resolvePrincipals` | After sender + receiver entity resolution | Identity enrichment |
+| `after:resolveAccess` | After IAM policy evaluation | Access policy augmentation |
+| `before:executeOperation` | Before broker dispatch — first safe decision point | General-purpose automations, routing overrides |
 | `episode-created` | When an episode clips (token budget or silence timer) | Memory writer dispatch |
 | `episode-retained` | After memory writer completes successfully | Memory consolidator dispatch |
-| `after:deliverResponse` | After response processed | Analytics, logging |
-| `deliverResponse` | Pipeline delivery/finalization | Cleanup, persistence |
+| `after:executeOperation` | After agent execution completes | Analytics, logging |
+| `after:finalizeRequest` | After cleanup and persistence | Post-request telemetry |
 
 #### Broker hooks
 
@@ -572,7 +572,7 @@ This function is called at every hook point in the pipeline and broker dispatch 
 
 ## Related Documents
 
-- `AGENTS.md` — Manager-Worker Pattern, worker dispatch
+- `BROKER.md` — Manager-Worker Pattern, worker dispatch
 - `DATA_MODEL.md` — Core data model
 - `../../memory/MEMORY_SYSTEM.md` — Memory system architecture (4-layer model)
 - `../../memory/MEMORY_STORAGE_MODEL.md` — Unified elements/sets/jobs storage model

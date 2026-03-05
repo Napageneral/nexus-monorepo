@@ -1,6 +1,6 @@
 # Agent Engine Interface
 
-**Status:** DESIGN SPEC
+**Status:** DESIGN
 **Last Updated:** 2026-03-02
 
 ---
@@ -531,7 +531,7 @@ Fallback happens when:
 ## Related Documents
 
 - `CONTEXT_ASSEMBLY.md` — How AssembledContext is built
-- `OVERVIEW.md` — Broker overview and architecture
+- `BROKER.md` — Broker overview and architecture
 - `STREAMING.md` — Streaming bridge spec (TODO)
 - `../../data/ledgers/AGENTS_LEDGER.md` — Schema for persistence
 - `upstream/AGENT_EXECUTION.md` — OpenClaw execution reference

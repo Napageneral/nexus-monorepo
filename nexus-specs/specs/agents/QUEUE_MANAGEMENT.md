@@ -1,6 +1,6 @@
 # Queue Management
 
-**Status:** SPEC IN PROGRESS  
+**Status:** DESIGN
 **Last Updated:** 2026-02-16
 
 ---
@@ -191,9 +191,8 @@ This enables natural flow of progress updates and results without blocking.
 
 ## Related Documents
 
-- `OVERVIEW.md` — Broker overview
+- `BROKER.md` — Broker overview and Manager-Worker Pattern
 - `SESSION_LIFECYCLE.md` — How queued messages become turns
-- `AGENTS.md` — Agent-to-agent communication patterns
 
 ---
 

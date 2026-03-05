@@ -1,6 +1,6 @@
 # Unified Entity Store — Identity Layer Dependency
 
-**Status:** CANONICAL SPEC
+**Status:** CANONICAL
 **Last Updated:** 2026-03-02
 **Related:** MEMORY_SYSTEM.md, MEMORY_WRITER.md
 
@@ -29,12 +29,10 @@ CREATE TABLE entities (
     type          TEXT NOT NULL,        -- person, organization, project, location, concept, group
     normalized    TEXT,                 -- canonical lowercase name for dedup
     is_user       INTEGER DEFAULT 0,   -- TRUE for the system owner
-    merged_into   TEXT,                 -- union-find: points to canonical entity
-    mention_count INTEGER DEFAULT 0,
+    merged_into   TEXT REFERENCES entities(id),  -- union-find: points to canonical entity
     origin        TEXT,                 -- who created: 'adapter', 'writer', 'manual'
     created_at    INTEGER NOT NULL,
-    updated_at    INTEGER,
-    metadata      TEXT
+    updated_at    INTEGER
 );
 ```
 
@@ -112,12 +110,14 @@ Merges can be:
 ```sql
 CREATE TABLE merge_candidates (
     id          TEXT PRIMARY KEY,
-    entity_a_id TEXT NOT NULL,
-    entity_b_id TEXT NOT NULL,
-    confidence  REAL,
-    reason      TEXT,
-    status      TEXT DEFAULT 'pending',  -- pending, accepted, rejected
-    created_at  INTEGER NOT NULL
+    entity_a_id TEXT NOT NULL REFERENCES entities(id),
+    entity_b_id TEXT NOT NULL REFERENCES entities(id),
+    confidence  REAL NOT NULL,
+    reason      TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'pending',
+    created_at  INTEGER NOT NULL,
+    resolved_at INTEGER,
+    UNIQUE(entity_a_id, entity_b_id)
 );
 ```
 

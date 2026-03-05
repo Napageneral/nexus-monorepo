@@ -1,7 +1,7 @@
 # Agent System Data Model (Ontology)
 
-**Status:** CONCEPTUAL REFERENCE  
-**Last Updated:** 2026-02-06
+**Status:** REFERENCE
+**Last Updated:** 2026-03-02
 
 ---
 
@@ -143,115 +143,6 @@ After:  Turn 1 → Turn 2 → Turn 3 → Turn 4 → Turn 5 → CompactionTurn (s
 
 ---
 
-## Configuration
-
-Configuration is layered, not bundled:
-
-### Identity
-
-Who the agent is.
-
-```typescript
-interface Identity {
-  soul: string;             // SOUL.md content
-  name: string;             // Display name
-  emoji?: string;           // Visual identifier
-}
-```
-
-### Permissions
-
-What the agent can do.
-
-```typescript
-interface Permissions {
-  tools: {
-    allow?: string[];       // Whitelist
-    deny?: string[];        // Blacklist (wins over allow)
-  };
-  sandbox?: SandboxConfig;
-  credentials?: string[];   // Credential IDs accessible
-}
-```
-
-### Model Config
-
-How the agent thinks. Can vary per-turn.
-
-```typescript
-interface ModelConfig {
-  model: string;            // e.g., "claude-sonnet-4-20250514"
-  thinking?: ThinkingConfig;
-  maxTokens?: number;
-  temperature?: number;
-}
-```
-
-### Persona
-
-Identity + Permissions bundled. A thread decorator.
-
-```typescript
-interface Persona {
-  id: string;
-  identity: Identity;
-  permissions: Permissions;
-  defaultModelConfig?: ModelConfig;
-}
-```
-
-**Note:** Persona does NOT include model config as a core property. Model config is separate and can vary per-turn. Persona provides defaults.
-
-**Inheritance:** Worker Agents inherit their Manager Agent's persona. They share identity and permissions for cohesive behavior.
-
----
-
-## Agent Roles
-
-| Role | Purpose | Spawned By |
-|------|---------|------------|
-| **Manager (MA)** | Conversation-facing, delegates tasks, manages messaging | NEX pipeline (event arrival) |
-| **Worker (WA)** | Task-focused, executes delegated work, reports back | MA (or other WA) via spawn tool |
-| **Unified** | Single agent handling both roles (simple deployments) | NEX pipeline |
-
-Workers can spawn nested workers. **Default depth limit: 3** (configurable via `agents.max_worker_depth` in config).
-
----
-
-## Routing
-
-### The Primitive
-
-**Route to thread ID.** Everything else builds on this.
-
-### Routing Hierarchy
-
-```
-┌─────────────────────────────────────────┐
-│           Persona Routing               │  → maps persona → main session
-├─────────────────────────────────────────┤
-│           Session Routing               │  → maps label → current thread head
-├─────────────────────────────────────────┤
-│         Turn/Thread Routing             │  → routes to specific turn ID
-│            (BEDROCK)                    │
-└─────────────────────────────────────────┘
-```
-
-| Target | What You Specify | Resolution |
-|--------|------------------|------------|
-| **Thread** | Thread/Turn ID | Direct routing to that turn's cumulative context |
-| **Session** | Session key | Resolves to session's current thread head |
-| **Persona** | Persona ID | Resolves to persona's main session |
-| **Smart** | Just content | Memory System finds best matching thread |
-
-**All resolve to thread ID.** Thread routing is the primitive.
-
-### Trigger/Automation Routing
-
-Triggers and automations default to persona routing (safest — MA decides where to put things). Session and thread routing are available for advanced use.
-
----
-
 ## Git Analogy
 
 | Concept | Git Equivalent | Description |
@@ -293,7 +184,7 @@ Persona
 ## Related Documents
 
 - `../../data/ledgers/AGENTS_LEDGER.md` — Concrete SQLite schema implementing these concepts
-- `OVERVIEW.md` — Broker overview and architecture
+- `BROKER.md` — Broker overview, routing, Manager-Worker Pattern
 - `CONTEXT_ASSEMBLY.md` — How context is built from these primitives
 - `AGENT_ENGINE.md` — Agent execution interface
 - `../../runtime/iam/` — Identity and access management

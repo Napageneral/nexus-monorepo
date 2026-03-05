@@ -58,6 +58,11 @@ export type OidcMapping = {
   };
 };
 
+export type VpsAccessConfig = {
+  sshKeyPath: string;
+  sshUser: string;
+};
+
 export type FrontdoorConfig = {
   host: string;
   port: number;
@@ -83,6 +88,8 @@ export type FrontdoorConfig = {
   inviteTtlSeconds?: number;
   /** @deprecated Use inviteTtlSeconds. */
   workspaceInviteTtlSeconds: number;
+  vpsAccess: VpsAccessConfig;
+  appStoragePath: string;
   runtimeTokenIssuer: string;
   runtimeTokenAudience: string;
   runtimeTokenSecret: string;

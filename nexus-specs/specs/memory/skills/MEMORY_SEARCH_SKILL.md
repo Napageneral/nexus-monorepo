@@ -1,6 +1,6 @@
 # Memory Search Skill
 
-**Status:** CANONICAL SPEC
+**Status:** CANONICAL
 **Last Updated:** 2026-03-02
 **Related:** ../MEMORY_SYSTEM.md, ../MEMORY_RECALL.md, MEMORY_REFLECT_SKILL.md
 

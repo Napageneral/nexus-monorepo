@@ -599,5 +599,5 @@ The Broker writes directly to the Agents Ledger — no intermediate JSONL files.
 - `DATA_MODEL.md` — Core primitives (Message, Turn, Thread, Session)
 - `SESSION_LIFECYCLE.md` — Session management, compaction, forking
 - `../broker/CONTEXT_ASSEMBLY.md` — How context is built from ledger data
-- `../broker/AGENTS.md` — Manager-Worker Pattern
+- `../broker/BROKER.md` — Manager-Worker Pattern
 - `../../nex/INTERFACES.md` — LedgerWrite interface contract

@@ -1,15 +1,15 @@
 import { randomUUID, createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import net from "node:net";
-import { spawn } from "node:child_process";
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from "node:http";
 import { URL } from "node:url";
 import httpProxy from "http-proxy";
-import { createCheckoutSession, verifyWebhookAndParseEvent, type BillingWebhookEvent } from "./billing.js";
+import { createCheckoutSession, createCreditDepositSession, verifyWebhookAndParseEvent, type BillingWebhookEvent } from "./billing.js";
 import { loadConfig, resolveProjectRoot } from "./config.js";
 import { randomToken, createPasswordHash } from "./crypto.js";
 import { HetznerProvider, renderCloudInitScript, type CloudProvider } from "./cloud-provider.js";
+import { installAppViaSSH, uninstallAppViaSSH } from "./ssh-helper.js";
+import { createMcpServer, type McpContext } from "./mcp-server.js";
 import { OidcFlowManager, type OidcClaims } from "./oidc-auth.js";
 import { SlidingWindowRateLimiter } from "./rate-limit.js";
 import { mintRuntimeAccessToken } from "./runtime-token.js";
@@ -894,36 +894,7 @@ function parseBool(input: unknown, fallback = false): boolean {
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 
-function normalizeRuntimeAppKind(
-  input: unknown,
-  fallback: "static" | "proxy",
-): "static" | "proxy" | null {
-  const raw = normalizeText(input).toLowerCase();
-  if (!raw) {
-    return fallback;
-  }
-  if (raw === "static" || raw === "proxy") {
-    return raw;
-  }
-  return null;
-}
-
-function normalizeUrlIfValid(value: string): string | null {
-  const raw = normalizeText(value);
-  if (!raw) {
-    return null;
-  }
-  try {
-    const parsed = new URL(raw);
-    const protocol = parsed.protocol.toLowerCase();
-    if (protocol !== "http:" && protocol !== "https:") {
-      return null;
-    }
-    return parsed.toString();
-  } catch {
-    return null;
-  }
-}
+// DELETED: normalizeRuntimeAppKind, normalizeUrlIfValid — only used by legacy config injection
 
 type EntryResolveAction =
   | "create_server_and_install"
@@ -1396,6 +1367,73 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     }
   }, 30000);
 
+  // ── Hourly Billing Job ──
+  const HOURLY_RATES_CENTS: Record<string, number> = {
+    cax11: 1, // $0.01/hour ≈ $7.20/month
+    cax21: 1, // $0.01/hour ≈ $7.20/month
+    cax31: 2, // $0.02/hour ≈ $14.40/month
+  };
+
+  function runHourlyBilling() {
+    try {
+      // Use UTC hour as billing period key for idempotency
+      const now = new Date();
+      const billingPeriod = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}T${String(now.getUTCHours()).padStart(2, "0")}`;
+
+      const allAccounts = store.getActiveAccountsWithServers();
+      for (const account of allAccounts) {
+        const credits = store.getCreditBalance(account.accountId);
+        if (!credits) continue;
+
+        // Skip billing if free tier active
+        const isFreeTier = !!(credits.freeTierExpiresAtMs && credits.freeTierExpiresAtMs > Date.now());
+        if (isFreeTier) continue;
+
+        // Check idempotency: skip if already billed this hour
+        const billingRefId = `billing-${account.accountId}-${billingPeriod}`;
+        const recentTransactions = store.getCreditTransactions(account.accountId, { limit: 5 });
+        const alreadyBilled = recentTransactions.some((t) => t.referenceId === billingRefId);
+        if (alreadyBilled) continue;
+
+        // Calculate hourly cost for all running servers
+        let totalCostCents = 0;
+        const servers = store.getServersForAccount(account.accountId);
+        const runningServers = servers.filter((s) => s.status === "running");
+        for (const srv of runningServers) {
+          const rate = HOURLY_RATES_CENTS[srv.plan] ?? 1;
+          totalCostCents += rate;
+        }
+        if (totalCostCents === 0) continue;
+
+        // Deduct
+        const result = store.deductCredits({
+          accountId: account.accountId,
+          amountCents: totalCostCents,
+          type: "usage",
+          description: `Hourly usage: ${runningServers.length} server(s)`,
+          referenceId: billingRefId,
+        });
+
+        if (!result.ok) {
+          // Insufficient balance — suspend servers
+          console.warn(
+            `[billing] Account ${account.accountId} insufficient balance (${credits.balanceCents}¢), suspending ${runningServers.length} server(s)`,
+          );
+          for (const srv of runningServers) {
+            store.updateServer(srv.serverId, { status: "suspended" });
+            routingTable.delete(srv.tenantId);
+            console.log(`[billing] Suspended server ${srv.serverId}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[billing] Hourly billing job error:", err);
+    }
+  }
+
+  // Run hourly billing every hour
+  setInterval(runHourlyBilling, 60 * 60 * 1000);
+
   function applyRateLimit(params: {
     req: IncomingMessage;
     res: ServerResponse;
@@ -1465,310 +1503,11 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     return tenant;
   }
 
-  function resolveManagedRuntimeAppConfig(appId: string):
-    | {
-        ok: true;
-        appConfig: Record<string, unknown>;
-      }
-    | {
-        ok: false;
-        error: string;
-        detail?: string;
-      } {
-    if (appId === "glowbot") {
-      const kind = normalizeRuntimeAppKind(process.env.FRONTDOOR_TENANT_GLOWBOT_APP_KIND, "proxy");
-      if (!kind) {
-        return {
-          ok: false,
-          error: "invalid_glowbot_app_kind",
-          detail: "set FRONTDOOR_TENANT_GLOWBOT_APP_KIND to static or proxy",
-        };
-      }
-      const root = normalizeText(process.env.FRONTDOOR_TENANT_GLOWBOT_APP_ROOT);
-      const proxyBaseUrl = normalizeUrlIfValid(
-        normalizeText(process.env.FRONTDOOR_TENANT_GLOWBOT_PROXY_BASE_URL),
-      );
-      if (kind === "static" && !root) {
-        return {
-          ok: false,
-          error: "glowbot_static_root_missing",
-          detail: "set FRONTDOOR_TENANT_GLOWBOT_APP_ROOT for static GlowBot app attach",
-        };
-      }
-      if (kind === "proxy" && !proxyBaseUrl) {
-        return {
-          ok: false,
-          error: "glowbot_proxy_base_url_missing",
-          detail: "set FRONTDOOR_TENANT_GLOWBOT_PROXY_BASE_URL for proxy GlowBot app attach",
-        };
-      }
-      if (kind === "proxy" && root) {
-        return {
-          ok: false,
-          error: "glowbot_proxy_static_conflict",
-          detail: "unset FRONTDOOR_TENANT_GLOWBOT_APP_ROOT when GlowBot app attach kind is proxy",
-        };
-      }
-      return {
-        ok: true,
-        appConfig: {
-          enabled: true,
-          displayName: "GlowBot",
-          entryPath: "/app/glowbot/",
-          apiBase: "/api/glowbot",
-          kind,
-          icon: "glowbot-diamond",
-          order: 30,
-          ...(kind === "static"
-            ? {
-                root,
-              }
-            : {
-                proxy: {
-                  baseUrl: proxyBaseUrl,
-                },
-              }),
-        },
-      };
-    }
+  // DELETED: resolveManagedRuntimeAppConfig — legacy config injection code removed (hard cutover)
 
-    if (appId === "spike") {
-      const kind = normalizeRuntimeAppKind(process.env.FRONTDOOR_TENANT_SPIKE_APP_KIND, "proxy");
-      if (!kind) {
-        return {
-          ok: false,
-          error: "invalid_spike_app_kind",
-          detail: "set FRONTDOOR_TENANT_SPIKE_APP_KIND to static or proxy",
-        };
-      }
-      const root = normalizeText(process.env.FRONTDOOR_TENANT_SPIKE_APP_ROOT);
-      const proxyBaseUrl = normalizeUrlIfValid(
-        normalizeText(process.env.FRONTDOOR_TENANT_SPIKE_PROXY_BASE_URL) ||
-          normalizeText(process.env.FRONTDOOR_SPIKE_RUNTIME_PUBLIC_BASE_URL),
-      );
-      if (kind === "static" && !root) {
-        return {
-          ok: false,
-          error: "spike_static_root_missing",
-          detail: "set FRONTDOOR_TENANT_SPIKE_APP_ROOT for static Spike app attach",
-        };
-      }
-      if (kind === "proxy" && !proxyBaseUrl) {
-        return {
-          ok: false,
-          error: "spike_proxy_base_url_missing",
-          detail:
-            "set FRONTDOOR_TENANT_SPIKE_PROXY_BASE_URL (or FRONTDOOR_SPIKE_RUNTIME_PUBLIC_BASE_URL) for proxy Spike app attach",
-        };
-      }
-      if (kind === "proxy" && root) {
-        return {
-          ok: false,
-          error: "spike_proxy_static_conflict",
-          detail: "unset FRONTDOOR_TENANT_SPIKE_APP_ROOT when Spike app attach kind is proxy",
-        };
-      }
-      return {
-        ok: true,
-        appConfig: {
-          enabled: true,
-          displayName: "Spike",
-          entryPath: "/app/spike",
-          apiBase: "/api/spike",
-          kind,
-          icon: "spike",
-          order: 40,
-          ...(kind === "static"
-            ? {
-                root,
-              }
-            : {
-                proxy: {
-                  baseUrl: proxyBaseUrl,
-                },
-              }),
-        },
-      };
-    }
-
-    return {
-      ok: false,
-      error: "runtime_app_attach_unsupported",
-      detail: `unsupported app attach target: ${appId}`,
-    };
-  }
-
-  async function waitForLoopbackPort(port: number, timeoutMs: number): Promise<boolean> {
-    const started = Date.now();
-    while (Date.now() - started < timeoutMs) {
-      // eslint-disable-next-line no-await-in-loop
-      const ok = await new Promise<boolean>((resolve) => {
-        const socket = net.createConnection({ port, host: "127.0.0.1" });
-        const finish = (value: boolean) => {
-          socket.removeAllListeners();
-          try {
-            socket.destroy();
-          } catch {
-            // best effort
-          }
-          resolve(value);
-        };
-        socket.once("connect", () => finish(true));
-        socket.once("error", () => finish(false));
-        socket.setTimeout(750, () => finish(false));
-      });
-      if (ok) {
-        return true;
-      }
-      // eslint-disable-next-line no-await-in-loop
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-    return false;
-  }
-
-  async function restartTenantRuntimeForServer(params: {
-    serverId: string;
-    stateDir: string;
-  }): Promise<
-    | {
-        ok: true;
-      }
-    | {
-        ok: false;
-        error: string;
-        detail?: string;
-      }
-  > {
-    const stateDir = path.resolve(params.stateDir);
-    const tenantRoot = path.resolve(stateDir, "..");
-    const configPath = path.join(stateDir, "config.json");
-    const logPath = path.join(tenantRoot, "runtime.log");
-    const pidPath = path.join(tenantRoot, "runtime.pid");
-    const portPath = path.join(tenantRoot, "runtime.port");
-    const nexAdapterConfigPath = path.join(stateDir, "nex.adapters.yaml");
-    const nexusBin = normalizeText(process.env.FRONTDOOR_TENANT_NEXUS_BIN) || "nexus";
-    const rawPort = normalizeText(fs.existsSync(portPath) ? fs.readFileSync(portPath, "utf8") : "");
-    const port = Number(rawPort);
-    if (!Number.isFinite(port) || port <= 0) {
-      return {
-        ok: false,
-        error: "runtime_port_missing",
-        detail: `missing runtime port for server ${params.serverId}`,
-      };
-    }
-    const existingPidRaw = normalizeText(fs.existsSync(pidPath) ? fs.readFileSync(pidPath, "utf8") : "");
-    const existingPid = Number(existingPidRaw);
-    if (Number.isFinite(existingPid) && existingPid > 0) {
-      try {
-        process.kill(existingPid, "SIGTERM");
-      } catch {
-        // ignore stale pid
-      }
-    }
-    const runtimeEnv: NodeJS.ProcessEnv = {
-      ...process.env,
-      NEXUS_STATE_DIR: stateDir,
-      NEXUS_CONFIG_PATH: configPath,
-    };
-    if (fs.existsSync(nexAdapterConfigPath)) {
-      runtimeEnv.NEXUS_NEX_CONFIG_PATH = nexAdapterConfigPath;
-    } else {
-      delete runtimeEnv.NEXUS_NEX_CONFIG_PATH;
-    }
-    const logFd = fs.openSync(logPath, "a");
-    const child = spawn(
-      nexusBin,
-      ["runtime", "run", "--port", String(port), "--bind", "loopback", "--auth", "trusted_token", "--force"],
-      {
-        env: runtimeEnv,
-        detached: true,
-        stdio: ["ignore", logFd, logFd],
-      },
-    );
-    fs.closeSync(logFd);
-    child.unref();
-    fs.writeFileSync(pidPath, `${child.pid}\n`, "utf8");
-    const ready = await waitForLoopbackPort(port, 90_000);
-    if (!ready) {
-      return {
-        ok: false,
-        error: "tenant_runtime_restart_timeout",
-        detail: `runtime did not become healthy on port ${String(port)} for server ${params.serverId}`,
-      };
-    }
-    return {
-      ok: true,
-    };
-  }
-
-  function resolveServerStateDir(serverId: string): string | null {
-    const normalizedServerId = normalizeText(serverId);
-    if (!normalizedServerId) {
-      return null;
-    }
-    const fromStore = autoProvisioner?.getTenantRecord(normalizedServerId)?.stateDir ?? null;
-    if (fromStore && fs.existsSync(path.join(fromStore, "config.json"))) {
-      return fromStore;
-    }
-    const tenantsRoot = path.resolve(
-      normalizeText(process.env.FRONTDOOR_TENANT_ROOT) ||
-        path.join(resolveProjectRoot(), ".tenants"),
-    );
-    const fallbackStateDir = path.join(tenantsRoot, normalizedServerId, "state");
-    if (fs.existsSync(path.join(fallbackStateDir, "config.json"))) {
-      return fallbackStateDir;
-    }
-    return null;
-  }
-
-  async function attachRuntimeAppOnServer(params: {
-    serverId: string;
-    appId: string;
-  }): Promise<
-    | {
-        ok: true;
-      }
-    | {
-        ok: false;
-        error: string;
-        detail?: string;
-      }
-  > {
-    const stateDir = resolveServerStateDir(params.serverId);
-    if (!stateDir) {
-      return {
-        ok: false,
-        error: "runtime_attach_state_unavailable",
-        detail: `server ${params.serverId} has no managed state directory for app attach`,
-      };
-    }
-    const configPath = path.join(stateDir, "config.json");
-    let parsedConfig: unknown;
-    try {
-      parsedConfig = JSON.parse(fs.readFileSync(configPath, "utf8")) as unknown;
-    } catch (error) {
-      return {
-        ok: false,
-        error: "runtime_config_parse_failed",
-        detail: String(error),
-      };
-    }
-    const appConfig = resolveManagedRuntimeAppConfig(params.appId);
-    if (!appConfig.ok) {
-      return appConfig;
-    }
-    const configRecord = asRecord(parsedConfig) ?? {};
-    const runtimeRecord = asRecord(configRecord.runtime) ?? {};
-    const appsRecord = asRecord(runtimeRecord.apps) ?? {};
-    appsRecord[params.appId] = appConfig.appConfig;
-    runtimeRecord.apps = appsRecord;
-    configRecord.runtime = runtimeRecord;
-    fs.writeFileSync(configPath, `${JSON.stringify(configRecord, null, 2)}\n`, "utf8");
-    return await restartTenantRuntimeForServer({
-      serverId: params.serverId,
-      stateDir,
-    });
-  }
+  // DELETED: waitForLoopbackPort, restartTenantRuntimeForServer, resolveServerStateDir,
+  // attachRuntimeAppOnServer — legacy config injection code removed (hard cutover).
+  // App installation now uses SSH/SCP tarball delivery + runtime HTTP API via installAppOnServer().
 
   function resolveServerAdminAccess(params: {
     session: SessionRecord;
@@ -1856,13 +1595,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         detail?: string;
       }
   > {
-    if (!autoProvisioner) {
-      return {
-        ok: false,
-        status: 400,
-        error: "autoprovision_disabled",
-      };
-    }
     const user = store.getUserById(params.session.principal.userId);
     if (!user || user.disabled) {
       return {
@@ -1871,6 +1603,139 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         error: "user_not_found",
       };
     }
+
+    // ── Determine provisioning strategy ──
+    // Prefer autoProvisioner with a configured command (legacy path).
+    // Fall back to cloudProvider (Hetzner API) when available.
+    const useAutoProvisioner =
+      autoProvisioner && config.autoProvision.command;
+    const useCloudProvider = !useAutoProvisioner && !!cloudProvider;
+
+    if (!useAutoProvisioner && !useCloudProvider) {
+      return {
+        ok: false,
+        status: 400,
+        error: "provisioning_not_configured",
+        detail: "Neither autoprovision command nor cloud provider is available",
+      };
+    }
+
+    // Ensure user has an account
+    const accounts = store.getAccountsForUser(user.userId);
+    const account = accounts[0] ?? store.createAccount(user.displayName || user.userId, user.userId);
+    store.addAccountMember(account.accountId, user.userId, "owner");
+
+    // Credit / free-tier check
+    const credits = store.getCreditBalance(account.accountId);
+    const isFreeTier = !!(credits?.freeTierExpiresAtMs && credits.freeTierExpiresAtMs > Date.now());
+    const hasBalance = !!(credits && credits.balanceCents > 0);
+
+    if (!isFreeTier && !hasBalance) {
+      return {
+        ok: false,
+        status: 402,
+        error: "payment_required",
+        detail: "Add credits to your account before creating a server",
+      };
+    }
+
+    // Free tier: 1 server max
+    if (isFreeTier && !hasBalance) {
+      const existingServers = store
+        .getServersForAccount(account.accountId)
+        .filter((s: { status: string }) => s.status !== "deleted");
+      if (existingServers.length >= 1) {
+        return {
+          ok: false,
+          status: 402,
+          error: "free_tier_server_limit",
+          detail: "Free tier is limited to 1 server. Add credits for additional servers.",
+        };
+      }
+    }
+
+    // Create app subscription at account level (so auto-install picks it up)
+    store.createAppSubscription({
+      accountId: account.accountId,
+      appId: params.appId,
+      planId: "starter",
+      status: "active",
+      provider: "none",
+    });
+
+    // ── Cloud Provider Path (Hetzner API) ──
+    if (useCloudProvider) {
+      const serverId = `srv-${randomUUID().slice(0, 12)}`;
+      const tenantId = `t-${randomUUID().slice(0, 12)}`;
+      const provisionToken = `prov-${randomToken(32)}`;
+      const runtimeAuthToken = `rt-${randomToken(32)}`;
+      const generatedName = `Server ${Date.now().toString(36)}`;
+
+      const server = store.createServer({
+        serverId,
+        accountId: account.accountId,
+        tenantId,
+        displayName: generatedName,
+        generatedName,
+        plan: "cax11",
+        provider: "hetzner",
+        provisionToken,
+        runtimeAuthToken,
+      });
+
+      const cloudInitScript = renderCloudInitScript({
+        tenantId,
+        serverId,
+        authToken: runtimeAuthToken,
+        provisionToken,
+        frontdoorUrl: config.baseUrl,
+      });
+
+      try {
+        const result = await cloudProvider!.createServer({
+          tenantId,
+          planId: "cax11",
+          cloudInitScript,
+        });
+        store.updateServer(serverId, {
+          providerServerId: result.providerServerId,
+          privateIp: result.privateIp || undefined,
+          publicIp: result.publicIp || undefined,
+        });
+        console.log(`[entry-provision] VPS created for ${serverId}: provider=${result.providerServerId}`);
+      } catch (err) {
+        console.error(`[entry-provision] Hetzner API failed:`, err);
+        store.updateServer(serverId, { status: "failed" });
+        return {
+          ok: false,
+          status: 500,
+          error: "cloud_create_failed",
+          detail: String(err),
+        };
+      }
+
+      // Update session to point to new server
+      const nextPrincipal = store.toPrincipal({
+        user,
+        server,
+        accountId: account.accountId,
+        amr: params.session.principal.amr.length > 0 ? params.session.principal.amr : ["oidc"],
+      });
+      const updatedSession = sessions.updateSessionPrincipal(params.session.id, nextPrincipal) ?? {
+        ...params.session,
+        principal: nextPrincipal,
+      };
+
+      // Don't install app here — the phone-home callback + auto-install handles it
+      // (VPS needs to boot and phone home first, which takes 30-60s)
+      return {
+        ok: true,
+        session: updatedSession,
+        serverId,
+      };
+    }
+
+    // ── Auto-Provisioner Path (legacy external command) ──
     const identity = resolvePreferredProvisionIdentity(user.userId);
     if (!identity) {
       return {
@@ -1886,7 +1751,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     };
     let resolvedPrincipal: Principal | null = null;
     try {
-      resolvedPrincipal = await autoProvisioner.resolveOrProvision({
+      resolvedPrincipal = await autoProvisioner!.resolveOrProvision({
         provider: identity.provider,
         claims,
         fallbackPrincipal: params.session.principal,
@@ -1917,10 +1782,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       };
     }
 
-    // Ensure user has an account
-    const accounts = store.getAccountsForUser(user.userId);
-    const account = accounts[0] ?? store.createAccount(user.displayName || user.userId, user.userId);
-
     // Upsert the server
     const server = store.upsertServer({
       serverId: tenant.id,
@@ -1942,18 +1803,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       deletedAtMs: null,
     });
 
-    // Ensure account membership
-    store.addAccountMember(account.accountId, user.userId, "owner");
-
-    // Create app subscription at account level
-    store.createAppSubscription({
-      accountId: account.accountId,
-      appId: params.appId,
-      planId: "starter",
-      status: "active",
-      provider: "none",
-    });
-
     const nextPrincipal = store.toPrincipal({
       user,
       server,
@@ -1964,17 +1813,16 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       ...params.session,
       principal: nextPrincipal,
     };
-    const installed = await ensureRuntimeAppInstalled({
-      session: updatedSession,
-      appId: params.appId,
+    const installed = await installAppOnServer({
       serverId: server.serverId,
+      appId: params.appId,
+      accountId: account.accountId,
       source: "purchase",
-      requestId: params.requestId,
     });
     if (!installed.ok) {
       return {
         ok: false,
-        status: installed.status,
+        status: installed.status ?? 500,
         error: installed.error,
         detail: installed.detail,
       };
@@ -2102,6 +1950,27 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     const object = asRecord(data?.object);
 
     if (event.provider === "mock") {
+      // Handle mock credit deposit
+      if (readOptionalString(payload.type) === "credit_deposit") {
+        const depositAccountId = readOptionalString(payload.account_id);
+        const depositAmount = readOptionalNumber(payload.amount_cents);
+        if (depositAccountId && depositAmount && depositAmount > 0) {
+          store.addCredits({
+            accountId: depositAccountId,
+            amountCents: depositAmount,
+            type: "deposit",
+            description: `Mock deposit: $${(depositAmount / 100).toFixed(2)}`,
+            referenceId: event.eventId,
+          });
+          const acctServers = store.getServersForAccount(depositAccountId);
+          for (const s of acctServers) {
+            if (s.status === "suspended") {
+              store.updateServer(s.serverId, { status: "running" });
+            }
+          }
+          return { serverId: depositAccountId, status: "credit_deposited" };
+        }
+      }
       const serverId = serverIdFromEvent ?? readOptionalString(payload.server_id);
       if (!serverId) {
         return { status: "ignored_server_missing" };
@@ -2177,6 +2046,30 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     }
 
     if (event.eventType === "checkout.session.completed") {
+      // Handle credit deposit checkout
+      if (readOptionalString(metadata?.type) === "credit_deposit") {
+        const depositAccountId = readOptionalString(metadata?.account_id);
+        const depositAmount = readOptionalNumber(metadata?.amount_cents);
+        if (depositAccountId && depositAmount && depositAmount > 0) {
+          store.addCredits({
+            accountId: depositAccountId,
+            amountCents: depositAmount,
+            type: "deposit",
+            description: `Stripe deposit: $${(depositAmount / 100).toFixed(2)}`,
+            referenceId: readOptionalString(object?.payment_intent) || readOptionalString(object?.id),
+          });
+          // If account has suspended servers, unsuspend them
+          const acctServers = store.getServersForAccount(depositAccountId);
+          for (const s of acctServers) {
+            if (s.status === "suspended") {
+              store.updateServer(s.serverId, { status: "running" });
+              console.log(`[billing] Unsuspended server ${s.serverId} after credit deposit`);
+            }
+          }
+          return { serverId: depositAccountId, status: "credit_deposited" };
+        }
+      }
+
       const checkoutPlanId = readOptionalString(metadata?.plan_id) || "starter";
       store.createServerSubscription({
         serverId,
@@ -2346,180 +2239,175 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     }
   }
 
-  async function ensureRuntimeAppInstalled(params: {
-    session: SessionRecord;
-    appId: string;
+  // -----------------------------------------------------------------------
+  // installAppOnServer — SSH/SCP tarball delivery + runtime HTTP API
+  // Replaces legacy config injection (attachRuntimeAppOnServer)
+  // -----------------------------------------------------------------------
+
+  async function installAppOnServer(params: {
     serverId: string;
-    source: "purchase" | "manual";
-    requestId: string;
+    appId: string;
+    accountId: string;
+    version?: string;
+    source: "purchase" | "manual" | "auto_provision" | "api";
   }): Promise<
-    | {
-        ok: true;
-        runtimeAppKind: string | null;
-      }
-    | {
-        ok: false;
-        status: number;
-        error: string;
-        detail?: string;
-      }
+    | { ok: true; version: string }
+    | { ok: false; error: string; detail?: string; status?: number }
   > {
     const entryPath = defaultEntryPathForApp(params.appId);
+    const version = params.version ?? "latest";
+
+    // 1. Check entitlement
+    const subscription = store.getAppSubscription(params.accountId, params.appId);
+    if (!subscription || subscription.status !== "active") {
+      return { ok: false, error: "not_entitled", status: 403 };
+    }
+
+    // 2. Check duplicate install
+    const existing = store.getServerAppInstall(params.serverId, params.appId);
+    if (existing?.status === "installed") {
+      return { ok: false, error: "already_installed", status: 409 };
+    }
+
+    // 3. Mark as installing
     store.upsertServerAppInstall({
       serverId: params.serverId,
       appId: params.appId,
       status: "installing",
+      version,
       entryPath,
       source: params.source,
     });
-    const resolveContext = resolveActiveServerContext({
-      session: params.session,
-      requestedServerId: params.serverId,
-    });
-    if (!resolveContext.ok) {
+
+    // 4. Resolve server
+    const server = store.getServer(params.serverId);
+    if (!server) {
       store.upsertServerAppInstall({
         serverId: params.serverId,
         appId: params.appId,
         status: "failed",
         entryPath,
-        lastError: resolveContext.error,
+        lastError: "server_not_found",
         source: params.source,
       });
-      return {
-        ok: false,
-        status: resolveContext.status,
-        error: resolveContext.error,
-      };
+      return { ok: false, error: "server_not_found", status: 404 };
     }
-    const runtimeApps = await probeRuntimeJsonEndpoint({
-      runtime: resolveContext.serverRuntime,
-      session: resolveContext.session,
-      principal: resolveContext.principal,
-      path: "/api/apps",
-      requestId: params.requestId,
-    });
-    if (!runtimeApps.ok) {
-      const code = runtimeApps.error || "runtime_unreachable";
+    if (server.status !== "running") {
       store.upsertServerAppInstall({
         serverId: params.serverId,
         appId: params.appId,
         status: "failed",
         entryPath,
-        lastError: code,
+        lastError: "server_not_running",
         source: params.source,
       });
-      return {
-        ok: false,
-        status: 503,
-        error: code,
-      };
+      return { ok: false, error: "server_not_running", status: 409 };
     }
-    const runtimeAppsById = parseRuntimeAppCatalog(runtimeApps.body);
-    const present = runtimeAppsById.get(params.appId) ?? null;
-    if (!present) {
-      const attach = await attachRuntimeAppOnServer({
+    if (!server.privateIp) {
+      store.upsertServerAppInstall({
         serverId: params.serverId,
         appId: params.appId,
+        status: "failed",
+        entryPath,
+        lastError: "server_no_private_ip",
+        source: params.source,
       });
-      if (!attach.ok) {
-        store.upsertServerAppInstall({
-          serverId: params.serverId,
-          appId: params.appId,
-          status: "failed",
-          entryPath,
-          lastError: attach.error,
-          source: params.source,
-        });
-        return {
-          ok: false,
-          status: 409,
-          error: attach.error,
-          detail: attach.detail,
-        };
-      }
-      const afterContext = resolveActiveServerContext({
-        session: resolveContext.session,
-        requestedServerId: params.serverId,
+      return { ok: false, error: "server_no_private_ip", status: 500 };
+    }
+
+    // 5. Resolve package path
+    const packagePath = path.join(config.appStoragePath, params.appId, version, "pkg.tar.gz");
+    if (!fs.existsSync(packagePath)) {
+      store.upsertServerAppInstall({
+        serverId: params.serverId,
+        appId: params.appId,
+        status: "failed",
+        entryPath,
+        lastError: `package_not_found: ${packagePath}`,
+        source: params.source,
       });
-      if (!afterContext.ok) {
-        store.upsertServerAppInstall({
-          serverId: params.serverId,
-          appId: params.appId,
-          status: "failed",
-          entryPath,
-          lastError: afterContext.error,
-          source: params.source,
-        });
-        return {
-          ok: false,
-          status: afterContext.status,
-          error: afterContext.error,
-        };
-      }
-      const runtimeAppsAfterAttach = await probeRuntimeJsonEndpoint({
-        runtime: afterContext.serverRuntime,
-        session: afterContext.session,
-        principal: afterContext.principal,
-        path: "/api/apps",
-        requestId: params.requestId,
-      });
-      if (!runtimeAppsAfterAttach.ok) {
-        const code = runtimeAppsAfterAttach.error || "runtime_unreachable";
-        store.upsertServerAppInstall({
-          serverId: params.serverId,
-          appId: params.appId,
-          status: "failed",
-          entryPath,
-          lastError: code,
-          source: params.source,
-        });
-        return {
-          ok: false,
-          status: 503,
-          error: code,
-        };
-      }
-      const afterCatalog = parseRuntimeAppCatalog(runtimeAppsAfterAttach.body);
-      const runtimeItem = afterCatalog.get(params.appId) ?? null;
-      if (!runtimeItem) {
-        store.upsertServerAppInstall({
-          serverId: params.serverId,
-          appId: params.appId,
-          status: "failed",
-          entryPath,
-          lastError: "runtime_app_missing_after_attach",
-          source: params.source,
-        });
-        return {
-          ok: false,
-          status: 409,
-          error: "runtime_app_missing_after_attach",
-        };
-      }
+      return { ok: false, error: "package_not_found", detail: packagePath, status: 404 };
+    }
+
+    // 6. SSH/SCP delivery + runtime install API
+    const result = await installAppViaSSH({
+      host: server.privateIp,
+      privateKeyPath: config.vpsAccess.sshKeyPath,
+      localTarballPath: packagePath,
+      appId: params.appId,
+      runtimePort: server.runtimePort || 8080,
+      runtimeAuthToken: server.runtimeAuthToken || "",
+    });
+
+    // 7. Update status
+    if (result.ok) {
       store.upsertServerAppInstall({
         serverId: params.serverId,
         appId: params.appId,
         status: "installed",
+        version,
         entryPath,
         source: params.source,
       });
-      return {
-        ok: true,
-        runtimeAppKind: runtimeItem.kind ?? null,
-      };
+      console.log(`[app-install] ${params.appId}@${version} installed on ${params.serverId}`);
+      return { ok: true, version };
+    } else {
+      store.upsertServerAppInstall({
+        serverId: params.serverId,
+        appId: params.appId,
+        status: "failed",
+        entryPath,
+        lastError: `${result.error}: ${result.detail ?? ""}`,
+        source: params.source,
+      });
+      console.error(`[app-install] Failed to install ${params.appId} on ${params.serverId}: ${result.error}`);
+      return { ok: false, error: result.error, detail: result.detail, status: 502 };
     }
+  }
+
+  // -----------------------------------------------------------------------
+  // uninstallAppFromServer — call runtime uninstall + cleanup via SSH
+  // -----------------------------------------------------------------------
+
+  async function uninstallAppFromServer(params: {
+    serverId: string;
+    appId: string;
+  }): Promise<
+    | { ok: true }
+    | { ok: false; error: string; detail?: string; status?: number }
+  > {
+    const server = store.getServer(params.serverId);
+    if (!server) {
+      return { ok: false, error: "server_not_found", status: 404 };
+    }
+    if (!server.privateIp) {
+      return { ok: false, error: "server_no_private_ip", status: 500 };
+    }
+
     store.upsertServerAppInstall({
       serverId: params.serverId,
       appId: params.appId,
-      status: "installed",
-      entryPath,
-      source: params.source,
+      status: "not_installed",
+      source: "manual",
     });
-    return {
-      ok: true,
-      runtimeAppKind: present.kind ?? null,
-    };
+
+    const result = await uninstallAppViaSSH({
+      host: server.privateIp,
+      privateKeyPath: config.vpsAccess.sshKeyPath,
+      appId: params.appId,
+      runtimePort: server.runtimePort || 8080,
+      runtimeAuthToken: server.runtimeAuthToken || "",
+    });
+
+    if (!result.ok) {
+      console.error(`[app-uninstall] Failed to uninstall ${params.appId} from ${params.serverId}: ${result.error}`);
+    }
+
+    return { ok: true };
   }
+
+  // DELETED: ensureRuntimeAppInstalled — legacy config injection code removed (hard cutover).
+  // All install flows now use installAppOnServer() above.
 
   function buildForwardedRuntimePath(params: {
     url: URL;
@@ -2766,6 +2654,144 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     params.res.end(framedBuffer);
   }
 
+  // -------------------------------------------------------------------------
+  // MCP Server
+  // -------------------------------------------------------------------------
+  const mcpServer = createMcpServer();
+
+  /** Build MCP helpers that delegate to server.ts internal functions. */
+  function buildMcpHelpers(): McpContext["helpers"] {
+    return {
+      installAppOnServer,
+      uninstallAppFromServer,
+      deleteServer: async (params: {
+        session: SessionRecord;
+        serverId: string;
+      }) => {
+        const access = resolveServerAdminAccess({
+          session: params.session,
+          serverId: params.serverId,
+        });
+        if (!access.ok) {
+          return { ok: false as const, error: access.error, status: access.status };
+        }
+        // Remove from routing table
+        routingTable.delete(access.server.tenantId);
+        store.updateServer(access.server.serverId, { status: "deprovisioning" });
+        config.tenants.delete(access.server.serverId);
+        // Destroy cloud VPS if available
+        if (access.server.providerServerId && cloudProvider) {
+          cloudProvider
+            .destroyServer(access.server.providerServerId)
+            .then(() => {
+              store.updateServer(access.server.serverId, {
+                status: "deleted",
+                deletedAtMs: Date.now(),
+              });
+              const installs = store.getServerEffectiveAppInstalls(access.server.serverId);
+              for (const inst of installs) {
+                store.upsertServerAppInstall({
+                  serverId: access.server.serverId,
+                  appId: inst.appId,
+                  status: "not_installed",
+                  source: "system",
+                });
+              }
+            })
+            .catch((err) => {
+              console.error(`[mcp delete-server] VPS destroy failed:`, err);
+              store.updateServer(access.server.serverId, { status: "failed" });
+            });
+        } else {
+          store.updateServer(access.server.serverId, {
+            status: "deleted",
+            deletedAtMs: Date.now(),
+          });
+        }
+        return { ok: true as const, status: "deprovisioning" };
+      },
+      createServer: async (params: {
+        session: SessionRecord;
+        plan?: string;
+        displayName?: string;
+      }) => {
+        const accountId = params.session.principal.accountId;
+        if (!accountId) {
+          return { ok: false as const, error: "no_account" };
+        }
+        if (!cloudProvider) {
+          return { ok: false as const, error: "cloud_provider_not_configured" };
+        }
+
+        // Credit / free-tier check
+        const mcpCredits = store.getCreditBalance(accountId);
+        const mcpIsFreeTier = !!(mcpCredits?.freeTierExpiresAtMs && mcpCredits.freeTierExpiresAtMs > Date.now());
+        const mcpHasBalance = !!(mcpCredits && mcpCredits.balanceCents > 0);
+        if (!mcpIsFreeTier && !mcpHasBalance) {
+          return { ok: false as const, error: "payment_required" };
+        }
+
+        const plan = params.plan ?? "cax11";
+        if (mcpIsFreeTier && !mcpHasBalance) {
+          if (plan !== "cax11") {
+            return { ok: false as const, error: "free_tier_plan_limit" };
+          }
+          const existing = store.getServersForAccount(accountId).filter((s) => s.status !== "deleted");
+          if (existing.length >= 1) {
+            return { ok: false as const, error: "free_tier_server_limit" };
+          }
+        }
+
+        const serverId = `srv-${randomUUID().slice(0, 12)}`;
+        const tenantId = `t-${randomUUID().slice(0, 12)}`;
+        const provisionToken = `prov-${randomToken(32)}`;
+        const runtimeAuthToken = `rt-${randomToken(32)}`;
+        const generatedName = `Server ${Date.now().toString(36)}`;
+
+        store.createServer({
+          serverId,
+          accountId,
+          tenantId,
+          displayName: params.displayName?.trim() || generatedName,
+          generatedName,
+          plan,
+          provider: "hetzner",
+          provisionToken,
+          runtimeAuthToken,
+        });
+
+        const cloudInitScript = renderCloudInitScript({
+          tenantId,
+          serverId,
+          authToken: runtimeAuthToken,
+          provisionToken,
+          frontdoorUrl: config.baseUrl,
+        });
+
+        try {
+          const result = await cloudProvider.createServer({
+            tenantId,
+            planId: plan,
+            cloudInitScript,
+          });
+          store.updateServer(serverId, {
+            providerServerId: result.providerServerId,
+            privateIp: result.privateIp || undefined,
+            publicIp: result.publicIp || undefined,
+          });
+        } catch (err) {
+          console.error(`[mcp create-server] Hetzner API failed:`, err);
+          store.updateServer(serverId, { status: "failed" });
+          return { ok: false as const, error: `cloud_create_failed: ${String(err)}` };
+        }
+
+        return { ok: true as const, serverId, tenantId, status: "provisioning" };
+      },
+      deterministicServerNameFromId,
+      getServerPublicUrl,
+    };
+  }
+
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", config.baseUrl);
     const pathname = url.pathname;
@@ -2800,6 +2826,12 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         // Tenant subdomain request — proxy to VPS
         const route = routingTable.get(tenantIdFromHost);
         if (!route || route.status !== "running") {
+          // Check if server is suspended (insufficient credits) by looking up by tenantId
+          const suspendedServer = store.getServerByTenantId(tenantIdFromHost);
+          if (suspendedServer?.status === "suspended") {
+            sendJson(res, 402, { error: "payment_required", message: "Server suspended — add credits to your account to resume." });
+            return;
+          }
           sendJson(res, 503, { error: "server_not_available", message: "This server is not currently running." });
           return;
         }
@@ -2876,6 +2908,39 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       if (method === "GET" && pathname === "/") {
         serveUiShell(res);
+        return;
+      }
+
+      // -------------------------------------------------------------------
+      // MCP endpoint — JSON-RPC 2.0 over HTTP POST
+      // -------------------------------------------------------------------
+      if (method === "POST" && pathname === "/mcp") {
+        const session = readSession({ req, config, sessions, store });
+        if (!session) {
+          sendJson(res, 401, { error: "unauthorized" });
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        if (!body || typeof body !== "object") {
+          sendJson(res, 400, {
+            jsonrpc: "2.0",
+            id: null,
+            error: { code: -32700, message: "Parse error" },
+          });
+          return;
+        }
+
+        const mcpCtx: McpContext = {
+          session,
+          store,
+          config,
+          cloudProvider,
+          helpers: buildMcpHelpers(),
+        };
+
+        const result = await mcpServer.handleRequest(body, mcpCtx);
+        sendJson(res, 200, result as Record<string, unknown>);
         return;
       }
 
@@ -3139,7 +3204,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
               provider: "none",
             });
 
-            // Build session early so ensureRuntimeAppInstalled can use it
+            // Build session early for principal context
             const earlyPrincipal = store.toPrincipal({
               user,
               server,
@@ -3150,12 +3215,11 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
             // Install the app on the server
             try {
-              await ensureRuntimeAppInstalled({
-                session: earlySession,
-                appId: intentApp,
+              await installAppOnServer({
                 serverId: server.serverId,
+                appId: intentApp,
+                accountId: account.accountId,
                 source: "purchase",
-                requestId,
               });
             } catch {
               // Non-fatal — user can install from dashboard
@@ -3328,6 +3392,26 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       if (method === "GET" && pathname === "/api/apps/catalog") {
         const products = store.listProducts();
+        // If authenticated, include per-user install info
+        const session = readSession({ req, config, sessions, store });
+        let userServerIds: string[] = [];
+        const installsByApp = new Map<string, string[]>();
+        if (session) {
+          const allServers = store
+            .getServersForUser(session.principal.userId)
+            .filter((s) => s.status !== "deleted");
+          userServerIds = allServers.map((s) => s.serverId);
+          for (const srv of allServers) {
+            const installs = store.getServerEffectiveAppInstalls(srv.serverId);
+            for (const inst of installs) {
+              if (inst.status === "installed") {
+                const arr = installsByApp.get(inst.appId) ?? [];
+                arr.push(srv.serverId);
+                installsByApp.set(inst.appId, arr);
+              }
+            }
+          }
+        }
         sendJson(res, 200, {
           ok: true,
           items: products.map((product) => ({
@@ -3336,6 +3420,8 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             tagline: product.tagline ?? null,
             accent_color: product.accentColor ?? null,
             homepage_url: product.homepageUrl ?? null,
+            latest_version: product.manifestVersion ?? null,
+            installed_on: installsByApp.get(product.productId) ?? [],
           })),
         });
         return;
@@ -3462,15 +3548,14 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             });
             return;
           }
-          const installed = await ensureRuntimeAppInstalled({
-            session,
-            appId,
+          const installed = await installAppOnServer({
             serverId: requestedServerId,
+            appId,
+            accountId: access.server.accountId,
             source: "purchase",
-            requestId,
           });
           if (!installed.ok) {
-            sendJson(res, installed.status, {
+            sendJson(res, installed.status ?? 500, {
               ok: false,
               error: installed.error,
               detail: installed.detail ?? null,
@@ -3733,6 +3818,14 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
               installed_app_ids: installs
                 .filter((item) => item.status === "installed")
                 .map((item) => item.appId),
+              installed_apps: installs.map((item) => ({
+                app_id: item.appId,
+                status: item.status,
+                version: item.version ?? null,
+                installed_at: item.installedAtMs
+                  ? new Date(item.installedAtMs).toISOString()
+                  : null,
+              })),
             },
           });
           return;
@@ -3936,32 +4029,15 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           });
           return;
         }
-        const appSub = store.getAppSubscription(access.server.accountId, appId);
-        if (!appSub || appSub.status !== "active") {
-          store.upsertServerAppInstall({
-            serverId,
-            appId,
-            status: "blocked_no_entitlement",
-            entryPath: defaultEntryPathForApp(appId),
-            source: "manual",
-          });
-          sendJson(res, 403, {
-            ok: false,
-            error: "app_entitlement_required",
-            app_id: appId,
-            server_id: serverId,
-          });
-          return;
-        }
-        const installed = await ensureRuntimeAppInstalled({
-          session,
-          appId,
+        // Use new SSH/SCP-based install pipeline
+        const installed = await installAppOnServer({
           serverId,
+          appId,
+          accountId: access.server.accountId,
           source: "manual",
-          requestId,
         });
         if (!installed.ok) {
-          sendJson(res, installed.status, {
+          sendJson(res, installed.status ?? 500, {
             ok: false,
             error: installed.error,
             detail: installed.detail ?? null,
@@ -3977,6 +4053,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           app_id: appId,
           install_status: install?.status ?? "installed",
           entry_path: install?.entryPath ?? defaultEntryPathForApp(appId),
+          version: installed.version,
         });
         return;
       }
@@ -4003,13 +4080,21 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           sendJson(res, access.status, { ok: false, error: access.error });
           return;
         }
-        // Mark as uninstalling, then set to not_installed
-        store.upsertServerAppInstall({
+        // Use new SSH-based uninstall
+        const uninstalled = await uninstallAppFromServer({
           serverId,
           appId,
-          status: "not_installed",
-          source: "manual",
         });
+        if (!uninstalled.ok) {
+          sendJson(res, uninstalled.status ?? 500, {
+            ok: false,
+            error: uninstalled.error,
+            detail: uninstalled.detail ?? null,
+            app_id: appId,
+            server_id: serverId,
+          });
+          return;
+        }
         sendJson(res, 200, {
           ok: true,
           server_id: serverId,
@@ -4259,15 +4344,14 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
               });
               return;
             }
-            const installed = await ensureRuntimeAppInstalled({
-              session: activeSession,
-              appId,
+            const installed = await installAppOnServer({
               serverId: targetServerId,
+              appId,
+              accountId: adminAccess.server.accountId,
               source: requestedAction === "purchase_app_then_install" ? "purchase" : "manual",
-              requestId,
             });
             if (!installed.ok) {
-              sendJson(res, installed.status, {
+              sendJson(res, installed.status ?? 500, {
                 ok: false,
                 error: installed.error,
                 detail: installed.detail ?? null,
@@ -5233,6 +5317,43 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         const plan = typeof bodyRecord?.plan === "string" ? bodyRecord.plan : "cax11";
         const displayName = typeof bodyRecord?.display_name === "string" ? (bodyRecord.display_name as string).trim() : "";
 
+        // Credit / free-tier check
+        const credits = store.getCreditBalance(accountId);
+        const isFreeTier = !!(credits?.freeTierExpiresAtMs && credits.freeTierExpiresAtMs > Date.now());
+        const hasBalance = !!(credits && credits.balanceCents > 0);
+
+        if (!isFreeTier && !hasBalance) {
+          sendJson(res, 402, {
+            ok: false,
+            error: "payment_required",
+            message: "Add credits to your account before creating a server",
+          });
+          return;
+        }
+
+        // Free tier constraints: cax11 only, 1 server max
+        if (isFreeTier && !hasBalance) {
+          if (plan !== "cax11") {
+            sendJson(res, 402, {
+              ok: false,
+              error: "free_tier_plan_limit",
+              message: "Free tier is limited to the Starter (cax11) plan",
+            });
+            return;
+          }
+          const existingServers = store
+            .getServersForAccount(accountId)
+            .filter((s) => s.status !== "deleted");
+          if (existingServers.length >= 1) {
+            sendJson(res, 402, {
+              ok: false,
+              error: "free_tier_server_limit",
+              message: "Free tier is limited to 1 server. Add credits for additional servers.",
+            });
+            return;
+          }
+        }
+
         const serverId = `srv-${randomUUID().slice(0, 12)}`;
         const tenantId = `t-${randomUUID().slice(0, 12)}`;
         const provisionToken = `prov-${randomToken(32)}`;
@@ -5251,26 +5372,13 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           runtimeAuthToken,
         });
 
-        // Get user's entitled apps
-        const entitlementAccounts = store.getAccountsForUser(session.principal.userId);
-        const appsToInstall: string[] = [];
-        for (const entAccount of entitlementAccounts) {
-          const subs = store.getAppSubscriptionsForAccount(entAccount.accountId);
-          for (const sub of subs) {
-            if (sub.status === "active" && !appsToInstall.includes(sub.appId)) {
-              appsToInstall.push(sub.appId);
-            }
-          }
-        }
-
-        // Render cloud-init
+        // Render cloud-init (apps auto-install after VPS phones home, not via cloud-init)
         const cloudInitScript = renderCloudInitScript({
           tenantId,
           serverId,
           authToken: runtimeAuthToken,
           provisionToken,
           frontdoorUrl: config.baseUrl,
-          appsToInstall,
         });
 
         // Create VPS (async but we await the initial API call)
@@ -5325,6 +5433,10 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           provisionToken: null,
         });
 
+        // Invalidate stale TenantConfig cache so resolveServerRuntime()
+        // picks up the fresh IP/port from the DB on next proxy request.
+        config.tenants.delete(cbServer.serverId);
+
         // Add to routing table
         if (cbPrivateIp) {
           routingTable.set(cbServer.tenantId, {
@@ -5339,6 +5451,46 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         }
 
         sendJson(res, 200, { ok: true });
+
+        // ---------------------------------------------------------------
+        // Auto-install entitled apps after VPS phones home
+        // Runs async — doesn't block the provision callback response
+        // ---------------------------------------------------------------
+        setImmediate(async () => {
+          try {
+            const server = store.getServer(cbServer.serverId);
+            if (!server?.accountId) return;
+
+            const subs = store.getAppSubscriptionsForAccount(server.accountId);
+            const appsToAutoInstall = subs
+              .filter(s => s.status === "active")
+              .map(s => s.appId);
+
+            if (appsToAutoInstall.length === 0) {
+              console.log(`[auto-install] No entitled apps to install on ${cbServer.serverId}`);
+              return;
+            }
+
+            console.log(`[auto-install] Installing ${appsToAutoInstall.length} app(s) on ${cbServer.serverId}: ${appsToAutoInstall.join(", ")}`);
+
+            for (const appId of appsToAutoInstall) {
+              const result = await installAppOnServer({
+                serverId: cbServer.serverId,
+                appId,
+                accountId: server.accountId,
+                source: "auto_provision",
+              });
+              if (result.ok) {
+                console.log(`[auto-install] ${appId} installed successfully on ${cbServer.serverId}`);
+              } else {
+                console.error(`[auto-install] Failed to install ${appId} on ${cbServer.serverId}: ${result.error}`);
+              }
+            }
+          } catch (err) {
+            console.error(`[auto-install] Error during auto-install on ${cbServer.serverId}:`, err);
+          }
+        });
+
         return;
       }
 
@@ -5829,7 +5981,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           // If the user already has a server + the intent app, go straight to the app.
           // Otherwise redirect to the dashboard — provisioning will continue in background.
           const hasTenant = !!completed.principal?.tenantId;
-          const needsProvision = !hasTenant && !!autoProvisioner && !!completed.productId;
+          const needsProvision = !hasTenant && (!!autoProvisioner || !!cloudProvider) && !!completed.productId;
           let oidcRedirect = completed.returnTo || "/";
           if (hasTenant && oidcRedirect === "/" && completed.productId) {
             oidcRedirect = `/app/${completed.productId}/`;
@@ -5847,7 +5999,9 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
           // Phase 2 — background provisioning for new users.
           // The user has already been redirected to the dashboard.
-          if (needsProvision && autoProvisioner) {
+          // Background provisioning only for legacy autoProvisioner with a command.
+          // Cloud provider path is handled by the dashboard's entry/execute call.
+          if (needsProvision && autoProvisioner && config.autoProvision.command) {
             void (async () => {
               const bgRequestId = requestId ?? randomToken(10);
               try {
@@ -5916,14 +6070,14 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
                   // Re-read session after principal update
                   const updatedSession = sessions.getSession(session.id);
                   if (updatedSession) {
+                    const bgAccountId = updatedSession.principal.accountId ?? updatedSession.principal.userId;
                     for (const appId of allApps) {
                       try {
-                        await ensureRuntimeAppInstalled({
-                          session: updatedSession,
-                          appId,
+                        await installAppOnServer({
                           serverId: autoServerId,
+                          appId,
+                          accountId: bgAccountId,
                           source: "purchase",
-                          requestId: bgRequestId,
                         });
                       } catch {
                         // Best-effort auto-install
@@ -5944,12 +6098,11 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             const autoAppId = completed.productId.trim().toLowerCase();
             const autoServerId = completed.principal.tenantId;
             try {
-              await ensureRuntimeAppInstalled({
-                session,
-                appId: autoAppId,
+              await installAppOnServer({
                 serverId: autoServerId,
+                appId: autoAppId,
+                accountId: session.principal.accountId ?? session.principal.userId,
                 source: "purchase",
-                requestId: requestId ?? randomToken(10),
               });
             } catch {
               // Best-effort auto-install
@@ -6190,6 +6343,147 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         const tokenId = pathname.split("/")[3];
         store.revokeApiToken(tokenId);
         return sendJson(res, 200, { ok: true });
+      }
+
+      // ── Account Info Endpoint ──────────────────────────────────────
+
+      if (method === "GET" && pathname === "/api/account") {
+        const session = readSession({ req, config, sessions, store });
+        if (!session) return sendJson(res, 401, { ok: false, error: "unauthorized" });
+        const accountId = session.principal.accountId;
+        if (!accountId) return sendJson(res, 400, { ok: false, error: "no_account" });
+
+        const account = store.getAccount(accountId);
+        if (!account) return sendJson(res, 404, { ok: false, error: "account_not_found" });
+
+        const servers = store.getServersForAccount(accountId);
+        const activeServers = servers.filter((s) => s.status !== "deleted");
+        const credits = store.getCreditBalance(accountId);
+        const freeTierActive = !!(credits?.freeTierExpiresAtMs && credits.freeTierExpiresAtMs > Date.now());
+        const daysRemaining = freeTierActive && credits?.freeTierExpiresAtMs
+          ? Math.max(0, Math.ceil((credits.freeTierExpiresAtMs - Date.now()) / 86400000))
+          : 0;
+
+        return sendJson(res, 200, {
+          ok: true,
+          accountId: account.accountId,
+          displayName: account.displayName,
+          email: session.principal.email ?? null,
+          status: account.status,
+          servers: activeServers.length,
+          createdAt: new Date(account.createdAtMs).toISOString(),
+          freeTier: {
+            active: freeTierActive,
+            expiresAt: credits?.freeTierExpiresAtMs ? new Date(credits.freeTierExpiresAtMs).toISOString() : null,
+            daysRemaining,
+          },
+          creditBalance: {
+            balanceCents: credits?.balanceCents ?? 0,
+            currency: credits?.currency ?? "usd",
+            formattedBalance: `$${((credits?.balanceCents ?? 0) / 100).toFixed(2)}`,
+          },
+        });
+      }
+
+      // ── Credit System Endpoints ────────────────────────────────────
+
+      if (method === "GET" && pathname === "/api/account/credits") {
+        const session = readSession({ req, config, sessions, store });
+        if (!session) return sendJson(res, 401, { ok: false, error: "unauthorized" });
+        const accountId = session.principal.accountId;
+        if (!accountId) return sendJson(res, 400, { ok: false, error: "no_account" });
+
+        const credits = store.getCreditBalance(accountId);
+        const transactions = store.getCreditTransactions(accountId, { limit: 10 });
+        const freeTierActive = !!(credits?.freeTierExpiresAtMs && credits.freeTierExpiresAtMs > Date.now());
+        const daysRemaining = freeTierActive && credits?.freeTierExpiresAtMs
+          ? Math.max(0, Math.ceil((credits.freeTierExpiresAtMs - Date.now()) / 86400000))
+          : 0;
+
+        sendJson(res, 200, {
+          ok: true,
+          balance_cents: credits?.balanceCents ?? 0,
+          currency: credits?.currency ?? "usd",
+          formatted_balance: `$${((credits?.balanceCents ?? 0) / 100).toFixed(2)}`,
+          free_tier: freeTierActive
+            ? {
+                active: true,
+                expires_at: new Date(credits!.freeTierExpiresAtMs!).toISOString(),
+                days_remaining: daysRemaining,
+              }
+            : { active: false },
+          recent_transactions: transactions.map((t) => ({
+            transaction_id: t.transactionId,
+            type: t.type,
+            amount_cents: t.amountCents,
+            balance_after_cents: t.balanceAfterCents,
+            description: t.description,
+            created_at: new Date(t.createdAtMs).toISOString(),
+          })),
+        });
+        return;
+      }
+
+      if (method === "GET" && pathname === "/api/account/credits/transactions") {
+        const session = readSession({ req, config, sessions, store });
+        if (!session) return sendJson(res, 401, { ok: false, error: "unauthorized" });
+        const accountId = session.principal.accountId;
+        if (!accountId) return sendJson(res, 400, { ok: false, error: "no_account" });
+
+        const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit")) || 50));
+        const offset = Math.max(0, Number(url.searchParams.get("offset")) || 0);
+        const transactions = store.getCreditTransactions(accountId, { limit, offset });
+
+        sendJson(res, 200, {
+          ok: true,
+          transactions: transactions.map((t) => ({
+            transaction_id: t.transactionId,
+            type: t.type,
+            amount_cents: t.amountCents,
+            balance_after_cents: t.balanceAfterCents,
+            description: t.description,
+            reference_id: t.referenceId,
+            created_at: new Date(t.createdAtMs).toISOString(),
+          })),
+        });
+        return;
+      }
+
+      if (method === "POST" && pathname === "/api/account/credits/deposit") {
+        const session = readSession({ req, config, sessions, store });
+        if (!session) return sendJson(res, 401, { ok: false, error: "unauthorized" });
+        const accountId = session.principal.accountId;
+        if (!accountId) return sendJson(res, 400, { ok: false, error: "no_account" });
+
+        const body = await readJsonBody(req);
+        const bodyRecord = asRecord(body);
+        const amountCents = typeof bodyRecord?.amount_cents === "number" ? bodyRecord.amount_cents : 0;
+
+        if (amountCents < 500) {
+          sendJson(res, 400, { ok: false, error: "minimum_deposit", message: "Minimum deposit is $5.00 (500 cents)" });
+          return;
+        }
+        if (amountCents > 100000) {
+          sendJson(res, 400, { ok: false, error: "maximum_deposit", message: "Maximum deposit is $1,000.00" });
+          return;
+        }
+
+        try {
+          const checkout = await createCreditDepositSession({
+            config,
+            accountId,
+            amountCents,
+            customerEmail: session.principal.email,
+          });
+          sendJson(res, 200, {
+            ok: true,
+            checkout_url: checkout.checkoutUrl,
+            session_id: checkout.sessionId,
+          });
+        } catch (err) {
+          sendJson(res, 500, { ok: false, error: String(err) });
+        }
+        return;
       }
 
       if (pathname.startsWith("/auth/")) {

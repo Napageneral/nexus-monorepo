@@ -1,6 +1,6 @@
 # Database Architecture — Canonical Spec
 
-> **Status:** APPROVED
+**Status:** CANONICAL
 > **Bundle:** Cross-cutting (touches Bundle A workspace lifecycle, Bundle B runtime routing, and data layer)
 > **Supersedes:** Ad-hoc multi-ledger layout from legacy memory subprocess + nex split
 > **Date:** 2025-02-18

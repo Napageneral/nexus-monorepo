@@ -627,6 +627,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): FrontdoorConfi
     throw new Error("frontdoor config billing webhookSecret is required when billing is enabled");
   }
 
+  // VPS access (SSH) — for app installation pipeline
+  const vpsAccessSshKeyPath = readString(
+    env.FRONTDOOR_VPS_SSH_KEY_PATH,
+    "/root/.ssh/nexus-operator",
+  );
+  const vpsAccessSshUser = readString(env.FRONTDOOR_VPS_SSH_USER, "root");
+
+  // App storage path — where app tarballs are stored on frontdoor
+  const appStoragePath = readString(
+    env.FRONTDOOR_APP_STORAGE_PATH,
+    "/opt/nexus/frontdoor/apps",
+  );
+
   if (tenants.size === 0 && !autoProvisionEnabled) {
     throw new Error("frontdoor config has no tenants");
   }
@@ -684,6 +697,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): FrontdoorConfi
       stripeApiBaseUrl,
       stripePriceIdsByPlan,
     },
+    vpsAccess: {
+      sshKeyPath: vpsAccessSshKeyPath,
+      sshUser: vpsAccessSshUser,
+    },
+    appStoragePath,
   };
 }
 

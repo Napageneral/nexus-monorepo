@@ -1,6 +1,6 @@
 # Fact Graph Traversal — Relationship Query Patterns
 
-**Status:** CANONICAL SPEC
+**Status:** CANONICAL
 **Last Updated:** 2026-03-02
 **Related:** UNIFIED_ENTITY_STORE.md, MEMORY_SYSTEM.md, MEMORY_RECALL.md
 

@@ -150,7 +150,7 @@ export type AccountMemberView = AccountMemberRecord & {
   displayName?: string;
 };
 
-export type ServerStatus = "provisioning" | "running" | "failed" | "deprovisioning" | "deleted";
+export type ServerStatus = "provisioning" | "running" | "failed" | "deprovisioning" | "deleted" | "suspended";
 
 export type ServerRecord = {
   serverId: string;
@@ -263,7 +263,7 @@ export type ServerAppInstallRecord = {
   entryPath?: string;
   lastError?: string;
   installedAtMs?: number;
-  source: "onboarding" | "manual" | "admin" | "system" | "purchase" | "inferred";
+  source: "onboarding" | "manual" | "admin" | "system" | "purchase" | "inferred" | "auto_provision" | "api";
   createdAtMs: number;
   updatedAtMs: number;
 };
@@ -311,6 +311,25 @@ export type InviteView = {
   redeemedByUserId?: string;
   redeemedAtMs?: number;
   revokedAtMs?: number;
+};
+
+export type CreditBalanceRecord = {
+  accountId: string;
+  balanceCents: number;
+  currency: string;
+  freeTierExpiresAtMs: number | null;
+  updatedAtMs: number;
+};
+
+export type CreditTransactionRecord = {
+  transactionId: string;
+  accountId: string;
+  amountCents: number;
+  balanceAfterCents: number;
+  type: "deposit" | "usage" | "refund" | "trial_grant" | "adjustment";
+  description: string;
+  referenceId: string | null;
+  createdAtMs: number;
 };
 
 export type ProductRecord = {
@@ -593,6 +612,31 @@ export class FrontdoorStore {
       );
       CREATE INDEX IF NOT EXISTS idx_frontdoor_account_invoices_account_created
         ON frontdoor_account_invoices(account_id, created_at_ms DESC);
+
+      -- Account Credits (prepaid balance)
+      CREATE TABLE IF NOT EXISTS frontdoor_account_credits (
+        account_id TEXT PRIMARY KEY REFERENCES frontdoor_accounts(account_id),
+        balance_cents INTEGER NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'usd',
+        free_tier_expires_at_ms INTEGER,
+        updated_at_ms INTEGER NOT NULL
+      );
+
+      -- Credit Transactions (audit log)
+      CREATE TABLE IF NOT EXISTS frontdoor_credit_transactions (
+        transaction_id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL REFERENCES frontdoor_accounts(account_id),
+        amount_cents INTEGER NOT NULL,
+        balance_after_cents INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        description TEXT NOT NULL,
+        reference_id TEXT,
+        created_at_ms INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_frontdoor_credit_transactions_account
+        ON frontdoor_credit_transactions(account_id);
+      CREATE INDEX IF NOT EXISTS idx_frontdoor_credit_transactions_created
+        ON frontdoor_credit_transactions(created_at_ms);
 
       -- Product Registry
       CREATE TABLE IF NOT EXISTS frontdoor_products (
@@ -997,6 +1041,10 @@ export class FrontdoorStore {
 
     // Owner is always a member with owner role
     this.addAccountMember(accountId, ownerUserId, "owner");
+
+    // Initialize credit balance with 7-day free tier
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    this.initializeCredits(accountId, 0, nowMs() + sevenDays);
 
     const account = this.getAccount(accountId);
     if (!account) {
@@ -2439,7 +2487,7 @@ export class FrontdoorStore {
     version?: string;
     entryPath?: string;
     lastError?: string;
-    source?: "onboarding" | "manual" | "admin" | "system" | "purchase" | "inferred";
+    source?: "onboarding" | "manual" | "admin" | "system" | "purchase" | "inferred" | "auto_provision" | "api";
   }): void {
     const serverId = params.serverId.trim();
     const appId = normalizeAppId(params.appId);
@@ -3623,6 +3671,209 @@ export class FrontdoorStore {
       .run(nowMs(), planId);
   }
 
+  // -----------------------------------------------------------------------
+  // Credit System
+  // -----------------------------------------------------------------------
+
+  getCreditBalance(accountId: string): CreditBalanceRecord | null {
+    const row = this.db
+      .prepare(
+        `
+        SELECT account_id, balance_cents, currency, free_tier_expires_at_ms, updated_at_ms
+        FROM frontdoor_account_credits
+        WHERE account_id = ?
+        LIMIT 1
+      `,
+      )
+      .get(accountId) as
+      | {
+          account_id: string;
+          balance_cents: number;
+          currency: string;
+          free_tier_expires_at_ms: number | null;
+          updated_at_ms: number;
+        }
+      | undefined;
+    if (!row) return null;
+    return {
+      accountId: row.account_id,
+      balanceCents: row.balance_cents,
+      currency: row.currency,
+      freeTierExpiresAtMs: row.free_tier_expires_at_ms ?? null,
+      updatedAtMs: row.updated_at_ms,
+    };
+  }
+
+  initializeCredits(
+    accountId: string,
+    initialBalanceCents = 0,
+    freeTierExpiresAtMs?: number,
+  ): void {
+    const now = nowMs();
+    this.db
+      .prepare(
+        `
+        INSERT OR IGNORE INTO frontdoor_account_credits
+          (account_id, balance_cents, currency, free_tier_expires_at_ms, updated_at_ms)
+        VALUES (?, ?, 'usd', ?, ?)
+      `,
+      )
+      .run(accountId, initialBalanceCents, freeTierExpiresAtMs ?? null, now);
+  }
+
+  addCredits(params: {
+    accountId: string;
+    amountCents: number;
+    type: "deposit" | "refund" | "trial_grant" | "adjustment";
+    description: string;
+    referenceId?: string;
+  }): { transactionId: string; balanceAfterCents: number } {
+    const now = nowMs();
+    const txId = `ctx-${now}-${Math.random().toString(36).slice(2, 8)}`;
+
+    this.db.exec("BEGIN");
+    try {
+      // Ensure credit record exists
+      this.initializeCredits(params.accountId);
+
+      // Update balance
+      this.db
+        .prepare(
+          `UPDATE frontdoor_account_credits SET balance_cents = balance_cents + ?, updated_at_ms = ? WHERE account_id = ?`,
+        )
+        .run(params.amountCents, now, params.accountId);
+
+      // Read new balance
+      const row = this.db
+        .prepare(`SELECT balance_cents FROM frontdoor_account_credits WHERE account_id = ?`)
+        .get(params.accountId) as { balance_cents: number };
+
+      // Insert transaction
+      this.db
+        .prepare(
+          `
+          INSERT INTO frontdoor_credit_transactions
+            (transaction_id, account_id, amount_cents, balance_after_cents, type, description, reference_id, created_at_ms)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        )
+        .run(txId, params.accountId, params.amountCents, row.balance_cents, params.type, params.description, params.referenceId ?? null, now);
+
+      this.db.exec("COMMIT");
+      return { transactionId: txId, balanceAfterCents: row.balance_cents };
+    } catch (err) {
+      this.db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
+  deductCredits(params: {
+    accountId: string;
+    amountCents: number;
+    type: "usage";
+    description: string;
+    referenceId?: string;
+  }): { ok: true; transactionId: string; balanceAfterCents: number } | { ok: false; error: "insufficient_balance"; currentBalanceCents: number } {
+    const now = nowMs();
+    const txId = `ctx-${now}-${Math.random().toString(36).slice(2, 8)}`;
+
+    this.db.exec("BEGIN");
+    try {
+      const row = this.db
+        .prepare(`SELECT balance_cents FROM frontdoor_account_credits WHERE account_id = ?`)
+        .get(params.accountId) as { balance_cents: number } | undefined;
+
+      if (!row) {
+        this.db.exec("ROLLBACK");
+        return { ok: false, error: "insufficient_balance", currentBalanceCents: 0 };
+      }
+
+      // Allow up to $1 negative balance before rejecting
+      if (row.balance_cents < params.amountCents && row.balance_cents < 100) {
+        this.db.exec("ROLLBACK");
+        return { ok: false, error: "insufficient_balance", currentBalanceCents: row.balance_cents };
+      }
+
+      // Deduct
+      const newBalance = row.balance_cents - params.amountCents;
+      this.db
+        .prepare(
+          `UPDATE frontdoor_account_credits SET balance_cents = ?, updated_at_ms = ? WHERE account_id = ?`,
+        )
+        .run(newBalance, now, params.accountId);
+
+      // Insert transaction
+      this.db
+        .prepare(
+          `
+          INSERT INTO frontdoor_credit_transactions
+            (transaction_id, account_id, amount_cents, balance_after_cents, type, description, reference_id, created_at_ms)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        )
+        .run(txId, params.accountId, -params.amountCents, newBalance, params.type, params.description, params.referenceId ?? null, now);
+
+      this.db.exec("COMMIT");
+      return { ok: true, transactionId: txId, balanceAfterCents: newBalance };
+    } catch (err) {
+      this.db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
+  getCreditTransactions(
+    accountId: string,
+    opts?: { limit?: number; offset?: number },
+  ): CreditTransactionRecord[] {
+    const limit = opts?.limit ?? 50;
+    const offset = opts?.offset ?? 0;
+    const rows = this.db
+      .prepare(
+        `
+        SELECT transaction_id, account_id, amount_cents, balance_after_cents,
+               type, description, reference_id, created_at_ms
+        FROM frontdoor_credit_transactions
+        WHERE account_id = ?
+        ORDER BY created_at_ms DESC
+        LIMIT ? OFFSET ?
+      `,
+      )
+      .all(accountId, limit, offset) as Array<{
+      transaction_id: string;
+      account_id: string;
+      amount_cents: number;
+      balance_after_cents: number;
+      type: string;
+      description: string;
+      reference_id: string | null;
+      created_at_ms: number;
+    }>;
+
+    return rows.map((r) => ({
+      transactionId: r.transaction_id,
+      accountId: r.account_id,
+      amountCents: r.amount_cents,
+      balanceAfterCents: r.balance_after_cents,
+      type: r.type as CreditTransactionRecord["type"],
+      description: r.description,
+      referenceId: r.reference_id,
+      createdAtMs: r.created_at_ms,
+    }));
+  }
+
+  getActiveAccountsWithServers(): Array<{ accountId: string }> {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT DISTINCT a.account_id
+        FROM frontdoor_accounts a
+        JOIN frontdoor_servers s ON s.account_id = a.account_id
+        WHERE a.status = 'active' AND s.status IN ('running', 'provisioning')
+      `,
+      )
+      .all() as Array<{ account_id: string }>;
+    return rows.map((r) => ({ accountId: r.account_id }));
+  }
 }
 
 // ── Conversion Helpers ──────────────────────────────────────────────

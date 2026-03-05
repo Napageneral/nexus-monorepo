@@ -189,28 +189,27 @@
   },
   "adapters": [
     {
-      "id": "google-ads",
-      "name": "Google Ads",
+      "id": "google",
+      "name": "Google",
       "platform": "google",
-      "command": "../../../adapters/nexus-adapter-gog-ads/bin/gog-ads-adapter",
-      "description": "Sync advertising campaign data from Google Ads",
+      "command": "../../../adapters/nexus-adapter-google/bin/google-adapter",
+      "description": "Sync data from Google Ads and Google Business Profile",
       "authMethods": [
         {
           "type": "oauth",
           "label": "Connect with Google"
-        }
-      ]
-    },
-    {
-      "id": "google-business-profile",
-      "name": "Google Business Profile",
-      "platform": "google",
-      "command": "../../../adapters/nexus-adapter-gog-places/bin/gog-places-adapter",
-      "description": "Sync business profile and review data from Google",
-      "authMethods": [
+        },
         {
-          "type": "oauth",
-          "label": "Connect with Google"
+          "type": "apikey",
+          "label": "Quick Connect (Places API)",
+          "fields": [
+            {
+              "name": "place_id",
+              "label": "Google Place ID",
+              "type": "text",
+              "required": true
+            }
+          ]
         }
       ]
     },
@@ -275,6 +274,60 @@
               "name": "centerId",
               "label": "Center ID",
               "type": "text",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "callrail",
+      "name": "CallRail",
+      "platform": "callrail",
+      "command": "../../../adapters/nexus-adapter-callrail/bin/callrail-adapter",
+      "description": "Sync phone call tracking data from CallRail",
+      "authMethods": [
+        {
+          "type": "apikey",
+          "label": "API Key Authentication",
+          "fields": [
+            {
+              "name": "api_token",
+              "label": "API Token",
+              "type": "password",
+              "required": true
+            },
+            {
+              "name": "account_id",
+              "label": "Account ID",
+              "type": "text",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "twilio",
+      "name": "Twilio",
+      "platform": "twilio",
+      "command": "../../../adapters/nexus-adapter-twilio/bin/twilio-adapter",
+      "description": "Sync call data from Twilio",
+      "authMethods": [
+        {
+          "type": "apikey",
+          "label": "Account SID + Auth Token",
+          "fields": [
+            {
+              "name": "account_sid",
+              "label": "Account SID",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "auth_token",
+              "label": "Auth Token",
+              "type": "password",
               "required": true
             }
           ]

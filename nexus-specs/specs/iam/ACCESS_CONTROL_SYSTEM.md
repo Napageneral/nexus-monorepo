@@ -1,8 +1,8 @@
 # Access Control System
 
-**Status:** DESIGN SPEC  
+**Status:** CANONICAL
 **Last Updated:** 2026-02-23  
-**Related:** ../../OVERVIEW.md, ../nex/EVENT_SYSTEM_DESIGN.md, ../broker/OVERVIEW.md, POLICY_ARCHITECTURE_UNIFICATION.md, ../nex/ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md
+**Related:** ../../OVERVIEW.md, ../nex/EVENT_SYSTEM_DESIGN.md, ../broker/BROKER.md, POLICY_ARCHITECTURE_UNIFICATION.md, ../nex/ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md
 
 ---
 

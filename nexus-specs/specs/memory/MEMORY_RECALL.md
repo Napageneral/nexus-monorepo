@@ -1,6 +1,6 @@
 # Memory Recall — Search API Specification
 
-**Status:** CANONICAL SPEC
+**Status:** CANONICAL
 **Last Updated:** 2026-03-02
 **Related:** MEMORY_SYSTEM.md, MEMORY_STORAGE_MODEL.md, skills/MEMORY_SEARCH_SKILL.md
 

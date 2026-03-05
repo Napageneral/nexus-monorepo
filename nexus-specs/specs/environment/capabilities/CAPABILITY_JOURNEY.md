@@ -1,6 +1,6 @@
 # Capability Onboarding Journey
 
-**Status:** SPEC COMPLETE  
+**Status:** DESIGN
 **Source:** `nexus-cli/.intent/specs/05_CAPABILITY_TAXONOMY.md`, `07_AGENT_BINDINGS.md`
 
 ---

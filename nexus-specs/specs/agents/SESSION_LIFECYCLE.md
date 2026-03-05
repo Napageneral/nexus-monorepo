@@ -1,21 +1,21 @@
 # Session Lifecycle
 
-**Status:** DESIGN SPEC
+**Status:** DESIGN
 **Last Updated:** 2026-02-26
-**Canonical routing spec:** `../nex/ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md`
+**Canonical routing spec:** `../nex/NEXUS_REQUEST_TARGET.md` (§ resolvePrincipals, § AgentContext)
 **Database layout:** See `../../data/DATABASE_ARCHITECTURE.md` for canonical database inventory (7 databases)
 
 ---
 
 ## Overview
 
-This document defines the complete lifecycle of agent sessions — from creation through turn processing, compaction, forking, and entity-merge-driven session aliasing. It stitches together the session-related concepts defined across DATA_MODEL.md, AGENTS_LEDGER.md, CONTEXT_ASSEMBLY.md, and OVERVIEW.md into one coherent flow.
+This document defines the complete lifecycle of agent sessions — from creation through turn processing, compaction, forking, and entity-merge-driven session aliasing. It stitches together the session-related concepts defined across DATA_MODEL.md, AGENTS_LEDGER.md, CONTEXT_ASSEMBLY.md, and BROKER.md into one coherent flow.
 
 **Key Insight:** Session keys are canonical from first contact. DM sessions use entity-pair keys, shared containers use container keys, and email uses thread-container keys. When the memory-writer later discovers that two entities are the same person, DM aliases preserve continuity while email thread boundaries remain isolated.
 
 Hard-cutover note:
 - Routing semantics in this doc follow entity-based keys and receiver-entity scoping.
-- Any remaining `persona_id` SQL examples are legacy ledger schema references and are superseded by persona binding architecture in `../nex/ENTITY_SYMMETRIC_ROUTING_AND_PERSONA_BINDING.md`.
+- Any remaining `persona_id` SQL examples are legacy ledger schema references and are superseded by persona binding architecture in `../nex/NEXUS_REQUEST_TARGET.md` (§ AgentContext).
 
 ---
 
@@ -557,10 +557,9 @@ This enables:
 
 - `../RUNTIME_ROUTING.md` — Canonical routing spec: contacts, identity resolution, session key generation, entity merge propagation
 - `DATA_MODEL.md` — Ontology: Session, Turn, Thread, Compaction definitions
-- `OVERVIEW.md` — Broker architecture, routing hierarchy
+- `BROKER.md` — Broker architecture, routing hierarchy, Manager-Worker Pattern
 - `AGENT_ENGINE.md` — Agent execution, CompactionResult, subagent spawning
 - `CONTEXT_ASSEMBLY.md` — Compaction-aware history building, token budget
-- `AGENTS.md` — Manager-Worker Pattern, inter-agent communication
 - `../../data/ledgers/AGENTS_LEDGER.md` — Schema for sessions, threads, compactions, session_history
 - `../../runtime/nex/NEXUS_REQUEST.md` — Pipeline stages 4 (routing) and 6 (session resolution)
 - `../../runtime/iam/ACCESS_CONTROL_SYSTEM.md` — ACL policies that produce session keys

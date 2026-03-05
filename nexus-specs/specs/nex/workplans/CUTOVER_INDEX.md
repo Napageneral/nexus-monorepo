@@ -1,8 +1,8 @@
 # Canonical Hard Cutover — Master Workplan Index
 
-**Status:** ACTIVE
+**Status:** COMPLETED
 **Created:** 2026-03-02
-**Updated:** 2026-03-04
+**Updated:** 2026-03-05
 **Canonical Specs:** [NEXUS_REQUEST_TARGET.md](../NEXUS_REQUEST_TARGET.md) · [AGENT_DELIVERY.md](../AGENT_DELIVERY.md) · [ATTACHMENTS.md](../ATTACHMENTS.md) · [SPEC_INDEX.md](../SPEC_INDEX.md) · [RESOLVED_DECISIONS.md](../RESOLVED_DECISIONS.md)
 
 ---
@@ -19,22 +19,22 @@ This index covers two generations of workplans:
 
 ---
 
-## API Redesign Workplans (WP1–WP12)
+## API Redesign Workplans (WP1–WP12) — ALL COMPLETED
 
-| # | Doc | Scope | Ops | Depends On |
-|---|-----|-------|-----|------------|
-| WP1 | [WP_IDENTITY_DB_OVERHAUL.md](./WP_IDENTITY_DB_OVERHAUL.md) | Contacts 8→3 consolidation, groups, policies to DB, entity CRUD, is_agent, immutable row | 46 | — |
-| WP2 | [WP_CREDENTIAL_SYSTEM.md](./WP_CREDENTIAL_SYSTEM.md) | File→DB credential migration, vault, encrypted store, 6 storage types, adapter_connections table | 21 | WP1 |
-| WP3 | [WP_AUTH_UNIFICATION.md](./WP_AUTH_UNIFICATION.md) | Audience removal (131 occurrences, 28 files), two-server collapse, role-gated loopback/hosted | 6 | — |
-| WP4 | [WP_SESSION_ROUTING.md](./WP_SESSION_ROUTING.md) | 3 session key systems → 1, request.session_routing, persona→workspace, label→key rename | — | WP5 |
-| WP5 | [WP_WORKSPACE_PRIMITIVE.md](./WP_WORKSPACE_PRIMITIVE.md) | New workspaces table, manifest system, persona elimination, working_dir rename | 10 | WP1 |
-| WP6 | [WP_HOOK_SYSTEM_COLLAPSE.md](./WP_HOOK_SYSTEM_COLLAPSE.md) | 4 hook systems → 1, 44→19 canonical hook points, naming standardization | — | — |
-| WP7 | [WP_WORK_DOMAIN_UNIFICATION.md](./WP_WORK_DOMAIN_UNIFICATION.md) | 7 new tables replacing ~15 across 4 DBs: jobs, cron, DAGs, agent_configs | 29 | WP5, WP6 |
-| WP8 | [WP_MEMORY_API_EXPOSURE.md](./WP_MEMORY_API_EXPOSURE.md) | Wrap 12 agent tools + internals as 20 control-plane operations | 20 | — |
-| WP9 | [WP_AGENTS_SESSIONS_API.md](./WP_AGENTS_SESSIONS_API.md) | agents.sessions.* (11), turns (2), messages (2), queue (2), agents CRUD (7), chat (3) | 27 | WP5, WP7 |
-| WP10 | [WP_ADAPTERS_CHANNELS_DELIVERY.md](./WP_ADAPTERS_CHANNELS_DELIVERY.md) | Channels deduplicated union (12), adapter connections (13), events (5), channel→account resolution | 30 | WP1, WP2 |
-| WP11 | [WP_APPS_SKILLS_MODELS_RUNTIME.md](./WP_APPS_SKILLS_MODELS_RUNTIME.md) | Apps (9), skills (3), models (2), runtime (2), pubsub (3), events (5), chat (3) | 27 | WP2, WP7 |
-| WP12 | [WP_DROPS_AND_EXTRACTIONS.md](./WP_DROPS_AND_EXTRACTIONS.md) | TTS extraction, 55+ ops dropped, 17 namespace renames, dead code sweep | — | Finish last |
+| # | Doc | Scope | Ops | Status | Commit |
+|---|-----|-------|-----|--------|--------|
+| WP1 | [WP_IDENTITY_DB_OVERHAUL.md](./_archive/WP_IDENTITY_DB_OVERHAUL.md) | Contacts 8→3 consolidation, groups, policies to DB, entity CRUD, is_agent, immutable row | 46 | ✅ COMPLETED | `c0627d7a2` |
+| WP2 | [WP_CREDENTIAL_SYSTEM.md](./_archive/WP_CREDENTIAL_SYSTEM.md) | File→DB credential migration, vault, encrypted store, 6 storage types, adapter_connections table | 21 | ✅ COMPLETED | `f36731799` |
+| WP3 | [WP_AUTH_UNIFICATION.md](./_archive/WP_AUTH_UNIFICATION.md) | Audience removal (131 occurrences, 28 files), two-server collapse, role-gated loopback/hosted | 6 | ✅ COMPLETED | `e83386a96` |
+| WP4 | [WP_SESSION_ROUTING.md](./_archive/WP_SESSION_ROUTING.md) | 3 session key systems → 1, request.session_routing, persona→workspace, label→key rename | — | ✅ COMPLETED | `ed16d4474` |
+| WP5 | [WP_WORKSPACE_PRIMITIVE.md](./_archive/WP_WORKSPACE_PRIMITIVE.md) | New workspaces table, manifest system, persona elimination, working_dir rename | 10 | ✅ COMPLETED | `4cec81ac1` |
+| WP6 | [WP_HOOK_SYSTEM_COLLAPSE.md](./_archive/WP_HOOK_SYSTEM_COLLAPSE.md) | 4 hook systems → 1, 44→19 canonical hook points, naming standardization | — | ✅ COMPLETED | `9c3da712c` |
+| WP7 | [WP_WORK_DOMAIN_UNIFICATION.md](./_archive/WP_WORK_DOMAIN_UNIFICATION.md) | 7 new tables replacing ~15 across 4 DBs: jobs, cron, DAGs, agent_configs | 29 | ✅ COMPLETED | `9b612d2f0` |
+| WP8 | [WP_MEMORY_API_EXPOSURE.md](./_archive/WP_MEMORY_API_EXPOSURE.md) | Wrap 12 agent tools + internals as 20 control-plane operations | 20 | ✅ COMPLETED | `ce203a1f8` |
+| WP9 | [WP_AGENTS_SESSIONS_API.md](./_archive/WP_AGENTS_SESSIONS_API.md) | agents.sessions.* (11), turns (2), messages (2), queue (2), agents CRUD (7), chat (3) | 27 | ✅ COMPLETED | `717d6c4b8` |
+| WP10 | [WP_ADAPTERS_CHANNELS_DELIVERY.md](./_archive/WP_ADAPTERS_CHANNELS_DELIVERY.md) | Channels deduplicated union (12), adapter connections (13), events (5), channel→account resolution | 30 | ✅ COMPLETED | `2bcadaa4e` |
+| WP11 | [WP_APPS_SKILLS_MODELS_RUNTIME.md](./_archive/WP_APPS_SKILLS_MODELS_RUNTIME.md) | Apps (9), skills (3), models (2), runtime (2), pubsub (3), events (5), chat (3) | 27 | ✅ COMPLETED | `f27b7d8c0` |
+| WP12 | [WP_DROPS_AND_EXTRACTIONS.md](./_archive/WP_DROPS_AND_EXTRACTIONS.md) | TTS extraction, 55+ ops dropped, 17 namespace renames, dead code sweep | — | ✅ COMPLETED | `213d119a0` |
 
 ---
 
@@ -126,12 +126,12 @@ Phase 1: NexusRequest Bus Rewrite ✅
 
 ---
 
-### Pre-Existing Workplans (Referenced by WP3 and WP4)
+### Pre-Existing Workplans (Referenced by WP3 and WP4) — COMPLETED
 
-| Doc | Summary | Referenced By |
-|-----|---------|---------------|
-| [AUDIENCE_REMOVAL_CUTOVER.md](./AUDIENCE_REMOVAL_CUTOVER.md) | Remove token audience (131 occurrences, 28 files) | WP3 |
-| [SESSION_ROUTING_UNIFICATION.md](./SESSION_ROUTING_UNIFICATION.md) | Unify 3 session key systems (~25 files) | WP4 |
+| Doc | Summary | Referenced By | Status |
+|-----|---------|---------------|--------|
+| [AUDIENCE_REMOVAL_CUTOVER.md](./_archive/AUDIENCE_REMOVAL_CUTOVER.md) | Remove token audience (131 occurrences, 28 files) | WP3 | ✅ COMPLETED (with WP3, `e83386a96`) |
+| [SESSION_ROUTING_UNIFICATION.md](./_archive/SESSION_ROUTING_UNIFICATION.md) | Unify 3 session key systems (~25 files) | WP4 | ✅ COMPLETED (superseded by WP4, `ed16d4474`) |
 
 ---
 

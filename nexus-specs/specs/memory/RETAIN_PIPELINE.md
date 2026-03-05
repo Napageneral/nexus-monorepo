@@ -1,8 +1,8 @@
 # Retain Pipeline — Episode Lifecycle
 
-**Status:** CANONICAL SPEC
-**Last Updated:** 2026-03-02
-**Related:** MEMORY_SYSTEM.md, MEMORY_WRITER.md, MEMORY_CONSOLIDATION.md
+**Status:** CANONICAL
+**Last Updated:** 2026-03-03
+**Related:** MEMORY_SYSTEM.md, MEMORY_WRITER.md, MEMORY_CONSOLIDATION.md, EPISODE_DETECTION.md
 
 ---
 
@@ -48,42 +48,24 @@ Each episode (retain set) tracks:
 
 ### Episode Detection Mechanism
 
-Episode detection uses a **hybrid approach: inline token-budget check + per-episode cron timer for the silence window**.
+Episode detection uses a **hybrid approach: inline token-budget check + per-episode CronService timer for the silence window**. See `EPISODE_DETECTION.md` for the full design spec including alternatives considered and architectural rationale.
 
-During `event.ingest`, after an event is stored, the pipeline slots it into an active episode:
+**Summary:** During `event.ingest`, after an event is stored, the pipeline slots it into an active episode:
 
-1. **Look up** `pending_retain_triggers` for `(platform, container_id, thread_id)`.
-2. **If no active episode exists** — create a new set in `memory.db` with `definition_id = 'retain'`, insert the event as a `set_member`, insert a `pending_retain_triggers` row, and schedule a 90-minute timer via the cron adapter.
-3. **If an active episode exists and the silence gap has NOT been exceeded** — add the event as a `set_member` and update the trigger row. Then check the token budget:
-   - **Under budget** — reset the timer to 90 minutes from now.
-   - **Over budget** — clip immediately (create a `jobs` row with `type_id = 'retain_v1'`, fire the `episode-created` hookpoint), then start a fresh episode for this event.
-4. **If the silence gap has been exceeded** — clip the old episode (create job, fire `episode-created`), then start a new episode with this event.
+1. **Look up** the cron job `episode-timeout:{platform}:{container_id}:{thread_id}` to find the active episode.
+2. **If no active episode exists** — create a new set in `memory.db` with `definition_id = 'retain'`, insert the event as a `set_member`, and create a one-shot cron job with a 90-minute timer that emits an `episode.timeout` internal event on fire.
+3. **If an active episode exists** — add the event as a `set_member` and update the set's metadata (token estimate, event count). Then check the token budget:
+   - **Under budget** — reset the cron timer to 90 minutes from now.
+   - **Over budget** — clip immediately (create a `jobs` row with `type_id = 'retain_v1'`, fire the `episode-created` hookpoint), delete the cron job, then start a fresh episode for this event.
+4. **If the silence gap has been exceeded** (stale timer safety net) — clip the old episode, then start a new episode with this event.
 
-When the cron timer fires, it invokes the episode timeout handler directly as an internal runtime event — this does NOT go through the full pipeline (no principals to resolve, no access to check). The handler clips the episode: creates the `jobs` row with `type_id = 'retain_v1'` and fires the `episode-created` hookpoint.
+When the cron timer fires, the CronService emits an `episode.timeout` internal event. The automation/hookpoint layer catches this event and clips the episode: creates the `jobs` row with `type_id = 'retain_v1'` and fires the `episode-created` hookpoint. The cron job auto-deletes (`deleteAfterRun: true`).
 
-#### `pending_retain_triggers` Table (runtime.db)
-
-```sql
-CREATE TABLE pending_retain_triggers (
-    platform        TEXT NOT NULL,
-    container_id    TEXT NOT NULL,
-    thread_id       TEXT NOT NULL DEFAULT '',
-    set_id          TEXT NOT NULL,
-    first_event_at  INTEGER NOT NULL,
-    last_event_at   INTEGER NOT NULL,
-    token_estimate  INTEGER NOT NULL DEFAULT 0,
-    event_count     INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY(platform, container_id, thread_id)
-);
-```
-
-Events are added to `set_members` in real-time as they arrive — the set is the "open episode." When the episode clips, the set is already fully populated; the pipeline just creates the job and fires the hook.
+Events are added to `set_members` in real-time as they arrive — the set is the "open episode." Accumulation state (token estimate, event count) is tracked on the set's metadata in `memory.db`. The cron job carries only the set_id and thread identity. When the episode clips, the set is already fully populated; the pipeline just creates the job and fires the hook.
 
 #### Crash Recovery
 
-On startup, scan `pending_retain_triggers`. For each row:
-- If `last_event_at + 90min < now` — clip immediately.
-- Otherwise — reschedule the timer for the remaining time.
+The CronService's existing `runMissedJobs()` on startup finds past-due episode timeout cron jobs and fires them. Episodes clip, writers dispatch. No additional crash recovery code needed.
 
 ### Fact Sets
 

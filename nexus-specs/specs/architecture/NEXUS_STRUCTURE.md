@@ -1,7 +1,7 @@
 # Nexus Project Structure
 
-**Status:** REFERENCE  
-**Updated:** 2026-02-23  
+**Status:** REFERENCE
+**Updated:** 2026-03-02
 **Purpose:** Define the project structure for the Nexus monorepo
 
 ---
@@ -13,7 +13,7 @@
 3. **Interface-driven** — Components communicate via defined interfaces and the event bus
 4. **Adapters are processes** — External CLI executables, not in-process objects
 5. **Skills not plugins** — Markdown docs + binaries, not code plugins
-6. **Memory system is unified** — The memory system (recall, search, entity extraction, embeddings, consolidation) runs inside the nex process as TypeScript. No separate process, no IPC boundary.
+6. **Memory system runs in the daemon** — The memory system (recall, search, entity extraction, embeddings, consolidation) runs inside the NEX daemon process. Agents access memory via `nexus memory` CLI commands that IPC to the daemon; the daemon executes the core functions and coordinates all database writes.
 
 ---
 
@@ -51,17 +51,18 @@ nexus/
 │   ├── nex/                        # NEX — Event Exchange (ingest pipeline)
 │   │   ├── daemon.ts               # Long-running NEX daemon process
 │   │   ├── pipeline.ts             # Event pipeline orchestration
-│   │   ├── stages/                 # Pipeline stages
-│   │   │   ├── normalize.ts        # Raw → NormalizedEvent
-│   │   │   ├── enrich.ts           # Identity resolution, metadata
-│   │   │   ├── evaluate.ts         # IAM policy check (calls into iam/)
-│   │   │   └── dispatch.ts         # Route to Broker or automation
+│   │   ├── stages/                 # Pipeline stages (5-stage canonical model)
+│   │   │   ├── accept-request.ts   # Parse, validate, create NexusRequest
+│   │   │   ├── resolve-principals.ts # Identity resolution (sender + receiver entities)
+│   │   │   ├── resolve-access.ts   # IAM policy check (calls into iam/)
+│   │   │   ├── execute-operation.ts # Route to Broker, run automations
+│   │   │   └── finalize-request.ts # Cleanup, persistence, analytics
 │   │   ├── adapters/               # Adapter Manager
 │   │   │   ├── manager.ts          # Lifecycle: discover, spawn, health-check
 │   │   │   ├── protocol.ts         # Adapter ↔ NEX wire protocol (stdin/stdout)
 │   │   │   └── registry.ts         # Installed adapter manifest
-│   │   └── plugins/                # Pipeline plugin hooks
-│   │       ├── loader.ts
+│   │   └── automations/            # Automation hooks (replaces plugins)
+│   │       ├── runner.ts           # evaluateAutomationsAtHook()
 │   │       └── types.ts
 │   │
 │   ├── broker/                     # Agent Broker (agent engine)
@@ -118,6 +119,7 @@ nexus/
 │   │   └── commands/
 │   │       ├── status.ts
 │   │       ├── capabilities.ts
+│   │       ├── memory/             # nexus memory <subcommand> (IPC to daemon)
 │   │       ├── skill/
 │   │       ├── credential/
 │   │       ├── config/
@@ -196,19 +198,19 @@ All persistent state lives in seven SQLite databases under `state/data/`, access
 
 | Database | Purpose | Key Tables |
 |----------|---------|------------|
-| **events.db** | Every inbound/outbound event normalized and stored. FTS5 full-text index. | `events`, `threads`, `event_participants`, `attachments` |
+| **events.db** | Every inbound/outbound event normalized and stored. FTS5 full-text index. | `events`, `attachments`, `attachment_interpretations`, `events_fts` |
 | **agents.db** | Session lifecycle, turns, messages, tool calls, compactions, artifacts. | `sessions`, `turns`, `messages`, `tool_calls`, `compactions`, `artifacts` |
 | **identity.db** | Entities, identity resolution, contacts, auth tokens, the Identity Graph. | `contacts`, `entities`, `entity_tags`, `auth_tokens` |
-| **memory.db** | Knowledge graph: elements, sets, jobs. | `elements`, `sets`, `jobs` |
-| **embeddings.db** | Vector embeddings for semantic search (sqlite-vec). | `embeddings` |
+| **memory.db** | Knowledge graph: elements, sets, jobs. | `elements`, `element_entities`, `element_links`, `sets`, `set_members`, `jobs`, `processing_log` |
+| **embeddings.db** | Vector embeddings for semantic search (sqlite-vec). | `embeddings`, `vec_embeddings` |
 | **runtime.db** | Pipeline requests, automations, adapter state, import jobs. | `nexus_requests`, `automations`, `adapter_instances` |
-| **work.db** | Work tracking: tasks, projects, goals, dependencies. | `tasks`, `projects`, `goals`, `dependencies` |
+| **work.db** | Work tracking: items, sequences, workflows, campaigns. | `work_items`, `sequences`, `workflows`, `campaigns` |
 
 SQLite WAL mode enables concurrent reads. Write contention is isolated by database -- hot-path writes to events.db, agents.db, and identity.db don't block each other.
 
 The Identity database contains the **Identity Graph** -- a graph structure mapping relationships between entities, identities, and platform accounts. This is queried by IAM for identity resolution and by the memory system for relationship-aware search.
 
-See `specs/data/DATABASE_ARCHITECTURE.md` for the canonical database specification.
+See `specs/DATABASE_ARCHITECTURE.md` for the canonical database specification.
 
 ---
 
@@ -262,13 +264,14 @@ Unlike openclaw where external communication isn't structured, Nexus adapters ar
 - Communicate over stdin/stdout using a JSON-lines protocol
 - A single adapter handles both directions for its platform
 
-### 5. Memory System Is Unified Inside Nex
+### 5. Memory System Runs in the Daemon
 
-The memory system (recall, search, entity extraction, embeddings, consolidation) runs inside the nex process as TypeScript. There is no separate process, no IPC boundary, no Go subprocess. The old Go memory subprocess has been eliminated -- all its logic has been ported to TypeScript. This provides:
-- Zero serialization overhead for memory operations
-- Single process simplicity -- no subprocess management or health checking
-- Direct function calls instead of HTTP/IPC roundtrips
+The memory system (recall, search, entity extraction, embeddings, consolidation) runs inside the NEX daemon process. Agents access memory operations via `nexus memory <subcommand>` CLI commands that send IPC requests to the daemon. The daemon executes the core functions, coordinates database writes, emits events, and returns JSON to stdout. This provides:
+- Daemon-coordinated writes — serialized through one process, no concurrent writer conflicts
+- Event emission — memory writes can trigger downstream automations (e.g., embedding generation)
+- Uniform agent interface — all agents use the same `nexus memory` CLI namespace
 - One connection pool for all 7 SQLite databases
+- Read-only direct SQLite access also available for ad-hoc analytical queries
 
 ### 6. MA/WA Agent Hierarchy
 

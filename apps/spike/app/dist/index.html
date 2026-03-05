@@ -1,0 +1,981 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Spike Runtime</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-1: #06131d;
+      --bg-2: #0d2332;
+      --panel: #102638cc;
+      --ink: #ebf5fa;
+      --muted: #9fb6c4;
+      --accent: #ff8f3f;
+      --accent-2: #2dc2b0;
+      --warn: #ffd479;
+      --ok: #6be29e;
+      --err: #ff7f7f;
+      --line: #2a4254;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1000px 580px at 8% -15%, #1d435f 0%, transparent 70%),
+        radial-gradient(800px 500px at 95% 2%, #263f2d 0%, transparent 62%),
+        linear-gradient(155deg, var(--bg-1) 0%, var(--bg-2) 100%);
+      min-height: 100vh;
+      animation: fadeIn 320ms ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .shell {
+      width: min(1180px, 94vw);
+      margin: 26px auto 48px;
+      display: grid;
+      gap: 16px;
+    }
+    .card {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 16px;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 18px 46px rgba(0, 0, 0, 0.28);
+      padding: 18px;
+    }
+    .hero {
+      display: grid;
+      gap: 8px;
+    }
+    h1 { margin: 0; font-size: clamp(1.28rem, 2.2vw, 2rem); letter-spacing: 0.01em; }
+    h2 {
+      margin: 0 0 10px;
+      font-size: 1rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #cde2ed;
+    }
+    .lead { margin: 0; color: var(--muted); }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .status {
+      border-radius: 11px;
+      border: 1px solid #275068;
+      background: #0c2030;
+      color: var(--muted);
+      padding: 11px 12px;
+      min-height: 46px;
+      font-size: 0.9rem;
+      font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      display: flex;
+      align-items: center;
+    }
+    .status.loading { color: var(--warn); border-color: #6f6640; background: #1e1c10; }
+    .status.ok { color: var(--ok); border-color: #3a674d; background: #122518; }
+    .status.err { color: var(--err); border-color: #754545; background: #301919; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .field { display: grid; gap: 7px; margin-bottom: 10px; }
+    label {
+      font-size: 0.76rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid #30485d;
+      border-radius: 9px;
+      padding: 10px;
+      color: var(--ink);
+      background: #0a1723;
+      font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.9rem;
+    }
+    textarea { min-height: 110px; resize: vertical; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: #05232a;
+      background: linear-gradient(135deg, var(--accent) 0%, #ffc06d 100%);
+      font-family: "Space Grotesk", sans-serif;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      min-height: 40px;
+      box-shadow: 0 10px 26px rgba(255, 143, 63, 0.33);
+      transition: transform .12s ease, box-shadow .18s ease;
+    }
+    button:hover { transform: translateY(-1px); }
+    button:active { transform: translateY(1px); }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    button.secondary {
+      color: #d0e7f7;
+      background: #19324a;
+      border: 1px solid #3a5670;
+      box-shadow: none;
+    }
+    .full { grid-column: 1 / -1; }
+    pre {
+      margin: 12px 0 0;
+      max-height: 260px;
+      overflow: auto;
+      border: 1px solid #2f4457;
+      border-radius: 9px;
+      background: #081420;
+      padding: 10px;
+      color: #c5ddf1;
+      font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.82rem;
+    }
+    .hint { color: var(--muted); font-size: 0.84rem; }
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      display: grid;
+      gap: 16px;
+      justify-items: center;
+    }
+    .empty-icon {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #1a3a4e 0%, #2d5266 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.5rem;
+      opacity: 0.7;
+    }
+    .empty-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin: 0;
+    }
+    .empty-text {
+      color: var(--muted);
+      max-width: 480px;
+      margin: 0;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: #0a1723;
+      border-radius: 999px;
+      overflow: hidden;
+      margin: 8px 0;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%);
+      transition: width 0.3s ease;
+      border-radius: 999px;
+    }
+    .index-card {
+      border: 1px solid #2a4254;
+      border-radius: 11px;
+      background: #0c1d2acc;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .index-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .index-title {
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    .badge {
+      font-size: 0.7rem;
+      border: 1px solid #35566d;
+      border-radius: 999px;
+      padding: 3px 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #bdd8e8;
+    }
+    .badge.ready {
+      color: #1f2f0f;
+      border-color: #8bbf51;
+      background: #d6f4b2;
+    }
+    .badge.hydrating {
+      color: #3e2f0f;
+      border-color: #bf9f51;
+      background: #f4e9b2;
+    }
+    .badge.error {
+      color: #3f1f1f;
+      border-color: #bf5151;
+      background: #f4b2b2;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .hidden { display: none; }
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+      .row { grid-template-columns: 1fr; }
+      button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="card hero">
+      <h1>Spike Runtime Workspace</h1>
+      <p class="lead">Tenant control surface for GitHub connect, index hydration, and oracle queries.</p>
+      <div id="status" class="status">Loading runtime context...</div>
+    </section>
+
+    <!-- Empty State: shown when no indexes exist -->
+    <section id="emptyState" class="card hidden">
+      <div class="empty-state">
+        <div class="empty-icon">🔌</div>
+        <h2 class="empty-title">Connect GitHub to get started</h2>
+        <p class="empty-text">Connect your GitHub account to create indexes from your repositories. Indexes enable code oracle queries powered by PRLM.</p>
+        <button type="button" id="connectGitHubEmpty">Connect GitHub App</button>
+      </div>
+    </section>
+
+    <!-- Main Interface: shown when at least one index exists or GitHub is connected -->
+    <section id="mainInterface" class="hidden">
+      <div class="grid">
+        <!-- Create Index -->
+        <article class="card">
+          <h2>Create Index</h2>
+          <div class="field">
+            <label for="repoSelect">Repository</label>
+            <select id="repoSelect">
+              <option value="">Select repository...</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="branchSelect">Branch</label>
+            <select id="branchSelect">
+              <option value="">Select branch...</option>
+            </select>
+          </div>
+          <div class="actions">
+            <button type="button" id="createIndexBtn">Create Index</button>
+            <button type="button" class="secondary" id="refreshReposBtn">Refresh Repos</button>
+          </div>
+          <div class="hint">Create a new code index from a GitHub repository.</div>
+        </article>
+
+        <!-- GitHub Connection -->
+        <article class="card">
+          <h2>GitHub Connection</h2>
+          <div id="githubStatus" class="status">Not connected</div>
+          <div class="actions" style="margin-top: 12px;">
+            <button type="button" id="connectGitHubBtn">Connect GitHub</button>
+            <button type="button" class="secondary" id="listInstallationsBtn">List Installations</button>
+          </div>
+          <pre id="githubOut">No GitHub installations loaded yet.</pre>
+        </article>
+
+        <!-- Ask Oracle -->
+        <article class="card full">
+          <h2>Ask Oracle</h2>
+          <div class="field">
+            <label for="indexSelect">Index</label>
+            <select id="indexSelect">
+              <option value="">Select index...</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="query">Query</label>
+            <textarea id="query" placeholder="What changed in this repository and why does it matter?"></textarea>
+          </div>
+          <div class="actions">
+            <button type="button" id="askBtn">Ask</button>
+          </div>
+          <pre id="askOut">No ask response yet.</pre>
+          <div class="ask-links hidden" id="askLinks">
+            <a href="inspector.html" target="_blank">Request Timeline</a>
+          </div>
+        </article>
+
+        <!-- Indexes Panel -->
+        <article class="card">
+          <h2>Indexes</h2>
+          <div id="indexesList"></div>
+          <div class="actions">
+            <button type="button" class="secondary" id="refreshIndexesBtn">Refresh</button>
+          </div>
+        </article>
+
+        <!-- Mirrors Panel -->
+        <article class="card">
+          <h2>Git Mirrors</h2>
+          <div id="mirrorsList"></div>
+          <div class="actions">
+            <button type="button" class="secondary" id="refreshMirrorsBtn">Refresh</button>
+          </div>
+        </article>
+
+        <!-- Worktrees Panel -->
+        <article class="card full">
+          <h2>Worktrees</h2>
+          <div id="worktreesList"></div>
+          <div class="actions">
+            <button type="button" class="secondary" id="refreshWorktreesBtn">Refresh</button>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // -----------------------------------------------------------------------
+    // Nex WebSocket RPC client
+    // -----------------------------------------------------------------------
+    const NexClient = (function () {
+      const WS_PATH = "/runtime/ws";
+      const PROTOCOL_VERSION = 3;
+      const TIMEOUT_MS = 30000;
+
+      let ws = null;
+      let connected = false;
+      let pending = new Map();
+      let connectPromise = null;
+
+      function wsUrl() {
+        var p = location.protocol === "https:" ? "wss:" : "ws:";
+        return p + "//" + location.host + WS_PATH;
+      }
+
+      function rid() {
+        if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+          return crypto.randomUUID();
+        }
+        return "r-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+      }
+
+      function send(frame) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(frame));
+        }
+      }
+
+      function resetConnection() {
+        connected = false;
+        connectPromise = null;
+        for (var entry of pending.values()) {
+          clearTimeout(entry.timer);
+          entry.reject(new Error("connection lost"));
+        }
+        pending.clear();
+      }
+
+      function connect() {
+        if (connected && ws && ws.readyState === WebSocket.OPEN) {
+          return Promise.resolve();
+        }
+        if (connectPromise) return connectPromise;
+
+        connectPromise = new Promise(function (resolve, reject) {
+          try {
+            ws = new WebSocket(wsUrl());
+          } catch (e) {
+            connectPromise = null;
+            reject(e);
+            return;
+          }
+
+          var cid = rid();
+          var settled = false;
+
+          var timer = setTimeout(function () {
+            if (!settled) {
+              settled = true;
+              connectPromise = null;
+              try { ws.close(); } catch (_) {}
+              reject(new Error("nex connect timeout"));
+            }
+          }, TIMEOUT_MS);
+
+          ws.onopen = function () {
+            send({
+              type: "req", id: cid, method: "connect",
+              params: {
+                minProtocol: PROTOCOL_VERSION,
+                maxProtocol: PROTOCOL_VERSION,
+                client: { id: "spike-ui", version: "1.0", platform: "web", mode: "backend" },
+                caps: [], role: "operator", scopes: ["operator.admin"]
+              }
+            });
+          };
+
+          ws.onmessage = function (event) {
+            var frame;
+            try { frame = JSON.parse(event.data); } catch (_) { return; }
+            if (!frame || frame.type === "event") return;
+            if (frame.type !== "res") return;
+
+            if (frame.id === cid) {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              if (!frame.ok) {
+                connectPromise = null;
+                reject(new Error((frame.error && frame.error.message) || "nex connect failed"));
+                return;
+              }
+              connected = true;
+              resolve();
+              return;
+            }
+
+            var p = pending.get(frame.id);
+            if (p) {
+              pending.delete(frame.id);
+              clearTimeout(p.timer);
+              if (!frame.ok) {
+                p.reject(new Error((frame.error && frame.error.message) || "rpc failed"));
+              } else {
+                p.resolve(frame.payload);
+              }
+            }
+          };
+
+          ws.onerror = function () {
+            if (!settled) { settled = true; clearTimeout(timer); connectPromise = null; reject(new Error("ws error")); }
+            resetConnection();
+          };
+
+          ws.onclose = function () {
+            if (!settled) { settled = true; clearTimeout(timer); connectPromise = null; reject(new Error("ws closed")); }
+            resetConnection();
+          };
+        });
+
+        return connectPromise;
+      }
+
+      async function call(method, params) {
+        await connect();
+        var id = rid();
+        return new Promise(function (resolve, reject) {
+          var timer = setTimeout(function () {
+            pending.delete(id);
+            reject(new Error("rpc timeout: " + method));
+          }, TIMEOUT_MS);
+          pending.set(id, { resolve: resolve, reject: reject, timer: timer });
+          send({ type: "req", id: id, method: method, params: params || {} });
+        });
+      }
+
+      return { connect: connect, call: call };
+    })();
+
+    // -----------------------------------------------------------------------
+    // Dual-mode API: WebSocket RPC in nex mode, HTTP in standalone
+    // -----------------------------------------------------------------------
+    var isNexMode = window.location.pathname.startsWith("/app/");
+
+    async function apiCall(operation, payload) {
+      if (isNexMode) {
+        return await NexClient.call(operation, payload || {});
+      }
+      // Standalone mode: POST to /operations/{operation}
+      var resp = await fetch("/operations/" + operation, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payload: payload || {} })
+      });
+      var data = await resp.json();
+      if (data.error) throw new Error(data.error.message);
+      return data.result;
+    }
+
+    // -----------------------------------------------------------------------
+    // Dashboard UI logic
+    // -----------------------------------------------------------------------
+    var $ = function (id) { return document.getElementById(id); };
+
+    var state = {
+      indexes: [],
+      installations: [],
+      repos: [],
+      branches: [],
+      mirrors: [],
+      worktrees: [],
+      pollTimers: {},
+      selectedIndexId: null
+    };
+
+    function setStatus(text, cls) {
+      var el = $("status");
+      el.className = "status" + (cls ? " " + cls : "");
+      el.textContent = text;
+    }
+
+    function pretty(value) {
+      try { return JSON.stringify(value, null, 2); } catch (_) { return String(value); }
+    }
+
+    function showEmptyState() {
+      $("emptyState").classList.remove("hidden");
+      $("mainInterface").classList.add("hidden");
+    }
+
+    function showMainInterface() {
+      $("emptyState").classList.add("hidden");
+      $("mainInterface").classList.remove("hidden");
+    }
+
+    async function checkInitialState() {
+      try {
+        var indexesData = await apiCall("spike.indexes.list", {});
+        state.indexes = Array.isArray(indexesData && indexesData.indexes) ? indexesData.indexes : [];
+
+        if (state.indexes.length === 0) {
+          // No indexes, check if GitHub is connected
+          try {
+            var installData = await apiCall("spike.github.installations.list", {});
+            state.installations = Array.isArray(installData && installData.installations) ? installData.installations : [];
+            if (state.installations.length === 0) {
+              showEmptyState();
+              setStatus("Connect GitHub to get started.", "loading");
+            } else {
+              showMainInterface();
+              setStatus("GitHub connected. Create an index to get started.", "ok");
+              await loadRepos();
+              renderIndexSelect();
+            }
+          } catch (err) {
+            showEmptyState();
+            setStatus("Connect GitHub to get started.", "loading");
+          }
+        } else {
+          showMainInterface();
+          setStatus("Runtime ready.", "ok");
+          await loadRepos();
+          renderIndexes();
+          renderIndexSelect();
+        }
+      } catch (err) {
+        setStatus("Failed to load initial state: " + (err.message || err), "err");
+        showEmptyState();
+      }
+    }
+
+    async function connectGitHub() {
+      setStatus("Starting GitHub App installation...", "loading");
+      var data = await apiCall("spike.connectors.github.install.start", {});
+      if (data && data.install_url) {
+        setStatus("Redirecting to GitHub...", "loading");
+        window.location.href = data.install_url;
+      } else {
+        throw new Error("No install_url returned");
+      }
+    }
+
+    async function listInstallations() {
+      var data = await apiCall("spike.github.installations.list", {});
+      state.installations = Array.isArray(data && data.installations) ? data.installations : [];
+      $("githubOut").textContent = pretty(data);
+      if (state.installations.length > 0) {
+        $("githubStatus").textContent = state.installations.length + " installation(s) connected";
+        $("githubStatus").className = "status ok";
+      } else {
+        $("githubStatus").textContent = "Not connected";
+        $("githubStatus").className = "status";
+      }
+      setStatus("Installations loaded.", "ok");
+    }
+
+    async function loadRepos() {
+      var installData = await apiCall("spike.github.installations.list", {});
+      state.installations = Array.isArray(installData && installData.installations) ? installData.installations : [];
+
+      if (state.installations.length === 0) {
+        state.repos = [];
+        renderRepoSelect();
+        return;
+      }
+
+      // Load repos from first installation
+      var installId = state.installations[0].installation_id;
+      var repoData = await apiCall("spike.connectors.github.repos", { installation_id: installId });
+      state.repos = Array.isArray(repoData && repoData.repositories) ? repoData.repositories : [];
+      renderRepoSelect();
+    }
+
+    async function loadBranches() {
+      var repoId = String($("repoSelect").value || "").trim();
+      if (!repoId) {
+        state.branches = [];
+        renderBranchSelect();
+        return;
+      }
+
+      var installId = state.installations[0].installation_id;
+      var branchData = await apiCall("spike.connectors.github.branches", {
+        installation_id: installId,
+        repo_id: repoId
+      });
+      state.branches = Array.isArray(branchData && branchData.branches) ? branchData.branches : [];
+      renderBranchSelect();
+    }
+
+    function renderRepoSelect() {
+      var select = $("repoSelect");
+      select.innerHTML = '<option value="">Select repository...</option>';
+      for (var i = 0; i < state.repos.length; i++) {
+        var repo = state.repos[i];
+        var opt = document.createElement("option");
+        opt.value = repo.full_name || repo.name;
+        opt.textContent = repo.full_name || repo.name;
+        select.appendChild(opt);
+      }
+    }
+
+    function renderBranchSelect() {
+      var select = $("branchSelect");
+      select.innerHTML = '<option value="">Select branch...</option>';
+      for (var i = 0; i < state.branches.length; i++) {
+        var branch = state.branches[i];
+        var opt = document.createElement("option");
+        opt.value = branch.name;
+        opt.textContent = branch.name + (branch.is_default ? " (default)" : "");
+        select.appendChild(opt);
+      }
+      // Auto-select default branch
+      var defaultBranch = state.branches.find(function (b) { return b.is_default; });
+      if (defaultBranch) {
+        select.value = defaultBranch.name;
+      }
+    }
+
+    function renderIndexSelect() {
+      var select = $("indexSelect");
+      select.innerHTML = '<option value="">Select index...</option>';
+      for (var i = 0; i < state.indexes.length; i++) {
+        var idx = state.indexes[i];
+        var opt = document.createElement("option");
+        opt.value = idx.index_id;
+        var repoInfo = idx.repo_id ? " (" + idx.repo_id + ")" : "";
+        opt.textContent = idx.index_id + repoInfo;
+        select.appendChild(opt);
+      }
+    }
+
+    async function createIndex() {
+      var repoId = String($("repoSelect").value || "").trim();
+      var ref = String($("branchSelect").value || "").trim();
+      if (!repoId) throw new Error("Please select a repository");
+      if (!ref) throw new Error("Please select a branch");
+
+      setStatus("Creating index...", "loading");
+      var data = await apiCall("spike.indexes.create", {
+        repo_id: repoId,
+        ref: ref
+      });
+
+      var indexId = data.index_id;
+      var jobId = data.job_id;
+
+      if (!indexId) throw new Error("No index_id returned");
+
+      setStatus("Index created: " + indexId + ". Hydrating...", "loading");
+
+      // Start polling for hydration progress
+      startHydrationPolling(indexId, jobId);
+
+      // Refresh indexes list
+      await loadIndexes();
+    }
+
+    function startHydrationPolling(indexId, jobId) {
+      if (state.pollTimers[indexId]) {
+        clearInterval(state.pollTimers[indexId]);
+      }
+
+      var pollCount = 0;
+      var maxPolls = 200; // 10 minutes max
+
+      state.pollTimers[indexId] = setInterval(async function () {
+        pollCount++;
+        if (pollCount > maxPolls) {
+          clearInterval(state.pollTimers[indexId]);
+          delete state.pollTimers[indexId];
+          setStatus("Hydration polling timeout for " + indexId, "err");
+          return;
+        }
+
+        try {
+          var statusData = await apiCall("spike.indexes.status", { index_id: indexId });
+          var phase = statusData.phase || "unknown";
+          var nodeCount = statusData.node_count || 0;
+          var progressPct = statusData.progress_pct || 0;
+
+          if (phase === "ready") {
+            clearInterval(state.pollTimers[indexId]);
+            delete state.pollTimers[indexId];
+            setStatus("Index " + indexId + " is ready (" + nodeCount + " nodes)", "ok");
+            await loadIndexes();
+          } else if (phase === "failed" || phase === "error") {
+            clearInterval(state.pollTimers[indexId]);
+            delete state.pollTimers[indexId];
+            setStatus("Index " + indexId + " hydration failed", "err");
+            await loadIndexes();
+          } else {
+            setStatus("Hydrating " + indexId + ": " + phase + " (" + progressPct + "%, " + nodeCount + " nodes)", "loading");
+            // Update the specific index card if visible
+            renderIndexes();
+          }
+        } catch (err) {
+          console.error("Poll error:", err);
+        }
+      }, 3000);
+    }
+
+    async function loadIndexes() {
+      var data = await apiCall("spike.indexes.list", {});
+      state.indexes = Array.isArray(data && data.indexes) ? data.indexes : [];
+      renderIndexes();
+      renderIndexSelect();
+    }
+
+    function renderIndexes() {
+      var list = $("indexesList");
+      list.innerHTML = "";
+
+      if (state.indexes.length === 0) {
+        list.innerHTML = '<div class="hint">No indexes created yet.</div>';
+        return;
+      }
+
+      for (var i = 0; i < state.indexes.length; i++) {
+        var idx = state.indexes[i];
+        var card = document.createElement("div");
+        card.className = "index-card";
+
+        var header = document.createElement("div");
+        header.className = "index-header";
+
+        var title = document.createElement("div");
+        title.className = "index-title mono";
+        title.textContent = idx.index_id;
+        header.appendChild(title);
+
+        var badge = document.createElement("span");
+        badge.className = "badge";
+        var status = String(idx.status || "unknown").toLowerCase();
+        if (status === "ready") {
+          badge.className = "badge ready";
+          badge.textContent = "Ready";
+        } else if (status === "hydrating" || status === "pending") {
+          badge.className = "badge hydrating";
+          badge.textContent = "Hydrating";
+        } else if (status === "failed" || status === "error") {
+          badge.className = "badge error";
+          badge.textContent = "Error";
+        } else {
+          badge.textContent = status;
+        }
+        header.appendChild(badge);
+        card.appendChild(header);
+
+        var meta = document.createElement("div");
+        meta.className = "hint mono";
+        var repoInfo = idx.repo_id ? idx.repo_id : "unknown repo";
+        var refInfo = idx.ref ? " @ " + idx.ref : "";
+        var nodeInfo = idx.node_count ? " • " + idx.node_count + " nodes" : "";
+        meta.textContent = repoInfo + refInfo + nodeInfo;
+        card.appendChild(meta);
+
+        // Show progress bar if hydrating
+        if (status === "hydrating" || status === "pending") {
+          var progressBar = document.createElement("div");
+          progressBar.className = "progress-bar";
+          var progressFill = document.createElement("div");
+          progressFill.className = "progress-fill";
+          var pct = idx.progress_pct || 0;
+          progressFill.style.width = pct + "%";
+          progressBar.appendChild(progressFill);
+          card.appendChild(progressBar);
+        }
+
+        list.appendChild(card);
+      }
+    }
+
+    async function loadMirrors() {
+      var data = await apiCall("spike.mirrors.list", {});
+      state.mirrors = Array.isArray(data && data.mirrors) ? data.mirrors : [];
+      renderMirrors();
+    }
+
+    function renderMirrors() {
+      var list = $("mirrorsList");
+      list.innerHTML = "";
+
+      if (state.mirrors.length === 0) {
+        list.innerHTML = '<div class="hint">No mirrors found.</div>';
+        return;
+      }
+
+      for (var i = 0; i < state.mirrors.length; i++) {
+        var mirror = state.mirrors[i];
+        var card = document.createElement("div");
+        card.className = "index-card";
+
+        var title = document.createElement("div");
+        title.className = "index-title mono";
+        title.textContent = mirror.repo_id || "unknown";
+        card.appendChild(title);
+
+        var meta = document.createElement("div");
+        meta.className = "hint mono";
+        var lastFetched = mirror.last_fetched ? new Date(mirror.last_fetched).toLocaleString() : "never";
+        meta.textContent = "Last fetched: " + lastFetched;
+        card.appendChild(meta);
+
+        list.appendChild(card);
+      }
+    }
+
+    async function loadWorktrees() {
+      var data = await apiCall("spike.worktrees.list", {});
+      state.worktrees = Array.isArray(data && data.worktrees) ? data.worktrees : [];
+      renderWorktrees();
+    }
+
+    function renderWorktrees() {
+      var list = $("worktreesList");
+      list.innerHTML = "";
+
+      if (state.worktrees.length === 0) {
+        list.innerHTML = '<div class="hint">No worktrees found.</div>';
+        return;
+      }
+
+      for (var i = 0; i < state.worktrees.length; i++) {
+        var wt = state.worktrees[i];
+        var card = document.createElement("div");
+        card.className = "index-card";
+
+        var header = document.createElement("div");
+        header.className = "index-header";
+
+        var title = document.createElement("div");
+        title.className = "index-title mono";
+        title.textContent = wt.worktree_id || "unknown";
+        header.appendChild(title);
+
+        var badge = document.createElement("span");
+        badge.className = "badge";
+        badge.textContent = wt.status || "unknown";
+        header.appendChild(badge);
+        card.appendChild(header);
+
+        var meta = document.createElement("div");
+        meta.className = "hint mono";
+        var repoInfo = wt.repo_id || "unknown";
+        var refInfo = wt.ref ? " @ " + wt.ref : "";
+        meta.textContent = repoInfo + refInfo;
+        card.appendChild(meta);
+
+        list.appendChild(card);
+      }
+    }
+
+    async function askOracle() {
+      var indexId = String($("indexSelect").value || "").trim();
+      var query = String($("query").value || "").trim();
+
+      if (!indexId) throw new Error("Please select an index");
+      if (!query) throw new Error("Please enter a query");
+
+      setStatus("Asking oracle...", "loading");
+      var data = await apiCall("spike.ask", {
+        index_id: indexId,
+        query: query
+      });
+
+      $("askOut").textContent = pretty(data);
+      setStatus("Ask completed.", "ok");
+    }
+
+    async function run(action) {
+      try {
+        setStatus("Working...", "loading");
+        await action();
+      } catch (err) {
+        setStatus(String((err && err.message) || err || "request failed"), "err");
+      }
+    }
+
+    async function boot() {
+      // Check URL params for GitHub callback
+      var q = new URLSearchParams(window.location.search);
+      var connectStatus = String(q.get("github_connect") || "").trim();
+      var detail = String(q.get("github_detail") || "").trim();
+
+      if (connectStatus === "connected") {
+        setStatus("GitHub installation connected.", "ok");
+        showMainInterface();
+        await loadRepos();
+        await loadIndexes();
+        renderIndexSelect();
+      } else if (connectStatus === "error") {
+        setStatus("GitHub connect failed" + (detail ? " (" + detail + ")" : "") + ".", "err");
+      } else {
+        await checkInitialState();
+      }
+
+      // Try to load browse panels
+      try {
+        await loadMirrors();
+        await loadWorktrees();
+      } catch (err) {
+        console.error("Failed to load browse panels:", err);
+      }
+    }
+
+    // Event listeners
+    $("connectGitHubEmpty").addEventListener("click", function () { run(connectGitHub); });
+    $("connectGitHubBtn").addEventListener("click", function () { run(connectGitHub); });
+    $("listInstallationsBtn").addEventListener("click", function () { run(listInstallations); });
+    $("repoSelect").addEventListener("change", function () { run(loadBranches); });
+    $("createIndexBtn").addEventListener("click", function () { run(createIndex); });
+    $("refreshReposBtn").addEventListener("click", function () { run(loadRepos); });
+    $("askBtn").addEventListener("click", function () { run(askOracle); });
+    $("refreshIndexesBtn").addEventListener("click", function () { run(loadIndexes); });
+    $("refreshMirrorsBtn").addEventListener("click", function () { run(loadMirrors); });
+    $("refreshWorktreesBtn").addEventListener("click", function () { run(loadWorktrees); });
+
+    // Boot
+    boot().catch(function (err) {
+      setStatus(String((err && err.message) || err || "boot failed"), "err");
+    });
+  </script>
+</body>
+</html>

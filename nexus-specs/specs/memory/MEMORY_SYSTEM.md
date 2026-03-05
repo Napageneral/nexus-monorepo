@@ -1,6 +1,6 @@
 # Memory System — Canonical Architecture
 
-**Status:** CANONICAL SPEC
+**Status:** CANONICAL
 **Last Updated:** 2026-03-02
 **Related:** MEMORY_STORAGE_MODEL.md, UNIFIED_ENTITY_STORE.md, MEMORY_WRITER.md, MEMORY_CONSOLIDATION.md, RETAIN_PIPELINE.md, MEMORY_RECALL.md, skills/MEMORY_INJECTION.md, skills/MEMORY_SEARCH_SKILL.md, skills/MEMORY_REFLECT_SKILL.md
 

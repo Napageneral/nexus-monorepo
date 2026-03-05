@@ -1,6 +1,6 @@
 # Language and Architecture Decision
 
-**Status:** CANONICAL
+**Status:** REFERENCE
 **Date:** 2026-02-23
 **Supersedes:** `LANGUAGE_DECISION.md` (archived)
 

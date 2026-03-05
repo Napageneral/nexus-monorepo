@@ -1,6 +1,6 @@
 # ACL Grants — Dynamic Permissions
 
-**Status:** DESIGN SPEC  
+**Status:** CANONICAL
 **Last Updated:** 2026-01-29  
 **Related:** ACCESS_CONTROL_SYSTEM.md, POLICIES.md
 

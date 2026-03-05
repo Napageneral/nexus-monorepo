@@ -438,7 +438,7 @@ If the agent dies mid-stream:
 
 - `broker/AGENT_ENGINE.md` — Agent engine callbacks that feed into streaming
 - `broker/CONTEXT_ASSEMBLY.md` — What the agent sees
-- `broker/OVERVIEW.md` — Broker overview, queue modes
+- `broker/BROKER.md` — Broker overview, queue modes
 - `adapters/ADAPTER_SYSTEM.md` — Adapter protocol, lifecycle, and `stream` command details
 - `adapters/INBOUND_INTERFACE.md` — NexusEvent and inbound type definitions
 - `adapters/OUTBOUND_INTERFACE.md` — StreamEvent and delivery type definitions

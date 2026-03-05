@@ -1,8 +1,10 @@
 # Billing Architecture: Account Model + Server & App Subscriptions
 
-Date: 2026-03-02  
-Status: confirmed  
+Date: 2026-03-02 (updated 2026-03-04)
+Status: confirmed
 Owners: Nexus Platform
+
+> **Billing model evolution (2026-03-04):** This spec describes the subscription-based billing model for apps and servers. The platform is evolving to a **prepaid credit system** for server billing: users deposit credits (Stripe or crypto), server uptime is billed hourly from their balance. A **7-day free tier** allows one cax11 server without payment. App subscriptions remain subscription-based as described here. Server subscriptions transition to credit-based billing. See `FRONTDOOR_MCP_SERVER_AND_AGENTIC_ACCESS_2026-03-04.md` sections 6-7 for the full credit system and free tier spec.
 
 ---
 
@@ -10,7 +12,7 @@ Owners: Nexus Platform
 
 Servers and apps are billed separately. Users pay for two things independently:
 
-1. **Server subscriptions** — Pay to keep a server running. Per-server pricing based on tier.
+1. **Server billing** — Prepaid credit balance. Server uptime billed hourly from credits. 7-day free tier for first cax11 server.
 2. **App subscriptions** — Pay for access to an app. Per-account pricing. Once purchased, installable on any of the account's servers at no additional cost.
 
 These are orthogonal. An account with 3 servers, GlowBot Clinic ($149/mo), and Spike Pro ($29/mo) pays: 3× server fee + $149 + $29 = total. GlowBot can be installed on all 3 servers, Spike on any subset.

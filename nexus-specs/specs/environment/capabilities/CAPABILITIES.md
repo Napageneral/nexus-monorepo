@@ -1,6 +1,6 @@
 # Capabilities System Specification
 
-**Status:** SPEC COMPLETE  
+**Status:** DESIGN
 **Source:** `nexus-cli/.intent/specs/05_CAPABILITY_TAXONOMY.md`, `06_CAPABILITIES_REFERENCE.md`
 
 ---

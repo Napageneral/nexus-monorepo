@@ -1,6 +1,6 @@
 # Context — Nexus Runtime + Memory System Redesign
 
-**Last Updated:** 2026-03-02
+**Last Updated:** 2026-03-03
 **Policy:** Hard cutover. No migrations, no backwards compatibility. Nuke and rebuild. Dev/test data is not preserved. The spec is the source of truth.
 
 ---
@@ -37,6 +37,7 @@ Read canonical specs for the target state. Read workplans for mechanical executi
 | `specs/memory/MEMORY_STORAGE_MODEL.md` | 686 | **The schema spec.** Full SQL DDL for 14 tables in memory.db. Elements, sets, jobs, FTS, seed data, design rationale. |
 | `specs/memory/UNIFIED_ENTITY_STORE.md` | 280 | Identity layer: entities, contacts (locked-in schema), merge candidates, entity tags, contact seeding. |
 | `specs/memory/RETAIN_PIPELINE.md` | 282 | Episode lifecycle: hybrid detection, payload format, participants-as-legend, filtering, writer dispatch. |
+| `specs/memory/EPISODE_DETECTION.md` | 230 | Episode detection mechanism: CronService-based per-episode timers, SQLite migration, internal event emission, crash recovery. Design decisions and alternatives considered. |
 | `specs/memory/MEMORY_WRITER.md` | 264 | Writer meeseeks: 12 CLI tools, extraction workflow, entity resolution, attachment interpretation. |
 | `specs/memory/MEMORY_CONSOLIDATION.md` | 166 | Consolidator meeseeks: `consolidate_facts` tool, observations, causal links, entity merge proposals. |
 | `specs/memory/MEMORY_RECALL.md` | 236 | Recall API: 7+ retrieval strategies, budget tiers, discriminated union result types, embedding provider. |
@@ -67,29 +68,30 @@ Read canonical specs for the target state. Read workplans for mechanical executi
 
 ### Workplans — Memory
 
-| Path | Lines | Phase | What It Changes |
-|------|-------|-------|-----------------|
-| `specs/memory/workplans/INDEX.md` | 97 | — | Index, dependency graph, key decisions. |
-| `specs/memory/workplans/01_SCHEMA.md` | 248 | 1a | `db/memory.ts` — nuke 16 old tables, create 14 new tables, seed data. |
-| `specs/memory/workplans/02_IDENTITY.md` | 257 | 1c | `db/identity.ts` — contacts rewrite, `sender_id`->`contact_id`, `source`->`origin`, PK change. |
-| `specs/memory/workplans/03_WRITER_TOOLS.md` | 391 | 2b | `memory-writer-tools.ts` — 12 tool rewrites for elements/sets/jobs, job context threading. |
-| `specs/memory/workplans/04_RECALL.md` | 358 | 3a | `recall.ts` — unified FTS, discriminated union types, `processing_log` queries. |
-| `specs/memory/workplans/05_PIPELINE.md` | 464 | 3c | retain-dispatch, meeseeks automations — sets, job tracking, episode detection, hookpoints. |
-| `specs/memory/workplans/06_TESTS.md` | 233 | 4d | All test files — schema helpers, tool mocks, assertion updates. |
+| Path | Lines | Phase | What It Changes | Status |
+|------|-------|-------|-----------------|--------|
+| `specs/memory/workplans/INDEX.md` | 103 | — | Index, dependency graph, key decisions. | Active |
+| `specs/memory/workplans/_archive/05_PIPELINE.md` | 455 | 3c | retain-dispatch, meeseeks automations — sets, job tracking, hookpoints. | ✅ Archived |
+| `specs/memory/workplans/06_TESTS.md` | 233 | 4d | All test files — schema helpers, tool mocks, assertion updates. | Blocked on Phase 7 |
+| `specs/memory/workplans/07_EPISODE_DETECTION.md` | 505 | 7 | CronService JSON→SQLite migration, episode detection via cron timers, delete pending_retain_triggers. | Active |
+| `specs/memory/workplans/_archive/01_SCHEMA.md` | 248 | 1a | `db/memory.ts` — 14-table Elements/Sets/Jobs schema. | ✅ Archived |
+| `specs/memory/workplans/_archive/02_IDENTITY.md` | 257 | 1c | `db/identity.ts` — contacts rewrite. | ✅ Archived |
+| `specs/memory/workplans/_archive/03_WRITER_TOOLS.md` | 391 | 2b | `memory-writer-tools.ts` — 12 tool rewrites. | ✅ Archived |
+| `specs/memory/workplans/_archive/04_RECALL.md` | 358 | 3a | `recall.ts` — unified FTS, discriminated union types. | ✅ Archived |
 
 ### Workplans — Nex Cutover
 
-| Path | Lines | Phase | What It Changes |
-|------|-------|-------|-----------------|
-| `specs/nex/workplans/CUTOVER_INDEX.md` | 107 | — | Master index, design decisions. |
-| `specs/nex/workplans/CUTOVER_01_NEXUS_REQUEST_BUS.md` | 480 | 2a | `request.ts` — delete 18 old Zod schemas, create 11 new ones. |
-| `specs/nex/workplans/CUTOVER_02_PIPELINE_AND_STAGES.md` | 482 | 3b | `pipeline.ts` + stages — 8->5 stages, delete 4 stage files. |
-| `specs/nex/workplans/CUTOVER_03_EVENTS_DB.md` | 475 | 1b | `events.ts` — nuke schema, rebuild events + attachments tables. |
-| `specs/nex/workplans/CUTOVER_04_IDENTITY_AND_NEXUS_DB.md` | 538 | 1c | `identity.ts` — contacts rewrite, entities origin, pending_retain_triggers. |
-| `specs/nex/workplans/CUTOVER_05_ADAPTER_PROTOCOL.md` | 229 | 2c | `protocol.ts` — adapter schema rename, `parseAdapterEventLine()` rewrite. |
-| `specs/nex/workplans/CUTOVER_06_REPLY_DELETION_AND_CLEANUP.md` | 324 | 4a-c | Reply deletion (90+ files), automations collapse, dead imports. |
+| Path | Lines | Phase | What It Changes | Status |
+|------|-------|-------|-----------------|--------|
+| `specs/nex/workplans/CUTOVER_INDEX.md` | 107 | — | Master index, design decisions. | Active |
+| `specs/nex/workplans/CUTOVER_06_REPLY_DELETION_AND_CLEANUP.md` | 324 | 4a-c | Reply deletion (90+ files), automations collapse, dead imports. | Active |
+| `specs/nex/workplans/_archive/CUTOVER_01_NEXUS_REQUEST_BUS.md` | 480 | 2a | `request.ts` — delete 18 old Zod schemas, create 11 new ones. | ✅ Archived |
+| `specs/nex/workplans/_archive/CUTOVER_02_PIPELINE_AND_STAGES.md` | 482 | 3b | `pipeline.ts` + stages — 8->5 stages, delete 4 stage files. | ✅ Archived |
+| `specs/nex/workplans/_archive/CUTOVER_03_EVENTS_DB.md` | 475 | 1b | `events.ts` — nuke schema, rebuild events + attachments tables. | ✅ Archived |
+| `specs/nex/workplans/_archive/CUTOVER_04_IDENTITY_AND_NEXUS_DB.md` | 538 | 1c | `identity.ts` — contacts rewrite, entities origin. | ✅ Archived |
+| `specs/nex/workplans/_archive/CUTOVER_05_ADAPTER_PROTOCOL.md` | 229 | 2c | `protocol.ts` — adapter schema rename, `parseAdapterEventLine()` rewrite. | ✅ Archived |
 
-**Total: 29 active documents** (1 master plan + 14 canonical specs + 3 skills + 14 workplans) — all archived documents are in `_archive/` directories.
+**Total: 30 active documents** (1 master plan + 15 canonical specs + 3 skills + 11 workplans) — completed workplans are in `_archive/` directories.
 
 ---
 
@@ -168,7 +170,7 @@ During `event.ingest`, events are slotted into active episodes (sets) in real-ti
 
 | Decision | Detail |
 |----------|--------|
-| **Entity type** | `{ id, name, type, normalized, is_user, origin, persona_path, tags, merged_into, mention_count, created_at, updated_at }`. No `first_seen`/`last_seen`. |
+| **Entity type** | `{ id, name, type, normalized, is_user, origin, persona_path, tags, merged_into, created_at, updated_at }`. No `mention_count`, `first_seen`, `last_seen`, or `metadata`. |
 | **Content types** | `"text" \| "reaction" \| "membership"` only. Image/audio/video/file are attachment media types, NOT content types. |
 | **entity_tags** | Lifecycle pattern: `(id, entity_id, tag, created_at, deleted_at)` with partial unique index `WHERE deleted_at IS NULL`. |
 | **entity_cooccurrences** | **NUKED.** Co-occurrence derived at query time from `element_entities` joins. No denormalized table. |

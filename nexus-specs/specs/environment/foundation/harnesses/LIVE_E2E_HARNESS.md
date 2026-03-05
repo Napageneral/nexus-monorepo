@@ -271,7 +271,7 @@ Runtime:
 - `specs/runtime/nex/CONTROL_PLANE.md`
 
 Broker:
-- `specs/runtime/broker/OVERVIEW.md`
+- `specs/agents/BROKER.md`
 - `specs/runtime/broker/CONTEXT_ASSEMBLY.md`
 - `specs/runtime/broker/QUEUE_MANAGEMENT.md`
 - `specs/runtime/broker/SESSION_LIFECYCLE.md`

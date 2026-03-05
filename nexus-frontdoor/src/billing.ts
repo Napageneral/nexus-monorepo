@@ -205,6 +205,103 @@ export async function createCheckoutSession(params: {
   };
 }
 
+export async function createCreditDepositSession(params: {
+  config: FrontdoorConfig;
+  accountId: string;
+  amountCents: number;
+  successUrl?: string;
+  cancelUrl?: string;
+  customerEmail?: string;
+}): Promise<CheckoutSessionResult> {
+  const provider = params.config.billing.provider;
+  if (provider === "none") {
+    throw new Error("billing_unconfigured");
+  }
+
+  const successUrl =
+    (params.successUrl || "").trim() ||
+    params.config.billing.checkoutSuccessUrl ||
+    `${params.config.baseUrl.replace(/\/+$/, "")}/billing/success`;
+  const cancelUrl =
+    (params.cancelUrl || "").trim() ||
+    params.config.billing.checkoutCancelUrl ||
+    `${params.config.baseUrl.replace(/\/+$/, "")}/billing/cancel`;
+
+  if (provider === "mock") {
+    const sessionId = `cs_mock_dep_${Math.random().toString(36).slice(2, 12)}`;
+    const checkoutUrl = `${params.config.baseUrl.replace(/\/+$/, "")}/billing/mock-checkout?type=credit_deposit&account_id=${encodeURIComponent(
+      params.accountId,
+    )}&amount_cents=${params.amountCents}&session_id=${encodeURIComponent(sessionId)}`;
+    return {
+      provider: "mock",
+      checkoutUrl,
+      sessionId,
+      expiresAtMs: Date.now() + 30 * 60 * 1000,
+    };
+  }
+
+  // Stripe one-time payment
+  const stripeKey = params.config.billing.stripeSecretKey;
+  if (!stripeKey) {
+    throw new Error("billing_unconfigured");
+  }
+  const stripeApiBase = params.config.billing.stripeApiBaseUrl.replace(/\/+$/, "");
+  const body = new URLSearchParams();
+  body.set("mode", "payment");
+  body.set("success_url", successUrl);
+  body.set("cancel_url", cancelUrl);
+  body.set("line_items[0][price_data][currency]", "usd");
+  body.set("line_items[0][price_data][unit_amount]", String(params.amountCents));
+  body.set("line_items[0][price_data][product_data][name]", "Nexus Credits");
+  body.set("line_items[0][price_data][product_data][description]", `$${(params.amountCents / 100).toFixed(2)} credit deposit`);
+  body.set("line_items[0][quantity]", "1");
+  body.set("metadata[type]", "credit_deposit");
+  body.set("metadata[account_id]", params.accountId);
+  body.set("metadata[amount_cents]", String(params.amountCents));
+  if (params.customerEmail?.trim()) {
+    body.set("customer_email", params.customerEmail.trim());
+  }
+  const response = await fetch(`${stripeApiBase}/v1/checkout/sessions`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${stripeKey}`,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: body.toString(),
+  });
+  const raw = await response.text();
+  let parsed: Record<string, unknown> = {};
+  try {
+    parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+  } catch {
+    parsed = { raw };
+  }
+  if (!response.ok) {
+    const errorMessage =
+      typeof parsed?.error === "object" &&
+      parsed.error &&
+      typeof (parsed.error as Record<string, unknown>).message === "string"
+        ? String((parsed.error as Record<string, unknown>).message)
+        : `stripe_deposit_failed_${response.status}`;
+    throw new Error(errorMessage);
+  }
+  const id = typeof parsed.id === "string" ? parsed.id : "";
+  const url = typeof parsed.url === "string" ? parsed.url : "";
+  if (!id || !url) {
+    throw new Error("stripe_deposit_invalid_response");
+  }
+  const expiresAtMs =
+    typeof parsed.expires_at === "number" && Number.isFinite(parsed.expires_at)
+      ? Math.floor(parsed.expires_at * 1000)
+      : undefined;
+  return {
+    provider: "stripe",
+    checkoutUrl: url,
+    sessionId: id,
+    expiresAtMs,
+  };
+}
+
 export function verifyWebhookAndParseEvent(params: {
   config: FrontdoorConfig;
   headers: Record<string, string | string[] | undefined>;

@@ -1,6 +1,6 @@
 # Nexus Architecture Overview
 
-**Status:** CANONICAL OVERVIEW
+**Status:** CANONICAL
 **Last Updated:** 2026-03-02
 **Database Layout:** See `DATABASE_ARCHITECTURE.md` for the canonical 7-database layout
 
@@ -326,6 +326,6 @@ Specs are organized into domain-first folders:
 - `nex/NEXUS_REQUEST_TARGET.md` — Canonical NexusRequest data bus and 5-stage pipeline
 - `nex/AGENT_DELIVERY.md` — Agent-driven delivery model
 - `nex/DAEMON.md` — NEX daemon lifecycle (startup, signals, shutdown)
-- `agents/OVERVIEW.md` — Agent system architecture (Broker)
+- `agents/BROKER.md` — Agent system architecture (Broker)
 - `memory/MEMORY_SYSTEM.md` — Memory system architecture
 - `architecture/NEXUS_STRUCTURE.md` — Codebase layout

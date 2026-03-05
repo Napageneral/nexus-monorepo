@@ -1,6 +1,6 @@
 # Memory Injection — Pre-Execution Meeseeks
 
-**Status:** CANONICAL SPEC
+**Status:** CANONICAL
 **Last Updated:** 2026-03-02
 **Related:** ../MEMORY_SYSTEM.md, MEMORY_SEARCH_SKILL.md
 

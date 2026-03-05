@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Spike — Code Oracle Platform</title>
+    <meta name="description" content="Ask your codebase anything. Spike indexes your repositories and gives you instant, accurate answers powered by deep code understanding." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a href="/" class="logo">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" fill="#10b981" opacity="0.15"/>
+          <path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="#10b981" stroke-width="1.5" fill="none"/>
+          <circle cx="12" cy="12" r="3" fill="#10b981"/>
+        </svg>
+        <span>Spike</span>
+      </a>
+      <nav class="topnav">
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <button id="topCta" class="btn btn-sm">Get started</button>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-badge">Hosted Oracle Platform</div>
+        <h1>Ask your codebase<br/><em>anything.</em></h1>
+        <p class="hero-sub">
+          Spike indexes your GitHub repositories and builds a deep semantic map of your code.
+          Then you ask questions and get precise, grounded answers in seconds.
+        </p>
+        <div class="hero-actions">
+          <button id="heroCta" class="btn btn-lg">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15.5 3.5H21V9M14 10l7-7M10 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-5"/></svg>
+            Continue with Google
+          </button>
+          <a id="dashLink" href="#" class="btn btn-ghost btn-lg">Open Dashboard</a>
+        </div>
+        <p id="statusLine" class="status-line">Checking connection...</p>
+      </section>
+
+      <section id="features" class="features">
+        <div class="section-label">Capabilities</div>
+        <div class="features-grid">
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+            <h3>Semantic Code Search</h3>
+            <p>Go beyond keyword matching. Spike understands code structure, function relationships, and data flow to find exactly what you need.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            </div>
+            <h3>Natural Language Q&A</h3>
+            <p>Ask questions in plain English. "Where is retry logic implemented?" "How does auth work?" Get answers with exact file and line references.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            </div>
+            <h3>Deep Hydration</h3>
+            <p>Spike walks every file, every branch, every commit you point it at. The oracle builds a complete map before answering a single question.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+            </div>
+            <h3>Private & Secure</h3>
+            <p>Your code never leaves your tenant. Each workspace runs on isolated infrastructure with encrypted storage and scoped access controls.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            </div>
+            <h3>GitHub Integration</h3>
+            <p>Install the Spike GitHub App, select your repos, and hydrate in one click. Webhook-driven sync keeps your oracle current on every push.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+            </div>
+            <h3>Control Plane</h3>
+            <p>Full API surface for jobs, sync status, ask history, and request forensics. Built-in inspector UI for debugging and RCA.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="how" class="how-section">
+        <div class="section-label">How it works</div>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <h3>Sign in</h3>
+              <p>One-click Google OAuth. Your account is created and your workspace is provisioned automatically.</p>
+            </div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <h3>Connect GitHub</h3>
+              <p>Install the Spike GitHub App on your org or personal account. Select which repos to index.</p>
+            </div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <h3>Hydrate</h3>
+              <p>Pick a branch and commit. Spike clones, walks every file, and builds the oracle's semantic map.</p>
+            </div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <h3>Ask</h3>
+              <p>Type your question. The oracle dispatches across nodes, synthesizes evidence, and returns a grounded answer.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="pricing" class="pricing">
+        <div class="section-label">Plans</div>
+        <div class="pricing-grid">
+          <article class="price-card">
+            <div class="price-tier">Spike Free</div>
+            <div class="price-amount">$0<span>/mo</span></div>
+            <ul class="price-features">
+              <li>3 public repositories</li>
+              <li>10 hydrations per month</li>
+              <li>50 ask queries per month</li>
+              <li>1 workspace member</li>
+            </ul>
+            <button id="freePlanCta" class="btn">Start Free</button>
+          </article>
+          <article class="price-card price-card-featured">
+            <div class="price-tier">Spike Pro</div>
+            <div class="price-amount">$29<span>/mo</span></div>
+            <ul class="price-features">
+              <li>25 repositories</li>
+              <li>Private repositories enabled</li>
+              <li>100 hydrations per month</li>
+              <li>500 ask queries per month</li>
+            </ul>
+            <button id="proPlanCta" class="btn">Upgrade to Pro</button>
+          </article>
+          <article class="price-card">
+            <div class="price-tier">Spike Team</div>
+            <div class="price-amount">$79<span>/mo</span></div>
+            <ul class="price-features">
+              <li>Unlimited repositories</li>
+              <li>Unlimited hydrations and asks</li>
+              <li>MCP + priority support</li>
+              <li>Up to 25 workspace members</li>
+            </ul>
+            <button id="teamPlanCta" class="btn">Upgrade to Team</button>
+          </article>
+        </div>
+        <div class="pricing-footnote">
+          Already have a workspace? <a id="pricingDashCta" href="#">Manage plans in Frontdoor billing.</a>
+        </div>
+        <div id="planSummary" class="plan-summary" hidden></div>
+      </section>
+
+      <section class="cta-section">
+        <h2>Ready to understand your codebase?</h2>
+        <p>Get started in under a minute. No credit card required.</p>
+        <button id="bottomCta" class="btn btn-lg">Get started free</button>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <span class="footer-brand">Spike</span>
+        <span class="footer-sep">&middot;</span>
+        <span>Powered by Nexus</span>
+      </div>
+    </footer>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

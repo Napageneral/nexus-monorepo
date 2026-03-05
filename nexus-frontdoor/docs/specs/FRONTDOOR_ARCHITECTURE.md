@@ -1,6 +1,6 @@
 # Frontdoor Architecture
 
-Date: 2026-02-27
+Date: 2026-02-27 (updated 2026-03-04)
 Status: canonical
 Owners: Nexus Platform
 
@@ -12,12 +12,13 @@ Frontdoor (`frontdoor.nexushub.sh`) is the canonical gateway for the Nexus hoste
 
 Frontdoor owns:
 
-1. **Authentication**: Google OIDC flow, session management (`.nexushub.sh` domain cookies).
-2. **Servers**: Provisioning, lifecycle, and management of isolated nex runtime instances.
-3. **Apps**: Product registry, entitlements, installation on servers, and launch routing.
+1. **Authentication**: Google OIDC flow, session management (`.nexushub.sh` domain cookies), API token auth (`nex_t_...`).
+2. **Servers**: Provisioning, lifecycle, and management of isolated nex runtime instances on Hetzner Cloud VPSes.
+3. **Apps**: App registry, entitlements, tarball distribution, installation on servers via SSH/SCP + runtime HTTP API, and launch routing.
 4. **Adapters**: Adapter catalog, installation on servers, credential configuration.
-5. **Billing**: Product-branded checkout, plan management, entitlement enforcement.
+5. **Billing**: Prepaid credits, Stripe payment integration, hourly usage billing, 7-day free tier, product-branded checkout.
 6. **Admin**: Server admin (invites, access, billing per server) and platform operator admin (spending, accounts, usage).
+7. **Programmatic Access**: MCP server for AI agent platform management, API token system for headless workflows.
 
 ---
 
@@ -201,14 +202,17 @@ This registry drives:
 
 ### 8.3 App install flow
 
-1. Validate entitlement and server access.
-2. Set install status: `installing`.
-3. Apply runtime app-slot config mutation (static root or proxy target).
-4. Preinstall bundled adapters.
-5. Reconcile runtime app catalog.
-6. Set status: `installed` (or `failed` with error).
+1. Validate entitlement (active subscription in `frontdoor_app_subscriptions`) and server access.
+2. Set install status: `installing` in `frontdoor_server_app_installs`.
+3. SCP app tarball from frontdoor's app registry (`/opt/nexus/frontdoor/apps/{appId}/`) to VPS via private network SSH.
+4. Extract tarball to `/opt/nex/apps/{appId}/` on VPS.
+5. Call runtime HTTP API: `POST http://10.0.0.x:18789/api/apps/install` with `{ appId, packageRef }`.
+6. Runtime validates manifest, registers handlers, runs lifecycle hooks.
+7. Set status: `installed` (or `failed` with error).
+8. On new server provisioning: auto-install all entitled apps after VPS phones home.
+9. Full architecture: `APP_INSTALLATION_PIPELINE_2026-03-04.md`
 
-### 8.3 Adapter install flow
+### 8.4 Adapter install flow
 
 1. Same pattern as app install.
 2. Adapter is registered in runtime config.
@@ -224,8 +228,8 @@ This registry drives:
 2. `BILLING_ARCHITECTURE_ACCOUNT_MODEL_2026-03-02.md` — account model, server/app subscriptions, billing separation.
 3. `FRONTDOOR_APP_FRAME_AND_DOCK_2026-03-02.md` — app frame injection, navigation dock.
 4. `NEX_APP_MANIFEST_AND_LIFECYCLE_2026-03-02.md` — app manifest format, handler modes, lifecycle hooks.
-5. `FRONTDOOR_WORKSPACE_ADMIN_CONTROL_PLANE_HARD_CUTOVER_2026-02-27.md` — admin control plane UI spec.
-6. `FRONTDOOR_PRODUCT_REGISTRY_AND_BRANDED_BILLING_2026-02-26.md` — product registry and billing design.
+5. `APP_INSTALLATION_PIPELINE_2026-03-04.md` — tarball-based app distribution, SSH/SCP delivery, runtime HTTP API install, auto-install on provisioning.
+6. `FRONTDOOR_MCP_SERVER_AND_AGENTIC_ACCESS_2026-03-04.md` — MCP server for agent platform management, credit system, free tier, agentic signup strategy.
 
 ### Archived specs (in `_archive/`)
 
@@ -236,6 +240,8 @@ Superseded by the specs above. Kept for historical reference:
 4. `SPEC_FRONTDOOR_PROXY_NEXT_CHUNK_ROUTING_AND_SIGNED_IN_PRODUCT_PROVISIONING_HARD_CUTOVER_2026-02-27.md` — implemented bug fixes.
 5. `FRONTDOOR_SPIKE_E2E_GAP_CLOSURE_TODO_2026-02-27.md` — completed execution tracker.
 6. `CROSS_DOC_ALIGNMENT_FRONTDOOR_APP_SLOT_2026-02-27.md` — alignment directive (decisions baked into architecture).
+7. `FRONTDOOR_PRODUCT_REGISTRY_AND_BRANDED_BILLING_2026-02-26.md` — superseded by billing spec + MCP/credits spec.
+8. `FRONTDOOR_WORKSPACE_ADMIN_CONTROL_PLANE_HARD_CUTOVER_2026-02-27.md` — execution plan for dashboard (completed).
 
 ### Product specs
 
@@ -257,3 +263,4 @@ Superseded by the specs above. Kept for historical reference:
 
 1. `ADMIN_SERVER_PATTERN.md` — reusable admin server pattern for product monitoring.
 2. Adapter store/library spec.
+3. Crypto/x402 payment integration spec.

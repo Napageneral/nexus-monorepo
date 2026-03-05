@@ -1,6 +1,6 @@
 # Skills CLI Specification
 
-**Status:** SPEC COMPLETE  
+**Status:** DESIGN
 **Last Updated:** 2026-01-30
 
 ---

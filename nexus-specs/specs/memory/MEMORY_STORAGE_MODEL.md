@@ -1,6 +1,6 @@
 # Memory Storage Model — Elements, Sets, Jobs
 
-**Status:** CANONICAL SPEC
+**Status:** CANONICAL
 **Last Updated:** 2026-03-01
 **Related:** MEMORY_SYSTEM.md, MEMORY_WRITER.md, MEMORY_CONSOLIDATION.md, RETAIN_PIPELINE.md, MEMORY_RECALL.md, UNIFIED_ENTITY_STORE.md
 

@@ -1,6 +1,6 @@
 # Context Assembly
 
-**Status:** DESIGN SPEC  
+**Status:** DESIGN
 **Last Updated:** 2026-02-06
 
 ---
@@ -598,7 +598,7 @@ Context tracking lives at the message level (see `AGENTS_LEDGER.md`). Each messa
 - `DATA_MODEL.md` — Turn, Thread, Session primitives
 - `AGENT_ENGINE.md` — pi-coding-agent wrapper interface (what goes in, what comes out)
 - `SESSION_LIFECYCLE.md` — Compaction details, session management
-- `OVERVIEW.md` — Broker overview (wraps pi-coding-agent)
+- `BROKER.md` — Broker overview (wraps pi-coding-agent)
 - `../../data/ledgers/AGENTS_LEDGER.md` — Schema for turn/message storage
 - `upstream/CONTEXT_ASSEMBLY.md` — OpenClaw reference
 

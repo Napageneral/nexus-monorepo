@@ -108,6 +108,11 @@ function baseConfig(): FrontdoorConfig {
       stripeApiBaseUrl: "https://api.stripe.com",
       stripePriceIdsByPlan: new Map(),
     },
+    vpsAccess: {
+      sshKeyPath: "/tmp/test-ssh-key",
+      sshUser: "root",
+    },
+    appStoragePath: "/tmp/test-app-storage",
   };
 }
 
