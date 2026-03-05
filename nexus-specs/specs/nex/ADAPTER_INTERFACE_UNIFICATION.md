@@ -194,6 +194,8 @@ This is one registry (single source of truth), grouped only for readability.
 
 ## 7. Clock Scheduling Cutover (`cron -> clock`)
 
+> **SUPERSEDED (Batch 6):** The `clock.schedule.*` naming below has been replaced by `cron.*` per [API_DESIGN_BATCH_6.md](./API_DESIGN_BATCH_6.md) and [WORK_DOMAIN_UNIFICATION.md](./WORK_DOMAIN_UNIFICATION.md). The cron schedule format is also simplified: everything is a cron expression (no separate `at`/`every`/`cron` kinds). Clock tick becomes `*/30 * * * * *`. See Batch 6 for the authoritative operations and schema.
+
 Clock owns both periodic ticks and scheduled jobs.
 
 ### 7.1 New clock schedule operations

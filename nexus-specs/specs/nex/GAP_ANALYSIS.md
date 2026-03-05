@@ -45,9 +45,11 @@
 | `chat.send` | ⚠️ PARTIAL | Implemented as `event.ingest(sync=true)`, no dedicated `chat.send` operation |
 | `chat.history` | ✅ EXISTS | Fully implemented, matches spec |
 | `chat.abort` | ✅ EXISTS | Fully implemented, matches spec |
+| `events.backfill` | ⚠️ PARTIAL | Backfill infrastructure exists (adapter SDK `event.backfill`), no dedicated Nex API operation |
 
-**Orphaned:** `chat.inject` (assistant injection), `send` (direct platform delivery)
+**Orphaned:** `chat.inject` (assistant injection — folded into `chat.send` with `role: "assistant"`), `send` (direct platform delivery — becomes `channels.send`)
 **Schema gaps:** events.db uses `sender_id/receiver_id/content/container_id` vs spec's `author_entity_id/payload/channel_id/type/subtype`
+**Naming:** `event.ingest` → `events.ingest` (plural per resolved decision)
 
 ---
 
@@ -57,15 +59,15 @@
 |-----------|--------|-------|
 | `agents.sessions.list` | ✅ EXISTS | Named `sessions.list` (namespace mismatch), missing `type` filter |
 | `agents.sessions.get` | ❌ MISSING | No dedicated endpoint. `resolveSessionRecord()` exists internally |
+| `agents.sessions.resolve` | ⚠️ PARTIAL | `resolveSessionRecord()` + `sessions.resolve` exist internally, namespace mismatch |
 | `agents.sessions.create` | ❌ MISSING | Sessions created implicitly via messaging |
-| `agents.sessions.update` | ⚠️ PARTIAL | `sessions.patch` exists but behavior overrides disabled in ledger mode |
-| `agents.sessions.delete` | ⚠️ PARTIAL | Soft-delete exists, namespace mismatch |
-| `agents.sessions.archive` | ❌ MISSING | `archiveSession()` function exists, no endpoint |
 | `agents.sessions.fork` | ❌ MISSING | No fork capability. Needs `type` column on sessions table |
+| `agents.sessions.archive` | ⚠️ PARTIAL | `archiveSession()` + soft-delete exist, different semantics from spec |
 | `agents.sessions.transfer` | ❌ MISSING | Persona rebinding exists but not session transfer |
 | `agents.sessions.import` | ✅ EXISTS | Works, only supports `source='aix'` |
-| `agents.sessions.context.get` | ❌ MISSING | Context assembly logic exists internally |
-| `agents.sessions.context.set` | ❌ MISSING | No context override mechanism |
+| `agents.sessions.import.chunk` | ❌ MISSING | No chunked upload for large imports |
+| `agents.sessions.history` | ⚠️ PARTIAL | `session_history` table exists, no API endpoint |
+| `agents.sessions.preview` | ❌ MISSING | `sessions.preview` exists as orphan but not exposed |
 | `agents.turns.list` | ❌ MISSING | Turns table populated, no API |
 | `agents.turns.get` | ❌ MISSING | No endpoint |
 | `agents.messages.list` | ❌ MISSING | `chat.history` returns messages but different format |
@@ -73,8 +75,8 @@
 | `agents.sessions.queue.list` | ❌ MISSING | `queue_items` table + `listQueueItems()` exist, no RPC |
 | `agents.sessions.queue.cancel` | ❌ MISSING | `clearSessionQueues()` exists, no RPC |
 
-**Schema gaps:** sessions table needs `type` column (main/isolated/forked), turns need `agent_config_id` (B6), `workspace_path`→`working_dir` rename
-**Orphaned:** `sessions.preview`, `sessions.resolve`, `sessions.reset`, `sessions.compact`, `sessions.usage`
+**Schema gaps:** sessions table needs `type` column (main/isolated/forked), `forked_from_session_id`, `forked_at_turn_id`, `workspace_id` (replaces persona_id). Turns need `agent_config_id` (B6), `workspace_path`→`working_dir` rename.
+**Note:** `sessions.update`/`sessions.patch` is REMOVED per spec (sessions are immutable). `sessions.delete` becomes `sessions.archive`. `sessions.reset`, `sessions.compact`, `sessions.usage` are dropped.
 
 ---
 
