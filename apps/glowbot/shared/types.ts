@@ -1,8 +1,8 @@
 /**
  * GlowBot Shared Types
  *
- * Shared across consumer app (method handlers), consumer-ui (RPC client),
- * and admin app. Single source of truth for all GlowBot contracts.
+ * Shared across the clinic app package, clinic UI, and admin app.
+ * Single source of truth for GlowBot contracts.
  */
 
 // ---------------------------------------------------------------------------
@@ -15,12 +15,16 @@ export const GLOWBOT_METHODS = {
   modeling: "glowbot.modeling",
   agents: "glowbot.agents",
   agentsRecommendations: "glowbot.agents.recommendations",
+  clinicProfileGet: "glowbot.clinicProfile.get",
+  clinicProfileUpdate: "glowbot.clinicProfile.update",
   integrations: "glowbot.integrations",
   integrationsConnectOauthStart: "glowbot.integrations.connect.oauth.start",
   integrationsConnectApikey: "glowbot.integrations.connect.apikey",
   integrationsConnectUpload: "glowbot.integrations.connect.upload",
   integrationsTest: "glowbot.integrations.test",
+  integrationsBackfill: "glowbot.integrations.backfill",
   integrationsDisconnect: "glowbot.integrations.disconnect",
+  productFlagsList: "glowbot.productFlags.list",
   pipelineStatus: "glowbot.pipeline.status",
   pipelineTrigger: "glowbot.pipeline.trigger",
 } as const;
@@ -31,6 +35,46 @@ export const GLOWBOT_METHODS = {
 
 export type GlowbotPeriod = "7d" | "30d" | "90d";
 export type GlowbotModelingWindow = "3m" | "6m" | "12m";
+export type GlowbotClinicProfileBand = string;
+
+export interface GlowbotClinicProfile {
+  clinicId: string;
+  specialty: string;
+  monthlyAdSpendBand: GlowbotClinicProfileBand;
+  patientVolumeBand: GlowbotClinicProfileBand;
+  locationCountBand: GlowbotClinicProfileBand;
+  source: {
+    updatedAtMs: number;
+    updatedBy: "clinic_app" | "operator";
+    version: number;
+  };
+}
+
+export interface GlowbotProductFlag {
+  key: string;
+  value: unknown;
+  description?: string;
+  updatedAtMs: number;
+}
+
+// ---------------------------------------------------------------------------
+// glowbot.clinicProfile.*
+// ---------------------------------------------------------------------------
+
+export interface GlowbotClinicProfileGetResponse {
+  clinicProfile: GlowbotClinicProfile | null;
+}
+
+export interface GlowbotClinicProfileUpdateParams {
+  specialty: string;
+  monthlyAdSpendBand?: GlowbotClinicProfileBand;
+  patientVolumeBand?: GlowbotClinicProfileBand;
+  locationCountBand?: GlowbotClinicProfileBand;
+}
+
+export interface GlowbotClinicProfileUpdateResponse {
+  clinicProfile: GlowbotClinicProfile;
+}
 
 // ---------------------------------------------------------------------------
 // glowbot.overview
@@ -195,14 +239,22 @@ export interface GlowbotIntegrationsResponse {
     icon: string;
     category: "advertising" | "emr" | "local";
     status: "connected" | "not_connected" | "expired" | "error";
-    authMethods: {
-      type: "oauth2" | "api-key" | "file-upload";
-      label: string;
-      icon: string;
+    backfillDefault?: string;
+    connectionProfiles: {
+      id: string;
+      displayName: string;
+      authMethodId: string;
+      scope: "app" | "server";
+      managedProfileId?: string;
+      kind: "oauth2" | "api-key" | "file-upload" | "custom-flow";
       fields?: { name: string; label: string; type: string; required: boolean }[];
     }[];
     connection?: {
+      connectionId: string;
       authMethod: string;
+      authMethodId?: string;
+      scope: "app" | "server";
+      connectionProfileId?: string;
       connectedAt: string;
       lastSync: string;
       lastSyncStatus: "success" | "error";
@@ -219,6 +271,7 @@ export interface GlowbotIntegrationsResponse {
 
 export interface GlowbotIntegrationsConnectOauthStartParams {
   adapterId: string;
+  connectionProfileId: string;
 }
 
 export interface GlowbotIntegrationsConnectOauthStartResponse {
@@ -227,6 +280,7 @@ export interface GlowbotIntegrationsConnectOauthStartResponse {
 
 export interface GlowbotIntegrationsConnectApikeyParams {
   adapterId: string;
+  connectionProfileId: string;
   fields: Record<string, string>;
 }
 
@@ -237,6 +291,7 @@ export interface GlowbotIntegrationsConnectApikeyResponse {
 
 export interface GlowbotIntegrationsConnectUploadParams {
   adapterId: string;
+  connectionProfileId: string;
   file: string;
   filename: string;
 }
@@ -255,7 +310,7 @@ export interface GlowbotIntegrationsConnectUploadResponse {
 // ---------------------------------------------------------------------------
 
 export interface GlowbotIntegrationsTestParams {
-  adapterId: string;
+  connectionId: string;
 }
 
 export interface GlowbotIntegrationsTestResponse {
@@ -263,12 +318,32 @@ export interface GlowbotIntegrationsTestResponse {
   error?: string;
 }
 
-export interface GlowbotIntegrationsDisconnectParams {
+export interface GlowbotIntegrationsBackfillParams {
   adapterId: string;
+  connectionId: string;
+  since?: string;
+}
+
+export interface GlowbotIntegrationsBackfillResponse {
+  status: "completed";
+  since: string;
+  recordsProcessed: number;
+}
+
+export interface GlowbotIntegrationsDisconnectParams {
+  connectionId: string;
 }
 
 export interface GlowbotIntegrationsDisconnectResponse {
   status: "disconnected";
+}
+
+// ---------------------------------------------------------------------------
+// glowbot.productFlags.list
+// ---------------------------------------------------------------------------
+
+export interface GlowbotProductFlagsListResponse {
+  productFlags: GlowbotProductFlag[];
 }
 
 // ---------------------------------------------------------------------------

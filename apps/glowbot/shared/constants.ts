@@ -5,32 +5,33 @@
  */
 
 export const GLOWBOT_ADAPTER_IDS = {
-  googleAds: "google-ads",
-  googleBusinessProfile: "google-business-profile",
+  google: "google",
   metaAds: "meta-ads",
   patientNowEmr: "patient-now-emr",
   zenotiEmr: "zenoti-emr",
+  callrail: "callrail",
+  twilio: "twilio",
   appleMaps: "apple-maps",
 } as const;
 
 export type GlowbotAdapterId = (typeof GLOWBOT_ADAPTER_IDS)[keyof typeof GLOWBOT_ADAPTER_IDS];
 
 export const ADAPTER_CATEGORIES: Record<string, "advertising" | "emr" | "local"> = {
-  "google-ads": "advertising",
+  google: "advertising",
   "meta-ads": "advertising",
-  "google-business-profile": "local",
   "apple-maps": "local",
+  callrail: "local",
+  twilio: "local",
   "patient-now-emr": "emr",
   "zenoti-emr": "emr",
 };
 
 export const ADAPTER_DISPLAY_NAMES: Record<string, string> = {
-  "google-ads": "Google Ads",
+  google: "Google",
   "meta-ads": "Meta Ads",
-  "google-business-profile": "Google Business Profile",
   "apple-maps": "Apple Maps",
+  callrail: "CallRail",
+  twilio: "Twilio",
   "patient-now-emr": "PatientNow EMR",
   "zenoti-emr": "Zenoti EMR",
 };
-
-export const GLOWBOT_DB_FILENAME = "glowbot.db";

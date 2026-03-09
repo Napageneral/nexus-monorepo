@@ -1,6 +1,3 @@
-import type { NexAppMethodHandler } from "../../../../nex/src/apps/context.js";
+import { createGlowbotHubProxyHandler } from "./_proxy.js";
 
-export const handle: NexAppMethodHandler = async (_ctx) => {
-  // TODO: Implement clinic detail view
-  return { clinic: null };
-};
+export const handle = createGlowbotHubProxyHandler("glowbotHub.clinics.get");

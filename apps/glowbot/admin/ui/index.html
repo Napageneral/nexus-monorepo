@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GlowBot Admin</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">GlowBot Operator Console</p>
+        <h1>Control Plane</h1>
+        <p class="subtitle">
+          Managed profiles, benchmark network health, clinics, diagnostics, flags, and audit.
+        </p>
+      </div>
+      <div class="masthead-actions">
+        <button id="refresh-all" class="button primary">Refresh All</button>
+      </div>
+    </header>
+
+    <div id="status" class="status hidden"></div>
+
+    <section class="summary-grid" id="summary-grid">
+      <article class="summary-card">
+        <p class="label">Hub Health</p>
+        <p class="value" id="summary-health">Loading</p>
+      </article>
+      <article class="summary-card">
+        <p class="label">Managed Profiles</p>
+        <p class="value" id="summary-managed-profiles">0</p>
+      </article>
+      <article class="summary-card">
+        <p class="label">Snapshots</p>
+        <p class="value" id="summary-snapshots">0</p>
+      </article>
+      <article class="summary-card">
+        <p class="label">Active Cohorts</p>
+        <p class="value" id="summary-cohorts">0</p>
+      </article>
+      <article class="summary-card">
+        <p class="label">Product Flags</p>
+        <p class="value" id="summary-flags">0</p>
+      </article>
+      <article class="summary-card">
+        <p class="label">Recent Failures</p>
+        <p class="value" id="summary-failures">0</p>
+      </article>
+    </section>
+
+    <main class="panel-grid">
+      <section class="panel span-2">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Overview</p>
+            <h2>Diagnostics Summary</h2>
+          </div>
+          <button data-refresh="overview" class="button ghost">Refresh</button>
+        </div>
+        <pre id="overview-json" class="json-view">Loading…</pre>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Diagnostics</p>
+            <h2>Relay And Service Health</h2>
+          </div>
+          <button data-refresh="diagnostics" class="button ghost">Refresh</button>
+        </div>
+        <pre id="diagnostics-json" class="json-view">Loading…</pre>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Benchmark Network</p>
+            <h2>Coverage And Freshness</h2>
+          </div>
+          <button data-refresh="network" class="button ghost">Refresh</button>
+        </div>
+        <pre id="network-json" class="json-view">Loading…</pre>
+      </section>
+
+      <section class="panel span-2">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Managed Profiles</p>
+            <h2>Provider-Control Objects</h2>
+          </div>
+          <div class="panel-actions">
+            <label class="checkbox">
+              <input type="checkbox" id="managed-include-archived">
+              Include archived
+            </label>
+            <button data-refresh="managed-profiles" class="button ghost">Refresh</button>
+          </div>
+        </div>
+        <div class="two-column">
+          <div>
+            <div id="managed-profiles-list" class="list"></div>
+          </div>
+          <div class="stack">
+            <label class="field">
+              <span>Create Profile (JSON)</span>
+              <textarea id="managed-profile-create" class="code-input" spellcheck="false"></textarea>
+            </label>
+            <div class="inline-actions">
+              <button id="managed-profile-create-button" class="button primary">Create</button>
+              <button id="managed-profile-fill-sample" class="button ghost">Load Sample</button>
+            </div>
+            <label class="field">
+              <span>Selected Profile (JSON patch)</span>
+              <textarea id="managed-profile-update" class="code-input" spellcheck="false"></textarea>
+            </label>
+            <div class="inline-actions">
+              <button id="managed-profile-load-button" class="button ghost">Load Selected</button>
+              <button id="managed-profile-update-button" class="button primary">Update Selected</button>
+              <button id="managed-profile-archive-button" class="button danger">Archive Selected</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel span-2">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Clinics</p>
+            <h2>Participation And Benchmark Freshness</h2>
+          </div>
+          <button data-refresh="clinics" class="button ghost">Refresh</button>
+        </div>
+        <div class="two-column">
+          <div>
+            <div id="clinics-list" class="list"></div>
+          </div>
+          <div>
+            <pre id="clinic-detail-json" class="json-view">Select a clinic.</pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Cohorts</p>
+            <h2>Canonical Grouping</h2>
+          </div>
+          <button data-refresh="cohorts" class="button ghost">Refresh</button>
+        </div>
+        <pre id="cohorts-json" class="json-view compact">Loading…</pre>
+        <label class="field">
+          <span>Replace Cohorts (JSON array)</span>
+          <textarea id="cohorts-update" class="code-input compact" spellcheck="false"></textarea>
+        </label>
+        <div class="inline-actions">
+          <button id="cohorts-fill-sample" class="button ghost">Load Sample</button>
+          <button id="cohorts-update-button" class="button primary">Replace Cohorts</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Product Flags</p>
+            <h2>Rollout And Config</h2>
+          </div>
+          <button data-refresh="product-flags" class="button ghost">Refresh</button>
+        </div>
+        <pre id="product-flags-json" class="json-view compact">Loading…</pre>
+        <label class="field">
+          <span>Flag Key</span>
+          <input id="product-flag-key" class="text-input" placeholder="benchmarks_enabled">
+        </label>
+        <label class="field">
+          <span>Flag Value (JSON)</span>
+          <input id="product-flag-value" class="text-input" placeholder="true">
+        </label>
+        <label class="field">
+          <span>Description</span>
+          <input id="product-flag-description" class="text-input" placeholder="Optional note">
+        </label>
+        <button id="product-flag-update-button" class="button primary">Update Flag</button>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Seeds</p>
+            <h2>Seed Benchmark Publication</h2>
+          </div>
+        </div>
+        <label class="field">
+          <span>Seed Records (JSON array)</span>
+          <textarea id="seed-publish" class="code-input compact" spellcheck="false"></textarea>
+        </label>
+        <div class="inline-actions">
+          <button id="seed-fill-sample" class="button ghost">Load Sample</button>
+          <button id="seed-publish-button" class="button primary">Publish Seeds</button>
+        </div>
+      </section>
+
+      <section class="panel span-2">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Audit</p>
+            <h2>Recent Operator And Relay Events</h2>
+          </div>
+          <button data-refresh="audit" class="button ghost">Refresh</button>
+        </div>
+        <pre id="audit-json" class="json-view">Loading…</pre>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
