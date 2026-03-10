@@ -44,12 +44,12 @@ func (e *GoAgentEngine) Start(ctx context.Context, opts EngineStartOpts) (Engine
 	model := strings.TrimSpace(opts.Model)
 
 	// Parse model string: "gpt-5.3-codex:high" → model="gpt-5.3-codex", thinkLevel="high"
-	// The ":high"/":low"/":medium" suffix is a thinking level, not part of the model ID.
+	// The suffix is a thinking level, not part of the model ID.
 	thinkLevel := strings.TrimSpace(opts.ThinkLevel)
 	if idx := strings.LastIndex(model, ":"); idx > 0 {
 		suffix := model[idx+1:]
 		switch strings.ToLower(suffix) {
-		case "high", "medium", "low", "none":
+		case "xhigh", "high", "medium", "low", "none":
 			if thinkLevel == "" {
 				thinkLevel = suffix
 			}
@@ -654,6 +654,11 @@ func (h *goAgentHandle) onRuntimeEvent(event goagent.RuntimeEvent) {
 			Type: "tool",
 			Data: payload,
 		})
+	case "provider_progress":
+		h.emitEvent(AgentEvent{
+			Type: "provider_progress",
+			Data: payload,
+		})
 	}
 }
 
@@ -671,6 +676,8 @@ func parseJSONValue(raw string) interface{} {
 
 func normalizeThinkingLevel(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "xhigh":
+		return "high"
 	case "low", "medium", "high", "none":
 		return strings.ToLower(strings.TrimSpace(raw))
 	default:

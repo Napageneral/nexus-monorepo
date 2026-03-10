@@ -2,7 +2,9 @@
 
 AI-powered code intelligence and repository analysis.
 
-See SPIKE_DATA_MODEL.md for the complete data model and SPIKE_FRONTDOOR_INTEGRATION.md for credential/callback routing.
+See `../docs/specs/SPIKE_DATA_MODEL.md` for the complete data model and
+`../docs/specs/SPIKE_INTEGRATIONS_AND_CALLBACK_OWNERSHIP.md` for hosted
+integration and callback ownership.
 
 ## Architecture: Service-Routed Mode
 

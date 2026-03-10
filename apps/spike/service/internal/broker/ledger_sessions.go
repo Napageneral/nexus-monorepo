@@ -389,6 +389,39 @@ func nullIfBlank(v string) any {
 	return v
 }
 
+func (b *Broker) touchSessionActivity(sessionLabel string, touchedAt int64) {
+	db := b.ledgerDB()
+	if db == nil {
+		return
+	}
+	sessionLabel = strings.TrimSpace(sessionLabel)
+	if sessionLabel == "" {
+		return
+	}
+	if touchedAt <= 0 {
+		touchedAt = nowUnixMilli()
+	}
+	const minTouchIntervalMS int64 = 1000
+
+	b.mu.Lock()
+	if b.sessionActivity == nil {
+		b.sessionActivity = map[string]int64{}
+	}
+	last := b.sessionActivity[sessionLabel]
+	if last > 0 && touchedAt-last < minTouchIntervalMS {
+		b.mu.Unlock()
+		return
+	}
+	b.sessionActivity[sessionLabel] = touchedAt
+	b.mu.Unlock()
+
+	_, _ = db.Exec(`
+		UPDATE sessions
+		SET updated_at = ?
+		WHERE label = ? AND updated_at < ?
+	`, touchedAt, sessionLabel, touchedAt)
+}
+
 func nullString(v sql.NullString) string {
 	if !v.Valid {
 		return ""

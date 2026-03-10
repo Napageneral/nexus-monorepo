@@ -7,8 +7,9 @@ import (
 
 func TestGitHubInstallStateRoundTrip(t *testing.T) {
 	payload := githubInstallStatePayload{
-		IssuedAt: time.Now().UTC().Unix(),
-		Nonce:    "nonce-123",
+		IssuedAt:            time.Now().UTC().Unix(),
+		Nonce:               "nonce-123",
+		ConnectionProfileID: spikeManagedGitHubConnectionProfileID,
 	}
 	state, err := encodeGitHubInstallState(payload, "state-secret")
 	if err != nil {
@@ -20,6 +21,9 @@ func TestGitHubInstallStateRoundTrip(t *testing.T) {
 	}
 	if decoded.Nonce != payload.Nonce {
 		t.Fatalf("unexpected decoded payload: %#v", decoded)
+	}
+	if decoded.ConnectionProfileID != payload.ConnectionProfileID {
+		t.Fatalf("unexpected decoded connection profile: %#v", decoded)
 	}
 }
 

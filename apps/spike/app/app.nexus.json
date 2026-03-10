@@ -8,32 +8,28 @@
     "entryPath": "/app/spike/",
     "spa": true
   },
-  "services": {
-    "engine": {
+  "services": [
+    {
+      "id": "engine",
       "command": "bin/spike-engine",
       "args": ["serve", "--port", "{{port}}"],
-      "port": 0,
-      "protocol": "http",
-      "healthCheck": {
-        "path": "/health",
-        "intervalSeconds": 30
-      },
+      "healthCheck": "/health",
       "env": {
         "NEX_APP_DATA_DIR": "{{dataDir}}",
         "NEX_SERVICE_PORT": "{{port}}"
       }
     }
-  },
+  ],
   "methods": {
     "spike.ask": {
       "description": "Ask a question about code in a repository tree",
       "action": "write",
       "params": {
         "type": "object",
-        "required": ["query", "tree_id"],
+        "required": ["query", "index_id"],
         "properties": {
           "query": { "type": "string", "description": "Natural language question about the code" },
-          "tree_id": { "type": "string", "description": "Tree identifier" },
+          "index_id": { "type": "string", "description": "Agent index identifier" },
           "json": { "type": "boolean", "description": "Return structured JSON response" }
         }
       }
@@ -420,49 +416,14 @@
         }
       }
     },
-    "spike.connectors.github.bind": {
-      "description": "Bind GitHub connector to tree",
-      "action": "write",
-      "params": {
-        "type": "object",
-        "required": ["tree_id", "service", "account"],
-        "properties": {
-          "tree_id": { "type": "string" },
-          "service": { "type": "string" },
-          "account": { "type": "string" },
-          "auth_id": { "type": "string" },
-          "metadata": { "type": "object" }
-        }
-      }
-    },
-    "spike.connectors.github.get": {
-      "description": "Get GitHub connector configuration for tree",
-      "action": "read",
-      "params": {
-        "type": "object",
-        "required": ["tree_id"],
-        "properties": { "tree_id": { "type": "string" } }
-      }
-    },
     "spike.connectors.github.install.start": {
-      "description": "Start GitHub App installation flow",
+      "description": "Start the managed Spike GitHub App installation flow",
       "action": "write",
       "params": {
         "type": "object",
-        "required": ["tree_id"],
-        "properties": { "tree_id": { "type": "string" } }
-      }
-    },
-    "spike.connectors.github.install.callback": {
-      "description": "Handle GitHub App installation callback",
-      "action": "write",
-      "params": {
-        "type": "object",
+        "required": ["connectionProfileId"],
         "properties": {
-          "code": { "type": "string" },
-          "installation_id": { "type": "string" },
-          "setup_action": { "type": "string" },
-          "state": { "type": "string" }
+          "connectionProfileId": { "type": "string" }
         }
       }
     },
@@ -471,8 +432,10 @@
       "action": "read",
       "params": {
         "type": "object",
-        "required": ["tree_id"],
-        "properties": { "tree_id": { "type": "string" } }
+        "required": ["installation_id"],
+        "properties": {
+          "installation_id": { "type": "integer" }
+        }
       }
     },
     "spike.connectors.github.branches": {
@@ -480,9 +443,9 @@
       "action": "read",
       "params": {
         "type": "object",
-        "required": ["tree_id", "repo_id"],
+        "required": ["installation_id", "repo_id"],
         "properties": {
-          "tree_id": { "type": "string" },
+          "installation_id": { "type": "integer" },
           "repo_id": { "type": "string" }
         }
       }
@@ -492,36 +455,37 @@
       "action": "read",
       "params": {
         "type": "object",
-        "required": ["tree_id", "repo_id", "ref"],
+        "required": ["installation_id", "repo_id", "ref"],
         "properties": {
-          "tree_id": { "type": "string" },
+          "installation_id": { "type": "integer" },
           "repo_id": { "type": "string" },
           "ref": { "type": "string" }
         }
       }
     },
     "spike.connectors.github.remove": {
-      "description": "Remove GitHub connector from tree",
+      "description": "Remove a connected GitHub installation",
       "action": "write",
       "params": {
         "type": "object",
-        "required": ["tree_id"],
-        "properties": { "tree_id": { "type": "string" } }
+        "required": ["installation_id"],
+        "properties": {
+          "installation_id": { "type": "integer" }
+        }
       }
     },
     "spike.connectors.github.setup": {
-      "description": "Setup GitHub connector with installation details",
+      "description": "Persist a bring-your-own GitHub App installation secret",
       "action": "write",
       "params": {
         "type": "object",
-        "required": ["tree_id", "account", "auth_id"],
+        "required": ["app_id", "installation_id", "private_key_pem"],
         "properties": {
-          "tree_id": { "type": "string" },
-          "account": { "type": "string" },
-          "auth_id": { "type": "string" },
           "app_id": { "type": "string" },
           "installation_id": { "type": "string" },
-          "metadata": { "type": "object" }
+          "installation_account_login": { "type": "string" },
+          "api_base_url": { "type": "string" },
+          "private_key_pem": { "type": "string" }
         }
       }
     },
@@ -594,7 +558,39 @@
       "default": "30"
     }
   },
+  "adapters": [
+    {
+      "id": "github",
+      "packageId": "github",
+      "displayName": "GitHub",
+      "description": "Connect repositories with GitHub",
+      "connectionProfiles": [
+        {
+          "id": "spike-managed-github-app",
+          "displayName": "Connect with Spike GitHub App",
+          "authMethodId": "github_app_managed",
+          "scope": "app",
+          "managedProfileId": "spike-github-app"
+        },
+        {
+          "id": "bring-your-own-github-app",
+          "displayName": "Use my own GitHub App",
+          "authMethodId": "github_app_custom",
+          "scope": "server"
+        },
+        {
+          "id": "personal-access-token",
+          "displayName": "Use a Personal Access Token",
+          "authMethodId": "pat",
+          "scope": "server"
+        }
+      ]
+    }
+  ],
   "requires": {
-    "nex": ">=0.9.0"
+    "nex": ">=0.9.0",
+    "adapters": [
+      { "id": "github", "version": "^1.0.0" }
+    ]
   }
 }

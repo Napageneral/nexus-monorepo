@@ -125,11 +125,13 @@ type OracleTree struct {
 
 	llmProvider   string
 	llmModel      string
+	thinkingLevel string
 	scopeKey      string
 	refName       string
 	commitSHA     string
 	treeFlavor    string
 	treeVersionID string
+	askPolicies   AskPolicies
 
 	rootRuntimeMu sync.Mutex
 	rootRuntimes  map[string]*oracleRootRuntime
@@ -147,8 +149,9 @@ type OracleTreeOptions struct {
 	SandboxBaseDir  string // Persistent sandbox root; when set, per-node sandboxes are rebuilt in-place per ask
 	RuntimeDir      string // External runtime root (sessions/sandboxes); defaults outside the repository
 
-	LLMProvider   string // Provider override (default: inferred or anthropic)
+	LLMProvider   string // Provider override (default: inferred or openai-codex)
 	LLMModel      string // Model override
+	ThinkingLevel string // Reasoning level override (none, low, medium, high, xhigh)
 	ScopeKey      string // Optional scope key override for ledger rows
 	RefName       string // Optional git ref override for ledger rows
 	CommitSHA     string // Optional commit override for ledger rows
@@ -209,11 +212,13 @@ func NewOracleTree(store Store, opts OracleTreeOptions) (*OracleTree, error) {
 		runtimeDir:      strings.TrimSpace(opts.RuntimeDir),
 		llmProvider:     llmProvider,
 		llmModel:        llmModel,
+		thinkingLevel:   strings.TrimSpace(opts.ThinkingLevel),
 		scopeKey:        strings.TrimSpace(opts.ScopeKey),
 		refName:         strings.TrimSpace(opts.RefName),
 		commitSHA:       strings.TrimSpace(opts.CommitSHA),
 		treeFlavor:      strings.TrimSpace(opts.TreeFlavor),
 		treeVersionID:   strings.TrimSpace(opts.TreeVersionID),
+		askPolicies:     DefaultAskPolicies(),
 	}, nil
 }
 
@@ -256,25 +261,42 @@ func (t *OracleTree) buildNodeContext(tree *Tree) *NodeContext {
 	if llmProvider == "" {
 		llmProvider = "openai-codex"
 	}
-	return &NodeContext{
-		Tree:            tree,
-		Substrate:       t.substrate,
-		Broker:          br,
-		HistoryAgent:    t.historyAgent,
-		MaxChildren:     t.maxChildren,
-		MaxParallel:     t.maxParallel,
-		PreserveSandbox: t.preserveSandbox,
-		SandboxBaseDir:  t.sandboxBaseDir,
-		SessionDir:      filepath.Join(t.runtimeBaseDir(tree.RootPath), "sessions"),
-		LLMProvider:     llmProvider,
-		LLMModel:        t.llmModel,
-		ScopeKey:        scope.ScopeKey,
-		RefName:         scope.RefName,
-		CommitSHA:       scope.CommitSHA,
-		TreeFlavor:      scope.TreeFlavor,
-		TreeVersionID:   scope.TreeVersionID,
-		llmSem:          make(chan struct{}, llmLimit),
+	ctx := &NodeContext{
+		Tree:              tree,
+		Substrate:         t.substrate,
+		ExecutionRecorder: newSQLAskExecutionRecorder(t.db),
+		HistoryAgent:      t.historyAgent,
+		MaxChildren:       t.maxChildren,
+		MaxParallel:       t.maxParallel,
+		PreserveSandbox:   t.preserveSandbox,
+		SandboxBaseDir:    t.sandboxBaseDir,
+		SessionDir:        filepath.Join(t.runtimeBaseDir(tree.RootPath), "sessions"),
+		LLMProvider:       llmProvider,
+		LLMModel:          t.llmModel,
+		ThinkingLevel:     strings.TrimSpace(t.thinkingLevel),
+		ScopeKey:          scope.ScopeKey,
+		RefName:           scope.RefName,
+		CommitSHA:         scope.CommitSHA,
+		TreeFlavor:        scope.TreeFlavor,
+		TreeVersionID:     scope.TreeVersionID,
+		Policies:          t.askPolicies.withDefaults(),
+		llmSem:            make(chan struct{}, llmLimit),
 	}
+	ctx.Executor = newBrokerPromptExecutor(br, brokerPromptExecutor{
+		sessionDir:    ctx.SessionDir,
+		provider:      ctx.LLMProvider,
+		model:         ctx.LLMModel,
+		thinkingLevel: ctx.ThinkingLevel,
+		scopeKey:      ctx.ScopeKey,
+		refName:       ctx.RefName,
+		commitSHA:     ctx.CommitSHA,
+		treeFlavor:    ctx.TreeFlavor,
+		treeVersionID: ctx.TreeVersionID,
+		sessionLabelBuilder: func(nodeID string) string {
+			return ctx.statelessSessionLabel(nodeID)
+		},
+	})
+	return ctx
 }
 
 func (t *OracleTree) Init(ctx context.Context, treeID string, rootPath string, capacity int) (*Tree, error) {
@@ -829,7 +851,13 @@ func (t *OracleTree) AskWithOptions(ctx context.Context, treeID string, query st
 	content, err := NewOracleNode(tree.MustNode(tree.RootID), nodeCtx).Ask(ctx, query, visited, &visitedMu)
 	if err != nil {
 		rootTurnID, _ := t.findRootTurnIDForRequest(tree, requestID)
-		if updateErr := t.updateAskRequestResult(requestID, "failed", rootTurnID, "", "ask_failed", err.Error(), time.Now().UTC().UnixMilli()); updateErr != nil {
+		status := "failed"
+		errorCode := "ask_failed"
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			status = "cancelled"
+			errorCode = "ask_cancelled"
+		}
+		if updateErr := t.updateAskRequestResult(requestID, status, rootTurnID, "", errorCode, err.Error(), time.Now().UTC().UnixMilli()); updateErr != nil {
 			return nil, errors.Join(err, updateErr)
 		}
 		return nil, err
@@ -924,6 +952,28 @@ func (t *OracleTree) updateAskRequestResult(requestID string, status string, roo
 		strings.TrimSpace(requestID),
 	)
 	return err
+}
+
+func (t *OracleTree) CancelAskRequest(ctx context.Context, treeID string, requestID string, reason string) error {
+	if t == nil || strings.TrimSpace(requestID) == "" {
+		return nil
+	}
+	var rootTurnID string
+	if strings.TrimSpace(treeID) != "" {
+		tree, err := t.store.LoadTree(ctx, strings.TrimSpace(treeID))
+		if err == nil && tree != nil {
+			rootTurnID, _ = t.findRootTurnIDForRequest(tree, requestID)
+		}
+	}
+	return t.updateAskRequestResult(
+		requestID,
+		"cancelled",
+		rootTurnID,
+		"",
+		"ask_cancelled",
+		strings.TrimSpace(reason),
+		time.Now().UTC().UnixMilli(),
+	)
 }
 
 func (t *OracleTree) findRootTurnIDForRequest(tree *Tree, requestID string) (string, error) {

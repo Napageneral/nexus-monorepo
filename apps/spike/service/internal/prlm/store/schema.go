@@ -123,6 +123,24 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_ask_requests_tree_created ON ask_requests(tree_id, created_at DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_ask_requests_scope_created ON ask_requests(scope_key, created_at DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_ask_requests_status_created ON ask_requests(status, created_at DESC);`,
+		`CREATE TABLE IF NOT EXISTS ask_request_executions (
+			request_id        TEXT NOT NULL,
+			node_id           TEXT NOT NULL,
+			phase             TEXT NOT NULL,
+			attempt           INTEGER NOT NULL,
+			origin            TEXT NOT NULL DEFAULT '',
+			status            TEXT NOT NULL DEFAULT '',
+			execution_backend TEXT NOT NULL DEFAULT '',
+			session_key       TEXT NOT NULL DEFAULT '',
+			run_id            TEXT NOT NULL DEFAULT '',
+			working_dir       TEXT NOT NULL DEFAULT '',
+			answer_preview    TEXT NOT NULL DEFAULT '',
+			error_message     TEXT NOT NULL DEFAULT '',
+			started_at        INTEGER NOT NULL,
+			completed_at      INTEGER NOT NULL,
+			PRIMARY KEY (request_id, node_id, phase, attempt)
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_ask_request_executions_request_started ON ask_request_executions(request_id, started_at DESC);`,
 	}
 
 	tx, err := db.BeginTx(ctx, nil)

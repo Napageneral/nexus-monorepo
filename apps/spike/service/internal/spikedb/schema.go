@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 1
+const schemaVersion = 4
 
 func (s *Store) migrate(ctx context.Context) error {
 	// Create schema_version table first
@@ -265,6 +265,25 @@ var schemaStatements = []string{
 	`CREATE INDEX IF NOT EXISTS idx_ask_requests_tree_created ON ask_requests(tree_id, created_at DESC);`,
 	`CREATE INDEX IF NOT EXISTS idx_ask_requests_scope_created ON ask_requests(scope_key, created_at DESC);`,
 	`CREATE INDEX IF NOT EXISTS idx_ask_requests_status_created ON ask_requests(status, created_at DESC);`,
+	`CREATE TABLE IF NOT EXISTS ask_request_executions (
+		request_id         TEXT NOT NULL,
+		node_id            TEXT NOT NULL,
+		phase              TEXT NOT NULL,
+		attempt            INTEGER NOT NULL,
+		origin             TEXT NOT NULL DEFAULT '',
+		status             TEXT NOT NULL DEFAULT '',
+		execution_backend  TEXT NOT NULL DEFAULT '',
+		session_key        TEXT NOT NULL DEFAULT '',
+		run_id             TEXT NOT NULL DEFAULT '',
+		working_dir        TEXT NOT NULL DEFAULT '',
+		answer_preview     TEXT NOT NULL DEFAULT '',
+		error_message      TEXT NOT NULL DEFAULT '',
+		started_at         INTEGER NOT NULL,
+		completed_at       INTEGER NOT NULL,
+		PRIMARY KEY (request_id, node_id, phase, attempt),
+		FOREIGN KEY (request_id) REFERENCES ask_requests(request_id) ON DELETE CASCADE
+	);`,
+	`CREATE INDEX IF NOT EXISTS idx_ask_request_executions_request_started ON ask_request_executions(request_id, started_at DESC);`,
 
 	// ── Jobs (control store compat — uses tree_id for now) ─────────────────
 	`CREATE TABLE IF NOT EXISTS jobs (
@@ -295,6 +314,159 @@ var schemaStatements = []string{
 		updated_at     INTEGER NOT NULL
 	);`,
 	`CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_created ON webhook_deliveries(created_at DESC);`,
+
+	// ── Code Intelligence Snapshots ────────────────────────────────────────
+	`CREATE TABLE IF NOT EXISTS code_snapshots (
+		snapshot_id     TEXT PRIMARY KEY,
+		repo_id         TEXT NOT NULL DEFAULT '',
+		commit_sha      TEXT NOT NULL DEFAULT '',
+		root_path       TEXT NOT NULL,
+		status          TEXT NOT NULL DEFAULT 'pending',
+		index_version   INTEGER NOT NULL DEFAULT 1,
+		file_count      INTEGER NOT NULL DEFAULT 0,
+		chunk_count     INTEGER NOT NULL DEFAULT 0,
+		symbol_count    INTEGER NOT NULL DEFAULT 0,
+		last_error      TEXT NOT NULL DEFAULT '',
+		created_at      INTEGER NOT NULL,
+		updated_at      INTEGER NOT NULL
+	);`,
+	`CREATE INDEX IF NOT EXISTS idx_code_snapshots_repo_commit ON code_snapshots(repo_id, commit_sha, updated_at DESC);`,
+
+	// ── Code Intelligence Files ────────────────────────────────────────────
+	`CREATE TABLE IF NOT EXISTS code_files (
+		snapshot_id      TEXT NOT NULL,
+		file_path        TEXT NOT NULL,
+		language         TEXT NOT NULL DEFAULT '',
+		classification   TEXT NOT NULL DEFAULT 'unknown',
+		size_bytes       INTEGER NOT NULL DEFAULT 0,
+		tokens           INTEGER NOT NULL DEFAULT 0,
+		hash             TEXT NOT NULL DEFAULT '',
+		parse_status     TEXT NOT NULL DEFAULT 'pending',
+		chunk_count      INTEGER NOT NULL DEFAULT 0,
+		symbol_count     INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (snapshot_id, file_path),
+		FOREIGN KEY (snapshot_id) REFERENCES code_snapshots(snapshot_id) ON DELETE CASCADE
+	);`,
+	`CREATE INDEX IF NOT EXISTS idx_code_files_snapshot_language ON code_files(snapshot_id, language);`,
+	`CREATE INDEX IF NOT EXISTS idx_code_files_snapshot_classification ON code_files(snapshot_id, classification);`,
+
+	// ── Code Intelligence Chunks ───────────────────────────────────────────
+	`CREATE TABLE IF NOT EXISTS code_chunks (
+		snapshot_id      TEXT NOT NULL,
+		chunk_id         TEXT NOT NULL,
+		file_path        TEXT NOT NULL,
+		language         TEXT NOT NULL DEFAULT '',
+		kind             TEXT NOT NULL DEFAULT 'file',
+		name             TEXT NOT NULL DEFAULT '',
+		start_line       INTEGER NOT NULL DEFAULT 1,
+		end_line         INTEGER NOT NULL DEFAULT 1,
+		content          TEXT NOT NULL DEFAULT '',
+		context_json     TEXT NOT NULL DEFAULT '{}',
+		PRIMARY KEY (snapshot_id, chunk_id),
+		FOREIGN KEY (snapshot_id, file_path) REFERENCES code_files(snapshot_id, file_path) ON DELETE CASCADE
+	);`,
+	`CREATE INDEX IF NOT EXISTS idx_code_chunks_snapshot_file ON code_chunks(snapshot_id, file_path, start_line);`,
+	`CREATE INDEX IF NOT EXISTS idx_code_chunks_snapshot_name ON code_chunks(snapshot_id, name);`,
+	`CREATE VIRTUAL TABLE IF NOT EXISTS code_chunks_fts USING fts5(
+		content,
+		name,
+		file_path,
+		content='code_chunks',
+		content_rowid='rowid'
+	);`,
+	`CREATE TRIGGER IF NOT EXISTS code_chunks_fts_insert AFTER INSERT ON code_chunks BEGIN
+		INSERT INTO code_chunks_fts(rowid, content, name, file_path) VALUES (new.rowid, new.content, new.name, new.file_path);
+	END;`,
+	`CREATE TRIGGER IF NOT EXISTS code_chunks_fts_update AFTER UPDATE OF content, name, file_path ON code_chunks BEGIN
+		UPDATE code_chunks_fts SET content = new.content, name = new.name, file_path = new.file_path WHERE rowid = new.rowid;
+	END;`,
+	`CREATE TRIGGER IF NOT EXISTS code_chunks_fts_delete AFTER DELETE ON code_chunks BEGIN
+		DELETE FROM code_chunks_fts WHERE rowid = old.rowid;
+	END;`,
+
+	// ── Code Intelligence Symbols ──────────────────────────────────────────
+	`CREATE TABLE IF NOT EXISTS code_symbols (
+		snapshot_id      TEXT NOT NULL,
+		symbol_id        TEXT NOT NULL,
+		name             TEXT NOT NULL,
+		qualified_name   TEXT NOT NULL DEFAULT '',
+		kind             TEXT NOT NULL DEFAULT '',
+		language         TEXT NOT NULL DEFAULT '',
+		file_path        TEXT NOT NULL,
+		start_line       INTEGER NOT NULL DEFAULT 1,
+		end_line         INTEGER NOT NULL DEFAULT 1,
+		chunk_id         TEXT NOT NULL DEFAULT '',
+		PRIMARY KEY (snapshot_id, symbol_id),
+		FOREIGN KEY (snapshot_id, chunk_id) REFERENCES code_chunks(snapshot_id, chunk_id) ON DELETE CASCADE
+	);`,
+	`CREATE INDEX IF NOT EXISTS idx_code_symbols_snapshot_name ON code_symbols(snapshot_id, name);`,
+	`CREATE INDEX IF NOT EXISTS idx_code_symbols_snapshot_qualified ON code_symbols(snapshot_id, qualified_name);`,
+	`CREATE INDEX IF NOT EXISTS idx_code_symbols_snapshot_file ON code_symbols(snapshot_id, file_path);`,
+
+	// ── Code Intelligence Imports ──────────────────────────────────────────
+	`CREATE TABLE IF NOT EXISTS code_imports (
+		snapshot_id      TEXT NOT NULL,
+		file_path        TEXT NOT NULL,
+		language         TEXT NOT NULL DEFAULT '',
+		import_path      TEXT NOT NULL,
+		import_kind      TEXT NOT NULL DEFAULT 'import',
+		PRIMARY KEY (snapshot_id, file_path, import_path),
+		FOREIGN KEY (snapshot_id, file_path) REFERENCES code_files(snapshot_id, file_path) ON DELETE CASCADE
+	);`,
+	`CREATE INDEX IF NOT EXISTS idx_code_imports_snapshot_target ON code_imports(snapshot_id, import_path);`,
+
+	// ── Code Intelligence Capabilities ─────────────────────────────────────
+	`CREATE TABLE IF NOT EXISTS code_capabilities (
+		snapshot_id      TEXT NOT NULL,
+		language         TEXT NOT NULL DEFAULT '',
+		capability       TEXT NOT NULL,
+		status           TEXT NOT NULL DEFAULT 'unsupported',
+		backend          TEXT NOT NULL DEFAULT '',
+		details_json     TEXT NOT NULL DEFAULT '{}',
+		PRIMARY KEY (snapshot_id, language, capability),
+		FOREIGN KEY (snapshot_id) REFERENCES code_snapshots(snapshot_id) ON DELETE CASCADE
+	);`,
+	`CREATE INDEX IF NOT EXISTS idx_code_capabilities_snapshot_status ON code_capabilities(snapshot_id, status);`,
+
+	// ── Code Intelligence References ───────────────────────────────────────
+	`CREATE TABLE IF NOT EXISTS code_references (
+		snapshot_id      TEXT NOT NULL,
+		symbol_name      TEXT NOT NULL,
+		language         TEXT NOT NULL DEFAULT '',
+		file_path        TEXT NOT NULL,
+		chunk_id         TEXT NOT NULL DEFAULT '',
+		start_line       INTEGER NOT NULL DEFAULT 1,
+		end_line         INTEGER NOT NULL DEFAULT 1,
+		reference_kind   TEXT NOT NULL DEFAULT 'identifier',
+		symbol_id        TEXT NOT NULL DEFAULT '',
+		qualified_name   TEXT NOT NULL DEFAULT '',
+		PRIMARY KEY (snapshot_id, symbol_name, file_path, start_line, end_line, reference_kind),
+		FOREIGN KEY (snapshot_id, chunk_id) REFERENCES code_chunks(snapshot_id, chunk_id) ON DELETE CASCADE
+	);`,
+	`CREATE INDEX IF NOT EXISTS idx_code_references_snapshot_symbol ON code_references(snapshot_id, symbol_name);`,
+	`CREATE INDEX IF NOT EXISTS idx_code_references_snapshot_symbol_id ON code_references(snapshot_id, symbol_id);`,
+	`CREATE INDEX IF NOT EXISTS idx_code_references_snapshot_file ON code_references(snapshot_id, file_path, start_line);`,
+
+	// ── Code Intelligence Calls ────────────────────────────────────────────
+	`CREATE TABLE IF NOT EXISTS code_calls (
+		snapshot_id              TEXT NOT NULL,
+		language                 TEXT NOT NULL DEFAULT '',
+		caller_symbol_id         TEXT NOT NULL DEFAULT '',
+		caller_name              TEXT NOT NULL DEFAULT '',
+		caller_qualified_name    TEXT NOT NULL DEFAULT '',
+		caller_file_path         TEXT NOT NULL,
+		caller_chunk_id          TEXT NOT NULL DEFAULT '',
+		callee_symbol_id         TEXT NOT NULL DEFAULT '',
+		callee_name              TEXT NOT NULL,
+		callee_qualified_name    TEXT NOT NULL DEFAULT '',
+		line                     INTEGER NOT NULL DEFAULT 1,
+		call_kind                TEXT NOT NULL DEFAULT 'call',
+		PRIMARY KEY (snapshot_id, caller_file_path, caller_chunk_id, callee_name, line, call_kind),
+		FOREIGN KEY (snapshot_id, caller_chunk_id) REFERENCES code_chunks(snapshot_id, chunk_id) ON DELETE CASCADE
+	);`,
+	`CREATE INDEX IF NOT EXISTS idx_code_calls_snapshot_callee_name ON code_calls(snapshot_id, callee_name);`,
+	`CREATE INDEX IF NOT EXISTS idx_code_calls_snapshot_callee_id ON code_calls(snapshot_id, callee_symbol_id);`,
+	`CREATE INDEX IF NOT EXISTS idx_code_calls_snapshot_caller_id ON code_calls(snapshot_id, caller_symbol_id);`,
 
 	// Broker-managed tables (threads, sessions, compactions, agents, etc.)
 	// are NOT defined here — the broker's own ledger migration creates them

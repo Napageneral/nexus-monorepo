@@ -397,126 +397,20 @@
       <h2>Timeline Nodes</h2>
       <div id="timeline" class="empty">No timeline loaded yet.</div>
     </section>
+    <section class="card timeline">
+      <h2>Execution Records</h2>
+      <div id="executions" class="empty">No execution records loaded yet.</div>
+    </section>
   </main>
 
   <script>
     // -----------------------------------------------------------------------
-    // Nex WebSocket RPC client (shared with index.html)
+    // Platform-owned browser runtime bridge
     // -----------------------------------------------------------------------
-    var NexClient = (function () {
-      var WS_PATH = "/runtime/ws";
-      var PROTOCOL_VERSION = 3;
-      var TIMEOUT_MS = 30000;
-
-      var ws = null;
-      var connected = false;
-      var pending = new Map();
-      var connectPromise = null;
-
-      function wsUrl() {
-        var p = location.protocol === "https:" ? "wss:" : "ws:";
-        return p + "//" + location.host + WS_PATH;
-      }
-
-      function rid() {
-        if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-          return crypto.randomUUID();
-        }
-        return "r-" + Date.now() + "-" + Math.random().toString(16).slice(2);
-      }
-
-      function send(frame) {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify(frame));
-        }
-      }
-
-      function resetConnection() {
-        connected = false;
-        connectPromise = null;
-        for (var entry of pending.values()) {
-          clearTimeout(entry.timer);
-          entry.reject(new Error("connection lost"));
-        }
-        pending.clear();
-      }
-
-      function connect() {
-        if (connected && ws && ws.readyState === WebSocket.OPEN) {
-          return Promise.resolve();
-        }
-        if (connectPromise) return connectPromise;
-
-        connectPromise = new Promise(function (resolve, reject) {
-          try { ws = new WebSocket(wsUrl()); } catch (e) { connectPromise = null; reject(e); return; }
-
-          var cid = rid();
-          var settled = false;
-
-          var timer = setTimeout(function () {
-            if (!settled) { settled = true; connectPromise = null; try { ws.close(); } catch (_) {} reject(new Error("nex connect timeout")); }
-          }, TIMEOUT_MS);
-
-          ws.onopen = function () {
-            send({
-              type: "req", id: cid, method: "connect",
-              params: {
-                minProtocol: PROTOCOL_VERSION, maxProtocol: PROTOCOL_VERSION,
-                client: { id: "spike-inspector", version: "1.0", platform: "web", mode: "backend" },
-                caps: [], role: "operator", scopes: ["operator.admin"]
-              }
-            });
-          };
-
-          ws.onmessage = function (event) {
-            var frame;
-            try { frame = JSON.parse(event.data); } catch (_) { return; }
-            if (!frame || frame.type === "event") return;
-            if (frame.type !== "res") return;
-
-            if (frame.id === cid) {
-              if (settled) return;
-              settled = true;
-              clearTimeout(timer);
-              if (!frame.ok) { connectPromise = null; reject(new Error((frame.error && frame.error.message) || "nex connect failed")); return; }
-              connected = true;
-              resolve();
-              return;
-            }
-
-            var p = pending.get(frame.id);
-            if (p) {
-              pending.delete(frame.id);
-              clearTimeout(p.timer);
-              if (!frame.ok) p.reject(new Error((frame.error && frame.error.message) || "rpc failed"));
-              else p.resolve(frame.payload);
-            }
-          };
-
-          ws.onerror = function () {
-            if (!settled) { settled = true; clearTimeout(timer); connectPromise = null; reject(new Error("ws error")); }
-            resetConnection();
-          };
-          ws.onclose = function () {
-            if (!settled) { settled = true; clearTimeout(timer); connectPromise = null; reject(new Error("ws closed")); }
-            resetConnection();
-          };
-        });
-        return connectPromise;
-      }
-
-      async function call(method, params) {
-        await connect();
-        var id = rid();
-        return new Promise(function (resolve, reject) {
-          var timer = setTimeout(function () { pending.delete(id); reject(new Error("rpc timeout: " + method)); }, TIMEOUT_MS);
-          pending.set(id, { resolve: resolve, reject: reject, timer: timer });
-          send({ type: "req", id: id, method: method, params: params || {} });
-        });
-      }
-
-      return { connect: connect, call: call };
-    })();
+    var NexClient = window.NexusRuntimeBridge;
+    if (!NexClient || typeof NexClient.rpcCall !== "function") {
+      throw new Error("nexus runtime bridge unavailable");
+    }
 
     // -----------------------------------------------------------------------
     // Dual-mode API
@@ -525,7 +419,7 @@
 
     async function spikeCall(method, params) {
       if (isNexMode) {
-        return await NexClient.call(method, params || {});
+        return await NexClient.rpcCall(method, params || {});
       }
       var headers = { "content-type": "application/json" };
       var tokenEl = document.getElementById("api-token");
@@ -556,6 +450,7 @@
     var summaryEl = document.getElementById("summary");
     var rootEl = document.getElementById("root");
     var timelineEl = document.getElementById("timeline");
+    var executionsEl = document.getElementById("executions");
     var form = document.getElementById("query-form");
     var treeInput = document.getElementById("tree-id");
     var requestInput = document.getElementById("request-id");
@@ -597,23 +492,29 @@
       statusEl.textContent = text;
     }
 
-    function renderSummary(askRequest, token) {
+    function renderSummary(askRequest, token, executions) {
       if (!askRequest) {
         summaryEl.className = "empty";
         summaryEl.textContent = "No request found.";
         return;
       }
+      var executionCount = Array.isArray(executions) ? executions.length : 0;
       summaryEl.className = "";
       summaryEl.innerHTML = [
         ["request_id", askRequest.request_id],
         ["request_token", token || "n/a"],
         ["tree_id", askRequest.tree_id],
         ["status", askRequest.status],
+        ["execution_count", String(executionCount)],
+        ["latest_execution_status", askRequest.latest_execution_status || "n/a"],
+        ["latest_execution_phase", askRequest.latest_execution_phase || "n/a"],
+        ["latest_execution_backend", askRequest.latest_execution_backend || "n/a"],
+        ["latest_execution_session", askRequest.latest_execution_session_key || "n/a"],
         ["tree_version_id", askRequest.tree_version_id || "n/a"],
         ["scope_key", askRequest.scope_key || "n/a"],
         ["ref_name", askRequest.ref_name || "n/a"],
         ["commit_sha", askRequest.commit_sha || "n/a"],
-        ["root_turn_id", askRequest.root_turn_id || "n/a"],
+        ["legacy_root_turn_id", askRequest.root_turn_id || "n/a"],
         ["created_at", ts(askRequest.created_at)],
         ["completed_at", ts(askRequest.completed_at)],
       ].map(function (pair) {
@@ -653,11 +554,14 @@
       timelineEl.className = "";
       timelineEl.innerHTML = nodes.map(function (node, idx) {
         var chips = [
-          '<span class="chip">' + esc(node.session_status || "unknown") + '</span>',
+          '<span class="chip">' + esc(node.execution_status || node.session_status || "unknown") + '</span>',
+          node.execution_backend ? '<span class="chip">' + esc(node.execution_backend) + '</span>' : '',
           '<span class="chip">depth ' + esc(node.depth) + '</span>',
           node.is_root ? '<span class="chip root">root</span>' : ''
         ].join(" ");
         var meta = [
+          'phase=' + esc(node.phase || "n/a"),
+          'attempt=' + esc(node.attempt != null ? node.attempt : 0),
           'messages=' + esc(node.message_count != null ? node.message_count : 0),
           'tools=' + esc(node.tool_call_count != null ? node.tool_call_count : 0),
           'updated=' + esc(ts(node.updated_at))
@@ -670,7 +574,43 @@
               '<div>' + chips + '</div>' +
             '</div>' +
             '<div class="meta">' + esc(meta) + '</div>' +
-            '<div class="meta">thread=' + esc(node.thread_id || "n/a") + '</div>' +
+            '<div class="meta">session=' + esc(node.session_label || "n/a") + ' \u00b7 thread=' + esc(node.thread_id || "n/a") + '</div>' +
+            '<div class="meta">working_dir=' + esc(node.working_dir || "n/a") + '</div>' +
+            '<div class="preview">' + preview + '</div>' +
+          '</article>'
+        );
+      }).join("");
+    }
+
+    function renderExecutions(executions) {
+      if (!Array.isArray(executions) || executions.length === 0) {
+        executionsEl.className = "empty";
+        executionsEl.textContent = "No execution records found for this request.";
+        return;
+      }
+      executionsEl.className = "";
+      executionsEl.innerHTML = executions.map(function (row, idx) {
+        var chips = [
+          '<span class="chip">' + esc(row.status || "unknown") + '</span>',
+          '<span class="chip">attempt ' + esc(row.attempt != null ? row.attempt : 0) + '</span>',
+          row.execution_backend ? '<span class="chip">' + esc(row.execution_backend) + '</span>' : ''
+        ].join(" ");
+        var meta = [
+          'phase=' + esc(row.phase || "n/a"),
+          'origin=' + esc(row.origin || "n/a"),
+          'started=' + esc(ts(row.started_at)),
+          'completed=' + esc(ts(row.completed_at))
+        ].join(" \u00b7 ");
+        var sessionKey = row.session_key ? esc(row.session_key) : "n/a";
+        var preview = row.answer_preview ? esc(row.answer_preview) : (row.error_message ? esc(row.error_message) : "No preview available.");
+        return (
+          '<article class="timeline-card" style="animation-delay:' + (idx * 35) + 'ms">' +
+            '<div class="timeline-head">' +
+              '<div class="node-id">' + esc(row.node_id || "unknown-node") + '</div>' +
+              '<div>' + chips + '</div>' +
+            '</div>' +
+            '<div class="meta">' + esc(meta) + '</div>' +
+            '<div class="meta">session=' + sessionKey + '</div>' +
             '<div class="preview">' + preview + '</div>' +
           '</article>'
         );
@@ -698,9 +638,11 @@
         ]);
         var inspect = results[0];
         var timeline = results[1];
-        renderSummary(inspect && inspect.ask_request, timeline && timeline.request_token);
+        var executions = (inspect && inspect.executions) || (timeline && timeline.executions) || [];
+        renderSummary(inspect && inspect.ask_request, timeline && timeline.request_token, executions);
         renderRoot(inspect);
         renderTimeline((timeline && timeline.timeline_nodes) || []);
+        renderExecutions(executions);
         setStatus("Loaded request " + requestID + " successfully.", "ok");
       } catch (err) {
         setStatus((err && err.message) || String(err), "err");
@@ -789,13 +731,21 @@
       }
       askListEl.className = "list";
       askListEl.innerHTML = items.map(function (row) {
+        var latestPhase = row.latest_execution_phase || "n/a";
+        var latestNode = row.latest_execution_node_id || "n/a";
+        var latestStatus = row.latest_execution_status || "n/a";
+        var latestBackend = row.latest_execution_backend || "n/a";
+        var executionCount = Number(row.execution_count || 0);
+        var legacyRootTurn = row.root_turn_id ? '<div class="item-sub">legacy_root_turn=' + esc(row.root_turn_id) + '</div>' : "";
         return '<div class="list-item">' +
           '<div class="item-head">' +
             '<div class="item-main">' + esc(row.request_id || "unknown") + '</div>' +
             '<button type="button" class="btn-mini" data-use-request="' + esc(row.request_id || "") + '" data-tree-id="' + esc(row.tree_id || "") + '">Inspect</button>' +
           '</div>' +
           '<div class="item-sub">status=' + esc(row.status || "n/a") + ' \u00b7 created=' + esc(ts(row.created_at)) + '</div>' +
-          '<div class="item-sub">root_turn=' + esc(row.root_turn_id || "n/a") + '</div>' +
+          '<div class="item-sub">executions=' + esc(String(executionCount)) + ' \u00b7 latest=' + esc(latestStatus) + ' \u00b7 phase=' + esc(latestPhase) + ' \u00b7 node=' + esc(latestNode) + '</div>' +
+          '<div class="item-sub">backend=' + esc(latestBackend) + ' \u00b7 session=' + esc(row.latest_execution_session_key || "n/a") + '</div>' +
+          legacyRootTurn +
         '</div>';
       }).join("");
       askListEl.querySelectorAll("[data-use-request]").forEach(function (button) {

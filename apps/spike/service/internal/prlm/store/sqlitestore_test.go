@@ -122,6 +122,27 @@ func TestSQLiteStore_AskRequestsTableExists(t *testing.T) {
 	}
 }
 
+func TestSQLiteStore_AskRequestExecutionsTableExists(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, ".oracle.db")
+	store, err := NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatalf("new sqlite store: %v", err)
+	}
+	defer store.Close()
+
+	var count int
+	if err := store.DB().QueryRowContext(
+		context.Background(),
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='ask_request_executions'`,
+	).Scan(&count); err != nil {
+		t.Fatalf("lookup ask_request_executions table: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected ask_request_executions table to exist, count=%d", count)
+	}
+}
+
 // TestSQLiteStore_RelationalRoundTrip verifies that SaveTree writes relational
 // tables and LoadTree reconstructs the tree faithfully, including nodes,
 // local-path assignments, bundle members, corpus entries, and parent-child

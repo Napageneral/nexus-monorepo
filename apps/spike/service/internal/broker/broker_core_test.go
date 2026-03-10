@@ -1008,3 +1008,33 @@ func TestBrokerStartExecution_AbortPersistsAbortedTurn(t *testing.T) {
 		t.Fatalf("expected aborted stream_end status, got %#v", streamEndPayload)
 	}
 }
+
+func TestEmitAgentEventTouchesSessionActivity(t *testing.T) {
+	db := openLedgerTestDB(t)
+	br, err := NewWithDB(db)
+	if err != nil {
+		t.Fatalf("new broker: %v", err)
+	}
+	label := "oracle:test:activity"
+	if _, err := br.CreateSession(label, SessionOptions{PersonaID: "main", SessionDir: t.TempDir()}); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	before, err := br.GetSession(label)
+	if err != nil {
+		t.Fatalf("get session before: %v", err)
+	}
+
+	time.Sleep(1100 * time.Millisecond)
+	br.emitAgentEvent(label, AgentEvent{
+		Type: "provider_progress",
+		Data: map[string]interface{}{"event_type": "response.output_text.delta"},
+	})
+
+	after, err := br.GetSession(label)
+	if err != nil {
+		t.Fatalf("get session after: %v", err)
+	}
+	if !after.UpdatedAt.After(before.UpdatedAt) {
+		t.Fatalf("expected session updated_at to advance, before=%v after=%v", before.UpdatedAt, after.UpdatedAt)
+	}
+}

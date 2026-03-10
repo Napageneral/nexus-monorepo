@@ -31,14 +31,14 @@ import (
 // --- Core operations -------------------------------------------------------
 
 func (s *oracleServer) nexAsk(p map[string]interface{}) (interface{}, error) {
-	treeID := payloadStr(p, "tree_id")
+	indexID := payloadStr(p, "index_id")
 	query := payloadStr(p, "query")
-	if treeID == "" || query == "" {
-		return nil, fmt.Errorf("tree_id and query are required")
+	if indexID == "" || query == "" {
+		return nil, fmt.Errorf("index_id and query are required")
 	}
 
 	s.mu.RLock()
-	tree := s.trees[treeID]
+	tree := s.trees[indexID]
 	s.mu.RUnlock()
 	if tree == nil {
 		return nil, fmt.Errorf("tree not found")
@@ -61,14 +61,14 @@ func (s *oracleServer) nexAsk(p map[string]interface{}) (interface{}, error) {
 	}
 
 	requestID := "req-" + uuid.NewString()
-	answer, err := tree.oracle.AskWithOptions(ctx, treeID, query, prlmtree.AskOptions{
+	answer, err := tree.oracle.AskWithOptions(ctx, indexID, query, prlmtree.AskOptions{
 		RequestID: requestID,
 	})
 	if err != nil {
 		return nil, err
 	}
 	return askResponse{
-		TreeID:    answer.TreeID,
+		IndexID:   answer.TreeID,
 		Query:     answer.Query,
 		Content:   strings.TrimSpace(answer.Content),
 		Visited:   answer.Visited,
@@ -300,6 +300,10 @@ func (s *oracleServer) nexAskRequestsInspect(p map[string]interface{}) (interfac
 	if err != nil {
 		return nil, err
 	}
+	executions, err := s.listAskRequestExecutions(treeID, requestID)
+	if err != nil {
+		return nil, err
+	}
 	rootTurn, rootMessages, rootToolCalls, rootSession, err := s.inspectAskRoot(treeID, askRow.RootTurnID)
 	if err != nil {
 		return nil, err
@@ -310,6 +314,7 @@ func (s *oracleServer) nexAskRequestsInspect(p map[string]interface{}) (interfac
 		"root_messages":   rootMessages,
 		"root_tool_calls": rootToolCalls,
 		"root_session":    rootSession,
+		"executions":      executions,
 	}, nil
 }
 
@@ -324,11 +329,15 @@ func (s *oracleServer) nexAskRequestsTimeline(p map[string]interface{}) (interfa
 	if err != nil {
 		return nil, err
 	}
+	executions, err := s.listAskRequestExecutions(treeID, requestID)
+	if err != nil {
+		return nil, err
+	}
 	requestToken := sanitizeAskRequestToken(requestID)
 	if requestToken == "" {
 		return nil, fmt.Errorf("request_id is required")
 	}
-	nodes, err := s.buildAskTimeline(treeID, askRow, requestToken, limit)
+	nodes, err := s.buildAskTimeline(treeID, askRow, executions, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -336,6 +345,7 @@ func (s *oracleServer) nexAskRequestsTimeline(p map[string]interface{}) (interfa
 		"ask_request":    askRow,
 		"request_token":  requestToken,
 		"timeline_nodes": nodes,
+		"executions":     executions,
 	}, nil
 }
 
@@ -658,13 +668,21 @@ func (s *oracleServer) nexGitHubConnectorInstallStart(p map[string]interface{}) 
 	if !s.githubAppReady() {
 		return nil, fmt.Errorf("github app is not configured")
 	}
+	connectionProfileID := payloadStr(p, "connectionProfileId")
+	if connectionProfileID == "" {
+		return nil, fmt.Errorf("connectionProfileId is required")
+	}
+	if !isManagedGitHubConnectionProfileID(connectionProfileID) {
+		return nil, fmt.Errorf("connectionProfileId must be %q", spikeManagedGitHubConnectionProfileID)
+	}
 	nonce, err := randomStateNonce()
 	if err != nil {
 		return nil, err
 	}
 	state, err := encodeGitHubInstallState(githubInstallStatePayload{
-		IssuedAt: time.Now().UTC().Unix(),
-		Nonce:    nonce,
+		IssuedAt:            time.Now().UTC().Unix(),
+		Nonce:               nonce,
+		ConnectionProfileID: connectionProfileID,
 	}, s.githubInstallSecret)
 	if err != nil {
 		return nil, err
@@ -677,52 +695,6 @@ func (s *oracleServer) nexGitHubConnectorInstallStart(p map[string]interface{}) 
 	return map[string]interface{}{
 		"ok":          true,
 		"install_url": installURL,
-	}, nil
-}
-
-func (s *oracleServer) nexGitHubConnectorInstallCallback(p map[string]interface{}) (interface{}, error) {
-	if !s.githubAppReady() {
-		return nil, fmt.Errorf("github app is not configured")
-	}
-	rawState := payloadStr(p, "state")
-	installationIDStr := payloadStr(p, "installation_id")
-
-	_, err := decodeGitHubInstallState(rawState, s.githubInstallSecret, 20*time.Minute, time.Now().UTC())
-	if err != nil {
-		return nil, fmt.Errorf("invalid state: %w", err)
-	}
-	installationID, err := parsePositiveInt64Secret(installationIDStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid installation_id: %w", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-	defer cancel()
-
-	appJWT, err := buildGitHubAppJWT(s.githubAppID, s.githubAppPrivateKey, time.Now().UTC())
-	if err != nil {
-		return nil, fmt.Errorf("app jwt failed: %w", err)
-	}
-	metadata, err := fetchGitHubInstallationMetadata(ctx, s.configuredGitHubAPIBaseURL(), appJWT, installationID)
-	if err != nil {
-		return nil, fmt.Errorf("installation lookup failed: %w", err)
-	}
-	_, err = s.upsertGitHubInstallation(installationID, metadata, githubConnectorSecret{
-		Service:                  "github",
-		Account:                  fmt.Sprintf("installation-%d", installationID),
-		AuthID:                   "custom",
-		AppID:                    s.githubAppID,
-		InstallationID:           installationID,
-		PrivateKeyPEM:            s.githubAppPrivateKey,
-		APIBaseURL:               s.configuredGitHubAPIBaseURL(),
-		InstallationAccountLogin: strings.TrimSpace(metadata.Account.Login),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return map[string]interface{}{
-		"ok":              true,
-		"installation_id": installationID,
 	}, nil
 }
 

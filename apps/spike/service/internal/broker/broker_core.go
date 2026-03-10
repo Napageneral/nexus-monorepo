@@ -692,6 +692,14 @@ func (b *Broker) emitAgentEvent(sessionLabel string, event AgentEvent) {
 	if sessionLabel == "" {
 		return
 	}
+	switch strings.ToLower(strings.TrimSpace(event.Type)) {
+	case "token":
+		// Token events can be very chatty. More meaningful lifecycle and provider
+		// progress events also flow through this path and already refresh
+		// session activity.
+	default:
+		b.touchSessionActivity(sessionLabel, nowUnixMilli())
+	}
 	b.mu.Lock()
 	subs := b.eventSubs[sessionLabel]
 	for _, sub := range subs {

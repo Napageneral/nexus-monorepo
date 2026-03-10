@@ -32,13 +32,13 @@ import (
 )
 
 type askRequest struct {
-	TreeID string `json:"tree_id"`
-	Query  string `json:"query"`
-	JSON   bool   `json:"json,omitempty"`
+	IndexID string `json:"index_id"`
+	Query   string `json:"query"`
+	JSON    bool   `json:"json,omitempty"`
 }
 
 type askResponse struct {
-	TreeID    string   `json:"tree_id"`
+	IndexID   string   `json:"index_id"`
 	Query     string   `json:"query"`
 	Content   string   `json:"content"`
 	Visited   []string `json:"visited,omitempty"`
@@ -183,6 +183,18 @@ type githubConnectorCommitsRequest struct {
 	Ref    string `json:"ref,omitempty"`
 }
 
+const (
+	spikeGitHubInstallationsListPath = "/api/spike/github/installations/list"
+	spikeGitHubInstallationsGetPath  = "/api/spike/github/installations/get"
+	spikeGitHubSetupPath             = "/api/spike/github/setup"
+	spikeGitHubReposPath             = "/api/spike/github/repos"
+	spikeGitHubBranchesPath          = "/api/spike/github/branches"
+	spikeGitHubCommitsPath           = "/api/spike/github/commits"
+	spikeGitHubRemovePath            = "/api/spike/github/remove"
+	githubAdapterCallbackPath        = "/auth/github/callback"
+	githubAdapterWebhookPath         = "/adapters/github/webhooks"
+)
+
 type treeVersionGetRequest struct {
 	ID string `json:"id"`
 }
@@ -214,21 +226,53 @@ type askRequestsTimelineRequest struct {
 }
 
 type askRequestRecord struct {
-	RequestID     string     `json:"request_id"`
-	TreeID        string     `json:"tree_id"`
-	ScopeKey      string     `json:"scope_key"`
-	RefName       string     `json:"ref_name"`
-	CommitSHA     string     `json:"commit_sha"`
-	TreeFlavor    string     `json:"tree_flavor"`
-	TreeVersionID string     `json:"tree_version_id"`
-	QueryText     string     `json:"query_text"`
-	Status        string     `json:"status"`
-	RootTurnID    string     `json:"root_turn_id"`
-	AnswerPreview string     `json:"answer_preview"`
-	ErrorCode     string     `json:"error_code"`
-	ErrorMessage  string     `json:"error_message"`
-	CreatedAt     time.Time  `json:"created_at"`
-	CompletedAt   *time.Time `json:"completed_at,omitempty"`
+	RequestID                 string     `json:"request_id"`
+	TreeID                    string     `json:"tree_id"`
+	ScopeKey                  string     `json:"scope_key"`
+	RefName                   string     `json:"ref_name"`
+	CommitSHA                 string     `json:"commit_sha"`
+	TreeFlavor                string     `json:"tree_flavor"`
+	TreeVersionID             string     `json:"tree_version_id"`
+	QueryText                 string     `json:"query_text"`
+	Status                    string     `json:"status"`
+	RootTurnID                string     `json:"root_turn_id"`
+	AnswerPreview             string     `json:"answer_preview"`
+	ErrorCode                 string     `json:"error_code"`
+	ErrorMessage              string     `json:"error_message"`
+	ExecutionCount            int        `json:"execution_count"`
+	LatestExecutionNodeID     string     `json:"latest_execution_node_id,omitempty"`
+	LatestExecutionPhase      string     `json:"latest_execution_phase,omitempty"`
+	LatestExecutionStatus     string     `json:"latest_execution_status,omitempty"`
+	LatestExecutionBackend    string     `json:"latest_execution_backend,omitempty"`
+	LatestExecutionSessionKey string     `json:"latest_execution_session_key,omitempty"`
+	LatestExecutionRunID      string     `json:"latest_execution_run_id,omitempty"`
+	LatestExecutionWorkDir    string     `json:"latest_execution_working_dir,omitempty"`
+	LatestExecutionPreview    string     `json:"latest_execution_preview,omitempty"`
+	LatestExecutionError      string     `json:"latest_execution_error,omitempty"`
+	CreatedAt                 time.Time  `json:"created_at"`
+	CompletedAt               *time.Time `json:"completed_at,omitempty"`
+}
+
+type askRequestExecutionRecord struct {
+	RequestID        string    `json:"request_id"`
+	NodeID           string    `json:"node_id"`
+	Phase            string    `json:"phase"`
+	Attempt          int       `json:"attempt"`
+	Origin           string    `json:"origin"`
+	Status           string    `json:"status"`
+	ExecutionBackend string    `json:"execution_backend"`
+	SessionKey       string    `json:"session_key"`
+	RunID            string    `json:"run_id"`
+	WorkingDir       string    `json:"working_dir"`
+	AnswerPreview    string    `json:"answer_preview"`
+	ErrorMessage     string    `json:"error_message"`
+	StartedAt        time.Time `json:"started_at"`
+	CompletedAt      time.Time `json:"completed_at"`
+}
+
+type askRequestExecutionSummary struct {
+	Count  int
+	Latest askRequestExecutionRecord
 }
 
 type askInspectorSession struct {
@@ -339,9 +383,14 @@ type askTimelineNode struct {
 	NodeID           string                  `json:"node_id"`
 	Depth            int                     `json:"depth"`
 	IsRoot           bool                    `json:"is_root"`
+	Phase            string                  `json:"phase"`
+	Attempt          int                     `json:"attempt"`
+	ExecutionStatus  string                  `json:"execution_status"`
+	ExecutionBackend string                  `json:"execution_backend"`
 	SessionLabel     string                  `json:"session_label"`
 	ThreadID         string                  `json:"thread_id"`
 	SessionStatus    string                  `json:"session_status"`
+	WorkingDir       string                  `json:"working_dir"`
 	CreatedAt        time.Time               `json:"created_at"`
 	UpdatedAt        time.Time               `json:"updated_at"`
 	Turn             *askTimelineTurnSummary `json:"turn,omitempty"`
@@ -738,7 +787,7 @@ func (s *oracleServer) handler() http.Handler {
 	mux.HandleFunc("/api/apps", s.handleApps)
 	mux.HandleFunc("/ask", s.handleAsk)
 	mux.HandleFunc("/status", s.handleStatus)
-	mux.HandleFunc("/github/webhook", s.handleGitHubWebhook)
+	mux.HandleFunc(githubAdapterWebhookPath, s.handleGitHubWebhook)
 	mux.HandleFunc("/sync", s.handleSync)
 	mux.HandleFunc("/jobs/get", s.handleJobsGet)
 	mux.HandleFunc("/jobs/list", s.handleJobsList)
@@ -756,15 +805,14 @@ func (s *oracleServer) handler() http.Handler {
 	mux.HandleFunc("/config/defaults", s.handleConfigDefaults)
 	mux.HandleFunc("/config/get", s.handleConfigGet)
 	mux.HandleFunc("/config/update", s.handleConfigUpdate)
-	mux.HandleFunc("/github/installations/list", s.handleGitHubInstallationsList)
-	mux.HandleFunc("/github/installations/get", s.handleGitHubInstallationsGet)
-	mux.HandleFunc("/connectors/github/install/start", s.handleGitHubConnectorInstallStart)
-	mux.HandleFunc("/connectors/github/install/callback", s.handleGitHubConnectorInstallCallback)
-	mux.HandleFunc("/connectors/github/repos", s.handleGitHubConnectorRepos)
-	mux.HandleFunc("/connectors/github/branches", s.handleGitHubConnectorBranches)
-	mux.HandleFunc("/connectors/github/commits", s.handleGitHubConnectorCommits)
-	mux.HandleFunc("/connectors/github/remove", s.handleGitHubConnectorRemove)
-	mux.HandleFunc("/connectors/github/setup", s.handleGitHubConnectorSetup)
+	mux.HandleFunc(spikeGitHubInstallationsListPath, s.handleGitHubInstallationsList)
+	mux.HandleFunc(spikeGitHubInstallationsGetPath, s.handleGitHubInstallationsGet)
+	mux.HandleFunc(githubAdapterCallbackPath, s.handleGitHubConnectorInstallCallback)
+	mux.HandleFunc(spikeGitHubReposPath, s.handleGitHubConnectorRepos)
+	mux.HandleFunc(spikeGitHubBranchesPath, s.handleGitHubConnectorBranches)
+	mux.HandleFunc(spikeGitHubCommitsPath, s.handleGitHubConnectorCommits)
+	mux.HandleFunc(spikeGitHubRemovePath, s.handleGitHubConnectorRemove)
+	mux.HandleFunc(spikeGitHubSetupPath, s.handleGitHubConnectorSetup)
 	mux.HandleFunc("/app", s.handleRuntimeApp)
 	mux.HandleFunc("/app/", s.handleRuntimeApp)
 	mux.HandleFunc("/tree_versions/get", s.handleTreeVersionGet)
@@ -773,8 +821,6 @@ func (s *oracleServer) handler() http.Handler {
 	mux.HandleFunc("/ask_requests/list", s.handleAskRequestsList)
 	mux.HandleFunc("/ask_requests/inspect", s.handleAskRequestsInspect)
 	mux.HandleFunc("/ask_requests/timeline", s.handleAskRequestsTimeline)
-	mux.HandleFunc("/control", s.handleControlRoot)
-	mux.HandleFunc("/control/ask-inspector", s.handleControlAskInspector)
 	mux.HandleFunc("/sessions/list", s.handleSessionsList)
 	mux.HandleFunc("/sessions/resolve", s.handleSessionsResolve)
 	mux.HandleFunc("/sessions/preview", s.handleSessionsPreview)
@@ -830,7 +876,7 @@ func isGitHubWebhookPath(r *http.Request) bool {
 	if r == nil {
 		return false
 	}
-	return strings.TrimSpace(r.URL.Path) == "/github/webhook"
+	return strings.TrimSpace(r.URL.Path) == githubAdapterWebhookPath
 }
 
 func (s *oracleServer) allowByRateLimit(w http.ResponseWriter, r *http.Request) bool {
@@ -903,8 +949,8 @@ func authTokenFromRequest(r *http.Request) string {
 	if token := parseBearerToken(r.Header.Get("Authorization")); token != "" {
 		return token
 	}
-	// Browser convenience path for initial control-page bootstrap.
-	if (r.Method == http.MethodGet || r.Method == http.MethodHead) && isControlPagePath(strings.TrimSpace(r.URL.Path)) {
+	// Browser convenience path for initial Spike UI bootstrap.
+	if (r.Method == http.MethodGet || r.Method == http.MethodHead) && isSpikeBrowserPath(strings.TrimSpace(r.URL.Path)) {
 		if q := strings.TrimSpace(r.URL.Query().Get("auth_token")); q != "" {
 			return q
 		}
@@ -924,13 +970,14 @@ func parseBearerToken(header string) string {
 	return strings.TrimSpace(header[len(prefix):])
 }
 
-func isControlPagePath(path string) bool {
-	switch path {
-	case "/control", "/control/ask-inspector":
+func isSpikeBrowserPath(path string) bool {
+	if path == "/app" || path == "/app/" || path == spikeAppEntryPathBare || path == spikeAppEntryPath {
 		return true
-	default:
-		return false
 	}
+	if path == spikeAppInspectorPath || path == spikeAppInspectorBare {
+		return true
+	}
+	return strings.HasPrefix(path, spikeAppNamespacePrefix)
 }
 
 func secureTokenEqual(expected string, actual string) bool {
@@ -1368,15 +1415,15 @@ func (s *oracleServer) handleAsk(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	req.TreeID = strings.TrimSpace(req.TreeID)
+	req.IndexID = strings.TrimSpace(req.IndexID)
 	req.Query = strings.TrimSpace(req.Query)
-	if req.TreeID == "" || req.Query == "" {
-		http.Error(w, "tree_id and query are required", http.StatusBadRequest)
+	if req.IndexID == "" || req.Query == "" {
+		http.Error(w, "index_id and query are required", http.StatusBadRequest)
 		return
 	}
 
 	s.mu.RLock()
-	tree := s.trees[req.TreeID]
+	tree := s.trees[req.IndexID]
 	s.mu.RUnlock()
 	if tree == nil {
 		http.Error(w, "tree not found", http.StatusNotFound)
@@ -1401,7 +1448,7 @@ func (s *oracleServer) handleAsk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	requestID := "req-" + uuid.NewString()
-	answer, err := tree.oracle.AskWithOptions(ctx, req.TreeID, req.Query, prlmtree.AskOptions{
+	answer, err := tree.oracle.AskWithOptions(ctx, req.IndexID, req.Query, prlmtree.AskOptions{
 		RequestID: requestID,
 	})
 	if err != nil {
@@ -1409,7 +1456,7 @@ func (s *oracleServer) handleAsk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := askResponse{
-		TreeID:    answer.TreeID,
+		IndexID:   answer.TreeID,
 		Query:     answer.Query,
 		Content:   strings.TrimSpace(answer.Content),
 		Visited:   answer.Visited,
@@ -2293,6 +2340,11 @@ func (s *oracleServer) handleAskRequestsInspect(w http.ResponseWriter, r *http.R
 		writeControlPlaneError(w, err)
 		return
 	}
+	executions, err := s.listAskRequestExecutions(req.TreeID, req.RequestID)
+	if err != nil {
+		writeControlPlaneError(w, err)
+		return
+	}
 	rootTurn, rootMessages, rootToolCalls, rootSession, err := s.inspectAskRoot(req.TreeID, askRow.RootTurnID)
 	if err != nil {
 		writeControlPlaneError(w, err)
@@ -2304,6 +2356,7 @@ func (s *oracleServer) handleAskRequestsInspect(w http.ResponseWriter, r *http.R
 		"root_messages":   rootMessages,
 		"root_tool_calls": rootToolCalls,
 		"root_session":    rootSession,
+		"executions":      executions,
 	})
 }
 
@@ -2322,12 +2375,17 @@ func (s *oracleServer) handleAskRequestsTimeline(w http.ResponseWriter, r *http.
 		writeControlPlaneError(w, err)
 		return
 	}
+	executions, err := s.listAskRequestExecutions(req.TreeID, req.RequestID)
+	if err != nil {
+		writeControlPlaneError(w, err)
+		return
+	}
 	requestToken := sanitizeAskRequestToken(req.RequestID)
 	if requestToken == "" {
 		writeControlPlaneError(w, fmt.Errorf("request_id is required"))
 		return
 	}
-	nodes, err := s.buildAskTimeline(req.TreeID, askRow, requestToken, req.Limit)
+	nodes, err := s.buildAskTimeline(req.TreeID, askRow, executions, req.Limit)
 	if err != nil {
 		writeControlPlaneError(w, err)
 		return
@@ -2336,6 +2394,7 @@ func (s *oracleServer) handleAskRequestsTimeline(w http.ResponseWriter, r *http.
 		"ask_request":    askRow,
 		"request_token":  requestToken,
 		"timeline_nodes": nodes,
+		"executions":     executions,
 	})
 }
 
@@ -2742,7 +2801,16 @@ func (s *oracleServer) getAskRequest(treeID string, requestID string) (*askReque
 		FROM ask_requests
 		WHERE request_id = ?
 	`, requestID)
-	return scanAskRequestRecord(row)
+	record, err := scanAskRequestRecord(row)
+	if err != nil {
+		return nil, err
+	}
+	summaries, err := s.listAskRequestExecutionSummaries(treeID, []string{requestID})
+	if err != nil {
+		return nil, err
+	}
+	applyAskRequestExecutionSummary(record, summaries[requestID])
+	return record, nil
 }
 
 func (s *oracleServer) listAskRequests(req askRequestsListRequest) ([]*askRequestRecord, error) {
@@ -2799,6 +2867,117 @@ func (s *oracleServer) listAskRequests(req askRequestsListRequest) ([]*askReques
 			return nil, scanErr
 		}
 		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	requestIDs := make([]string, 0, len(out))
+	for _, row := range out {
+		if row == nil {
+			continue
+		}
+		requestIDs = append(requestIDs, row.RequestID)
+	}
+	summaries, err := s.listAskRequestExecutionSummaries(req.TreeID, requestIDs)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range out {
+		if row == nil {
+			continue
+		}
+		applyAskRequestExecutionSummary(row, summaries[row.RequestID])
+	}
+	return out, nil
+}
+
+func (s *oracleServer) listAskRequestExecutionSummaries(treeID string, requestIDs []string) (map[string]askRequestExecutionSummary, error) {
+	db, err := s.resolveTreeStoreDB(strings.TrimSpace(treeID))
+	if err != nil {
+		return nil, err
+	}
+	normalized := make([]string, 0, len(requestIDs))
+	seen := make(map[string]struct{}, len(requestIDs))
+	for _, requestID := range requestIDs {
+		requestID = strings.TrimSpace(requestID)
+		if requestID == "" {
+			continue
+		}
+		if _, ok := seen[requestID]; ok {
+			continue
+		}
+		seen[requestID] = struct{}{}
+		normalized = append(normalized, requestID)
+	}
+	if len(normalized) == 0 {
+		return map[string]askRequestExecutionSummary{}, nil
+	}
+	placeholders := make([]string, 0, len(normalized))
+	args := make([]any, 0, len(normalized))
+	for _, requestID := range normalized {
+		placeholders = append(placeholders, "?")
+		args = append(args, requestID)
+	}
+	query := `
+		SELECT request_id, node_id, phase, attempt, origin, status, execution_backend,
+		       session_key, run_id, working_dir, answer_preview, error_message,
+		       started_at, completed_at
+		FROM ask_request_executions
+		WHERE request_id IN (` + strings.Join(placeholders, ", ") + `)
+		ORDER BY request_id ASC, started_at DESC, completed_at DESC, attempt DESC, node_id ASC, phase ASC
+	`
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]askRequestExecutionSummary, len(normalized))
+	for rows.Next() {
+		record, scanErr := scanAskRequestExecutionRecord(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		summary := out[record.RequestID]
+		summary.Count++
+		if summary.Count == 1 {
+			summary.Latest = record
+		}
+		out[record.RequestID] = summary
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (s *oracleServer) listAskRequestExecutions(treeID string, requestID string) ([]askRequestExecutionRecord, error) {
+	db, err := s.resolveTreeStoreDB(strings.TrimSpace(treeID))
+	if err != nil {
+		return nil, err
+	}
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return nil, fmt.Errorf("request_id is required")
+	}
+	rows, err := db.Query(`
+		SELECT request_id, node_id, phase, attempt, origin, status, execution_backend,
+		       session_key, run_id, working_dir, answer_preview, error_message,
+		       started_at, completed_at
+		FROM ask_request_executions
+		WHERE request_id = ?
+		ORDER BY started_at ASC, node_id ASC, phase ASC, attempt ASC
+	`, requestID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]askRequestExecutionRecord, 0)
+	for rows.Next() {
+		record, scanErr := scanAskRequestExecutionRecord(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		out = append(out, record)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -2862,52 +3041,80 @@ func (s *oracleServer) inspectAskRoot(treeID string, rootTurnID string) (*askIns
 	return turn, messages, calls, session, nil
 }
 
-func (s *oracleServer) buildAskTimeline(treeID string, askRow *askRequestRecord, requestToken string, limit int) ([]askTimelineNode, error) {
-	sessions, err := s.listAskTimelineSessions(treeID, askRow, requestToken, limit)
-	if err != nil {
-		return nil, err
+func (s *oracleServer) buildAskTimeline(treeID string, askRow *askRequestRecord, executions []askRequestExecutionRecord, limit int) ([]askTimelineNode, error) {
+	if limit <= 0 {
+		limit = 256
 	}
-	br, err := s.resolveTreeBroker(strings.TrimSpace(treeID))
-	if err != nil {
-		return nil, err
+	if limit > 2000 {
+		limit = 2000
+	}
+	if len(executions) == 0 {
+		return []askTimelineNode{}, nil
 	}
 
-	nodes := make([]askTimelineNode, 0, len(sessions))
-	for _, session := range sessions {
-		nodeID := askTimelineNodeIDFromLabel(session.Label)
-		node := askTimelineNode{
-			NodeID:        nodeID,
-			Depth:         askTimelineDepth(nodeID),
-			IsRoot:        strings.TrimSpace(session.ThreadID) != "" && strings.TrimSpace(session.ThreadID) == strings.TrimSpace(askRow.RootTurnID),
-			SessionLabel:  session.Label,
-			ThreadID:      session.ThreadID,
-			SessionStatus: session.Status,
-			CreatedAt:     session.CreatedAt,
-			UpdatedAt:     session.UpdatedAt,
+	nodesByID := make(map[string]*askTimelineNode, len(executions))
+	for _, execution := range executions {
+		nodeID := strings.TrimSpace(execution.NodeID)
+		if nodeID == "" {
+			continue
 		}
-		turnID := strings.TrimSpace(session.ThreadID)
-		if turnID != "" {
-			turn, messages, calls, err := br.GetTurnDetails(turnID)
-			if err != nil {
-				if !errors.Is(err, sql.ErrNoRows) {
-					return nil, err
-				}
-			} else {
-				node.Turn = &askTimelineTurnSummary{
-					ID:            turn.ID,
-					ParentTurnID:  turn.ParentTurnID,
-					Status:        turn.Status,
-					StartedAt:     turn.StartedAt,
-					CompletedAt:   turn.CompletedAt,
-					TotalTokens:   turn.TotalTokens,
-					ToolCallCount: turn.ToolCallCount,
-				}
-				node.MessageCount = len(messages)
-				node.ToolCallCount = len(calls)
-				node.AssistantPreview = summarizeAssistantPreview(messages)
+		node := nodesByID[nodeID]
+		if node == nil {
+			updatedAt := execution.CompletedAt
+			if updatedAt.IsZero() {
+				updatedAt = execution.StartedAt
+			}
+			preview := strings.TrimSpace(execution.AnswerPreview)
+			if preview == "" {
+				preview = strings.TrimSpace(execution.ErrorMessage)
+			}
+			node = &askTimelineNode{
+				NodeID:           nodeID,
+				Depth:            askTimelineDepth(nodeID),
+				IsRoot:           nodeID == "root",
+				Phase:            strings.TrimSpace(execution.Phase),
+				Attempt:          execution.Attempt,
+				ExecutionStatus:  strings.TrimSpace(execution.Status),
+				ExecutionBackend: strings.TrimSpace(execution.ExecutionBackend),
+				SessionLabel:     strings.TrimSpace(execution.SessionKey),
+				SessionStatus:    strings.TrimSpace(execution.Status),
+				WorkingDir:       strings.TrimSpace(execution.WorkingDir),
+				CreatedAt:        execution.StartedAt,
+				UpdatedAt:        updatedAt,
+				AssistantPreview: preview,
+			}
+			nodesByID[nodeID] = node
+			continue
+		}
+		if execution.StartedAt.Before(node.CreatedAt) || node.CreatedAt.IsZero() {
+			node.CreatedAt = execution.StartedAt
+		}
+		candidateUpdatedAt := execution.CompletedAt
+		if candidateUpdatedAt.IsZero() {
+			candidateUpdatedAt = execution.StartedAt
+		}
+		if node.UpdatedAt.Before(candidateUpdatedAt) {
+			node.Phase = strings.TrimSpace(execution.Phase)
+			node.Attempt = execution.Attempt
+			node.ExecutionStatus = strings.TrimSpace(execution.Status)
+			node.ExecutionBackend = strings.TrimSpace(execution.ExecutionBackend)
+			node.SessionLabel = strings.TrimSpace(execution.SessionKey)
+			node.SessionStatus = strings.TrimSpace(execution.Status)
+			node.WorkingDir = strings.TrimSpace(execution.WorkingDir)
+			node.UpdatedAt = candidateUpdatedAt
+			preview := strings.TrimSpace(execution.AnswerPreview)
+			if preview == "" {
+				preview = strings.TrimSpace(execution.ErrorMessage)
+			}
+			if preview != "" {
+				node.AssistantPreview = preview
 			}
 		}
-		nodes = append(nodes, node)
+	}
+
+	nodes := make([]askTimelineNode, 0, len(nodesByID))
+	for _, node := range nodesByID {
+		nodes = append(nodes, *node)
 	}
 	sort.Slice(nodes, func(i, j int) bool {
 		if nodes[i].Depth != nodes[j].Depth {
@@ -2918,77 +3125,82 @@ func (s *oracleServer) buildAskTimeline(treeID string, askRow *askRequestRecord,
 		}
 		return nodes[i].UpdatedAt.Before(nodes[j].UpdatedAt)
 	})
+	if len(nodes) > limit {
+		nodes = nodes[:limit]
+	}
+
+	entry, err := s.resolveServedTree(strings.TrimSpace(treeID))
+	if err != nil {
+		return nil, err
+	}
+	if entry != nil && entry.broker != nil {
+		if err := s.enrichAskTimelineNodes(entry.broker, askRow, nodes); err != nil {
+			return nil, err
+		}
+	}
 	return nodes, nil
 }
 
-func (s *oracleServer) listAskTimelineSessions(treeID string, askRow *askRequestRecord, requestToken string, limit int) ([]askTimelineSessionRow, error) {
-	db, err := s.resolveTreeStoreDB(strings.TrimSpace(treeID))
-	if err != nil {
-		return nil, err
+func (s *oracleServer) enrichAskTimelineNodes(br *broker.Broker, askRow *askRequestRecord, nodes []askTimelineNode) error {
+	if br == nil || len(nodes) == 0 {
+		return nil
 	}
-	if limit <= 0 {
-		limit = 256
-	}
-	if limit > 2000 {
-		limit = 2000
-	}
-
-	where := []string{"origin = 'ask'"}
-	args := make([]any, 0, 5)
-	treeVersionID := ""
-	scopeKey := ""
+	rootTurnID := ""
 	if askRow != nil {
-		treeVersionID = strings.TrimSpace(askRow.TreeVersionID)
-		scopeKey = strings.TrimSpace(askRow.ScopeKey)
+		rootTurnID = strings.TrimSpace(askRow.RootTurnID)
 	}
-	if treeVersionID != "" {
-		where = append(where, "label LIKE ?")
-		args = append(args, treeVersionID+":%:stateless:"+requestToken+":%")
-	} else {
-		where = append(where, "label LIKE ?")
-		args = append(args, "%:stateless:"+requestToken+":%")
-	}
-	if scopeKey != "" {
-		where = append(where, "scope_key = ?")
-		args = append(args, scopeKey)
-	}
-
-	query := `
-		SELECT label, thread_id, status, created_at, updated_at
-		FROM sessions
-		WHERE ` + strings.Join(where, " AND ") + `
-		ORDER BY updated_at ASC
-		LIMIT ?
-	`
-	args = append(args, limit)
-	rows, err := db.Query(query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	out := make([]askTimelineSessionRow, 0)
-	for rows.Next() {
-		var (
-			row         askTimelineSessionRow
-			threadID    sql.NullString
-			createdAtMS int64
-			updatedAtMS int64
-		)
-		if err := rows.Scan(&row.Label, &threadID, &row.Status, &createdAtMS, &updatedAtMS); err != nil {
-			return nil, err
+	for i := range nodes {
+		label := strings.TrimSpace(nodes[i].SessionLabel)
+		if label == "" {
+			continue
 		}
-		if threadID.Valid {
-			row.ThreadID = strings.TrimSpace(threadID.String)
+		session, err := br.GetSession(label)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			return err
 		}
-		row.CreatedAt = fromUnixMilli(createdAtMS)
-		row.UpdatedAt = fromUnixMilli(updatedAtMS)
-		out = append(out, row)
+		nodes[i].ThreadID = strings.TrimSpace(session.ThreadID)
+		if strings.TrimSpace(session.Status) != "" {
+			nodes[i].SessionStatus = strings.TrimSpace(session.Status)
+		}
+		if !session.CreatedAt.IsZero() {
+			nodes[i].CreatedAt = session.CreatedAt
+		}
+		if !session.UpdatedAt.IsZero() {
+			nodes[i].UpdatedAt = session.UpdatedAt
+		}
+		if rootTurnID != "" && strings.TrimSpace(session.ThreadID) == rootTurnID {
+			nodes[i].IsRoot = true
+		}
+		turnID := strings.TrimSpace(session.ThreadID)
+		if turnID == "" {
+			continue
+		}
+		turn, messages, calls, err := br.GetTurnDetails(turnID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			return err
+		}
+		nodes[i].Turn = &askTimelineTurnSummary{
+			ID:            turn.ID,
+			ParentTurnID:  turn.ParentTurnID,
+			Status:        turn.Status,
+			StartedAt:     turn.StartedAt,
+			CompletedAt:   turn.CompletedAt,
+			TotalTokens:   turn.TotalTokens,
+			ToolCallCount: turn.ToolCallCount,
+		}
+		nodes[i].MessageCount = len(messages)
+		nodes[i].ToolCallCount = len(calls)
+		if preview := summarizeAssistantPreview(messages); preview != "" {
+			nodes[i].AssistantPreview = preview
+		}
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return nil
 }
 
 func sanitizeAskRequestToken(raw string) string {
@@ -3110,6 +3322,63 @@ func scanAskRequestRecord(scanner interface{ Scan(dest ...any) error }) (*askReq
 		row.CompletedAt = &completed
 	}
 	return &row, nil
+}
+
+func scanAskRequestExecutionRecord(scanner interface{ Scan(dest ...any) error }) (askRequestExecutionRecord, error) {
+	var (
+		record      askRequestExecutionRecord
+		startedAt   int64
+		completedAt int64
+	)
+	if err := scanner.Scan(
+		&record.RequestID,
+		&record.NodeID,
+		&record.Phase,
+		&record.Attempt,
+		&record.Origin,
+		&record.Status,
+		&record.ExecutionBackend,
+		&record.SessionKey,
+		&record.RunID,
+		&record.WorkingDir,
+		&record.AnswerPreview,
+		&record.ErrorMessage,
+		&startedAt,
+		&completedAt,
+	); err != nil {
+		return askRequestExecutionRecord{}, err
+	}
+	record.StartedAt = fromUnixMilli(startedAt)
+	record.CompletedAt = fromUnixMilli(completedAt)
+	return record, nil
+}
+
+func applyAskRequestExecutionSummary(row *askRequestRecord, summary askRequestExecutionSummary) {
+	if row == nil {
+		return
+	}
+	row.ExecutionCount = summary.Count
+	if summary.Count == 0 {
+		row.LatestExecutionNodeID = ""
+		row.LatestExecutionPhase = ""
+		row.LatestExecutionStatus = ""
+		row.LatestExecutionBackend = ""
+		row.LatestExecutionSessionKey = ""
+		row.LatestExecutionRunID = ""
+		row.LatestExecutionWorkDir = ""
+		row.LatestExecutionPreview = ""
+		row.LatestExecutionError = ""
+		return
+	}
+	row.LatestExecutionNodeID = summary.Latest.NodeID
+	row.LatestExecutionPhase = summary.Latest.Phase
+	row.LatestExecutionStatus = summary.Latest.Status
+	row.LatestExecutionBackend = summary.Latest.ExecutionBackend
+	row.LatestExecutionSessionKey = summary.Latest.SessionKey
+	row.LatestExecutionRunID = summary.Latest.RunID
+	row.LatestExecutionWorkDir = summary.Latest.WorkingDir
+	row.LatestExecutionPreview = summary.Latest.AnswerPreview
+	row.LatestExecutionError = summary.Latest.ErrorMessage
 }
 
 func fromUnixMilli(ms int64) time.Time {

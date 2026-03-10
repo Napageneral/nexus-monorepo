@@ -13,9 +13,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Napageneral/spike/internal/broker"
 	prlmhistory "github.com/Napageneral/spike/internal/prlm/history"
 	prlmnode "github.com/Napageneral/spike/internal/prlm/node"
+	prlmparallel "github.com/Napageneral/spike/internal/prlm/parallel"
 )
 
 // NodeContext is a shared dependency bundle built once per OracleTree operation
@@ -24,7 +24,8 @@ type NodeContext struct {
 	Tree      *Tree
 	Substrate Substrate
 
-	Broker *broker.Broker
+	Executor          PromptExecutor
+	ExecutionRecorder AskExecutionRecorder
 
 	HistoryAgent *prlmhistory.HistoryAgent // nil when git unavailable
 
@@ -40,11 +41,13 @@ type NodeContext struct {
 	SessionDir      string
 	LLMProvider     string
 	LLMModel        string
+	ThinkingLevel   string
 	ScopeKey        string
 	RefName         string
 	CommitSHA       string
 	TreeFlavor      string
 	TreeVersionID   string
+	Policies        AskPolicies
 
 	// llmSem is a shared limiter for LLM turn execution across the full OracleNode
 	// recursion. Without this, nested fan-out can multiply parallelism and easily
@@ -240,14 +243,16 @@ func sleepWithContext(ctx context.Context, d time.Duration) error {
 	}
 }
 
-func (c *NodeContext) completeWithRetry(ctx context.Context, fn func() (string, error)) (string, error) {
+func (c *NodeContext) completeWithRetry(ctx context.Context, fn func(attempt int) (string, error)) (string, error) {
 	if fn == nil {
 		return "", nil
 	}
 	var lastErr error
 	backoff := defaultLLMRetryBase
 	for attempt := 1; attempt <= defaultLLMRetryAttempts; attempt++ {
-		out, err := c.withLLMLimit(ctx, fn)
+		out, err := c.withLLMLimit(ctx, func() (string, error) {
+			return fn(attempt)
+		})
 		if err == nil {
 			return out, nil
 		}
@@ -283,49 +288,136 @@ func (c *NodeContext) baseSessionLabel(nodeID string) string {
 	return treeVersionID + ":" + strings.TrimSpace(nodeID)
 }
 
-func (c *NodeContext) ensureSession(nodeID string, sessionLabel string, origin string, systemPrompt string, workDir string) error {
-	if c == nil || c.Broker == nil {
-		return fmt.Errorf("broker is not configured")
+func (c *NodeContext) prepareNode(ctx context.Context, agentID string, scopeAbs string) error {
+	if c == nil || c.Executor == nil {
+		return fmt.Errorf("execution runtime is not configured")
 	}
-	_, err := c.Broker.CreateSession(sessionLabel, broker.SessionOptions{
-		PersonaID:     "oracle",
-		Origin:        strings.TrimSpace(origin),
-		WorkDir:       strings.TrimSpace(workDir),
-		Provider:      strings.TrimSpace(c.LLMProvider),
-		Model:         strings.TrimSpace(c.LLMModel),
-		SystemPrompt:  strings.TrimSpace(systemPrompt),
-		SessionDir:    strings.TrimSpace(c.SessionDir),
-		ScopeKey:      strings.TrimSpace(c.ScopeKey),
-		RefName:       strings.TrimSpace(c.RefName),
-		CommitSHA:     strings.TrimSpace(c.CommitSHA),
-		TreeFlavor:    strings.TrimSpace(c.TreeFlavor),
-		TreeVersionID: strings.TrimSpace(c.TreeVersionID),
+	return c.Executor.PrepareNode(ctx, NodeExecutionScope{
+		AgentID:  strings.TrimSpace(agentID),
+		ScopeAbs: strings.TrimSpace(scopeAbs),
 	})
-	return err
 }
 
-func (c *NodeContext) executePrompt(ctx context.Context, nodeID string, origin string, prompt string, systemPrompt string, workDir string) (string, error) {
-	if c == nil || c.Broker == nil {
-		return "", fmt.Errorf("broker is not configured")
+func (c *NodeContext) executePrompt(ctx context.Context, nodeID string, phase AskPhase, origin string, prompt string, systemPrompt string, workDir string) (string, error) {
+	return c.executePromptAttempt(ctx, nodeID, phase, 1, origin, prompt, systemPrompt, workDir)
+}
+
+func (c *NodeContext) executePromptAttempt(ctx context.Context, nodeID string, phase AskPhase, attempt int, origin string, prompt string, systemPrompt string, workDir string) (string, error) {
+	if c == nil || c.Executor == nil {
+		return "", fmt.Errorf("execution runtime is not configured")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if c.Policies.Execution != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = c.Policies.Execution.PromptContext(ctx, nodeID, phase)
+		defer cancel()
 	}
 	prompt = strings.TrimSpace(prompt)
 	systemPrompt = strings.TrimSpace(systemPrompt)
-
-	sessionLabel := c.statelessSessionLabel(nodeID)
-	if err := c.ensureSession(nodeID, sessionLabel, origin, systemPrompt, workDir); err != nil {
-		return "", err
+	startedAt := time.Now().UTC().UnixMilli()
+	result, err := c.Executor.ExecutePrompt(ctx, PromptExecutionRequest{
+		RequestID:    c.RequestID,
+		NodeID:       strings.TrimSpace(nodeID),
+		Phase:        phase,
+		Attempt:      attempt,
+		Origin:       strings.TrimSpace(origin),
+		Prompt:       prompt,
+		SystemPrompt: systemPrompt,
+		WorkDir:      strings.TrimSpace(workDir),
+	})
+	completedAt := time.Now().UTC().UnixMilli()
+	if c.ExecutionRecorder != nil {
+		recordErr := c.ExecutionRecorder.RecordPromptExecution(ctx, AskPromptExecutionRecord{
+			RequestID:     c.RequestID,
+			NodeID:        strings.TrimSpace(nodeID),
+			Phase:         phase,
+			Attempt:       attempt,
+			Origin:        strings.TrimSpace(origin),
+			Status:        executionStatusForError(err),
+			Backend:       promptExecutionBackend(result),
+			SessionKey:    promptExecutionSessionKey(result),
+			RunID:         promptExecutionRunID(result),
+			WorkingDir:    strings.TrimSpace(workDir),
+			AnswerPreview: promptExecutionContent(result),
+			ErrorMessage:  promptExecutionError(err),
+			StartedAt:     startedAt,
+			CompletedAt:   completedAt,
+		})
+		if recordErr != nil && err == nil {
+			return "", recordErr
+		}
 	}
-	result, err := c.Broker.Execute(ctx, sessionLabel, prompt)
 	if err != nil {
 		return "", err
 	}
 	if result == nil {
-		_ = c.Broker.StopSession(sessionLabel)
 		return "", nil
 	}
-	out := strings.TrimSpace(result.Content)
-	_ = c.Broker.StopSession(sessionLabel)
-	return out, nil
+	return strings.TrimSpace(result.Content), nil
+}
+
+func promptExecutionBackend(result *PromptExecutionResult) string {
+	if result == nil {
+		return ""
+	}
+	return strings.TrimSpace(result.Backend)
+}
+
+func promptExecutionSessionKey(result *PromptExecutionResult) string {
+	if result == nil {
+		return ""
+	}
+	return strings.TrimSpace(result.SessionKey)
+}
+
+func promptExecutionRunID(result *PromptExecutionResult) string {
+	if result == nil {
+		return ""
+	}
+	return strings.TrimSpace(result.RunID)
+}
+
+func promptExecutionContent(result *PromptExecutionResult) string {
+	if result == nil {
+		return ""
+	}
+	return strings.TrimSpace(result.Content)
+}
+
+func promptExecutionError(err error) string {
+	if err == nil {
+		return ""
+	}
+	return strings.TrimSpace(err.Error())
+}
+
+func (c *NodeContext) classifyScope(tree *Tree, node *prlmnode.Node, domain *prlmnode.Domain) ScopeClassification {
+	if c == nil {
+		return ScopeClassification{Kind: ScopeClassificationNeedsLLM}
+	}
+	policies := c.Policies.withDefaults()
+	return policies.ScopeClassifier.Classify(tree, node, domain)
+}
+
+func (c *NodeContext) routeChildIDs(tree *Tree, node *prlmnode.Node, rootQuery string, parentInterpretation string) []string {
+	if c == nil {
+		if node == nil {
+			return nil
+		}
+		return append([]string(nil), node.ChildIDs...)
+	}
+	policies := c.Policies.withDefaults()
+	return policies.Routing.RouteChildIDs(tree, node, rootQuery, parentInterpretation)
+}
+
+func (c *NodeContext) allowDegradedCompletion() bool {
+	if c == nil {
+		return false
+	}
+	policies := c.Policies.withDefaults()
+	return policies.Synthesis.AllowDegradedCompletion()
 }
 
 // OracleNode wraps a persisted *prlmnode.Node with active behavior.
@@ -1001,8 +1093,8 @@ func (n *OracleNode) Hydrate(ctx context.Context, parentCtx *hydrateParentContex
 		tracker.visit(n.ID)
 	}
 
-	// Hydrate requires a live broker-backed runtime.
-	if n.ctx.Broker == nil {
+	// Hydrate requires a live execution runtime.
+	if n.ctx.Executor == nil {
 		node.Status = prlmnode.NodeStatusFailed
 		node.Error = "no llm runtime configured"
 		if tracker != nil {
@@ -1049,7 +1141,7 @@ func (n *OracleNode) Hydrate(ctx context.Context, parentCtx *hydrateParentContex
 	}
 
 	scopeAbs := nodeScopeAbs(tree, node)
-	if _, err := n.ctx.Broker.RegisterOrUpdateAgent(agentID, broker.RoleLeafMapper, scopeAbs); err != nil {
+	if err := n.ctx.prepareNode(ctx, agentID, scopeAbs); err != nil {
 		node.Status = prlmnode.NodeStatusFailed
 		node.Error = err.Error()
 		if tracker != nil {
@@ -1063,8 +1155,8 @@ func (n *OracleNode) Hydrate(ctx context.Context, parentCtx *hydrateParentContex
 	orientInstruction := hydrateOrientInstruction(node, parentCtx)
 	node.Status = prlmnode.NodeStatusOperating
 	node.Error = ""
-	orientOut, err := n.ctx.completeWithRetry(ctx, func() (string, error) {
-		return n.ctx.executePrompt(ctx, node.ID, "hydrate", orientInstruction, sys, sandboxDir)
+	orientOut, err := n.ctx.completeWithRetry(ctx, func(attempt int) (string, error) {
+		return n.ctx.executePromptAttempt(ctx, node.ID, AskPhaseInterpret, attempt, "hydrate", orientInstruction, sys, sandboxDir)
 	})
 	if err != nil {
 		node.Status = prlmnode.NodeStatusFailed
@@ -1096,7 +1188,7 @@ func (n *OracleNode) Hydrate(ctx context.Context, parentCtx *hydrateParentContex
 
 	childOutputs := make(map[string]string, len(node.ChildIDs))
 	var mu sync.Mutex
-	if err := broker.RunParallel(ctx, node.ChildIDs, n.ctx.MaxParallel, func(cid string) error {
+	if err := prlmparallel.Run(ctx, node.ChildIDs, n.ctx.MaxParallel, func(cid string) error {
 		out, err := NewOracleNode(tree.MustNode(cid), n.ctx).Hydrate(ctx, childCtx)
 		if err != nil {
 			if tracker != nil {
@@ -1115,8 +1207,8 @@ func (n *OracleNode) Hydrate(ctx context.Context, parentCtx *hydrateParentContex
 	// Phase 3: SYNTHESIZE
 	synthInstruction := hydrateSynthesizeInstruction(tree, childOutputs)
 	node.Status = prlmnode.NodeStatusOperating
-	synthOut, err := n.ctx.completeWithRetry(ctx, func() (string, error) {
-		return n.ctx.executePrompt(ctx, node.ID, "hydrate", synthInstruction, sys, sandboxDir)
+	synthOut, err := n.ctx.completeWithRetry(ctx, func(attempt int) (string, error) {
+		return n.ctx.executePromptAttempt(ctx, node.ID, AskPhaseSynthesize, attempt, "hydrate", synthInstruction, sys, sandboxDir)
 	})
 	if err != nil {
 		node.Status = prlmnode.NodeStatusFailed
@@ -1159,8 +1251,8 @@ func (n *OracleNode) Ask(ctx context.Context, message string, visited map[string
 	}
 	askTimingf(debugEnabled, node.ID, requestID, "start")
 
-	// Ask always requires a live broker-backed runtime.
-	if n.ctx.Broker == nil {
+	// Ask always requires a live execution runtime.
+	if n.ctx.Executor == nil {
 		return "", fmt.Errorf("ask requires an LLM runtime")
 	}
 
@@ -1211,7 +1303,7 @@ func (n *OracleNode) Ask(ctx context.Context, message string, visited map[string
 
 	scopeAbs := nodeScopeAbs(tree, node)
 	agentID := prlmAgentID(tree.ID, node.ID)
-	if _, err := n.ctx.Broker.RegisterOrUpdateAgent(agentID, broker.RoleLeafMapper, scopeAbs); err != nil {
+	if err := n.ctx.prepareNode(ctx, agentID, scopeAbs); err != nil {
 		node.Status = prlmnode.NodeStatusFailed
 		node.Error = err.Error()
 		return "", err
@@ -1219,13 +1311,21 @@ func (n *OracleNode) Ask(ctx context.Context, message string, visited map[string
 
 	sys := oracleSystemPrompt(len(node.ChildIDs) > 0)
 
+	if classification := n.ctx.classifyScope(tree, node, domain); classification.Terminal {
+		node.LastOperatedAt = time.Now().UTC()
+		node.Status = prlmnode.NodeStatusReady
+		node.Error = ""
+		askTimingf(debugEnabled, node.ID, requestID, "scope classified terminal=%s", classification.Kind)
+		return strings.TrimSpace(classification.Content), nil
+	}
+
 	// Leaf: answer directly (one turn).
 	if len(node.ChildIDs) == 0 {
 		instruction := askLeafInstruction(node, message)
 		node.Status = prlmnode.NodeStatusOperating
 		node.Error = ""
-		out, err := n.ctx.completeWithRetry(ctx, func() (string, error) {
-			return n.ctx.executePrompt(ctx, node.ID, "ask", instruction, sys, sandboxDir)
+		out, err := n.ctx.completeWithRetry(ctx, func(attempt int) (string, error) {
+			return n.ctx.executePromptAttempt(ctx, node.ID, AskPhaseLeaf, attempt, "ask", instruction, sys, sandboxDir)
 		})
 		if err != nil {
 			node.Status = prlmnode.NodeStatusFailed
@@ -1242,8 +1342,8 @@ func (n *OracleNode) Ask(ctx context.Context, message string, visited map[string
 	node.Status = prlmnode.NodeStatusOperating
 	node.Error = ""
 	interpretInstruction := askInterpretInstruction(node, message)
-	interpretOut, err := n.ctx.completeWithRetry(ctx, func() (string, error) {
-		return n.ctx.executePrompt(ctx, node.ID, "ask", interpretInstruction, sys, sandboxDir)
+	interpretOut, err := n.ctx.completeWithRetry(ctx, func(attempt int) (string, error) {
+		return n.ctx.executePromptAttempt(ctx, node.ID, AskPhaseInterpret, attempt, "ask", interpretInstruction, sys, sandboxDir)
 	})
 	if err != nil {
 		node.Status = prlmnode.NodeStatusFailed
@@ -1256,13 +1356,13 @@ func (n *OracleNode) Ask(ctx context.Context, message string, visited map[string
 	askTimingf(debugEnabled, node.ID, requestID, "interpret done")
 
 	// Phase 2: DISPATCH (always exhaustive fan-out to all direct children).
-	childIDs := append([]string(nil), node.ChildIDs...)
+	childIDs := n.ctx.routeChildIDs(tree, node, rootQuery, interpretOut)
 	askTimingf(debugEnabled, node.ID, requestID, "dispatching %d children (exhaustive)", len(childIDs))
 
 	childOutputs := make(map[string]string, len(childIDs))
 	childErrors := make(map[string]string, len(childIDs))
 	var mu sync.Mutex
-	if err := broker.RunParallel(ctx, childIDs, n.ctx.MaxParallel, func(cid string) error {
+	if err := prlmparallel.Run(ctx, childIDs, n.ctx.MaxParallel, func(cid string) error {
 		childNode := tree.MustNode(cid)
 
 		childMsg := askDispatchMessage(childNode, rootQuery, interpretOut)
@@ -1280,7 +1380,7 @@ func (n *OracleNode) Ask(ctx context.Context, message string, visited map[string
 	}); err != nil {
 		return "", err
 	}
-	if len(childErrors) > 0 {
+	if len(childErrors) > 0 && !n.ctx.allowDegradedCompletion() {
 		keys := make([]string, 0, len(childErrors))
 		for cid := range childErrors {
 			keys = append(keys, cid)
@@ -1298,8 +1398,8 @@ func (n *OracleNode) Ask(ctx context.Context, message string, visited map[string
 	synthInstruction := askSynthesizeInstruction(tree, node, message, childIDs, childOutputs)
 	node.Status = prlmnode.NodeStatusOperating
 	node.Error = ""
-	synthOut, err := n.ctx.completeWithRetry(ctx, func() (string, error) {
-		return n.ctx.executePrompt(ctx, node.ID, "ask", synthInstruction, sys, sandboxDir)
+	synthOut, err := n.ctx.completeWithRetry(ctx, func(attempt int) (string, error) {
+		return n.ctx.executePromptAttempt(ctx, node.ID, AskPhaseSynthesize, attempt, "ask", synthInstruction, sys, sandboxDir)
 	})
 	if err != nil {
 		node.Status = prlmnode.NodeStatusFailed
@@ -1312,7 +1412,7 @@ func (n *OracleNode) Ask(ctx context.Context, message string, visited map[string
 	return strings.TrimSpace(synthOut), nil
 }
 
-// Operate runs one node-level operation through the broker-backed session client.
+// Operate runs one node-level operation through the configured execution runtime.
 func (n *OracleNode) Operate(ctx context.Context, domain *prlmnode.Domain, message string) (string, error) {
 	if n == nil || n.ctx == nil || n.ctx.Tree == nil || n.Node == nil || domain == nil {
 		return "", nil
@@ -1321,7 +1421,7 @@ func (n *OracleNode) Operate(ctx context.Context, domain *prlmnode.Domain, messa
 	tree := n.ctx.Tree
 	node := n.Node
 
-	if n.ctx.Broker == nil {
+	if n.ctx.Executor == nil {
 		return "", fmt.Errorf("operate requires an LLM runtime")
 	}
 
@@ -1343,14 +1443,14 @@ func (n *OracleNode) Operate(ctx context.Context, domain *prlmnode.Domain, messa
 
 	agentID := prlmAgentID(tree.ID, node.ID)
 	scopeAbs := nodeScopeAbs(tree, node)
-	if _, err := n.ctx.Broker.RegisterOrUpdateAgent(agentID, broker.RoleLeafMapper, scopeAbs); err != nil {
+	if err := n.ctx.prepareNode(ctx, agentID, scopeAbs); err != nil {
 		node.Status = prlmnode.NodeStatusFailed
 		node.Error = err.Error()
 		return "", err
 	}
 
-	out, err := n.ctx.completeWithRetry(ctx, func() (string, error) {
-		return n.ctx.executePrompt(ctx, node.ID, "operate", instruction, sys, sandboxDir)
+	out, err := n.ctx.completeWithRetry(ctx, func(attempt int) (string, error) {
+		return n.ctx.executePromptAttempt(ctx, node.ID, AskPhaseLeaf, attempt, "operate", instruction, sys, sandboxDir)
 	})
 	if err != nil {
 		node.Status = prlmnode.NodeStatusFailed

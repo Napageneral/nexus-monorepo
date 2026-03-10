@@ -70,8 +70,8 @@ func TestServeGitHubWebhookPushAndDuplicateDelivery(t *testing.T) {
 			"oracle-test": {
 				treeID:   "oracle-test",
 				capacity: 120000,
-				store:   store,
-				oracle:  oracle,
+				store:    store,
+				oracle:   oracle,
 			},
 		},
 		control:             controlStore,
@@ -100,7 +100,7 @@ func TestServeGitHubWebhookPushAndDuplicateDelivery(t *testing.T) {
 	}
 	signature := signGitHubPayload("webhook-secret", body)
 
-	resp := postGitHubWebhook(t, httpSrv.URL+"/github/webhook", "push", "delivery-1", signature, body)
+	resp := postGitHubWebhook(t, httpSrv.URL+githubAdapterWebhookPath, "push", "delivery-1", signature, body)
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("expected webhook status 202, got %d", resp.StatusCode)
 	}
@@ -140,7 +140,7 @@ func TestServeGitHubWebhookPushAndDuplicateDelivery(t *testing.T) {
 		t.Fatalf("expected queued webhook sync job to complete, got %s (%s)", job.Status, job.Error)
 	}
 
-	dupResp := postGitHubWebhook(t, httpSrv.URL+"/github/webhook", "push", "delivery-1", signature, body)
+	dupResp := postGitHubWebhook(t, httpSrv.URL+githubAdapterWebhookPath, "push", "delivery-1", signature, body)
 	if dupResp.StatusCode != http.StatusAccepted {
 		t.Fatalf("expected duplicate webhook status 202, got %d", dupResp.StatusCode)
 	}
@@ -170,7 +170,7 @@ func TestServeGitHubWebhookRejectsInvalidSignature(t *testing.T) {
 	defer httpSrv.Close()
 
 	body := []byte(`{"ref":"refs/heads/main","repository":{"full_name":"acme/widget","clone_url":"https://example.com/acme/widget.git","default_branch":"main"}}`)
-	resp := postGitHubWebhook(t, httpSrv.URL+"/github/webhook?tree_id=oracle-test", "push", "delivery-invalid", "sha256=deadbeef", body)
+	resp := postGitHubWebhook(t, httpSrv.URL+githubAdapterWebhookPath+"?tree_id=oracle-test", "push", "delivery-invalid", "sha256=deadbeef", body)
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected invalid signature status 401, got %d", resp.StatusCode)
 	}

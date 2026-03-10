@@ -60,8 +60,8 @@ func registerProxyTools(s *server.MCPServer, upstream string, askTimeout time.Du
 			mcp.Required(),
 			mcp.Description("The question to ask the oracle about the codebase"),
 		),
-		mcp.WithString("tree_id",
-			mcp.Description("Tree ID to query (defaults to the only served tree)"),
+		mcp.WithString("index_id",
+			mcp.Description("Agent index ID to query (defaults to the only served index)"),
 		),
 	)
 	s.AddTool(askTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -74,20 +74,20 @@ func registerProxyTools(s *server.MCPServer, upstream string, askTimeout time.Du
 			return mcp.NewToolResultError("query is required"), nil
 		}
 
-		treeID := strings.TrimSpace(request.GetString("tree_id", ""))
+		indexID := strings.TrimSpace(request.GetString("index_id", ""))
 
-		// If no tree_id provided, fetch status to find the default.
-		if treeID == "" {
+		// If no index_id provided, fetch status to find the default.
+		if indexID == "" {
 			id, err := fetchDefaultTreeID(ctx, httpClient, upstream)
 			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("failed to resolve tree_id: %v", err)), nil
+				return mcp.NewToolResultError(fmt.Sprintf("failed to resolve index_id: %v", err)), nil
 			}
-			treeID = id
+			indexID = id
 		}
 
 		body, _ := json.Marshal(askRequest{
-			TreeID: treeID,
-			Query:  query,
+			IndexID: indexID,
+			Query:   query,
 		})
 
 		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, upstream+"/ask", bytes.NewReader(body))
@@ -149,8 +149,8 @@ func registerProxyTools(s *server.MCPServer, upstream string, askTimeout time.Du
 	})
 }
 
-// fetchDefaultTreeID hits the upstream /status endpoint and returns the tree ID
-// if exactly one tree is served.
+// fetchDefaultTreeID hits the upstream /status endpoint and returns the served
+// index ID if exactly one index is available.
 func fetchDefaultTreeID(ctx context.Context, client *http.Client, upstream string) (string, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, upstream+"/status", nil)
 	if err != nil {
@@ -168,5 +168,5 @@ func fetchDefaultTreeID(ctx context.Context, client *http.Client, upstream strin
 	if len(status.Trees) == 1 {
 		return status.Trees[0].TreeID, nil
 	}
-	return "", fmt.Errorf("multiple trees served, tree_id is required")
+	return "", fmt.Errorf("multiple indexes served, index_id is required")
 }

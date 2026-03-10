@@ -27,6 +27,12 @@ import (
 
 const defaultGitHubAPIBaseURL = "https://api.github.com"
 
+const (
+	spikeManagedGitHubConnectionProfileID  = "spike-managed-github-app"
+	spikeBringYourOwnGitHubAppConnectionID = "bring-your-own-github-app"
+	spikePersonalAccessTokenConnectionID   = "personal-access-token"
+)
+
 type githubConnectorSecret struct {
 	Service                  string
 	Account                  string
@@ -80,8 +86,9 @@ type githubCommitMetadata struct {
 }
 
 type githubInstallStatePayload struct {
-	IssuedAt int64  `json:"issued_at"`
-	Nonce    string `json:"nonce"`
+	IssuedAt            int64  `json:"issued_at"`
+	Nonce               string `json:"nonce"`
+	ConnectionProfileID string `json:"connectionProfileId,omitempty"`
 }
 
 func (s *oracleServer) githubAppReady() bool {
@@ -318,6 +325,10 @@ func runtimeAppRedirectTarget(status string, detail string) string {
 	return target
 }
 
+func isManagedGitHubConnectionProfileID(raw string) bool {
+	return strings.TrimSpace(raw) == spikeManagedGitHubConnectionProfileID
+}
+
 func randomStateNonce() (string, error) {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
@@ -394,39 +405,6 @@ func (s *oracleServer) handleGitHubConnectorSetup(w http.ResponseWriter, r *http
 	})
 }
 
-func (s *oracleServer) handleGitHubConnectorInstallStart(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !s.githubAppReady() {
-		http.Error(w, "github app is not configured", http.StatusServiceUnavailable)
-		return
-	}
-	nonce, err := randomStateNonce()
-	if err != nil {
-		writeControlPlaneError(w, err)
-		return
-	}
-	state, err := encodeGitHubInstallState(githubInstallStatePayload{
-		IssuedAt: time.Now().UTC().Unix(),
-		Nonce:    nonce,
-	}, s.githubInstallSecret)
-	if err != nil {
-		writeControlPlaneError(w, err)
-		return
-	}
-	target := &url.URL{
-		Scheme: "https",
-		Host:   "github.com",
-		Path:   "/apps/" + url.PathEscape(strings.TrimSpace(s.githubAppSlug)) + "/installations/new",
-	}
-	values := target.Query()
-	values.Set("state", state)
-	target.RawQuery = values.Encode()
-	http.Redirect(w, r, target.String(), http.StatusTemporaryRedirect)
-}
-
 func (s *oracleServer) handleGitHubConnectorInstallCallback(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -441,9 +419,13 @@ func (s *oracleServer) handleGitHubConnectorInstallCallback(w http.ResponseWrite
 	}
 
 	rawState := strings.TrimSpace(r.URL.Query().Get("state"))
-	_, err := decodeGitHubInstallState(rawState, s.githubInstallSecret, 20*time.Minute, time.Now().UTC())
+	statePayload, err := decodeGitHubInstallState(rawState, s.githubInstallSecret, 20*time.Minute, time.Now().UTC())
 	if err != nil {
 		redirectError("invalid_state")
+		return
+	}
+	if !isManagedGitHubConnectionProfileID(statePayload.ConnectionProfileID) {
+		redirectError("invalid_connection_profile")
 		return
 	}
 	installationID, err := parsePositiveInt64Secret(r.URL.Query().Get("installation_id"))

@@ -17,7 +17,7 @@ func TestCmdAskRemoteJSON(t *testing.T) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(askResponse{
-			TreeID:    "oracle-deep",
+			IndexID:   "oracle-deep",
 			Query:     "How does auth work?",
 			Content:   "Auth uses JWT.",
 			Visited:   []string{"root"},
@@ -32,7 +32,7 @@ func TestCmdAskRemoteJSON(t *testing.T) {
 		t.Fatalf("pipe: %v", err)
 	}
 	os.Stdout = w
-	err = cmdAsk([]string{"--remote", server.URL, "--tree-id", "oracle-deep", "--json", "How does auth work?"})
+	err = cmdAsk([]string{"--remote", server.URL, "--index-id", "oracle-deep", "--json", "How does auth work?"})
 	_ = w.Close()
 	os.Stdout = oldStdout
 	if err != nil {
@@ -50,7 +50,7 @@ func TestCmdAskRemoteJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(output), &resp); err != nil {
 		t.Fatalf("unmarshal output: %v, raw=%q", err, output)
 	}
-	if resp.TreeID != "oracle-deep" || resp.RequestID != "req-test" {
+	if resp.IndexID != "oracle-deep" || resp.RequestID != "req-test" {
 		t.Fatalf("unexpected response: %#v", resp)
 	}
 }

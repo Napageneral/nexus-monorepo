@@ -114,21 +114,37 @@ func (s *oracleServer) buildNexOperationHandlers() map[string]nexOperationHandle
 		"spike.indexes.delete": s.nexIndexesDelete,
 		"spike.indexes.status": s.nexIndexesStatus,
 
+		// Code intelligence
+		"spike.code-intel.index.build":       s.nexCodeIntelIndexBuild,
+		"spike.code-intel.index.status":      s.nexCodeIntelIndexStatus,
+		"spike.code-intel.source.file":       s.nexCodeIntelSourceFile,
+		"spike.code-intel.source.chunk":      s.nexCodeIntelSourceChunk,
+		"spike.code-intel.source.context":    s.nexCodeIntelSourceContext,
+		"spike.code-intel.symbol.resolve":    s.nexCodeIntelSymbolResolve,
+		"spike.code-intel.symbol.references": s.nexCodeIntelSymbolReferences,
+		"spike.code-intel.graph.callers":     s.nexCodeIntelGraphCallers,
+		"spike.code-intel.graph.callees":     s.nexCodeIntelGraphCallees,
+		"spike.code-intel.graph.imports":     s.nexCodeIntelGraphImports,
+		"spike.code-intel.graph.importers":   s.nexCodeIntelGraphImporters,
+		"spike.code-intel.search.semantic":   s.nexCodeIntelSearchSemantic,
+		"spike.code-intel.context.pack":      s.nexCodeIntelContextPack,
+		"spike.code-intel.tests.impact":      s.nexCodeIntelTestsImpact,
+		"spike.guides.build":                 s.nexGuidesBuild,
+
 		// Config
 		"spike.config.defaults": s.nexConfigDefaults,
 		"spike.config.get":      s.nexConfigGet,
 		"spike.config.update":   s.nexConfigUpdate,
 
 		// GitHub installations
-		"spike.github.installations.list":          s.nexGitHubInstallationsList,
-		"spike.github.installations.get":           s.nexGitHubInstallationsGet,
-		"spike.connectors.github.install.start":    s.nexGitHubConnectorInstallStart,
-		"spike.connectors.github.install.callback": s.nexGitHubConnectorInstallCallback,
-		"spike.connectors.github.repos":            s.nexGitHubConnectorRepos,
-		"spike.connectors.github.branches":         s.nexGitHubConnectorBranches,
-		"spike.connectors.github.commits":          s.nexGitHubConnectorCommits,
-		"spike.connectors.github.remove":           s.nexGitHubConnectorRemove,
-		"spike.connectors.github.setup":            s.nexGitHubConnectorSetup,
+		"spike.github.installations.list":       s.nexGitHubInstallationsList,
+		"spike.github.installations.get":        s.nexGitHubInstallationsGet,
+		"spike.connectors.github.install.start": s.nexGitHubConnectorInstallStart,
+		"spike.connectors.github.repos":         s.nexGitHubConnectorRepos,
+		"spike.connectors.github.branches":      s.nexGitHubConnectorBranches,
+		"spike.connectors.github.commits":       s.nexGitHubConnectorCommits,
+		"spike.connectors.github.remove":        s.nexGitHubConnectorRemove,
+		"spike.connectors.github.setup":         s.nexGitHubConnectorSetup,
 
 		// Webhooks
 		"spike.github.webhook": s.nexGitHubWebhook,
@@ -298,4 +314,3 @@ func payloadStrPtr(p map[string]interface{}, key string) *string {
 	}
 	return &s
 }
-

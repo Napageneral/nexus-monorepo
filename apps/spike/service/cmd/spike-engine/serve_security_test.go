@@ -89,18 +89,18 @@ func TestServeFrontDoorStatusAuthPolicyAndControlQueryToken(t *testing.T) {
 	}
 	_ = authResp.Body.Close()
 
-	controlResp, err := http.Get(httpSrv.URL + "/control/ask-inspector?auth_token=secret-token")
+	controlResp, err := http.Get(httpSrv.URL + "/app/spike/inspector?auth_token=secret-token")
 	if err != nil {
-		t.Fatalf("get /control/ask-inspector with query token: %v", err)
+		t.Fatalf("get /app/spike/inspector with query token: %v", err)
 	}
 	if controlResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected query-token control UI access 200, got %d", controlResp.StatusCode)
 	}
 	_ = controlResp.Body.Close()
 
-	controlUnauthResp, err := http.Get(httpSrv.URL + "/control/ask-inspector")
+	controlUnauthResp, err := http.Get(httpSrv.URL + "/app/spike/inspector")
 	if err != nil {
-		t.Fatalf("get /control/ask-inspector unauth: %v", err)
+		t.Fatalf("get /app/spike/inspector unauth: %v", err)
 	}
 	if controlUnauthResp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected unauthenticated control UI access 401, got %d", controlUnauthResp.StatusCode)

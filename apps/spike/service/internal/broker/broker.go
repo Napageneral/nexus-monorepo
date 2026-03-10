@@ -19,12 +19,13 @@ type Broker struct {
 	engine Engine
 	orch   *Orchestrator
 
-	mu             sync.Mutex
-	handles        map[string]EngineHandle
-	sessionConfigs map[string]EngineStartOpts
-	completionSubs map[string][]chan AgentResult
-	eventSubs      map[string][]chan AgentEvent
-	ledgerScope    LedgerScope
+	mu              sync.Mutex
+	handles         map[string]EngineHandle
+	sessionConfigs  map[string]EngineStartOpts
+	completionSubs  map[string][]chan AgentResult
+	eventSubs       map[string][]chan AgentEvent
+	sessionActivity map[string]int64
+	ledgerScope     LedgerScope
 }
 
 // Dir returns the broker's storage directory (e.g., <root>/.intent/state/broker).
@@ -46,11 +47,12 @@ func New(brokerDir string) (*Broker, error) {
 	}
 
 	return &Broker{
-		store:          store,
-		handles:        map[string]EngineHandle{},
-		sessionConfigs: map[string]EngineStartOpts{},
-		completionSubs: map[string][]chan AgentResult{},
-		eventSubs:      map[string][]chan AgentEvent{},
+		store:           store,
+		handles:         map[string]EngineHandle{},
+		sessionConfigs:  map[string]EngineStartOpts{},
+		completionSubs:  map[string][]chan AgentResult{},
+		eventSubs:       map[string][]chan AgentEvent{},
+		sessionActivity: map[string]int64{},
 	}, nil
 }
 
@@ -65,12 +67,13 @@ func NewWithDB(db *sql.DB) (*Broker, error) {
 		return nil, fmt.Errorf("failed to initialize store: %w", err)
 	}
 	return &Broker{
-		store:          store,
-		db:             db,
-		handles:        map[string]EngineHandle{},
-		sessionConfigs: map[string]EngineStartOpts{},
-		completionSubs: map[string][]chan AgentResult{},
-		eventSubs:      map[string][]chan AgentEvent{},
+		store:           store,
+		db:              db,
+		handles:         map[string]EngineHandle{},
+		sessionConfigs:  map[string]EngineStartOpts{},
+		completionSubs:  map[string][]chan AgentResult{},
+		eventSubs:       map[string][]chan AgentEvent{},
+		sessionActivity: map[string]int64{},
 	}, nil
 }
 

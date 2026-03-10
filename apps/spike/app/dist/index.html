@@ -316,7 +316,7 @@
           </div>
           <pre id="askOut">No ask response yet.</pre>
           <div class="ask-links hidden" id="askLinks">
-            <a href="inspector.html" target="_blank">Request Timeline</a>
+            <a href="/app/spike/inspector">Request Timeline</a>
           </div>
         </article>
 
@@ -352,146 +352,12 @@
 
   <script>
     // -----------------------------------------------------------------------
-    // Nex WebSocket RPC client
+    // Platform-owned browser runtime bridge
     // -----------------------------------------------------------------------
-    const NexClient = (function () {
-      const WS_PATH = "/runtime/ws";
-      const PROTOCOL_VERSION = 3;
-      const TIMEOUT_MS = 30000;
-
-      let ws = null;
-      let connected = false;
-      let pending = new Map();
-      let connectPromise = null;
-
-      function wsUrl() {
-        var p = location.protocol === "https:" ? "wss:" : "ws:";
-        return p + "//" + location.host + WS_PATH;
-      }
-
-      function rid() {
-        if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-          return crypto.randomUUID();
-        }
-        return "r-" + Date.now() + "-" + Math.random().toString(16).slice(2);
-      }
-
-      function send(frame) {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify(frame));
-        }
-      }
-
-      function resetConnection() {
-        connected = false;
-        connectPromise = null;
-        for (var entry of pending.values()) {
-          clearTimeout(entry.timer);
-          entry.reject(new Error("connection lost"));
-        }
-        pending.clear();
-      }
-
-      function connect() {
-        if (connected && ws && ws.readyState === WebSocket.OPEN) {
-          return Promise.resolve();
-        }
-        if (connectPromise) return connectPromise;
-
-        connectPromise = new Promise(function (resolve, reject) {
-          try {
-            ws = new WebSocket(wsUrl());
-          } catch (e) {
-            connectPromise = null;
-            reject(e);
-            return;
-          }
-
-          var cid = rid();
-          var settled = false;
-
-          var timer = setTimeout(function () {
-            if (!settled) {
-              settled = true;
-              connectPromise = null;
-              try { ws.close(); } catch (_) {}
-              reject(new Error("nex connect timeout"));
-            }
-          }, TIMEOUT_MS);
-
-          ws.onopen = function () {
-            send({
-              type: "req", id: cid, method: "connect",
-              params: {
-                minProtocol: PROTOCOL_VERSION,
-                maxProtocol: PROTOCOL_VERSION,
-                client: { id: "spike-ui", version: "1.0", platform: "web", mode: "backend" },
-                caps: [], role: "operator", scopes: ["operator.admin"]
-              }
-            });
-          };
-
-          ws.onmessage = function (event) {
-            var frame;
-            try { frame = JSON.parse(event.data); } catch (_) { return; }
-            if (!frame || frame.type === "event") return;
-            if (frame.type !== "res") return;
-
-            if (frame.id === cid) {
-              if (settled) return;
-              settled = true;
-              clearTimeout(timer);
-              if (!frame.ok) {
-                connectPromise = null;
-                reject(new Error((frame.error && frame.error.message) || "nex connect failed"));
-                return;
-              }
-              connected = true;
-              resolve();
-              return;
-            }
-
-            var p = pending.get(frame.id);
-            if (p) {
-              pending.delete(frame.id);
-              clearTimeout(p.timer);
-              if (!frame.ok) {
-                p.reject(new Error((frame.error && frame.error.message) || "rpc failed"));
-              } else {
-                p.resolve(frame.payload);
-              }
-            }
-          };
-
-          ws.onerror = function () {
-            if (!settled) { settled = true; clearTimeout(timer); connectPromise = null; reject(new Error("ws error")); }
-            resetConnection();
-          };
-
-          ws.onclose = function () {
-            if (!settled) { settled = true; clearTimeout(timer); connectPromise = null; reject(new Error("ws closed")); }
-            resetConnection();
-          };
-        });
-
-        return connectPromise;
-      }
-
-      async function call(method, params) {
-        await connect();
-        var id = rid();
-        return new Promise(function (resolve, reject) {
-          var timer = setTimeout(function () {
-            pending.delete(id);
-            reject(new Error("rpc timeout: " + method));
-          }, TIMEOUT_MS);
-          pending.set(id, { resolve: resolve, reject: reject, timer: timer });
-          send({ type: "req", id: id, method: method, params: params || {} });
-        });
-      }
-
-      return { connect: connect, call: call };
-    })();
+    const NexClient = window.NexusRuntimeBridge;
+    if (!NexClient || typeof NexClient.rpcCall !== "function") {
+      throw new Error("nexus runtime bridge unavailable");
+    }
 
     // -----------------------------------------------------------------------
     // Dual-mode API: WebSocket RPC in nex mode, HTTP in standalone
@@ -500,7 +366,7 @@
 
     async function apiCall(operation, payload) {
       if (isNexMode) {
-        return await NexClient.call(operation, payload || {});
+        return await NexClient.rpcCall(operation, payload || {});
       }
       // Standalone mode: POST to /operations/{operation}
       var resp = await fetch("/operations/" + operation, {
@@ -528,6 +394,8 @@
       pollTimers: {},
       selectedIndexId: null
     };
+
+    var managedGitHubConnectionProfileId = "spike-managed-github-app";
 
     function setStatus(text, cls) {
       var el = $("status");
@@ -587,7 +455,9 @@
 
     async function connectGitHub() {
       setStatus("Starting GitHub App installation...", "loading");
-      var data = await apiCall("spike.connectors.github.install.start", {});
+      var data = await apiCall("spike.connectors.github.install.start", {
+        connectionProfileId: managedGitHubConnectionProfileId
+      });
       if (data && data.install_url) {
         setStatus("Redirecting to GitHub...", "loading");
         window.location.href = data.install_url;

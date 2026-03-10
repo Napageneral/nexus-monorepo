@@ -166,6 +166,42 @@ func TestServeSyncPersistsCompletedJob(t *testing.T) {
 	}
 }
 
+func TestNexAskRequiresIndexID(t *testing.T) {
+	srv := &oracleServer{}
+	_, err := srv.nexAsk(map[string]interface{}{
+		"tree_id": "legacy-tree",
+		"query":   "what is this?",
+	})
+	if err == nil || !strings.Contains(err.Error(), "index_id and query are required") {
+		t.Fatalf("expected index_id validation error, got %v", err)
+	}
+}
+
+func TestHandleAskRequiresIndexID(t *testing.T) {
+	srv := &oracleServer{
+		trees: map[string]*servedTree{},
+	}
+	httpSrv := httptest.NewServer(srv.handler())
+	defer httpSrv.Close()
+
+	resp, err := http.Post(httpSrv.URL+"/ask", "application/json", bytes.NewReader([]byte(`{"tree_id":"legacy-tree","query":"what is this?"}`)))
+	if err != nil {
+		t.Fatalf("post /ask: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected /ask 400, got %d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read /ask body: %v", err)
+	}
+	if !strings.Contains(string(body), "index_id and query are required") {
+		t.Fatalf("expected index_id validation message, got %q", strings.TrimSpace(string(body)))
+	}
+}
+
 func TestNewOracleServerAllowsMissingTreeOnStartup(t *testing.T) {
 	root := t.TempDir()
 	configDir := filepath.Join(root, "trees")
@@ -542,66 +578,66 @@ func TestServeGitHubInstallationEndpoints(t *testing.T) {
 	defer httpSrv.Close()
 
 	// List installations
-	listResp, err := http.Post(httpSrv.URL+"/github/installations/list", "application/json", bytes.NewReader([]byte(`{}`)))
+	listResp, err := http.Post(httpSrv.URL+spikeGitHubInstallationsListPath, "application/json", bytes.NewReader([]byte(`{}`)))
 	if err != nil {
-		t.Fatalf("post /github/installations/list: %v", err)
+		t.Fatalf("post %s: %v", spikeGitHubInstallationsListPath, err)
 	}
 	defer listResp.Body.Close()
 	if listResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(listResp.Body)
-		t.Fatalf("expected /github/installations/list 200, got %d body=%s", listResp.StatusCode, strings.TrimSpace(string(body)))
+		t.Fatalf("expected %s 200, got %d body=%s", spikeGitHubInstallationsListPath, listResp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var listOut struct {
 		Installations []spikedb.GitHubInstallation `json:"installations"`
 	}
 	if err := json.NewDecoder(listResp.Body).Decode(&listOut); err != nil {
-		t.Fatalf("decode /github/installations/list response: %v", err)
+		t.Fatalf("decode %s response: %v", spikeGitHubInstallationsListPath, err)
 	}
 	if len(listOut.Installations) != 1 || listOut.Installations[0].InstallationID != 42 {
 		t.Fatalf("unexpected installations list: %#v", listOut)
 	}
 
 	// Get installation
-	getResp, err := http.Post(httpSrv.URL+"/github/installations/get", "application/json", bytes.NewReader([]byte(`{"installation_id":42}`)))
+	getResp, err := http.Post(httpSrv.URL+spikeGitHubInstallationsGetPath, "application/json", bytes.NewReader([]byte(`{"installation_id":42}`)))
 	if err != nil {
-		t.Fatalf("post /github/installations/get: %v", err)
+		t.Fatalf("post %s: %v", spikeGitHubInstallationsGetPath, err)
 	}
 	defer getResp.Body.Close()
 	if getResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(getResp.Body)
-		t.Fatalf("expected /github/installations/get 200, got %d body=%s", getResp.StatusCode, strings.TrimSpace(string(body)))
+		t.Fatalf("expected %s 200, got %d body=%s", spikeGitHubInstallationsGetPath, getResp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var getOut struct {
 		Installation spikedb.GitHubInstallation `json:"installation"`
 	}
 	if err := json.NewDecoder(getResp.Body).Decode(&getOut); err != nil {
-		t.Fatalf("decode /github/installations/get response: %v", err)
+		t.Fatalf("decode %s response: %v", spikeGitHubInstallationsGetPath, err)
 	}
 	if getOut.Installation.AccountLogin != "napageneral" {
 		t.Fatalf("unexpected installation: %#v", getOut)
 	}
 
-	// Remove installation via spikeStore (direct DB call, since /connectors/github/remove hasn't been migrated yet)
+	// Remove installation via spikeStore (direct DB call in this test).
 	err = store.DeleteGitHubInstallation(ctx, 42)
 	if err != nil {
 		t.Fatalf("delete installation: %v", err)
 	}
 
 	// Verify it's gone from the list
-	listResp2, err := http.Post(httpSrv.URL+"/github/installations/list", "application/json", bytes.NewReader([]byte(`{}`)))
+	listResp2, err := http.Post(httpSrv.URL+spikeGitHubInstallationsListPath, "application/json", bytes.NewReader([]byte(`{}`)))
 	if err != nil {
-		t.Fatalf("post /github/installations/list after delete: %v", err)
+		t.Fatalf("post %s after delete: %v", spikeGitHubInstallationsListPath, err)
 	}
 	defer listResp2.Body.Close()
 	if listResp2.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(listResp2.Body)
-		t.Fatalf("expected /github/installations/list 200 after delete, got %d body=%s", listResp2.StatusCode, strings.TrimSpace(string(body)))
+		t.Fatalf("expected %s 200 after delete, got %d body=%s", spikeGitHubInstallationsListPath, listResp2.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var listOut2 struct {
 		Installations []spikedb.GitHubInstallation `json:"installations"`
 	}
 	if err := json.NewDecoder(listResp2.Body).Decode(&listOut2); err != nil {
-		t.Fatalf("decode /github/installations/list response after delete: %v", err)
+		t.Fatalf("decode %s response after delete: %v", spikeGitHubInstallationsListPath, err)
 	}
 	if len(listOut2.Installations) != 0 {
 		t.Fatalf("expected empty installations list after delete, got: %#v", listOut2)
@@ -1044,6 +1080,21 @@ func TestServeAskRequestsEndpoints(t *testing.T) {
 	); err != nil {
 		t.Fatalf("insert ask request req-new: %v", err)
 	}
+	if _, err := store.DB().Exec(`
+		INSERT INTO ask_request_executions (
+			request_id, node_id, phase, attempt, origin, status, execution_backend,
+			session_key, run_id, working_dir, answer_preview, error_message, started_at, completed_at
+		) VALUES
+			(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+			(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+			(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		"req-mid", "root", "interpret", 1, "ask", "completed", "broker", "session-mid-root", "", "/tmp/mid/root", "mid root preview", "", now-1950, now-1900,
+		"req-mid", "root", "synthesize", 1, "ask", "completed", "broker", "session-mid-final", "", "/tmp/mid/root", "mid final preview", "", now-1850, now-1800,
+		"req-new", "root", "interpret", 1, "ask", "failed", "broker", "session-new-root", "", "/tmp/new/root", "", "step failed", now-950, now-925,
+	); err != nil {
+		t.Fatalf("insert ask request executions: %v", err)
+	}
 
 	srv := &oracleServer{
 		trees: map[string]*servedTree{
@@ -1073,6 +1124,12 @@ func TestServeAskRequestsEndpoints(t *testing.T) {
 	if filteredPayload.AskRequests[0].RootTurnID != "turn-mid" || filteredPayload.AskRequests[0].Status != "completed" {
 		t.Fatalf("unexpected filtered ask_request row: %#v", filteredPayload.AskRequests[0])
 	}
+	if filteredPayload.AskRequests[0].ExecutionCount != 2 ||
+		filteredPayload.AskRequests[0].LatestExecutionStatus != "completed" ||
+		filteredPayload.AskRequests[0].LatestExecutionPhase != "synthesize" ||
+		filteredPayload.AskRequests[0].LatestExecutionSessionKey != "session-mid-final" {
+		t.Fatalf("unexpected filtered execution summary: %#v", filteredPayload.AskRequests[0])
+	}
 
 	orderedResp, err := http.Post(httpSrv.URL+"/ask_requests/list", "application/json", bytes.NewReader([]byte(`{"tree_id":"oracle-test","limit":10}`)))
 	if err != nil {
@@ -1094,6 +1151,16 @@ func TestServeAskRequestsEndpoints(t *testing.T) {
 	if orderedPayload.AskRequests[0].RequestID != "req-new" || orderedPayload.AskRequests[1].RequestID != "req-mid" || orderedPayload.AskRequests[2].RequestID != "req-old" {
 		t.Fatalf("expected created_at DESC order, got %#v", orderedPayload.AskRequests)
 	}
+	if orderedPayload.AskRequests[0].ExecutionCount != 1 ||
+		orderedPayload.AskRequests[0].LatestExecutionStatus != "failed" ||
+		orderedPayload.AskRequests[0].LatestExecutionError != "step failed" {
+		t.Fatalf("unexpected req-new execution summary: %#v", orderedPayload.AskRequests[0])
+	}
+	if orderedPayload.AskRequests[2].ExecutionCount != 0 ||
+		orderedPayload.AskRequests[2].LatestExecutionStatus != "" ||
+		orderedPayload.AskRequests[2].LatestExecutionSessionKey != "" {
+		t.Fatalf("unexpected req-old execution summary: %#v", orderedPayload.AskRequests[2])
+	}
 
 	getResp, err := http.Post(httpSrv.URL+"/ask_requests/get", "application/json", bytes.NewReader([]byte(`{"tree_id":"oracle-test","request_id":"req-mid"}`)))
 	if err != nil {
@@ -1111,6 +1178,13 @@ func TestServeAskRequestsEndpoints(t *testing.T) {
 	}
 	if getPayload.AskRequest.RequestID != "req-mid" || getPayload.AskRequest.ScopeKey != "scope-a" {
 		t.Fatalf("unexpected /ask_requests/get payload: %#v", getPayload.AskRequest)
+	}
+	if getPayload.AskRequest.ExecutionCount != 2 ||
+		getPayload.AskRequest.LatestExecutionNodeID != "root" ||
+		getPayload.AskRequest.LatestExecutionPhase != "synthesize" ||
+		getPayload.AskRequest.LatestExecutionBackend != "broker" ||
+		getPayload.AskRequest.LatestExecutionWorkDir != "/tmp/mid/root" {
+		t.Fatalf("unexpected /ask_requests/get execution summary: %#v", getPayload.AskRequest)
 	}
 
 	missingResp, err := http.Post(httpSrv.URL+"/ask_requests/get", "application/json", bytes.NewReader([]byte(`{"tree_id":"oracle-test","request_id":"missing"}`)))
@@ -1214,6 +1288,29 @@ func TestServeAskRequestsInspectEndpoint(t *testing.T) {
 		t.Fatalf("insert ask request req-inspect: %v", err)
 	}
 	if _, err := store.DB().Exec(`
+		INSERT INTO ask_request_executions (
+			request_id, node_id, phase, attempt, origin, status, execution_backend,
+			session_key, run_id, working_dir, answer_preview, error_message, started_at, completed_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		"req-inspect",
+		"root",
+		"synthesize",
+		1,
+		"ask",
+		"completed",
+		"broker",
+		sessionLabel,
+		"",
+		root,
+		"final preview",
+		"",
+		now-250,
+		now-200,
+	); err != nil {
+		t.Fatalf("insert ask_request_execution req-inspect: %v", err)
+	}
+	if _, err := store.DB().Exec(`
 		INSERT INTO ask_requests (
 			request_id, tree_id, scope_key, ref_name, commit_sha, tree_flavor, tree_version_id,
 			query_text, status, root_turn_id, answer_preview, error_code, error_message, created_at, completed_at
@@ -1258,11 +1355,12 @@ func TestServeAskRequestsInspectEndpoint(t *testing.T) {
 		t.Fatalf("expected /ask_requests/inspect 200, got %d", resp.StatusCode)
 	}
 	var payload struct {
-		AskRequest    askRequestRecord       `json:"ask_request"`
-		RootTurn      *askInspectorTurn      `json:"root_turn"`
-		RootMessages  []askInspectorMessage  `json:"root_messages"`
-		RootToolCalls []askInspectorToolCall `json:"root_tool_calls"`
-		RootSession   *askInspectorSession   `json:"root_session"`
+		AskRequest    askRequestRecord            `json:"ask_request"`
+		RootTurn      *askInspectorTurn           `json:"root_turn"`
+		RootMessages  []askInspectorMessage       `json:"root_messages"`
+		RootToolCalls []askInspectorToolCall      `json:"root_tool_calls"`
+		RootSession   *askInspectorSession        `json:"root_session"`
+		Executions    []askRequestExecutionRecord `json:"executions"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode /ask_requests/inspect response: %v", err)
@@ -1282,6 +1380,9 @@ func TestServeAskRequestsInspectEndpoint(t *testing.T) {
 	if payload.RootSession == nil || payload.RootSession.Label != sessionLabel || payload.RootSession.ThreadID != execResult.TurnID {
 		t.Fatalf("unexpected root_session: %#v", payload.RootSession)
 	}
+	if len(payload.Executions) != 1 || payload.Executions[0].NodeID != "root" || payload.Executions[0].SessionKey != sessionLabel {
+		t.Fatalf("unexpected executions payload: %#v", payload.Executions)
+	}
 
 	noRootResp, err := http.Post(httpSrv.URL+"/ask_requests/inspect", "application/json", bytes.NewReader([]byte(`{"tree_id":"oracle-test","request_id":"req-no-root"}`)))
 	if err != nil {
@@ -1292,11 +1393,12 @@ func TestServeAskRequestsInspectEndpoint(t *testing.T) {
 		t.Fatalf("expected /ask_requests/inspect req-no-root 200, got %d", noRootResp.StatusCode)
 	}
 	var noRootPayload struct {
-		AskRequest    askRequestRecord       `json:"ask_request"`
-		RootTurn      *askInspectorTurn      `json:"root_turn"`
-		RootMessages  []askInspectorMessage  `json:"root_messages"`
-		RootToolCalls []askInspectorToolCall `json:"root_tool_calls"`
-		RootSession   *askInspectorSession   `json:"root_session"`
+		AskRequest    askRequestRecord            `json:"ask_request"`
+		RootTurn      *askInspectorTurn           `json:"root_turn"`
+		RootMessages  []askInspectorMessage       `json:"root_messages"`
+		RootToolCalls []askInspectorToolCall      `json:"root_tool_calls"`
+		RootSession   *askInspectorSession        `json:"root_session"`
+		Executions    []askRequestExecutionRecord `json:"executions"`
 	}
 	if err := json.NewDecoder(noRootResp.Body).Decode(&noRootPayload); err != nil {
 		t.Fatalf("decode /ask_requests/inspect req-no-root response: %v", err)
@@ -1306,6 +1408,9 @@ func TestServeAskRequestsInspectEndpoint(t *testing.T) {
 	}
 	if noRootPayload.RootTurn != nil || len(noRootPayload.RootMessages) != 0 || len(noRootPayload.RootToolCalls) != 0 || noRootPayload.RootSession != nil {
 		t.Fatalf("expected null/empty root artifacts for req-no-root, got %#v", noRootPayload)
+	}
+	if len(noRootPayload.Executions) != 0 {
+		t.Fatalf("expected empty executions for req-no-root, got %#v", noRootPayload.Executions)
 	}
 
 	missingResp, err := http.Post(httpSrv.URL+"/ask_requests/inspect", "application/json", bytes.NewReader([]byte(`{"tree_id":"oracle-test","request_id":"missing"}`)))
@@ -1418,6 +1523,21 @@ func TestServeAskRequestsTimelineEndpoint(t *testing.T) {
 	); err != nil {
 		t.Fatalf("insert ask request req-timeline: %v", err)
 	}
+	if _, err := store.DB().Exec(`
+		INSERT INTO ask_request_executions (
+			request_id, node_id, phase, attempt, origin, status, execution_backend,
+			session_key, run_id, working_dir, answer_preview, error_message, started_at, completed_at
+		) VALUES
+			(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+			(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+			(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		requestID, "root", "interpret", 1, "ask", "completed", "broker", rootLabel, "", root, "root preview", "", now-190, now-180,
+		requestID, "root.c1", "leaf", 1, "ask", "completed", "broker", childOneLabel, "", root, "child one preview", "", now-170, now-160,
+		requestID, "root.c2", "leaf", 1, "ask", "completed", "broker", childTwoLabel, "", root, "child two preview", "", now-150, now-140,
+	); err != nil {
+		t.Fatalf("insert ask_request_executions req-timeline: %v", err)
+	}
 
 	srv := &oracleServer{
 		trees: map[string]*servedTree{
@@ -1439,9 +1559,10 @@ func TestServeAskRequestsTimelineEndpoint(t *testing.T) {
 		t.Fatalf("expected /ask_requests/timeline 200, got %d", resp.StatusCode)
 	}
 	var payload struct {
-		AskRequest    askRequestRecord  `json:"ask_request"`
-		RequestToken  string            `json:"request_token"`
-		TimelineNodes []askTimelineNode `json:"timeline_nodes"`
+		AskRequest    askRequestRecord            `json:"ask_request"`
+		RequestToken  string                      `json:"request_token"`
+		TimelineNodes []askTimelineNode           `json:"timeline_nodes"`
+		Executions    []askRequestExecutionRecord `json:"executions"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode /ask_requests/timeline response: %v", err)
@@ -1458,14 +1579,25 @@ func TestServeAskRequestsTimelineEndpoint(t *testing.T) {
 	if !payload.TimelineNodes[0].IsRoot || payload.TimelineNodes[0].ThreadID != results[rootLabel].TurnID {
 		t.Fatalf("unexpected root timeline node: %#v", payload.TimelineNodes[0])
 	}
+	if payload.TimelineNodes[0].ExecutionStatus != "completed" ||
+		payload.TimelineNodes[0].ExecutionBackend != "broker" ||
+		payload.TimelineNodes[0].Phase != "interpret" {
+		t.Fatalf("unexpected root execution timeline fields: %#v", payload.TimelineNodes[0])
+	}
 	if payload.TimelineNodes[1].ToolCallCount != 1 {
 		t.Fatalf("expected child node tool_call_count=1, got %#v", payload.TimelineNodes[1])
+	}
+	if payload.TimelineNodes[1].SessionLabel != childOneLabel || payload.TimelineNodes[1].WorkingDir != root {
+		t.Fatalf("unexpected child one session linkage: %#v", payload.TimelineNodes[1])
 	}
 	if strings.TrimSpace(payload.TimelineNodes[1].AssistantPreview) == "" {
 		t.Fatalf("expected assistant preview in timeline child node")
 	}
 	if payload.TimelineNodes[2].ToolCallCount != 0 {
 		t.Fatalf("expected child two tool_call_count=0, got %#v", payload.TimelineNodes[2])
+	}
+	if len(payload.Executions) != 3 || payload.Executions[0].NodeID != "root" || payload.Executions[1].NodeID != "root.c1" || payload.Executions[2].NodeID != "root.c2" {
+		t.Fatalf("unexpected executions timeline payload: %#v", payload.Executions)
 	}
 
 	missingResp, err := http.Post(httpSrv.URL+"/ask_requests/timeline", "application/json", bytes.NewReader([]byte(`{"tree_id":"oracle-test","request_id":"missing"}`)))
@@ -1478,7 +1610,104 @@ func TestServeAskRequestsTimelineEndpoint(t *testing.T) {
 	}
 }
 
-func TestServeControlAskInspectorUIRoutes(t *testing.T) {
+func TestServeAskRequestsTimelineUsesExecutionRecordsWithoutBroker(t *testing.T) {
+	root := t.TempDir()
+	runtimeDB := filepath.Join(root, "runtime.db")
+	store, err := prlmstore.NewSQLiteStore(runtimeDB)
+	if err != nil {
+		t.Fatalf("new sqlite store: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Now().UTC().UnixMilli()
+	if _, err := store.DB().Exec(`
+		INSERT INTO ask_requests (
+			request_id, tree_id, scope_key, ref_name, commit_sha, tree_flavor, tree_version_id,
+			query_text, status, root_turn_id, answer_preview, error_code, error_message, created_at, completed_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		"req-exec-only",
+		"oracle-test",
+		"scope-a",
+		"refs/heads/main",
+		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"oracle-test",
+		"tv-a",
+		"timeline execution only",
+		"running",
+		"",
+		"",
+		"",
+		"",
+		now-200,
+		nil,
+	); err != nil {
+		t.Fatalf("insert ask request req-exec-only: %v", err)
+	}
+	if _, err := store.DB().Exec(`
+		INSERT INTO ask_request_executions (
+			request_id, node_id, phase, attempt, origin, status, execution_backend,
+			session_key, run_id, working_dir, answer_preview, error_message, started_at, completed_at
+		) VALUES
+			(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+			(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		"req-exec-only", "root", "interpret", 1, "ask", "completed", "broker", "exec-only-root", "", filepath.Join(root, "sandbox-root"), "root preview", "", now-180, now-170,
+		"req-exec-only", "root.c1", "leaf", 2, "ask", "failed", "broker", "exec-only-child", "", filepath.Join(root, "sandbox-child"), "", "child failed", now-160, now-150,
+	); err != nil {
+		t.Fatalf("insert ask_request_executions req-exec-only: %v", err)
+	}
+
+	srv := &oracleServer{
+		trees: map[string]*servedTree{
+			"oracle-test": {store: store},
+		},
+	}
+	httpSrv := httptest.NewServer(srv.handler())
+	defer httpSrv.Close()
+
+	resp, err := http.Post(httpSrv.URL+"/ask_requests/timeline", "application/json", bytes.NewReader([]byte(`{"tree_id":"oracle-test","request_id":"req-exec-only","limit":20}`)))
+	if err != nil {
+		t.Fatalf("post /ask_requests/timeline exec-only: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected /ask_requests/timeline exec-only 200, got %d", resp.StatusCode)
+	}
+	var payload struct {
+		AskRequest    askRequestRecord            `json:"ask_request"`
+		TimelineNodes []askTimelineNode           `json:"timeline_nodes"`
+		Executions    []askRequestExecutionRecord `json:"executions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode /ask_requests/timeline exec-only response: %v", err)
+	}
+	if payload.AskRequest.RequestID != "req-exec-only" {
+		t.Fatalf("unexpected exec-only ask request payload: %#v", payload.AskRequest)
+	}
+	if len(payload.TimelineNodes) != 2 {
+		t.Fatalf("expected 2 exec-only timeline nodes, got %#v", payload.TimelineNodes)
+	}
+	if !payload.TimelineNodes[0].IsRoot || payload.TimelineNodes[0].ThreadID != "" {
+		t.Fatalf("expected root node with no broker thread enrichment, got %#v", payload.TimelineNodes[0])
+	}
+	if payload.TimelineNodes[0].SessionLabel != "exec-only-root" ||
+		payload.TimelineNodes[0].ExecutionStatus != "completed" ||
+		payload.TimelineNodes[0].WorkingDir != filepath.Join(root, "sandbox-root") {
+		t.Fatalf("unexpected exec-only root timeline node: %#v", payload.TimelineNodes[0])
+	}
+	if payload.TimelineNodes[1].ExecutionStatus != "failed" ||
+		payload.TimelineNodes[1].Phase != "leaf" ||
+		payload.TimelineNodes[1].Attempt != 2 ||
+		payload.TimelineNodes[1].AssistantPreview != "child failed" {
+		t.Fatalf("unexpected exec-only child timeline node: %#v", payload.TimelineNodes[1])
+	}
+	if len(payload.Executions) != 2 {
+		t.Fatalf("expected 2 exec-only executions, got %#v", payload.Executions)
+	}
+}
+
+func TestServeSpikeInspectorUIRoutes(t *testing.T) {
 	srv := &oracleServer{uiDir: testUIDir(t)}
 	httpSrv := httptest.NewServer(srv.handler())
 	defer httpSrv.Close()
@@ -1488,36 +1717,48 @@ func TestServeControlAskInspectorUIRoutes(t *testing.T) {
 			return http.ErrUseLastResponse
 		},
 	}
-	controlResp, err := redirectClient.Get(httpSrv.URL + "/control")
+	controlResp, err := redirectClient.Get(httpSrv.URL + "/app")
 	if err != nil {
-		t.Fatalf("get /control: %v", err)
+		t.Fatalf("get /app: %v", err)
 	}
 	defer controlResp.Body.Close()
 	if controlResp.StatusCode != http.StatusTemporaryRedirect {
-		t.Fatalf("expected /control redirect status %d, got %d", http.StatusTemporaryRedirect, controlResp.StatusCode)
+		t.Fatalf("expected /app redirect status %d, got %d", http.StatusTemporaryRedirect, controlResp.StatusCode)
 	}
-	if got := controlResp.Header.Get("Location"); got != "/control/ask-inspector" {
-		t.Fatalf("expected /control redirect location /control/ask-inspector, got %q", got)
+	if got := controlResp.Header.Get("Location"); got != "/app/spike/" {
+		t.Fatalf("expected /app redirect location /app/spike/, got %q", got)
 	}
 
-	uiResp, err := http.Get(httpSrv.URL + "/control/ask-inspector")
+	entryResp, err := redirectClient.Get(httpSrv.URL + "/app/spike")
 	if err != nil {
-		t.Fatalf("get /control/ask-inspector: %v", err)
+		t.Fatalf("get /app/spike: %v", err)
+	}
+	defer entryResp.Body.Close()
+	if entryResp.StatusCode != http.StatusTemporaryRedirect {
+		t.Fatalf("expected /app/spike redirect status %d, got %d", http.StatusTemporaryRedirect, entryResp.StatusCode)
+	}
+	if got := entryResp.Header.Get("Location"); got != "/app/spike/" {
+		t.Fatalf("expected /app/spike redirect location /app/spike/, got %q", got)
+	}
+
+	uiResp, err := http.Get(httpSrv.URL + "/app/spike/inspector")
+	if err != nil {
+		t.Fatalf("get /app/spike/inspector: %v", err)
 	}
 	defer uiResp.Body.Close()
 	if uiResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected /control/ask-inspector status 200, got %d", uiResp.StatusCode)
+		t.Fatalf("expected /app/spike/inspector status 200, got %d", uiResp.StatusCode)
 	}
 	if ctype := uiResp.Header.Get("Content-Type"); !strings.Contains(strings.ToLower(ctype), "text/html") {
 		t.Fatalf("expected HTML content type, got %q", ctype)
 	}
 	body, err := io.ReadAll(uiResp.Body)
 	if err != nil {
-		t.Fatalf("read /control/ask-inspector body: %v", err)
+		t.Fatalf("read /app/spike/inspector body: %v", err)
 	}
 	content := string(body)
 	if !strings.Contains(content, "Spike Ask Inspector") {
-		t.Fatalf("expected UI title in /control/ask-inspector body")
+		t.Fatalf("expected UI title in /app/spike/inspector body")
 	}
 	if !strings.Contains(content, "spike.ask-requests.inspect") || !strings.Contains(content, "spike.ask-requests.timeline") {
 		t.Fatalf("expected inspector API wiring in UI body")
@@ -1539,6 +1780,14 @@ func TestServeControlAskInspectorUIRoutes(t *testing.T) {
 	}
 	if !strings.Contains(content, "payload.status = askStatus") {
 		t.Fatalf("expected ask status filter wiring in UI body")
+	}
+	if !strings.Contains(content, "Execution Records") || !strings.Contains(content, "renderExecutions") {
+		t.Fatalf("expected execution records panel wiring in UI body")
+	}
+	if !strings.Contains(content, "latest_execution_status") ||
+		!strings.Contains(content, "legacy_root_turn_id") ||
+		!strings.Contains(content, "working_dir=") {
+		t.Fatalf("expected execution-first ask summary and timeline wiring in UI body")
 	}
 }
 
@@ -1591,20 +1840,20 @@ func TestServeRuntimeAppsManifestAndAppRoute(t *testing.T) {
 	if !appsOut.OK || len(appsOut.Items) != 1 {
 		t.Fatalf("unexpected /api/apps payload: %#v", appsOut)
 	}
-	if appsOut.Items[0].AppID == "" || !strings.HasPrefix(appsOut.Items[0].EntryPath, "/app/spike") {
+	if appsOut.Items[0].AppID == "" || !strings.HasPrefix(appsOut.Items[0].EntryPath, "/app/spike/") {
 		t.Fatalf("unexpected app descriptor: %#v", appsOut.Items[0])
 	}
 
-	appReq, _ := http.NewRequest(http.MethodGet, httpSrv.URL+"/app/spike?tree_id=oracle-test", nil)
+	appReq, _ := http.NewRequest(http.MethodGet, httpSrv.URL+"/app/spike/?tree_id=oracle-test", nil)
 	appReq.Header.Set("Authorization", "Bearer runtime-secret")
 	appResp, err := http.DefaultClient.Do(appReq)
 	if err != nil {
-		t.Fatalf("get /app/spike auth: %v", err)
+		t.Fatalf("get /app/spike/ auth: %v", err)
 	}
 	if appResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(appResp.Body)
 		_ = appResp.Body.Close()
-		t.Fatalf("expected /app/spike 200, got %d body=%s", appResp.StatusCode, strings.TrimSpace(string(body)))
+		t.Fatalf("expected /app/spike/ 200, got %d body=%s", appResp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	body, _ := io.ReadAll(appResp.Body)
 	_ = appResp.Body.Close()
@@ -1654,14 +1903,14 @@ func TestServeGitHubConnectorSetupWritesSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal setup payload: %v", err)
 	}
-	resp, err := http.Post(httpSrv.URL+"/connectors/github/setup", "application/json", bytes.NewReader(raw))
+	resp, err := http.Post(httpSrv.URL+spikeGitHubSetupPath, "application/json", bytes.NewReader(raw))
 	if err != nil {
-		t.Fatalf("post /connectors/github/setup: %v", err)
+		t.Fatalf("post %s: %v", spikeGitHubSetupPath, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
-		t.Fatalf("expected /connectors/github/setup 200, got %d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+		t.Fatalf("expected %s 200, got %d body=%s", spikeGitHubSetupPath, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var out struct {
 		OK           bool `json:"ok"`
@@ -1673,11 +1922,11 @@ func TestServeGitHubConnectorSetupWritesSecret(t *testing.T) {
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		_ = resp.Body.Close()
-		t.Fatalf("decode /connectors/github/setup response: %v", err)
+		t.Fatalf("decode %s response: %v", spikeGitHubSetupPath, err)
 	}
 	_ = resp.Body.Close()
 	if !out.OK || out.Installation.InstallationID != 42 || out.Installation.AppID != "9001" {
-		t.Fatalf("unexpected /connectors/github/setup payload: %#v", out)
+		t.Fatalf("unexpected %s payload: %#v", spikeGitHubSetupPath, out)
 	}
 
 	secretPath := filepath.Join(
@@ -1757,17 +2006,20 @@ func TestServeGitHubConnectorInstallStartAndCallback(t *testing.T) {
 		},
 	}
 
-	startResp, err := noRedirect.Get(httpSrv.URL + "/connectors/github/install/start")
+	startOut, err := srv.nexGitHubConnectorInstallStart(map[string]interface{}{
+		"connectionProfileId": spikeManagedGitHubConnectionProfileID,
+	})
 	if err != nil {
-		t.Fatalf("get /connectors/github/install/start: %v", err)
+		t.Fatalf("nexGitHubConnectorInstallStart: %v", err)
 	}
-	if startResp.StatusCode != http.StatusTemporaryRedirect {
-		body, _ := io.ReadAll(startResp.Body)
-		_ = startResp.Body.Close()
-		t.Fatalf("expected /connectors/github/install/start 307, got %d body=%s", startResp.StatusCode, strings.TrimSpace(string(body)))
+	startPayload, ok := startOut.(map[string]interface{})
+	if !ok {
+		t.Fatalf("unexpected install start payload type: %T", startOut)
 	}
-	startLocation := strings.TrimSpace(startResp.Header.Get("Location"))
-	_ = startResp.Body.Close()
+	startLocation, ok := startPayload["install_url"].(string)
+	if !ok {
+		t.Fatalf("install start payload missing install_url: %#v", startPayload)
+	}
 	if startLocation == "" {
 		t.Fatalf("expected install start redirect location")
 	}
@@ -1782,16 +2034,23 @@ func TestServeGitHubConnectorInstallStartAndCallback(t *testing.T) {
 	if stateParam == "" {
 		t.Fatalf("expected state query in install start redirect")
 	}
+	decodedState, err := decodeGitHubInstallState(stateParam, srv.githubInstallSecret, 20*time.Minute, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("decode install state: %v", err)
+	}
+	if decodedState.ConnectionProfileID != spikeManagedGitHubConnectionProfileID {
+		t.Fatalf("unexpected connection profile in state: %#v", decodedState)
+	}
 
-	callbackURL := httpSrv.URL + "/connectors/github/install/callback?installation_id=42&state=" + url.QueryEscape(stateParam)
+	callbackURL := httpSrv.URL + githubAdapterCallbackPath + "?installation_id=42&state=" + url.QueryEscape(stateParam)
 	callbackResp, err := noRedirect.Get(callbackURL)
 	if err != nil {
-		t.Fatalf("get /connectors/github/install/callback: %v", err)
+		t.Fatalf("get %s: %v", githubAdapterCallbackPath, err)
 	}
 	if callbackResp.StatusCode != http.StatusTemporaryRedirect {
 		body, _ := io.ReadAll(callbackResp.Body)
 		_ = callbackResp.Body.Close()
-		t.Fatalf("expected /connectors/github/install/callback 307, got %d body=%s", callbackResp.StatusCode, strings.TrimSpace(string(body)))
+		t.Fatalf("expected %s 307, got %d body=%s", githubAdapterCallbackPath, callbackResp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	callbackLocation := strings.TrimSpace(callbackResp.Header.Get("Location"))
 	_ = callbackResp.Body.Close()
@@ -1843,6 +2102,77 @@ func TestServeGitHubConnectorInstallStartAndCallback(t *testing.T) {
 	}
 }
 
+func TestNexGitHubConnectorInstallStartRequiresManagedConnectionProfile(t *testing.T) {
+	srv := &oracleServer{
+		githubAppSlug:       "ask-spike",
+		githubAppID:         9001,
+		githubAppPrivateKey: "private-key",
+		githubInstallSecret: "state-secret-123",
+	}
+
+	if _, err := srv.nexGitHubConnectorInstallStart(nil); err == nil || !strings.Contains(err.Error(), "connectionProfileId is required") {
+		t.Fatalf("expected missing connectionProfileId error, got %v", err)
+	}
+
+	_, err := srv.nexGitHubConnectorInstallStart(map[string]interface{}{
+		"connectionProfileId": spikeBringYourOwnGitHubAppConnectionID,
+	})
+	if err == nil {
+		t.Fatalf("expected unsupported connection profile error")
+	}
+	if !strings.Contains(err.Error(), spikeManagedGitHubConnectionProfileID) {
+		t.Fatalf("expected managed connection profile requirement, got %v", err)
+	}
+}
+
+func TestServeGitHubConnectorInstallCallbackRejectsUnsupportedConnectionProfile(t *testing.T) {
+	srv := &oracleServer{
+		githubAppSlug:       "ask-spike",
+		githubAppID:         9001,
+		githubAppPrivateKey: "private-key",
+		githubInstallSecret: "state-secret-123",
+	}
+	httpSrv := httptest.NewServer(srv.handler())
+	defer httpSrv.Close()
+
+	state, err := encodeGitHubInstallState(githubInstallStatePayload{
+		IssuedAt:            time.Now().UTC().Unix(),
+		Nonce:               "nonce-123",
+		ConnectionProfileID: spikeBringYourOwnGitHubAppConnectionID,
+	}, srv.githubInstallSecret)
+	if err != nil {
+		t.Fatalf("encode state: %v", err)
+	}
+
+	noRedirect := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	callbackURL := httpSrv.URL + githubAdapterCallbackPath + "?installation_id=42&state=" + url.QueryEscape(state)
+	callbackResp, err := noRedirect.Get(callbackURL)
+	if err != nil {
+		t.Fatalf("get %s: %v", githubAdapterCallbackPath, err)
+	}
+	defer callbackResp.Body.Close()
+	if callbackResp.StatusCode != http.StatusTemporaryRedirect {
+		body, _ := io.ReadAll(callbackResp.Body)
+		t.Fatalf("expected %s 307, got %d body=%s", githubAdapterCallbackPath, callbackResp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	redirectLocation := strings.TrimSpace(callbackResp.Header.Get("Location"))
+	parsedRedirect, err := url.Parse(redirectLocation)
+	if err != nil {
+		t.Fatalf("parse redirect location: %v", err)
+	}
+	if got := strings.TrimSpace(parsedRedirect.Query().Get("github_connect")); got != "error" {
+		t.Fatalf("expected github_connect=error, got %q", got)
+	}
+	if got := strings.TrimSpace(parsedRedirect.Query().Get("github_detail")); got != "invalid_connection_profile" {
+		t.Fatalf("expected github_detail invalid_connection_profile, got %q", got)
+	}
+}
+
 func TestServeGitHubConnectorRepoBranchCommitEndpoints(t *testing.T) {
 	root := t.TempDir()
 
@@ -1889,14 +2219,14 @@ func TestServeGitHubConnectorRepoBranchCommitEndpoints(t *testing.T) {
 	httpSrv := httptest.NewServer(srv.handler())
 	defer httpSrv.Close()
 
-	reposResp, err := http.Post(httpSrv.URL+"/connectors/github/repos", "application/json", bytes.NewReader([]byte(`{"installation_id":42}`)))
+	reposResp, err := http.Post(httpSrv.URL+spikeGitHubReposPath, "application/json", bytes.NewReader([]byte(`{"installation_id":42}`)))
 	if err != nil {
-		t.Fatalf("post /connectors/github/repos: %v", err)
+		t.Fatalf("post %s: %v", spikeGitHubReposPath, err)
 	}
 	if reposResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(reposResp.Body)
 		_ = reposResp.Body.Close()
-		t.Fatalf("expected /connectors/github/repos 200, got %d body=%s", reposResp.StatusCode, strings.TrimSpace(string(body)))
+		t.Fatalf("expected %s 200, got %d body=%s", spikeGitHubReposPath, reposResp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var reposOut struct {
 		OK    bool `json:"ok"`
@@ -1907,22 +2237,22 @@ func TestServeGitHubConnectorRepoBranchCommitEndpoints(t *testing.T) {
 	}
 	if err := json.NewDecoder(reposResp.Body).Decode(&reposOut); err != nil {
 		_ = reposResp.Body.Close()
-		t.Fatalf("decode /connectors/github/repos response: %v", err)
+		t.Fatalf("decode %s response: %v", spikeGitHubReposPath, err)
 	}
 	_ = reposResp.Body.Close()
 	if !reposOut.OK || len(reposOut.Items) != 1 || reposOut.Items[0].RepoID != "acme/widget" {
-		t.Fatalf("unexpected /connectors/github/repos payload: %#v", reposOut)
+		t.Fatalf("unexpected %s payload: %#v", spikeGitHubReposPath, reposOut)
 	}
 
 	branchesPayload := `{"installation_id":42,"repo_id":"acme/widget"}`
-	branchesResp, err := http.Post(httpSrv.URL+"/connectors/github/branches", "application/json", bytes.NewReader([]byte(branchesPayload)))
+	branchesResp, err := http.Post(httpSrv.URL+spikeGitHubBranchesPath, "application/json", bytes.NewReader([]byte(branchesPayload)))
 	if err != nil {
-		t.Fatalf("post /connectors/github/branches: %v", err)
+		t.Fatalf("post %s: %v", spikeGitHubBranchesPath, err)
 	}
 	if branchesResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(branchesResp.Body)
 		_ = branchesResp.Body.Close()
-		t.Fatalf("expected /connectors/github/branches 200, got %d body=%s", branchesResp.StatusCode, strings.TrimSpace(string(body)))
+		t.Fatalf("expected %s 200, got %d body=%s", spikeGitHubBranchesPath, branchesResp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var branchesOut struct {
 		OK    bool `json:"ok"`
@@ -1933,25 +2263,25 @@ func TestServeGitHubConnectorRepoBranchCommitEndpoints(t *testing.T) {
 	}
 	if err := json.NewDecoder(branchesResp.Body).Decode(&branchesOut); err != nil {
 		_ = branchesResp.Body.Close()
-		t.Fatalf("decode /connectors/github/branches response: %v", err)
+		t.Fatalf("decode %s response: %v", spikeGitHubBranchesPath, err)
 	}
 	_ = branchesResp.Body.Close()
 	if !branchesOut.OK || len(branchesOut.Items) < 1 {
-		t.Fatalf("unexpected /connectors/github/branches payload: %#v", branchesOut)
+		t.Fatalf("unexpected %s payload: %#v", spikeGitHubBranchesPath, branchesOut)
 	}
 	if branchesOut.Items[0].Name != "main" || !branchesOut.Items[0].IsDefault {
 		t.Fatalf("unexpected default branch payload: %#v", branchesOut.Items)
 	}
 
 	commitsPayload := `{"installation_id":42,"repo_id":"acme/widget","ref":"main"}`
-	commitsResp, err := http.Post(httpSrv.URL+"/connectors/github/commits", "application/json", bytes.NewReader([]byte(commitsPayload)))
+	commitsResp, err := http.Post(httpSrv.URL+spikeGitHubCommitsPath, "application/json", bytes.NewReader([]byte(commitsPayload)))
 	if err != nil {
-		t.Fatalf("post /connectors/github/commits: %v", err)
+		t.Fatalf("post %s: %v", spikeGitHubCommitsPath, err)
 	}
 	if commitsResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(commitsResp.Body)
 		_ = commitsResp.Body.Close()
-		t.Fatalf("expected /connectors/github/commits 200, got %d body=%s", commitsResp.StatusCode, strings.TrimSpace(string(body)))
+		t.Fatalf("expected %s 200, got %d body=%s", spikeGitHubCommitsPath, commitsResp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var commitsOut struct {
 		OK    bool `json:"ok"`
@@ -1962,11 +2292,11 @@ func TestServeGitHubConnectorRepoBranchCommitEndpoints(t *testing.T) {
 	}
 	if err := json.NewDecoder(commitsResp.Body).Decode(&commitsOut); err != nil {
 		_ = commitsResp.Body.Close()
-		t.Fatalf("decode /connectors/github/commits response: %v", err)
+		t.Fatalf("decode %s response: %v", spikeGitHubCommitsPath, err)
 	}
 	_ = commitsResp.Body.Close()
 	if !commitsOut.OK || len(commitsOut.Items) != 1 {
-		t.Fatalf("unexpected /connectors/github/commits payload: %#v", commitsOut)
+		t.Fatalf("unexpected %s payload: %#v", spikeGitHubCommitsPath, commitsOut)
 	}
 	if commitsOut.Items[0].SHA != "abc123" || commitsOut.Items[0].Message != "Initial commit" {
 		t.Fatalf("unexpected commit payload: %#v", commitsOut.Items[0])

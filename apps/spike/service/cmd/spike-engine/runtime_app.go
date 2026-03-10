@@ -9,6 +9,14 @@ import (
 	"strings"
 )
 
+const (
+	spikeAppEntryPath       = "/app/spike/"
+	spikeAppEntryPathBare   = "/app/spike"
+	spikeAppInspectorPath   = "/app/spike/inspector"
+	spikeAppInspectorBare   = "/app/spike/inspector/"
+	spikeAppNamespacePrefix = "/app/spike/"
+)
+
 type runtimeAppDescriptor struct {
 	AppID       string `json:"app_id"`
 	DisplayName string `json:"display_name"`
@@ -80,7 +88,7 @@ func (s *oracleServer) buildRuntimeAppDescriptors(requestedTreeID string) ([]run
 	for _, treeID := range treeIDs {
 		values := url.Values{}
 		values.Set("tree_id", treeID)
-		entryPath := "/app/spike"
+		entryPath := spikeAppEntryPath
 		if encoded := values.Encode(); encoded != "" {
 			entryPath += "?" + encoded
 		}
@@ -130,17 +138,44 @@ func (s *oracleServer) handleRuntimeApp(w http.ResponseWriter, r *http.Request) 
 	}
 	path := strings.TrimSpace(r.URL.Path)
 	if path == "/app" || path == "/app/" {
-		target := "/app/spike"
+		target := spikeAppEntryPath
 		if raw := strings.TrimSpace(r.URL.RawQuery); raw != "" {
 			target += "?" + raw
 		}
 		http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 		return
 	}
+	if path == spikeAppEntryPathBare {
+		target := spikeAppEntryPath
+		if raw := strings.TrimSpace(r.URL.RawQuery); raw != "" {
+			target += "?" + raw
+		}
+		http.Redirect(w, r, target, http.StatusTemporaryRedirect)
+		return
+	}
+	if path == spikeAppInspectorBare {
+		target := spikeAppInspectorPath
+		if raw := strings.TrimSpace(r.URL.RawQuery); raw != "" {
+			target += "?" + raw
+		}
+		http.Redirect(w, r, target, http.StatusTemporaryRedirect)
+		return
+	}
+	if path == spikeAppInspectorPath {
+		s.serveUIFile(w, r, "inspector.html")
+		return
+	}
+	if path == spikeAppEntryPath {
+		s.serveUIFile(w, r, "index.html")
+		return
+	}
+	if !strings.HasPrefix(path, spikeAppNamespacePrefix) {
+		http.NotFound(w, r)
+		return
+	}
 
-	// Strip the /app/spike prefix and resolve to a file in dist/.
-	relPath := strings.TrimPrefix(path, "/app/spike")
-	relPath = strings.TrimPrefix(relPath, "/")
+	// Strip the canonical /app/spike/ prefix and resolve to a file in dist/.
+	relPath := strings.TrimPrefix(path, spikeAppNamespacePrefix)
 	if relPath == "" {
 		relPath = "index.html"
 	}

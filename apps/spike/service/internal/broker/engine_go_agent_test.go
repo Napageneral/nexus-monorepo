@@ -136,3 +136,9 @@ func TestGoAgentHandle_SetThinkingLevelCompactAndEvents(t *testing.T) {
 		t.Fatalf("expected at least two events before unsubscribe, got %d", eventCount)
 	}
 }
+
+func TestNormalizeThinkingLevel_XHighAlias(t *testing.T) {
+	if got := normalizeThinkingLevel("xhigh"); got != "high" {
+		t.Fatalf("normalizeThinkingLevel(xhigh) = %q, want high", got)
+	}
+}

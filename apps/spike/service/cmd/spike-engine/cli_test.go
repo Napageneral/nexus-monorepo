@@ -31,7 +31,7 @@ func TestPRLMCLI_AskJSON(t *testing.T) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"tree_id":    "t1",
+			"index_id":   "t1",
 			"query":      "what is in this repo?",
 			"content":    "repo summary",
 			"visited":    []string{"root"},
@@ -42,7 +42,7 @@ func TestPRLMCLI_AskJSON(t *testing.T) {
 
 	askCmd := exec.Command(bin, "ask",
 		"--remote", server.URL,
-		"--tree-id", "t1",
+		"--index-id", "t1",
 		"--json",
 		"what is in this repo?",
 	)
@@ -52,7 +52,7 @@ func TestPRLMCLI_AskJSON(t *testing.T) {
 	}
 
 	var resp struct {
-		TreeID  string   `json:"tree_id"`
+		IndexID string   `json:"index_id"`
 		Query   string   `json:"query"`
 		Content string   `json:"content"`
 		Visited []string `json:"visited"`
@@ -60,8 +60,8 @@ func TestPRLMCLI_AskJSON(t *testing.T) {
 	if err := json.Unmarshal(out, &resp); err != nil {
 		t.Fatalf("unmarshal json: %v\n%s", err, string(out))
 	}
-	if resp.TreeID != "t1" {
-		t.Fatalf("expected tree_id t1, got %q", resp.TreeID)
+	if resp.IndexID != "t1" {
+		t.Fatalf("expected index_id t1, got %q", resp.IndexID)
 	}
 	if !strings.Contains(resp.Query, "what is in this repo?") {
 		t.Fatalf("unexpected query: %q", resp.Query)

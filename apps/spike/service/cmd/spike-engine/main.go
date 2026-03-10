@@ -9,9 +9,11 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	prlmstore "github.com/Napageneral/spike/internal/prlm/store"
@@ -68,8 +70,8 @@ func main() {
 
 func usage() {
 	fmt.Println("spike init    [--storage-root DIR --scope PATH --tree-id ID --capacity N --max-children N]")
-	fmt.Println("spike hydrate [--storage-root DIR --scope PATH --tree-id ID --model MODEL --max-parallel N --preserve-sandbox]")
-	fmt.Println("spike ask     [--storage-root DIR --remote URL --scope PATH --tree-id ID --model MODEL --max-parallel N --preserve-sandbox --json] \"QUERY\"")
+	fmt.Println("spike hydrate [--storage-root DIR --scope PATH --tree-id ID --provider PROVIDER --model MODEL --thinking LEVEL --max-parallel N --preserve-sandbox]")
+	fmt.Println("spike ask     [--storage-root DIR --remote URL --scope PATH --index-id ID --provider PROVIDER --model MODEL --thinking LEVEL --max-parallel N --preserve-sandbox --json] \"QUERY\"")
 	fmt.Println("spike status  [--storage-root DIR --scope PATH --tree-id ID]")
 	fmt.Println("spike serve   [--storage-root DIR --port N --ask-timeout DURATION --max-concurrent-asks N ...]")
 	fmt.Println("spike sync    [--storage-root DIR --scope PATH --tree-id ID --max-children N]")
@@ -138,7 +140,9 @@ func cmdHydrate(args []string) error {
 	fs := flag.NewFlagSet("hydrate", flag.ContinueOnError)
 	storageRootFlag := fs.String("storage-root", defaultStorageRoot(), "Root directory for spike data (db, runtime)")
 	treeID := fs.String("tree-id", "default", "Tree ID")
+	llmProvider := fs.String("provider", "", "Optional provider override for the selected backend")
 	llmModel := fs.String("model", "", "Optional model override for selected backend")
+	thinkingLevel := fs.String("thinking", "", "Optional reasoning level override (none, low, medium, high, xhigh)")
 	preserveSandbox := fs.Bool("preserve-sandbox", false, "Preserve sandbox directory for debugging")
 	maxChildren := fs.Int("max-children", 12, "Max children per split")
 	maxParallel := fs.Int("max-parallel", 4, "Max parallel child execution")
@@ -166,14 +170,19 @@ func cmdHydrate(args []string) error {
 		MaxChildren:     *maxChildren,
 		MaxParallel:     *maxParallel,
 		PreserveSandbox: *preserveSandbox,
+		LLMProvider:     *llmProvider,
 		LLMModel:        *llmModel,
+		ThinkingLevel:   *thinkingLevel,
 		RuntimeDir:      filepath.Join(storageRoot, "runtime"),
 	})
 	if err != nil {
 		return err
 	}
 
-	report, err := oracle.Hydrate(context.Background(), *treeID)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	report, err := oracle.Hydrate(ctx, *treeID)
 	if err != nil {
 		return err
 	}
@@ -269,8 +278,10 @@ func cmdAsk(args []string) error {
 	fs := flag.NewFlagSet("ask", flag.ContinueOnError)
 	storageRootFlag := fs.String("storage-root", defaultStorageRoot(), "Root directory for spike data (db, runtime)")
 	remoteURL := fs.String("remote", "", "Remote oracle server base URL (e.g. http://oracle:7422)")
-	treeID := fs.String("tree-id", "default", "Tree ID")
+	indexID := fs.String("index-id", "default", "Agent index ID")
+	llmProvider := fs.String("provider", "", "Optional provider override for the selected backend")
 	llmModel := fs.String("model", "", "Optional model override for selected backend")
+	thinkingLevel := fs.String("thinking", "", "Optional reasoning level override (none, low, medium, high, xhigh)")
 	jsonOut := fs.Bool("json", false, "Emit structured JSON output")
 	preserveSandbox := fs.Bool("preserve-sandbox", false, "Preserve sandbox directory for debugging")
 	maxChildren := fs.Int("max-children", 12, "Max children per split")
@@ -284,9 +295,9 @@ func cmdAsk(args []string) error {
 	}
 	if strings.TrimSpace(*remoteURL) != "" {
 		req := askRequest{
-			TreeID: *treeID,
-			Query:  query,
-			JSON:   *jsonOut,
+			IndexID: *indexID,
+			Query:   query,
+			JSON:    *jsonOut,
 		}
 		body, err := json.Marshal(req)
 		if err != nil {
@@ -344,25 +355,41 @@ func cmdAsk(args []string) error {
 		MaxChildren:     *maxChildren,
 		MaxParallel:     *maxParallel,
 		PreserveSandbox: *preserveSandbox,
+		LLMProvider:     *llmProvider,
 		LLMModel:        *llmModel,
+		ThinkingLevel:   *thinkingLevel,
 		RuntimeDir:      filepath.Join(storageRoot, "runtime"),
 	})
 	if err != nil {
 		return err
 	}
 
-	answer, err := oracle.Ask(context.Background(), *treeID, query)
+	requestID := fmt.Sprintf("cli-ask-%d", time.Now().UTC().UnixNano())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	go func() {
+		sig := <-sigCh
+		_ = oracle.CancelAskRequest(context.Background(), *indexID, requestID, fmt.Sprintf("interrupted by %s", sig))
+		cancel()
+	}()
+
+	answer, err := oracle.AskWithOptions(ctx, *indexID, query, prlmtree.AskOptions{RequestID: requestID})
 	if err != nil {
 		return err
 	}
 	if *jsonOut {
 		payload := struct {
-			TreeID  string   `json:"tree_id"`
+			IndexID string   `json:"index_id"`
 			Query   string   `json:"query"`
 			Content string   `json:"content"`
 			Visited []string `json:"visited,omitempty"`
 		}{
-			TreeID:  answer.TreeID,
+			IndexID: answer.TreeID,
 			Query:   answer.Query,
 			Content: strings.TrimSpace(answer.Content),
 			Visited: answer.Visited,

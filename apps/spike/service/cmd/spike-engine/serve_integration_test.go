@@ -114,8 +114,8 @@ func TestServeAskUsesStatelessSessions(t *testing.T) {
 	defer httpServer.Close()
 
 	payload := askRequest{
-		TreeID: "oracle-deep",
-		Query:  "Read hello.txt and return only the line starting with VALUE:",
+		IndexID: "oracle-deep",
+		Query:   "Read hello.txt and return only the line starting with VALUE:",
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
