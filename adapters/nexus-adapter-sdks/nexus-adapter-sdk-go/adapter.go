@@ -1,7 +1,7 @@
 // Package nexadapter provides shared infrastructure for building Nexus adapters.
 //
 // Instead of each adapter reimplementing operation dispatch, JSONL emission,
-// signal handling, NexusEvent construction, text chunking, and streaming
+// signal handling, record emission, text chunking, and streaming
 // protocol support, this SDK handles all of it. Adapter authors write only the
 // platform-specific logic.
 //
@@ -48,6 +48,15 @@ type AdapterOperations struct {
 
 	// DeliverySend delivers a message to the platform.
 	DeliverySend func(ctx context.Context, req SendRequest) (*DeliveryResult, error)
+
+	// DeliveryReact adds or removes a reaction on a platform message.
+	DeliveryReact func(ctx context.Context, req ReactRequest) (*DeliveryResult, error)
+
+	// DeliveryEdit updates an existing platform message in place.
+	DeliveryEdit func(ctx context.Context, req EditRequest) (*DeliveryResult, error)
+
+	// DeliveryDelete deletes an existing platform message/resource.
+	DeliveryDelete func(ctx context.Context, req DeleteRequest) (*DeliveryResult, error)
 
 	// EventBackfill emits historical events and exits when history is exhausted.
 	EventBackfill func(ctx context.Context, account string, since time.Time, emit EmitFunc) error
@@ -120,9 +129,15 @@ func Run(adapter Adapter) {
 		err = runMonitor(adapter, filteredArgs)
 	case "adapter.control.start":
 		err = runControl(adapter, filteredArgs)
-	case "delivery.send":
+	case "channels.send":
 		err = runSend(adapter, filteredArgs)
-	case "event.backfill":
+	case "channels.react":
+		err = runReact(adapter, filteredArgs)
+	case "channels.edit":
+		err = runEdit(adapter, filteredArgs)
+	case "channels.delete":
+		err = runDelete(adapter, filteredArgs)
+	case "events.backfill":
 		err = runBackfill(adapter, filteredArgs)
 	case "adapter.health":
 		err = runHealth(adapter, filteredArgs)
@@ -136,7 +151,7 @@ func Run(adapter Adapter) {
 		err = runSetup(adapter, filteredArgs, OpAdapterSetupStatus)
 	case "adapter.setup.cancel":
 		err = runSetup(adapter, filteredArgs, OpAdapterSetupCancel)
-	case "delivery.stream":
+	case "channels.stream":
 		err = runStream(adapter, filteredArgs)
 	case "help", "--help", "-h":
 		printUsage()
@@ -161,17 +176,20 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "Usage: %s <operation> [flags]\n\n", name)
 	fmt.Fprintf(os.Stderr, "Operations:\n")
 	fmt.Fprintf(os.Stderr, "  adapter.info\n")
-	fmt.Fprintf(os.Stderr, "  adapter.monitor.start --account <id>\n")
-	fmt.Fprintf(os.Stderr, "  adapter.control.start --account <id>\n")
-	fmt.Fprintf(os.Stderr, "  delivery.send --account <id> --to <target> --text \"...\"\n")
-	fmt.Fprintf(os.Stderr, "  event.backfill --account <id> --since <date>\n")
-	fmt.Fprintf(os.Stderr, "  adapter.health --account <id>\n")
+	fmt.Fprintf(os.Stderr, "  adapter.monitor.start --connection <id>\n")
+	fmt.Fprintf(os.Stderr, "  adapter.control.start --connection <id>\n")
+	fmt.Fprintf(os.Stderr, "  channels.send --connection <id> --target-json <json> --text \"...\"\n")
+	fmt.Fprintf(os.Stderr, "  channels.react --connection <id> --to <target> --message-id <id> --emoji <name> [--remove]\n")
+	fmt.Fprintf(os.Stderr, "  channels.edit --connection <id> --to <target> --message-id <id> --text \"...\"\n")
+	fmt.Fprintf(os.Stderr, "  channels.delete --connection <id> --target-json <json> --message-id <id>\n")
+	fmt.Fprintf(os.Stderr, "  events.backfill --connection <id> --since <date>\n")
+	fmt.Fprintf(os.Stderr, "  adapter.health --connection <id>\n")
 	fmt.Fprintf(os.Stderr, "  adapter.accounts.list\n")
 	fmt.Fprintf(os.Stderr, "  adapter.setup.start [--account <id>] [--session-id <id>] [--payload-json <json>]\n")
 	fmt.Fprintf(os.Stderr, "  adapter.setup.submit --session-id <id> [--account <id>] [--payload-json <json>]\n")
 	fmt.Fprintf(os.Stderr, "  adapter.setup.status --session-id <id> [--account <id>]\n")
 	fmt.Fprintf(os.Stderr, "  adapter.setup.cancel --session-id <id> [--account <id>]\n")
-	fmt.Fprintf(os.Stderr, "  delivery.stream --account <id>\n")
+	fmt.Fprintf(os.Stderr, "  channels.stream --connection <id>\n")
 	fmt.Fprintf(os.Stderr, "\nGlobal flags:\n")
 	fmt.Fprintf(os.Stderr, "  --verbose, -v                     Enable debug logging\n")
 }
@@ -195,7 +213,7 @@ func runMonitor(adapter Adapter, args []string) error {
 	}
 
 	fs := flag.NewFlagSet("adapter.monitor.start", flag.ContinueOnError)
-	account := fs.String("account", "", "Account ID")
+	connection := fs.String("connection", "", "Connection ID")
 	_ = fs.String("format", "jsonl", "Output format (always jsonl)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -205,8 +223,8 @@ func runMonitor(adapter Adapter, args []string) error {
 
 	emit := makeEmitFunc()
 
-	LogInfo("monitor starting for account %q", *account)
-	err := adapter.Operations.AdapterMonitorStart(ctx, *account, emit)
+	LogInfo("monitor starting for connection %q", *connection)
+	err := adapter.Operations.AdapterMonitorStart(ctx, *connection, emit)
 	if err != nil {
 		return fmt.Errorf("adapter.monitor.start: %w", err)
 	}
@@ -216,31 +234,48 @@ func runMonitor(adapter Adapter, args []string) error {
 
 func runSend(adapter Adapter, args []string) error {
 	if adapter.Operations.DeliverySend == nil {
-		return fmt.Errorf("delivery.send not supported by this adapter")
+		return fmt.Errorf("channels.send not supported by this adapter")
 	}
 
-	fs := flag.NewFlagSet("delivery.send", flag.ContinueOnError)
-	account := fs.String("account", "", "Account ID")
-	to := fs.String("to", "", "Target (email, phone, channel:id)")
+	fs := flag.NewFlagSet("channels.send", flag.ContinueOnError)
+	connection := fs.String("connection", "", "Connection ID")
+	targetJSON := fs.String("target-json", "", "Canonical delivery target JSON")
 	text := fs.String("text", "", "Message text")
 	media := fs.String("media", "", "Media file path")
 	caption := fs.String("caption", "", "Media caption")
-	replyTo := fs.String("reply-to", "", "Reply to event ID")
-	threadID := fs.String("thread", "", "Thread ID")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	ctx := signalContext()
 
+	var target DeliveryTarget
+	if raw := strings.TrimSpace(*targetJSON); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &target); err != nil {
+			return fmt.Errorf("--target-json must be a valid DeliveryTarget object: %w", err)
+		}
+	}
+	if trimmed := strings.TrimSpace(*connection); trimmed != "" {
+		if target.ConnectionID != "" && target.ConnectionID != trimmed {
+			return fmt.Errorf("--connection %q does not match target.connection_id %q", trimmed, target.ConnectionID)
+		}
+		target.ConnectionID = trimmed
+	}
+	if strings.TrimSpace(target.ConnectionID) == "" {
+		return fmt.Errorf("missing delivery target connection_id")
+	}
+
 	req := SendRequest{
-		Account:   *account,
-		To:        *to,
-		Text:      *text,
-		Media:     *media,
-		Caption:   *caption,
-		ReplyToID: *replyTo,
-		ThreadID:  *threadID,
+		Target:  target,
+		Text:    *text,
+		Media:   *media,
+		Caption: *caption,
+
+		// Deprecated compatibility fields derived from the canonical target.
+		Account:   target.ConnectionID,
+		To:        target.Channel.ContainerID,
+		ReplyToID: target.ReplyToID,
+		ThreadID:  target.Channel.ThreadID,
 	}
 
 	result, err := adapter.Operations.DeliverySend(ctx, req)
@@ -259,13 +294,147 @@ func runSend(adapter Adapter, args []string) error {
 	return writeJSON(result)
 }
 
-func runBackfill(adapter Adapter, args []string) error {
-	if adapter.Operations.EventBackfill == nil {
-		return fmt.Errorf("event.backfill not supported by this adapter")
+func runReact(adapter Adapter, args []string) error {
+	if adapter.Operations.DeliveryReact == nil {
+		return fmt.Errorf("channels.react not supported by this adapter")
 	}
 
-	fs := flag.NewFlagSet("event.backfill", flag.ContinueOnError)
-	account := fs.String("account", "", "Account ID")
+	fs := flag.NewFlagSet("channels.react", flag.ContinueOnError)
+	connection := fs.String("connection", "", "Connection ID")
+	to := fs.String("to", "", "Target (channel:id, chat:id, etc.)")
+	messageID := fs.String("message-id", "", "Target message ID")
+	emoji := fs.String("emoji", "", "Reaction emoji name")
+	remove := fs.Bool("remove", false, "Remove the reaction instead of adding it")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	ctx := signalContext()
+	req := ReactRequest{
+		Account:   *connection,
+		To:        *to,
+		MessageID: *messageID,
+		Emoji:     *emoji,
+		Remove:    *remove,
+	}
+
+	result, err := adapter.Operations.DeliveryReact(ctx, req)
+	if err != nil {
+		return writeJSON(&DeliveryResult{
+			Success: false,
+			Error: &DeliveryError{
+				Type:    "unknown",
+				Message: err.Error(),
+				Retry:   false,
+			},
+		})
+	}
+
+	return writeJSON(result)
+}
+
+func runEdit(adapter Adapter, args []string) error {
+	if adapter.Operations.DeliveryEdit == nil {
+		return fmt.Errorf("channels.edit not supported by this adapter")
+	}
+
+	fs := flag.NewFlagSet("channels.edit", flag.ContinueOnError)
+	connection := fs.String("connection", "", "Connection ID")
+	to := fs.String("to", "", "Target (channel:id, chat:id, etc.)")
+	messageID := fs.String("message-id", "", "Target message ID")
+	text := fs.String("text", "", "Replacement message text")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	ctx := signalContext()
+	req := EditRequest{
+		Account:   *connection,
+		To:        *to,
+		MessageID: *messageID,
+		Text:      *text,
+	}
+
+	result, err := adapter.Operations.DeliveryEdit(ctx, req)
+	if err != nil {
+		return writeJSON(&DeliveryResult{
+			Success: false,
+			Error: &DeliveryError{
+				Type:    "unknown",
+				Message: err.Error(),
+				Retry:   false,
+			},
+		})
+	}
+
+	return writeJSON(result)
+}
+
+func runDelete(adapter Adapter, args []string) error {
+	if adapter.Operations.DeliveryDelete == nil {
+		return fmt.Errorf("channels.delete not supported by this adapter")
+	}
+
+	fs := flag.NewFlagSet("channels.delete", flag.ContinueOnError)
+	connection := fs.String("connection", "", "Connection ID")
+	targetJSON := fs.String("target-json", "", "Canonical delivery target JSON")
+	messageID := fs.String("message-id", "", "Target message ID")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	ctx := signalContext()
+
+	var target DeliveryTarget
+	if raw := strings.TrimSpace(*targetJSON); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &target); err != nil {
+			return fmt.Errorf("--target-json must be a valid DeliveryTarget object: %w", err)
+		}
+	}
+	if trimmed := strings.TrimSpace(*connection); trimmed != "" {
+		if target.ConnectionID != "" && target.ConnectionID != trimmed {
+			return fmt.Errorf("--connection %q does not match target.connection_id %q", trimmed, target.ConnectionID)
+		}
+		target.ConnectionID = trimmed
+	}
+	if strings.TrimSpace(target.ConnectionID) == "" {
+		return fmt.Errorf("missing delivery target connection_id")
+	}
+	if strings.TrimSpace(*messageID) == "" {
+		return fmt.Errorf("missing required --message-id")
+	}
+
+	req := DeleteRequest{
+		Target:    target,
+		MessageID: *messageID,
+
+		// Deprecated compatibility fields derived from the canonical target.
+		Account: target.ConnectionID,
+		To:      target.Channel.ContainerID,
+	}
+
+	result, err := adapter.Operations.DeliveryDelete(ctx, req)
+	if err != nil {
+		return writeJSON(&DeliveryResult{
+			Success: false,
+			Error: &DeliveryError{
+				Type:    "unknown",
+				Message: err.Error(),
+				Retry:   false,
+			},
+		})
+	}
+
+	return writeJSON(result)
+}
+
+func runBackfill(adapter Adapter, args []string) error {
+	if adapter.Operations.EventBackfill == nil {
+		return fmt.Errorf("events.backfill not supported by this adapter")
+	}
+
+	fs := flag.NewFlagSet("events.backfill", flag.ContinueOnError)
+	connection := fs.String("connection", "", "Connection ID")
 	since := fs.String("since", "", "Backfill start date (ISO 8601 or YYYY-MM-DD)")
 	_ = fs.String("format", "jsonl", "Output format (always jsonl)")
 	if err := fs.Parse(args); err != nil {
@@ -280,10 +449,10 @@ func runBackfill(adapter Adapter, args []string) error {
 	ctx := signalContext()
 	emit := makeEmitFunc()
 
-	LogInfo("backfill starting for account %q since %s", *account, sinceTime.Format(time.RFC3339))
-	err = adapter.Operations.EventBackfill(ctx, *account, sinceTime, emit)
+	LogInfo("backfill starting for connection %q since %s", *connection, sinceTime.Format(time.RFC3339))
+	err = adapter.Operations.EventBackfill(ctx, *connection, sinceTime, emit)
 	if err != nil {
-		return fmt.Errorf("event.backfill: %w", err)
+		return fmt.Errorf("events.backfill: %w", err)
 	}
 	LogInfo("backfill completed")
 	return nil
@@ -295,18 +464,18 @@ func runHealth(adapter Adapter, args []string) error {
 	}
 
 	fs := flag.NewFlagSet("adapter.health", flag.ContinueOnError)
-	account := fs.String("account", "", "Account ID")
+	connection := fs.String("connection", "", "Connection ID")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	ctx := context.Background()
-	health, err := adapter.Operations.AdapterHealth(ctx, *account)
+	health, err := adapter.Operations.AdapterHealth(ctx, *connection)
 	if err != nil {
 		// Return structured health error rather than crashing
 		return writeJSON(&AdapterHealth{
 			Connected: false,
-			Account:   *account,
+			Account:   *connection,
 			Error:     err.Error(),
 		})
 	}
@@ -393,20 +562,20 @@ func runControl(adapter Adapter, args []string) error {
 	}
 
 	fs := flag.NewFlagSet("adapter.control.start", flag.ContinueOnError)
-	account := fs.String("account", "", "Account ID")
+	connection := fs.String("connection", "", "Connection ID")
 	_ = fs.String("format", "jsonl", "Output format (always jsonl)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if strings.TrimSpace(*account) == "" {
-		return fmt.Errorf("missing required flag: --account")
+	if strings.TrimSpace(*connection) == "" {
+		return fmt.Errorf("missing required flag: --connection")
 	}
 
 	ctx := signalContext()
 	session := NewControlSession(os.Stdin, os.Stdout)
 
-	LogInfo("control session starting for account %q", *account)
-	if err := adapter.Operations.AdapterControlStart(ctx, strings.TrimSpace(*account), session); err != nil {
+	LogInfo("control session starting for connection %q", *connection)
+	if err := adapter.Operations.AdapterControlStart(ctx, strings.TrimSpace(*connection), session); err != nil {
 		return fmt.Errorf("adapter.control.start: %w", err)
 	}
 	LogInfo("control session stopped cleanly")
@@ -415,11 +584,11 @@ func runControl(adapter Adapter, args []string) error {
 
 func runStream(adapter Adapter, args []string) error {
 	if adapter.Operations.DeliveryStream == nil {
-		return fmt.Errorf("delivery.stream not supported by this adapter")
+		return fmt.Errorf("channels.stream not supported by this adapter")
 	}
 
-	fs := flag.NewFlagSet("delivery.stream", flag.ContinueOnError)
-	_ = fs.String("account", "", "Account ID")
+	fs := flag.NewFlagSet("channels.stream", flag.ContinueOnError)
+	_ = fs.String("connection", "", "Connection ID")
 	_ = fs.String("format", "jsonl", "Output format (always jsonl)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -430,7 +599,7 @@ func runStream(adapter Adapter, args []string) error {
 	LogInfo("stream handler starting")
 	err := handleStream(ctx, adapter.Operations.DeliveryStream)
 	if err != nil {
-		return fmt.Errorf("delivery.stream: %w", err)
+		return fmt.Errorf("channels.stream: %w", err)
 	}
 	LogInfo("stream handler stopped cleanly")
 	return nil
@@ -444,10 +613,10 @@ func signalContext() context.Context {
 	return ctx
 }
 
-// makeEmitFunc creates an EmitFunc that writes NexusEvents as JSONL to stdout.
+// makeEmitFunc creates an EmitFunc that writes adapter records as JSONL to stdout.
 func makeEmitFunc() EmitFunc {
-	return func(event NexusEvent) {
-		if err := writeJSON(event); err != nil {
+	return func(record any) {
+		if err := writeJSON(record); err != nil {
 			LogError("emit error: %v", err)
 		}
 	}

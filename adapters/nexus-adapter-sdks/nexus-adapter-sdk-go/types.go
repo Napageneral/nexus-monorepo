@@ -45,6 +45,8 @@ type AdapterAuthField struct {
 }
 
 type AdapterAuthMethod struct {
+	ID string `json:"id,omitempty"`
+
 	Type string `json:"type"` // "oauth2" | "api_key" | "file_upload" | "custom_flow"
 
 	// Shared display metadata
@@ -79,15 +81,15 @@ const (
 	OpAdapterSetupSubmit  AdapterOperation = "adapter.setup.submit"
 	OpAdapterSetupStatus  AdapterOperation = "adapter.setup.status"
 	OpAdapterSetupCancel  AdapterOperation = "adapter.setup.cancel"
-	OpEventBackfill       AdapterOperation = "event.backfill"
-	OpDeliverySend        AdapterOperation = "delivery.send"
+	OpEventBackfill       AdapterOperation = "events.backfill"
+	OpDeliverySend        AdapterOperation = "channels.send"
 	OpAdapterHealth       AdapterOperation = "adapter.health"
 	OpAdapterAccountsList AdapterOperation = "adapter.accounts.list"
-	OpDeliveryStream      AdapterOperation = "delivery.stream"
-	OpDeliveryReact       AdapterOperation = "delivery.react"
-	OpDeliveryEdit        AdapterOperation = "delivery.edit"
-	OpDeliveryDelete      AdapterOperation = "delivery.delete"
-	OpDeliveryPoll        AdapterOperation = "delivery.poll"
+	OpDeliveryStream      AdapterOperation = "channels.stream"
+	OpDeliveryReact       AdapterOperation = "channels.react"
+	OpDeliveryEdit        AdapterOperation = "channels.edit"
+	OpDeliveryDelete      AdapterOperation = "channels.delete"
+	OpDeliveryPoll        AdapterOperation = "channels.poll"
 )
 
 // ChannelCapabilities describes what a channel supports. Reported by the
@@ -119,7 +121,42 @@ type ChannelCapabilities struct {
 	SupportsStreamingEdit bool `json:"supports_streaming_edit"` // Can pseudo-stream by editing messages
 }
 
-// --- NexusEvent (Inbound) ---
+// --- Canonical Inbound Records ---
+
+type AdapterInboundRecord struct {
+	Operation string                `json:"operation"`
+	Routing   AdapterInboundRouting `json:"routing"`
+	Payload   AdapterInboundPayload `json:"payload"`
+}
+
+type AdapterInboundRouting struct {
+	Adapter       string         `json:"adapter,omitempty"`
+	Platform      string         `json:"platform"`
+	ConnectionID  string         `json:"connection_id"`
+	SenderID      string         `json:"sender_id"`
+	SenderName    string         `json:"sender_name,omitempty"`
+	ReceiverID    string         `json:"receiver_id,omitempty"`
+	ReceiverName  string         `json:"receiver_name,omitempty"`
+	SpaceID       string         `json:"space_id,omitempty"`
+	SpaceName     string         `json:"space_name,omitempty"`
+	ContainerKind string         `json:"container_kind"`
+	ContainerID   string         `json:"container_id"`
+	ContainerName string         `json:"container_name,omitempty"`
+	ThreadID      string         `json:"thread_id,omitempty"`
+	ThreadName    string         `json:"thread_name,omitempty"`
+	ReplyToID     string         `json:"reply_to_id,omitempty"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
+}
+
+type AdapterInboundPayload struct {
+	ExternalRecordID string         `json:"external_record_id"`
+	Timestamp        int64          `json:"timestamp"`
+	Content          string         `json:"content"`
+	ContentType      string         `json:"content_type"`
+	Attachments      []Attachment   `json:"attachments,omitempty"`
+	Recipients       []string       `json:"recipients,omitempty"`
+	Metadata         map[string]any `json:"metadata,omitempty"`
+}
 
 // NexusEvent is the normalized event format that all adapters emit.
 // One JSON object per line on stdout (JSONL).
@@ -154,25 +191,55 @@ type NexusEvent struct {
 
 // Attachment represents a media attachment on an event.
 type Attachment struct {
-	ID          string `json:"id"`
-	Filename    string `json:"filename"`
-	ContentType string `json:"content_type"` // MIME type
-	SizeBytes   int64  `json:"size_bytes,omitempty"`
-	URL         string `json:"url,omitempty"`  // Remote URL
-	Path        string `json:"path,omitempty"` // Local file path
+	ID          string         `json:"id"`
+	Filename    string         `json:"filename,omitempty"`
+	MIMEType    string         `json:"mime_type"` // MIME type
+	MediaType   string         `json:"media_type,omitempty"`
+	Size        int64          `json:"size,omitempty"`
+	URL         string         `json:"url,omitempty"`        // Remote URL
+	LocalPath   string         `json:"local_path,omitempty"` // Local file path
+	ContentHash string         `json:"content_hash,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
 // --- Outbound Delivery ---
 
+type ChannelRef struct {
+	Platform      string `json:"platform"`
+	SpaceID       string `json:"space_id,omitempty"`
+	ContainerKind string `json:"container_kind,omitempty"`
+	ContainerID   string `json:"container_id,omitempty"`
+	ThreadID      string `json:"thread_id,omitempty"`
+}
+
+type DeliveryTarget struct {
+	ConnectionID string     `json:"connection_id"`
+	Channel      ChannelRef `json:"channel"`
+	ReplyToID    string     `json:"reply_to_id,omitempty"`
+}
+
 // SendRequest contains the parameters for a `send` command invocation.
 type SendRequest struct {
-	Account   string `json:"account"`
-	To        string `json:"to"` // Email, phone, channel:id, etc.
-	Text      string `json:"text,omitempty"`
-	Media     string `json:"media,omitempty"` // File path
-	Caption   string `json:"caption,omitempty"`
-	ReplyToID string `json:"reply_to_id,omitempty"` // Reply to event ID
+	Target  DeliveryTarget `json:"target"`
+	Text    string         `json:"text,omitempty"`
+	Media   string         `json:"media,omitempty"` // File path
+	Caption string         `json:"caption,omitempty"`
+
+	// Deprecated compatibility fields. New adapters should route from Target.
+	Account   string `json:"account,omitempty"`
+	To        string `json:"to,omitempty"`
+	ReplyToID string `json:"reply_to_id,omitempty"`
 	ThreadID  string `json:"thread_id,omitempty"`
+}
+
+// DeleteRequest contains the parameters for a `channels.delete` invocation.
+type DeleteRequest struct {
+	Target    DeliveryTarget `json:"target"`
+	MessageID string         `json:"message_id"`
+
+	// Deprecated compatibility fields. New adapters should route from Target.
+	Account string `json:"account,omitempty"`
+	To      string `json:"to,omitempty"`
 }
 
 // DeliveryResult is the structured output of a `send` command.
@@ -182,6 +249,23 @@ type DeliveryResult struct {
 	ChunksSent int            `json:"chunks_sent"`
 	TotalChars int            `json:"total_chars,omitempty"`
 	Error      *DeliveryError `json:"error,omitempty"`
+}
+
+// ReactRequest contains the parameters for a `channels.react` invocation.
+type ReactRequest struct {
+	Account   string `json:"account"`
+	To        string `json:"to"`
+	MessageID string `json:"message_id"`
+	Emoji     string `json:"emoji"`
+	Remove    bool   `json:"remove,omitempty"`
+}
+
+// EditRequest contains the parameters for a `channels.edit` invocation.
+type EditRequest struct {
+	Account   string `json:"account"`
+	To        string `json:"to"`
+	MessageID string `json:"message_id"`
+	Text      string `json:"text"`
 }
 
 // DeliveryError describes why a delivery failed.
@@ -270,10 +354,10 @@ type AdapterControlInvokeResultFrame struct {
 	Error     *AdapterControlInvokeError `json:"error,omitempty"`
 }
 
-// AdapterControlEventIngestFrame is sent adapter -> runtime to ingest canonical event envelopes.
-type AdapterControlEventIngestFrame struct {
-	Type  string         `json:"type"` // "event.ingest"
-	Event map[string]any `json:"event"`
+// AdapterControlRecordIngestFrame is sent adapter -> runtime to ingest canonical record envelopes.
+type AdapterControlRecordIngestFrame struct {
+	Type   string `json:"type"` // "record.ingest"
+	Record any    `json:"record"`
 }
 
 // --- Streaming Protocol ---
@@ -284,9 +368,9 @@ type StreamEvent struct {
 	Type string `json:"type"` // "stream_start", "token", "tool_status", "reasoning", "stream_end", "stream_error"
 
 	// stream_start
-	RunID        string          `json:"runId,omitempty"`
-	SessionLabel string          `json:"sessionLabel,omitempty"`
-	Target       *DeliveryTarget `json:"target,omitempty"`
+	RunID     string          `json:"runId,omitempty"`
+	SessionID string          `json:"session_id,omitempty"`
+	Target    *DeliveryTarget `json:"target,omitempty"`
 
 	// token, reasoning
 	Text string `json:"text,omitempty"`
@@ -303,15 +387,6 @@ type StreamEvent struct {
 	// stream_error
 	ErrorMsg string `json:"error,omitempty"`
 	Partial  bool   `json:"partial,omitempty"`
-}
-
-// DeliveryTarget identifies where to send a message during streaming.
-type DeliveryTarget struct {
-	Platform  string `json:"platform"`
-	AccountID string `json:"account_id"`
-	To        string `json:"to"`
-	ThreadID  string `json:"thread_id,omitempty"`
-	ReplyToID string `json:"reply_to_id,omitempty"`
 }
 
 // AdapterStreamStatus is emitted by the adapter on stdout during streaming.
