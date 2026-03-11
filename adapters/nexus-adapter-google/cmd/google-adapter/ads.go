@@ -68,7 +68,7 @@ func adsHealth(ctx context.Context, account string) (bool, map[string]any) {
 
 // --- Ads data fetching ---
 
-func fetchAdsMetricsSince(ctx context.Context, account string, since time.Time) ([]nexadapter.NexusEvent, time.Time, error) {
+func fetchAdsMetricsSince(ctx context.Context, account string, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 	resolved, err := resolveAccount(ctx, account, "ads")
 	if err != nil {
 		return nil, time.Time{}, err
@@ -87,30 +87,30 @@ func fetchAdsMetricsSince(ctx context.Context, account string, since time.Time) 
 		return nil, time.Time{}, fmt.Errorf("parse gog ads metrics response: %w", err)
 	}
 
-	var events []nexadapter.NexusEvent
+	var records []nexadapter.AdapterInboundRecord
 	for _, row := range resp.Metrics {
-		events = append(events, buildAdsMetricEvents(resolved, row)...)
+		records = append(records, buildAdsMetricRecords(resolved, row)...)
 	}
 
-	return events, time.Now(), nil
+	return records, time.Now(), nil
 }
 
-func buildAdsMetricEvents(account string, row adsMetricRow) []nexadapter.NexusEvent {
+func buildAdsMetricRecords(connectionID string, row adsMetricRow) []nexadapter.AdapterInboundRecord {
 	date := strings.TrimSpace(row.Date)
 	if date == "" {
 		date = time.Now().UTC().Format(adsDateLayout)
 	}
 
-	account, err := nexadapter.RequireAccount(account)
+	connectionID, err := nexadapter.RequireConnection(connectionID)
 	if err != nil {
-		nexadapter.LogError("ads metric events: %v", err)
+		nexadapter.LogError("ads metric records: %v", err)
 		return nil
 	}
 
 	timestamp := nexadapter.MetricTimestamp(date, nil)
 	baseID := strings.Join([]string{
 		adsPlatformID,
-		nexadapter.SafeIDToken(account),
+		nexadapter.SafeIDToken(connectionID),
 		nexadapter.SafeIDToken(date),
 		nexadapter.SafeIDToken(row.CampaignID),
 	}, ":")
@@ -132,32 +132,47 @@ func buildAdsMetricEvents(account string, row adsMetricRow) []nexadapter.NexusEv
 		values = append(values, metricValue{Name: "ad_cost_per_conversion", Value: row.Cost / row.Conversions})
 	}
 
-	events := make([]nexadapter.NexusEvent, 0, len(values))
+	records := make([]nexadapter.AdapterInboundRecord, 0, len(values))
 	for _, metric := range values {
 		if metric.Value < 0 {
 			continue
 		}
-		event := nexadapter.
-			NewEvent(adsPlatformID, fmt.Sprintf("%s:%s", baseID, nexadapter.SafeIDToken(metric.Name))).
-			WithTimestampUnixMs(timestamp).
-			WithContent(fmt.Sprintf("%s=%g", metric.Name, metric.Value)).
-			WithContentType("text").
-			WithSender(adsPlatformID, "Google Ads").
-			WithContainer("metrics", "channel").
-			WithAccount(account).
-			WithMetadata("adapter_id", adsPlatformID).
-			WithMetadata("metric_name", metric.Name).
-			WithMetadata("metric_value", metric.Value).
-			WithMetadata("date", date).
-			WithMetadata("campaign_id", row.CampaignID).
-			WithMetadata("campaign_name", row.CampaignName).
-			WithMetadata("ad_group_id", row.AdGroupID).
-			WithMetadata("ad_group_name", row.AdGroupName).
-			WithMetadata("ad_id", row.AdID).
-			WithMetadata("ad_name", row.AdName).
-			Build()
-		events = append(events, event)
+		record := nexadapter.AdapterInboundRecord{
+			Operation: "record.ingest",
+			Routing: nexadapter.AdapterInboundRouting{
+				Adapter:       adapterName,
+				Platform:      adsPlatformID,
+				ConnectionID:  connectionID,
+				SenderID:      adsPlatformID,
+				SenderName:    "Google Ads",
+				ContainerKind: "group",
+				ContainerID:   "metrics",
+				ContainerName: "Metrics",
+				ThreadID:      row.CampaignID,
+				ThreadName:    row.CampaignName,
+			},
+			Payload: nexadapter.AdapterInboundPayload{
+				ExternalRecordID: fmt.Sprintf("%s:%s", baseID, nexadapter.SafeIDToken(metric.Name)),
+				Timestamp:        timestamp,
+				Content:          fmt.Sprintf("%s=%g", metric.Name, metric.Value),
+				ContentType:      "text",
+				Metadata: map[string]any{
+					"connection_id": connectionID,
+					"adapter_id":    adsPlatformID,
+					"metric_name":   metric.Name,
+					"metric_value":  metric.Value,
+					"date":          date,
+					"campaign_id":   row.CampaignID,
+					"campaign_name": row.CampaignName,
+					"ad_group_id":   row.AdGroupID,
+					"ad_group_name": row.AdGroupName,
+					"ad_id":         row.AdID,
+					"ad_name":       row.AdName,
+				},
+			},
+		}
+		records = append(records, record)
 	}
 
-	return events
+	return records
 }

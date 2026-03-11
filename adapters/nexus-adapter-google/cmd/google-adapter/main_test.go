@@ -10,7 +10,7 @@ import (
 )
 
 func TestBuildAdsMetricEvents_EmitsCoreMetrics(t *testing.T) {
-	events := buildAdsMetricEvents("clinic@example.com", adsMetricRow{
+	records := buildAdsMetricRecords("google-conn", adsMetricRow{
 		Date:         "2026-02-26",
 		CampaignID:   "123",
 		CampaignName: "Brand Search",
@@ -20,23 +20,26 @@ func TestBuildAdsMetricEvents_EmitsCoreMetrics(t *testing.T) {
 		Conversions:  22,
 	})
 
-	if len(events) < 4 {
-		t.Fatalf("expected at least 4 metric events, got %d", len(events))
+	if len(records) < 4 {
+		t.Fatalf("expected at least 4 metric records, got %d", len(records))
 	}
-	first := events[0]
-	if first.Platform != adsPlatformID {
-		t.Fatalf("unexpected platform: %q", first.Platform)
+	first := records[0]
+	if first.Operation != "record.ingest" {
+		t.Fatalf("unexpected operation: %q", first.Operation)
 	}
-	if first.AccountID != "clinic@example.com" {
-		t.Fatalf("unexpected account: %q", first.AccountID)
+	if first.Routing.Platform != adsPlatformID {
+		t.Fatalf("unexpected platform: %q", first.Routing.Platform)
 	}
-	if got := first.Metadata["adapter_id"]; got != adsPlatformID {
+	if first.Routing.ConnectionID != "google-conn" {
+		t.Fatalf("unexpected connection: %q", first.Routing.ConnectionID)
+	}
+	if got := first.Payload.Metadata["adapter_id"]; got != adsPlatformID {
 		t.Fatalf("unexpected adapter_id metadata: %#v", got)
 	}
 }
 
 func TestBuildAdsMetricEvents_IncludesCPC(t *testing.T) {
-	events := buildAdsMetricEvents("test@example.com", adsMetricRow{
+	records := buildAdsMetricRecords("google-conn", adsMetricRow{
 		Date:        "2026-02-26",
 		CampaignID:  "456",
 		Cost:        100.0,
@@ -46,14 +49,14 @@ func TestBuildAdsMetricEvents_IncludesCPC(t *testing.T) {
 	})
 
 	// Should have 6 metrics: spend, impressions, clicks, conversions, CPC, CPA
-	if len(events) != 6 {
-		t.Fatalf("expected 6 metric events (including CPC and CPA), got %d", len(events))
+	if len(records) != 6 {
+		t.Fatalf("expected 6 metric records (including CPC and CPA), got %d", len(records))
 	}
 }
 
 func TestBuildPlacesMetricEvents(t *testing.T) {
-	events := buildPlacesMetricEvents(
-		"default",
+	records := buildPlacesMetricRecords(
+		"google-conn",
 		"ChIJ123",
 		"2026-02-26",
 		placeDetailsResponse{
@@ -70,16 +73,16 @@ func TestBuildPlacesMetricEvents(t *testing.T) {
 		},
 	)
 
-	if len(events) != 3 {
-		t.Fatalf("expected 3 metric events, got %d", len(events))
+	if len(records) != 3 {
+		t.Fatalf("expected 3 metric records, got %d", len(records))
 	}
-	if got := events[0].Platform; got != placesPlatformID {
+	if got := records[0].Routing.Platform; got != placesPlatformID {
 		t.Fatalf("unexpected platform: %q", got)
 	}
-	if got := events[0].Metadata["adapter_id"]; got != placesPlatformID {
+	if got := records[0].Payload.Metadata["adapter_id"]; got != placesPlatformID {
 		t.Fatalf("unexpected adapter_id metadata: %#v", got)
 	}
-	if got := events[0].Metadata["place_id"]; got != "ChIJ123" {
+	if got := records[0].Payload.Metadata["place_id"]; got != "ChIJ123" {
 		t.Fatalf("unexpected place_id metadata: %#v", got)
 	}
 }
@@ -88,9 +91,9 @@ func TestResolvePlaceCredentials_FromRuntimeContext(t *testing.T) {
 	dir := t.TempDir()
 	contextPath := filepath.Join(dir, "runtime-context.json")
 	payload := nexadapter.RuntimeContext{
-		Platform:  "google",
-		AccountID: "default",
-		Config:    map[string]any{},
+		Platform:     "google",
+		ConnectionID: "google-conn",
+		Config:       map[string]any{},
 		Credential: &nexadapter.RuntimeCredential{
 			Kind:  "token",
 			Value: "abc",
@@ -113,6 +116,9 @@ func TestResolvePlaceCredentials_FromRuntimeContext(t *testing.T) {
 	creds, err := resolvePlaceCredentials("clinic-account")
 	if err != nil {
 		t.Fatalf("resolvePlaceCredentials: %v", err)
+	}
+	if creds.Account != "google-conn" {
+		t.Fatalf("unexpected account: %q", creds.Account)
 	}
 	if creds.PlaceID != "ChIJ123" {
 		t.Fatalf("unexpected place id: %q", creds.PlaceID)
@@ -138,7 +144,7 @@ func TestInfoReturnsAllOperations(t *testing.T) {
 		nexadapter.OpAdapterInfo,
 		nexadapter.OpAdapterHealth,
 		nexadapter.OpAdapterAccountsList,
-		nexadapter.OpEventBackfill,
+		nexadapter.OpRecordsBackfill,
 		nexadapter.OpAdapterMonitorStart,
 	}
 	for _, op := range required {

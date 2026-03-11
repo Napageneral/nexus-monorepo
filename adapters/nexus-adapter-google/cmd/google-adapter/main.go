@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -15,7 +14,6 @@ const (
 	adapterName                  = "google-adapter"
 	adapterVersion               = "0.1.0"
 	platformID                   = "google"
-	defaultPlatformCredentialURL = "https://hub.glowbot.com/api/platform-credentials"
 )
 
 func main() {
@@ -24,8 +22,8 @@ func main() {
 			AdapterInfo:         info,
 			AdapterHealth:       health,
 			AdapterAccountsList: accounts,
-			EventBackfill:       backfill,
-			AdapterMonitorStart: monitor,
+			RecordsBackfill:     backfill,
+			MonitorStart:        monitor,
 		},
 	})
 }
@@ -39,7 +37,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			nexadapter.OpAdapterInfo,
 			nexadapter.OpAdapterHealth,
 			nexadapter.OpAdapterAccountsList,
-			nexadapter.OpEventBackfill,
+			nexadapter.OpRecordsBackfill,
 			nexadapter.OpAdapterMonitorStart,
 		},
 		CredentialService: "google",
@@ -47,6 +45,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 		Auth: &nexadapter.AdapterAuthManifest{
 			Methods: []nexadapter.AdapterAuthMethod{
 				{
+					ID:      "google_oauth_managed",
 					Type:    "oauth2",
 					Label:   "Connect with Google",
 					Icon:    "oauth",
@@ -56,9 +55,10 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 						"https://www.googleapis.com/auth/business.manage",
 					},
 					PlatformCredentials:   true,
-					PlatformCredentialURL: nexadapter.PlatformCredentialURL(defaultPlatformCredentialURL),
+					PlatformCredentialURL: nexadapter.PlatformCredentialURL(""),
 				},
 				{
+					ID:      "google_places_api_key",
 					Type:    "api_key",
 					Label:   "Quick Connect (Places API)",
 					Icon:    "key",
@@ -74,6 +74,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 					},
 				},
 				{
+					ID:          "google_csv_upload",
 					Type:        "file_upload",
 					Label:       "Upload CSV Export",
 					Icon:        "upload",
@@ -92,44 +93,34 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 }
 
 func accounts(ctx context.Context) ([]nexadapter.AdapterAccount, error) {
-	// Discover accounts that have ads or places services
-	out, err := runGogJSON(ctx, "", "auth", "list")
+	runtimeContext, err := nexadapter.LoadRuntimeContextFromEnv()
 	if err != nil {
-		// If gog auth fails, check for API-key-only places config
-		creds, credErr := resolvePlaceCredentials("default")
-		if credErr == nil && creds.PlaceID != "" {
-			return []nexadapter.AdapterAccount{
-				{ID: "default", DisplayName: "default (Places API)", Status: "ready"},
-			}, nil
-		}
-		return nil, err
+		return []nexadapter.AdapterAccount{}, nil
 	}
 
-	var resp gogAuthListResponse
-	if err := json.Unmarshal(out, &resp); err != nil {
-		return nil, fmt.Errorf("parse gog auth list: %w", err)
+	displayName := runtimeContext.ConnectionID
+	if runtimeContext.Credential != nil {
+		service := nexadapter.FirstNonBlank(
+			nexadapter.FieldValue(runtimeContext.Credential.Fields, "service"),
+			nexadapter.FieldValue(runtimeContext.Credential.Fields, "provider"),
+		)
+		if service != "" {
+			displayName = fmt.Sprintf("%s (%s)", runtimeContext.ConnectionID, service)
+		}
 	}
 
-	result := make([]nexadapter.AdapterAccount, 0, len(resp.Accounts))
-	for _, account := range resp.Accounts {
-		email := strings.ToLower(strings.TrimSpace(account.Email))
-		if email == "" {
-			continue
-		}
-		hasAds := containsService(account.Services, "ads")
-		hasPlaces := containsService(account.Services, "places")
-		if len(account.Services) > 0 && !hasAds && !hasPlaces {
-			continue
-		}
-		result = append(result, nexadapter.AdapterAccount{
-			ID:            email,
-			DisplayName:   email,
-			CredentialRef: fmt.Sprintf("google/%s", email),
+	credentialRef := "google/" + runtimeContext.ConnectionID
+	if runtimeContext.Credential != nil && strings.TrimSpace(runtimeContext.Credential.Ref) != "" {
+		credentialRef = runtimeContext.Credential.Ref
+	}
+	return []nexadapter.AdapterAccount{
+		{
+			ID:            runtimeContext.ConnectionID,
+			DisplayName:   displayName,
+			CredentialRef: credentialRef,
 			Status:        "ready",
-		})
-	}
-
-	return result, nil
+		},
+	}, nil
 }
 
 func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, error) {
@@ -163,13 +154,13 @@ func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, err
 
 	displayAccount := strings.TrimSpace(account)
 	if displayAccount == "" {
-		displayAccount = "default"
+		displayAccount = "unknown"
 	}
 
 	h := &nexadapter.AdapterHealth{
-		Connected: anyConnected,
-		Account:   displayAccount,
-		Details:   details,
+		Connected:    anyConnected,
+		ConnectionID: displayAccount,
+		Details:      details,
 	}
 	if anyConnected {
 		h.LastEventAt = time.Now().UnixMilli()
@@ -221,9 +212,9 @@ func monitor(ctx context.Context, account string, emit nexadapter.EmitFunc) erro
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := nexadapter.PollMonitor(nexadapter.PollConfig{
+		err := nexadapter.PollMonitor(nexadapter.PollConfig[nexadapter.AdapterInboundRecord]{
 			Interval: 6 * time.Hour,
-			Fetch: func(ctx context.Context, since time.Time) ([]nexadapter.NexusEvent, time.Time, error) {
+			Fetch: func(ctx context.Context, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 				return fetchAdsMetricsSince(ctx, account, since)
 			},
 			MaxConsecutiveErrors: 5,
@@ -238,9 +229,9 @@ func monitor(ctx context.Context, account string, emit nexadapter.EmitFunc) erro
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := nexadapter.PollMonitor(nexadapter.PollConfig{
+		err := nexadapter.PollMonitor(nexadapter.PollConfig[nexadapter.AdapterInboundRecord]{
 			Interval: 24 * time.Hour,
-			Fetch: func(ctx context.Context, _ time.Time) ([]nexadapter.NexusEvent, time.Time, error) {
+			Fetch: func(ctx context.Context, _ time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 				return fetchPlacesMetrics(ctx, account)
 			},
 			MaxConsecutiveErrors: 5,

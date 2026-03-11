@@ -53,11 +53,9 @@ func placesHealth(ctx context.Context, creds googleCredentials) (bool, map[strin
 // --- Places credential resolution ---
 
 func resolvePlaceCredentials(account string) (googleCredentials, error) {
-	account, err := nexadapter.RequireAccount(account)
+	account, err := nexadapter.RequireConnection(account)
 	if err != nil {
-		// Places can work with just a place_id and no account context,
-		// so we allow empty account if place_id is available.
-		account = "default"
+		return googleCredentials{}, err
 	}
 
 	placeID := ""
@@ -66,6 +64,9 @@ func resolvePlaceCredentials(account string) (googleCredentials, error) {
 	// Try runtime context first
 	runtimeCtx, ctxErr := nexadapter.LoadRuntimeContextFromEnv()
 	if ctxErr == nil && runtimeCtx != nil && runtimeCtx.Credential != nil {
+		if strings.TrimSpace(runtimeCtx.ConnectionID) != "" {
+			account = runtimeCtx.ConnectionID
+		}
 		placeID = nexadapter.FirstNonBlank(
 			nexadapter.FieldValue(runtimeCtx.Credential.Fields, "place_id"),
 			nexadapter.FieldValue(runtimeCtx.Credential.Fields, "placeId"),
@@ -94,7 +95,7 @@ func resolvePlaceCredentials(account string) (googleCredentials, error) {
 
 // --- Places data fetching ---
 
-func fetchPlacesMetrics(ctx context.Context, account string) ([]nexadapter.NexusEvent, time.Time, error) {
+func fetchPlacesMetrics(ctx context.Context, account string) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 	creds, err := resolvePlaceCredentials(account)
 	if err != nil {
 		return nil, time.Time{}, err
@@ -110,8 +111,8 @@ func fetchPlacesMetrics(ctx context.Context, account string) ([]nexadapter.Nexus
 	}
 
 	date := time.Now().UTC().Format("2006-01-02")
-	events := buildPlacesMetricEvents(creds.Account, creds.PlaceID, date, details, reviews)
-	return events, time.Now(), nil
+	records := buildPlacesMetricRecords(creds.Account, creds.PlaceID, date, details, reviews)
+	return records, time.Now(), nil
 }
 
 func fetchPlaceDetails(ctx context.Context, creds googleCredentials) (placeDetailsResponse, error) {
@@ -154,13 +155,18 @@ func fetchPlaceReviews(ctx context.Context, creds googleCredentials) (placeRevie
 	return resp, nil
 }
 
-func buildPlacesMetricEvents(
-	account string,
+func buildPlacesMetricRecords(
+	connectionID string,
 	placeID string,
 	date string,
 	details placeDetailsResponse,
 	reviews placeReviewsResponse,
-) []nexadapter.NexusEvent {
+) []nexadapter.AdapterInboundRecord {
+	connectionID, err := nexadapter.RequireConnection(connectionID)
+	if err != nil {
+		nexadapter.LogError("places metric records: %v", err)
+		return nil
+	}
 	placeToken := nexadapter.SafeIDToken(placeID)
 	timestamp := nexadapter.MetricTimestamp(date, nil)
 	rating := floatFromAny(details.Place["rating"])
@@ -177,32 +183,47 @@ func buildPlacesMetricEvents(
 		{Name: "reviews_new", Value: reviewSampleCount},
 	}
 
-	events := make([]nexadapter.NexusEvent, 0, len(values))
+	records := make([]nexadapter.AdapterInboundRecord, 0, len(values))
 	for _, metric := range values {
 		if metric.Value < 0 {
 			continue
 		}
-		eventID := fmt.Sprintf("%s:%s:%s:%s",
+		recordID := fmt.Sprintf("%s:%s:%s:%s",
 			placesPlatformID, placeToken,
 			nexadapter.SafeIDToken(date),
 			nexadapter.SafeIDToken(metric.Name))
-		event := nexadapter.
-			NewEvent(placesPlatformID, eventID).
-			WithTimestampUnixMs(timestamp).
-			WithContent(fmt.Sprintf("%s=%g", metric.Name, metric.Value)).
-			WithContentType("text").
-			WithSender(placesPlatformID, "Google Business Profile").
-			WithContainer("metrics", "channel").
-			WithAccount(account).
-			WithMetadata("adapter_id", placesPlatformID).
-			WithMetadata("place_id", placeID).
-			WithMetadata("date", date).
-			WithMetadata("metric_name", metric.Name).
-			WithMetadata("metric_value", metric.Value).
-			Build()
-		events = append(events, event)
+		record := nexadapter.AdapterInboundRecord{
+			Operation: "record.ingest",
+			Routing: nexadapter.AdapterInboundRouting{
+				Adapter:       adapterName,
+				Platform:      placesPlatformID,
+				ConnectionID:  connectionID,
+				SenderID:      placesPlatformID,
+				SenderName:    "Google Business Profile",
+				ContainerKind: "group",
+				ContainerID:   "metrics",
+				ContainerName: "Metrics",
+				ThreadID:      placeID,
+				ThreadName:    placeID,
+			},
+			Payload: nexadapter.AdapterInboundPayload{
+				ExternalRecordID: recordID,
+				Timestamp:        timestamp,
+				Content:          fmt.Sprintf("%s=%g", metric.Name, metric.Value),
+				ContentType:      "text",
+				Metadata: map[string]any{
+					"connection_id": connectionID,
+					"adapter_id":    placesPlatformID,
+					"place_id":      placeID,
+					"date":          date,
+					"metric_name":   metric.Name,
+					"metric_value":  metric.Value,
+				},
+			},
+		}
+		records = append(records, record)
 	}
-	return events
+	return records
 }
 
 // --- Type conversion helpers (for untyped JSON responses) ---

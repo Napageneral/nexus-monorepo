@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	nexadapter "github.com/nexus-project/adapter-sdk-go"
@@ -56,6 +57,70 @@ func runGogJSON(ctx context.Context, account string, args ...string) ([]byte, er
 	return nil, err
 }
 
+func ensureGogRuntimeAuth(ctx context.Context, account string) error {
+	account, err := nexadapter.RequireConnection(account)
+	if err != nil {
+		return err
+	}
+
+	runtimeContext, err := nexadapter.LoadRuntimeContextFromEnv()
+	if err != nil || runtimeContext == nil || runtimeContext.Credential == nil {
+		return nil
+	}
+	if strings.TrimSpace(runtimeContext.ConnectionID) != account {
+		return nil
+	}
+
+	refreshToken := nexadapter.FirstNonBlank(
+		nexadapter.FieldValue(runtimeContext.Credential.Fields, "refresh_token"),
+		nexadapter.FieldValue(runtimeContext.Credential.Fields, "refreshToken"),
+	)
+	if refreshToken == "" {
+		return nil
+	}
+
+	payload := map[string]any{
+		"email":         account,
+		"refresh_token": refreshToken,
+	}
+	if accessToken := nexadapter.FirstNonBlank(
+		nexadapter.FieldValue(runtimeContext.Credential.Fields, "access_token"),
+		nexadapter.FieldValue(runtimeContext.Credential.Fields, "accessToken"),
+		runtimeContext.Credential.Value,
+	); accessToken != "" {
+		payload["access_token"] = accessToken
+	}
+	if expiresAt := nexadapter.FirstNonBlank(
+		nexadapter.FieldValue(runtimeContext.Credential.Fields, "expires_at"),
+		nexadapter.FieldValue(runtimeContext.Credential.Fields, "expiresAt"),
+	); expiresAt != "" {
+		payload["expires_at"] = expiresAt
+	}
+
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal gog token payload: %w", err)
+	}
+
+	tempDir, err := os.MkdirTemp("", "nexus-gog-token-*")
+	if err != nil {
+		return fmt.Errorf("create gog token temp dir: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	tokenPath := filepath.Join(tempDir, "token.json")
+	if err := os.WriteFile(tokenPath, raw, 0o600); err != nil {
+		return fmt.Errorf("write gog token file: %w", err)
+	}
+
+	cmd := exec.CommandContext(ctx, gogCommand(), "auth", "tokens", "import", tokenPath, "--force", "--json")
+	cmd.Env = os.Environ()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("gog auth tokens import failed: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 // containsService checks if a service list contains the target (case-insensitive).
 func containsService(services []string, target string) bool {
 	for _, service := range services {
@@ -70,8 +135,16 @@ func containsService(services []string, target string) bool {
 // If account is provided, normalizes and returns it.
 // If empty, auto-discovers from gog auth list (filtering by service).
 func resolveAccount(ctx context.Context, account string, service string) (string, error) {
+	if runtimeContext, err := nexadapter.LoadRuntimeContextFromEnv(); err == nil && runtimeContext != nil {
+		if strings.TrimSpace(runtimeContext.ConnectionID) != "" {
+			account = runtimeContext.ConnectionID
+		}
+	}
 	normalized := strings.ToLower(strings.TrimSpace(account))
 	if normalized != "" {
+		if err := ensureGogRuntimeAuth(ctx, normalized); err != nil {
+			return "", err
+		}
 		return normalized, nil
 	}
 	list, err := discoverAccounts(ctx, service)
