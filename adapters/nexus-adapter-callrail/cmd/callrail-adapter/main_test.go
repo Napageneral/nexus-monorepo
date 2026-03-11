@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -8,7 +11,7 @@ import (
 	nexadapter "github.com/nexus-project/adapter-sdk-go"
 )
 
-func TestBuildCallMetricEvents_EmitsCoreMetrics(t *testing.T) {
+func TestBuildCallMetricRecords_EmitsCoreMetrics(t *testing.T) {
 	m := &callMetrics{
 		TotalCalls:     25,
 		AnsweredCalls:  20,
@@ -20,44 +23,46 @@ func TestBuildCallMetricEvents_EmitsCoreMetrics(t *testing.T) {
 		QualifiedLeads: 7,
 		ConvertedLeads: 3,
 	}
-	events := buildCallMetricEvents("test-account", "company-123", "2026-02-26", m)
+	records := buildCallMetricRecords("test-connection", "company-123", "2026-02-26", m)
 
 	// Should have at least: calls_total, calls_answered, calls_missed, calls_first_time,
 	// calls_duration_avg, leads_qualified, leads_converted + 2 source + 1 campaign = 10
-	if len(events) < 7 {
-		t.Fatalf("expected at least 7 metric events, got %d", len(events))
+	if len(records) < 7 {
+		t.Fatalf("expected at least 7 metric records, got %d", len(records))
 	}
 
-	// Check first event is calls_total.
-	first := events[0]
-	if first.Platform != platformID {
-		t.Fatalf("unexpected platform: %q", first.Platform)
+	first := records[0]
+	if first.Operation != "record.ingest" {
+		t.Fatalf("unexpected operation: %q", first.Operation)
 	}
-	if first.AccountID != "test-account" {
-		t.Fatalf("unexpected account: %q", first.AccountID)
+	if first.Routing.Platform != platformID {
+		t.Fatalf("unexpected platform: %q", first.Routing.Platform)
 	}
-	if got := first.Metadata["adapter_id"]; got != platformID {
+	if first.Routing.ConnectionID != "test-connection" {
+		t.Fatalf("unexpected connection: %q", first.Routing.ConnectionID)
+	}
+	if got := first.Payload.Metadata["adapter_id"]; got != platformID {
 		t.Fatalf("unexpected adapter_id metadata: %#v", got)
 	}
-	if got := first.Metadata["clinic_id"]; got != "company-123" {
+	if got := first.Payload.Metadata["clinic_id"]; got != "company-123" {
 		t.Fatalf("expected clinic_id metadata, got: %#v", got)
 	}
-	if first.Metadata["metric_name"] != "calls_total" {
-		t.Fatalf("first event should be calls_total, got: %v", first.Metadata["metric_name"])
+	if first.Payload.Metadata["metric_name"] != "calls_total" {
+		t.Fatalf("first record should be calls_total, got: %v", first.Payload.Metadata["metric_name"])
 	}
 }
 
-func TestBuildCallMetricEvents_NoCompanyID(t *testing.T) {
+func TestBuildCallMetricRecords_NoCompanyID(t *testing.T) {
 	m := &callMetrics{
 		TotalCalls: 5,
 		BySource:   map[string]int{},
 		ByCampaign: map[string]int{},
 	}
-	events := buildCallMetricEvents("acct", "", "2026-01-01", m)
+	records := buildCallMetricRecords("conn-123", "", "2026-01-01", m)
 
-	for _, event := range events {
-		if _, hasClinicID := event.Metadata["clinic_id"]; hasClinicID {
-			t.Fatal("events without company_id should not have clinic_id metadata")
+	for _, record := range records {
+		if _, hasClinicID := record.Payload.Metadata["clinic_id"]; hasClinicID {
+			t.Fatal("records without company_id should not have clinic_id metadata")
 		}
 	}
 }
@@ -209,5 +214,42 @@ func TestAnyToInt(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("anyToInt(%v) = %d, want %d", tt.input, got, tt.want)
 		}
+	}
+}
+
+func TestAccountsUsesRuntimeConnectionID(t *testing.T) {
+	dir := t.TempDir()
+	contextPath := filepath.Join(dir, "runtime-context.json")
+	payload := nexadapter.RuntimeContext{
+		Platform:     platformID,
+		ConnectionID: "callrail-live-conn",
+		Config:       map[string]any{},
+		Credential: &nexadapter.RuntimeCredential{
+			Kind: "api_key",
+			Value: "token",
+			Ref:  "callrail/callrail-live-conn",
+			Fields: map[string]string{
+				"company_id": "COM123",
+			},
+		},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal context: %v", err)
+	}
+	if err := os.WriteFile(contextPath, raw, 0o600); err != nil {
+		t.Fatalf("write context: %v", err)
+	}
+	t.Setenv(nexadapter.AdapterContextEnvVar, contextPath)
+
+	accountsList, err := accounts(nil)
+	if err != nil {
+		t.Fatalf("accounts: %v", err)
+	}
+	if len(accountsList) != 1 {
+		t.Fatalf("expected 1 account, got %d", len(accountsList))
+	}
+	if accountsList[0].ID != "callrail-live-conn" {
+		t.Fatalf("unexpected account id: %q", accountsList[0].ID)
 	}
 }

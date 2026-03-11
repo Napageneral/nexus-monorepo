@@ -96,8 +96,8 @@ func main() {
 			AdapterInfo:          info,
 			AdapterHealth:        health,
 			AdapterAccountsList:  accounts,
-			EventBackfill:        backfill,
-			AdapterMonitorStart:  monitor,
+			RecordsBackfill:      backfill,
+			MonitorStart:         monitor,
 		},
 	})
 }
@@ -115,7 +115,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			nexadapter.OpAdapterInfo,
 			nexadapter.OpAdapterHealth,
 			nexadapter.OpAdapterAccountsList,
-			nexadapter.OpEventBackfill,
+			nexadapter.OpRecordsBackfill,
 			nexadapter.OpAdapterMonitorStart,
 		},
 		CredentialService: "callrail",
@@ -123,6 +123,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 		Auth: &nexadapter.AdapterAuthManifest{
 			Methods: []nexadapter.AdapterAuthMethod{
 				{
+					ID:      "callrail_api_token",
 					Type:    "api_key",
 					Label:   "Enter API Token",
 					Icon:    "key",
@@ -152,6 +153,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 					},
 				},
 				{
+					ID:          "callrail_csv_upload",
 					Type:        "file_upload",
 					Label:       "Upload CSV Export",
 					Icon:        "upload",
@@ -182,32 +184,49 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 }
 
 func accounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {
+	runtimeContext, err := nexadapter.LoadRuntimeContextFromEnv()
+	if err != nil {
+		return []nexadapter.AdapterAccount{}, nil
+	}
+
+	displayName := runtimeContext.ConnectionID
+	if runtimeContext.Credential != nil {
+		companyID := nexadapter.FieldValue(runtimeContext.Credential.Fields, "company_id")
+		if companyID != "" {
+			displayName = fmt.Sprintf("%s (%s)", runtimeContext.ConnectionID, companyID)
+		}
+	}
+
+	credentialRef := "callrail/" + runtimeContext.ConnectionID
+	if runtimeContext.Credential != nil && strings.TrimSpace(runtimeContext.Credential.Ref) != "" {
+		credentialRef = runtimeContext.Credential.Ref
+	}
 	return []nexadapter.AdapterAccount{
 		{
-			ID:            "default",
-			DisplayName:   "default",
-			CredentialRef: "callrail/default",
+			ID:            runtimeContext.ConnectionID,
+			DisplayName:   displayName,
+			CredentialRef: credentialRef,
 			Status:        "ready",
 		},
 	}, nil
 }
 
 func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, error) {
-	account, err := nexadapter.RequireAccount(account)
+	account, err := nexadapter.RequireConnection(account)
 	if err != nil {
 		return &nexadapter.AdapterHealth{
-			Connected: false,
-			Account:   account,
-			Error:     err.Error(),
+			Connected:    false,
+			ConnectionID: account,
+			Error:        err.Error(),
 		}, nil
 	}
 
 	creds, err := resolveCallRailCredentials(account)
 	if err != nil {
 		return &nexadapter.AdapterHealth{
-			Connected: false,
-			Account:   account,
-			Error:     err.Error(),
+			Connected:    false,
+			ConnectionID: account,
+			Error:        err.Error(),
 		}, nil
 	}
 
@@ -217,9 +236,9 @@ func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, err
 	var payload callsResponse
 	if err := callRailGetJSON(ctx, creds, fmt.Sprintf("/v3/a/%s/calls.json", creds.AccountID), params, &payload); err != nil {
 		return &nexadapter.AdapterHealth{
-			Connected: false,
-			Account:   creds.AccountID,
-			Error:     err.Error(),
+			Connected:    false,
+			ConnectionID: account,
+			Error:        err.Error(),
 		}, nil
 	}
 
@@ -232,15 +251,15 @@ func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, err
 	}
 
 	return &nexadapter.AdapterHealth{
-		Connected:   true,
-		Account:     creds.AccountID,
-		LastEventAt: time.Now().UnixMilli(),
-		Details:     details,
+		Connected:    true,
+		ConnectionID: account,
+		LastEventAt:  time.Now().UnixMilli(),
+		Details:      details,
 	}, nil
 }
 
 func backfill(ctx context.Context, account string, since time.Time, emit nexadapter.EmitFunc) error {
-	account, err := nexadapter.RequireAccount(account)
+	account, err := nexadapter.RequireConnection(account)
 	if err != nil {
 		return err
 	}
@@ -255,13 +274,13 @@ func backfill(ctx context.Context, account string, since time.Time, emit nexadap
 }
 
 func monitor(ctx context.Context, account string, emit nexadapter.EmitFunc) error {
-	account, err := nexadapter.RequireAccount(account)
+	account, err := nexadapter.RequireConnection(account)
 	if err != nil {
 		return err
 	}
-	return nexadapter.PollMonitor(nexadapter.PollConfig{
+	return nexadapter.PollMonitor(nexadapter.PollConfig[nexadapter.AdapterInboundRecord]{
 		Interval: 6 * time.Hour,
-		Fetch: func(ctx context.Context, since time.Time) ([]nexadapter.NexusEvent, time.Time, error) {
+		Fetch: func(ctx context.Context, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 			return fetchCallRailMetricsSince(ctx, account, since)
 		},
 		MaxConsecutiveErrors: 5,
@@ -275,7 +294,7 @@ func monitor(ctx context.Context, account string, emit nexadapter.EmitFunc) erro
 // fetchCallRailMetricsSince fetches calls since the given time across all
 // discovered companies (multi-location). If a specific company_id is
 // configured, only that company is included.
-func fetchCallRailMetricsSince(ctx context.Context, account string, since time.Time) ([]nexadapter.NexusEvent, time.Time, error) {
+func fetchCallRailMetricsSince(ctx context.Context, account string, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 	creds, err := resolveCallRailCredentials(account)
 	if err != nil {
 		return nil, time.Time{}, err
@@ -306,11 +325,11 @@ func fetchCallRailMetricsSince(ctx context.Context, account string, since time.T
 			return nil, time.Time{}, err
 		}
 		metrics := aggregateCallsByDate(calls)
-		events := buildAllCallMetricEvents(creds.AccountID, "", metrics)
-		return events, time.Now(), nil
+		records := buildAllCallMetricRecords(account, "", metrics)
+		return records, time.Now(), nil
 	}
 
-	var allEvents []nexadapter.NexusEvent
+	var allRecords []nexadapter.AdapterInboundRecord
 	for _, companyID := range companyIDs {
 		calls, err := fetchCallsForDateRange(ctx, creds, from, to, companyID)
 		if err != nil {
@@ -318,11 +337,11 @@ func fetchCallRailMetricsSince(ctx context.Context, account string, since time.T
 			continue
 		}
 		metrics := aggregateCallsByDate(calls)
-		events := buildAllCallMetricEvents(creds.AccountID, companyID, metrics)
-		allEvents = append(allEvents, events...)
+		records := buildAllCallMetricRecords(account, companyID, metrics)
+		allRecords = append(allRecords, records...)
 	}
 
-	return allEvents, time.Now(), nil
+	return allRecords, time.Now(), nil
 }
 
 // fetchCompanies discovers all companies (locations) for the account.
@@ -439,23 +458,21 @@ func aggregateCallsByDate(calls []callRecord) map[string]*callMetrics {
 	return metrics
 }
 
-func buildAllCallMetricEvents(account string, companyID string, metricsByDate map[string]*callMetrics) []nexadapter.NexusEvent {
+func buildAllCallMetricRecords(connectionID string, companyID string, metricsByDate map[string]*callMetrics) []nexadapter.AdapterInboundRecord {
 	dates := sortedKeys(metricsByDate)
-	var events []nexadapter.NexusEvent
+	var records []nexadapter.AdapterInboundRecord
 	for _, date := range dates {
 		m := metricsByDate[date]
-		events = append(events, buildCallMetricEvents(account, companyID, date, m)...)
+		records = append(records, buildCallMetricRecords(connectionID, companyID, date, m)...)
 	}
-	return events
+	return records
 }
 
-func buildCallMetricEvents(account string, companyID string, date string, m *callMetrics) []nexadapter.NexusEvent {
-	// Caller should have validated, but add safety check
-	var err error
-	account, err = nexadapter.RequireAccount(account)
+func buildCallMetricRecords(connectionID string, companyID string, date string, m *callMetrics) []nexadapter.AdapterInboundRecord {
+	connectionID, err := nexadapter.RequireConnection(connectionID)
 	if err != nil {
-		nexadapter.LogError("invalid account in buildCallMetricEvents: %v", err)
-		account = "default" // fallback for safety
+		nexadapter.LogError("invalid connection in buildCallMetricRecords: %v", err)
+		return nil
 	}
 	timestamp := nexadapter.MetricTimestamp(date, nil)
 
@@ -505,7 +522,7 @@ func buildCallMetricEvents(account string, companyID string, date string, m *cal
 		_ = campaign // used in event metadata below
 	}
 
-	events := make([]nexadapter.NexusEvent, 0, len(values))
+	records := make([]nexadapter.AdapterInboundRecord, 0, len(values))
 
 	// Core metrics (non-source/campaign).
 	for _, metric := range values {
@@ -515,73 +532,119 @@ func buildCallMetricEvents(account string, companyID string, date string, m *cal
 		if metric.name == "calls_by_source" || metric.name == "calls_by_campaign" {
 			continue // handled separately below
 		}
-		eventID := fmt.Sprintf("%s:%s:%s:%s:%s", platformID, strings.ToLower(nexadapter.SafeIDToken(account)), strings.ToLower(nexadapter.SafeIDToken(date)), companyToken, strings.ToLower(nexadapter.SafeIDToken(metric.name)))
-		event := nexadapter.
-			NewEvent(platformID, eventID).
-			WithTimestampUnixMs(timestamp).
-			WithContent(fmt.Sprintf("%s=%g", metric.name, metric.value)).
-			WithContentType("text").
-			WithSender(platformID, "CallRail").
-			WithContainer("metrics", "channel").
-			WithAccount(account).
-			WithMetadata("adapter_id", platformID).
-			WithMetadata("date", date).
-			WithMetadata("metric_name", metric.name).
-			WithMetadata("metric_value", metric.value).
-			Build()
-		if companyID != "" {
-			event.Metadata["clinic_id"] = companyID
+		metadata := map[string]any{
+			"connection_id": connectionID,
+			"adapter_id":    platformID,
+			"date":          date,
+			"metric_name":   metric.name,
+			"metric_value":  metric.value,
 		}
-		events = append(events, event)
+		if companyID != "" {
+			metadata["clinic_id"] = companyID
+			metadata["metadata_key"] = companyID
+		}
+		record := nexadapter.AdapterInboundRecord{
+			Operation: "record.ingest",
+			Routing: nexadapter.AdapterInboundRouting{
+				Adapter:       adapterName,
+				Platform:      platformID,
+				ConnectionID:  connectionID,
+				SenderID:      platformID,
+				SenderName:    "CallRail",
+				ContainerKind: "group",
+				ContainerID:   "metrics",
+				ContainerName: "Metrics",
+				ThreadID:      companyID,
+				ThreadName:    companyID,
+			},
+			Payload: nexadapter.AdapterInboundPayload{
+				ExternalRecordID: fmt.Sprintf("%s:%s:%s:%s:%s", platformID, strings.ToLower(nexadapter.SafeIDToken(connectionID)), strings.ToLower(nexadapter.SafeIDToken(date)), companyToken, strings.ToLower(nexadapter.SafeIDToken(metric.name))),
+				Timestamp:        timestamp,
+				Content:          fmt.Sprintf("%s=%g", metric.name, metric.value),
+				ContentType:      "text",
+				Metadata:         metadata,
+			},
+		}
+		records = append(records, record)
 	}
 
 	// Per-source metrics.
 	for source, count := range m.BySource {
-		eventID := fmt.Sprintf("%s:%s:%s:%s:calls_by_source:%s", platformID, strings.ToLower(nexadapter.SafeIDToken(account)), strings.ToLower(nexadapter.SafeIDToken(date)), companyToken, strings.ToLower(nexadapter.SafeIDToken(source)))
-		event := nexadapter.
-			NewEvent(platformID, eventID).
-			WithTimestampUnixMs(timestamp).
-			WithContent(fmt.Sprintf("calls_by_source=%d", count)).
-			WithContentType("text").
-			WithSender(platformID, "CallRail").
-			WithContainer("metrics", "channel").
-			WithAccount(account).
-			WithMetadata("adapter_id", platformID).
-			WithMetadata("date", date).
-			WithMetadata("metric_name", "calls_by_source").
-			WithMetadata("metric_value", float64(count)).
-			WithMetadata("metadata_key", source).
-			Build()
-		if companyID != "" {
-			event.Metadata["clinic_id"] = companyID
+		metadata := map[string]any{
+			"connection_id": connectionID,
+			"adapter_id":    platformID,
+			"date":          date,
+			"metric_name":   "calls_by_source",
+			"metric_value":  float64(count),
+			"metadata_key":  source,
 		}
-		events = append(events, event)
+		if companyID != "" {
+			metadata["clinic_id"] = companyID
+		}
+		record := nexadapter.AdapterInboundRecord{
+			Operation: "record.ingest",
+			Routing: nexadapter.AdapterInboundRouting{
+				Adapter:       adapterName,
+				Platform:      platformID,
+				ConnectionID:  connectionID,
+				SenderID:      platformID,
+				SenderName:    "CallRail",
+				ContainerKind: "group",
+				ContainerID:   "metrics",
+				ContainerName: "Metrics",
+				ThreadID:      companyID,
+				ThreadName:    companyID,
+			},
+			Payload: nexadapter.AdapterInboundPayload{
+				ExternalRecordID: fmt.Sprintf("%s:%s:%s:%s:calls_by_source:%s", platformID, strings.ToLower(nexadapter.SafeIDToken(connectionID)), strings.ToLower(nexadapter.SafeIDToken(date)), companyToken, strings.ToLower(nexadapter.SafeIDToken(source))),
+				Timestamp:        timestamp,
+				Content:          fmt.Sprintf("calls_by_source=%d", count),
+				ContentType:      "text",
+				Metadata:         metadata,
+			},
+		}
+		records = append(records, record)
 	}
 
 	// Per-campaign metrics.
 	for campaign, count := range m.ByCampaign {
-		eventID := fmt.Sprintf("%s:%s:%s:%s:calls_by_campaign:%s", platformID, strings.ToLower(nexadapter.SafeIDToken(account)), strings.ToLower(nexadapter.SafeIDToken(date)), companyToken, strings.ToLower(nexadapter.SafeIDToken(campaign)))
-		event := nexadapter.
-			NewEvent(platformID, eventID).
-			WithTimestampUnixMs(timestamp).
-			WithContent(fmt.Sprintf("calls_by_campaign=%d", count)).
-			WithContentType("text").
-			WithSender(platformID, "CallRail").
-			WithContainer("metrics", "channel").
-			WithAccount(account).
-			WithMetadata("adapter_id", platformID).
-			WithMetadata("date", date).
-			WithMetadata("metric_name", "calls_by_campaign").
-			WithMetadata("metric_value", float64(count)).
-			WithMetadata("metadata_key", campaign).
-			Build()
-		if companyID != "" {
-			event.Metadata["clinic_id"] = companyID
+		metadata := map[string]any{
+			"connection_id": connectionID,
+			"adapter_id":    platformID,
+			"date":          date,
+			"metric_name":   "calls_by_campaign",
+			"metric_value":  float64(count),
+			"metadata_key":  campaign,
 		}
-		events = append(events, event)
+		if companyID != "" {
+			metadata["clinic_id"] = companyID
+		}
+		record := nexadapter.AdapterInboundRecord{
+			Operation: "record.ingest",
+			Routing: nexadapter.AdapterInboundRouting{
+				Adapter:       adapterName,
+				Platform:      platformID,
+				ConnectionID:  connectionID,
+				SenderID:      platformID,
+				SenderName:    "CallRail",
+				ContainerKind: "group",
+				ContainerID:   "metrics",
+				ContainerName: "Metrics",
+				ThreadID:      companyID,
+				ThreadName:    companyID,
+			},
+			Payload: nexadapter.AdapterInboundPayload{
+				ExternalRecordID: fmt.Sprintf("%s:%s:%s:%s:calls_by_campaign:%s", platformID, strings.ToLower(nexadapter.SafeIDToken(connectionID)), strings.ToLower(nexadapter.SafeIDToken(date)), companyToken, strings.ToLower(nexadapter.SafeIDToken(campaign))),
+				Timestamp:        timestamp,
+				Content:          fmt.Sprintf("calls_by_campaign=%d", count),
+				ContentType:      "text",
+				Metadata:         metadata,
+			},
+		}
+		records = append(records, record)
 	}
 
-	return events
+	return records
 }
 
 // ---------------------------------------------------------------------------
@@ -630,7 +693,7 @@ func callRailGetJSON(ctx context.Context, creds callRailCredentials, endpoint st
 // ---------------------------------------------------------------------------
 
 func resolveCallRailCredentials(account string) (callRailCredentials, error) {
-	account, err := nexadapter.RequireAccount(account)
+	account, err := nexadapter.RequireConnection(account)
 	if err != nil {
 		return callRailCredentials{}, fmt.Errorf("invalid account: %w", err)
 	}
@@ -643,6 +706,9 @@ func resolveCallRailCredentials(account string) (callRailCredentials, error) {
 
 	runtimeContext, err := nexadapter.LoadRuntimeContextFromEnv()
 	if err == nil && runtimeContext != nil {
+		if strings.TrimSpace(runtimeContext.ConnectionID) != "" {
+			account = runtimeContext.ConnectionID
+		}
 		if runtimeContext.Credential != nil {
 			fields = runtimeContext.Credential.Fields
 			apiToken = nexadapter.FirstNonBlank(
