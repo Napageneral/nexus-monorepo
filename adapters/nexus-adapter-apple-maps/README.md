@@ -1,21 +1,56 @@
-# nexus-adapter-apple-maps
+# Nexus Apple Maps Adapter
 
-Nexus adapter wrapper for Apple Maps manual/CSV metrics.
+Shared Apple Maps adapter for Nex.
 
-## Notes
+This repository contains:
 
-Apple Maps does not currently expose a supported public reviews/performance API for this integration path. This adapter is intentionally manual-first and pairs with CSV uploads in the GlowBot integration flow.
+- the Apple Maps adapter implementation
+- package-local spec, workplan, and validation docs
+- an installable adapter package manifest in `adapter.nexus.json`
+- a release script that emits a Nex operator-install tarball
+
+## Layout
+
+- `cmd/apple-maps-adapter/` - adapter entrypoint and manual Apple Maps logic
+- `docs/specs/` - active target-state adapter specs
+- `docs/workplans/` - active gap-closure workplans
+- `docs/validation/` - active validation ladders
 
 ## Build
 
 ```bash
-go build ./cmd/apple-maps-adapter
+mkdir -p ./bin
+go build -o ./bin/apple-maps-adapter ./cmd/apple-maps-adapter
 ```
 
-## Run
+## Package
 
 ```bash
-go run ./cmd/apple-maps-adapter adapter.info
-go run ./cmd/apple-maps-adapter adapter.health --account default
-go run ./cmd/apple-maps-adapter event.backfill --account default --since 2026-01-01
+./scripts/package-release.sh
 ```
+
+This writes a tarball to `./dist/` containing:
+
+- `adapter.nexus.json`
+- `bin/apple-maps-adapter`
+
+## Test
+
+```bash
+go test ./...
+```
+
+## Local CLI
+
+```bash
+./bin/apple-maps-adapter adapter.info
+./bin/apple-maps-adapter adapter.accounts.list
+./bin/apple-maps-adapter adapter.health --connection <connection-id>
+./bin/apple-maps-adapter records.backfill --connection <connection-id> --since 2026-01-01T00:00:00Z
+```
+
+## Active Docs
+
+- [docs/README.md](/Users/tyler/nexus/home/projects/nexus/adapters/nexus-adapter-apple-maps/docs/README.md)
+- [ADAPTER_SPEC_APPLE_MAPS.md](/Users/tyler/nexus/home/projects/nexus/adapters/nexus-adapter-apple-maps/docs/specs/ADAPTER_SPEC_APPLE_MAPS.md)
+- [APPLE_MAPS_ADAPTER_PACKAGE_DISTRIBUTION_AND_INSTALL.md](/Users/tyler/nexus/home/projects/nexus/adapters/nexus-adapter-apple-maps/docs/specs/APPLE_MAPS_ADAPTER_PACKAGE_DISTRIBUTION_AND_INSTALL.md)

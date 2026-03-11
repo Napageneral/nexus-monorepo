@@ -31,7 +31,7 @@ func main() {
 			AdapterInfo:         info,
 			AdapterHealth:       health,
 			AdapterAccountsList: accounts,
-			EventBackfill:       backfill,
+			RecordsBackfill:     backfill,
 		},
 	})
 }
@@ -45,13 +45,14 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			nexadapter.OpAdapterInfo,
 			nexadapter.OpAdapterHealth,
 			nexadapter.OpAdapterAccountsList,
-			nexadapter.OpEventBackfill,
+			nexadapter.OpRecordsBackfill,
 		},
 		CredentialService: "apple-maps",
 		MultiAccount:      true,
 		Auth: &nexadapter.AdapterAuthManifest{
 			Methods: []nexadapter.AdapterAuthMethod{
 				{
+					ID:          "apple_maps_csv_upload",
 					Type:        "file_upload",
 					Label:       "Upload CSV / Manual Entry",
 					Icon:        "upload",
@@ -82,21 +83,39 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 }
 
 func accounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {
+	runtimeContext, err := nexadapter.LoadRuntimeContextFromEnv()
+	if err != nil {
+		return []nexadapter.AdapterAccount{}, nil
+	}
+
+	credentialRef := "apple-maps/" + runtimeContext.ConnectionID
+	if runtimeContext.Credential != nil && strings.TrimSpace(runtimeContext.Credential.Ref) != "" {
+		credentialRef = runtimeContext.Credential.Ref
+	}
+
 	return []nexadapter.AdapterAccount{
 		{
-			ID:            "default",
-			DisplayName:   "default",
-			CredentialRef: "apple-maps/default",
+			ID:            runtimeContext.ConnectionID,
+			DisplayName:   runtimeContext.ConnectionID,
+			CredentialRef: credentialRef,
 			Status:        "ready",
 		},
 	}, nil
 }
 
 func health(_ context.Context, account string) (*nexadapter.AdapterHealth, error) {
+	account, err := nexadapter.RequireConnection(account)
+	if err != nil {
+		return &nexadapter.AdapterHealth{
+			Connected:    false,
+			ConnectionID: account,
+			Error:        err.Error(),
+		}, nil
+	}
 	return &nexadapter.AdapterHealth{
-		Connected:   true,
-		Account:     fallbackAccount(account),
-		LastEventAt: time.Now().UnixMilli(),
+		Connected:    true,
+		ConnectionID: account,
+		LastEventAt:  time.Now().UnixMilli(),
 		Details: map[string]any{
 			"mode": "manual_csv",
 		},
@@ -105,31 +124,42 @@ func health(_ context.Context, account string) (*nexadapter.AdapterHealth, error
 
 func backfill(_ context.Context, account string, since time.Time, emit nexadapter.EmitFunc) error {
 	_ = since
+	account, err := nexadapter.RequireConnection(account)
+	if err != nil {
+		return err
+	}
+
 	for _, metric := range resolveManualMetrics() {
-		eventID := strings.Join(
-			[]string{
-				platformID,
-				sanitizeToken(fallbackAccount(account)),
-				sanitizeToken(metric.Date),
-				sanitizeToken(metric.Name),
+		record := nexadapter.AdapterInboundRecord{
+			Operation: "record.ingest",
+			Routing: nexadapter.AdapterInboundRouting{
+				Adapter:       adapterName,
+				Platform:      platformID,
+				ConnectionID:  account,
+				SenderID:      platformID,
+				SenderName:    "Apple Maps",
+				ContainerKind: "group",
+				ContainerID:   "metrics",
+				ContainerName: "Metrics",
+				ThreadID:      "manual-metrics",
+				ThreadName:    "Manual Metrics",
 			},
-			":",
-		)
-		event := nexadapter.
-			NewEvent(platformID, eventID).
-			WithTimestampUnixMs(metricTimestampMs(metric.Date)).
-			WithContent(fmt.Sprintf("%s=%g", metric.Name, metric.Value)).
-			WithContentType("text").
-			WithSender(platformID, "Apple Maps").
-			WithContainer("metrics", "channel").
-			WithAccount(fallbackAccount(account)).
-			WithMetadata("adapter_id", platformID).
-			WithMetadata("metric_name", metric.Name).
-			WithMetadata("metric_value", metric.Value).
-			WithMetadata("date", metric.Date).
-			WithMetadata("source", metric.Source).
-			Build()
-		emit(event)
+			Payload: nexadapter.AdapterInboundPayload{
+				ExternalRecordID: fmt.Sprintf("%s:%s:%s:%s", platformID, strings.ToLower(nexadapter.SafeIDToken(account)), strings.ToLower(nexadapter.SafeIDToken(metric.Date)), strings.ToLower(nexadapter.SafeIDToken(metric.Name))),
+				Timestamp:        nexadapter.MetricTimestamp(metric.Date, nil),
+				Content:          fmt.Sprintf("%s=%g", metric.Name, metric.Value),
+				ContentType:      "text",
+				Metadata: map[string]any{
+					"connection_id": account,
+					"adapter_id":    platformID,
+					"metric_name":   metric.Name,
+					"metric_value":  metric.Value,
+					"date":          metric.Date,
+					"source":        metric.Source,
+				},
+			},
+		}
+		emit(record)
 	}
 	return nil
 }
@@ -178,22 +208,6 @@ func parseFloat(raw string) float64 {
 	return value
 }
 
-func metricTimestampMs(isoDay string) int64 {
-	parsed, err := time.Parse(dateLayout, strings.TrimSpace(isoDay))
-	if err != nil {
-		return time.Now().UnixMilli()
-	}
-	return parsed.Add(12 * time.Hour).UnixMilli()
-}
-
-func fallbackAccount(account string) string {
-	value := strings.TrimSpace(strings.ToLower(account))
-	if value == "" {
-		return "default"
-	}
-	return value
-}
-
 func firstNonBlank(values ...string) string {
 	for _, value := range values {
 		if trimmed := strings.TrimSpace(value); trimmed != "" {
@@ -201,29 +215,4 @@ func firstNonBlank(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func sanitizeToken(raw string) string {
-	trimmed := strings.TrimSpace(strings.ToLower(raw))
-	if trimmed == "" {
-		return "na"
-	}
-	var b strings.Builder
-	for _, ch := range trimmed {
-		switch {
-		case ch >= 'a' && ch <= 'z':
-			b.WriteRune(ch)
-		case ch >= '0' && ch <= '9':
-			b.WriteRune(ch)
-		case ch == '-', ch == '_', ch == '.':
-			b.WriteRune(ch)
-		default:
-			b.WriteByte('-')
-		}
-	}
-	token := strings.Trim(b.String(), "-._")
-	if token == "" {
-		return "na"
-	}
-	return token
 }
