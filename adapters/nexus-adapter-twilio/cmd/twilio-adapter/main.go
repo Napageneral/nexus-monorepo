@@ -79,8 +79,8 @@ func main() {
 			AdapterInfo:         info,
 			AdapterHealth:       health,
 			AdapterAccountsList: accounts,
-			EventBackfill:       backfill,
-			AdapterMonitorStart: monitor,
+			RecordsBackfill:     backfill,
+			MonitorStart:        monitor,
 		},
 	})
 }
@@ -94,7 +94,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			nexadapter.OpAdapterInfo,
 			nexadapter.OpAdapterHealth,
 			nexadapter.OpAdapterAccountsList,
-			nexadapter.OpEventBackfill,
+			nexadapter.OpRecordsBackfill,
 			nexadapter.OpAdapterMonitorStart,
 		},
 		CredentialService: "twilio",
@@ -102,9 +102,11 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 		Auth: &nexadapter.AdapterAuthManifest{
 			Methods: []nexadapter.AdapterAuthMethod{
 				{
-					Type:  "api_key",
-					Label: "Enter Twilio Credentials",
-					Icon:  "key",
+					ID:      "twilio_account_credentials",
+					Type:    "api_key",
+					Label:   "Enter Twilio Credentials",
+					Icon:    "key",
+					Service: "twilio",
 					Fields: []nexadapter.AdapterAuthField{
 						{
 							Name:        "account_sid",
@@ -123,6 +125,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 					},
 				},
 				{
+					ID:          "twilio_csv_upload",
 					Type:        "file_upload",
 					Label:       "Upload CSV Export",
 					Icon:        "upload",
@@ -153,18 +156,35 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 }
 
 func accounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {
+	runtimeContext, err := nexadapter.LoadRuntimeContextFromEnv()
+	if err != nil {
+		return []nexadapter.AdapterAccount{}, nil
+	}
+
+	displayName := runtimeContext.ConnectionID
+	if runtimeContext.Credential != nil {
+		accountSID := nexadapter.FieldValue(runtimeContext.Credential.Fields, "account_sid")
+		if accountSID != "" {
+			displayName = fmt.Sprintf("%s (%s)", runtimeContext.ConnectionID, accountSID)
+		}
+	}
+
+	credentialRef := "twilio/" + runtimeContext.ConnectionID
+	if runtimeContext.Credential != nil && strings.TrimSpace(runtimeContext.Credential.Ref) != "" {
+		credentialRef = runtimeContext.Credential.Ref
+	}
 	return []nexadapter.AdapterAccount{
 		{
-			ID:            "default",
-			DisplayName:   "default",
-			CredentialRef: "twilio/default",
+			ID:            runtimeContext.ConnectionID,
+			DisplayName:   displayName,
+			CredentialRef: credentialRef,
 			Status:        "ready",
 		},
 	}, nil
 }
 
 func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, error) {
-	account, err := nexadapter.RequireAccount(account)
+	account, err := nexadapter.RequireConnection(account)
 	if err != nil {
 		return nil, err
 	}
@@ -172,9 +192,9 @@ func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, err
 	creds, err := resolveTwilioCredentials(account)
 	if err != nil {
 		return &nexadapter.AdapterHealth{
-			Connected: false,
-			Account:   account,
-			Error:     err.Error(),
+			Connected:    false,
+			ConnectionID: account,
+			Error:        err.Error(),
 		}, nil
 	}
 
@@ -185,25 +205,25 @@ func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, err
 	endpoint := fmt.Sprintf("/2010-04-01/Accounts/%s/Calls.json", creds.AccountSID)
 	if err := twilioGetJSON(ctx, creds, endpoint, params, &testResponse); err != nil {
 		return &nexadapter.AdapterHealth{
-			Connected: false,
-			Account:   creds.AccountID,
-			Error:     err.Error(),
+			Connected:    false,
+			ConnectionID: account,
+			Error:        err.Error(),
 		}, nil
 	}
 
 	return &nexadapter.AdapterHealth{
-		Connected:   true,
-		Account:     creds.AccountID,
-		LastEventAt: time.Now().UnixMilli(),
+		Connected:    true,
+		ConnectionID: account,
+		LastEventAt:  time.Now().UnixMilli(),
 		Details: map[string]any{
-			"account_sid": nexadapter.SafeIDToken(creds.AccountSID),
+			"account_sid": creds.AccountSID,
 			"base_url":    creds.BaseURL,
 		},
 	}, nil
 }
 
 func backfill(ctx context.Context, account string, since time.Time, emit nexadapter.EmitFunc) error {
-	account, err := nexadapter.RequireAccount(account)
+	account, err := nexadapter.RequireConnection(account)
 	if err != nil {
 		return err
 	}
@@ -219,21 +239,21 @@ func backfill(ctx context.Context, account string, since time.Time, emit nexadap
 }
 
 func monitor(ctx context.Context, account string, emit nexadapter.EmitFunc) error {
-	account, err := nexadapter.RequireAccount(account)
+	account, err := nexadapter.RequireConnection(account)
 	if err != nil {
 		return err
 	}
 
-	return nexadapter.PollMonitor(nexadapter.PollConfig{
+	return nexadapter.PollMonitor(nexadapter.PollConfig[nexadapter.AdapterInboundRecord]{
 		Interval: 1 * time.Hour,
-		Fetch: func(ctx context.Context, since time.Time) ([]nexadapter.NexusEvent, time.Time, error) {
+		Fetch: func(ctx context.Context, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 			return fetchTwilioMetricsSince(ctx, account, since)
 		},
 		MaxConsecutiveErrors: 5,
 	})(ctx, account, emit)
 }
 
-func fetchTwilioMetricsSince(ctx context.Context, account string, since time.Time) ([]nexadapter.NexusEvent, time.Time, error) {
+func fetchTwilioMetricsSince(ctx context.Context, account string, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 	creds, err := resolveTwilioCredentials(account)
 	if err != nil {
 		return nil, time.Time{}, err
@@ -252,12 +272,12 @@ func fetchTwilioMetricsSince(ctx context.Context, account string, since time.Tim
 	metricsByDate := aggregateTwilioCallsByDate(calls)
 
 	// Build events for each date and metric
-	var events []nexadapter.NexusEvent
+	var records []nexadapter.AdapterInboundRecord
 	for date, metrics := range metricsByDate {
-		events = append(events, buildTwilioMetricEvents(creds.AccountID, date, metrics)...)
+		records = append(records, buildTwilioMetricRecords(creds.AccountID, date, metrics)...)
 	}
 
-	return events, time.Now(), nil
+	return records, time.Now(), nil
 }
 
 func fetchAllCalls(ctx context.Context, creds twilioCredentials, from time.Time, to time.Time) ([]twilioCall, error) {
@@ -357,7 +377,12 @@ func aggregateTwilioCallsByDate(calls []twilioCall) map[string]twilioMetrics {
 	return metricsByDate
 }
 
-func buildTwilioMetricEvents(account string, date string, metrics twilioMetrics) []nexadapter.NexusEvent {
+func buildTwilioMetricRecords(connectionID string, date string, metrics twilioMetrics) []nexadapter.AdapterInboundRecord {
+	connectionID, err := nexadapter.RequireConnection(connectionID)
+	if err != nil {
+		nexadapter.LogError("invalid connection in buildTwilioMetricRecords: %v", err)
+		return nil
+	}
 	timestamp := nexadapter.MetricTimestamp(date, nil)
 
 	type metricValue struct {
@@ -380,32 +405,44 @@ func buildTwilioMetricEvents(account string, date string, metrics twilioMetrics)
 		metricsList = append(metricsList, metricValue{name: "calls_duration_avg", value: avgDuration})
 	}
 
-	var events []nexadapter.NexusEvent
+	var records []nexadapter.AdapterInboundRecord
 	for _, metric := range metricsList {
 		if metric.value < 0 {
 			continue
 		}
+		record := nexadapter.AdapterInboundRecord{
+			Operation: "record.ingest",
+			Routing: nexadapter.AdapterInboundRouting{
+				Adapter:       adapterName,
+				Platform:      platformID,
+				ConnectionID:  connectionID,
+				SenderID:      platformID,
+				SenderName:    "Twilio",
+				ContainerKind: "group",
+				ContainerID:   "metrics",
+				ContainerName: "Metrics",
+				ThreadID:      "calls",
+				ThreadName:    "Calls",
+			},
+			Payload: nexadapter.AdapterInboundPayload{
+				ExternalRecordID: fmt.Sprintf("%s:%s:%s:%s", platformID, strings.ToLower(nexadapter.SafeIDToken(connectionID)), strings.ToLower(nexadapter.SafeIDToken(date)), strings.ToLower(nexadapter.SafeIDToken(metric.name))),
+				Timestamp:        timestamp,
+				Content:          fmt.Sprintf("%s=%g", metric.name, metric.value),
+				ContentType:      "text",
+				Metadata: map[string]any{
+					"connection_id": connectionID,
+					"adapter_id":    platformID,
+					"date":          date,
+					"metric_name":   metric.name,
+					"metric_value":  metric.value,
+				},
+			},
+		}
 
-		eventID := fmt.Sprintf("%s:%s:%s:%s", platformID, nexadapter.SafeIDToken(account), nexadapter.SafeIDToken(date), nexadapter.SafeIDToken(metric.name))
-
-		event := nexadapter.
-			NewEvent(platformID, eventID).
-			WithTimestampUnixMs(timestamp).
-			WithContent(fmt.Sprintf("%s=%g", metric.name, metric.value)).
-			WithContentType("text").
-			WithSender(platformID, "Twilio").
-			WithContainer("metrics", "channel").
-			WithAccount(account).
-			WithMetadata("adapter_id", platformID).
-			WithMetadata("date", date).
-			WithMetadata("metric_name", metric.name).
-			WithMetadata("metric_value", metric.value).
-			Build()
-
-		events = append(events, event)
+		records = append(records, record)
 	}
 
-	return events
+	return records
 }
 
 func twilioGetJSON(ctx context.Context, creds twilioCredentials, endpoint string, params url.Values, out any) error {
@@ -453,7 +490,7 @@ func twilioGetJSONFullURL(ctx context.Context, creds twilioCredentials, fullURL 
 }
 
 func resolveTwilioCredentials(account string) (twilioCredentials, error) {
-	resolvedAccount, err := nexadapter.RequireAccount(account)
+	resolvedAccount, err := nexadapter.RequireConnection(account)
 	if err != nil {
 		return twilioCredentials{}, err
 	}
@@ -465,8 +502,8 @@ func resolveTwilioCredentials(account string) (twilioCredentials, error) {
 
 	runtimeContext, err := nexadapter.LoadRuntimeContextFromEnv()
 	if err == nil && runtimeContext != nil {
-		if strings.TrimSpace(runtimeContext.AccountID) != "" {
-			resolvedAccount, err = nexadapter.RequireAccount(runtimeContext.AccountID)
+		if strings.TrimSpace(runtimeContext.ConnectionID) != "" {
+			resolvedAccount, err = nexadapter.RequireConnection(runtimeContext.ConnectionID)
 			if err != nil {
 				return twilioCredentials{}, err
 			}

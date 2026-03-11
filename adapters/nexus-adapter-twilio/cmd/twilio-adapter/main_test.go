@@ -1,7 +1,12 @@
 package main
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
+
+	nexadapter "github.com/nexus-project/adapter-sdk-go"
 )
 
 func TestAggregateTwilioCallsByDate(t *testing.T) {
@@ -89,7 +94,7 @@ func TestAggregateTwilioCallsByDate(t *testing.T) {
 	}
 }
 
-func TestBuildTwilioMetricEvents(t *testing.T) {
+func TestBuildTwilioMetricRecords(t *testing.T) {
 	metrics := twilioMetrics{
 		CallsTotal:       10,
 		CallsInbound:     6,
@@ -101,40 +106,40 @@ func TestBuildTwilioMetricEvents(t *testing.T) {
 		CallsCostSum:     5.50,
 	}
 
-	events := buildTwilioMetricEvents("test-account", "2026-01-15", metrics)
+	records := buildTwilioMetricRecords("test-connection", "2026-01-15", metrics)
 
-	if len(events) != 7 {
-		t.Fatalf("Expected 7 events, got %d", len(events))
+	if len(records) != 7 {
+		t.Fatalf("Expected 7 records, got %d", len(records))
 	}
 
-	// Check that all events have the correct structure
-	for _, event := range events {
-		if event.Platform != platformID {
-			t.Errorf("Event platform = %s, want %s", event.Platform, platformID)
+	for _, record := range records {
+		if record.Operation != "record.ingest" {
+			t.Errorf("Record operation = %s, want record.ingest", record.Operation)
 		}
-		if event.AccountID != "test-account" {
-			t.Errorf("Event account = %s, want test-account", event.AccountID)
+		if record.Routing.Platform != platformID {
+			t.Errorf("Record platform = %s, want %s", record.Routing.Platform, platformID)
 		}
-		if event.ContainerKind != "channel" {
-			t.Errorf("Event container kind = %s, want channel", event.ContainerKind)
+		if record.Routing.ConnectionID != "test-connection" {
+			t.Errorf("Record connection = %s, want test-connection", record.Routing.ConnectionID)
 		}
-		if event.Timestamp <= 0 {
-			t.Errorf("Event timestamp is invalid: %d", event.Timestamp)
+		if record.Routing.ContainerKind != "group" {
+			t.Errorf("Record container kind = %s, want group", record.Routing.ContainerKind)
+		}
+		if record.Payload.Timestamp <= 0 {
+			t.Errorf("Record timestamp is invalid: %d", record.Payload.Timestamp)
 		}
 
-		// Check metadata
-		if event.Metadata["adapter_id"] != platformID {
-			t.Errorf("Event metadata adapter_id = %v, want %s", event.Metadata["adapter_id"], platformID)
+		if record.Payload.Metadata["adapter_id"] != platformID {
+			t.Errorf("Record metadata adapter_id = %v, want %s", record.Payload.Metadata["adapter_id"], platformID)
 		}
-		if event.Metadata["date"] != "2026-01-15" {
-			t.Errorf("Event metadata date = %v, want 2026-01-15", event.Metadata["date"])
+		if record.Payload.Metadata["date"] != "2026-01-15" {
+			t.Errorf("Record metadata date = %v, want 2026-01-15", record.Payload.Metadata["date"])
 		}
 	}
 
-	// Verify specific metrics exist
 	metricsFound := make(map[string]bool)
-	for _, event := range events {
-		if metricName, ok := event.Metadata["metric_name"].(string); ok {
+	for _, record := range records {
+		if metricName, ok := record.Payload.Metadata["metric_name"].(string); ok {
 			metricsFound[metricName] = true
 		}
 	}
@@ -151,7 +156,7 @@ func TestBuildTwilioMetricEvents(t *testing.T) {
 
 	for _, metric := range expectedMetrics {
 		if !metricsFound[metric] {
-			t.Errorf("Expected metric %s not found in events", metric)
+			t.Errorf("Expected metric %s not found in records", metric)
 		}
 	}
 }
@@ -234,5 +239,42 @@ func TestParseNumber(t *testing.T) {
 				t.Errorf("parseNumber(%q) = %f, want %f", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestAccountsUsesRuntimeConnectionID(t *testing.T) {
+	dir := t.TempDir()
+	contextPath := filepath.Join(dir, "runtime-context.json")
+	payload := nexadapter.RuntimeContext{
+		Platform:     platformID,
+		ConnectionID: "twilio-live-conn",
+		Config:       map[string]any{},
+		Credential: &nexadapter.RuntimeCredential{
+			Kind: "api_key",
+			Value: "token",
+			Ref:  "twilio/twilio-live-conn",
+			Fields: map[string]string{
+				"account_sid": "AC123",
+			},
+		},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal context: %v", err)
+	}
+	if err := os.WriteFile(contextPath, raw, 0o600); err != nil {
+		t.Fatalf("write context: %v", err)
+	}
+	t.Setenv(nexadapter.AdapterContextEnvVar, contextPath)
+
+	accountsList, err := accounts(nil)
+	if err != nil {
+		t.Fatalf("accounts: %v", err)
+	}
+	if len(accountsList) != 1 {
+		t.Fatalf("expected 1 account, got %d", len(accountsList))
+	}
+	if accountsList[0].ID != "twilio-live-conn" {
+		t.Fatalf("unexpected account id: %q", accountsList[0].ID)
 	}
 }
