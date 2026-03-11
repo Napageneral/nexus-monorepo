@@ -1,12 +1,17 @@
 # Workplan: Credit System and Free Tier
 
 **Date:** 2026-03-04
-**Status:** NOT STARTED
-**Spec:** `docs/specs/FRONTDOOR_MCP_SERVER_AND_AGENTIC_ACCESS_2026-03-04.md` (sections 6-7)
+**Status:** COMPLETED (archived 2026-03-10)
+**Spec:** `docs/specs/BILLING_ARCHITECTURE_ACCOUNT_MODEL_2026-03-02.md`
+**Proposal:** `docs/proposals/FRONTDOOR_MCP_SERVER_AND_AGENTIC_ACCESS_2026-03-04.md` (sections 6-7)
 **Depends on:** App Installation Pipeline, MCP Server (for metered tool calls)
 **Approach:** HARD CUTOVER — replaces the existing per-server Stripe subscription model with prepaid credits. Old billing tables (`frontdoor_server_subscriptions` as billing mechanism) are superseded. No dual billing paths, no migration period.
 
 ---
+
+> Historical note: the credits and free-tier model is implemented in frontdoor
+> code and now belongs to the active billing canon, not to an active execution
+> plan.
 
 ## Objective
 

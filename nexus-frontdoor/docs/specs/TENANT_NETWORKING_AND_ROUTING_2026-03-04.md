@@ -1,8 +1,8 @@
 # Tenant Networking and Routing
 
-**Status:** DESIGN
-**Last Updated:** 2026-03-04
-**Related:** CLOUD_PROVISIONING_ARCHITECTURE_2026-03-04.md, FRONTDOOR_ARCHITECTURE.md, CRITICAL_CUSTOMER_FLOWS_2026-03-02.md
+**Status:** CANONICAL
+**Last Updated:** 2026-03-06
+**Related:** CLOUD_PROVISIONING_ARCHITECTURE_2026-03-04.md, FRONTDOOR_ARCHITECTURE.md, FRONTDOOR_HOSTED_ACCESS_AND_ROUTING.md, FRONTDOOR_SHELL_AND_EMBEDDED_APP_MODEL.md, CRITICAL_CUSTOMER_FLOWS_2026-03-02.md
 
 ---
 
@@ -285,16 +285,23 @@ server.on('upgrade', (req, socket, head) => {
 });
 ```
 
-### 5.4 App Frame Injection
+### 5.4 Frontdoor Shell Boundary
 
-For browser requests to app UIs (HTML pages), frontdoor injects the app frame (44px navigation header). This is an existing behavior documented in FRONTDOOR_APP_FRAME_AND_DOCK_2026-03-02.md.
+For human launch at `frontdoor.nexushub.sh/app/<appId>/`, frontdoor owns the
+top-level browser document and renders app content inside a dedicated
+iframe-backed embedded boundary.
 
-The proxy flow for HTML responses:
-1. Proxy request to VPS
-2. If response content-type is HTML, inject the app frame header
-3. Stream the modified response back
+The proxy flow for shell-profile HTML responses:
+1. Frontdoor renders the shell document
+2. The shell loads the tenant app document inside the embedded boundary
+3. Shell chrome and platform navigation remain frontdoor-owned
 
-For non-HTML responses (JS, CSS, images, API calls, WebSocket), pass through without modification.
+The runtime app document is not mutated via DOM injection. The canonical shell
+contract is defined in `FRONTDOOR_SHELL_AND_EMBEDDED_APP_MODEL.md`.
+
+For non-shell traffic such as JS, CSS, images, API calls, and WebSocket
+requests, frontdoor proxies the request without shell-specific document
+mutation.
 
 ### 5.5 Proxy Headers
 

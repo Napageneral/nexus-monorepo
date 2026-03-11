@@ -1,12 +1,16 @@
 # Workplan: Frontdoor MCP Server
 
 **Date:** 2026-03-04
-**Status:** NOT STARTED
-**Spec:** `docs/specs/FRONTDOOR_MCP_SERVER_AND_AGENTIC_ACCESS_2026-03-04.md`
+**Status:** COMPLETED (archived 2026-03-10)
+**Spec:** `docs/specs/FRONTDOOR_ARCHITECTURE.md`
+**Proposal:** `docs/proposals/FRONTDOOR_MCP_SERVER_AND_AGENTIC_ACCESS_2026-03-04.md`
 **Depends on:** App Installation Pipeline (for app-related tools)
 **Approach:** HARD CUTOVER — no backwards compatibility, no parallel legacy paths
 
 ---
+
+> Historical note: the frontdoor MCP surface is implemented in code and no
+> longer belongs in the active workplans tree.
 
 ## Objective
 

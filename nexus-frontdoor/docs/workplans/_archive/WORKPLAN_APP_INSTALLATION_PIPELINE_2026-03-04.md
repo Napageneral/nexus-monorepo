@@ -1,12 +1,17 @@
 # Workplan: App Installation Pipeline
 
 **Date:** 2026-03-04
-**Status:** NOT STARTED
-**Spec:** `docs/specs/APP_INSTALLATION_PIPELINE_2026-03-04.md`
+**Status:** COMPLETED (archived 2026-03-10)
+**Spec:** `docs/specs/FRONTDOOR_PACKAGE_REGISTRY_AND_LIFECYCLE.md`
+**Proposal:** `docs/proposals/APP_INSTALLATION_PIPELINE_2026-03-04.md`
 **Depends on:** Cloud Provisioning (completed), Runtime App Management API (exists)
 **Approach:** HARD CUTOVER — no backwards compatibility, no parallel legacy paths
 
 ---
+
+> Historical note: the package-install cutover landed in code and is now tracked
+> by the runtime-owned package/operator canon and validation docs under
+> `nex/docs/specs/platform/*` and `nex/docs/validation/*`.
 
 ## Objective
 

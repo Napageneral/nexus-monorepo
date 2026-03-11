@@ -6,13 +6,13 @@
 **Extends:** [Cloud Provisioning Validation Ladder](VALIDATION_LADDER_CLOUD_PROVISIONING_2026-03-04.md) (97/110 PASS)
 
 **Workplans:**
-- [App Installation Pipeline](WORKPLAN_APP_INSTALLATION_PIPELINE_2026-03-04.md)
-- [MCP Server](WORKPLAN_MCP_SERVER_2026-03-04.md)
-- [Credit System & Free Tier](WORKPLAN_CREDIT_SYSTEM_AND_FREE_TIER_2026-03-04.md)
+- [App Installation Pipeline](../../workplans/WORKPLAN_APP_INSTALLATION_PIPELINE_2026-03-04.md)
+- [MCP Server](../../workplans/WORKPLAN_MCP_SERVER_2026-03-04.md)
+- [Credit System & Free Tier](../../workplans/WORKPLAN_CREDIT_SYSTEM_AND_FREE_TIER_2026-03-04.md)
 
 **Specs:**
-- [App Installation Pipeline](../specs/APP_INSTALLATION_PIPELINE_2026-03-04.md)
-- [MCP Server & Agentic Access](../specs/FRONTDOOR_MCP_SERVER_AND_AGENTIC_ACCESS_2026-03-04.md)
+- [App Installation Pipeline](../../proposals/APP_INSTALLATION_PIPELINE_2026-03-04.md)
+- [MCP Server & Agentic Access](../../proposals/FRONTDOOR_MCP_SERVER_AND_AGENTIC_ACCESS_2026-03-04.md)
 
 ---
 

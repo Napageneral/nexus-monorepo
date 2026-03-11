@@ -1,7 +1,10 @@
 # App Installation Pipeline Architecture
 
 **Date:** 2026-03-04
-**Status:** DRAFT
+**Status:** ARCHIVED 2026-03-10
+
+> Historical note: this exploratory proposal predates the runtime-owned package
+> operator canon and is retained only as historical context.
 **Author:** System Architecture Team
 
 ## Overview

@@ -1,42 +1,79 @@
-# Billing Architecture: Account Model + Server & App Subscriptions
+# Billing Architecture: Accounts, Credits, and App Subscriptions
 
-Date: 2026-03-02 (updated 2026-03-04)
-Status: confirmed
+Date: 2026-03-02 (updated 2026-03-10)
+Status: CANONICAL
 Owners: Nexus Platform
 
-> **Billing model evolution (2026-03-04):** This spec describes the subscription-based billing model for apps and servers. The platform is evolving to a **prepaid credit system** for server billing: users deposit credits (Stripe or crypto), server uptime is billed hourly from their balance. A **7-day free tier** allows one cax11 server without payment. App subscriptions remain subscription-based as described here. Server subscriptions transition to credit-based billing. See `FRONTDOOR_MCP_SERVER_AND_AGENTIC_ACCESS_2026-03-04.md` sections 6-7 for the full credit system and free tier spec.
-
 ---
 
-## 1) Core Principle
+## Purpose
 
-Servers and apps are billed separately. Users pay for two things independently:
+This document defines the canonical frontdoor billing model.
 
-1. **Server billing** — Prepaid credit balance. Server uptime billed hourly from credits. 7-day free tier for first cax11 server.
-2. **App subscriptions** — Pay for access to an app. Per-account pricing. Once purchased, installable on any of the account's servers at no additional cost.
+It covers:
 
-These are orthogonal. An account with 3 servers, GlowBot Clinic ($149/mo), and Spike Pro ($29/mo) pays: 3× server fee + $149 + $29 = total. GlowBot can be installed on all 3 servers, Spike on any subset.
+1. the account as the billing and ownership unit
+2. prepaid credits for hosted server usage
+3. the free-tier contract for first-server onboarding
+4. per-account app subscriptions and entitlements
+5. the customer-facing billing surfaces frontdoor owns
 
----
+## Customer Experience
 
-## 2) Account Entity
+Billing should feel simple:
 
-An **account** is the billing and ownership unit. It sits between users and servers.
+1. a user signs into frontdoor and operates within an account
+2. the account has one shared credit balance for hosted server usage
+3. the first starter server may run under a time-bounded free tier
+4. paid server usage deducts from the account credit balance
+5. apps are unlocked by per-account subscriptions rather than per-server purchases
+6. billing UI shows credit balance, free-tier status, app plans, invoices, and payment methods in one place
 
-- Every user belongs to at least one account.
-- On first signup, an account is automatically created with the user as owner.
-- An account owns servers and app subscriptions.
-- Team members are invited to an account (not to individual servers or apps).
-- B2B from the start — accounts represent clinics, engineering teams, organizations.
+The hosted billing story is account-first. The platform does not use a separate
+per-server subscription contract as canonical billing truth.
 
-### Schema
+## Canonical Billing Split
+
+Frontdoor bills two things separately.
+
+### 1. Server usage
+
+Server usage is paid from an account credit balance.
+
+Rules:
+
+1. credits are held at the account level
+2. server plans determine hourly burn rate
+3. running servers deduct usage from credits
+4. if credits are exhausted outside the free tier, running servers are suspended
+5. adding credits allows suspended servers to resume
+
+### 2. App access
+
+App access is granted by per-account app subscriptions.
+
+Rules:
+
+1. one app subscription unlocks that app across the account's eligible servers
+2. app subscriptions and server credits are orthogonal
+3. app entitlements are resolved from the subscription plus overrides/trials/comps
+
+## Account Entity
+
+An account is the billing and ownership unit between users and servers.
+
+- every user belongs to at least one account
+- an account owns servers, credits, app subscriptions, and memberships
+- team members are invited to the account, not to individual billing records
+
+Canonical account tables:
 
 ```sql
 CREATE TABLE frontdoor_accounts (
   account_id    TEXT PRIMARY KEY,
   display_name  TEXT NOT NULL,
   owner_user_id TEXT NOT NULL REFERENCES frontdoor_users(user_id),
-  status        TEXT NOT NULL DEFAULT 'active',  -- 'active' | 'suspended' | 'closed'
+  status        TEXT NOT NULL DEFAULT 'active',
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL
 );
@@ -44,232 +81,192 @@ CREATE TABLE frontdoor_accounts (
 CREATE TABLE frontdoor_account_memberships (
   account_id    TEXT NOT NULL REFERENCES frontdoor_accounts(account_id),
   user_id       TEXT NOT NULL REFERENCES frontdoor_users(user_id),
-  role          TEXT NOT NULL DEFAULT 'member',  -- 'owner' | 'admin' | 'member' | 'viewer'
+  role          TEXT NOT NULL DEFAULT 'member',
   invited_by    TEXT,
   joined_at_ms  INTEGER NOT NULL,
   PRIMARY KEY(account_id, user_id)
 );
 ```
 
-### Roles
+## Credits Model
 
-| Role | Billing | Team Mgmt | Server Mgmt | App Use | View Only |
-|------|---------|-----------|-------------|---------|-----------|
-| Owner | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Admin | ❌ | ✅ (invite only) | ✅ | ✅ | ✅ |
-| Member | ❌ | ❌ | ❌ | ✅ | ✅ |
-| Viewer | ❌ | ❌ | ❌ | ❌ | ✅ |
+Credits are the canonical billing contract for hosted server usage.
 
----
-
-## 3) Server Subscriptions
-
-Each server has its own subscription tied to the account.
+Canonical credit tables:
 
 ```sql
-CREATE TABLE frontdoor_server_subscriptions (
-  server_id       TEXT PRIMARY KEY REFERENCES frontdoor_servers(server_id),
-  account_id      TEXT NOT NULL REFERENCES frontdoor_accounts(account_id),
-  tier            TEXT NOT NULL DEFAULT 'standard',  -- 'starter' | 'standard' | 'performance' | ...
-  status          TEXT NOT NULL DEFAULT 'active',    -- 'active' | 'trialing' | 'past_due' | 'cancelled'
-  provider        TEXT NOT NULL DEFAULT 'none',      -- 'stripe' | 'mock' | 'none'
-  customer_id     TEXT,          -- Stripe customer ID
-  subscription_id TEXT,          -- Stripe subscription ID
-  period_start_ms INTEGER,
-  period_end_ms   INTEGER,
-  created_at_ms   INTEGER NOT NULL,
-  updated_at_ms   INTEGER NOT NULL
+CREATE TABLE frontdoor_account_credits (
+  account_id             TEXT PRIMARY KEY REFERENCES frontdoor_accounts(account_id),
+  balance_cents          INTEGER NOT NULL DEFAULT 0,
+  currency               TEXT NOT NULL DEFAULT 'usd',
+  free_tier_expires_at_ms INTEGER,
+  updated_at_ms          INTEGER NOT NULL
+);
+
+CREATE TABLE frontdoor_credit_transactions (
+  transaction_id        TEXT PRIMARY KEY,
+  account_id            TEXT NOT NULL REFERENCES frontdoor_accounts(account_id),
+  amount_cents          INTEGER NOT NULL,
+  balance_after_cents   INTEGER NOT NULL,
+  type                  TEXT NOT NULL,
+  description           TEXT NOT NULL,
+  reference_id          TEXT,
+  created_at_ms         INTEGER NOT NULL
 );
 ```
 
-### Server Tiers
+### Credit Rules
 
-Designed for multiple tiers. Currently only one:
+1. positive transactions add credits
+2. negative transactions deduct usage
+3. the ledger is append-only at the transaction level
+4. account balance is authoritative for hosted server eligibility outside the free tier
+5. `reference_id` is used for idempotent hourly usage deduction and payment reconciliation
 
-| Tier | Resources | Price | Status |
-|------|-----------|-------|--------|
-| standard | Cheapest Hetzner VPS | TBD | Current default |
-| (future tiers) | Larger VPS options | TBD | Planned |
+### Free Tier
 
-No free servers. All servers require an active subscription.
+The free tier is an account-level bootstrap state on the credit record.
 
----
+Rules:
 
-## 4) App Subscriptions
+1. the first server may run under a time-bounded free tier
+2. the canonical initial free tier is one `cax11` server for seven days
+3. free-tier state lives on the credit record, not in a parallel subscription system
+4. once the free tier expires, server creation and continued paid usage require credits
 
-App subscriptions are per-account, per-app. One subscription covers all servers.
+### Suspension
+
+If an account has no credits outside the free tier:
+
+1. running servers may be suspended
+2. routing for those servers is removed until billing is resolved
+3. a later credit deposit may unsuspend the servers without reprovisioning
+
+## App Subscriptions
+
+App access is account-scoped.
+
+Canonical subscription table:
 
 ```sql
 CREATE TABLE frontdoor_app_subscriptions (
-  account_id      TEXT NOT NULL REFERENCES frontdoor_accounts(account_id),
-  app_id          TEXT NOT NULL,          -- 'glowbot', 'spike', etc.
-  plan_id         TEXT NOT NULL,          -- 'glowbot-starter', 'glowbot-clinic', etc.
-  status          TEXT NOT NULL DEFAULT 'active',  -- 'active' | 'trialing' | 'past_due' | 'cancelled'
-  provider        TEXT NOT NULL DEFAULT 'none',
-  customer_id     TEXT,
-  subscription_id TEXT,
-  period_start_ms INTEGER,
-  period_end_ms   INTEGER,
-  cancelled_at_ms INTEGER,               -- when cancellation was requested
-  cancel_at_ms    INTEGER,               -- when it will actually cancel (end of period)
-  created_at_ms   INTEGER NOT NULL,
-  updated_at_ms   INTEGER NOT NULL,
+  account_id       TEXT NOT NULL REFERENCES frontdoor_accounts(account_id),
+  app_id           TEXT NOT NULL,
+  plan_id          TEXT NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'active',
+  provider         TEXT NOT NULL DEFAULT 'none',
+  customer_id      TEXT,
+  subscription_id  TEXT,
+  period_start_ms  INTEGER,
+  period_end_ms    INTEGER,
+  cancelled_at_ms  INTEGER,
+  cancel_at_ms     INTEGER,
+  created_at_ms    INTEGER NOT NULL,
+  updated_at_ms    INTEGER NOT NULL,
   PRIMARY KEY(account_id, app_id)
 );
 ```
 
-### Free Tier Handling
+Rules:
 
-Free app tiers (e.g., GlowBot Starter at $0, Spike Free at $0) create a real subscription record:
-```
-account_id: "acct_abc123"
-app_id: "glowbot"  
-plan_id: "glowbot-starter"
-status: "active"
-provider: "none"  (no Stripe needed for free)
-```
+1. an account either has an active app subscription or it does not
+2. free app plans still create real subscription rows
+3. frontdoor uses app subscriptions to decide install eligibility
+4. app subscriptions do not replace credits and credits do not replace app subscriptions
 
-This ensures consistent entitlement resolution — always check the subscription, never special-case "no subscription means free."
+## Entitlements
 
----
+Entitlements are the effective account/app capability state derived from app
+subscriptions and policy overrides.
 
-## 5) Entitlements
-
-Entitlements are derived from app subscriptions. When an account subscribes to GlowBot Clinic, the plan's limits become entitlements.
+Canonical entitlement table:
 
 ```sql
 CREATE TABLE frontdoor_account_entitlements (
-  account_id      TEXT NOT NULL REFERENCES frontdoor_accounts(account_id),
-  app_id          TEXT NOT NULL,
-  entitlement_key TEXT NOT NULL,
+  account_id        TEXT NOT NULL REFERENCES frontdoor_accounts(account_id),
+  app_id            TEXT NOT NULL,
+  entitlement_key   TEXT NOT NULL,
   entitlement_value TEXT NOT NULL,
-  source          TEXT NOT NULL DEFAULT 'plan',  -- 'plan' | 'override' | 'trial' | 'comp'
-  expires_at_ms   INTEGER,
-  created_at_ms   INTEGER NOT NULL,
-  updated_at_ms   INTEGER NOT NULL,
+  source            TEXT NOT NULL DEFAULT 'plan',
+  expires_at_ms     INTEGER,
+  created_at_ms     INTEGER NOT NULL,
+  updated_at_ms     INTEGER NOT NULL,
   PRIMARY KEY(account_id, app_id, entitlement_key)
 );
 ```
 
-### Entitlement Resolution Order
+Resolution order:
 
-1. **Plan defaults**: Parse `limits_json` from the app subscription's plan
-2. **Overrides**: Stored entitlements with `source = 'override'` (admin-set)
-3. **Trials**: Stored entitlements with `source = 'trial'` (time-limited)
-4. **Comps**: Stored entitlements with `source = 'comp'` (operator-granted)
+1. plan defaults
+2. overrides
+3. trials
+4. comps
 
-Higher-priority sources override lower ones. Expired entries are ignored.
+Higher-priority active sources win.
 
-### Enforcement
+## Payment Flows
 
-Entitlements are checked at:
-1. **Frontdoor level** — Before allowing app install, before allowing certain API calls
-2. **Runtime level** — Method handlers can query entitlements via the nex SDK to gate features
+### Credit deposit
 
----
+1. user opens billing and chooses a deposit amount
+2. frontdoor creates a deposit checkout session
+3. payment provider confirms completion
+4. frontdoor appends a positive credit transaction and updates balance
+5. suspended servers may resume once sufficient balance exists
 
-## 6) Stripe Integration
+### App subscription purchase
 
-### Checkout Flow (Purchase)
+1. user selects an app plan
+2. frontdoor creates or updates the provider subscription
+3. webhook reconciliation updates the app subscription row
+4. entitlements refresh from the resulting plan state
 
-1. User selects a plan (app or server tier)
-2. Frontdoor creates a Stripe Checkout Session:
-   - `mode: "subscription"`
-   - `metadata: { account_id, app_id/server_id, plan_id }`
-   - Price ID from the product plan record
-3. User completes payment on Stripe
-4. Stripe sends webhook → frontdoor processes:
-   - Creates/updates subscription record
-   - Syncs entitlements from plan
+### Payment methods and invoices
 
-### Webhook Events Handled
+Frontdoor may delegate hosted card management and invoice detail to the payment
+provider portal while keeping billing summary and entitlement state in the
+frontdoor UI.
 
-| Event | Action |
-|-------|--------|
-| `checkout.session.completed` | Create subscription, sync entitlements |
-| `customer.subscription.updated` | Update plan/status, re-sync entitlements |
-| `customer.subscription.deleted` | Set status to cancelled, schedule deactivation |
-| `invoice.payment_succeeded` | Record invoice, confirm active status |
-| `invoice.payment_failed` | Set status to past_due, notify account owner |
+## Relationship To Server State
 
-### Plan Changes (Upgrade/Downgrade)
+Servers still carry plan and usage state, but the billing contract is not a
+per-server subscription row.
 
-Handled via Stripe's subscription update API with proration:
-1. Frontdoor calls Stripe to update the subscription's price
-2. Stripe prorates and adjusts the next invoice
-3. Webhook confirms the change
-4. Entitlements updated immediately
+Server-related billing facts include:
 
----
+1. server plan affects hourly usage burn
+2. server status may become `suspended` when credits are exhausted
+3. usage summaries may be stored per server for reporting
+4. `tenant_id` is routing identity, not the billing key
 
-## 7) Server Ownership
+## Customer-Facing Billing Surfaces
 
-Servers belong to accounts, not users.
+Frontdoor-owned billing UI should expose:
 
-```sql
--- Servers table (renamed from workspaces)
-CREATE TABLE frontdoor_servers (
-  server_id               TEXT PRIMARY KEY,
-  account_id              TEXT NOT NULL REFERENCES frontdoor_accounts(account_id),
-  display_name            TEXT NOT NULL,
-  generated_name          TEXT NOT NULL,    -- auto-generated friendly name
-  runtime_url             TEXT NOT NULL,
-  runtime_public_base_url TEXT NOT NULL,
-  runtime_ws_url          TEXT,
-  runtime_sse_url         TEXT,
-  runtime_auth_token      TEXT,
-  status                  TEXT NOT NULL DEFAULT 'provisioning',
-  tier                    TEXT NOT NULL DEFAULT 'standard',
-  created_at_ms           INTEGER NOT NULL,
-  updated_at_ms           INTEGER NOT NULL
-);
-```
+1. account credit balance
+2. recent credit transactions
+3. free-tier status and remaining time when applicable
+4. app subscriptions and current plans
+5. invoices and payment-method management links
+6. server usage summaries and suspension state
 
----
+## Canonical Billing Terms
 
-## 8) App Install Tracking
+| Term | Meaning |
+|---|---|
+| `account` | Billing and ownership container for servers, credits, subscriptions, and members |
+| `credit balance` | Current prepaid balance used for hosted server usage |
+| `credit transaction` | Immutable ledger entry recording deposit, usage, refund, or adjustment |
+| `free tier` | Time-bounded bootstrap allowance attached to the account credit record |
+| `app subscription` | Per-account plan that unlocks app access and entitlements |
+| `entitlement` | Effective capability state derived from plan or override |
+| `server plan` | Resource/price class that determines hosted usage burn |
+| `tenant_id` | Runtime routing identity, not a billing identity |
 
-Tracks which apps are installed on which servers (independent of billing).
+## Non-Negotiable Rules
 
-```sql
-CREATE TABLE frontdoor_server_app_installs (
-  server_id       TEXT NOT NULL REFERENCES frontdoor_servers(server_id),
-  app_id          TEXT NOT NULL,
-  status          TEXT NOT NULL DEFAULT 'not_installed',  -- 'installing' | 'installed' | 'failed' | 'uninstalling'
-  version         TEXT,                                    -- installed app version
-  entry_path      TEXT,                                    -- e.g., '/app/glowbot/'
-  last_error      TEXT,
-  installed_at_ms INTEGER,
-  source          TEXT NOT NULL DEFAULT 'manual',          -- 'onboarding' | 'manual' | 'admin'
-  created_at_ms   INTEGER NOT NULL,
-  updated_at_ms   INTEGER NOT NULL,
-  PRIMARY KEY(server_id, app_id)
-);
-```
-
-An app can only be installed on a server if the account has an active subscription for that app.
-
----
-
-## 9) Migration from Current Schema
-
-The current schema has:
-- `frontdoor_workspaces` → becomes `frontdoor_servers` + `frontdoor_accounts`
-- `frontdoor_workspace_billing` (per-workspace) → splits into `frontdoor_server_subscriptions` + `frontdoor_app_subscriptions`
-- `frontdoor_user_app_entitlements` (per-user) → becomes `frontdoor_app_subscriptions` (per-account)
-- `frontdoor_product_entitlements` (per-workspace) → becomes `frontdoor_account_entitlements` (per-account)
-- `frontdoor_workspace_app_installs` → becomes `frontdoor_server_app_installs`
-
-This is a hard cutover — no backwards compatibility needed.
-
----
-
-## 10) Terminology
-
-| Old Term | New Term | Rationale |
-|----------|----------|-----------|
-| Workspace | Server | Customer-facing term for a nex runtime instance |
-| User app entitlement | App subscription | Reflects the billing relationship |
-| Workspace billing | Server subscription | Billing is per-server |
-| Product entitlement | Account entitlement | Entitlements are account-scoped |
-| Tenant | Server | Internal term aligns with customer term |
+1. active hosted server billing uses credits, not per-server subscriptions
+2. active app access uses per-account app subscriptions
+3. free tier belongs to the account credit model
+4. frontdoor is the billing control plane for hosted accounts
+5. billing docs must not reintroduce `workspace` or legacy per-server subscription terminology as canonical truth

@@ -1,10 +1,15 @@
 # Frontdoor App Frame & Dock
 
 Date: 2026-03-02
-Status: confirmed
+Status: superseded by `FRONTDOOR_SHELL_AND_EMBEDDED_APP_MODEL.md`
 Owners: Nexus Platform
 
 ---
+
+> Superseded (2026-03-06): the canonical hosted shell model now uses a
+> frontdoor-owned shell document with an iframe-backed embedded app boundary.
+> This document preserves the older injection-based frame model for historical
+> reference only.
 
 ## 1) Overview
 
@@ -179,13 +184,13 @@ All frame styles are scoped under `#nexus-app-frame` and use specific class pref
 
 Current flow for `/app/<app-id>/*`:
 1. Validate session
-2. Resolve workspace context
+2. Resolve server context
 3. If control UI document path → inject control bootstrap
 4. Otherwise → proxy to runtime as-is
 
 New flow:
 1. Validate session
-2. Resolve server context (renamed from workspace)
+2. Resolve server context
 3. If HTML document request (`Accept: text/html`, no file extension, GET method):
    a. Proxy to runtime and buffer the response
    b. Look up active app metadata from product registry

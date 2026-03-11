@@ -1,8 +1,8 @@
 # Cloud Provisioning Architecture
 
-**Status:** DESIGN
-**Last Updated:** 2026-03-04
-**Related:** FRONTDOOR_ARCHITECTURE.md, TENANT_NETWORKING_AND_ROUTING_2026-03-04.md, BILLING_ARCHITECTURE_ACCOUNT_MODEL_2026-03-02.md, CRITICAL_CUSTOMER_FLOWS_2026-03-02.md
+**Status:** CANONICAL
+**Last Updated:** 2026-03-06
+**Related:** FRONTDOOR_ARCHITECTURE.md, FRONTDOOR_HOSTED_ACCESS_AND_ROUTING.md, FRONTDOOR_PACKAGE_REGISTRY_AND_LIFECYCLE.md, BILLING_ARCHITECTURE_ACCOUNT_MODEL_2026-03-02.md, CRITICAL_CUSTOMER_FLOWS_2026-03-02.md
 
 ---
 
@@ -268,7 +268,7 @@ Using ARM64 (Ampere CAX) instances for cost efficiency (same architecture as fro
 | cax31 | Performance | 8 | 16 GB | 160 GB | ~€9.49/mo | Show cost |
 
 All servers created in `nbg1` datacenter (Nuremberg) — same as frontdoor.
-Pricing displayed at cost for now (no markup). User sees the actual Hetzner price.
+Pricing is displayed at operator cost with no markup. User sees the actual Hetzner price.
 No region selection in UI — all servers go to nbg1.
 
 ---
@@ -618,9 +618,9 @@ Step 5: Update final status
     status = "deleted",
     deleted_at_ms = Date.now()
 
-Step 6: Clean up app install records
-  UPDATE frontdoor_server_app_installs SET
-    status = "not_installed"
+Step 6: Clean up server package state
+  UPDATE frontdoor_server_package_installs SET
+    status = "removed"
   WHERE server_id = "srv-..."
 ```
 
@@ -635,7 +635,7 @@ Step 6: Clean up app install records
 | DNS | Nothing to clean up (wildcard) |
 | Frontdoor routing table | Entry removed |
 | Server DB record | Kept (status = "deleted") for audit |
-| App install records | Reset to not_installed |
+| Server package install records | Mark removed |
 | App subscriptions | Unchanged (account-level, not server-level) |
 
 ### 8.5 Orphan Protection
@@ -747,11 +747,11 @@ HETZNER_SNAPSHOT_ID=<golden-snapshot-id>
 
 ### 12.1 Server Suspension
 
-When a server subscription payment fails:
-1. Grace period (e.g., 7 days) with "past due" warnings
-2. After grace period: server is stopped (VPS powered off, not destroyed)
-3. After extended period (e.g., 30 days): server is deprovisioned
-4. Data is not recoverable after deprovisioning
+When an account exhausts credits outside the free tier:
+1. Frontdoor marks running servers as suspended and removes them from routing
+2. The shell explains that credits must be added before the server resumes
+3. A later credit deposit may unsuspend the server without reprovisioning
+4. Longer-term deprovisioning policy, if added, is account/credits policy rather than a server-subscription contract
 
 ### 12.2 Server Migration
 

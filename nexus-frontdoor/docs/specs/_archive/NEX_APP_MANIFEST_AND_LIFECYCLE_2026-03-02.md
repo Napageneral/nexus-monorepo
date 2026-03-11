@@ -1,9 +1,14 @@
 # Nex App Manifest & Lifecycle
 
-Date: 2026-03-02
-Status: confirmed
+Date: 2026-03-02 (archived 2026-03-10)
+Status: superseded by `../../../../nex/docs/specs/apps/app-manifest-and-package-model.md`
 Updated: 2026-03-02 (reconciled with NEX_ARCHITECTURE_AND_SDK_MODEL; two handler modes; eliminated TS proxy layer for service-backed apps)
 Owners: Nexus Platform
+
+> Historical note: this document used to carry frontdoor-local app manifest
+> canon. The active manifest and package contract now lives in
+> `nex/docs/specs/apps/app-manifest-and-package-model.md`. This archived copy is
+> retained only as historical reference.
 
 ---
 
@@ -891,8 +896,6 @@ When an app is published to frontdoor (at publish time):
 
 This replaces the hardcoded `seedProducts()` approach — products are defined by their apps.
 
-**V1 bridge:** For the first two apps (GlowBot, Spike), the publish step can be a manual CLI tool or script that reads manifests and updates the frontdoor seed data. The real automated publish pipeline comes later.
-
 ### 6.2 App Installation Flow
 
 1. User triggers install via frontdoor UI (Flow F11)
@@ -985,14 +988,3 @@ These questions were raised during design and have been resolved:
 5. **Stripe price IDs**: Not in the manifest. Plans declare logical pricing (name, amount, features, limits). Stripe mapping is operator config, configured via admin UI or environment variables.
 
 ---
-
-## 9) Open Questions / Future Work
-
-1. **App marketplace / distribution**: How are third-party apps published and discovered? Currently only first-party apps (published by the operator).
-2. **App sandboxing**: **Resolved by new model** — Apps already run as separate processes (service binaries). Process-level isolation is inherent. Container-level isolation (for untrusted third-party apps) is a future concern but the architecture supports it naturally since apps are external processes, not in-process code.
-3. **App-to-app communication**: **Resolved** — Yes. App operations are registered in the taxonomy. Any caller with IAM permission can dispatch any operation. GlowBot can call `spike.ask` via `dispatch("spike.ask", {...})`. Cross-app calls go through the full pipeline (auth, IAM, tracing).
-4. **Data portability**: Moving app data between servers (mentioned in lifecycle section — deferred).
-5. **Hot reload in development**: Developer experience for iterating on service binaries. The runtime can watch the binary and restart on change.
-6. **App configuration UI**: Can an app declare a configuration schema that frontdoor renders as a settings form?
-7. **Streaming methods**: Long-running method calls that stream responses (e.g., AI chat, live data). The current method interface is request/response. Streaming is a V2 concern. The transport layer (WebSocket, gRPC) supports streaming natively — the question is the operation schema format for streaming responses.
-8. **Internal transport protocol**: The protocol between runtime and service binaries. V1 uses HTTP. gRPC and stdio are candidates for V2. See [NEX_ARCHITECTURE_AND_SDK_MODEL.md](../../nexus-specs/specs/nex/NEX_ARCHITECTURE_AND_SDK_MODEL.md) for transport layer design.

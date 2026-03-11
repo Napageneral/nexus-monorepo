@@ -1,9 +1,13 @@
 # Frontdoor MCP Server and Agentic Access Strategy
 
 **Date:** 2026-03-04
-**Status:** DRAFT
+**Status:** ARCHIVED 2026-03-10
 **Author:** Architecture Team
 **Component:** nexus-frontdoor
+
+> Historical note: MCP, credits, and free-tier behavior described here has now
+> been absorbed into active frontdoor canon and implementation. This proposal is
+> retained only as historical context.
 
 ---
 

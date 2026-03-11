@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # Production E2E Gap Closure Test
-# Tests: signup → auto-provision → auto-install → app frame → navigation
+# Tests: signup → auto-provision → auto-install → shell render → navigation
 # Prerequisites: frontdoor on 4789, runtime on 18789, fresh state, products synced
 # =============================================================================
 
@@ -99,23 +99,23 @@ for APP in spike glowbot control; do
 done
 
 # -----------------------------------------------------------
-section "6. App frame injection"
+section "6. Frontdoor shell render"
 # -----------------------------------------------------------
 GLOWBOT_HTML=$(curl -s "$FRONTDOOR/app/glowbot/" -H "Cookie: $SESSION_COOKIE" -H "Accept: text/html")
-if echo "$GLOWBOT_HTML" | grep -q "nexus-app-frame\|nexus-frame\|__nexus"; then
-  pass "App frame injected into GlowBot page"
+if echo "$GLOWBOT_HTML" | grep -q "nxf-shell-root\|nxf-shell-embed\|nxf-shell-loading"; then
+  pass "Frontdoor shell rendered for GlowBot page"
 else
-  if echo "$GLOWBOT_HTML" | grep -q "position:fixed\|app-frame\|nexus"; then
-    pass "App frame elements detected in GlowBot page"
+  if echo "$GLOWBOT_HTML" | grep -q "iframe\|shell\|nexus"; then
+    pass "Frontdoor shell elements detected in GlowBot page"
   else
-    fail "No app frame detected in GlowBot page"
+    fail "No frontdoor shell detected in GlowBot page"
   fi
 fi
 
 if echo "$GLOWBOT_HTML" | grep -qi "glowbot"; then
-  pass "Frame shows GlowBot branding"
+  pass "Shell shows GlowBot branding"
 else
-  fail "Frame missing GlowBot branding"
+  fail "Shell missing GlowBot branding"
 fi
 
 # -----------------------------------------------------------
@@ -156,9 +156,9 @@ else
 fi
 
 if echo "$GLOWBOT_HTML" | grep -qi "tenant-dev\|server"; then
-  pass "Frame includes server reference"
+  pass "Shell includes server reference"
 else
-  pass "Frame rendered (server name check inconclusive in curl)"
+  pass "Shell rendered (server name check inconclusive in curl)"
 fi
 
 # -----------------------------------------------------------

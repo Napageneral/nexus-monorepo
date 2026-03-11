@@ -1,10 +1,10 @@
 # Critical Customer Flows
 
-Date: 2026-03-02 (updated 2026-03-04)
-Status: confirmed
+Date: 2026-03-02 (updated 2026-03-06)
+Status: CANONICAL
 Owners: Nexus Platform
 
-> **Update (2026-03-04):** Server provisioning is now cloud-based (Hetzner VPSes). App installation uses SSH/SCP tarball delivery + runtime HTTP API (replaces config injection). Server billing uses prepaid credits with 7-day free tier. MCP server enables agentic platform management. See: `APP_INSTALLATION_PIPELINE_2026-03-04.md`, `FRONTDOOR_MCP_SERVER_AND_AGENTIC_ACCESS_2026-03-04.md`.
+> **Update (2026-03-10):** Hosted app launch uses a frontdoor-owned shell profile for humans and a tenant-origin profile for direct runtime traffic. The shell is durable and iframe-backed. Package install and upgrade are package-based, dependency-aware, and staged. See: `FRONTDOOR_HOSTED_ACCESS_AND_ROUTING.md`, `FRONTDOOR_SHELL_AND_EMBEDDED_APP_MODEL.md`, and `FRONTDOOR_PACKAGE_REGISTRY_AND_LIFECYCLE.md`.
 
 ## Confirmed Design Decisions
 
@@ -12,8 +12,8 @@ Owners: Nexus Platform
 - **Account entity**: Exists from the start (B2B — clinics, engineering teams). Sits between users and servers. An account owns servers and app subscriptions. Users are members of accounts.
 - **Server tiers**: Design for multiple tiers (small/medium/large). Currently three tiers: cax11 (Starter), cax21 (Standard), cax31 (Performance). 7-day free tier for first cax11 server.
 - **Free tier handling**: Free app tiers create an active subscription record with the free plan ID. Free server tier uses 7-day trial with `free_tier_expires_at_ms` on the credit record.
-- **App installation**: Frontdoor serves tarballs from app registry, SCPs to VPS via private network, calls runtime's `POST /api/apps/install` HTTP API. Auto-install on provisioning.
-- **App frame**: Frontdoor injects a persistent dock/bar when user is inside an app, allowing navigation back to dashboard, switching apps, account management.
+- **App installation**: Frontdoor resolves package releases and dependencies, stages artifacts to VPSes over the private network, and drives runtime operator lifecycle APIs. Auto-install on provisioning uses the same package lifecycle system.
+- **App shell**: Frontdoor owns the top-level shell document and renders app content inside a durable embedded boundary, allowing navigation back to dashboard, switching apps, and account management without trusting the app DOM.
 - **All app UIs hosted on nex runtime**: No external proxies. Apps serve static built UI files through nex, with method handlers running inside nex for backend logic.
 - **Programmatic access**: MCP server at `POST /mcp` for agent platform management. API tokens (`nex_t_...`) for headless workflows. Human OIDC signup required (agents operate after account creation).
 
@@ -38,7 +38,7 @@ Owners: Nexus Platform
    c. Provisions a server
    d. Creates app subscription (GlowBot Starter, $0, active)
    e. Installs GlowBot app on the new server
-6. User lands in GlowBot dashboard (inside frontdoor app frame at /app/glowbot/)
+6. User lands in the GlowBot dashboard inside the frontdoor shell profile at `frontdoor.nexushub.sh/app/glowbot/`
 7. Provisioning may take a moment — progress indicator shown during server provisioning
 
 ### F2: Neutral Signup (New User at Frontdoor Directly)
@@ -79,7 +79,7 @@ Owners: Nexus Platform
 
 1. From server dashboard, click "New Server"
 2. Select server tier/size (currently only one option, designed for multiple)
-3. Billing: server subscription created, goes through Stripe checkout if paid
+3. Billing: server creation is allowed by active free tier or available credits; paid usage draws from the account credit balance
 4. New server provisions → appears in server list
 5. User can then install any of their entitled apps on it
 
@@ -152,12 +152,12 @@ Owners: Nexus Platform
    - MCP: `tools/call nexus.apps.install`
 2. User selects target server (if not already selected)
 3. Click "Install" (or auto-triggered)
-4. Installation mechanics (see `APP_INSTALLATION_PIPELINE_2026-03-04.md`):
+4. Installation mechanics (see `FRONTDOOR_PACKAGE_REGISTRY_AND_LIFECYCLE.md`):
    a. Entitlement validated via `frontdoor_app_subscriptions`
-   b. App tarball SCPed to VPS via SSH over private network
-   c. Tarball extracted to `/opt/nex/apps/{appId}/`
-   d. Runtime HTTP API called: `POST /api/apps/install`
-   e. Runtime validates manifest, registers handlers, runs lifecycle hooks
+   b. Target app release and package dependencies resolved
+   c. Package artifacts staged to the VPS over the private network
+   d. Runtime operator lifecycle endpoints invoked in dependency order
+   e. Runtime validates, activates, and health-checks the package set
 5. Status transitions: not_installed → installing → installed (or failed)
 6. Visual progress during installation
 7. Once installed, app card on server detail shows "Launch" button
@@ -173,13 +173,13 @@ Owners: Nexus Platform
 ### F13: Launch an App
 
 1. From server detail, click "Launch" on an installed app card
-2. Navigation: → `/app/<appId>/` within frontdoor app frame
-3. Frontdoor app frame/dock becomes visible:
+2. Navigation: → `frontdoor.nexushub.sh/app/<appId>/` within the frontdoor shell profile
+3. Frontdoor shell chrome becomes visible:
    - Shows current app, other installed apps for quick switch
    - Back to dashboard button
    - Account menu
 4. App loads its UI (served as static files from nex runtime)
-5. App UI connects to nex runtime via WebSocket for data
+5. App UI connects to the hosted runtime transport via same-origin `/runtime/ws` using a frontdoor-minted runtime access token
 
 ---
 
@@ -187,20 +187,20 @@ Owners: Nexus Platform
 
 ### F14: Navigate Between Apps
 
-1. While inside GlowBot, use frontdoor dock to switch to Spike
-2. Click Spike in the dock → navigates to `/app/spike/` on the same server
+1. While inside GlowBot, use the frontdoor shell app switcher to switch to Spike
+2. Click Spike in the shell navigation → navigates to `/app/spike/` on the same server
 3. GlowBot state: handled by browser (different URL path, app manages its own state)
 4. Spike loads in the frame
 
 ### F15: Return to Server Dashboard
 
-1. Click home/dashboard icon in frontdoor dock
+1. Click home/dashboard in the frontdoor shell
 2. → Back to server dashboard view
-3. App frame/dock hides or transforms to dashboard nav
+3. The shell stays frontdoor-owned while the main content returns to the dashboard view
 
 ### F16: Switch Servers
 
-1. From dock or dashboard, server switcher
+1. From shell or dashboard, use the server switcher
 2. Select a different server → dashboard shows that server's apps
 3. If currently inside an app, switching servers navigates to the new server's dashboard
 
@@ -234,12 +234,12 @@ Owners: Nexus Platform
 3. Status: active → cancelled (grace period until period end)
 4. At period end: downgrade to free tier or deactivate
 
-### F20: Cancel Server Subscription
+### F20: Credit Exhaustion And Server Suspension
 
-1. From billing, click "Cancel" on a server subscription
-2. Confirmation: "This server and all its data will be deprovisioned at the end of your billing period on [date]."
-3. Server stays running until period end
-4. At period end: server deprovisioned, data archived/deleted per policy
+1. From billing, the user sees account credit balance, recent transactions, and free-tier status
+2. If credits run out outside the free tier, running servers become suspended
+3. Frontdoor explains that credits must be added before those servers resume
+4. After a credit deposit, the account can resume suspended servers
 
 ### F21: Payment Method Management
 
@@ -296,7 +296,7 @@ Owners: Nexus Platform
 1. Operator opens frontdoor admin app (a nex app on its own server)
 2. Dashboard shows:
    - Total accounts, total servers, total active users
-   - Total revenue (server subs + app subs)
+   - Total revenue and credit-liability signals
    - Error rates, provisioning queue
    - Recent activity feed
 3. All accounts listed, searchable/filterable
@@ -353,7 +353,7 @@ F1/F2 (Signup) → F4 (Server Provisioned) → F6 (View Server)
 F5 (New Server) requires active account from F1/F2
 F10 (Purchase) requires Stripe integration for paid plans
 F11 (Install) requires app tarball + SSH/SCP + runtime install API
-F13 (Launch) requires app frame/dock in frontdoor + static serving in nex
+F13 (Launch) requires a frontdoor-owned shell and embedded app boundary + static serving in nex
 F22 (Invite) requires account entity + membership model
 F30 (Agent Connect) requires F1/F2 (human signup) + API token
 ```
@@ -362,7 +362,7 @@ F30 (Agent Connect) requires F1/F2 (human signup) + API token
 
 ## Agentic Flows (F30–F33)
 
-> Added 2026-03-04. See `FRONTDOOR_MCP_SERVER_AND_AGENTIC_ACCESS_2026-03-04.md` for full spec.
+> Added 2026-03-04; updated 2026-03-10. MCP is now an implemented frontdoor surface. These flows describe the customer-facing behavior, while the detailed hosted proof lives in the active validation packet referenced by `docs/validation/FRONTDOOR_HOSTED_VALIDATION_ENTRYPOINT.md`.
 
 ### F30: Agent Connects via MCP
 
