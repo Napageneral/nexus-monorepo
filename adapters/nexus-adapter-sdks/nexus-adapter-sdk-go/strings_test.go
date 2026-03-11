@@ -94,12 +94,12 @@ func TestFieldValue(t *testing.T) {
 	}
 }
 
-func TestRequireAccount(t *testing.T) {
+func TestRequireConnection(t *testing.T) {
 	tests := []struct {
-		name    string
-		account string
-		want    string
-		wantErr bool
+		name         string
+		connectionID string
+		want         string
+		wantErr      bool
 	}{
 		{"normal account", "user@example.com", "user@example.com", false},
 		{"trims whitespace", "  user@example.com  ", "user@example.com", false},
@@ -110,13 +110,13 @@ func TestRequireAccount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := RequireAccount(tt.account)
+			got, err := RequireConnection(tt.connectionID)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("RequireAccount(%q) error = %v, wantErr %v", tt.account, err, tt.wantErr)
+				t.Errorf("RequireConnection(%q) error = %v, wantErr %v", tt.connectionID, err, tt.wantErr)
 				return
 			}
 			if got != tt.want {
-				t.Errorf("RequireAccount(%q) = %q, want %q", tt.account, got, tt.want)
+				t.Errorf("RequireConnection(%q) = %q, want %q", tt.connectionID, got, tt.want)
 			}
 		})
 	}

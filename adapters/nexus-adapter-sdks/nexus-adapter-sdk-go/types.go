@@ -81,15 +81,15 @@ const (
 	OpAdapterSetupSubmit  AdapterOperation = "adapter.setup.submit"
 	OpAdapterSetupStatus  AdapterOperation = "adapter.setup.status"
 	OpAdapterSetupCancel  AdapterOperation = "adapter.setup.cancel"
-	OpEventBackfill       AdapterOperation = "events.backfill"
-	OpDeliverySend        AdapterOperation = "channels.send"
+	OpRecordsBackfill     AdapterOperation = "records.backfill"
+	OpChannelsSend        AdapterOperation = "channels.send"
 	OpAdapterHealth       AdapterOperation = "adapter.health"
 	OpAdapterAccountsList AdapterOperation = "adapter.accounts.list"
-	OpDeliveryStream      AdapterOperation = "channels.stream"
-	OpDeliveryReact       AdapterOperation = "channels.react"
-	OpDeliveryEdit        AdapterOperation = "channels.edit"
-	OpDeliveryDelete      AdapterOperation = "channels.delete"
-	OpDeliveryPoll        AdapterOperation = "channels.poll"
+	OpChannelsStream      AdapterOperation = "channels.stream"
+	OpChannelsReact       AdapterOperation = "channels.react"
+	OpChannelsEdit        AdapterOperation = "channels.edit"
+	OpChannelsDelete      AdapterOperation = "channels.delete"
+	OpChannelsPoll        AdapterOperation = "channels.poll"
 )
 
 // ChannelCapabilities describes what a channel supports. Reported by the
@@ -158,37 +158,6 @@ type AdapterInboundPayload struct {
 	Metadata         map[string]any `json:"metadata,omitempty"`
 }
 
-// NexusEvent is the normalized event format that all adapters emit.
-// One JSON object per line on stdout (JSONL).
-type NexusEvent struct {
-	// Identity
-	EventID   string `json:"event_id"`  // "{platform}:{source_id}"
-	Timestamp int64  `json:"timestamp"` // Unix ms
-
-	// Content
-	Content     string       `json:"content"`
-	ContentType string       `json:"content_type"` // "text", "image", "audio", "video", "file", "reaction", "membership"
-	Attachments []Attachment `json:"attachments,omitempty"`
-
-	// Routing context
-	Platform      string `json:"platform"`   // Platform name
-	AccountID     string `json:"account_id"` // Which account received this
-	SenderID      string `json:"sender_id"`  // Platform-specific sender ID
-	SenderName    string `json:"sender_name,omitempty"`
-	SpaceID       string `json:"space_id,omitempty"`   // Optional parent container scope (guild/workspace)
-	SpaceName     string `json:"space_name,omitempty"` // Optional display name
-	ContainerID   string `json:"container_id"`         // Chat/channel/DM identifier
-	ContainerKind string `json:"container_kind"`       // "dm", "direct", "group", "channel"
-	ContainerName string `json:"container_name,omitempty"`
-	ThreadID      string `json:"thread_id,omitempty"`
-	ThreadName    string `json:"thread_name,omitempty"`
-	ReplyToID     string `json:"reply_to_id,omitempty"`
-
-	// Platform metadata (anything channel-specific)
-	Metadata         map[string]any `json:"metadata,omitempty"`
-	DeliveryMetadata map[string]any `json:"delivery_metadata,omitempty"`
-}
-
 // Attachment represents a media attachment on an event.
 type Attachment struct {
 	ID          string         `json:"id"`
@@ -224,22 +193,12 @@ type SendRequest struct {
 	Text    string         `json:"text,omitempty"`
 	Media   string         `json:"media,omitempty"` // File path
 	Caption string         `json:"caption,omitempty"`
-
-	// Deprecated compatibility fields. New adapters should route from Target.
-	Account   string `json:"account,omitempty"`
-	To        string `json:"to,omitempty"`
-	ReplyToID string `json:"reply_to_id,omitempty"`
-	ThreadID  string `json:"thread_id,omitempty"`
 }
 
 // DeleteRequest contains the parameters for a `channels.delete` invocation.
 type DeleteRequest struct {
 	Target    DeliveryTarget `json:"target"`
 	MessageID string         `json:"message_id"`
-
-	// Deprecated compatibility fields. New adapters should route from Target.
-	Account string `json:"account,omitempty"`
-	To      string `json:"to,omitempty"`
 }
 
 // DeliveryResult is the structured output of a `send` command.
@@ -253,19 +212,19 @@ type DeliveryResult struct {
 
 // ReactRequest contains the parameters for a `channels.react` invocation.
 type ReactRequest struct {
-	Account   string `json:"account"`
-	To        string `json:"to"`
-	MessageID string `json:"message_id"`
-	Emoji     string `json:"emoji"`
-	Remove    bool   `json:"remove,omitempty"`
+	ConnectionID string `json:"connection_id"`
+	To           string `json:"to"`
+	MessageID    string `json:"message_id"`
+	Emoji        string `json:"emoji"`
+	Remove       bool   `json:"remove,omitempty"`
 }
 
 // EditRequest contains the parameters for a `channels.edit` invocation.
 type EditRequest struct {
-	Account   string `json:"account"`
-	To        string `json:"to"`
-	MessageID string `json:"message_id"`
-	Text      string `json:"text"`
+	ConnectionID string `json:"connection_id"`
+	To           string `json:"to"`
+	MessageID    string `json:"message_id"`
+	Text         string `json:"text"`
 }
 
 // DeliveryError describes why a delivery failed.
@@ -281,11 +240,11 @@ type DeliveryError struct {
 
 // AdapterHealth is the structured output of a `health` command.
 type AdapterHealth struct {
-	Connected   bool           `json:"connected"`
-	Account     string         `json:"account"`
-	LastEventAt int64          `json:"last_event_at,omitempty"` // Unix ms
-	Error       string         `json:"error,omitempty"`
-	Details     map[string]any `json:"details,omitempty"`
+	Connected    bool           `json:"connected"`
+	ConnectionID string         `json:"connection_id"`
+	LastEventAt  int64          `json:"last_event_at,omitempty"` // Unix ms
+	Error        string         `json:"error,omitempty"`
+	Details      map[string]any `json:"details,omitempty"`
 }
 
 // --- Accounts ---
@@ -422,16 +381,16 @@ const (
 
 // AdapterSetupRequest is the generic input for adapter.setup.* operations.
 type AdapterSetupRequest struct {
-	Account   string         `json:"account,omitempty"`
-	SessionID string         `json:"session_id,omitempty"`
-	Payload   map[string]any `json:"payload,omitempty"`
+	ConnectionID string         `json:"connection_id,omitempty"`
+	SessionID    string         `json:"session_id,omitempty"`
+	Payload      map[string]any `json:"payload,omitempty"`
 }
 
 // AdapterSetupResult is the generic output for adapter.setup.* operations.
 type AdapterSetupResult struct {
 	Status       AdapterSetupStatus `json:"status"`
 	SessionID    string             `json:"session_id,omitempty"`
-	Account      string             `json:"account,omitempty"`
+	ConnectionID string             `json:"connection_id,omitempty"`
 	Service      string             `json:"service,omitempty"`
 	Message      string             `json:"message,omitempty"`
 	Instructions string             `json:"instructions,omitempty"`

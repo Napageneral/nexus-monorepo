@@ -9,7 +9,7 @@ import (
 )
 
 // StreamConfig configures the streaming delivery handler.
-// Only needed for adapters that declare "delivery.stream" in adapter.info operations.
+// Only needed for adapters that declare "channels.stream" in adapter.info operations.
 type StreamConfig struct {
 	// OnStreamStart is called when a new streaming delivery begins.
 	// The adapter should create a platform message and prepare for token accumulation.
@@ -44,7 +44,7 @@ func EmitStreamStatus(status AdapterStreamStatus) error {
 }
 
 // handleStream reads StreamEvent JSONL from stdin and dispatches to callbacks.
-// This is the main loop for the `stream` command.
+// This is the main loop for the `channels.stream` command.
 func handleStream(ctx context.Context, config *StreamConfig) error {
 	scanner := bufio.NewScanner(os.Stdin)
 	// Increase buffer size for potentially large events

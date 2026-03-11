@@ -68,14 +68,14 @@ func FieldValue(fields map[string]string, key string) string {
 	return strings.TrimSpace(fields[key])
 }
 
-// RequireAccount normalizes an account string (trims whitespace) and returns
-// an error if it resolves to empty. This replaces the old fallbackAccount pattern
-// which silently returned "default" — missing accounts are a config error that
-// should fail loudly so broken setups are caught immediately.
-func RequireAccount(account string) (string, error) {
-	normalized := strings.TrimSpace(account)
+// RequireConnection normalizes a runtime connection string (trims whitespace)
+// and returns an error if it resolves to empty. Missing connection identifiers
+// are a configuration error that should fail loudly so broken setups are caught
+// immediately.
+func RequireConnection(connectionID string) (string, error) {
+	normalized := strings.TrimSpace(connectionID)
 	if normalized == "" {
-		return "", fmt.Errorf("account is required but was empty (check adapter credentials and --account flag)")
+		return "", fmt.Errorf("connection is required but was empty (check adapter credentials and --connection flag)")
 	}
 	return normalized, nil
 }

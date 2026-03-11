@@ -15,8 +15,8 @@
 //	    nexadapter.Run(nexadapter.Adapter{
 //	        Operations: nexadapter.AdapterOperations{
 //	            AdapterInfo: myInfo,
-//	            AdapterMonitorStart: myMonitor, // or nexadapter.PollMonitor(config)
-//	            DeliverySend: mySend,
+//	            MonitorStart: myMonitor, // or nexadapter.PollMonitor(config)
+//	            ChannelsSend: mySend,
 //	        },
 //	    })
 //	}
@@ -43,26 +43,26 @@ type AdapterOperations struct {
 	// Required for all adapters.
 	AdapterInfo func(ctx context.Context) (*AdapterInfo, error)
 
-	// AdapterMonitorStart streams live events and should block until ctx is cancelled.
-	AdapterMonitorStart func(ctx context.Context, account string, emit EmitFunc) error
+	// MonitorStart streams live records and should block until ctx is cancelled.
+	MonitorStart func(ctx context.Context, connectionID string, emit EmitFunc) error
 
-	// DeliverySend delivers a message to the platform.
-	DeliverySend func(ctx context.Context, req SendRequest) (*DeliveryResult, error)
+	// ChannelsSend delivers a message to the platform.
+	ChannelsSend func(ctx context.Context, req SendRequest) (*DeliveryResult, error)
 
-	// DeliveryReact adds or removes a reaction on a platform message.
-	DeliveryReact func(ctx context.Context, req ReactRequest) (*DeliveryResult, error)
+	// ChannelsReact adds or removes a reaction on a platform message.
+	ChannelsReact func(ctx context.Context, req ReactRequest) (*DeliveryResult, error)
 
-	// DeliveryEdit updates an existing platform message in place.
-	DeliveryEdit func(ctx context.Context, req EditRequest) (*DeliveryResult, error)
+	// ChannelsEdit updates an existing platform message in place.
+	ChannelsEdit func(ctx context.Context, req EditRequest) (*DeliveryResult, error)
 
-	// DeliveryDelete deletes an existing platform message/resource.
-	DeliveryDelete func(ctx context.Context, req DeleteRequest) (*DeliveryResult, error)
+	// ChannelsDelete deletes an existing platform message/resource.
+	ChannelsDelete func(ctx context.Context, req DeleteRequest) (*DeliveryResult, error)
 
-	// EventBackfill emits historical events and exits when history is exhausted.
-	EventBackfill func(ctx context.Context, account string, since time.Time, emit EmitFunc) error
+	// RecordsBackfill emits historical records and exits when history is exhausted.
+	RecordsBackfill func(ctx context.Context, connectionID string, since time.Time, emit EmitFunc) error
 
-	// AdapterHealth reports account connection status.
-	AdapterHealth func(ctx context.Context, account string) (*AdapterHealth, error)
+	// AdapterHealth reports connection health.
+	AdapterHealth func(ctx context.Context, connectionID string) (*AdapterHealth, error)
 
 	// AdapterAccountsList lists configured accounts for the adapter.
 	AdapterAccountsList func(ctx context.Context) ([]AdapterAccount, error)
@@ -79,11 +79,11 @@ type AdapterOperations struct {
 	// AdapterSetupCancel cancels an in-progress setup session.
 	AdapterSetupCancel func(ctx context.Context, req AdapterSetupRequest) (*AdapterSetupResult, error)
 
-	// AdapterControlStart starts a long-lived duplex control session.
-	AdapterControlStart func(ctx context.Context, account string, session *ControlSession) error
+	// ControlStart starts a long-lived duplex control session.
+	ControlStart func(ctx context.Context, connectionID string, session *ControlSession) error
 
-	// DeliveryStream configures streaming delivery support.
-	DeliveryStream *StreamConfig
+	// ChannelsStream configures streaming delivery support.
+	ChannelsStream *StreamConfig
 }
 
 // Adapter defines the operation handlers for a Nexus adapter.
@@ -137,7 +137,7 @@ func Run(adapter Adapter) {
 		err = runEdit(adapter, filteredArgs)
 	case "channels.delete":
 		err = runDelete(adapter, filteredArgs)
-	case "events.backfill":
+	case "records.backfill":
 		err = runBackfill(adapter, filteredArgs)
 	case "adapter.health":
 		err = runHealth(adapter, filteredArgs)
@@ -182,13 +182,13 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  channels.react --connection <id> --to <target> --message-id <id> --emoji <name> [--remove]\n")
 	fmt.Fprintf(os.Stderr, "  channels.edit --connection <id> --to <target> --message-id <id> --text \"...\"\n")
 	fmt.Fprintf(os.Stderr, "  channels.delete --connection <id> --target-json <json> --message-id <id>\n")
-	fmt.Fprintf(os.Stderr, "  events.backfill --connection <id> --since <date>\n")
+	fmt.Fprintf(os.Stderr, "  records.backfill --connection <id> --since <date>\n")
 	fmt.Fprintf(os.Stderr, "  adapter.health --connection <id>\n")
 	fmt.Fprintf(os.Stderr, "  adapter.accounts.list\n")
-	fmt.Fprintf(os.Stderr, "  adapter.setup.start [--account <id>] [--session-id <id>] [--payload-json <json>]\n")
-	fmt.Fprintf(os.Stderr, "  adapter.setup.submit --session-id <id> [--account <id>] [--payload-json <json>]\n")
-	fmt.Fprintf(os.Stderr, "  adapter.setup.status --session-id <id> [--account <id>]\n")
-	fmt.Fprintf(os.Stderr, "  adapter.setup.cancel --session-id <id> [--account <id>]\n")
+	fmt.Fprintf(os.Stderr, "  adapter.setup.start [--connection <id>] [--session-id <id>] [--payload-json <json>]\n")
+	fmt.Fprintf(os.Stderr, "  adapter.setup.submit --session-id <id> [--connection <id>] [--payload-json <json>]\n")
+	fmt.Fprintf(os.Stderr, "  adapter.setup.status --session-id <id> [--connection <id>]\n")
+	fmt.Fprintf(os.Stderr, "  adapter.setup.cancel --session-id <id> [--connection <id>]\n")
 	fmt.Fprintf(os.Stderr, "  channels.stream --connection <id>\n")
 	fmt.Fprintf(os.Stderr, "\nGlobal flags:\n")
 	fmt.Fprintf(os.Stderr, "  --verbose, -v                     Enable debug logging\n")
@@ -208,7 +208,7 @@ func runInfo(adapter Adapter) error {
 }
 
 func runMonitor(adapter Adapter, args []string) error {
-	if adapter.Operations.AdapterMonitorStart == nil {
+	if adapter.Operations.MonitorStart == nil {
 		return fmt.Errorf("adapter.monitor.start not supported by this adapter")
 	}
 
@@ -224,7 +224,7 @@ func runMonitor(adapter Adapter, args []string) error {
 	emit := makeEmitFunc()
 
 	LogInfo("monitor starting for connection %q", *connection)
-	err := adapter.Operations.AdapterMonitorStart(ctx, *connection, emit)
+	err := adapter.Operations.MonitorStart(ctx, *connection, emit)
 	if err != nil {
 		return fmt.Errorf("adapter.monitor.start: %w", err)
 	}
@@ -233,7 +233,7 @@ func runMonitor(adapter Adapter, args []string) error {
 }
 
 func runSend(adapter Adapter, args []string) error {
-	if adapter.Operations.DeliverySend == nil {
+	if adapter.Operations.ChannelsSend == nil {
 		return fmt.Errorf("channels.send not supported by this adapter")
 	}
 
@@ -270,15 +270,9 @@ func runSend(adapter Adapter, args []string) error {
 		Text:    *text,
 		Media:   *media,
 		Caption: *caption,
-
-		// Deprecated compatibility fields derived from the canonical target.
-		Account:   target.ConnectionID,
-		To:        target.Channel.ContainerID,
-		ReplyToID: target.ReplyToID,
-		ThreadID:  target.Channel.ThreadID,
 	}
 
-	result, err := adapter.Operations.DeliverySend(ctx, req)
+	result, err := adapter.Operations.ChannelsSend(ctx, req)
 	if err != nil {
 		// Return error as a structured DeliveryResult rather than crashing
 		return writeJSON(&DeliveryResult{
@@ -295,7 +289,7 @@ func runSend(adapter Adapter, args []string) error {
 }
 
 func runReact(adapter Adapter, args []string) error {
-	if adapter.Operations.DeliveryReact == nil {
+	if adapter.Operations.ChannelsReact == nil {
 		return fmt.Errorf("channels.react not supported by this adapter")
 	}
 
@@ -311,14 +305,14 @@ func runReact(adapter Adapter, args []string) error {
 
 	ctx := signalContext()
 	req := ReactRequest{
-		Account:   *connection,
-		To:        *to,
-		MessageID: *messageID,
-		Emoji:     *emoji,
-		Remove:    *remove,
+		ConnectionID: strings.TrimSpace(*connection),
+		To:           *to,
+		MessageID:    *messageID,
+		Emoji:        *emoji,
+		Remove:       *remove,
 	}
 
-	result, err := adapter.Operations.DeliveryReact(ctx, req)
+	result, err := adapter.Operations.ChannelsReact(ctx, req)
 	if err != nil {
 		return writeJSON(&DeliveryResult{
 			Success: false,
@@ -334,7 +328,7 @@ func runReact(adapter Adapter, args []string) error {
 }
 
 func runEdit(adapter Adapter, args []string) error {
-	if adapter.Operations.DeliveryEdit == nil {
+	if adapter.Operations.ChannelsEdit == nil {
 		return fmt.Errorf("channels.edit not supported by this adapter")
 	}
 
@@ -349,13 +343,13 @@ func runEdit(adapter Adapter, args []string) error {
 
 	ctx := signalContext()
 	req := EditRequest{
-		Account:   *connection,
-		To:        *to,
-		MessageID: *messageID,
-		Text:      *text,
+		ConnectionID: strings.TrimSpace(*connection),
+		To:           *to,
+		MessageID:    *messageID,
+		Text:         *text,
 	}
 
-	result, err := adapter.Operations.DeliveryEdit(ctx, req)
+	result, err := adapter.Operations.ChannelsEdit(ctx, req)
 	if err != nil {
 		return writeJSON(&DeliveryResult{
 			Success: false,
@@ -371,7 +365,7 @@ func runEdit(adapter Adapter, args []string) error {
 }
 
 func runDelete(adapter Adapter, args []string) error {
-	if adapter.Operations.DeliveryDelete == nil {
+	if adapter.Operations.ChannelsDelete == nil {
 		return fmt.Errorf("channels.delete not supported by this adapter")
 	}
 
@@ -407,13 +401,9 @@ func runDelete(adapter Adapter, args []string) error {
 	req := DeleteRequest{
 		Target:    target,
 		MessageID: *messageID,
-
-		// Deprecated compatibility fields derived from the canonical target.
-		Account: target.ConnectionID,
-		To:      target.Channel.ContainerID,
 	}
 
-	result, err := adapter.Operations.DeliveryDelete(ctx, req)
+	result, err := adapter.Operations.ChannelsDelete(ctx, req)
 	if err != nil {
 		return writeJSON(&DeliveryResult{
 			Success: false,
@@ -429,11 +419,11 @@ func runDelete(adapter Adapter, args []string) error {
 }
 
 func runBackfill(adapter Adapter, args []string) error {
-	if adapter.Operations.EventBackfill == nil {
-		return fmt.Errorf("events.backfill not supported by this adapter")
+	if adapter.Operations.RecordsBackfill == nil {
+		return fmt.Errorf("records.backfill not supported by this adapter")
 	}
 
-	fs := flag.NewFlagSet("events.backfill", flag.ContinueOnError)
+	fs := flag.NewFlagSet("records.backfill", flag.ContinueOnError)
 	connection := fs.String("connection", "", "Connection ID")
 	since := fs.String("since", "", "Backfill start date (ISO 8601 or YYYY-MM-DD)")
 	_ = fs.String("format", "jsonl", "Output format (always jsonl)")
@@ -450,9 +440,9 @@ func runBackfill(adapter Adapter, args []string) error {
 	emit := makeEmitFunc()
 
 	LogInfo("backfill starting for connection %q since %s", *connection, sinceTime.Format(time.RFC3339))
-	err = adapter.Operations.EventBackfill(ctx, *connection, sinceTime, emit)
+	err = adapter.Operations.RecordsBackfill(ctx, *connection, sinceTime, emit)
 	if err != nil {
-		return fmt.Errorf("events.backfill: %w", err)
+		return fmt.Errorf("records.backfill: %w", err)
 	}
 	LogInfo("backfill completed")
 	return nil
@@ -474,9 +464,9 @@ func runHealth(adapter Adapter, args []string) error {
 	if err != nil {
 		// Return structured health error rather than crashing
 		return writeJSON(&AdapterHealth{
-			Connected: false,
-			Account:   *connection,
-			Error:     err.Error(),
+			Connected:    false,
+			ConnectionID: strings.TrimSpace(*connection),
+			Error:        err.Error(),
 		})
 	}
 
@@ -519,7 +509,7 @@ func runSetup(adapter Adapter, args []string, operation AdapterOperation) error 
 	}
 
 	fs := flag.NewFlagSet(string(operation), flag.ContinueOnError)
-	account := fs.String("account", "", "Account ID")
+	connection := fs.String("connection", "", "Connection ID")
 	sessionID := fs.String("session-id", "", "Setup session ID")
 	payloadJSON := fs.String("payload-json", "", "JSON object payload")
 	if err := fs.Parse(args); err != nil {
@@ -527,8 +517,8 @@ func runSetup(adapter Adapter, args []string, operation AdapterOperation) error 
 	}
 
 	req := AdapterSetupRequest{}
-	if trimmed := strings.TrimSpace(*account); trimmed != "" {
-		req.Account = trimmed
+	if trimmed := strings.TrimSpace(*connection); trimmed != "" {
+		req.ConnectionID = trimmed
 	}
 	if trimmed := strings.TrimSpace(*sessionID); trimmed != "" {
 		req.SessionID = trimmed
@@ -557,7 +547,7 @@ func runSetup(adapter Adapter, args []string, operation AdapterOperation) error 
 }
 
 func runControl(adapter Adapter, args []string) error {
-	if adapter.Operations.AdapterControlStart == nil {
+	if adapter.Operations.ControlStart == nil {
 		return fmt.Errorf("adapter.control.start not supported by this adapter")
 	}
 
@@ -575,7 +565,7 @@ func runControl(adapter Adapter, args []string) error {
 	session := NewControlSession(os.Stdin, os.Stdout)
 
 	LogInfo("control session starting for connection %q", *connection)
-	if err := adapter.Operations.AdapterControlStart(ctx, strings.TrimSpace(*connection), session); err != nil {
+	if err := adapter.Operations.ControlStart(ctx, strings.TrimSpace(*connection), session); err != nil {
 		return fmt.Errorf("adapter.control.start: %w", err)
 	}
 	LogInfo("control session stopped cleanly")
@@ -583,7 +573,7 @@ func runControl(adapter Adapter, args []string) error {
 }
 
 func runStream(adapter Adapter, args []string) error {
-	if adapter.Operations.DeliveryStream == nil {
+	if adapter.Operations.ChannelsStream == nil {
 		return fmt.Errorf("channels.stream not supported by this adapter")
 	}
 
@@ -597,7 +587,7 @@ func runStream(adapter Adapter, args []string) error {
 	ctx := signalContext()
 
 	LogInfo("stream handler starting")
-	err := handleStream(ctx, adapter.Operations.DeliveryStream)
+	err := handleStream(ctx, adapter.Operations.ChannelsStream)
 	if err != nil {
 		return fmt.Errorf("channels.stream: %w", err)
 	}

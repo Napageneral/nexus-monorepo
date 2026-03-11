@@ -2,120 +2,120 @@ package nexadapter
 
 import "time"
 
-// EventBuilder provides a fluent API for constructing NexusEvent objects.
-// Use NewEvent() to start building.
-type EventBuilder struct {
-	event NexusEvent
+// RecordBuilder provides a fluent API for constructing canonical
+// record.ingest envelopes. Use NewRecord() to start building.
+type RecordBuilder struct {
+	record AdapterInboundRecord
 }
 
-// NewEvent creates a new event builder for the given platform and event ID.
-// The event ID should follow the convention "{platform}:{source_id}".
-//
-//	event := nexadapter.NewEvent("imessage", "imessage:abc-def-123").
-//	    WithTimestamp(msg.Date).
-//	    WithContent(msg.Text).
-//	    WithSender(msg.Handle, msg.DisplayName).
-//	    WithContainer(msg.ChatID, "dm").
-//	    WithAccount("default").
-//	    Build()
-func NewEvent(platform, eventID string) *EventBuilder {
-	return &EventBuilder{
-		event: NexusEvent{
-			Platform:    platform,
-			EventID:     eventID,
-			ContentType: "text",
-			Timestamp:   time.Now().UnixMilli(),
+// NewRecord creates a new record builder for the given platform and external
+// record ID.
+func NewRecord(platform, externalRecordID string) *RecordBuilder {
+	return &RecordBuilder{
+		record: AdapterInboundRecord{
+			Operation: "record.ingest",
+			Routing: AdapterInboundRouting{
+				Platform:      platform,
+				ConnectionID:  "",
+				SenderID:      "",
+				ContainerKind: "direct",
+				ContainerID:   "",
+			},
+			Payload: AdapterInboundPayload{
+				ExternalRecordID: externalRecordID,
+				Timestamp:        time.Now().UnixMilli(),
+				Content:          "",
+				ContentType:      "text",
+			},
 		},
 	}
 }
 
-// WithTimestamp sets the event timestamp from a time.Time.
-func (b *EventBuilder) WithTimestamp(t time.Time) *EventBuilder {
-	b.event.Timestamp = t.UnixMilli()
+func (b *RecordBuilder) WithTimestamp(t time.Time) *RecordBuilder {
+	b.record.Payload.Timestamp = t.UnixMilli()
 	return b
 }
 
-// WithTimestampUnixMs sets the event timestamp from a Unix millisecond value.
-func (b *EventBuilder) WithTimestampUnixMs(ms int64) *EventBuilder {
-	b.event.Timestamp = ms
+func (b *RecordBuilder) WithTimestampUnixMs(ms int64) *RecordBuilder {
+	b.record.Payload.Timestamp = ms
 	return b
 }
 
-// WithContent sets the text content of the event.
-func (b *EventBuilder) WithContent(content string) *EventBuilder {
-	b.event.Content = content
+func (b *RecordBuilder) WithContent(content string) *RecordBuilder {
+	b.record.Payload.Content = content
 	return b
 }
 
-// WithContentType sets the content type (default is "text").
-// Common values: "text", "image", "audio", "video", "file", "reaction".
-func (b *EventBuilder) WithContentType(ct string) *EventBuilder {
-	b.event.ContentType = ct
+func (b *RecordBuilder) WithContentType(ct string) *RecordBuilder {
+	b.record.Payload.ContentType = ct
 	return b
 }
 
-// WithSender sets the sender's platform ID and optional display name.
-func (b *EventBuilder) WithSender(id, name string) *EventBuilder {
-	b.event.SenderID = id
-	b.event.SenderName = name
+func (b *RecordBuilder) WithSender(id, name string) *RecordBuilder {
+	b.record.Routing.SenderID = id
+	b.record.Routing.SenderName = name
 	return b
 }
 
-// WithContainer sets the conversation container identifier and kind.
-// containerID is the chat/channel/DM identifier.
-// kind is one of: "dm", "direct", "group", "channel".
-func (b *EventBuilder) WithContainer(containerID, kind string) *EventBuilder {
-	b.event.ContainerID = containerID
-	b.event.ContainerKind = kind
+func (b *RecordBuilder) WithReceiver(id, name string) *RecordBuilder {
+	b.record.Routing.ReceiverID = id
+	b.record.Routing.ReceiverName = name
 	return b
 }
 
-// WithPeer is a deprecated alias for WithContainer.
-func (b *EventBuilder) WithPeer(peerID, kind string) *EventBuilder {
-	return b.WithContainer(peerID, kind)
-}
-
-// WithAccount sets the adapter account ID that received this event.
-func (b *EventBuilder) WithAccount(account string) *EventBuilder {
-	b.event.AccountID = account
+func (b *RecordBuilder) WithContainer(containerID, kind string) *RecordBuilder {
+	b.record.Routing.ContainerID = containerID
+	b.record.Routing.ContainerKind = kind
 	return b
 }
 
-// WithThread sets the thread ID for threaded conversations.
-func (b *EventBuilder) WithThread(threadID string) *EventBuilder {
-	b.event.ThreadID = threadID
+func (b *RecordBuilder) WithConnection(connectionID string) *RecordBuilder {
+	b.record.Routing.ConnectionID = connectionID
 	return b
 }
 
-// WithSpace sets the optional parent container scope (e.g., guild/workspace).
-func (b *EventBuilder) WithSpace(spaceID, spaceName string) *EventBuilder {
-	b.event.SpaceID = spaceID
-	b.event.SpaceName = spaceName
+func (b *RecordBuilder) WithThread(threadID string) *RecordBuilder {
+	b.record.Routing.ThreadID = threadID
 	return b
 }
 
-// WithReplyTo sets the event ID this event is replying to.
-func (b *EventBuilder) WithReplyTo(eventID string) *EventBuilder {
-	b.event.ReplyToID = eventID
+func (b *RecordBuilder) WithSpace(spaceID, spaceName string) *RecordBuilder {
+	b.record.Routing.SpaceID = spaceID
+	b.record.Routing.SpaceName = spaceName
 	return b
 }
 
-// WithAttachment adds a media attachment to the event.
-func (b *EventBuilder) WithAttachment(a Attachment) *EventBuilder {
-	b.event.Attachments = append(b.event.Attachments, a)
+func (b *RecordBuilder) WithReplyTo(recordID string) *RecordBuilder {
+	b.record.Routing.ReplyToID = recordID
 	return b
 }
 
-// WithMetadata sets a key-value pair in the platform-specific metadata.
-func (b *EventBuilder) WithMetadata(key string, value any) *EventBuilder {
-	if b.event.Metadata == nil {
-		b.event.Metadata = make(map[string]any)
+func (b *RecordBuilder) WithAttachment(a Attachment) *RecordBuilder {
+	b.record.Payload.Attachments = append(b.record.Payload.Attachments, a)
+	return b
+}
+
+func (b *RecordBuilder) WithRecipient(recipientID string) *RecordBuilder {
+	b.record.Payload.Recipients = append(b.record.Payload.Recipients, recipientID)
+	return b
+}
+
+func (b *RecordBuilder) WithMetadata(key string, value any) *RecordBuilder {
+	if b.record.Payload.Metadata == nil {
+		b.record.Payload.Metadata = make(map[string]any)
 	}
-	b.event.Metadata[key] = value
+	b.record.Payload.Metadata[key] = value
 	return b
 }
 
-// Build returns the constructed NexusEvent.
-func (b *EventBuilder) Build() NexusEvent {
-	return b.event
+func (b *RecordBuilder) WithRoutingMetadata(key string, value any) *RecordBuilder {
+	if b.record.Routing.Metadata == nil {
+		b.record.Routing.Metadata = make(map[string]any)
+	}
+	b.record.Routing.Metadata[key] = value
+	return b
+}
+
+func (b *RecordBuilder) Build() AdapterInboundRecord {
+	return b.record
 }

@@ -137,14 +137,14 @@ func (s *ControlSession) EmitInvokeResult(frame AdapterControlInvokeResultFrame)
 	return s.writeFrame(frame)
 }
 
-// EmitEventIngest emits event.ingest.
-func (s *ControlSession) EmitEventIngest(event map[string]any) error {
-	if event == nil {
-		return fmt.Errorf("event is required")
+// EmitRecordIngest emits canonical record.ingest control output.
+func (s *ControlSession) EmitRecordIngest(record any) error {
+	if record == nil {
+		return fmt.Errorf("record is required")
 	}
-	frame := AdapterControlEventIngestFrame{
-		Type:  "event.ingest",
-		Event: event,
+	frame := AdapterControlRecordIngestFrame{
+		Type:   "record.ingest",
+		Record: record,
 	}
 	return s.writeFrame(frame)
 }

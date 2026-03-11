@@ -23,7 +23,7 @@ func TestRunSendParsesCanonicalDeliveryTarget(t *testing.T) {
 
 	adapter := Adapter{
 		Operations: AdapterOperations{
-			DeliverySend: func(ctx context.Context, req SendRequest) (*DeliveryResult, error) {
+			ChannelsSend: func(ctx context.Context, req SendRequest) (*DeliveryResult, error) {
 				captured = req
 				return &DeliveryResult{
 					Success:    true,
@@ -66,11 +66,5 @@ func TestRunSendParsesCanonicalDeliveryTarget(t *testing.T) {
 	}
 	if strings.TrimSpace(captured.Text) != `{"action":"comment","body":"hello"}` {
 		t.Fatalf("text = %q", captured.Text)
-	}
-	if captured.Account != "jira-conn" {
-		t.Fatalf("compat account = %q", captured.Account)
-	}
-	if captured.To != "VT" {
-		t.Fatalf("compat to = %q", captured.To)
 	}
 }

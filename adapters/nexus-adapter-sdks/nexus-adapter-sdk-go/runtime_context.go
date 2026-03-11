@@ -14,10 +14,10 @@ const AdapterContextEnvVar = "NEXUS_ADAPTER_CONTEXT_PATH"
 //
 // This is a process boundary contract (NEX -> adapter). Keep it stable.
 type RuntimeContext struct {
-	Version   int            `json:"version,omitempty"`
-	Platform  string         `json:"platform"`
-	AccountID string         `json:"account_id"`
-	Config    map[string]any `json:"config"`
+	Version      int            `json:"version,omitempty"`
+	Platform     string         `json:"platform"`
+	ConnectionID string         `json:"connection_id"`
+	Config       map[string]any `json:"config"`
 
 	// Credential is optional; adapters may run in unauthenticated mode.
 	Credential *RuntimeCredential `json:"credential,omitempty"`
@@ -65,8 +65,8 @@ func LoadRuntimeContextFile(path string) (*RuntimeContext, error) {
 	if ctx.Platform == "" {
 		return nil, fmt.Errorf("runtime context missing platform")
 	}
-	if ctx.AccountID == "" {
-		return nil, fmt.Errorf("runtime context missing account_id")
+	if ctx.ConnectionID == "" {
+		return nil, fmt.Errorf("runtime context missing connection_id")
 	}
 	if ctx.Config == nil {
 		ctx.Config = map[string]any{}
