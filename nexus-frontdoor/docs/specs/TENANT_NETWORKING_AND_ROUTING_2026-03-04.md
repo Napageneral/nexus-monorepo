@@ -2,7 +2,7 @@
 
 **Status:** CANONICAL
 **Last Updated:** 2026-03-06
-**Related:** CLOUD_PROVISIONING_ARCHITECTURE_2026-03-04.md, FRONTDOOR_ARCHITECTURE.md, FRONTDOOR_HOSTED_ACCESS_AND_ROUTING.md, FRONTDOOR_SHELL_AND_EMBEDDED_APP_MODEL.md, CRITICAL_CUSTOMER_FLOWS_2026-03-02.md
+**Related:** CLOUD_PROVISIONING_ARCHITECTURE_2026-03-04.md, FRONTDOOR_ARCHITECTURE.md, FRONTDOOR_HOSTED_ACCESS_AND_ROUTING.md, FRONTDOOR_SHELL_AND_EMBEDDED_APP_MODEL.md, CRITICAL_CUSTOMER_FLOWS_2026-03-02.md, `nex/docs/specs/platform/server-lifecycle-and-durability.md`
 
 ---
 
@@ -11,7 +11,7 @@
 Frontdoor is the single entry point for all tenant traffic. It terminates TLS (via Caddy), resolves the target tenant, and reverse-proxies requests to the tenant's VPS over a Hetzner Cloud Network.
 
 **Infrastructure context:**
-- Frontdoor runs on Hetzner Cloud VPS `oracle-1` (CAX31, ARM64, nbg1-dc3, IP: 46.225.118.74)
+- Frontdoor runs on a dedicated public host in the Hetzner Cloud project
 - Caddy 2.x is the TLS-terminating reverse proxy in front of frontdoor (port 4789)
 - Frontdoor and all tenant VPSes are in the same Hetzner Cloud project and datacenter (nbg1)
 
@@ -44,7 +44,7 @@ nexushub.sh      A    <frontdoor-public-ip>
 **Why wildcard:**
 - Zero DNS propagation delay on new tenant creation
 - No DNS API calls during provisioning — one less thing to fail
-- No DNS cleanup during deprovisioning
+- No DNS cleanup during archive, restore, or final destroy because wildcard routing stays stable
 - Single TLS cert to manage
 - Simple and deterministic
 
@@ -82,9 +82,10 @@ Not in v1 — adding this later requires only a domain registry table and cert p
 
 ### 3.1 Caddy as TLS Terminator
 
-Caddy is the TLS-terminating reverse proxy running on the frontdoor VPS. It handles certificate provisioning and renewal automatically.
+Caddy is the TLS-terminating reverse proxy running on the dedicated frontdoor
+host. It handles certificate provisioning and renewal automatically.
 
-Current Caddyfile has individual site blocks for `frontdoor.nexushub.sh` and `api.spike.fyi`. To support wildcard subdomains, Caddy needs:
+To support wildcard subdomains, Caddy needs:
 
 1. A custom build with a DNS challenge plugin (stock Caddy 2.6.2 does not include DNS plugins)
 2. A wildcard site block for `*.nexushub.sh`
@@ -101,12 +102,6 @@ Target Caddyfile:
     }
     encode gzip zstd
     reverse_proxy 127.0.0.1:4789
-}
-
-# Spike API (separate domain, separate cert)
-api.spike.fyi {
-    encode gzip zstd
-    reverse_proxy 127.0.0.1:7422
 }
 ```
 
@@ -157,7 +152,7 @@ All tenant VPSes and frontdoor share a Hetzner Cloud Network in the same datacen
 Network:  10.0.0.0/16
 Subnet:   10.0.0.0/16 (zone: eu-central / nbg1)
 
-Frontdoor (oracle-1, cax31):  10.0.0.x (auto-assigned when attached)
+Frontdoor public host:          10.0.0.x (auto-assigned when attached)
 Tenant VPS 1:                  10.0.0.x (auto-assigned on creation)
 Tenant VPS 2:                  10.0.0.x (auto-assigned on creation)
 ...
@@ -616,7 +611,7 @@ Every provisioning event is logged:
 }
 ```
 
-Events: `server_provisioning_started`, `server_provision_callback`, `server_provisioning_complete`, `server_provisioning_failed`, `server_deprovisioning_started`, `server_deprovisioning_complete`.
+Events: `server_provisioning_started`, `server_provision_callback`, `server_provisioning_complete`, `server_provisioning_failed`, `server_archive_started`, `server_archive_complete`, `server_recovery_started`, `server_recovery_complete`, `server_destroy_started`, `server_destroy_complete`.
 
 ---
 
@@ -662,7 +657,7 @@ For the initial implementation (getting Hetzner provisioning working end-to-end)
 5. WebSocket upgrade proxying
 
 ### Phase 2: Cloud Provisioning (Required)
-6. Hetzner provider implementation (createServer, destroyServer)
+6. Hetzner provider implementation (createServer plus durable lifecycle provider actions)
 7. Cloud-init template rendering
 8. Provision callback endpoint
 9. Provisioning timeout handler

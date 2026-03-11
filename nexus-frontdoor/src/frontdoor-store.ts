@@ -24,6 +24,28 @@ function parseJsonArray(raw: unknown): string[] {
   }
 }
 
+function parseJsonObject(raw: unknown): Record<string, string> {
+  if (typeof raw !== "string" || !raw.trim()) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value !== "string" || !value.trim()) {
+        continue;
+      }
+      out[key] = value.trim();
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 function dedupe(values: string[]): string[] {
   const out = new Set<string>();
   for (const value of values) {
@@ -41,6 +63,10 @@ function normalizeUsername(value: string): string {
 }
 
 function normalizeAppId(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function normalizeIdentifier(value: string): string {
   return value.trim().toLowerCase();
 }
 
@@ -71,6 +97,24 @@ function canonicalizeRuntimeUrl(raw: string): string {
     return noTrailingSlash.toLowerCase();
   } catch {
     return value.replace(/\/+$/g, "").toLowerCase();
+  }
+}
+
+function canonicalizeBaseUrl(raw: string): string {
+  const value = raw.trim();
+  if (!value) {
+    return "";
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+    parsed.hash = "";
+    parsed.search = "";
+    return parsed.toString().replace(/\/+$/g, "");
+  } catch {
+    return "";
   }
 }
 
@@ -150,7 +194,15 @@ export type AccountMemberView = AccountMemberRecord & {
   displayName?: string;
 };
 
-export type ServerStatus = "provisioning" | "running" | "failed" | "deprovisioning" | "deleted" | "suspended";
+export type ServerStatus =
+  | "provisioning"
+  | "running"
+  | "recovering"
+  | "failed"
+  | "suspended"
+  | "archived"
+  | "destroy_pending"
+  | "destroyed";
 
 export type ServerRecord = {
   serverId: string;
@@ -162,14 +214,103 @@ export type ServerRecord = {
   plan: string;
   provider: string;
   providerServerId: string | null;
+  previousProviderServerId: string | null;
   privateIp: string | null;
   publicIp: string | null;
+  previousPrivateIp: string | null;
+  previousPublicIp: string | null;
   runtimePort: number;
   runtimeAuthToken: string | null;
   provisionToken: string | null;
+  backupEnabled: boolean;
+  deleteProtectionEnabled: boolean;
+  rebuildProtectionEnabled: boolean;
   createdAtMs: number;
   updatedAtMs: number;
-  deletedAtMs: number | null;
+  archivedAtMs: number | null;
+  destroyedAtMs: number | null;
+  lastRecoveredAtMs: number | null;
+  activeRecoveryPointId: string | null;
+};
+
+export type ServerRecoveryPointRecord = {
+  recoveryPointId: string;
+  serverId: string;
+  tenantId: string;
+  provider: string;
+  providerArtifactId: string;
+  captureType: "backup" | "snapshot" | "image";
+  label: string;
+  notes: string | null;
+  createdAtMs: number;
+};
+
+type ServerRow = {
+  server_id: string;
+  account_id: string;
+  tenant_id: string;
+  display_name: string;
+  generated_name: string;
+  status: string;
+  plan: string;
+  provider: string;
+  provider_server_id: string | null;
+  previous_provider_server_id: string | null;
+  private_ip: string | null;
+  public_ip: string | null;
+  previous_private_ip: string | null;
+  previous_public_ip: string | null;
+  runtime_port: number | null;
+  runtime_auth_token: string | null;
+  provision_token: string | null;
+  backup_enabled: number | null;
+  delete_protection_enabled: number | null;
+  rebuild_protection_enabled: number | null;
+  created_at_ms: number;
+  updated_at_ms: number;
+  archived_at_ms: number | null;
+  destroyed_at_ms: number | null;
+  last_recovered_at_ms: number | null;
+  active_recovery_point_id: string | null;
+  deleted_at_ms?: number | null;
+};
+
+export type ManagedConnectionFlowKind = "oauth2" | "custom_flow";
+
+export type PlatformManagedConnectionProfileStatus = "active" | "disabled" | "archived";
+
+export type PlatformManagedConnectionProfileRecord = {
+  managedProfileId: string;
+  appId: string;
+  adapterId: string;
+  connectionProfileId: string;
+  authMethodId: string;
+  flowKind: ManagedConnectionFlowKind;
+  service: string;
+  displayName: string;
+  status: PlatformManagedConnectionProfileStatus;
+  authorizeUrl?: string;
+  tokenUrl?: string;
+  clientId?: string;
+  clientSecretRef?: string;
+  scopes: string[];
+  authorizeParams: Record<string, string>;
+  tokenParams: Record<string, string>;
+  config: Record<string, string>;
+  createdAtMs: number;
+  updatedAtMs: number;
+};
+
+export type ProductControlPlaneRouteStatus = "active" | "disabled" | "archived";
+
+export type ProductControlPlaneRouteRecord = {
+  appId: string;
+  displayName: string;
+  baseUrl: string;
+  authTokenRef: string;
+  status: ProductControlPlaneRouteStatus;
+  createdAtMs: number;
+  updatedAtMs: number;
 };
 
 export function getServerRuntimeUrl(server: ServerRecord): string | null {
@@ -264,6 +405,59 @@ export type ServerAppInstallRecord = {
   lastError?: string;
   installedAtMs?: number;
   source: "onboarding" | "manual" | "admin" | "system" | "purchase" | "inferred" | "auto_provision" | "api";
+  createdAtMs: number;
+  updatedAtMs: number;
+};
+
+export type FrontdoorPackageKind = "runtime" | "app" | "adapter" | "service";
+
+export type FrontdoorPackageRecord = {
+  packageId: string;
+  kind: FrontdoorPackageKind;
+  displayName: string;
+  description?: string;
+  productId?: string;
+  status: string;
+  createdAtMs: number;
+  updatedAtMs: number;
+};
+
+export type FrontdoorPackageReleaseRecord = {
+  releaseId: string;
+  packageId: string;
+  version: string;
+  manifestJson: string;
+  channel: string;
+  status: string;
+  publishedAtMs: number;
+  createdAtMs: number;
+};
+
+export type FrontdoorPackageVariantRecord = {
+  variantId: string;
+  releaseId: string;
+  targetOs: string;
+  targetArch: string;
+  packageFormat: string;
+  tarballPath: string;
+  sha256?: string;
+  sizeBytes?: number;
+  createdAtMs: number;
+};
+
+export type ServerPackageInstallRecord = {
+  serverId: string;
+  kind: FrontdoorPackageKind;
+  packageId: string;
+  desiredReleaseId?: string;
+  desiredVersion?: string;
+  activeReleaseId?: string;
+  activeVersion?: string;
+  status: string;
+  installReason: string;
+  entryPath?: string;
+  lastError?: string;
+  installedAtMs?: number;
   createdAtMs: number;
   updatedAtMs: number;
 };
@@ -436,17 +630,41 @@ export class FrontdoorStore {
         plan                 TEXT NOT NULL DEFAULT 'cax11',
         provider             TEXT NOT NULL DEFAULT 'hetzner',
         provider_server_id   TEXT,
+        previous_provider_server_id TEXT,
         private_ip           TEXT,
         public_ip            TEXT,
+        previous_private_ip  TEXT,
+        previous_public_ip   TEXT,
         runtime_port         INTEGER DEFAULT 8080,
         runtime_auth_token   TEXT,
         provision_token      TEXT,
+        backup_enabled       INTEGER NOT NULL DEFAULT 0,
+        delete_protection_enabled INTEGER NOT NULL DEFAULT 0,
+        rebuild_protection_enabled INTEGER NOT NULL DEFAULT 0,
         created_at_ms        INTEGER NOT NULL,
         updated_at_ms        INTEGER NOT NULL,
+        archived_at_ms       INTEGER,
+        destroyed_at_ms      INTEGER,
+        last_recovered_at_ms INTEGER,
+        active_recovery_point_id TEXT,
         deleted_at_ms        INTEGER
       );
       CREATE INDEX IF NOT EXISTS idx_frontdoor_servers_account
         ON frontdoor_servers(account_id);
+
+      CREATE TABLE IF NOT EXISTS frontdoor_server_recovery_points (
+        recovery_point_id     TEXT PRIMARY KEY,
+        server_id             TEXT NOT NULL REFERENCES frontdoor_servers(server_id),
+        tenant_id             TEXT NOT NULL,
+        provider              TEXT NOT NULL,
+        provider_artifact_id  TEXT NOT NULL,
+        capture_type          TEXT NOT NULL,
+        label                 TEXT NOT NULL,
+        notes                 TEXT,
+        created_at_ms         INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_frontdoor_server_recovery_points_server
+        ON frontdoor_server_recovery_points(server_id, created_at_ms DESC);
 
       -- API Tokens (per-user API keys)
       CREATE TABLE IF NOT EXISTS frontdoor_api_tokens (
@@ -511,6 +729,85 @@ export class FrontdoorStore {
       );
       CREATE INDEX IF NOT EXISTS idx_frontdoor_account_entitlements_account
         ON frontdoor_account_entitlements(account_id);
+
+      CREATE TABLE IF NOT EXISTS frontdoor_packages (
+        package_id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        description TEXT,
+        product_id TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_frontdoor_packages_kind
+        ON frontdoor_packages(kind, package_id);
+
+      CREATE TABLE IF NOT EXISTS frontdoor_package_releases (
+        release_id TEXT PRIMARY KEY,
+        package_id TEXT NOT NULL REFERENCES frontdoor_packages(package_id),
+        version TEXT NOT NULL,
+        manifest_json TEXT NOT NULL,
+        channel TEXT NOT NULL DEFAULT 'stable',
+        status TEXT NOT NULL DEFAULT 'published',
+        published_at_ms INTEGER NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        UNIQUE(package_id, version)
+      );
+      CREATE INDEX IF NOT EXISTS idx_frontdoor_package_releases_package
+        ON frontdoor_package_releases(package_id, created_at_ms DESC);
+
+      CREATE TABLE IF NOT EXISTS frontdoor_release_variants (
+        variant_id TEXT PRIMARY KEY,
+        release_id TEXT NOT NULL REFERENCES frontdoor_package_releases(release_id),
+        target_os TEXT NOT NULL,
+        target_arch TEXT NOT NULL,
+        package_format TEXT NOT NULL,
+        tarball_path TEXT NOT NULL,
+        sha256 TEXT,
+        size_bytes INTEGER,
+        created_at_ms INTEGER NOT NULL,
+        UNIQUE(release_id, target_os, target_arch)
+      );
+      CREATE INDEX IF NOT EXISTS idx_frontdoor_release_variants_release
+        ON frontdoor_release_variants(release_id);
+
+      CREATE TABLE IF NOT EXISTS frontdoor_server_package_installs (
+        server_id TEXT NOT NULL REFERENCES frontdoor_servers(server_id),
+        kind TEXT NOT NULL,
+        package_id TEXT NOT NULL REFERENCES frontdoor_packages(package_id),
+        desired_release_id TEXT,
+        desired_version TEXT,
+        active_release_id TEXT,
+        active_version TEXT,
+        status TEXT NOT NULL,
+        install_reason TEXT NOT NULL DEFAULT 'manual',
+        entry_path TEXT,
+        last_error TEXT,
+        installed_at_ms INTEGER,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        PRIMARY KEY(server_id, kind, package_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_frontdoor_server_package_installs_server
+        ON frontdoor_server_package_installs(server_id, kind);
+
+      CREATE TABLE IF NOT EXISTS frontdoor_server_package_requirements (
+        server_id TEXT NOT NULL REFERENCES frontdoor_servers(server_id),
+        requiring_kind TEXT NOT NULL,
+        requiring_package_id TEXT NOT NULL,
+        required_kind TEXT NOT NULL,
+        required_package_id TEXT NOT NULL,
+        version_constraint TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        PRIMARY KEY (
+          server_id,
+          requiring_kind,
+          requiring_package_id,
+          required_kind,
+          required_package_id
+        )
+      );
 
       -- Server App Installs (which apps are installed on which servers)
       CREATE TABLE IF NOT EXISTS frontdoor_server_app_installs (
@@ -674,6 +971,123 @@ export class FrontdoorStore {
       );
       CREATE INDEX IF NOT EXISTS idx_frontdoor_product_plans_product
         ON frontdoor_product_plans(product_id, sort_order);
+
+      -- Platform-managed Connection Profiles
+      CREATE TABLE IF NOT EXISTS frontdoor_platform_managed_connection_profiles (
+        managed_profile_id     TEXT PRIMARY KEY,
+        app_id                 TEXT NOT NULL,
+        adapter_id             TEXT NOT NULL,
+        connection_profile_id  TEXT NOT NULL,
+        auth_method_id         TEXT NOT NULL,
+        flow_kind              TEXT NOT NULL,
+        service                TEXT NOT NULL,
+        display_name           TEXT NOT NULL,
+        status                 TEXT NOT NULL DEFAULT 'active',
+        authorize_url          TEXT,
+        token_url              TEXT,
+        client_id              TEXT,
+        client_secret_ref      TEXT,
+        scopes_json            TEXT,
+        authorize_params_json  TEXT,
+        token_params_json      TEXT,
+        config_json            TEXT,
+        created_at_ms          INTEGER NOT NULL,
+        updated_at_ms          INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_frontdoor_platform_managed_connection_profiles_tuple
+        ON frontdoor_platform_managed_connection_profiles(
+          app_id,
+          adapter_id,
+          connection_profile_id,
+          auth_method_id,
+          status
+        );
+      CREATE INDEX IF NOT EXISTS idx_frontdoor_platform_managed_connection_profiles_lookup
+        ON frontdoor_platform_managed_connection_profiles(
+          app_id,
+          adapter_id,
+          connection_profile_id,
+          auth_method_id,
+          managed_profile_id
+        );
+
+      -- Product Control Plane Routes
+      CREATE TABLE IF NOT EXISTS frontdoor_product_control_plane_routes (
+        app_id            TEXT PRIMARY KEY,
+        display_name      TEXT NOT NULL,
+        base_url          TEXT NOT NULL,
+        auth_token_ref    TEXT NOT NULL,
+        status            TEXT NOT NULL DEFAULT 'active',
+        created_at_ms     INTEGER NOT NULL,
+        updated_at_ms     INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_frontdoor_servers_runtime_auth_token
+        ON frontdoor_servers(runtime_auth_token);
+    `);
+    try {
+      this.db.exec("ALTER TABLE frontdoor_servers ADD COLUMN backup_enabled INTEGER NOT NULL DEFAULT 0");
+    } catch {
+      // Already exists.
+    }
+    try {
+      this.db.exec("ALTER TABLE frontdoor_servers ADD COLUMN delete_protection_enabled INTEGER NOT NULL DEFAULT 0");
+    } catch {
+      // Already exists.
+    }
+    try {
+      this.db.exec("ALTER TABLE frontdoor_servers ADD COLUMN rebuild_protection_enabled INTEGER NOT NULL DEFAULT 0");
+    } catch {
+      // Already exists.
+    }
+    try {
+      this.db.exec("ALTER TABLE frontdoor_servers ADD COLUMN archived_at_ms INTEGER");
+    } catch {
+      // Already exists.
+    }
+    try {
+      this.db.exec("ALTER TABLE frontdoor_servers ADD COLUMN destroyed_at_ms INTEGER");
+    } catch {
+      // Already exists.
+    }
+    try {
+      this.db.exec("ALTER TABLE frontdoor_servers ADD COLUMN last_recovered_at_ms INTEGER");
+    } catch {
+      // Already exists.
+    }
+    try {
+      this.db.exec("ALTER TABLE frontdoor_servers ADD COLUMN active_recovery_point_id TEXT");
+    } catch {
+      // Already exists.
+    }
+    try {
+      this.db.exec("ALTER TABLE frontdoor_servers ADD COLUMN previous_provider_server_id TEXT");
+    } catch {
+      // Already exists.
+    }
+    try {
+      this.db.exec("ALTER TABLE frontdoor_servers ADD COLUMN previous_private_ip TEXT");
+    } catch {
+      // Already exists.
+    }
+    try {
+      this.db.exec("ALTER TABLE frontdoor_servers ADD COLUMN previous_public_ip TEXT");
+    } catch {
+      // Already exists.
+    }
+    this.db.exec(`
+      UPDATE frontdoor_servers
+      SET status = 'destroy_pending'
+      WHERE status = 'deprovisioning'
+    `);
+    this.db.exec(`
+      UPDATE frontdoor_servers
+      SET status = 'destroyed'
+      WHERE status = 'deleted'
+    `);
+    this.db.exec(`
+      UPDATE frontdoor_servers
+      SET destroyed_at_ms = COALESCE(destroyed_at_ms, deleted_at_ms)
+      WHERE deleted_at_ms IS NOT NULL
     `);
   }
 
@@ -701,9 +1115,21 @@ export class FrontdoorStore {
         });
       }
     }
-    // Seed configured tenants as servers under a system account
+
+    // Seed configured tenants as isolated per-tenant config accounts so a user
+    // only resolves the server(s) for their configured tenant.
     for (const tenant of config.tenants.values()) {
-      const systemAccount = this.ensureSystemAccount();
+      const tenantUsers = [...config.usersById.values()].filter((user) => user.tenantId === tenant.id);
+      const primaryOwner = tenantUsers[0] ?? null;
+      const accountId = `config-account:${tenant.id}`;
+      const existingAccount = this.getAccount(accountId);
+      const account =
+        existingAccount ??
+        this.createAccountWithId(
+          accountId,
+          tenant.id,
+          primaryOwner?.id ?? "system",
+        );
       const existingServer = this.getServer(tenant.id);
       if (!existingServer) {
         // Use a direct INSERT for seeded servers since they are pre-provisioned
@@ -721,7 +1147,7 @@ export class FrontdoorStore {
           )
           .run(
             tenant.id,
-            systemAccount.accountId,
+            account.accountId,
             tenant.id,
             tenant.id,
             tenant.id,
@@ -730,19 +1156,17 @@ export class FrontdoorStore {
             now,
           );
       } else {
-        this.updateServer(tenant.id, {
-          status: "running",
-        });
+        this.updateServer(tenant.id, { status: "running" });
       }
-      // Ensure configured users have membership on this server's account
-      for (const user of config.usersById.values()) {
-        if (user.tenantId === tenant.id) {
-          this.addAccountMember(
-            systemAccount.accountId,
-            user.id,
-            "owner",
-          );
+
+      if (primaryOwner) {
+        this.addAccountMember(account.accountId, primaryOwner.id, "owner");
+      }
+      for (const user of tenantUsers) {
+        if (primaryOwner && user.id === primaryOwner.id) {
+          continue;
         }
+        this.addAccountMember(account.accountId, user.id, "admin");
       }
     }
   }
@@ -1298,25 +1722,7 @@ export class FrontdoorStore {
 
   // ── Server Methods ────────────────────────────────────────────────
 
-  private mapServerRow(row: {
-    server_id: string;
-    account_id: string;
-    tenant_id: string;
-    display_name: string;
-    generated_name: string;
-    status: string;
-    plan: string;
-    provider: string;
-    provider_server_id: string | null;
-    private_ip: string | null;
-    public_ip: string | null;
-    runtime_port: number | null;
-    runtime_auth_token: string | null;
-    provision_token: string | null;
-    created_at_ms: number;
-    updated_at_ms: number;
-    deleted_at_ms: number | null;
-  }): ServerRecord {
+  private mapServerRow(row: ServerRow): ServerRecord {
     const status = row.status;
     return {
       serverId: row.server_id,
@@ -1324,20 +1730,37 @@ export class FrontdoorStore {
       tenantId: row.tenant_id,
       displayName: row.display_name,
       generatedName: row.generated_name,
-      status: (status === "provisioning" || status === "running" || status === "failed" || status === "deprovisioning" || status === "deleted")
-        ? status
-        : "provisioning",
+      status:
+        status === "provisioning" ||
+        status === "running" ||
+        status === "recovering" ||
+        status === "failed" ||
+        status === "suspended" ||
+        status === "archived" ||
+        status === "destroy_pending" ||
+        status === "destroyed"
+          ? status
+          : "provisioning",
       plan: row.plan,
       provider: row.provider,
       providerServerId: row.provider_server_id ?? null,
+      previousProviderServerId: row.previous_provider_server_id ?? null,
       privateIp: row.private_ip ?? null,
       publicIp: row.public_ip ?? null,
+      previousPrivateIp: row.previous_private_ip ?? null,
+      previousPublicIp: row.previous_public_ip ?? null,
       runtimePort: row.runtime_port ?? 8080,
       runtimeAuthToken: row.runtime_auth_token ?? null,
       provisionToken: row.provision_token ?? null,
+      backupEnabled: Boolean(row.backup_enabled),
+      deleteProtectionEnabled: Boolean(row.delete_protection_enabled),
+      rebuildProtectionEnabled: Boolean(row.rebuild_protection_enabled),
       createdAtMs: row.created_at_ms,
       updatedAtMs: row.updated_at_ms,
-      deletedAtMs: row.deleted_at_ms ?? null,
+      archivedAtMs: row.archived_at_ms ?? null,
+      destroyedAtMs: row.destroyed_at_ms ?? row.deleted_at_ms ?? null,
+      lastRecoveredAtMs: row.last_recovered_at_ms ?? null,
+      activeRecoveryPointId: row.active_recovery_point_id ?? null,
     };
   }
 
@@ -1348,10 +1771,13 @@ export class FrontdoorStore {
         `
         INSERT INTO frontdoor_servers (
           server_id, account_id, tenant_id, display_name, generated_name,
-          status, plan, provider, provider_server_id,
-          private_ip, public_ip, runtime_port, runtime_auth_token,
-          provision_token, created_at_ms, updated_at_ms, deleted_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          status, plan, provider, provider_server_id, previous_provider_server_id,
+          private_ip, public_ip, previous_private_ip, previous_public_ip,
+          runtime_port, runtime_auth_token, provision_token,
+          backup_enabled, delete_protection_enabled, rebuild_protection_enabled,
+          created_at_ms, updated_at_ms, archived_at_ms, destroyed_at_ms,
+          last_recovered_at_ms, active_recovery_point_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(server_id) DO UPDATE SET
           account_id = excluded.account_id,
           tenant_id = excluded.tenant_id,
@@ -1361,13 +1787,22 @@ export class FrontdoorStore {
           plan = excluded.plan,
           provider = excluded.provider,
           provider_server_id = excluded.provider_server_id,
+          previous_provider_server_id = excluded.previous_provider_server_id,
           private_ip = excluded.private_ip,
           public_ip = excluded.public_ip,
+          previous_private_ip = excluded.previous_private_ip,
+          previous_public_ip = excluded.previous_public_ip,
           runtime_port = excluded.runtime_port,
           runtime_auth_token = excluded.runtime_auth_token,
           provision_token = excluded.provision_token,
+          backup_enabled = excluded.backup_enabled,
+          delete_protection_enabled = excluded.delete_protection_enabled,
+          rebuild_protection_enabled = excluded.rebuild_protection_enabled,
           updated_at_ms = excluded.updated_at_ms,
-          deleted_at_ms = excluded.deleted_at_ms
+          archived_at_ms = excluded.archived_at_ms,
+          destroyed_at_ms = excluded.destroyed_at_ms,
+          last_recovered_at_ms = excluded.last_recovered_at_ms,
+          active_recovery_point_id = excluded.active_recovery_point_id
       `,
       )
       .run(
@@ -1380,14 +1815,23 @@ export class FrontdoorStore {
         record.plan || "cax11",
         record.provider || "hetzner",
         record.providerServerId ?? null,
+        record.previousProviderServerId ?? null,
         record.privateIp ?? null,
         record.publicIp ?? null,
+        record.previousPrivateIp ?? null,
+        record.previousPublicIp ?? null,
         record.runtimePort ?? 8080,
         record.runtimeAuthToken ?? null,
         record.provisionToken ?? null,
+        record.backupEnabled ? 1 : 0,
+        record.deleteProtectionEnabled ? 1 : 0,
+        record.rebuildProtectionEnabled ? 1 : 0,
         createdAt,
         createdAt,
-        record.deletedAtMs ?? null,
+        record.archivedAtMs ?? null,
+        record.destroyedAtMs ?? null,
+        record.lastRecoveredAtMs ?? null,
+        record.activeRecoveryPointId ?? null,
       );
     this.ensureServerLimitsDefaults(record.serverId);
     return this.getServer(record.serverId) ?? record;
@@ -1426,9 +1870,12 @@ export class FrontdoorStore {
           runtime_port,
           runtime_auth_token,
           provision_token,
+          backup_enabled,
+          delete_protection_enabled,
+          rebuild_protection_enabled,
           created_at_ms,
           updated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, 'provisioning', ?, ?, 8080, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, 'provisioning', ?, ?, 8080, ?, ?, 0, 0, 0, ?, ?)
       `,
       )
       .run(
@@ -1456,37 +1903,13 @@ export class FrontdoorStore {
     const row = this.db
       .prepare(
         `
-        SELECT
-          server_id, account_id, tenant_id, display_name, generated_name,
-          status, plan, provider, provider_server_id,
-          private_ip, public_ip, runtime_port, runtime_auth_token,
-          provision_token, created_at_ms, updated_at_ms, deleted_at_ms
+        SELECT *
         FROM frontdoor_servers
         WHERE server_id = ?
         LIMIT 1
       `,
       )
-      .get(serverId) as
-      | {
-          server_id: string;
-          account_id: string;
-          tenant_id: string;
-          display_name: string;
-          generated_name: string;
-          status: string;
-          plan: string;
-          provider: string;
-          provider_server_id: string | null;
-          private_ip: string | null;
-          public_ip: string | null;
-          runtime_port: number | null;
-          runtime_auth_token: string | null;
-          provision_token: string | null;
-          created_at_ms: number;
-          updated_at_ms: number;
-          deleted_at_ms: number | null;
-        }
-      | undefined;
+      .get(serverId) as ServerRow | undefined;
     return row ? this.mapServerRow(row) : null;
   }
 
@@ -1494,35 +1917,13 @@ export class FrontdoorStore {
     const rows = this.db
       .prepare(
         `
-        SELECT
-          server_id, account_id, tenant_id, display_name, generated_name,
-          status, plan, provider, provider_server_id,
-          private_ip, public_ip, runtime_port, runtime_auth_token,
-          provision_token, created_at_ms, updated_at_ms, deleted_at_ms
+        SELECT *
         FROM frontdoor_servers
-        WHERE account_id = ? AND (deleted_at_ms IS NULL AND status != 'deleted')
+        WHERE account_id = ? AND status != 'destroyed'
         ORDER BY display_name ASC
       `,
       )
-      .all(accountId) as Array<{
-      server_id: string;
-      account_id: string;
-      tenant_id: string;
-      display_name: string;
-      generated_name: string;
-      status: string;
-      plan: string;
-      provider: string;
-      provider_server_id: string | null;
-      private_ip: string | null;
-      public_ip: string | null;
-      runtime_port: number | null;
-      runtime_auth_token: string | null;
-      provision_token: string | null;
-      created_at_ms: number;
-      updated_at_ms: number;
-      deleted_at_ms: number | null;
-    }>;
+      .all(accountId) as ServerRow[];
     return rows.map((row) => this.mapServerRow(row));
   }
 
@@ -1530,35 +1931,13 @@ export class FrontdoorStore {
     const rows = this.db
       .prepare(
         `
-        SELECT
-          server_id, account_id, tenant_id, display_name, generated_name,
-          status, plan, provider, provider_server_id,
-          private_ip, public_ip, runtime_port, runtime_auth_token,
-          provision_token, created_at_ms, updated_at_ms, deleted_at_ms
+        SELECT *
         FROM frontdoor_servers
-        WHERE deleted_at_ms IS NULL AND status != 'deleted'
+        WHERE status != 'destroyed'
         ORDER BY display_name ASC
       `,
       )
-      .all() as Array<{
-      server_id: string;
-      account_id: string;
-      tenant_id: string;
-      display_name: string;
-      generated_name: string;
-      status: string;
-      plan: string;
-      provider: string;
-      provider_server_id: string | null;
-      private_ip: string | null;
-      public_ip: string | null;
-      runtime_port: number | null;
-      runtime_auth_token: string | null;
-      provision_token: string | null;
-      created_at_ms: number;
-      updated_at_ms: number;
-      deleted_at_ms: number | null;
-    }>;
+      .all() as ServerRow[];
     return rows.map((row) => this.mapServerRow(row));
   }
 
@@ -1574,13 +1953,22 @@ export class FrontdoorStore {
   updateServer(serverId: string, updates: Partial<{
     displayName: string;
     status: ServerStatus;
-    providerServerId: string;
-    privateIp: string;
-    publicIp: string;
+    providerServerId: string | null;
+    previousProviderServerId: string | null;
+    privateIp: string | null;
+    publicIp: string | null;
+    previousPrivateIp: string | null;
+    previousPublicIp: string | null;
     runtimePort: number;
     runtimeAuthToken: string | null;
     provisionToken: string | null;
-    deletedAtMs: number;
+    backupEnabled: boolean;
+    deleteProtectionEnabled: boolean;
+    rebuildProtectionEnabled: boolean;
+    archivedAtMs: number | null;
+    destroyedAtMs: number | null;
+    lastRecoveredAtMs: number | null;
+    activeRecoveryPointId: string | null;
   }>): void {
     const updatedAt = nowMs();
     const fields: string[] = [];
@@ -1597,6 +1985,10 @@ export class FrontdoorStore {
       fields.push("provider_server_id = ?");
       values.push(updates.providerServerId);
     }
+    if (updates.previousProviderServerId !== undefined) {
+      fields.push("previous_provider_server_id = ?");
+      values.push(updates.previousProviderServerId);
+    }
     if (updates.privateIp !== undefined) {
       fields.push("private_ip = ?");
       values.push(updates.privateIp);
@@ -1604,6 +1996,14 @@ export class FrontdoorStore {
     if (updates.publicIp !== undefined) {
       fields.push("public_ip = ?");
       values.push(updates.publicIp);
+    }
+    if (updates.previousPrivateIp !== undefined) {
+      fields.push("previous_private_ip = ?");
+      values.push(updates.previousPrivateIp);
+    }
+    if (updates.previousPublicIp !== undefined) {
+      fields.push("previous_public_ip = ?");
+      values.push(updates.previousPublicIp);
     }
     if (updates.runtimePort !== undefined) {
       fields.push("runtime_port = ?");
@@ -1617,9 +2017,33 @@ export class FrontdoorStore {
       fields.push("provision_token = ?");
       values.push(updates.provisionToken);
     }
-    if (updates.deletedAtMs !== undefined) {
-      fields.push("deleted_at_ms = ?");
-      values.push(updates.deletedAtMs);
+    if (updates.backupEnabled !== undefined) {
+      fields.push("backup_enabled = ?");
+      values.push(updates.backupEnabled ? 1 : 0);
+    }
+    if (updates.deleteProtectionEnabled !== undefined) {
+      fields.push("delete_protection_enabled = ?");
+      values.push(updates.deleteProtectionEnabled ? 1 : 0);
+    }
+    if (updates.rebuildProtectionEnabled !== undefined) {
+      fields.push("rebuild_protection_enabled = ?");
+      values.push(updates.rebuildProtectionEnabled ? 1 : 0);
+    }
+    if (updates.archivedAtMs !== undefined) {
+      fields.push("archived_at_ms = ?");
+      values.push(updates.archivedAtMs);
+    }
+    if (updates.destroyedAtMs !== undefined) {
+      fields.push("destroyed_at_ms = ?");
+      values.push(updates.destroyedAtMs);
+    }
+    if (updates.lastRecoveredAtMs !== undefined) {
+      fields.push("last_recovered_at_ms = ?");
+      values.push(updates.lastRecoveredAtMs);
+    }
+    if (updates.activeRecoveryPointId !== undefined) {
+      fields.push("active_recovery_point_id = ?");
+      values.push(updates.activeRecoveryPointId);
     }
     if (fields.length === 0) {
       return;
@@ -1634,37 +2058,13 @@ export class FrontdoorStore {
     const row = this.db
       .prepare(
         `
-        SELECT
-          server_id, account_id, tenant_id, display_name, generated_name,
-          status, plan, provider, provider_server_id,
-          private_ip, public_ip, runtime_port, runtime_auth_token,
-          provision_token, created_at_ms, updated_at_ms, deleted_at_ms
+        SELECT *
         FROM frontdoor_servers
         WHERE tenant_id = ?
         LIMIT 1
       `,
       )
-      .get(tenantId) as
-      | {
-          server_id: string;
-          account_id: string;
-          tenant_id: string;
-          display_name: string;
-          generated_name: string;
-          status: string;
-          plan: string;
-          provider: string;
-          provider_server_id: string | null;
-          private_ip: string | null;
-          public_ip: string | null;
-          runtime_port: number | null;
-          runtime_auth_token: string | null;
-          provision_token: string | null;
-          created_at_ms: number;
-          updated_at_ms: number;
-          deleted_at_ms: number | null;
-        }
-      | undefined;
+      .get(tenantId) as ServerRow | undefined;
     return row ? this.mapServerRow(row) : null;
   }
 
@@ -1672,37 +2072,31 @@ export class FrontdoorStore {
     const row = this.db
       .prepare(
         `
-        SELECT
-          server_id, account_id, tenant_id, display_name, generated_name,
-          status, plan, provider, provider_server_id,
-          private_ip, public_ip, runtime_port, runtime_auth_token,
-          provision_token, created_at_ms, updated_at_ms, deleted_at_ms
+        SELECT *
         FROM frontdoor_servers
-        WHERE provision_token = ? AND status = 'provisioning'
+        WHERE provision_token = ? AND status IN ('provisioning', 'recovering')
         LIMIT 1
       `,
       )
-      .get(token) as
-      | {
-          server_id: string;
-          account_id: string;
-          tenant_id: string;
-          display_name: string;
-          generated_name: string;
-          status: string;
-          plan: string;
-          provider: string;
-          provider_server_id: string | null;
-          private_ip: string | null;
-          public_ip: string | null;
-          runtime_port: number | null;
-          runtime_auth_token: string | null;
-          provision_token: string | null;
-          created_at_ms: number;
-          updated_at_ms: number;
-          deleted_at_ms: number | null;
-        }
-      | undefined;
+      .get(token) as ServerRow | undefined;
+    return row ? this.mapServerRow(row) : null;
+  }
+
+  getServerByRuntimeAuthToken(token: string): ServerRecord | null {
+    const normalizedToken = token.trim();
+    if (!normalizedToken) {
+      return null;
+    }
+    const row = this.db
+      .prepare(
+        `
+        SELECT *
+        FROM frontdoor_servers
+        WHERE runtime_auth_token = ?
+        LIMIT 1
+      `,
+      )
+      .get(normalizedToken) as ServerRow | undefined;
     return row ? this.mapServerRow(row) : null;
   }
 
@@ -1710,36 +2104,582 @@ export class FrontdoorStore {
     const rows = this.db
       .prepare(
         `
-        SELECT
-          server_id, account_id, tenant_id, display_name, generated_name,
-          status, plan, provider, provider_server_id,
-          private_ip, public_ip, runtime_port, runtime_auth_token,
-          provision_token, created_at_ms, updated_at_ms, deleted_at_ms
+        SELECT *
         FROM frontdoor_servers
         WHERE status = 'running'
         ORDER BY display_name ASC
       `,
       )
-      .all() as Array<{
+      .all() as ServerRow[];
+    return rows.map((row) => this.mapServerRow(row));
+  }
+
+  createServerRecoveryPoint(input: {
+    recoveryPointId?: string;
+    serverId: string;
+    tenantId: string;
+    provider: string;
+    providerArtifactId: string;
+    captureType: "backup" | "snapshot" | "image";
+    label: string;
+    notes?: string | null;
+  }): ServerRecoveryPointRecord {
+    const recoveryPointId = input.recoveryPointId?.trim() || randomUUID();
+    const createdAt = nowMs();
+    this.db
+      .prepare(
+        `
+        INSERT INTO frontdoor_server_recovery_points (
+          recovery_point_id,
+          server_id,
+          tenant_id,
+          provider,
+          provider_artifact_id,
+          capture_type,
+          label,
+          notes,
+          created_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      )
+      .run(
+        recoveryPointId,
+        input.serverId,
+        input.tenantId,
+        input.provider,
+        input.providerArtifactId,
+        input.captureType,
+        input.label.trim(),
+        input.notes?.trim() || null,
+        createdAt,
+      );
+    return {
+      recoveryPointId,
+      serverId: input.serverId,
+      tenantId: input.tenantId,
+      provider: input.provider,
+      providerArtifactId: input.providerArtifactId,
+      captureType: input.captureType,
+      label: input.label.trim(),
+      notes: input.notes?.trim() || null,
+      createdAtMs: createdAt,
+    };
+  }
+
+  listServerRecoveryPoints(serverId: string): ServerRecoveryPointRecord[] {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT
+          recovery_point_id,
+          server_id,
+          tenant_id,
+          provider,
+          provider_artifact_id,
+          capture_type,
+          label,
+          notes,
+          created_at_ms
+        FROM frontdoor_server_recovery_points
+        WHERE server_id = ?
+        ORDER BY created_at_ms DESC
+      `,
+      )
+      .all(serverId) as Array<{
+      recovery_point_id: string;
       server_id: string;
-      account_id: string;
       tenant_id: string;
-      display_name: string;
-      generated_name: string;
-      status: string;
-      plan: string;
       provider: string;
-      provider_server_id: string | null;
-      private_ip: string | null;
-      public_ip: string | null;
-      runtime_port: number | null;
-      runtime_auth_token: string | null;
-      provision_token: string | null;
+      provider_artifact_id: string;
+      capture_type: string;
+      label: string;
+      notes: string | null;
+      created_at_ms: number;
+    }>;
+    return rows.map((row) => ({
+      recoveryPointId: row.recovery_point_id,
+      serverId: row.server_id,
+      tenantId: row.tenant_id,
+      provider: row.provider,
+      providerArtifactId: row.provider_artifact_id,
+      captureType:
+        row.capture_type === "backup" || row.capture_type === "image"
+          ? row.capture_type
+          : "snapshot",
+      label: row.label,
+      notes: row.notes,
+      createdAtMs: row.created_at_ms,
+    }));
+  }
+
+  getServerRecoveryPoint(serverId: string, recoveryPointId: string): ServerRecoveryPointRecord | null {
+    const row = this.db
+      .prepare(
+        `
+        SELECT
+          recovery_point_id,
+          server_id,
+          tenant_id,
+          provider,
+          provider_artifact_id,
+          capture_type,
+          label,
+          notes,
+          created_at_ms
+        FROM frontdoor_server_recovery_points
+        WHERE server_id = ? AND recovery_point_id = ?
+        LIMIT 1
+      `,
+      )
+      .get(serverId, recoveryPointId) as
+      | {
+          recovery_point_id: string;
+          server_id: string;
+          tenant_id: string;
+          provider: string;
+          provider_artifact_id: string;
+          capture_type: string;
+          label: string;
+          notes: string | null;
+          created_at_ms: number;
+        }
+      | undefined;
+    if (!row) {
+      return null;
+    }
+    return {
+      recoveryPointId: row.recovery_point_id,
+      serverId: row.server_id,
+      tenantId: row.tenant_id,
+      provider: row.provider,
+      providerArtifactId: row.provider_artifact_id,
+      captureType:
+        row.capture_type === "backup" || row.capture_type === "image"
+          ? row.capture_type
+          : "snapshot",
+      label: row.label,
+      notes: row.notes,
+      createdAtMs: row.created_at_ms,
+    };
+  }
+
+  private mapPlatformManagedConnectionProfileRow(row: {
+    managed_profile_id: string;
+    app_id: string;
+    adapter_id: string;
+    connection_profile_id: string;
+    auth_method_id: string;
+    flow_kind: string;
+    service: string;
+    display_name: string;
+    status: string;
+    authorize_url: string | null;
+    token_url: string | null;
+    client_id: string | null;
+    client_secret_ref: string | null;
+    scopes_json: string | null;
+    authorize_params_json: string | null;
+    token_params_json: string | null;
+    config_json: string | null;
+    created_at_ms: number;
+    updated_at_ms: number;
+  }): PlatformManagedConnectionProfileRecord {
+    return {
+      managedProfileId: row.managed_profile_id,
+      appId: row.app_id,
+      adapterId: row.adapter_id,
+      connectionProfileId: row.connection_profile_id,
+      authMethodId: row.auth_method_id,
+      flowKind: row.flow_kind === "custom_flow" ? "custom_flow" : "oauth2",
+      service: row.service,
+      displayName: row.display_name,
+      status:
+        row.status === "disabled" || row.status === "archived"
+          ? row.status
+          : "active",
+      authorizeUrl: row.authorize_url ?? undefined,
+      tokenUrl: row.token_url ?? undefined,
+      clientId: row.client_id ?? undefined,
+      clientSecretRef: row.client_secret_ref ?? undefined,
+      scopes: parseJsonArray(row.scopes_json),
+      authorizeParams: parseJsonObject(row.authorize_params_json),
+      tokenParams: parseJsonObject(row.token_params_json),
+      config: parseJsonObject(row.config_json),
+      createdAtMs: row.created_at_ms,
+      updatedAtMs: row.updated_at_ms,
+    };
+  }
+
+  upsertPlatformManagedConnectionProfile(record: {
+    managedProfileId: string;
+    appId: string;
+    adapterId: string;
+    connectionProfileId: string;
+    authMethodId: string;
+    flowKind: ManagedConnectionFlowKind;
+    service: string;
+    displayName: string;
+    status?: PlatformManagedConnectionProfileStatus;
+    authorizeUrl?: string;
+    tokenUrl?: string;
+    clientId?: string;
+    clientSecretRef?: string;
+    scopes?: string[];
+    authorizeParams?: Record<string, string>;
+    tokenParams?: Record<string, string>;
+    config?: Record<string, string>;
+  }): PlatformManagedConnectionProfileRecord {
+    const managedProfileId = normalizeIdentifier(record.managedProfileId);
+    const appId = normalizeAppId(record.appId);
+    const adapterId = normalizeIdentifier(record.adapterId);
+    const connectionProfileId = normalizeIdentifier(record.connectionProfileId);
+    const authMethodId = normalizeIdentifier(record.authMethodId);
+    const flowKind = record.flowKind === "custom_flow" ? "custom_flow" : "oauth2";
+    const service = normalizeIdentifier(record.service);
+    const status =
+      record.status === "disabled" || record.status === "archived"
+        ? record.status
+        : "active";
+    const now = nowMs();
+    this.db
+      .prepare(
+        `
+        INSERT INTO frontdoor_platform_managed_connection_profiles (
+          managed_profile_id,
+          app_id,
+          adapter_id,
+          connection_profile_id,
+          auth_method_id,
+          flow_kind,
+          service,
+          display_name,
+          status,
+          authorize_url,
+          token_url,
+          client_id,
+          client_secret_ref,
+          scopes_json,
+          authorize_params_json,
+          token_params_json,
+          config_json,
+          created_at_ms,
+          updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(managed_profile_id) DO UPDATE SET
+          app_id = excluded.app_id,
+          adapter_id = excluded.adapter_id,
+          connection_profile_id = excluded.connection_profile_id,
+          auth_method_id = excluded.auth_method_id,
+          flow_kind = excluded.flow_kind,
+          service = excluded.service,
+          display_name = excluded.display_name,
+          status = excluded.status,
+          authorize_url = excluded.authorize_url,
+          token_url = excluded.token_url,
+          client_id = excluded.client_id,
+          client_secret_ref = excluded.client_secret_ref,
+          scopes_json = excluded.scopes_json,
+          authorize_params_json = excluded.authorize_params_json,
+          token_params_json = excluded.token_params_json,
+          config_json = excluded.config_json,
+          updated_at_ms = excluded.updated_at_ms
+      `,
+      )
+      .run(
+        managedProfileId,
+        appId,
+        adapterId,
+        connectionProfileId,
+        authMethodId,
+        flowKind,
+        service,
+        record.displayName.trim(),
+        status,
+        record.authorizeUrl?.trim() || null,
+        record.tokenUrl?.trim() || null,
+        record.clientId?.trim() || null,
+        record.clientSecretRef?.trim() || null,
+        JSON.stringify(dedupe(record.scopes ?? [])),
+        JSON.stringify(record.authorizeParams ?? {}),
+        JSON.stringify(record.tokenParams ?? {}),
+        JSON.stringify(record.config ?? {}),
+        now,
+        now,
+      );
+    const saved = this.getPlatformManagedConnectionProfile(managedProfileId);
+    if (!saved) {
+      throw new Error("failed_to_upsert_platform_managed_connection_profile");
+    }
+    return saved;
+  }
+
+  getPlatformManagedConnectionProfile(
+    managedProfileId: string,
+  ): PlatformManagedConnectionProfileRecord | null {
+    const normalizedId = normalizeIdentifier(managedProfileId);
+    if (!normalizedId) {
+      return null;
+    }
+    const row = this.db
+      .prepare(
+        `
+        SELECT
+          managed_profile_id, app_id, adapter_id, connection_profile_id,
+          auth_method_id, flow_kind, service, display_name, status,
+          authorize_url, token_url, client_id, client_secret_ref,
+          scopes_json, authorize_params_json, token_params_json, config_json,
+          created_at_ms, updated_at_ms
+        FROM frontdoor_platform_managed_connection_profiles
+        WHERE managed_profile_id = ?
+        LIMIT 1
+      `,
+      )
+      .get(normalizedId) as
+      | {
+          managed_profile_id: string;
+          app_id: string;
+          adapter_id: string;
+          connection_profile_id: string;
+          auth_method_id: string;
+          flow_kind: string;
+          service: string;
+          display_name: string;
+          status: string;
+          authorize_url: string | null;
+          token_url: string | null;
+          client_id: string | null;
+          client_secret_ref: string | null;
+          scopes_json: string | null;
+          authorize_params_json: string | null;
+          token_params_json: string | null;
+          config_json: string | null;
+          created_at_ms: number;
+          updated_at_ms: number;
+        }
+      | undefined;
+    return row ? this.mapPlatformManagedConnectionProfileRow(row) : null;
+  }
+
+  findPlatformManagedConnectionProfile(params: {
+    appId: string;
+    adapterId: string;
+    connectionProfileId: string;
+    authMethodId: string;
+    managedProfileId?: string;
+    status?: PlatformManagedConnectionProfileStatus;
+  }): PlatformManagedConnectionProfileRecord | null {
+    const appId = normalizeAppId(params.appId);
+    const adapterId = normalizeIdentifier(params.adapterId);
+    const connectionProfileId = normalizeIdentifier(params.connectionProfileId);
+    const authMethodId = normalizeIdentifier(params.authMethodId);
+    const managedProfileId = params.managedProfileId ? normalizeIdentifier(params.managedProfileId) : "";
+    const status =
+      params.status === "disabled" || params.status === "archived"
+        ? params.status
+        : "active";
+    if (!appId || !adapterId || !connectionProfileId || !authMethodId) {
+      return null;
+    }
+    if (managedProfileId) {
+      const row = this.db
+        .prepare(
+          `
+          SELECT
+            managed_profile_id, app_id, adapter_id, connection_profile_id,
+            auth_method_id, flow_kind, service, display_name, status,
+            authorize_url, token_url, client_id, client_secret_ref,
+            scopes_json, authorize_params_json, token_params_json, config_json,
+            created_at_ms, updated_at_ms
+          FROM frontdoor_platform_managed_connection_profiles
+          WHERE managed_profile_id = ?
+            AND app_id = ?
+            AND adapter_id = ?
+            AND connection_profile_id = ?
+            AND auth_method_id = ?
+            AND status = ?
+          LIMIT 1
+        `,
+        )
+        .get(
+          managedProfileId,
+          appId,
+          adapterId,
+          connectionProfileId,
+          authMethodId,
+          status,
+        ) as
+        | {
+            managed_profile_id: string;
+            app_id: string;
+            adapter_id: string;
+            connection_profile_id: string;
+            auth_method_id: string;
+            flow_kind: string;
+            service: string;
+            display_name: string;
+            status: string;
+            authorize_url: string | null;
+            token_url: string | null;
+            client_id: string | null;
+            client_secret_ref: string | null;
+            scopes_json: string | null;
+            authorize_params_json: string | null;
+            token_params_json: string | null;
+            config_json: string | null;
+            created_at_ms: number;
+            updated_at_ms: number;
+          }
+        | undefined;
+      return row ? this.mapPlatformManagedConnectionProfileRow(row) : null;
+    }
+    const rows = this.db
+      .prepare(
+        `
+        SELECT
+          managed_profile_id, app_id, adapter_id, connection_profile_id,
+          auth_method_id, flow_kind, service, display_name, status,
+          authorize_url, token_url, client_id, client_secret_ref,
+          scopes_json, authorize_params_json, token_params_json, config_json,
+          created_at_ms, updated_at_ms
+        FROM frontdoor_platform_managed_connection_profiles
+        WHERE app_id = ?
+          AND adapter_id = ?
+          AND connection_profile_id = ?
+          AND auth_method_id = ?
+          AND status = ?
+        LIMIT 2
+      `,
+      )
+      .all(appId, adapterId, connectionProfileId, authMethodId, status) as Array<{
+      managed_profile_id: string;
+      app_id: string;
+      adapter_id: string;
+      connection_profile_id: string;
+      auth_method_id: string;
+      flow_kind: string;
+      service: string;
+      display_name: string;
+      status: string;
+      authorize_url: string | null;
+      token_url: string | null;
+      client_id: string | null;
+      client_secret_ref: string | null;
+      scopes_json: string | null;
+      authorize_params_json: string | null;
+      token_params_json: string | null;
+      config_json: string | null;
       created_at_ms: number;
       updated_at_ms: number;
-      deleted_at_ms: number | null;
     }>;
-    return rows.map((row) => this.mapServerRow(row));
+    if (rows.length !== 1) {
+      return null;
+    }
+    return this.mapPlatformManagedConnectionProfileRow(rows[0]);
+  }
+
+  private mapProductControlPlaneRouteRow(row: {
+    app_id: string;
+    display_name: string;
+    base_url: string;
+    auth_token_ref: string;
+    status: string;
+    created_at_ms: number;
+    updated_at_ms: number;
+  }): ProductControlPlaneRouteRecord {
+    return {
+      appId: row.app_id,
+      displayName: row.display_name,
+      baseUrl: row.base_url,
+      authTokenRef: row.auth_token_ref,
+      status:
+        row.status === "disabled" || row.status === "archived"
+          ? row.status
+          : "active",
+      createdAtMs: row.created_at_ms,
+      updatedAtMs: row.updated_at_ms,
+    };
+  }
+
+  upsertProductControlPlaneRoute(record: {
+    appId: string;
+    displayName: string;
+    baseUrl: string;
+    authTokenRef: string;
+    status?: ProductControlPlaneRouteStatus;
+  }): ProductControlPlaneRouteRecord {
+    const appId = normalizeAppId(record.appId);
+    const displayName = record.displayName.trim();
+    const baseUrl = canonicalizeBaseUrl(record.baseUrl);
+    const authTokenRef = record.authTokenRef.trim();
+    const status =
+      record.status === "disabled" || record.status === "archived"
+        ? record.status
+        : "active";
+    if (!appId || !displayName || !baseUrl || !authTokenRef) {
+      throw new Error("invalid_product_control_plane_route");
+    }
+    const now = nowMs();
+    this.db
+      .prepare(
+        `
+        INSERT INTO frontdoor_product_control_plane_routes (
+          app_id,
+          display_name,
+          base_url,
+          auth_token_ref,
+          status,
+          created_at_ms,
+          updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(app_id) DO UPDATE SET
+          display_name = excluded.display_name,
+          base_url = excluded.base_url,
+          auth_token_ref = excluded.auth_token_ref,
+          status = excluded.status,
+          updated_at_ms = excluded.updated_at_ms
+      `,
+      )
+      .run(appId, displayName, baseUrl, authTokenRef, status, now, now);
+    const saved = this.getProductControlPlaneRoute(appId);
+    if (!saved) {
+      throw new Error("failed_to_upsert_product_control_plane_route");
+    }
+    return saved;
+  }
+
+  getProductControlPlaneRoute(appId: string): ProductControlPlaneRouteRecord | null {
+    const normalizedAppId = normalizeAppId(appId);
+    if (!normalizedAppId) {
+      return null;
+    }
+    const row = this.db
+      .prepare(
+        `
+        SELECT
+          app_id,
+          display_name,
+          base_url,
+          auth_token_ref,
+          status,
+          created_at_ms,
+          updated_at_ms
+        FROM frontdoor_product_control_plane_routes
+        WHERE app_id = ?
+        LIMIT 1
+      `,
+      )
+      .get(normalizedAppId) as
+      | {
+          app_id: string;
+          display_name: string;
+          base_url: string;
+          auth_token_ref: string;
+          status: string;
+          created_at_ms: number;
+          updated_at_ms: number;
+        }
+      | undefined;
+    return row ? this.mapProductControlPlaneRouteRow(row) : null;
   }
 
   getStuckProvisioningServers(timeoutMs: number): ServerRecord[] {
@@ -1747,35 +2687,13 @@ export class FrontdoorStore {
     const rows = this.db
       .prepare(
         `
-        SELECT
-          server_id, account_id, tenant_id, display_name, generated_name,
-          status, plan, provider, provider_server_id,
-          private_ip, public_ip, runtime_port, runtime_auth_token,
-          provision_token, created_at_ms, updated_at_ms, deleted_at_ms
+        SELECT *
         FROM frontdoor_servers
-        WHERE status = 'provisioning' AND created_at_ms < ?
+        WHERE status IN ('provisioning', 'recovering') AND provision_token IS NOT NULL AND created_at_ms < ?
         ORDER BY created_at_ms ASC
       `,
       )
-      .all(cutoff) as Array<{
-      server_id: string;
-      account_id: string;
-      tenant_id: string;
-      display_name: string;
-      generated_name: string;
-      status: string;
-      plan: string;
-      provider: string;
-      provider_server_id: string | null;
-      private_ip: string | null;
-      public_ip: string | null;
-      runtime_port: number | null;
-      runtime_auth_token: string | null;
-      provision_token: string | null;
-      created_at_ms: number;
-      updated_at_ms: number;
-      deleted_at_ms: number | null;
-    }>;
+      .all(cutoff) as ServerRow[];
     return rows.map((row) => this.mapServerRow(row));
   }
 
@@ -2480,6 +3398,422 @@ export class FrontdoorStore {
 
   // ── Server App Install Methods ────────────────────────────────────
 
+  upsertPackage(params: {
+    packageId: string;
+    kind: FrontdoorPackageKind;
+    displayName: string;
+    description?: string;
+    productId?: string;
+    status?: string;
+  }): void {
+    const createdAt = nowMs();
+    this.db.prepare(`
+      INSERT INTO frontdoor_packages (
+        package_id,
+        kind,
+        display_name,
+        description,
+        product_id,
+        status,
+        created_at_ms,
+        updated_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(package_id) DO UPDATE SET
+        kind = excluded.kind,
+        display_name = excluded.display_name,
+        description = excluded.description,
+        product_id = excluded.product_id,
+        status = excluded.status,
+        updated_at_ms = excluded.updated_at_ms
+    `).run(
+      normalizeIdentifier(params.packageId),
+      params.kind,
+      params.displayName.trim(),
+      params.description?.trim() || null,
+      params.productId?.trim() || null,
+      params.status?.trim() || "active",
+      createdAt,
+      createdAt,
+    );
+  }
+
+  upsertPackageRelease(params: {
+    releaseId: string;
+    packageId: string;
+    version: string;
+    manifestJson: string;
+    channel?: string;
+    status?: string;
+    publishedAtMs?: number;
+  }): void {
+    const createdAt = nowMs();
+    this.db.prepare(`
+      INSERT INTO frontdoor_package_releases (
+        release_id,
+        package_id,
+        version,
+        manifest_json,
+        channel,
+        status,
+        published_at_ms,
+        created_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(release_id) DO UPDATE SET
+        package_id = excluded.package_id,
+        version = excluded.version,
+        manifest_json = excluded.manifest_json,
+        channel = excluded.channel,
+        status = excluded.status,
+        published_at_ms = excluded.published_at_ms
+    `).run(
+      params.releaseId.trim(),
+      normalizeIdentifier(params.packageId),
+      params.version.trim(),
+      params.manifestJson,
+      params.channel?.trim() || "stable",
+      params.status?.trim() || "published",
+      params.publishedAtMs ?? createdAt,
+      createdAt,
+    );
+  }
+
+  upsertPackageReleaseVariant(params: {
+    variantId: string;
+    releaseId: string;
+    targetOs: string;
+    targetArch: string;
+    packageFormat: string;
+    tarballPath: string;
+    sha256?: string;
+    sizeBytes?: number;
+  }): void {
+    const createdAt = nowMs();
+    this.db.prepare(`
+      INSERT INTO frontdoor_release_variants (
+        variant_id,
+        release_id,
+        target_os,
+        target_arch,
+        package_format,
+        tarball_path,
+        sha256,
+        size_bytes,
+        created_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(variant_id) DO UPDATE SET
+        release_id = excluded.release_id,
+        target_os = excluded.target_os,
+        target_arch = excluded.target_arch,
+        package_format = excluded.package_format,
+        tarball_path = excluded.tarball_path,
+        sha256 = excluded.sha256,
+        size_bytes = excluded.size_bytes
+    `).run(
+      params.variantId.trim(),
+      params.releaseId.trim(),
+      params.targetOs.trim(),
+      params.targetArch.trim(),
+      params.packageFormat.trim(),
+      path.resolve(params.tarballPath),
+      params.sha256?.trim() || null,
+      typeof params.sizeBytes === "number" ? params.sizeBytes : null,
+      createdAt,
+    );
+  }
+
+  getPackageReleaseVariant(
+    kind: FrontdoorPackageKind,
+    packageId: string,
+    version: string,
+  ): (FrontdoorPackageVariantRecord & { releaseId: string; version: string }) | null {
+    const row = this.db.prepare(`
+      SELECT
+        rv.variant_id,
+        rv.release_id,
+        pr.version,
+        rv.target_os,
+        rv.target_arch,
+        rv.package_format,
+        rv.tarball_path,
+        rv.sha256,
+        rv.size_bytes,
+        rv.created_at_ms
+      FROM frontdoor_release_variants rv
+      JOIN frontdoor_package_releases pr ON pr.release_id = rv.release_id
+      JOIN frontdoor_packages p ON p.package_id = pr.package_id
+      WHERE p.kind = ? AND p.package_id = ? AND pr.version = ?
+      ORDER BY rv.created_at_ms DESC
+      LIMIT 1
+    `).get(kind, normalizeIdentifier(packageId), version.trim()) as
+      | {
+          variant_id: string;
+          release_id: string;
+          version: string;
+          target_os: string;
+          target_arch: string;
+          package_format: string;
+          tarball_path: string;
+          sha256: string | null;
+          size_bytes: number | null;
+          created_at_ms: number;
+        }
+      | undefined;
+    if (!row) {
+      return null;
+    }
+    return {
+      variantId: row.variant_id,
+      releaseId: row.release_id,
+      version: row.version,
+      targetOs: row.target_os,
+      targetArch: row.target_arch,
+      packageFormat: row.package_format,
+      tarballPath: row.tarball_path,
+      sha256: row.sha256 ?? undefined,
+      sizeBytes: row.size_bytes ?? undefined,
+      createdAtMs: row.created_at_ms,
+    };
+  }
+
+  getLatestPackageReleaseVariant(
+    kind: FrontdoorPackageKind,
+    packageId: string,
+  ): (FrontdoorPackageVariantRecord & { releaseId: string; version: string }) | null {
+    const row = this.db.prepare(`
+      SELECT
+        rv.variant_id,
+        rv.release_id,
+        pr.version,
+        rv.target_os,
+        rv.target_arch,
+        rv.package_format,
+        rv.tarball_path,
+        rv.sha256,
+        rv.size_bytes,
+        rv.created_at_ms
+      FROM frontdoor_release_variants rv
+      JOIN frontdoor_package_releases pr ON pr.release_id = rv.release_id
+      JOIN frontdoor_packages p ON p.package_id = pr.package_id
+      WHERE p.kind = ? AND p.package_id = ? AND pr.status = 'published'
+      ORDER BY pr.published_at_ms DESC, rv.created_at_ms DESC
+      LIMIT 1
+    `).get(kind, normalizeIdentifier(packageId)) as
+      | {
+          variant_id: string;
+          release_id: string;
+          version: string;
+          target_os: string;
+          target_arch: string;
+          package_format: string;
+          tarball_path: string;
+          sha256: string | null;
+          size_bytes: number | null;
+          created_at_ms: number;
+        }
+      | undefined;
+    if (!row) {
+      return null;
+    }
+    return {
+      variantId: row.variant_id,
+      releaseId: row.release_id,
+      version: row.version,
+      targetOs: row.target_os,
+      targetArch: row.target_arch,
+      packageFormat: row.package_format,
+      tarballPath: row.tarball_path,
+      sha256: row.sha256 ?? undefined,
+      sizeBytes: row.size_bytes ?? undefined,
+      createdAtMs: row.created_at_ms,
+    };
+  }
+
+  upsertServerPackageInstall(params: {
+    serverId: string;
+    kind: FrontdoorPackageKind;
+    packageId: string;
+    status: string;
+    desiredReleaseId?: string;
+    desiredVersion?: string;
+    activeReleaseId?: string;
+    activeVersion?: string;
+    installReason?: string;
+    entryPath?: string;
+    lastError?: string;
+  }): void {
+    const serverId = params.serverId.trim();
+    const packageId = normalizeIdentifier(params.packageId);
+    if (!serverId || !packageId) {
+      return;
+    }
+    this.upsertPackage({
+      packageId,
+      kind: params.kind,
+      displayName: packageId,
+    });
+    const createdAt = nowMs();
+    const installedAtMs = params.status === "installed" ? createdAt : null;
+    this.db.prepare(`
+      INSERT INTO frontdoor_server_package_installs (
+        server_id,
+        kind,
+        package_id,
+        desired_release_id,
+        desired_version,
+        active_release_id,
+        active_version,
+        status,
+        install_reason,
+        entry_path,
+        last_error,
+        installed_at_ms,
+        created_at_ms,
+        updated_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(server_id, kind, package_id) DO UPDATE SET
+        desired_release_id = excluded.desired_release_id,
+        desired_version = excluded.desired_version,
+        active_release_id = COALESCE(excluded.active_release_id, frontdoor_server_package_installs.active_release_id),
+        active_version = COALESCE(excluded.active_version, frontdoor_server_package_installs.active_version),
+        status = excluded.status,
+        install_reason = excluded.install_reason,
+        entry_path = excluded.entry_path,
+        last_error = excluded.last_error,
+        installed_at_ms = COALESCE(excluded.installed_at_ms, frontdoor_server_package_installs.installed_at_ms),
+        updated_at_ms = excluded.updated_at_ms
+    `).run(
+      serverId,
+      params.kind,
+      packageId,
+      params.desiredReleaseId?.trim() || null,
+      params.desiredVersion?.trim() || null,
+      params.activeReleaseId?.trim() || null,
+      params.activeVersion?.trim() || null,
+      params.status.trim(),
+      params.installReason?.trim() || "manual",
+      params.entryPath?.trim() || null,
+      params.lastError?.trim() || null,
+      installedAtMs,
+      createdAt,
+      createdAt,
+    );
+  }
+
+  getServerPackageInstall(
+    serverId: string,
+    kind: FrontdoorPackageKind,
+    packageId: string,
+  ): ServerPackageInstallRecord | null {
+    const row = this.db.prepare(`
+      SELECT
+        server_id,
+        kind,
+        package_id,
+        desired_release_id,
+        desired_version,
+        active_release_id,
+        active_version,
+        status,
+        install_reason,
+        entry_path,
+        last_error,
+        installed_at_ms,
+        created_at_ms,
+        updated_at_ms
+      FROM frontdoor_server_package_installs
+      WHERE server_id = ? AND kind = ? AND package_id = ?
+      LIMIT 1
+    `).get(serverId.trim(), kind, normalizeIdentifier(packageId)) as
+      | {
+          server_id: string;
+          kind: FrontdoorPackageKind;
+          package_id: string;
+          desired_release_id: string | null;
+          desired_version: string | null;
+          active_release_id: string | null;
+          active_version: string | null;
+          status: string;
+          install_reason: string;
+          entry_path: string | null;
+          last_error: string | null;
+          installed_at_ms: number | null;
+          created_at_ms: number;
+          updated_at_ms: number;
+        }
+      | undefined;
+    if (!row) {
+      return null;
+    }
+    return this.mapServerPackageInstallRow(row);
+  }
+
+  getServerPackageInstalls(
+    serverId: string,
+    kind?: FrontdoorPackageKind,
+  ): ServerPackageInstallRecord[] {
+    const normalizedServerId = serverId.trim();
+    if (!normalizedServerId) {
+      return [];
+    }
+    const rows = (kind
+      ? this.db.prepare(`
+          SELECT
+            server_id,
+            kind,
+            package_id,
+            desired_release_id,
+            desired_version,
+            active_release_id,
+            active_version,
+            status,
+            install_reason,
+            entry_path,
+            last_error,
+            installed_at_ms,
+            created_at_ms,
+            updated_at_ms
+          FROM frontdoor_server_package_installs
+          WHERE server_id = ? AND kind = ?
+          ORDER BY package_id ASC
+        `).all(normalizedServerId, kind)
+      : this.db.prepare(`
+          SELECT
+            server_id,
+            kind,
+            package_id,
+            desired_release_id,
+            desired_version,
+            active_release_id,
+            active_version,
+            status,
+            install_reason,
+            entry_path,
+            last_error,
+            installed_at_ms,
+            created_at_ms,
+            updated_at_ms
+          FROM frontdoor_server_package_installs
+          WHERE server_id = ?
+          ORDER BY kind ASC, package_id ASC
+        `).all(normalizedServerId)) as Array<{
+          server_id: string;
+          kind: FrontdoorPackageKind;
+          package_id: string;
+          desired_release_id: string | null;
+          desired_version: string | null;
+          active_release_id: string | null;
+          active_version: string | null;
+          status: string;
+          install_reason: string;
+          entry_path: string | null;
+          last_error: string | null;
+          installed_at_ms: number | null;
+          created_at_ms: number;
+          updated_at_ms: number;
+        }>;
+    return rows.map((row) => this.mapServerPackageInstallRow(row));
+  }
+
   upsertServerAppInstall(params: {
     serverId: string;
     appId: string;
@@ -2494,46 +3828,18 @@ export class FrontdoorStore {
     if (!serverId || !appId) {
       return;
     }
-    const createdAt = nowMs();
-    const installedAtMs = params.status === "installed" ? createdAt : null;
     const source = params.source ?? "manual";
-    this.db
-      .prepare(
-        `
-        INSERT INTO frontdoor_server_app_installs (
-          server_id,
-          app_id,
-          status,
-          version,
-          entry_path,
-          last_error,
-          installed_at_ms,
-          source,
-          created_at_ms,
-          updated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(server_id, app_id) DO UPDATE SET
-          status = excluded.status,
-          version = COALESCE(excluded.version, frontdoor_server_app_installs.version),
-          entry_path = excluded.entry_path,
-          last_error = excluded.last_error,
-          installed_at_ms = COALESCE(excluded.installed_at_ms, frontdoor_server_app_installs.installed_at_ms),
-          source = excluded.source,
-          updated_at_ms = excluded.updated_at_ms
-      `,
-      )
-      .run(
-        serverId,
-        appId,
-        params.status,
-        params.version?.trim() || null,
-        params.entryPath?.trim() || null,
-        params.lastError?.trim() || null,
-        installedAtMs,
-        source,
-        createdAt,
-        createdAt,
-      );
+    this.upsertServerPackageInstall({
+      serverId,
+      kind: "app",
+      packageId: appId,
+      status: params.status,
+      desiredVersion: params.version,
+      activeVersion: params.status === "installed" ? params.version : undefined,
+      installReason: source,
+      entryPath: params.entryPath,
+      lastError: params.lastError,
+    });
   }
 
   setServerAppInstallStatus(
@@ -2553,73 +3859,39 @@ export class FrontdoorStore {
   }
 
   getServerAppInstall(serverId: string, appId: string): ServerAppInstallRecord | null {
-    const normalizedServerId = serverId.trim();
-    const normalizedAppId = normalizeAppId(appId);
-    if (!normalizedServerId || !normalizedAppId) {
+    const pkg = this.getServerPackageInstall(serverId, "app", appId);
+    if (!pkg) {
       return null;
     }
-    const row = this.db
-      .prepare(
-        `
-        SELECT
-          server_id, app_id, status, version, entry_path,
-          last_error, installed_at_ms, source,
-          created_at_ms, updated_at_ms
-        FROM frontdoor_server_app_installs
-        WHERE server_id = ? AND app_id = ?
-        LIMIT 1
-      `,
-      )
-      .get(normalizedServerId, normalizedAppId) as
-      | {
-          server_id: string;
-          app_id: string;
-          status: string;
-          version: string | null;
-          entry_path: string | null;
-          last_error: string | null;
-          installed_at_ms: number | null;
-          source: string;
-          created_at_ms: number;
-          updated_at_ms: number;
-        }
-      | undefined;
-    if (!row) {
-      return null;
-    }
-    return this.mapServerAppInstallRow(row);
+    return this.mapServerAppInstallRow({
+      server_id: pkg.serverId,
+      app_id: pkg.packageId,
+      status: pkg.status,
+      version: pkg.activeVersion ?? pkg.desiredVersion ?? null,
+      entry_path: pkg.entryPath ?? null,
+      last_error: pkg.lastError ?? null,
+      installed_at_ms: pkg.installedAtMs ?? null,
+      source: pkg.installReason,
+      created_at_ms: pkg.createdAtMs,
+      updated_at_ms: pkg.updatedAtMs,
+    });
   }
 
   getServerAppInstalls(serverId: string): ServerAppInstallRecord[] {
-    const normalizedServerId = serverId.trim();
-    if (!normalizedServerId) {
-      return [];
-    }
-    const rows = this.db
-      .prepare(
-        `
-        SELECT
-          server_id, app_id, status, version, entry_path,
-          last_error, installed_at_ms, source,
-          created_at_ms, updated_at_ms
-        FROM frontdoor_server_app_installs
-        WHERE server_id = ?
-        ORDER BY app_id ASC
-      `,
-      )
-      .all(normalizedServerId) as Array<{
-      server_id: string;
-      app_id: string;
-      status: string;
-      version: string | null;
-      entry_path: string | null;
-      last_error: string | null;
-      installed_at_ms: number | null;
-      source: string;
-      created_at_ms: number;
-      updated_at_ms: number;
-    }>;
-    return rows.map((row) => this.mapServerAppInstallRow(row));
+    return this.getServerPackageInstalls(serverId, "app").map((pkg) =>
+      this.mapServerAppInstallRow({
+        server_id: pkg.serverId,
+        app_id: pkg.packageId,
+        status: pkg.status,
+        version: pkg.activeVersion ?? pkg.desiredVersion ?? null,
+        entry_path: pkg.entryPath ?? null,
+        last_error: pkg.lastError ?? null,
+        installed_at_ms: pkg.installedAtMs ?? null,
+        source: pkg.installReason,
+        created_at_ms: pkg.createdAtMs,
+        updated_at_ms: pkg.updatedAtMs,
+      }),
+    );
   }
 
   getServerEffectiveAppInstalls(serverId: string): ServerAppInstallRecord[] {
@@ -2685,6 +3957,40 @@ export class FrontdoorStore {
         source === "inferred"
           ? source
           : "manual",
+      createdAtMs: row.created_at_ms,
+      updatedAtMs: row.updated_at_ms,
+    };
+  }
+
+  private mapServerPackageInstallRow(row: {
+    server_id: string;
+    kind: FrontdoorPackageKind;
+    package_id: string;
+    desired_release_id: string | null;
+    desired_version: string | null;
+    active_release_id: string | null;
+    active_version: string | null;
+    status: string;
+    install_reason: string;
+    entry_path: string | null;
+    last_error: string | null;
+    installed_at_ms: number | null;
+    created_at_ms: number;
+    updated_at_ms: number;
+  }): ServerPackageInstallRecord {
+    return {
+      serverId: row.server_id,
+      kind: row.kind,
+      packageId: row.package_id,
+      desiredReleaseId: row.desired_release_id ?? undefined,
+      desiredVersion: row.desired_version ?? undefined,
+      activeReleaseId: row.active_release_id ?? undefined,
+      activeVersion: row.active_version ?? undefined,
+      status: row.status,
+      installReason: row.install_reason,
+      entryPath: row.entry_path ?? undefined,
+      lastError: row.last_error ?? undefined,
+      installedAtMs: row.installed_at_ms ?? undefined,
       createdAtMs: row.created_at_ms,
       updatedAtMs: row.updated_at_ms,
     };
@@ -3330,7 +4636,8 @@ export class FrontdoorStore {
     }
     return {
       userId: params.user.userId,
-      tenantId: params.server?.serverId ?? "",
+      serverId: params.server?.serverId,
+      tenantId: params.server?.tenantId ?? "",
       entityId: params.server
         ? `entity:${params.server.serverId}:${params.user.userId}`
         : `entity:user:${params.user.userId}`,
@@ -3868,7 +5175,7 @@ export class FrontdoorStore {
         SELECT DISTINCT a.account_id
         FROM frontdoor_accounts a
         JOIN frontdoor_servers s ON s.account_id = a.account_id
-        WHERE a.status = 'active' AND s.status IN ('running', 'provisioning')
+        WHERE a.status = 'active' AND s.status IN ('running', 'provisioning', 'recovering', 'suspended', 'archived', 'destroy_pending')
       `,
       )
       .all() as Array<{ account_id: string }>;
@@ -3882,7 +5189,7 @@ export function serverToTenantConfig(server: ServerRecord): TenantConfig {
   const runtimeUrl = getServerRuntimeUrl(server) ?? `http://localhost:${server.runtimePort}`;
   const wsUrl = getServerRuntimeWsUrl(server) ?? undefined;
   return {
-    id: server.serverId,
+    id: server.tenantId,
     runtimeUrl,
     runtimePublicBaseUrl: getServerPublicUrl(server),
     runtimeWsUrl: wsUrl,

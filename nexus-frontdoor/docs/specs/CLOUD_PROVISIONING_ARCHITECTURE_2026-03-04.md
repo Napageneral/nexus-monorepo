@@ -2,17 +2,18 @@
 
 **Status:** CANONICAL
 **Last Updated:** 2026-03-06
-**Related:** FRONTDOOR_ARCHITECTURE.md, FRONTDOOR_HOSTED_ACCESS_AND_ROUTING.md, FRONTDOOR_PACKAGE_REGISTRY_AND_LIFECYCLE.md, BILLING_ARCHITECTURE_ACCOUNT_MODEL_2026-03-02.md, CRITICAL_CUSTOMER_FLOWS_2026-03-02.md
+**Related:** FRONTDOOR_ARCHITECTURE.md, FRONTDOOR_HOSTED_ACCESS_AND_ROUTING.md, FRONTDOOR_PACKAGE_REGISTRY_AND_LIFECYCLE.md, BILLING_ARCHITECTURE_ACCOUNT_MODEL_2026-03-02.md, CRITICAL_CUSTOMER_FLOWS_2026-03-02.md, `nex/docs/specs/platform/server-lifecycle-and-durability.md`
 
 ---
 
 ## 1) Overview
 
-Frontdoor is the provisioning service. It creates, manages, and destroys tenant VPS instances on cloud providers. Each tenant gets a dedicated VPS — full VM isolation, not containers.
+Frontdoor is the provisioning and recovery orchestrator for durable hosted servers. It creates, manages, archives, restores, and only exceptionally destroys the backing tenant VPS instances on cloud providers. Each tenant gets a dedicated VPS — full VM isolation, not containers.
 
 **Core decisions:**
 - One VPS per tenant (simplicity, full isolation, nex runtime agents have full freedom)
 - Frontdoor owns all provisioning logic (no separate provisioning service)
+- Durable server lifecycle — archive and restore are first-class; provider VM destroy is the final low-level step, not the normal lifecycle story
 - Cloud Provider Abstraction — Hetzner first, AWS later (for HIPAA/BAA compliance)
 - Golden snapshot images with minimal cloud-init bootstrap for tenant-specific config
 - Provision callback (phone-home) pattern for VPS readiness signaling
@@ -72,9 +73,10 @@ interface CloudProvider {
   getServerStatus(providerServerId: string): Promise<ProviderServerStatus>;
 
   /**
-   * Destroy a VPS and all associated resources.
-   * This is irreversible. Deletes the VM, its boot disk, and any attached volumes.
-   * Does NOT handle DNS or routing cleanup — frontdoor handles that.
+   * Destroy a backing VPS and all associated provider resources.
+   * This is the final irreversible provider-level action used only after the
+   * durable server lifecycle authorizes destruction.
+   * It does NOT define the normal customer-visible server lifecycle by itself.
    */
   destroyServer(providerServerId: string): Promise<void>;
 
@@ -413,7 +415,7 @@ nex-golden-v3  (2026-04-01) — nex runtime 0.3.0 + security patches
 - New servers always use the latest snapshot.
 - Existing servers are NOT automatically updated — they continue running on their original snapshot.
 - In-place updates to existing servers: SSH in via private network, update nex runtime, restart service.
-- Major migrations: create new VPS from new snapshot, migrate data, destroy old VPS.
+- Major migrations: create a replacement VPS from a new snapshot, migrate and verify, cut the durable server over, then archive or destroy the old backing VPS according to lifecycle policy.
 
 ### 6.4 Building a New Snapshot
 
@@ -538,7 +540,7 @@ Authorization: Bearer prov-<provision-token>
 
 1. Look up the server record by `server_id` and `tenant_id`
 2. Verify `provision_token` matches → reject if mismatch (prevents unauthorized registration)
-3. Verify server status is `"provisioning"` → reject if already running or deleted
+3. Verify server status is `"provisioning"` → reject if already running or already in a final destroyed state
 4. Update server record:
    ```
    status = "running"
@@ -565,77 +567,103 @@ If the VPS fails to phone home within **5 minutes**:
 3. Frontend shows error: "Server creation failed. Please try again."
 4. User can retry from dashboard
 
-### 7.7 Provisioning Status Transitions
+### 7.7 Canonical Lifecycle Transitions
 
 ```
 provisioning → running    (phone-home received, healthy)
 provisioning → failed     (timeout, provider error, phone-home error)
-running      → stopping   (user-initiated stop, future feature)
-running      → deprovisioning (user-initiated delete)
-deprovisioning → deleted  (provider confirmed destruction)
-failed       → deleted    (cleanup after failed provisioning)
+running      → recovering (restore or replacement repair)
+running      → suspended  (billing or operator hold)
+running      → archived   (non-destructive offboarding)
+running      → destroy_pending (explicit final destroy)
+recovering   → running    (replacement or restore complete)
+recovering   → failed     (restore or repair failed)
+suspended    → running    (resume)
+suspended    → archived   (inactive but durable)
+archived     → recovering (restore from archive or recovery point)
+archived     → destroy_pending (explicit final destroy)
+destroy_pending → destroyed (provider destruction completed)
 ```
 
 ---
 
-## 8) Deprovisioning Flow
+## 8) Archive, Restore, And Final Destroy
 
-### 8.1 User Initiates Server Deletion
+### 8.1 Archive Is The Default Offboarding Action
 
 ```
-User clicks "Delete Server" → confirmation modal:
-  "Permanently delete 'My Dev Server'?
-   This will destroy the server and all data on it.
+User clicks "Archive Server" → confirmation modal:
+  "Archive 'My Dev Server'?
+   The server will stop running and leave active routing,
+   but it will remain recoverable."
+  [Cancel] [Archive Server]
+```
+
+Archive orchestration:
+
+```
+Step 1: Validate session and account access
+Step 2: Remove from active routing
+Step 3: Stop or offline active compute as provider/runtime policy allows
+Step 4: Persist server status = "archived"
+Step 5: Retain package state, recovery metadata, and durable server identity
+```
+
+Archive is the normal answer for:
+
+- customer offboarding without permanent destruction
+- suspension after billing or subscription issues
+- operator-managed offlining before later restore
+
+### 8.2 Restore Returns The Same Durable Server Asset
+
+Restore orchestration:
+
+1. Select the recovery artifact or archive source
+2. Create or resume the backing provider VM
+3. Boot the runtime with the same `server_id` and `tenant_id`
+4. Health-check before routing cutover
+5. Restore active routing once healthy
+
+Restore should preserve the durable customer machine identity even if the
+provider VM changes.
+
+### 8.3 Final Destroy Is Exceptional
+
+```
+User clicks "Destroy Server Permanently" → confirmation modal:
+  "Permanently destroy 'My Dev Server'?
+   This irreversibly removes the durable server asset and its recovery path.
    This action cannot be undone."
-  [Cancel] [Delete Server]
+  [Cancel] [Destroy Permanently]
 ```
 
-### 8.2 Frontend → API
+Final destroy orchestration:
 
-```
-DELETE /api/servers/srv-...
-```
+1. Validate stronger destructive confirmation and policy
+2. Enter `destroy_pending`
+3. Satisfy retention and recovery-point policy
+4. Clear provider protection if required
+5. Execute final provider destruction
+6. Persist server status = `destroyed`
+7. Keep only the audit tombstone required by policy
 
-### 8.3 Frontdoor Orchestration
+Destroy is not the default offboarding flow.
+It is the final low-level infrastructure action after the durable lifecycle says
+destruction is truly intended.
 
-```
-Step 1: Validate session, admin access
-
-Step 2: Remove from routing table (immediate)
-  - No more traffic reaches this VPS
-  - In-flight requests may fail — acceptable
-
-Step 3: Update server status
-  UPDATE frontdoor_servers SET status = "deprovisioning"
-
-Step 4: Destroy cloud infrastructure
-  provider.destroyServer(server.providerServerId)
-  - Hetzner: DELETE /v1/servers/{id} — deletes VM and boot disk
-  - AWS: ec2.terminateInstances({ InstanceIds: [id] }) — terminates and cleans up
-
-Step 5: Update final status
-  UPDATE frontdoor_servers SET
-    status = "deleted",
-    deleted_at_ms = Date.now()
-
-Step 6: Clean up server package state
-  UPDATE frontdoor_server_package_installs SET
-    status = "removed"
-  WHERE server_id = "srv-..."
-```
-
-### 8.4 What Gets Cleaned Up
+### 8.4 What Final Destroy Cleans Up
 
 | Resource | Cleanup |
 |----------|---------|
-| Cloud VPS | Destroyed via provider API |
-| VPS boot disk | Destroyed with VPS |
-| Private network attachment | Removed with VPS |
-| Firewall attachment | Removed with VPS |
+| Backing cloud VPS | Destroyed via provider API |
+| Provider boot disk | Destroyed with backing VPS unless retained by explicit policy |
+| Private network attachment | Removed with backing VPS |
+| Firewall attachment | Removed with backing VPS |
 | DNS | Nothing to clean up (wildcard) |
-| Frontdoor routing table | Entry removed |
-| Server DB record | Kept (status = "deleted") for audit |
-| Server package install records | Mark removed |
+| Frontdoor routing table | Already removed before final destroy |
+| Durable server DB record | Reduced to audit tombstone / destroyed lifecycle record |
+| Recovery metadata | Retained or purged according to destroy policy |
 | App subscriptions | Unchanged (account-level, not server-level) |
 
 ### 8.5 Orphan Protection
@@ -644,7 +672,7 @@ On frontdoor startup, reconcile cloud provider state with DB:
 - Query provider for all servers with label `managed-by: nexus-frontdoor`
 - Compare with DB records
 - Any provider servers not in DB → alert operator (potential orphan)
-- Any DB records with status "running" but no provider server → mark as failed
+- Any DB records with status "running" but no provider server → enter recovery instead of assuming intentional destruction
 
 ---
 
@@ -667,7 +695,29 @@ A single SSH keypair (`nexus-operator`) is used for all tenant VPS access:
 - Users do NOT get SSH access — they interact through platform UIs
 - The operator key enables maintenance, updates, and agent-driven troubleshooting
 
-### 9.3 Key Rotation (Future)
+### 9.3 Static Public Platform Hosts
+
+The platform also has static public hosts such as the frontdoor host and, when
+needed, product-specific control plane hosts.
+
+These hosts are not lifecycle-managed tenant VPSes and therefore follow a
+different hardening policy:
+
+- canonical operator access uses the same `nexus-operator` key
+- public SSH is restricted to explicit operator-controlled ingress rather than
+  open internet access
+- host-level firewall policy and provider-level firewall policy both narrow
+  inbound access
+- backups remain enabled
+- delete and rebuild protection remain enabled
+- named snapshots are taken before major infrastructure changes
+
+Lifecycle-managed tenant VPSes keep the private-network SSH model defined above.
+Under the durable server lifecycle, tenant delete and rebuild protection should
+become the default once the platform's archive, restore, and final-destroy flow
+explicitly knows how to clear or preserve protection at the right step.
+
+### 9.4 Key Rotation (Future)
 
 When the operator key needs to be rotated:
 1. Generate new keypair
@@ -693,7 +743,7 @@ ALTER TABLE frontdoor_servers ADD COLUMN private_ip TEXT;         -- Private net
 ALTER TABLE frontdoor_servers ADD COLUMN public_ip TEXT;          -- Public IP (if applicable)
 ALTER TABLE frontdoor_servers ADD COLUMN runtime_port INTEGER;    -- Port nex runtime listens on
 ALTER TABLE frontdoor_servers ADD COLUMN provision_token TEXT;    -- One-time phone-home token (null after use)
-ALTER TABLE frontdoor_servers ADD COLUMN deleted_at_ms INTEGER;   -- When server was deleted
+ALTER TABLE frontdoor_servers ADD COLUMN destroyed_at_ms INTEGER; -- When server was permanently destroyed
 ```
 
 ---
@@ -751,7 +801,7 @@ When an account exhausts credits outside the free tier:
 1. Frontdoor marks running servers as suspended and removes them from routing
 2. The shell explains that credits must be added before the server resumes
 3. A later credit deposit may unsuspend the server without reprovisioning
-4. Longer-term deprovisioning policy, if added, is account/credits policy rather than a server-subscription contract
+4. Longer-term offboarding policy archives durable servers before any final destroy policy is considered
 
 ### 12.2 Server Migration
 
@@ -759,7 +809,7 @@ Moving a tenant to a different plan or region:
 1. Create new VPS with desired plan/region
 2. Transfer data from old VPS to new VPS (rsync over private network)
 3. Update routing table to point to new VPS
-4. Destroy old VPS
+4. Archive or destroy the old backing VPS according to the durable lifecycle policy
 
 ### 12.3 Auto-Scaling (Not Planned)
 

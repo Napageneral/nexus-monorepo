@@ -1,7 +1,7 @@
 # Frontdoor Hosted Validation Entrypoint
 
 **Status:** ACTIVE
-**Last Updated:** 2026-03-10
+**Last Updated:** 2026-03-11
 
 ---
 
@@ -12,17 +12,27 @@ follow the current runtime-owned validation packet:
 
 - [/Users/tyler/nexus/home/projects/nexus/nex/docs/validation/canonical-api-validation-ladder.md](/Users/tyler/nexus/home/projects/nexus/nex/docs/validation/canonical-api-validation-ladder.md)
 - [/Users/tyler/nexus/home/projects/nexus/nex/docs/validation/package-operator-frontdoor-cutover-validation-ladder.md](/Users/tyler/nexus/home/projects/nexus/nex/docs/validation/package-operator-frontdoor-cutover-validation-ladder.md)
-- [/Users/tyler/nexus/home/projects/nexus/nex/docs/validation/canonical-api-full-system-signoff-report-2026-03-10.md](/Users/tyler/nexus/home/projects/nexus/nex/docs/validation/canonical-api-full-system-signoff-report-2026-03-10.md)
+- [/Users/tyler/nexus/home/projects/nexus/nex/docs/validation/server-lifecycle-and-durability-validation-ladder.md](/Users/tyler/nexus/home/projects/nexus/nex/docs/validation/server-lifecycle-and-durability-validation-ladder.md)
+- [/Users/tyler/nexus/home/projects/nexus/nex/docs/validation/server-lifecycle-and-durability-signoff-report-2026-03-11.md](/Users/tyler/nexus/home/projects/nexus/nex/docs/validation/server-lifecycle-and-durability-signoff-report-2026-03-11.md)
+- [/Users/tyler/nexus/home/projects/nexus/nex/docs/validation/canonical-api-full-system-signoff-report-2026-03-11.md](/Users/tyler/nexus/home/projects/nexus/nex/docs/validation/canonical-api-full-system-signoff-report-2026-03-11.md)
 
 Those documents are the source of truth for:
 
 - account and server access
 - shell and tenant-origin routing
+- durable hosted server lifecycle, archive, restore, and final destroy behavior
 - runtime token minting
 - package registry and lifecycle
 - shared adapter connection profiles
 - upgrade and rollback behavior
 - final hosted cutover signoff
+
+For package-level live testing on real hosted servers, use:
+
+- [/Users/tyler/nexus/home/projects/nexus/nexus-frontdoor/docs/validation/FRONTDOOR_HOSTED_PACKAGE_LIVE_TESTING.md](/Users/tyler/nexus/home/projects/nexus/nexus-frontdoor/docs/validation/FRONTDOOR_HOSTED_PACKAGE_LIVE_TESTING.md)
+
+That document is the single operational flow for agents testing hosted app and
+adapter packages through Frontdoor.
 
 ---
 

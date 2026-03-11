@@ -755,6 +755,7 @@
               <span id="serverDetailBadge" class="badge"></span>
             </div>
             <div class="page-header-actions">
+              <button id="restoreServerBtn" class="small primary hidden">Restore Server</button>
               <button id="saveServerNameBtn" class="small subtle">Save Name</button>
             </div>
           </div>
@@ -776,22 +777,25 @@
           <div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid rgba(239, 68, 68, 0.15);">
             <h3 style="font-size: 0.88rem; font-weight: 700; color: var(--red); margin-bottom: 8px;">Danger Zone</h3>
             <p style="font-size: 0.78rem; color: var(--text-dim); margin-bottom: 12px;">
-              Deleting a server is permanent. All apps and data on this server will be removed.
+              Archive is the default offboarding action. Final destroy is separate and irreversible.
             </p>
-            <button id="deleteServerBtn" class="small danger">Delete Server</button>
+            <div class="btn-row" style="justify-content: flex-start;">
+              <button id="deleteServerBtn" class="small subtle">Archive Server</button>
+              <button id="destroyServerBtn" class="small danger">Destroy Server</button>
+            </div>
           </div>
 
-          <!-- Delete Confirmation Modal -->
+          <!-- Archive Confirmation Modal -->
           <div id="deleteServerModal" class="modal-overlay hidden">
             <div class="modal-box">
-              <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 8px;">Delete Server?</h3>
+              <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 8px;">Archive Server?</h3>
               <p style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 16px;">
-                This will disable the server and all its apps. This action cannot be undone.
+                This will stop routing traffic to the server without destroying the durable machine.
               </p>
               <p id="deleteServerModalName" style="font-size: 0.84rem; font-weight: 600; color: var(--text); margin-bottom: 16px;"></p>
               <div class="btn-row" style="justify-content: flex-end;">
                 <button id="cancelDeleteServerBtn" class="small subtle">Cancel</button>
-                <button id="confirmDeleteServerBtn" class="small danger">Delete Server</button>
+                <button id="confirmDeleteServerBtn" class="small danger">Archive Server</button>
               </div>
             </div>
           </div>
@@ -1066,7 +1070,10 @@
         const s = asText(status).toLowerCase();
         if (s === 'ready' || s === 'active' || s === 'running') return 'badge-ready';
         if (s === 'provisioning') return 'badge-provisioning';
-        if (s === 'deprovisioning') return 'badge-provisioning';
+        if (s === 'recovering') return 'badge-provisioning';
+        if (s === 'archived' || s === 'suspended') return 'badge-degraded';
+        if (s === 'destroy_pending') return 'badge-provisioning';
+        if (s === 'destroyed') return 'badge-failed';
         if (s === 'installing') return 'badge-installing';
         if (s === 'installed') return 'badge-installed';
         if (s === 'degraded') return 'badge-degraded';
@@ -1080,7 +1087,11 @@
         if (s === 'running') return 'Running';
         if (s === 'active') return 'Running';
         if (s === 'provisioning') return 'Provisioning...';
-        if (s === 'deprovisioning') return 'Deleting...';
+        if (s === 'recovering') return 'Recovering...';
+        if (s === 'archived') return 'Archived';
+        if (s === 'suspended') return 'Suspended';
+        if (s === 'destroy_pending') return 'Destroy Pending';
+        if (s === 'destroyed') return 'Destroyed';
         if (s === 'failed') return 'Failed';
         if (s === 'blocked_no_entitlement') return 'No Entitlement';
         return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -1506,6 +1517,9 @@
         badge.innerHTML = `<span class="dot"></span>${statusLabel(status)}`;
         el('serverDetailTier').textContent = `Tier: ${asText(server.tier || 'starter')}`;
         el('serverDetailId').textContent = server.server_id;
+        el('restoreServerBtn').classList.toggle('hidden', !(status === 'archived' || status === 'failed' || status === 'suspended'));
+        el('deleteServerBtn').classList.toggle('hidden', !(status === 'running' || status === 'failed' || status === 'suspended'));
+        el('destroyServerBtn').classList.toggle('hidden', status === 'destroyed');
 
         renderServerApps();
         renderInstallableApps();
@@ -2348,11 +2362,42 @@
         if (!state.selectedServerId) return;
         const btn = el('confirmDeleteServerBtn');
         btn.disabled = true;
-        btn.textContent = 'Deleting...';
-        const r = await api(`/api/servers/${encodeURIComponent(state.selectedServerId)}`, { method: 'DELETE' });
+        btn.textContent = 'Archiving...';
+        const r = await api(`/api/servers/${encodeURIComponent(state.selectedServerId)}/archive`, { method: 'POST', body: '{}' });
         el('deleteServerModal').classList.add('hidden');
         btn.disabled = false;
-        btn.textContent = 'Delete Server';
+        btn.textContent = 'Archive Server';
+        if (r.ok) {
+          await loadServers();
+          await openServerDetail(state.selectedServerId);
+        }
+      });
+
+      el('restoreServerBtn').addEventListener('click', async () => {
+        if (!state.selectedServerId) return;
+        const btn = el('restoreServerBtn');
+        btn.disabled = true;
+        btn.textContent = 'Restoring...';
+        const r = await api(`/api/servers/${encodeURIComponent(state.selectedServerId)}/restore`, {
+          method: 'POST',
+          body: '{}'
+        });
+        btn.disabled = false;
+        btn.textContent = 'Restore Server';
+        if (r.ok) {
+          await loadServers();
+          await openServerDetail(state.selectedServerId);
+        }
+      });
+
+      el('destroyServerBtn').addEventListener('click', async () => {
+        if (!state.selectedServerId) return;
+        const confirmed = confirm('Destroy this server permanently? This is irreversible.');
+        if (!confirmed) return;
+        const r = await api(`/api/servers/${encodeURIComponent(state.selectedServerId)}/destroy`, {
+          method: 'POST',
+          body: JSON.stringify({ confirm: true })
+        });
         if (r.ok) {
           state.selectedServerId = null;
           state.serverDetail = null;

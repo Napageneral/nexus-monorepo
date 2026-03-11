@@ -11,6 +11,7 @@ Owners: Nexus Platform
 - **Billing model**: Servers billed via prepaid credits (hourly usage deduction). Apps billed via per-account subscriptions. Once you buy an app, you can install it on any of your account's servers.
 - **Account entity**: Exists from the start (B2B — clinics, engineering teams). Sits between users and servers. An account owns servers and app subscriptions. Users are members of accounts.
 - **Server tiers**: Design for multiple tiers (small/medium/large). Currently three tiers: cax11 (Starter), cax21 (Standard), cax31 (Performance). 7-day free tier for first cax11 server.
+- **Server durability**: A server is a durable customer machine. Frontdoor may replace the backing provider VM during recovery, but the customer keeps the same server identity. Archive is the default non-destructive offboarding state; irreversible destroy is separate and exceptional.
 - **Free tier handling**: Free app tiers create an active subscription record with the free plan ID. Free server tier uses 7-day trial with `free_tier_expires_at_ms` on the credit record.
 - **App installation**: Frontdoor resolves package releases and dependencies, stages artifacts to VPSes over the private network, and drives runtime operator lifecycle APIs. Auto-install on provisioning uses the same package lifecycle system.
 - **App shell**: Frontdoor owns the top-level shell document and renders app content inside a durable embedded boundary, allowing navigation back to dashboard, switching apps, and account management without trusting the app DOM.
@@ -382,7 +383,7 @@ F30 (Agent Connect) requires F1/F2 (human signup) + API token
 3. Agent polls `nexus.servers.get` until status = "running"
 4. Entitled apps auto-install on provisioning
 5. Agent calls `nexus.servers.get` → sees installed apps
-6. Agent can delete server with `nexus.servers.delete` (requires `confirm: true`)
+6. Agent can archive a server as the default offboarding action. Final destroy is a separate explicit destructive flow after archive and retention policy handling.
 
 ### F32: Agent Manages Apps
 

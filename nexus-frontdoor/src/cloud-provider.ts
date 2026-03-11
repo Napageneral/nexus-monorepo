@@ -7,6 +7,8 @@ export type CreateServerOpts = {
   tenantId: string;
   planId: string;
   cloudInitScript: string;
+  imageId?: string;
+  serverName?: string;
 };
 
 /** Result returned from a successful createServer call. */
@@ -14,6 +16,9 @@ export type CreateServerResult = {
   providerServerId: string;
   publicIp: string;
   privateIp: string;
+  backupEnabled: boolean;
+  deleteProtectionEnabled: boolean;
+  rebuildProtectionEnabled: boolean;
 };
 
 /** Normalised server status used within nexus-frontdoor. */
@@ -21,6 +26,11 @@ export type ProviderServerStatus = {
   state: "creating" | "running" | "stopped" | "deleting" | "error";
   publicIp?: string;
   privateIp?: string;
+};
+
+export type CreateRecoveryPointResult = {
+  providerArtifactId: string;
+  captureType: "snapshot";
 };
 
 /** A server plan (size / pricing) exposed by the provider. */
@@ -40,6 +50,13 @@ export type ServerPlan = {
 export interface CloudProvider {
   createServer(opts: CreateServerOpts): Promise<CreateServerResult>;
   getServerStatus(providerServerId: string): Promise<ProviderServerStatus>;
+  archiveServer(providerServerId: string): Promise<void>;
+  restoreServer(providerServerId: string): Promise<void>;
+  createRecoveryPoint(providerServerId: string, label: string): Promise<CreateRecoveryPointResult>;
+  setProtection(
+    providerServerId: string,
+    protection: { delete: boolean; rebuild: boolean },
+  ): Promise<void>;
   destroyServer(providerServerId: string): Promise<void>;
   listPlans(): ServerPlan[];
 }
@@ -80,6 +97,19 @@ type HetznerGetServerResponse = {
       ipv4?: { ip?: string };
     };
     private_net?: Array<{ ip?: string }>;
+  };
+  error?: { message?: string; code?: string };
+};
+
+type HetznerActionResponse = {
+  action?: {
+    id?: number;
+    command?: string;
+    status?: string;
+  };
+  image?: {
+    id?: number;
+    type?: string;
   };
   error?: { message?: string; code?: string };
 };
@@ -159,15 +189,64 @@ export class HetznerProvider implements CloudProvider {
     return [...HETZNER_ARM64_PLANS];
   }
 
+  private async postServerAction(
+    providerServerId: string,
+    actionPath: string,
+    body?: Record<string, unknown>,
+  ): Promise<HetznerActionResponse> {
+    const response = await fetch(
+      `${HETZNER_API_BASE}/servers/${encodeURIComponent(providerServerId)}/actions/${actionPath}`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${this.apiToken}`,
+          "content-type": "application/json",
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      },
+    );
+    const raw = await response.text();
+    let parsed: HetznerActionResponse = {};
+    try {
+      parsed = raw ? (JSON.parse(raw) as HetznerActionResponse) : {};
+    } catch {
+      throw new Error(`hetzner_${actionPath}_invalid_response: ${raw.slice(0, 200)}`);
+    }
+    if (!response.ok) {
+      const msg = parsed.error?.message ?? `hetzner_${actionPath}_failed_${response.status}`;
+      throw new Error(msg);
+    }
+    return parsed;
+  }
+
+  private async waitForState(
+    providerServerId: string,
+    expected: ProviderServerStatus["state"],
+    timeoutMs = 120000,
+  ): Promise<ProviderServerStatus> {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      const status = await this.getServerStatus(providerServerId);
+      if (status.state === expected) {
+        return status;
+      }
+      if (status.state === "error") {
+        throw new Error(`hetzner_wait_for_${expected}_failed`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+    throw new Error(`hetzner_wait_for_${expected}_timeout`);
+  }
+
   // -----------------------------------------------------------------------
   // createServer
   // -----------------------------------------------------------------------
 
   async createServer(opts: CreateServerOpts): Promise<CreateServerResult> {
     const body = {
-      name: `nex-${opts.tenantId}`,
+      name: opts.serverName?.trim() || `nex-${opts.tenantId}`,
       server_type: opts.planId,
-      image: this.snapshotId,
+      image: opts.imageId?.trim() || this.snapshotId,
       datacenter: this.datacenter,
       ssh_keys: this.sshKeyIds.map(Number),
       networks: [Number(this.networkId)],
@@ -214,7 +293,27 @@ export class HetznerProvider implements CloudProvider {
     const publicIp = server.public_net?.ipv4?.ip ?? "";
     const privateIp = server.private_net?.[0]?.ip ?? "";
 
-    return { providerServerId, publicIp, privateIp };
+    try {
+      await this.postServerAction(providerServerId, "enable_backup");
+      await this.postServerAction(providerServerId, "change_protection", {
+        delete: true,
+        rebuild: true,
+      });
+    } catch (error) {
+      await this.destroyServer(providerServerId).catch(() => {
+        // Best-effort cleanup after a failed durability setup step.
+      });
+      throw error;
+    }
+
+    return {
+      providerServerId,
+      publicIp,
+      privateIp,
+      backupEnabled: true,
+      deleteProtectionEnabled: true,
+      rebuildProtectionEnabled: true,
+    };
   }
 
   // -----------------------------------------------------------------------
@@ -253,6 +352,61 @@ export class HetznerProvider implements CloudProvider {
     const privateIp = server?.private_net?.[0]?.ip ?? undefined;
 
     return { state, publicIp, privateIp };
+  }
+
+  // -----------------------------------------------------------------------
+  // archiveServer
+  // -----------------------------------------------------------------------
+
+  async archiveServer(providerServerId: string): Promise<void> {
+    await this.postServerAction(providerServerId, "poweroff");
+    await this.waitForState(providerServerId, "stopped");
+  }
+
+  // -----------------------------------------------------------------------
+  // restoreServer
+  // -----------------------------------------------------------------------
+
+  async restoreServer(providerServerId: string): Promise<void> {
+    await this.postServerAction(providerServerId, "poweron");
+    await this.waitForState(providerServerId, "running");
+  }
+
+  // -----------------------------------------------------------------------
+  // createRecoveryPoint
+  // -----------------------------------------------------------------------
+
+  async createRecoveryPoint(providerServerId: string, label: string): Promise<CreateRecoveryPointResult> {
+    const parsed = await this.postServerAction(providerServerId, "create_image", {
+      type: "snapshot",
+      description: label,
+      labels: {
+        "managed-by": "nexus-frontdoor",
+        "recovery-point": "true",
+      },
+    });
+    const imageId = parsed.image?.id;
+    if (!imageId) {
+      throw new Error("hetzner_create_recovery_point_missing_image_id");
+    }
+    return {
+      providerArtifactId: String(imageId),
+      captureType: "snapshot",
+    };
+  }
+
+  // -----------------------------------------------------------------------
+  // setProtection
+  // -----------------------------------------------------------------------
+
+  async setProtection(
+    providerServerId: string,
+    protection: { delete: boolean; rebuild: boolean },
+  ): Promise<void> {
+    await this.postServerAction(providerServerId, "change_protection", {
+      delete: protection.delete,
+      rebuild: protection.rebuild,
+    });
   }
 
   // -----------------------------------------------------------------------

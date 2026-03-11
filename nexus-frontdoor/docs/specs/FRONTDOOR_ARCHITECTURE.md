@@ -13,7 +13,7 @@ Frontdoor (`frontdoor.nexushub.sh`) is the canonical gateway for the Nexus hoste
 Frontdoor owns:
 
 1. **Authentication**: Google OIDC flow, session management (`.nexushub.sh` domain cookies), API token auth (`nex_t_...`).
-2. **Servers**: Provisioning, lifecycle, and management of isolated nex runtime instances on Hetzner Cloud VPSes.
+2. **Servers**: Provisioning, lifecycle, durability, recovery, and management of isolated nex runtime instances on cloud provider VMs.
 3. **Apps**: Product catalog, entitlements, package distribution, installation planning, and launch routing.
 4. **Adapters**: Adapter catalog, adapter package dependencies, installation planning, and credential configuration.
 5. **Billing**: Prepaid credits, Stripe payment integration, hourly usage billing, 7-day free tier, product-branded checkout.
@@ -28,12 +28,13 @@ Frontdoor manages three primitives that customers interact with:
 
 ### 2.1 Servers
 
-A server is an isolated nex runtime instance. It is the customer's execution environment and data isolation boundary.
+A server is the customer's durable execution environment and data isolation boundary. The backing provider VM is replaceable infrastructure, not the customer-facing machine identity.
 
 1. Servers start as neutral runtime profiles.
 2. Apps and adapters install on top of servers.
 3. A single server can host multiple apps and adapters.
 4. Each server is fully airgapped — no cross-server data access.
+5. Servers are durable customer assets with archive and restore semantics; destroy is exceptional rather than the default lifecycle.
 
 ### 2.2 Apps
 
@@ -270,17 +271,13 @@ Superseded by the specs above. Kept for historical reference:
 2. `nex/docs/specs/platform/runtime-access-and-routing.md` — canonical hosted access, routing, DNS, and transport contract.
 3. `nex/docs/specs/platform/package-registry-and-release-lifecycle.md` — canonical hosted package registry, releases, install, upgrade, and rollback contract.
 4. `nex/docs/specs/platform/packages-and-control-planes.md` — canonical package/control-plane ownership split.
-5. `nex/docs/specs/platform/managed-connection-gateway.md` — canonical runtime-to-frontdoor managed-connection gateway model.
-6. `nex/docs/specs/apps/app-manifest-and-package-model.md` — canonical app package and manifest contract.
-7. `nex/docs/specs/adapters/adapter-connections.md` — canonical shared adapter connection model.
+5. `nex/docs/specs/platform/product-control-plane-servers-and-admin-apps.md` — canonical deployment and visibility model for operator-only product control plane servers and admin apps.
+6. `nex/docs/specs/platform/managed-connection-gateway.md` — canonical runtime-to-frontdoor managed-connection gateway model.
+7. `nex/docs/specs/apps/app-manifest-and-package-model.md` — canonical app package and manifest contract.
+8. `nex/docs/specs/adapters/adapter-connections.md` — canonical shared adapter connection model.
 
 ### Infrastructure specs (in this directory)
 
-1. `CLOUD_PROVISIONING_ARCHITECTURE_2026-03-04.md` — cloud provider abstraction, Hetzner/AWS, snapshot strategy, provisioning/deprovisioning flows.
+1. `CLOUD_PROVISIONING_ARCHITECTURE_2026-03-04.md` — cloud provider abstraction, Hetzner/AWS, snapshot strategy, and frontdoor infrastructure behavior under the durable server lifecycle.
 2. `TENANT_NETWORKING_AND_ROUTING_2026-03-04.md` — frontdoor ingress, wildcard DNS/TLS, private-network routing, and shell-profile boundary behavior.
 3. `FRONTDOOR_HOSTED_ACCESS_AND_ROUTING.md` — frontdoor routing, DNS, TLS, token layering, callback and webhook ownership.
-
-### Proposals (in `../proposals/`)
-
-1. `ADMIN_SERVER_PATTERN.md` — seed proposal for reusable product admin server architecture.
-2. `TODO_ADMIN_SERVER_PATTERN.md` — proposal backlog derived from the admin server seed.

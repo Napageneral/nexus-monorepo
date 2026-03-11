@@ -45,10 +45,47 @@ export interface McpHelpers {
     serverId: string;
     appId: string;
   }) => Promise<{ ok: true } | { ok: false; error: string; detail?: string; status?: number }>;
-  deleteServer: (params: {
+  archiveServer: (params: {
     session: SessionRecord;
     serverId: string;
   }) => Promise<{ ok: true; status: string } | { ok: false; error: string; status?: number }>;
+  restoreServer: (params: {
+    session: SessionRecord;
+    serverId: string;
+  }) => Promise<{ ok: true; status: string } | { ok: false; error: string; status?: number }>;
+  destroyServer: (params: {
+    session: SessionRecord;
+    serverId: string;
+  }) => Promise<{ ok: true; status: string } | { ok: false; error: string; status?: number }>;
+  createRecoveryPoint: (params: {
+    session: SessionRecord;
+    serverId: string;
+    label: string;
+    notes?: string | null;
+  }) => Promise<
+    | {
+        ok: true;
+        recoveryPointId: string;
+        providerArtifactId: string;
+        captureType: string;
+      }
+    | { ok: false; error: string; status?: number }
+  >;
+  listRecoveryPoints: (params: {
+    session: SessionRecord;
+    serverId: string;
+  }) => Promise<
+    | {
+        ok: true;
+        items: Array<{
+          recoveryPointId: string;
+          label: string;
+          captureType: string;
+          createdAtMs: number;
+        }>;
+      }
+    | { ok: false; error: string; status?: number }
+  >;
   createServer: (params: {
     session: SessionRecord;
     plan?: string;
@@ -250,7 +287,7 @@ export function createMcpServer(): McpServer {
     async (params, ctx) => {
       const statusFilter = typeof params.status === "string" ? params.status : "all";
       const allServers = ctx.store.getServersForUser(ctx.session.principal.userId);
-      let servers = allServers.filter((s) => s.status !== "deleted");
+      let servers = allServers.filter((s) => s.status !== "destroyed");
 
       if (statusFilter !== "all") {
         servers = servers.filter((s) => s.status === statusFilter);
@@ -370,23 +407,88 @@ export function createMcpServer(): McpServer {
     },
   );
 
-  // -- nexus.servers.delete -------------------------------------------------
+  // -- nexus.servers.archive ------------------------------------------------
   mcp.registerTool(
     {
-      name: "nexus.servers.delete",
+      name: "nexus.servers.archive",
       description:
-        "Delete a server. Requires confirm: true to prevent accidental deletion.",
+        "Archive a server. This is the default non-destructive offboarding action.",
       inputSchema: {
         type: "object",
         properties: {
           serverId: {
             type: "string",
-            description: "The server ID to delete",
+            description: "The server ID to archive",
+          },
+        },
+        required: ["serverId"],
+      },
+    },
+    async (params, ctx) => {
+      const serverId = typeof params.serverId === "string" ? params.serverId : "";
+      if (!serverId) return errorResult("serverId is required");
+
+      const result = await ctx.helpers.archiveServer({
+        session: ctx.session,
+        serverId,
+      });
+
+      if (!result.ok) {
+        return errorResult(result.error);
+      }
+
+      return textResult({ ok: true, status: result.status });
+    },
+  );
+
+  // -- nexus.servers.restore ------------------------------------------------
+  mcp.registerTool(
+    {
+      name: "nexus.servers.restore",
+      description: "Restore an archived, suspended, or failed server back to running.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          serverId: {
+            type: "string",
+            description: "The server ID to restore",
+          },
+        },
+        required: ["serverId"],
+      },
+    },
+    async (params, ctx) => {
+      const serverId = typeof params.serverId === "string" ? params.serverId : "";
+      if (!serverId) return errorResult("serverId is required");
+
+      const result = await ctx.helpers.restoreServer({
+        session: ctx.session,
+        serverId,
+      });
+      if (!result.ok) {
+        return errorResult(result.error);
+      }
+      return textResult({ ok: true, status: result.status });
+    },
+  );
+
+  // -- nexus.servers.destroy ------------------------------------------------
+  mcp.registerTool(
+    {
+      name: "nexus.servers.destroy",
+      description:
+        "Permanently destroy a server. Requires confirm: true because this is irreversible.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          serverId: {
+            type: "string",
+            description: "The server ID to destroy permanently",
           },
           confirm: {
             type: "boolean",
             description:
-              "Must be true to confirm deletion. Without this, returns a confirmation prompt.",
+              "Must be true to confirm permanent destruction. Without this, returns a confirmation prompt.",
           },
         },
         required: ["serverId"],
@@ -399,20 +501,104 @@ export function createMcpServer(): McpServer {
       if (params.confirm !== true) {
         return textResult({
           confirmation_required: true,
-          message: `Are you sure you want to delete server ${serverId}? This will destroy the VPS and all data. Call again with confirm: true to proceed.`,
+          message: `Destroy server ${serverId}? This is irreversible and clears provider protection before final delete. Call again with confirm: true to proceed.`,
         });
       }
 
-      const result = await ctx.helpers.deleteServer({
+      const result = await ctx.helpers.destroyServer({
         session: ctx.session,
         serverId,
       });
-
       if (!result.ok) {
         return errorResult(result.error);
       }
-
       return textResult({ ok: true, status: result.status });
+    },
+  );
+
+  // -- nexus.servers.recovery_points.list ----------------------------------
+  mcp.registerTool(
+    {
+      name: "nexus.servers.recovery_points.list",
+      description: "List named recovery points for a server.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          serverId: {
+            type: "string",
+            description: "The server ID whose recovery points should be listed",
+          },
+        },
+        required: ["serverId"],
+      },
+    },
+    async (params, ctx) => {
+      const serverId = typeof params.serverId === "string" ? params.serverId : "";
+      if (!serverId) return errorResult("serverId is required");
+      const result = await ctx.helpers.listRecoveryPoints({
+        session: ctx.session,
+        serverId,
+      });
+      if (!result.ok) {
+        return errorResult(result.error);
+      }
+      return textResult({
+        ok: true,
+        items: result.items.map((item) => ({
+          recoveryPointId: item.recoveryPointId,
+          label: item.label,
+          captureType: item.captureType,
+          createdAt: new Date(item.createdAtMs).toISOString(),
+        })),
+      });
+    },
+  );
+
+  // -- nexus.servers.recovery_points.create --------------------------------
+  mcp.registerTool(
+    {
+      name: "nexus.servers.recovery_points.create",
+      description: "Create a named recovery point for a server.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          serverId: {
+            type: "string",
+            description: "The server ID to checkpoint",
+          },
+          label: {
+            type: "string",
+            description: "Human-readable label for the recovery point",
+          },
+          notes: {
+            type: "string",
+            description: "Optional notes about why the checkpoint was taken",
+          },
+        },
+        required: ["serverId", "label"],
+      },
+    },
+    async (params, ctx) => {
+      const serverId = typeof params.serverId === "string" ? params.serverId : "";
+      const label = typeof params.label === "string" ? params.label : "";
+      const notes = typeof params.notes === "string" ? params.notes : undefined;
+      if (!serverId || !label) return errorResult("serverId and label are required");
+
+      const result = await ctx.helpers.createRecoveryPoint({
+        session: ctx.session,
+        serverId,
+        label,
+        notes,
+      });
+      if (!result.ok) {
+        return errorResult(result.error);
+      }
+      return textResult({
+        ok: true,
+        recoveryPointId: result.recoveryPointId,
+        providerArtifactId: result.providerArtifactId,
+        captureType: result.captureType,
+      });
     },
   );
 
@@ -651,7 +837,7 @@ export function createMcpServer(): McpServer {
 
       const servers = ctx.store
         .getServersForUser(ctx.session.principal.userId)
-        .filter((s) => s.status !== "deleted");
+        .filter((s) => s.status !== "destroyed");
 
       return textResult({
         accountId: account.accountId,
@@ -713,7 +899,7 @@ export function createMcpServer(): McpServer {
 
       const servers = ctx.store
         .getServersForUser(ctx.session.principal.userId)
-        .filter((s) => s.status !== "deleted");
+        .filter((s) => s.status !== "destroyed");
 
       const credits = ctx.store.getCreditBalance(accountId);
       const isFreeTier = !!(credits?.freeTierExpiresAtMs && credits.freeTierExpiresAtMs > Date.now());

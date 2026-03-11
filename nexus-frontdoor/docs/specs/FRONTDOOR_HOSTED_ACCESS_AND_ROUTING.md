@@ -189,7 +189,15 @@ interface HostedRoute {
   serverId: string;
   privateIp: string;
   runtimePort: number;
-  status: "provisioning" | "running" | "degraded" | "stopping" | "deleted";
+  status:
+    | "provisioning"
+    | "running"
+    | "degraded"
+    | "recovering"
+    | "suspended"
+    | "archived"
+    | "destroy_pending"
+    | "destroyed";
 }
 ```
 
