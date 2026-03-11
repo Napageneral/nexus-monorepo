@@ -20,7 +20,6 @@ const (
 	adapterName                  = "meta-ads-adapter"
 	adapterVersion               = "0.1.0"
 	platformID                   = "meta-ads"
-	defaultPlatformCredentialURL = "https://hub.glowbot.com/api/platform-credentials"
 	defaultGraphBaseURL          = "https://graph.facebook.com/v21.0"
 	dateLayout                   = "2006-01-02"
 )
@@ -68,8 +67,8 @@ func main() {
 			AdapterInfo:          info,
 			AdapterHealth:        health,
 			AdapterAccountsList:  accounts,
-			EventBackfill:        backfill,
-			AdapterMonitorStart:  monitor,
+			RecordsBackfill:      backfill,
+			MonitorStart:         monitor,
 		},
 	})
 }
@@ -83,7 +82,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			nexadapter.OpAdapterInfo,
 			nexadapter.OpAdapterHealth,
 			nexadapter.OpAdapterAccountsList,
-			nexadapter.OpEventBackfill,
+			nexadapter.OpRecordsBackfill,
 			nexadapter.OpAdapterMonitorStart,
 		},
 		CredentialService: "facebook",
@@ -91,15 +90,17 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 		Auth: &nexadapter.AdapterAuthManifest{
 			Methods: []nexadapter.AdapterAuthMethod{
 				{
+					ID:                    "facebook_oauth_managed",
 					Type:                  "oauth2",
 					Label:                 "Connect with Facebook",
 					Icon:                  "oauth",
 					Service:               "facebook",
 					Scopes:                []string{"ads_read"},
 					PlatformCredentials:   true,
-					PlatformCredentialURL: nexadapter.PlatformCredentialURL(defaultPlatformCredentialURL),
+					PlatformCredentialURL: nexadapter.PlatformCredentialURL(""),
 				},
 				{
+					ID:      "facebook_access_token",
 					Type:    "api_key",
 					Label:   "Enter Access Token",
 					Icon:    "key",
@@ -122,6 +123,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 					},
 				},
 				{
+					ID:          "facebook_csv_upload",
 					Type:        "file_upload",
 					Label:       "Upload CSV Export",
 					Icon:        "upload",
@@ -152,47 +154,68 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 }
 
 func accounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {
+	runtimeContext, err := nexadapter.LoadRuntimeContextFromEnv()
+	if err != nil {
+		return []nexadapter.AdapterAccount{}, nil
+	}
+
+	displayName := runtimeContext.ConnectionID
+	if runtimeContext.Credential != nil {
+		adAccountID := nexadapter.FirstNonBlank(
+			nexadapter.FieldValue(runtimeContext.Credential.Fields, "ad_account_id"),
+			nexadapter.FieldValue(runtimeContext.Credential.Fields, "account_id"),
+			nexadapter.FieldValue(runtimeContext.Credential.Fields, "act"),
+		)
+		if adAccountID != "" {
+			displayName = fmt.Sprintf("%s (%s)", runtimeContext.ConnectionID, normalizeAdAccountID(adAccountID))
+		}
+	}
+
+	credentialRef := "facebook/" + runtimeContext.ConnectionID
+	if runtimeContext.Credential != nil && strings.TrimSpace(runtimeContext.Credential.Ref) != "" {
+		credentialRef = runtimeContext.Credential.Ref
+	}
 	return []nexadapter.AdapterAccount{
 		{
-			ID:            "default",
-			DisplayName:   "default",
-			CredentialRef: "facebook/default",
+			ID:            runtimeContext.ConnectionID,
+			DisplayName:   displayName,
+			CredentialRef: credentialRef,
 			Status:        "ready",
 		},
 	}, nil
 }
 
 func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, error) {
-	account, err := nexadapter.RequireAccount(account)
+	account, err := nexadapter.RequireConnection(account)
 	if err != nil {
 		return &nexadapter.AdapterHealth{
-			Connected: false,
-			Account:   account,
-			Error:     err.Error(),
+			Connected:    false,
+			ConnectionID: account,
+			Error:        err.Error(),
 		}, nil
 	}
 	creds, err := resolveMetaCredentials(account)
 	if err != nil {
 		return &nexadapter.AdapterHealth{
-			Connected: false,
-			Account:   account,
-			Error:     err.Error(),
+			Connected:    false,
+			ConnectionID: account,
+			Error:        err.Error(),
 		}, nil
 	}
 
 	summary, err := fetchAccountSummary(ctx, creds)
 	if err != nil {
 		return &nexadapter.AdapterHealth{
-			Connected: false,
-			Account:   creds.AccountID,
-			Error:     err.Error(),
+			Connected:    false,
+			ConnectionID: account,
+			Error:        err.Error(),
 		}, nil
 	}
 
 	return &nexadapter.AdapterHealth{
-		Connected:   true,
-		Account:     creds.AccountID,
-		LastEventAt: time.Now().UnixMilli(),
+		Connected:    true,
+		ConnectionID: account,
+		LastEventAt:  time.Now().UnixMilli(),
 		Details: map[string]any{
 			"ad_account_id":  creds.AdAccountID,
 			"account_name":   summary.Name,
@@ -202,7 +225,7 @@ func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, err
 }
 
 func backfill(ctx context.Context, account string, since time.Time, emit nexadapter.EmitFunc) error {
-	account, err := nexadapter.RequireAccount(account)
+	account, err := nexadapter.RequireConnection(account)
 	if err != nil {
 		return err
 	}
@@ -217,20 +240,20 @@ func backfill(ctx context.Context, account string, since time.Time, emit nexadap
 }
 
 func monitor(ctx context.Context, account string, emit nexadapter.EmitFunc) error {
-	account, err := nexadapter.RequireAccount(account)
+	account, err := nexadapter.RequireConnection(account)
 	if err != nil {
 		return err
 	}
-	return nexadapter.PollMonitor(nexadapter.PollConfig{
+	return nexadapter.PollMonitor(nexadapter.PollConfig[nexadapter.AdapterInboundRecord]{
 		Interval: 6 * time.Hour,
-		Fetch: func(ctx context.Context, since time.Time) ([]nexadapter.NexusEvent, time.Time, error) {
+		Fetch: func(ctx context.Context, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 			return fetchInsightsSince(ctx, account, since)
 		},
 		MaxConsecutiveErrors: 5,
 	})(ctx, account, emit)
 }
 
-func fetchInsightsSince(ctx context.Context, account string, since time.Time) ([]nexadapter.NexusEvent, time.Time, error) {
+func fetchInsightsSince(ctx context.Context, account string, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 	creds, err := resolveMetaCredentials(account)
 	if err != nil {
 		return nil, time.Time{}, err
@@ -240,19 +263,19 @@ func fetchInsightsSince(ctx context.Context, account string, since time.Time) ([
 	to := time.Now().UTC().Format(dateLayout)
 	requestURL := buildInsightsURL(creds, from, to)
 
-	var events []nexadapter.NexusEvent
+	var records []nexadapter.AdapterInboundRecord
 	for strings.TrimSpace(requestURL) != "" {
 		page, nextURL, err := fetchInsightsPage(ctx, creds, requestURL)
 		if err != nil {
 			return nil, time.Time{}, err
 		}
 		for _, row := range page.Data {
-			events = append(events, buildMetaMetricEvents(creds.AccountID, row)...)
+			records = append(records, buildMetaMetricRecords(creds.AccountID, row)...)
 		}
 		requestURL = strings.TrimSpace(nextURL)
 	}
 
-	return events, time.Now(), nil
+	return records, time.Now(), nil
 }
 
 func fetchAccountSummary(ctx context.Context, creds metaCredentials) (metaAccountSummary, error) {
@@ -340,7 +363,7 @@ func graphGetJSON(ctx context.Context, accessToken string, requestURL string, ou
 	return nil
 }
 
-func buildMetaMetricEvents(account string, row metaInsightRow) []nexadapter.NexusEvent {
+func buildMetaMetricRecords(connectionID string, row metaInsightRow) []nexadapter.AdapterInboundRecord {
 	date := strings.TrimSpace(row.DateStart)
 	if date == "" {
 		date = time.Now().UTC().Format(dateLayout)
@@ -374,35 +397,60 @@ func buildMetaMetricEvents(account string, row metaInsightRow) []nexadapter.Nexu
 	}
 
 	timestamp := nexadapter.MetricTimestamp(date, nil)
+	connectionID, err := nexadapter.RequireConnection(connectionID)
+	if err != nil {
+		nexadapter.LogError("meta ads record build: %v", err)
+		return nil
+	}
+	metadataKey := nexadapter.FirstNonBlank(campaignID, campaignName)
 	base := strings.Join(
-		[]string{platformID, nexadapter.SafeIDToken(account), nexadapter.SafeIDToken(date), nexadapter.SafeIDToken(campaignID)},
+		[]string{platformID, nexadapter.SafeIDToken(connectionID), nexadapter.SafeIDToken(date), nexadapter.SafeIDToken(campaignID)},
 		":",
 	)
 
-	events := make([]nexadapter.NexusEvent, 0, len(metrics))
+	records := make([]nexadapter.AdapterInboundRecord, 0, len(metrics))
 	for _, metric := range metrics {
 		if metric.value < 0 {
 			continue
 		}
-		event := nexadapter.
-			NewEvent(platformID, fmt.Sprintf("%s:%s", base, nexadapter.SafeIDToken(metric.name))).
-			WithTimestampUnixMs(timestamp).
-			WithContent(fmt.Sprintf("%s=%g", metric.name, metric.value)).
-			WithContentType("text").
-			WithSender(platformID, "Meta Ads").
-			WithContainer("metrics", "channel").
-			WithAccount(account).
-			WithMetadata("adapter_id", platformID).
-			WithMetadata("metric_name", metric.name).
-			WithMetadata("metric_value", metric.value).
-			WithMetadata("date", date).
-			WithMetadata("campaign_id", campaignID).
-			WithMetadata("campaign_name", campaignName).
-			Build()
-		events = append(events, event)
+		metadata := map[string]any{
+			"connection_id": connectionID,
+			"adapter_id":    platformID,
+			"metric_name":   metric.name,
+			"metric_value":  metric.value,
+			"date":          date,
+			"campaign_id":   campaignID,
+			"campaign_name": campaignName,
+		}
+		if metadataKey != "" {
+			metadata["metadata_key"] = metadataKey
+		}
+		record := nexadapter.AdapterInboundRecord{
+			Operation: "record.ingest",
+			Routing: nexadapter.AdapterInboundRouting{
+				Adapter:       adapterName,
+				Platform:      platformID,
+				ConnectionID:  connectionID,
+				SenderID:      platformID,
+				SenderName:    "Meta Ads",
+				ContainerKind: "group",
+				ContainerID:   "metrics",
+				ContainerName: "Metrics",
+				ThreadID:      campaignID,
+				ThreadName:    campaignName,
+			},
+			Payload: nexadapter.AdapterInboundPayload{
+				ExternalRecordID: fmt.Sprintf("%s:%s", base, nexadapter.SafeIDToken(metric.name)),
+				Timestamp:        timestamp,
+				Content:          fmt.Sprintf("%s=%g", metric.name, metric.value),
+				ContentType:      "text",
+				Metadata:         metadata,
+			},
+		}
+		records = append(records, record)
 	}
 
-	return events
+	return records
 }
 
 func parseConversions(actions []metaActionMetric) float64 {
@@ -479,6 +527,9 @@ func resolveMetaCredentials(account string) (metaCredentials, error) {
 
 	runtimeContext, err := nexadapter.LoadRuntimeContextFromEnv()
 	if err == nil && runtimeContext != nil {
+		if strings.TrimSpace(runtimeContext.ConnectionID) != "" {
+			account = runtimeContext.ConnectionID
+		}
 		if runtimeContext.Credential != nil {
 			fields = runtimeContext.Credential.Fields
 			accessToken = nexadapter.FirstNonBlank(
@@ -540,4 +591,3 @@ func normalizeAdAccountID(raw string) string {
 	}
 	return "act_" + trimmed
 }
-

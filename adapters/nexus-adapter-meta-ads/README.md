@@ -1,22 +1,57 @@
-# nexus-adapter-meta-ads
+# Nexus Meta Ads Adapter
 
-Nexus adapter wrapper for Meta Ads fast-path ingestion using a long-lived user access token.
+Shared Meta Ads adapter for Nex.
 
-## Requirements
+This repository contains:
 
-- Meta long-lived user access token with `ads_read`
-- Meta ad account id (`act_<id>`)
+- the Meta Ads adapter implementation
+- package-local spec, workplan, and validation docs
+- an installable adapter package manifest in `adapter.nexus.json`
+- a release script that emits a Nex operator-install tarball
+
+## Layout
+
+- `cmd/meta-ads-adapter/` - adapter entrypoint and Meta provider logic
+- `docs/specs/` - active target-state adapter specs
+- `docs/workplans/` - active gap-closure workplans
+- `docs/validation/` - active validation ladders
 
 ## Build
 
 ```bash
-go build ./cmd/meta-ads-adapter
+mkdir -p ./bin
+go build -o ./bin/meta-ads-adapter ./cmd/meta-ads-adapter
 ```
 
-## Run
+## Package
 
 ```bash
-go run ./cmd/meta-ads-adapter adapter.info
-go run ./cmd/meta-ads-adapter adapter.health --account default
-go run ./cmd/meta-ads-adapter event.backfill --account default --since 2026-01-01
+./scripts/package-release.sh
 ```
+
+This writes a tarball to `./dist/` containing:
+
+- `adapter.nexus.json`
+- `bin/meta-ads-adapter`
+
+## Test
+
+```bash
+go test ./...
+```
+
+## Local CLI
+
+```bash
+./bin/meta-ads-adapter adapter.info
+./bin/meta-ads-adapter adapter.accounts.list
+./bin/meta-ads-adapter adapter.health --connection <connection-id>
+./bin/meta-ads-adapter adapter.monitor.start --connection <connection-id>
+./bin/meta-ads-adapter records.backfill --connection <connection-id> --since 2026-01-01T00:00:00Z
+```
+
+## Active Docs
+
+- [docs/README.md](/Users/tyler/nexus/home/projects/nexus/adapters/nexus-adapter-meta-ads/docs/README.md)
+- [ADAPTER_SPEC_META_ADS.md](/Users/tyler/nexus/home/projects/nexus/adapters/nexus-adapter-meta-ads/docs/specs/ADAPTER_SPEC_META_ADS.md)
+- [META_ADS_ADAPTER_PACKAGE_DISTRIBUTION_AND_INSTALL.md](/Users/tyler/nexus/home/projects/nexus/adapters/nexus-adapter-meta-ads/docs/specs/META_ADS_ADAPTER_PACKAGE_DISTRIBUTION_AND_INSTALL.md)

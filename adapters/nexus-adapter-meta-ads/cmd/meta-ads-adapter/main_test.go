@@ -1,6 +1,13 @@
 package main
 
-import "testing"
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+
+	nexadapter "github.com/nexus-project/adapter-sdk-go"
+)
 
 func TestNormalizeAdAccountID(t *testing.T) {
 	if got := normalizeAdAccountID("123456"); got != "act_123456" {
@@ -12,7 +19,7 @@ func TestNormalizeAdAccountID(t *testing.T) {
 }
 
 func TestBuildMetaMetricEvents(t *testing.T) {
-	events := buildMetaMetricEvents("default", metaInsightRow{
+	records := buildMetaMetricRecords("conn-meta", metaInsightRow{
 		DateStart:    "2026-02-26",
 		CampaignID:   "cmp-1",
 		CampaignName: "Brand Campaign",
@@ -29,14 +36,17 @@ func TestBuildMetaMetricEvents(t *testing.T) {
 		},
 	})
 
-	if len(events) < 6 {
-		t.Fatalf("expected at least 6 events, got %d", len(events))
+	if len(records) < 6 {
+		t.Fatalf("expected at least 6 records, got %d", len(records))
 	}
-	if events[0].Platform != platformID {
-		t.Fatalf("unexpected platform: %q", events[0].Platform)
+	if records[0].Routing.Platform != platformID {
+		t.Fatalf("unexpected platform: %q", records[0].Routing.Platform)
 	}
-	if events[0].AccountID != "default" {
-		t.Fatalf("unexpected account: %q", events[0].AccountID)
+	if records[0].Routing.ConnectionID != "conn-meta" {
+		t.Fatalf("unexpected connection: %q", records[0].Routing.ConnectionID)
+	}
+	if got := records[0].Payload.Metadata["adapter_id"]; got != platformID {
+		t.Fatalf("unexpected adapter_id metadata: %#v", got)
 	}
 }
 
@@ -48,5 +58,42 @@ func TestParseConversions(t *testing.T) {
 	})
 	if got != 5 {
 		t.Fatalf("parseConversions mismatch: %v", got)
+	}
+}
+
+func TestAccountsUsesRuntimeConnectionID(t *testing.T) {
+	dir := t.TempDir()
+	contextPath := filepath.Join(dir, "runtime-context.json")
+	payload := nexadapter.RuntimeContext{
+		Platform:     platformID,
+		ConnectionID: "meta-live-conn",
+		Config:       map[string]any{},
+		Credential: &nexadapter.RuntimeCredential{
+			Kind: "oauth",
+			Value: "token",
+			Ref:  "facebook/meta-live-conn",
+			Fields: map[string]string{
+				"ad_account_id": "act_123456",
+			},
+		},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal context: %v", err)
+	}
+	if err := os.WriteFile(contextPath, raw, 0o600); err != nil {
+		t.Fatalf("write context: %v", err)
+	}
+	t.Setenv(nexadapter.AdapterContextEnvVar, contextPath)
+
+	accountsList, err := accounts(nil)
+	if err != nil {
+		t.Fatalf("accounts: %v", err)
+	}
+	if len(accountsList) != 1 {
+		t.Fatalf("expected 1 account, got %d", len(accountsList))
+	}
+	if accountsList[0].ID != "meta-live-conn" {
+		t.Fatalf("unexpected account id: %q", accountsList[0].ID)
 	}
 }
