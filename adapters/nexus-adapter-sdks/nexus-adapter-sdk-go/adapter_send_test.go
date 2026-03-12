@@ -2,6 +2,7 @@ package nexadapter
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"strings"
@@ -66,5 +67,60 @@ func TestRunSendParsesCanonicalDeliveryTarget(t *testing.T) {
 	}
 	if strings.TrimSpace(captured.Text) != `{"action":"comment","body":"hello"}` {
 		t.Fatalf("text = %q", captured.Text)
+	}
+}
+
+func TestRunSendNormalizesErrorDeliveryResultMessageIDs(t *testing.T) {
+	originalStdout := os.Stdout
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stdout = writer
+	defer func() {
+		os.Stdout = originalStdout
+	}()
+
+	adapter := Adapter{
+		Operations: AdapterOperations{
+			ChannelsSend: func(ctx context.Context, req SendRequest) (*DeliveryResult, error) {
+				return &DeliveryResult{
+					Success: false,
+					Error: &DeliveryError{
+						Type:    "unknown",
+						Message: "boom",
+						Retry:   false,
+					},
+				}, nil
+			},
+		},
+	}
+
+	err = runSend(adapter, []string{
+		"--connection", "jira-conn",
+		"--target-json", `{"connection_id":"jira-conn","channel":{"platform":"jira","space_id":"vrtly","container_kind":"group","container_id":"VT"}}`,
+		"--text", `{"action":"comment","body":"hello"}`,
+	})
+	if err != nil {
+		t.Fatalf("runSend: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+	raw, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read stdout: %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("json unmarshal: %v", err)
+	}
+	messageIDs, ok := payload["message_ids"].([]any)
+	if !ok {
+		t.Fatalf("message_ids type = %T, want []any", payload["message_ids"])
+	}
+	if len(messageIDs) != 0 {
+		t.Fatalf("len(message_ids) = %d, want 0", len(messageIDs))
 	}
 }

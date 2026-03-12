@@ -10,6 +10,9 @@ import (
 // NEX writes an ephemeral JSON file (0600) and passes its path via this env var.
 const AdapterContextEnvVar = "NEXUS_ADAPTER_CONTEXT_PATH"
 
+// AdapterStateDirEnvVar points to the canonical writable state root for one adapter package.
+const AdapterStateDirEnvVar = "NEXUS_ADAPTER_STATE_DIR"
+
 // RuntimeContext is the injected configuration + resolved credential used by adapters at runtime.
 //
 // This is a process boundary contract (NEX -> adapter). Keep it stable.
@@ -83,4 +86,13 @@ func LoadRuntimeContextFile(path string) (*RuntimeContext, error) {
 	}
 
 	return &ctx, nil
+}
+
+// LoadAdapterStateDirFromEnv returns the canonical writable adapter state root.
+func LoadAdapterStateDirFromEnv() (string, error) {
+	p := os.Getenv(AdapterStateDirEnvVar)
+	if p == "" {
+		return "", fmt.Errorf("missing adapter state dir (expected $%s)", AdapterStateDirEnvVar)
+	}
+	return p, nil
 }

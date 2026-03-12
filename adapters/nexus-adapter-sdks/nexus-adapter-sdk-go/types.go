@@ -13,6 +13,12 @@ type AdapterInfo struct {
 	// Supported adapter operations
 	Operations []AdapterOperation `json:"operations"`
 
+	// Provider-native typed methods exposed by this adapter.
+	Methods []AdapterMethod `json:"methods"`
+
+	// Optional declaration metadata for the package-native method catalog.
+	MethodCatalog *AdapterMethodCatalog `json:"methodCatalog,omitempty"`
+
 	// Credential linking
 	CredentialService string `json:"credential_service,omitempty"` // Links to credential store service
 	MultiAccount      bool   `json:"multi_account"`
@@ -22,6 +28,45 @@ type AdapterInfo struct {
 
 	// Optional auth manifest used by runtime/control-plane credential orchestration.
 	Auth *AdapterAuthManifest `json:"auth,omitempty"`
+}
+
+// AdapterMethod describes one provider-native typed method exposed by an adapter.
+type AdapterMethod struct {
+	Name               string                    `json:"name"`
+	Description        string                    `json:"description,omitempty"`
+	Action             string                    `json:"action"` // "read" | "write"
+	Params             map[string]any            `json:"params,omitempty"`
+	Response           map[string]any            `json:"response,omitempty"`
+	Surfaces           []string                  `json:"surfaces,omitempty"`
+	ConnectionRequired bool                      `json:"connection_required"`
+	MutatesRemote      bool                      `json:"mutates_remote"`
+	Origin             AdapterMethodOrigin       `json:"origin"`
+	ContextHints       AdapterMethodContextHints `json:"context_hints"`
+}
+
+type AdapterMethodCatalog struct {
+	Source    string `json:"source,omitempty"` // "manifest" | "openapi"
+	Document  string `json:"document,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+}
+
+type AdapterMethodOrigin struct {
+	Kind              string `json:"kind"` // "core" | "app" | "adapter"
+	PackageID         string `json:"package_id,omitempty"`
+	PackageVersion    string `json:"package_version,omitempty"`
+	DeclarationMode   string `json:"declaration_mode"`   // "manifest" | "openapi" | "builtin"
+	DeclarationSource string `json:"declaration_source"` // e.g. "adapter.nexus.json"
+	Namespace         string `json:"namespace"`
+}
+
+type AdapterMethodContextHintValue struct {
+	Value      any    `json:"value"`
+	Source     string `json:"source"`
+	Confidence string `json:"confidence"` // "exact" | "derived" | "weak"
+}
+
+type AdapterMethodContextHints struct {
+	Params map[string]AdapterMethodContextHintValue `json:"params"`
 }
 
 // AdapterAuthManifest describes credential setup methods exposed by an adapter.

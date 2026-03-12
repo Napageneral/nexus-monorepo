@@ -82,8 +82,16 @@ type AdapterOperations struct {
 	// ControlStart starts a long-lived duplex control session.
 	ControlStart func(ctx context.Context, connectionID string, session *ControlSession) error
 
+	// Methods executes provider-native namespaced adapter methods.
+	Methods map[string]func(ctx context.Context, req AdapterMethodRequest) (any, error)
+
 	// ChannelsStream configures streaming delivery support.
 	ChannelsStream *StreamConfig
+}
+
+type AdapterMethodRequest struct {
+	ConnectionID string         `json:"connection_id,omitempty"`
+	Payload      map[string]any `json:"payload,omitempty"`
 }
 
 // Adapter defines the operation handlers for a Nexus adapter.
@@ -157,9 +165,7 @@ func Run(adapter Adapter) {
 		printUsage()
 		os.Exit(0)
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command: %s\n", command)
-		printUsage()
-		os.Exit(1)
+		err = runMethod(adapter, command, filteredArgs)
 	}
 
 	if err != nil {
@@ -190,6 +196,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  adapter.setup.status --session-id <id> [--connection <id>]\n")
 	fmt.Fprintf(os.Stderr, "  adapter.setup.cancel --session-id <id> [--connection <id>]\n")
 	fmt.Fprintf(os.Stderr, "  channels.stream --connection <id>\n")
+	fmt.Fprintf(os.Stderr, "  <adapter-native-method> [--connection <id>] [--payload-json <json>]\n")
 	fmt.Fprintf(os.Stderr, "\nGlobal flags:\n")
 	fmt.Fprintf(os.Stderr, "  --verbose, -v                     Enable debug logging\n")
 }
@@ -275,17 +282,18 @@ func runSend(adapter Adapter, args []string) error {
 	result, err := adapter.Operations.ChannelsSend(ctx, req)
 	if err != nil {
 		// Return error as a structured DeliveryResult rather than crashing
-		return writeJSON(&DeliveryResult{
-			Success: false,
+		return writeJSON(normalizeDeliveryResult(&DeliveryResult{
+			Success:    false,
+			MessageIDs: []string{},
 			Error: &DeliveryError{
 				Type:    "unknown",
 				Message: err.Error(),
 				Retry:   false,
 			},
-		})
+		}))
 	}
 
-	return writeJSON(result)
+	return writeJSON(normalizeDeliveryResult(result))
 }
 
 func runReact(adapter Adapter, args []string) error {
@@ -314,17 +322,18 @@ func runReact(adapter Adapter, args []string) error {
 
 	result, err := adapter.Operations.ChannelsReact(ctx, req)
 	if err != nil {
-		return writeJSON(&DeliveryResult{
-			Success: false,
+		return writeJSON(normalizeDeliveryResult(&DeliveryResult{
+			Success:    false,
+			MessageIDs: []string{},
 			Error: &DeliveryError{
 				Type:    "unknown",
 				Message: err.Error(),
 				Retry:   false,
 			},
-		})
+		}))
 	}
 
-	return writeJSON(result)
+	return writeJSON(normalizeDeliveryResult(result))
 }
 
 func runEdit(adapter Adapter, args []string) error {
@@ -351,17 +360,18 @@ func runEdit(adapter Adapter, args []string) error {
 
 	result, err := adapter.Operations.ChannelsEdit(ctx, req)
 	if err != nil {
-		return writeJSON(&DeliveryResult{
-			Success: false,
+		return writeJSON(normalizeDeliveryResult(&DeliveryResult{
+			Success:    false,
+			MessageIDs: []string{},
 			Error: &DeliveryError{
 				Type:    "unknown",
 				Message: err.Error(),
 				Retry:   false,
 			},
-		})
+		}))
 	}
 
-	return writeJSON(result)
+	return writeJSON(normalizeDeliveryResult(result))
 }
 
 func runDelete(adapter Adapter, args []string) error {
@@ -405,17 +415,36 @@ func runDelete(adapter Adapter, args []string) error {
 
 	result, err := adapter.Operations.ChannelsDelete(ctx, req)
 	if err != nil {
-		return writeJSON(&DeliveryResult{
-			Success: false,
+		return writeJSON(normalizeDeliveryResult(&DeliveryResult{
+			Success:    false,
+			MessageIDs: []string{},
 			Error: &DeliveryError{
 				Type:    "unknown",
 				Message: err.Error(),
 				Retry:   false,
 			},
-		})
+		}))
 	}
 
-	return writeJSON(result)
+	return writeJSON(normalizeDeliveryResult(result))
+}
+
+func normalizeDeliveryResult(result *DeliveryResult) *DeliveryResult {
+	if result == nil {
+		return &DeliveryResult{
+			Success:    false,
+			MessageIDs: []string{},
+			Error: &DeliveryError{
+				Type:    "unknown",
+				Message: "adapter returned nil delivery result",
+				Retry:   false,
+			},
+		}
+	}
+	if result.MessageIDs == nil {
+		result.MessageIDs = []string{}
+	}
+	return result
 }
 
 func runBackfill(adapter Adapter, args []string) error {
@@ -572,6 +601,65 @@ func runControl(adapter Adapter, args []string) error {
 	return nil
 }
 
+func runMethod(adapter Adapter, methodName string, args []string) error {
+	if adapter.Operations.AdapterInfo == nil {
+		return fmt.Errorf("adapter.info handler not implemented")
+	}
+	if adapter.Operations.Methods == nil {
+		return fmt.Errorf("unknown command: %s", methodName)
+	}
+	handler, ok := adapter.Operations.Methods[methodName]
+	if !ok || handler == nil {
+		return fmt.Errorf("unknown command: %s", methodName)
+	}
+
+	info, err := adapter.Operations.AdapterInfo(context.Background())
+	if err != nil {
+		return fmt.Errorf("adapter.info: %w", err)
+	}
+	method, ok := findDeclaredMethod(info, methodName)
+	if !ok {
+		return fmt.Errorf("adapter method not declared in adapter.info: %s", methodName)
+	}
+
+	fs := flag.NewFlagSet(methodName, flag.ContinueOnError)
+	connection := fs.String("connection", "", "Connection ID")
+	payloadJSON := fs.String("payload-json", "", "JSON object payload")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	req := AdapterMethodRequest{}
+	if trimmed := strings.TrimSpace(*connection); trimmed != "" {
+		req.ConnectionID = trimmed
+	}
+	if method.ConnectionRequired && strings.TrimSpace(req.ConnectionID) == "" {
+		return fmt.Errorf("--connection is required for %s", methodName)
+	}
+
+	if raw := strings.TrimSpace(*payloadJSON); raw != "" {
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+			return fmt.Errorf("--payload-json must be a valid JSON object: %w", err)
+		}
+		if payload == nil {
+			return fmt.Errorf("--payload-json must decode to a JSON object")
+		}
+		req.Payload = payload
+	} else {
+		req.Payload = map[string]any{}
+	}
+
+	result, err := handler(signalContext(), req)
+	if err != nil {
+		return fmt.Errorf("%s: %w", methodName, err)
+	}
+	if result == nil {
+		result = map[string]any{}
+	}
+	return writeJSON(result)
+}
+
 func runStream(adapter Adapter, args []string) error {
 	if adapter.Operations.ChannelsStream == nil {
 		return fmt.Errorf("channels.stream not supported by this adapter")
@@ -593,6 +681,18 @@ func runStream(adapter Adapter, args []string) error {
 	}
 	LogInfo("stream handler stopped cleanly")
 	return nil
+}
+
+func findDeclaredMethod(info *AdapterInfo, methodName string) (AdapterMethod, bool) {
+	if info == nil {
+		return AdapterMethod{}, false
+	}
+	for _, method := range info.Methods {
+		if method.Name == methodName {
+			return method, true
+		}
+	}
+	return AdapterMethod{}, false
 }
 
 // --- Helpers ---
