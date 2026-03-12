@@ -3,15 +3,7 @@ import { callGlowbotHubOperation, createGlowbotHubProxyHandler, getGlowbotHubHea
 import { handle as overviewGetHandler } from "./overview-get.js";
 
 function createContext() {
-  const get = vi.fn();
-  const post = vi.fn();
-  const service = vi.fn(() => ({
-    get,
-    post,
-    put: vi.fn(),
-    delete: vi.fn(),
-    isHealthy: () => true,
-  }));
+  const callMethod = vi.fn();
   return {
     ctx: {
       params: {},
@@ -32,23 +24,23 @@ function createContext() {
         dataDir: "/tmp/glowbot-admin",
         packageDir: "/tmp/glowbot-admin/pkg",
         config: {},
-        service,
+        service: vi.fn(),
       },
-      nex: {} as never,
+      nex: {
+        runtime: {
+          callMethod,
+        },
+      } as never,
     },
-    service,
-    get,
-    post,
+    callMethod,
   };
 }
 
 describe("glowbot admin hub proxy", () => {
-  it("calls the local hub service and unwraps result envelopes", async () => {
-    const { ctx, service, post } = createContext();
-    post.mockResolvedValue({
-      result: {
-        productFlags: [{ key: "benchmarks_enabled", value: true, updatedAtMs: 1 }],
-      },
+  it("calls the co-installed hub app through runtime.callMethod", async () => {
+    const { ctx, callMethod } = createContext();
+    callMethod.mockResolvedValue({
+      productFlags: [{ key: "benchmarks_enabled", value: true, updatedAtMs: 1 }],
     });
 
     const result = await callGlowbotHubOperation<{ productFlags: Array<{ key: string }> }>(
@@ -57,76 +49,63 @@ describe("glowbot admin hub proxy", () => {
       {},
     );
 
-    expect(service).toHaveBeenCalledWith("hub");
-    expect(post).toHaveBeenCalledWith("/operations/glowbotHub.productFlags.list", {
-      payload: {},
-    });
+    expect(callMethod).toHaveBeenCalledWith("glowbotHub.productFlags.list", {});
     expect(result.productFlags[0]?.key).toBe("benchmarks_enabled");
   });
 
-  it("throws when the hub returns an error envelope", async () => {
-    const { ctx, post } = createContext();
-    post.mockResolvedValue({
-      error: {
-        code: "INTERNAL_ERROR",
-        message: "hub exploded",
-      },
-    });
+  it("throws when the runtime call fails", async () => {
+    const { ctx, callMethod } = createContext();
+    callMethod.mockRejectedValue(new Error("hub exploded"));
 
     await expect(
       callGlowbotHubOperation(ctx, "glowbotHub.productFlags.list", {}),
     ).rejects.toThrow("hub exploded");
   });
 
-  it("reads hub health through the local service client", async () => {
-    const { ctx, get } = createContext();
-    get.mockResolvedValue({ status: "ok" });
+  it("reads hub health through the co-installed hub app methods", async () => {
+    const { ctx, callMethod } = createContext();
+    callMethod.mockResolvedValue({ status: "ok" });
 
     const result = await getGlowbotHubHealth(ctx);
 
-    expect(get).toHaveBeenCalledWith("/health");
+    expect(callMethod).toHaveBeenCalledWith("glowbotHub.diagnostics.summary", {});
     expect(result.status).toBe("ok");
   });
 
-  it("builds proxy handlers over the local hub service", async () => {
-    const { ctx, post } = createContext();
+  it("builds proxy handlers over the co-installed hub app methods", async () => {
+    const { ctx, callMethod } = createContext();
     ctx.params = { includeArchived: true };
-    post.mockResolvedValue({
-      result: {
-        profiles: [],
-      },
-    });
+    callMethod.mockResolvedValue({ profiles: [] });
 
     const handler = createGlowbotHubProxyHandler<{ profiles: unknown[] }>(
       "glowbotHub.managedProfiles.list",
     );
     const result = await handler(ctx);
 
-    expect(post).toHaveBeenCalledWith("/operations/glowbotHub.managedProfiles.list", {
-      payload: { includeArchived: true },
+    expect(callMethod).toHaveBeenCalledWith("glowbotHub.managedProfiles.list", {
+      includeArchived: true,
     });
     expect(result).toEqual({ profiles: [] });
   });
 
-  it("assembles overview from local hub service calls", async () => {
-    const { ctx, get, post } = createContext();
-    get.mockResolvedValue({ status: "ok" });
-    post.mockImplementation(async (path: string) => {
-      if (path === "/operations/glowbotHub.diagnostics.summary") {
-        return { result: { status: "healthy" } };
+  it("assembles overview from co-installed hub app calls", async () => {
+    const { ctx, callMethod } = createContext();
+    callMethod.mockImplementation(async (method: string) => {
+      if (method === "glowbotHub.diagnostics.summary") {
+        return { status: "healthy" };
       }
-      if (path === "/operations/glowbotHub.benchmarks.networkHealth") {
-        return { result: { cohortCount: 2 } };
+      if (method === "glowbotHub.benchmarks.networkHealth") {
+        return { cohortCount: 2 };
       }
-      if (path === "/operations/glowbotHub.productFlags.list") {
-        return { result: { productFlags: [{ key: "benchmarks_enabled", value: true, updatedAtMs: 1 }] } };
+      if (method === "glowbotHub.productFlags.list") {
+        return { productFlags: [{ key: "benchmarks_enabled", value: true, updatedAtMs: 1 }] };
       }
-      throw new Error(`unexpected path: ${path}`);
+      throw new Error(`unexpected method: ${method}`);
     });
 
     const result = (await overviewGetHandler(ctx)) as Record<string, unknown>;
 
-    expect(result.hubHealth).toEqual({ status: "ok" });
+    expect(result.hubHealth).toEqual({ status: "healthy" });
     expect(result.diagnostics).toEqual({ status: "healthy" });
     expect(result.benchmarkNetwork).toEqual({ cohortCount: 2 });
     expect(result.productFlags).toEqual({

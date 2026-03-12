@@ -241,6 +241,25 @@ Current state note:
 
 ---
 
+## Milestone 13A: Synthetic Deployed Rehearsal ✅
+
+| # | Checkpoint | Pass Criteria |
+|---|---|---|
+| SDR1 | Real GlowBot package artifacts publish cleanly | `glowbot`, `glowbot-admin`, and `glowbot-hub` are published as real hosted artifacts |
+| SDR2 | Deployed control-plane split is real | `glowbot-admin` and `glowbot-hub` run on a dedicated control-plane runtime and `glowbot` runs on a separate clinic runtime |
+| SDR3 | Synthetic record ingest reaches the clinic runtime | canonical synthetic `record.ingest` payloads are accepted on the deployed clinic runtime |
+| SDR4 | `metric_extract` materializes metric elements | deployed downstream work writes real `metric` elements from those synthetic records |
+| SDR5 | Clinic methods read sane outputs | deployed `overview`, `funnel`, `modeling`, and recommendations methods return coherent data |
+| SDR6 | Benchmark snapshot publish/query works | the deployed clinic app and control plane exchange benchmark-safe snapshots successfully |
+| SDR7 | Deployed product-control-plane reads work | product flags and other control-plane reads succeed through `productControlPlane.call` |
+
+Current state note:
+
+- SDR1-SDR7 are landed and validated in the hosted GlowBot synthetic deployed
+  rehearsal
+
+---
+
 ## Milestone 10: Benchmark Network 🟡
 
 The shared benchmark network must become real on top of the hub.
@@ -333,3 +352,28 @@ experience.
 Live-clinic validation details are tracked in:
 
 - [LIVE_CREDENTIAL_CUTOVER_RUNBOOK.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/validation/LIVE_CREDENTIAL_CUTOVER_RUNBOOK.md)
+
+---
+
+## Milestone 13A: Synthetic Deployed Rehearsal 🚧
+
+Synthetic canonical records validate the deployed two-server GlowBot shape
+before live credentials arrive.
+
+| # | Checkpoint | Pass Criteria |
+|---|---|---|
+| SR1 | Control-plane server is installed | `glowbot-admin` and `glowbot-hub` are installed on a dedicated server |
+| SR2 | Clinic server is installed | `glowbot` is installed on a separate clinic server |
+| SR3 | Product flag update works through deployed admin path | operator update reaches the real control plane |
+| SR4 | Clinic profile update works on deployed clinic app | benchmark-capable clinic profile truth is persisted |
+| SR5 | Synthetic canonical record ingress works | deployed clinic runtime accepts canonical `record.ingest` |
+| SR6 | Metric extraction runs downstream | synthetic records produce real `metric` elements |
+| SR7 | Overview/funnel/modeling/recommendations are sane | deployed clinic methods return coherent responses |
+| SR8 | Benchmark publish/query works on deployed topology | clinic app and control plane round-trip benchmark data |
+| SR9 | Clinic can read product flags through `productControlPlane.call` | deployed gateway path is real for product config reads |
+
+Current state note:
+
+- this milestone is the next active non-credential validation slice
+- once complete, targeted hub/admin hardening can be driven by the evidence it
+  surfaces

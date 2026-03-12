@@ -23,8 +23,9 @@ Related canon:
 
 - [GLOWBOT_PRODUCT_CONTROL_PLANE_DEPLOYMENT.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_PRODUCT_CONTROL_PLANE_DEPLOYMENT.md)
 - [GLOWBOT_HUB_SERVICE_SHELL.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_HUB_SERVICE_SHELL.md)
-- [HOSTED_PRODUCT_CONTROL_PLANES.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/hosted/HOSTED_PRODUCT_CONTROL_PLANES.md)
-- [HOSTED_PRODUCT_CONTROL_PLANE_SHELL.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/hosted/HOSTED_PRODUCT_CONTROL_PLANE_SHELL.md)
+- [Platform Packages and Control Planes](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/packages-and-control-planes.md)
+- [Managed Connection Gateway](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/managed-connection-gateway.md)
+- [Platform Runtime Access and Routing](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/runtime-access-and-routing.md)
 
 ---
 

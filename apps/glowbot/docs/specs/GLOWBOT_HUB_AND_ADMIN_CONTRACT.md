@@ -1,23 +1,25 @@
 # GlowBot — Hub And Admin Contract
 
-> Canonical contract for the shared GlowBot hub service, the operator-facing
+> Canonical contract for the shared GlowBot hub app, the operator-facing
 > admin app, and the benchmark network boundary.
 
 ---
 
 ## Purpose
 
-This document defines the product-specific shared-service boundary for GlowBot.
+This document defines the product-specific shared control-plane app boundary for
+GlowBot.
 
 It exists to keep three things clear:
 
 1. what belongs in the clinic-facing GlowBot app
-2. what belongs in the shared GlowBot hub service
+2. what belongs in the shared GlowBot hub app
 3. what still belongs to frontdoor and the hosted runtime rather than to
    product-level GlowBot packages
 
 This is the detailed contract behind:
 
+- [Product Control Plane Servers and Admin Apps](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/product-control-plane-servers-and-admin-apps.md)
 - [CENTRAL_HUB.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/CENTRAL_HUB.md)
 - [GLOWBOT_PACKAGE_TOPOLOGY.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_PACKAGE_TOPOLOGY.md)
 - [DATA_PIPELINE.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/DATA_PIPELINE.md)
@@ -57,7 +59,7 @@ Deployment model:
   [GLOWBOT_PRODUCT_CONTROL_PLANE_DEPLOYMENT.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_PRODUCT_CONTROL_PLANE_DEPLOYMENT.md)
 
 The hub is not a second runtime and not a second frontdoor. It is a
-product-specific shared service.
+product-specific shared control-plane app.
 
 ---
 
@@ -97,7 +99,7 @@ Detailed shape by concern:
 | Layer | Owns |
 |---|---|
 | Frontdoor | package registry, install planning, routing, runtime token minting, private managed-connection gateway, platform-managed profiles |
-| Hosted runtime | package activation, adapter connection execution, reusable callbacks/webhooks, clinic-local memory/jobs/DAGs/cron |
+| Hosted runtime | package activation, adapter connection execution, reusable callbacks/webhooks, clinic-local memory/jobs/DAGs/schedules |
 | GlowBot app | clinic UX, product-specific computation, canonical clinic profile ownership, benchmark-safe summary publication, benchmark consumption |
 | GlowBot hub | shared benchmark aggregation, cohort rules, product flags, support-safe diagnostics, benchmark dataset serving, GlowBot-managed provider profiles, GlowBot secret-backed provider operations |
 | GlowBot admin | operator UX on top of the GlowBot hub contract |
@@ -268,7 +270,7 @@ These diagnostics must never expose long-lived provider credential secrets.
 
 ## Hub Service Methods
 
-The shared service package owns a product-level service namespace.
+The shared control-plane app owns a product-level method namespace.
 
 Canonical hub method families:
 

@@ -2,14 +2,14 @@ import type { JobScriptContext } from "../../../../../nex/src/nex/control-plane/
 
 type MetricExtractJobInput = {
   clinicEntityId?: string;
-  event?: AdapterEventInput;
-  events?: AdapterEventInput[];
+  event?: RecordIngestedEventInput;
 };
 
-type AdapterEventInput = {
+type RecordIngestedEventInput = {
+  id?: string;
   type?: string;
-  connectionId?: string;
-  data?: Record<string, unknown>;
+  properties?: Record<string, unknown>;
+  created_at?: number | string;
 };
 
 type MetricElementCandidate = {
@@ -25,6 +25,17 @@ type MetricElementCandidate = {
   metadataKey: string;
   entityId: string | null;
   metadata: Record<string, unknown>;
+};
+
+type RecordRow = {
+  id?: unknown;
+  record_id?: unknown;
+  content?: unknown;
+  timestamp?: unknown;
+  received_at?: unknown;
+  platform?: unknown;
+  receiver_id?: unknown;
+  metadata?: unknown;
 };
 
 const RESERVED_METADATA_KEYS = new Set([
@@ -70,13 +81,8 @@ function parseTimestamp(value: unknown, fallbackDate: string): number {
   return Number.isFinite(fallback) ? fallback : Date.now();
 }
 
-function parseSourceEventId(payload: Record<string, unknown>): string | null {
-  return (
-    asString(payload.event_id) ||
-    asString(payload.eventId) ||
-    asString(payload.id) ||
-    null
-  );
+function parseSourceEventId(record: RecordRow): string | null {
+  return asString(record.record_id) || asString(record.id) || null;
 }
 
 function deriveMetadataKey(rawMetadata: Record<string, unknown>): string {
@@ -111,28 +117,27 @@ function parseInput(input: Record<string, unknown>): MetricExtractJobInput {
   return {
     clinicEntityId: asString(input.clinicEntityId) || undefined,
     event:
-      rawEvent && Object.keys(rawEvent).length > 0 ? (rawEvent as AdapterEventInput) : undefined,
-    events: Array.isArray(input.events)
-      ? input.events.map((entry) => asRecord(entry) as AdapterEventInput)
-      : undefined,
+      rawEvent && Object.keys(rawEvent).length > 0
+        ? (rawEvent as RecordIngestedEventInput)
+        : undefined,
   };
 }
 
-function toEventList(input: MetricExtractJobInput): AdapterEventInput[] {
-  if (Array.isArray(input.events) && input.events.length > 0) {
-    return input.events;
+function parseRecordMetadata(value: unknown): Record<string, unknown> {
+  if (typeof value === "string" && value.trim()) {
+    try {
+      return asRecord(JSON.parse(value));
+    } catch {
+      return {};
+    }
   }
-  return input.event ? [input.event] : [];
+  return asRecord(value);
 }
 
-function toMetricCandidate(params: {
-  event: AdapterEventInput;
-  clinicEntityId?: string;
-}): MetricElementCandidate | null {
-  const payload = asRecord(params.event.data);
-  const rawMetadata = asRecord(payload.metadata);
-  const connectionId = asString(params.event.connectionId);
-  const adapterId = asString(rawMetadata.adapter_id) || asString(payload.platform);
+function toMetricCandidate(params: { record: RecordRow; clinicEntityId?: string }): MetricElementCandidate | null {
+  const rawMetadata = parseRecordMetadata(params.record.metadata);
+  const connectionId = asString(rawMetadata.connection_id) || asString(params.record.receiver_id);
+  const adapterId = asString(rawMetadata.adapter_id) || asString(params.record.platform);
   const metricName = asString(rawMetadata.metric_name);
   const metricValue = asNumber(rawMetadata.metric_value);
   const date = asString(rawMetadata.date);
@@ -163,25 +168,15 @@ function toMetricCandidate(params: {
     metricValue,
     date,
     content:
-      asString(payload.content) || `${metricName}: ${metricValue} on ${date} from ${adapterId}`,
-    asOf: parseTimestamp(payload.timestamp, date),
-    sourceEventId: parseSourceEventId(payload),
+      asString(params.record.content) ||
+      `${metricName}: ${metricValue} on ${date} from ${adapterId}`,
+    asOf: parseTimestamp(params.record.timestamp ?? params.record.received_at, date),
+    sourceEventId: parseSourceEventId(params.record),
     clinicId,
     metadataKey,
     entityId: asString(params.clinicEntityId) || asString(rawMetadata.clinic_entity_id) || null,
     metadata,
   };
-}
-
-function parseElementMetadata(value: unknown): Record<string, unknown> {
-  if (typeof value === "string" && value.trim()) {
-    try {
-      return asRecord(JSON.parse(value));
-    } catch {
-      return {};
-    }
-  }
-  return asRecord(value);
 }
 
 async function findExistingMetricElement(
@@ -211,26 +206,49 @@ async function findExistingMetricElement(
   return (elements[0] as Record<string, unknown> | undefined) ?? null;
 }
 
+async function loadCanonicalRecord(
+  runtime: JobScriptContext["runtime"],
+  event: RecordIngestedEventInput,
+): Promise<RecordRow | null> {
+  if (asString(event.type) !== "record.ingested") {
+    return null;
+  }
+  const properties = asRecord(event.properties);
+  const recordId = asString(properties.record_id);
+  if (!recordId) {
+    return null;
+  }
+  const result = asRecord(await runtime.callMethod("records.get", { id: recordId }));
+  return asRecord(result.record);
+}
+
 export async function handler(ctx: JobScriptContext): Promise<Record<string, unknown>> {
   const input = parseInput(ctx.input);
-  const events = toEventList(input);
+  if (!input.event) {
+    return {
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      rejected: 0,
+      processed: 0,
+    };
+  }
 
   let created = 0;
   let updated = 0;
   let skipped = 0;
   let rejected = 0;
+  const record = await loadCanonicalRecord(ctx.runtime, input.event);
+  const candidate = record
+    ? toMetricCandidate({
+        record,
+        clinicEntityId: input.clinicEntityId,
+      })
+    : null;
 
-  for (const event of events) {
-    const candidate = toMetricCandidate({
-      event,
-      clinicEntityId: input.clinicEntityId,
-    });
-
-    if (!candidate) {
-      rejected += 1;
-      continue;
-    }
-
+  if (!candidate) {
+    rejected += 1;
+  } else {
     const existing = await findExistingMetricElement(ctx.runtime, candidate);
     if (!existing) {
       await ctx.runtime.callMethod("memory.elements.create", {
@@ -239,29 +257,25 @@ export async function handler(ctx: JobScriptContext): Promise<Record<string, unk
         entityId: candidate.entityId,
         asOf: candidate.asOf,
         sourceEventId: candidate.sourceEventId,
-        sourceJobId: ctx.run.id,
         metadata: candidate.metadata,
       });
       created += 1;
-      continue;
+    } else {
+      const existingMetadata = parseRecordMetadata(existing.metadata);
+      const existingValue = asNumber(existingMetadata.metric_value);
+      if (existingValue !== null && existingValue === candidate.metricValue) {
+        skipped += 1;
+      } else {
+        await ctx.runtime.callMethod("memory.elements.update", {
+          id: asString(existing.id),
+          content: candidate.content,
+          asOf: candidate.asOf,
+          sourceEventId: candidate.sourceEventId,
+          metadata: candidate.metadata,
+        });
+        updated += 1;
+      }
     }
-
-    const existingMetadata = parseElementMetadata(existing.metadata);
-    const existingValue = asNumber(existingMetadata.metric_value);
-    if (existingValue !== null && existingValue === candidate.metricValue) {
-      skipped += 1;
-      continue;
-    }
-
-    await ctx.runtime.callMethod("memory.elements.update", {
-      id: asString(existing.id),
-      content: candidate.content,
-      asOf: candidate.asOf,
-      sourceEventId: candidate.sourceEventId,
-      sourceJobId: ctx.run.id,
-      metadata: candidate.metadata,
-    });
-    updated += 1;
   }
 
   return {
@@ -269,7 +283,7 @@ export async function handler(ctx: JobScriptContext): Promise<Record<string, unk
     updated,
     skipped,
     rejected,
-    processed: events.length,
+    processed: 1,
   };
 }
 

@@ -72,11 +72,11 @@ function createRuntime(params?: {
           runs: params?.runs ?? [],
         };
       }
-      if (method === "cron.list") {
+      if (method === "schedules.list") {
         return {
           schedules: [
             {
-              id: "cron-1",
+              id: "schedule-1",
               name: "glowbot.metric_extract",
               next_run_at: params?.nextRunAt ?? "2026-03-07T00:00:00.000Z",
             },
@@ -258,7 +258,7 @@ describe("read model", () => {
     expect(operations.some((entry) => entry.operation === "glowbotHub.benchmarks.query")).toBe(true);
   });
 
-  test("reads pipeline status from job runs and cron schedules and can trigger a manual run", async () => {
+  test("reads pipeline status from job runs and schedules and can trigger a manual run", async () => {
     const { runtime, jobsInvoke } = createRuntime({
       metrics: METRICS,
       runs: [

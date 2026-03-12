@@ -10,7 +10,7 @@
 2. **Every adapter has a CSV fallback** — manual upload always works, no API needed
 3. **Adapters are nex adapter binaries** — JSONL over stdin/stdout, using the `nexadapter` SDK
 4. **Adapters are shared installable packages** — GlowBot declares adapter dependencies under `requires.adapters`, and the app manifest exposes customer-facing integration metadata under `adapters[]`
-5. **Raw data first** — adapters emit metric data as NexusEvents; the pipeline extracts and stores as elements in memory.db
+5. **Raw data first** — adapters emit canonical `record.ingest` envelopes carrying metric facts; the pipeline extracts those records into metric elements in memory.db
 6. **Name metrics what they are** — don't over-generalize names; use `calls_total`, `calls_first_time` not "page_actions". Collapse later if needed, never prematurely.
 7. **One credential per platform** — Google services share one OAuth flow; clinic connects once, all Google services activate
 8. **Hard cutover** — no backwards compatibility with legacy app-local pipeline storage. All data flows through nex primitives (elements, sets, jobs, DAGs).
@@ -38,19 +38,19 @@ Canonical manifest shape:
   "id": "glowbot",
   "requires": {
     "adapters": [
-      { "id": "google", "version": "^1.0.0" },
-      { "id": "meta-ads", "version": "^1.0.0" },
-      { "id": "patient-now-emr", "version": "^1.0.0" },
-      { "id": "zenoti-emr", "version": "^1.0.0" },
-      { "id": "callrail", "version": "^1.0.0" },
-      { "id": "twilio", "version": "^1.0.0" },
-      { "id": "apple-maps", "version": "^1.0.0" }
+      { "id": "nexus-adapter-google", "version": "^0.1.0" },
+      { "id": "nexus-adapter-meta-ads", "version": "^0.1.0" },
+      { "id": "nexus-adapter-patient-now-emr", "version": "^0.1.0" },
+      { "id": "nexus-adapter-zenoti-emr", "version": "^0.1.0" },
+      { "id": "nexus-adapter-callrail", "version": "^0.1.0" },
+      { "id": "nexus-adapter-twilio", "version": "^0.1.0" },
+      { "id": "nexus-adapter-apple-maps", "version": "^0.1.0" }
     ]
   },
   "adapters": [
     {
       "id": "google",
-      "packageId": "google",
+      "packageId": "nexus-adapter-google",
       "displayName": "Google",
       "description": "Google Ads and Google Business Profile in one connection",
       "connectionProfiles": [
@@ -164,7 +164,7 @@ WHERE segments.date BETWEEN '{start}' AND '{end}'
 ```json
 {
   "id": "google",
-  "packageId": "google",
+  "packageId": "nexus-adapter-google",
   "displayName": "Google",
   "description": "Google Ads and Google Business Profile in one connection",
   "connectionProfiles": [
@@ -265,7 +265,7 @@ GET /{ad_account_id}/insights
 ```json
 {
   "id": "meta-ads",
-  "packageId": "meta-ads",
+  "packageId": "nexus-adapter-meta-ads",
   "displayName": "Meta Ads",
   "connectionProfiles": [
     {
@@ -363,7 +363,7 @@ Required CSV columns:
 ```json
 {
   "id": "patient-now-emr",
-  "packageId": "patient-now-emr",
+  "packageId": "nexus-adapter-patient-now-emr",
   "displayName": "Patient Now",
   "connectionProfiles": [
     {
@@ -454,7 +454,7 @@ Required CSV columns:
 ```json
 {
   "id": "zenoti-emr",
-  "packageId": "zenoti-emr",
+  "packageId": "nexus-adapter-zenoti-emr",
   "displayName": "Zenoti",
   "connectionProfiles": [
     {
@@ -587,7 +587,7 @@ P2. Google covers 85-90%+ of local search in the US market. Revisit when Apple o
 ```json
 {
   "id": "apple-maps",
-  "packageId": "apple-maps",
+  "packageId": "nexus-adapter-apple-maps",
   "displayName": "Apple Maps",
   "connectionProfiles": [
     {
@@ -694,7 +694,7 @@ POST /v3/a/{account_id}/webhooks.json
 ```json
 {
   "id": "callrail",
-  "packageId": "callrail",
+  "packageId": "nexus-adapter-callrail",
   "displayName": "CallRail",
   "connectionProfiles": [
     {
@@ -799,7 +799,7 @@ Provides call quality metrics, connection details, carrier information.
 ```json
 {
   "id": "twilio",
-  "packageId": "twilio",
+  "packageId": "nexus-adapter-twilio",
   "displayName": "Twilio",
   "connectionProfiles": [
     {
@@ -831,7 +831,7 @@ Every adapter follows the same pattern:
 adapters/{adapter-id}/
   manifest.json       # Auth types, sync config, metrics produced
   sync.ts             # Backfill + live sync implementation
-  transform.ts        # Source data → NexusEvent with metric metadata
+  transform.ts        # Source data → canonical record.ingest envelope with metric metadata
   validate.ts         # Connection test logic
   csv-import.ts       # CSV parsing + normalization (shared module)
 ```
@@ -843,7 +843,7 @@ The nex runtime provides:
 - Health monitoring and error reporting
 - Supervision with exponential backoff restart (base 1s, 2x, max 5min)
 
-An adapter author only writes the data-fetching and transformation logic. The adapter emits NexusEvents via stdout JSONL with metric data in `metadata` fields. A downstream `metric_extract` job (see DATA_PIPELINE.md) extracts these into metric elements in memory.db.
+An adapter author only writes the data-fetching and transformation logic. The adapter emits canonical `record.ingest` JSONL envelopes via stdout with metric facts carried in the record payload and routing metadata. A downstream `metric_extract` job (see DATA_PIPELINE.md) reads those canonical records and extracts them into metric elements in memory.db.
 
 ---
 
@@ -866,6 +866,6 @@ function importCSV(config: CSVImportConfig, file: Buffer): MetricRow[] {
 }
 ```
 
-Each adapter provides its own `CSVImportConfig` mapping CSV columns to NexusEvents (which the metric_extract job then converts to elements).
+Each adapter provides its own `CSVImportConfig` mapping CSV columns to canonical `record.ingest` envelopes (which the `metric_extract` job then converts to elements).
 
 ---

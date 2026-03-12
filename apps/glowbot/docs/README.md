@@ -26,6 +26,7 @@ Status note:
 - [GLOWBOT_OBJECT_TAXONOMY.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_OBJECT_TAXONOMY.md)
 - [GLOWBOT_PRODUCT_CONTROL_PLANE_DEPLOYMENT.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_PRODUCT_CONTROL_PLANE_DEPLOYMENT.md)
 - [GLOWBOT_PACKAGE_PUBLISH_AND_DEPLOY_REHEARSAL.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_PACKAGE_PUBLISH_AND_DEPLOY_REHEARSAL.md)
+- [GLOWBOT_SYNTHETIC_DEPLOYED_REHEARSAL.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_SYNTHETIC_DEPLOYED_REHEARSAL.md)
 - [GLOWBOT_PRODUCT_CONTROL_PLANE_GATEWAY.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_PRODUCT_CONTROL_PLANE_GATEWAY.md)
 - [GLOWBOT_HUB_SERVICE_SHELL.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_HUB_SERVICE_SHELL.md)
 - [GLOWBOT_CLINIC_PROFILE.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_CLINIC_PROFILE.md)
@@ -61,6 +62,8 @@ Archived note:
   [docs/archive/workplans](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/archive/workplans)
 - the focused package publish/deploy rehearsal note is complete and now belongs
   in [docs/archive/workplans](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/archive/workplans)
+- the focused synthetic deployed rehearsal note is complete and now belongs in
+  [docs/archive/workplans](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/archive/workplans)
 - the adapter-package install cutovers are complete and archived inside each
   adapter package; the active non-EMR workplan now tracks only live credential
   validation for first-clinic readiness

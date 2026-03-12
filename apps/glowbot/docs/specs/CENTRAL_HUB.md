@@ -1,6 +1,6 @@
 # GlowBot — Central Hub Specification
 
-> Product-specific shared services, benchmark aggregation, and operator surfaces for GlowBot on the hosted Nex platform.
+> Product-specific shared control-plane app behavior, benchmark aggregation, and operator surfaces for GlowBot on the hosted Nex platform.
 >
 > Detailed hub/admin contract material now lives in:
 >
@@ -22,7 +22,7 @@ The intended hosted GlowBot experience is:
 4. the clinic launches GlowBot through the frontdoor shell
 5. the clinic connects integrations through runtime-owned adapter connection flows
 6. GlowBot computes clinic-local intelligence from adapter data inside the tenant runtime
-7. GlowBot pulls shared benchmark and product control data from the GlowBot hub service
+7. GlowBot pulls shared benchmark and product control data from the GlowBot hub app
 8. GlowBot operators manage benchmarks, clinic profiles, and support workflows through a separate admin app on a dedicated GlowBot control plane server
 
 The GlowBot hub is not a second platform control plane. It is the
@@ -43,7 +43,7 @@ Execution split:
 
 - the clinic-facing `glowbot` package is an inline-handler nex app
 - the operator-facing `glowbot-admin` package is an inline-handler nex app
-- the shared `glowbot-hub` package is a separate service package
+- the shared `glowbot-hub` package is a separate headless app package
 
 This split is intentional.
 
@@ -77,13 +77,13 @@ Those responsibilities belong to frontdoor and the runtime respectively.
 
 ## Package Model
 
-GlowBot uses the hosted package model defined in [NEX_APP_MANIFEST_AND_PACKAGE_MODEL.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/NEX_APP_MANIFEST_AND_PACKAGE_MODEL.md).
+GlowBot uses the hosted package model defined in [App Manifest and Package Model](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/apps/app-manifest-and-package-model.md).
 
 Canonical package roles:
 
 - `glowbot`: clinic-facing app package
 - `glowbot-admin`: operator-facing app package
-- `glowbot-hub`: shared service package for benchmarks and product control data
+- `glowbot-hub`: shared headless app package for benchmarks and product control data
 - shared adapter packages: `google`, `meta-ads`, `patient-now-emr`, `zenoti-emr`, `callrail`, `twilio`, `apple-maps`
 
 Clinic servers declare shared adapter dependencies explicitly:
@@ -93,13 +93,13 @@ Clinic servers declare shared adapter dependencies explicitly:
   "id": "glowbot",
   "requires": {
     "adapters": [
-      { "id": "google", "version": "^1.0.0" },
-      { "id": "meta-ads", "version": "^1.0.0" },
-      { "id": "patient-now-emr", "version": "^1.0.0" },
-      { "id": "zenoti-emr", "version": "^1.0.0" },
-      { "id": "callrail", "version": "^1.0.0" },
-      { "id": "twilio", "version": "^1.0.0" },
-      { "id": "apple-maps", "version": "^1.0.0" }
+      { "id": "nexus-adapter-google", "version": "^0.1.0" },
+      { "id": "nexus-adapter-meta-ads", "version": "^0.1.0" },
+      { "id": "nexus-adapter-patient-now-emr", "version": "^0.1.0" },
+      { "id": "nexus-adapter-zenoti-emr", "version": "^0.1.0" },
+      { "id": "nexus-adapter-callrail", "version": "^0.1.0" },
+      { "id": "nexus-adapter-twilio", "version": "^0.1.0" },
+      { "id": "nexus-adapter-apple-maps", "version": "^0.1.0" }
     ]
   }
 }
@@ -158,7 +158,7 @@ Operators use the hub for:
 
 ### 4. Shared service endpoints for the GlowBot apps
 
-Clinic and operator apps may call the hub service for:
+Clinic and operator apps may call the hub app for:
 
 - benchmark queries
 - clinic profile resolution
@@ -221,7 +221,7 @@ Privacy rule:
 
 ## Admin App
 
-The operator surface is a separate app package, not an internal page bolted onto the hub service.
+The operator surface is a separate app package, not an internal page bolted onto the hub app.
 
 ```json
 {
@@ -264,7 +264,8 @@ These are product-level methods. They do not replace package lifecycle or runtim
 
 ## Hub Communication Model
 
-Clinic runtimes access the hub as a shared service dependency.
+Clinic runtimes access the hub through the product control-plane gateway and
+app dependency model.
 
 Canonical interactions:
 
@@ -299,9 +300,9 @@ storage and orchestration.
 
 ## Reference Specs
 
-- [SPEC_DRIVEN_DEVELOPMENT_WORKFLOW.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/SPEC_DRIVEN_DEVELOPMENT_WORKFLOW.md)
-- [NEX_APP_MANIFEST_AND_PACKAGE_MODEL.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/NEX_APP_MANIFEST_AND_PACKAGE_MODEL.md)
-- [HOSTED_APP_PLATFORM_CONTRACT.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/hosted/HOSTED_APP_PLATFORM_CONTRACT.md)
-- [HOSTED_PLATFORM_ACCESS_AND_ROUTING.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/hosted/HOSTED_PLATFORM_ACCESS_AND_ROUTING.md)
-- [HOSTED_ARTIFACT_REGISTRY_AND_RELEASES.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/hosted/HOSTED_ARTIFACT_REGISTRY_AND_RELEASES.md)
-- [HOSTED_INSTALL_AND_UPGRADE_LIFECYCLE.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/hosted/HOSTED_INSTALL_AND_UPGRADE_LIFECYCLE.md)
+- [spec-driven-development-workflow.md](/Users/tyler/nexus/home/projects/nexus/docs/governance/spec-driven-development-workflow.md)
+- [App Manifest and Package Model](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/apps/app-manifest-and-package-model.md)
+- [Platform Model](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/platform-model.md)
+- [Platform Runtime Access and Routing](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/runtime-access-and-routing.md)
+- [Platform Packages and Control Planes](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/packages-and-control-planes.md)
+- [Managed Connection Gateway](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/managed-connection-gateway.md)

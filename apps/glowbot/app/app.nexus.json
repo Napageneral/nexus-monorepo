@@ -5,13 +5,13 @@
   "description": "AI-powered growth intelligence for healthcare practices",
   "requires": {
     "adapters": [
-      { "id": "google", "version": "^1.0.0" },
-      { "id": "meta-ads", "version": "^1.0.0" },
-      { "id": "patient-now-emr", "version": "^1.0.0" },
-      { "id": "zenoti-emr", "version": "^1.0.0" },
-      { "id": "callrail", "version": "^1.0.0" },
-      { "id": "twilio", "version": "^1.0.0" },
-      { "id": "apple-maps", "version": "^1.0.0" }
+      { "id": "nexus-adapter-google", "version": "^0.1.0" },
+      { "id": "nexus-adapter-meta-ads", "version": "^0.1.0" },
+      { "id": "nexus-adapter-patient-now-emr", "version": "^0.1.0" },
+      { "id": "nexus-adapter-zenoti-emr", "version": "^0.1.0" },
+      { "id": "nexus-adapter-callrail", "version": "^0.1.0" },
+      { "id": "nexus-adapter-twilio", "version": "^0.1.0" },
+      { "id": "nexus-adapter-apple-maps", "version": "^0.1.0" }
     ]
   },
   "handler": "methods/index.ts",
@@ -273,7 +273,7 @@
   "adapters": [
     {
       "id": "google",
-      "packageId": "google",
+      "packageId": "nexus-adapter-google",
       "displayName": "Google",
       "description": "Google Ads and Google Business Profile in one connection",
       "connectionProfiles": [
@@ -315,7 +315,7 @@
     },
     {
       "id": "meta-ads",
-      "packageId": "meta-ads",
+      "packageId": "nexus-adapter-meta-ads",
       "displayName": "Meta Ads",
       "description": "Sync advertising campaign data from Meta (Facebook/Instagram)",
       "connectionProfiles": [
@@ -348,7 +348,7 @@
     },
     {
       "id": "patient-now-emr",
-      "packageId": "patient-now-emr",
+      "packageId": "nexus-adapter-patient-now-emr",
       "displayName": "Patient Now",
       "description": "Sync patient and appointment data from PatientNow EMR",
       "connectionProfiles": [
@@ -376,7 +376,7 @@
     },
     {
       "id": "zenoti-emr",
-      "packageId": "zenoti-emr",
+      "packageId": "nexus-adapter-zenoti-emr",
       "displayName": "Zenoti",
       "description": "Sync patient and appointment data from Zenoti EMR",
       "connectionProfiles": [
@@ -412,7 +412,7 @@
     },
     {
       "id": "callrail",
-      "packageId": "callrail",
+      "packageId": "nexus-adapter-callrail",
       "displayName": "CallRail",
       "description": "Sync phone call tracking data from CallRail",
       "connectionProfiles": [
@@ -441,7 +441,7 @@
     },
     {
       "id": "twilio",
-      "packageId": "twilio",
+      "packageId": "nexus-adapter-twilio",
       "displayName": "Twilio",
       "description": "Sync call data from Twilio",
       "connectionProfiles": [
@@ -468,7 +468,7 @@
     },
     {
       "id": "apple-maps",
-      "packageId": "apple-maps",
+      "packageId": "nexus-adapter-apple-maps",
       "displayName": "Apple Maps",
       "description": "Sync business profile data from Apple Maps",
       "connectionProfiles": [

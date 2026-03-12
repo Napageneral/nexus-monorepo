@@ -119,7 +119,7 @@ const MODEL_WINDOW_COUNT: Record<GlowbotModelingWindow, number> = {
 };
 
 const METRIC_EXTRACT_JOB_NAME = "metric_extract";
-const METRIC_EXTRACT_CRON_NAME = "glowbot.metric_extract";
+const METRIC_EXTRACT_SCHEDULE_NAME = "glowbot.metric_extract";
 const DEFAULT_PIPELINE_STATUS: GlowbotPipelineStatusResponse["lastCompletedRun"] = {
   id: "",
   completedAt: "",
@@ -821,15 +821,17 @@ async function getMetricExtractRunSummary(
   let nextScheduledRun = "";
 
   if (jobDefinitionId) {
-    const cronResult = asRecord(
-      await runtime.callMethod("cron.list", {
+    const scheduleResult = asRecord(
+      await runtime.callMethod("schedules.list", {
         job_definition_id: jobDefinitionId,
         limit: 20,
       }),
     );
-    const schedules = asArray(cronResult.schedules);
+    const schedules = asArray(scheduleResult.schedules);
     const schedule =
-      schedules.find((entry) => asString(entry.name) === METRIC_EXTRACT_CRON_NAME) ?? schedules[0] ?? null;
+      schedules.find((entry) => asString(entry.name) === METRIC_EXTRACT_SCHEDULE_NAME) ??
+      schedules[0] ??
+      null;
     nextScheduledRun = nowIso(schedule ? schedule.next_run_at : null);
 
     const runs = await getMetricExtractRuns(runtime, jobDefinitionId);

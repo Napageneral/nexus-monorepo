@@ -148,6 +148,26 @@ Required artifact contents:
 - `bin/`
 - `src/`
 
+## Canonical Rehearsal Environment
+
+The hosted rehearsal must run against:
+
+- one frontdoor process
+- one dedicated control-plane runtime process
+- one separate clinic runtime process
+- one control-plane server record bound to the control-plane runtime
+- one clinic server record bound to the clinic runtime
+
+The two runtime processes must be genuinely isolated.
+
+Reason:
+
+- frontdoor identifies the calling runtime by that server's runtime auth token
+- `productControlPlane.call` must prove clinic-server identity distinct from
+  control-plane-server identity
+- one shared runtime process cannot honestly prove cross-server control-plane
+  routing
+
 ## Canonical Rehearsal Sequence
 
 The rehearsal sequence is:
@@ -155,13 +175,17 @@ The rehearsal sequence is:
 1. produce real package tarballs for `glowbot`, `glowbot-admin`, and
    `glowbot-hub`
 2. publish those releases to the hosted package registry
-3. create/select a clinic-style server
-4. install `glowbot` there
-5. create/select a dedicated GlowBot control-plane server
-6. install `glowbot-admin` there
-7. validate that dependency planning also installs `glowbot-hub`
-8. verify package state, service health, and visibility
-9. verify `productControlPlane.call` from clinic app to control-plane server
+3. publish the required shared adapter releases used by `glowbot`
+4. create/select a dedicated GlowBot control-plane server
+5. create/select a separate clinic-style server
+6. bind the control-plane server to the control-plane runtime
+7. bind the clinic server to the clinic runtime
+8. install `glowbot-admin` on the control-plane server
+9. validate that dependency planning also installs `glowbot-hub`
+10. install `glowbot` on the clinic server
+11. validate that app dependencies and adapter dependencies install correctly
+12. verify package state, health, and visibility on both servers
+13. verify `productControlPlane.call` from clinic app to control-plane server
 
 This is the minimum hosted rehearsal before synthetic records or live clinic
 credentials.
@@ -173,8 +197,9 @@ The rehearsal is successful only if:
 1. all three GlowBot packages publish as real tarball artifacts
 2. the clinic server installs only `glowbot`
 3. the control-plane server installs `glowbot-admin` and `glowbot-hub`
-4. `glowbot-admin` is operator-visible only
-5. `glowbot-hub` is operator-hidden and not browser-launchable
-6. `productControlPlane.call` succeeds against the installed control-plane
+4. the control-plane server and clinic server are distinct
+5. `glowbot-admin` is operator-visible only
+6. `glowbot-hub` is operator-hidden and not browser-launchable
+7. `productControlPlane.call` succeeds against the installed control-plane
    deployment
-7. no repo-local path assumptions are required to make the install work
+8. no repo-local path assumptions are required to make the install work

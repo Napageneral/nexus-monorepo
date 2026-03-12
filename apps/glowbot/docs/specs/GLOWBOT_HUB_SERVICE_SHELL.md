@@ -21,8 +21,9 @@ It exists to make six things explicit:
 
 This is a product-specific implementation of the shared hosted shell defined in:
 
-- [HOSTED_PRODUCT_CONTROL_PLANES.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/hosted/HOSTED_PRODUCT_CONTROL_PLANES.md)
-- [HOSTED_PRODUCT_CONTROL_PLANE_SHELL.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/hosted/HOSTED_PRODUCT_CONTROL_PLANE_SHELL.md)
+- [Platform Model](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/platform-model.md)
+- [Platform Packages and Control Planes](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/packages-and-control-planes.md)
+- [Managed Connection Gateway](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/managed-connection-gateway.md)
 
 This document does not redefine benchmark payloads or admin UI behavior in
 detail. Those live in:
@@ -55,13 +56,13 @@ From the operator's perspective, GlowBot has:
 
 - one dedicated control-plane server
 - one admin app
-- one private shared service
+- one private shared control-plane app
 
 ---
 
 ## Non-Negotiable Design Rules
 
-1. `glowbot-hub` is GlowBot's product control plane service.
+1. `glowbot-hub` is GlowBot's product control-plane app.
 2. `glowbot-hub` is not a second frontdoor and not a second tenant runtime.
 3. `glowbot-hub` is the canonical owner of GlowBot-managed provider secrets.
 4. `glowbot-admin` is operator UX over hub state. It is not the canonical
@@ -75,8 +76,9 @@ From the operator's perspective, GlowBot has:
    do not replace the shell.
 9. The shell must support both managed-provider behavior and non-provider
    product control behavior.
-10. The shell must be deployable as a hosted service package on GlowBot's
-    dedicated control-plane server.
+10. The shell must be deployable on GlowBot's dedicated control-plane server as
+    a real hosted package. In the current runtime install path that package is
+    app-packaged and runs a package-local service.
 
 ---
 
@@ -132,8 +134,8 @@ The shell gives the admin app that single product-control-plane boundary.
 
 ## Package Role And Deployment
 
-`glowbot-hub` is a service package deployed on the dedicated GlowBot
-product-control-plane server described in:
+`glowbot-hub` is the dedicated GlowBot control-plane package deployed on the
+dedicated GlowBot product-control-plane server described in:
 
 - [GLOWBOT_PRODUCT_CONTROL_PLANE_DEPLOYMENT.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_PRODUCT_CONTROL_PLANE_DEPLOYMENT.md)
 
@@ -181,7 +183,7 @@ Owns:
 
 Owns:
 
-- service health summaries
+- hub process health summaries
 - recent relay activity
 - recent failures
 - profile health
@@ -323,7 +325,7 @@ This is the minimum audit shape needed for diagnostics and incident review.
 
 ## Canonical Internal Service Methods
 
-The hub shell should expose stable internal service method families for the
+The hub shell should expose stable internal method families for the
 admin app and future local modules.
 
 Canonical method families:
@@ -351,7 +353,7 @@ Target-state shell layout:
 
 ```text
 hub/
-  service.nexus.json
+  app.nexus.json
   src/
     ingress/
     managed-profiles/
@@ -385,7 +387,7 @@ The shell is not considered real until all of these are true:
    material
 5. audit events are written for relay success and failure
 6. diagnostics can report recent relay failures and profile health
-7. `glowbot-admin` can call the shell through stable internal service methods
+7. `glowbot-admin` can call the shell through stable internal methods
 
 ---
 

@@ -11,8 +11,8 @@ This document locks the baseline vocabulary for active GlowBot specs.
 
 GlowBot inherits the shared hosted vocabulary from:
 
-- `../../../../nexus-specs/specs/nex/hosted/HOSTED_OBJECT_TAXONOMY.md`
-- `../../../../nexus-specs/specs/nex/adapters/ADAPTER_CONNECTION_PROFILES_AND_CALLBACKS.md`
+- `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/platform-model.md`
+- `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/adapters/adapter-connections.md`
 
 This local taxonomy exists so hosted/product terms do not drift while the rest
 of the GlowBot spec tree is being aligned.
@@ -26,7 +26,7 @@ of the GlowBot spec tree is being aligned.
 3. Shared adapter connections are different from GlowBot-specific data and pipeline state.
 4. `clinic_id` is the canonical location/customer segmentation tag in GlowBot data flows when per-clinic scoping matters.
 5. The clinic-facing GlowBot package is an inline-handler hosted app; the shared
-   GlowBot backend is a separate hub service package.
+   GlowBot backend is a separate hub control-plane package.
 
 ---
 
@@ -37,7 +37,7 @@ of the GlowBot spec tree is being aligned.
 | `GlowBot app` | The installable clinic-facing hosted GlowBot app package |
 | `website` | Public GlowBot marketing and signup surface in front of frontdoor |
 | `admin app` | Operator-facing hosted GlowBot admin package |
-| `hub service` | Shared GlowBot benchmark and product-control service package |
+| `hub service` | Logical shared GlowBot benchmark and product-control service running inside the `glowbot-hub` control-plane package |
 | `product control plane` | The GlowBot hub in its role as shared backend and secret owner for GlowBot-managed provider flows |
 | `shared package` | GlowBot-owned shared contracts, schemas, and reusable local libraries |
 | `server` | Customer-facing machine that hosts the GlowBot app |

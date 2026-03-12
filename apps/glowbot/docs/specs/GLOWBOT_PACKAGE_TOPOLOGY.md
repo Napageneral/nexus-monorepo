@@ -26,14 +26,15 @@ folder names or transitional layouts.
 
 ## Customer Experience First
 
-GlowBot has three user-facing UI surfaces and one shared product service:
+GlowBot has three user-facing UI surfaces and one shared product control-plane
+package:
 
 1. a public GlowBot landing site in front of frontdoor
 2. the clinic-facing GlowBot app that runs through frontdoor and the tenant
    runtime
 3. a GlowBot admin panel used by the product operator on the hub side
-4. a shared GlowBot hub service that publishes benchmarks and product control
-   data to GlowBot installations
+4. a shared GlowBot hub control-plane package that publishes benchmarks and
+   product control data to GlowBot installations
 
 Those are different surfaces with different responsibilities and they should be
 represented explicitly in the package topology.
@@ -58,7 +59,7 @@ Top-level ownership:
 
 - `app/` owns the clinic-facing hosted GlowBot app package
 - `admin/` owns the operator-facing admin app package
-- `hub/` owns the shared GlowBot service package
+- `hub/` owns the shared GlowBot control-plane package
 - `website/` owns the public landing and signup surface
 - `shared/` owns shared contracts, schemas, and package-local libraries used by
   multiple GlowBot packages
@@ -147,18 +148,18 @@ Deployment model:
 Execution model:
 
 - the admin package is an inline-handler nex app
-- it is not the shared service itself
+- it is not the shared control-plane app itself
 
 ### `hub/`
 
-The shared GlowBot service package.
+The shared GlowBot control-plane package.
 
 This package owns:
 
 - benchmark publishing and retrieval
 - product control/configuration data
 - product-wide support-safe diagnostic surfaces
-- any shared service APIs used by the GlowBot app and admin app
+- the package-local `hub` service used by the GlowBot app and admin app
 
 It is not a second hosted platform control plane.
 
@@ -207,14 +208,14 @@ It does not become a runtime product surface by itself.
 
 GlowBot follows the hosted Nex package model defined in:
 
-- [NEX_APP_MANIFEST_AND_PACKAGE_MODEL.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/NEX_APP_MANIFEST_AND_PACKAGE_MODEL.md)
-- [HOSTED_APP_PLATFORM_CONTRACT.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/hosted/HOSTED_APP_PLATFORM_CONTRACT.md)
+- [App Manifest and Package Model](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/apps/app-manifest-and-package-model.md)
+- [Platform Model](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/platform-model.md)
 
 Canonical hosted package roles:
 
 - `glowbot` → clinic-facing app package, implemented in `app/`
 - `glowbot-admin` → operator-facing app package, implemented in `admin/`
-- `glowbot-hub` → shared service package, implemented in `hub/`
+- `glowbot-hub` → shared control-plane package, implemented in `hub/`
 
 Shared adapters remain separate packages outside the GlowBot monorepo package
 set. The GlowBot app package depends on them via `requires.adapters`; it does
@@ -258,7 +259,8 @@ Reasoning:
 
 By contrast:
 
-- the hub is a separate top-level package because it is a distinct shared service
+- the hub is a separate top-level package because it is a distinct shared
+  control-plane app
 - the admin panel is a separate top-level package because it is a distinct
   operator-facing app
 - the public landing site is a separate top-level package because it is not the
@@ -270,7 +272,7 @@ By contrast:
 |---|---|
 | `app/` | inline-handler nex app |
 | `admin/` | inline-handler nex app |
-| `hub/` | shared service package |
+| `hub/` | shared control-plane package |
 | `website/` | public web package |
 | `shared/` | shared library package |
 
@@ -320,7 +322,7 @@ implementation history.
 |---|---|---|---|
 | `app/` | clinic-facing product UI + runtime app | clinic user | hosted app package |
 | `admin/` | operator admin UI | GlowBot operator | hosted app package |
-| `hub/` | shared benchmark/control service | GlowBot app + admin | shared service package |
+| `hub/` | shared benchmark/control package | GlowBot app + admin | control-plane package with package-local service |
 | `website/` | public landing/signup site | prospective customer | public web package |
 | `shared/` | shared contracts and schemas | internal package reuse | shared library package |
 

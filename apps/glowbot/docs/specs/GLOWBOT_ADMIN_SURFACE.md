@@ -17,10 +17,11 @@ It exists to make five things explicit:
 5. which pages and method families are part of the canonical admin surface
 
 This document does not define frontdoor operator UX and it does not replace the
-hub service shell.
+hub control-plane shell.
 
 Related canon:
 
+- [Product Control Plane Servers and Admin Apps](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/product-control-plane-servers-and-admin-apps.md)
 - [GLOWBOT_HUB_AND_ADMIN_CONTRACT.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_HUB_AND_ADMIN_CONTRACT.md)
 - [GLOWBOT_HUB_SERVICE_SHELL.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_HUB_SERVICE_SHELL.md)
 - [GLOWBOT_PRODUCT_CONTROL_PLANE_DEPLOYMENT.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_PRODUCT_CONTROL_PLANE_DEPLOYMENT.md)
@@ -102,7 +103,7 @@ Shows:
 - relay activity
 - recent failures
 - managed profile resolution failures
-- product-control-plane service health
+- product-control-plane app health
 
 ### Benchmark Network
 
@@ -190,9 +191,9 @@ admin/
 Rules:
 
 - `app.nexus.json` declares the operator-facing admin app
-- the admin app may declare `glowbot-hub` as a local service dependency because
+- the admin app may declare `glowbot-hub` as a local app dependency because
   both run on the dedicated control-plane server
-- admin hooks and methods remain thin application surfaces over the hub service
+- admin hooks and methods remain thin application surfaces over the hub app
 
 ---
 

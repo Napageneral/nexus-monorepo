@@ -23,8 +23,9 @@ This is the deployment companion to:
 
 - [GLOWBOT_HUB_AND_ADMIN_CONTRACT.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_HUB_AND_ADMIN_CONTRACT.md)
 - [GLOWBOT_PACKAGE_TOPOLOGY.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_PACKAGE_TOPOLOGY.md)
-- [HOSTED_PRODUCT_CONTROL_PLANES.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/hosted/HOSTED_PRODUCT_CONTROL_PLANES.md)
-- [HOSTED_PRODUCT_CONTROL_PLANE_SHELL.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/hosted/HOSTED_PRODUCT_CONTROL_PLANE_SHELL.md)
+- [Product Control Plane Servers and Admin Apps](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/product-control-plane-servers-and-admin-apps.md)
+- [Platform Packages and Control Planes](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/packages-and-control-planes.md)
+- [Platform Runtime Access and Routing](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/runtime-access-and-routing.md)
 
 ---
 
@@ -38,7 +39,7 @@ The intended hosted GlowBot experience is:
 4. product operators use a separate dedicated GlowBot control-plane server
 5. that server runs:
    - `glowbot-admin` as the operator-facing app
-   - `glowbot-hub` as the shared product control plane service
+   - `glowbot-hub` as the shared product control-plane app
 6. frontdoor remains the runtime-facing gateway for managed connection
    operations and relays GlowBot-managed requests to `glowbot-hub`
 
@@ -56,7 +57,9 @@ customer-visible.
    server by default.
 3. `glowbot-admin` is operator-only and not customer-visible in normal product
    catalog and launch flows.
-4. `glowbot-hub` is a service package, not a customer-launchable browser app.
+4. `glowbot-hub` is the non-browser product control-plane package. In the
+   current runtime install path it is packaged as an app artifact with a
+   package-local service process.
 5. The clinic-facing `glowbot` app does not declare `glowbot-hub` as a
    per-server dependency.
 6. Clinic runtimes access GlowBot product control-plane behavior through:
@@ -89,7 +92,7 @@ The clinic server owns:
 
 - clinic-local app execution
 - clinic-local adapter connections
-- clinic-local nex memory/jobs/DAGs/cron
+- clinic-local nex memory/jobs/DAGs/schedules
 - clinic-local product computation
 
 ### 2. GlowBot control plane deployment
@@ -173,7 +176,9 @@ This is the key package/deployment distinction.
 
 - not browser-launchable
 - not customer-visible
-- installed as a service package on the control plane server
+- installed on the control plane server as a dedicated control-plane package
+- currently shipped as an `app.nexus.json` package whose runtime behavior is
+  provided by a package-local `hub` service
 
 The operator should still be able to manage this deployment through frontdoor
 as hosted infrastructure. Customers should not discover it as part of their
@@ -228,7 +233,7 @@ Target-state rule:
 - the control plane deployment installs `glowbot-admin` and `glowbot-hub`
   separately on the dedicated control plane server
 - product-control-plane routing is resolved through frontdoor and product
-  deployment metadata, not clinic-server `requires.services`
+  deployment metadata, not clinic-server `requires.apps`
 
 This is a canonical spec change, not a migration note.
 
@@ -237,7 +242,7 @@ This is a canonical spec change, not a migration note.
 ## Relationship To The Admin App Manifest
 
 The operator-facing `glowbot-admin` app runs on the dedicated control plane
-server and may declare `glowbot-hub` as a local service dependency on that
+server and may declare `glowbot-hub` as a local app dependency on that
 server.
 
 Canonical meaning:
@@ -245,10 +250,10 @@ Canonical meaning:
 - `glowbot-admin` and `glowbot-hub` are co-installed on the product control
   plane server
 - the admin app is the operator-facing nex app
-- the hub is the backing service package
+- the hub is the backing control-plane package
 
-That is a valid use of `requires.services` because both packages belong on the
-same server.
+That is a valid use of `requires.apps` because both packages are app packages
+that belong on the same server.
 
 ---
 

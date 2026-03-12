@@ -14,14 +14,14 @@
 ## Design Principles
 
 1. **Build on nex core** — GlowBot's pipeline is expressed as nex jobs operating on nex elements, not as a separate application with its own database. No parallel data infrastructure.
-2. **Raw data first** — adapters emit metric data as NexusEvents. A `metric_extract` job converts them into metric elements with full granularity.
+2. **Raw data first** — shared adapters emit canonical `record.ingest` envelopes carrying metric facts. A `metric_extract` job reacts downstream to `record.ingested` and converts those canonical records into metric elements with full granularity.
 3. **Funnel is a computed view** — stitched from metric elements across adapters, not a predefined abstraction. Stored as observation elements.
 4. **Name metrics what they are** — `calls_total`, `appointments_booked`, `ad_spend`. Never over-generalize. Collapse later if needed, never prematurely.
 5. **Never transform in place** — metric elements are immutable source of truth. Computed elements (funnel snapshots, trends, recommendations) are re-derived on each pipeline run.
 6. **Source traceability** — every metric element preserves the originating runtime `connection_id`; `adapter_id` remains source classification. Every computed element links back to the metric elements it was derived from via `element_links`.
 7. **Pipeline as DAG** — the pipeline is a nex DAG definition with explicit dependencies, enabling parallel execution and context accumulation between steps.
 8. **Hard cutover** — no backwards compatibility with legacy app-local pipeline storage. All data flows through nex primitives.
-9. **SDK only** — GlowBot uses the nex Platform SDK (`ctx.nex.runtime.callMethod(...)`) to interact with elements, sets, links, jobs, DAGs, cron, and adapter events. No direct database access.
+9. **SDK only** — GlowBot uses the nex Platform SDK (`ctx.nex.runtime.callMethod(...)`) to interact with records, elements, sets, links, jobs, DAGs, schedules, and durable event subscriptions. No direct database access.
 10. **Multi-location via metadata** — all metric elements carry `clinic_id` in metadata. Pipeline can aggregate per-location or rolled-up across all locations. Location is a query filter, not an architectural boundary.
 11. **Ownership boundary is explicit** — nex core owns generic storage, indexing, scheduling, and orchestration primitives. GlowBot owns product-specific computation modules such as metric normalization, funnel math, trend analysis, drop-off detection, and recommendation logic.
 12. **Benchmark publication uses app-owned clinic identity** — benchmark snapshots include the canonical GlowBot `ClinicProfile` owned by the clinic app; the hub resolves cohorts from that object.
@@ -31,7 +31,8 @@
 
 GlowBot could maintain its own separate application database, but this would be a parallel data system alongside nex's memory.db. Instead, GlowBot's data model maps naturally onto nex's existing primitives:
 
-- **Metric data → Elements** (type: `metric`) — atomic facts with structured metadata
+- **Inbound adapter data → Records** (`record.ingest` / `record.ingested`) — canonical external source material carrying metric facts
+- **Metric data → Elements** (type: `metric`) — atomic derived facts with structured metadata
 - **Period groupings → Sets** — collections of metric elements for computation windows
 - **Pipeline steps → Jobs** — deterministic or LLM-driven computation
 - **Pipeline orchestration → DAG** — multi-step workflow with dependencies and parallelism
@@ -48,8 +49,9 @@ The target state is:
   - element link storage and traversal
   - job registration and run records
   - DAG orchestration
-  - cron scheduling
-  - adapter event ingress and monitoring primitives
+  - schedule evaluation
+  - canonical record ingestion
+  - durable event-subscription wake-up
 - GlowBot owns the product-specific computation code:
   - metric normalization rules for GlowBot concepts
   - clinic-profile-backed benchmark snapshot assembly
@@ -183,8 +185,8 @@ GlowBot registers the following element types during its `install` hook:
 
 #### Metric Element (`type: "metric"`)
 
-Created by the `metric_extract` job from adapter NexusEvents carrying canonical
-connection provenance.
+Created by the `metric_extract` job from canonical adapter-emitted records
+carrying canonical connection provenance.
 
 ```typescript
 {
@@ -193,7 +195,7 @@ connection provenance.
   content: "ad_spend: $1,234.56 on 2026-03-04 from google (campaign: Brand) [Atlanta Buckhead]",
   entity_id: "clinic-123",        // links to the clinic entity
   as_of: 1709510400000,           // 2026-03-04 as Unix timestamp
-  source_event_id: "evt_...",     // the NexusEvent that carried this
+  source_record_id: "rec_...",    // the canonical record that carried this
   source_job_id: "job_...",       // the metric_extract job run
   metadata: {
     connection_id: "conn_google_glowbot_01",
@@ -236,7 +238,7 @@ Additional connection context such as `connection_profile_id`,
 runtime provides it.
 
 **Deduplication:** The `metric_extract` job uses the processing log to avoid
-creating duplicate elements for the same NexusEvent. Additionally, a UNIQUE-like
+creating duplicate elements for the same canonical source record. Additionally, a UNIQUE-like
 constraint can be enforced via the combination of `(connection_id, clinic_id,
 metric_name, date, metadata_key)` in metadata — the extract job checks for
 existing elements before creating new ones (upsert semantics via element
@@ -525,7 +527,7 @@ DAG: "glowbot_pipeline"
 ```
 
 **Execution flow:**
-1. `metric_extract` runs first — creates metric elements from recent NexusEvents
+1. `metric_extract` runs first — creates metric elements from recent canonical records surfaced through `record.ingested`
 2. `funnel_compute` and `trend_compute` run **in parallel** (both depend only on node_1)
 3. `dropoff_detect` runs after funnel computation
 4. `recommend` runs last (depends on funnel + trends + dropoffs — needs all context)
@@ -534,19 +536,19 @@ Nodes 2 and 3 running in parallel is a real win — they operate on different sl
 
 ### 4.2 Job Definitions
 
-#### `metric_extract` — NexusEvent → Metric Elements
+#### `metric_extract` — `record.ingested` → Metric Elements
 
 **Type:** Deterministic (no LLM)
-**Input:** Set of unprocessed NexusEvents from GlowBot adapters
+**Input:** Canonical records emitted by shared adapters and routed through durable `events.subscriptions` wake-up
 **Output:** Metric elements in memory.db
 
 ```typescript
 // Pseudocode for metric_extract job script
 async function execute(input: JobInput): Promise<JobOutput> {
-  const events = getUnprocessedAdapterEvents(input.set_id)
+  const records = getQueuedRecordsForIngest(input)
   const created: string[] = []
 
-  for (const event of events) {
+  for (const record of records) {
     const {
       connection_id,
       adapter_id,
@@ -557,14 +559,14 @@ async function execute(input: JobInput): Promise<JobOutput> {
       metric_name,
       metric_value,
       date
-    } = event.metadata
+    } = record.metadata
 
     if (!connection_id) {
       throw new Error("metric_extract requires canonical connection_id provenance")
     }
 
-    const clinic_id = event.metadata.clinic_id || ""
-    const metadata_key = event.metadata.metadata_key || ""
+    const clinic_id = record.metadata.clinic_id || ""
+    const metadata_key = record.metadata.metadata_key || ""
 
     // Upsert: check for existing element with same (connection_id, clinic_id, metric_name, date, metadata_key)
     const existing = findExistingMetricElement(
@@ -584,7 +586,7 @@ async function execute(input: JobInput): Promise<JobOutput> {
       content: `${metric_name}: ${metric_value} on ${date} from ${adapter_id} via ${connection_id}`,
       entity_id: input.clinic_entity_id,
       as_of: dateToTimestamp(date),
-      source_event_id: event.id,
+      source_record_id: record.id,
       parent_id: existing?.id,  // version chain if updating
       metadata: {
         connection_id,
@@ -602,7 +604,6 @@ async function execute(input: JobInput): Promise<JobOutput> {
     })
 
     created.push(element.id)
-    markProcessed(event.id, "metric_extract")
   }
 
   return { element_ids: created, count: created.length }
@@ -646,18 +647,17 @@ Sends the complete analysis package to a nex agent with the `glowbot-analysis` s
 
 ### 4.3 Pipeline Scheduling
 
-Via nex cron:
+Via nex schedules:
 
 ```typescript
-await ctx.nex.runtime.callMethod('cron.create', {
-  id: 'glowbot-pipeline-cron',
-  jobDefinitionId: 'glowbot_pipeline_dag',
+await ctx.nex.runtime.callMethod('schedules.create', {
+  job_definition_id: 'glowbot_pipeline_dag',
   expression: '0 0 */6 * * *',
   timezone: 'UTC'
 });
 ```
 
-The cron fires the DAG, which executes all nodes in dependency order.
+The schedule fires the DAG, which executes all nodes in dependency order.
 
 | Schedule | Action |
 |----------|--------|
@@ -706,7 +706,9 @@ Adapters (monitor.start polling + event.backfill)
   ├── CallRail adapter (Call API + webhooks, 6h)
   └── Twilio adapter (Call API + webhooks, 1h)
   │
-  ↓ NexusEvents (JSONL stdout → nex runtime)
+  ↓ canonical record.ingest envelopes (JSONL stdout → nex runtime)
+  ↓ record.ingested
+  ↓ durable events.subscriptions wake `metric_extract`
   │
   ↓ metric_extract job (deterministic)
   │
@@ -837,13 +839,13 @@ GlowBot interacts with nex exclusively through the Platform SDK. Here are the sp
 | `dags.create` | Register pipeline DAG (5-node dependency graph) |
 | `dags.runs.start` | Start pipeline DAG run (manual trigger) |
 | `dags.runs.get` | Get current DAG run status for UI |
-| `cron.create` | Schedule pipeline DAG to run every 6 hours |
+| `schedules.create` | Schedule pipeline DAG to run every 6 hours |
 
 ### Adapter Domain
 
 | Operation | GlowBot Usage |
 |-----------|--------------|
-| `ctx.nex.adapters.onEvent()` | Subscribe to adapter events in activate hook |
+| `events.subscriptions.create` | Seed durable `record.ingested` wake-up for `metric_extract` |
 | `ctx.nex.adapters.list()` | List connected adapters for integrations UI |
 
 ---

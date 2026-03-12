@@ -298,7 +298,7 @@ function buildPeerRecordsFromSnapshots(snapshots, profileKey, periodStart, perio
       .map((snapshot) => asNumber(asRecord(snapshot.metrics)[metricName]))
       .filter((value) => value !== null)
       .sort((left, right) => left - right);
-    if (values.length === 0) {
+    if (values.length < 2) {
       continue;
     }
     records.push({

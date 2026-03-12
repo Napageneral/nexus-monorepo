@@ -19,5 +19,6 @@ export async function callGlowbotProductControlPlane<T>(
       payload,
     }),
   );
-  return result as T;
+  const unwrapped = asRecord(result.result);
+  return ((Object.keys(unwrapped).length > 0 ? unwrapped : result) as unknown) as T;
 }

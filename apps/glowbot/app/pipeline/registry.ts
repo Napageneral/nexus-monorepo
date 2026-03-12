@@ -23,10 +23,11 @@ export type EnsuredGlowbotPipelineResources = {
     id: string;
     name: string;
   };
-  cron: {
+  schedule: {
     id: string;
     name: string;
     jobDefinitionId: string;
+    enabled: boolean;
   };
 };
 
@@ -37,16 +38,27 @@ type JobSeed = {
   scriptPath: string;
 };
 
-const GLOWBOT_DAG_NAME = "glowbot_pipeline";
+export const GLOWBOT_DAG_NAME = "glowbot_pipeline";
 const GLOWBOT_DAG_DESCRIPTION = "GlowBot write-path-first pipeline DAG";
-const GLOWBOT_METRIC_EXTRACT_CRON_NAME = "glowbot.metric_extract";
-const GLOWBOT_METRIC_EXTRACT_CRON_EXPRESSION = "0 */6 * * *";
-const GLOWBOT_METRIC_EXTRACT_CRON_TIMEZONE = "UTC";
+export const GLOWBOT_METRIC_EXTRACT_JOB_NAME = "metric_extract";
+export const GLOWBOT_METRIC_EXTRACT_SCHEDULE_NAME = "glowbot.metric_extract";
+export const GLOWBOT_METRIC_EXTRACT_SCHEDULE_EXPRESSION = "0 */6 * * *";
+export const GLOWBOT_METRIC_EXTRACT_SCHEDULE_TIMEZONE = "UTC";
+export const GLOWBOT_METRIC_RECORD_PLATFORMS = [
+  "google-ads",
+  "google-business-profile",
+  "meta-ads",
+  "patient-now-emr",
+  "zenoti-emr",
+  "callrail",
+  "twilio",
+  "apple-maps",
+] as const;
 
 const JOBS: JobSeed[] = [
   {
     key: "metricExtract",
-    name: "metric_extract",
+    name: GLOWBOT_METRIC_EXTRACT_JOB_NAME,
     description: "Normalize adapter metric events into GlowBot metric elements",
     scriptPath: fileURLToPath(new URL("./jobs/metric-extract.ts", import.meta.url)),
   },
@@ -75,6 +87,7 @@ const JOBS: JobSeed[] = [
     scriptPath: fileURLToPath(new URL("./jobs/recommend.ts", import.meta.url)),
   },
 ];
+const GLOWBOT_PIPELINE_JOB_NAMES = new Set(JOBS.map((job) => job.name));
 
 const METRIC_METADATA_SCHEMA = {
   type: "object",
@@ -120,8 +133,8 @@ async function listDags(runtime: RuntimeMethodCaller): Promise<RuntimeRow[]> {
   return asArray(result.dags);
 }
 
-async function listCronSchedules(runtime: RuntimeMethodCaller): Promise<RuntimeRow[]> {
-  const result = asRecord(await runtime.callMethod("cron.list", {}));
+async function listSchedules(runtime: RuntimeMethodCaller): Promise<RuntimeRow[]> {
+  const result = asRecord(await runtime.callMethod("schedules.list", {}));
   return asArray(result.schedules);
 }
 
@@ -249,15 +262,20 @@ async function ensureDag(runtime: RuntimeMethodCaller, jobs: EnsuredGlowbotPipel
   };
 }
 
-async function ensureMetricExtractCron(runtime: RuntimeMethodCaller, jobDefinitionId: string): Promise<{
+async function ensureMetricExtractSchedule(
+  runtime: RuntimeMethodCaller,
+  jobDefinitionId: string,
+  enabled: boolean,
+): Promise<{
   id: string;
   name: string;
   jobDefinitionId: string;
+  enabled: boolean;
 }> {
-  const schedules = await listCronSchedules(runtime);
+  const schedules = await listSchedules(runtime);
   const existing = schedules.find((schedule) => {
     return (
-      asString(schedule.name) === GLOWBOT_METRIC_EXTRACT_CRON_NAME ||
+      asString(schedule.name) === GLOWBOT_METRIC_EXTRACT_SCHEDULE_NAME ||
       asString(schedule.job_definition_id) === jobDefinitionId
     );
   });
@@ -265,55 +283,59 @@ async function ensureMetricExtractCron(runtime: RuntimeMethodCaller, jobDefiniti
   if (existing) {
     const id = asString(existing.id);
     const needsUpdate =
-      asString(existing.name) !== GLOWBOT_METRIC_EXTRACT_CRON_NAME ||
-      asString(existing.expression) !== GLOWBOT_METRIC_EXTRACT_CRON_EXPRESSION ||
-      asString(existing.timezone) !== GLOWBOT_METRIC_EXTRACT_CRON_TIMEZONE ||
-      existing.enabled !== 1;
+      asString(existing.name) !== GLOWBOT_METRIC_EXTRACT_SCHEDULE_NAME ||
+      asString(existing.expression) !== GLOWBOT_METRIC_EXTRACT_SCHEDULE_EXPRESSION ||
+      asString(existing.timezone) !== GLOWBOT_METRIC_EXTRACT_SCHEDULE_TIMEZONE ||
+      existing.enabled !== (enabled ? 1 : 0);
 
     if (needsUpdate) {
       const updated = asRecord(
-        await runtime.callMethod("cron.update", {
+        await runtime.callMethod("schedules.update", {
           id,
-          name: GLOWBOT_METRIC_EXTRACT_CRON_NAME,
-          expression: GLOWBOT_METRIC_EXTRACT_CRON_EXPRESSION,
-          timezone: GLOWBOT_METRIC_EXTRACT_CRON_TIMEZONE,
-          enabled: true,
+          name: GLOWBOT_METRIC_EXTRACT_SCHEDULE_NAME,
+          expression: GLOWBOT_METRIC_EXTRACT_SCHEDULE_EXPRESSION,
+          timezone: GLOWBOT_METRIC_EXTRACT_SCHEDULE_TIMEZONE,
+          enabled,
         }),
       );
       return {
         id: asString(asRecord(updated.schedule).id) || id,
-        name: GLOWBOT_METRIC_EXTRACT_CRON_NAME,
+        name: GLOWBOT_METRIC_EXTRACT_SCHEDULE_NAME,
         jobDefinitionId,
+        enabled,
       };
     }
 
     return {
       id,
-      name: GLOWBOT_METRIC_EXTRACT_CRON_NAME,
+      name: GLOWBOT_METRIC_EXTRACT_SCHEDULE_NAME,
       jobDefinitionId,
+      enabled: existing.enabled === 1,
     };
   }
 
   const created = asRecord(
-    await runtime.callMethod("cron.create", {
+    await runtime.callMethod("schedules.create", {
       job_definition_id: jobDefinitionId,
-      name: GLOWBOT_METRIC_EXTRACT_CRON_NAME,
-      expression: GLOWBOT_METRIC_EXTRACT_CRON_EXPRESSION,
-      timezone: GLOWBOT_METRIC_EXTRACT_CRON_TIMEZONE,
-      enabled: true,
+      name: GLOWBOT_METRIC_EXTRACT_SCHEDULE_NAME,
+      expression: GLOWBOT_METRIC_EXTRACT_SCHEDULE_EXPRESSION,
+      timezone: GLOWBOT_METRIC_EXTRACT_SCHEDULE_TIMEZONE,
+      enabled,
     }),
   );
 
   return {
     id: asString(asRecord(created.schedule).id),
-    name: GLOWBOT_METRIC_EXTRACT_CRON_NAME,
+    name: GLOWBOT_METRIC_EXTRACT_SCHEDULE_NAME,
     jobDefinitionId,
+    enabled,
   };
 }
 
 export async function ensureGlowbotPipelineResources(params: {
   runtime: RuntimeMethodCaller;
   appId: string;
+  scheduleEnabled?: boolean;
 }): Promise<EnsuredGlowbotPipelineResources> {
   await ensureMetricElementDefinition(params);
 
@@ -323,7 +345,61 @@ export async function ensureGlowbotPipelineResources(params: {
   }
 
   const dag = await ensureDag(params.runtime, jobs);
-  const cron = await ensureMetricExtractCron(params.runtime, jobs.metricExtract.id);
+  const schedule = await ensureMetricExtractSchedule(
+    params.runtime,
+    jobs.metricExtract.id,
+    params.scheduleEnabled ?? false,
+  );
 
-  return { jobs, dag, cron };
+  return { jobs, dag, schedule };
+}
+
+export async function setGlowbotMetricExtractScheduleEnabled(params: {
+  runtime: RuntimeMethodCaller;
+  enabled: boolean;
+}): Promise<void> {
+  const schedules = await listSchedules(params.runtime);
+  const schedule =
+    schedules.find((entry) => asString(entry.name) === GLOWBOT_METRIC_EXTRACT_SCHEDULE_NAME) ?? null;
+  if (!schedule) {
+    return;
+  }
+  if ((schedule.enabled === 1) === params.enabled) {
+    return;
+  }
+  await params.runtime.callMethod("schedules.update", {
+    id: asString(schedule.id),
+    enabled: params.enabled,
+  });
+}
+
+export async function removeGlowbotPipelineResources(params: {
+  runtime: RuntimeMethodCaller;
+}): Promise<void> {
+  const schedules = await listSchedules(params.runtime);
+  for (const schedule of schedules) {
+    if (asString(schedule.name) === GLOWBOT_METRIC_EXTRACT_SCHEDULE_NAME) {
+      await params.runtime.callMethod("schedules.delete", {
+        id: asString(schedule.id),
+      });
+    }
+  }
+
+  const dags = await listDags(params.runtime);
+  for (const dag of dags) {
+    if (asString(dag.name) === GLOWBOT_DAG_NAME) {
+      await params.runtime.callMethod("dags.delete", {
+        id: asString(dag.id),
+      });
+    }
+  }
+
+  const jobs = await listJobs(params.runtime);
+  for (const job of jobs) {
+    if (GLOWBOT_PIPELINE_JOB_NAMES.has(asString(job.name))) {
+      await params.runtime.callMethod("jobs.delete", {
+        id: asString(job.id),
+      });
+    }
+  }
 }

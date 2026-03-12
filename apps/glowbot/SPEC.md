@@ -23,7 +23,7 @@ Current status:
 
 ## Canonical Nexus References
 
-- [SPEC_DRIVEN_DEVELOPMENT_WORKFLOW.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/SPEC_DRIVEN_DEVELOPMENT_WORKFLOW.md)
+- [spec-driven-development-workflow.md](/Users/tyler/nexus/home/projects/nexus/docs/governance/spec-driven-development-workflow.md)
 - [NEX_APP_MANIFEST_AND_PACKAGE_MODEL.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/NEX_APP_MANIFEST_AND_PACKAGE_MODEL.md)
 - [HOSTED_APP_PLATFORM_CONTRACT.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/hosted/HOSTED_APP_PLATFORM_CONTRACT.md)
 - [HOSTED_PLATFORM_ACCESS_AND_ROUTING.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/hosted/HOSTED_PLATFORM_ACCESS_AND_ROUTING.md)

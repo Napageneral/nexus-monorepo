@@ -1,10 +1,16 @@
 import type { NexAppHookContext } from "../../../../nex/src/apps/context.js";
-import { stopGlowbotAdapterSubscriptions } from "../pipeline/subscriptions.js";
+import { removeGlowbotPipelineResources } from "../pipeline/registry.js";
+import { removeGlowbotRuntimeWork } from "../pipeline/runtime-work.js";
 
 export default async function onUninstall(ctx: NexAppHookContext): Promise<void> {
   console.log(`[GlowBot] Uninstalling app version ${ctx.app.version}...`);
 
-  stopGlowbotAdapterSubscriptions();
+  await removeGlowbotRuntimeWork({
+    runtime: ctx.nex.runtime,
+  });
+  await removeGlowbotPipelineResources({
+    runtime: ctx.nex.runtime,
+  });
 
   try {
     ctx.nex.audit.log("glowbot.uninstall", {

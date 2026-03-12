@@ -242,6 +242,83 @@ test("benchmark publication, query, and network health work", async () => {
   }
 });
 
+test("benchmark query falls back to seeds when live sample size is below peer threshold", async () => {
+  const dataDir = makeTempDir();
+  const { server } = createHubServer({ dataDir });
+  const origin = await listen(server);
+
+  try {
+    await fetch(`${origin}/operations/glowbotHub.benchmarks.seed.publish`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        payload: {
+          records: [
+            {
+              profileKey: "med-spa|10k-25k|100-250|single",
+              periodKind: "30d",
+              metricName: "impressions_to_clicks",
+              peerMedian: 0.08,
+              peerP25: 0.07,
+              peerP75: 0.09,
+              sourceLabel: "seed",
+            },
+          ],
+        },
+      }),
+    });
+
+    await fetch(`${origin}/operations/glowbotHub.benchmarks.publishSnapshot`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        payload: {
+          clinicId: "clinic-a",
+          periodStart: "2026-02-01",
+          periodEnd: "2026-02-28",
+          clinicProfile: {
+            specialty: "med-spa",
+            monthlyAdSpendBand: "10k-25k",
+            patientVolumeBand: "100-250",
+            locationCountBand: "single",
+          },
+          metrics: {
+            impressions_to_clicks: 0.05,
+          },
+          source: {
+            appId: "glowbot",
+            generatedAtMs: Date.now(),
+            dataFreshnessMs: 3600000,
+          },
+        },
+      }),
+    });
+
+    const query = await fetch(`${origin}/operations/glowbotHub.benchmarks.query`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        payload: {
+          clinicProfile: {
+            specialty: "med-spa",
+            monthlyAdSpendBand: "10k-25k",
+            patientVolumeBand: "100-250",
+            locationCountBand: "single",
+          },
+          periodStart: "2026-02-01",
+          periodEnd: "2026-02-28",
+        },
+      }),
+    });
+    const queryBody = await query.json();
+    const record = queryBody.result.records.find((entry) => entry.metricName === "impressions_to_clicks");
+    assert.equal(record.source, "industry_seed");
+    assert.equal(record.peerMedian, 0.08);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test("private product control plane ingress relays only allowed clinic operations", async () => {
   const dataDir = makeTempDir();
   process.env.GLOWBOT_PRODUCT_CONTROL_PLANE_TOKEN = "hub-test-token";

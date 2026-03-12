@@ -121,6 +121,8 @@ Remaining real gaps:
   real installed GlowBot control-plane server
 - secret storage still needs hardening beyond the current `secretRef` shell
   implementation
+- synthetic deployed product rehearsal is complete on the hosted two-server
+  shape; remaining pre-clinic work is hardening and live credential validation
 - persisted derived outputs are not materialized yet
 - live clinic validation still depends on real credentials and onboarding
 
@@ -614,6 +616,38 @@ Exit criteria:
 
 ---
 
+## W13A. Synthetic Deployed Rehearsal ✅
+
+This is the last non-credential product rehearsal before the first clinic.
+
+Scope:
+
+- real published GlowBot package artifacts
+- separate control-plane and clinic servers
+- synthetic canonical `record.ingest`
+- real downstream `metric_extract`
+- deployed clinic method reads
+- benchmark snapshot publish/query
+- product flag round-trip through the deployed control-plane path
+
+Current state note:
+
+- complete and validated with real published package artifacts, separate
+  control-plane and clinic runtimes, synthetic canonical `record.ingest`,
+  downstream `metric_extract`, deployed clinic method reads, benchmark
+  publication/query, and product-control-plane reads
+- the focused execution and evidence notes are now archived in
+  [docs/archive/workplans](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/archive/workplans)
+  and
+  [docs/archive/validation](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/archive/validation)
+
+Exit criteria:
+
+- the deployed shape proves metric ingest, clinic reads, benchmark publication,
+  and product-control-plane reads without live credentials
+
+---
+
 ## Current Sequencing
 
 | Order | Workstream | Current Status |
@@ -631,7 +665,8 @@ Exit criteria:
 | 11 | W10 Benchmark network implementation | complete |
 | 12 | W11 Clinic app hub integration cutover | complete |
 | 13 | W12 Persisted derived outputs and DAG automation | open |
-| 14 | W13 Live clinic cutover | pending |
+| 14 | W13A Synthetic deployed rehearsal | complete |
+| 15 | W13 Live clinic cutover | pending |
 
 Parallel notes:
 

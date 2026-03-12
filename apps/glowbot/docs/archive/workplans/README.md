@@ -16,3 +16,4 @@ Examples archived here include:
   [WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/workplans/WORKPLAN.md)
 - one-off gap analyses and cutover notes that no longer describe the current
   execution sequence
+- completed focused cutovers such as the March 10 Nex runtime realignment note
