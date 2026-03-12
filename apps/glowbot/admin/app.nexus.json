@@ -3,6 +3,16 @@
   "version": "1.0.0",
   "displayName": "GlowBot Admin",
   "description": "Administrative console for managing GlowBot clinic instances",
+  "product": {
+    "tagline": "Operator console for GlowBot",
+    "plans": [
+      {
+        "id": "internal",
+        "name": "Internal",
+        "isDefault": true
+      }
+    ]
+  },
   "requires": {
     "apps": [
       { "id": "glowbot-hub", "version": "^1.0.0" }

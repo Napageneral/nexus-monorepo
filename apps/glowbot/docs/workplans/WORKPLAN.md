@@ -318,20 +318,21 @@ Completed:
 
 Still required:
 
-- validate deployment metadata and installation behavior on the dedicated
-  control-plane server
 - harden secret storage beyond the current env-backed `secretRef` resolution
-- complete focused service-shell validation against a deployed frontdoor relay
+- complete focused managed-profile relay validation beyond the current
+  product-control-plane call rehearsal
 
 Exit criteria:
 
 - `hub/` is a real control-plane package
 - frontdoor has a real private HTTP target to relay to
 - the hub owns real managed-profile and secret-backed shell behavior
+- the dedicated control-plane deployment/install path is proven through hosted
+  rehearsal
 
-## W7A. Package Publish And Deploy Rehearsal 🟡
+## W7A. Package Publish And Deploy Rehearsal ✅
 
-This is the immediate waiting-period workstream before live clinic credentials.
+This hosted rehearsal slice is complete and kept here for traceability.
 
 Scope:
 
@@ -344,7 +345,7 @@ Scope:
 Canonical detail lives in:
 
 - [GLOWBOT_PACKAGE_PUBLISH_AND_DEPLOY_REHEARSAL.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_PACKAGE_PUBLISH_AND_DEPLOY_REHEARSAL.md)
-- [GLOWBOT_PACKAGE_PUBLISH_AND_DEPLOY_REHEARSAL_WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/workplans/GLOWBOT_PACKAGE_PUBLISH_AND_DEPLOY_REHEARSAL_WORKPLAN.md)
+- [GLOWBOT_PACKAGE_PUBLISH_AND_DEPLOY_REHEARSAL_WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/archive/workplans/GLOWBOT_PACKAGE_PUBLISH_AND_DEPLOY_REHEARSAL_WORKPLAN.md)
 
 Exit criteria:
 
@@ -352,6 +353,16 @@ Exit criteria:
 - clinic-style install of `glowbot` is provable
 - control-plane install of `glowbot-admin` pulls in `glowbot-hub`
 - deployed package state and `productControlPlane.call` behavior are validated
+
+Recorded proof:
+
+- frontdoor published and installed real `glowbot`, `glowbot-admin`, and
+  `glowbot-hub` artifacts
+- `glowbot-admin` installation on the control-plane server pulled in
+  `glowbot-hub` automatically via `requires.apps`
+- `glowbot` installed on a separate clinic-style server
+- the deployed clinic app successfully reached the deployed control plane via
+  `productControlPlane.call`
 
 ---
 

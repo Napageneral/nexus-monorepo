@@ -176,10 +176,11 @@ validation closure are still open.
 Current state note:
 
 - HS1-HS8 are materially landed in the hub package
-- remaining work is deployment-truth validation and stronger secret-storage /
-  relay verification rather than greenfield shell creation
+- hosted deployment truth is now proven through Milestone 7A
+- remaining work is stronger secret-storage and managed-profile relay
+  verification rather than greenfield shell creation
 
-## Milestone 7A: Package Publish And Deploy Rehearsal 🟡
+## Milestone 7A: Package Publish And Deploy Rehearsal ✅
 
 | # | Checkpoint | Pass Criteria |
 |---|---|---|
@@ -190,6 +191,10 @@ Current state note:
 | PR5 | control-plane install uses dependency planning | installing `glowbot-admin` also installs `glowbot-hub` |
 | PR6 | admin visibility is operator-only | deployed admin surface is not visible in normal customer inventory |
 | PR7 | `productControlPlane.call` works against deployed control plane | clinic app reaches the installed control plane through the hosted path |
+
+Current state note:
+
+- PR1-PR7 are landed and validated in the hosted GlowBot deployment rehearsal
 
 ---
 
