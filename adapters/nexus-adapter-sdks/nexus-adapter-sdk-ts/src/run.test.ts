@@ -27,6 +27,7 @@ describe("runAdapter", () => {
             name: "test-adapter",
             version: "0.0.0",
             operations: ["adapter.info"],
+            methods: [],
             multi_account: false,
             platform_capabilities: {
               text_limit: 1,
@@ -64,7 +65,7 @@ describe("runAdapter", () => {
     });
   });
 
-  it("send handler errors are returned as a structured DeliveryResult (exit 0)", async () => {
+  it("channels.send handler errors are returned as a structured DeliveryResult (exit 0)", async () => {
     const stdout = captureStream();
     const stderr = captureStream();
 
@@ -75,7 +76,8 @@ describe("runAdapter", () => {
             platform: "test",
             name: "test-adapter",
             version: "0.0.0",
-            operations: ["adapter.info", "delivery.send"],
+            operations: ["adapter.info", "channels.send"],
+            methods: [],
             multi_account: false,
             platform_capabilities: {
               text_limit: 2000,
@@ -94,7 +96,7 @@ describe("runAdapter", () => {
               supports_streaming_edit: false,
             },
           }),
-          "delivery.send": async () => {
+          "channels.send": async () => {
             throw new Error("boom");
           },
         },
@@ -103,11 +105,11 @@ describe("runAdapter", () => {
         argv: [
           "node",
           "adapter",
-          "delivery.send",
-          "--account",
+          "channels.send",
+          "--connection",
           "default",
-          "--to",
-          "channel:1",
+          "--target-json",
+          "{\"connection_id\":\"default\",\"channel\":{\"platform\":\"test\",\"container_kind\":\"group\",\"container_id\":\"channel:1\"}}",
           "--text",
           "hi",
         ],
@@ -140,6 +142,7 @@ describe("runAdapter", () => {
             name: "test-adapter",
             version: "0.0.0",
             operations: ["adapter.info", "adapter.monitor.start"],
+            methods: [],
             multi_account: false,
             platform_capabilities: {
               text_limit: 1,
@@ -166,7 +169,7 @@ describe("runAdapter", () => {
           "node",
           "adapter",
           "adapter.monitor.start",
-          "--account",
+          "--connection",
           "default",
           "--format",
           "jsonl",
@@ -196,6 +199,7 @@ describe("runAdapter", () => {
             name: "test-adapter",
             version: "0.0.0",
             operations: ["adapter.info", "adapter.setup.start"],
+            methods: [],
             multi_account: false,
             platform_capabilities: {
               text_limit: 1,
@@ -217,7 +221,7 @@ describe("runAdapter", () => {
           "adapter.setup.start": async (_ctx, req) => ({
             status: "pending",
             session_id: req.session_id ?? "setup-1",
-            account: req.account ?? "default",
+            connection_id: req.connection_id ?? "default",
             service: "test",
             message: "ok",
           }),
@@ -263,6 +267,7 @@ describe("runAdapter", () => {
             name: "test-adapter",
             version: "0.0.0",
             operations: ["adapter.info", "adapter.control.start"],
+            methods: [],
             multi_account: false,
             platform_capabilities: {
               text_limit: 1,
@@ -281,7 +286,7 @@ describe("runAdapter", () => {
               supports_streaming_edit: false,
             },
           }),
-          "adapter.control.start": async (_ctx, { account }, session) => {
+          "adapter.control.start": async (_ctx, { connection_id }, session) => {
             const registry = session.createEndpointRegistry();
             await registry.upsert({
               endpoint_id: "device-host-1",
@@ -294,7 +299,7 @@ describe("runAdapter", () => {
               onInvoke: async (frame) => ({
                 ok: true,
                 payload: {
-                  account,
+                  connection_id,
                   endpoint_id: frame.endpoint_id,
                   command: frame.command,
                 },
@@ -304,7 +309,7 @@ describe("runAdapter", () => {
         },
       },
       {
-        argv: ["node", "adapter", "adapter.control.start", "--account", "acct-1"],
+        argv: ["node", "adapter", "adapter.control.start", "--connection", "acct-1"],
         stdin: stdin as unknown as NodeJS.ReadableStream,
         stdout: stdout.stream,
         stderr: stderr.stream,
@@ -344,11 +349,80 @@ describe("runAdapter", () => {
       request_id: "req-1",
       ok: true,
       payload: {
-        account: "acct-1",
+        connection_id: "acct-1",
         endpoint_id: "device-host-1",
         command: "camera.snap",
       },
     });
     expect(stderr.read()).toBe("");
+  });
+
+  it("invokes generic namespaced adapter methods with connection and payload", async () => {
+    const stdout = captureStream();
+    const stderr = captureStream();
+
+    const code = await runAdapter(
+      {
+        operations: {
+          "adapter.info": () => ({
+            platform: "test",
+            name: "test-adapter",
+            version: "0.0.0",
+            operations: ["adapter.info"],
+            methods: [
+              {
+                name: "test.echo",
+                description: "Echo a payload",
+                action: "read",
+                params: { type: "object" },
+                response: { type: "object" },
+                surfaces: ["ws.control", "http.control"],
+                connection_required: true,
+                mutates_remote: false,
+              },
+            ],
+            methodCatalog: {
+              source: "manifest",
+              namespace: "test",
+            },
+            multi_account: false,
+            platform_capabilities: {},
+          }),
+          methods: {
+            "test.echo": async (_ctx, req) => ({
+              ok: true,
+              connection_id: req.connection_id,
+              payload: req.payload ?? null,
+            }),
+          },
+        },
+      },
+      {
+        argv: [
+          "node",
+          "adapter",
+          "test.echo",
+          "--connection",
+          "default",
+          "--payload-json",
+          "{\"value\":\"hello\"}",
+        ],
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+        patchConsole: false,
+        installSignalHandlers: false,
+        requireRuntimeContext: false,
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(stderr.read()).toBe("");
+    expect(JSON.parse(stdout.read().trim())).toEqual({
+      ok: true,
+      connection_id: "default",
+      payload: {
+        value: "hello",
+      },
+    });
   });
 });

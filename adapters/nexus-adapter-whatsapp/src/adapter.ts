@@ -2,11 +2,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  newEvent,
+  defineAdapter,
+  messageRecord,
+  readReplyToTarget,
+  requireContainerTarget,
+  sleepWithSignal,
+  type AdapterInboundRecord,
+  type Attachment,
   type AdapterContext,
-  type AdapterDefinition,
   type DeliveryResult,
-  type NexusEvent,
 } from "@nexus-project/adapter-sdk-ts";
 
 type UnknownRecord = Record<string, unknown>;
@@ -104,7 +108,7 @@ export function normalizeWhatsAppTarget(raw: string): string {
   return `${digits}@s.whatsapp.net`;
 }
 
-function resolveAuthDir(ctx: AdapterContext, account: string): string {
+function resolveAuthDir(ctx: AdapterContext, connectionID: string): string {
   const fromEnv = process.env.NEXUS_WHATSAPP_AUTH_DIR?.trim();
   if (fromEnv) {
     return path.resolve(fromEnv);
@@ -116,29 +120,14 @@ function resolveAuthDir(ctx: AdapterContext, account: string): string {
     return path.resolve(fromConfig);
   }
 
-  return path.resolve(os.homedir(), "nexus", "state", "credentials", "whatsapp", account);
+  return path.resolve(os.homedir(), "nexus", "state", "credentials", "whatsapp", connectionID);
 }
 
 function ensureAuthDir(authDir: string): void {
   fs.mkdirSync(authDir, { recursive: true });
 }
 
-function inferContentType(messagePayload: UnknownRecord): NexusEvent["content_type"] {
-  if (asString(messagePayload.conversation) || asString(asRecord(messagePayload.extendedTextMessage)?.text)) {
-    return "text";
-  }
-  if (asRecord(messagePayload.imageMessage)) {
-    return "image";
-  }
-  if (asRecord(messagePayload.videoMessage)) {
-    return "video";
-  }
-  if (asRecord(messagePayload.audioMessage)) {
-    return "audio";
-  }
-  if (asRecord(messagePayload.documentMessage)) {
-    return "file";
-  }
+function inferContentType(messagePayload: UnknownRecord): "text" | "reaction" | "membership" {
   if (asRecord(messagePayload.reactionMessage)) {
     return "reaction";
   }
@@ -207,16 +196,16 @@ function extractReplyToID(messagePayload: UnknownRecord): string | undefined {
   return asString(reactionKey?.id);
 }
 
-function extractAttachments(messagePayload: UnknownRecord, messageID: string) {
-  const attachments: NonNullable<NexusEvent["attachments"]> = [];
+function extractAttachments(messagePayload: UnknownRecord, messageID: string): Attachment[] {
+  const attachments: Attachment[] = [];
 
   const image = asRecord(messagePayload.imageMessage);
   if (image) {
     attachments.push({
       id: `${messageID}:image`,
       filename: `${messageID}.jpg`,
-      content_type: asString(image.mimetype) ?? "image/jpeg",
-      ...(asNumber(image.fileLength) ? { size_bytes: Math.trunc(asNumber(image.fileLength) ?? 0) } : {}),
+      mime_type: asString(image.mimetype) ?? "image/jpeg",
+      ...(asNumber(image.fileLength) ? { size: Math.trunc(asNumber(image.fileLength) ?? 0) } : {}),
     });
   }
 
@@ -225,8 +214,8 @@ function extractAttachments(messagePayload: UnknownRecord, messageID: string) {
     attachments.push({
       id: `${messageID}:video`,
       filename: `${messageID}.mp4`,
-      content_type: asString(video.mimetype) ?? "video/mp4",
-      ...(asNumber(video.fileLength) ? { size_bytes: Math.trunc(asNumber(video.fileLength) ?? 0) } : {}),
+      mime_type: asString(video.mimetype) ?? "video/mp4",
+      ...(asNumber(video.fileLength) ? { size: Math.trunc(asNumber(video.fileLength) ?? 0) } : {}),
     });
   }
 
@@ -235,8 +224,8 @@ function extractAttachments(messagePayload: UnknownRecord, messageID: string) {
     attachments.push({
       id: `${messageID}:audio`,
       filename: `${messageID}.ogg`,
-      content_type: asString(audio.mimetype) ?? "audio/ogg",
-      ...(asNumber(audio.fileLength) ? { size_bytes: Math.trunc(asNumber(audio.fileLength) ?? 0) } : {}),
+      mime_type: asString(audio.mimetype) ?? "audio/ogg",
+      ...(asNumber(audio.fileLength) ? { size: Math.trunc(asNumber(audio.fileLength) ?? 0) } : {}),
     });
   }
 
@@ -245,15 +234,18 @@ function extractAttachments(messagePayload: UnknownRecord, messageID: string) {
     attachments.push({
       id: `${messageID}:document`,
       filename: asString(document.fileName) ?? `${messageID}.bin`,
-      content_type: asString(document.mimetype) ?? "application/octet-stream",
-      ...(asNumber(document.fileLength) ? { size_bytes: Math.trunc(asNumber(document.fileLength) ?? 0) } : {}),
+      mime_type: asString(document.mimetype) ?? "application/octet-stream",
+      ...(asNumber(document.fileLength) ? { size: Math.trunc(asNumber(document.fileLength) ?? 0) } : {}),
     });
   }
 
   return attachments;
 }
 
-export function buildEventFromBaileysMessage(raw: UnknownRecord, accountID: string): NexusEvent | null {
+export function buildEventFromBaileysMessage(
+  raw: UnknownRecord,
+  connectionID: string,
+): AdapterInboundRecord | null {
   const key = asRecord(raw.key);
   const remoteJid = asString(key?.remoteJid);
   const messageID = asString(key?.id);
@@ -276,27 +268,25 @@ export function buildEventFromBaileysMessage(raw: UnknownRecord, accountID: stri
   const timestamp = toUnixMs(raw.messageTimestamp);
   const replyToID = extractReplyToID(messagePayload);
 
-  const builder = newEvent("whatsapp", `whatsapp:${messageID}`)
-    .withTimestampUnixMs(timestamp)
-    .withAccount(accountID)
-    .withSender(senderID, senderName)
-    .withContainer(remoteJid, isGroup ? "group" : "direct")
-    .withContent(content)
-    .withContentType(contentType)
-    .withMetadata("remote_jid", remoteJid)
-    .withMetadata("participant", asString(key?.participant) ?? null)
-    .withMetadata("message_id", messageID);
-
-  if (replyToID) {
-    builder.withReplyTo(replyToID);
-  }
-
-  const attachments = extractAttachments(messagePayload, messageID);
-  for (const attachment of attachments) {
-    builder.withAttachment(attachment);
-  }
-
-  return builder.build();
+  return messageRecord({
+    platform: "whatsapp",
+    connectionId: connectionID,
+    externalRecordId: `whatsapp:${messageID}`,
+    timestamp,
+    senderId: senderID,
+    senderName,
+    containerId: remoteJid,
+    containerKind: isGroup ? "group" : "direct",
+    ...(replyToID ? { replyToId: replyToID } : {}),
+    content,
+    contentType,
+    attachments: extractAttachments(messagePayload, messageID),
+    metadata: {
+      remote_jid: remoteJid,
+      participant: asString(key?.participant) ?? null,
+      message_id: messageID,
+    },
+  });
 }
 
 async function waitForOpen(params: {
@@ -404,10 +394,6 @@ async function connectSocket(params: {
   };
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function extractStatusCode(error: unknown): number | undefined {
   const record = asRecord(error);
   const direct = asNumber(record?.status);
@@ -503,63 +489,43 @@ const WHATSAPP_CHANNEL_CAPABILITIES = {
   supports_streaming_edit: false,
 } as const;
 
-export const whatsappAdapter: AdapterDefinition = {
-  operations: {
-    "adapter.info": async () => ({
-      platform: "whatsapp",
-      name: "nexus-adapter-whatsapp",
-      version: "0.1.0",
-      operations: [
-        "adapter.info",
-        "adapter.accounts.list",
-        "adapter.health",
-        "delivery.send",
-        "adapter.monitor.start",
-      ],
-      credential_service: "whatsapp",
-      multi_account: true,
-      auth: {
-        methods: [
-          {
-            type: "file_upload",
-            label: "Upload WhatsApp Session",
-            icon: "upload",
-            accept: [".json", ".zip"],
-            templateUrl: "/templates/whatsapp-session.json",
-          },
-        ],
-        setupGuide:
-          "Provide an exported WhatsApp auth session bundle (Baileys creds/session files) to connect this account.",
+export const whatsappAdapter = defineAdapter({
+  platform: "whatsapp",
+  name: "nexus-adapter-whatsapp",
+  version: "0.1.0",
+  multi_account: true,
+  credential_service: "whatsapp",
+  auth: {
+    methods: [
+      {
+        id: "whatsapp_session_upload",
+        type: "file_upload",
+        label: "Upload WhatsApp Session",
+        icon: "upload",
+        accept: [".json", ".zip"],
+        templateUrl: "/templates/whatsapp-session.json",
       },
-      platform_capabilities: WHATSAPP_CHANNEL_CAPABILITIES,
-    }),
-
-    "adapter.accounts.list": async (ctx) => {
-      const accountID = ctx.runtime?.account_id || "default";
-      return [
-        {
-          id: accountID,
-          status: "ready" as const,
-          ...(ctx.runtime?.credential?.ref ? { credential_ref: ctx.runtime.credential.ref } : {}),
-        },
-      ];
-    },
-
-    "adapter.health": async (ctx, args) => {
-      const authDir = resolveAuthDir(ctx, args.account);
+    ],
+    setupGuide:
+      "Provide an exported WhatsApp auth session bundle (Baileys creds/session files) to connect this account.",
+  },
+  capabilities: WHATSAPP_CHANNEL_CAPABILITIES,
+  connection: {
+    health: async (ctx) => {
+      const authDir = resolveAuthDir(ctx, ctx.connectionId ?? "default");
       const credsPath = path.join(authDir, "creds.json");
       const connected = fs.existsSync(credsPath);
       return {
         connected,
-        account: args.account,
         ...(connected ? { last_event_at: Date.now() } : { error: "missing WhatsApp auth session" }),
         details: {
           auth_dir: authDir,
         },
       };
     },
-
-    "delivery.send": async (ctx, req) => {
+  },
+  delivery: {
+    send: async (ctx, req) => {
       if (req.media) {
         return {
           success: false,
@@ -583,8 +549,8 @@ export const whatsappAdapter: AdapterDefinition = {
         };
       }
 
-      const target = normalizeWhatsAppTarget(req.to);
-      const authDir = resolveAuthDir(ctx, req.account);
+      const target = normalizeWhatsAppTarget(requireContainerTarget(req.target));
+      const authDir = resolveAuthDir(ctx, ctx.connectionId ?? req.target.connection_id);
       ensureAuthDir(authDir);
 
       const connection = await connectSocket({
@@ -594,11 +560,12 @@ export const whatsappAdapter: AdapterDefinition = {
       });
 
       try {
-        const quoted = req.reply_to_id
+        const quotedReplyTo = readReplyToTarget(req.target);
+        const quoted = quotedReplyTo
           ? ({
               key: {
                 remoteJid: target,
-                id: req.reply_to_id,
+                id: quotedReplyTo,
                 fromMe: false,
               },
               message: {
@@ -624,9 +591,10 @@ export const whatsappAdapter: AdapterDefinition = {
         connection.close();
       }
     },
-
-    "adapter.monitor.start": async (ctx, args, emit) => {
-      const authDir = resolveAuthDir(ctx, args.account);
+  },
+  ingest: {
+    monitor: async (ctx, emit) => {
+      const authDir = resolveAuthDir(ctx, ctx.connectionId ?? "default");
       ensureAuthDir(authDir);
       const credsPath = path.join(authDir, "creds.json");
 
@@ -640,7 +608,10 @@ export const whatsappAdapter: AdapterDefinition = {
             const record = asRecord(upsert);
             const messages = Array.isArray(record?.messages) ? record.messages : [];
             for (const raw of messages) {
-              const parsed = buildEventFromBaileysMessage(asRecord(raw) ?? {}, args.account);
+              const parsed = buildEventFromBaileysMessage(
+                asRecord(raw) ?? {},
+                ctx.connectionId ?? "default",
+              );
               if (parsed) {
                 emit(parsed);
               }
@@ -683,7 +654,7 @@ export const whatsappAdapter: AdapterDefinition = {
               if (fs.existsSync(credsPath)) {
                 break;
               }
-              await sleep(5000);
+              await sleepWithSignal(ctx.signal, 5000);
             }
             continue;
           }
@@ -691,15 +662,15 @@ export const whatsappAdapter: AdapterDefinition = {
             "whatsapp monitor loop error: %s",
             error instanceof Error ? error.message : String(error),
           );
-          await sleep(1500);
+          await sleepWithSignal(ctx.signal, 1500);
         } finally {
           connection?.close();
         }
 
         if (!ctx.signal.aborted) {
-          await sleep(1000);
+          await sleepWithSignal(ctx.signal, 1000);
         }
       }
     },
   },
-};
+});

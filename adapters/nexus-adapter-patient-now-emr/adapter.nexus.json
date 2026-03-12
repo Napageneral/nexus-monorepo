@@ -1,0 +1,8 @@
+{
+  "id": "nexus-adapter-patient-now-emr",
+  "version": "0.1.0",
+  "displayName": "PatientNow EMR",
+  "description": "Shared PatientNow EMR adapter package for Nex.",
+  "platform": "patient-now-emr",
+  "command": "./bin/patient-now-emr-adapter"
+}

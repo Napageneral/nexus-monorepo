@@ -1,14 +1,29 @@
 export type { AdapterRuntimeContext, AdapterRuntimeCredential } from "./runtime-context.js";
 export {
   ADAPTER_CONTEXT_ENV_VAR,
+  ADAPTER_STATE_DIR_ENV_VAR,
+  loadAdapterStateDir,
   loadAdapterRuntimeContext,
   readAdapterRuntimeContextFile,
+  requireAdapterStateDir,
   requireAdapterRuntimeContext,
 } from "./runtime-context.js";
+export type {
+  DeclaredAdapterMethod,
+  DefineAdapterConfig,
+  DefinedAdapterContext,
+} from "./define.js";
+export { defineAdapter, method } from "./define.js";
+export type { CredentialLookupOptions } from "./credentials.js";
+export { readCredential, requireCredential } from "./credentials.js";
+export { requireContainerTarget, readReplyToTarget, readThreadTarget } from "./targets.js";
+export type { RetryOptions } from "./retry.js";
+export { parseRetryAfterMs, sleepWithSignal, withRetry } from "./retry.js";
 
 export type {
   AdapterContext,
   AdapterDefinition,
+  AdapterMethodInvokeRequest,
   AdapterOperations,
   AdapterSetupRequest,
   RunAdapterOptions,
@@ -22,6 +37,11 @@ export {
   AdapterAccountSchema,
   AdapterAuthFieldSchema,
   AdapterAuthManifestSchema,
+  AdapterMethodSchema,
+  AdapterMethodCatalogSchema,
+  AdapterMethodContextHintValueSchema,
+  AdapterMethodContextHintsSchema,
+  AdapterMethodOriginSchema,
   AdapterAuthMethodApiKeySchema,
   AdapterAuthMethodCustomFlowSchema,
   AdapterAuthMethodFileUploadSchema,
@@ -30,13 +50,16 @@ export {
   AdapterControlEndpointSchema,
   AdapterControlEndpointRemoveFrameSchema,
   AdapterControlEndpointUpsertFrameSchema,
-  AdapterControlEventIngestFrameSchema,
   AdapterControlInputFrameSchema,
   AdapterControlInvokeCancelFrameSchema,
   AdapterControlInvokeErrorSchema,
   AdapterControlInvokeRequestFrameSchema,
   AdapterControlInvokeResultFrameSchema,
   AdapterControlOutputFrameSchema,
+  AdapterControlRecordIngestFrameSchema,
+  AdapterInboundPayloadSchema,
+  AdapterInboundRecordSchema,
+  AdapterInboundRoutingSchema,
   AdapterOperationSchema,
   AdapterSetupResultSchema,
   AdapterSetupStatusSchema,
@@ -45,14 +68,14 @@ export {
   AdapterStreamStatusSchema,
   AttachmentSchema,
   ChannelCapabilitiesSchema,
+  ChannelRefSchema,
   ContainerKindSchema,
   ContentTypeSchema,
   DeliveryErrorTypeSchema,
   DeliveryErrorSchema,
   DeliveryResultSchema,
   DeliveryTargetSchema,
-  NexusEventSchema,
-  PeerKindSchema,
+  RecipientSchema,
   SendRequestSchema,
   StreamEventSchema,
 } from "./protocol.js";
@@ -61,6 +84,11 @@ export type {
   AdapterAccount,
   AdapterAuthField,
   AdapterAuthManifest,
+  AdapterMethod,
+  AdapterMethodCatalog,
+  AdapterMethodContextHintValue,
+  AdapterMethodContextHints,
+  AdapterMethodOrigin,
   AdapterAuthMethod,
   AdapterAuthMethodApiKey,
   AdapterAuthMethodCustomFlow,
@@ -69,19 +97,24 @@ export type {
   AdapterControlEndpoint,
   AdapterControlEndpointRemoveFrame,
   AdapterControlEndpointUpsertFrame,
-  AdapterControlEventIngestFrame,
   AdapterControlInputFrame,
   AdapterControlInvokeCancelFrame,
   AdapterControlInvokeError,
   AdapterControlInvokeRequestFrame,
   AdapterControlInvokeResultFrame,
   AdapterControlOutputFrame,
+  AdapterControlRecordIngestFrame,
+  AdapterInboundPayload,
+  AdapterInboundRecord,
+  AdapterInboundRouting,
   AdapterOperation,
   AdapterSetupResult,
   AdapterSetupStatus,
   AdapterHealth,
   AdapterInfo,
   AdapterStreamStatus,
+  Attachment,
+  ChannelRef,
   ChannelCapabilities,
   ContainerKind,
   ContentType,
@@ -89,8 +122,7 @@ export type {
   DeliveryError,
   DeliveryResult,
   DeliveryTarget,
-  NexusEvent,
-  PeerKind,
+  Recipient,
   SendRequest,
   StreamEvent,
 } from "./protocol.js";
@@ -98,8 +130,8 @@ export type {
 export type { StreamHandlers } from "./stream.js";
 export { emitStreamStatus, handleStream } from "./stream.js";
 
-export type { PollConfig, EmitFunc, MonitorHandler } from "./monitor.js";
-export { pollMonitor } from "./monitor.js";
+export type { PollConfig, PollBackfillConfig, EmitFunc, MonitorHandler, BackfillHandler } from "./monitor.js";
+export { pollMonitor, pollBackfill } from "./monitor.js";
 
 export type {
   AdapterControlInvokeReply,
@@ -114,7 +146,8 @@ export {
 
 export { chunkText, sendWithChunking } from "./send.js";
 
-export { newEvent, EventBuilder } from "./event.js";
+export type { MessageRecordOptions } from "./event.js";
+export { newRecord, RecordBuilder, messageRecord } from "./event.js";
 
 export type { AdapterLogger } from "./logger.js";
 export { createAdapterLogger, patchConsoleToStderr } from "./logger.js";

@@ -28,12 +28,12 @@ function createRuntimeContextEnv(): { env: NodeJS.ProcessEnv; cleanup: () => voi
   fs.writeFileSync(
     contextPath,
     JSON.stringify(
-      {
-        version: 1,
-        platform: "telegram",
-        account_id: "default",
-        config: {},
-        credential: {
+        {
+          version: 1,
+          platform: "telegram",
+          connection_id: "default",
+          config: {},
+          credential: {
           kind: "token",
           value: "bot-token-test",
           ref: "telegram/default",
@@ -92,7 +92,7 @@ describe("telegram adapter contract smoke", () => {
     const parsed = JSON.parse(line ?? "{}");
     expect(parsed.platform).toBe("telegram");
     expect(parsed.operations).toContain("adapter.monitor.start");
-    expect(parsed.operations).toContain("delivery.send");
+    expect(parsed.operations).toContain("channels.send");
     expect(parsed.platform_capabilities.supports_threads).toBe(true);
   });
 
@@ -126,15 +126,11 @@ describe("telegram adapter contract smoke", () => {
         argv: [
           "node",
           "adapter",
-          "delivery.send",
-          "--account",
+          "channels.send",
+          "--connection",
           "default",
-          "--to",
-          "telegram:-100123",
-          "--thread",
-          "7",
-          "--reply-to",
-          "42",
+          "--target-json",
+          "{\"connection_id\":\"default\",\"channel\":{\"platform\":\"telegram\",\"container_id\":\"telegram:-100123\",\"container_kind\":\"group\",\"thread_id\":\"7\"},\"reply_to_id\":\"42\"}",
           "--text",
           "hello",
         ],
@@ -188,19 +184,16 @@ describe("telegram adapter contract smoke", () => {
     );
 
     expect(event).toBeTruthy();
-    expect(event?.platform).toBe("telegram");
-    expect(event?.account_id).toBe("default");
-    expect(event?.container_kind).toBe("group");
-    expect(event?.container_id).toBe("-100123");
-    expect(event?.thread_id).toBe("12");
-    expect(event?.reply_to_id).toBe("55");
-    expect(event?.sender_id).toBe("777");
-    expect(event?.sender_name).toBe("@alice");
-    expect(event?.content).toBe("hello world");
-
-    const asRecord = event as unknown as Record<string, unknown>;
-    expect(asRecord.channel).toBeUndefined();
-    expect(asRecord.peer_id).toBeUndefined();
-    expect(asRecord.peer_kind).toBeUndefined();
+    expect(event?.operation).toBe("record.ingest");
+    expect(event?.routing.platform).toBe("telegram");
+    expect(event?.routing.connection_id).toBe("default");
+    expect(event?.routing.container_kind).toBe("group");
+    expect(event?.routing.container_id).toBe("-100123");
+    expect(event?.routing.container_name).toBe("Ops");
+    expect(event?.routing.thread_id).toBe("12");
+    expect(event?.routing.reply_to_id).toBe("55");
+    expect(event?.routing.sender_id).toBe("777");
+    expect(event?.routing.sender_name).toBe("@alice");
+    expect(event?.payload.content).toBe("hello world");
   });
 });

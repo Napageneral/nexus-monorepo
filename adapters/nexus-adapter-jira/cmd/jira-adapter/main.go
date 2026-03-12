@@ -20,48 +20,53 @@ const (
 
 func main() {
 	os.Args = preprocessCLIArgs(os.Args)
-	if len(os.Args) > 1 && os.Args[1] == "records.backfill" {
-		if err := runRecordsBackfill(os.Args[2:]); err != nil {
-			nexadapter.LogError("%v", err)
-			os.Exit(1)
-		}
-		return
-	}
-	nexadapter.Run(nexadapter.Adapter{
-		Operations: nexadapter.AdapterOperations{
-			AdapterInfo:         info,
-			AdapterAccountsList: accounts,
-			AdapterSetupStart:   setupStart,
-			AdapterSetupSubmit:  setupSubmit,
-			AdapterSetupStatus:  setupStatus,
-			AdapterSetupCancel:  setupCancel,
-			AdapterHealth:       health,
-			AdapterMonitorStart: monitor,
-			DeliverySend:        send,
-		},
-	})
+	nexadapter.Run(nexadapter.DefineAdapter(adapterConfig()))
 }
 
-func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
-	return &nexadapter.AdapterInfo{
+func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
+	return nexadapter.DefineAdapterConfig[struct{}]{
 		Platform:          platformID,
 		Name:              adapterName,
 		Version:           adapterVersion,
 		CredentialService: credentialService,
 		MultiAccount:      true,
-		Operations: []nexadapter.AdapterOperation{
-			nexadapter.OpAdapterInfo,
-			nexadapter.OpAdapterHealth,
-			nexadapter.OpAdapterAccountsList,
-			nexadapter.OpAdapterSetupStart,
-			nexadapter.OpAdapterSetupSubmit,
-			nexadapter.OpAdapterSetupStatus,
-			nexadapter.OpAdapterSetupCancel,
-			nexadapter.OpAdapterMonitorStart,
-			nexadapter.AdapterOperation("records.backfill"),
-			nexadapter.OpDeliverySend,
+		Connection: nexadapter.ConnectionHandlers[struct{}]{
+			Accounts: func(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterAccount, error) {
+				return accounts(ctx.Context)
+			},
+			Health: func(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth, error) {
+				return health(ctx.Context, ctx.ConnectionID)
+			},
 		},
-		PlatformCapabilities: nexadapter.ChannelCapabilities{
+		Ingest: nexadapter.IngestHandlers[struct{}]{
+			Monitor: func(ctx nexadapter.AdapterContext[struct{}], emit nexadapter.EmitFunc) error {
+				return monitor(ctx.Context, ctx.ConnectionID, emit)
+			},
+			Backfill: func(ctx nexadapter.AdapterContext[struct{}], since time.Time, emit nexadapter.EmitFunc) error {
+				return backfill(ctx.Context, ctx.ConnectionID, since, emit)
+			},
+		},
+		Delivery: nexadapter.DeliveryHandlers[struct{}]{
+			Send: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.SendRequest) (*nexadapter.DeliveryResult, error) {
+				return send(ctx.Context, req)
+			},
+		},
+		Setup: nexadapter.SetupHandlers[struct{}]{
+			Start: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+				return setupStart(ctx.Context, req)
+			},
+			Submit: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+				return setupSubmit(ctx.Context, req)
+			},
+			Status: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+				return setupStatus(ctx.Context, req)
+			},
+			Cancel: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+				return setupCancel(ctx.Context, req)
+			},
+		},
+		Methods: map[string]nexadapter.DeclaredMethod[struct{}]{},
+		Capabilities: nexadapter.ChannelCapabilities{
 			TextLimit:             32768,
 			SupportsMarkdown:      true,
 			MarkdownFlavor:        "standard",
@@ -113,7 +118,12 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			},
 			SetupGuide: "Generate an API token at https://id.atlassian.com/manage-profile/security/api-tokens",
 		},
-	}, nil
+	}
+}
+
+func info(ctx context.Context) (*nexadapter.AdapterInfo, error) {
+	adapter := nexadapter.DefineAdapter(adapterConfig())
+	return adapter.Operations.AdapterInfo(ctx)
 }
 
 func accounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {
@@ -186,24 +196,24 @@ func setupStart(ctx context.Context, req nexadapter.AdapterSetupRequest) (*nexad
 	}
 
 	session := setupSession{
-		SessionID:  sessionID,
-		Account:    resolvedConnectionID(req.Account, client.site),
-		Site:       client.site,
-		Email:      email,
-		APIToken:   apiToken,
-		User:       *user,
-		ProjectMap: projectMap,
-		Status:     nexadapter.SetupStatusRequiresInput,
+		SessionID:    sessionID,
+		ConnectionID: resolvedConnectionID(req.ConnectionID, client.site),
+		Site:         client.site,
+		Email:        email,
+		APIToken:     apiToken,
+		User:         *user,
+		ProjectMap:   projectMap,
+		Status:       nexadapter.SetupStatusRequiresInput,
 	}
 	if err := saveSetupSession(session); err != nil {
 		return nil, err
 	}
 
 	return &nexadapter.AdapterSetupResult{
-		Status:    nexadapter.SetupStatusRequiresInput,
-		SessionID: sessionID,
-		Account:   session.Account,
-		Service:   credentialService,
+		Status:       nexadapter.SetupStatusRequiresInput,
+		SessionID:    sessionID,
+		ConnectionID: session.ConnectionID,
+		Service:      credentialService,
 		Message: fmt.Sprintf(
 			"Credentials valid. Authenticated as %s (%s). Select projects to sync.",
 			user.DisplayName,
@@ -230,32 +240,32 @@ func setupSubmit(_ context.Context, req nexadapter.AdapterSetupRequest) (*nexada
 	session, err := loadSetupSession(req.SessionID)
 	if err != nil {
 		return &nexadapter.AdapterSetupResult{
-			Status:    nexadapter.SetupStatusFailed,
-			SessionID: req.SessionID,
-			Account:   req.Account,
-			Service:   credentialService,
-			Message:   err.Error(),
+			Status:       nexadapter.SetupStatusFailed,
+			SessionID:    req.SessionID,
+			ConnectionID: req.ConnectionID,
+			Service:      credentialService,
+			Message:      err.Error(),
 		}, nil
 	}
 
 	if session.Status == nexadapter.SetupStatusCancelled {
 		return &nexadapter.AdapterSetupResult{
-			Status:    nexadapter.SetupStatusFailed,
-			SessionID: session.SessionID,
-			Account:   session.Account,
-			Service:   credentialService,
-			Message:   "setup session has been cancelled",
+			Status:       nexadapter.SetupStatusFailed,
+			SessionID:    session.SessionID,
+			ConnectionID: session.ConnectionID,
+			Service:      credentialService,
+			Message:      "setup session has been cancelled",
 		}, nil
 	}
 
 	projects := payloadStringSlice(req.Payload, "projects")
 	if len(projects) == 0 {
 		return &nexadapter.AdapterSetupResult{
-			Status:    nexadapter.SetupStatusFailed,
-			SessionID: session.SessionID,
-			Account:   session.Account,
-			Service:   credentialService,
-			Message:   "at least one project must be selected",
+			Status:       nexadapter.SetupStatusFailed,
+			SessionID:    session.SessionID,
+			ConnectionID: session.ConnectionID,
+			Service:      credentialService,
+			Message:      "at least one project must be selected",
 		}, nil
 	}
 
@@ -267,11 +277,11 @@ func setupSubmit(_ context.Context, req nexadapter.AdapterSetupRequest) (*nexada
 	}
 	if len(invalid) > 0 {
 		return &nexadapter.AdapterSetupResult{
-			Status:    nexadapter.SetupStatusFailed,
-			SessionID: session.SessionID,
-			Account:   session.Account,
-			Service:   credentialService,
-			Message:   fmt.Sprintf("unknown project keys: %s", strings.Join(invalid, ", ")),
+			Status:       nexadapter.SetupStatusFailed,
+			SessionID:    session.SessionID,
+			ConnectionID: session.ConnectionID,
+			Service:      credentialService,
+			Message:      fmt.Sprintf("unknown project keys: %s", strings.Join(invalid, ", ")),
 		}, nil
 	}
 
@@ -282,11 +292,11 @@ func setupSubmit(_ context.Context, req nexadapter.AdapterSetupRequest) (*nexada
 	}
 
 	return &nexadapter.AdapterSetupResult{
-		Status:    nexadapter.SetupStatusCompleted,
-		SessionID: session.SessionID,
-		Account:   session.Account,
-		Service:   credentialService,
-		Message:   fmt.Sprintf("Jira adapter configured. Syncing projects: %s.", strings.Join(projects, ", ")),
+		Status:       nexadapter.SetupStatusCompleted,
+		SessionID:    session.SessionID,
+		ConnectionID: session.ConnectionID,
+		Service:      credentialService,
+		Message:      fmt.Sprintf("Jira adapter configured. Syncing projects: %s.", strings.Join(projects, ", ")),
 		SecretFields: map[string]string{
 			"site":      session.Site,
 			"email":     session.Email,
@@ -305,11 +315,11 @@ func setupStatus(_ context.Context, req nexadapter.AdapterSetupRequest) (*nexada
 	session, err := loadSetupSession(req.SessionID)
 	if err != nil {
 		return &nexadapter.AdapterSetupResult{
-			Status:    nexadapter.SetupStatusFailed,
-			SessionID: req.SessionID,
-			Account:   req.Account,
-			Service:   credentialService,
-			Message:   err.Error(),
+			Status:       nexadapter.SetupStatusFailed,
+			SessionID:    req.SessionID,
+			ConnectionID: req.ConnectionID,
+			Service:      credentialService,
+			Message:      err.Error(),
 		}, nil
 	}
 
@@ -322,11 +332,11 @@ func setupStatus(_ context.Context, req nexadapter.AdapterSetupRequest) (*nexada
 	})
 
 	return &nexadapter.AdapterSetupResult{
-		Status:    session.Status,
-		SessionID: session.SessionID,
-		Account:   session.Account,
-		Service:   credentialService,
-		Message:   "Setup session loaded.",
+		Status:       session.Status,
+		SessionID:    session.SessionID,
+		ConnectionID: session.ConnectionID,
+		Service:      credentialService,
+		Message:      "Setup session loaded.",
 		Fields: []nexadapter.AdapterAuthField{
 			{
 				Name:     "projects",
@@ -354,11 +364,11 @@ func setupCancel(_ context.Context, req nexadapter.AdapterSetupRequest) (*nexada
 	session, err := loadSetupSession(req.SessionID)
 	if err != nil {
 		return &nexadapter.AdapterSetupResult{
-			Status:    nexadapter.SetupStatusFailed,
-			SessionID: req.SessionID,
-			Account:   req.Account,
-			Service:   credentialService,
-			Message:   err.Error(),
+			Status:       nexadapter.SetupStatusFailed,
+			SessionID:    req.SessionID,
+			ConnectionID: req.ConnectionID,
+			Service:      credentialService,
+			Message:      err.Error(),
 		}, nil
 	}
 
@@ -368,11 +378,11 @@ func setupCancel(_ context.Context, req nexadapter.AdapterSetupRequest) (*nexada
 	}
 
 	return &nexadapter.AdapterSetupResult{
-		Status:    nexadapter.SetupStatusCancelled,
-		SessionID: session.SessionID,
-		Account:   session.Account,
-		Service:   credentialService,
-		Message:   "Setup cancelled.",
+		Status:       nexadapter.SetupStatusCancelled,
+		SessionID:    session.SessionID,
+		ConnectionID: session.ConnectionID,
+		Service:      credentialService,
+		Message:      "Setup cancelled.",
 	}, nil
 }
 
@@ -387,18 +397,18 @@ func health(ctx context.Context, connection string) (*nexadapter.AdapterHealth, 
 	}
 	if err != nil {
 		return &nexadapter.AdapterHealth{
-			Connected: false,
-			Account:   resolvedConnection,
-			Error:     err.Error(),
+			Connected:    false,
+			ConnectionID: resolvedConnection,
+			Error:        err.Error(),
 		}, nil
 	}
 
 	user, err := client.getMyself(ctx)
 	if err != nil {
 		return &nexadapter.AdapterHealth{
-			Connected: false,
-			Account:   resolvedConnection,
-			Error:     err.Error(),
+			Connected:    false,
+			ConnectionID: resolvedConnection,
+			Error:        err.Error(),
 		}, nil
 	}
 
@@ -408,9 +418,9 @@ func health(ctx context.Context, connection string) (*nexadapter.AdapterHealth, 
 	}
 
 	return &nexadapter.AdapterHealth{
-		Connected:   true,
-		Account:     resolvedConnection,
-		LastEventAt: time.Now().UnixMilli(),
+		Connected:    true,
+		ConnectionID: resolvedConnection,
+		LastEventAt:  time.Now().UnixMilli(),
 		Details: map[string]any{
 			"site":          fmt.Sprintf("%s.atlassian.net", client.site),
 			"user":          user.DisplayName,
@@ -492,11 +502,11 @@ func firstNonBlank(values ...string) string {
 
 func failedSetupResult(req nexadapter.AdapterSetupRequest, message string) *nexadapter.AdapterSetupResult {
 	return &nexadapter.AdapterSetupResult{
-		Status:    nexadapter.SetupStatusFailed,
-		SessionID: strings.TrimSpace(req.SessionID),
-		Account:   resolvedConnectionID(req.Account, payloadString(req.Payload, "site")),
-		Service:   credentialService,
-		Message:   message,
+		Status:       nexadapter.SetupStatusFailed,
+		SessionID:    strings.TrimSpace(req.SessionID),
+		ConnectionID: resolvedConnectionID(req.ConnectionID, payloadString(req.Payload, "site")),
+		Service:      credentialService,
+		Message:      message,
 	}
 }
 

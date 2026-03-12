@@ -46,24 +46,24 @@ type callsResponse struct {
 }
 
 type callRecord struct {
-	ID               string `json:"id"`
-	StartTime        string `json:"start_time"`
-	Duration         any    `json:"duration"` // string or number
-	Direction        string `json:"direction"`
-	AnsweredAt       string `json:"answered_at"`
-	Source           string `json:"source"`
-	Campaign         string `json:"campaign"`
-	CampaignName     string `json:"campaign_name"`
-	CompanyID        string `json:"company_id"`
-	CompanyName      string `json:"company_name"`
-	FirstCall        any    `json:"first_call"`  // bool or string
-	LeadStatus       string `json:"lead_status"` // "good_lead", "not_a_lead", etc.
-	Tags             []any  `json:"tags"`
-	TrackingNumber   string `json:"tracking_phone_number"`
-	ConversationID   string `json:"conversation_id"`
-	FormSubmission   bool   `json:"form_submission"`
-	CallType         string `json:"call_type"`
-	Value            any    `json:"value"` // string or number — revenue attribution
+	ID             string `json:"id"`
+	StartTime      string `json:"start_time"`
+	Duration       any    `json:"duration"` // string or number
+	Direction      string `json:"direction"`
+	AnsweredAt     string `json:"answered_at"`
+	Source         string `json:"source"`
+	Campaign       string `json:"campaign"`
+	CampaignName   string `json:"campaign_name"`
+	CompanyID      string `json:"company_id"`
+	CompanyName    string `json:"company_name"`
+	FirstCall      any    `json:"first_call"`  // bool or string
+	LeadStatus     string `json:"lead_status"` // "good_lead", "not_a_lead", etc.
+	Tags           []any  `json:"tags"`
+	TrackingNumber string `json:"tracking_phone_number"`
+	ConversationID string `json:"conversation_id"`
+	FormSubmission bool   `json:"form_submission"`
+	CallType       string `json:"call_type"`
+	Value          any    `json:"value"` // string or number — revenue attribution
 }
 
 type companiesResponse struct {
@@ -91,33 +91,35 @@ type callMetrics struct {
 // ---------------------------------------------------------------------------
 
 func main() {
-	nexadapter.Run(nexadapter.Adapter{
-		Operations: nexadapter.AdapterOperations{
-			AdapterInfo:          info,
-			AdapterHealth:        health,
-			AdapterAccountsList:  accounts,
-			RecordsBackfill:      backfill,
-			MonitorStart:         monitor,
-		},
-	})
+	nexadapter.Run(nexadapter.DefineAdapter(adapterConfig()))
 }
 
 // ---------------------------------------------------------------------------
 // Operations
 // ---------------------------------------------------------------------------
 
-func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
-	return &nexadapter.AdapterInfo{
+func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
+	return nexadapter.DefineAdapterConfig[struct{}]{
 		Platform: platformID,
 		Name:     adapterName,
 		Version:  adapterVersion,
-		Operations: []nexadapter.AdapterOperation{
-			nexadapter.OpAdapterInfo,
-			nexadapter.OpAdapterHealth,
-			nexadapter.OpAdapterAccountsList,
-			nexadapter.OpRecordsBackfill,
-			nexadapter.OpAdapterMonitorStart,
+		Connection: nexadapter.ConnectionHandlers[struct{}]{
+			Accounts: func(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterAccount, error) {
+				return accounts(ctx.Context)
+			},
+			Health: func(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth, error) {
+				return health(ctx.Context, ctx.ConnectionID)
+			},
 		},
+		Ingest: nexadapter.IngestHandlers[struct{}]{
+			Monitor: func(ctx nexadapter.AdapterContext[struct{}], emit nexadapter.EmitFunc) error {
+				return monitor(ctx.Context, ctx.ConnectionID, emit)
+			},
+			Backfill: func(ctx nexadapter.AdapterContext[struct{}], since time.Time, emit nexadapter.EmitFunc) error {
+				return backfill(ctx.Context, ctx.ConnectionID, since, emit)
+			},
+		},
+		Methods:           map[string]nexadapter.DeclaredMethod[struct{}]{},
 		CredentialService: "callrail",
 		MultiAccount:      true,
 		Auth: &nexadapter.AdapterAuthManifest{
@@ -163,7 +165,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			},
 			SetupGuide: "Go to CallRail Settings → API Access to generate an API key. Note your Account ID from the URL.",
 		},
-		PlatformCapabilities: nexadapter.ChannelCapabilities{
+		Capabilities: nexadapter.ChannelCapabilities{
 			TextLimit:             20000,
 			SupportsMarkdown:      true,
 			MarkdownFlavor:        "standard",
@@ -180,7 +182,12 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			SupportsVoiceNotes:    false,
 			SupportsStreamingEdit: false,
 		},
-	}, nil
+	}
+}
+
+func info(ctx context.Context) (*nexadapter.AdapterInfo, error) {
+	adapter := nexadapter.DefineAdapter(adapterConfig())
+	return adapter.Operations.AdapterInfo(ctx)
 }
 
 func accounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {

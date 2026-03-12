@@ -26,27 +26,28 @@ type manualMetric struct {
 }
 
 func main() {
-	nexadapter.Run(nexadapter.Adapter{
-		Operations: nexadapter.AdapterOperations{
-			AdapterInfo:         info,
-			AdapterHealth:       health,
-			AdapterAccountsList: accounts,
-			RecordsBackfill:     backfill,
-		},
-	})
+	nexadapter.Run(nexadapter.DefineAdapter(adapterConfig()))
 }
 
-func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
-	return &nexadapter.AdapterInfo{
+func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
+	return nexadapter.DefineAdapterConfig[struct{}]{
 		Platform: platformID,
 		Name:     adapterName,
 		Version:  adapterVersion,
-		Operations: []nexadapter.AdapterOperation{
-			nexadapter.OpAdapterInfo,
-			nexadapter.OpAdapterHealth,
-			nexadapter.OpAdapterAccountsList,
-			nexadapter.OpRecordsBackfill,
+		Connection: nexadapter.ConnectionHandlers[struct{}]{
+			Accounts: func(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterAccount, error) {
+				return accounts(ctx.Context)
+			},
+			Health: func(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth, error) {
+				return health(ctx.Context, ctx.ConnectionID)
+			},
 		},
+		Ingest: nexadapter.IngestHandlers[struct{}]{
+			Backfill: func(ctx nexadapter.AdapterContext[struct{}], since time.Time, emit nexadapter.EmitFunc) error {
+				return backfill(ctx.Context, ctx.ConnectionID, since, emit)
+			},
+		},
+		Methods:           map[string]nexadapter.DeclaredMethod[struct{}]{},
 		CredentialService: "apple-maps",
 		MultiAccount:      true,
 		Auth: &nexadapter.AdapterAuthManifest{
@@ -62,7 +63,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			},
 			SetupGuide: "Apple Maps runs in manual/CSV mode for this integration path.",
 		},
-		PlatformCapabilities: nexadapter.ChannelCapabilities{
+		Capabilities: nexadapter.ChannelCapabilities{
 			TextLimit:             20000,
 			SupportsMarkdown:      true,
 			MarkdownFlavor:        "standard",
@@ -79,7 +80,12 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			SupportsVoiceNotes:    false,
 			SupportsStreamingEdit: false,
 		},
-	}, nil
+	}
+}
+
+func info(ctx context.Context) (*nexadapter.AdapterInfo, error) {
+	adapter := nexadapter.DefineAdapter(adapterConfig())
+	return adapter.Operations.AdapterInfo(ctx)
 }
 
 func accounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {

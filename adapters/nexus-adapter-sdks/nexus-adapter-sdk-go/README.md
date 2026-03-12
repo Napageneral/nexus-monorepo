@@ -23,14 +23,17 @@ Canonical references:
 
 - [Package Author Experience](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/package-author-experience.md)
 - [Hosted Package Ownership and Validation Model](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/hosted-package-ownership-and-validation-model.md)
+- [Unified Adapter SDK and Authoring Model](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/unified-adapter-sdk-and-authoring-model.md)
 - [Apps, Adapters, and Method Surfaces](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/apps-adapters-and-method-surfaces.md)
 - [Package Method Catalog and IAM](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/package-method-catalog-and-iam.md)
 - [Adapter Protocol](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/adapters/adapter-protocol.md)
+- [Unified Go Adapter SDK API](/Users/tyler/nexus/home/projects/nexus/adapters/nexus-adapter-sdks/docs/specs/UNIFIED_GO_ADAPTER_SDK_API.md)
 
 ## What This SDK Owns
 
 Shared behavior such as:
 
+- `DefineAdapter(...)` and single-source method declaration
 - CLI dispatch for adapter operations
 - runtime context parsing
 - canonical adapter state-root discovery via `NEXUS_ADAPTER_STATE_DIR`

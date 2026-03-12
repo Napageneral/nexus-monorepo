@@ -9,7 +9,7 @@ import {
 } from "./runtime-context.js";
 
 describe("runtime context", () => {
-  it("loads runtime context (legacy Nex v1 injection) from NEXUS_ADAPTER_CONTEXT_PATH", () => {
+  it("loads runtime context from NEXUS_ADAPTER_CONTEXT_PATH", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nexus-adapter-ctx-test-"));
     const ctxPath = path.join(dir, "runtime-context.json");
     fs.writeFileSync(
@@ -18,54 +18,14 @@ describe("runtime context", () => {
         {
           version: 1,
           platform: "discord",
-          account_id: "default",
-          config: { webhook_id: "abc123" },
-          credential: {
-            ref: "discord/default",
-            service: "discord",
-            account: "default",
-            value: "token-123",
-          },
-        },
-        null,
-        2,
-      )}\n`,
-      "utf8",
-    );
-
-    const previous = process.env[ADAPTER_CONTEXT_ENV_VAR];
-    try {
-      process.env[ADAPTER_CONTEXT_ENV_VAR] = ctxPath;
-      const loaded = requireAdapterRuntimeContext();
-      expect(loaded).toMatchObject({
-        platform: "discord",
-        account_id: "default",
-        config: { webhook_id: "abc123" },
-        credential: { kind: "token", ref: "discord/default", value: "token-123" },
-      });
-    } finally {
-      if (previous === undefined) {
-        delete process.env[ADAPTER_CONTEXT_ENV_VAR];
-      } else {
-        process.env[ADAPTER_CONTEXT_ENV_VAR] = previous;
-      }
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("loads runtime context (spec shape) from NEXUS_ADAPTER_CONTEXT_PATH", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nexus-adapter-ctx-test-"));
-    const ctxPath = path.join(dir, "runtime-context.json");
-    fs.writeFileSync(
-      ctxPath,
-      `${JSON.stringify(
-        {
-          platform: "discord",
-          account_id: "echo-bot",
+          connection_id: "echo-bot",
           config: { dm_policy: "allow_owner_only" },
           credential: {
             kind: "token",
             value: "token-456",
+            fields: { token: "token-456" },
+            auth_id: "token",
+            type: "token",
           },
         },
         null,
@@ -80,9 +40,13 @@ describe("runtime context", () => {
       const loaded = requireAdapterRuntimeContext();
       expect(loaded).toMatchObject({
         platform: "discord",
-        account_id: "echo-bot",
+        connection_id: "echo-bot",
         config: { dm_policy: "allow_owner_only" },
-        credential: { kind: "token", value: "token-456" },
+        credential: {
+          kind: "token",
+          value: "token-456",
+          fields: { token: "token-456" },
+        },
       });
     } finally {
       if (previous === undefined) {

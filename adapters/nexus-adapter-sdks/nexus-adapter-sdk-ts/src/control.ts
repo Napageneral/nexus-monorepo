@@ -7,10 +7,10 @@ import {
   AdapterControlInvokeRequestFrameSchema,
   AdapterControlOutputFrameSchema,
   type AdapterControlEndpoint,
-  type AdapterControlEventIngestFrame,
   type AdapterControlInputFrame,
   type AdapterControlInvokeCancelFrame,
   type AdapterControlInvokeError,
+  type AdapterControlRecordIngestFrame,
   type AdapterControlInvokeRequestFrame,
   type AdapterControlOutputFrame,
 } from "./protocol.js";
@@ -127,10 +127,10 @@ export class AdapterControlSession {
     });
   }
 
-  async emitEventIngest(event: Record<string, unknown>): Promise<void> {
-    const frame: AdapterControlEventIngestFrame = {
-      type: "event.ingest",
-      event,
+  async emitRecordIngest(record: Record<string, unknown>): Promise<void> {
+    const frame: AdapterControlRecordIngestFrame = {
+      type: "record.ingest",
+      record,
     };
     await this.send(frame);
   }

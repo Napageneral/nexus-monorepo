@@ -40,34 +40,37 @@ type metricPoint struct {
 }
 
 func main() {
-	nexadapter.Run(nexadapter.Adapter{
-		Operations: nexadapter.AdapterOperations{
-			AdapterInfo:          info,
-			AdapterHealth:        health,
-			AdapterAccountsList:  accounts,
-			EventBackfill:        backfill,
-			AdapterMonitorStart:  monitor,
-		},
-	})
+	nexadapter.Run(nexadapter.DefineAdapter(adapterConfig()))
 }
 
-func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
-	return &nexadapter.AdapterInfo{
+func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
+	return nexadapter.DefineAdapterConfig[struct{}]{
 		Platform: platformID,
 		Name:     adapterName,
 		Version:  adapterVersion,
-		Operations: []nexadapter.AdapterOperation{
-			nexadapter.OpAdapterInfo,
-			nexadapter.OpAdapterHealth,
-			nexadapter.OpAdapterAccountsList,
-			nexadapter.OpEventBackfill,
-			nexadapter.OpAdapterMonitorStart,
+		Connection: nexadapter.ConnectionHandlers[struct{}]{
+			Accounts: func(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterAccount, error) {
+				return accounts(ctx.Context)
+			},
+			Health: func(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth, error) {
+				return health(ctx.Context, ctx.ConnectionID)
+			},
 		},
+		Ingest: nexadapter.IngestHandlers[struct{}]{
+			Monitor: func(ctx nexadapter.AdapterContext[struct{}], emit nexadapter.EmitFunc) error {
+				return monitor(ctx.Context, ctx.ConnectionID, emit)
+			},
+			Backfill: func(ctx nexadapter.AdapterContext[struct{}], since time.Time, emit nexadapter.EmitFunc) error {
+				return backfill(ctx.Context, ctx.ConnectionID, since, emit)
+			},
+		},
+		Methods:           map[string]nexadapter.DeclaredMethod[struct{}]{},
 		CredentialService: "zenoti",
 		MultiAccount:      true,
 		Auth: &nexadapter.AdapterAuthManifest{
 			Methods: []nexadapter.AdapterAuthMethod{
 				{
+					ID:      "zenoti_api_key",
 					Type:    "api_key",
 					Label:   "Enter API Key",
 					Icon:    "key",
@@ -96,16 +99,18 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 						},
 					},
 				},
-					{
-						Type:                  "oauth2",
-						Label:                 "Connect with Zenoti",
-						Icon:                  "oauth",
-						Service:               "zenoti",
-						Scopes:                []string{"appointments:read"},
-						PlatformCredentials:   true,
-						PlatformCredentialURL: nexadapter.PlatformCredentialURL(defaultPlatformCredentialURL),
-					},
 				{
+					ID:                    "zenoti_oauth_managed",
+					Type:                  "oauth2",
+					Label:                 "Connect with Zenoti",
+					Icon:                  "oauth",
+					Service:               "zenoti",
+					Scopes:                []string{"appointments:read"},
+					PlatformCredentials:   true,
+					PlatformCredentialURL: nexadapter.PlatformCredentialURL(defaultPlatformCredentialURL),
+				},
+				{
+					ID:          "zenoti_csv_upload",
 					Type:        "file_upload",
 					Label:       "Upload CSV Export",
 					Icon:        "upload",
@@ -115,7 +120,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			},
 			SetupGuide: "Fast path uses api_key. Provide center_id for API sync/backfill; CSV fallback works without API access.",
 		},
-		PlatformCapabilities: nexadapter.ChannelCapabilities{
+		Capabilities: nexadapter.ChannelCapabilities{
 			TextLimit:             20000,
 			SupportsMarkdown:      true,
 			MarkdownFlavor:        "standard",
@@ -132,7 +137,12 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			SupportsVoiceNotes:    false,
 			SupportsStreamingEdit: false,
 		},
-	}, nil
+	}
+}
+
+func info(ctx context.Context) (*nexadapter.AdapterInfo, error) {
+	adapter := nexadapter.DefineAdapter(adapterConfig())
+	return adapter.Operations.AdapterInfo(ctx)
 }
 
 func accounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {
@@ -146,14 +156,14 @@ func accounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {
 	}, nil
 }
 
-func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, error) {
-	account = nexadapter.FirstNonBlank(strings.TrimSpace(strings.ToLower(account)), "default")
-	creds, err := resolveZenotiCredentials(account)
+func health(ctx context.Context, connectionID string) (*nexadapter.AdapterHealth, error) {
+	connectionID = nexadapter.FirstNonBlank(strings.TrimSpace(strings.ToLower(connectionID)), "default")
+	creds, err := resolveZenotiCredentials(connectionID)
 	if err != nil {
 		return &nexadapter.AdapterHealth{
-			Connected: false,
-			Account:   account,
-			Error:     err.Error(),
+			Connected:    false,
+			ConnectionID: connectionID,
+			Error:        err.Error(),
 		}, nil
 	}
 
@@ -163,15 +173,15 @@ func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, err
 		_, err = fetchAppointmentsWindow(ctx, creds, today, today)
 		if err != nil {
 			return &nexadapter.AdapterHealth{
-				Connected: false,
-				Account:   creds.AccountID,
-				Error:     err.Error(),
+				Connected:    false,
+				ConnectionID: creds.AccountID,
+				Error:        err.Error(),
 			}, nil
 		}
 		return &nexadapter.AdapterHealth{
-			Connected:   true,
-			Account:     creds.AccountID,
-			LastEventAt: time.Now().UnixMilli(),
+			Connected:    true,
+			ConnectionID: creds.AccountID,
+			LastEventAt:  time.Now().UnixMilli(),
 			Details: map[string]any{
 				"center_id": creds.CenterID,
 			},
@@ -182,25 +192,25 @@ func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, err
 	centerIDs, err := fetchZenotiCenters(ctx, creds)
 	if err != nil {
 		return &nexadapter.AdapterHealth{
-			Connected: false,
-			Account:   creds.AccountID,
-			Error:     err.Error(),
+			Connected:    false,
+			ConnectionID: creds.AccountID,
+			Error:        err.Error(),
 		}, nil
 	}
 
 	return &nexadapter.AdapterHealth{
-		Connected:   true,
-		Account:     creds.AccountID,
-		LastEventAt: time.Now().UnixMilli(),
+		Connected:    true,
+		ConnectionID: creds.AccountID,
+		LastEventAt:  time.Now().UnixMilli(),
 		Details: map[string]any{
 			"centers_discovered": len(centerIDs),
 		},
 	}, nil
 }
 
-func backfill(ctx context.Context, account string, since time.Time, emit nexadapter.EmitFunc) error {
-	account = nexadapter.FirstNonBlank(strings.TrimSpace(strings.ToLower(account)), "default")
-	events, _, err := fetchZenotiMetricsAllCenters(ctx, account, since)
+func backfill(ctx context.Context, connectionID string, since time.Time, emit nexadapter.EmitFunc) error {
+	connectionID = nexadapter.FirstNonBlank(strings.TrimSpace(strings.ToLower(connectionID)), "default")
+	events, _, err := fetchZenotiMetricsAllCenters(ctx, connectionID, since)
 	if err != nil {
 		return err
 	}
@@ -210,14 +220,14 @@ func backfill(ctx context.Context, account string, since time.Time, emit nexadap
 	return nil
 }
 
-func monitor(ctx context.Context, account string, emit nexadapter.EmitFunc) error {
-	return nexadapter.PollMonitor(nexadapter.PollConfig{
+func monitor(ctx context.Context, connectionID string, emit nexadapter.EmitFunc) error {
+	return nexadapter.PollMonitor(nexadapter.PollConfig[nexadapter.AdapterInboundRecord]{
 		Interval: 1 * time.Hour,
-		Fetch: func(ctx context.Context, since time.Time) ([]nexadapter.NexusEvent, time.Time, error) {
-			return fetchZenotiMetricsAllCenters(ctx, account, since)
+		Fetch: func(ctx context.Context, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
+			return fetchZenotiMetricsAllCenters(ctx, connectionID, since)
 		},
 		MaxConsecutiveErrors: 5,
-	})(ctx, account, emit)
+	})(ctx, connectionID, emit)
 }
 
 // fetchZenotiCenters discovers all centers/locations via GET /v1/centers.
@@ -248,8 +258,8 @@ func fetchZenotiCenters(ctx context.Context, creds zenotiCredentials) ([]string,
 
 // fetchZenotiMetricsAllCenters fetches metrics across all discovered centers.
 // If a manual center_id is configured, only that center is queried.
-func fetchZenotiMetricsAllCenters(ctx context.Context, account string, since time.Time) ([]nexadapter.NexusEvent, time.Time, error) {
-	creds, err := resolveZenotiCredentials(account)
+func fetchZenotiMetricsAllCenters(ctx context.Context, connectionID string, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
+	creds, err := resolveZenotiCredentials(connectionID)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
@@ -270,7 +280,7 @@ func fetchZenotiMetricsAllCenters(ctx context.Context, account string, since tim
 		nexadapter.LogInfo("discovered %d zenoti center(s)", len(centerIDs))
 	}
 
-	var allEvents []nexadapter.NexusEvent
+	var allEvents []nexadapter.AdapterInboundRecord
 	for _, centerID := range centerIDs {
 		centerCreds := creds
 		centerCreds.CenterID = centerID
@@ -283,7 +293,7 @@ func fetchZenotiMetricsAllCenters(ctx context.Context, account string, since tim
 
 		// Tag all events with clinic_id for multi-location support.
 		for i := range events {
-			events[i].Metadata["clinic_id"] = centerID
+			events[i].Payload.Metadata["clinic_id"] = centerID
 		}
 		allEvents = append(allEvents, events...)
 	}
@@ -292,7 +302,7 @@ func fetchZenotiMetricsAllCenters(ctx context.Context, account string, since tim
 }
 
 // fetchZenotiMetricsForCenter fetches and aggregates metrics for a single center.
-func fetchZenotiMetricsForCenter(ctx context.Context, creds zenotiCredentials, since time.Time) ([]nexadapter.NexusEvent, error) {
+func fetchZenotiMetricsForCenter(ctx context.Context, creds zenotiCredentials, since time.Time) ([]nexadapter.AdapterInboundRecord, error) {
 	windowStart := truncateDay(since.UTC())
 	windowEnd := truncateDay(time.Now().UTC())
 
@@ -316,7 +326,7 @@ func fetchZenotiMetricsForCenter(ctx context.Context, creds zenotiCredentials, s
 		windowStart = chunkEnd.AddDate(0, 0, 1)
 	}
 
-	var events []nexadapter.NexusEvent
+	var events []nexadapter.AdapterInboundRecord
 	for _, point := range sortedMetricPoints(aggregates) {
 		if point.Value < 0 {
 			continue
@@ -500,7 +510,7 @@ func sortedMetricPoints(points map[string]*metricPoint) []metricPoint {
 	return result
 }
 
-func buildZenotiMetricEvents(creds zenotiCredentials, point metricPoint) []nexadapter.NexusEvent {
+func buildZenotiMetricEvents(creds zenotiCredentials, point metricPoint) []nexadapter.AdapterInboundRecord {
 	metadataToken := point.MetadataKey
 	if strings.TrimSpace(metadataToken) == "" {
 		metadataToken = "total"
@@ -517,13 +527,14 @@ func buildZenotiMetricEvents(creds zenotiCredentials, point metricPoint) []nexad
 		":",
 	)
 	event := nexadapter.
-		NewEvent(platformID, eventID).
+		NewRecord(platformID, eventID).
 		WithTimestampUnixMs(nexadapter.MetricTimestamp(point.Date, nil)).
 		WithContent(fmt.Sprintf("%s=%g", point.MetricName, point.Value)).
 		WithContentType("text").
 		WithSender(platformID, "Zenoti").
 		WithContainer("metrics", "channel").
-		WithAccount(creds.AccountID).
+		WithConnection(creds.AccountID).
+		WithSpace(creds.CenterID, creds.CenterID).
 		WithMetadata("adapter_id", platformID).
 		WithMetadata("center_id", creds.CenterID).
 		WithMetadata("date", point.Date).
@@ -532,10 +543,10 @@ func buildZenotiMetricEvents(creds zenotiCredentials, point metricPoint) []nexad
 		Build()
 
 	if strings.TrimSpace(point.MetadataKey) != "" {
-		event.Metadata["metadata_key"] = point.MetadataKey
+		event.Payload.Metadata["metadata_key"] = point.MetadataKey
 	}
 
-	return []nexadapter.NexusEvent{event}
+	return []nexadapter.AdapterInboundRecord{event}
 }
 
 func appointmentDate(row map[string]any) string {
@@ -635,8 +646,8 @@ func resolveZenotiCredentials(account string) (zenotiCredentials, error) {
 
 	runtimeContext, err := nexadapter.LoadRuntimeContextFromEnv()
 	if err == nil && runtimeContext != nil {
-		if strings.TrimSpace(runtimeContext.AccountID) != "" {
-			resolvedAccount = nexadapter.FirstNonBlank(strings.TrimSpace(strings.ToLower(runtimeContext.AccountID)), "default")
+		if strings.TrimSpace(runtimeContext.ConnectionID) != "" {
+			resolvedAccount = nexadapter.FirstNonBlank(strings.TrimSpace(strings.ToLower(runtimeContext.ConnectionID)), "default")
 		}
 		if runtimeContext.Credential != nil {
 			fields = runtimeContext.Credential.Fields
@@ -819,4 +830,3 @@ func floatValue(input any) (float64, bool) {
 		return 0, false
 	}
 }
-

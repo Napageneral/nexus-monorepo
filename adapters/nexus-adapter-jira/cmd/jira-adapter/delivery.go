@@ -20,7 +20,7 @@ type jiraDeliveryRoute struct {
 }
 
 func send(ctx context.Context, req nexadapter.SendRequest) (*nexadapter.DeliveryResult, error) {
-	client, cfg, err := loadJiraClientFromRuntime()
+	cfg, runtimeCtx, err := loadConnectionConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -30,9 +30,19 @@ func send(ctx context.Context, req nexadapter.SendRequest) (*nexadapter.Delivery
 		return failedDeliveryResult(err, len(req.Text)), nil
 	}
 
-	route, err := resolveDeliveryRoute(req.Target, cfg, client, action.Action)
+	runtimeSite := ""
+	if runtimeCtx.Credential != nil {
+		runtimeSite = normalizeSite(runtimeCtx.Credential.Fields["site"])
+	}
+
+	route, err := resolveDeliveryRoute(req.Target, cfg, runtimeSite, action.Action)
 	if err != nil {
 		return failedDeliveryResult(err, len(req.Text)), nil
+	}
+
+	client, _, err := loadJiraClientFromRuntime()
+	if err != nil {
+		return nil, err
 	}
 
 	switch action.Action {
@@ -257,7 +267,7 @@ func parseDeliveryAction(raw string) (deliveryAction, error) {
 	return action, nil
 }
 
-func resolveDeliveryRoute(target nexadapter.DeliveryTarget, cfg *jiraConnectionConfig, client *jiraClient, action string) (jiraDeliveryRoute, error) {
+func resolveDeliveryRoute(target nexadapter.DeliveryTarget, cfg *jiraConnectionConfig, site string, action string) (jiraDeliveryRoute, error) {
 	connectionID := strings.TrimSpace(target.ConnectionID)
 	if connectionID == "" {
 		return jiraDeliveryRoute{}, errors.New("delivery target missing connection_id")
@@ -270,8 +280,8 @@ func resolveDeliveryRoute(target nexadapter.DeliveryTarget, cfg *jiraConnectionC
 	if !strings.EqualFold(strings.TrimSpace(channel.Platform), "jira") {
 		return jiraDeliveryRoute{}, fmt.Errorf("delivery target platform must be jira, got %q", channel.Platform)
 	}
-	if channel.SpaceID != "" && !strings.EqualFold(strings.TrimSpace(channel.SpaceID), strings.TrimSpace(client.site)) {
-		return jiraDeliveryRoute{}, fmt.Errorf("delivery target space_id %q does not match runtime site %q", channel.SpaceID, client.site)
+	if channel.SpaceID != "" && !strings.EqualFold(strings.TrimSpace(channel.SpaceID), strings.TrimSpace(site)) {
+		return jiraDeliveryRoute{}, fmt.Errorf("delivery target space_id %q does not match runtime site %q", channel.SpaceID, site)
 	}
 	if kind := strings.TrimSpace(channel.ContainerKind); kind != "" && kind != "group" {
 		return jiraDeliveryRoute{}, fmt.Errorf("jira delivery target container_kind must be group, got %q", channel.ContainerKind)

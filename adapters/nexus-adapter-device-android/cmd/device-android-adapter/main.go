@@ -42,40 +42,46 @@ var androidCommands = []string{
 }
 
 func main() {
-	nexadapter.Run(nexadapter.Adapter{
-		Operations: nexadapter.AdapterOperations{
-			AdapterInfo:         info,
-			AdapterHealth:       health,
-			AdapterAccountsList: accounts,
-			AdapterControlStart: controlStart,
-			AdapterSetupStart:   setupStart,
-			AdapterSetupSubmit:  setupSubmit,
-			AdapterSetupStatus:  setupStatus,
-			AdapterSetupCancel:  setupCancel,
-		},
-	})
+	nexadapter.Run(nexadapter.DefineAdapter(adapterConfig()))
 }
 
-func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
-	return &nexadapter.AdapterInfo{
+func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
+	return nexadapter.DefineAdapterConfig[struct{}]{
 		Platform: platformID,
 		Name:     adapterName,
 		Version:  adapterVersion,
-		Operations: []nexadapter.AdapterOperation{
-			nexadapter.OpAdapterInfo,
-			nexadapter.OpAdapterHealth,
-			nexadapter.OpAdapterAccountsList,
-			nexadapter.OpAdapterControlStart,
-			nexadapter.OpAdapterSetupStart,
-			nexadapter.OpAdapterSetupSubmit,
-			nexadapter.OpAdapterSetupStatus,
-			nexadapter.OpAdapterSetupCancel,
+		Connection: nexadapter.ConnectionHandlers[struct{}]{
+			Accounts: func(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterAccount, error) {
+				return accounts(ctx.Context)
+			},
+			Health: func(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth, error) {
+				return health(ctx.Context, ctx.ConnectionID)
+			},
 		},
+		Setup: nexadapter.SetupHandlers[struct{}]{
+			Start: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+				return setupStart(ctx.Context, req)
+			},
+			Submit: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+				return setupSubmit(ctx.Context, req)
+			},
+			Status: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+				return setupStatus(ctx.Context, req)
+			},
+			Cancel: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+				return setupCancel(ctx.Context, req)
+			},
+		},
+		Control: func(ctx context.Context, connectionID string, session *nexadapter.ControlSession) error {
+			return controlStart(ctx, connectionID, session)
+		},
+		Methods:           map[string]nexadapter.DeclaredMethod[struct{}]{},
 		CredentialService: "device",
 		MultiAccount:      true,
 		Auth: &nexadapter.AdapterAuthManifest{
 			Methods: []nexadapter.AdapterAuthMethod{
 				{
+					ID:      "device_android_pairing",
 					Type:    "custom_flow",
 					Label:   "Connect Android Companion",
 					Icon:    "android",
@@ -85,7 +91,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			},
 			SetupGuide: "Install Nexus Android app, grant required permissions (camera/microphone/location/SMS as needed), then approve device pairing.",
 		},
-		PlatformCapabilities: nexadapter.ChannelCapabilities{
+		Capabilities: nexadapter.ChannelCapabilities{
 			TextLimit:             20000,
 			SupportsMarkdown:      false,
 			MarkdownFlavor:        "standard",
@@ -102,7 +108,12 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			SupportsVoiceNotes:    false,
 			SupportsStreamingEdit: false,
 		},
-	}, nil
+	}
+}
+
+func info(ctx context.Context) (*nexadapter.AdapterInfo, error) {
+	adapter := nexadapter.DefineAdapter(adapterConfig())
+	return adapter.Operations.AdapterInfo(ctx)
 }
 
 func accounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {
@@ -116,11 +127,11 @@ func accounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {
 	}, nil
 }
 
-func health(_ context.Context, account string) (*nexadapter.AdapterHealth, error) {
+func health(_ context.Context, connectionID string) (*nexadapter.AdapterHealth, error) {
 	return &nexadapter.AdapterHealth{
-		Connected:   envBool("NEXUS_DEVICE_ANDROID_CONNECTED", true),
-		Account:     fallbackAccount(account),
-		LastEventAt: time.Now().UnixMilli(),
+		Connected:    envBool("NEXUS_DEVICE_ANDROID_CONNECTED", true),
+		ConnectionID: fallbackConnectionID(connectionID),
+		LastEventAt:  time.Now().UnixMilli(),
 		Details: map[string]any{
 			"platform":   platformID,
 			"mode":       "device_control",
@@ -131,9 +142,9 @@ func health(_ context.Context, account string) (*nexadapter.AdapterHealth, error
 	}, nil
 }
 
-func controlStart(ctx context.Context, account string, session *nexadapter.ControlSession) error {
+func controlStart(ctx context.Context, connectionID string, session *nexadapter.ControlSession) error {
 	endpoint := nexadapter.AdapterControlEndpoint{
-		EndpointID:  endpointID("NEXUS_DEVICE_ANDROID_ENDPOINT_ID", "android", account),
+		EndpointID:  endpointID("NEXUS_DEVICE_ANDROID_ENDPOINT_ID", "android", connectionID),
 		DisplayName: "Android Companion",
 		Platform:    platformID,
 		Caps:        append([]string{}, androidCaps...),
@@ -170,7 +181,7 @@ func controlStart(ctx context.Context, account string, session *nexadapter.Contr
 					"platform":         platformID,
 					"endpoint_id":      endpoint.EndpointID,
 					"command":          frame.Command,
-					"account":          fallbackAccount(account),
+					"connection":       fallbackConnectionID(connectionID),
 					"received_payload": frame.Payload,
 					"status":           "stubbed",
 				},
@@ -190,14 +201,14 @@ func setupSubmit(_ context.Context, req nexadapter.AdapterSetupRequest) (*nexada
 		return requiresSetupInput(req, "Setup incomplete: install companion, grant permissions, and approve pairing first."), nil
 	}
 	return &nexadapter.AdapterSetupResult{
-		Status:    nexadapter.SetupStatusCompleted,
-		SessionID: setupSessionID(req.SessionID),
-		Account:   fallbackAccount(req.Account),
-		Service:   "device-android",
-		Message:   "Android companion setup completed.",
+		Status:       nexadapter.SetupStatusCompleted,
+		SessionID:    setupSessionID(req.SessionID),
+		ConnectionID: fallbackConnectionID(req.ConnectionID),
+		Service:      "device-android",
+		Message:      "Android companion setup completed.",
 		Metadata: map[string]any{
 			"platform":  platformID,
-			"endpoint":  endpointID("NEXUS_DEVICE_ANDROID_ENDPOINT_ID", "android", req.Account),
+			"endpoint":  endpointID("NEXUS_DEVICE_ANDROID_ENDPOINT_ID", "android", req.ConnectionID),
 			"completed": true,
 		},
 	}, nil
@@ -207,7 +218,7 @@ func setupStatus(_ context.Context, req nexadapter.AdapterSetupRequest) (*nexada
 	return &nexadapter.AdapterSetupResult{
 		Status:       nexadapter.SetupStatusPending,
 		SessionID:    setupSessionID(req.SessionID),
-		Account:      fallbackAccount(req.Account),
+		ConnectionID: fallbackConnectionID(req.ConnectionID),
 		Service:      "device-android",
 		Message:      "Awaiting setup confirmation.",
 		Instructions: "Submit confirm_companion_installed=yes, confirm_permissions_granted=yes, and confirm_paired=yes.",
@@ -217,11 +228,11 @@ func setupStatus(_ context.Context, req nexadapter.AdapterSetupRequest) (*nexada
 
 func setupCancel(_ context.Context, req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
 	return &nexadapter.AdapterSetupResult{
-		Status:    nexadapter.SetupStatusCancelled,
-		SessionID: setupSessionID(req.SessionID),
-		Account:   fallbackAccount(req.Account),
-		Service:   "device-android",
-		Message:   "Android companion setup cancelled.",
+		Status:       nexadapter.SetupStatusCancelled,
+		SessionID:    setupSessionID(req.SessionID),
+		ConnectionID: fallbackConnectionID(req.ConnectionID),
+		Service:      "device-android",
+		Message:      "Android companion setup cancelled.",
 	}, nil
 }
 
@@ -229,7 +240,7 @@ func requiresSetupInput(req nexadapter.AdapterSetupRequest, message string) *nex
 	return &nexadapter.AdapterSetupResult{
 		Status:       nexadapter.SetupStatusRequiresInput,
 		SessionID:    setupSessionID(req.SessionID),
-		Account:      fallbackAccount(req.Account),
+		ConnectionID: fallbackConnectionID(req.ConnectionID),
 		Service:      "device-android",
 		Message:      message,
 		Instructions: "Install the Android companion app, grant required permissions, then approve pairing.",
@@ -310,15 +321,15 @@ func setupSessionID(sessionID string) string {
 	return trimmed
 }
 
-func endpointID(envName, prefix, account string) string {
+func endpointID(envName, prefix, connectionID string) string {
 	if value := strings.TrimSpace(os.Getenv(envName)); value != "" {
 		return value
 	}
-	return fmt.Sprintf("%s-%s", prefix, sanitizeToken(fallbackAccount(account)))
+	return fmt.Sprintf("%s-%s", prefix, sanitizeToken(fallbackConnectionID(connectionID)))
 }
 
-func fallbackAccount(account string) string {
-	trimmed := strings.TrimSpace(strings.ToLower(account))
+func fallbackConnectionID(connectionID string) string {
+	trimmed := strings.TrimSpace(strings.ToLower(connectionID))
 	if trimmed == "" {
 		return "default"
 	}

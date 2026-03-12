@@ -1,12 +1,15 @@
 # nexus-adapter-zenoti-emr
 
-Nexus adapter wrapper for Zenoti EMR metrics.
+Shared Nex adapter for Zenoti EMR metrics.
 
-## Fast Path
+## Package Lifecycle
 
-- API key auth (`api_key`)
-- Optional `center_id` for multi-location scope
-- CSV fallback for manual imports
+This adapter is packaged and installed through the canonical Nex adapter package
+flow.
+
+- package manifest: `adapter.nexus.json`
+- release script: `scripts/package-release.sh`
+- package docs: `docs/`
 
 ## Build
 

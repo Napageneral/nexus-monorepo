@@ -57,7 +57,7 @@ describe("whatsapp adapter contract smoke", () => {
     const parsed = JSON.parse(line ?? "{}");
     expect(parsed.platform).toBe("whatsapp");
     expect(parsed.operations).toContain("adapter.monitor.start");
-    expect(parsed.operations).toContain("delivery.send");
+    expect(parsed.operations).toContain("channels.send");
   });
 
   it("reports disconnected health when auth session is missing", async () => {
@@ -69,7 +69,7 @@ describe("whatsapp adapter contract smoke", () => {
 
     try {
       const code = await runAdapter(whatsappAdapter, {
-        argv: ["node", "adapter", "adapter.health", "--account", "default"],
+        argv: ["node", "adapter", "adapter.health", "--connection", "default"],
         stdout: stdout.stream,
         stderr: stderr.stream,
         patchConsole: false,
@@ -85,7 +85,7 @@ describe("whatsapp adapter contract smoke", () => {
         .find(Boolean);
       const parsed = JSON.parse(line ?? "{}");
       expect(parsed.connected).toBe(false);
-      expect(parsed.account).toBe("default");
+      expect(parsed.connection_id).toBe("default");
     } finally {
       if (previousAuthDir) {
         process.env.NEXUS_WHATSAPP_AUTH_DIR = previousAuthDir;
@@ -120,17 +120,13 @@ describe("whatsapp adapter contract smoke", () => {
     );
 
     expect(event).toBeTruthy();
-    expect(event?.platform).toBe("whatsapp");
-    expect(event?.account_id).toBe("default");
-    expect(event?.container_kind).toBe("group");
-    expect(event?.container_id).toBe("120363401234567890@g.us");
-    expect(event?.sender_id).toBe("15550001111@s.whatsapp.net");
-    expect(event?.reply_to_id).toBe("PREV999");
-    expect(event?.content).toBe("hello from group");
-
-    const asRecord = event as unknown as Record<string, unknown>;
-    expect(asRecord.channel).toBeUndefined();
-    expect(asRecord.peer_id).toBeUndefined();
-    expect(asRecord.peer_kind).toBeUndefined();
+    expect(event?.operation).toBe("record.ingest");
+    expect(event?.routing.platform).toBe("whatsapp");
+    expect(event?.routing.connection_id).toBe("default");
+    expect(event?.routing.container_kind).toBe("group");
+    expect(event?.routing.container_id).toBe("120363401234567890@g.us");
+    expect(event?.routing.sender_id).toBe("15550001111@s.whatsapp.net");
+    expect(event?.routing.reply_to_id).toBe("PREV999");
+    expect(event?.payload.content).toBe("hello from group");
   });
 });

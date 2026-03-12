@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-// --- Adapter Identity & Registration ---
-
 export const AdapterOperationSchema = z.enum([
   "adapter.info",
   "adapter.health",
@@ -12,40 +10,38 @@ export const AdapterOperationSchema = z.enum([
   "adapter.setup.submit",
   "adapter.setup.status",
   "adapter.setup.cancel",
-  "event.backfill",
-  "delivery.send",
-  "delivery.stream",
-  "delivery.react",
-  "delivery.edit",
-  "delivery.delete",
-  "delivery.poll",
+  "records.backfill",
+  "channels.send",
+  "channels.stream",
+  "channels.react",
+  "channels.edit",
+  "channels.delete",
 ]);
 
 export type AdapterOperation = z.infer<typeof AdapterOperationSchema>;
 
-// ChannelCapabilities is for agent context + adapter self-description via `info`.
-// Keep this aligned with `nexus-adapter-sdk-go/types.go` JSON tags.
 export const ChannelCapabilitiesSchema = z
   .object({
-    text_limit: z.number().int().nonnegative(),
+    text_limit: z.number().int().nonnegative().optional(),
     caption_limit: z.number().int().nonnegative().optional(),
-
-    supports_markdown: z.boolean(),
+    supports_markdown: z.boolean().optional(),
     markdown_flavor: z.string().optional(),
-    supports_tables: z.boolean(),
-    supports_code_blocks: z.boolean(),
-
-    supports_embeds: z.boolean(),
-    supports_threads: z.boolean(),
-    supports_reactions: z.boolean(),
-    supports_polls: z.boolean(),
-    supports_buttons: z.boolean(),
-    supports_edit: z.boolean(),
-    supports_delete: z.boolean(),
-    supports_media: z.boolean(),
-    supports_voice_notes: z.boolean(),
-
-    supports_streaming_edit: z.boolean(),
+    supports_tables: z.boolean().optional(),
+    supports_code_blocks: z.boolean().optional(),
+    supports_embeds: z.boolean().optional(),
+    supports_threads: z.boolean().optional(),
+    supports_reactions: z.boolean().optional(),
+    supports_polls: z.boolean().optional(),
+    supports_buttons: z.boolean().optional(),
+    supports_edit: z.boolean().optional(),
+    supports_delete: z.boolean().optional(),
+    supports_media: z.boolean().optional(),
+    supports_voice_notes: z.boolean().optional(),
+    supports_streaming_edit: z.boolean().optional(),
+    supports_ptt: z.boolean().optional(),
+    supports_streaming: z.boolean().optional(),
+    max_message_length: z.number().int().positive().optional(),
+    max_attachments: z.number().int().positive().optional(),
   })
   .catchall(z.unknown());
 
@@ -66,6 +62,7 @@ export const AdapterAuthFieldSchema = z.object({
 });
 
 export const AdapterAuthMethodOAuthSchema = z.object({
+  id: z.string(),
   type: z.literal("oauth2"),
   label: z.string(),
   icon: z.string(),
@@ -76,6 +73,7 @@ export const AdapterAuthMethodOAuthSchema = z.object({
 });
 
 export const AdapterAuthMethodApiKeySchema = z.object({
+  id: z.string(),
   type: z.literal("api_key"),
   label: z.string(),
   icon: z.string(),
@@ -84,6 +82,7 @@ export const AdapterAuthMethodApiKeySchema = z.object({
 });
 
 export const AdapterAuthMethodFileUploadSchema = z.object({
+  id: z.string(),
   type: z.literal("file_upload"),
   label: z.string(),
   icon: z.string(),
@@ -93,6 +92,7 @@ export const AdapterAuthMethodFileUploadSchema = z.object({
 });
 
 export const AdapterAuthMethodCustomFlowSchema = z.object({
+  id: z.string(),
   type: z.literal("custom_flow"),
   label: z.string(),
   icon: z.string(),
@@ -112,18 +112,63 @@ export const AdapterAuthManifestSchema = z.object({
   setupGuide: z.string().optional(),
 });
 
+export const AdapterMethodContextHintValueSchema = z.object({
+  value: z.unknown(),
+  source: z.string(),
+  confidence: z.enum(["exact", "derived", "weak"]),
+});
+
+export const AdapterMethodContextHintsSchema = z.object({
+  params: z.record(z.string(), AdapterMethodContextHintValueSchema),
+});
+
+export const AdapterMethodOriginSchema = z.object({
+  kind: z.enum(["core", "app", "adapter"]),
+  package_id: z.string().nullable(),
+  package_version: z.string().nullable(),
+  declaration_mode: z.enum(["manifest", "openapi", "builtin"]),
+  declaration_source: z.string(),
+  namespace: z.string(),
+});
+
+export const AdapterMethodSchema = z.object({
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  action: z.enum(["read", "write"]).optional(),
+  params: z.record(z.string(), z.unknown()).nullable().optional(),
+  response: z.record(z.string(), z.unknown()).nullable().optional(),
+  surfaces: z.array(z.enum(["ws.control", "http.control"])).optional(),
+  connection_required: z.boolean().optional(),
+  mutates_remote: z.boolean().optional(),
+  context_hints: AdapterMethodContextHintsSchema.optional(),
+  origin: AdapterMethodOriginSchema.optional(),
+});
+
+export const AdapterMethodCatalogSchema = z.object({
+  source: z.enum(["manifest", "openapi"]).optional(),
+  document: z.string().optional(),
+  namespace: z.string().optional(),
+});
+
 export const AdapterInfoSchema = z.object({
   platform: z.string(),
   name: z.string(),
   version: z.string(),
   operations: z.array(AdapterOperationSchema),
+  methods: z.array(AdapterMethodSchema),
   credential_service: z.string().optional(),
   multi_account: z.boolean(),
   platform_capabilities: ChannelCapabilitiesSchema,
   auth: AdapterAuthManifestSchema.optional(),
+  methodCatalog: AdapterMethodCatalogSchema.optional(),
 });
 
 export type AdapterInfo = z.infer<typeof AdapterInfoSchema>;
+export type AdapterMethod = z.infer<typeof AdapterMethodSchema>;
+export type AdapterMethodCatalog = z.infer<typeof AdapterMethodCatalogSchema>;
+export type AdapterMethodContextHintValue = z.infer<typeof AdapterMethodContextHintValueSchema>;
+export type AdapterMethodContextHints = z.infer<typeof AdapterMethodContextHintsSchema>;
+export type AdapterMethodOrigin = z.infer<typeof AdapterMethodOriginSchema>;
 export type AdapterAuthField = z.infer<typeof AdapterAuthFieldSchema>;
 export type AdapterAuthMethodOAuth = z.infer<typeof AdapterAuthMethodOAuthSchema>;
 export type AdapterAuthMethodApiKey = z.infer<typeof AdapterAuthMethodApiKeySchema>;
@@ -132,70 +177,75 @@ export type AdapterAuthMethodCustomFlow = z.infer<typeof AdapterAuthMethodCustom
 export type AdapterAuthMethod = z.infer<typeof AdapterAuthMethodSchema>;
 export type AdapterAuthManifest = z.infer<typeof AdapterAuthManifestSchema>;
 
-// --- NexusEvent (Inbound) ---
-
 export const AttachmentSchema = z.object({
   id: z.string(),
-  filename: z.string(),
-  content_type: z.string(),
-  size_bytes: z.number().int().nonnegative().optional(),
+  filename: z.string().optional(),
+  mime_type: z.string(),
+  media_type: z.string().optional(),
+  size: z.number().int().nonnegative().optional(),
   url: z.string().optional(),
-  path: z.string().optional(),
+  local_path: z.string().optional(),
+  content_hash: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type Attachment = z.infer<typeof AttachmentSchema>;
 
-export const ContainerKindSchema = z.enum(["dm", "direct", "group", "channel"]);
-export type ContainerKind = z.infer<typeof ContainerKindSchema>;
-// Deprecated alias retained for transition.
-export const PeerKindSchema = ContainerKindSchema;
-export type PeerKind = ContainerKind;
+export const RecipientSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  avatar_url: z.string().optional(),
+});
 
-export const ContentTypeSchema = z.enum([
-  "text",
-  "image",
-  "audio",
-  "video",
-  "file",
-  "reaction",
-  "membership",
-]);
+export type Recipient = z.infer<typeof RecipientSchema>;
+
+export const ContentTypeSchema = z.enum(["text", "reaction", "membership"]);
 export type ContentType = z.infer<typeof ContentTypeSchema>;
 
-// NexusEvent is the normalized event format that all adapters emit.
-// One JSON object per line on stdout (JSONL).
-export const NexusEventSchema = z.object({
-  // Identity
-  event_id: z.string(), // "{platform}:{source_id}"
-  timestamp: z.number().int(), // Unix ms
+export const ContainerKindSchema = z.enum(["direct", "group"]);
+export type ContainerKind = z.infer<typeof ContainerKindSchema>;
 
-  // Content
-  content: z.string(),
-  content_type: ContentTypeSchema,
-  attachments: z.array(AttachmentSchema).optional(),
-
-  // Routing context
+export const AdapterInboundRoutingSchema = z.object({
+  adapter: z.string().optional(),
   platform: z.string(),
-  account_id: z.string(),
+  connection_id: z.string(),
   sender_id: z.string(),
   sender_name: z.string().optional(),
+  receiver_id: z.string().optional(),
+  receiver_name: z.string().optional(),
   space_id: z.string().optional(),
   space_name: z.string().optional(),
-  container_id: z.string(),
   container_kind: ContainerKindSchema,
+  container_id: z.string(),
   container_name: z.string().optional(),
   thread_id: z.string().optional(),
   thread_name: z.string().optional(),
   reply_to_id: z.string().optional(),
-
-  // Platform metadata
   metadata: z.record(z.string(), z.unknown()).optional(),
-  delivery_metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
-export type NexusEvent = z.infer<typeof NexusEventSchema>;
+export type AdapterInboundRouting = z.infer<typeof AdapterInboundRoutingSchema>;
 
-// --- Outbound Delivery ---
+export const AdapterInboundPayloadSchema = z.object({
+  external_record_id: z.string(),
+  timestamp: z.number().int(),
+  content: z.string(),
+  content_type: ContentTypeSchema,
+  reply_to_id: z.string().optional(),
+  attachments: z.array(AttachmentSchema).optional(),
+  recipients: z.array(z.string()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export type AdapterInboundPayload = z.infer<typeof AdapterInboundPayloadSchema>;
+
+export const AdapterInboundRecordSchema = z.object({
+  operation: z.literal("record.ingest"),
+  routing: AdapterInboundRoutingSchema,
+  payload: AdapterInboundPayloadSchema,
+});
+
+export type AdapterInboundRecord = z.infer<typeof AdapterInboundRecordSchema>;
 
 export const DeliveryErrorTypeSchema = z.enum([
   "rate_limited",
@@ -209,9 +259,9 @@ export const DeliveryErrorTypeSchema = z.enum([
 export type DeliveryErrorType = z.infer<typeof DeliveryErrorTypeSchema>;
 
 export const DeliveryErrorSchema = z.object({
-  type: DeliveryErrorTypeSchema,
+  type: DeliveryErrorTypeSchema.optional(),
   message: z.string(),
-  retry: z.boolean(),
+  retry: z.boolean().optional(),
   retry_after_ms: z.number().int().nonnegative().optional(),
   details: z.record(z.string(), z.unknown()).optional(),
 });
@@ -223,36 +273,47 @@ export const DeliveryResultSchema = z.object({
   message_ids: z.array(z.string()),
   chunks_sent: z.number().int().nonnegative(),
   total_chars: z.number().int().nonnegative().optional(),
-  error: DeliveryErrorSchema.optional(),
+  error: z.union([z.string(), DeliveryErrorSchema]).optional(),
 });
 
 export type DeliveryResult = z.infer<typeof DeliveryResultSchema>;
 
+export const ChannelRefSchema = z.object({
+  platform: z.string(),
+  space_id: z.string().optional(),
+  container_kind: ContainerKindSchema.optional(),
+  container_id: z.string().optional(),
+  thread_id: z.string().optional(),
+});
+
+export type ChannelRef = z.infer<typeof ChannelRefSchema>;
+
+export const DeliveryTargetSchema = z.object({
+  connection_id: z.string(),
+  channel: ChannelRefSchema,
+  reply_to_id: z.string().optional(),
+});
+
+export type DeliveryTarget = z.infer<typeof DeliveryTargetSchema>;
+
 export const SendRequestSchema = z.object({
-  account: z.string(),
-  to: z.string(),
+  target: DeliveryTargetSchema,
   text: z.string().optional(),
   media: z.string().optional(),
   caption: z.string().optional(),
-  reply_to_id: z.string().optional(),
-  thread_id: z.string().optional(),
 });
 
 export type SendRequest = z.infer<typeof SendRequestSchema>;
 
-// --- Health ---
-
 export const AdapterHealthSchema = z.object({
   connected: z.boolean(),
-  account: z.string(),
+  connection_id: z.string(),
   last_event_at: z.number().int().optional(),
   error: z.string().optional(),
   details: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type AdapterHealth = z.infer<typeof AdapterHealthSchema>;
-
-// --- Accounts ---
 
 export const AdapterAccountSchema = z.object({
   id: z.string(),
@@ -262,8 +323,6 @@ export const AdapterAccountSchema = z.object({
 });
 
 export type AdapterAccount = z.infer<typeof AdapterAccountSchema>;
-
-// --- Adapter Control Session Protocol ---
 
 export const AdapterControlEndpointSchema = z.object({
   endpoint_id: z.string(),
@@ -348,39 +407,29 @@ export type AdapterControlInvokeResultFrame = z.infer<
   typeof AdapterControlInvokeResultFrameSchema
 >;
 
-export const AdapterControlEventIngestFrameSchema = z.object({
-  type: z.literal("event.ingest"),
-  event: z.record(z.string(), z.unknown()),
+export const AdapterControlRecordIngestFrameSchema = z.object({
+  type: z.literal("record.ingest"),
+  record: z.record(z.string(), z.unknown()),
 });
 
-export type AdapterControlEventIngestFrame = z.infer<typeof AdapterControlEventIngestFrameSchema>;
+export type AdapterControlRecordIngestFrame = z.infer<
+  typeof AdapterControlRecordIngestFrameSchema
+>;
 
 export const AdapterControlOutputFrameSchema = z.discriminatedUnion("type", [
   AdapterControlEndpointUpsertFrameSchema,
   AdapterControlEndpointRemoveFrameSchema,
   AdapterControlInvokeResultFrameSchema,
-  AdapterControlEventIngestFrameSchema,
+  AdapterControlRecordIngestFrameSchema,
 ]);
 
 export type AdapterControlOutputFrame = z.infer<typeof AdapterControlOutputFrameSchema>;
-
-// --- Streaming Protocol ---
-
-export const DeliveryTargetSchema = z.object({
-  platform: z.string(),
-  account_id: z.string(),
-  to: z.string(),
-  thread_id: z.string().optional(),
-  reply_to_id: z.string().optional(),
-});
-
-export type DeliveryTarget = z.infer<typeof DeliveryTargetSchema>;
 
 export const StreamEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("stream_start"),
     runId: z.string(),
-    sessionLabel: z.string(),
+    session_id: z.string().optional(),
     target: DeliveryTargetSchema,
   }),
   z.object({ type: z.literal("token"), text: z.string() }),
@@ -400,7 +449,7 @@ export const StreamEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("stream_error"),
     error: z.string(),
-    partial: z.boolean(),
+    partial: z.boolean().optional(),
   }),
 ]);
 
@@ -416,6 +465,7 @@ export const AdapterStreamStatusSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("message_sent"), messageId: z.string(), final: z.boolean() }),
   z.object({ type: z.literal("delivery_complete"), messageIds: z.array(z.string()) }),
   z.object({ type: z.literal("delivery_error"), error: z.string() }),
+  z.object({ type: z.literal("error"), error: z.string() }),
 ]);
 
 export type AdapterStreamStatus = z.infer<typeof AdapterStreamStatusSchema>;
@@ -432,7 +482,7 @@ export const AdapterSetupResultSchema = z
   .object({
     status: AdapterSetupStatusSchema,
     session_id: z.string().optional(),
-    account: z.string().optional(),
+    connection_id: z.string().optional(),
     service: z.string().optional(),
     message: z.string().optional(),
     instructions: z.string().optional(),

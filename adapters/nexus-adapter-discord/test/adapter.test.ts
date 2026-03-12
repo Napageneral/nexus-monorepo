@@ -44,7 +44,7 @@ describe("discord adapter contract smoke", () => {
 
     const operations = Array.isArray(payload.operations) ? payload.operations : [];
     expect(operations).toContain("adapter.monitor.start");
-    expect(operations).toContain("delivery.send");
+    expect(operations).toContain("channels.send");
 
     const auth = (payload.auth ?? {}) as Record<string, unknown>;
     const methods = Array.isArray(auth.methods) ? auth.methods : [];
@@ -64,7 +64,7 @@ describe("discord adapter contract smoke", () => {
         {
           version: 1,
           platform: "discord",
-          account_id: "default",
+          connection_id: "default",
           config: {},
           credential: {
             kind: "token",
@@ -81,7 +81,7 @@ describe("discord adapter contract smoke", () => {
     );
 
     try {
-      const result = runDiscordAdapter(["adapter.accounts.list", "--account", "default"], {
+      const result = runDiscordAdapter(["adapter.accounts.list", "--connection", "default"], {
         ...process.env,
         NEXUS_ADAPTER_CONTEXT_PATH: contextPath,
       });

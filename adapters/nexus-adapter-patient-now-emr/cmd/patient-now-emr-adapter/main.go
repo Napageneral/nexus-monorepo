@@ -41,34 +41,37 @@ type metricPoint struct {
 }
 
 func main() {
-	nexadapter.Run(nexadapter.Adapter{
-		Operations: nexadapter.AdapterOperations{
-			AdapterInfo:          info,
-			AdapterHealth:        health,
-			AdapterAccountsList:  accounts,
-			EventBackfill:        backfill,
-			AdapterMonitorStart:  monitor,
-		},
-	})
+	nexadapter.Run(nexadapter.DefineAdapter(adapterConfig()))
 }
 
-func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
-	return &nexadapter.AdapterInfo{
+func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
+	return nexadapter.DefineAdapterConfig[struct{}]{
 		Platform: platformID,
 		Name:     adapterName,
 		Version:  adapterVersion,
-		Operations: []nexadapter.AdapterOperation{
-			nexadapter.OpAdapterInfo,
-			nexadapter.OpAdapterHealth,
-			nexadapter.OpAdapterAccountsList,
-			nexadapter.OpEventBackfill,
-			nexadapter.OpAdapterMonitorStart,
+		Connection: nexadapter.ConnectionHandlers[struct{}]{
+			Accounts: func(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterAccount, error) {
+				return accounts(ctx.Context)
+			},
+			Health: func(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth, error) {
+				return health(ctx.Context, ctx.ConnectionID)
+			},
 		},
+		Ingest: nexadapter.IngestHandlers[struct{}]{
+			Monitor: func(ctx nexadapter.AdapterContext[struct{}], emit nexadapter.EmitFunc) error {
+				return monitor(ctx.Context, ctx.ConnectionID, emit)
+			},
+			Backfill: func(ctx nexadapter.AdapterContext[struct{}], since time.Time, emit nexadapter.EmitFunc) error {
+				return backfill(ctx.Context, ctx.ConnectionID, since, emit)
+			},
+		},
+		Methods:           map[string]nexadapter.DeclaredMethod[struct{}]{},
 		CredentialService: "patient-now",
 		MultiAccount:      true,
 		Auth: &nexadapter.AdapterAuthManifest{
 			Methods: []nexadapter.AdapterAuthMethod{
 				{
+					ID:      "patient_now_api_key",
 					Type:    "api_key",
 					Label:   "Enter API Key",
 					Icon:    "key",
@@ -98,6 +101,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 					},
 				},
 				{
+					ID:          "patient_now_csv_upload",
 					Type:        "file_upload",
 					Label:       "Upload CSV Export",
 					Icon:        "upload",
@@ -107,7 +111,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			},
 			SetupGuide: "PatientNow private API contracts are partner-gated. Fast path captures api_key + practice_id; set base_url when API access is provisioned.",
 		},
-		PlatformCapabilities: nexadapter.ChannelCapabilities{
+		Capabilities: nexadapter.ChannelCapabilities{
 			TextLimit:             20000,
 			SupportsMarkdown:      true,
 			MarkdownFlavor:        "standard",
@@ -124,7 +128,12 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			SupportsVoiceNotes:    false,
 			SupportsStreamingEdit: false,
 		},
-	}, nil
+	}
+}
+
+func info(ctx context.Context) (*nexadapter.AdapterInfo, error) {
+	adapter := nexadapter.DefineAdapter(adapterConfig())
+	return adapter.Operations.AdapterInfo(ctx)
 }
 
 func accounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {
@@ -138,21 +147,21 @@ func accounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {
 	}, nil
 }
 
-func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, error) {
-	creds, err := resolvePatientNowCredentials(account)
+func health(ctx context.Context, connectionID string) (*nexadapter.AdapterHealth, error) {
+	creds, err := resolvePatientNowCredentials(connectionID)
 	if err != nil {
 		return &nexadapter.AdapterHealth{
-			Connected: false,
-			Account:   account,
-			Error:     err.Error(),
+			Connected:    false,
+			ConnectionID: connectionID,
+			Error:        err.Error(),
 		}, nil
 	}
 
 	if strings.TrimSpace(creds.BaseURL) == "" {
 		return &nexadapter.AdapterHealth{
-			Connected:   true,
-			Account:     creds.AccountID,
-			LastEventAt: time.Now().UnixMilli(),
+			Connected:    true,
+			ConnectionID: creds.AccountID,
+			LastEventAt:  time.Now().UnixMilli(),
 			Details: map[string]any{
 				"verification": "credentials_only",
 				"warning":      "base_url not configured; remote API health check skipped",
@@ -165,24 +174,24 @@ func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, err
 	params.Set("practice_id", creds.PracticeID)
 	if err := patientNowRequest(ctx, creds, http.MethodGet, healthPath, params, nil); err != nil {
 		return &nexadapter.AdapterHealth{
-			Connected: false,
-			Account:   creds.AccountID,
-			Error:     err.Error(),
+			Connected:    false,
+			ConnectionID: creds.AccountID,
+			Error:        err.Error(),
 		}, nil
 	}
 
 	return &nexadapter.AdapterHealth{
-		Connected:   true,
-		Account:     creds.AccountID,
-		LastEventAt: time.Now().UnixMilli(),
+		Connected:    true,
+		ConnectionID: creds.AccountID,
+		LastEventAt:  time.Now().UnixMilli(),
 		Details: map[string]any{
 			"practice_id": creds.PracticeID,
 		},
 	}, nil
 }
 
-func backfill(ctx context.Context, account string, since time.Time, emit nexadapter.EmitFunc) error {
-	events, _, err := fetchPatientNowMetricsSince(ctx, account, since)
+func backfill(ctx context.Context, connectionID string, since time.Time, emit nexadapter.EmitFunc) error {
+	events, _, err := fetchPatientNowMetricsSince(ctx, connectionID, since)
 	if err != nil {
 		return err
 	}
@@ -192,18 +201,18 @@ func backfill(ctx context.Context, account string, since time.Time, emit nexadap
 	return nil
 }
 
-func monitor(ctx context.Context, account string, emit nexadapter.EmitFunc) error {
-	return nexadapter.PollMonitor(nexadapter.PollConfig{
+func monitor(ctx context.Context, connectionID string, emit nexadapter.EmitFunc) error {
+	return nexadapter.PollMonitor(nexadapter.PollConfig[nexadapter.AdapterInboundRecord]{
 		Interval: 15 * time.Minute,
-		Fetch: func(ctx context.Context, since time.Time) ([]nexadapter.NexusEvent, time.Time, error) {
-			return fetchPatientNowMetricsSince(ctx, account, since)
+		Fetch: func(ctx context.Context, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
+			return fetchPatientNowMetricsSince(ctx, connectionID, since)
 		},
 		MaxConsecutiveErrors: 5,
-	})(ctx, account, emit)
+	})(ctx, connectionID, emit)
 }
 
-func fetchPatientNowMetricsSince(ctx context.Context, account string, since time.Time) ([]nexadapter.NexusEvent, time.Time, error) {
-	creds, err := resolvePatientNowCredentials(account)
+func fetchPatientNowMetricsSince(ctx context.Context, connectionID string, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
+	creds, err := resolvePatientNowCredentials(connectionID)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
@@ -227,7 +236,7 @@ func fetchPatientNowMetricsSince(ctx context.Context, account string, since time
 		return nil, time.Time{}, err
 	}
 
-	var events []nexadapter.NexusEvent
+	var events []nexadapter.AdapterInboundRecord
 	for _, point := range metrics {
 		if point.Value < 0 {
 			continue
@@ -358,7 +367,7 @@ func patientNowRequest(
 	return nil
 }
 
-func buildPatientNowEvents(creds patientNowCredentials, point metricPoint) []nexadapter.NexusEvent {
+func buildPatientNowEvents(creds patientNowCredentials, point metricPoint) []nexadapter.AdapterInboundRecord {
 	metadataToken := point.MetadataKey
 	if strings.TrimSpace(metadataToken) == "" {
 		metadataToken = "total"
@@ -375,13 +384,14 @@ func buildPatientNowEvents(creds patientNowCredentials, point metricPoint) []nex
 		":",
 	)
 	event := nexadapter.
-		NewEvent(platformID, eventID).
+		NewRecord(platformID, eventID).
 		WithTimestampUnixMs(nexadapter.MetricTimestamp(point.Date, nil)).
 		WithContent(fmt.Sprintf("%s=%g", point.MetricName, point.Value)).
 		WithContentType("text").
 		WithSender(platformID, "PatientNow").
 		WithContainer("metrics", "channel").
-		WithAccount(creds.AccountID).
+		WithConnection(creds.AccountID).
+		WithSpace(creds.PracticeID, creds.PracticeID).
 		WithMetadata("adapter_id", platformID).
 		WithMetadata("practice_id", creds.PracticeID).
 		WithMetadata("date", point.Date).
@@ -389,10 +399,10 @@ func buildPatientNowEvents(creds patientNowCredentials, point metricPoint) []nex
 		WithMetadata("metric_value", point.Value).
 		Build()
 	if strings.TrimSpace(point.MetadataKey) != "" {
-		event.Metadata["metadata_key"] = point.MetadataKey
+		event.Payload.Metadata["metadata_key"] = point.MetadataKey
 	}
 
-	return []nexadapter.NexusEvent{event}
+	return []nexadapter.AdapterInboundRecord{event}
 }
 
 func dedupePoints(points []metricPoint) []metricPoint {
@@ -466,8 +476,8 @@ func resolvePatientNowCredentials(account string) (patientNowCredentials, error)
 
 	runtimeContext, err := nexadapter.LoadRuntimeContextFromEnv()
 	if err == nil && runtimeContext != nil {
-		if strings.TrimSpace(runtimeContext.AccountID) != "" {
-			resolvedAccount = runtimeContext.AccountID
+		if strings.TrimSpace(runtimeContext.ConnectionID) != "" {
+			resolvedAccount = runtimeContext.ConnectionID
 		}
 		if runtimeContext.Credential != nil {
 			fields = runtimeContext.Credential.Fields
@@ -669,4 +679,3 @@ func sortStrings(values []string) {
 		}
 	}
 }
-

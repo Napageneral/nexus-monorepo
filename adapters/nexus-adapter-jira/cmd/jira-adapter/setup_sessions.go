@@ -19,7 +19,7 @@ var validSessionID = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
 type setupSession struct {
 	SessionID     string                                       `json:"session_id"`
-	Account       string                                       `json:"account"`
+	ConnectionID  string                                       `json:"connection_id"`
 	Site          string                                       `json:"site"`
 	Email         string                                       `json:"email"`
 	APIToken      string                                       `json:"api_token"`

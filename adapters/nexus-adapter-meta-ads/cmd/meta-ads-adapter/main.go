@@ -17,11 +17,11 @@ import (
 )
 
 const (
-	adapterName                  = "meta-ads-adapter"
-	adapterVersion               = "0.1.0"
-	platformID                   = "meta-ads"
-	defaultGraphBaseURL          = "https://graph.facebook.com/v21.0"
-	dateLayout                   = "2006-01-02"
+	adapterName         = "meta-ads-adapter"
+	adapterVersion      = "0.1.0"
+	platformID          = "meta-ads"
+	defaultGraphBaseURL = "https://graph.facebook.com/v21.0"
+	dateLayout          = "2006-01-02"
 )
 
 type metaCredentials struct {
@@ -62,29 +62,31 @@ type metaInsightsResponse struct {
 }
 
 func main() {
-	nexadapter.Run(nexadapter.Adapter{
-		Operations: nexadapter.AdapterOperations{
-			AdapterInfo:          info,
-			AdapterHealth:        health,
-			AdapterAccountsList:  accounts,
-			RecordsBackfill:      backfill,
-			MonitorStart:         monitor,
-		},
-	})
+	nexadapter.Run(nexadapter.DefineAdapter(adapterConfig()))
 }
 
-func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
-	return &nexadapter.AdapterInfo{
+func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
+	return nexadapter.DefineAdapterConfig[struct{}]{
 		Platform: platformID,
 		Name:     adapterName,
 		Version:  adapterVersion,
-		Operations: []nexadapter.AdapterOperation{
-			nexadapter.OpAdapterInfo,
-			nexadapter.OpAdapterHealth,
-			nexadapter.OpAdapterAccountsList,
-			nexadapter.OpRecordsBackfill,
-			nexadapter.OpAdapterMonitorStart,
+		Connection: nexadapter.ConnectionHandlers[struct{}]{
+			Accounts: func(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterAccount, error) {
+				return accounts(ctx.Context)
+			},
+			Health: func(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth, error) {
+				return health(ctx.Context, ctx.ConnectionID)
+			},
 		},
+		Ingest: nexadapter.IngestHandlers[struct{}]{
+			Monitor: func(ctx nexadapter.AdapterContext[struct{}], emit nexadapter.EmitFunc) error {
+				return monitor(ctx.Context, ctx.ConnectionID, emit)
+			},
+			Backfill: func(ctx nexadapter.AdapterContext[struct{}], since time.Time, emit nexadapter.EmitFunc) error {
+				return backfill(ctx.Context, ctx.ConnectionID, since, emit)
+			},
+		},
+		Methods:           map[string]nexadapter.DeclaredMethod[struct{}]{},
 		CredentialService: "facebook",
 		MultiAccount:      true,
 		Auth: &nexadapter.AdapterAuthManifest{
@@ -133,7 +135,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			},
 			SetupGuide: "Fast path uses long-lived access_token + ad_account_id. Full OAuth path requires app review for ads_read.",
 		},
-		PlatformCapabilities: nexadapter.ChannelCapabilities{
+		Capabilities: nexadapter.ChannelCapabilities{
 			TextLimit:             20000,
 			SupportsMarkdown:      true,
 			MarkdownFlavor:        "standard",
@@ -150,7 +152,12 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			SupportsVoiceNotes:    false,
 			SupportsStreamingEdit: false,
 		},
-	}, nil
+	}
+}
+
+func info(ctx context.Context) (*nexadapter.AdapterInfo, error) {
+	adapter := nexadapter.DefineAdapter(adapterConfig())
+	return adapter.Operations.AdapterInfo(ctx)
 }
 
 func accounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {

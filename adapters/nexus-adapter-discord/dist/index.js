@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { chunkText, emitStreamStatus, newEvent, runAdapter, sendWithChunking, } from "@nexus-project/adapter-sdk-ts";
+import { chunkText, defineAdapter, emitStreamStatus, messageRecord, newRecord, readReplyToTarget, readThreadTarget, requireContainerTarget, requireCredential, runAdapter, sendWithChunking, } from "@nexus-project/adapter-sdk-ts";
 import { ChannelType, Client, GatewayIntentBits, Partials, REST, Routes, } from "discord.js";
 const DISCORD_TEXT_LIMIT = 2000;
 const STREAM_PLACEHOLDER_TEXT = "...";
@@ -86,22 +86,6 @@ function isDiscordDisallowedIntentsError(error) {
     }
     return false;
 }
-function getDiscordToken(ctx) {
-    const runtimeFieldToken = ctx.runtime?.credential?.fields?.bot_token?.trim() ??
-        ctx.runtime?.credential?.fields?.token?.trim();
-    if (runtimeFieldToken) {
-        return runtimeFieldToken;
-    }
-    const runtimeToken = ctx.runtime?.credential?.value?.trim();
-    if (runtimeToken) {
-        return runtimeToken;
-    }
-    const envToken = process.env.DISCORD_TOKEN?.trim();
-    if (envToken) {
-        return envToken;
-    }
-    throw new Error("missing discord credential (runtime credential or DISCORD_TOKEN)");
-}
 function parseDiscordTarget(raw) {
     const trimmed = raw.trim();
     if (!trimmed) {
@@ -124,52 +108,16 @@ function parseDiscordTarget(raw) {
     return { kind: "channel", id: trimmed };
 }
 function inferContentType(message) {
-    if (message.content.trim()) {
-        return "text";
-    }
-    const first = message.attachments.first();
-    const mime = first?.contentType?.toLowerCase() ?? "";
-    if (mime.startsWith("image/")) {
-        return "image";
-    }
-    if (mime.startsWith("video/")) {
-        return "video";
-    }
-    if (mime.startsWith("audio/")) {
-        return "audio";
-    }
-    if (first) {
-        return "file";
-    }
     return "text";
 }
 function inferContentTypeFromRawMessage(raw) {
-    const content = asString(raw.content);
-    if (content) {
-        return "text";
-    }
-    const attachments = extractRawAttachments(raw);
-    const first = attachments[0];
-    const mime = first?.content_type.toLowerCase() ?? "";
-    if (mime.startsWith("image/")) {
-        return "image";
-    }
-    if (mime.startsWith("video/")) {
-        return "video";
-    }
-    if (mime.startsWith("audio/")) {
-        return "audio";
-    }
-    if (first) {
-        return "file";
-    }
     return "text";
 }
 function normalizeContainer(message) {
     if (message.channel.isThread()) {
         return {
             container_id: message.channel.parentId ?? message.channel.id,
-            container_kind: "channel",
+            container_kind: "group",
             container_name: message.channel.parent?.isTextBased()
                 ? ("name" in message.channel.parent ? message.channel.parent.name : undefined)
                 : undefined,
@@ -181,7 +129,7 @@ function normalizeContainer(message) {
     if (channelType === ChannelType.DM) {
         return {
             container_id: message.channel.id,
-            container_kind: "dm",
+            container_kind: "direct",
         };
     }
     if (channelType === ChannelType.GroupDM) {
@@ -193,7 +141,7 @@ function normalizeContainer(message) {
     }
     return {
         container_id: message.channel.id,
-        container_kind: "channel",
+        container_kind: "group",
         container_name: "name" in message.channel ? message.channel.name : undefined,
     };
 }
@@ -213,7 +161,7 @@ function normalizeContainerFromChannelRecord(channel, parent) {
     if (isThreadChannelType(channel.type)) {
         return {
             container_id: parent?.id ?? channel.parent_id ?? channel.id,
-            container_kind: "channel",
+            container_kind: "group",
             container_name: parent?.name,
             thread_id: channel.id,
             thread_name: channel.name,
@@ -222,7 +170,7 @@ function normalizeContainerFromChannelRecord(channel, parent) {
     if (channel.type === ChannelType.DM) {
         return {
             container_id: channel.id,
-            container_kind: "dm",
+            container_kind: "direct",
             container_name: channel.name,
         };
     }
@@ -235,7 +183,7 @@ function normalizeContainerFromChannelRecord(channel, parent) {
     }
     return {
         container_id: channel.id,
-        container_kind: "channel",
+        container_kind: "group",
         container_name: channel.name,
     };
 }
@@ -280,7 +228,7 @@ function extractRawAttachments(raw) {
             continue;
         }
         const filename = asString(record.filename) ?? id;
-        const contentType = asString(record.content_type) ?? "application/octet-stream";
+        const contentType = asString(record.mime_type) ?? "application/octet-stream";
         const size = typeof record.size === "number" && Number.isFinite(record.size) && record.size >= 0
             ? Math.floor(record.size)
             : undefined;
@@ -288,8 +236,8 @@ function extractRawAttachments(raw) {
         result.push({
             id,
             filename,
-            content_type: contentType,
-            ...(typeof size === "number" ? { size_bytes: size } : {}),
+            mime_type: contentType,
+            ...(typeof size === "number" ? { size } : {}),
             ...(url ? { url } : {}),
         });
     }
@@ -617,13 +565,13 @@ async function getGuildName(rest, guildID, cache) {
     return name;
 }
 function buildBackfillEvent(params) {
-    const builder = newEvent("discord", `discord:${params.parsed_message.id}`)
+    const builder = newRecord("discord", `discord:${params.parsed_message.id}`)
         .withTimestampUnixMs(params.parsed_message.timestamp_ms)
         .withContent(params.parsed_message.content)
         .withContentType(params.parsed_message.content_type)
         .withSender(params.parsed_message.sender_id, params.parsed_message.sender_name)
-        .withContainer(params.normalized_container.container_id, params.normalized_container.container_kind)
-        .withAccount(params.account_id)
+        .withContainer(params.normalized_container.container_id, params.normalized_container.container_kind, params.normalized_container.container_name)
+        .withConnection(params.connection_id)
         .withMetadata("message_id", params.parsed_message.id)
         .withMetadata("channel_id", params.source_channel_id)
         .withMetadata("guild_id", params.space_id ?? null)
@@ -631,28 +579,18 @@ function buildBackfillEvent(params) {
         .withMetadata("author_is_bot", params.parsed_message.author_is_bot)
         .withMetadata("backfill", true);
     if (params.normalized_container.thread_id) {
-        builder.withThread(params.normalized_container.thread_id);
+        builder.withThread(params.normalized_container.thread_id, params.normalized_container.thread_name);
     }
     if (params.parsed_message.reply_to_id) {
         builder.withReplyTo(params.parsed_message.reply_to_id);
     }
+    if (params.space_id) {
+        builder.withSpace(params.space_id, params.space_name);
+    }
     for (const attachment of params.parsed_message.attachments) {
         builder.withAttachment(attachment);
     }
-    const event = builder.build();
-    if (params.space_id) {
-        event.space_id = params.space_id;
-    }
-    if (params.space_name) {
-        event.space_name = params.space_name;
-    }
-    if (params.normalized_container.container_name) {
-        event.container_name = params.normalized_container.container_name;
-    }
-    if (params.normalized_container.thread_name) {
-        event.thread_name = params.normalized_container.thread_name;
-    }
-    return event;
+    return builder.build();
 }
 async function backfillChannelMessages(params) {
     let emitted = 0;
@@ -686,7 +624,7 @@ async function backfillChannelMessages(params) {
                 continue;
             }
             const event = buildBackfillEvent({
-                account_id: params.account_id,
+                connection_id: params.connection_id,
                 parsed_message: parsed,
                 normalized_container: params.normalized_container,
                 source_channel_id: params.channel_id,
@@ -721,10 +659,14 @@ const discordStreamHandlers = {
         if (activeStream) {
             throw new Error("discord stream overlap detected: previous stream is still active");
         }
-        const token = getDiscordToken(ctx);
+        const token = requireCredential(ctx, {
+            label: "discord bot token",
+            fields: ["bot_token", "token"],
+            env: ["DISCORD_TOKEN"],
+        });
         const rest = restClient(token);
-        const channelID = await resolveSendChannelID(rest, event.target.to, event.target.thread_id);
-        const replyToID = event.target.reply_to_id?.trim();
+        const channelID = await resolveSendChannelID(rest, requireContainerTarget(event.target), readThreadTarget(event.target));
+        const replyToID = readReplyToTarget(event.target);
         const createdID = await createDiscordMessage(rest, channelID, STREAM_PLACEHOLDER_TEXT, replyToID);
         emitStreamStatus({
             type: "message_created",
@@ -811,80 +753,69 @@ const discordStreamHandlers = {
         activeStreamRest = null;
     },
 };
-const discordAdapter = {
-    operations: {
-        "adapter.info": async () => ({
-            platform: "discord",
-            name: "nexus-discord-adapter",
-            version: "0.1.0",
-            operations: [
-                "adapter.info",
-                "adapter.accounts.list",
-                "adapter.health",
-                "adapter.monitor.start",
-                "event.backfill",
-                "delivery.send",
-                "delivery.stream",
-            ],
-            credential_service: "discord",
-            multi_account: true,
-            auth: {
-                methods: [
+const discordAdapter = defineAdapter({
+    platform: "discord",
+    name: "nexus-discord-adapter",
+    version: "0.1.0",
+    multi_account: true,
+    credential_service: "discord",
+    auth: {
+        methods: [
+            {
+                id: "discord_bot_token",
+                type: "api_key",
+                label: "Enter Bot Token",
+                icon: "key",
+                service: "discord",
+                fields: [
                     {
-                        type: "api_key",
-                        label: "Enter Bot Token",
-                        icon: "key",
-                        service: "discord",
-                        fields: [
-                            {
-                                name: "bot_token",
-                                label: "Bot Token",
-                                type: "secret",
-                                required: true,
-                                placeholder: "Discord bot token",
-                            },
-                        ],
+                        name: "bot_token",
+                        label: "Bot Token",
+                        type: "secret",
+                        required: true,
+                        placeholder: "Discord bot token",
                     },
                 ],
-                setupGuide: "Create a bot token in Discord Developer Portal and paste it here. Keep this token secret.",
             },
-            platform_capabilities: {
-                text_limit: DISCORD_TEXT_LIMIT,
-                supports_markdown: true,
-                markdown_flavor: "discord",
-                supports_tables: false,
-                supports_code_blocks: true,
-                supports_embeds: true,
-                supports_threads: true,
-                supports_reactions: true,
-                supports_polls: false,
-                supports_buttons: false,
-                supports_edit: true,
-                supports_delete: false,
-                supports_media: false,
-                supports_voice_notes: false,
-                supports_streaming_edit: true,
-            },
-        }),
-        "adapter.accounts.list": async (ctx) => {
-            const accountID = ctx.runtime?.account_id?.trim() || "default";
-            return [
-                {
-                    id: accountID,
-                    display_name: accountID,
-                    credential_ref: `discord/${accountID}`,
-                    status: "ready",
-                },
-            ];
+        ],
+        setupGuide: "Create a bot token in Discord Developer Portal and paste it here. Keep this token secret.",
+    },
+    capabilities: {
+        text_limit: DISCORD_TEXT_LIMIT,
+        supports_markdown: true,
+        markdown_flavor: "discord",
+        supports_tables: false,
+        supports_code_blocks: true,
+        supports_embeds: true,
+        supports_threads: true,
+        supports_reactions: true,
+        supports_polls: false,
+        supports_buttons: false,
+        supports_edit: true,
+        supports_delete: false,
+        supports_media: false,
+        supports_voice_notes: false,
+        supports_streaming_edit: true,
+    },
+    client: {
+        create: ({ ctx }) => {
+            const token = requireCredential(ctx, {
+                label: "discord bot token",
+                fields: ["bot_token", "token"],
+                env: ["DISCORD_TOKEN"],
+            });
+            return {
+                token,
+                rest: restClient(token),
+            };
         },
-        "adapter.health": async (ctx, args) => {
+    },
+    connection: {
+        health: async (ctx) => {
             try {
-                const token = getDiscordToken(ctx);
-                const rest = restClient(token);
-                const me = (await rest.get(Routes.user()));
+                const me = (await ctx.client.rest.get(Routes.user()));
                 return {
                     connected: Boolean(me.id),
-                    account: args.account,
                     last_event_at: Date.now(),
                     details: {
                         user_id: me.id ?? null,
@@ -895,14 +826,14 @@ const discordAdapter = {
             catch (error) {
                 return {
                     connected: false,
-                    account: args.account,
                     error: error instanceof Error ? error.message : String(error),
                 };
             }
         },
-        "event.backfill": async (ctx, args, emit) => {
-            const token = getDiscordToken(ctx);
-            const rest = restClient(token);
+    },
+    ingest: {
+        backfill: async (ctx, args, emit) => {
+            const rest = ctx.client.rest;
             const selfID = await fetchSelfUserID(rest);
             const options = resolveBackfillOptions(ctx);
             let channelIDs = [...options.channel_ids];
@@ -941,7 +872,7 @@ const discordAdapter = {
                         ctx,
                         rest,
                         emit,
-                        account_id: args.account,
+                        connection_id: ctx.connectionId,
                         channel_id: channel.id,
                         normalized_container: normalizedContainer,
                         ...(spaceID ? { space_id: spaceID } : {}),
@@ -959,53 +890,8 @@ const discordAdapter = {
             }
             ctx.log.info("discord backfill emitted %d event(s)", totalEmitted);
         },
-        "delivery.send": async (ctx, req) => {
-            if (req.media?.trim()) {
-                return {
-                    success: false,
-                    message_ids: [],
-                    chunks_sent: 0,
-                    error: {
-                        type: "content_rejected",
-                        message: "media send is not implemented in this adapter yet",
-                        retry: false,
-                    },
-                };
-            }
-            const text = req.text?.trim();
-            if (!text) {
-                return {
-                    success: false,
-                    message_ids: [],
-                    chunks_sent: 0,
-                    error: {
-                        type: "content_rejected",
-                        message: "message text is required",
-                        retry: false,
-                    },
-                };
-            }
-            try {
-                const token = getDiscordToken(ctx);
-                const rest = restClient(token);
-                const channelID = await resolveSendChannelID(rest, req.to, req.thread_id);
-                return await sendDiscordText(rest, channelID, text, req.reply_to_id);
-            }
-            catch (error) {
-                return {
-                    success: false,
-                    message_ids: [],
-                    chunks_sent: 0,
-                    error: {
-                        type: "network",
-                        message: error instanceof Error ? error.message : String(error),
-                        retry: true,
-                    },
-                };
-            }
-        },
-        "adapter.monitor.start": async (ctx, args, emit) => {
-            const token = getDiscordToken(ctx);
+        monitor: async (ctx, emit) => {
+            const token = ctx.client.token;
             const client = new Client({
                 intents: [
                     GatewayIntentBits.Guilds,
@@ -1032,7 +918,7 @@ const discordAdapter = {
             };
             client.on("ready", () => {
                 selfID = client.user?.id ?? "";
-                ctx.log.info("discord monitor connected account=%s bot_id=%s", JSON.stringify(args.account), JSON.stringify(selfID));
+                ctx.log.info("discord monitor connected account=%s bot_id=%s", JSON.stringify(ctx.connectionId), JSON.stringify(selfID));
             });
             client.on("shardDisconnect", (event, shardID) => {
                 const closeCode = extractDiscordCloseCode(event);
@@ -1042,7 +928,7 @@ const discordAdapter = {
                     return;
                 }
                 const reason = extractDiscordCloseReason(event);
-                ctx.log.info("discord shard disconnected account=%s shard=%s code=%s reason=%s", JSON.stringify(args.account), String(shardID), String(closeCode ?? "unknown"), JSON.stringify(reason ?? ""));
+                ctx.log.info("discord shard disconnected account=%s shard=%s code=%s reason=%s", JSON.stringify(ctx.connectionId), String(shardID), String(closeCode ?? "unknown"), JSON.stringify(reason ?? ""));
             });
             client.on("error", (error) => {
                 if (isDiscordDisallowedIntentsError(error)) {
@@ -1050,7 +936,7 @@ const discordAdapter = {
                     requestMonitorStop();
                     return;
                 }
-                ctx.log.error("discord monitor error account=%s err=%s", JSON.stringify(args.account), error instanceof Error ? error.message : String(error));
+                ctx.log.error("discord monitor error account=%s err=%s", JSON.stringify(ctx.connectionId), error instanceof Error ? error.message : String(error));
             });
             client.on("shardError", (error, shardID) => {
                 if (isDiscordDisallowedIntentsError(error)) {
@@ -1058,7 +944,7 @@ const discordAdapter = {
                     requestMonitorStop();
                     return;
                 }
-                ctx.log.error("discord shard error account=%s shard=%s err=%s", JSON.stringify(args.account), String(shardID), error instanceof Error ? error.message : String(error));
+                ctx.log.error("discord shard error account=%s shard=%s err=%s", JSON.stringify(ctx.connectionId), String(shardID), error instanceof Error ? error.message : String(error));
             });
             client.on("messageCreate", (message) => {
                 if (message.author?.id && message.author.id === selfID) {
@@ -1073,39 +959,42 @@ const discordAdapter = {
                         : "(no content)";
                 const content = message.content.trim() || fallbackContent;
                 const replyToID = message.reference?.messageId ?? undefined;
-                const builder = newEvent("discord", `discord:${message.id}`)
-                    .withTimestamp(message.createdAt)
-                    .withContent(content)
-                    .withContentType(contentType)
-                    .withSender(message.author?.id ?? "unknown", message.member?.displayName ?? message.author?.displayName ?? message.author?.username)
-                    .withContainer(container.container_id, container.container_kind)
-                    .withAccount(args.account)
-                    .withMetadata("message_id", message.id)
-                    .withMetadata("channel_id", message.channel.id)
-                    .withMetadata("guild_id", message.guildId ?? null)
-                    .withMetadata("mentions_bot", selfID ? message.mentions.users.has(selfID) : false)
-                    .withMetadata("author_is_bot", Boolean(message.author?.bot));
-                if (container.thread_id) {
-                    builder.withThread(container.thread_id);
-                }
-                if (replyToID) {
-                    builder.withReplyTo(replyToID);
-                }
+                const attachments = [];
                 for (const attachment of message.attachments.values()) {
-                    builder.withAttachment({
+                    attachments.push({
                         id: attachment.id,
                         filename: attachment.name ?? attachment.id,
-                        content_type: attachment.contentType ?? "application/octet-stream",
-                        ...(typeof attachment.size === "number" ? { size_bytes: attachment.size } : {}),
+                        mime_type: attachment.contentType ?? "application/octet-stream",
+                        ...(typeof attachment.size === "number" ? { size: attachment.size } : {}),
                         ...(attachment.url ? { url: attachment.url } : {}),
                     });
                 }
-                const event = builder.build();
-                event.space_id = message.guildId ?? undefined;
-                event.space_name = message.guild?.name ?? undefined;
-                event.container_name = container.container_name;
-                event.thread_name = container.thread_name;
-                emit(event);
+                emit(messageRecord({
+                    platform: "discord",
+                    connectionId: ctx.connectionId,
+                    externalRecordId: `discord:${message.id}`,
+                    timestamp: message.createdAt,
+                    content,
+                    contentType,
+                    senderId: message.author?.id ?? "unknown",
+                    senderName: message.member?.displayName ?? message.author?.displayName ?? message.author?.username,
+                    containerId: container.container_id,
+                    containerKind: container.container_kind,
+                    containerName: container.container_name,
+                    ...(container.thread_id ? { threadId: container.thread_id, threadName: container.thread_name } : {}),
+                    ...(message.guildId
+                        ? { spaceId: message.guildId, spaceName: message.guild?.name ?? undefined }
+                        : {}),
+                    ...(replyToID ? { replyToId: replyToID } : {}),
+                    attachments,
+                    metadata: {
+                        message_id: message.id,
+                        channel_id: message.channel.id,
+                        guild_id: message.guildId ?? null,
+                        mentions_bot: selfID ? message.mentions.users.has(selfID) : false,
+                        author_is_bot: Boolean(message.author?.bot),
+                    },
+                }));
             });
             await client.login(token);
             await new Promise((resolve) => {
@@ -1129,7 +1018,52 @@ const discordAdapter = {
             });
             await client.destroy();
         },
-        "delivery.stream": discordStreamHandlers,
     },
-};
+    delivery: {
+        send: async (ctx, req) => {
+            if (req.media?.trim()) {
+                return {
+                    success: false,
+                    message_ids: [],
+                    chunks_sent: 0,
+                    error: {
+                        type: "content_rejected",
+                        message: "media send is not implemented in this adapter yet",
+                        retry: false,
+                    },
+                };
+            }
+            const text = req.text?.trim();
+            if (!text) {
+                return {
+                    success: false,
+                    message_ids: [],
+                    chunks_sent: 0,
+                    error: {
+                        type: "content_rejected",
+                        message: "message text is required",
+                        retry: false,
+                    },
+                };
+            }
+            try {
+                const channelID = await resolveSendChannelID(ctx.client.rest, requireContainerTarget(req.target), readThreadTarget(req.target));
+                return await sendDiscordText(ctx.client.rest, channelID, text, readReplyToTarget(req.target));
+            }
+            catch (error) {
+                return {
+                    success: false,
+                    message_ids: [],
+                    chunks_sent: 0,
+                    error: {
+                        type: "network",
+                        message: error instanceof Error ? error.message : String(error),
+                        retry: true,
+                    },
+                };
+            }
+        },
+        stream: discordStreamHandlers,
+    },
+});
 await runAdapter(discordAdapter);

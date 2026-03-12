@@ -1,15 +1,15 @@
 # nexus-adapter-patient-now-emr
 
-Nexus adapter wrapper for PatientNow EMR metrics.
+Shared Nex adapter for PatientNow EMR metrics.
 
-## Fast Path
+## Package Lifecycle
 
-- API key + practice id credential capture
-- CSV fallback for immediate manual ingestion
+This adapter is packaged and installed through the canonical Nex adapter package
+flow.
 
-## Notes
-
-PatientNow API contracts are partner-gated. This adapter supports credential validation and a configurable metrics endpoint path to avoid hardcoding undocumented private routes.
+- package manifest: `adapter.nexus.json`
+- release script: `scripts/package-release.sh`
+- package docs: `docs/`
 
 ## Build
 

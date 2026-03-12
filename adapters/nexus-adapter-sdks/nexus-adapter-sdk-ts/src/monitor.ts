@@ -1,102 +1,247 @@
-import { AdapterLogger } from "./logger.js";
-import { NexusEvent } from "./protocol.js";
-import type { AdapterContext, AdapterDefinition } from "./run.js";
+import type { AdapterInboundRecord } from "./protocol.js";
+import type { DefinedAdapterContext } from "./define.js";
+import type { AdapterDefinition } from "./run.js";
+import { sleepWithSignal } from "./retry.js";
 
-export type EmitFunc = (event: NexusEvent) => void;
+export type EmitFunc = (record: AdapterInboundRecord) => void;
 
-export type PollConfig = {
-  intervalMs: number;
-  fetch: (
-    ctx: AdapterContext,
-    since: Date,
-    account: string,
-  ) => Promise<{ events: NexusEvent[]; newCursor?: Date }> | { events: NexusEvent[]; newCursor?: Date };
-  initialCursor?: Date;
-  errorBackoffMs?: number;
-  maxConsecutiveErrors?: number;
+type MaybePromise<T> = T | Promise<T>;
+
+export type PollConfig<TClient, TCursor, TPage, TItem> = {
+  initialCursor?: (args: {
+    ctx: DefinedAdapterContext<TClient>;
+    connectionId: string;
+  }) => MaybePromise<TCursor | undefined>;
+  poll: (args: {
+    ctx: DefinedAdapterContext<TClient>;
+    connectionId: string;
+    cursor: TCursor | undefined;
+    signal: AbortSignal;
+  }) => MaybePromise<TPage>;
+  items: (page: TPage) => Iterable<TItem>;
+  toRecord: (args: {
+    ctx: DefinedAdapterContext<TClient>;
+    connectionId: string;
+    cursor: TCursor | undefined;
+    page: TPage;
+    item: TItem;
+  }) => MaybePromise<AdapterInboundRecord | AdapterInboundRecord[] | null | undefined>;
+  nextCursor?: (args: {
+    ctx: DefinedAdapterContext<TClient>;
+    connectionId: string;
+    cursor: TCursor | undefined;
+    page: TPage;
+    item: TItem;
+  }) => MaybePromise<TCursor | undefined>;
+  pageCursor?: (args: {
+    ctx: DefinedAdapterContext<TClient>;
+    connectionId: string;
+    cursor: TCursor | undefined;
+    page: TPage;
+  }) => MaybePromise<TCursor | undefined>;
+  idleMs?: number;
+  errorDelayMs?: number;
 };
 
 export type MonitorHandler = NonNullable<AdapterDefinition["operations"]["adapter.monitor.start"]>;
 
-export function pollMonitor(config: PollConfig): MonitorHandler {
-  return async (ctx: AdapterContext, args: { account: string }, emit: EmitFunc) => {
-    const intervalMs = config.intervalMs;
-    if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
-      throw new Error(`pollMonitor: invalid intervalMs: ${intervalMs}`);
-    }
+export type BackfillHandler = NonNullable<AdapterDefinition["operations"]["records.backfill"]>;
 
-    let cursor = config.initialCursor ?? new Date();
-    let errorBackoffMs = config.errorBackoffMs ?? intervalMs;
-    if (!Number.isFinite(errorBackoffMs) || errorBackoffMs <= 0) {
-      errorBackoffMs = intervalMs;
-    }
+export type PollBackfillConfig<TClient, TCursor, TPage, TItem> = {
+  initialCursor?: (args: {
+    ctx: DefinedAdapterContext<TClient>;
+    connectionId: string;
+    since: Date;
+  }) => MaybePromise<TCursor | undefined>;
+  poll: (args: {
+    ctx: DefinedAdapterContext<TClient>;
+    connectionId: string;
+    cursor: TCursor | undefined;
+    since: Date;
+    signal: AbortSignal;
+  }) => MaybePromise<TPage>;
+  items: (page: TPage) => Iterable<TItem>;
+  toRecord: (args: {
+    ctx: DefinedAdapterContext<TClient>;
+    connectionId: string;
+    cursor: TCursor | undefined;
+    page: TPage;
+    item: TItem;
+  }) => MaybePromise<AdapterInboundRecord | AdapterInboundRecord[] | null | undefined>;
+  nextCursor?: (args: {
+    ctx: DefinedAdapterContext<TClient>;
+    connectionId: string;
+    cursor: TCursor | undefined;
+    page: TPage;
+    item: TItem;
+  }) => MaybePromise<TCursor | undefined>;
+  pageCursor?: (args: {
+    ctx: DefinedAdapterContext<TClient>;
+    connectionId: string;
+    cursor: TCursor | undefined;
+    page: TPage;
+  }) => MaybePromise<TCursor | undefined>;
+  hasMore?: (args: {
+    ctx: DefinedAdapterContext<TClient>;
+    connectionId: string;
+    cursor: TCursor | undefined;
+    page: TPage;
+    itemCount: number;
+  }) => MaybePromise<boolean>;
+};
 
-    let consecutiveErrors = 0;
-    const maxConsecutiveErrors = config.maxConsecutiveErrors ?? 0;
+export function pollMonitor<TClient, TCursor, TPage, TItem>(
+  config: PollConfig<TClient, TCursor, TPage, TItem>,
+): (ctx: DefinedAdapterContext<TClient>, emit: EmitFunc) => Promise<void> {
+  return async (ctx, emit) => {
+    const connectionId = requireConnectionId(ctx);
+    let cursor = config.initialCursor
+      ? await config.initialCursor({ ctx, connectionId })
+      : undefined;
+    const idleMs = Math.max(0, Math.trunc(config.idleMs ?? 0));
+    const errorDelayMs = Math.max(0, Math.trunc(config.errorDelayMs ?? 1_000));
 
-    while (true) {
-      if (ctx.signal.aborted) {
-        ctx.log.info("monitor shutting down (signal aborted)");
-        return;
-      }
-
-      let fetched: { events: NexusEvent[]; newCursor?: Date };
+    while (!ctx.signal.aborted) {
       try {
-        fetched = await config.fetch(ctx, cursor, args.account);
-      } catch (err) {
-        consecutiveErrors++;
-        ctx.log.error("poll fetch error (%d consecutive): %s", consecutiveErrors, errorToString(err));
+        const page = await config.poll({
+          ctx,
+          connectionId,
+          cursor,
+          signal: ctx.signal,
+        });
 
-        if (maxConsecutiveErrors > 0 && consecutiveErrors >= maxConsecutiveErrors) {
-          throw err instanceof Error ? err : new Error(String(err));
+        let emitted = 0;
+        for (const item of config.items(page)) {
+          const result = await config.toRecord({
+            ctx,
+            connectionId,
+            cursor,
+            page,
+            item,
+          });
+          for (const record of asRecords(result)) {
+            emit(record);
+            emitted += 1;
+          }
+          if (config.nextCursor) {
+            cursor = await config.nextCursor({
+              ctx,
+              connectionId,
+              cursor,
+              page,
+              item,
+            });
+          }
         }
 
-        await sleep(errorBackoffMs, ctx.signal, ctx.log);
-        continue;
-      }
+        if (config.pageCursor) {
+          cursor = await config.pageCursor({
+            ctx,
+            connectionId,
+            cursor,
+            page,
+          });
+        }
 
-      consecutiveErrors = 0;
-
-      const events = fetched.events ?? [];
-      for (const event of events) {
-        emit(event);
+        if (emitted > 0) {
+          ctx.log.debug("emitted %d records", emitted);
+        }
+        if (idleMs > 0) {
+          await sleepWithSignal(ctx.signal, idleMs);
+        }
+      } catch (err) {
+        if (ctx.signal.aborted) {
+          break;
+        }
+        ctx.log.error("poll monitor error: %s", err instanceof Error ? err.message : String(err));
+        if (errorDelayMs > 0) {
+          await sleepWithSignal(ctx.signal, errorDelayMs);
+        }
       }
-      if (events.length > 0) {
-        ctx.log.debug("emitted %d events", events.length);
-      }
-
-      if (fetched.newCursor instanceof Date && !Number.isNaN(fetched.newCursor.valueOf())) {
-        cursor = fetched.newCursor;
-      }
-
-      await sleep(intervalMs, ctx.signal, ctx.log);
     }
   };
 }
 
-function errorToString(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+export function pollBackfill<TClient, TCursor, TPage, TItem>(
+  config: PollBackfillConfig<TClient, TCursor, TPage, TItem>,
+): (ctx: DefinedAdapterContext<TClient>, args: { since: Date }, emit: EmitFunc) => Promise<void> {
+  return async (ctx, args, emit) => {
+    const connectionId = requireConnectionId(ctx);
+    let cursor = config.initialCursor
+      ? await config.initialCursor({ ctx, connectionId, since: args.since })
+      : undefined;
+
+    while (!ctx.signal.aborted) {
+      const page = await config.poll({
+        ctx,
+        connectionId,
+        cursor,
+        since: args.since,
+        signal: ctx.signal,
+      });
+
+      let itemCount = 0;
+      for (const item of config.items(page)) {
+        itemCount += 1;
+        const result = await config.toRecord({
+          ctx,
+          connectionId,
+          cursor,
+          page,
+          item,
+        });
+        for (const record of asRecords(result)) {
+          emit(record);
+        }
+        if (config.nextCursor) {
+          cursor = await config.nextCursor({
+            ctx,
+            connectionId,
+            cursor,
+            page,
+            item,
+          });
+        }
+      }
+
+      if (config.pageCursor) {
+        cursor = await config.pageCursor({
+          ctx,
+          connectionId,
+          cursor,
+          page,
+        });
+      }
+
+      const hasMore = config.hasMore
+        ? await config.hasMore({
+            ctx,
+            connectionId,
+            cursor,
+            page,
+            itemCount,
+          })
+        : itemCount > 0;
+      if (!hasMore) {
+        return;
+      }
+    }
+  };
 }
 
-async function sleep(ms: number, signal: AbortSignal, log: AdapterLogger): Promise<void> {
-  await new Promise<void>((resolve) => {
-    const t = setTimeout(() => {
-      signal.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
+function asRecords(
+  value: AdapterInboundRecord | AdapterInboundRecord[] | null | undefined,
+): AdapterInboundRecord[] {
+  if (!value) {
+    return [];
+  }
+  return Array.isArray(value) ? value : [value];
+}
 
-    const onAbort = () => {
-      clearTimeout(t);
-      signal.removeEventListener("abort", onAbort);
-      log.debug("sleep aborted");
-      resolve();
-    };
-
-    if (signal.aborted) {
-      clearTimeout(t);
-      resolve();
-      return;
-    }
-    signal.addEventListener("abort", onAbort, { once: true });
-  });
+function requireConnectionId<TClient>(ctx: DefinedAdapterContext<TClient>): string {
+  const connectionId = ctx.connectionId?.trim();
+  if (!connectionId) {
+    throw new Error("connection id is required");
+  }
+  return connectionId;
 }

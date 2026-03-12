@@ -1,0 +1,8 @@
+{
+  "id": "nexus-adapter-telegram",
+  "version": "0.1.0",
+  "displayName": "Telegram",
+  "description": "Shared Telegram adapter package for Nex.",
+  "platform": "telegram",
+  "command": "./bin/nexus-adapter-telegram"
+}

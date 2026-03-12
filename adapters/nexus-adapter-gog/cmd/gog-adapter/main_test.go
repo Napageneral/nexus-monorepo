@@ -90,13 +90,13 @@ func TestInfoIncludesBackfillOperation(t *testing.T) {
 	}
 	found := false
 	for _, operation := range got.Operations {
-		if operation == "event.backfill" {
+		if operation == "records.backfill" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("expected event.backfill operation in info.Operations, got %#v", got.Operations)
+		t.Fatalf("expected records.backfill operation in info.Operations, got %#v", got.Operations)
 	}
 }
 

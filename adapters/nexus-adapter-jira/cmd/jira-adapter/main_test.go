@@ -153,7 +153,7 @@ func TestSetupFlowPersistsAcrossInvocations(t *testing.T) {
 	defer restoreTransport()
 
 	startResult, err := setupStart(context.Background(), nexadapter.AdapterSetupRequest{
-		Account: "vrtly-jira",
+		ConnectionID: "vrtly-jira",
 		Payload: map[string]any{
 			"site":      "vrtly",
 			"email":     "tyler@example.com",

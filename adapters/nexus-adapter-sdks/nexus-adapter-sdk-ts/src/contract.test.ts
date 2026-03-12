@@ -8,9 +8,9 @@ import {
   AdapterControlOutputFrameSchema,
   AdapterHealthSchema,
   AdapterInfoSchema,
+  AdapterInboundRecordSchema,
   AdapterStreamStatusSchema,
   DeliveryResultSchema,
-  NexusEventSchema,
   StreamEventSchema,
 } from "./protocol.js";
 import { readAdapterRuntimeContextFile } from "./runtime-context.js";
@@ -20,8 +20,7 @@ function contractDir(): string {
   if (env && env.trim()) {
     return path.resolve(env);
   }
-  // Default assumes this repo is checked out next to `nexus-specs`.
-  return path.resolve(process.cwd(), "../../nexus-specs/specs/delivery/contract");
+  return path.resolve(process.cwd(), "../../../nex/docs/specs/adapters/contract");
 }
 
 function loadJSON(filePath: string): unknown {
@@ -63,9 +62,9 @@ describe("adapter protocol contract (nexus-specs)", () => {
     expect(get("AdapterInfo")(adapterInfo)).toBe(true);
     AdapterInfoSchema.parse(adapterInfo);
 
-    const nexusEvent = loadJSON(path.join(fixturesDir, "nexus_event.json"));
-    expect(get("NexusEvent")(nexusEvent)).toBe(true);
-    NexusEventSchema.parse(nexusEvent);
+    const inboundRecord = loadJSON(path.join(fixturesDir, "inbound_record.json"));
+    expect(get("AdapterInboundRecord")(inboundRecord)).toBe(true);
+    AdapterInboundRecordSchema.parse(inboundRecord);
 
     const deliveryOk = loadJSON(path.join(fixturesDir, "delivery_result_success.json"));
     expect(get("DeliveryResult")(deliveryOk)).toBe(true);
@@ -84,12 +83,14 @@ describe("adapter protocol contract (nexus-specs)", () => {
     AdapterAccountSchema.parse(account);
 
     const runtimeContextPath = path.join(fixturesDir, "runtime_context.json");
-    const runtimeCtx = loadJSON(runtimeContextPath);
-    expect(get("RuntimeContext")(runtimeCtx)).toBe(true);
-    // TS SDK loads runtime context from disk (not via zod schema export).
+    // RuntimeContext is a supporting fixture, not a published schema definition.
+    expect(loadJSON(runtimeContextPath)).toMatchObject({
+      platform: "discord",
+      connection_id: "echo-bot",
+    });
     expect(readAdapterRuntimeContextFile(runtimeContextPath)).toMatchObject({
       platform: "discord",
-      account_id: "echo-bot",
+      connection_id: "echo-bot",
     });
 
     const streamEvents = loadJSONL(path.join(fixturesDir, "stream_events.jsonl"));
@@ -115,5 +116,46 @@ describe("adapter protocol contract (nexus-specs)", () => {
       expect(get("AdapterControlOutputFrame")(frame)).toBe(true);
       AdapterControlOutputFrameSchema.parse(frame);
     }
+  });
+
+  it("TS SDK schemas round-trip canonical fixtures without losing contract fields", () => {
+    const dir = contractDir();
+    const schemaPath = path.join(dir, "adapter-protocol.schema.json");
+    const schema = loadJSON(schemaPath) as Record<string, unknown>;
+
+    const ajv = new Ajv2020({ allErrors: true, strict: true });
+    ajv.addSchema(schema);
+
+    const id = String(schema["$id"] ?? "");
+    expect(id).toMatch(/^https?:\/\//u);
+
+    const get = (ref: string) => {
+      const v = ajv.getSchema(`${id}#/$defs/${ref}`);
+      if (!v) {
+        throw new Error(`missing schema ref: ${ref}`);
+      }
+      return v;
+    };
+
+    const fixturesDir = path.join(dir, "fixtures");
+
+    const roundTrip = <T>(ref: string, name: string, parse: (value: unknown) => T) => {
+      const parsed = parse(loadJSON(path.join(fixturesDir, name)));
+      const encoded = JSON.parse(JSON.stringify(parsed)) as unknown;
+      expect(get(ref)(encoded)).toBe(true);
+    };
+
+    roundTrip("AdapterInfo", "adapter_info.json", (value) => AdapterInfoSchema.parse(value));
+    roundTrip("AdapterInboundRecord", "inbound_record.json", (value) =>
+      AdapterInboundRecordSchema.parse(value),
+    );
+    roundTrip("DeliveryResult", "delivery_result_success.json", (value) =>
+      DeliveryResultSchema.parse(value),
+    );
+    roundTrip("DeliveryResult", "delivery_result_rate_limited.json", (value) =>
+      DeliveryResultSchema.parse(value),
+    );
+    roundTrip("AdapterHealth", "adapter_health.json", (value) => AdapterHealthSchema.parse(value));
+    roundTrip("AdapterAccount", "adapter_account.json", (value) => AdapterAccountSchema.parse(value));
   });
 });

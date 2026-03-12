@@ -47,44 +47,56 @@ type backfillState struct {
 }
 
 func main() {
-	nexadapter.Run(nexadapter.Adapter{
-		Operations: nexadapter.AdapterOperations{
-			AdapterInfo:         info,
-			AdapterMonitorStart: monitor,
-			DeliverySend:        send,
-			EventBackfill:       backfill,
-			AdapterHealth:       health,
-			AdapterAccountsList: accounts,
-			AdapterSetupStart:   setupStart,
-			AdapterSetupSubmit:  setupSubmit,
-			AdapterSetupStatus:  setupStatus,
-			AdapterSetupCancel:  setupCancel,
-		},
-	})
+	nexadapter.Run(nexadapter.DefineAdapter(adapterConfig()))
 }
 
-func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
-	return &nexadapter.AdapterInfo{
+func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
+	return nexadapter.DefineAdapterConfig[struct{}]{
 		Platform: "gmail",
 		Name:     adapterName,
 		Version:  adapterVersion,
-		Operations: []nexadapter.AdapterOperation{
-			nexadapter.OpAdapterInfo,
-			nexadapter.OpAdapterMonitorStart,
-			nexadapter.OpDeliverySend,
-			nexadapter.OpEventBackfill,
-			nexadapter.OpAdapterHealth,
-			nexadapter.OpAdapterAccountsList,
-			nexadapter.OpAdapterSetupStart,
-			nexadapter.OpAdapterSetupSubmit,
-			nexadapter.OpAdapterSetupStatus,
-			nexadapter.OpAdapterSetupCancel,
+		Connection: nexadapter.ConnectionHandlers[struct{}]{
+			Accounts: func(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterAccount, error) {
+				return accounts(ctx.Context)
+			},
+			Health: func(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth, error) {
+				return health(ctx.Context, ctx.ConnectionID)
+			},
 		},
+		Ingest: nexadapter.IngestHandlers[struct{}]{
+			Monitor: func(ctx nexadapter.AdapterContext[struct{}], emit nexadapter.EmitFunc) error {
+				return monitor(ctx.Context, ctx.ConnectionID, emit)
+			},
+			Backfill: func(ctx nexadapter.AdapterContext[struct{}], since time.Time, emit nexadapter.EmitFunc) error {
+				return backfill(ctx.Context, ctx.ConnectionID, since, emit)
+			},
+		},
+		Delivery: nexadapter.DeliveryHandlers[struct{}]{
+			Send: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.SendRequest) (*nexadapter.DeliveryResult, error) {
+				return send(ctx.Context, req)
+			},
+		},
+		Setup: nexadapter.SetupHandlers[struct{}]{
+			Start: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+				return setupStart(ctx.Context, req)
+			},
+			Submit: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+				return setupSubmit(ctx.Context, req)
+			},
+			Status: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+				return setupStatus(ctx.Context, req)
+			},
+			Cancel: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+				return setupCancel(ctx.Context, req)
+			},
+		},
+		Methods:           map[string]nexadapter.DeclaredMethod[struct{}]{},
 		CredentialService: "google",
 		MultiAccount:      true,
 		Auth: &nexadapter.AdapterAuthManifest{
 			Methods: []nexadapter.AdapterAuthMethod{
 				{
+					ID:                    "google_oauth_managed",
 					Type:                  "oauth2",
 					Label:                 "Connect Google Account",
 					Icon:                  "google",
@@ -98,6 +110,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 					},
 				},
 				{
+					ID:      "gog_existing_auth",
 					Type:    "custom_flow",
 					Label:   "Use Existing Gog Auth",
 					Icon:    "settings",
@@ -125,7 +138,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			},
 			SetupGuide: "Authenticate via Google OAuth, or use existing `gog auth add` credentials and complete custom setup.",
 		},
-		PlatformCapabilities: nexadapter.ChannelCapabilities{
+		Capabilities: nexadapter.ChannelCapabilities{
 			TextLimit:             20000,
 			SupportsMarkdown:      true,
 			MarkdownFlavor:        "standard",
@@ -142,7 +155,12 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			SupportsVoiceNotes:    false,
 			SupportsStreamingEdit: false,
 		},
-	}, nil
+	}
+}
+
+func info(ctx context.Context) (*nexadapter.AdapterInfo, error) {
+	adapter := nexadapter.DefineAdapter(adapterConfig())
+	return adapter.Operations.AdapterInfo(ctx)
 }
 
 func platformCredentialURL() string {
@@ -269,7 +287,7 @@ func payloadBool(payload map[string]any, key string) bool {
 }
 
 func selectSetupAccount(req nexadapter.AdapterSetupRequest, configured []nexadapter.AdapterAccount) (string, bool) {
-	requested := strings.TrimSpace(strings.ToLower(req.Account))
+	requested := strings.TrimSpace(strings.ToLower(req.ConnectionID))
 	if requested == "" {
 		requested = strings.TrimSpace(strings.ToLower(payloadString(req.Payload, "account_email")))
 	}
@@ -300,7 +318,7 @@ func buildGogSetupResult(ctx context.Context, req nexadapter.AdapterSetupRequest
 		return &nexadapter.AdapterSetupResult{
 			Status:       nexadapter.SetupStatusRequiresInput,
 			SessionID:    sessionID,
-			Account:      setupAccountOrDefault(req.Account),
+			ConnectionID: setupAccountOrDefault(req.ConnectionID),
 			Service:      "google",
 			Message:      "Confirm when `gog auth add <email>` is complete.",
 			Instructions: "Run `gog auth add <email>` to authenticate Gmail access, then submit again.",
@@ -313,7 +331,7 @@ func buildGogSetupResult(ctx context.Context, req nexadapter.AdapterSetupRequest
 		return &nexadapter.AdapterSetupResult{
 			Status:       nexadapter.SetupStatusRequiresInput,
 			SessionID:    sessionID,
-			Account:      setupAccountOrDefault(req.Account),
+			ConnectionID: setupAccountOrDefault(req.ConnectionID),
 			Service:      "google",
 			Message:      "Unable to read Gog auth accounts.",
 			Instructions: "Ensure Gog CLI is installed and run `gog auth add <email>`.",
@@ -329,7 +347,7 @@ func buildGogSetupResult(ctx context.Context, req nexadapter.AdapterSetupRequest
 		return &nexadapter.AdapterSetupResult{
 			Status:       nexadapter.SetupStatusRequiresInput,
 			SessionID:    sessionID,
-			Account:      setupAccountOrDefault(account),
+			ConnectionID: setupAccountOrDefault(account),
 			Service:      "google",
 			Message:      "Requested Gog account is not authenticated yet.",
 			Instructions: "Run `gog auth add <email>` for this account, then submit again.",
@@ -346,11 +364,11 @@ func buildGogSetupResult(ctx context.Context, req nexadapter.AdapterSetupRequest
 	}
 	if healthResult.Connected {
 		return &nexadapter.AdapterSetupResult{
-			Status:    nexadapter.SetupStatusCompleted,
-			SessionID: sessionID,
-			Account:   account,
-			Service:   "google",
-			Message:   "Gog account is authenticated and ready.",
+			Status:       nexadapter.SetupStatusCompleted,
+			SessionID:    sessionID,
+			ConnectionID: account,
+			Service:      "google",
+			Message:      "Gog account is authenticated and ready.",
 			Metadata: map[string]any{
 				"configured_accounts": len(configured),
 			},
@@ -360,7 +378,7 @@ func buildGogSetupResult(ctx context.Context, req nexadapter.AdapterSetupRequest
 	return &nexadapter.AdapterSetupResult{
 		Status:       nexadapter.SetupStatusRequiresInput,
 		SessionID:    sessionID,
-		Account:      account,
+		ConnectionID: account,
 		Service:      "google",
 		Message:      "Gog account health check failed.",
 		Instructions: "Re-run `gog auth add <email>` and submit again.",
@@ -385,23 +403,23 @@ func setupStatus(ctx context.Context, req nexadapter.AdapterSetupRequest) (*nexa
 
 func setupCancel(_ context.Context, req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
 	return &nexadapter.AdapterSetupResult{
-		Status:    nexadapter.SetupStatusCancelled,
-		SessionID: setupSessionIDOrDefault(req.SessionID),
-		Account:   setupAccountOrDefault(req.Account),
-		Service:   "google",
-		Message:   "Setup cancelled.",
+		Status:       nexadapter.SetupStatusCancelled,
+		SessionID:    setupSessionIDOrDefault(req.SessionID),
+		ConnectionID: setupAccountOrDefault(req.ConnectionID),
+		Service:      "google",
+		Message:      "Setup cancelled.",
 	}, nil
 }
 
 // ---------- Health ----------
 
-func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, error) {
-	resolved, err := resolveAccount(ctx, account)
+func health(ctx context.Context, connectionID string) (*nexadapter.AdapterHealth, error) {
+	resolved, err := resolveAccount(ctx, connectionID)
 	if err != nil {
 		return &nexadapter.AdapterHealth{
-			Connected: false,
-			Account:   fallbackAccount(account),
-			Error:     err.Error(),
+			Connected:    false,
+			ConnectionID: fallbackAccount(connectionID),
+			Error:        err.Error(),
 		}, nil
 	}
 
@@ -409,23 +427,23 @@ func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, err
 	_, err = runGogJSON(ctx, resolved, "gmail", "labels", "list")
 	if err != nil {
 		return &nexadapter.AdapterHealth{
-			Connected: false,
-			Account:   resolved,
-			Error:     err.Error(),
+			Connected:    false,
+			ConnectionID: resolved,
+			Error:        err.Error(),
 		}, nil
 	}
 
 	return &nexadapter.AdapterHealth{
-		Connected:   true,
-		Account:     resolved,
-		LastEventAt: time.Now().UnixMilli(),
+		Connected:    true,
+		ConnectionID: resolved,
+		LastEventAt:  time.Now().UnixMilli(),
 	}, nil
 }
 
 // ---------- Send ----------
 
 func send(ctx context.Context, req nexadapter.SendRequest) (*nexadapter.DeliveryResult, error) {
-	resolved, err := resolveAccount(ctx, req.Account)
+	resolved, err := resolveAccount(ctx, req.Target.ConnectionID)
 	if err != nil {
 		return &nexadapter.DeliveryResult{
 			Success: false,
@@ -437,13 +455,13 @@ func send(ctx context.Context, req nexadapter.SendRequest) (*nexadapter.Delivery
 		}, nil
 	}
 
-	target := strings.TrimSpace(req.To)
+	target := strings.TrimSpace(req.Target.Channel.ContainerID)
 	if target == "" {
 		return &nexadapter.DeliveryResult{
 			Success: false,
 			Error: &nexadapter.DeliveryError{
 				Type:    "content_rejected",
-				Message: "--to is required",
+				Message: "target.channel.container_id is required",
 				Retry:   false,
 			},
 		}, nil
@@ -476,8 +494,8 @@ func send(ctx context.Context, req nexadapter.SendRequest) (*nexadapter.Delivery
 		target,
 		subject,
 		body,
-		strings.TrimSpace(req.ThreadID),
-		strings.TrimSpace(req.ReplyToID),
+		strings.TrimSpace(req.Target.Channel.ThreadID),
+		strings.TrimSpace(req.Target.ReplyToID),
 	)...)
 	if err != nil {
 		return &nexadapter.DeliveryResult{
@@ -601,8 +619,8 @@ type gogGmailGetResponse struct {
 	Body    string            `json:"body"`
 }
 
-func monitor(ctx context.Context, account string, emit nexadapter.EmitFunc) error {
-	resolved, err := resolveAccount(ctx, account)
+func monitor(ctx context.Context, connectionID string, emit nexadapter.EmitFunc) error {
+	resolved, err := resolveAccount(ctx, connectionID)
 	if err != nil {
 		return err
 	}
@@ -629,8 +647,8 @@ func monitor(ctx context.Context, account string, emit nexadapter.EmitFunc) erro
 	return monitorWithPollingQuery(ctx, resolved, pollStatePath, emit)
 }
 
-func backfill(ctx context.Context, account string, since time.Time, emit nexadapter.EmitFunc) error {
-	resolved, err := resolveAccount(ctx, account)
+func backfill(ctx context.Context, connectionID string, since time.Time, emit nexadapter.EmitFunc) error {
+	resolved, err := resolveAccount(ctx, connectionID)
 	if err != nil {
 		return err
 	}
@@ -1084,15 +1102,15 @@ func buildBackfillQuery(since time.Time) string {
 	return fmt.Sprintf("%s %s", resolveBackfillQueryBase(), dateFilter)
 }
 
-func buildEventFromMessage(ctx context.Context, account string, messageID string) (nexadapter.NexusEvent, error) {
+func buildEventFromMessage(ctx context.Context, account string, messageID string) (nexadapter.AdapterInboundRecord, error) {
 	out, err := runGogJSON(ctx, account, "gmail", "get", messageID, "--format", "metadata")
 	if err != nil {
-		return nexadapter.NexusEvent{}, err
+		return nexadapter.AdapterInboundRecord{}, err
 	}
 
 	var resp gogGmailGetResponse
 	if err := json.Unmarshal(out, &resp); err != nil {
-		return nexadapter.NexusEvent{}, fmt.Errorf("parse gmail get: %w", err)
+		return nexadapter.AdapterInboundRecord{}, fmt.Errorf("parse gmail get: %w", err)
 	}
 
 	fromHeader := strings.TrimSpace(resp.Headers["from"])
@@ -1116,12 +1134,13 @@ func buildEventFromMessage(ctx context.Context, account string, messageID string
 	}
 
 	content := renderEmailEventContent(subject, resp.Message.Snippet)
-	eventBuilder := nexadapter.NewEvent("gmail", fmt.Sprintf("gmail:message:%s", messageID)).
+	eventBuilder := nexadapter.NewRecord("gmail", fmt.Sprintf("gmail:message:%s", messageID)).
 		WithTimestampUnixMs(timestamp).
 		WithContent(content).
+		WithContentType("text/markdown").
 		WithSender(senderID, senderName).
 		WithContainer(peerID, peerKind).
-		WithAccount(account).
+		WithConnection(account).
 		WithMetadata("message_id", messageID).
 		WithMetadata("thread_id", threadID).
 		WithMetadata("subject", subject).

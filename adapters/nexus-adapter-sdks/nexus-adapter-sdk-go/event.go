@@ -119,3 +119,79 @@ func (b *RecordBuilder) WithRoutingMetadata(key string, value any) *RecordBuilde
 func (b *RecordBuilder) Build() AdapterInboundRecord {
 	return b.record
 }
+
+type MessageRecordOptions struct {
+	Platform         string
+	ConnectionID     string
+	ExternalRecordID string
+	SenderID         string
+	SenderName       string
+	ReceiverID       string
+	ReceiverName     string
+	SpaceID          string
+	SpaceName        string
+	ContainerID      string
+	ContainerKind    string
+	ContainerName    string
+	ThreadID         string
+	ThreadName       string
+	ReplyToID        string
+	Timestamp        time.Time
+	TimestampUnixMs  int64
+	Content          string
+	ContentType      string
+	Attachments      []Attachment
+	Recipients       []string
+	Metadata         map[string]any
+	RoutingMetadata  map[string]any
+}
+
+func MessageRecord(options MessageRecordOptions) AdapterInboundRecord {
+	builder := NewRecord(options.Platform, options.ExternalRecordID).
+		WithConnection(options.ConnectionID).
+		WithSender(options.SenderID, options.SenderName).
+		WithContainer(options.ContainerID, options.ContainerKind).
+		WithContent(options.Content)
+
+	if options.ContentType != "" {
+		builder.WithContentType(options.ContentType)
+	}
+	if !options.Timestamp.IsZero() {
+		builder.WithTimestamp(options.Timestamp)
+	} else if options.TimestampUnixMs > 0 {
+		builder.WithTimestampUnixMs(options.TimestampUnixMs)
+	}
+	if options.ReceiverID != "" {
+		builder.WithReceiver(options.ReceiverID, options.ReceiverName)
+	}
+	if options.SpaceID != "" {
+		builder.WithSpace(options.SpaceID, options.SpaceName)
+	}
+	if options.ThreadID != "" {
+		builder.WithThread(options.ThreadID)
+	}
+	if options.ReplyToID != "" {
+		builder.WithReplyTo(options.ReplyToID)
+	}
+	for _, attachment := range options.Attachments {
+		builder.WithAttachment(attachment)
+	}
+	for _, recipient := range options.Recipients {
+		builder.WithRecipient(recipient)
+	}
+	for key, value := range options.Metadata {
+		builder.WithMetadata(key, value)
+	}
+	for key, value := range options.RoutingMetadata {
+		builder.WithRoutingMetadata(key, value)
+	}
+
+	record := builder.Build()
+	if options.ContainerName != "" {
+		record.Routing.ContainerName = options.ContainerName
+	}
+	if options.ThreadName != "" {
+		record.Routing.ThreadName = options.ThreadName
+	}
+	return record
+}

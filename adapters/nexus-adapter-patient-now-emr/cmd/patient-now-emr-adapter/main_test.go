@@ -85,14 +85,14 @@ func TestBuildPatientNowEvents_AggregateMetadataOnly(t *testing.T) {
 		"metadata_key": true,
 	}
 
-	for key := range events[0].Metadata {
+	for key := range events[0].Payload.Metadata {
 		if !allowed[key] {
 			t.Fatalf("unexpected metadata key %q; expected aggregate-only keys", key)
 		}
 	}
 
 	for _, forbidden := range []string{"patient_name", "phone", "email", "dob", "appointment_id"} {
-		if _, exists := events[0].Metadata[forbidden]; exists {
+		if _, exists := events[0].Payload.Metadata[forbidden]; exists {
 			t.Fatalf("forbidden PHI metadata key present: %s", forbidden)
 		}
 	}

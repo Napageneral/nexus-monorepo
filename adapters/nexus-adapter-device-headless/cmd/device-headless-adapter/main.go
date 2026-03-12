@@ -21,40 +21,46 @@ const (
 )
 
 func main() {
-	nexadapter.Run(nexadapter.Adapter{
-		Operations: nexadapter.AdapterOperations{
-			AdapterInfo:         info,
-			AdapterHealth:       health,
-			AdapterAccountsList: accounts,
-			AdapterControlStart: controlStart,
-			AdapterSetupStart:   setupStart,
-			AdapterSetupSubmit:  setupSubmit,
-			AdapterSetupStatus:  setupStatus,
-			AdapterSetupCancel:  setupCancel,
-		},
-	})
+	nexadapter.Run(nexadapter.DefineAdapter(adapterConfig()))
 }
 
-func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
-	return &nexadapter.AdapterInfo{
+func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
+	return nexadapter.DefineAdapterConfig[struct{}]{
 		Platform: platformID,
 		Name:     adapterName,
 		Version:  adapterVersion,
-		Operations: []nexadapter.AdapterOperation{
-			nexadapter.OpAdapterInfo,
-			nexadapter.OpAdapterHealth,
-			nexadapter.OpAdapterAccountsList,
-			nexadapter.OpAdapterControlStart,
-			nexadapter.OpAdapterSetupStart,
-			nexadapter.OpAdapterSetupSubmit,
-			nexadapter.OpAdapterSetupStatus,
-			nexadapter.OpAdapterSetupCancel,
+		Connection: nexadapter.ConnectionHandlers[struct{}]{
+			Accounts: func(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterAccount, error) {
+				return accounts(ctx.Context)
+			},
+			Health: func(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth, error) {
+				return health(ctx.Context, ctx.ConnectionID)
+			},
 		},
+		Setup: nexadapter.SetupHandlers[struct{}]{
+			Start: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+				return setupStart(ctx.Context, req)
+			},
+			Submit: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+				return setupSubmit(ctx.Context, req)
+			},
+			Status: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+				return setupStatus(ctx.Context, req)
+			},
+			Cancel: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
+				return setupCancel(ctx.Context, req)
+			},
+		},
+		Control: func(ctx context.Context, connectionID string, session *nexadapter.ControlSession) error {
+			return controlStart(ctx, connectionID, session)
+		},
+		Methods:           map[string]nexadapter.DeclaredMethod[struct{}]{},
 		CredentialService: "device",
 		MultiAccount:      true,
 		Auth: &nexadapter.AdapterAuthManifest{
 			Methods: []nexadapter.AdapterAuthMethod{
 				{
+					ID:      "device_headless_pairing",
 					Type:    "custom_flow",
 					Label:   "Connect Headless Host",
 					Icon:    "terminal",
@@ -64,7 +70,7 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			},
 			SetupGuide: "Run the headless companion host process on the target machine, then approve pairing before invoking system/browser commands.",
 		},
-		PlatformCapabilities: nexadapter.ChannelCapabilities{
+		Capabilities: nexadapter.ChannelCapabilities{
 			TextLimit:             20000,
 			SupportsMarkdown:      false,
 			MarkdownFlavor:        "standard",
@@ -81,7 +87,12 @@ func info(_ context.Context) (*nexadapter.AdapterInfo, error) {
 			SupportsVoiceNotes:    false,
 			SupportsStreamingEdit: false,
 		},
-	}, nil
+	}
+}
+
+func info(ctx context.Context) (*nexadapter.AdapterInfo, error) {
+	adapter := nexadapter.DefineAdapter(adapterConfig())
+	return adapter.Operations.AdapterInfo(ctx)
 }
 
 func accounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {
@@ -95,13 +106,13 @@ func accounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {
 	}, nil
 }
 
-func health(_ context.Context, account string) (*nexadapter.AdapterHealth, error) {
+func health(_ context.Context, connectionID string) (*nexadapter.AdapterHealth, error) {
 	commands := headlessCommands()
 	caps := headlessCaps()
 	return &nexadapter.AdapterHealth{
-		Connected:   envBool("NEXUS_DEVICE_HEADLESS_CONNECTED", true),
-		Account:     fallbackAccount(account),
-		LastEventAt: time.Now().UnixMilli(),
+		Connected:    envBool("NEXUS_DEVICE_HEADLESS_CONNECTED", true),
+		ConnectionID: fallbackConnectionID(connectionID),
+		LastEventAt:  time.Now().UnixMilli(),
 		Details: map[string]any{
 			"platform":   platformID,
 			"mode":       "device_control",
@@ -112,10 +123,10 @@ func health(_ context.Context, account string) (*nexadapter.AdapterHealth, error
 	}, nil
 }
 
-func controlStart(ctx context.Context, account string, session *nexadapter.ControlSession) error {
+func controlStart(ctx context.Context, connectionID string, session *nexadapter.ControlSession) error {
 	commands := headlessCommands()
 	endpoint := nexadapter.AdapterControlEndpoint{
-		EndpointID:  endpointID("NEXUS_DEVICE_HEADLESS_ENDPOINT_ID", "headless", account),
+		EndpointID:  endpointID("NEXUS_DEVICE_HEADLESS_ENDPOINT_ID", "headless", connectionID),
 		DisplayName: "Headless Host",
 		Platform:    platformID,
 		Caps:        headlessCaps(),
@@ -180,7 +191,7 @@ func controlStart(ctx context.Context, account string, session *nexadapter.Contr
 					"platform":    platformID,
 					"endpoint_id": endpoint.EndpointID,
 					"command":     command,
-					"account":     fallbackAccount(account),
+					"connection":  fallbackConnectionID(connectionID),
 					"result":      resultPayload,
 				},
 			}, nil
@@ -316,14 +327,14 @@ func setupSubmit(_ context.Context, req nexadapter.AdapterSetupRequest) (*nexada
 		return requiresSetupInput(req, "Setup incomplete: start host process and approve pairing first."), nil
 	}
 	return &nexadapter.AdapterSetupResult{
-		Status:    nexadapter.SetupStatusCompleted,
-		SessionID: setupSessionID(req.SessionID),
-		Account:   fallbackAccount(req.Account),
-		Service:   "device-headless",
-		Message:   "Headless host setup completed.",
+		Status:       nexadapter.SetupStatusCompleted,
+		SessionID:    setupSessionID(req.SessionID),
+		ConnectionID: fallbackConnectionID(req.ConnectionID),
+		Service:      "device-headless",
+		Message:      "Headless host setup completed.",
 		Metadata: map[string]any{
 			"platform":  platformID,
-			"endpoint":  endpointID("NEXUS_DEVICE_HEADLESS_ENDPOINT_ID", "headless", req.Account),
+			"endpoint":  endpointID("NEXUS_DEVICE_HEADLESS_ENDPOINT_ID", "headless", req.ConnectionID),
 			"completed": true,
 		},
 	}, nil
@@ -333,7 +344,7 @@ func setupStatus(_ context.Context, req nexadapter.AdapterSetupRequest) (*nexada
 	return &nexadapter.AdapterSetupResult{
 		Status:       nexadapter.SetupStatusPending,
 		SessionID:    setupSessionID(req.SessionID),
-		Account:      fallbackAccount(req.Account),
+		ConnectionID: fallbackConnectionID(req.ConnectionID),
 		Service:      "device-headless",
 		Message:      "Awaiting setup confirmation.",
 		Instructions: "Submit confirm_service_running=yes and confirm_paired=yes.",
@@ -343,11 +354,11 @@ func setupStatus(_ context.Context, req nexadapter.AdapterSetupRequest) (*nexada
 
 func setupCancel(_ context.Context, req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
 	return &nexadapter.AdapterSetupResult{
-		Status:    nexadapter.SetupStatusCancelled,
-		SessionID: setupSessionID(req.SessionID),
-		Account:   fallbackAccount(req.Account),
-		Service:   "device-headless",
-		Message:   "Headless host setup cancelled.",
+		Status:       nexadapter.SetupStatusCancelled,
+		SessionID:    setupSessionID(req.SessionID),
+		ConnectionID: fallbackConnectionID(req.ConnectionID),
+		Service:      "device-headless",
+		Message:      "Headless host setup cancelled.",
 	}, nil
 }
 
@@ -355,7 +366,7 @@ func requiresSetupInput(req nexadapter.AdapterSetupRequest, message string) *nex
 	return &nexadapter.AdapterSetupResult{
 		Status:       nexadapter.SetupStatusRequiresInput,
 		SessionID:    setupSessionID(req.SessionID),
-		Account:      fallbackAccount(req.Account),
+		ConnectionID: fallbackConnectionID(req.ConnectionID),
 		Service:      "device-headless",
 		Message:      message,
 		Instructions: "Run headless host process, verify reachability, then approve pairing.",
@@ -507,15 +518,15 @@ func setupSessionID(sessionID string) string {
 	return trimmed
 }
 
-func endpointID(envName, prefix, account string) string {
+func endpointID(envName, prefix, connectionID string) string {
 	if value := strings.TrimSpace(os.Getenv(envName)); value != "" {
 		return value
 	}
-	return fmt.Sprintf("%s-%s", prefix, sanitizeToken(fallbackAccount(account)))
+	return fmt.Sprintf("%s-%s", prefix, sanitizeToken(fallbackConnectionID(connectionID)))
 }
 
-func fallbackAccount(account string) string {
-	trimmed := strings.TrimSpace(strings.ToLower(account))
+func fallbackConnectionID(connectionID string) string {
+	trimmed := strings.TrimSpace(strings.ToLower(connectionID))
 	if trimmed == "" {
 		return "default"
 	}

@@ -130,3 +130,39 @@ func PollMonitor[T any](config PollConfig[T]) func(ctx context.Context, connecti
 		}
 	}
 }
+
+type PollBackfillConfig[T any] struct {
+	InitialCursor time.Time
+	Fetch         func(ctx context.Context, cursor time.Time, since time.Time) (records []T, newCursor time.Time, done bool, err error)
+}
+
+func PollBackfill[T any](config PollBackfillConfig[T]) func(ctx context.Context, connectionID string, since time.Time, emit EmitFunc) error {
+	return func(ctx context.Context, connectionID string, since time.Time, emit EmitFunc) error {
+		cursor := config.InitialCursor
+		if cursor.IsZero() {
+			cursor = since
+		}
+
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			default:
+			}
+
+			records, newCursor, done, err := config.Fetch(ctx, cursor, since)
+			if err != nil {
+				return err
+			}
+			for _, record := range records {
+				emit(record)
+			}
+			if !newCursor.IsZero() {
+				cursor = newCursor
+			}
+			if done {
+				return nil
+			}
+		}
+	}
+}

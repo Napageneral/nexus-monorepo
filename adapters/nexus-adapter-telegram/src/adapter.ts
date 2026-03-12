@@ -1,9 +1,15 @@
 import {
-  newEvent,
-  type AdapterContext,
-  type AdapterDefinition,
+  defineAdapter,
+  messageRecord,
+  pollMonitor,
+  readReplyToTarget,
+  readThreadTarget,
+  requireContainerTarget,
+  requireCredential,
+  type AdapterInboundRecord,
+  type Attachment,
+  type ContainerKind,
   type DeliveryResult,
-  type NexusEvent,
 } from "@nexus-project/adapter-sdk-ts";
 
 type UnknownRecord = Record<string, unknown>;
@@ -63,13 +69,13 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-function inferContainerKind(chatType: string | undefined): NexusEvent["container_kind"] {
+function inferContainerKind(chatType: string | undefined): ContainerKind {
   const normalized = chatType?.toLowerCase();
   if (normalized === "group" || normalized === "supergroup") {
     return "group";
   }
   if (normalized === "channel") {
-    return "channel";
+    return "group";
   }
   if (normalized === "private") {
     return "direct";
@@ -91,7 +97,7 @@ function inferSenderName(from: UnknownRecord | undefined, chat: UnknownRecord | 
   return asString(chat?.title);
 }
 
-function extractAttachmentFromPhoto(photos: unknown[]): NonNullable<NexusEvent["attachments"]>[number] | null {
+function extractAttachmentFromPhoto(photos: unknown[]): Attachment | null {
   if (photos.length === 0) {
     return null;
   }
@@ -111,27 +117,12 @@ function extractAttachmentFromPhoto(photos: unknown[]): NonNullable<NexusEvent["
   return {
     id: fileID,
     filename: `${uniqueID}.jpg`,
-    content_type: "image/jpeg",
-    ...(asInteger(largest?.file_size) ? { size_bytes: asInteger(largest?.file_size) } : {}),
+    mime_type: "image/jpeg",
+    ...(asInteger(largest?.file_size) ? { size: asInteger(largest?.file_size) } : {}),
   };
 }
 
-function inferContentType(message: UnknownRecord): NexusEvent["content_type"] {
-  if (asString(message.text) || asString(message.caption)) {
-    return "text";
-  }
-  if (asArray(message.photo).length > 0) {
-    return "image";
-  }
-  if (asRecord(message.video)) {
-    return "video";
-  }
-  if (asRecord(message.voice) || asRecord(message.audio)) {
-    return "audio";
-  }
-  if (asRecord(message.document)) {
-    return "file";
-  }
+function inferContentType(message: UnknownRecord): "text" | "reaction" | "membership" {
   if (asRecord(message.new_chat_member) || asArray(message.new_chat_members).length > 0) {
     return "membership";
   }
@@ -174,8 +165,8 @@ function extractContent(message: UnknownRecord): string {
   return "[unsupported telegram message]";
 }
 
-function extractAttachments(message: UnknownRecord): NonNullable<NexusEvent["attachments"]> {
-  const attachments: NonNullable<NexusEvent["attachments"]> = [];
+function extractAttachments(message: UnknownRecord): Attachment[] {
+  const attachments: Attachment[] = [];
   const photoAttachment = extractAttachmentFromPhoto(asArray(message.photo));
   if (photoAttachment) {
     attachments.push(photoAttachment);
@@ -188,8 +179,8 @@ function extractAttachments(message: UnknownRecord): NonNullable<NexusEvent["att
       attachments.push({
         id: fileID,
         filename: asString(document.file_name) ?? `${fileID}.bin`,
-        content_type: asString(document.mime_type) ?? "application/octet-stream",
-        ...(asInteger(document.file_size) ? { size_bytes: asInteger(document.file_size) } : {}),
+        mime_type: asString(document.mime_type) ?? "application/octet-stream",
+        ...(asInteger(document.file_size) ? { size: asInteger(document.file_size) } : {}),
       });
     }
   }
@@ -201,8 +192,8 @@ function extractAttachments(message: UnknownRecord): NonNullable<NexusEvent["att
       attachments.push({
         id: fileID,
         filename: `${asString(video.file_unique_id) ?? fileID}.mp4`,
-        content_type: asString(video.mime_type) ?? "video/mp4",
-        ...(asInteger(video.file_size) ? { size_bytes: asInteger(video.file_size) } : {}),
+        mime_type: asString(video.mime_type) ?? "video/mp4",
+        ...(asInteger(video.file_size) ? { size: asInteger(video.file_size) } : {}),
       });
     }
   }
@@ -214,8 +205,8 @@ function extractAttachments(message: UnknownRecord): NonNullable<NexusEvent["att
       attachments.push({
         id: fileID,
         filename: `${asString(audio.file_unique_id) ?? fileID}.ogg`,
-        content_type: asString(audio.mime_type) ?? "audio/ogg",
-        ...(asInteger(audio.file_size) ? { size_bytes: asInteger(audio.file_size) } : {}),
+        mime_type: asString(audio.mime_type) ?? "audio/ogg",
+        ...(asInteger(audio.file_size) ? { size: asInteger(audio.file_size) } : {}),
       });
     }
   }
@@ -251,7 +242,7 @@ function extractMessagePayload(update: UnknownRecord): ExtractedPayload | null {
   return null;
 }
 
-export function buildEventFromUpdate(update: UnknownRecord, accountID: string): NexusEvent | null {
+export function buildEventFromUpdate(update: UnknownRecord, connectionID: string): AdapterInboundRecord | null {
   const payload = extractMessagePayload(update);
   if (!payload) {
     return null;
@@ -281,60 +272,28 @@ export function buildEventFromUpdate(update: UnknownRecord, accountID: string): 
   const timestampSeconds = asInteger(message.date);
   const timestampMs = timestampSeconds ? timestampSeconds * 1000 : Date.now();
 
-  const builder = newEvent(
-    "telegram",
-    `telegram:update:${payload.updateID}:${messageID ?? "unknown"}`,
-  )
-    .withTimestampUnixMs(timestampMs)
-    .withAccount(accountID)
-    .withSender(senderID, senderName)
-    .withContainer(chatID, containerKind)
-    .withContent(extractContent(message))
-    .withContentType(inferContentType(message))
-    .withMetadata("telegram_update_id", payload.updateID)
-    .withMetadata("telegram_update_type", payload.updateType)
-    .withMetadata("telegram_chat_type", asString(chat?.type) ?? "unknown")
-    .withMetadata("telegram_message_id", messageID ?? null);
-
-  if (threadID !== undefined) {
-    builder.withThread(String(threadID));
-  }
-  if (replyToID !== undefined) {
-    builder.withReplyTo(String(replyToID));
-  }
-
-  const attachments = extractAttachments(message);
-  for (const attachment of attachments) {
-    builder.withAttachment(attachment);
-  }
-
-  const event = builder.build();
-  if (containerName) {
-    event.container_name = containerName;
-  }
-  return event;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function resolveTelegramToken(ctx: AdapterContext): string {
-  const runtimeFieldToken =
-    ctx.runtime?.credential?.fields?.bot_token?.trim() ??
-    ctx.runtime?.credential?.fields?.token?.trim();
-  if (runtimeFieldToken) {
-    return runtimeFieldToken;
-  }
-  const runtimeToken = ctx.runtime?.credential?.value?.trim();
-  if (runtimeToken) {
-    return runtimeToken;
-  }
-  const envToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
-  if (envToken) {
-    return envToken;
-  }
-  throw new Error("missing telegram bot token (runtime credential or TELEGRAM_BOT_TOKEN)");
+  return messageRecord({
+    platform: "telegram",
+    connectionId: connectionID,
+    externalRecordId: `telegram:update:${payload.updateID}:${messageID ?? "unknown"}`,
+    timestamp: timestampMs,
+    senderId: senderID,
+    senderName,
+    containerId: chatID,
+    containerKind,
+    containerName,
+    ...(threadID !== undefined ? { threadId: String(threadID) } : {}),
+    ...(replyToID !== undefined ? { replyToId: String(replyToID) } : {}),
+    content: extractContent(message),
+    contentType: inferContentType(message),
+    attachments: extractAttachments(message),
+    metadata: {
+      telegram_update_id: payload.updateID,
+      telegram_update_type: payload.updateType,
+      telegram_chat_type: asString(chat?.type) ?? "unknown",
+      telegram_message_id: messageID ?? null,
+    },
+  });
 }
 
 export function parseTelegramTarget(raw: string): string {
@@ -383,20 +342,19 @@ async function telegramRequest<T>(params: {
 }
 
 async function sendTelegramText(params: {
-  ctx: AdapterContext;
-  account: string;
+  token: string;
   to: string;
   text: string;
   threadID?: string;
   replyToID?: string;
+  signal?: AbortSignal;
 }): Promise<DeliveryResult> {
-  const token = resolveTelegramToken(params.ctx);
   const chatID = parseTelegramTarget(params.to);
   const messageThreadID = parseOptionalMessageID(params.threadID);
   const replyToMessageID = parseOptionalMessageID(params.replyToID);
 
   const result = await telegramRequest<{ message_id?: number }>({
-    token,
+    token: params.token,
     method: "sendMessage",
     body: {
       chat_id: chatID,
@@ -404,7 +362,7 @@ async function sendTelegramText(params: {
       ...(messageThreadID !== undefined ? { message_thread_id: messageThreadID } : {}),
       ...(replyToMessageID !== undefined ? { reply_to_message_id: replyToMessageID } : {}),
     },
-    signal: params.ctx.signal,
+    signal: params.signal,
   });
 
   const messageID = result.message_id !== undefined ? String(result.message_id) : "";
@@ -435,67 +393,54 @@ const TELEGRAM_CHANNEL_CAPABILITIES = {
   supports_streaming_edit: false,
 } as const;
 
-export const telegramAdapter: AdapterDefinition = {
-  operations: {
-    "adapter.info": async () => ({
-      platform: "telegram",
-      name: "nexus-adapter-telegram",
-      version: "0.1.0",
-      operations: [
-        "adapter.info",
-        "adapter.accounts.list",
-        "adapter.health",
-        "delivery.send",
-        "adapter.monitor.start",
-      ],
-      credential_service: "telegram",
-      multi_account: true,
-      auth: {
-        methods: [
+export const telegramAdapter = defineAdapter<{ token: string }>({
+  platform: "telegram",
+  name: "nexus-adapter-telegram",
+  version: "0.1.0",
+  multi_account: true,
+  credential_service: "telegram",
+  auth: {
+    methods: [
+      {
+        id: "telegram_bot_token",
+        type: "api_key",
+        label: "Enter Bot Token",
+        icon: "key",
+        service: "telegram",
+        fields: [
           {
-            type: "api_key",
-            label: "Enter Bot Token",
-            icon: "key",
-            service: "telegram",
-            fields: [
-              {
-                name: "bot_token",
-                label: "Bot Token",
-                type: "secret",
-                required: true,
-                placeholder: "123456789:AA...",
-              },
-            ],
+            name: "bot_token",
+            label: "Bot Token",
+            type: "secret",
+            required: true,
+            placeholder: "123456789:AA...",
           },
         ],
-        setupGuide:
-          "Create a bot with BotFather, copy the bot token, and connect this adapter with that token.",
       },
-      platform_capabilities: TELEGRAM_CHANNEL_CAPABILITIES,
+    ],
+    setupGuide:
+      "Create a bot with BotFather, copy the bot token, and connect this adapter with that token.",
+  },
+  capabilities: TELEGRAM_CHANNEL_CAPABILITIES,
+  client: {
+    create: ({ ctx }) => ({
+      token: requireCredential(ctx, {
+        label: "telegram bot token",
+        fields: ["bot_token", "token"],
+        env: ["TELEGRAM_BOT_TOKEN"],
+      }),
     }),
-
-    "adapter.accounts.list": async (ctx) => {
-      const accountID = ctx.runtime?.account_id || "default";
-      return [
-        {
-          id: accountID,
-          status: "ready" as const,
-          ...(ctx.runtime?.credential?.ref ? { credential_ref: ctx.runtime.credential.ref } : {}),
-        },
-      ];
-    },
-
-    "adapter.health": async (ctx, args) => {
-      const token = resolveTelegramToken(ctx);
+  },
+  connection: {
+    health: async (ctx) => {
       const me = await telegramRequest<UnknownRecord>({
-        token,
+        token: ctx.client?.token ?? "",
         method: "getMe",
         body: {},
         signal: ctx.signal,
       });
       return {
         connected: true,
-        account: args.account,
         last_event_at: Date.now(),
         details: {
           id: asInteger(me.id),
@@ -503,8 +448,9 @@ export const telegramAdapter: AdapterDefinition = {
         },
       };
     },
-
-    "delivery.send": async (ctx, req) => {
+  },
+  delivery: {
+    send: async (ctx, req) => {
       if (req.media) {
         return {
           success: false,
@@ -529,64 +475,44 @@ export const telegramAdapter: AdapterDefinition = {
       }
 
       return await sendTelegramText({
-        ctx,
-        account: req.account,
-        to: req.to,
+        token: ctx.client!.token,
+        to: requireContainerTarget(req.target),
         text,
-        threadID: req.thread_id,
-        replyToID: req.reply_to_id,
+        threadID: readThreadTarget(req.target),
+        replyToID: readReplyToTarget(req.target),
+        signal: ctx.signal,
       });
     },
-
-    "adapter.monitor.start": async (ctx, args, emit) => {
-      const token = resolveTelegramToken(ctx);
-      let offset = 0;
-
-      while (!ctx.signal.aborted) {
-        try {
-          const updates = await telegramRequest<unknown[]>({
-            token,
-            method: "getUpdates",
-            body: {
-              timeout: 25,
-              ...(offset > 0 ? { offset } : {}),
-              allowed_updates: ["message", "edited_message", "channel_post", "edited_channel_post"],
-            },
-            signal: ctx.signal,
-          });
-
-          if (updates.length === 0) {
-            continue;
-          }
-
-          for (const rawUpdate of updates) {
-            if (ctx.signal.aborted) {
-              break;
-            }
-            const update = asRecord(rawUpdate);
-            if (!update) {
-              continue;
-            }
-            const updateID = asInteger(update.update_id);
-            if (updateID !== undefined) {
-              offset = Math.max(offset, updateID + 1);
-            }
-            const event = buildEventFromUpdate(update, args.account);
-            if (event) {
-              emit(event);
-            }
-          }
-        } catch (error) {
-          if (ctx.signal.aborted) {
-            break;
-          }
-          ctx.log.info(
-            "telegram monitor loop error: %s",
-            error instanceof Error ? error.message : String(error),
-          );
-          await sleep(1500);
-        }
-      }
-    },
   },
-};
+  ingest: {
+    monitor: pollMonitor<{ token: string }, number, unknown[], UnknownRecord>({
+      initialCursor: () => 0,
+      poll: async ({ ctx, cursor }) => {
+        return await telegramRequest<unknown[]>({
+          token: ctx.client!.token,
+          method: "getUpdates",
+          body: {
+            timeout: 25,
+            ...(cursor && cursor > 0 ? { offset: cursor } : {}),
+            allowed_updates: ["message", "edited_message", "channel_post", "edited_channel_post"],
+          },
+          signal: ctx.signal,
+        });
+      },
+      items: (page) =>
+        page
+          .map((entry) => asRecord(entry))
+          .filter((entry): entry is UnknownRecord => Boolean(entry)),
+      toRecord: ({ item, connectionId }) => buildEventFromUpdate(item, connectionId),
+      nextCursor: ({ item, cursor }) => {
+        const updateID = asInteger(item.update_id);
+        if (updateID === undefined) {
+          return cursor;
+        }
+        return Math.max(cursor ?? 0, updateID + 1);
+      },
+      idleMs: 0,
+      errorDelayMs: 1500,
+    }),
+  },
+});
