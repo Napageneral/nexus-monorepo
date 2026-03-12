@@ -259,7 +259,15 @@ function readSession(params: {
   const sessionId = cookies[params.config.sessionCookieName];
   if (sessionId) {
     const session = params.sessions.getSession(sessionId);
-    if (session) return session;
+    if (session) {
+      return {
+        ...session,
+        principal: elevatePrincipalForGlobalOperatorAccess({
+          principal: session.principal,
+          config: params.config,
+        }),
+      };
+    }
   }
 
   // 2. Try API token (Bearer nex_t_...)
@@ -274,15 +282,18 @@ function readSession(params: {
         // Synthesize a SessionRecord from the API token
         return {
           id: `api-token:${tokenRecord.tokenId}`,
-          principal: {
-            userId: tokenRecord.userId,
-            tenantId: "", // API tokens are cross-tenant
-            entityId: tokenRecord.userId,
-            roles: ["operator"],
-            scopes: tokenRecord.scopes === "*" ? ["*"] : tokenRecord.scopes.split(","),
-            amr: ["api_token"],
-            accountId: tokenRecord.accountId,
-          },
+          principal: elevatePrincipalForGlobalOperatorAccess({
+            principal: {
+              userId: tokenRecord.userId,
+              tenantId: "", // API tokens are cross-tenant
+              entityId: tokenRecord.userId,
+              roles: ["operator"],
+              scopes: tokenRecord.scopes === "*" ? ["*"] : tokenRecord.scopes.split(","),
+              amr: ["api_token"],
+              accountId: tokenRecord.accountId,
+            },
+            config: params.config,
+          }),
           createdAtMs: tokenRecord.createdAtMs,
           expiresAtMs: tokenRecord.expiresAtMs ?? Date.now() + 86400000,
           refreshTokens: new Map(),
@@ -1424,11 +1435,42 @@ function hasGlobalOperatorAccess(principal: Principal): boolean {
     }
   }
   for (const scope of principal.scopes) {
-    if (scope === "*" || scope === "operator.admin" || scope.startsWith("operator.")) {
+    if (scope === "operator.admin" || scope.startsWith("operator.")) {
       return true;
     }
   }
   return false;
+}
+
+function elevatePrincipalForGlobalOperatorAccess(params: {
+  principal: Principal;
+  config: FrontdoorConfig;
+}): Principal {
+  if (!params.config.operatorUserIds?.has(params.principal.userId)) {
+    return params.principal;
+  }
+  const roles = params.principal.roles.includes("operator")
+    ? params.principal.roles
+    : [...params.principal.roles, "operator"];
+  const scopes = params.principal.scopes.includes("operator.admin")
+    ? params.principal.scopes
+    : [...params.principal.scopes, "operator.admin"];
+  return {
+    ...params.principal,
+    roles,
+    scopes,
+  };
+}
+
+function isProductVisibleToPrincipal(
+  product: { visibility?: string | null },
+  principal: Principal | null,
+): boolean {
+  const visibility = (product.visibility ?? "customer").trim().toLowerCase();
+  if (visibility === "operator") {
+    return principal ? hasGlobalOperatorAccess(principal) : false;
+  }
+  return true;
 }
 
 type OidcIdentityRef = {
@@ -1509,8 +1551,8 @@ function isValidAppId(appId: string): boolean {
 }
 
 function defaultEntryPathForApp(appId: string): string {
-  if (appId === "control") {
-    return "/app/control/chat";
+  if (appId === "console") {
+    return "/app/console/chat";
   }
   if (appId === "glowbot") {
     return "/app/glowbot/";
@@ -3411,7 +3453,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         periodStartMs: readOptionalNumber(payload.period_start_ms),
         periodEndMs: readOptionalNumber(payload.period_end_ms),
       });
-      const appId = readOptionalString(payload.app_id) || "control";
+      const appId = readOptionalString(payload.app_id) || "console";
       syncEntitlementsFromPlan(server.accountId, appId, planId);
       const invoice = asRecord(payload.invoice);
       const invoiceId = readOptionalString(invoice?.invoice_id) || readOptionalString(payload.invoice_id);
@@ -3458,7 +3500,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         periodStartMs: msFromUnixSeconds(object?.current_period_start),
         periodEndMs: msFromUnixSeconds(object?.current_period_end),
       });
-      const appId = readOptionalString(metadata?.app_id) || "control";
+      const appId = readOptionalString(metadata?.app_id) || "console";
       syncEntitlementsFromPlan(server.accountId, appId, resolvedPlanId);
       return { serverId, status: "processed" };
     }
@@ -3498,7 +3540,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         customerId: readOptionalString(object?.customer),
         subscriptionId: readOptionalString(object?.subscription),
       });
-      const appId = readOptionalString(metadata?.app_id) || "control";
+      const appId = readOptionalString(metadata?.app_id) || "console";
       syncEntitlementsFromPlan(server.accountId, appId, checkoutPlanId);
       return { serverId, status: "processed" };
     }
@@ -5481,7 +5523,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     accountId: string;
   }): void {
     const appIdMatch = params.url.pathname.match(/^\/app\/([^/]+)/);
-    const appId = appIdMatch ? decodeURIComponent(appIdMatch[1]) : "control";
+    const appId = appIdMatch ? decodeURIComponent(appIdMatch[1]) : "console";
     const frame = buildAppFrameContext({
       session: params.session,
       serverId: params.serverId,
@@ -5491,7 +5533,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     });
     const currentInstall = frame.installedApps.find((item) => item.appId === appId);
     const appAvailable =
-      appId === "control" || currentInstall?.status === "installed";
+      appId === "console" || currentInstall?.status === "installed";
     let initialTitle: string | undefined;
     let initialDetail: string | undefined;
     let embedSrc: string | undefined;
@@ -5536,7 +5578,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     accountId: string;
   }): Promise<void> {
     const appIdMatch = params.url.pathname.match(/^\/app\/([^/]+)/);
-    const appId = appIdMatch ? decodeURIComponent(appIdMatch[1]) : "control";
+    const appId = appIdMatch ? decodeURIComponent(appIdMatch[1]) : "console";
     const frame = buildAppFrameContext({
       session: params.session,
       serverId: params.serverId,
@@ -6442,7 +6484,10 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       // ── Public Product Registry ────────────────────────────────────
       if (method === "GET" && pathname === "/api/products") {
-        const products = store.listProducts();
+        const session = readSession({ req, config, sessions, store });
+        const products = store
+          .listProducts()
+          .filter((product) => isProductVisibleToPrincipal(product, session?.principal ?? null));
         sendJson(res, 200, {
           ok: true,
           items: products.map((p) => ({
@@ -6458,13 +6503,14 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       const productDetailRouteMatch = pathname.match(/^\/api\/products\/([^/]+)$/);
       if (method === "GET" && productDetailRouteMatch) {
+        const session = readSession({ req, config, sessions, store });
         const productId = decodeURIComponent(productDetailRouteMatch[1] ?? "").trim();
         if (!productId) {
           sendJson(res, 400, { ok: false, error: "missing_product_id" });
           return;
         }
         const product = store.getProduct(productId);
-        if (!product) {
+        if (!product || !isProductVisibleToPrincipal(product, session?.principal ?? null)) {
           sendJson(res, 404, { ok: false, error: "product_not_found" });
           return;
         }
@@ -6492,13 +6538,14 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
       const productPlansRouteMatch = pathname.match(/^\/api\/products\/([^/]+)\/plans$/);
       if (method === "GET" && productPlansRouteMatch) {
+        const session = readSession({ req, config, sessions, store });
         const productId = decodeURIComponent(productPlansRouteMatch[1] ?? "").trim();
         if (!productId) {
           sendJson(res, 400, { ok: false, error: "missing_product_id" });
           return;
         }
         const product = store.getProduct(productId);
-        if (!product) {
+        if (!product || !isProductVisibleToPrincipal(product, session?.principal ?? null)) {
           sendJson(res, 404, { ok: false, error: "product_not_found" });
           return;
         }
@@ -6522,9 +6569,11 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (method === "GET" && pathname === "/api/apps/catalog") {
-        const products = store.listProducts();
-        // If authenticated, include per-user install info
         const session = readSession({ req, config, sessions, store });
+        const products = store
+          .listProducts()
+          .filter((product) => isProductVisibleToPrincipal(product, session?.principal ?? null));
+        // If authenticated, include per-user install info
         let userServerIds: string[] = [];
         const installsByApp = new Map<string, string[]>();
         if (session) {
@@ -6569,7 +6618,10 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         }
         const accounts = store.getAccountsForUser(session.principal.userId);
         const productsById = new Map(
-          store.listProducts().map((product) => [product.productId, product]),
+          store
+            .listProducts()
+            .filter((product) => isProductVisibleToPrincipal(product, session.principal))
+            .map((product) => [product.productId, product]),
         );
         // Collect app subscriptions across all user's accounts
         const subscriptionsByApp = new Map<string, { status: string; source: string }>();
@@ -6596,20 +6648,22 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         }
         sendJson(res, 200, {
           ok: true,
-          items: [...subscriptionsByApp.entries()].map(([appId, sub]) => {
-            const product = productsById.get(appId) ?? null;
-            const serverIds = [...(installedByApp.get(appId) ?? new Set<string>())];
-            return {
-              app_id: appId,
-              status: sub.status,
-              source: sub.source,
-              display_name: product?.displayName ?? appId,
-              tagline: product?.tagline ?? null,
-              accent_color: product?.accentColor ?? null,
-              server_ids: serverIds,
-              install_count: serverIds.length,
-            };
-          }),
+          items: [...subscriptionsByApp.entries()]
+            .filter(([appId]) => productsById.has(appId))
+            .map(([appId, sub]) => {
+              const product = productsById.get(appId) ?? null;
+              const serverIds = [...(installedByApp.get(appId) ?? new Set<string>())];
+              return {
+                app_id: appId,
+                status: sub.status,
+                source: sub.source,
+                display_name: product?.displayName ?? appId,
+                tagline: product?.tagline ?? null,
+                accent_color: product?.accentColor ?? null,
+                server_ids: serverIds,
+                install_count: serverIds.length,
+              };
+            }),
         });
         return;
       }
@@ -6633,7 +6687,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           return;
         }
         const product = store.getProduct(appId);
-        if (!product) {
+        if (!product || !isProductVisibleToPrincipal(product, session.principal)) {
           sendJson(res, 404, {
             ok: false,
             error: "app_not_found",
@@ -6888,7 +6942,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           };
           syncServerRuntimeProjection(server);
           const requestedAppId = normalizeAppId(body.app_id);
-          if (requestedAppId && requestedAppId !== "control") {
+          if (requestedAppId && requestedAppId !== "console") {
             const appSub = store.getAppSubscription(accountId, requestedAppId);
             store.upsertServerAppInstall({
               serverId: server.serverId,
@@ -7256,7 +7310,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           return;
         }
         const entitlement =
-          appId === "control"
+          appId === "console"
             ? { status: "active" as const }
             : (() => {
                 const accountId = context.accountId;
@@ -7270,7 +7324,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           ok: true,
           server_id: serverId,
           app_id: appId,
-          entitlement_status: appId === "control" ? "active" : entitlement?.status ?? "inactive",
+          entitlement_status: appId === "console" ? "active" : entitlement?.status ?? "inactive",
           install_status: install?.status ?? "not_installed",
           entry_path: install?.entryPath ?? defaultEntryPathForApp(appId),
           last_error: install?.lastError ?? null,
@@ -7297,7 +7351,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           });
           return;
         }
-        if (appId === "control") {
+        if (appId === "console") {
           sendJson(res, 400, {
             ok: false,
             error: "system_app_install_not_allowed",
@@ -7305,7 +7359,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           return;
         }
         const product = store.getProduct(appId);
-        if (!product) {
+        if (!product || !isProductVisibleToPrincipal(product, session.principal)) {
           sendJson(res, 404, {
             ok: false,
             error: "app_not_found",
@@ -7581,7 +7635,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           sendJson(res, 400, { ok: false, error: "invalid_upgrade_request" });
           return;
         }
-        if (appId === "control") {
+        if (appId === "console") {
           sendJson(res, 400, { ok: false, error: "system_app_upgrade_not_allowed" });
           return;
         }
@@ -7637,7 +7691,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           sendJson(res, 400, { ok: false, error: "invalid_uninstall_request" });
           return;
         }
-        if (appId === "control") {
+        if (appId === "console") {
           sendJson(res, 400, { ok: false, error: "system_app_uninstall_not_allowed" });
           return;
         }
@@ -7749,10 +7803,12 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             .getServerEffectiveAppInstalls(serverId)
             .map((item) => [item.appId, item] as const),
         );
-        const products = store.listProducts();
+        const products = store
+          .listProducts()
+          .filter((product) => isProductVisibleToPrincipal(product, session.principal));
         const productByAppId = new Map(products.map((item) => [item.productId, item]));
 
-        const appIds = new Set<string>(["control"]);
+        const appIds = new Set<string>(["console"]);
         for (const product of products) {
           appIds.add(product.productId);
         }
@@ -7768,16 +7824,16 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           .map((appId) => {
             const product = productByAppId.get(appId);
             const entitlement =
-              appId === "control" ? { status: "active" as const } : entitlementsByApp.get(appId);
+              appId === "console" ? { status: "active" as const } : entitlementsByApp.get(appId);
             const install = installsByApp.get(appId) ?? null;
             const runtimeItem = runtimeAppsById.get(appId) ?? null;
-            const entitlementStatus = appId === "control" ? "active" : entitlement?.status ?? "inactive";
+            const entitlementStatus = appId === "console" ? "active" : entitlement?.status ?? "inactive";
             const installStatus = install?.status ?? "not_installed";
-            const blockedByEntitlement = appId !== "control" && entitlementStatus !== "active";
+            const blockedByEntitlement = appId !== "console" && entitlementStatus !== "active";
             const blockedByRuntimeUnavailable =
-              appId !== "control" && installStatus === "installed" && runtimeApps.ok === false;
+              appId !== "console" && installStatus === "installed" && runtimeApps.ok === false;
             const blockedByRuntimeMissing =
-              appId !== "control" && installStatus === "installed" && runtimeApps.ok && !runtimeItem;
+              appId !== "console" && installStatus === "installed" && runtimeApps.ok && !runtimeItem;
             const entryPath =
               runtimeItem?.entryPath || install?.entryPath || defaultEntryPathForApp(appId);
             const blockedReason = blockedByEntitlement
@@ -7838,7 +7894,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           return;
         }
         const product = store.getProduct(appId);
-        if (!product) {
+        if (!product || !isProductVisibleToPrincipal(product, session.principal)) {
           sendJson(res, 404, {
             ok: false,
             error: "app_not_found",
@@ -8017,7 +8073,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           }
         }
         const runtimeBlockedReason =
-          appId === "control" || finalInstallStatus !== "installed"
+          appId === "console" || finalInstallStatus !== "installed"
             ? null
             : runtimeProbeOk === false
               ? "runtime_unavailable"
@@ -8088,7 +8144,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           return;
         }
         const product = store.getProduct(appId);
-        if (!product) {
+        if (!product || !isProductVisibleToPrincipal(product, session.principal)) {
           sendJson(res, 404, {
             ok: false,
             error: "app_not_found",
@@ -10381,7 +10437,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           request_id: requestId,
           user_id: context.principal.userId,
           server_id: context.server.serverId,
-          audience: "control-plane",
+          audience: "runtime-api",
         });
         return;
       }
@@ -10453,7 +10509,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           request_id: requestId,
           user_id: context.principal.userId,
           server_id: context.server.serverId,
-          audience: "control-plane",
+          audience: "runtime-api",
         });
         return;
       }

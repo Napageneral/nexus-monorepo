@@ -170,4 +170,41 @@ describe("publishAppRelease", () => {
       store.close();
     }
   });
+
+  it("persists product visibility from the manifest", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "frontdoor-publish-visibility-"));
+    cleanupPaths.push(tempDir);
+    const storePath = path.join(tempDir, "frontdoor.db");
+    const packageRoot = path.join(tempDir, "package");
+    fs.mkdirSync(packageRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(packageRoot, "app.nexus.json"),
+      JSON.stringify({
+        id: "glowbot-admin",
+        version: "1.0.0",
+        displayName: "GlowBot Admin",
+        product: {
+          visibility: "operator",
+          tagline: "Operator console",
+        },
+      }),
+      "utf8",
+    );
+    const tarballPath = path.join(tempDir, "glowbot-admin-1.0.0.tar.gz");
+    fs.writeFileSync(tarballPath, "glowbot-admin-package\n", "utf8");
+
+    const store = new FrontdoorStore(storePath);
+    try {
+      await publishAppRelease({
+        store,
+        packageRoot,
+        tarballPath,
+        targetOs: "linux",
+        targetArch: "x64",
+      });
+      expect(store.getProduct("glowbot-admin")?.visibility).toBe("operator");
+    } finally {
+      store.close();
+    }
+  });
 });

@@ -21,6 +21,7 @@ interface ManifestPlan {
 
 interface ManifestProduct {
   tagline?: string;
+  visibility?: "customer" | "operator";
   accentColor?: string;
   color?: string;
   logoSvg?: string;
@@ -149,6 +150,7 @@ export async function syncProductFromManifest(
   store.upsertProduct({
     productId: manifest.id,
     displayName: manifest.displayName!,
+    visibility: product.visibility ?? "customer",
     tagline: product.tagline,
     accentColor: product.accentColor || product.color,
     logoSvg: logoSvg,

@@ -177,8 +177,9 @@ Current state note:
 
 - HS1-HS8 are materially landed in the hub package
 - hosted deployment truth is now proven through Milestone 7A
-- remaining work is stronger secret-storage and managed-profile relay
-  verification rather than greenfield shell creation
+- managed-profile relay is now proven on the deployed path
+- remaining work is stronger secret-storage hardening rather than greenfield
+  shell creation
 
 ## Milestone 7A: Package Publish And Deploy Rehearsal ✅
 
@@ -198,7 +199,7 @@ Current state note:
 
 ---
 
-## Milestone 8: GlowBot-Managed Profiles 🟡
+## Milestone 8: GlowBot-Managed Profiles ✅
 
 The first real product-managed connection path must exist on top of the shell.
 
@@ -212,13 +213,12 @@ The first real product-managed connection path must exist on top of the shell.
 
 Current state note:
 
-- MP1-MP4 are materially landed in hub code
-- MP5 still needs end-to-end validation through the real runtime/frontdoor/hub
-  path
+- MP1-MP5 are landed and validated through the hosted runtime/frontdoor/hub
+  path, including failed-exchange diagnostics and audit evidence
 
 ---
 
-## Milestone 9: Admin Surface 🟡
+## Milestone 9: Admin Surface ✅
 
 The operator-facing admin app must become real.
 
@@ -235,9 +235,7 @@ The operator-facing admin app must become real.
 
 Current state note:
 
-- A1-A7 are materially landed at the method-contract level
-- A8 and full operator-surface validation remain open until the dedicated
-  control-plane deployment path is exercised
+- A1-A8 are landed and validated through the hosted deployed rehearsal
 
 ---
 
@@ -260,7 +258,7 @@ Current state note:
 
 ---
 
-## Milestone 10: Benchmark Network 🟡
+## Milestone 10: Benchmark Network ✅
 
 The shared benchmark network must become real on top of the hub.
 
@@ -276,9 +274,8 @@ The shared benchmark network must become real on top of the hub.
 
 Current state note:
 
-- BN1-BN7 are materially landed in the hub
-- what remains open is real clinic-app publication/query usage against the
-  canonical clinic profile and hosted gateway path
+- BN1-BN7 are landed and validated on the hosted synthetic deployed topology;
+  real clinic publication/query evidence belongs to Milestone 13
 
 ---
 
@@ -308,6 +305,12 @@ Current state note:
 
 Persisted higher-level observations remain future work and are still required
 for full parity with the target-state derived-output spec.
+
+Focused detail lives in:
+
+- [GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION.md)
+- [GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/workplans/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_WORKPLAN.md)
+- [GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_VALIDATION.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/validation/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_VALIDATION.md)
 
 | # | Checkpoint | Pass Criteria |
 |---|---|---|
@@ -354,26 +357,3 @@ Live-clinic validation details are tracked in:
 - [LIVE_CREDENTIAL_CUTOVER_RUNBOOK.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/validation/LIVE_CREDENTIAL_CUTOVER_RUNBOOK.md)
 
 ---
-
-## Milestone 13A: Synthetic Deployed Rehearsal 🚧
-
-Synthetic canonical records validate the deployed two-server GlowBot shape
-before live credentials arrive.
-
-| # | Checkpoint | Pass Criteria |
-|---|---|---|
-| SR1 | Control-plane server is installed | `glowbot-admin` and `glowbot-hub` are installed on a dedicated server |
-| SR2 | Clinic server is installed | `glowbot` is installed on a separate clinic server |
-| SR3 | Product flag update works through deployed admin path | operator update reaches the real control plane |
-| SR4 | Clinic profile update works on deployed clinic app | benchmark-capable clinic profile truth is persisted |
-| SR5 | Synthetic canonical record ingress works | deployed clinic runtime accepts canonical `record.ingest` |
-| SR6 | Metric extraction runs downstream | synthetic records produce real `metric` elements |
-| SR7 | Overview/funnel/modeling/recommendations are sane | deployed clinic methods return coherent responses |
-| SR8 | Benchmark publish/query works on deployed topology | clinic app and control plane round-trip benchmark data |
-| SR9 | Clinic can read product flags through `productControlPlane.call` | deployed gateway path is real for product config reads |
-
-Current state note:
-
-- this milestone is the next active non-credential validation slice
-- once complete, targeted hub/admin hardening can be driven by the evidence it
-  surfaces

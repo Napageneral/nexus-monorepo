@@ -555,6 +555,7 @@ export type CreditTransactionRecord = {
 export type ProductRecord = {
   productId: string;
   displayName: string;
+  visibility?: "customer" | "operator";
   tagline?: string;
   accentColor?: string;
   logoSvg?: string;
@@ -980,6 +981,7 @@ export class FrontdoorStore {
       CREATE TABLE IF NOT EXISTS frontdoor_products (
         product_id TEXT PRIMARY KEY,
         display_name TEXT NOT NULL,
+        visibility TEXT NOT NULL DEFAULT 'customer',
         tagline TEXT,
         accent_color TEXT,
         logo_svg TEXT,
@@ -1065,6 +1067,11 @@ export class FrontdoorStore {
       CREATE INDEX IF NOT EXISTS idx_frontdoor_servers_runtime_auth_token
         ON frontdoor_servers(runtime_auth_token);
     `);
+    try {
+      this.db.exec("ALTER TABLE frontdoor_products ADD COLUMN visibility TEXT NOT NULL DEFAULT 'customer'");
+    } catch {
+      // Already exists.
+    }
     try {
       this.db.exec("ALTER TABLE frontdoor_users ADD COLUMN entity_id TEXT");
     } catch {
@@ -4410,13 +4417,13 @@ export class FrontdoorStore {
       byApp.set(install.appId, install);
     }
     // Control app is always implicitly installed
-    if (!byApp.has("control")) {
+    if (!byApp.has("console")) {
       const now = nowMs();
-      byApp.set("control", {
+      byApp.set("console", {
         serverId,
-        appId: "control",
+        appId: "console",
         status: "installed",
-        entryPath: "/app/control/chat",
+        entryPath: "/app/console/chat",
         source: "system",
         createdAtMs: now,
         updatedAtMs: now,
@@ -5167,6 +5174,7 @@ export class FrontdoorStore {
         INSERT INTO frontdoor_products (
           product_id,
           display_name,
+          visibility,
           tagline,
           accent_color,
           logo_svg,
@@ -5176,9 +5184,10 @@ export class FrontdoorStore {
           onboarding_origin,
           created_at_ms,
           updated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(product_id) DO UPDATE SET
           display_name = excluded.display_name,
+          visibility = excluded.visibility,
           tagline = excluded.tagline,
           accent_color = excluded.accent_color,
           logo_svg = excluded.logo_svg,
@@ -5192,6 +5201,7 @@ export class FrontdoorStore {
       .run(
         record.productId,
         record.displayName,
+        record.visibility ?? "customer",
         record.tagline ?? null,
         record.accentColor ?? null,
         record.logoSvg ?? null,
@@ -5212,6 +5222,7 @@ export class FrontdoorStore {
         SELECT
           product_id,
           display_name,
+          visibility,
           tagline,
           accent_color,
           logo_svg,
@@ -5228,6 +5239,7 @@ export class FrontdoorStore {
       | {
           product_id: string;
           display_name: string;
+          visibility: "customer" | "operator";
           tagline: string | null;
           accent_color: string | null;
           logo_svg: string | null;
@@ -5243,6 +5255,7 @@ export class FrontdoorStore {
     return {
       productId: row.product_id,
       displayName: row.display_name,
+      visibility: row.visibility,
       tagline: row.tagline ?? undefined,
       accentColor: row.accent_color ?? undefined,
       logoSvg: row.logo_svg ?? undefined,
@@ -5260,6 +5273,7 @@ export class FrontdoorStore {
         SELECT
           product_id,
           display_name,
+          visibility,
           tagline,
           accent_color,
           logo_svg,
@@ -5274,6 +5288,7 @@ export class FrontdoorStore {
       .all() as Array<{
       product_id: string;
       display_name: string;
+      visibility: "customer" | "operator";
       tagline: string | null;
       accent_color: string | null;
       logo_svg: string | null;
@@ -5285,6 +5300,7 @@ export class FrontdoorStore {
     return rows.map((row) => ({
       productId: row.product_id,
       displayName: row.display_name,
+      visibility: row.visibility,
       tagline: row.tagline ?? undefined,
       accentColor: row.accent_color ?? undefined,
       logoSvg: row.logo_svg ?? undefined,

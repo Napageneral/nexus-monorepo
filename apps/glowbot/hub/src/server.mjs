@@ -797,23 +797,44 @@ export function createHubServer({ dataDir = path.join(process.cwd(), ".data"), f
           jsonResponse(res, 404, { error: "managed profile not found" });
           return;
         }
-        const providerResponse = await exchangeManagedOauth(profile, body, fetchImpl);
-        appendAuditEvent(
-          store,
-          createAuditEvent({
-            requestKind: "profile_exchange",
-            serverId: relayContext.serverId,
-            tenantId: relayContext.tenantId,
-            appId: relayContext.appId,
-            adapterId: relayContext.adapterId,
-            connectionProfileId: relayContext.connectionProfileId,
-            authMethodId: relayContext.authMethodId,
-            managedProfileId: relayContext.managedProfileId,
-            resolvedProfileId: profile.managedProfileId,
-            outcome: "success",
-          }),
-        );
-        jsonResponse(res, 200, providerResponse);
+        try {
+          const providerResponse = await exchangeManagedOauth(profile, body, fetchImpl);
+          appendAuditEvent(
+            store,
+            createAuditEvent({
+              requestKind: "profile_exchange",
+              serverId: relayContext.serverId,
+              tenantId: relayContext.tenantId,
+              appId: relayContext.appId,
+              adapterId: relayContext.adapterId,
+              connectionProfileId: relayContext.connectionProfileId,
+              authMethodId: relayContext.authMethodId,
+              managedProfileId: relayContext.managedProfileId,
+              resolvedProfileId: profile.managedProfileId,
+              outcome: "success",
+            }),
+          );
+          jsonResponse(res, 200, providerResponse);
+        } catch (error) {
+          appendAuditEvent(
+            store,
+            createAuditEvent({
+              requestKind: "profile_exchange",
+              serverId: relayContext.serverId,
+              tenantId: relayContext.tenantId,
+              appId: relayContext.appId,
+              adapterId: relayContext.adapterId,
+              connectionProfileId: relayContext.connectionProfileId,
+              authMethodId: relayContext.authMethodId,
+              managedProfileId: relayContext.managedProfileId,
+              resolvedProfileId: profile.managedProfileId,
+              outcome: "failed",
+              errorCode: "exchange_failed",
+              errorDetail: error instanceof Error ? error.message : String(error),
+            }),
+          );
+          jsonResponse(res, 500, { error: "managed profile exchange failed" });
+        }
         return;
       }
 

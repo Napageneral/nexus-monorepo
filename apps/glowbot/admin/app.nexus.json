@@ -5,6 +5,7 @@
   "description": "Administrative console for managing GlowBot clinic instances",
   "product": {
     "tagline": "Operator console for GlowBot",
+    "visibility": "operator",
     "plans": [
       {
         "id": "internal",

@@ -75,7 +75,7 @@ function baseConfig(runtimeUrl: string): FrontdoorConfig {
     devCreatorEmails: new Set<string>(),
     inviteTtlSeconds: 7 * 24 * 60 * 60,
     runtimeTokenIssuer: "https://frontdoor.test",
-    runtimeTokenAudience: "control-plane",
+    runtimeTokenAudience: "runtime-api",
     runtimeTokenSecret: "frontdoor-secret-test",
     runtimeTokenActiveKid: undefined,
     runtimeTokenSecretsByKid: new Map(),
@@ -145,7 +145,10 @@ function baseConfig(runtimeUrl: string): FrontdoorConfig {
   };
 }
 
-function seedProducts(config: FrontdoorConfig, items: Array<{ productId: string; displayName: string }>): void {
+function seedProducts(
+  config: FrontdoorConfig,
+  items: Array<{ productId: string; displayName: string; visibility?: "customer" | "operator" }>,
+): void {
   const storePath = config.frontdoorStorePath;
   if (!storePath) {
     throw new Error("frontdoor test config is missing a store path");
@@ -156,11 +159,36 @@ function seedProducts(config: FrontdoorConfig, items: Array<{ productId: string;
       store.upsertProduct({
         productId: item.productId,
         displayName: item.displayName,
+        visibility: item.visibility ?? "customer",
       });
     }
   } finally {
     store.close();
   }
+}
+
+function addUserToConfig(
+  config: FrontdoorConfig,
+  user: {
+    id: string;
+    username: string;
+    passwordHash: string;
+    tenantId: string;
+    entityId: string;
+    displayName: string;
+    email: string;
+    roles: string[];
+    scopes: string[];
+  },
+): void {
+  config.usersByUsername.set(user.username, {
+    ...user,
+    disabled: false,
+  });
+  config.usersById.set(user.id, {
+    ...user,
+    disabled: false,
+  });
 }
 
 function withStore<T>(config: FrontdoorConfig, run: (store: FrontdoorStore) => T): T {
@@ -514,12 +542,12 @@ describe("managed connection profile endpoints", () => {
       runtimeAuthToken: "rt-frontdoor-managed-test",
     });
     const previousToken = process.env.GLOWBOT_PRODUCT_CONTROL_PLANE_TOKEN;
-    process.env.GLOWBOT_PRODUCT_CONTROL_PLANE_TOKEN = "glowbot-control-plane-token";
+    process.env.GLOWBOT_PRODUCT_CONTROL_PLANE_TOKEN = "glowbot-product-control-plane-token";
 
     const controlPlane = await listen(
       createHttpServer((req, res) => {
         expect(req.method).toBe("GET");
-        expect(req.headers.authorization).toBe("Bearer glowbot-control-plane-token");
+        expect(req.headers.authorization).toBe("Bearer glowbot-product-control-plane-token");
         expect(req.headers["x-nexus-server-id"]).toBe("tenant-dev");
         expect(req.headers["x-nexus-tenant-id"]).toBe("tenant-dev");
         expect(req.headers["x-nexus-entity-id"]).toBe("entity-owner");
@@ -617,13 +645,13 @@ describe("managed connection profile endpoints", () => {
       runtimeAuthToken: "rt-frontdoor-managed-test",
     });
     const previousToken = process.env.GLOWBOT_PRODUCT_CONTROL_PLANE_TOKEN;
-    process.env.GLOWBOT_PRODUCT_CONTROL_PLANE_TOKEN = "glowbot-control-plane-token";
+    process.env.GLOWBOT_PRODUCT_CONTROL_PLANE_TOKEN = "glowbot-product-control-plane-token";
 
     const controlPlane = await listen(
       createHttpServer(async (req, res) => {
         expect(req.method).toBe("POST");
         expect(req.url).toBe("/api/internal/frontdoor/managed-connections/profile/exchange");
-        expect(req.headers.authorization).toBe("Bearer glowbot-control-plane-token");
+        expect(req.headers.authorization).toBe("Bearer glowbot-product-control-plane-token");
         expect(req.headers["x-nexus-server-id"]).toBe("tenant-dev");
         expect(req.headers["x-nexus-tenant-id"]).toBe("tenant-dev");
         expect(req.headers["x-nexus-entity-id"]).toBe("entity-owner");
@@ -782,13 +810,13 @@ describe("product control plane gateway", () => {
       runtimeAuthToken: "rt-frontdoor-product-test",
     });
     const previousToken = process.env.GLOWBOT_PRODUCT_CONTROL_PLANE_TOKEN;
-    process.env.GLOWBOT_PRODUCT_CONTROL_PLANE_TOKEN = "glowbot-control-plane-token";
+    process.env.GLOWBOT_PRODUCT_CONTROL_PLANE_TOKEN = "glowbot-product-control-plane-token";
 
     const controlPlane = await listen(
       createHttpServer(async (req, res) => {
         expect(req.method).toBe("POST");
         expect(req.url).toBe("/api/internal/frontdoor/product-control-plane/call");
-        expect(req.headers.authorization).toBe("Bearer glowbot-control-plane-token");
+        expect(req.headers.authorization).toBe("Bearer glowbot-product-control-plane-token");
         expect(req.headers["x-nexus-server-id"]).toBe("tenant-dev");
         expect(req.headers["x-nexus-tenant-id"]).toBe("tenant-dev");
         expect(req.headers["x-nexus-entity-id"]).toBe("entity-owner");
@@ -1231,10 +1259,10 @@ describe("frontdoor scaffold", () => {
     >;
     expect(claims.tenant_id).toBe("tenant-dev");
     expect(claims.entity_id).toBe("entity-owner");
-    expect(claims.aud).toBe("control-plane");
+    expect(claims.aud).toBe("runtime-api");
   });
 
-  it("proxies /app paths to runtime control UI routes", async () => {
+  it("proxies /app paths to runtime operator console routes", async () => {
     let lastAuthorization = "";
     let lastTenantHeader = "";
     let lastRuntimeUrl = "";
@@ -1371,7 +1399,7 @@ describe("frontdoor scaffold", () => {
     expect(lastAuthorization.startsWith("Bearer ")).toBe(true);
   });
 
-  it("renders a frontdoor shell for control app HTML routes and proxies embedded app HTML without leaking shell params upstream", async () => {
+  it("renders a frontdoor shell for console app HTML routes and proxies embedded app HTML without leaking shell params upstream", async () => {
     let lastRuntimeUrl = "";
     const runtime = await listen(
       createHttpServer((req, res) => {
@@ -1387,7 +1415,7 @@ describe("frontdoor scaffold", () => {
     const frontdoorRunning = await listen(frontdoor.server);
     const cookie = await login(frontdoorRunning.origin);
 
-    const bootstrapResp = await fetch(`${frontdoorRunning.origin}/app/control/chat?session=main`, {
+    const bootstrapResp = await fetch(`${frontdoorRunning.origin}/app/console/chat?session=main`, {
       headers: {
         cookie,
         accept: "text/html",
@@ -1396,11 +1424,11 @@ describe("frontdoor scaffold", () => {
     expect(bootstrapResp.status).toBe(200);
     const shellHtml = await bootstrapResp.text();
     expect(shellHtml).toContain('id="nxf-shell-embed"');
-    expect(shellHtml).toContain('/app/control/chat?session=main&amp;__nxf_embed=1');
+    expect(shellHtml).toContain('/app/console/chat?session=main&amp;__nxf_embed=1');
     expect(lastRuntimeUrl).toBe("");
 
     const embeddedResp = await fetch(
-      `${frontdoorRunning.origin}/app/control/chat?session=main&__nxf_embed=1`,
+      `${frontdoorRunning.origin}/app/console/chat?session=main&__nxf_embed=1`,
       {
         headers: {
           cookie,
@@ -1412,7 +1440,7 @@ describe("frontdoor scaffold", () => {
     const embeddedHtml = await embeddedResp.text();
     expect(embeddedHtml).toContain('id="nxf-embedded-app-bridge"');
     expect(embeddedHtml).not.toContain('id="nexus-app-frame"');
-    expect(lastRuntimeUrl).toBe("/app/control/chat?session=main");
+    expect(lastRuntimeUrl).toBe("/app/console/chat?session=main");
     expect(lastRuntimeUrl.includes("token=")).toBe(false);
     expect(lastRuntimeUrl.includes("runtimeUrl=")).toBe(false);
     expect(lastRuntimeUrl.includes("__nxf_embed")).toBe(false);
@@ -1440,7 +1468,7 @@ describe("frontdoor scaffold", () => {
     const cookie = await login(frontdoorRunning.origin);
 
     const embeddedResp = await fetch(
-      `${frontdoorRunning.origin}/app/control/chat?session=main&__nxf_embed=1`,
+      `${frontdoorRunning.origin}/app/console/chat?session=main&__nxf_embed=1`,
       {
         headers: {
           cookie,
@@ -2162,7 +2190,7 @@ describe("frontdoor scaffold", () => {
             JSON.stringify({
               ok: true,
               items: [
-                { app_id: "control", display_name: "Control", entry_path: "/app/control/chat" },
+                { app_id: "console", display_name: "Console", entry_path: "/app/console/chat" },
                 { app_id: "api-only", display_name: "API Only", entry_path: "/api/only" },
               ],
             }),
@@ -2204,8 +2232,8 @@ describe("frontdoor scaffold", () => {
     expect(body.runtime_health?.http_status).toBe(200);
     expect(body.app_catalog?.ok).toBe(true);
     expect(body.app_catalog?.app_count).toBe(1);
-    expect(body.app_catalog?.items?.[0]?.app_id).toBe("control");
-    expect(body.app_catalog?.items?.[0]?.entry_path).toBe("/app/control/chat");
+    expect(body.app_catalog?.items?.[0]?.app_id).toBe("console");
+    expect(body.app_catalog?.items?.[0]?.entry_path).toBe("/app/console/chat");
     expect(seenPaths.includes("/health")).toBe(true);
     expect(seenPaths.includes("/api/apps")).toBe(true);
   });
@@ -2334,7 +2362,7 @@ describe("frontdoor scaffold", () => {
           res.end(
             JSON.stringify({
               ok: true,
-              items: [{ app_id: "control", display_name: "Control", entry_path: "/app/control/chat" }],
+              items: [{ app_id: "console", display_name: "Console", entry_path: "/app/console/chat" }],
             }),
           );
           return;
@@ -2817,7 +2845,7 @@ describe("frontdoor scaffold", () => {
     expect(serverBody.server?.server_id).toBe("tenant-dev");
     expect(serverBody.server?.account_id).toBe(SEEDED_ACCOUNT_ID);
     expect(serverBody.server?.runtime_public_base_url).toBe("https://tenant-dev.nexushub.sh");
-    expect(serverBody.server?.installed_app_ids).toContain("control");
+    expect(serverBody.server?.installed_app_ids).toContain("console");
 
     const setTokenResp = await fetch(
       `${frontdoorRunning.origin}/api/servers/tenant-dev/runtime-auth-token/set`,
@@ -3366,7 +3394,7 @@ describe("frontdoor scaffold", () => {
             JSON.stringify({
               ok: true,
               items: [
-                { app_id: "control", display_name: "Control", entry_path: "/app/control/chat" },
+                { app_id: "console", display_name: "Console", entry_path: "/app/console/chat" },
                 {
                   app_id: "glowbot",
                   display_name: "GlowBot",
@@ -3547,7 +3575,7 @@ describe("frontdoor scaffold", () => {
       { productId: "glowbot-admin", displayName: "GlowBot Admin" },
       { productId: "glowbot-hub", displayName: "GlowBot Hub" },
     ]);
-    const tempDir = path.join(tmpdir(), `nexus-frontdoor-glowbot-control-plane-${randomUUID()}`);
+    const tempDir = path.join(tmpdir(), `nexus-frontdoor-glowbot-runtime API-${randomUUID()}`);
     fs.mkdirSync(tempDir, { recursive: true });
     const adminTarballPath = path.join(tempDir, "glowbot-admin-1.0.0.tar.gz");
     const hubTarballPath = path.join(tempDir, "glowbot-hub-1.0.0.tar.gz");
@@ -3622,6 +3650,83 @@ describe("frontdoor scaffold", () => {
         }),
       ]);
     });
+  });
+
+  it("hides operator-only products from public and customer-facing inventory", async () => {
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ ok: true, items: [] }));
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    addUserToConfig(config, {
+      id: "u-member",
+      username: "member",
+      passwordHash: createPasswordHash("memberpass"),
+      tenantId: "tenant-dev",
+      entityId: "entity-member",
+      displayName: "Member",
+      email: "member@example.com",
+      roles: ["member"],
+      scopes: [],
+    });
+    seedProducts(config, [
+      { productId: "glowbot", displayName: "GlowBot", visibility: "customer" },
+      { productId: "glowbot-admin", displayName: "GlowBot Admin", visibility: "operator" },
+    ]);
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+
+    const publicProductsResp = await fetch(`${frontdoorRunning.origin}/api/products`);
+    expect(publicProductsResp.status).toBe(200);
+    const publicProductsBody = (await publicProductsResp.json()) as { items: Array<{ product_id: string }> };
+    expect(publicProductsBody.items.map((item) => item.product_id)).toContain("glowbot");
+    expect(publicProductsBody.items.map((item) => item.product_id)).not.toContain("glowbot-admin");
+
+    const memberCookie = await login(frontdoorRunning.origin, {
+      username: "member",
+      password: "memberpass",
+    });
+    const catalogResp = await fetch(`${frontdoorRunning.origin}/api/apps/catalog`, {
+      headers: { cookie: memberCookie },
+    });
+    expect(catalogResp.status).toBe(200);
+    const catalogBody = (await catalogResp.json()) as { items: Array<{ app_id: string }> };
+    expect(catalogBody.items.map((item) => item.app_id)).toContain("glowbot");
+    expect(catalogBody.items.map((item) => item.app_id)).not.toContain("glowbot-admin");
+
+    const hiddenDetailResp = await fetch(`${frontdoorRunning.origin}/api/products/glowbot-admin`, {
+      headers: { cookie: memberCookie },
+    });
+    expect(hiddenDetailResp.status).toBe(404);
+
+    const hiddenPurchaseResp = await fetch(`${frontdoorRunning.origin}/api/apps/glowbot-admin/purchase`, {
+      method: "POST",
+      headers: {
+        cookie: memberCookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+    expect(hiddenPurchaseResp.status).toBe(404);
+
+    const hiddenResolveResp = await fetch(
+      `${frontdoorRunning.origin}/api/entry/resolve?app_id=glowbot-admin&entry_source=test-suite`,
+      {
+        headers: { cookie: memberCookie },
+      },
+    );
+    expect(hiddenResolveResp.status).toBe(404);
+
+    const ownerCookie = await login(frontdoorRunning.origin);
+    const ownerCatalogResp = await fetch(`${frontdoorRunning.origin}/api/apps/catalog`, {
+      headers: { cookie: ownerCookie },
+    });
+    expect(ownerCatalogResp.status).toBe(200);
+    const ownerCatalogBody = (await ownerCatalogResp.json()) as { items: Array<{ app_id: string }> };
+    expect(ownerCatalogBody.items.map((item) => item.app_id)).toContain("glowbot-admin");
   });
 
   it("installs adapters through server adapter routes and uses direct runtime delivery for local runtimes", async () => {
@@ -3938,7 +4043,7 @@ describe("frontdoor scaffold", () => {
           res.end(
             JSON.stringify({
               ok: true,
-              items: [{ app_id: "control", display_name: "Control", entry_path: "/app/control/chat" }],
+              items: [{ app_id: "console", display_name: "Console", entry_path: "/app/console/chat" }],
             }),
           );
           return;
@@ -3999,7 +4104,7 @@ describe("frontdoor scaffold", () => {
           res.end(
             JSON.stringify({
               ok: true,
-              items: [{ app_id: "control", display_name: "Control", entry_path: "/app/control/chat" }],
+              items: [{ app_id: "console", display_name: "Console", entry_path: "/app/console/chat" }],
             }),
           );
           return;
@@ -4065,7 +4170,7 @@ describe("frontdoor scaffold", () => {
             JSON.stringify({
               ok: true,
               items: [
-                { app_id: "control", display_name: "Control", entry_path: "/app/control/chat" },
+                { app_id: "console", display_name: "Console", entry_path: "/app/console/chat" },
                 { app_id: "glowbot", display_name: "GlowBot", entry_path: "/app/glowbot/" },
               ],
             }),
@@ -4281,7 +4386,7 @@ process.stdin.on("end", () => {
             JSON.stringify({
               ok: true,
               items: [
-                { app_id: "control", display_name: "Control", entry_path: "/app/control/chat" },
+                { app_id: "console", display_name: "Console", entry_path: "/app/console/chat" },
                 { app_id: "glowbot", display_name: "GlowBot", entry_path: "/app/glowbot/" },
               ],
             }),
@@ -4418,7 +4523,7 @@ process.stdin.on("end", () => {
             JSON.stringify({
               ok: true,
               items: [
-                { app_id: "control", display_name: "Control", entry_path: "/app/control/chat" },
+                { app_id: "console", display_name: "Console", entry_path: "/app/console/chat" },
                 { app_id: "glowbot", display_name: "GlowBot", entry_path: "/app/glowbot/" },
               ],
             }),
@@ -4495,7 +4600,7 @@ process.stdin.on("end", () => {
             JSON.stringify({
               ok: true,
               items: [
-                { app_id: "control", display_name: "Control", entry_path: "/app/control/chat" },
+                { app_id: "console", display_name: "Console", entry_path: "/app/console/chat" },
                 {
                   app_id: "spike-runtime",
                   display_name: "Spike Runtime",
@@ -4581,7 +4686,7 @@ process.stdin.on("end", () => {
           res.end(
             JSON.stringify({
               ok: true,
-              items: [{ app_id: "control", display_name: "Control", entry_path: "/app/control/chat" }],
+              items: [{ app_id: "console", display_name: "Console", entry_path: "/app/console/chat" }],
             }),
           );
           return;

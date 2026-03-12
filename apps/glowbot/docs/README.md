@@ -32,6 +32,7 @@ Status note:
 - [GLOWBOT_CLINIC_PROFILE.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_CLINIC_PROFILE.md)
 - [GLOWBOT_BENCHMARK_NETWORK.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_BENCHMARK_NETWORK.md)
 - [GLOWBOT_DERIVED_OUTPUT_MODEL.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_DERIVED_OUTPUT_MODEL.md)
+- [GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION.md)
 - [GLOWBOT_ADMIN_SURFACE.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_ADMIN_SURFACE.md)
 - [DATA_PIPELINE.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/DATA_PIPELINE.md)
 - [CENTRAL_HUB.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/CENTRAL_HUB.md)
@@ -46,6 +47,7 @@ Status note:
 ### Workplans
 
 - [WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/workplans/WORKPLAN.md)
+- [GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/workplans/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_WORKPLAN.md)
 - [NON_EMR_ADAPTER_PARITY_WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/workplans/NON_EMR_ADAPTER_PARITY_WORKPLAN.md)
 - [IDENTITY_DB_SQLCIPHER_CUTOVER.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/workplans/IDENTITY_DB_SQLCIPHER_CUTOVER.md)
 
@@ -71,6 +73,7 @@ Archived note:
 ### Validation
 
 - [VALIDATION_LADDER.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/validation/VALIDATION_LADDER.md)
+- [GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_VALIDATION.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/validation/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_VALIDATION.md)
 - [LIVE_CREDENTIAL_CUTOVER_RUNBOOK.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/validation/LIVE_CREDENTIAL_CUTOVER_RUNBOOK.md)
 
 ### Proposals

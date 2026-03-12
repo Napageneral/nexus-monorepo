@@ -117,12 +117,8 @@ Confirmed from code in the authoritative app tree:
 
 Remaining real gaps:
 
-- dedicated control-plane deployment and visibility validation still needs a
-  real installed GlowBot control-plane server
 - secret storage still needs hardening beyond the current `secretRef` shell
   implementation
-- synthetic deployed product rehearsal is complete on the hosted two-server
-  shape; remaining pre-clinic work is hardening and live credential validation
 - persisted derived outputs are not materialized yet
 - live clinic validation still depends on real credentials and onboarding
 
@@ -321,8 +317,6 @@ Completed:
 Still required:
 
 - harden secret storage beyond the current env-backed `secretRef` resolution
-- complete focused managed-profile relay validation beyond the current
-  product-control-plane call rehearsal
 
 Exit criteria:
 
@@ -391,8 +385,9 @@ Completed:
 - full tuple resolution by `managed_profile_id`, `app_id`, `adapter_id`,
   `connection_profile_id`, and `auth_method_id` exists in the hub
 - the hub has a first real secret-backed OAuth exchange path
-- the first GlowBot-managed provider path is validated in focused
-  runtime/frontdoor/hub tests
+- the first GlowBot-managed provider path is validated in deployed
+  runtime/frontdoor/hub rehearsal, including failed-exchange diagnostics and
+  audit capture
 
 Important boundary:
 
@@ -408,7 +403,7 @@ Exit criteria:
 
 ---
 
-## W9. Admin Surface Cutover 🟡
+## W9. Admin Surface Cutover ✅
 
 Turn `glowbot-admin` into a real operator app over hub state.
 
@@ -437,16 +432,16 @@ Completed:
 - `admin/ui` now exists as a real operator console source tree
 - `admin/dist` is now generated as the packaged static operator UI
 
-Still required:
-
-- operator-only visibility and access-control validation on a real dedicated
-  control-plane server
-
 Exit criteria:
 
 - `glowbot-admin` calls the hub instead of placeholder local logic
 - operator workflows reflect the real product-control-plane architecture
 - admin is operator-only and not exposed as a customer-facing app
+
+Recorded proof:
+
+- deployed hosted rehearsal proves `glowbot-admin` is hidden from normal
+  customer inventory and non-operator contexts cannot invoke admin methods
 
 ---
 
@@ -546,6 +541,12 @@ Exit criteria:
 Persisted higher-level observations remain future work, but they are part of
 the target-state parity plan and must be represented honestly.
 
+Focused detail lives in:
+
+- [GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION.md)
+- [GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/workplans/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_WORKPLAN.md)
+- [GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_VALIDATION.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/validation/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_VALIDATION.md)
+
 Scope:
 
 - register element definitions for:
@@ -577,6 +578,8 @@ Important boundary:
 
 - the benchmark network remains snapshot-based and decoupled from the local
   derived-output strategy
+- W12 materializes derived outputs first and keeps clinic reads on-demand until
+  real clinic evidence justifies a read-path cutover
 
 Exit criteria:
 
