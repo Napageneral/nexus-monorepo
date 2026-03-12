@@ -15,6 +15,7 @@ import { AutoProvisionStore } from "./autoprovision-store.js";
 import type { CloudProvider } from "./cloud-provider.js";
 import { createPasswordHash } from "./crypto.js";
 import { FrontdoorStore } from "./frontdoor-store.js";
+import { publishAppRelease } from "./publish-app-release.js";
 import { createFrontdoorServer } from "./server.js";
 import * as sshHelper from "./ssh-helper.js";
 import type { FrontdoorConfig } from "./types.js";
@@ -26,6 +27,8 @@ type Running = {
 
 const running: Running[] = [];
 const SEEDED_ACCOUNT_ID = "config-account:tenant-dev";
+const GLOWBOT_ADMIN_APP_ROOT = "/Users/tyler/nexus/home/projects/nexus/apps/glowbot/admin";
+const GLOWBOT_HUB_APP_ROOT = "/Users/tyler/nexus/home/projects/nexus/apps/glowbot/hub";
 
 async function listen(server: HttpServer): Promise<Running> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -283,6 +286,11 @@ async function login(
 function decodeJwtHeader(token: string): Record<string, unknown> {
   const headerPart = token.split(".")[0] ?? "";
   return JSON.parse(Buffer.from(headerPart, "base64url").toString("utf8")) as Record<string, unknown>;
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  const payloadPart = token.split(".")[1] ?? "";
+  return JSON.parse(Buffer.from(payloadPart, "base64url").toString("utf8")) as Record<string, unknown>;
 }
 
 type TestSigningKey = {
@@ -1410,6 +1418,42 @@ describe("frontdoor scaffold", () => {
     expect(lastRuntimeUrl.includes("__nxf_embed")).toBe(false);
   });
 
+  it("uses a session-bound runtime access token for embedded app proxying even when a server runtime auth token exists", async () => {
+    let lastAuthorization = "";
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        lastAuthorization = String(req.headers.authorization ?? "");
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/html; charset=utf-8");
+        res.end("<!doctype html><html><head><title>runtime</title></head><body>ok</body></html>");
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    config.tenants.set("tenant-dev", {
+      id: "tenant-dev",
+      runtimeUrl: runtime.origin,
+      runtimePublicBaseUrl: runtime.origin,
+      runtimeAuthToken: "rt-frontdoor-managed-test",
+    });
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const embeddedResp = await fetch(
+      `${frontdoorRunning.origin}/app/control/chat?session=main&__nxf_embed=1`,
+      {
+        headers: {
+          cookie,
+          accept: "text/html",
+        },
+      },
+    );
+    expect(embeddedResp.status).toBe(200);
+    await embeddedResp.text();
+    expect(lastAuthorization.startsWith("Bearer ")).toBe(true);
+    expect(lastAuthorization).not.toBe("Bearer rt-frontdoor-managed-test");
+  });
+
   it("renders a shell-level not-installed state for unavailable apps while keeping the embedded app document shell-free", async () => {
     let lastRuntimeUrl = "";
     const runtime = await listen(
@@ -1545,6 +1589,57 @@ describe("frontdoor scaffold", () => {
       unknown
     >;
     expect(claims.tenant_id).toBe("tenant-dev");
+  });
+
+  it("mints a trusted runtime token for shell runtime proxying when stored server token is missing", async () => {
+    let seenAuth = "";
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        seenAuth = String(req.headers.authorization ?? "");
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ ok: true }));
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    config.tenants.set("tenant-dev", {
+      id: "tenant-dev",
+      runtimeUrl: runtime.origin,
+      runtimePublicBaseUrl: runtime.origin,
+      runtimeAuthToken: "runtime-auth-token-local",
+    });
+    const frontdoor = createFrontdoorServer({ config });
+    withStore(config, (store) => {
+      const server = store.getServer("tenant-dev");
+      expect(server).toBeTruthy();
+      if (!server) {
+        throw new Error("missing_server");
+      }
+      store.updateServer(server.serverId, {
+        privateIp: null,
+        runtimePort: 8080,
+        runtimeAuthToken: null,
+      });
+      const cleared = store.getServer(server.serverId);
+      expect(cleared?.runtimeAuthToken).toBeNull();
+    });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const response = await fetch(`${frontdoorRunning.origin}/runtime/health`, {
+      headers: { cookie },
+    });
+    expect(response.status).toBe(200);
+    await response.text();
+
+    expect(seenAuth.startsWith("Bearer ")).toBe(true);
+    const proxiedToken = seenAuth.slice("Bearer ".length);
+    expect(proxiedToken).toContain(".");
+    expect(decodeJwtPayload(proxiedToken)).toMatchObject({
+      tenant_id: "tenant-dev",
+      role: "operator",
+      client_id: "nexus-frontdoor",
+    });
   });
 
   it("rejects cross-origin mutation requests", async () => {
@@ -2948,7 +3043,7 @@ describe("frontdoor scaffold", () => {
       redirectUri: "http://127.0.0.1/api/auth/oidc/callback/google",
       scope: "openid profile email",
     });
-    const installSpy = vi.spyOn(sshHelper, "installPackageViaSSH").mockResolvedValue({ ok: true });
+    const installSpy = vi.spyOn(sshHelper, "installPackageViaRuntimeHttp").mockResolvedValue({ ok: true });
 
     const frontdoor = createFrontdoorServer({ config });
     const frontdoorRunning = await listen(frontdoor.server);
@@ -3294,7 +3389,7 @@ describe("frontdoor scaffold", () => {
       { productId: "spike", displayName: "Spike" },
     ]);
     stageFakePackage(config, "glowbot");
-    const installSpy = vi.spyOn(sshHelper, "installPackageViaSSH").mockResolvedValue({ ok: true });
+    const installSpy = vi.spyOn(sshHelper, "installPackageViaRuntimeHttp").mockResolvedValue({ ok: true });
     const frontdoor = createFrontdoorServer({ config });
     const frontdoorRunning = await listen(frontdoor.server);
     const cookie = await login(frontdoorRunning.origin);
@@ -3433,6 +3528,102 @@ describe("frontdoor scaffold", () => {
     expect(postInstallResolveBody.installed_server_ids).toContain("tenant-dev");
   });
 
+  it("installs dependency app packages before the requested app package", async () => {
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        if (req.url?.startsWith("/api/apps")) {
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end(JSON.stringify({ ok: true, items: [] }));
+          return;
+        }
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ ok: true }));
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    seedProducts(config, [
+      { productId: "glowbot-admin", displayName: "GlowBot Admin" },
+      { productId: "glowbot-hub", displayName: "GlowBot Hub" },
+    ]);
+    const tempDir = path.join(tmpdir(), `nexus-frontdoor-glowbot-control-plane-${randomUUID()}`);
+    fs.mkdirSync(tempDir, { recursive: true });
+    const adminTarballPath = path.join(tempDir, "glowbot-admin-1.0.0.tar.gz");
+    const hubTarballPath = path.join(tempDir, "glowbot-hub-1.0.0.tar.gz");
+    fs.writeFileSync(adminTarballPath, "glowbot-admin-package\n", "utf8");
+    fs.writeFileSync(hubTarballPath, "glowbot-hub-package\n", "utf8");
+
+    const installSpy = vi.spyOn(sshHelper, "installPackageViaRuntimeHttp").mockResolvedValue({ ok: true });
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const store = new FrontdoorStore(frontdoor.config.frontdoorStorePath as string);
+    try {
+      await publishAppRelease({
+        store,
+        packageRoot: GLOWBOT_ADMIN_APP_ROOT,
+        tarballPath: adminTarballPath,
+        targetOs: process.platform,
+        targetArch: process.arch,
+      });
+      await publishAppRelease({
+        store,
+        packageRoot: GLOWBOT_HUB_APP_ROOT,
+        tarballPath: hubTarballPath,
+        targetOs: process.platform,
+        targetArch: process.arch,
+      });
+      store.createAppSubscription({
+        accountId: SEEDED_ACCOUNT_ID,
+        appId: "glowbot-admin",
+        planId: "default",
+        status: "active",
+        provider: "manual",
+      });
+    } finally {
+      store.close();
+    }
+    const cookie = await login(frontdoorRunning.origin);
+
+    const installResp = await fetch(
+      `${frontdoorRunning.origin}/api/servers/tenant-dev/apps/glowbot-admin/install`,
+      {
+        method: "POST",
+        headers: { cookie },
+      },
+    );
+    expect(installResp.status).toBe(200);
+    const installBody = (await installResp.json()) as { ok: boolean; install_status: string };
+    expect(installBody.ok).toBe(true);
+    expect(installBody.install_status).toBe("installed");
+    expect(installSpy).toHaveBeenCalledTimes(2);
+    expect(installSpy.mock.calls[0]?.[0]).toMatchObject({
+      kind: "app",
+      packageId: "glowbot-hub",
+    });
+    expect(installSpy.mock.calls[1]?.[0]).toMatchObject({
+      kind: "app",
+      packageId: "glowbot-admin",
+    });
+
+    withStore(config, (verifiedStore) => {
+      const adminInstall = verifiedStore.getServerPackageInstall("tenant-dev", "app", "glowbot-admin");
+      const hubInstall = verifiedStore.getServerPackageInstall("tenant-dev", "app", "glowbot-hub");
+      expect(adminInstall?.status).toBe("installed");
+      expect(hubInstall?.status).toBe("installed");
+      expect(verifiedStore.listServerPackageRequirements("tenant-dev", "app", "glowbot-admin")).toEqual([
+        expect.objectContaining({
+          serverId: "tenant-dev",
+          requiringKind: "app",
+          requiringPackageId: "glowbot-admin",
+          requiredKind: "app",
+          requiredPackageId: "glowbot-hub",
+          versionConstraint: "^1.0.0",
+        }),
+      ]);
+    });
+  });
+
   it("installs adapters through server adapter routes and uses direct runtime delivery for local runtimes", async () => {
     const runtime = await listen(
       createHttpServer((req, res) => {
@@ -3536,7 +3727,14 @@ describe("frontdoor scaffold", () => {
       packageId: "nexus-adapter-confluence",
       version: "0.1.0",
       runtimeUrl: runtime.origin,
-      runtimeAuthToken: "runtime-auth-token-local",
+    });
+    const installToken = String(directInstallSpy.mock.calls[0]?.[0].runtimeBearerToken ?? "");
+    expect(installToken).toContain(".");
+    expect(installToken).not.toBe("runtime-auth-token-local");
+    expect(decodeJwtPayload(installToken)).toMatchObject({
+      tenant_id: "tenant-dev",
+      role: "operator",
+      client_id: "nexus-frontdoor-package-operator",
     });
     expect(sshInstallSpy).not.toHaveBeenCalled();
   });
@@ -3574,7 +3772,7 @@ describe("frontdoor scaffold", () => {
         installReason: "manual",
       });
     });
-    const upgradeSpy = vi.spyOn(sshHelper, "upgradePackageViaSSH").mockResolvedValue({ ok: true });
+    const upgradeSpy = vi.spyOn(sshHelper, "upgradePackageViaRuntimeHttp").mockResolvedValue({ ok: true });
     const frontdoorRunning = await listen(frontdoor.server);
     const cookie = await login(frontdoorRunning.origin);
 
@@ -3599,7 +3797,14 @@ describe("frontdoor scaffold", () => {
       kind: "adapter",
       packageId: "nexus-adapter-confluence",
       targetVersion: "0.1.1",
-      runtimeAuthToken: "runtime-auth-token-local",
+    });
+    const upgradeToken = String(upgradeSpy.mock.calls[0]?.[0].runtimeBearerToken ?? "");
+    expect(upgradeToken).toContain(".");
+    expect(upgradeToken).not.toBe("runtime-auth-token-local");
+    expect(decodeJwtPayload(upgradeToken)).toMatchObject({
+      tenant_id: "tenant-dev",
+      role: "operator",
+      client_id: "nexus-frontdoor-package-operator",
     });
 
     const statusResp = await fetch(
@@ -3641,7 +3846,7 @@ describe("frontdoor scaffold", () => {
         installReason: "manual",
       });
     });
-    const uninstallSpy = vi.spyOn(sshHelper, "uninstallPackageViaSSH").mockResolvedValue({ ok: true });
+    const uninstallSpy = vi.spyOn(sshHelper, "uninstallPackageViaRuntimeHttp").mockResolvedValue({ ok: true });
     const frontdoorRunning = await listen(frontdoor.server);
     const cookie = await login(frontdoorRunning.origin);
 
@@ -3661,7 +3866,14 @@ describe("frontdoor scaffold", () => {
     expect(uninstallSpy.mock.calls[0]?.[0]).toMatchObject({
       kind: "adapter",
       packageId: "nexus-adapter-confluence",
-      runtimeAuthToken: "runtime-auth-token-local",
+    });
+    const uninstallToken = String(uninstallSpy.mock.calls[0]?.[0].runtimeBearerToken ?? "");
+    expect(uninstallToken).toContain(".");
+    expect(uninstallToken).not.toBe("runtime-auth-token-local");
+    expect(decodeJwtPayload(uninstallToken)).toMatchObject({
+      tenant_id: "tenant-dev",
+      role: "operator",
+      client_id: "nexus-frontdoor-package-operator",
     });
 
     const statusResp = await fetch(
@@ -3700,7 +3912,7 @@ describe("frontdoor scaffold", () => {
         source: "manual",
       });
     });
-    const upgradeSpy = vi.spyOn(sshHelper, "upgradePackageViaSSH").mockResolvedValue({ ok: true });
+    const upgradeSpy = vi.spyOn(sshHelper, "upgradePackageViaRuntimeHttp").mockResolvedValue({ ok: true });
     const frontdoorRunning = await listen(frontdoor.server);
     const cookie = await login(frontdoorRunning.origin);
 
@@ -3726,6 +3938,13 @@ describe("frontdoor scaffold", () => {
       packageId: "glowbot",
       targetVersion: "2.0.0",
     });
+    const appUpgradeToken = String(upgradeSpy.mock.calls[0]?.[0].runtimeBearerToken ?? "");
+    expect(appUpgradeToken).toContain(".");
+    expect(decodeJwtPayload(appUpgradeToken)).toMatchObject({
+      tenant_id: "tenant-dev",
+      role: "operator",
+      client_id: "nexus-frontdoor-package-operator",
+    });
   });
 
   it("installs the latest published app release when no explicit version is provided", async () => {
@@ -3750,7 +3969,7 @@ describe("frontdoor scaffold", () => {
     const config = baseConfig(runtime.origin);
     seedProducts(config, [{ productId: "spike", displayName: "Spike" }]);
     stageFakePackage(config, "spike", "1.2.3");
-    const installSpy = vi.spyOn(sshHelper, "installPackageViaSSH").mockResolvedValue({ ok: true });
+    const installSpy = vi.spyOn(sshHelper, "installPackageViaRuntimeHttp").mockResolvedValue({ ok: true });
     const frontdoor = createFrontdoorServer({ config });
     const frontdoorRunning = await listen(frontdoor.server);
     const cookie = await login(frontdoorRunning.origin);
@@ -3779,6 +3998,13 @@ describe("frontdoor scaffold", () => {
       kind: "app",
       packageId: "spike",
       version: "1.2.3",
+    });
+    const appInstallToken = String(installSpy.mock.calls[0]?.[0].runtimeBearerToken ?? "");
+    expect(appInstallToken).toContain(".");
+    expect(decodeJwtPayload(appInstallToken)).toMatchObject({
+      tenant_id: "tenant-dev",
+      role: "operator",
+      client_id: "nexus-frontdoor-package-operator",
     });
   });
 
@@ -3902,7 +4128,7 @@ process.stdin.on("end", () => {
       providers: ["google"],
       command: `${JSON.stringify(process.execPath)} ${JSON.stringify(scriptPath)}`,
     };
-    const installSpy = vi.spyOn(sshHelper, "installPackageViaSSH").mockResolvedValue({ ok: true });
+    const installSpy = vi.spyOn(sshHelper, "installPackageViaRuntimeHttp").mockResolvedValue({ ok: true });
     const frontdoor = createFrontdoorServer({ config });
     const frontdoorRunning = await listen(frontdoor.server);
     withStore(frontdoor.config, (store) => {
@@ -4118,7 +4344,7 @@ process.stdin.on("end", () => {
       providers: ["google"],
       command: `${JSON.stringify(process.execPath)} ${JSON.stringify(scriptPath)}`,
     };
-    const installSpy = vi.spyOn(sshHelper, "installPackageViaSSH").mockResolvedValue({ ok: true });
+    const installSpy = vi.spyOn(sshHelper, "installPackageViaRuntimeHttp").mockResolvedValue({ ok: true });
     const frontdoor = createFrontdoorServer({ config });
     const frontdoorRunning = await listen(frontdoor.server);
     withStore(frontdoor.config, (store) => {

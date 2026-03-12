@@ -4,7 +4,7 @@
 > spec set.
 >
 > **Status:** ACTIVE
-> **Last Updated:** 2026-03-09
+> **Last Updated:** 2026-03-10
 > **Covers:** target-state specs, active workplan, and live cutover runbook
 
 ---
@@ -50,7 +50,7 @@ topology.
 | T2 | Clinic UI folded into app package | former `consumer-ui/` lives under `app/ui/` |
 | T3 | Operator package remains explicit | `admin/` remains a top-level app package |
 | T4 | Public package remains explicit | `website/` remains a top-level package |
-| T5 | Hub package boundary exists | `hub/` exists as a top-level service-package boundary |
+| T5 | Hub package boundary exists | `hub/` exists as a top-level control-plane app-package boundary |
 | T6 | Workspace config is real | root workspace config references actual packages only |
 
 ---
@@ -67,8 +67,8 @@ GlowBot manifests now teach the intended package and deployment truth.
 | P4 | Shared constants reflect current adapter reality | unified `google` plus `callrail` and `twilio` are canonical |
 | P5 | Shared types reflect connection-profile model | contracts do not expose legacy app-local auth form canon |
 | P6 | Clinic app does not locally require `glowbot-hub` | clinic-server manifest does not imply product-control-plane co-installation |
-| P7 | Admin app declares the correct local service dependency model | admin manifest and package metadata match the dedicated control-plane server model |
-| P8 | Hub package metadata is real | `glowbot-hub` has real service/package metadata for control-plane deployment |
+| P7 | Admin app declares the correct local app dependency model | admin manifest and package metadata match the dedicated control-plane server model |
+| P8 | Hub package metadata is real | `glowbot-hub` has real app/package metadata for control-plane deployment |
 
 Current state note:
 
@@ -102,17 +102,17 @@ Current state note:
 
 ---
 
-## Milestone 4: Pipeline Write Path Baseline 🟡
+## Milestone 4: Pipeline Write Path Baseline ✅
 
-GlowBot writes raw metric data into nex primitives, but write-path closure is
-not complete yet.
+GlowBot writes raw metric data into nex primitives through the canonical Nex
+write path.
 
 | # | Checkpoint | Pass Criteria |
 |---|---|---|
 | W1 | Install registers the metric element definition | `memory.elements.definitions.*` contains the GlowBot `metric` type |
-| W2 | Install registers jobs/DAG/cron | GlowBot work primitives exist in the nex work domain |
-| W3 | Activate subscribes to adapter events | app uses `ctx.nex.adapters.onEvent()` successfully |
-| W4 | Metric extraction writes elements | adapter events produce `metric` elements via nex APIs |
+| W2 | Install registers jobs/DAG/schedules | GlowBot work primitives exist in the nex work domain under canonical `schedules.*` nouns |
+| W3 | Durable ingest wake-up exists | `metric_extract` is woken by `events.subscriptions.*` on `record.ingested`, not transient app-local adapter event hooks |
+| W4 | Metric extraction writes elements | canonical records produce `metric` elements via nex APIs |
 | W5 | Deduplication is connection-aware | repeated runs do not duplicate the same metric for the same connection, and distinct same-adapter connections remain distinct |
 | W6 | Multi-location tagging works | metric elements carry canonical `clinic_id` when present |
 | W7 | Provenance metadata preserves connection context | metric metadata carries `connection_id` and preserves additional connection context when runtime provides it |
@@ -121,8 +121,9 @@ not complete yet.
 
 Current state note:
 
-- W1-W8 are materially landed
-- W9 remains open until the persisted-derived-output tranche lands
+- W1-W9 are materially landed
+- remaining provenance-link materialization now belongs to Milestone 12 rather
+  than the raw metric write path baseline
 
 ---
 
@@ -163,7 +164,7 @@ validation closure are still open.
 
 | # | Checkpoint | Pass Criteria |
 |---|---|---|
-| HS1 | Hub package is executable | `hub/` is more than a README and has real service/package metadata |
+| HS1 | Hub package is executable | `hub/` is more than a README and has real app/package metadata |
 | HS2 | Private ingress endpoints exist | frontdoor relay endpoints are implemented at the canonical paths |
 | HS3 | Private ingress enforces caller auth | unauthenticated or malformed relay requests are rejected |
 | HS4 | Managed profile registry exists | durable managed-profile storage and lookup are implemented |
@@ -177,6 +178,18 @@ Current state note:
 - HS1-HS8 are materially landed in the hub package
 - remaining work is deployment-truth validation and stronger secret-storage /
   relay verification rather than greenfield shell creation
+
+## Milestone 7A: Package Publish And Deploy Rehearsal 🟡
+
+| # | Checkpoint | Pass Criteria |
+|---|---|---|
+| PR1 | `glowbot` artifact exists | real tarball emitted from package-release tooling |
+| PR2 | `glowbot-admin` artifact exists | real tarball emitted from package-release tooling |
+| PR3 | `glowbot-hub` artifact exists | real tarball emitted from package-release tooling |
+| PR4 | clinic install uses real artifact | hosted clinic-server install is driven from published package artifact |
+| PR5 | control-plane install uses dependency planning | installing `glowbot-admin` also installs `glowbot-hub` |
+| PR6 | admin visibility is operator-only | deployed admin surface is not visible in normal customer inventory |
+| PR7 | `productControlPlane.call` works against deployed control plane | clinic app reaches the installed control plane through the hosted path |
 
 ---
 
@@ -245,7 +258,7 @@ Current state note:
 
 ---
 
-## Milestone 11: Clinic App Hub Integration 🟡
+## Milestone 11: Clinic App Hub Integration ✅
 
 The clinic-facing app must consume the real hub rather than placeholders.
 
@@ -262,12 +275,12 @@ The clinic-facing app must consume the real hub rather than placeholders.
 Current state note:
 
 - CI1-CI7 are materially landed in app/runtime/hub code
-- remaining work is real hosted deployment and live-clinic validation rather
-  than another clinic-app integration rewrite
+- dedicated control-plane deployment validation now belongs to Milestone 13,
+  not this local integration milestone
 
 ---
 
-## Milestone 12: Persisted Derived Outputs And DAG Automation 🚧
+## Milestone 12: Persisted Derived Outputs And DAG Automation 🟡
 
 Persisted higher-level observations remain future work and are still required
 for full parity with the target-state derived-output spec.
@@ -281,7 +294,13 @@ for full parity with the target-state derived-output spec.
 | D5 | Recommendations are versioned canonically | recommendation elements use active/superseded semantics rather than overwrite |
 | D6 | Read path can use persisted outputs | clinic surfaces can consume persisted derived outputs where intended |
 | D7 | DAG execution is real end to end | DAG runs advance through node execution rather than serving as registration-only scaffolding |
-| D8 | Cron-driven refresh is real end to end | scheduled execution produces real work, not only records |
+| D8 | Schedule-driven refresh is real end to end | scheduled execution produces real work, not only records |
+
+Current state note:
+
+- the March 10 Nex validation packet no longer justifies treating D7-D8 as
+  upstream-blocked by default
+- the remaining work in this milestone is now primarily GlowBot-owned
 
 ---
 

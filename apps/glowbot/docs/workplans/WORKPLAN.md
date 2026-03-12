@@ -4,7 +4,7 @@
 > app tree into implementation parity with the active spec set.
 >
 > **Status:** ACTIVE
-> **Last Updated:** 2026-03-09
+> **Last Updated:** 2026-03-10
 > **Approach:** hard cutover, no backwards compatibility
 
 ---
@@ -43,8 +43,8 @@ These decisions are already resolved and are not reopened in this workplan.
 | Clinic app execution model | `app/` is an inline-handler nex app, not a default service-routed product package. |
 | Admin execution model | `admin/` is a separate inline-handler nex app. |
 | Shared backend boundary | Shared benchmark and product-control behavior belongs in `hub/`, not in the clinic app package. |
-| Product control plane deployment | `glowbot-admin` and `glowbot-hub` are co-installed on a dedicated GlowBot control-plane server managed through the hosted platform. |
-| Pipeline ownership | nex core owns storage, indexing, links, jobs, DAG/cron primitives, and shared adapter execution. GlowBot owns product-specific computation modules. |
+| Product control plane deployment | `glowbot-admin` and `glowbot-hub` are co-installed on a dedicated GlowBot control-plane server managed through the hosted platform, with operator install driven by `glowbot-admin` dependency planning. |
+| Pipeline ownership | nex core owns storage, indexing, links, jobs, DAG/schedules primitives, canonical record ingress, and shared adapter execution. GlowBot owns product-specific computation modules. |
 | Provenance identity | `connection_id` is the canonical provenance identity. `adapter_id` is source classification, not canonical connection identity. |
 | Benchmark boundary | The hub consumes `ClinicBenchmarkSnapshot`, not raw adapter events and not raw local derived-output elements. |
 | Clinic profile ownership | The clinic-facing GlowBot app owns canonical `ClinicProfile` truth; the hub owns deterministic `profileKey` resolution and cohort definitions from that object. |
@@ -88,22 +88,27 @@ Confirmed from code in the authoritative app tree:
 - clinic UI source lives under `app/ui/`
 - the clinic manifest uses `requires.adapters` and profile-based adapter
   integration metadata
-- the clinic manifest no longer declares `glowbot-hub` under
-  `requires.services`
+- the clinic manifest no longer declares `glowbot-hub` under any dedicated
+  service dependency field
 - the app install/activate path registers:
   - one real element definition: `metric`
   - five job definitions
   - one DAG definition
-  - one cron schedule
+  - one schedule
+- schedule lifecycle is now activation-aware through canonical `schedules.*`
+- durable `record.ingested` subscriptions now seed/disable/remove through
+  lifecycle hooks
 - `metric_extract` is the only real pipeline job today
 - metric elements are persisted into nex memory with connection-aware
   provenance
+- `metric_extract` now consumes canonical `record.ingested` wake-ups and loads
+  canonical records through `records.get`
 - clinic-facing methods read from nex primitives and compute higher-level views
   on demand
 - the old SQLite pipeline path has been deleted from the active clinic app
-- `glowbot-hub` exists as a real service package with private frontdoor relay
-  ingress, managed profile storage, diagnostics, config, audit, and benchmark
-  modules
+- `glowbot-hub` exists as a real control-plane package with private frontdoor
+  relay ingress, managed profile storage, diagnostics, config, audit, and
+  benchmark modules
 - `glowbot-admin` now exposes real operator method families over the hub
   contract
 - admin methods now call the co-installed hub through `ctx.app.service("hub")`
@@ -138,7 +143,7 @@ Completed:
 Exit criteria:
 
 - the active doc tree teaches the same shape as
-  [SPEC_DRIVEN_DEVELOPMENT_WORKFLOW.md](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/SPEC_DRIVEN_DEVELOPMENT_WORKFLOW.md)
+  [spec-driven-development-workflow.md](/Users/tyler/nexus/home/projects/nexus/docs/governance/spec-driven-development-workflow.md)
 
 ---
 
@@ -175,9 +180,9 @@ Completed:
   identity, and connection state
 - clinic app manifest no longer declares `glowbot-hub` as a clinic-server
   dependency
-- admin manifest declares the local `glowbot-hub` service dependency expected
-  on the dedicated control-plane server
-- `glowbot-hub` has real service/package metadata for control-plane deployment
+- admin manifest declares the local `glowbot-hub` app dependency expected on
+  the dedicated control-plane server
+- `glowbot-hub` has real app/package metadata for control-plane deployment
 - the active manifests now teach:
   - clinic server package set
   - control-plane server package set
@@ -185,7 +190,7 @@ Completed:
 Exit criteria:
 
 - clinic app dependencies reflect clinic-server reality only
-- admin/hub dependencies reflect dedicated control-plane-server reality
+- admin/hub app dependencies reflect dedicated control-plane-server reality
 - no package metadata implies per-clinic installation of `glowbot-hub`
 
 ---
@@ -220,36 +225,31 @@ Exit criteria:
 
 ---
 
-## W4. Pipeline Write Path Baseline 🟡
-
-The write path is real, but it still needs final closure against the stabilized
-runtime connection model.
+## W4. Pipeline Write Path Baseline ✅
 
 Completed:
 
 - install registers the `metric` element definition
-- install registers GlowBot jobs, DAG, and cron
-- activate subscribes to adapter events with `ctx.nex.adapters.onEvent()`
-- adapter events enqueue `metric_extract`
+- install registers GlowBot jobs and DAG definition
+- install/activate/upgrade/read-path code is hard-cut from `cron.*` to
+  `schedules.*`
+- durable `events.subscriptions.*` wake `metric_extract` on canonical
+  `record.ingested`
+- `metric_extract` now consumes canonical stored records through `records.get`
 - `metric_extract` writes connection-aware `metric` elements into nex memory
 - write-path dedup keys include `connection_id`
 - multi-location data remains taggable with `clinic_id`
+- metric metadata preserves canonical `connection_id` provenance and carries
+  additional connection context when runtime provides it
 
-Still required:
+Remaining boundary:
 
-- validate full runtime metadata carriage for:
-  - `connection_profile_id`
-  - `auth_method_id`
-  - `connection_scope`
-  - `source_app_id`
-- confirm end-to-end write-path behavior once the canonical runtime connection
-  model lands
-- ensure the write path can create the provenance links that the later
-  derived-output model requires
+- provenance link creation for derived outputs moves to W12 with persisted
+  derived observations
 
 Exit criteria:
 
-- adapter events produce canonical metric elements
+- canonical records produce canonical metric elements
 - metric elements preserve canonical connection-based provenance
 - the write path is cleanly ready for persisted derived outputs
 
@@ -303,7 +303,7 @@ This is now the highest-priority product-owned architecture workstream.
 
 Completed:
 
-- create a real `glowbot-hub` service package
+- create a real `glowbot-hub` control-plane package
 - add service/package manifest and executable entrypoint
 - implement private frontdoor relay ingress:
   - `GET /api/internal/frontdoor/managed-connections/profile`
@@ -325,9 +325,33 @@ Still required:
 
 Exit criteria:
 
-- `hub/` is a real service package
+- `hub/` is a real control-plane package
 - frontdoor has a real private HTTP target to relay to
 - the hub owns real managed-profile and secret-backed shell behavior
+
+## W7A. Package Publish And Deploy Rehearsal 🟡
+
+This is the immediate waiting-period workstream before live clinic credentials.
+
+Scope:
+
+- publish real package artifacts for `glowbot`, `glowbot-admin`, and
+  `glowbot-hub`
+- validate dependency-driven control-plane install behavior
+- rehearse hosted install using real package artifacts instead of repo-local
+  package roots
+
+Canonical detail lives in:
+
+- [GLOWBOT_PACKAGE_PUBLISH_AND_DEPLOY_REHEARSAL.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_PACKAGE_PUBLISH_AND_DEPLOY_REHEARSAL.md)
+- [GLOWBOT_PACKAGE_PUBLISH_AND_DEPLOY_REHEARSAL_WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/workplans/GLOWBOT_PACKAGE_PUBLISH_AND_DEPLOY_REHEARSAL_WORKPLAN.md)
+
+Exit criteria:
+
+- real release tarballs exist for all three GlowBot packages
+- clinic-style install of `glowbot` is provable
+- control-plane install of `glowbot-admin` pulls in `glowbot-hub`
+- deployed package state and `productControlPlane.call` behavior are validated
 
 ---
 
@@ -453,7 +477,7 @@ Exit criteria:
 
 ---
 
-## W11. Clinic App Hub Integration Cutover 🟡
+## W11. Clinic App Hub Integration Cutover ✅
 
 Connect the clinic-facing GlowBot app to the real hub.
 
@@ -486,8 +510,10 @@ Completed:
 - clinic app no longer teaches local `glowbot-hub` co-installation
 - clinic integration backfill now routes through the canonical runtime
   connection surface instead of local placeholders
+- the exact Nex runtime gateway method used by clinic app code,
+  `productControlPlane.call`, is now landed and validated in source/tests
 
-Still required:
+Remaining validation:
 
 - validate the full clinic app -> runtime -> frontdoor -> hub path on a real
   dedicated control-plane server during W13 live rollout
@@ -502,7 +528,7 @@ Exit criteria:
 
 ---
 
-## W12. Persisted Derived Outputs And DAG Automation 🚧
+## W12. Persisted Derived Outputs And DAG Automation 🟡
 
 Persisted higher-level observations remain future work, but they are part of
 the target-state parity plan and must be represented honestly.
@@ -524,8 +550,15 @@ Scope:
 - version/supersede recommendations instead of overwriting them
 - move read surfaces onto persisted derived outputs where that now improves the
   steady-state design
-- validate DAG execution and cron-driven refresh once the runtime engine is
-  truly real
+- validate derived-output execution against the now-signed-off Nex work runtime
+- validate end-to-end schedule-driven refresh against `schedules.*`
+
+Current state:
+
+- the March 10 Nex validation packet no longer supports treating DAG/schedule
+  execution as an upstream blocker by default
+- the remaining work in this tranche is GlowBot-owned implementation and
+  validation against the landed Nex work runtime
 
 Important boundary:
 
@@ -556,6 +589,13 @@ Scope:
 - disconnect/reconnect verification
 - evidence capture in the live runbook
 
+Supporting workstream:
+
+- non-EMR shared-adapter parity is tracked separately in
+  [NON_EMR_ADAPTER_PARITY_WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/workplans/NON_EMR_ADAPTER_PARITY_WORKPLAN.md)
+  because the first clinic will validate Google, Meta Ads, CallRail, Twilio,
+  and Apple Maps before EMR adapters
+
 Exit criteria:
 
 - a real clinic can connect, ingest, benchmark, and see valid data through the
@@ -571,23 +611,23 @@ Exit criteria:
 | 2 | W1 Monorepo topology cutover | complete |
 | 3 | W2 Hosted package and deployment model cutover | complete |
 | 4 | W3 Runtime adapter connection surface | complete |
-| 5 | W4 Pipeline write path baseline | partial |
+| 5 | W4 Pipeline write path baseline | complete |
 | 6 | W5 Clinic read path and on-demand computation | complete |
 | 7 | W6 Hard cutover deletion | complete |
 | 8 | W7 Hub service shell implementation | partial |
 | 9 | W8 GlowBot-managed profiles | complete |
 | 10 | W9 Admin surface cutover | partial |
 | 11 | W10 Benchmark network implementation | complete |
-| 12 | W11 Clinic app hub integration cutover | partial |
-| 13 | W12 Persisted derived outputs and DAG automation | pending |
+| 12 | W11 Clinic app hub integration cutover | complete |
+| 13 | W12 Persisted derived outputs and DAG automation | open |
 | 14 | W13 Live clinic cutover | pending |
 
 Parallel notes:
 
 - W10 does not need W12 to land first because the benchmark network is
   intentionally snapshot-based
-- W12 should not start until the control-plane and clinic-app integration
-  boundaries are stable enough to avoid churn
+- the control-plane and clinic-app integration boundaries are now stable enough
+  that W12 can proceed when live-clinic priorities permit
 
 ---
 

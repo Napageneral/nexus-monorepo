@@ -221,6 +221,8 @@ export type ServerRecord = {
   previousPublicIp: string | null;
   runtimePort: number;
   runtimeAuthToken: string | null;
+  runtimeOs?: string | null;
+  runtimeArch?: string | null;
   provisionToken: string | null;
   backupEnabled: boolean;
   deleteProtectionEnabled: boolean;
@@ -262,6 +264,8 @@ type ServerRow = {
   previous_public_ip: string | null;
   runtime_port: number | null;
   runtime_auth_token: string | null;
+  runtime_os: string | null;
+  runtime_arch: string | null;
   provision_token: string | null;
   backup_enabled: number | null;
   delete_protection_enabled: number | null;
@@ -411,6 +415,8 @@ export type ServerAppInstallRecord = {
 
 export type FrontdoorPackageKind = "runtime" | "app" | "adapter" | "service";
 
+export type FrontdoorReleaseDependencyClass = "app" | "adapter";
+
 export type FrontdoorPackageRecord = {
   packageId: string;
   kind: FrontdoorPackageKind;
@@ -431,6 +437,15 @@ export type FrontdoorPackageReleaseRecord = {
   status: string;
   publishedAtMs: number;
   createdAtMs: number;
+};
+
+export type FrontdoorReleaseDependencyRecord = {
+  releaseId: string;
+  dependencyClass: FrontdoorReleaseDependencyClass;
+  dependencyPackageId: string;
+  versionConstraint: string;
+  requiredForActivate: boolean;
+  sortOrder: number;
 };
 
 export type FrontdoorPackageVariantRecord = {
@@ -460,6 +475,16 @@ export type ServerPackageInstallRecord = {
   installedAtMs?: number;
   createdAtMs: number;
   updatedAtMs: number;
+};
+
+export type ServerPackageRequirementRecord = {
+  serverId: string;
+  requiringKind: FrontdoorPackageKind;
+  requiringPackageId: string;
+  requiredKind: FrontdoorPackageKind;
+  requiredPackageId: string;
+  versionConstraint: string;
+  createdAtMs: number;
 };
 
 export type ServerLimitsSummary = {
@@ -637,6 +662,8 @@ export class FrontdoorStore {
         previous_public_ip   TEXT,
         runtime_port         INTEGER DEFAULT 8080,
         runtime_auth_token   TEXT,
+        runtime_os           TEXT,
+        runtime_arch         TEXT,
         provision_token      TEXT,
         backup_enabled       INTEGER NOT NULL DEFAULT 0,
         delete_protection_enabled INTEGER NOT NULL DEFAULT 0,
@@ -756,6 +783,18 @@ export class FrontdoorStore {
       );
       CREATE INDEX IF NOT EXISTS idx_frontdoor_package_releases_package
         ON frontdoor_package_releases(package_id, created_at_ms DESC);
+
+      CREATE TABLE IF NOT EXISTS frontdoor_release_dependencies (
+        release_id TEXT NOT NULL REFERENCES frontdoor_package_releases(release_id),
+        dependency_class TEXT NOT NULL,
+        dependency_package_id TEXT NOT NULL REFERENCES frontdoor_packages(package_id),
+        version_constraint TEXT NOT NULL,
+        required_for_activate INTEGER NOT NULL DEFAULT 1,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (release_id, dependency_class, dependency_package_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_frontdoor_release_dependencies_release
+        ON frontdoor_release_dependencies(release_id, sort_order, dependency_package_id);
 
       CREATE TABLE IF NOT EXISTS frontdoor_release_variants (
         variant_id TEXT PRIMARY KEY,
@@ -1071,6 +1110,16 @@ export class FrontdoorStore {
     }
     try {
       this.db.exec("ALTER TABLE frontdoor_servers ADD COLUMN previous_public_ip TEXT");
+    } catch {
+      // Already exists.
+    }
+    try {
+      this.db.exec("ALTER TABLE frontdoor_servers ADD COLUMN runtime_os TEXT");
+    } catch {
+      // Already exists.
+    }
+    try {
+      this.db.exec("ALTER TABLE frontdoor_servers ADD COLUMN runtime_arch TEXT");
     } catch {
       // Already exists.
     }
@@ -1751,6 +1800,8 @@ export class FrontdoorStore {
       previousPublicIp: row.previous_public_ip ?? null,
       runtimePort: row.runtime_port ?? 8080,
       runtimeAuthToken: row.runtime_auth_token ?? null,
+      runtimeOs: row.runtime_os ?? null,
+      runtimeArch: row.runtime_arch ?? null,
       provisionToken: row.provision_token ?? null,
       backupEnabled: Boolean(row.backup_enabled),
       deleteProtectionEnabled: Boolean(row.delete_protection_enabled),
@@ -1773,11 +1824,11 @@ export class FrontdoorStore {
           server_id, account_id, tenant_id, display_name, generated_name,
           status, plan, provider, provider_server_id, previous_provider_server_id,
           private_ip, public_ip, previous_private_ip, previous_public_ip,
-          runtime_port, runtime_auth_token, provision_token,
+          runtime_port, runtime_auth_token, runtime_os, runtime_arch, provision_token,
           backup_enabled, delete_protection_enabled, rebuild_protection_enabled,
           created_at_ms, updated_at_ms, archived_at_ms, destroyed_at_ms,
           last_recovered_at_ms, active_recovery_point_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(server_id) DO UPDATE SET
           account_id = excluded.account_id,
           tenant_id = excluded.tenant_id,
@@ -1794,6 +1845,8 @@ export class FrontdoorStore {
           previous_public_ip = excluded.previous_public_ip,
           runtime_port = excluded.runtime_port,
           runtime_auth_token = excluded.runtime_auth_token,
+          runtime_os = excluded.runtime_os,
+          runtime_arch = excluded.runtime_arch,
           provision_token = excluded.provision_token,
           backup_enabled = excluded.backup_enabled,
           delete_protection_enabled = excluded.delete_protection_enabled,
@@ -1822,6 +1875,8 @@ export class FrontdoorStore {
         record.previousPublicIp ?? null,
         record.runtimePort ?? 8080,
         record.runtimeAuthToken ?? null,
+        record.runtimeOs?.trim() || null,
+        record.runtimeArch?.trim() || null,
         record.provisionToken ?? null,
         record.backupEnabled ? 1 : 0,
         record.deleteProtectionEnabled ? 1 : 0,
@@ -1869,13 +1924,15 @@ export class FrontdoorStore {
           provider,
           runtime_port,
           runtime_auth_token,
+          runtime_os,
+          runtime_arch,
           provision_token,
           backup_enabled,
           delete_protection_enabled,
           rebuild_protection_enabled,
           created_at_ms,
           updated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, 'provisioning', ?, ?, 8080, ?, ?, 0, 0, 0, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, 'provisioning', ?, ?, 8080, ?, ?, ?, ?, 0, 0, 0, ?, ?)
       `,
       )
       .run(
@@ -1887,6 +1944,8 @@ export class FrontdoorStore {
         plan,
         provider,
         input.runtimeAuthToken?.trim() || null,
+        null,
+        null,
         input.provisionToken?.trim() || null,
         now,
         now,
@@ -1961,6 +2020,8 @@ export class FrontdoorStore {
     previousPublicIp: string | null;
     runtimePort: number;
     runtimeAuthToken: string | null;
+    runtimeOs: string | null;
+    runtimeArch: string | null;
     provisionToken: string | null;
     backupEnabled: boolean;
     deleteProtectionEnabled: boolean;
@@ -2012,6 +2073,14 @@ export class FrontdoorStore {
     if (updates.runtimeAuthToken !== undefined) {
       fields.push("runtime_auth_token = ?");
       values.push(updates.runtimeAuthToken);
+    }
+    if (updates.runtimeOs !== undefined) {
+      fields.push("runtime_os = ?");
+      values.push(updates.runtimeOs);
+    }
+    if (updates.runtimeArch !== undefined) {
+      fields.push("runtime_arch = ?");
+      values.push(updates.runtimeArch);
     }
     if (updates.provisionToken !== undefined) {
       fields.push("provision_token = ?");
@@ -3437,6 +3506,47 @@ export class FrontdoorStore {
     );
   }
 
+  getPackage(packageId: string): FrontdoorPackageRecord | null {
+    const row = this.db.prepare(`
+      SELECT
+        package_id,
+        kind,
+        display_name,
+        description,
+        product_id,
+        status,
+        created_at_ms,
+        updated_at_ms
+      FROM frontdoor_packages
+      WHERE package_id = ?
+      LIMIT 1
+    `).get(normalizeIdentifier(packageId)) as
+      | {
+          package_id: string;
+          kind: FrontdoorPackageKind;
+          display_name: string;
+          description: string | null;
+          product_id: string | null;
+          status: string;
+          created_at_ms: number;
+          updated_at_ms: number;
+        }
+      | undefined;
+    if (!row) {
+      return null;
+    }
+    return {
+      packageId: row.package_id,
+      kind: row.kind,
+      displayName: row.display_name,
+      description: row.description ?? undefined,
+      productId: row.product_id ?? undefined,
+      status: row.status,
+      createdAtMs: row.created_at_ms,
+      updatedAtMs: row.updated_at_ms,
+    };
+  }
+
   upsertPackageRelease(params: {
     releaseId: string;
     packageId: string;
@@ -3475,6 +3585,85 @@ export class FrontdoorStore {
       params.publishedAtMs ?? createdAt,
       createdAt,
     );
+  }
+
+  replacePackageReleaseDependencies(
+    releaseId: string,
+    dependencies: Array<{
+      dependencyClass: FrontdoorReleaseDependencyClass;
+      dependencyPackageId: string;
+      versionConstraint: string;
+      requiredForActivate?: boolean;
+      sortOrder?: number;
+    }>,
+  ): void {
+    const normalizedReleaseId = releaseId.trim();
+    const rows = dependencies.map((dependency) => ({
+      dependencyClass: dependency.dependencyClass,
+      dependencyPackageId: normalizeIdentifier(dependency.dependencyPackageId),
+      versionConstraint: dependency.versionConstraint.trim() || "latest",
+      requiredForActivate: dependency.requiredForActivate !== false,
+      sortOrder: Number.isFinite(dependency.sortOrder) ? Number(dependency.sortOrder) : 0,
+    }));
+    const deleteStmt = this.db.prepare(`
+      DELETE FROM frontdoor_release_dependencies
+      WHERE release_id = ?
+    `);
+    const insertStmt = this.db.prepare(`
+      INSERT INTO frontdoor_release_dependencies (
+        release_id,
+        dependency_class,
+        dependency_package_id,
+        version_constraint,
+        required_for_activate,
+        sort_order
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(release_id, dependency_class, dependency_package_id) DO UPDATE SET
+        version_constraint = excluded.version_constraint,
+        required_for_activate = excluded.required_for_activate,
+        sort_order = excluded.sort_order
+    `);
+    deleteStmt.run(normalizedReleaseId);
+    for (const row of rows) {
+      insertStmt.run(
+        normalizedReleaseId,
+        row.dependencyClass,
+        row.dependencyPackageId,
+        row.versionConstraint,
+        row.requiredForActivate ? 1 : 0,
+        row.sortOrder,
+      );
+    }
+  }
+
+  listPackageReleaseDependencies(releaseId: string): FrontdoorReleaseDependencyRecord[] {
+    const rows = this.db.prepare(`
+      SELECT
+        release_id,
+        dependency_class,
+        dependency_package_id,
+        version_constraint,
+        required_for_activate,
+        sort_order
+      FROM frontdoor_release_dependencies
+      WHERE release_id = ?
+      ORDER BY sort_order ASC, dependency_package_id ASC
+    `).all(releaseId.trim()) as Array<{
+      release_id: string;
+      dependency_class: FrontdoorReleaseDependencyClass;
+      dependency_package_id: string;
+      version_constraint: string;
+      required_for_activate: number;
+      sort_order: number;
+    }>;
+    return rows.map((row) => ({
+      releaseId: row.release_id,
+      dependencyClass: row.dependency_class,
+      dependencyPackageId: row.dependency_package_id,
+      versionConstraint: row.version_constraint,
+      requiredForActivate: row.required_for_activate !== 0,
+      sortOrder: row.sort_order,
+    }));
   }
 
   upsertPackageReleaseVariant(params: {
@@ -3558,21 +3747,85 @@ export class FrontdoorStore {
           created_at_ms: number;
         }
       | undefined;
-    if (!row) {
-      return null;
-    }
-    return {
-      variantId: row.variant_id,
-      releaseId: row.release_id,
-      version: row.version,
-      targetOs: row.target_os,
-      targetArch: row.target_arch,
-      packageFormat: row.package_format,
-      tarballPath: row.tarball_path,
-      sha256: row.sha256 ?? undefined,
-      sizeBytes: row.size_bytes ?? undefined,
-      createdAtMs: row.created_at_ms,
-    };
+    return row
+      ? {
+          variantId: row.variant_id,
+          releaseId: row.release_id,
+          version: row.version,
+          targetOs: row.target_os,
+          targetArch: row.target_arch,
+          packageFormat: row.package_format,
+          tarballPath: row.tarball_path,
+          sha256: row.sha256 ?? undefined,
+          sizeBytes: row.size_bytes ?? undefined,
+          createdAtMs: row.created_at_ms,
+        }
+      : null;
+  }
+
+  getPackageReleaseVariantForTarget(
+    kind: FrontdoorPackageKind,
+    packageId: string,
+    version: string,
+    targetOs: string,
+    targetArch: string,
+  ): (FrontdoorPackageVariantRecord & { releaseId: string; version: string }) | null {
+    const row = this.db.prepare(`
+      SELECT
+        rv.variant_id,
+        rv.release_id,
+        pr.version,
+        rv.target_os,
+        rv.target_arch,
+        rv.package_format,
+        rv.tarball_path,
+        rv.sha256,
+        rv.size_bytes,
+        rv.created_at_ms
+      FROM frontdoor_release_variants rv
+      JOIN frontdoor_package_releases pr ON pr.release_id = rv.release_id
+      JOIN frontdoor_packages p ON p.package_id = pr.package_id
+      WHERE p.kind = ?
+        AND p.package_id = ?
+        AND pr.version = ?
+        AND rv.target_os = ?
+        AND rv.target_arch = ?
+      ORDER BY rv.created_at_ms DESC
+      LIMIT 1
+    `).get(
+      kind,
+      normalizeIdentifier(packageId),
+      version.trim(),
+      targetOs.trim(),
+      targetArch.trim(),
+    ) as
+      | {
+          variant_id: string;
+          release_id: string;
+          version: string;
+          target_os: string;
+          target_arch: string;
+          package_format: string;
+          tarball_path: string;
+          sha256: string | null;
+          size_bytes: number | null;
+          created_at_ms: number;
+        }
+      | undefined;
+    return row
+      ? {
+          variantId: row.variant_id,
+          releaseId: row.release_id,
+          version: row.version,
+          targetOs: row.target_os,
+          targetArch: row.target_arch,
+          packageFormat: row.package_format,
+          tarballPath: row.tarball_path,
+          sha256: row.sha256 ?? undefined,
+          sizeBytes: row.size_bytes ?? undefined,
+          createdAtMs: row.created_at_ms,
+        }
+      : null;
   }
 
   getLatestPackageReleaseVariant(
@@ -3611,13 +3864,136 @@ export class FrontdoorStore {
           created_at_ms: number;
         }
       | undefined;
-    if (!row) {
-      return null;
-    }
-    return {
+    return row
+      ? {
+          variantId: row.variant_id,
+          releaseId: row.release_id,
+          version: row.version,
+          targetOs: row.target_os,
+          targetArch: row.target_arch,
+          packageFormat: row.package_format,
+          tarballPath: row.tarball_path,
+          sha256: row.sha256 ?? undefined,
+          sizeBytes: row.size_bytes ?? undefined,
+          createdAtMs: row.created_at_ms,
+        }
+      : null;
+  }
+
+  getLatestPackageReleaseVariantForTarget(
+    kind: FrontdoorPackageKind,
+    packageId: string,
+    targetOs: string,
+    targetArch: string,
+  ): (FrontdoorPackageVariantRecord & { releaseId: string; version: string }) | null {
+    const row = this.db.prepare(`
+      SELECT
+        rv.variant_id,
+        rv.release_id,
+        pr.version,
+        rv.target_os,
+        rv.target_arch,
+        rv.package_format,
+        rv.tarball_path,
+        rv.sha256,
+        rv.size_bytes,
+        rv.created_at_ms
+      FROM frontdoor_release_variants rv
+      JOIN frontdoor_package_releases pr ON pr.release_id = rv.release_id
+      JOIN frontdoor_packages p ON p.package_id = pr.package_id
+      WHERE p.kind = ?
+        AND p.package_id = ?
+        AND pr.status = 'published'
+        AND rv.target_os = ?
+        AND rv.target_arch = ?
+      ORDER BY pr.published_at_ms DESC, rv.created_at_ms DESC
+      LIMIT 1
+    `).get(
+      kind,
+      normalizeIdentifier(packageId),
+      targetOs.trim(),
+      targetArch.trim(),
+    ) as
+      | {
+          variant_id: string;
+          release_id: string;
+          version: string;
+          target_os: string;
+          target_arch: string;
+          package_format: string;
+          tarball_path: string;
+          sha256: string | null;
+          size_bytes: number | null;
+          created_at_ms: number;
+        }
+      | undefined;
+    return row
+      ? {
+          variantId: row.variant_id,
+          releaseId: row.release_id,
+          version: row.version,
+          targetOs: row.target_os,
+          targetArch: row.target_arch,
+          packageFormat: row.package_format,
+          tarballPath: row.tarball_path,
+          sha256: row.sha256 ?? undefined,
+          sizeBytes: row.size_bytes ?? undefined,
+          createdAtMs: row.created_at_ms,
+        }
+      : null;
+  }
+
+  listPackageReleaseVariantsForTarget(
+    kind: FrontdoorPackageKind,
+    packageId: string,
+    targetOs: string,
+    targetArch: string,
+  ): Array<FrontdoorPackageVariantRecord & { releaseId: string; version: string; publishedAtMs: number }> {
+    const rows = this.db.prepare(`
+      SELECT
+        rv.variant_id,
+        rv.release_id,
+        pr.version,
+        pr.published_at_ms,
+        rv.target_os,
+        rv.target_arch,
+        rv.package_format,
+        rv.tarball_path,
+        rv.sha256,
+        rv.size_bytes,
+        rv.created_at_ms
+      FROM frontdoor_release_variants rv
+      JOIN frontdoor_package_releases pr ON pr.release_id = rv.release_id
+      JOIN frontdoor_packages p ON p.package_id = pr.package_id
+      WHERE p.kind = ?
+        AND p.package_id = ?
+        AND pr.status = 'published'
+        AND rv.target_os = ?
+        AND rv.target_arch = ?
+      ORDER BY pr.published_at_ms DESC, rv.created_at_ms DESC
+    `).all(
+      kind,
+      normalizeIdentifier(packageId),
+      targetOs.trim(),
+      targetArch.trim(),
+    ) as Array<{
+      variant_id: string;
+      release_id: string;
+      version: string;
+      published_at_ms: number;
+      target_os: string;
+      target_arch: string;
+      package_format: string;
+      tarball_path: string;
+      sha256: string | null;
+      size_bytes: number | null;
+      created_at_ms: number;
+    }>;
+    return rows.map((row) => ({
       variantId: row.variant_id,
       releaseId: row.release_id,
       version: row.version,
+      publishedAtMs: row.published_at_ms,
       targetOs: row.target_os,
       targetArch: row.target_arch,
       packageFormat: row.package_format,
@@ -3625,7 +4001,7 @@ export class FrontdoorStore {
       sha256: row.sha256 ?? undefined,
       sizeBytes: row.size_bytes ?? undefined,
       createdAtMs: row.created_at_ms,
-    };
+    }));
   }
 
   upsertServerPackageInstall(params: {
@@ -3812,6 +4188,112 @@ export class FrontdoorStore {
           updated_at_ms: number;
         }>;
     return rows.map((row) => this.mapServerPackageInstallRow(row));
+  }
+
+  upsertServerPackageRequirement(params: {
+    serverId: string;
+    requiringKind: FrontdoorPackageKind;
+    requiringPackageId: string;
+    requiredKind: FrontdoorPackageKind;
+    requiredPackageId: string;
+    versionConstraint: string;
+  }): void {
+    const createdAt = nowMs();
+    this.db.prepare(`
+      INSERT INTO frontdoor_server_package_requirements (
+        server_id,
+        requiring_kind,
+        requiring_package_id,
+        required_kind,
+        required_package_id,
+        version_constraint,
+        created_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(
+        server_id,
+        requiring_kind,
+        requiring_package_id,
+        required_kind,
+        required_package_id
+      ) DO UPDATE SET
+        version_constraint = excluded.version_constraint
+    `).run(
+      params.serverId.trim(),
+      params.requiringKind,
+      normalizeIdentifier(params.requiringPackageId),
+      params.requiredKind,
+      normalizeIdentifier(params.requiredPackageId),
+      params.versionConstraint.trim() || "latest",
+      createdAt,
+    );
+  }
+
+  listServerPackageRequirements(
+    serverId: string,
+    requiringKind?: FrontdoorPackageKind,
+    requiringPackageId?: string,
+  ): ServerPackageRequirementRecord[] {
+    const normalizedServerId = serverId.trim();
+    if (!normalizedServerId) {
+      return [];
+    }
+    const rows = (
+      requiringKind && requiringPackageId
+        ? this.db.prepare(`
+            SELECT
+              server_id,
+              requiring_kind,
+              requiring_package_id,
+              required_kind,
+              required_package_id,
+              version_constraint,
+              created_at_ms
+            FROM frontdoor_server_package_requirements
+            WHERE server_id = ? AND requiring_kind = ? AND requiring_package_id = ?
+            ORDER BY required_kind ASC, required_package_id ASC
+          `).all(normalizedServerId, requiringKind, normalizeIdentifier(requiringPackageId))
+        : this.db.prepare(`
+            SELECT
+              server_id,
+              requiring_kind,
+              requiring_package_id,
+              required_kind,
+              required_package_id,
+              version_constraint,
+              created_at_ms
+            FROM frontdoor_server_package_requirements
+            WHERE server_id = ?
+            ORDER BY requiring_kind ASC, requiring_package_id ASC, required_kind ASC, required_package_id ASC
+          `).all(normalizedServerId)
+    ) as Array<{
+      server_id: string;
+      requiring_kind: FrontdoorPackageKind;
+      requiring_package_id: string;
+      required_kind: FrontdoorPackageKind;
+      required_package_id: string;
+      version_constraint: string;
+      created_at_ms: number;
+    }>;
+    return rows.map((row) => ({
+      serverId: row.server_id,
+      requiringKind: row.requiring_kind,
+      requiringPackageId: row.requiring_package_id,
+      requiredKind: row.required_kind,
+      requiredPackageId: row.required_package_id,
+      versionConstraint: row.version_constraint,
+      createdAtMs: row.created_at_ms,
+    }));
+  }
+
+  deleteServerPackageRequirementsForRequiring(
+    serverId: string,
+    requiringKind: FrontdoorPackageKind,
+    requiringPackageId: string,
+  ): void {
+    this.db.prepare(`
+      DELETE FROM frontdoor_server_package_requirements
+      WHERE server_id = ? AND requiring_kind = ? AND requiring_package_id = ?
+    `).run(serverId.trim(), requiringKind, normalizeIdentifier(requiringPackageId));
   }
 
   upsertServerAppInstall(params: {

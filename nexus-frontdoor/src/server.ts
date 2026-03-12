@@ -25,6 +25,7 @@ import { TenantAutoProvisioner } from "./tenant-autoprovision.js";
 import { syncProductFromManifest } from "./product-sync.js";
 import {
   FrontdoorStore,
+  type FrontdoorPackageKind,
   type PlatformManagedConnectionProfileRecord,
   type ProductControlPlaneRouteRecord,
   type ServerRecord,
@@ -56,6 +57,69 @@ type CreateServerOptions = {
 };
 
 type JsonResponse = Record<string, unknown>;
+
+type DependencyClass = "app" | "adapter";
+
+type ResolvedPackagePlanStep = {
+  kind: FrontdoorPackageKind;
+  packageId: string;
+  versionConstraint: string;
+  variant: {
+    releaseId: string;
+    version: string;
+    tarballPath: string;
+  };
+  direct: boolean;
+};
+
+function parseSemver(version: string): { major: number; minor: number; patch: number } | null {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(version.trim());
+  if (!match) {
+    return null;
+  }
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+  };
+}
+
+function compareSemver(a: string, b: string): number {
+  const parsedA = parseSemver(a);
+  const parsedB = parseSemver(b);
+  if (!parsedA || !parsedB) {
+    return a.localeCompare(b);
+  }
+  if (parsedA.major !== parsedB.major) {
+    return parsedA.major - parsedB.major;
+  }
+  if (parsedA.minor !== parsedB.minor) {
+    return parsedA.minor - parsedB.minor;
+  }
+  if (parsedA.patch !== parsedB.patch) {
+    return parsedA.patch - parsedB.patch;
+  }
+  return 0;
+}
+
+function satisfiesVersionConstraint(version: string, constraint: string): boolean {
+  const trimmed = constraint.trim();
+  if (!trimmed || trimmed === "latest" || trimmed === "*") {
+    return true;
+  }
+  if (trimmed.startsWith("^")) {
+    const minimum = parseSemver(trimmed.slice(1));
+    const actual = parseSemver(version);
+    if (!minimum || !actual) {
+      return false;
+    }
+    if (actual.major !== minimum.major) {
+      return false;
+    }
+    return compareSemver(version, `${minimum.major}.${minimum.minor}.${minimum.patch}`) >= 0;
+  }
+  return version.trim() === trimmed;
+}
 
 function getClientIp(req: IncomingMessage): string {
   const forwardedFor = req.headers["x-forwarded-for"];
@@ -1818,16 +1882,70 @@ function resolveRuntimeUpstreamBearerToken(params: {
   session: SessionRecord;
   runtime: TenantConfig;
 }): string {
-  const configured = params.runtime.runtimeAuthToken?.trim();
-  if (configured) {
-    return configured;
-  }
   const access = mintRuntimeAccessToken({
     config: params.config,
     principal: params.principal,
     sessionId: params.session.id,
   });
   return access.token;
+}
+
+function resolvePackageOperatorRuntimePrincipal(params: {
+  store: FrontdoorStore;
+  session?: SessionRecord;
+  server: ServerRecord;
+}): { principal: Principal; sessionId: string } | null {
+  if (params.session) {
+    const user = params.store.getUserById(params.session.principal.userId);
+    if (user && !user.disabled) {
+      return {
+        principal: params.store.toPrincipal({
+          user,
+          server: params.server,
+          accountId: params.server.accountId,
+          amr: params.session.principal.amr,
+        }),
+        sessionId: params.session.id,
+      };
+    }
+  }
+
+  const account = params.store.getAccount(params.server.accountId);
+  if (!account) {
+    return null;
+  }
+  const owner = params.store.getUserById(account.ownerUserId);
+  if (!owner || owner.disabled) {
+    return null;
+  }
+
+  return {
+    principal: params.store.toPrincipal({
+      user: owner,
+      server: params.server,
+      accountId: params.server.accountId,
+      amr: ["system"],
+    }),
+    sessionId: `frontdoor-system:${params.server.serverId}`,
+  };
+}
+
+function mintPackageOperatorRuntimeBearerToken(params: {
+  config: FrontdoorConfig;
+  store: FrontdoorStore;
+  session?: SessionRecord;
+  server: ServerRecord;
+}): string | null {
+  const resolved = resolvePackageOperatorRuntimePrincipal(params);
+  if (!resolved) {
+    return null;
+  }
+  return mintRuntimeAccessToken({
+    config: params.config,
+    principal: resolved.principal,
+    sessionId: resolved.sessionId,
+    clientId: "nexus-frontdoor-package-operator",
+  }).token;
 }
 
 function serveUiShell(res: ServerResponse): void {
@@ -1977,7 +2095,50 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
   const routingTable = new Map<string, TenantRoute>();
 
+  function resolveConfiguredTenantRuntimeAuthToken(tenantId: string): string | null {
+    const configured = config.tenants.get(tenantId)?.runtimeAuthToken?.trim();
+    return configured ? configured : null;
+  }
+
+  function resolveEffectiveServerRuntimeAuthToken(server: {
+    tenantId: string;
+    runtimeAuthToken?: string | null;
+  }): string | null {
+    const persisted = server.runtimeAuthToken?.trim();
+    if (persisted) {
+      return persisted;
+    }
+    return resolveConfiguredTenantRuntimeAuthToken(server.tenantId);
+  }
+
+  function buildEffectiveTenantConfig(server: ServerRecord): TenantConfig {
+    const tenant = serverToTenantConfig(server);
+    const runtimeAuthToken = resolveEffectiveServerRuntimeAuthToken(server);
+    if (runtimeAuthToken) {
+      tenant.runtimeAuthToken = runtimeAuthToken;
+    } else {
+      delete tenant.runtimeAuthToken;
+    }
+    return tenant;
+  }
+
+  function hydrateConfiguredTenantRuntimeAuthTokens(): void {
+    for (const server of store.getRunningServers()) {
+      if (server.runtimeAuthToken?.trim()) {
+        continue;
+      }
+      const configuredRuntimeAuthToken = resolveConfiguredTenantRuntimeAuthToken(server.tenantId);
+      if (!configuredRuntimeAuthToken) {
+        continue;
+      }
+      store.updateServer(server.serverId, {
+        runtimeAuthToken: configuredRuntimeAuthToken,
+      });
+    }
+  }
+
   function initRoutingTable() {
+    hydrateConfiguredTenantRuntimeAuthTokens();
     const servers = store.getRunningServers();
     for (const server of servers) {
       if (server.privateIp && server.runtimePort) {
@@ -1986,7 +2147,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           serverId: server.serverId,
           privateIp: server.privateIp,
           runtimePort: server.runtimePort,
-          runtimeAuthToken: server.runtimeAuthToken,
+          runtimeAuthToken: resolveEffectiveServerRuntimeAuthToken(server),
           status: "running",
         });
       }
@@ -2193,10 +2354,10 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       serverId: server.serverId,
       privateIp: server.privateIp,
       runtimePort: server.runtimePort,
-      runtimeAuthToken: server.runtimeAuthToken,
+      runtimeAuthToken: resolveEffectiveServerRuntimeAuthToken(server),
       status: "running",
     });
-    config.tenants.set(server.tenantId, serverToTenantConfig(server));
+    config.tenants.set(server.tenantId, buildEffectiveTenantConfig(server));
   }
 
   function syncServerRuntimeProjection(server: ServerRecord): void {
@@ -2353,11 +2514,25 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     if (!server) {
       return null;
     }
+    const effectiveRuntimeAuthToken = resolveEffectiveServerRuntimeAuthToken(server);
     const configTenant = config.tenants.get(server.tenantId);
     if (configTenant) {
-      return configTenant;
+      const nextTenant: TenantConfig =
+        configTenant.runtimeAuthToken === effectiveRuntimeAuthToken
+          ? configTenant
+          : {
+              ...configTenant,
+              ...(effectiveRuntimeAuthToken ? { runtimeAuthToken: effectiveRuntimeAuthToken } : {}),
+            };
+      if (!effectiveRuntimeAuthToken && "runtimeAuthToken" in nextTenant) {
+        delete nextTenant.runtimeAuthToken;
+      }
+      if (nextTenant !== configTenant) {
+        config.tenants.set(server.tenantId, nextTenant);
+      }
+      return nextTenant;
     }
-    const tenant = serverToTenantConfig(server);
+    const tenant = buildEffectiveTenantConfig(server);
     config.tenants.set(server.tenantId, tenant);
     return tenant;
   }
@@ -3516,6 +3691,9 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
   }
 
   function resolveServerOperatorRuntimeUrl(server: ServerRecord): string | null {
+    if (server.privateIp && server.runtimePort) {
+      return `http://${server.privateIp}:${server.runtimePort}`;
+    }
     const tenant = config.tenants.get(server.tenantId);
     const runtimeUrl = tenant?.runtimeUrl?.trim();
     if (!runtimeUrl) {
@@ -3557,17 +3735,488 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     }
   }
 
+  function resolveServerProbeRuntimeUrl(server: ServerRecord): string | null {
+    const direct = resolveServerOperatorRuntimeUrl(server);
+    if (direct) {
+      return direct;
+    }
+    const host = resolveServerOperatorHost(server);
+    if (!host) {
+      return null;
+    }
+    return `http://${host.host}:${host.runtimePort}`;
+  }
+
+  async function resolveServerRuntimePlatform(server: ServerRecord): Promise<{
+    os: string;
+    arch: string;
+  } | null> {
+    const cachedOs = readOptionalString(server.runtimeOs);
+    const cachedArch = readOptionalString(server.runtimeArch);
+    if (cachedOs && cachedArch) {
+      return { os: cachedOs, arch: cachedArch };
+    }
+
+    if (shouldUseDirectRuntimeOperatorApi(server)) {
+      return {
+        os: process.platform,
+        arch: process.arch,
+      };
+    }
+
+    const runtimeUrl = resolveServerProbeRuntimeUrl(server);
+    if (!runtimeUrl) {
+      return null;
+    }
+    try {
+      const response = await fetch(`${runtimeUrl.replace(/\/$/, "")}/health`, {
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!response.ok) {
+        return null;
+      }
+      const body = await response.json() as { platform?: { os?: unknown; arch?: unknown } };
+      const os = readOptionalString(body?.platform?.os);
+      const arch = readOptionalString(body?.platform?.arch);
+      if (!os || !arch) {
+        return null;
+      }
+      store.updateServer(server.serverId, {
+        runtimeOs: os,
+        runtimeArch: arch,
+      });
+      return { os, arch };
+    } catch {
+      return null;
+    }
+  }
+
+  function resolvePackageVariantForConstraint(params: {
+    kind: FrontdoorPackageKind;
+    packageId: string;
+    versionConstraint: string;
+    targetOs: string;
+    targetArch: string;
+  }): {
+    ok: true;
+    variant: { releaseId: string; version: string; tarballPath: string };
+  } | {
+    ok: false;
+    error: "package_not_found" | "package_variant_not_found";
+    detail: string;
+    status: number;
+  } {
+    const versionConstraint = params.versionConstraint.trim() || "latest";
+    if (versionConstraint === "latest") {
+      const variant = store.getLatestPackageReleaseVariantForTarget(
+        params.kind,
+        params.packageId,
+        params.targetOs,
+        params.targetArch,
+      );
+      if (variant) {
+        return {
+          ok: true,
+          variant: {
+            releaseId: variant.releaseId,
+            version: variant.version,
+            tarballPath: variant.tarballPath,
+          },
+        };
+      }
+      const anyVariant = store.getLatestPackageReleaseVariant(params.kind, params.packageId);
+      if (!anyVariant) {
+        return {
+          ok: false,
+          error: "package_not_found",
+          detail: `${params.packageId}@latest`,
+          status: 404,
+        };
+      }
+      return {
+        ok: false,
+        error: "package_variant_not_found",
+        detail: `${params.packageId}@latest for ${params.targetOs}/${params.targetArch}`,
+        status: 404,
+      };
+    }
+
+    const exactVariant = store.getPackageReleaseVariantForTarget(
+      params.kind,
+      params.packageId,
+      versionConstraint,
+      params.targetOs,
+      params.targetArch,
+    );
+    if (exactVariant) {
+      return {
+        ok: true,
+        variant: {
+          releaseId: exactVariant.releaseId,
+          version: exactVariant.version,
+          tarballPath: exactVariant.tarballPath,
+        },
+      };
+    }
+    const exactAnyVariant = store.getPackageReleaseVariant(params.kind, params.packageId, versionConstraint);
+    if (exactAnyVariant) {
+      return {
+        ok: false,
+        error: "package_variant_not_found",
+        detail: `${params.packageId}@${versionConstraint} for ${params.targetOs}/${params.targetArch}`,
+        status: 404,
+      };
+    }
+
+    const candidates = store.listPackageReleaseVariantsForTarget(
+      params.kind,
+      params.packageId,
+      params.targetOs,
+      params.targetArch,
+    );
+    const matching = candidates
+      .filter((candidate) => satisfiesVersionConstraint(candidate.version, versionConstraint))
+      .sort((a, b) => compareSemver(b.version, a.version));
+    const selected = matching[0];
+    if (selected) {
+      return {
+        ok: true,
+        variant: {
+          releaseId: selected.releaseId,
+          version: selected.version,
+          tarballPath: selected.tarballPath,
+        },
+      };
+    }
+    if (candidates.length > 0) {
+      return {
+        ok: false,
+        error: "package_variant_not_found",
+        detail: `${params.packageId}@${versionConstraint} for ${params.targetOs}/${params.targetArch}`,
+        status: 404,
+      };
+    }
+    return {
+      ok: false,
+      error: "package_not_found",
+      detail: `${params.packageId}@${versionConstraint}`,
+      status: 404,
+    };
+  }
+
+  function resolveAppInstallPlan(params: {
+    appId: string;
+    versionConstraint: string;
+    targetOs: string;
+    targetArch: string;
+  }): {
+    ok: true;
+    steps: ResolvedPackagePlanStep[];
+    requirements: Array<{
+      requiringKind: FrontdoorPackageKind;
+      requiringPackageId: string;
+      requiredKind: FrontdoorPackageKind;
+      requiredPackageId: string;
+      versionConstraint: string;
+    }>;
+    topLevelVersion: string;
+  } | {
+    ok: false;
+    error: string;
+    detail?: string;
+    status: number;
+  } {
+    const ordered: ResolvedPackagePlanStep[] = [];
+    const byPackageId = new Map<string, ResolvedPackagePlanStep>();
+    const visiting = new Set<string>();
+    const requirements: Array<{
+      requiringKind: FrontdoorPackageKind;
+      requiringPackageId: string;
+      requiredKind: FrontdoorPackageKind;
+      requiredPackageId: string;
+      versionConstraint: string;
+    }> = [];
+
+    const resolveNode = (node: {
+      packageId: string;
+      dependencyClass: DependencyClass | null;
+      versionConstraint: string;
+      direct: boolean;
+      requiring?: { kind: FrontdoorPackageKind; packageId: string };
+    }): { ok: true } | { ok: false; error: string; detail?: string; status: number } => {
+      const packageRecord = store.getPackage(node.packageId);
+      if (!packageRecord) {
+        return {
+          ok: false,
+          error: "package_not_found",
+          detail: `${node.packageId}@${node.versionConstraint}`,
+          status: 404,
+        };
+      }
+      if (packageRecord.kind !== "app" && packageRecord.kind !== "adapter") {
+        return {
+          ok: false,
+          error: "package_kind_not_supported",
+          detail: `${node.packageId}:${packageRecord.kind}`,
+          status: 422,
+        };
+      }
+      if (node.dependencyClass && packageRecord.kind !== node.dependencyClass) {
+        return {
+          ok: false,
+          error: "package_kind_mismatch",
+          detail: `${node.packageId} declared as ${node.dependencyClass} but published as ${packageRecord.kind}`,
+          status: 422,
+        };
+      }
+
+      const existing = byPackageId.get(node.packageId);
+      if (existing) {
+        if (!satisfiesVersionConstraint(existing.variant.version, node.versionConstraint)) {
+          return {
+            ok: false,
+            error: "dependency_version_conflict",
+            detail: `${node.packageId} resolved ${existing.variant.version} which does not satisfy ${node.versionConstraint}`,
+            status: 422,
+          };
+        }
+        if (node.direct) {
+          existing.direct = true;
+        }
+        if (node.requiring) {
+          requirements.push({
+            requiringKind: node.requiring.kind,
+            requiringPackageId: node.requiring.packageId,
+            requiredKind: existing.kind,
+            requiredPackageId: existing.packageId,
+            versionConstraint: node.versionConstraint,
+          });
+        }
+        return { ok: true };
+      }
+
+      if (visiting.has(node.packageId)) {
+        return {
+          ok: false,
+          error: "dependency_cycle_detected",
+          detail: node.packageId,
+          status: 422,
+        };
+      }
+      visiting.add(node.packageId);
+
+      const resolvedVariant = resolvePackageVariantForConstraint({
+        kind: packageRecord.kind,
+        packageId: node.packageId,
+        versionConstraint: node.versionConstraint,
+        targetOs: params.targetOs,
+        targetArch: params.targetArch,
+      });
+      if (!resolvedVariant.ok) {
+        visiting.delete(node.packageId);
+        return resolvedVariant;
+      }
+
+      if (packageRecord.kind === "app") {
+        const dependencies = store.listPackageReleaseDependencies(resolvedVariant.variant.releaseId);
+        for (const dependency of dependencies) {
+          const resolved = resolveNode({
+            packageId: dependency.dependencyPackageId,
+            dependencyClass: dependency.dependencyClass,
+            versionConstraint: dependency.versionConstraint,
+            direct: false,
+            requiring: {
+              kind: packageRecord.kind,
+              packageId: node.packageId,
+            },
+          });
+          if (!resolved.ok) {
+            visiting.delete(node.packageId);
+            return resolved;
+          }
+        }
+      }
+
+      const step: ResolvedPackagePlanStep = {
+        kind: packageRecord.kind,
+        packageId: node.packageId,
+        versionConstraint: node.versionConstraint,
+        variant: resolvedVariant.variant,
+        direct: node.direct,
+      };
+      byPackageId.set(node.packageId, step);
+      if (node.requiring) {
+        requirements.push({
+          requiringKind: node.requiring.kind,
+          requiringPackageId: node.requiring.packageId,
+          requiredKind: step.kind,
+          requiredPackageId: step.packageId,
+          versionConstraint: node.versionConstraint,
+        });
+      }
+      ordered.push(step);
+      visiting.delete(node.packageId);
+      return { ok: true };
+    };
+
+    const topLevel = resolveNode({
+      packageId: params.appId,
+      dependencyClass: "app",
+      versionConstraint: params.versionConstraint,
+      direct: true,
+    });
+    if (!topLevel.ok) {
+      return topLevel;
+    }
+    const topLevelStep = byPackageId.get(params.appId);
+    if (!topLevelStep) {
+      return {
+        ok: false,
+        error: "package_not_found",
+        detail: `${params.appId}@${params.versionConstraint}`,
+        status: 404,
+      };
+    }
+    return {
+      ok: true,
+      steps: ordered,
+      requirements,
+      topLevelVersion: topLevelStep.variant.version,
+    };
+  }
+
+  async function installResolvedPackageOnServer(params: {
+    server: ServerRecord;
+    runtimeBearerToken: string;
+    installReason: string;
+    packageStep: ResolvedPackagePlanStep;
+  }): Promise<
+    | { ok: true }
+    | { ok: false; error: string; detail?: string; status?: number }
+  > {
+    const entryPath = params.packageStep.kind === "app"
+      ? defaultEntryPathForApp(params.packageStep.packageId)
+      : undefined;
+    const existing = store.getServerPackageInstall(
+      params.server.serverId,
+      params.packageStep.kind,
+      params.packageStep.packageId,
+    );
+    if (
+      existing?.status === "installed" &&
+      existing.activeReleaseId === params.packageStep.variant.releaseId
+    ) {
+      return { ok: true };
+    }
+    if (existing?.status === "installed" && existing.activeReleaseId !== params.packageStep.variant.releaseId) {
+      return {
+        ok: false,
+        error: "dependency_upgrade_required",
+        detail: `${params.packageStep.packageId}: ${existing.activeVersion ?? "unknown"} -> ${params.packageStep.variant.version}`,
+        status: 409,
+      };
+    }
+
+    store.upsertServerPackageInstall({
+      serverId: params.server.serverId,
+      kind: params.packageStep.kind,
+      packageId: params.packageStep.packageId,
+      status: "installing",
+      desiredReleaseId: params.packageStep.variant.releaseId,
+      desiredVersion: params.packageStep.variant.version,
+      entryPath,
+      installReason: params.installReason,
+    });
+
+    if (!fs.existsSync(params.packageStep.variant.tarballPath)) {
+      store.upsertServerPackageInstall({
+        serverId: params.server.serverId,
+        kind: params.packageStep.kind,
+        packageId: params.packageStep.packageId,
+        status: "failed",
+        desiredReleaseId: params.packageStep.variant.releaseId,
+        desiredVersion: params.packageStep.variant.version,
+        entryPath,
+        lastError: `package_not_found: ${params.packageStep.variant.tarballPath}`,
+        installReason: params.installReason,
+      });
+      return {
+        ok: false,
+        error: "package_not_found",
+        detail: params.packageStep.variant.tarballPath,
+        status: 404,
+      };
+    }
+
+    const result = shouldUseDirectRuntimeInstall(params.server, params.packageStep.variant.tarballPath)
+      ? await installPackageViaRuntimeHttp({
+          runtimeUrl: resolveServerOperatorRuntimeUrl(params.server) ?? "",
+          localTarballPath: params.packageStep.variant.tarballPath,
+          kind: params.packageStep.kind,
+          packageId: params.packageStep.packageId,
+          version: params.packageStep.variant.version,
+          releaseId: params.packageStep.variant.releaseId,
+          runtimeBearerToken: params.runtimeBearerToken,
+        })
+      : await (async () => {
+          const operatorTarget = resolveServerOperatorHost(params.server);
+          if (!operatorTarget) {
+            return { ok: false as const, error: "server_no_private_ip", detail: "" };
+          }
+          return await installPackageViaSSH({
+            host: operatorTarget.host,
+            privateKeyPath: config.vpsAccess.sshKeyPath,
+            localTarballPath: params.packageStep.variant.tarballPath,
+            kind: params.packageStep.kind,
+            packageId: params.packageStep.packageId,
+            version: params.packageStep.variant.version,
+            releaseId: params.packageStep.variant.releaseId,
+            runtimePort: operatorTarget.runtimePort,
+            runtimeBearerToken: params.runtimeBearerToken,
+          });
+        })();
+
+    if (result.ok) {
+      store.upsertServerPackageInstall({
+        serverId: params.server.serverId,
+        kind: params.packageStep.kind,
+        packageId: params.packageStep.packageId,
+        status: "installed",
+        desiredReleaseId: params.packageStep.variant.releaseId,
+        desiredVersion: params.packageStep.variant.version,
+        activeReleaseId: params.packageStep.variant.releaseId,
+        activeVersion: params.packageStep.variant.version,
+        entryPath,
+        installReason: params.installReason,
+      });
+      return { ok: true };
+    }
+
+    store.upsertServerPackageInstall({
+      serverId: params.server.serverId,
+      kind: params.packageStep.kind,
+      packageId: params.packageStep.packageId,
+      status: "failed",
+      desiredReleaseId: params.packageStep.variant.releaseId,
+      desiredVersion: params.packageStep.variant.version,
+      entryPath,
+      lastError: `${result.error}: ${result.detail ?? ""}`,
+      installReason: params.installReason,
+    });
+    return { ok: false, error: result.error, detail: result.detail, status: 502 };
+  }
+
   async function installAppOnServer(params: {
     serverId: string;
     appId: string;
     accountId: string;
     version?: string;
     source: "purchase" | "manual" | "auto_provision" | "api";
+    session?: SessionRecord;
   }): Promise<
     | { ok: true; version: string }
     | { ok: false; error: string; detail?: string; status?: number }
   > {
-    const entryPath = defaultEntryPathForApp(params.appId);
     const requestedVersion = params.version?.trim() || "latest";
 
     // 1. Check entitlement
@@ -3582,41 +4231,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       return { ok: false, error: "already_installed", status: 409 };
     }
 
-    const variant = requestedVersion === "latest"
-      ? store.getLatestPackageReleaseVariant("app", params.appId)
-      : store.getPackageReleaseVariant("app", params.appId, requestedVersion);
-    if (!variant) {
-      store.upsertServerPackageInstall({
-        serverId: params.serverId,
-        kind: "app",
-        packageId: params.appId,
-        status: "failed",
-        desiredVersion: requestedVersion,
-        entryPath,
-        lastError: `package_not_found: ${params.appId}@${requestedVersion}`,
-        installReason: params.source,
-      });
-      return {
-        ok: false,
-        error: "package_not_found",
-        detail: `${params.appId}@${requestedVersion}`,
-        status: 404,
-      };
-    }
-
-    // 3. Mark as installing
-    store.upsertServerPackageInstall({
-      serverId: params.serverId,
-      kind: "app",
-      packageId: params.appId,
-      status: "installing",
-      desiredReleaseId: variant.releaseId,
-      desiredVersion: variant.version,
-      entryPath,
-      installReason: params.source,
-    });
-
-    // 4. Resolve server
+    // 3. Resolve server + platform
     const server = store.getServer(params.serverId);
     if (!server) {
       store.upsertServerPackageInstall({
@@ -3624,13 +4239,30 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         kind: "app",
         packageId: params.appId,
         status: "failed",
-        entryPath,
-        desiredReleaseId: variant.releaseId,
-        desiredVersion: variant.version,
+        entryPath: defaultEntryPathForApp(params.appId),
         lastError: "server_not_found",
         installReason: params.source,
       });
       return { ok: false, error: "server_not_found", status: 404 };
+    }
+    const runtimeBearerToken = mintPackageOperatorRuntimeBearerToken({
+      config,
+      store,
+      session: params.session,
+      server,
+    });
+    if (!runtimeBearerToken) {
+      store.upsertServerPackageInstall({
+        serverId: params.serverId,
+        kind: "app",
+        packageId: params.appId,
+        status: "failed",
+        desiredVersion: requestedVersion,
+        entryPath: defaultEntryPathForApp(params.appId),
+        lastError: "runtime_operator_token_unavailable",
+        installReason: params.source,
+      });
+      return { ok: false, error: "runtime_operator_token_unavailable", status: 502 };
     }
     if (server.status !== "running") {
       store.upsertServerPackageInstall({
@@ -3638,89 +4270,84 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         kind: "app",
         packageId: params.appId,
         status: "failed",
-        entryPath,
-        desiredReleaseId: variant.releaseId,
-        desiredVersion: variant.version,
+        entryPath: defaultEntryPathForApp(params.appId),
         lastError: "server_not_running",
         installReason: params.source,
       });
       return { ok: false, error: "server_not_running", status: 409 };
     }
-    // 5. Resolve package path
-    if (!fs.existsSync(variant.tarballPath)) {
+    const platform = await resolveServerRuntimePlatform(server);
+    if (!platform) {
       store.upsertServerPackageInstall({
         serverId: params.serverId,
         kind: "app",
         packageId: params.appId,
         status: "failed",
-        entryPath,
-        desiredReleaseId: variant.releaseId,
-        desiredVersion: variant.version,
-        lastError: `package_not_found: ${variant.tarballPath}`,
+        desiredVersion: requestedVersion,
+        entryPath: defaultEntryPathForApp(params.appId),
+        lastError: "server_runtime_platform_unavailable",
         installReason: params.source,
       });
-      return { ok: false, error: "package_not_found", detail: variant.tarballPath, status: 404 };
+      return { ok: false, error: "server_runtime_platform_unavailable", status: 502 };
     }
 
-    const result = shouldUseDirectRuntimeInstall(server, variant.tarballPath)
-      ? await installPackageViaRuntimeHttp({
-          runtimeUrl: resolveServerOperatorRuntimeUrl(server) ?? "",
-          localTarballPath: variant.tarballPath,
+    const plan = resolveAppInstallPlan({
+      appId: params.appId,
+      versionConstraint: requestedVersion,
+      targetOs: platform.os,
+      targetArch: platform.arch,
+    });
+    if (!plan.ok) {
+      store.upsertServerPackageInstall({
+        serverId: params.serverId,
+        kind: "app",
+        packageId: params.appId,
+        status: "failed",
+        desiredVersion: requestedVersion,
+        entryPath: defaultEntryPathForApp(params.appId),
+        lastError: `${plan.error}: ${plan.detail ?? ""}`,
+        installReason: params.source,
+      });
+      return plan;
+    }
+
+    for (const step of plan.steps) {
+      const installed = await installResolvedPackageOnServer({
+        server,
+        runtimeBearerToken,
+        installReason: step.direct ? params.source : "dependency",
+        packageStep: step,
+      });
+      if (!installed.ok) {
+        store.upsertServerPackageInstall({
+          serverId: params.serverId,
           kind: "app",
           packageId: params.appId,
-          version: variant.version,
-          releaseId: variant.releaseId,
-          runtimeAuthToken: server.runtimeAuthToken || "",
-        })
-      : await (async () => {
-          const operatorTarget = resolveServerOperatorHost(server);
-          if (!operatorTarget) {
-            return { ok: false as const, error: "server_no_private_ip", detail: "" };
-          }
-          return await installPackageViaSSH({
-            host: operatorTarget.host,
-            privateKeyPath: config.vpsAccess.sshKeyPath,
-            localTarballPath: variant.tarballPath,
-            kind: "app",
-            packageId: params.appId,
-            version: variant.version,
-            releaseId: variant.releaseId,
-            runtimePort: operatorTarget.runtimePort,
-            runtimeAuthToken: server.runtimeAuthToken || "",
-          });
-        })();
-
-    // 7. Update status
-    if (result.ok) {
-      store.upsertServerPackageInstall({
-        serverId: params.serverId,
-        kind: "app",
-        packageId: params.appId,
-        status: "installed",
-        desiredReleaseId: variant.releaseId,
-        desiredVersion: variant.version,
-        activeReleaseId: variant.releaseId,
-        activeVersion: variant.version,
-        entryPath,
-        installReason: params.source,
-      });
-      console.log(`[app-install] ${params.appId}@${variant.version} installed on ${params.serverId}`);
-      return { ok: true, version: variant.version };
-    } else {
-      store.upsertServerPackageInstall({
-        serverId: params.serverId,
-        kind: "app",
-        packageId: params.appId,
-        status: "failed",
-        entryPath,
-        desiredReleaseId: variant.releaseId,
-        desiredVersion: variant.version,
-        lastError: `${result.error}: ${result.detail ?? ""}`,
-        installReason: params.source,
-      });
-      console.error(`[app-install] Failed to install ${params.appId} on ${params.serverId}: ${result.error}`);
-      return { ok: false, error: result.error, detail: result.detail, status: 502 };
+          status: "failed",
+          desiredVersion: requestedVersion,
+          entryPath: defaultEntryPathForApp(params.appId),
+          lastError: `${installed.error}: ${installed.detail ?? ""}`,
+          installReason: params.source,
+        });
+        console.error(`[app-install] Failed to install ${step.packageId} while installing ${params.appId}: ${installed.error}`);
+        return installed;
+      }
     }
+
+    store.deleteServerPackageRequirementsForRequiring(params.serverId, "app", params.appId);
+    for (const requirement of plan.requirements) {
+      store.upsertServerPackageRequirement({
+        serverId: params.serverId,
+        requiringKind: requirement.requiringKind,
+        requiringPackageId: requirement.requiringPackageId,
+        requiredKind: requirement.requiredKind,
+        requiredPackageId: requirement.requiredPackageId,
+        versionConstraint: requirement.versionConstraint,
+      });
+    }
+
+    console.log(`[app-install] ${params.appId}@${plan.topLevelVersion} installed on ${params.serverId} with ${plan.steps.length} package(s)`);
+    return { ok: true, version: plan.topLevelVersion };
   }
 
   async function installAdapterOnServer(params: {
@@ -3728,6 +4355,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     adapterId: string;
     version?: string;
     source: "manual" | "api";
+    session?: SessionRecord;
   }): Promise<
     | { ok: true; version: string }
     | { ok: false; error: string; detail?: string; status?: number }
@@ -3738,21 +4366,112 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       return { ok: false, error: "already_installed", status: 409 };
     }
 
-    const variant = store.getPackageReleaseVariant("adapter", params.adapterId, version);
-    if (!variant) {
+    const server = store.getServer(params.serverId);
+    if (!server) {
       store.upsertServerPackageInstall({
         serverId: params.serverId,
         kind: "adapter",
         packageId: params.adapterId,
         status: "failed",
         desiredVersion: version,
-        lastError: `package_not_found: ${params.adapterId}@${version}`,
+        lastError: "server_not_found",
+        installReason: params.source,
+      });
+      return { ok: false, error: "server_not_found", status: 404 };
+    }
+    const runtimeBearerToken = mintPackageOperatorRuntimeBearerToken({
+      config,
+      store,
+      session: params.session,
+      server,
+    });
+    if (!runtimeBearerToken) {
+      store.upsertServerPackageInstall({
+        serverId: params.serverId,
+        kind: "adapter",
+        packageId: params.adapterId,
+        status: "failed",
+        desiredVersion: version,
+        lastError: "runtime_operator_token_unavailable",
+        installReason: params.source,
+      });
+      return { ok: false, error: "runtime_operator_token_unavailable", status: 502 };
+    }
+    if (server.status !== "running") {
+      store.upsertServerPackageInstall({
+        serverId: params.serverId,
+        kind: "adapter",
+        packageId: params.adapterId,
+        status: "failed",
+        desiredVersion: version,
+        lastError: "server_not_running",
+        installReason: params.source,
+      });
+      return { ok: false, error: "server_not_running", status: 409 };
+    }
+    const platform = await resolveServerRuntimePlatform(server);
+    if (!platform) {
+      store.upsertServerPackageInstall({
+        serverId: params.serverId,
+        kind: "adapter",
+        packageId: params.adapterId,
+        status: "failed",
+        desiredVersion: version,
+        lastError: "server_runtime_platform_unavailable",
+        installReason: params.source,
+      });
+      return { ok: false, error: "server_runtime_platform_unavailable", status: 502 };
+    }
+
+    const variant = version === "latest"
+      ? store.getLatestPackageReleaseVariantForTarget(
+          "adapter",
+          params.adapterId,
+          platform.os,
+          platform.arch,
+        )
+      : store.getPackageReleaseVariantForTarget(
+          "adapter",
+          params.adapterId,
+          version,
+          platform.os,
+          platform.arch,
+        );
+    if (!variant) {
+      const anyVariant = version === "latest"
+        ? store.getLatestPackageReleaseVariant("adapter", params.adapterId)
+        : store.getPackageReleaseVariant("adapter", params.adapterId, version);
+      if (!anyVariant) {
+        store.upsertServerPackageInstall({
+          serverId: params.serverId,
+          kind: "adapter",
+          packageId: params.adapterId,
+          status: "failed",
+          desiredVersion: version,
+          lastError: `package_not_found: ${params.adapterId}@${version}`,
+          installReason: params.source,
+        });
+        return {
+          ok: false,
+          error: "package_not_found",
+          detail: `${params.adapterId}@${version}`,
+          status: 404,
+        };
+      }
+      const detail = `${params.adapterId}@${version} for ${platform.os}/${platform.arch}`;
+      store.upsertServerPackageInstall({
+        serverId: params.serverId,
+        kind: "adapter",
+        packageId: params.adapterId,
+        status: "failed",
+        desiredVersion: version,
+        lastError: `package_variant_not_found: ${detail}`,
         installReason: params.source,
       });
       return {
         ok: false,
-        error: "package_not_found",
-        detail: `${params.adapterId}@${version}`,
+        error: "package_variant_not_found",
+        detail,
         status: 404,
       };
     }
@@ -3766,34 +4485,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       desiredVersion: variant.version,
       installReason: params.source,
     });
-
-    const server = store.getServer(params.serverId);
-    if (!server) {
-      store.upsertServerPackageInstall({
-        serverId: params.serverId,
-        kind: "adapter",
-        packageId: params.adapterId,
-        status: "failed",
-        desiredReleaseId: variant.releaseId,
-        desiredVersion: variant.version,
-        lastError: "server_not_found",
-        installReason: params.source,
-      });
-      return { ok: false, error: "server_not_found", status: 404 };
-    }
-    if (server.status !== "running") {
-      store.upsertServerPackageInstall({
-        serverId: params.serverId,
-        kind: "adapter",
-        packageId: params.adapterId,
-        status: "failed",
-        desiredReleaseId: variant.releaseId,
-        desiredVersion: variant.version,
-        lastError: "server_not_running",
-        installReason: params.source,
-      });
-      return { ok: false, error: "server_not_running", status: 409 };
-    }
     if (!fs.existsSync(variant.tarballPath)) {
       store.upsertServerPackageInstall({
         serverId: params.serverId,
@@ -3816,7 +4507,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           packageId: params.adapterId,
           version: variant.version,
           releaseId: variant.releaseId,
-          runtimeAuthToken: server.runtimeAuthToken || "",
+          runtimeBearerToken,
         })
       : await (async () => {
           const operatorTarget = resolveServerOperatorHost(server);
@@ -3832,7 +4523,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             version: variant.version,
             releaseId: variant.releaseId,
             runtimePort: operatorTarget.runtimePort,
-            runtimeAuthToken: server.runtimeAuthToken || "",
+            runtimeBearerToken,
           });
         })();
 
@@ -3871,6 +4562,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
   async function uninstallAppFromServer(params: {
     serverId: string;
     appId: string;
+    session?: SessionRecord;
   }): Promise<
     | { ok: true }
     | { ok: false; error: string; detail?: string; status?: number }
@@ -3878,6 +4570,23 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     const server = store.getServer(params.serverId);
     if (!server) {
       return { ok: false, error: "server_not_found", status: 404 };
+    }
+    const runtimeBearerToken = mintPackageOperatorRuntimeBearerToken({
+      config,
+      store,
+      session: params.session,
+      server,
+    });
+    if (!runtimeBearerToken) {
+      store.upsertServerPackageInstall({
+        serverId: params.serverId,
+        kind: "app",
+        packageId: params.appId,
+        status: "failed",
+        installReason: "manual",
+        lastError: "runtime_operator_token_unavailable",
+      });
+      return { ok: false, error: "runtime_operator_token_unavailable", status: 502 };
     }
     store.upsertServerPackageInstall({
       serverId: params.serverId,
@@ -3892,7 +4601,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           runtimeUrl: resolveServerOperatorRuntimeUrl(server) ?? "",
           kind: "app",
           packageId: params.appId,
-          runtimeAuthToken: server.runtimeAuthToken || "",
+          runtimeBearerToken,
         })
       : await (async () => {
           const operatorTarget = resolveServerOperatorHost(server);
@@ -3905,7 +4614,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             kind: "app",
             packageId: params.appId,
             runtimePort: operatorTarget.runtimePort,
-            runtimeAuthToken: server.runtimeAuthToken || "",
+            runtimeBearerToken,
           });
         })();
 
@@ -3936,6 +4645,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
   async function uninstallAdapterFromServer(params: {
     serverId: string;
     adapterId: string;
+    session?: SessionRecord;
   }): Promise<
     | { ok: true }
     | { ok: false; error: string; detail?: string; status?: number }
@@ -3948,6 +4658,27 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     const server = store.getServer(params.serverId);
     if (!server) {
       return { ok: false, error: "server_not_found", status: 404 };
+    }
+    const runtimeBearerToken = mintPackageOperatorRuntimeBearerToken({
+      config,
+      store,
+      session: params.session,
+      server,
+    });
+    if (!runtimeBearerToken) {
+      store.upsertServerPackageInstall({
+        serverId: params.serverId,
+        kind: "adapter",
+        packageId: params.adapterId,
+        status: "failed",
+        desiredReleaseId: existing.desiredReleaseId ?? undefined,
+        desiredVersion: existing.desiredVersion ?? undefined,
+        activeReleaseId: existing.activeReleaseId ?? undefined,
+        activeVersion: existing.activeVersion ?? undefined,
+        installReason: "manual",
+        lastError: "runtime_operator_token_unavailable",
+      });
+      return { ok: false, error: "runtime_operator_token_unavailable", status: 502 };
     }
     store.upsertServerPackageInstall({
       serverId: params.serverId,
@@ -3966,7 +4697,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           runtimeUrl: resolveServerOperatorRuntimeUrl(server) ?? "",
           kind: "adapter",
           packageId: params.adapterId,
-          runtimeAuthToken: server.runtimeAuthToken || "",
+          runtimeBearerToken,
         })
       : await (async () => {
           const operatorTarget = resolveServerOperatorHost(server);
@@ -3979,7 +4710,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             kind: "adapter",
             packageId: params.adapterId,
             runtimePort: operatorTarget.runtimePort,
-            runtimeAuthToken: server.runtimeAuthToken || "",
+            runtimeBearerToken,
           });
         })();
 
@@ -4015,6 +4746,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     appId: string;
     targetVersion: string;
     source: "manual" | "api";
+    session?: SessionRecord;
   }): Promise<
     | { ok: true; version: string }
     | { ok: false; error: string; detail?: string; status?: number }
@@ -4028,12 +4760,40 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     if (!server) {
       return { ok: false, error: "server_not_found", status: 404 };
     }
-    const variant = store.getPackageReleaseVariant("app", params.appId, params.targetVersion);
+    const runtimeBearerToken = mintPackageOperatorRuntimeBearerToken({
+      config,
+      store,
+      session: params.session,
+      server,
+    });
+    if (!runtimeBearerToken) {
+      return { ok: false, error: "runtime_operator_token_unavailable", status: 502 };
+    }
+    const platform = await resolveServerRuntimePlatform(server);
+    if (!platform) {
+      return { ok: false, error: "server_runtime_platform_unavailable", status: 502 };
+    }
+    const variant = store.getPackageReleaseVariantForTarget(
+      "app",
+      params.appId,
+      params.targetVersion,
+      platform.os,
+      platform.arch,
+    );
     if (!variant) {
+      const anyVariant = store.getPackageReleaseVariant("app", params.appId, params.targetVersion);
+      if (!anyVariant) {
+        return {
+          ok: false,
+          error: "package_not_found",
+          detail: `${params.appId}@${params.targetVersion}`,
+          status: 404,
+        };
+      }
       return {
         ok: false,
-        error: "package_not_found",
-        detail: `${params.appId}@${params.targetVersion}`,
+        error: "package_variant_not_found",
+        detail: `${params.appId}@${params.targetVersion} for ${platform.os}/${platform.arch}`,
         status: 404,
       };
     }
@@ -4058,7 +4818,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           packageId: params.appId,
           targetVersion: variant.version,
           releaseId: variant.releaseId,
-          runtimeAuthToken: server.runtimeAuthToken || "",
+          runtimeBearerToken,
         })
       : await (async () => {
           const operatorTarget = resolveServerOperatorHost(server);
@@ -4074,7 +4834,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             targetVersion: variant.version,
             releaseId: variant.releaseId,
             runtimePort: operatorTarget.runtimePort,
-            runtimeAuthToken: server.runtimeAuthToken || "",
+            runtimeBearerToken,
           });
         })();
 
@@ -4115,6 +4875,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     adapterId: string;
     targetVersion: string;
     source: "manual" | "api";
+    session?: SessionRecord;
   }): Promise<
     | { ok: true; version: string }
     | { ok: false; error: string; detail?: string; status?: number }
@@ -4128,12 +4889,40 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     if (!server) {
       return { ok: false, error: "server_not_found", status: 404 };
     }
-    const variant = store.getPackageReleaseVariant("adapter", params.adapterId, params.targetVersion);
+    const runtimeBearerToken = mintPackageOperatorRuntimeBearerToken({
+      config,
+      store,
+      session: params.session,
+      server,
+    });
+    if (!runtimeBearerToken) {
+      return { ok: false, error: "runtime_operator_token_unavailable", status: 502 };
+    }
+    const platform = await resolveServerRuntimePlatform(server);
+    if (!platform) {
+      return { ok: false, error: "server_runtime_platform_unavailable", status: 502 };
+    }
+    const variant = store.getPackageReleaseVariantForTarget(
+      "adapter",
+      params.adapterId,
+      params.targetVersion,
+      platform.os,
+      platform.arch,
+    );
     if (!variant) {
+      const anyVariant = store.getPackageReleaseVariant("adapter", params.adapterId, params.targetVersion);
+      if (!anyVariant) {
+        return {
+          ok: false,
+          error: "package_not_found",
+          detail: `${params.adapterId}@${params.targetVersion}`,
+          status: 404,
+        };
+      }
       return {
         ok: false,
-        error: "package_not_found",
-        detail: `${params.adapterId}@${params.targetVersion}`,
+        error: "package_variant_not_found",
+        detail: `${params.adapterId}@${params.targetVersion} for ${platform.os}/${platform.arch}`,
         status: 404,
       };
     }
@@ -4158,7 +4947,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           packageId: params.adapterId,
           targetVersion: variant.version,
           releaseId: variant.releaseId,
-          runtimeAuthToken: server.runtimeAuthToken || "",
+          runtimeBearerToken,
         })
       : await (async () => {
           const operatorTarget = resolveServerOperatorHost(server);
@@ -4174,7 +4963,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             targetVersion: variant.version,
             releaseId: variant.releaseId,
             runtimePort: operatorTarget.runtimePort,
-            runtimeAuthToken: server.runtimeAuthToken || "",
+            runtimeBearerToken,
           });
         })();
 
@@ -6532,6 +7321,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           appId,
           accountId: access.server.accountId,
           source: "manual",
+          session,
         });
         if (!installed.ok) {
           sendJson(res, installed.status ?? 500, {
@@ -6652,6 +7442,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           adapterId,
           version: typeof body.version === "string" ? body.version.trim() : undefined,
           source: "manual",
+          session,
         });
         if (!installed.ok) {
           sendJson(res, installed.status ?? 500, {
@@ -6706,6 +7497,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           adapterId,
           targetVersion,
           source: "manual",
+          session,
         });
         if (!upgraded.ok) {
           sendJson(res, upgraded.status ?? 500, {
@@ -6747,6 +7539,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         const uninstalled = await uninstallAdapterFromServer({
           serverId,
           adapterId,
+          session,
         });
         if (!uninstalled.ok) {
           sendJson(res, uninstalled.status ?? 500, {
@@ -6801,6 +7594,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           appId,
           targetVersion,
           source: "manual",
+          session,
         });
         if (!upgraded.ok) {
           sendJson(res, upgraded.status ?? 500, {
@@ -6848,6 +7642,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         const uninstalled = await uninstallAppFromServer({
           serverId,
           appId,
+          session,
         });
         if (!uninstalled.ok) {
           sendJson(res, uninstalled.status ?? 500, {
