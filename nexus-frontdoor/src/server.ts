@@ -1936,6 +1936,13 @@ function mintPackageOperatorRuntimeBearerToken(params: {
   session?: SessionRecord;
   server: ServerRecord;
 }): string | null {
+  const persisted =
+    params.server.runtimeAuthToken?.trim() ||
+    params.config.tenants.get(params.server.tenantId)?.runtimeAuthToken?.trim() ||
+    null;
+  if (persisted) {
+    return persisted;
+  }
   const resolved = resolvePackageOperatorRuntimePrincipal(params);
   if (!resolved) {
     return null;
@@ -6268,6 +6275,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         const passwordHash = createPasswordHash(password);
         const user = store.upsertUser({
           userId,
+          entityId: `entity:${randomUUID()}`,
           username,
           passwordHash,
           email,

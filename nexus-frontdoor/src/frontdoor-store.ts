@@ -154,6 +154,7 @@ function parseEntitlementCountLimit(raw: string | undefined): number | null {
 
 export type FrontdoorUserRecord = {
   userId: string;
+  entityId: string;
   username?: string;
   passwordHash?: string;
   email?: string;
@@ -602,6 +603,7 @@ export class FrontdoorStore {
       -- Users
       CREATE TABLE IF NOT EXISTS frontdoor_users (
         user_id TEXT PRIMARY KEY,
+        entity_id TEXT,
         username TEXT UNIQUE,
         password_hash TEXT,
         email TEXT,
@@ -1064,6 +1066,11 @@ export class FrontdoorStore {
         ON frontdoor_servers(runtime_auth_token);
     `);
     try {
+      this.db.exec("ALTER TABLE frontdoor_users ADD COLUMN entity_id TEXT");
+    } catch {
+      // Already exists.
+    }
+    try {
       this.db.exec("ALTER TABLE frontdoor_servers ADD COLUMN backup_enabled INTEGER NOT NULL DEFAULT 0");
     } catch {
       // Already exists.
@@ -1124,6 +1131,11 @@ export class FrontdoorStore {
       // Already exists.
     }
     this.db.exec(`
+      UPDATE frontdoor_users
+      SET entity_id = COALESCE(NULLIF(entity_id, ''), 'entity:' || user_id)
+      WHERE entity_id IS NULL OR TRIM(entity_id) = ''
+    `);
+    this.db.exec(`
       UPDATE frontdoor_servers
       SET status = 'destroy_pending'
       WHERE status = 'deprovisioning'
@@ -1150,6 +1162,7 @@ export class FrontdoorStore {
     for (const user of config.usersById.values()) {
       const savedUser = this.upsertUser({
         userId: user.id,
+        entityId: user.entityId,
         username: user.username,
         passwordHash: user.passwordHash,
         email: user.email,
@@ -1228,6 +1241,7 @@ export class FrontdoorStore {
     // Ensure the system user exists before creating the system account (FK constraint)
     this.upsertUser({
       userId: "system",
+      entityId: "entity:system",
       username: "system",
       email: "system@localhost",
       displayName: "System",
@@ -1240,6 +1254,7 @@ export class FrontdoorStore {
 
   private mapUserRow(row: {
     user_id: string;
+    entity_id: string | null;
     username: string | null;
     password_hash: string | null;
     email: string | null;
@@ -1248,6 +1263,7 @@ export class FrontdoorStore {
   }): FrontdoorUserRecord {
     return {
       userId: row.user_id,
+      entityId: row.entity_id ?? `entity:${row.user_id}`,
       username: row.username ?? undefined,
       passwordHash: row.password_hash ?? undefined,
       email: row.email ?? undefined,
@@ -1264,6 +1280,7 @@ export class FrontdoorStore {
         `
         INSERT INTO frontdoor_users (
           user_id,
+          entity_id,
           username,
           password_hash,
           email,
@@ -1271,8 +1288,9 @@ export class FrontdoorStore {
           disabled,
           created_at_ms,
           updated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(user_id) DO UPDATE SET
+          entity_id = COALESCE(excluded.entity_id, frontdoor_users.entity_id),
           username = COALESCE(excluded.username, frontdoor_users.username),
           password_hash = COALESCE(excluded.password_hash, frontdoor_users.password_hash),
           email = COALESCE(excluded.email, frontdoor_users.email),
@@ -1283,6 +1301,7 @@ export class FrontdoorStore {
       )
       .run(
         record.userId,
+        record.entityId,
         username,
         record.passwordHash ?? null,
         record.email ?? null,
@@ -1302,7 +1321,7 @@ export class FrontdoorStore {
     const row = this.db
       .prepare(
         `
-        SELECT user_id, username, password_hash, email, display_name, disabled
+        SELECT user_id, entity_id, username, password_hash, email, display_name, disabled
         FROM frontdoor_users
         WHERE user_id = ?
         LIMIT 1
@@ -1311,6 +1330,7 @@ export class FrontdoorStore {
       .get(userId) as
       | {
           user_id: string;
+          entity_id: string | null;
           username: string | null;
           password_hash: string | null;
           email: string | null;
@@ -1329,7 +1349,7 @@ export class FrontdoorStore {
     const row = this.db
       .prepare(
         `
-        SELECT user_id, username, password_hash, email, display_name, disabled
+        SELECT user_id, entity_id, username, password_hash, email, display_name, disabled
         FROM frontdoor_users
         WHERE username = ?
         LIMIT 1
@@ -1338,6 +1358,7 @@ export class FrontdoorStore {
       .get(normalized) as
       | {
           user_id: string;
+          entity_id: string | null;
           username: string | null;
           password_hash: string | null;
           email: string | null;
@@ -1356,7 +1377,7 @@ export class FrontdoorStore {
     const row = this.db
       .prepare(
         `
-        SELECT user_id, username, password_hash, email, display_name, disabled
+        SELECT user_id, entity_id, username, password_hash, email, display_name, disabled
         FROM frontdoor_users
         WHERE lower(email) = ?
         LIMIT 1
@@ -1365,6 +1386,7 @@ export class FrontdoorStore {
       .get(normalized) as
       | {
           user_id: string;
+          entity_id: string | null;
           username: string | null;
           password_hash: string | null;
           email: string | null;
@@ -1413,6 +1435,7 @@ export class FrontdoorStore {
         `
         SELECT
           u.user_id,
+          u.entity_id,
           u.username,
           u.password_hash,
           u.email,
@@ -1427,6 +1450,7 @@ export class FrontdoorStore {
       .get(normalizedProvider, normalizedSubject) as
       | {
           user_id: string;
+          entity_id: string | null;
           username: string | null;
           password_hash: string | null;
           email: string | null;
@@ -5054,6 +5078,7 @@ export class FrontdoorStore {
     if (linked) {
       const merged = this.upsertUser({
         userId: linked.userId,
+        entityId: linked.entityId,
         username: linked.username,
         passwordHash: linked.passwordHash,
         email: params.email || linked.email,
@@ -5072,6 +5097,7 @@ export class FrontdoorStore {
     if (!user) {
       user = this.upsertUser({
         userId: `user-${randomUUID()}`,
+        entityId: `entity:${randomUUID()}`,
         email: params.email,
         displayName: params.displayName,
         disabled: false,
@@ -5120,9 +5146,7 @@ export class FrontdoorStore {
       userId: params.user.userId,
       serverId: params.server?.serverId,
       tenantId: params.server?.tenantId ?? "",
-      entityId: params.server
-        ? `entity:${params.server.serverId}:${params.user.userId}`
-        : `entity:user:${params.user.userId}`,
+      entityId: params.user.entityId,
       username: params.user.username,
       displayName: params.user.displayName,
       email: params.user.email,

@@ -1230,7 +1230,7 @@ describe("frontdoor scaffold", () => {
       unknown
     >;
     expect(claims.tenant_id).toBe("tenant-dev");
-    expect(claims.entity_id).toBe("entity:tenant-dev:u-owner");
+    expect(claims.entity_id).toBe("entity-owner");
     expect(claims.aud).toBe("control-plane");
   });
 
@@ -3729,13 +3729,7 @@ describe("frontdoor scaffold", () => {
       runtimeUrl: runtime.origin,
     });
     const installToken = String(directInstallSpy.mock.calls[0]?.[0].runtimeBearerToken ?? "");
-    expect(installToken).toContain(".");
-    expect(installToken).not.toBe("runtime-auth-token-local");
-    expect(decodeJwtPayload(installToken)).toMatchObject({
-      tenant_id: "tenant-dev",
-      role: "operator",
-      client_id: "nexus-frontdoor-package-operator",
-    });
+    expect(installToken).toBe("runtime-auth-token-local");
     expect(sshInstallSpy).not.toHaveBeenCalled();
   });
 
@@ -3799,13 +3793,7 @@ describe("frontdoor scaffold", () => {
       targetVersion: "0.1.1",
     });
     const upgradeToken = String(upgradeSpy.mock.calls[0]?.[0].runtimeBearerToken ?? "");
-    expect(upgradeToken).toContain(".");
-    expect(upgradeToken).not.toBe("runtime-auth-token-local");
-    expect(decodeJwtPayload(upgradeToken)).toMatchObject({
-      tenant_id: "tenant-dev",
-      role: "operator",
-      client_id: "nexus-frontdoor-package-operator",
-    });
+    expect(upgradeToken).toBe("runtime-auth-token-local");
 
     const statusResp = await fetch(
       `${frontdoorRunning.origin}/api/servers/tenant-dev/adapters/nexus-adapter-confluence/install-status`,
@@ -3868,13 +3856,7 @@ describe("frontdoor scaffold", () => {
       packageId: "nexus-adapter-confluence",
     });
     const uninstallToken = String(uninstallSpy.mock.calls[0]?.[0].runtimeBearerToken ?? "");
-    expect(uninstallToken).toContain(".");
-    expect(uninstallToken).not.toBe("runtime-auth-token-local");
-    expect(decodeJwtPayload(uninstallToken)).toMatchObject({
-      tenant_id: "tenant-dev",
-      role: "operator",
-      client_id: "nexus-frontdoor-package-operator",
-    });
+    expect(uninstallToken).toBe("runtime-auth-token-local");
 
     const statusResp = await fetch(
       `${frontdoorRunning.origin}/api/servers/tenant-dev/adapters/nexus-adapter-confluence/install-status`,
