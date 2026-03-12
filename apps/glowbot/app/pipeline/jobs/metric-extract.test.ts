@@ -21,6 +21,7 @@ function createContext(params: {
   input: Record<string, unknown>;
   record?: RecordFixture | null;
   existingElements?: Array<Record<string, unknown>>;
+  includeDerivedDag?: boolean;
 }) {
   const calls: RuntimeCall[] = [];
   const runtime = {
@@ -44,6 +45,18 @@ function createContext(params: {
       }
       if (method === "memory.elements.update") {
         return { element: { id: "element-2" } };
+      }
+      if (method === "dags.list") {
+        return {
+          dags: params.includeDerivedDag === false ? [] : [{ id: "dag-derived-1", name: "glowbot_derived_outputs" }],
+        };
+      }
+      if (method === "dags.runs.start") {
+        return {
+          run: {
+            id: "dagrun-001",
+          },
+        };
       }
       throw new Error(`unexpected runtime method: ${method}`);
     }),
@@ -105,11 +118,15 @@ describe("metric_extract job", () => {
     const result = await handler(ctx);
 
     expect(result).toMatchObject({
+      status: "ok",
       created: 1,
       updated: 0,
       skipped: 0,
       rejected: 0,
       processed: 1,
+      metricElementIds: ["element-1"],
+      touchedDates: ["2026-03-05"],
+      triggeredDerivedDagRunId: "dagrun-001",
     });
     expect(calls[0]?.method).toBe("records.get");
     expect(calls[0]?.params).toEqual({ id: "google-ads:evt-1" });
@@ -125,6 +142,8 @@ describe("metric_extract job", () => {
     });
     expect(calls[2]?.params.sourceEventId).toBe("google-ads:evt-1");
     expect(calls[2]?.params.sourceJobId).toBeUndefined();
+    expect(calls[3]?.method).toBe("dags.list");
+    expect(calls[4]?.method).toBe("dags.runs.start");
   });
 
   it("returns a no-op result when schedule-driven execution has no event input", async () => {
@@ -135,13 +154,18 @@ describe("metric_extract job", () => {
     const result = await handler(ctx);
 
     expect(result).toEqual({
+      status: "ok",
       created: 0,
       updated: 0,
       skipped: 0,
       rejected: 0,
       processed: 0,
+      metricElementIds: [],
+      clinicIds: [],
+      touchedDates: [],
+      triggeredDerivedDagRunId: "dagrun-001",
     });
-    expect(calls).toEqual([]);
+    expect(calls.map((call) => call.method)).toEqual(["dags.list", "dags.runs.start"]);
   });
 
   it("rejects records missing canonical connection provenance", async () => {
@@ -170,6 +194,7 @@ describe("metric_extract job", () => {
     const result = await handler(ctx);
 
     expect(result).toMatchObject({
+      status: "ok",
       created: 0,
       updated: 0,
       skipped: 0,
@@ -222,16 +247,23 @@ describe("metric_extract job", () => {
     const result = await handler(ctx);
 
     expect(result).toMatchObject({
+      status: "ok",
       created: 0,
       updated: 1,
       skipped: 0,
       rejected: 0,
       processed: 1,
+      metricElementIds: ["element-2"],
+      clinicIds: ["center-1"],
+      touchedDates: ["2026-03-05"],
+      triggeredDerivedDagRunId: "dagrun-001",
     });
     expect(calls[2]?.method).toBe("memory.elements.update");
     expect(calls[2]?.params.id).toBe("existing-1");
     expect(calls[2]?.params.sourceEventId).toBe("callrail:evt-3");
     expect(calls[2]?.params.sourceJobId).toBeUndefined();
+    expect(calls[3]?.method).toBe("dags.list");
+    expect(calls[4]?.method).toBe("dags.runs.start");
   });
 
   it("keeps same-platform connections distinct in dedup lookups", async () => {

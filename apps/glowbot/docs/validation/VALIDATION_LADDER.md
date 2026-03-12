@@ -301,16 +301,14 @@ Current state note:
 
 ---
 
-## Milestone 12: Persisted Derived Outputs And DAG Automation 🟡
+## Milestone 12: Persisted Derived Outputs And DAG Automation ✅
 
-Persisted higher-level observations remain future work and are still required
-for full parity with the target-state derived-output spec.
+Persisted higher-level observations are now real and validated against both the
+current on-demand read model and the landed Nex work runtime.
 
-Focused detail lives in:
+Canonical detail lives in:
 
 - [GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION.md)
-- [GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/workplans/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_WORKPLAN.md)
-- [GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_VALIDATION.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/validation/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_VALIDATION.md)
 
 | # | Checkpoint | Pass Criteria |
 |---|---|---|
@@ -319,15 +317,23 @@ Focused detail lives in:
 | D3 | Derived outputs are persisted canonically | jobs write derived outputs into nex primitives instead of returning only on-demand results |
 | D4 | Derived outputs preserve provenance | derived elements link back to source metric elements |
 | D5 | Recommendations are versioned canonically | recommendation elements use active/superseded semantics rather than overwrite |
-| D6 | Read path can use persisted outputs | clinic surfaces can consume persisted derived outputs where intended |
+| D6 | Read-path cutover remains an explicit decision | clinic reads may stay on-demand while persisted outputs are validated underneath |
 | D7 | DAG execution is real end to end | DAG runs advance through node execution rather than serving as registration-only scaffolding |
 | D8 | Schedule-driven refresh is real end to end | scheduled execution produces real work, not only records |
 
 Current state note:
 
-- the March 10 Nex validation packet no longer justifies treating D7-D8 as
-  upstream-blocked by default
-- the remaining work in this milestone is now primarily GlowBot-owned
+- D1-D8 are landed and validated
+- local and hosted validation now prove:
+  - derived element registration
+  - materialization jobs
+  - provenance links and recommendation supersession
+  - DAG advancement through the real work runtime
+  - schedule-triggered refresh through `schedules.*`
+- the focused W12 execution notes now belong in
+  [docs/archive/workplans](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/archive/workplans)
+  and
+  [docs/archive/validation](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/archive/validation)
 
 ---
 

@@ -1,4 +1,11 @@
 import { fileURLToPath } from "node:url";
+import {
+  GLOWBOT_DERIVED_OUTPUT_DAG_NAME,
+  GLOWBOT_METRIC_EXTRACT_JOB_NAME,
+  GLOWBOT_METRIC_EXTRACT_SCHEDULE_EXPRESSION,
+  GLOWBOT_METRIC_EXTRACT_SCHEDULE_NAME,
+  GLOWBOT_METRIC_EXTRACT_SCHEDULE_TIMEZONE,
+} from "./constants.js";
 
 export type RuntimeMethodCaller = {
   callMethod: (method: string, params: unknown) => Promise<unknown>;
@@ -38,12 +45,8 @@ type JobSeed = {
   scriptPath: string;
 };
 
-export const GLOWBOT_DAG_NAME = "glowbot_pipeline";
-const GLOWBOT_DAG_DESCRIPTION = "GlowBot write-path-first pipeline DAG";
-export const GLOWBOT_METRIC_EXTRACT_JOB_NAME = "metric_extract";
-export const GLOWBOT_METRIC_EXTRACT_SCHEDULE_NAME = "glowbot.metric_extract";
-export const GLOWBOT_METRIC_EXTRACT_SCHEDULE_EXPRESSION = "0 */6 * * *";
-export const GLOWBOT_METRIC_EXTRACT_SCHEDULE_TIMEZONE = "UTC";
+export const GLOWBOT_DAG_NAME = GLOWBOT_DERIVED_OUTPUT_DAG_NAME;
+const GLOWBOT_DAG_DESCRIPTION = "GlowBot derived-output materialization DAG";
 export const GLOWBOT_METRIC_RECORD_PLATFORMS = [
   "google-ads",
   "google-business-profile",
@@ -107,6 +110,134 @@ const METRIC_METADATA_SCHEMA = {
   },
 };
 
+const FUNNEL_SNAPSHOT_METADATA_SCHEMA = {
+  type: "object",
+  required: ["window", "period_start", "period_end", "scope_key", "step_name", "step_order"],
+  properties: {
+    window: { type: "string", enum: ["7d", "30d", "90d"] },
+    scope_key: { type: "string" },
+    clinic_id: { type: "string" },
+    step_name: { type: "string" },
+    step_order: { type: "number" },
+    period_start: { type: "string", format: "date" },
+    period_end: { type: "string", format: "date" },
+    step_value: { type: "number" },
+    prev_step_value: { type: "number" },
+    conversion_rate: { type: "number" },
+    peer_median: { type: "number" },
+    delta_vs_peer: { type: "number" },
+    source_breakdown: { type: "object" },
+    computed_at_ms: { type: "number" },
+  },
+};
+
+const TREND_DELTA_METADATA_SCHEMA = {
+  type: "object",
+  required: [
+    "window",
+    "period_start",
+    "period_end",
+    "baseline_start",
+    "baseline_end",
+    "scope_key",
+    "metric_name",
+    "adapter_id",
+  ],
+  properties: {
+    window: { type: "string", enum: ["7d", "30d", "90d"] },
+    scope_key: { type: "string" },
+    clinic_id: { type: "string" },
+    metric_name: { type: "string" },
+    adapter_id: { type: "string" },
+    period_start: { type: "string", format: "date" },
+    period_end: { type: "string", format: "date" },
+    baseline_start: { type: "string", format: "date" },
+    baseline_end: { type: "string", format: "date" },
+    current_total: { type: "number" },
+    previous_total: { type: "number" },
+    delta: { type: "number" },
+    delta_percent: { type: "number" },
+    computed_at_ms: { type: "number" },
+  },
+};
+
+const DROPOFF_ANALYSIS_METADATA_SCHEMA = {
+  type: "object",
+  required: ["analysis_key", "window", "period_start", "period_end", "scope_key"],
+  properties: {
+    analysis_key: { type: "string" },
+    window: { type: "string", enum: ["7d", "30d", "90d"] },
+    scope_key: { type: "string" },
+    clinic_id: { type: "string" },
+    period_start: { type: "string", format: "date" },
+    period_end: { type: "string", format: "date" },
+    baseline_start: { type: "string", format: "date" },
+    baseline_end: { type: "string", format: "date" },
+    weakest_step: { type: "object" },
+    flagged_gaps: { type: "array" },
+    computed_at_ms: { type: "number" },
+  },
+};
+
+const RECOMMENDATION_METADATA_SCHEMA = {
+  type: "object",
+  required: [
+    "recommendation_key",
+    "window",
+    "period_start",
+    "period_end",
+    "scope_key",
+    "category",
+    "status",
+  ],
+  properties: {
+    recommendation_key: { type: "string" },
+    window: { type: "string", enum: ["7d", "30d", "90d"] },
+    scope_key: { type: "string" },
+    clinic_id: { type: "string" },
+    period_start: { type: "string", format: "date" },
+    period_end: { type: "string", format: "date" },
+    category: { type: "string" },
+    status: { type: "string", enum: ["active", "superseded"] },
+    rank: { type: "number" },
+    delta_value: { type: "number" },
+    delta_unit: { type: "string" },
+    confidence: { type: "string" },
+    action_data: { type: "object" },
+    reasoning: { type: "string" },
+    created_at_ms: { type: "number" },
+    superseded_at_ms: { type: "number" },
+  },
+};
+
+const ELEMENT_DEFINITIONS = [
+  {
+    id: "metric",
+    description: "Daily metric data point from an adapter connection",
+    metadataSchema: METRIC_METADATA_SCHEMA,
+  },
+  {
+    id: "funnel_snapshot",
+    description: "Persisted GlowBot funnel snapshot for a windowed clinic scope",
+    metadataSchema: FUNNEL_SNAPSHOT_METADATA_SCHEMA,
+  },
+  {
+    id: "trend_delta",
+    description: "Persisted GlowBot trend delta for a windowed clinic scope",
+    metadataSchema: TREND_DELTA_METADATA_SCHEMA,
+  },
+  {
+    id: "dropoff_analysis",
+    description: "Persisted GlowBot drop-off analysis for a windowed clinic scope",
+    metadataSchema: DROPOFF_ANALYSIS_METADATA_SCHEMA,
+  },
+  {
+    id: "recommendation",
+    description: "Versioned GlowBot recommendation for a windowed clinic scope",
+    metadataSchema: RECOMMENDATION_METADATA_SCHEMA,
+  },
+] as const;
+
 function asRecord(value: unknown): RuntimeRow {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as RuntimeRow)
@@ -148,20 +279,22 @@ async function ensureMetricElementDefinition(params: {
   appId: string;
 }): Promise<void> {
   const definitions = await listElementDefinitions(params.runtime);
-  const existing = definitions.find((definition) => asString(definition.id) === "metric");
-  if (existing) {
-    return;
-  }
+  for (const seed of ELEMENT_DEFINITIONS) {
+    const existing = definitions.find((definition) => asString(definition.id) === seed.id);
+    if (existing) {
+      continue;
+    }
 
-  await params.runtime.callMethod("memory.elements.definitions.create", {
-    id: "metric",
-    name: "metric",
-    description: "Daily metric data point from an adapter connection",
-    config: {
-      ownerAppId: params.appId,
-      metadataSchema: METRIC_METADATA_SCHEMA,
-    },
-  });
+    await params.runtime.callMethod("memory.elements.definitions.create", {
+      id: seed.id,
+      name: seed.id,
+      description: seed.description,
+      config: {
+        ownerAppId: params.appId,
+        metadataSchema: seed.metadataSchema,
+      },
+    });
+  }
 }
 
 async function ensureJob(runtime: RuntimeMethodCaller, appId: string, seed: JobSeed): Promise<EnsuredJob> {
@@ -214,7 +347,16 @@ async function ensureDag(runtime: RuntimeMethodCaller, jobs: EnsuredGlowbotPipel
   name: string;
 }> {
   const dags = await listDags(runtime);
-  const existing = dags.find((dag) => asString(dag.name) === GLOWBOT_DAG_NAME);
+  for (const dag of dags) {
+    if (asString(dag.name) === "glowbot_pipeline" && asString(dag.name) !== GLOWBOT_DAG_NAME) {
+      await runtime.callMethod("dags.delete", {
+        id: asString(dag.id),
+      });
+    }
+  }
+
+  const refreshedDags = await listDags(runtime);
+  const existing = refreshedDags.find((dag) => asString(dag.name) === GLOWBOT_DAG_NAME);
   if (existing) {
     return {
       id: asString(existing.id),
@@ -228,29 +370,28 @@ async function ensureDag(runtime: RuntimeMethodCaller, jobs: EnsuredGlowbotPipel
       description: GLOWBOT_DAG_DESCRIPTION,
       nodes: [
         {
-          job_definition_id: jobs.metricExtract.id,
+          id: "funnel_compute_node",
+          job_definition_id: jobs.funnelCompute.id,
           depends_on: [],
           position: 1,
         },
         {
-          job_definition_id: jobs.funnelCompute.id,
-          depends_on: [jobs.metricExtract.id],
+          id: "trend_compute_node",
+          job_definition_id: jobs.trendCompute.id,
+          depends_on: [],
           position: 2,
         },
         {
-          job_definition_id: jobs.trendCompute.id,
-          depends_on: [jobs.metricExtract.id],
+          id: "dropoff_detect_node",
+          job_definition_id: jobs.dropoffDetect.id,
+          depends_on: ["funnel_compute_node", "trend_compute_node"],
           position: 3,
         },
         {
-          job_definition_id: jobs.dropoffDetect.id,
-          depends_on: [jobs.funnelCompute.id],
-          position: 4,
-        },
-        {
+          id: "recommend_node",
           job_definition_id: jobs.recommend.id,
-          depends_on: [jobs.funnelCompute.id, jobs.trendCompute.id, jobs.dropoffDetect.id],
-          position: 5,
+          depends_on: ["dropoff_detect_node"],
+          position: 4,
         },
       ],
     }),
@@ -387,7 +528,7 @@ export async function removeGlowbotPipelineResources(params: {
 
   const dags = await listDags(params.runtime);
   for (const dag of dags) {
-    if (asString(dag.name) === GLOWBOT_DAG_NAME) {
+    if (asString(dag.name) === GLOWBOT_DAG_NAME || asString(dag.name) === "glowbot_pipeline") {
       await params.runtime.callMethod("dags.delete", {
         id: asString(dag.id),
       });

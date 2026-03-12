@@ -386,5 +386,4 @@ W12 is complete only when:
 
 Detailed checkpoint validation belongs in:
 
-- `docs/validation/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_VALIDATION.md`
-
+- `docs/archive/validation/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_VALIDATION.md`

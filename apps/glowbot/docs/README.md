@@ -47,7 +47,6 @@ Status note:
 ### Workplans
 
 - [WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/workplans/WORKPLAN.md)
-- [GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/workplans/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_WORKPLAN.md)
 - [NON_EMR_ADAPTER_PARITY_WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/workplans/NON_EMR_ADAPTER_PARITY_WORKPLAN.md)
 - [IDENTITY_DB_SQLCIPHER_CUTOVER.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/workplans/IDENTITY_DB_SQLCIPHER_CUTOVER.md)
 
@@ -66,6 +65,8 @@ Archived note:
   in [docs/archive/workplans](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/archive/workplans)
 - the focused synthetic deployed rehearsal note is complete and now belongs in
   [docs/archive/workplans](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/archive/workplans)
+- the focused derived-output materialization note is complete and now belongs
+  in [docs/archive/workplans](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/archive/workplans)
 - the adapter-package install cutovers are complete and archived inside each
   adapter package; the active non-EMR workplan now tracks only live credential
   validation for first-clinic readiness
@@ -73,7 +74,6 @@ Archived note:
 ### Validation
 
 - [VALIDATION_LADDER.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/validation/VALIDATION_LADDER.md)
-- [GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_VALIDATION.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/validation/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_VALIDATION.md)
 - [LIVE_CREDENTIAL_CUTOVER_RUNBOOK.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/validation/LIVE_CREDENTIAL_CUTOVER_RUNBOOK.md)
 
 ### Proposals

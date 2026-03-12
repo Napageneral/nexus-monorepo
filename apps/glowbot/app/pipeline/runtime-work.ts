@@ -7,6 +7,9 @@ import {
 type RuntimeRow = Record<string, unknown>;
 
 const GLOWBOT_RECORD_INGESTED_EVENT_TYPE = "record.ingested";
+const GLOWBOT_RECORD_MATCHES = new Set(
+  GLOWBOT_METRIC_RECORD_PLATFORMS.map((platform) => desiredMatchJson(platform)),
+);
 
 function asRecord(value: unknown): RuntimeRow {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -132,12 +135,12 @@ export async function ensureGlowbotRuntimeWork(params: {
 export async function disableGlowbotRuntimeWork(params: {
   runtime: RuntimeMethodCaller;
 }): Promise<void> {
-  const jobDefinitionId = await findMetricExtractJobDefinitionId(params.runtime);
-  if (!jobDefinitionId) {
-    return;
-  }
-  const subscriptions = await listSubscriptions(params.runtime, jobDefinitionId);
+  const subscriptions = await listSubscriptions(params.runtime);
   for (const subscription of subscriptions) {
+    const matchJson = asString(subscription.match_json);
+    if (!GLOWBOT_RECORD_MATCHES.has(matchJson)) {
+      continue;
+    }
     if (asInt(subscription.enabled) !== 0) {
       await params.runtime.callMethod("events.subscriptions.update", {
         id: asString(subscription.id),
@@ -150,12 +153,12 @@ export async function disableGlowbotRuntimeWork(params: {
 export async function removeGlowbotRuntimeWork(params: {
   runtime: RuntimeMethodCaller;
 }): Promise<void> {
-  const jobDefinitionId = await findMetricExtractJobDefinitionId(params.runtime);
-  if (!jobDefinitionId) {
-    return;
-  }
-  const subscriptions = await listSubscriptions(params.runtime, jobDefinitionId);
+  const subscriptions = await listSubscriptions(params.runtime);
   for (const subscription of subscriptions) {
+    const matchJson = asString(subscription.match_json);
+    if (!GLOWBOT_RECORD_MATCHES.has(matchJson)) {
+      continue;
+    }
     await params.runtime.callMethod("events.subscriptions.delete", {
       id: asString(subscription.id),
     });

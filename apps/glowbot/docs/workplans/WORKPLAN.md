@@ -536,16 +536,14 @@ Exit criteria:
 
 ---
 
-## W12. Persisted Derived Outputs And DAG Automation 🟡
+## W12. Persisted Derived Outputs And DAG Automation ✅
 
-Persisted higher-level observations remain future work, but they are part of
-the target-state parity plan and must be represented honestly.
+Persisted higher-level observations are now materially landed under the
+canonical Nex work runtime while clinic reads intentionally remain on-demand.
 
-Focused detail lives in:
+Canonical detail lives in:
 
 - [GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/specs/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION.md)
-- [GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/workplans/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_WORKPLAN.md)
-- [GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_VALIDATION.md](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/validation/GLOWBOT_DERIVED_OUTPUT_MATERIALIZATION_VALIDATION.md)
 
 Scope:
 
@@ -569,10 +567,25 @@ Scope:
 
 Current state:
 
-- the March 10 Nex validation packet no longer supports treating DAG/schedule
-  execution as an upstream blocker by default
-- the remaining work in this tranche is GlowBot-owned implementation and
-  validation against the landed Nex work runtime
+- derived element definitions are registered for:
+  - `funnel_snapshot`
+  - `trend_delta`
+  - `dropoff_analysis`
+  - `recommendation`
+- `metric_extract` now triggers a dedicated derived-output DAG rather than
+  serving as the only durable GlowBot pipeline stage
+- `funnel_compute`, `trend_compute`, `dropoff_detect`, and `recommend` are
+  real job scripts
+- derived outputs now persist canonically into nex memory with provenance links
+  and recommendation supersession
+- deployed and local runtime validation now prove:
+  - DAG advancement through downstream node execution
+  - schedule-driven refresh through `schedules.trigger`
+  - parity against the current on-demand read model
+- the focused W12 execution notes are now historical and belong in
+  [docs/archive/workplans](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/archive/workplans)
+  and
+  [docs/archive/validation](/Users/tyler/nexus/home/projects/nexus/apps/glowbot/docs/archive/validation)
 
 Important boundary:
 
@@ -585,7 +598,7 @@ Exit criteria:
 
 - derived outputs are persisted canonically
 - provenance is explainable
-- clinic read surfaces can rely on persisted derived outputs where intended
+- the materialized outputs are proven against the current on-demand read model
 
 ---
 
@@ -667,7 +680,7 @@ Exit criteria:
 | 10 | W9 Admin surface cutover | partial |
 | 11 | W10 Benchmark network implementation | complete |
 | 12 | W11 Clinic app hub integration cutover | complete |
-| 13 | W12 Persisted derived outputs and DAG automation | open |
+| 13 | W12 Persisted derived outputs and DAG automation | complete |
 | 14 | W13A Synthetic deployed rehearsal | complete |
 | 15 | W13 Live clinic cutover | pending |
 

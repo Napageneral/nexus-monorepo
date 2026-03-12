@@ -1,4 +1,5 @@
 import type { JobScriptContext } from "../../../../../nex/src/nex/control-plane/server-work.js";
+import { GLOWBOT_DERIVED_OUTPUT_DAG_NAME } from "../constants.js";
 
 type MetricExtractJobInput = {
   clinicEntityId?: string;
@@ -222,15 +223,60 @@ async function loadCanonicalRecord(
   return asRecord(result.record);
 }
 
+async function findDerivedOutputDagId(runtime: JobScriptContext["runtime"]): Promise<string | null> {
+  const result = asRecord(await runtime.callMethod("dags.list", {}));
+  const dags = Array.isArray(result.dags)
+    ? result.dags.filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry))
+    : [];
+  const match = dags.find((dag) => asString(asRecord(dag).name) === GLOWBOT_DERIVED_OUTPUT_DAG_NAME);
+  return match ? asString(asRecord(match).id) || null : null;
+}
+
+async function triggerDerivedOutputDag(params: {
+  ctx: JobScriptContext;
+  clinicIds: string[];
+  touchedDates: string[];
+  reason: "schedule" | "metric_change";
+}): Promise<string | undefined> {
+  const dagDefinitionId = await findDerivedOutputDagId(params.ctx.runtime);
+  if (!dagDefinitionId) {
+    params.ctx.log.warn(`GlowBot derived-output DAG "${GLOWBOT_DERIVED_OUTPUT_DAG_NAME}" is not registered`);
+    return undefined;
+  }
+  const started = asRecord(
+    await params.ctx.runtime.callMethod("dags.runs.start", {
+      dag_definition_id: dagDefinitionId,
+      created_by: "glowbot",
+      parameters: {
+        clinicIds: params.clinicIds,
+        touchedDates: params.touchedDates,
+        reason: params.reason,
+      },
+    }),
+  );
+  return asString(asRecord(started.run).id) || undefined;
+}
+
 export async function handler(ctx: JobScriptContext): Promise<Record<string, unknown>> {
   const input = parseInput(ctx.input);
   if (!input.event) {
+    const triggeredDerivedDagRunId = await triggerDerivedOutputDag({
+      ctx,
+      clinicIds: [],
+      touchedDates: [],
+      reason: "schedule",
+    });
     return {
+      status: "ok",
       created: 0,
       updated: 0,
       skipped: 0,
       rejected: 0,
       processed: 0,
+      metricElementIds: [],
+      clinicIds: [],
+      touchedDates: [],
+      triggeredDerivedDagRunId,
     };
   }
 
@@ -238,6 +284,7 @@ export async function handler(ctx: JobScriptContext): Promise<Record<string, unk
   let updated = 0;
   let skipped = 0;
   let rejected = 0;
+  const metricElementIds: string[] = [];
   const record = await loadCanonicalRecord(ctx.runtime, input.event);
   const candidate = record
     ? toMetricCandidate({
@@ -251,39 +298,60 @@ export async function handler(ctx: JobScriptContext): Promise<Record<string, unk
   } else {
     const existing = await findExistingMetricElement(ctx.runtime, candidate);
     if (!existing) {
-      await ctx.runtime.callMethod("memory.elements.create", {
+      const createdResult = asRecord(await ctx.runtime.callMethod("memory.elements.create", {
         type: "metric",
         content: candidate.content,
         entityId: candidate.entityId,
         asOf: candidate.asOf,
         sourceEventId: candidate.sourceEventId,
         metadata: candidate.metadata,
-      });
+      }));
+      metricElementIds.push(asString(asRecord(createdResult.element).id));
       created += 1;
     } else {
       const existingMetadata = parseRecordMetadata(existing.metadata);
       const existingValue = asNumber(existingMetadata.metric_value);
       if (existingValue !== null && existingValue === candidate.metricValue) {
+        metricElementIds.push(asString(existing.id));
         skipped += 1;
       } else {
-        await ctx.runtime.callMethod("memory.elements.update", {
+        const updatedResult = asRecord(await ctx.runtime.callMethod("memory.elements.update", {
           id: asString(existing.id),
           content: candidate.content,
           asOf: candidate.asOf,
           sourceEventId: candidate.sourceEventId,
           metadata: candidate.metadata,
-        });
+        }));
+        metricElementIds.push(asString(asRecord(updatedResult.element).id));
         updated += 1;
       }
     }
   }
 
+  const clinicIds = candidate?.clinicId ? [candidate.clinicId] : [];
+  const touchedDates = candidate?.date ? [candidate.date] : [];
+  const triggeredDerivedDagRunId =
+    created > 0 || updated > 0
+      ? await triggerDerivedOutputDag({
+          ctx,
+          clinicIds,
+          touchedDates,
+          reason: "metric_change",
+        })
+      : undefined;
+
   return {
+    status: "ok",
     created,
     updated,
     skipped,
     rejected,
     processed: 1,
+    recordId: candidate?.sourceEventId ?? null,
+    metricElementIds,
+    clinicIds,
+    touchedDates,
+    triggeredDerivedDagRunId,
   };
 }
 
