@@ -11,7 +11,9 @@ import { HetznerProvider, renderCloudInitScript, type CloudProvider } from "./cl
 import {
   installPackageViaRuntimeHttp,
   installPackageViaSSH,
+  uninstallPackageViaRuntimeHttp,
   uninstallPackageViaSSH,
+  upgradePackageViaRuntimeHttp,
   upgradePackageViaSSH,
 } from "./ssh-helper.js";
 import { createMcpServer, type McpContext } from "./mcp-server.js";
@@ -226,6 +228,16 @@ function readSession(params: {
   }
 
   return null;
+}
+
+function ensurePersistentSession(params: {
+  session: SessionRecord;
+  sessions: SessionStore;
+}): SessionRecord {
+  if (!params.session.id.startsWith("api-token:")) {
+    return params.session;
+  }
+  return params.sessions.createSession(params.session.principal);
 }
 
 type ManagedConnectionScope = "server" | "app";
@@ -795,7 +807,15 @@ function resolveRuntimeDescriptor(
   const runtimeHttpBaseUrl = `${runtimeBaseUrl}/runtime`;
   const runtimeWsUrl = tenant.runtimeWsUrl?.trim()
     ? tenant.runtimeWsUrl.trim()
-    : new URL("/runtime/ws", `${runtimeBaseUrl}/`).toString();
+    : (() => {
+        const wsUrl = new URL("/runtime/ws", `${runtimeBaseUrl}/`);
+        if (wsUrl.protocol === "http:") {
+          wsUrl.protocol = "ws:";
+        } else if (wsUrl.protocol === "https:") {
+          wsUrl.protocol = "wss:";
+        }
+        return wsUrl.toString();
+      })();
   const runtimeSseUrl = tenant.runtimeSseUrl?.trim()
     ? tenant.runtimeSseUrl.trim()
     : new URL("/runtime/api/events/stream", `${runtimeBaseUrl}/`).toString();
@@ -3521,6 +3541,10 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     if (!fs.existsSync(tarballPath)) {
       return false;
     }
+    return shouldUseDirectRuntimeOperatorApi(server);
+  }
+
+  function shouldUseDirectRuntimeOperatorApi(server: ServerRecord): boolean {
     const runtimeUrl = resolveServerOperatorRuntimeUrl(server);
     if (!runtimeUrl) {
       return false;
@@ -3622,22 +3646,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       });
       return { ok: false, error: "server_not_running", status: 409 };
     }
-    const operatorTarget = resolveServerOperatorHost(server);
-    if (!operatorTarget) {
-      store.upsertServerPackageInstall({
-        serverId: params.serverId,
-        kind: "app",
-        packageId: params.appId,
-        status: "failed",
-        entryPath,
-        desiredReleaseId: variant.releaseId,
-        desiredVersion: variant.version,
-        lastError: "server_no_private_ip",
-        installReason: params.source,
-      });
-      return { ok: false, error: "server_no_private_ip", status: 500 };
-    }
-
     // 5. Resolve package path
     if (!fs.existsSync(variant.tarballPath)) {
       store.upsertServerPackageInstall({
@@ -3654,18 +3662,33 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       return { ok: false, error: "package_not_found", detail: variant.tarballPath, status: 404 };
     }
 
-    // 6. SSH/SCP staging + runtime operator package install API
-    const result = await installPackageViaSSH({
-      host: operatorTarget.host,
-      privateKeyPath: config.vpsAccess.sshKeyPath,
-      localTarballPath: variant.tarballPath,
-      kind: "app",
-      packageId: params.appId,
-      version: variant.version,
-      releaseId: variant.releaseId,
-      runtimePort: operatorTarget.runtimePort,
-      runtimeAuthToken: server.runtimeAuthToken || "",
-    });
+    const result = shouldUseDirectRuntimeInstall(server, variant.tarballPath)
+      ? await installPackageViaRuntimeHttp({
+          runtimeUrl: resolveServerOperatorRuntimeUrl(server) ?? "",
+          localTarballPath: variant.tarballPath,
+          kind: "app",
+          packageId: params.appId,
+          version: variant.version,
+          releaseId: variant.releaseId,
+          runtimeAuthToken: server.runtimeAuthToken || "",
+        })
+      : await (async () => {
+          const operatorTarget = resolveServerOperatorHost(server);
+          if (!operatorTarget) {
+            return { ok: false as const, error: "server_no_private_ip", detail: "" };
+          }
+          return await installPackageViaSSH({
+            host: operatorTarget.host,
+            privateKeyPath: config.vpsAccess.sshKeyPath,
+            localTarballPath: variant.tarballPath,
+            kind: "app",
+            packageId: params.appId,
+            version: variant.version,
+            releaseId: variant.releaseId,
+            runtimePort: operatorTarget.runtimePort,
+            runtimeAuthToken: server.runtimeAuthToken || "",
+          });
+        })();
 
     // 7. Update status
     if (result.ok) {
@@ -3856,11 +3879,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     if (!server) {
       return { ok: false, error: "server_not_found", status: 404 };
     }
-    const operatorTarget = resolveServerOperatorHost(server);
-    if (!operatorTarget) {
-      return { ok: false, error: "server_no_private_ip", status: 500 };
-    }
-
     store.upsertServerPackageInstall({
       serverId: params.serverId,
       kind: "app",
@@ -3869,14 +3887,27 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       installReason: "manual",
     });
 
-    const result = await uninstallPackageViaSSH({
-      host: operatorTarget.host,
-      privateKeyPath: config.vpsAccess.sshKeyPath,
-      kind: "app",
-      packageId: params.appId,
-      runtimePort: operatorTarget.runtimePort,
-      runtimeAuthToken: server.runtimeAuthToken || "",
-    });
+    const result = shouldUseDirectRuntimeOperatorApi(server)
+      ? await uninstallPackageViaRuntimeHttp({
+          runtimeUrl: resolveServerOperatorRuntimeUrl(server) ?? "",
+          kind: "app",
+          packageId: params.appId,
+          runtimeAuthToken: server.runtimeAuthToken || "",
+        })
+      : await (async () => {
+          const operatorTarget = resolveServerOperatorHost(server);
+          if (!operatorTarget) {
+            return { ok: false as const, error: "server_no_private_ip", detail: "" };
+          }
+          return await uninstallPackageViaSSH({
+            host: operatorTarget.host,
+            privateKeyPath: config.vpsAccess.sshKeyPath,
+            kind: "app",
+            packageId: params.appId,
+            runtimePort: operatorTarget.runtimePort,
+            runtimeAuthToken: server.runtimeAuthToken || "",
+          });
+        })();
 
     if (!result.ok) {
       console.error(`[app-uninstall] Failed to uninstall ${params.appId} from ${params.serverId}: ${result.error}`);
@@ -3902,6 +3933,83 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     return { ok: true };
   }
 
+  async function uninstallAdapterFromServer(params: {
+    serverId: string;
+    adapterId: string;
+  }): Promise<
+    | { ok: true }
+    | { ok: false; error: string; detail?: string; status?: number }
+  > {
+    const existing = store.getServerPackageInstall(params.serverId, "adapter", params.adapterId);
+    if (!existing || existing.status !== "installed") {
+      return { ok: false, error: "not_installed", status: 404 };
+    }
+
+    const server = store.getServer(params.serverId);
+    if (!server) {
+      return { ok: false, error: "server_not_found", status: 404 };
+    }
+    store.upsertServerPackageInstall({
+      serverId: params.serverId,
+      kind: "adapter",
+      packageId: params.adapterId,
+      status: "uninstalling",
+      desiredReleaseId: existing.desiredReleaseId ?? undefined,
+      desiredVersion: existing.desiredVersion ?? undefined,
+      activeReleaseId: existing.activeReleaseId ?? undefined,
+      activeVersion: existing.activeVersion ?? undefined,
+      installReason: "manual",
+    });
+
+    const result = shouldUseDirectRuntimeOperatorApi(server)
+      ? await uninstallPackageViaRuntimeHttp({
+          runtimeUrl: resolveServerOperatorRuntimeUrl(server) ?? "",
+          kind: "adapter",
+          packageId: params.adapterId,
+          runtimeAuthToken: server.runtimeAuthToken || "",
+        })
+      : await (async () => {
+          const operatorTarget = resolveServerOperatorHost(server);
+          if (!operatorTarget) {
+            return { ok: false as const, error: "server_no_private_ip", detail: "" };
+          }
+          return await uninstallPackageViaSSH({
+            host: operatorTarget.host,
+            privateKeyPath: config.vpsAccess.sshKeyPath,
+            kind: "adapter",
+            packageId: params.adapterId,
+            runtimePort: operatorTarget.runtimePort,
+            runtimeAuthToken: server.runtimeAuthToken || "",
+          });
+        })();
+
+    if (!result.ok) {
+      store.upsertServerPackageInstall({
+        serverId: params.serverId,
+        kind: "adapter",
+        packageId: params.adapterId,
+        status: "failed",
+        desiredReleaseId: existing.desiredReleaseId ?? undefined,
+        desiredVersion: existing.desiredVersion ?? undefined,
+        activeReleaseId: existing.activeReleaseId ?? undefined,
+        activeVersion: existing.activeVersion ?? undefined,
+        installReason: "manual",
+        lastError: `${result.error}: ${result.detail ?? ""}`,
+      });
+      return { ok: false, error: result.error, detail: result.detail, status: 502 };
+    }
+
+    store.upsertServerPackageInstall({
+      serverId: params.serverId,
+      kind: "adapter",
+      packageId: params.adapterId,
+      status: "not_installed",
+      installReason: "manual",
+      lastError: "",
+    });
+    return { ok: true };
+  }
+
   async function upgradeAppOnServer(params: {
     serverId: string;
     appId: string;
@@ -3919,10 +4027,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     const server = store.getServer(params.serverId);
     if (!server) {
       return { ok: false, error: "server_not_found", status: 404 };
-    }
-    const operatorTarget = resolveServerOperatorHost(server);
-    if (!operatorTarget) {
-      return { ok: false, error: "server_no_private_ip", status: 500 };
     }
     const variant = store.getPackageReleaseVariant("app", params.appId, params.targetVersion);
     if (!variant) {
@@ -3946,17 +4050,33 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       installReason: params.source,
     });
 
-    const result = await upgradePackageViaSSH({
-      host: operatorTarget.host,
-      privateKeyPath: config.vpsAccess.sshKeyPath,
-      localTarballPath: variant.tarballPath,
-      kind: "app",
-      packageId: params.appId,
-      targetVersion: variant.version,
-      releaseId: variant.releaseId,
-      runtimePort: operatorTarget.runtimePort,
-      runtimeAuthToken: server.runtimeAuthToken || "",
-    });
+    const result = shouldUseDirectRuntimeInstall(server, variant.tarballPath)
+      ? await upgradePackageViaRuntimeHttp({
+          runtimeUrl: resolveServerOperatorRuntimeUrl(server) ?? "",
+          localTarballPath: variant.tarballPath,
+          kind: "app",
+          packageId: params.appId,
+          targetVersion: variant.version,
+          releaseId: variant.releaseId,
+          runtimeAuthToken: server.runtimeAuthToken || "",
+        })
+      : await (async () => {
+          const operatorTarget = resolveServerOperatorHost(server);
+          if (!operatorTarget) {
+            return { ok: false as const, error: "server_no_private_ip", detail: "" };
+          }
+          return await upgradePackageViaSSH({
+            host: operatorTarget.host,
+            privateKeyPath: config.vpsAccess.sshKeyPath,
+            localTarballPath: variant.tarballPath,
+            kind: "app",
+            packageId: params.appId,
+            targetVersion: variant.version,
+            releaseId: variant.releaseId,
+            runtimePort: operatorTarget.runtimePort,
+            runtimeAuthToken: server.runtimeAuthToken || "",
+          });
+        })();
 
     if (!result.ok) {
       store.upsertServerPackageInstall({
@@ -3984,6 +4104,105 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       activeReleaseId: variant.releaseId,
       activeVersion: variant.version,
       entryPath: defaultEntryPathForApp(params.appId),
+      installReason: params.source,
+      lastError: "",
+    });
+    return { ok: true, version: variant.version };
+  }
+
+  async function upgradeAdapterOnServer(params: {
+    serverId: string;
+    adapterId: string;
+    targetVersion: string;
+    source: "manual" | "api";
+  }): Promise<
+    | { ok: true; version: string }
+    | { ok: false; error: string; detail?: string; status?: number }
+  > {
+    const existing = store.getServerPackageInstall(params.serverId, "adapter", params.adapterId);
+    if (!existing || existing.status !== "installed") {
+      return { ok: false, error: "not_installed", status: 404 };
+    }
+
+    const server = store.getServer(params.serverId);
+    if (!server) {
+      return { ok: false, error: "server_not_found", status: 404 };
+    }
+    const variant = store.getPackageReleaseVariant("adapter", params.adapterId, params.targetVersion);
+    if (!variant) {
+      return {
+        ok: false,
+        error: "package_not_found",
+        detail: `${params.adapterId}@${params.targetVersion}`,
+        status: 404,
+      };
+    }
+
+    store.upsertServerPackageInstall({
+      serverId: params.serverId,
+      kind: "adapter",
+      packageId: params.adapterId,
+      status: "installing",
+      desiredReleaseId: variant.releaseId,
+      desiredVersion: variant.version,
+      activeReleaseId: existing.activeReleaseId ?? undefined,
+      activeVersion: existing.activeVersion ?? undefined,
+      installReason: params.source,
+    });
+
+    const result = shouldUseDirectRuntimeInstall(server, variant.tarballPath)
+      ? await upgradePackageViaRuntimeHttp({
+          runtimeUrl: resolveServerOperatorRuntimeUrl(server) ?? "",
+          localTarballPath: variant.tarballPath,
+          kind: "adapter",
+          packageId: params.adapterId,
+          targetVersion: variant.version,
+          releaseId: variant.releaseId,
+          runtimeAuthToken: server.runtimeAuthToken || "",
+        })
+      : await (async () => {
+          const operatorTarget = resolveServerOperatorHost(server);
+          if (!operatorTarget) {
+            return { ok: false as const, error: "server_no_private_ip", detail: "" };
+          }
+          return await upgradePackageViaSSH({
+            host: operatorTarget.host,
+            privateKeyPath: config.vpsAccess.sshKeyPath,
+            localTarballPath: variant.tarballPath,
+            kind: "adapter",
+            packageId: params.adapterId,
+            targetVersion: variant.version,
+            releaseId: variant.releaseId,
+            runtimePort: operatorTarget.runtimePort,
+            runtimeAuthToken: server.runtimeAuthToken || "",
+          });
+        })();
+
+    if (!result.ok) {
+      store.upsertServerPackageInstall({
+        serverId: params.serverId,
+        kind: "adapter",
+        packageId: params.adapterId,
+        status: "failed",
+        desiredReleaseId: variant.releaseId,
+        desiredVersion: variant.version,
+        activeReleaseId: existing.activeReleaseId ?? undefined,
+        activeVersion: existing.activeVersion ?? undefined,
+        installReason: params.source,
+        lastError: `${result.error}: ${result.detail ?? ""}`,
+      });
+      return { ok: false, error: result.error, detail: result.detail, status: 502 };
+    }
+
+    store.upsertServerPackageInstall({
+      serverId: params.serverId,
+      kind: "adapter",
+      packageId: params.adapterId,
+      status: "installed",
+      desiredReleaseId: variant.releaseId,
+      desiredVersion: variant.version,
+      activeReleaseId: variant.releaseId,
+      activeVersion: variant.version,
       installReason: params.source,
       lastError: "",
     });
@@ -6451,6 +6670,99 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           adapter_id: adapterId,
           install_status: install?.status ?? "installed",
           version: installed.version,
+        });
+        return;
+      }
+
+      const serverAdapterUpgradeRouteMatch = pathname.match(
+        /^\/api\/servers\/([^/]+)\/adapters\/([^/]+)\/upgrade$/,
+      );
+      if (method === "POST" && serverAdapterUpgradeRouteMatch) {
+        const session = readSession({ req, config, sessions, store });
+        if (!session) {
+          sendJson(res, 401, { ok: false, error: "unauthorized" });
+          return;
+        }
+        const serverId = decodeURIComponent(serverAdapterUpgradeRouteMatch[1] ?? "").trim();
+        const adapterId = decodeURIComponent(serverAdapterUpgradeRouteMatch[2] ?? "").trim();
+        if (!serverId || !adapterId) {
+          sendJson(res, 400, { ok: false, error: "invalid_upgrade_request" });
+          return;
+        }
+        const access = resolveServerAdminAccess({ session, serverId });
+        if (!access.ok) {
+          sendJson(res, access.status, { ok: false, error: access.error });
+          return;
+        }
+        const body = (await readJsonBody<{ target_version?: string }>(req)) ?? {};
+        const targetVersion =
+          typeof body.target_version === "string" ? body.target_version.trim() : "";
+        if (!targetVersion) {
+          sendJson(res, 400, { ok: false, error: "missing_target_version" });
+          return;
+        }
+        const upgraded = await upgradeAdapterOnServer({
+          serverId,
+          adapterId,
+          targetVersion,
+          source: "manual",
+        });
+        if (!upgraded.ok) {
+          sendJson(res, upgraded.status ?? 500, {
+            ok: false,
+            error: upgraded.error,
+            detail: upgraded.detail ?? null,
+            adapter_id: adapterId,
+            server_id: serverId,
+          });
+          return;
+        }
+        sendJson(res, 200, {
+          ok: true,
+          server_id: serverId,
+          adapter_id: adapterId,
+          install_status: "installed",
+          version: upgraded.version,
+        });
+        return;
+      }
+
+      if (method === "DELETE" && serverAdapterInstallRouteMatch) {
+        const session = readSession({ req, config, sessions, store });
+        if (!session) {
+          sendJson(res, 401, { ok: false, error: "unauthorized" });
+          return;
+        }
+        const serverId = decodeURIComponent(serverAdapterInstallRouteMatch[1] ?? "").trim();
+        const adapterId = decodeURIComponent(serverAdapterInstallRouteMatch[2] ?? "").trim();
+        if (!serverId || !adapterId) {
+          sendJson(res, 400, { ok: false, error: "invalid_uninstall_request" });
+          return;
+        }
+        const access = resolveServerAdminAccess({ session, serverId });
+        if (!access.ok) {
+          sendJson(res, access.status, { ok: false, error: access.error });
+          return;
+        }
+        const uninstalled = await uninstallAdapterFromServer({
+          serverId,
+          adapterId,
+        });
+        if (!uninstalled.ok) {
+          sendJson(res, uninstalled.status ?? 500, {
+            ok: false,
+            error: uninstalled.error,
+            detail: uninstalled.detail ?? null,
+            adapter_id: adapterId,
+            server_id: serverId,
+          });
+          return;
+        }
+        sendJson(res, 200, {
+          ok: true,
+          server_id: serverId,
+          adapter_id: adapterId,
+          install_status: "not_installed",
         });
         return;
       }
@@ -9207,8 +9519,8 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       }
 
       if (method === "POST" && pathname === "/api/runtime/token") {
-        const session = readSession({ req, config, sessions, store });
-        if (!session) {
+        const rawSession = readSession({ req, config, sessions, store });
+        if (!rawSession) {
           sendJson(res, 401, {
             ok: false,
             error: "unauthorized",
@@ -9220,7 +9532,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             req,
             res,
             limiter: tokenEndpointLimiter,
-            key: `token:endpoint:${session.id}`,
+            key: `token:endpoint:${rawSession.id}`,
             error: "token_rate_limited",
           })
         ) {
@@ -9232,7 +9544,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           (typeof body.server_id === "string" ? body.server_id.trim() : "") ||
           undefined;
         const context = resolveActiveServerContext({
-          session,
+          session: rawSession,
           requestedServerId,
         });
         if (!context.ok) {
@@ -9243,14 +9555,18 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           });
           return;
         }
-        const refreshToken = sessions.issueRefreshToken(context.session.id);
+        const persistentSession = ensurePersistentSession({
+          session: context.session,
+          sessions,
+        });
+        const refreshToken = sessions.issueRefreshToken(persistentSession.id);
         const tenant = context.serverRuntime;
         sendJson(res, 200, {
           ok: true,
           ...buildRuntimeTokenResponse({
             config,
             req,
-            session: context.session,
+            session: persistentSession,
             refreshToken,
             serverId: context.server.serverId,
             tenant,

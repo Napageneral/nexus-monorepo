@@ -984,9 +984,11 @@ describe("frontdoor scaffold", () => {
     expect(mintBody.tenant_id).toBe("tenant-dev");
     expect(mintBody.runtime?.server_id).toBe("tenant-dev");
     expect(mintBody.runtime?.tenant_id).toBe("tenant-dev");
-    expect(mintBody.runtime?.http_base_url).toBe("https://tenant-dev.nexushub.sh/runtime");
-    expect(mintBody.runtime?.ws_url).toBe("wss://tenant-dev.nexushub.sh/runtime/ws");
-    expect(mintBody.runtime?.sse_url).toBe("https://tenant-dev.nexushub.sh/runtime/api/events/stream");
+    expect(mintBody.runtime?.http_base_url).toBe(`${runtime.origin}/runtime`);
+    expect(mintBody.runtime?.ws_url).toBe(
+      `${runtime.origin.replace(/^http/i, "ws")}/runtime/ws`,
+    );
+    expect(mintBody.runtime?.sse_url).toBe(`${runtime.origin}/runtime/api/events/stream`);
 
     const refreshResp = await fetch(`${frontdoorRunning.origin}/api/runtime/token/refresh`, {
       method: "POST",
@@ -1772,7 +1774,7 @@ describe("frontdoor scaffold", () => {
     };
     expect(tokenBody.tenant_id.startsWith("t-")).toBe(true);
     expect(tokenBody.runtime?.server_id).toBe("srv-test-2");
-    expect(tokenBody.runtime?.http_base_url).toBe("https://t-tenant-test-2.nexushub.sh/runtime");
+    expect(tokenBody.runtime?.http_base_url).toBe(`${runtimeSecondary.origin}/runtime`);
 
     const badServerResp = await fetch(`${frontdoorRunning.origin}/api/runtime/token`, {
       method: "POST",
@@ -1854,6 +1856,95 @@ describe("frontdoor scaffold", () => {
     const forbiddenBody = (await forbiddenResp.json()) as { ok?: boolean; error?: string };
     expect(forbiddenBody.ok).toBe(false);
     expect(forbiddenBody.error).toBe("operator_forbidden");
+  });
+
+  it("mints a runtime token with a Frontdoor API token when server_id is provided", async () => {
+    const runtimePrimary = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true,"runtime":"primary"}');
+      }),
+    );
+    const runtimeSecondary = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true,"runtime":"secondary"}');
+      }),
+    );
+    const frontdoor = createFrontdoorServer({
+      config: baseConfig(runtimePrimary.origin),
+    });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const createResp = await fetch(`${frontdoorRunning.origin}/api/servers`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        server_id: "srv-api-token-runtime",
+        display_name: "API Token Runtime Server",
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    withStore(frontdoor.config, (store) => {
+      const server = store.getServer("srv-api-token-runtime");
+      expect(server).toBeTruthy();
+      if (!server) {
+        throw new Error("missing_created_server");
+      }
+      store.updateServer("srv-api-token-runtime", {
+        privateIp: "127.0.0.1",
+        runtimePort: Number(new URL(runtimeSecondary.origin).port || "80"),
+      });
+      frontdoor.config.tenants.set(server.tenantId, {
+        id: server.tenantId,
+        runtimeUrl: runtimeSecondary.origin,
+        runtimePublicBaseUrl: runtimeSecondary.origin,
+      });
+    });
+
+    const tokenCreateResp = await fetch(`${frontdoorRunning.origin}/api/tokens/create`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        display_name: "Runtime Mint Test",
+      }),
+    });
+    expect(tokenCreateResp.status).toBe(200);
+    const tokenCreateBody = (await tokenCreateResp.json()) as {
+      token?: string;
+    };
+    expect(tokenCreateBody.token).toBeTruthy();
+
+    const runtimeTokenResp = await fetch(`${frontdoorRunning.origin}/api/runtime/token`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${tokenCreateBody.token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        server_id: "srv-api-token-runtime",
+      }),
+    });
+    expect(runtimeTokenResp.status).toBe(200);
+    const runtimeTokenBody = (await runtimeTokenResp.json()) as {
+      ok?: boolean;
+      refresh_token?: string;
+      runtime?: { server_id?: string; http_base_url?: string };
+    };
+    expect(runtimeTokenBody.ok).toBe(true);
+    expect(runtimeTokenBody.refresh_token).toBeTruthy();
+    expect(runtimeTokenBody.runtime?.server_id).toBe("srv-api-token-runtime");
+    expect(runtimeTokenBody.runtime?.http_base_url).toBe(`${runtimeSecondary.origin}/runtime`);
   });
 
   it("supports server usage summary and protects billing summary for admins", async () => {
@@ -3448,6 +3539,142 @@ describe("frontdoor scaffold", () => {
       runtimeAuthToken: "runtime-auth-token-local",
     });
     expect(sshInstallSpy).not.toHaveBeenCalled();
+  });
+
+  it("upgrades an installed adapter through the public Frontdoor route", async () => {
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ ok: true }));
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    stageFakePackage(config, "nexus-adapter-confluence", "0.1.0", "adapter");
+    stageFakePackage(config, "nexus-adapter-confluence", "0.1.1", "adapter");
+    const frontdoor = createFrontdoorServer({ config });
+    withStore(config, (store) => {
+      const server = store.getServer("tenant-dev");
+      expect(server).toBeTruthy();
+      if (!server) {
+        throw new Error("missing_server");
+      }
+      store.updateServer(server.serverId, {
+        runtimeAuthToken: "runtime-auth-token-local",
+      });
+      store.upsertServerPackageInstall({
+        serverId: "tenant-dev",
+        kind: "adapter",
+        packageId: "nexus-adapter-confluence",
+        status: "installed",
+        desiredReleaseId: "rel-nexus-adapter-confluence-0.1.0",
+        desiredVersion: "0.1.0",
+        activeReleaseId: "rel-nexus-adapter-confluence-0.1.0",
+        activeVersion: "0.1.0",
+        installReason: "manual",
+      });
+    });
+    const upgradeSpy = vi.spyOn(sshHelper, "upgradePackageViaSSH").mockResolvedValue({ ok: true });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const response = await fetch(
+      `${frontdoorRunning.origin}/api/servers/tenant-dev/adapters/nexus-adapter-confluence/upgrade`,
+      {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ target_version: "0.1.1" }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { ok: boolean; version: string };
+    expect(body.ok).toBe(true);
+    expect(body.version).toBe("0.1.1");
+    expect(upgradeSpy).toHaveBeenCalledTimes(1);
+    expect(upgradeSpy.mock.calls[0]?.[0]).toMatchObject({
+      kind: "adapter",
+      packageId: "nexus-adapter-confluence",
+      targetVersion: "0.1.1",
+      runtimeAuthToken: "runtime-auth-token-local",
+    });
+
+    const statusResp = await fetch(
+      `${frontdoorRunning.origin}/api/servers/tenant-dev/adapters/nexus-adapter-confluence/install-status`,
+      { headers: { cookie } },
+    );
+    expect(statusResp.status).toBe(200);
+    const statusBody = (await statusResp.json()) as {
+      ok: boolean;
+      install_status: string;
+      active_version: string | null;
+    };
+    expect(statusBody.ok).toBe(true);
+    expect(statusBody.install_status).toBe("installed");
+    expect(statusBody.active_version).toBe("0.1.1");
+  });
+
+  it("uninstalls an installed adapter through the public Frontdoor route", async () => {
+    const config = baseConfig("http://127.0.0.1:18789");
+    const frontdoor = createFrontdoorServer({ config });
+    withStore(config, (store) => {
+      const server = store.getServer("tenant-dev");
+      expect(server).toBeTruthy();
+      if (!server) {
+        throw new Error("missing_server");
+      }
+      store.updateServer(server.serverId, {
+        runtimeAuthToken: "runtime-auth-token-local",
+      });
+      store.upsertServerPackageInstall({
+        serverId: "tenant-dev",
+        kind: "adapter",
+        packageId: "nexus-adapter-confluence",
+        status: "installed",
+        desiredReleaseId: "rel-nexus-adapter-confluence-0.1.0",
+        desiredVersion: "0.1.0",
+        activeReleaseId: "rel-nexus-adapter-confluence-0.1.0",
+        activeVersion: "0.1.0",
+        installReason: "manual",
+      });
+    });
+    const uninstallSpy = vi.spyOn(sshHelper, "uninstallPackageViaSSH").mockResolvedValue({ ok: true });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const response = await fetch(
+      `${frontdoorRunning.origin}/api/servers/tenant-dev/adapters/nexus-adapter-confluence/install`,
+      {
+        method: "DELETE",
+        headers: { cookie },
+      },
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { ok: boolean; install_status: string };
+    expect(body.ok).toBe(true);
+    expect(body.install_status).toBe("not_installed");
+    expect(uninstallSpy).toHaveBeenCalledTimes(1);
+    expect(uninstallSpy.mock.calls[0]?.[0]).toMatchObject({
+      kind: "adapter",
+      packageId: "nexus-adapter-confluence",
+      runtimeAuthToken: "runtime-auth-token-local",
+    });
+
+    const statusResp = await fetch(
+      `${frontdoorRunning.origin}/api/servers/tenant-dev/adapters/nexus-adapter-confluence/install-status`,
+      { headers: { cookie } },
+    );
+    expect(statusResp.status).toBe(200);
+    const statusBody = (await statusResp.json()) as {
+      ok: boolean;
+      install_status: string;
+    };
+    expect(statusBody.ok).toBe(true);
+    expect(statusBody.install_status).toBe("not_installed");
   });
 
   it("upgrades an installed app through the package operator path", async () => {
