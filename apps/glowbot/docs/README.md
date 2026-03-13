@@ -1,5 +1,13 @@
 # GlowBot Documentation
 
+This tree owns GlowBot-specific product docs.
+
+Shared governance and platform docs live in:
+
+- [/Users/tyler/nexus/home/projects/nexus/docs/governance/spec-driven-development-workflow.md](/Users/tyler/nexus/home/projects/nexus/docs/governance/spec-driven-development-workflow.md)
+- [/Users/tyler/nexus/home/projects/nexus/nex/docs/index.md](/Users/tyler/nexus/home/projects/nexus/nex/docs/index.md)
+- [/Users/tyler/nexus/home/projects/nexus/nexus-frontdoor/docs/README.md](/Users/tyler/nexus/home/projects/nexus/nexus-frontdoor/docs/README.md)
+
 This repository follows the canonical Nexus spec-driven workflow:
 
 - `specs/` contains active target-state product and operating specs
