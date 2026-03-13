@@ -8,6 +8,7 @@ Recently archived as complete:
 
 Recently archived as historical or superseded:
 
+- [SPIKE_WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/apps/spike/docs/workplans/archive/SPIKE_WORKPLAN.md)
 - [SPIKE_ASK_SUBTREE_ORCHESTRATION_AND_FINALIZATION_RCA_2026-03-06.md](/Users/tyler/nexus/home/projects/nexus/apps/spike/docs/workplans/archive/SPIKE_ASK_SUBTREE_ORCHESTRATION_AND_FINALIZATION_RCA_2026-03-06.md)
 - [SPIKE_CODE_INTELLIGENCE_PLATFORM_WORKPLAN_2026-03-06.md](/Users/tyler/nexus/home/projects/nexus/apps/spike/docs/workplans/archive/SPIKE_CODE_INTELLIGENCE_PLATFORM_WORKPLAN_2026-03-06.md)
 - [SPIKE_CODE_INTELLIGENCE_TOOLING_WORKPLAN_2026-03-06.md](/Users/tyler/nexus/home/projects/nexus/apps/spike/docs/workplans/archive/SPIKE_CODE_INTELLIGENCE_TOOLING_WORKPLAN_2026-03-06.md)
