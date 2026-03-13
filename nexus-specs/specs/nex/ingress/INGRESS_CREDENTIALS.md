@@ -1,6 +1,6 @@
 # Ingress Credentials (API Keys + Webchat Sessions)
 
-**Status:** DESIGN
+**Status:** SUPPORTING SPEC
 **Last Updated:** 2026-02-18  
 **Related:**
 - `SINGLE_TENANT_MULTI_USER.md` (trust zones + multi-user story)
@@ -44,13 +44,13 @@ Key invariant:
     - hosted UI served from the same origin as ingress
     - hosted UI on a different origin (cookie limitations) via bearer fallback
 - **Unified IAM boundary.**
-  - Any request that can run an agent becomes a `NexusEvent` and is authorized/audited by IAM.
+  - Any request that can run an agent becomes a canonical `NexusRequest` operation and is authorized/audited by IAM. External communication ingress uses `record.ingest`.
 
 ---
 
 ## Non-Goals
 
-- OIDC / hosted operator login (control-plane AuthN). This spec only covers **ingress** (customers/integrations).
+- OIDC / hosted operator login (frontdoor AuthN). This spec only covers **ingress** (customers/integrations).
 - True multi-tenant runtime (many unrelated orgs in one daemon).
 - CAPTCHA / bot defense design (rate limits can exist, but are not specified here).
 
@@ -279,7 +279,7 @@ This is not required for AuthN, but is useful for directory queries and consiste
   - issue an `audience=ingress` token
   - store token as HttpOnly cookie by default
 - Add bearer fallback (same token model) for hosted cross-origin cases.
-- Ensure all webchat messages are normalized to `NexusEvent` and enter `nex.processEvent(...)`.
+- Ensure all webchat messages are normalized to `record.ingest` and enter the canonical request pipeline.
 
 ### Phase 2 (security hardening, still compatible)
 

@@ -1,7 +1,7 @@
 # API Design: Batch 2 — Identity, Contacts, Auth, Credentials, ACL, Groups
 
-**Status:** COMPLETE — all decisions locked
-**Last Updated:** 2026-03-03
+**Status:** REFERENCE — Batch 2 decisions preserved; active canonical identity/runtime model lives in current supporting specs
+**Last Updated:** 2026-03-08
 
 ---
 
@@ -17,7 +17,7 @@
 
 **entity_tags uses [immutable row pattern](./IMMUTABLE_ROW_PATTERN.md).** `created_at` + `deleted_at`, no UPDATEs.
 
-**entity_persona uses [immutable row pattern](./IMMUTABLE_ROW_PATTERN.md).** Persona binding history preserved.
+**entity_persona uses [immutable row pattern](./IMMUTABLE_ROW_PATTERN.md).** Persona binding history is preserved, with the persisted binding pointing at `workspace_id`. Persona remains the conceptual identity contract, but storage is workspace-backed.
 
 **Drop first_seen/last_seen.** Trivial to query from events. Applies to all tables system-wide.
 
@@ -37,8 +37,8 @@
 | `entities.merge.propose` | write | Propose a merge candidate with confidence score and evidence |
 | `entities.merge.candidates` | read | List pending merge candidates with confidence |
 | `entities.merge.resolve` | write | Approve or reject a merge candidate |
-| `entities.persona.list` | read | List persona bindings for an entity |
-| `entities.persona.set` | write | Set persona binding (immutable row insert) |
+| `entities.persona.list` | read | List workspace-backed persona bindings for an entity |
+| `entities.persona.set` | write | Set persona binding (immutable row insert referencing `workspace_id`) |
 
 ---
 
@@ -48,11 +48,11 @@
 
 ### Decisions
 
-**Massive consolidation: 8 tables → 3.** Eliminated: contact_name_observations, spaces, containers, threads, names, membership_events. Membership events are already in events.db. Name history captured via immutable row pattern.
+**Massive consolidation: 8 tables → 3.** Eliminated: contact_name_observations, spaces, containers, threads, names, membership_events. Membership records are already in records.db. Name history captured via immutable row pattern.
 
 **`contacts` uses [immutable row pattern](./IMMUTABLE_ROW_PATTERN.md).** Identity columns: `(platform, space_id, contact_id)`. When a name changes, soft-close old row, insert new. Full name history in one table.
 
-**`channels` is the new unified platform topology table.** Replaces spaces, containers, threads, and names. One row per unique `(platform, account_id, container_id, thread_id)`. Space info denormalized. Uses immutable row pattern for name changes.
+**`channels` is the unified platform topology table.** Replaces spaces, containers, and naming side tables. One row per unique root channel/container. Space info is denormalized. Thread and reply information remain record metadata, not separate default channel rows. Uses immutable row pattern for name changes.
 
 **`channel_participants` renamed from container_participants.** Who's in which channel, message counts, status.
 
@@ -91,8 +91,6 @@ CREATE TABLE channels (
     container_id    TEXT NOT NULL,
     container_kind  TEXT NOT NULL,     -- 'direct', 'group'
     container_name  TEXT,
-    thread_id       TEXT,
-    thread_name     TEXT,
     created_at      INTEGER NOT NULL,
     deleted_at      INTEGER,          -- immutable row pattern (name changes)
     metadata_json   TEXT
@@ -135,7 +133,7 @@ CREATE TABLE channel_participants (
 |-----------|------|-------------|
 | `channels.list` | read | List channels (filter by platform, space, container_kind) |
 | `channels.get` | read | Get a single channel |
-| `channels.search` | read | Search channels (filter by platform, space, container, thread, participant) |
+| `channels.search` | read | Search channels (filter by platform, space, container, participant) |
 | `channels.history` | read | Get naming history for a channel |
 | `channels.participants.list` | read | List participants in a channel |
 | `channels.participants.get` | read | Get participant details |
@@ -154,7 +152,7 @@ CREATE TABLE channel_participants (
 
 ### Decisions (continued)
 
-**One unified server. Audience removed.** The two-server split (control-plane:18789, ingress:18790) collapses into a single HTTP server. The `audience` field on tokens is removed entirely. IAM policies + roles/scopes determine what a token can do — not which server it was presented to. Full workplan: [AUDIENCE_REMOVAL_CUTOVER.md](./workplans/AUDIENCE_REMOVAL_CUTOVER.md).
+**One unified server. Audience removed.** The two-server split (runtime-api:18789, ingress:18790) collapses into a single HTTP server. The `audience` field on tokens is removed entirely. IAM policies + roles/scopes determine what a token can do — not which server it was presented to. Full workplan: [AUDIENCE_REMOVAL_CUTOVER.md](./workplans/AUDIENCE_REMOVAL_CUTOVER.md).
 
 **Loopback bypass gates on role, not audience.** Loopback bypass allowed for `role: "operator"` only.
 
@@ -248,7 +246,7 @@ CREATE TABLE policies (
     match_json      TEXT NOT NULL,        -- JSON blob, application-level matching
     effect          TEXT NOT NULL,        -- 'allow', 'deny', 'ask'
     permissions_json TEXT,                -- JSON blob (tools + credentials together)
-    session_json    TEXT,                 -- persona_ref, key template
+    session_json    TEXT,                 -- workspace_id-backed persona binding, key template
     modifiers_json  TEXT,                 -- queue_mode, delay_response
     priority        INTEGER NOT NULL DEFAULT 0,
     is_builtin      INTEGER DEFAULT 0,

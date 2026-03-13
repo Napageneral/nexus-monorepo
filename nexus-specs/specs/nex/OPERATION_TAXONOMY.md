@@ -12,8 +12,8 @@
 > - `health` → `runtime.health` (under `runtime.*` namespace)
 > - `SessionLabel` → `SessionKey` (renamed in session routing unification)
 > - `clock.schedule.*` → `cron.*` (Batch 6 authoritative)
-> - All domain names are plural (`events.*`, `agents.*`, `adapters.*`)
-> - `event.ingest` → `events.ingest` (plural)
+> - external ingress is now `record.ingest`, not `event.ingest` / `events.ingest`
+> - external persisted inputs are `records`, not `events`
 >
 > This document is preserved for historical reference of the input/output schema patterns. The operation names and groupings are no longer authoritative.
 
@@ -73,7 +73,7 @@ Introspection and monitoring operations.
 
 | Field | Value |
 |-------|-------|
-| Mode | `control` |
+| Mode | `core` |
 | Action | `read` |
 | Resource | `runtime.health` |
 
@@ -316,8 +316,7 @@ Heartbeat every 30 seconds: `event: heartbeat\ndata: {}\n\n`
   items: Array<{
     app_id: string;
     display_name: string;
-    entry_path: string;        // e.g., "/app/control/chat"
-    api_base: string;          // e.g., "/api/control"
+    entry_path: string;        // e.g., "/app/console/chat"
     kind: "static" | "proxy";
     proxy_base_url?: string;   // Only for kind="proxy"
     icon: string;
@@ -326,7 +325,7 @@ Heartbeat every 30 seconds: `event: heartbeat\ndata: {}\n\n`
 }
 ```
 
-**Notes:** In hosted mode, each app is IAM-checked against the caller's role/scopes.
+**Notes:** In hosted mode, each app is IAM-checked against the caller's role/scopes. App-owned HTTP remains the derived `/api/<appId>/...` namespace; it is not carried as a first-class discovery field.
 
 ---
 
@@ -377,7 +376,7 @@ Authentication, user management, and API token management.
   token: string;                   // Bearer token
   token_id: string;                // Token record ID
   entity_id: string;               // Authenticated entity ID
-  audience: "control-plane";
+  audience: "runtime-api";
   scopes: ["operator.admin"];
   expires_at: EpochMs;             // 30 days from creation
 }
@@ -1168,27 +1167,34 @@ Session lifecycle management.
 
 ---
 
-#### `sessions.import`
+#### `agents.sessions.import`
+
+Note:
+This is the internal imported-session bridge used by the standalone AIX app. It is not the public device-facing AIX client contract.
 
 | Field | Value |
 |-------|-------|
 | Mode | `control` |
 | Action | `admin` |
-| Resource | `sessions.import` |
+| Resource | `agents.sessions.import` |
 
 **Input:**
 ```typescript
 {
   source: "aix";
-  runId?: string;
   mode: "backfill" | "tail";
-  personaId?: string;
   idempotencyKey: string;
   items: Array<{                         // 1..256 items
     sourceProvider: string;
     sourceSessionId: string;
     sourceSessionFingerprint: string;
     importedAtMs: EpochMs;
+    sourceAccount?: {
+      platform: string;
+      spaceId?: string;
+      contactId: string;
+      contactName?: string;
+    };
     session: {
       labelHint?: SessionLabel;
       createdAtMs?: EpochMs;
@@ -1256,7 +1262,6 @@ Session lifecycle management.
 ```typescript
 {
   ok: true;
-  runId: string;
   imported: number;
   upserted: number;
   skipped: number;
@@ -1273,27 +1278,83 @@ Session lifecycle management.
 
 ---
 
-#### `sessions.import.chunk`
+#### `agents.sessions.import.chunk`
+
+Note:
+This is the internal chunked upload bridge used by the standalone AIX app. Public device-facing upload operations belong to the AIX app namespace.
 
 | Field | Value |
 |-------|-------|
 | Mode | `control` |
 | Action | `admin` |
-| Resource | `sessions.import` |
+| Resource | `agents.sessions.import` |
 
 **Input:**
 ```typescript
 {
   source: "aix";
-  runId?: string;
   mode: "backfill" | "tail";
-  personaId?: string;
   idempotencyKey: string;
   uploadId: string;
   chunkIndex: number;            // integer >= 0
   chunkTotal: number;            // integer >= 1
+  payloadSha256: string;
   encoding: "gzip+base64";
   data: string;                  // Compressed + base64-encoded chunk
+  sourceProvider: string;
+  sourceSessionId: string;
+  sourceSessionFingerprint: string;
+  sourceAccount?: {
+    platform: string;
+    spaceId?: string;
+    contactId: string;
+    contactName?: string;
+  };
+}
+```
+
+**Output:**
+```typescript
+{
+  ok: true;
+  uploadId: string;
+  status: "staged" | "completed";
+  received: number;
+  total: number;
+  import?: {
+    imported: number;
+    upserted: number;
+    skipped: number;
+    failed: number;
+    results: Array<{
+      sourceProvider: string;
+      sourceSessionId: string;
+      sessionLabel?: string;
+      status: "imported" | "upserted" | "skipped" | "failed";
+      reason?: string;
+    }>;
+  };
+}
+```
+
+---
+
+#### `agents.sessions.import.upload_status`
+
+Note:
+This is the internal resumable upload status bridge used by the standalone AIX app. Public device-facing upload status belongs to the AIX app namespace.
+
+| Field | Value |
+|-------|-------|
+| Mode | `control` |
+| Action | `admin` |
+| Resource | `agents.sessions.import` |
+
+**Input:**
+```typescript
+{
+  source: "aix";
+  uploadId: string;
   sourceProvider: string;
   sourceSessionId: string;
   sourceSessionFingerprint: string;
@@ -1304,12 +1365,23 @@ Session lifecycle management.
 ```typescript
 {
   ok: true;
-  runId: string;
   uploadId: string;
-  status: "staged" | "completed";
-  received: number;
-  total: number;
-  import?: SessionsImportResponse;   // Present when status is "completed"
+  status: "missing" | "staging" | "completed" | "failed";
+  chunkTotal: number | null;
+  receivedRanges: Array<{ start: number; end: number }>;
+  import?: {
+    imported: number;
+    upserted: number;
+    skipped: number;
+    failed: number;
+    results: Array<{
+      sourceProvider: string;
+      sourceSessionId: string;
+      sessionLabel?: string;
+      status: "imported" | "upserted" | "skipped" | "failed";
+      reason?: string;
+    }>;
+  };
 }
 ```
 
@@ -2226,17 +2298,21 @@ Adapter management, delivery, and scheduled operations.
 
 ### Group 8: Adapter Connections (12 operations)
 
-Connection lifecycle management for adapters. Handles credential storage, OAuth flows, and connection testing. Most operations delegate to the adapter binary for info/health checks.
+Connection lifecycle management for shared adapters. Handles connection profile
+selection, managed credential resolution, OAuth/custom setup flows, and
+connection testing. One shared adapter may hold multiple visible connections on
+the same server, so the canonical runtime contract is connection-based rather
+than adapter-singleton based.
 
 ---
 
-#### `adapter.connections.list`
+#### `adapters.connections.list`
 
 | Field | Value |
 |-------|-------|
 | Mode | `control` |
 | Action | `read` |
-| Resource | `adapter.connections` |
+| Resource | `adapters.connections` |
 
 **Input:**
 ```typescript
@@ -2246,11 +2322,15 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 **Output:**
 ```typescript
 {
-  adapters: Array<{
+  connections: Array<{
+    connectionId: string;
     adapter: string;
     name: string;
     status: "connected" | "disconnected" | "error" | "expired";
+    authMethodId: string | null;
     authMethod: "oauth2" | "api_key" | "file_upload" | "custom_flow" | null;
+    scope: "server" | "app";
+    appId?: string;
     auth?: unknown;
     account: string | null;
     lastSync: EpochMs | null;
@@ -2260,42 +2340,48 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 }
 ```
 
-**Notes:** Per-adapter errors are caught gracefully and represented as entries with `status: "error"`. Delegates to adapter binary for `adapter.info` and `adapter.health`.
+**Notes:** Returns the caller-visible connection set, not one summary row per
+adapter package. Scope and app visibility rules determine which rows are
+returned.
 
 ---
 
-#### `adapter.connections.status`
+#### `adapters.connections.status`
 
 | Field | Value |
 |-------|-------|
 | Mode | `control` |
 | Action | `read` |
-| Resource | `adapter.connections` |
+| Resource | `adapters.connections` |
 
 **Input:**
 ```typescript
 {
-  adapter: string;
+  connectionId: string;
 }
 ```
 
-**Output:** Single `AdapterConnectionEntry` (same shape as list items).
+**Output:** Single connection entry (same shape as list items).
 
 ---
 
-#### `adapter.connections.oauth.start`
+#### `adapters.connections.oauth.start`
 
 | Field | Value |
 |-------|-------|
 | Mode | `control` |
 | Action | `pair` |
-| Resource | `adapter.connections.oauth` |
+| Resource | `adapters.connections.oauth` |
 
 **Input:**
 ```typescript
 {
+  appId: string;
   adapter: string;
-  methodIndex?: number;          // integer >= 0; selects which auth method
+  connectionProfileId: string;
+  authMethodId?: string;
+  scope?: "server" | "app";
+  managedProfileId?: string;
   redirectBaseUrl?: string;
 }
 ```
@@ -2309,17 +2395,19 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 }
 ```
 
-**Errors:** `UNAVAILABLE` — adapter doesn't support OAuth, missing client metadata, platform credential fetch fails.
+**Errors:** `UNAVAILABLE` — adapter doesn't support OAuth, the selected profile
+doesn't resolve to an OAuth-capable auth method, missing client metadata, or
+managed credential lookup fails.
 
 ---
 
-#### `adapter.connections.oauth.complete`
+#### `adapters.connections.oauth.complete`
 
 | Field | Value |
 |-------|-------|
 | Mode | `control` |
 | Action | `pair` |
-| Resource | `adapter.connections.oauth` |
+| Resource | `adapters.connections.oauth` |
 
 **Input:**
 ```typescript
@@ -2334,6 +2422,7 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 ```typescript
 {
   status: string;                // "connected"
+  connectionId: string;
   account: string;               // Derived from token response
   service: string;
 }
@@ -2343,19 +2432,23 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 
 ---
 
-#### `adapter.connections.apikey.save`
+#### `adapters.connections.apikey.save`
 
 | Field | Value |
 |-------|-------|
 | Mode | `control` |
 | Action | `admin` |
-| Resource | `adapter.connections.credentials` |
+| Resource | `adapters.connections.credentials` |
 
 **Input:**
 ```typescript
 {
+  appId: string;
   adapter: string;
-  methodIndex?: number;          // integer >= 0
+  connectionProfileId: string;
+  authMethodId?: string;
+  scope?: "server" | "app";
+  managedProfileId?: string;
   account?: string;
   fields: Record<string, string>;  // Key-value credential fields
 }
@@ -2365,6 +2458,7 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 ```typescript
 {
   status: string;                // "connected" | "error" | "expired"
+  connectionId: string;
   account: string;
   service: string;
   error?: string;                // Present when status != "connected"
@@ -2375,18 +2469,23 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 
 ---
 
-#### `adapter.connections.upload`
+#### `adapters.connections.upload`
 
 | Field | Value |
 |-------|-------|
 | Mode | `control` |
 | Action | `write` |
-| Resource | `adapter.connections.upload` |
+| Resource | `adapters.connections.upload` |
 
 **Input:**
 ```typescript
 {
+  appId: string;
   adapter: string;
+  connectionProfileId: string;
+  authMethodId?: string;
+  scope?: "server" | "app";
+  managedProfileId?: string;
   fileName: string;              // Original filename
   filePath: string;              // Absolute path to uploaded file
 }
@@ -2396,6 +2495,7 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 ```typescript
 {
   status: string;                // "imported"
+  connectionId?: string;
   preview: {
     rows: number;
     columns: string[];
@@ -2408,19 +2508,23 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 
 ---
 
-#### `adapter.connections.custom.start`
+#### `adapters.connections.custom.start`
 
 | Field | Value |
 |-------|-------|
 | Mode | `control` |
 | Action | `pair` |
-| Resource | `adapter.connections.custom` |
+| Resource | `adapters.connections.custom` |
 
 **Input:**
 ```typescript
 {
+  appId: string;
   adapter: string;
-  methodIndex?: number;
+  connectionProfileId: string;
+  authMethodId?: string;
+  scope?: "server" | "app";
+  managedProfileId?: string;
   account?: string;
   payload?: Record<string, unknown>;
 }
@@ -2431,6 +2535,7 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 {
   status: "pending" | "requires_input" | "completed" | "failed" | "cancelled";
   sessionId?: string;
+  connectionId?: string;
   account?: string;
   service?: string;
   message?: string;
@@ -2450,20 +2555,19 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 
 ---
 
-#### `adapter.connections.custom.submit`
+#### `adapters.connections.custom.submit`
 
 | Field | Value |
 |-------|-------|
 | Mode | `control` |
 | Action | `pair` |
-| Resource | `adapter.connections.custom` |
+| Resource | `adapters.connections.custom` |
 
 **Input:**
 ```typescript
 {
   adapter: string;
   sessionId: string;             // Must match existing pending flow
-  account?: string;
   payload?: Record<string, unknown>;
 }
 ```
@@ -2472,20 +2576,19 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 
 ---
 
-#### `adapter.connections.custom.status`
+#### `adapters.connections.custom.status`
 
 | Field | Value |
 |-------|-------|
 | Mode | `control` |
 | Action | `read` |
-| Resource | `adapter.connections.custom` |
+| Resource | `adapters.connections.custom` |
 
 **Input:**
 ```typescript
 {
   adapter: string;
   sessionId: string;
-  account?: string;
 }
 ```
 
@@ -2493,20 +2596,19 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 
 ---
 
-#### `adapter.connections.custom.cancel`
+#### `adapters.connections.custom.cancel`
 
 | Field | Value |
 |-------|-------|
 | Mode | `control` |
 | Action | `pair` |
-| Resource | `adapter.connections.custom` |
+| Resource | `adapters.connections.custom` |
 
 **Input:**
 ```typescript
 {
   adapter: string;
   sessionId: string;
-  account?: string;
 }
 ```
 
@@ -2515,8 +2617,9 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 {
   status: "cancelled";
   sessionId: string;
-  account: string;
-  service: string;
+  connectionId?: string;
+  account?: string;
+  service?: string;
 }
 ```
 
@@ -2524,19 +2627,18 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 
 ---
 
-#### `adapter.connections.test`
+#### `adapters.connections.test`
 
 | Field | Value |
 |-------|-------|
 | Mode | `control` |
 | Action | `read` |
-| Resource | `adapter.connections` |
+| Resource | `adapters.connections` |
 
 **Input:**
 ```typescript
 {
-  adapter: string;
-  account?: string;
+  connectionId: string;
 }
 ```
 
@@ -2545,7 +2647,8 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 {
   ok: boolean;
   latency: number;               // ms
-  account: string;
+  connectionId: string;
+  account?: string;
   error?: string | null;         // Present when ok=false
 }
 ```
@@ -2554,19 +2657,18 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 
 ---
 
-#### `adapter.connections.disconnect`
+#### `adapters.connections.disconnect`
 
 | Field | Value |
 |-------|-------|
 | Mode | `control` |
 | Action | `admin` |
-| Resource | `adapter.connections` |
+| Resource | `adapters.connections` |
 
 **Input:**
 ```typescript
 {
-  adapter: string;
-  account?: string;
+  connectionId: string;
 }
 ```
 
@@ -2574,12 +2676,14 @@ Connection lifecycle management for adapters. Handles credential storage, OAuth 
 ```typescript
 {
   status: "disconnected";
+  connectionId: string;
   account?: string;
   service?: string;
 }
 ```
 
-**Notes:** Stops monitor, removes credentials, removes connection record. No delegation to adapter binary.
+**Notes:** Removes only the targeted connection record and its credentials. It
+must not remove unrelated same-adapter connections.
 
 ---
 
@@ -2746,13 +2850,13 @@ Direct adapter binary operations and delivery. Most are passthrough to the adapt
 
 ---
 
-#### `adapter.control.start`
+#### `adapter.serve.start`
 
 | Field | Value |
 |-------|-------|
 | Mode | `control` |
 | Action | `admin` |
-| Resource | `adapter.control` |
+| Resource | `adapter.serve` |
 
 **Input:**
 ```typescript
@@ -3841,582 +3945,43 @@ These operations are candidates for extraction into standalone apps. They exist 
 
 ---
 
-### Group 15: Work CRM (18 operations)
-
-Task/workflow/campaign engine for agent-driven work management. Strong candidate for app extraction.
-
----
-
-#### `work.tasks.list`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `read` |
-| Resource | `work.tasks` |
-
-**Input:**
-```typescript
-{
-  type?: string;               // Task type filter
-}
-```
-
-**Output:**
-```typescript
-{
-  tasks: WorkTaskRow[];
-}
-```
-
----
-
-#### `work.tasks.create`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `write` |
-| Resource | `work.tasks` |
-
-**Input:**
-```typescript
-{
-  name: string;                // Required
-  id?: string;                 // Defaults to "task:<uuid>"
-  description?: string;
-  type?: string;
-  default_assignee_type?: string;
-  default_assignee_id?: string;
-  default_priority?: string;
-  default_due_offset_ms?: number;
-  automation_ref?: string;
-  agent_prompt?: string;
-  metadata_json?: string | object;
-  now?: EpochMs;
-}
-```
-
-**Output:**
-```typescript
-{
-  task: WorkTaskRow;
-}
-```
-
----
-
-#### `work.entities.seed`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `write` |
-| Resource | `work.entities` |
-
-**Input:**
-```typescript
-{
-  entities: Array<{            // Required, non-empty
-    id?: string;               // Defaults to "entity:<uuid>"
-    name?: string;             // Defaults to id
-    type?: string;             // Defaults to "person"
-    normalized?: string;       // Defaults to name.toLowerCase()
-    is_user?: boolean;
-    mention_count?: number;
-    first_seen?: EpochMs;
-    last_seen?: EpochMs;
-    tags?: string[];
-  }>;
-  tags?: string[];             // Shared tags applied to all entities
-  now?: EpochMs;
-  actor?: string;              // Defaults to "operator"
-  reason?: string;
-}
-```
-
-**Output:**
-```typescript
-{
-  entities: Array<{
-    id: string;
-    name: string;
-    type: string;
-    tags: string[];
-  }>;
-  count: number;
-  tags_added: number;
-}
-```
-
-**Errors:** `INVALID_REQUEST` — entities empty or not array.
-
----
-
-#### `work.workflows.list`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `read` |
-| Resource | `work.workflows` |
-
-**Input:**
-```typescript
-{
-  type?: string;
-}
-```
-
-**Output:**
-```typescript
-{
-  workflows: WorkWorkflowRow[];
-}
-```
-
----
-
-#### `work.workflows.create`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `write` |
-| Resource | `work.workflows` |
-
-**Input:**
-```typescript
-{
-  name: string;                // Required
-  id?: string;                 // Defaults to "workflow:<uuid>"
-  description?: string;
-  type?: string;
-  metadata_json?: string | object;
-  now?: EpochMs;
-  steps?: Array<{
-    task_id: string;           // Required per step
-    id?: string;               // Defaults to "workflow-step:<uuid>"
-    step_order?: number;       // Defaults to index+1
-    depends_on_steps?: string[];
-    delay_after_ms?: number;
-    condition_json?: string | object;
-    override_due_offset_ms?: number;
-    override_priority?: string;
-    override_assignee_type?: string;
-    override_assignee_id?: string;
-    override_prompt?: string;
-    metadata_json?: string | object;
-  }>;
-}
-```
-
-**Output:**
-```typescript
-{
-  workflow: WorkWorkflowRow;
-  steps: WorkWorkflowStepRow[];
-}
-```
-
-**Errors:** `INVALID_REQUEST` — name missing, step missing task_id.
-
----
-
-#### `work.workflows.instantiate`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `write` |
-| Resource | `work.workflows` |
-
-**Input:**
-```typescript
-{
-  workflow_id: string;         // Required
-  entity_id?: string;
-  parent_sequence_id?: string;
-  name?: string;
-  now?: EpochMs;
-}
-```
-
-**Output:**
-```typescript
-{
-  sequence: WorkSequenceRow;
-  items: WorkItemRow[];
-}
-```
-
-**Errors:** `INVALID_REQUEST` — workflow_id missing or not found.
-
----
-
-#### `work.campaigns.instantiate`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `write` |
-| Resource | `work.campaigns` |
-
-**Input:**
-```typescript
-{
-  workflow_id: string;         // Required
-  name: string;                // Required
-  entity_filter: string;       // Required — filter tag for identity entities
-  now?: EpochMs;
-}
-```
-
-**Output:**
-```typescript
-{
-  sequence: WorkSequenceRow;   // Campaign parent sequence
-  items: WorkItemRow[];        // Per-entity work items
-}
-```
-
-**Errors:** `INVALID_REQUEST` — required params missing. `UNAVAILABLE` — identity ledger unavailable.
-
----
-
-#### `work.items.list`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `read` |
-| Resource | `work.items` |
-
-**Input:**
-```typescript
-{
-  status?: string;
-  entity_id?: string;
-  sequence_id?: string;
-  task_id?: string;
-  assignee_type?: string;
-  assignee_id?: string;
-}
-```
-
-**Output:**
-```typescript
-{
-  items: WorkItemRow[];
-}
-```
-
----
-
-#### `work.items.get`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `read` |
-| Resource | `work.items` |
-
-**Input:**
-```typescript
-{
-  id: string;                  // Required
-}
-```
-
-**Output:**
-```typescript
-{
-  item: WorkItemRow;
-}
-```
-
-**Errors:** `INVALID_REQUEST` — id missing or not found.
-
----
-
-#### `work.items.create`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `write` |
-| Resource | `work.items` |
-
-**Input:**
-```typescript
-{
-  title: string;               // Required
-  id?: string;                 // Defaults to "work:<uuid>"
-  task_id?: string;
-  description?: string;
-  entity_id?: string;
-  priority?: string;
-  due_at?: EpochMs;
-  scheduled_at?: EpochMs;
-  sequence_id?: string;
-  workflow_step_id?: string;
-  sequence_order?: number;
-  depends_on_items?: string | string[];
-  source?: string;             // Defaults to "manual"
-  source_ref?: string;
-  source_url?: string;
-  recurrence?: string;
-  recurrence_source_id?: string;
-  status?: string;             // Defaults to "scheduled" if scheduled_at set, else "pending"
-  assignee_type?: string;
-  assignee_id?: string;
-  started_at?: EpochMs;
-  completed_at?: EpochMs;
-  snoozed_until?: EpochMs;
-  metadata_json?: string | object;
-  now?: EpochMs;
-  actor?: string;              // Defaults to "operator"
-  reason?: string;
-}
-```
-
-**Output:**
-```typescript
-{
-  item: WorkItemRow;
-}
-```
-
----
-
-#### `work.items.events.list`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `read` |
-| Resource | `work.items.events` |
-
-**Input:**
-```typescript
-{
-  id: string;                  // Required — work item ID
-}
-```
-
-**Output:**
-```typescript
-{
-  events: WorkItemEventRow[];
-}
-```
-
----
-
-#### `work.items.assign`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `write` |
-| Resource | `work.items` |
-
-**Input:**
-```typescript
-{
-  id: string;                  // Required
-  assignee_type?: string;
-  assignee_id?: string;
-  actor?: string;              // Defaults to "operator"
-  now?: EpochMs;
-  reason?: string;
-}
-```
-
-**Output:**
-```typescript
-{
-  item: WorkItemRow;
-}
-```
-
----
-
-#### `work.items.snooze`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `write` |
-| Resource | `work.items` |
-
-**Input:**
-```typescript
-{
-  id: string;                  // Required
-  snoozed_until: EpochMs;     // Required
-  actor?: string;
-  reason?: string;
-  now?: EpochMs;
-}
-```
-
-**Output:**
-```typescript
-{
-  item: WorkItemRow;
-}
-```
-
----
-
-#### `work.items.complete`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `write` |
-| Resource | `work.items` |
-
-**Input:**
-```typescript
-{
-  id: string;                  // Required
-  actor?: string;              // Defaults to "operator"
-  reason?: string;
-  now?: EpochMs;
-}
-```
-
-**Output:**
-```typescript
-{
-  item: WorkItemRow;
-}
-```
-
-**Notes:** Also calls `advanceSequence()` to progress parent workflow sequence.
-
----
-
-#### `work.items.cancel`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `write` |
-| Resource | `work.items` |
-
-**Input:**
-```typescript
-{
-  id: string;                  // Required
-  actor?: string;              // Defaults to "operator"
-  reason?: string;
-  now?: EpochMs;
-}
-```
-
-**Output:**
-```typescript
-{
-  item: WorkItemRow;
-}
-```
-
----
-
-#### `work.sequences.list`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `read` |
-| Resource | `work.sequences` |
-
-**Input:**
-```typescript
-{
-  workflow_id?: string;
-  entity_id?: string;
-  parent_sequence_id?: string;
-  status?: string;
-  include_items?: boolean;
-}
-```
-
-**Output:**
-```typescript
-{
-  sequences: WorkSequenceRow[];
-  itemsBySequence?: Record<string, WorkItemRow[]>;  // Only if include_items=true
-}
-```
-
----
-
-#### `work.sequences.get`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `read` |
-| Resource | `work.sequences` |
-
-**Input:**
-```typescript
-{
-  id: string;                  // Required
-}
-```
-
-**Output:**
-```typescript
-{
-  sequence: WorkSequenceRow;
-  items: WorkItemRow[];
-}
-```
-
-**Errors:** `INVALID_REQUEST` — not found.
-
----
-
-#### `work.dashboard.summary`
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `read` |
-| Resource | `work.dashboard` |
-
-**Input:**
-```typescript
-{
-  now?: EpochMs;               // Defaults to Date.now()
-}
-```
-
-**Output:**
-```typescript
-{
-  generated_at: EpochMs;
-  items: {
-    total: number;
-    due_now: number;
-    overdue: number;
-    by_status: Record<string, number>;
-    entity_coverage: number;
-  };
-  sequences: {
-    total: number;
-    by_status: Record<string, number>;
-    campaigns_total: number;
-    campaigns_active: number;
-    campaigns_completed: number;
-  };
-}
-```
+### Group 15: Legacy Work CRM Surface (removed)
+
+The pre-cutover `work.*` CRM/task/workflow/campaign surface is no longer part of
+the canonical Nex API.
+
+These operations were hard-removed in favor of the unified durable work
+runtime:
+
+- `jobs.*`
+- `schedules.*`
+- `dags.*`
+- `events.subscriptions.*`
+- `agents.configs.*`
+
+Canonical mapping is defined in:
+
+- [`API_DESIGN_BATCH_6.md`](/Users/tyler/nexus/home/projects/nexus/nexus-specs/specs/nex/API_DESIGN_BATCH_6.md)
+- [`jobs-schedules-and-dags.md`](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/work/jobs-schedules-and-dags.md)
+
+Removed legacy methods:
+
+- `work.tasks.*`
+- `work.items.*`
+- `work.workflows.*`
+- `work.sequences.*`
+- `work.campaigns.*`
+- `work.dashboard.*`
+- `work.entities.*`
+
+Hard-cut rules:
+
+1. do not add new runtime handlers for these removed methods
+2. do not build UI against these removed methods
+3. use identity APIs for entity management
+4. use DAG runs for workflow/campaign-style orchestration
+5. compute dashboard summaries from canonical runtime APIs instead of reviving
+   `work.dashboard.summary`
 
 ---
 
@@ -5184,19 +4749,11 @@ These operations are only available via HTTP (not WebSocket):
 
 ---
 
-## Dynamic Operations
+## Browser Document Routing
 
-#### `apps.open.<app_id>`
+Browser document launch under `/app/<app_id>/...` is routing, not a runtime operation.
 
-Pattern: `apps.open.[a-z0-9][a-z0-9_-]{0,63}`
-
-Dynamically resolved at runtime. Returns the app's static files or proxied content.
-
-| Field | Value |
-|-------|-------|
-| Mode | `control` |
-| Action | `read` |
-| Resource | `apps.<app_id>` |
+There is no canonical `apps.open.*` runtime method family.
 
 ---
 

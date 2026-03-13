@@ -15,7 +15,8 @@ Batch 5 covers the remaining core platform domains: adapter connection managemen
 - Agents & Workspaces: [API_DESIGN_BATCH_4.md](./API_DESIGN_BATCH_4.md) (Batch 4)
 - Adapter Interface Unification: [ADAPTER_INTERFACE_UNIFICATION.md](./ADAPTER_INTERFACE_UNIFICATION.md)
 - Credential & Connection System: [CREDENTIAL_AND_ADAPTER_CONNECTION_SYSTEM.md](./CREDENTIAL_AND_ADAPTER_CONNECTION_SYSTEM.md)
-- Adapter Connection Service: [adapters/ADAPTER_CONNECTION_SERVICE.md](./adapters/ADAPTER_CONNECTION_SERVICE.md)
+- Adapter Connection Architecture: [adapters/ADAPTER_CONNECTION_ARCHITECTURE.md](./adapters/ADAPTER_CONNECTION_ARCHITECTURE.md)
+- Adapter Connection Profiles And Callbacks: [adapters/ADAPTER_CONNECTION_PROFILES_AND_CALLBACKS.md](./adapters/ADAPTER_CONNECTION_PROFILES_AND_CALLBACKS.md)
 - Manager Agent Communications: [MANAGER_AGENT_COMMUNICATIONS.md](./MANAGER_AGENT_COMMUNICATIONS.md)
 - Batch 6 (Jobs, Cron, DAGs, Agent Config, Browser, TTS, Wizard): [API_DESIGN_BATCH_6.md](./API_DESIGN_BATCH_6.md)
 - Work Domain Unification: [WORK_DOMAIN_UNIFICATION.md](./WORK_DOMAIN_UNIFICATION.md)
@@ -30,7 +31,7 @@ There are two distinct operation surfaces that must not be conflated:
 
 **1. Nex Operation Taxonomy (External API)**
 - Operations callable by external clients (UI, CLI, apps, agents, other services)
-- Accessed via WebSocket or HTTP through the Nex control plane
+- Accessed via WebSocket or HTTP through the Nex runtime API
 - Flow through the 5-stage pipeline (acceptRequest → resolvePrincipals → resolveAccess → executeOperation → finalizeRequest)
 - Subject to IAM, audit, and hooks
 
@@ -57,7 +58,7 @@ The Nex API adds orchestration logic: credential resolution, connection state tr
 
 **Adapter SDK operations are NOT in the Nex operation taxonomy.** They are documented separately in the Adapter SDK spec. The Nex taxonomy only contains operations callable by external clients. Adapter SDK verbs (`adapter.info`, `adapter.health`, `delivery.send`, etc.) appear in the taxonomy ONLY as the implementation detail behind a Nex API operation — never as directly exposed operations.
 
-**Exception:** `event.ingest` and `event.backfill` remain in the Nex taxonomy because they are genuinely external-facing — adapters emit events INTO Nex, and backfill can be triggered by external callers.
+**Exception:** live one-record ingress is a deliberate singular operation: `record.ingest`. Historical backfill remains a collection/batch operation: `records.backfill`. These remain in the Nex taxonomy because they are genuinely external-facing — adapters emit records INTO Nex, and backfill can be triggered by external callers.
 
 ### Adapter SDK Contract (Reference)
 
@@ -69,7 +70,7 @@ The adapter SDK defines these verbs (documented in the Adapter SDK spec, NOT in 
 | `adapter.health` | Nex → Adapter | One-shot spawn, read stdout JSON |
 | `adapter.accounts.list` | Nex → Adapter | One-shot spawn, read stdout JSON |
 | `adapter.monitor.start` | Nex → Adapter | Long-running, read stdout JSONL events |
-| `adapter.control.start` | Nex → Adapter | Long-running bidirectional JSONL |
+| `adapter.serve.start` | Nex → Adapter | Long-running bidirectional JSONL |
 | `adapter.setup.start` | Nex → Adapter | One-shot spawn |
 | `adapter.setup.submit` | Nex → Adapter | One-shot spawn |
 | `adapter.setup.status` | Nex → Adapter | One-shot spawn |
@@ -80,13 +81,13 @@ The adapter SDK defines these verbs (documented in the Adapter SDK spec, NOT in 
 | `delivery.edit` | Nex → Adapter | One-shot spawn |
 | `delivery.delete` | Nex → Adapter | One-shot spawn |
 | `delivery.poll` | Nex → Adapter | One-shot spawn |
-| `event.backfill` | Nex → Adapter | Long-running, read stdout JSONL |
+| `records.backfill` | Nex → Adapter | Long-running, read stdout JSONL |
 
 ---
 
 ## Domain: Adapter Connections
 
-**Database:** `nexus.db` (`adapter_connections` table, `credentials` table)
+**Database:** `runtime.db` (`adapter_connections` table, `credentials` table)
 
 ### Decisions
 
@@ -128,7 +129,7 @@ The adapter SDK defines these verbs (documented in the Adapter SDK spec, NOT in 
 
 ## Domain: Channels
 
-**Database:** `nexus.db` (channels from Batch 2 identity model)
+**Database:** `identity.db` (channels table in the identity/addressability layer)
 
 ### Decisions
 
@@ -352,7 +353,7 @@ Contact Resolution → Channel Selection → Identity Decision → Channel Send
 
 ## Domain: Apps
 
-**Database:** `nexus.db` (app registry), app-specific databases in app data directories
+**Database:** `runtime.db` (app registry), app-specific databases in app data directories
 
 ### Decisions
 
@@ -390,20 +391,20 @@ Contact Resolution → Channel Selection → Identity Decision → Channel Send
 
 ---
 
-## Domain: Event Ingestion
+## Domain: Record Ingress
 
 ### Decisions
 
-**`event.ingest` and `event.backfill` stay in the Nex taxonomy.** These are external-facing — adapters emit events INTO Nex, and backfill can be triggered by external callers.
+**`record.ingest` and `records.backfill` stay in the Nex taxonomy.** These are external-facing — adapters emit records INTO Nex, and backfill can be triggered by external callers.
 
-**Already captured in Batch 1.** `event.ingest` was covered in Batch 1 with the `ingress_type` discrimination (`chat`, `agent`, `system`). `event.backfill` is triggered via the Nex API and delegates to the adapter SDK.
+**Already captured in Batch 1.** `record.ingest` is the canonical live ingress for one external record. `records.backfill` is triggered via the Nex API and delegates to the adapter SDK.
 
 ### Operations
 
 | Operation | Verb | Description |
 |-----------|------|-------------|
-| `event.ingest` | write | Ingest an event (chat, agent, or system) — Batch 1 |
-| `event.backfill` | write | Trigger historical event backfill from an adapter |
+| `record.ingest` | write | Ingest one external record — Batch 1 |
+| `records.backfill` | write | Trigger historical record backfill from an adapter/source |
 
 **Total: 2 operations** (already counted in Batch 1)
 
@@ -441,7 +442,7 @@ ALTER TABLE entities ADD COLUMN is_agent BOOLEAN DEFAULT FALSE;
 
 ### Decision
 
-**Device pairing is already folded into adapters.** The specs and code confirm that devices ARE adapters with `adapter.control.start` for duplex control. Legacy `node.*` namespace is gone. `device.pair.*` and `device.host.*` operations are handled through the adapter model.
+**Device pairing is already folded into adapters.** The specs and code confirm that devices ARE adapters with `adapter.serve.start` for duplex control. Legacy `node.*` namespace is gone. `device.pair.*` and `device.host.*` operations are handled through the adapter model.
 
 No separate device pairing operations in the Nex taxonomy. The pairing flow is an adapter connection flow.
 
@@ -511,7 +512,7 @@ These domains require deeper design sessions:
 ## Resolved Items
 
 ### RESOLVED: Adapter SDK Separation
-Clean delineation established. Adapter SDK verbs (`adapter.info`, `adapter.health`, `delivery.send`, etc.) are NOT in the Nex operation taxonomy. They are documented as reference in the Adapter SDK spec. The Nex taxonomy contains only orchestrated versions that wrap adapter SDK calls with IAM, audit, credential injection, and connection state tracking. The wrapping is necessary and not duplicative — it's the control plane layer.
+Clean delineation established. Adapter SDK verbs (`adapter.info`, `adapter.health`, `delivery.send`, etc.) are NOT in the Nex operation taxonomy. They are documented as reference in the Adapter SDK spec. The Nex taxonomy contains only orchestrated versions that wrap adapter SDK calls with IAM, audit, credential injection, and connection state tracking. The wrapping is necessary and not duplicative — it's the runtime API layer.
 
 ### DEFERRED: Deep Pass on `status` Command
 The `status` output shape needs alignment with all new domains from Batches 1–6. Deferred to the deep pass across all batches.

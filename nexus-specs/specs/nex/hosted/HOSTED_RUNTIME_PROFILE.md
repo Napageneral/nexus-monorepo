@@ -1,291 +1,249 @@
-# Hosted Runtime Profile (Per-Tenant Nexus)
+# Hosted Runtime Profile
 
-**Status:** DESIGN
-**Last Updated:** 2026-02-20  
+**Status:** CANONICAL
+**Last Updated:** 2026-03-06
 **Related:**
-- `HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md`
-- `HOSTED_MULTI_WORKSPACE.md`
-- `../ingress/SINGLE_TENANT_MULTI_USER.md`
-- `../ingress/INGRESS_INTEGRITY.md`
-- `../ingress/CONTROL_PLANE_AUTHZ_TAXONOMY.md`
-- `../workplans/INGRESS_CONTROL_PLANE_UNIFICATION_PLAN.md`
+- `HOSTED_APP_PLATFORM_CONTRACT.md`
+- `HOSTED_OBJECT_TAXONOMY.md`
+- `HOSTED_PLATFORM_ACCESS_AND_ROUTING.md`
+- `HOSTED_ACCOUNT_AND_SERVER_ACCESS.md`
+- `HOSTED_TENANT_ORIGIN_RUNTIME_ACCESS.md`
 
 ---
 
 ## Purpose
 
-Define exactly what Nexus runtime must enforce to safely run behind a hosted frontdoor with one runtime per tenant.
+This document defines the target-state runtime behavior for hosted Nex servers.
 
-This document explicitly separates:
+It answers one question:
 
-- what is already implemented
-- what remains to implement
-- the normative behavior in hosted mode
-
----
-
-## Hosted Mode Invariants
-
-In hosted mode, runtime must obey all of the following:
-
-1. every control-plane request is authenticated and IAM-authorized
-2. every agent-triggering ingress path enters NEX as `NexusEvent`
-3. principal identity is derived from verified credentials/claims, never request body identity hints
-4. only minimal internal event sources may use `system` principal (`clock`, `boot`, `restart`)
-5. tenant claim must match runtime tenant configuration
+what must the runtime enforce when it is running as the hosted runtime on a
+frontdoor-managed server?
 
 ---
 
-## Current State Mapping
+## Hosted Customer Experience
 
-### Already Implemented
+From the customer's perspective:
 
-- control-plane authz taxonomy (`control.<resource>.<action`) exists
-- control-plane IAM authorization path exists for WS and HTTP operations (including `tools.invoke` and canvas/browser HTTP/WS surfaces)
-- control-plane username/password login exists
-- ingress credentials lifecycle exists (list/create/revoke/rotate)
-- ingress integrity enforcement exists (stamping + reserved platform rules + integrity telemetry)
-- ingress credential role-tag synchronization exists
-- trusted-token runtime auth mode (`runtime.auth.mode=trusted_token`) with claim verification
-- hosted-mode startup hardening gates (`runtime.hostedMode` + `runtime.tenantId` + verifier required)
-- strict tenant pinning (`tenant_id` claim must match runtime tenant)
-- hosted-mode HTTP/WS behavior gates (no local-direct bypass, `/api/auth/login` disabled)
-- hosted-mode regression suite covering startup guards + HTTP/WS auth behavior
+1. frontdoor authenticates the human or client
+2. frontdoor resolves the target server/runtime
+3. the runtime accepts authorized traffic for that server only
+4. apps, adapters, callbacks, and upgrades run inside that runtime boundary
 
-### Remaining For Hosted Readiness
-
-1. production key management and signing-key rotation strategy
-2. full hosted Control UI integration through frontdoor (beyond scaffold shell)
+The runtime is strict and predictable. It does not guess identity, trust local
+shortcuts, or silently widen access in hosted mode.
 
 ---
 
-## Runtime Auth Modes
+## Hosted Runtime Invariants
 
-### Local mode (existing)
+When running in hosted mode, the runtime must enforce all of the following:
 
-- optimized for loopback/local owner workflows
-- may include local-direct conveniences
-
-### Hosted mode (target profile)
-
-- frontdoor-authenticated only
-- no local-direct bypass
-- no unauthenticated control-plane HTTP/WS/SSE
-- tenant claim mandatory
-- token verification mandatory
-
-Hosted mode is a strict profile, not a new runtime architecture.
+1. every runtime HTTP, WebSocket, and SSE request is authenticated
+2. principal identity comes from verified token claims, not request body hints
+3. tenant pinning is mandatory
+4. IAM authorization applies before method execution
+5. local-direct hosted-platform bypasses are disabled
+6. reusable adapter callbacks and reusable adapter webhooks route through the runtime-owned adapter surfaces
+7. private package lifecycle mutation is available only through trusted operator endpoints
 
 ---
 
-## Trusted-Token Mode Spec
+## Request Classes
 
-Runtime must support an auth verifier plugin for frontdoor tokens.
+Hosted runtime traffic falls into two classes.
 
-Validation requirements:
+### 1. Public runtime access
 
-- verify signature
-- verify `iss`
-- verify `aud`
-- verify `exp`/`iat` (and optional `nbf`)
-- enforce `jti` replay mitigation policy (at least bounded recent cache)
-- require and validate `tenant_id`
-- require and validate `entity_id`
+Used for:
 
-On success, runtime binds connection/request principal from claims:
+- app UI runtime calls
+- WebSocket transport
+- direct tenant-origin browser or machine access
+- runtime-owned adapter auth/setup callbacks
+- runtime-owned reusable adapter webhooks
 
-- `principal.entity_id <- token.entity_id`
-- runtime scopes/roles <- token scopes/roles
-- runtime session metadata <- token.session_id (if present)
+Authenticated with:
 
-On failure, runtime rejects request before method dispatch.
+- runtime access token, or
+- provider-specific callback verification where the route is a provider callback/webhook surface
+
+### 2. Private operator access
+
+Used for:
+
+- package install
+- package uninstall
+- package upgrade
+- health probes for lifecycle operations
+- other frontdoor-only operator traffic
+
+Authenticated with:
+
+- runtime trusted token
 
 ---
 
-## Canonical Claims Contract
+## Token Verification Requirements
 
-Required:
+### Runtime access token
 
-- `iss`
-- `aud`
-- `exp`
-- `iat`
-- `jti`
+The runtime must verify:
+
+- signature
+- issuer
+- audience
+- expiry and issued-at
 - `tenant_id`
 - `entity_id`
-- `scopes`
 
 Recommended:
 
-- `session_id`
-- `roles`
-- `client_id`
-- `amr`
+- replay mitigation for `jti`
+- bounded clock skew
+- explicit role and scope claim validation
 
-Optional:
+On success, the runtime binds:
 
-- `display_name`
-- `email`
+- principal entity id
+- roles
+- scopes
+- optional session/client metadata
+
+### Runtime trusted token
+
+The runtime must separately verify trusted operator credentials used by
+frontdoor.
 
 Rules:
 
-- claims are authoritative identity context
-- request payload identity hints are never authoritative
-- runtime must reject token if `tenant_id` mismatches configured tenant
+1. trusted operator credentials are never a browser contract
+2. trusted operator credentials do not bypass tenant pinning
+3. trusted operator credentials authorize operator endpoints only
 
 ---
 
-## Hosted Hardening Requirements
+## Hosted Transport Behavior
 
-When `runtime.hosted_mode=true`:
+### Shell-profile traffic
 
-1. disable local-direct request bypass for control-plane HTTP endpoints
-2. require AuthN for control-plane WS handshake
-3. require AuthN for control-plane SSE stream
-4. require IAM authorization per control-plane operation taxonomy
-5. forbid wildcard/system fallbacks for non-internal ingress channels
+For traffic proxied through frontdoor:
 
-This can be implemented as one profile gate with fail-fast startup checks.
+1. frontdoor resolves the target server/runtime
+2. frontdoor forwards the request or socket
+3. the runtime still verifies runtime access for the target tenant/runtime
 
----
+### Tenant-origin traffic
 
-## Control-Plane IAM Parity
+For direct `t-<tenantId>.nexushub.sh` traffic:
 
-Normative rule:
+1. the runtime accepts direct HTTP/WS/SSE
+2. runtime access token verification is still mandatory
+3. allowed browser origins must be explicit
 
-- no control-plane operation is allowed to rely only on token scopes without IAM policy evaluation
-
-Implementation guardrails:
-
-- all WS methods are taxonomy-backed and IAM-evaluated
-- all control-plane HTTP operation methods map to taxonomy entries and IAM authorization
-- regression tests must fail on any added method missing taxonomy/IAM integration
+The protocol is the same in both profiles. Only the transport path changes.
 
 ---
 
-## Ingress Integrity Contract (Applies Unchanged)
+## Callback And Webhook Ownership
 
-The existing integrity spec remains canonical and applies directly in hosted mode:
+The runtime owns reusable adapter ingress under:
 
-- daemon-stamped authoritative fields
-- reserved platform protection
-- adapter account/platform bounds
-- token-derived principal mapping
-- ingress integrity violation audit + bus events
+- `/auth/<service>/...`
+- `/adapters/<service>/webhooks/...`
 
-No net-new identity bypasses are introduced by frontdoor when trusted-token mode is used correctly.
+Rules:
+
+1. provider auth/setup logic for shared adapters lives here
+2. reusable provider webhook verification lives here
+3. app-specific business callbacks do not live here
+
+App-specific external callbacks remain under app-owned paths:
+
+- `/app/<appId>/callbacks/...`
+- `/app/<appId>/webhooks/...`
 
 ---
 
-## Runtime Configuration Surface (Proposed)
+## Private Operator Endpoint Boundary
 
-```yaml
-runtime:
-  hosted_mode: true
-  tenant_id: "tenant_abc"
-  auth:
-    mode: "trusted_token"
-    trusted_token:
-      issuer: "https://app.example.com"
-      audience: "nexus-runtime"
-      jwks_url: "https://app.example.com/.well-known/jwks.json"
-      clock_skew_seconds: 60
-      require_jti: true
+Hosted lifecycle mutation is runtime-owned but private.
+
+Canonical operator endpoints:
+
+- `POST /api/operator/packages/install`
+- `POST /api/operator/packages/uninstall`
+- `POST /api/operator/packages/upgrade`
+- `GET /api/operator/packages/<kind>/<packageId>`
+- `GET /api/operator/packages/<kind>/<packageId>/health`
+
+Rules:
+
+1. these endpoints require trusted operator auth
+2. they are not part of the browser/client contract
+3. they must enforce tenant pinning and package validation
+
+---
+
+## Hosted Configuration Surface
+
+Canonical runtime behavior requires configuration for:
+
+- hosted mode enablement
+- tenant id pinning
+- runtime access token verification
+- trusted operator credential verification
+- explicit allowed browser origins for direct tenant-origin access
+
+Illustrative shape:
+
+```json
+{
+  "runtime": {
+    "hostedMode": true,
+    "tenantId": "tenant_clinic_a_prod",
+    "auth": {
+      "accessToken": {
+        "issuer": "https://frontdoor.nexushub.sh",
+        "audience": "nex-runtime"
+      },
+      "trustedOperator": {
+        "issuer": "https://frontdoor.nexushub.sh",
+        "audience": "nex-operator"
+      }
+    },
+    "allowedBrowserOrigins": [
+      "https://frontdoor.nexushub.sh",
+      "https://t-tenant_clinic_a_prod.nexushub.sh"
+    ]
+  }
+}
 ```
 
-Notes:
-
-- exact key names can change; behavior requirements cannot
-- runtime must fail startup when hosted mode is enabled without valid trusted-token verifier config
-
----
-
-## Decision Points (Locked)
-
-1. **Use direct IAM authorize for control-plane ops (not NexusEvent pipeline):** locked
-2. **Principal source in hosted mode is token claims from trusted frontdoor:** locked
-3. **Ingress integrity contract carries forward unchanged:** locked
-4. **System principal reserved for internal sources only:** locked
-
----
-
-## Tactical Decision Points (Choose During Implementation)
-
-1. JTI replay strategy: in-memory LRU vs persistent short-term store
-2. JWKS refresh strategy: polling vs cache-on-miss with backoff
-3. Token TTL default: 5 minutes vs 15 minutes
-4. Hosted mode config naming finalization
-
-These do not change architecture direction.
+Exact field names may change. The required behavior does not.
 
 ---
 
 ## Validation Matrix
 
-Required automated checks:
+Required checks:
 
-1. valid token + tenant match -> allow subject to IAM
+1. valid runtime access token + matching tenant -> allow subject to IAM
 2. valid token + tenant mismatch -> deny
-3. expired token -> deny
-4. invalid signature -> deny
-5. HTTP identity hint spoof (`user`, sender hints) does not alter principal
-6. control-plane HTTP endpoint without token in hosted mode -> deny
-7. WS connect without token in hosted mode -> deny
-8. reserved platform claim from external ingress -> deny + integrity audit event
-
-Validation snapshot (2026-02-20):
-
-- `src/nex/control-plane/auth.test.ts`
-- `src/nex/control-plane/server.hosted-mode.e2e.test.ts`
-- `src/nex/control-plane/server.auth.login.e2e.test.ts`
-- `src/nex/control-plane/server.health.e2e.test.ts`
-- `src/nex/control-plane/server.nex-http.e2e.test.ts`
-- `src/nex/control-plane/server.ingress-cutover.e2e.test.ts`
-- `src/nex/control-plane/server.ingress-credentials.e2e.test.ts`
-- `/Users/tyler/nexus/home/projects/nexus/nexus-frontdoor/src/server.test.ts`
-- `/Users/tyler/nexus/home/projects/nexus/nexus-frontdoor/src/oidc-auth.test.ts`
-- `src/nex/control-plane/server.frontdoor-live-stack.e2e.test.ts`
-- `src/nex/control-plane/server.frontdoor-browser-smoke.e2e.test.ts`
-
-These suites pass together for hosted/runtime profile coverage.
+3. invalid signature -> deny
+4. missing auth on runtime HTTP/WS/SSE -> deny
+5. browser origin outside allowlist for direct tenant-origin access -> deny
+6. runtime-owned adapter callback route enforces correct flow completion and tenant derivation
+7. private operator endpoint without trusted auth -> deny
+8. operator endpoint with trusted auth but wrong tenant context -> deny
 
 ---
 
-## Implementation Order
+## Non-Negotiable Rules
 
-1. add trusted-token verifier interface and implementation ✅
-2. add hosted_mode profile gate + startup validation ✅
-3. close remaining control-plane HTTP IAM parity gaps for hosted profile endpoints ✅
-4. add hosted-mode auth regression suite ✅
-5. integrate with frontdoor scaffold for end-to-end tests ✅ (scaffold-local coverage), expand into Nexus hosted CI matrix ⏳
-
----
-
-## High-Level Architecture
-
-```mermaid
-flowchart LR
-  U["Browser User"] --> FD["Frontdoor (app.domain)"]
-  FD -->|"OIDC/password login"| IDP["Identity Provider"]
-  FD -->|"workspace resolve"| TD["Workspace Directory"]
-  FD -->|"mint short-lived runtime token"| TI["Token Issuer"]
-  FD -->|"HTTP/WS/SSE proxy"| R1["Workspace Runtime A"]
-  FD -->|"HTTP/WS/SSE proxy"| R2["Workspace Runtime B"]
-  R1 --> DB1["Workspace A state/ledgers"]
-  R2 --> DB2["Workspace B state/ledgers"]
-```
-
----
-
-## Frontdoor Scaffold Modules
-
-The frontdoor scaffold project (`nexus-frontdoor`) provides:
-
-1. `auth-provider/` — password provider + OIDC interface
-2. `tenant-resolver/` — maps user/session to workspace
-3. `runtime-token-issuer/` — JWT/assertion signer
-4. `runtime-proxy/` — HTTP/WS/SSE reverse proxy with sticky routing
-5. `ui-shell/` — hosted control UI static assets
-6. `observability/` — request logs, auth logs, routing logs
-
-See `HOSTED_DIRECT_BROWSER_RUNTIME_CONTRACT.md` for the API contract and `HOSTED_MULTI_WORKSPACE.md` for the multi-workspace data model.
+1. hosted mode is a strict runtime security profile
+2. the runtime never trusts frontdoor session cookies directly
+3. the runtime never treats `workspace` as the public hosted selection unit
+4. provider callbacks do not move into app namespaces just to satisfy one app
+5. package lifecycle mutation does not leak into public client APIs

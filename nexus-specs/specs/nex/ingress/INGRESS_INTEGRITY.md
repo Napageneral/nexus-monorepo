@@ -1,264 +1,320 @@
-# Ingress Integrity (Field Stamping Contract)
+# Ingress Integrity
 
-**Status:** DESIGN
-**Last Updated:** 2026-02-18  
-**Related:**
-- `SINGLE_TENANT_MULTI_USER.md` (single-tenant, multi-user + anti-spoofing)
-- `INGRESS_CREDENTIALS.md` (API keys + webchat sessions)
-- `../../delivery/UNIFIED_DELIVERY_TAXONOMY.md` (canonical delivery ids)
-- `../RUNTIME_ROUTING.md` (routing + identity resolution)
-- `../../delivery/INBOUND_INTERFACE.md` (adapter ingress contract)
-- `../../delivery/INTERNAL_ADAPTERS.md` (http-ingress + clock as internal adapters)
-- `../../iam/ACCESS_CONTROL_SYSTEM.md` (IAM model)
-- `../../iam/POLICIES.md` (policy matching)
+**Status:** CANONICAL
+**Last Updated:** 2026-03-06
+**Related:** [../COMMUNICATION_MODEL.md](../COMMUNICATION_MODEL.md), [../NEXUS_REQUEST_TARGET.md](../NEXUS_REQUEST_TARGET.md), [../../iam/ACCESS_CONTROL_SYSTEM.md](../../iam/ACCESS_CONTROL_SYSTEM.md), [../../iam/POLICIES.md](../../iam/POLICIES.md), [../ADAPTER_INTERFACE_UNIFICATION.md](../ADAPTER_INTERFACE_UNIFICATION.md)
 
 ---
 
-## Summary
+## Overview
 
-Ingress integrity defines which parts of a `NexusEvent` are treated as:
+Ingress integrity defines which parts of an external inbound request are authoritative, which parts are validated platform facts, and which parts are untrusted caller claims.
 
-- **authoritative facts** (daemon-stamped / credential-derived), vs
-- **untrusted claims** (adapter/client supplied and subject to validation/override).
+This spec covers external record ingress only:
 
-This is the security contract that prevents identity spoofing (impersonating another principal) and policy spoofing (making IAM evaluate the wrong rules) in hosted mode.
+- adapter-originated `record.ingest`
+- public HTTP or runtime-api ingress that becomes `record.ingest`
+- any other external surface that persists a canonical `record`
 
-Key invariants:
+This spec does **not** cover internal runtime notifications such as:
 
-1. **No spoofing:** clients cannot choose their principal. Principal is derived from verified auth (tokens/API keys) or trusted upstream platform identities.
-2. **Adapter claims are bounded:** adapters can only emit events for the delivery platforms/accounts they are configured and authenticated to represent.
-3. **All agent work is unified:** anything that can run an agent enters the NEX pipeline as a `NexusEvent` and is authorized/audited by IAM.
+- `record.ingested`
+- broker hook points
+- worker lifecycle events
+- cron and job runtime events
 
-### Implementation Snapshot (2026-02-18)
+Those are internal `events`, not external ingress.
 
-Implemented in `nex`:
+The goal is simple:
 
-- Adapter ingress stamping and anti-spoof validation (`platform`, `account_id`, reserved platform guard).
-- Reserved `_daemon` namespace stripping + daemon receive timestamp stamping.
-- IAM time conditions based on daemon receive time (`request.created_at`).
-- Token-backed ingress identity hints (`user`, `x-nexus-session-key`) ignored for customer ingress + recorded as integrity violations.
-- Integrity violation telemetry emitted to:
-  - audit ledger table `ingress_integrity_log`
-  - bus event `ingress.integrity.violation`
-
-Remaining:
-
-- Extend the same integrity telemetry path to any future ingress bridges as they are adapterized.
+- callers cannot spoof principal identity
+- callers cannot spoof privileged platforms or channels
+- callers cannot spoof the communication boundary IAM should evaluate
+- the runtime always evaluates ACL against daemon-stamped request context, not raw caller intent
 
 ---
 
-## Goals
+## Customer and Operator Experience
 
-- Make it impossible for customers/untrusted clients to impersonate operators or other customers.
-- Make it impossible for external adapters to impersonate privileged internal ingress (system/control-plane).
-- Support a single hosted UI/API surface where permissions are enforced by IAM, without relying on "system ingress" shortcuts.
-- Keep adapters useful: adapters can supply real platform facts (Discord user id, channel id, etc), while the daemon enforces integrity boundaries.
+From the user side:
 
----
+- a message, email, webhook, or other external record arrives
+- Nexus attributes it to the correct source surface and identities
+- policies are evaluated against the real sender, real receiver, and real channel
 
-## Non-Goals
+From the operator side:
 
-- "Full sandboxing" (filesystem/network isolation). This spec only covers integrity of *identity/delivery* and *auth-derived principals*.
-- Treating an adapter process as fully untrusted. Adapters are part of the runtime's trusted computing base, but we still enforce integrity rules to prevent bugs/misconfigurations from becoming privilege escalation.
-
----
-
-## Threat Model (What We Are Preventing)
-
-1. **End-user identity spoofing**
-   - Example: HTTP OpenAI-compat caller sets `user="owner"` and tricks the daemon into mapping them to an operator principal.
-2. **Channel/platform spoofing**
-   - Example: an ingress path claims `platform="control-plane"` to get privileged policies or bypass identity resolution.
-3. **Conversation spoofing**
-   - Example: attacker chooses a `container_id` or `thread_id` that maps to a privileged session key or policy condition.
-4. **Timestamp spoofing**
-   - Example: attacker supplies a timestamp to bypass time-based IAM conditions.
-5. **Capabilities spoofing**
-   - Example: attacker claims a channel supports streaming/editing/embeds and manipulates delivery formatting or code paths.
+- adapters provide platform facts, but they do not get to redefine privileged runtime identity
+- public ingress cannot claim to be a different user, platform, account, or system source
+- any integrity violation is rejected or stripped and auditable
 
 ---
 
-## Canonical Event Shape (NEX)
+## Canonical Ingress Shape
 
-In NEX, ingress is normalized into:
+External ingress is normalized into the canonical `NexusRequest` bus shape described in [../NEXUS_REQUEST_TARGET.md](../NEXUS_REQUEST_TARGET.md).
 
-- `event`: `{ event_id, timestamp, content, content_type, attachments?, metadata? }`
-- `delivery`: `{ platform, account_id, sender_id, sender_name?, space_id?, container_id, container_kind, thread_id?, reply_to_id?, metadata?, capabilities, available_channels }`
+The important pieces are:
 
-Even though many of these fields exist in the event payload, they are *not* equally trustworthy. Integrity is defined by the stamping contract below.
+- `request.operation = "record.ingest"`
+- `request.routing`
+- `request.payload` as `RecordPayload`
+- `request.principals` after `resolvePrincipals`
+- `request.access` after `resolveAccess`
 
----
+The canonical external payload is:
 
-## Field Classes (What Is Trusted vs Claimed)
+```typescript
+type RecordPayload = {
+  external_record_id: string;
+  content: string;
+  content_type: "text" | "reaction" | "membership";
+  attachments?: Attachment[];
+  recipients?: RoutingParticipant[];
+  timestamp: number;
+  metadata?: Record<string, unknown>;
+};
+```
 
-### A) Daemon-stamped (authoritative)
+The canonical routing shape is:
 
-These fields MUST be set/overridden by the daemon based on the authenticated ingress source (adapter instance or internal adapter module):
-
-- `delivery.platform`
-- `delivery.account_id`
-- `delivery.capabilities`
-- `delivery.available_channels`
-
-Rationale:
-
-- Prevent an adapter/client from claiming a privileged platform or another account.
-- Ensure capabilities are sourced from runtime adapter registry, not caller input.
-
-### B) Credential-derived (authoritative)
-
-For token-backed ingress (webchat sessions, API keys, operator login sessions), end-user identity MUST be derived from verified credentials:
-
-- `principal.entity_id` is derived from the credential (token/API key/session).
-- `delivery.sender_id` is daemon-derived from that same identity (see "Token-backed ingress" below).
-
-Caller-provided identity hints (example: OpenAI `user`) are treated as metadata only.
-
-### C) Adapter-provided (trusted facts, but validated)
-
-For platform adapters (Discord/Telegram/iMessage/etc), the adapter supplies platform facts that the daemon cannot directly observe:
-
-- `delivery.sender_id` (platform user identifier)
-- `delivery.sender_name` (display only)
-- `delivery.space_id` / `delivery.container_id` / `delivery.thread_id` / names
-- `delivery.container_kind`, `delivery.reply_to_id`
-- `event.event_id` (platform message id) and `event.timestamp` (platform time) when available
-- `event.content`, `event.attachments`, `event.metadata` (non-authoritative)
-
-The daemon MUST validate these fields for shape and consistency (and may reject impossible combinations).
-
-### D) Client-provided (untrusted)
-
-For public HTTP ingress, the daemon MUST treat all identity-related and routing-related fields in the HTTP payload as untrusted:
-
-- any `sender_id` or `platform` fields in the body are ignored
-- any "routing override" / persona/session hints are ignored unless the credential is an operator-class credential AND IAM permits it
-
----
-
-## Reserved Platforms (No External Claims)
-
-Reserve platform names (or prefixes) that only the daemon/internal adapters may emit:
-
-- `system/*` (clock, boot, sentinel)
-- `control/*` (control-plane internal chat UX if modeled as an internal adapter)
-- `runtime/*` (internal maintenance)
-
-Rules:
-
-1. External adapters MUST NOT be able to emit reserved platforms.
-2. Public HTTP ingress MUST NOT be able to emit reserved platforms.
-3. If an ingress payload claims a reserved platform, the daemon rejects and audits it.
-
----
-
-## Multi-Account Adapters
-
-One adapter binary/process may legitimately represent multiple accounts (small fixed set) based on loaded credentials.
-
-Rules:
-
-- Each adapter instance has an allowed set: `allowed_accounts = {account_id...}` for its `platform`.
-- For each inbound event, the adapter may indicate which `account_id` the event is for.
-- The daemon MUST verify `account_id in allowed_accounts` and MUST reject events outside the configured set.
-- The daemon MAY override `delivery.account_id` if the adapter-provided value disagrees with the authenticated adapter instance context.
-
-This preserves usability while preventing cross-account spoofing.
-
----
-
-## Timestamps (Platform Time vs Daemon Time)
-
-Rules:
-
-- The daemon MUST stamp a receive timestamp for every inbound event (example: `event.metadata._daemon.received_at_ms`).
-- For public HTTP ingress:
-  - the daemon generates `event.event_id`
-  - the daemon stamps `event.timestamp` (authoritative)
-  - any client-provided timestamp may be recorded as metadata but is not authoritative
-- For platform adapters:
-  - accept platform `event.timestamp` and record it
-  - IAM time-based decisions should use daemon receive time unless explicitly configured otherwise
-
-Rationale: keep platform time for debugging while avoiding timestamp spoofing in policy evaluation.
-
----
-
-## Metadata Namespaces
-
-Define reserved metadata namespaces:
-
-- `event.metadata._daemon.*` and `delivery.metadata._daemon.*` are daemon-only.
-- Adapters/clients attempting to write under `_daemon` are rejected or have those keys stripped and audited.
-
-This allows the runtime to attach authoritative integrity evidence without ambiguity.
-
----
-
-## Token-Backed Ingress Identity (Webchat, API Keys, Login Sessions)
-
-For any ingress where the request is authenticated via a token/API key/session:
-
-1. The daemon verifies the credential.
-2. The daemon resolves `entity_id` deterministically from that credential.
-3. The daemon sets principal and delivery identity from that:
-   - `principal.entity_id = <resolved entity_id>`
-   - `delivery.sender_id = <daemon-derived identifier>`
-
-Recommended canonical forms:
-
-- Webchat visitor sessions: `platform="webchat"`, `sender_id="entity:<entity_id>"` (or `"webchat:<session_id>"` if you want sender_id to represent a session contact)
-- Ingress API keys: `platform="api_key"`, `sender_id="key:<key_id>"` (mapped to entity), or directly `entity:<entity_id>`
-- Operator login sessions: `platform="login"`, `sender_id="user:<user_id>"` or `oidc:<sub>` (future)
+```typescript
+type Routing = {
+  adapter: string;
+  platform: string;
+  sender: RoutingParticipant;
+  receiver: RoutingParticipant;
+  space_id?: string;
+  container_kind?: "direct" | "group";
+  container_id?: string;
+  thread_id?: string;
+  reply_to_id?: string;
+  metadata?: Record<string, unknown>;
+};
+```
 
 Critical rule:
 
-- Caller-provided fields like OpenAI `user` MUST NOT influence principal resolution.
+- `thread_id` and `reply_to_id` are record metadata only
+- they are not trusted as conversation splitters
+- conversation boundaries are derived later by `resolvePrincipals`
 
 ---
 
-## Enforcement Points (Implementation Guidance)
+## Trust Classes
 
-Integrity should be enforced at the earliest boundary possible, with "defense in depth":
+### 1. Daemon-Stamped Request Fields
 
-1. **Adapter Manager ingress (external adapters)**
-   - authenticate adapter instance
-   - stamp/verify `platform` and `account_id`
-   - source `capabilities` / `available_channels` from runtime registry
-2. **Internal adapters (http-ingress, clock)**
-   - internal code stamps all authoritative fields
-3. **Public HTTP ingress**
-   - derive identity from credential
-   - ignore caller-provided identity/routing claims
-4. **Pipeline receive stage (last line of defense)**
-   - validate reserved platform rules
-   - validate metadata namespace rules
-   - ensure system principals only exist for explicit internal platforms
+These fields are always owned by the daemon/runtime boundary:
+
+- `request_id`
+- `operation`
+- `routing.adapter`
+- `routing.platform`
+- transport metadata
+- any internal source or connection identifiers the runtime attaches
+
+If caller input disagrees with daemon-stamped values, daemon-stamped values win.
+
+### 2. Credential-Derived Identity
+
+For token-backed ingress such as webchat, API keys, or authenticated operator surfaces:
+
+- principal identity is derived from the verified credential
+- caller-supplied identity hints are ignored for authority
+- caller hints may be recorded as metadata for debugging, but they do not affect principal resolution
+
+Examples of untrusted caller hints:
+
+- `user`
+- `sender_id`
+- persona hints
+- session hints
+- conversation routing hints
+
+### 3. Adapter-Provided Platform Facts
+
+Platform adapters may provide the external facts the daemon cannot directly infer:
+
+- `external_record_id`
+- platform timestamp
+- content and attachments
+- raw sender platform id
+- raw receiver platform id
+- `space_id`
+- `container_id`
+- `container_kind`
+- `thread_id`
+- `reply_to_id`
+
+These are treated as trusted platform facts **only after validation**.
+
+The daemon validates:
+
+- shape
+- platform/adapter consistency
+- account or connection ownership
+- impossible combinations
+- reserved namespace violations
+
+### 4. Client-Provided Claims
+
+For direct public ingress, everything identity-sensitive or routing-sensitive in the request body is untrusted by default.
+
+Examples:
+
+- claimed sender identity
+- claimed platform
+- claimed receiver identity
+- claimed privileged container
+- claimed session or conversation target
+
+The runtime either ignores these values, replaces them with stamped values, or rejects the request.
+
+---
+
+## Reserved Namespaces and Platforms
+
+Some namespaces are daemon-only:
+
+- metadata keys under `_daemon.*`
+- reserved internal platform families such as `system/*`, `runtime/*`, and `runtime-api/*`
+
+Rules:
+
+1. external callers and external adapters may not claim reserved internal platforms
+2. callers may not write `_daemon.*` metadata
+3. if such a claim appears, the daemon strips or rejects it and records an integrity violation
+
+---
+
+## Multi-Account and Multi-Connection Boundaries
+
+Adapters may represent multiple configured accounts or connections, but they may only emit records for identities the runtime has explicitly bound to that adapter instance.
+
+Rules:
+
+1. the runtime knows which accounts or connections each adapter instance is allowed to represent
+2. inbound records outside that bound set are rejected
+3. if the adapter supplies account-like metadata, the daemon verifies it against the bound instance
+4. a caller cannot move a record across accounts or connections by changing payload fields
+
+This prevents cross-account spoofing while preserving normal multi-account adapters.
+
+---
+
+## Timestamp and Record Identity Rules
+
+### `external_record_id`
+
+`external_record_id` is the strongest stable external identifier the source can provide.
+
+Rules:
+
+1. adapters should provide the native stable identifier when one exists
+2. if no native stable identifier exists, the adapter must synthesize a deterministic fallback
+3. callers do not choose the canonical `record_id`
+4. canonical dedupe happens on the persisted record layer, not on raw caller envelopes
+
+### Timestamps
+
+Two timestamps may matter:
+
+- source timestamp from the external platform
+- daemon receive timestamp
+
+Rules:
+
+1. the runtime records daemon receive time for every external ingress
+2. source timestamps may be preserved for traceability
+3. policy evaluation should use daemon-controlled receive time unless a spec explicitly says otherwise
+4. public callers do not get to authoritatively backdate requests
+
+---
+
+## Enforcement Points
+
+Integrity is enforced in layers:
+
+### Adapter Boundary
+
+When ingest arrives from an adapter process:
+
+- verify adapter identity
+- verify bound platform
+- verify bound account/connection scope
+- strip or reject reserved metadata
+
+### Public HTTP / Runtime API Boundary
+
+When ingest arrives from an authenticated public surface:
+
+- derive identity from the verified credential
+- ignore caller-authored identity or routing overrides
+- stamp canonical transport and routing metadata
+
+### `acceptRequest`
+
+At the pipeline boundary:
+
+- validate the request shape
+- ensure reserved namespaces are not caller-authored
+- ensure required record and routing fields exist
+- normalize any accepted source facts into canonical bus shape
+
+### `resolvePrincipals`
+
+After raw ingest:
+
+- resolve sender and receiver entities from canonical routing
+- derive the conversation boundary from resolved principals plus channel shape
+- never trust caller-provided session or conversation targets as authoritative
 
 ---
 
 ## Audit Requirements
 
-The daemon MUST write audit entries (or bus events) for integrity violations:
+Ingress integrity violations must be observable.
 
-- reserved platform claim attempt
-- platform/account mismatch vs adapter instance
-- client attempts to set `_daemon` metadata
-- client attempts to set identity fields when authenticated via token-backed ingress
+At minimum the runtime must audit:
 
-This is as important as enforcement: it makes active probing visible.
+- reserved platform claim attempts
+- reserved metadata writes
+- mismatched adapter/account or adapter/platform claims
+- ignored client identity overrides
+- impossible channel shape combinations
+
+The audit record should preserve:
+
+- when it happened
+- which surface or adapter it came from
+- what was claimed
+- what the daemon accepted instead
+- whether the request was rejected or normalized
 
 ---
 
-## Test Plan (Minimum)
+## Minimum Validation
 
-1. HTTP OpenAI/OpenResponses:
-   - supplying `user` does not change principal
-   - supplying spoofed `sender_id` in payload is ignored/rejected
-2. Reserved platform claims:
-   - external adapter cannot emit `system/*` or `control/*`
-3. Adapter multi-account boundary:
-   - adapter configured for account A cannot emit account B
-4. Timestamp:
-   - daemon receive timestamp always recorded
-   - HTTP timestamps are daemon-stamped for IAM decisions
+1. Public HTTP ingress cannot change the resolved principal by supplying identity hints.
+2. External adapters cannot emit reserved internal platforms.
+3. `_daemon.*` metadata cannot be caller-authored.
+4. A multi-account adapter cannot emit records for accounts outside its bound set.
+5. Spoofed `thread_id` or `container_id` values cannot bypass conversation derivation rules.
+6. `record.ingest` always enters the pipeline in canonical request shape before ACL evaluation.
+
+---
+
+## Naming Locks
+
+- external inbound object: `record`
+- canonical live ingress operation: `record.ingest`
+- persisted canonical identifier: `record_id`
+- external dedupe identifier: `external_record_id`
+- internal downstream notification: `record.ingested`
+
+Non-canonical here:
+
+- external `event` as the persisted ingress noun
+- `event.event_id` as the primary external identifier shape
+- caller-owned session or conversation routing overrides for ordinary ingress

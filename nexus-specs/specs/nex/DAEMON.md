@@ -1,590 +1,340 @@
 # NEX Daemon
 
 **Status:** CANONICAL
-**Last Updated:** 2026-02-18
-**Related:** [NEXUS_REQUEST_TARGET.md](./NEXUS_REQUEST_TARGET.md), ingress/CONTROL_PLANE.md, `../delivery/ADAPTER_SYSTEM.md`
-**Database layout:** See `../DATABASE_ARCHITECTURE.md` for canonical database inventory
+**Last Updated:** 2026-03-06
+**Related:** [NEXUS_REQUEST_TARGET.md](./NEXUS_REQUEST_TARGET.md), [COMMUNICATION_MODEL.md](./COMMUNICATION_MODEL.md), [WORK_DOMAIN_UNIFICATION.md](./WORK_DOMAIN_UNIFICATION.md), [ADAPTER_INTERFACE_UNIFICATION.md](./ADAPTER_INTERFACE_UNIFICATION.md), [RUNTIME_API_BOUNDARY_AND_EXTENSION_OWNERSHIP.md](./RUNTIME_API_BOUNDARY_AND_EXTENSION_OWNERSHIP.md)
 
 ---
 
 ## Overview
 
-The NEX daemon is the persistent process that **is** Nexus at runtime. It boots the system, supervises adapters, runs the pipeline, serves the event bus, and shuts down cleanly.
+The NEX daemon is the persistent runtime process for Nexus.
 
-```
-nexus daemon start
-     │
-     ▼
-┌──────────────────────────────────────────────────────────┐
-│                      NEX DAEMON                           │
-│                                                           │
-│  ┌──────────┐  ┌──────────────┐  ┌────────────────────┐ │
-│  │  Config   │  │ Ledger DBs   │  │   Event Bus        │ │
-│  └──────────┘  └──────────────┘  └────────────────────┘ │
-│                                                           │
-│  ┌──────────────────────────────────────────────────────┐│
-│  │              Adapter Manager                          ││
-│  │  eve/default (PID 1234)    ● running                 ││
-│  │  gog/tnapathy  (PID 1235)  ● running                ││
-│  │  discord/echo  (PID 1236)  ● running                 ││
-│  └──────────────────────────────────────────────────────┘│
-│                                                           │
-│  ┌──────────────┐  ┌────────────┐  ┌──────────────────┐ │
-│  │  Pipeline     │  │  Plugins   │  │  HTTP Server     │ │
-│  │  (5 stages)   │  │  (loaded)  │  │  (health + SSE)  │ │
-│  └──────────────┘  └────────────┘  └──────────────────┘ │
-│                                                           │
-│  ┌──────────────┐  ┌────────────────────────────────────┐│
-│  │  Timer        │  │  Signal Handler                    ││
-│  │  (heartbeat)  │  │  SIGTERM → shutdown                ││
-│  │              │  │  SIGINT  → shutdown                 ││
-│  │              │  │  SIGUSR1 → config reload            ││
-│  └──────────────┘  └────────────────────────────────────┘│
-│                                                           │
-└──────────────────────────────────────────────────────────┘
+It owns:
+
+- configuration loading
+- ledger lifecycle
+- the 5-stage request pipeline
+- internal pubsub
+- runtime API surfaces
+- adapter supervision
+- the durable work dispatcher and queue workers
+- work runtime supervision
+
+It is the one long-lived process that turns external ingress, internal runtime events, jobs, and agent execution into one coherent system.
+
+---
+
+## Operator Experience
+
+From an operator perspective:
+
+- when the daemon is up, adapters can ingest, the runtime API can serve requests, scheduled work can fire, and agent runs can proceed
+- when the daemon is down, Nexus is effectively offline
+- health reporting comes from one place
+- startup and shutdown are explicit, supervised, and auditable
+
+The daemon should feel like the single runtime boundary for the whole platform, not one service among many loosely coupled peers.
+
+---
+
+## Core Runtime Model
+
+At runtime, the daemon coordinates these subsystems:
+
+```text
+config
+  -> ledgers
+  -> pipeline
+  -> pubsub
+  -> runtime API surfaces
+  -> adapter manager
+  -> work runtime
 ```
 
-**This spec covers:** How the process starts, what it supervises, how it handles signals, and how it shuts down. The *pipeline* is in `NEXUS_REQUEST_TARGET.md`. The *adapter lifecycle* is in `../delivery/ADAPTER_SYSTEM.md`.
+### Ledgers
+
+The daemon opens and migrates the runtime ledgers it owns:
+
+- `records.db`
+- `agents.db`
+- `identity.db`
+- `memory.db`
+- `embeddings.db`
+- `runtime.db`
+- `work.db`
+
+### Pipeline
+
+All operations, regardless of source, flow through:
+
+```text
+acceptRequest -> resolvePrincipals -> resolveAccess -> executeOperation -> finalizeRequest
+```
+
+`record.ingest` is the canonical live-ingress path for one external record.
+
+### PubSub
+
+Internal runtime notifications are published on pubsub.
+
+Examples:
+
+- `record.ingested`
+- broker lifecycle events
+- worker lifecycle events
+- system readiness or degradation events
+
+Pubsub is internal runtime signaling.
+It is not the persisted record ledger.
+
+### Adapter Manager
+
+The adapter manager supervises inbound and outbound adapter connections.
+
+Platform adapters:
+
+- emit external records into `record.ingest`
+- perform outbound delivery for broker-invoked agent responses
+
+### Work Runtime
+
+The work runtime supervises:
+
+- `event_subscriptions`
+- `job_schedules`
+- `job_queue`
+- `job_runs`
+- DAG advancement
+- job execution
+
+Time-based work is executed as jobs.
+The daemon does **not** model time as synthetic inbound records.
 
 ---
 
 ## Startup Sequence
 
-When `nexus daemon start` executes:
+Canonical startup order:
 
-```
-1. Lock                        Acquire PID lockfile (~/nexus/state/nex.pid)
-2. Config                      Load state/config.json, validate schema
-3. Logging                     Initialize structured logger
-4. Databases                   Open/migrate ledger databases
-5. Event Bus                   Initialize in-memory pub/sub
-6. Plugin Loader               Load plugins from plugins/ directory
-7. Pipeline                    Wire up 5-stage pipeline with loaded plugins
-8. Control-Plane Server        Start HTTP + WS (health + SSE + UI + endpoints + RPC)
-9. Adapter Manager             Start enabled adapter accounts (spawn processes)
-10. Timer                      Start internal heartbeat/cron adapter
-11. Ready                      Publish system.started, write ready state
-```
+1. acquire PID lock
+2. load and validate config
+3. initialize logging
+4. open and migrate ledgers
+5. initialize pubsub
+6. initialize the request pipeline and hookpoint dispatch
+7. start runtime API surfaces
+8. start the adapter manager and enabled adapter connections
+9. start the work runtime, dispatcher, queue workers, and cron evaluation loop
+10. publish ready state and accept normal traffic
 
-### 1. PID Lockfile
+This order matters:
 
-Prevents multiple daemon instances:
+- ledgers must exist before runtime services can write state
+- the pipeline must exist before adapters or runtime API surfaces can submit operations
+- the work runtime should only start after the pipeline and ledgers are available
 
-```typescript
-const LOCKFILE = path.join(nexusStateDir, 'nex.pid');
+---
 
-function acquireLock(): void {
-  if (fs.existsSync(LOCKFILE)) {
-    const existingPid = parseInt(fs.readFileSync(LOCKFILE, 'utf-8'));
-    if (isProcessRunning(existingPid)) {
-      throw new Error(`NEX daemon already running (PID ${existingPid})`);
-    }
-    // Stale lockfile — previous crash
-    fs.unlinkSync(LOCKFILE);
-  }
-  fs.writeFileSync(LOCKFILE, String(process.pid));
-}
-```
+## Locking and Single-Process Ownership
 
-On exit (clean or crash handler), the lockfile is removed.
+The daemon owns a PID lock under Nexus state.
 
-### 2. Configuration
+Rules:
 
-Load from canonical config file:
+1. only one daemon instance may own the runtime state at a time
+2. stale locks from crashed processes may be cleared after process liveness verification
+3. startup fails fast if another live daemon already owns the lock
 
-- `~/nexus/state/config.json`
+This prevents split-brain behavior across ledgers, adapters, and cron execution.
 
-The config is a single JSON document namespaced by domain. Representative domains:
+---
 
-- `runtime.*` (bind host/port, exposure, UI hosting)
+## Configuration
+
+The daemon loads canonical Nexus configuration before touching runtime state.
+
+Representative configuration areas:
+
+- `runtime.*`
 - `adapters.*`
-- `plugins.*`
-- `bus.*`
-- `timer.*`
 - `memory.*`
+- `work.*`
+- `pubsub.*`
 
-Config validation fails fast — if the config is invalid, the daemon exits with a clear error before touching databases or spawning processes.
+Configuration validation is fail-fast:
 
-### 3. Database Initialization
-
-Open (or create + migrate) all ledger databases:
-
-```
-state/data/
-├── events.db        # Event Ledger — inbound/outbound events
-├── agents.db        # Agents Ledger — sessions, turns, messages, tool_calls
-├── identity.db      # Identity — contacts, directory, entities, auth, ACL
-├── memory.db        # Memory System — elements, sets, jobs
-├── embeddings.db    # Semantic vector index (sqlite-vec)
-├── runtime.db       # Runtime Operations — requests, adapters, automations, bus
-└── work.db          # Work Management — tasks, work items, workflows, sequences
-```
-
-Migration strategy: each database has a `schema_version` table. On open, check version and apply any pending migrations. If migration fails, daemon exits with error — never run with stale schema.
-
-### 4. Adapter Manager Boot
-
-The Adapter Manager reads the `adapters:` config and the `adapter_instances` DB table, then starts enabled accounts.
-
-Adapter classes:
-
-1. **Platform adapters** (iMessage, Gmail, Discord, etc.) — monitor JSONL `NexusEvent` -> pipeline
-2. **Import adapters** (`aix`) — IPC import frames -> Session Import Service
-
-Boot behavior:
-
-```
-For each adapter in config:
-  For each enabled account:
-    If class == platform:
-      1. Verify credential (if credential_ref set)
-      2. Spawn monitor: <command> monitor --account <id> --format jsonl
-      3. Read monitor stdout JSONL -> ingest pipeline
-      4. Update adapter_instances: status=running, pid=<pid>
-      5. Start health check loop
-
-    If class == import (aix):
-      1. Spawn worker process under local IPC transport
-      2. Route IPC import.batch/import.chunk -> Session Import Service
-      3. Start tail loop (sync) and/or enqueue backfill jobs (async)
-      4. Update adapter_instances: status=running, pid=<pid>
-      5. Start health check loop
-```
-
-Adapters start in parallel (no ordering dependency between adapters). Runtime readers/listeners run in async loops per adapter account.
-
-**Startup order within an adapter account is sequential:** credential check → spawn → confirm stdout is readable → mark running.
-
-See `../delivery/ADAPTER_SYSTEM.md` for channel adapter lifecycle and `workplans/SESSION_IMPORT_SERVICE.md` for `aix` import adapter lifecycle.
-
-### 5. Timer Adapter
-
-The timer adapter is internal (not an external process). It generates synthetic events at configured intervals:
-
-```typescript
-interface TimerEvent {
-  event_id: string;        // "timer:heartbeat:<timestamp>"
-  platform: "clock";
-  content_type: "system/heartbeat";
-  content: "";
-  timestamp: number;
-  sender_id: "system";
-  container_id: "system";
-  container_kind: "direct";
-}
-```
-
-Timer events enter the full pipeline like any other event. Automations can match on `platform: "clock"` for scheduled tasks (daily summaries, periodic checks, etc.).
-
-```yaml
-timer:
-  heartbeat_interval_ms: 60000    # Fire every 60s
-  cron:
-    - expr: "0 8 * * *"           # Daily at 8am
-      label: "morning-summary"
-    - expr: "*/30 * * * *"        # Every 30 min
-      label: "email-check"
-```
-
-Cron events carry the label in metadata so automations can distinguish them:
-
-```typescript
-// Timer cron event
-{
-  event_id: "timer:cron:morning-summary:1707235200000",
-  platform: "clock",
-  content_type: "system/cron",
-  content: "",
-  metadata: { cron_label: "morning-summary", cron_expr: "0 8 * * *" }
-}
-```
-
-### 6. Control-Plane Server (HTTP + WS)
-
-The daemon serves the runtime control-plane for CLI + UI + integrations. At minimum:
-
-```
-GET /health              → Health check (for doctor system, monitoring)
-GET /api/events/stream   → SSE event stream (bus subscriber)
-```
-
-Additional control-plane endpoints (UI, hooks, OpenAI/OpenResponses, tools invoke, WS RPC) are specified in `ingress/CONTROL_PLANE.md`.
-
-Binds to `runtime.*` configuration (default loopback). No external exposure without explicit config.
-
-#### Health Endpoint
-
-```
-GET /health
-```
-
-```typescript
-interface HealthResponse {
-  status: "healthy" | "degraded" | "unhealthy";
-  version: string;
-  uptime_ms: number;
-  pid: number;
-
-  adapters: {
-    total: number;
-    running: number;
-    errored: number;
-    details: Array<{
-      adapter: string;
-      account: string;
-      status: string;
-      health: string;
-      last_event_age_ms: number | null;
-    }>;
-  };
-
-  pipeline: {
-    active_requests: number;
-    total_processed: number;
-    avg_latency_ms: number;
-  };
-
-  ledgers: {
-    events_db: "ok" | "error";
-    agents_db: "ok" | "error";
-    identity_db: "ok" | "error";
-    memory_db: "ok" | "error";
-    embeddings_db: "ok" | "error";
-    runtime_db: "ok" | "error";
-    work_db: "ok" | "error";
-  };
-}
-```
-
-Overall status logic:
-- **healthy** — all adapters running, all DBs ok, pipeline processing
-- **degraded** — some adapters errored or degraded, but pipeline functional
-- **unhealthy** — pipeline broken or critical DB inaccessible
-
-#### SSE Endpoint
-
-See `BUS_ARCHITECTURE.md` for full SSE spec. The daemon starts the SSE endpoint as part of the HTTP server, subscribing to all bus events.
-
-### 7. Ready State
-
-Once all subsystems are initialized:
-
-1. Publish `system.started` bus event with version info
-2. Log startup summary:
-
-```
-[NEX] Daemon started (v0.1.0)
-  PID:       12345
-  HTTP:      127.0.0.1:7400
-  Adapters:  3 running, 0 errored
-    eve/default           imessage  ● running
-    gog/tnapathy@gmail.com gmail   ● running
-    discord-cli/echo-bot  discord   ● running
-  Plugins:   2 loaded (logging, analytics)
-  Timer:     heartbeat every 60s
-  Ledgers:   7/7 ok
-```
+- invalid config prevents startup
+- partial boot is not acceptable
 
 ---
 
-## Signal Handling
+## Database Initialization
 
-| Signal | Action |
-|--------|--------|
-| `SIGTERM` | Graceful shutdown (standard process termination) |
-| `SIGINT` | Graceful shutdown (Ctrl+C) |
-| `SIGUSR1` | Config hot-reload |
-| `SIGUSR2` | Reserved (future: dump diagnostics to file) |
+Each ledger is opened and migrated before the daemon begins accepting traffic.
 
-### Graceful Shutdown (SIGTERM / SIGINT)
+Rules:
 
-```
-Signal received
-     │
-     ▼
-1. Publish system.stopping bus event
-2. Stop accepting new adapter events (close JSONL readers)
-3. Drain active pipeline requests (wait up to 30s)
-4. Stop timer adapter
-5. Send SIGTERM to all adapter processes
-6. Wait up to 5s for adapter processes to exit
-7. SIGKILL any remaining adapter processes
-8. Close HTTP server (stop accepting new connections, drain active)
-9. Flush async ledger writes
-10. Close database connections
-11. Remove PID lockfile
-12. Exit 0
-```
+1. every owned ledger has schema-version tracking
+2. migrations either complete successfully or startup fails
+3. the daemon never runs with partially migrated state
 
-**Key principle:** Don't lose data. Active pipeline requests finish. Pending ledger writes flush. Only then do we exit.
+The ledgers serve distinct roles:
 
-**Timeout behavior:**
-- Active requests get 30s to complete. After that, they're cancelled and logged as interrupted.
-- Adapter processes get 5s after SIGTERM. This matches `../delivery/ADAPTER_SYSTEM.md` shutdown spec.
-- HTTP server gets 5s to drain active SSE connections.
-
-### Config Hot-Reload (SIGUSR1)
-
-```
-SIGUSR1 received
-     │
-     ▼
-1. Re-read state/config.json
-2. Validate new config against schema
-3. If invalid → log error, keep running with old config
-4. Diff old vs new config
-5. Apply changes that don't require restart:
-     │
-     ├── adapter added/removed → start/stop adapter processes
-     ├── adapter account enabled/disabled → start/stop monitor
-     ├── timer intervals changed → reschedule
-     ├── plugin enabled/disabled → load/unload
-     ├── log level changed → update logger
-     ├── bus mode changed → switch write-through on/off
-     │
-     └── Changes that DO require restart (logged as warning):
-           ├── daemon.port changed
-           ├── ledgers.directory changed
-           └── pipeline.timeout_ms changed (applies to new requests only)
-6. Publish system.config_reloaded bus event
-```
-
-CLI trigger:
-
-```bash
-# Send SIGUSR1 to running daemon
-nexus daemon reload
-
-# Equivalent to:
-kill -USR1 $(cat ~/nexus/state/nex.pid)
-```
+- `records.db` for canonical external records
+- `agents.db` for conversations, sessions, turns, messages, and tool calls
+- `identity.db` for entities, contacts, ACL, grants, and audit
+- `memory.db` for elements and sets
+- `embeddings.db` for vector search structures
+- `runtime.db` for runtime requests, adapter state, Nexus-owned runtime configuration, workspaces, and internal runtime bookkeeping
+- `work.db` for jobs, event subscriptions, job schedules, DAGs, mutable leased queue state, immutable job runs, and agent configs
 
 ---
 
-## Process Model
+## Ingress Responsibilities
 
-### What Runs Inside the Daemon
+The daemon accepts operations from multiple sources, but all of them converge into one pipeline.
 
-| Component | Thread/Async Model | Notes |
-|-----------|-------------------|-------|
-| Pipeline stages | Async functions (event loop) | All in-process, no network hops |
-| Adapter stdout readers | One async loop per adapter | Reads JSONL, pushes to pipeline |
-| Adapter stream writers | One async loop per streaming adapter | Writes StreamEvent JSONL to stdin |
-| Health check loops | One timer per adapter | Periodic health probes |
-| Timer adapter | Single interval/cron scheduler | Generates synthetic events |
-| HTTP server | Async (Hono/native) | Health + SSE |
-| Event Bus | In-memory pub/sub | Sync publish, async subscribers |
-| Async ledger writes | Background write queue | Batched/coalesced |
+### External Record Ingress
 
-### What Runs as Child Processes
+External platform traffic arrives through adapters and becomes `record.ingest`.
 
-| Process | Managed By | Lifecycle |
-|---------|-----------|-----------|
-| Adapter `monitor` | Adapter Manager | Long-running, auto-restart |
-| Adapter `stream` | Adapter Manager | Long-running, auto-restart |
-| Adapter `backfill` | Adapter Manager | Terminates on completion |
-| Adapter `health` | Adapter Manager | Short-lived per check |
-| Adapter `send` | Agent delivery tool (via broker) | Short-lived per delivery |
+Canonical flow:
 
-All child processes are tracked by PID. On daemon shutdown, all children are cleaned up.
+```text
+adapter -> record.ingest -> pipeline -> persist/dedupe record -> publish record.ingested
+```
+
+### Runtime API Operations
+
+The runtime API may submit:
+
+- `record.ingest`
+- read operations
+- management operations
+- broker and work operations
+
+These still use the same request pipeline.
+
+### Internal Runtime Signals
+
+Internal runtime signals do **not** masquerade as external records.
+
+Examples:
+
+- readiness changes
+- cron firings
+- broker hook points
+- worker lifecycle events
+
+These are internal pubsub events or direct work-runtime actions.
 
 ---
 
-## CLI Commands
+## Adapter Supervision
 
-### `nexus daemon start`
+The daemon is responsible for adapter lifecycle:
 
-Start the NEX daemon:
+- starting enabled adapters
+- monitoring health
+- restarting when policy allows
+- tracking connection status
+- routing outbound delivery requests
 
-```bash
-# Foreground (default for development)
-nexus daemon start
+The important boundary is:
 
-# Background (detached)
-nexus daemon start --detach
+- adapters own external protocol behavior
+- the daemon owns runtime coordination, stamping, and supervision
 
-# With specific config
-nexus daemon start --config ./custom-config.json
-
-# With log level override
-nexus daemon start --log-level debug
-```
-
-Flags:
-- `--detach` / `-d` — Run in background, write logs to `~/nexus/state/logs/nex.log`
-- `--config <path>` — Config file path (default: `~/nexus/state/config.json`)
-- `--log-level <level>` — Override config log level
-- `--port <port>` — Override config HTTP port
-
-### `nexus daemon stop`
-
-Graceful shutdown:
-
-```bash
-nexus daemon stop
-# Sends SIGTERM to daemon PID, waits for exit
-# Timeout: 45s (30s drain + 15s cleanup)
-```
-
-### `nexus daemon restart`
-
-Stop + start:
-
-```bash
-nexus daemon restart
-# Equivalent to: nexus daemon stop && nexus daemon start
-```
-
-### `nexus daemon status`
-
-Show current daemon state:
-
-```bash
-nexus daemon status
-
-# Output:
-# NEX Daemon: running (PID 12345, uptime 4h 23m)
-# HTTP: 127.0.0.1:7400
-#
-# Adapters:
-#   eve/default            imessage  ● running   healthy   last: 12s ago    events: 3,891
-#   gog/tnapathy@gmail.com gmail     ● running   healthy   last: 2s ago     events: 1,247
-#   discord-cli/echo-bot   discord   ● running   healthy   last: 3m ago     events: 156
-#
-# Pipeline:
-#   Active requests: 0
-#   Total processed: 847
-#   Avg latency: 1,234ms
-#
-# Plugins: logging, analytics
-# Timer: heartbeat 60s, 2 cron jobs
-# Ledgers: 7/7 ok
-```
-
-If not running:
-
-```bash
-nexus daemon status
-
-# NEX Daemon: not running
-# Last ran: 2026-02-05 14:30 (PID 12340, exited cleanly)
-```
-
-### `nexus daemon reload`
-
-Hot-reload config:
-
-```bash
-nexus daemon reload
-# Sends SIGUSR1, waits for system.config_reloaded bus event
-```
-
-### `nexus daemon logs`
-
-Tail daemon logs:
-
-```bash
-# Follow logs
-nexus daemon logs -f
-
-# Last 100 lines
-nexus daemon logs -n 100
-
-# Filter by level
-nexus daemon logs --level error
-```
+The daemon should verify that each running adapter instance is allowed to represent the configured source it claims to handle.
 
 ---
 
-## Crash Recovery
+## Work Runtime Responsibilities
 
-### On Unexpected Exit
+The daemon owns the work runtime loop.
 
-If the daemon crashes (segfault, OOM, uncaught exception):
+That includes:
 
-1. Child adapter processes become orphans — the OS will not automatically kill them
-2. On next `nexus daemon start`:
-   - Detect stale lockfile (PID not running)
-   - Clean up stale lockfile
-   - Scan for orphaned adapter processes (check `adapter_instances` DB for PIDs)
-   - Kill any orphaned adapter processes
-   - Resume normal startup
+- evaluating due `job_schedules`
+- matching internal runtime events against active `event_subscriptions`
+- enqueueing durable work into `job_queue`
+- leasing queue rows to workers
+- creating and finalizing `job_runs`
+- advancing DAGs after upstream node completion
+- recording job status and metrics
 
-### On Adapter Crash
+The work runtime may invoke:
 
-Handled by the Adapter Manager's restart policy (see `../delivery/ADAPTER_SYSTEM.md`):
-- Exponential backoff: 1s → 2s → 4s → 8s → ... → 5min max
-- Max 5 restarts before marking errored
-- Reset restart count after 10min healthy
-- Manual recovery: `nexus adapter restart <adapter>/<account>`
+- pure jobs
+- broker-managed agent runs
+- follow-on internal runtime publications
 
-### On Pipeline Error
+Blocking hook-point jobs remain inline on the request or broker lifecycle path.
+They may still produce `job_runs`, but they do not require queue leasing.
 
-Pipeline errors are per-request, not daemon-level:
-- Error logged with full NexusRequest context
-- `onError` plugins fire
-- Error trace written to Nexus Ledger
-- Daemon continues processing other events
-- See `NEXUS_REQUEST_TARGET.md` for pipeline error handling
+The key architecture rule is:
 
-### On Database Error
-
-- If a ledger DB is inaccessible at startup → daemon fails to start
-- If a ledger DB becomes inaccessible at runtime → affected writes fail, health degrades to "unhealthy"
-- Daemon does NOT crash on DB errors — it logs and continues with degraded state
-- Fix: resolve DB issue, daemon auto-recovers on next write attempt
+**time-based and event-reactive work is modeled as jobs, durable queue state, and immutable job runs, not as synthetic external ingress records**
 
 ---
 
-## Logging
+## Health Model
 
-Structured JSON logging to stdout (foreground) or log file (detached):
+The daemon exposes a health surface for operators and tooling.
 
-```jsonl
-{"ts":"2026-02-05T14:30:00.123Z","level":"info","msg":"Daemon started","version":"0.1.0","pid":12345}
-{"ts":"2026-02-05T14:30:00.456Z","level":"info","msg":"Adapter started","adapter":"eve","account":"default","pid":1234}
-{"ts":"2026-02-05T14:30:01.789Z","level":"info","msg":"Pipeline complete","request_id":"req_abc","duration_ms":1234,"stage_count":9}
-{"ts":"2026-02-05T14:30:02.012Z","level":"warn","msg":"Adapter health degraded","adapter":"gog","account":"tyler@work.com"}
-{"ts":"2026-02-05T14:30:03.345Z","level":"error","msg":"Pipeline error","request_id":"req_def","error":"LLM rate limited","stage":"runAgent"}
-```
+Health should at minimum cover:
 
-Log file location (detached mode): `~/nexus/state/logs/nex.log`
+- daemon liveness
+- ledger availability
+- adapter status
+- pipeline capacity
+- work-runtime status
 
-Log rotation: not handled by daemon — use system logrotate or similar. The daemon reopens log file on SIGHUP (standard pattern).
+Overall health should distinguish:
 
----
+- healthy
+- degraded
+- unhealthy
 
-## File Locations
-
-```
-~/nexus/state/               # Canonical runtime state (CLI/daemon owned)
-├── nex.pid                  # PID lockfile (created at start, removed at stop)
-└── logs/
-    └── nex.log              # Log file (detached mode only)
-
-~/nexus/state/
-├── config.json              # Canonical config
-
-~/nexus/state/data/
-├── events.db
-├── agents.db
-├── identity.db
-├── memory.db
-├── embeddings.db
-├── runtime.db
-└── work.db
-```
+The goal is operational clarity, not just “process exists”.
 
 ---
 
-## Related Documents
+## Shutdown
 
-- `NEXUS_REQUEST_TARGET.md` — The canonical NexusRequest data bus and 5-stage pipeline
-- `AGENT_DELIVERY.md` — Agent-driven delivery model
-- `../delivery/ADAPTER_SYSTEM.md` — Adapter process supervision, restart, health
-- `../agents/SESSION_LIFECYCLE.md` — Session management within the pipeline
-- `../../environment/` — Workspace layout and configuration
+Canonical shutdown order:
+
+1. stop accepting new runtime API traffic
+2. stop accepting new adapter ingress
+3. stop dispatching new scheduled work
+4. allow in-flight requests and jobs to finish or abort by policy
+5. flush logs and final runtime state
+6. close ledgers
+7. remove PID lock
+
+Shutdown should be clean and predictable.
+The daemon should not leave half-owned adapter processes or ambiguous cron ownership behind.
 
 ---
 
-*This document defines how the NEX daemon starts, runs, and stops. The pipeline it executes is defined in `NEXUS_REQUEST_TARGET.md`. The adapters it supervises are in `../delivery/ADAPTER_SYSTEM.md`.*
+## Non-Goals
+
+The daemon is not:
+
+- a fake ingress adapter that converts internal timers into external records
+- a plugin host for parallel legacy extension systems
+- a separate routing model from the request pipeline
+
+Those older shapes are superseded by the canonical pipeline, pubsub, and work runtime model.
+
+---
+
+## Naming Locks
+
+- external persisted ingress object: `record`
+- internal notification: `event`
+- canonical live ingress operation: `record.ingest`
+- canonical internal ingest notification: `record.ingested`
+- time-based and event-reactive work primitives: `event_subscriptions` + `job_schedules` + `job_queue` + `job_runs`
+- no top-level `automation` subsystem

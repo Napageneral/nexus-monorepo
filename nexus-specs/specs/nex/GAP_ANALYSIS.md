@@ -31,7 +31,7 @@
 | Browser, TTS, Wizard (B6) | 5+7‡ | 5 | 0 | 0 |
 | **TOTALS** | **~206** | **~44** | **~53** | **~109** |
 
-\* Memory ops exist as agent tools/internal functions but have 0 control-plane endpoints
+\* Memory ops exist as agent tools/internal functions but have 0 runtime API endpoints
 † Jobs ops are NEW domain; cron has 8 existing ops to rename
 ‡ Browser(1)+Wizard(4) compliant, TTS(7) being extracted (removed from count)
 
@@ -85,8 +85,9 @@ All 12 workplans have been committed:
 | `agents.sessions.fork` | ❌ MISSING | No fork capability. Needs `type` column on sessions table |
 | `agents.sessions.archive` | ⚠️ PARTIAL | `archiveSession()` + soft-delete exist, different semantics from spec |
 | `agents.sessions.transfer` | ❌ MISSING | Persona rebinding exists but not session transfer |
-| `agents.sessions.import` | ✅ EXISTS | Works, only supports `source='aix'` |
-| `agents.sessions.import.chunk` | ❌ MISSING | No chunked upload for large imports |
+| `agents.sessions.import` | ⚠️ PARTIAL | Exists as the core imported-session bridge, but still needs auth-derived provenance and multi-user-safe import identity for shared archives |
+| `agents.sessions.import.chunk` | ⚠️ PARTIAL | Exists as the core imported-session bridge, but still needs resumable upload hardening (`payloadSha256`, uploader scoping, upload status) |
+| `agents.sessions.import.upload_status` | ❌ MISSING | Required for restart-safe resumable uploads through the app-managed ingest path |
 | `agents.sessions.history` | ⚠️ PARTIAL | `session_history` table exists, no API endpoint |
 | `agents.sessions.preview` | ❌ MISSING | `sessions.preview` exists as orphan but not exposed |
 | `agents.turns.list` | ❌ MISSING | Turns table populated, no API |
@@ -97,6 +98,9 @@ All 12 workplans have been committed:
 | `agents.sessions.queue.cancel` | ❌ MISSING | `clearSessionQueues()` exists, no RPC |
 
 **Schema gaps:** sessions table needs `type` column (main/isolated/forked), `forked_from_session_id`, `forked_at_turn_id`, `workspace_id` (replaces persona_id). Turns need `agent_config_id` (B6), `workspace_path`→`working_dir` rename.
+
+Planning note:
+Public AIX client operations now belong to the standalone AIX app namespace (`aix.credentials.*`, `aix.sources.register`, `aix.runs.*`, `aix.uploads.*`). The `agents.sessions.import*` rows above refer only to the internal imported-session bridge into `agents.db`.
 **Note:** `sessions.update`/`sessions.patch` is REMOVED per spec (sessions are immutable). `sessions.delete` becomes `sessions.archive`. `sessions.reset`, `sessions.compact`, `sessions.usage` are dropped.
 
 ---
@@ -155,7 +159,7 @@ All 12 workplans have been committed:
 | `memory.entities.confirm` | ⚠️ PARTIAL | `confirm_entity` agent tool works |
 | `memory.consolidate` | ⚠️ PARTIAL | `consolidate_facts` agent tool works (3 patterns) |
 
-**Key insight:** Memory domain is the most mature internally — schema is excellent, recall engine is production-grade, agent tools work. The gap is purely **API exposure**. Most operations need wrapping as control-plane endpoints.
+**Key insight:** Memory domain is the most mature internally — schema is excellent, recall engine is production-grade, agent tools work. The gap is purely **API exposure**. Most operations need wrapping as runtime API endpoints.
 
 **Existing admin layer:** 11 `memory.review.*` operations exist for debugging (not in spec, keep separate)
 
@@ -241,7 +245,7 @@ All 12 workplans have been committed:
 - `models.list` works. `models.get` missing.
 
 **Apps (9 ops):** 0 EXISTS as WS ops, 2 PARTIAL, 4 MISSING
-- App management exists as **HTTP-only** (not WebSocket control-plane methods)
+- App management exists as **HTTP-only** (not WebSocket runtime API methods)
 - Missing: get, enable, disable, standalone start/stop
 
 **Runtime (3 ops):** 3 EXISTS
@@ -304,11 +308,11 @@ All 12 workplans have been committed:
 
 ## Top Patterns Observed
 
-1. **"DB exists, no API"** — Most common pattern. Database functions exist but aren't exposed as control-plane operations. Applies to: events, sessions, turns, messages, queue, memory, automations.
+1. **"DB exists, no API"** — Most common pattern. Database functions exist but aren't exposed as runtime API methods. Applies to: events, sessions, turns, messages, queue, memory, automations.
 
 2. **"Agent tool, no runtime API"** — Memory domain has 12 agent tools that implement spec operations but aren't exposed to non-agent callers.
 
-3. **"HTTP-only, no WS"** — Apps domain has full HTTP management but no WebSocket control-plane methods.
+3. **"HTTP-only, no WS"** — Apps domain has full HTTP management but no WebSocket runtime API methods.
 
 4. **"Namespace mismatch"** — Many operations exist but under different names: `sessions.*` → `agents.sessions.*`, `adapter.*` → `adapters.*`, `clock.schedule.*` → `cron.*`, `health` → `runtime.health`.
 
@@ -320,9 +324,9 @@ All 12 workplans have been committed:
 
 | Purpose | Path |
 |---------|------|
-| Runtime operations taxonomy | `src/nex/control-plane/runtime-operations.ts` |
-| Server method handlers | `src/nex/control-plane/server-methods/*.ts` |
-| Protocol schemas | `src/nex/control-plane/protocol/schema/*.ts` |
+| Runtime operations taxonomy | `src/nex/runtime-api/runtime-operations.ts` |
+| Server method handlers | `src/nex/runtime-api/server-methods/*.ts` |
+| Protocol schemas | `src/nex/runtime-api/protocol/schema/*.ts` |
 | Database schemas | `src/db/*.ts` (events, agents, identity, memory, hooks, work, nexus, embeddings) |
 | IAM core | `src/iam/*.ts` (identity, grants, policies, audit, password-auth, role-caps) |
 | Memory subsystem | `src/memory/*.ts` (recall, retain, embeddings, graph) |
