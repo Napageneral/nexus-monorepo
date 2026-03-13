@@ -38,7 +38,7 @@ The active target-state source of truth for this review is:
 - `docs/specs/SPIKE_STORAGE_BOUNDARY.md`
 - `docs/specs/SPIKE_DATA_MODEL.md`
 - `docs/specs/SPIKE_INTEGRATIONS_AND_CALLBACK_OWNERSHIP.md`
-- `nexus-specs/specs/ledgers/AGENTS_LEDGER.md`
+- `nex/docs/specs/agents/agents-database-reference.md`
 - `nexus-frontdoor/docs/specs/FRONTDOOR_HOSTED_ACCESS_AND_ROUTING.md`
 - `nexus-frontdoor/docs/specs/FRONTDOOR_PACKAGE_REGISTRY_AND_LIFECYCLE.md`
 
