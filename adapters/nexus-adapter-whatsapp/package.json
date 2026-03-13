@@ -11,7 +11,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "lint": "tsc -p tsconfig.json --noEmit"
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "sdk:generate": "pnpm --dir ../../nex exec tsx scripts/sdk/generate-adapter-sdk-ts.ts nexus-adapter-whatsapp",
+    "sdk:build": "tsc -p sdk/nexus-adapter-whatsapp-sdk-ts/tsconfig.json"
   },
   "dependencies": {
     "@nexus-project/adapter-sdk-ts": "file:../nexus-adapter-sdks/nexus-adapter-sdk-ts",

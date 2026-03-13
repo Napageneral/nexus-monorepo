@@ -2,6 +2,19 @@
 
 External WhatsApp adapter binary for the NEX adapter manager.
 
+## Consumer SDK
+
+Generated consumer SDK:
+
+- `sdk/nexus-adapter-whatsapp-sdk-ts/`
+
+Regenerate it with:
+
+```bash
+pnpm run sdk:generate
+pnpm run sdk:build
+```
+
 ## Commands
 
 - `info`

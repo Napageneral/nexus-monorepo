@@ -23,6 +23,8 @@ Typical package shape:
 ```text
 adapters/<adapter-id>/
   adapter.nexus.json
+  sdk/
+    <adapter-id>-sdk-ts/
   docs/
     specs/
     workplans/
@@ -54,6 +56,7 @@ that carries:
 Start here for package-author rules:
 
 - [Package Author Experience](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/package-author-experience.md)
+- [Generated SDKs and Shared Package Kit](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/generated-sdks-and-shared-package-kit.md)
 - [Hosted Package Ownership and Validation Model](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/hosted-package-ownership-and-validation-model.md)
 - [Adapter Package Distribution and Install](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/adapter-package-distribution-and-install.md)
 - [Apps, Adapters, and Method Surfaces](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/apps-adapters-and-method-surfaces.md)
@@ -121,3 +124,13 @@ Use it when:
 - CLI/runtime context semantics change
 - package-release expectations change
 - multiple adapters would otherwise implement the same protocol glue by hand
+
+## Consumer SDKs
+
+Every adapter should publish:
+
+1. a central OpenAPI artifact under `contracts/adapters/<adapter-id>/`
+2. a repo-local consumer SDK under `adapters/<adapter-id>/sdk/`
+
+The shared adapter SDK is for authoring adapters.
+The per-adapter consumer SDK is for apps, agents, and tools that want to call that adapter's package contract.
