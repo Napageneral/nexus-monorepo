@@ -1,3 +1,78 @@
 [submodule "nex"]
 	path = nex
 	url = https://github.com/Napageneral/nex.git
+[submodule "packages/apps/spike"]
+	path = packages/apps/spike
+	url = https://github.com/Napageneral/spike.git
+[submodule "packages/apps/aix"]
+	path = packages/apps/aix
+	url = https://github.com/Napageneral/aix.git
+[submodule "packages/apps/dispatch"]
+	path = packages/apps/dispatch
+	url = https://github.com/Napageneral/dispatch.git
+[submodule "packages/apps/glowbot"]
+	path = packages/apps/glowbot
+	url = https://github.com/Napageneral/glowbot.git
+[submodule "packages/apps/gstack"]
+	path = packages/apps/gstack
+	url = https://github.com/Napageneral/gstack.git
+[submodule "packages/adapters/apple-maps"]
+	path = packages/adapters/apple-maps
+	url = https://github.com/Napageneral/apple-maps.git
+[submodule "packages/adapters/callrail"]
+	path = packages/adapters/callrail
+	url = https://github.com/Napageneral/callrail.git
+[submodule "packages/adapters/confluence"]
+	path = packages/adapters/confluence
+	url = https://github.com/Napageneral/confluence.git
+[submodule "packages/adapters/device-android"]
+	path = packages/adapters/device-android
+	url = https://github.com/Napageneral/device-android.git
+[submodule "packages/adapters/device-headless"]
+	path = packages/adapters/device-headless
+	url = https://github.com/Napageneral/device-headless.git
+[submodule "packages/adapters/device-ios"]
+	path = packages/adapters/device-ios
+	url = https://github.com/Napageneral/device-ios.git
+[submodule "packages/adapters/device-macos"]
+	path = packages/adapters/device-macos
+	url = https://github.com/Napageneral/device-macos.git
+[submodule "packages/adapters/discord"]
+	path = packages/adapters/discord
+	url = https://github.com/Napageneral/discord.git
+[submodule "packages/adapters/git"]
+	path = packages/adapters/git
+	url = https://github.com/Napageneral/git.git
+[submodule "packages/adapters/gog"]
+	path = packages/adapters/gog
+	url = https://github.com/Napageneral/gog.git
+[submodule "packages/adapters/google"]
+	path = packages/adapters/google
+	url = https://github.com/Napageneral/google.git
+[submodule "packages/adapters/jira"]
+	path = packages/adapters/jira
+	url = https://github.com/Napageneral/jira.git
+[submodule "packages/adapters/meta-ads"]
+	path = packages/adapters/meta-ads
+	url = https://github.com/Napageneral/meta-ads.git
+[submodule "packages/adapters/patient-now-emr"]
+	path = packages/adapters/patient-now-emr
+	url = https://github.com/Napageneral/patient-now-emr.git
+[submodule "packages/adapters/qase"]
+	path = packages/adapters/qase
+	url = https://github.com/Napageneral/qase.git
+[submodule "packages/adapters/slack"]
+	path = packages/adapters/slack
+	url = https://github.com/Napageneral/slack.git
+[submodule "packages/adapters/telegram"]
+	path = packages/adapters/telegram
+	url = https://github.com/Napageneral/telegram.git
+[submodule "packages/adapters/twilio"]
+	path = packages/adapters/twilio
+	url = https://github.com/Napageneral/twilio.git
+[submodule "packages/adapters/whatsapp"]
+	path = packages/adapters/whatsapp
+	url = https://github.com/Napageneral/whatsapp.git
+[submodule "packages/adapters/zenoti-emr"]
+	path = packages/adapters/zenoti-emr
+	url = https://github.com/Napageneral/zenoti-emr.git
