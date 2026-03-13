@@ -1,0 +1,9 @@
+{
+  "contract": "adapters/slack",
+  "generator": "nex/scripts/contracts/generate-openapi.ts",
+  "sources": [
+    "adapters/slack",
+    "adapters/nexus-adapter-sdks/nexus-adapter-sdk-ts/src/protocol.ts",
+    "adapters/nexus-adapter-sdks/nexus-adapter-sdk-go/define.go"
+  ]
+}
