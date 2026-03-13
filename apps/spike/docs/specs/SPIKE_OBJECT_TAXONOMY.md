@@ -11,8 +11,8 @@ This document locks the vocabulary used in active Spike specs.
 
 Spike inherits the hosted platform vocabulary from:
 
-- `../../../../nexus-specs/specs/nex/hosted/HOSTED_OBJECT_TAXONOMY.md`
-- `../../../../nexus-specs/specs/nex/adapters/ADAPTER_CONNECTION_PROFILES_AND_CALLBACKS.md`
+- `/Users/tyler/nexus/home/projects/nexus/nexus-frontdoor/docs/specs/FRONTDOOR_OBJECT_TAXONOMY.md`
+- `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/adapters/adapter-connections.md`
 
 This local taxonomy pins the Spike-specific nouns layered on top of that
 platform model.

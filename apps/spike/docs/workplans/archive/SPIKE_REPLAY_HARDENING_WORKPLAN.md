@@ -1,5 +1,8 @@
 # Spike Replay Hardening Workplan
 
+**Status:** ACTIVE
+**Last Updated:** 2026-03-12
+
 ## Purpose
 
 Close the remaining replay gaps after private clone auth and PR head commit

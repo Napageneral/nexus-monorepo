@@ -18,7 +18,7 @@ Related active docs:
 - `SPIKE_OBJECT_TAXONOMY.md`
 - `SPIKE_SESSION_AND_EXECUTION_OWNERSHIP.md`
 - `SPIKE_DATA_MODEL.md`
-- `nexus-specs/specs/ledgers/AGENTS_LEDGER.md`
+- `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/agents/agents-database-reference.md`
 
 ---
 

@@ -1,5 +1,8 @@
 # Spike Code App Transformation Workplan
 
+**Status:** ACTIVE
+**Last Updated:** 2026-03-12
+
 ## Gap Analysis Summary
 
 The spec defines Spike as a **code intelligence infrastructure app** with no PRLM oracle, no broker, and no LLM-based "ask" system. The current codebase is a **PRLM oracle app** that happens to also have code intelligence bolted on. The transformation is primarily a **subtraction** (remove PRLM/broker/ask) plus **operation namespace renaming** (code-intel.* -> code.*) and **adding missing mirror/worktree CRUD operations**.

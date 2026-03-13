@@ -55,7 +55,7 @@ and not a wrapper GitHub adapter.
 |---|---|
 | `spike` | Customer-facing hosted app package installed on customer servers |
 | `github` | Shared adapter package implementing generic GitHub behavior |
-| `spike-hub` | Spike product control plane service |
+| `spike-hub` | Spike product control-plane app |
 | `spike-admin` | Operator-facing Spike admin app |
 
 ---
@@ -103,5 +103,5 @@ The Spike admin app should expose:
 - ask throughput and cost visibility
 - support-safe product diagnostics
 
-The admin app talks to the Spike product control plane service. It is not the
+The admin app talks to the Spike product control-plane app. It is not the
 canonical home of the provider secret itself.

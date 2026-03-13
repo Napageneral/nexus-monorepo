@@ -15,10 +15,10 @@ integration flows.
 
 Shared hosted rules come from:
 
-- `nexus-specs/specs/nex/hosted/HOSTED_PLATFORM_ACCESS_AND_ROUTING.md`
-- `nexus-specs/specs/nex/hosted/HOSTED_APP_PLATFORM_CONTRACT.md`
-- `nexus-specs/specs/nex/hosted/HOSTED_OBJECT_TAXONOMY.md`
-- `nexus-specs/specs/nex/adapters/ADAPTER_CONNECTION_PROFILES_AND_CALLBACKS.md`
+- `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/runtime-access-and-routing.md`
+- `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/packages-and-control-planes.md`
+- `/Users/tyler/nexus/home/projects/nexus/nexus-frontdoor/docs/specs/FRONTDOOR_OBJECT_TAXONOMY.md`
+- `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/adapters/adapter-connections.md`
 - `SPIKE_OBJECT_TAXONOMY.md`
 
 ---

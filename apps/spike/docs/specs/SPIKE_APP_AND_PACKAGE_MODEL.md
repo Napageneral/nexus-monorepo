@@ -19,10 +19,9 @@ It covers:
 
 Shared hosted rules come from:
 
-- `nexus-specs/specs/nex/hosted/HOSTED_APP_PLATFORM_CONTRACT.md`
-- `nexus-specs/specs/nex/hosted/HOSTED_PLATFORM_ACCESS_AND_ROUTING.md`
-- `nexus-specs/specs/nex/hosted/HOSTED_PRODUCT_CONTROL_PLANES.md`
-- `nexus-specs/specs/nex/NEX_APP_MANIFEST_AND_PACKAGE_MODEL.md`
+- `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/packages-and-control-planes.md`
+- `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/runtime-access-and-routing.md`
+- `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/apps/app-manifest-and-package-model.md`
 - `SPIKE_PRODUCT_CONTROL_PLANE.md`
 - `SPIKE_OBJECT_TAXONOMY.md`
 
@@ -79,7 +78,7 @@ The Spike repository area is organized into distinct concerns:
 apps/spike/
   app/       # installable Spike app package
   service/   # build source for Spike services/binaries
-  hub/       # Spike product control plane service
+  hub/       # Spike product control-plane app
   product/   # Spike marketing/onboarding surface
   admin/     # Spike-specific admin package(s)
   docs/      # active specs, workplans, validation, archive
@@ -119,7 +118,7 @@ origin and it is not the app package root.
 
 ### `hub/`
 
-`hub/` is the target-state Spike product control plane service.
+`hub/` is the target-state Spike product control-plane app.
 
 It owns:
 
@@ -177,9 +176,9 @@ Spike-specific rules:
 8. Request timeline and inspector experiences are internal Spike routes beneath
    `/app/spike/`; they are not separate top-level UI contracts.
 
-If Spike needs reusable adapters or shared services, those are separate
-installable packages declared as dependencies. They are not filesystem escapes
-or hidden runtime assumptions.
+If Spike needs reusable adapters or hidden/shared backend packages, those are
+separate installable packages declared as dependencies. They are not filesystem
+escapes or hidden runtime assumptions.
 
 ---
 
@@ -220,7 +219,7 @@ Rules:
 
 1. Product-specific Spike behavior remains app-owned.
 2. Reusable external-system connectivity belongs in separately installable
-   adapter or service packages.
+   adapter or app packages.
 3. Spike-specific orchestration may compose those dependencies, but the package
    contract records them explicitly.
 

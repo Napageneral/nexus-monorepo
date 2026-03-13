@@ -5,6 +5,9 @@ title: "Spike Code Build Replay Serialization Workplan"
 
 # Spike Code Build Replay Serialization Workplan
 
+**Status:** ACTIVE
+**Last Updated:** 2026-03-12
+
 ## Goal
 
 Replace process-local build locking with durable snapshot serialization so

@@ -5,6 +5,9 @@ title: "Spike PR Source Archive Replay Durability Workplan"
 
 # Spike PR Source Archive Replay Durability Workplan
 
+**Status:** ACTIVE
+**Last Updated:** 2026-03-12
+
 ## Goal
 
 Allow Spike to replay historical PR code truthfully even after the provider no

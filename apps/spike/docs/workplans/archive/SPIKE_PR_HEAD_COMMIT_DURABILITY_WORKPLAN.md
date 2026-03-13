@@ -5,6 +5,9 @@ title: "Spike PR Head Commit Durability Workplan"
 
 # Spike PR Head Commit Durability Workplan
 
+**Status:** ACTIVE
+**Last Updated:** 2026-03-12
+
 ## Goal
 
 Make Spike choose the correct PR rebuild target and stop silently building the

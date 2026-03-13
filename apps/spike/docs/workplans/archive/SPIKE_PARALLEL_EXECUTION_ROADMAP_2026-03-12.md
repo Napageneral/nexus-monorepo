@@ -5,6 +5,9 @@ title: "Spike Parallel Execution Roadmap 2026-03-12"
 
 # Spike Parallel Execution Roadmap
 
+**Status:** ACTIVE
+**Last Updated:** 2026-03-12
+
 ## Purpose
 
 Track Spike-specific work that should move forward without colliding with the

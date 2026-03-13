@@ -15,7 +15,7 @@ and a private broker/session ledger.
 
 Shared Nex rules come from:
 
-- `nexus-specs/specs/ledgers/AGENTS_LEDGER.md`
+- `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/agents/agents-database-reference.md`
 - `SPIKE_OBJECT_TAXONOMY.md`
 - `SPIKE_APP_AND_PACKAGE_MODEL.md`
 - `SPIKE_PRODUCT_CONTROL_PLANE.md`
