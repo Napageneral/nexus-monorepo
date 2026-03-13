@@ -541,7 +541,7 @@ export const frontdoorOpenApiRoutes: FrontdoorOpenApiRoute[] = [
     path: "/api/servers/{serverId}/apps/{appId}/install-status",
     operationId: "frontdoor.servers.apps.installStatus",
     summary: "Get app entitlement and install status for a hosted server",
-    tags: ["Apps", "Servers"],
+    tags: ["Servers"],
     security: [{ cookieSession: [] }],
     parameters: [
       {
@@ -577,7 +577,7 @@ export const frontdoorOpenApiRoutes: FrontdoorOpenApiRoute[] = [
     path: "/api/servers/{serverId}/apps/{appId}/install",
     operationId: "frontdoor.servers.apps.install",
     summary: "Install an app on a hosted server",
-    tags: ["Apps", "Servers"],
+    tags: ["Servers"],
     security: [{ cookieSession: [] }],
     parameters: [
       {
@@ -621,7 +621,7 @@ export const frontdoorOpenApiRoutes: FrontdoorOpenApiRoute[] = [
     path: "/api/servers/{serverId}/apps/{appId}/upgrade",
     operationId: "frontdoor.servers.apps.upgrade",
     summary: "Upgrade an installed app on a hosted server",
-    tags: ["Apps", "Servers"],
+    tags: ["Servers"],
     security: [{ cookieSession: [] }],
     parameters: [
       {
@@ -675,7 +675,7 @@ export const frontdoorOpenApiRoutes: FrontdoorOpenApiRoute[] = [
     path: "/api/servers/{serverId}/apps/{appId}/install",
     operationId: "frontdoor.servers.apps.uninstall",
     summary: "Uninstall an app from a hosted server",
-    tags: ["Apps", "Servers"],
+    tags: ["Servers"],
     security: [{ cookieSession: [] }],
     parameters: [
       {
@@ -711,7 +711,7 @@ export const frontdoorOpenApiRoutes: FrontdoorOpenApiRoute[] = [
     path: "/api/servers/{serverId}/adapters/{adapterId}/install-status",
     operationId: "frontdoor.servers.adapters.installStatus",
     summary: "Get adapter install status for a hosted server",
-    tags: ["Adapters", "Servers"],
+    tags: ["Servers"],
     security: [{ cookieSession: [] }],
     parameters: [
       {
@@ -747,7 +747,7 @@ export const frontdoorOpenApiRoutes: FrontdoorOpenApiRoute[] = [
     path: "/api/servers/{serverId}/adapters/{adapterId}/install",
     operationId: "frontdoor.servers.adapters.install",
     summary: "Install an adapter on a hosted server",
-    tags: ["Adapters", "Servers"],
+    tags: ["Servers"],
     security: [{ cookieSession: [] }],
     parameters: [
       {
@@ -801,7 +801,7 @@ export const frontdoorOpenApiRoutes: FrontdoorOpenApiRoute[] = [
     path: "/api/servers/{serverId}/adapters/{adapterId}/upgrade",
     operationId: "frontdoor.servers.adapters.upgrade",
     summary: "Upgrade an installed adapter on a hosted server",
-    tags: ["Adapters", "Servers"],
+    tags: ["Servers"],
     security: [{ cookieSession: [] }],
     parameters: [
       {
@@ -855,7 +855,7 @@ export const frontdoorOpenApiRoutes: FrontdoorOpenApiRoute[] = [
     path: "/api/servers/{serverId}/adapters/{adapterId}/install",
     operationId: "frontdoor.servers.adapters.uninstall",
     summary: "Uninstall an adapter from a hosted server",
-    tags: ["Adapters", "Servers"],
+    tags: ["Servers"],
     security: [{ cookieSession: [] }],
     parameters: [
       {

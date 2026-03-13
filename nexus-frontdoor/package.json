@@ -8,6 +8,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/index.ts",
+    "sdk:generate:ts": "node --import tsx scripts/sdk/generate-frontdoor-sdk-ts.ts",
+    "sdk:build:ts": "pnpm sdk:generate:ts && tsc -p sdk/frontdoor-sdk-ts/tsconfig.json",
+    "sdk:generate:go": "node --import tsx scripts/sdk/generate-frontdoor-sdk-go.ts",
+    "sdk:build:go": "pnpm sdk:generate:go && (cd sdk/frontdoor-sdk-go && go test ./...)",
     "start": "node dist/index.js",
     "test": "vitest run",
     "lint": "tsc -p tsconfig.json --noEmit",

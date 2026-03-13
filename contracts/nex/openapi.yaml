@@ -7328,10 +7328,155 @@ paths:
                       - type: object
                         additionalProperties: true
                       - type: "null"
-  /runtime/operations/agents.sessions.import:
+  /runtime/operations/agents.sessions.import.chunk:
     post:
-      operationId: agents.sessions.import
-      summary: agents.sessions.import
+      operationId: agents.sessions.import.chunk
+      summary: agents.sessions.import.chunk
+      tags:
+        - Agents
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              additionalProperties: false
+              type: object
+              required:
+                - source
+                - mode
+                - sourceEntityId
+                - idempotencyKey
+                - uploadId
+                - chunkIndex
+                - chunkTotal
+                - encoding
+                - data
+                - sourceProvider
+                - sourceSessionId
+                - sourceSessionFingerprint
+              properties:
+                source:
+                  const: aix
+                  type: string
+                runId:
+                  minLength: 1
+                  type: string
+                mode:
+                  anyOf:
+                    - const: backfill
+                      type: string
+                    - const: tail
+                      type: string
+                workspaceId:
+                  minLength: 1
+                  type: string
+                sourceEntityId:
+                  minLength: 1
+                  type: string
+                sourceContactId:
+                  minLength: 1
+                  type: string
+                aixSourceId:
+                  minLength: 1
+                  type: string
+                idempotencyKey:
+                  minLength: 1
+                  type: string
+                uploadId:
+                  minLength: 1
+                  type: string
+                chunkIndex:
+                  minimum: 0
+                  type: integer
+                chunkTotal:
+                  minimum: 1
+                  type: integer
+                encoding:
+                  const: gzip+base64
+                  type: string
+                data:
+                  minLength: 1
+                  type: string
+                sourceProvider:
+                  minLength: 1
+                  type: string
+                sourceSessionId:
+                  minLength: 1
+                  type: string
+                sourceSessionFingerprint:
+                  minLength: 1
+                  type: string
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/agents.sessions.import.execute:
+    post:
+      operationId: agents.sessions.import.execute
+      summary: agents.sessions.import.execute
       tags:
         - Agents
       x-sdk-public: true
@@ -7597,151 +7742,6 @@ paths:
                               type: integer
                             error:
                               type: string
-      responses:
-        "200":
-          description: Successful runtime operation response
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - true
-                  payload:
-                    type: object
-                    additionalProperties: true
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "400":
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-  /runtime/operations/agents.sessions.import.chunk:
-    post:
-      operationId: agents.sessions.import.chunk
-      summary: agents.sessions.import.chunk
-      tags:
-        - Agents
-      x-sdk-public: true
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              additionalProperties: false
-              type: object
-              required:
-                - source
-                - mode
-                - sourceEntityId
-                - idempotencyKey
-                - uploadId
-                - chunkIndex
-                - chunkTotal
-                - encoding
-                - data
-                - sourceProvider
-                - sourceSessionId
-                - sourceSessionFingerprint
-              properties:
-                source:
-                  const: aix
-                  type: string
-                runId:
-                  minLength: 1
-                  type: string
-                mode:
-                  anyOf:
-                    - const: backfill
-                      type: string
-                    - const: tail
-                      type: string
-                workspaceId:
-                  minLength: 1
-                  type: string
-                sourceEntityId:
-                  minLength: 1
-                  type: string
-                sourceContactId:
-                  minLength: 1
-                  type: string
-                aixSourceId:
-                  minLength: 1
-                  type: string
-                idempotencyKey:
-                  minLength: 1
-                  type: string
-                uploadId:
-                  minLength: 1
-                  type: string
-                chunkIndex:
-                  minimum: 0
-                  type: integer
-                chunkTotal:
-                  minimum: 1
-                  type: integer
-                encoding:
-                  const: gzip+base64
-                  type: string
-                data:
-                  minLength: 1
-                  type: string
-                sourceProvider:
-                  minLength: 1
-                  type: string
-                sourceSessionId:
-                  minLength: 1
-                  type: string
-                sourceSessionFingerprint:
-                  minLength: 1
-                  type: string
       responses:
         "200":
           description: Successful runtime operation response
@@ -15173,10 +15173,10 @@ paths:
                       - type: object
                         additionalProperties: true
                       - type: "null"
-  /runtime/operations/entities.merge:
+  /runtime/operations/entities.merge.apply:
     post:
-      operationId: entities.merge
-      summary: entities.merge
+      operationId: entities.merge.apply
+      summary: entities.merge.apply
       tags:
         - Entities
       x-sdk-public: true
