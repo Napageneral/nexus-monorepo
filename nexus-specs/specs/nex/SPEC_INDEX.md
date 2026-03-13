@@ -305,3 +305,7 @@ For the systematic code walkthrough, these are the codebase locations to compare
 | Broker/Roles | `nex/src/nex/broker/`, `nex/src/iam/role-caps.ts` | agents.db + work.db |
 
 - [ADAPTER_CONSUMER_SDK_OWNERSHIP_AND_GENERATION_MODEL.md](./ADAPTER_CONSUMER_SDK_OWNERSHIP_AND_GENERATION_MODEL.md)
+
+- [ADAPTER_STREAM_SESSION_SDK_MODEL.md](./ADAPTER_STREAM_SESSION_SDK_MODEL.md)
+
+- [workplans/ADAPTER_DISCORD_PUBLISHABILITY_HARD_CUTOVER_2026-03-13.md](./workplans/ADAPTER_DISCORD_PUBLISHABILITY_HARD_CUTOVER_2026-03-13.md)

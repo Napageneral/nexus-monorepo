@@ -14,3 +14,16 @@ pnpm build
 ```bash
 ./scripts/package-release.sh
 ```
+
+## Consumer SDK
+
+Generated consumer SDK:
+
+- `sdk/nexus-adapter-discord-sdk-ts/`
+
+Regenerate it with:
+
+```bash
+pnpm run sdk:generate
+pnpm run sdk:build
+```

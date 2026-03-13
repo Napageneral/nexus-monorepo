@@ -124,3 +124,7 @@ These are useful, but they are not part of the active canonical target-state con
 - [NEX_API_LAYER_HARD_CUTOVER_2026-03-12.md](./workplans/NEX_API_LAYER_HARD_CUTOVER_2026-03-12.md) - Hard-cut workplan for consolidating ownership under the dedicated `nex/src/nex/runtime-api/` layer and publishing the canonical Nex OpenAPI contract.
 
 - [ADAPTER_CONSUMER_SDK_OWNERSHIP_AND_GENERATION_MODEL.md](./ADAPTER_CONSUMER_SDK_OWNERSHIP_AND_GENERATION_MODEL.md)
+
+- [ADAPTER_STREAM_SESSION_SDK_MODEL.md](./ADAPTER_STREAM_SESSION_SDK_MODEL.md)
+
+- [workplans/ADAPTER_DISCORD_PUBLISHABILITY_HARD_CUTOVER_2026-03-13.md](./workplans/ADAPTER_DISCORD_PUBLISHABILITY_HARD_CUTOVER_2026-03-13.md)
