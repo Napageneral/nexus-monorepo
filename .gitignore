@@ -1,3 +1,27 @@
 .DS_Store
 **/.DS_Store
 
+# Legacy local hosted demo state
+.hosted-demo/
+
+# Frontdoor monorepo local/runtime state
+frontdoor/nexus-frontdoor/.demo-stack/
+frontdoor/nexus-frontdoor/.tenants/
+frontdoor/nexus-frontdoor/.vercel/
+frontdoor/nexus-frontdoor/node_modules/
+frontdoor/nexus-frontdoor/dist/
+frontdoor/nexus-frontdoor/state/
+frontdoor/nexus-frontdoor/frontdoor.db
+frontdoor/nexus-frontdoor/*.log
+frontdoor/nexus-frontdoor/*.pid
+
+# Frontdoor website local state
+frontdoor/nexus-frontdoor-web/node_modules/
+frontdoor/nexus-frontdoor-web/test-results/
+frontdoor/nexus-frontdoor-web/.vercel/
+frontdoor/nexus-frontdoor-web/.env.production.local
+
+# Nested package local dependency/build noise
+**/node_modules/
+**/dist/
+**/.vercel/
