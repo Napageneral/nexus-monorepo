@@ -1,0 +1,7 @@
+{
+  "contract": "frontdoor",
+  "generator": "nex/scripts/contracts/generate-openapi.ts",
+  "sources": [
+    "nexus-frontdoor/src/openapi/frontdoor-contract.ts"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "contract": "nex",
+  "generator": "nex/scripts/contracts/generate-openapi.ts",
+  "sources": [
+    "nex/src/nex/runtime-api/runtime-operations.ts",
+    "nex/src/nex/runtime-api/http-runtime-api-routes.ts",
+    "nex/src/nex/runtime-api/protocol/schema.ts",
+    "nex/src/nex/runtime-api/openapi/nex-contract.ts"
+  ]
+}
