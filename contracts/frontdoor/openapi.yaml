@@ -727,6 +727,422 @@ paths:
                       - "null"
                   server_count:
                     type: number
+  /api/servers/{serverId}/adapters/{adapterId}/install:
+    post:
+      operationId: frontdoor.servers.adapters.install
+      summary: Install an adapter on a hosted server
+      tags:
+        - Adapters
+        - Servers
+      security:
+        - cookieSession: []
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: adapterId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - version
+              properties:
+                version:
+                  type: string
+      responses:
+        "200":
+          description: Adapter install result
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - server_id
+                  - adapter_id
+                  - install_status
+                  - version
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  server_id:
+                    type: string
+                  adapter_id:
+                    type: string
+                  install_status:
+                    type: string
+                  version:
+                    type: string
+        "400":
+          description: Invalid install request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                  detail:
+                    type:
+                      - string
+                      - "null"
+                  server_count:
+                    type: number
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                  detail:
+                    type:
+                      - string
+                      - "null"
+                  server_count:
+                    type: number
+        "404":
+          description: Adapter not found
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                  detail:
+                    type:
+                      - string
+                      - "null"
+                  server_count:
+                    type: number
+    delete:
+      operationId: frontdoor.servers.adapters.uninstall
+      summary: Uninstall an adapter from a hosted server
+      tags:
+        - Adapters
+        - Servers
+      security:
+        - cookieSession: []
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: adapterId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Adapter uninstall result
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - server_id
+                  - install_status
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  server_id:
+                    type: string
+                  app_id:
+                    type: string
+                  adapter_id:
+                    type: string
+                  install_status:
+                    type: string
+        "400":
+          description: Invalid uninstall request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                  detail:
+                    type:
+                      - string
+                      - "null"
+                  server_count:
+                    type: number
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                  detail:
+                    type:
+                      - string
+                      - "null"
+                  server_count:
+                    type: number
+  /api/servers/{serverId}/adapters/{adapterId}/install-status:
+    get:
+      operationId: frontdoor.servers.adapters.installStatus
+      summary: Get adapter install status for a hosted server
+      tags:
+        - Adapters
+        - Servers
+      security:
+        - cookieSession: []
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: adapterId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Adapter install status
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - server_id
+                  - adapter_id
+                  - install_status
+                  - desired_version
+                  - active_version
+                  - last_error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  server_id:
+                    type: string
+                  adapter_id:
+                    type: string
+                  install_status:
+                    type: string
+                  desired_version:
+                    type:
+                      - string
+                      - "null"
+                  active_version:
+                    type:
+                      - string
+                      - "null"
+                  last_error:
+                    type:
+                      - string
+                      - "null"
+        "400":
+          description: Invalid install status request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                  detail:
+                    type:
+                      - string
+                      - "null"
+                  server_count:
+                    type: number
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                  detail:
+                    type:
+                      - string
+                      - "null"
+                  server_count:
+                    type: number
+  /api/servers/{serverId}/adapters/{adapterId}/upgrade:
+    post:
+      operationId: frontdoor.servers.adapters.upgrade
+      summary: Upgrade an installed adapter on a hosted server
+      tags:
+        - Adapters
+        - Servers
+      security:
+        - cookieSession: []
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: adapterId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - target_version
+              properties:
+                target_version:
+                  type: string
+      responses:
+        "200":
+          description: Adapter upgrade result
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - server_id
+                  - install_status
+                  - version
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  server_id:
+                    type: string
+                  app_id:
+                    type: string
+                  adapter_id:
+                    type: string
+                  install_status:
+                    type: string
+                  version:
+                    type: string
+        "400":
+          description: Invalid upgrade request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                  detail:
+                    type:
+                      - string
+                      - "null"
+                  server_count:
+                    type: number
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                  detail:
+                    type:
+                      - string
+                      - "null"
+                  server_count:
+                    type: number
+        "404":
+          description: Adapter not found
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                  detail:
+                    type:
+                      - string
+                      - "null"
+                  server_count:
+                    type: number
   /api/servers/{serverId}/apps/{appId}/install:
     post:
       operationId: frontdoor.servers.apps.install
@@ -856,6 +1272,89 @@ paths:
                       - "null"
                   server_count:
                     type: number
+    delete:
+      operationId: frontdoor.servers.apps.uninstall
+      summary: Uninstall an app from a hosted server
+      tags:
+        - Apps
+        - Servers
+      security:
+        - cookieSession: []
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: App uninstall result
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - server_id
+                  - install_status
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  server_id:
+                    type: string
+                  app_id:
+                    type: string
+                  adapter_id:
+                    type: string
+                  install_status:
+                    type: string
+        "400":
+          description: Invalid uninstall request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                  detail:
+                    type:
+                      - string
+                      - "null"
+                  server_count:
+                    type: number
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                  detail:
+                    type:
+                      - string
+                      - "null"
+                  server_count:
+                    type: number
   /api/servers/{serverId}/apps/{appId}/install-status:
     get:
       operationId: frontdoor.servers.apps.installStatus
@@ -932,6 +1431,124 @@ paths:
                     type: number
         "401":
           description: Not authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                  detail:
+                    type:
+                      - string
+                      - "null"
+                  server_count:
+                    type: number
+  /api/servers/{serverId}/apps/{appId}/upgrade:
+    post:
+      operationId: frontdoor.servers.apps.upgrade
+      summary: Upgrade an installed app on a hosted server
+      tags:
+        - Apps
+        - Servers
+      security:
+        - cookieSession: []
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - target_version
+              properties:
+                target_version:
+                  type: string
+      responses:
+        "200":
+          description: App upgrade result
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - server_id
+                  - install_status
+                  - version
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  server_id:
+                    type: string
+                  app_id:
+                    type: string
+                  adapter_id:
+                    type: string
+                  install_status:
+                    type: string
+                  version:
+                    type: string
+        "400":
+          description: Invalid upgrade request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                  detail:
+                    type:
+                      - string
+                      - "null"
+                  server_count:
+                    type: number
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                  detail:
+                    type:
+                      - string
+                      - "null"
+                  server_count:
+                    type: number
+        "404":
+          description: App not found
           content:
             application/json:
               schema:

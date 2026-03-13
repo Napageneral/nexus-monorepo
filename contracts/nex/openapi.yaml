@@ -45,6 +45,8 @@ paths:
       summary: apps.list HTTP alias
       tags:
         - Apps
+      x-sdk-public: false
+      x-alias-of: apps.list
       security:
         - bearerAuth: []
       responses:
@@ -103,6 +105,8 @@ paths:
       summary: apps.install HTTP alias
       tags:
         - Apps
+      x-sdk-public: false
+      x-alias-of: apps.install
       security:
         - bearerAuth: []
       responses:
@@ -174,6 +178,8 @@ paths:
       summary: apps.uninstall HTTP alias
       tags:
         - Apps
+      x-sdk-public: false
+      x-alias-of: apps.uninstall
       security:
         - bearerAuth: []
       responses:
@@ -245,6 +251,8 @@ paths:
       summary: auth.login HTTP alias
       tags:
         - Auth
+      x-sdk-public: false
+      x-alias-of: auth.login
       responses:
         "200":
           description: Successful runtime HTTP alias response
@@ -341,6 +349,8 @@ paths:
       summary: events.subscribe HTTP alias
       tags:
         - Events
+      x-sdk-public: false
+      x-alias-of: events.subscribe
       security:
         - bearerAuth: []
       responses:
@@ -377,6 +387,8 @@ paths:
       summary: operator.packages.install HTTP alias
       tags:
         - Runtime
+      x-sdk-public: false
+      x-alias-of: operator.packages.install
       security:
         - bearerAuth: []
       responses:
@@ -442,6 +454,8 @@ paths:
       summary: operator.packages.uninstall HTTP alias
       tags:
         - Runtime
+      x-sdk-public: false
+      x-alias-of: operator.packages.uninstall
       security:
         - bearerAuth: []
       responses:
@@ -507,6 +521,8 @@ paths:
       summary: operator.packages.upgrade HTTP alias
       tags:
         - Runtime
+      x-sdk-public: false
+      x-alias-of: operator.packages.upgrade
       security:
         - bearerAuth: []
       responses:
@@ -572,6 +588,8 @@ paths:
       summary: runtime.health HTTP alias
       tags:
         - Runtime
+      x-sdk-public: false
+      x-alias-of: runtime.health
       security:
         - bearerAuth: []
       responses:
@@ -630,6 +648,7 @@ paths:
       summary: acl.approval.request
       tags:
         - ACL
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -782,6 +801,7 @@ paths:
       summary: acl.audit.get
       tags:
         - ACL
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -861,6 +881,7 @@ paths:
       summary: acl.audit.list
       tags:
         - ACL
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -940,6 +961,7 @@ paths:
       summary: acl.audit.stats
       tags:
         - ACL
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -1019,6 +1041,7 @@ paths:
       summary: acl.evaluate
       tags:
         - ACL
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -1098,6 +1121,7 @@ paths:
       summary: acl.policies.create
       tags:
         - ACL
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -1177,6 +1201,7 @@ paths:
       summary: acl.policies.delete
       tags:
         - ACL
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -1256,6 +1281,7 @@ paths:
       summary: acl.policies.disable
       tags:
         - ACL
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -1335,6 +1361,7 @@ paths:
       summary: acl.policies.enable
       tags:
         - ACL
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -1414,6 +1441,7 @@ paths:
       summary: acl.policies.get
       tags:
         - ACL
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -1493,6 +1521,7 @@ paths:
       summary: acl.policies.list
       tags:
         - ACL
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -1572,6 +1601,7 @@ paths:
       summary: acl.policies.update
       tags:
         - ACL
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -1651,6 +1681,7 @@ paths:
       summary: acl.requests.approve
       tags:
         - ACL
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -1866,6 +1897,7 @@ paths:
       summary: acl.requests.deny
       tags:
         - ACL
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -2063,6 +2095,7 @@ paths:
       summary: acl.requests.list
       tags:
         - ACL
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -2261,6 +2294,7 @@ paths:
       summary: acl.requests.show
       tags:
         - ACL
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -2450,6 +2484,7 @@ paths:
       summary: adapter.accounts.list
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -2529,6 +2564,7 @@ paths:
       summary: adapter.health
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -2608,6 +2644,7 @@ paths:
       summary: adapter.info
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -2687,6 +2724,7 @@ paths:
       summary: adapter.monitor.start
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -2766,6 +2804,7 @@ paths:
       summary: adapter.monitor.stop
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -2845,6 +2884,7 @@ paths:
       summary: adapter.serve.start
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -2924,6 +2964,7 @@ paths:
       summary: adapter.setup.cancel
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -3003,6 +3044,7 @@ paths:
       summary: adapter.setup.start
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -3082,6 +3124,7 @@ paths:
       summary: adapter.setup.status
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -3161,6 +3204,7 @@ paths:
       summary: adapter.setup.submit
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -3240,6 +3284,7 @@ paths:
       summary: adapters.connections.backfill
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -3366,6 +3411,7 @@ paths:
       summary: adapters.connections.create
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -3481,6 +3527,7 @@ paths:
       summary: adapters.connections.credentials.get
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -3601,6 +3648,7 @@ paths:
       summary: adapters.connections.custom.cancel
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -3692,6 +3740,7 @@ paths:
       summary: adapters.connections.custom.start
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -3801,6 +3850,7 @@ paths:
       summary: adapters.connections.custom.status
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -3892,6 +3942,7 @@ paths:
       summary: adapters.connections.custom.submit
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -3987,6 +4038,7 @@ paths:
       summary: adapters.connections.disconnect
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -4072,6 +4124,7 @@ paths:
       summary: adapters.connections.get
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -4151,6 +4204,7 @@ paths:
       summary: adapters.connections.list
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -4311,6 +4365,7 @@ paths:
       summary: adapters.connections.oauth.complete
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -4404,6 +4459,7 @@ paths:
       summary: adapters.connections.oauth.start
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -4522,6 +4578,7 @@ paths:
       summary: adapters.connections.status
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -4679,6 +4736,7 @@ paths:
       summary: adapters.connections.test
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -4764,6 +4822,7 @@ paths:
       summary: adapters.connections.update
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -4883,6 +4942,7 @@ paths:
       summary: adapters.connections.upload
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -4994,6 +5054,7 @@ paths:
       summary: adapters.methods
       tags:
         - Adapters
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -5073,6 +5134,7 @@ paths:
       summary: agents.configs.create
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -5152,6 +5214,7 @@ paths:
       summary: agents.configs.delete
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -5231,6 +5294,7 @@ paths:
       summary: agents.configs.get
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -5310,6 +5374,7 @@ paths:
       summary: agents.configs.list
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -5389,6 +5454,7 @@ paths:
       summary: agents.configs.update
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -5468,6 +5534,7 @@ paths:
       summary: agents.conversations.abort
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -5547,6 +5614,7 @@ paths:
       summary: agents.conversations.get
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -5626,6 +5694,7 @@ paths:
       summary: agents.conversations.history
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -5705,6 +5774,7 @@ paths:
       summary: agents.conversations.list
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -5784,6 +5854,7 @@ paths:
       summary: agents.conversations.search
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -5863,6 +5934,7 @@ paths:
       summary: agents.conversations.send
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -5942,6 +6014,7 @@ paths:
       summary: agents.create
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -6053,6 +6126,7 @@ paths:
       summary: agents.delete
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -6150,6 +6224,7 @@ paths:
       summary: agents.files.get
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -6274,6 +6349,7 @@ paths:
       summary: agents.files.list
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -6396,6 +6472,7 @@ paths:
       summary: agents.files.set
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -6527,6 +6604,7 @@ paths:
       summary: agents.identity.get
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -6627,6 +6705,7 @@ paths:
       summary: agents.list
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -6758,6 +6837,7 @@ paths:
       summary: agents.sessions.archive
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -6845,6 +6925,7 @@ paths:
       summary: agents.sessions.compact
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -6933,6 +7014,7 @@ paths:
       summary: agents.sessions.create
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -7012,6 +7094,7 @@ paths:
       summary: agents.sessions.fork
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -7091,6 +7174,7 @@ paths:
       summary: agents.sessions.get
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -7170,6 +7254,7 @@ paths:
       summary: agents.sessions.history
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -7249,6 +7334,7 @@ paths:
       summary: agents.sessions.import
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -7581,6 +7667,7 @@ paths:
       summary: agents.sessions.import.chunk
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -7725,6 +7812,7 @@ paths:
       summary: agents.sessions.imports.list
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -7824,6 +7912,7 @@ paths:
       summary: agents.sessions.list
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -7929,6 +8018,7 @@ paths:
       summary: agents.sessions.patch
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -8095,6 +8185,7 @@ paths:
       summary: agents.sessions.preview
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -8188,6 +8279,7 @@ paths:
       summary: agents.sessions.reset
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -8273,6 +8365,7 @@ paths:
       summary: agents.sessions.resolve
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -8372,6 +8465,7 @@ paths:
       summary: agents.sessions.send
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -8474,6 +8568,7 @@ paths:
       summary: agents.sessions.transfer
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -8553,6 +8648,7 @@ paths:
       summary: agents.update
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -8659,6 +8755,7 @@ paths:
       summary: agents.wait
       tags:
         - Agents
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -8747,6 +8844,7 @@ paths:
       summary: apps.get
       tags:
         - Apps
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -8831,6 +8929,7 @@ paths:
       summary: apps.install
       tags:
         - Apps
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -8916,6 +9015,7 @@ paths:
       summary: apps.list
       tags:
         - Apps
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -9003,6 +9103,7 @@ paths:
       summary: apps.logs
       tags:
         - Apps
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -9088,6 +9189,7 @@ paths:
       summary: apps.methods
       tags:
         - Apps
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -9172,6 +9274,7 @@ paths:
       summary: apps.start
       tags:
         - Apps
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -9257,6 +9360,7 @@ paths:
       summary: apps.status
       tags:
         - Apps
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -9341,6 +9445,7 @@ paths:
       summary: apps.stop
       tags:
         - Apps
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -9426,6 +9531,7 @@ paths:
       summary: apps.uninstall
       tags:
         - Apps
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -9511,6 +9617,7 @@ paths:
       summary: auth.login
       tags:
         - Auth
+      x-sdk-public: true
       requestBody:
         required: false
         content:
@@ -9597,6 +9704,7 @@ paths:
       summary: auth.tokens.create
       tags:
         - Auth
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -9760,6 +9868,7 @@ paths:
       summary: auth.tokens.list
       tags:
         - Auth
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -9909,6 +10018,7 @@ paths:
       summary: auth.tokens.revoke
       tags:
         - Auth
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -10003,6 +10113,7 @@ paths:
       summary: auth.tokens.rotate
       tags:
         - Auth
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -10170,6 +10281,7 @@ paths:
       summary: auth.users.create
       tags:
         - Auth
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -10305,6 +10417,7 @@ paths:
       summary: auth.users.list
       tags:
         - Auth
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -10415,6 +10528,7 @@ paths:
       summary: auth.users.setPassword
       tags:
         - Auth
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -10512,6 +10626,7 @@ paths:
       summary: browser.request
       tags:
         - Runtime
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -10591,6 +10706,7 @@ paths:
       summary: channels.create
       tags:
         - Channels
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -10704,6 +10820,7 @@ paths:
       summary: channels.delete
       tags:
         - Channels
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -10783,6 +10900,7 @@ paths:
       summary: channels.edit
       tags:
         - Channels
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -10862,6 +10980,7 @@ paths:
       summary: channels.get
       tags:
         - Channels
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -10946,6 +11065,7 @@ paths:
       summary: channels.history
       tags:
         - Channels
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -11031,6 +11151,7 @@ paths:
       summary: channels.list
       tags:
         - Channels
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -11122,6 +11243,7 @@ paths:
       summary: channels.participants.get
       tags:
         - Channels
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -11206,6 +11328,7 @@ paths:
       summary: channels.participants.history
       tags:
         - Channels
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -11292,6 +11415,7 @@ paths:
       summary: channels.participants.list
       tags:
         - Channels
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -11376,6 +11500,7 @@ paths:
       summary: channels.react
       tags:
         - Channels
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -11455,6 +11580,7 @@ paths:
       summary: channels.resolve
       tags:
         - Channels
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -11565,6 +11691,7 @@ paths:
       summary: channels.search
       tags:
         - Channels
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -11663,6 +11790,7 @@ paths:
       summary: channels.send
       tags:
         - Channels
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -11742,6 +11870,7 @@ paths:
       summary: channels.status
       tags:
         - Channels
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -11826,6 +11955,7 @@ paths:
       summary: channels.stream
       tags:
         - Channels
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -11905,6 +12035,7 @@ paths:
       summary: channels.update
       tags:
         - Channels
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -12011,6 +12142,7 @@ paths:
       summary: config.apply
       tags:
         - Config
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -12105,6 +12237,7 @@ paths:
       summary: config.get
       tags:
         - Config
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -12184,6 +12317,7 @@ paths:
       summary: config.patch
       tags:
         - Config
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -12278,6 +12412,7 @@ paths:
       summary: config.schema
       tags:
         - Config
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -12393,6 +12528,7 @@ paths:
       summary: config.set
       tags:
         - Config
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -12480,6 +12616,7 @@ paths:
       summary: contacts.create
       tags:
         - Contacts
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -12582,6 +12719,7 @@ paths:
       summary: contacts.get
       tags:
         - Contacts
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -12666,6 +12804,7 @@ paths:
       summary: contacts.history
       tags:
         - Contacts
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -12756,6 +12895,7 @@ paths:
       summary: contacts.import
       tags:
         - Contacts
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -12866,6 +13006,7 @@ paths:
       summary: contacts.list
       tags:
         - Contacts
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -12955,6 +13096,7 @@ paths:
       summary: contacts.search
       tags:
         - Contacts
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -13044,6 +13186,7 @@ paths:
       summary: contacts.update
       tags:
         - Contacts
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -13134,6 +13277,7 @@ paths:
       summary: credentials.create
       tags:
         - Credentials
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -13243,6 +13387,7 @@ paths:
       summary: credentials.get
       tags:
         - Credentials
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -13327,6 +13472,7 @@ paths:
       summary: credentials.list
       tags:
         - Credentials
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -13418,6 +13564,7 @@ paths:
       summary: credentials.resolve
       tags:
         - Credentials
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -13515,6 +13662,7 @@ paths:
       summary: credentials.revoke
       tags:
         - Credentials
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -13599,6 +13747,7 @@ paths:
       summary: credentials.update
       tags:
         - Credentials
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -13698,6 +13847,7 @@ paths:
       summary: credentials.vault.retrieve
       tags:
         - Credentials
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -13782,6 +13932,7 @@ paths:
       summary: credentials.vault.store
       tags:
         - Credentials
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -13870,6 +14021,7 @@ paths:
       summary: dags.create
       tags:
         - DAGs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -13949,6 +14101,7 @@ paths:
       summary: dags.delete
       tags:
         - DAGs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -14028,6 +14181,7 @@ paths:
       summary: dags.get
       tags:
         - DAGs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -14107,6 +14261,7 @@ paths:
       summary: dags.list
       tags:
         - DAGs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -14186,6 +14341,7 @@ paths:
       summary: dags.runs.cancel
       tags:
         - DAGs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -14265,6 +14421,7 @@ paths:
       summary: dags.runs.get
       tags:
         - DAGs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -14344,6 +14501,7 @@ paths:
       summary: dags.runs.list
       tags:
         - DAGs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -14423,6 +14581,7 @@ paths:
       summary: dags.runs.pause
       tags:
         - DAGs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -14502,6 +14661,7 @@ paths:
       summary: dags.runs.resume
       tags:
         - DAGs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -14581,6 +14741,7 @@ paths:
       summary: dags.runs.start
       tags:
         - DAGs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -14660,6 +14821,7 @@ paths:
       summary: dags.update
       tags:
         - DAGs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -14739,6 +14901,7 @@ paths:
       summary: entities.create
       tags:
         - Entities
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -14835,6 +14998,7 @@ paths:
       summary: entities.get
       tags:
         - Entities
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -14919,6 +15083,7 @@ paths:
       summary: entities.list
       tags:
         - Entities
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -15014,6 +15179,7 @@ paths:
       summary: entities.merge
       tags:
         - Entities
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -15102,6 +15268,7 @@ paths:
       summary: entities.merge.candidates
       tags:
         - Entities
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -15185,6 +15352,7 @@ paths:
       summary: entities.merge.propose
       tags:
         - Entities
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -15277,6 +15445,7 @@ paths:
       summary: entities.merge.resolve
       tags:
         - Entities
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -15367,6 +15536,7 @@ paths:
       summary: entities.resolve
       tags:
         - Entities
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -15451,6 +15621,7 @@ paths:
       summary: entities.tags.add
       tags:
         - Entities
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -15539,6 +15710,7 @@ paths:
       summary: entities.tags.list
       tags:
         - Entities
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -15623,6 +15795,7 @@ paths:
       summary: entities.tags.remove
       tags:
         - Entities
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -15711,6 +15884,7 @@ paths:
       summary: entities.update
       tags:
         - Entities
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -15807,6 +15981,7 @@ paths:
       summary: events.publish
       tags:
         - Events
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -15894,6 +16069,7 @@ paths:
       summary: events.subscribe
       tags:
         - Events
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -15973,6 +16149,7 @@ paths:
       summary: events.subscriptions.create
       tags:
         - Events
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -16112,6 +16289,7 @@ paths:
       summary: events.subscriptions.delete
       tags:
         - Events
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -16205,6 +16383,7 @@ paths:
       summary: events.subscriptions.get
       tags:
         - Events
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -16328,6 +16507,7 @@ paths:
       summary: events.subscriptions.list
       tags:
         - Events
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -16464,6 +16644,7 @@ paths:
       summary: events.subscriptions.update
       tags:
         - Events
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -16605,6 +16786,7 @@ paths:
       summary: events.unsubscribe
       tags:
         - Events
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -16684,6 +16866,7 @@ paths:
       summary: groups.create
       tags:
         - Groups
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -16776,6 +16959,7 @@ paths:
       summary: groups.delete
       tags:
         - Groups
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -16860,6 +17044,7 @@ paths:
       summary: groups.get
       tags:
         - Groups
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -16944,6 +17129,7 @@ paths:
       summary: groups.list
       tags:
         - Groups
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -17027,6 +17213,7 @@ paths:
       summary: groups.members.add
       tags:
         - Groups
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -17119,6 +17306,7 @@ paths:
       summary: groups.members.list
       tags:
         - Groups
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -17203,6 +17391,7 @@ paths:
       summary: groups.members.remove
       tags:
         - Groups
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -17291,6 +17480,7 @@ paths:
       summary: groups.update
       tags:
         - Groups
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -17387,6 +17577,7 @@ paths:
       summary: jobs.cancel
       tags:
         - Jobs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -17480,6 +17671,7 @@ paths:
       summary: jobs.create
       tags:
         - Jobs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -17586,6 +17778,7 @@ paths:
       summary: jobs.delete
       tags:
         - Jobs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -17670,6 +17863,7 @@ paths:
       summary: jobs.get
       tags:
         - Jobs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -17754,6 +17948,7 @@ paths:
       summary: jobs.invoke
       tags:
         - Jobs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -17855,6 +18050,7 @@ paths:
       summary: jobs.list
       tags:
         - Jobs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -17945,6 +18141,7 @@ paths:
       summary: jobs.queue.get
       tags:
         - Jobs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -18038,6 +18235,7 @@ paths:
       summary: jobs.queue.list
       tags:
         - Jobs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -18129,6 +18327,7 @@ paths:
       summary: jobs.requeue
       tags:
         - Jobs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -18222,6 +18421,7 @@ paths:
       summary: jobs.retry
       tags:
         - Jobs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -18315,6 +18515,7 @@ paths:
       summary: jobs.runs.get
       tags:
         - Jobs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -18399,6 +18600,7 @@ paths:
       summary: jobs.runs.list
       tags:
         - Jobs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -18495,6 +18697,7 @@ paths:
       summary: jobs.update
       tags:
         - Jobs
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -18603,6 +18806,7 @@ paths:
       summary: logs.tail
       tags:
         - Runtime
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -18717,6 +18921,7 @@ paths:
       summary: memory.elements.consolidate
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -18796,6 +19001,7 @@ paths:
       summary: memory.elements.create
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -18875,6 +19081,7 @@ paths:
       summary: memory.elements.definitions.create
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -18954,6 +19161,7 @@ paths:
       summary: memory.elements.definitions.get
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -19033,6 +19241,7 @@ paths:
       summary: memory.elements.definitions.list
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -19112,6 +19321,7 @@ paths:
       summary: memory.elements.entities.link
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -19191,6 +19401,7 @@ paths:
       summary: memory.elements.entities.list
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -19270,6 +19481,7 @@ paths:
       summary: memory.elements.get
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -19349,6 +19561,7 @@ paths:
       summary: memory.elements.links.create
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -19428,6 +19641,7 @@ paths:
       summary: memory.elements.links.list
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -19507,6 +19721,7 @@ paths:
       summary: memory.elements.links.traverse
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -19586,6 +19801,7 @@ paths:
       summary: memory.elements.list
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -19665,6 +19881,7 @@ paths:
       summary: memory.elements.resolve_head
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -19744,6 +19961,7 @@ paths:
       summary: memory.elements.search
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -19823,6 +20041,7 @@ paths:
       summary: memory.elements.update
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -19902,6 +20121,7 @@ paths:
       summary: memory.entities.confirm
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -19981,6 +20201,7 @@ paths:
       summary: memory.entities.create
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -20060,6 +20281,7 @@ paths:
       summary: memory.entities.propose_merge
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -20139,6 +20361,7 @@ paths:
       summary: memory.recall
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -20218,6 +20441,7 @@ paths:
       summary: memory.review.entity.get
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -20297,6 +20521,7 @@ paths:
       summary: memory.review.episode.get
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -20376,6 +20601,7 @@ paths:
       summary: memory.review.episode.outputs.get
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -20455,6 +20681,7 @@ paths:
       summary: memory.review.fact.get
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -20534,6 +20761,7 @@ paths:
       summary: memory.review.observation.get
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -20613,6 +20841,7 @@ paths:
       summary: memory.review.quality.items.list
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -20692,6 +20921,7 @@ paths:
       summary: memory.review.quality.summary
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -20771,6 +21001,7 @@ paths:
       summary: memory.review.run.episodes.list
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -20850,6 +21081,7 @@ paths:
       summary: memory.review.run.get
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -20929,6 +21161,7 @@ paths:
       summary: memory.review.runs.list
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -21008,6 +21241,7 @@ paths:
       summary: memory.review.search
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -21087,6 +21321,7 @@ paths:
       summary: memory.sets.create
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -21166,6 +21401,7 @@ paths:
       summary: memory.sets.get
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -21245,6 +21481,7 @@ paths:
       summary: memory.sets.list
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -21324,6 +21561,7 @@ paths:
       summary: memory.sets.members.add
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -21403,6 +21641,7 @@ paths:
       summary: memory.sets.members.list
       tags:
         - Memory
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -21482,6 +21721,7 @@ paths:
       summary: models.get
       tags:
         - Models
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -21566,6 +21806,7 @@ paths:
       summary: models.list
       tags:
         - Models
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -21673,6 +21914,7 @@ paths:
       summary: operator.packages.get
       tags:
         - Runtime
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -21752,6 +21994,7 @@ paths:
       summary: operator.packages.health
       tags:
         - Runtime
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -21831,6 +22074,7 @@ paths:
       summary: operator.packages.install
       tags:
         - Runtime
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -21910,6 +22154,7 @@ paths:
       summary: operator.packages.uninstall
       tags:
         - Runtime
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -21989,6 +22234,7 @@ paths:
       summary: operator.packages.upgrade
       tags:
         - Runtime
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -22068,6 +22314,7 @@ paths:
       summary: productControlPlane.call
       tags:
         - Product Control Plane
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -22157,6 +22404,7 @@ paths:
       summary: record.ingest
       tags:
         - Records
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -22355,6 +22603,7 @@ paths:
       summary: records.get
       tags:
         - Records
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -22439,6 +22688,7 @@ paths:
       summary: records.list
       tags:
         - Records
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -22520,6 +22770,7 @@ paths:
       summary: records.search
       tags:
         - Records
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -22607,6 +22858,7 @@ paths:
       summary: runtime.health
       tags:
         - Runtime
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -22688,6 +22940,7 @@ paths:
       summary: schedules.create
       tags:
         - Schedules
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -22786,6 +23039,7 @@ paths:
       summary: schedules.delete
       tags:
         - Schedules
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -22870,6 +23124,7 @@ paths:
       summary: schedules.get
       tags:
         - Schedules
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -22954,6 +23209,7 @@ paths:
       summary: schedules.list
       tags:
         - Schedules
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -23044,6 +23300,7 @@ paths:
       summary: schedules.trigger
       tags:
         - Schedules
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -23134,6 +23391,7 @@ paths:
       summary: schedules.update
       tags:
         - Schedules
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -23232,6 +23490,7 @@ paths:
       summary: skills.list
       tags:
         - Skills
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -23313,6 +23572,7 @@ paths:
       summary: skills.search
       tags:
         - Skills
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -23399,6 +23659,7 @@ paths:
       summary: skills.use
       tags:
         - Skills
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -23485,6 +23746,7 @@ paths:
       summary: status
       tags:
         - Runtime
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -23564,6 +23826,7 @@ paths:
       summary: system-presence
       tags:
         - Runtime
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -23643,6 +23906,7 @@ paths:
       summary: talk.mode
       tags:
         - Talk
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -23728,6 +23992,7 @@ paths:
       summary: tools.catalog
       tags:
         - Tools
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -23807,6 +24072,7 @@ paths:
       summary: tools.invoke
       tags:
         - Tools
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -23886,6 +24152,7 @@ paths:
       summary: update.run
       tags:
         - Runtime
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -23976,6 +24243,7 @@ paths:
       summary: wizard.cancel
       tags:
         - Wizard
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -24060,6 +24328,7 @@ paths:
       summary: wizard.next
       tags:
         - Wizard
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -24228,6 +24497,7 @@ paths:
       summary: wizard.start
       tags:
         - Wizard
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -24393,6 +24663,7 @@ paths:
       summary: wizard.status
       tags:
         - Wizard
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -24493,6 +24764,7 @@ paths:
       summary: workspaces.create
       tags:
         - Workspaces
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -24583,6 +24855,7 @@ paths:
       summary: workspaces.delete
       tags:
         - Workspaces
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -24667,6 +24940,7 @@ paths:
       summary: workspaces.files.delete
       tags:
         - Workspaces
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -24755,6 +25029,7 @@ paths:
       summary: workspaces.files.get
       tags:
         - Workspaces
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -24843,6 +25118,7 @@ paths:
       summary: workspaces.files.list
       tags:
         - Workspaces
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -24927,6 +25203,7 @@ paths:
       summary: workspaces.files.set
       tags:
         - Workspaces
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -25017,6 +25294,7 @@ paths:
       summary: workspaces.get
       tags:
         - Workspaces
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -25101,6 +25379,7 @@ paths:
       summary: workspaces.list
       tags:
         - Workspaces
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -25182,6 +25461,7 @@ paths:
       summary: workspaces.manifest.get
       tags:
         - Workspaces
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -25266,6 +25546,7 @@ paths:
       summary: workspaces.manifest.update
       tags:
         - Workspaces
+      x-sdk-public: true
       security:
         - bearerAuth: []
       requestBody:
@@ -25355,6 +25636,8 @@ paths:
       summary: tools.catalog HTTP alias
       tags:
         - Tools
+      x-sdk-public: false
+      x-alias-of: tools.catalog
       security:
         - bearerAuth: []
       responses:
@@ -25420,6 +25703,8 @@ paths:
       summary: tools.invoke HTTP alias
       tags:
         - Tools
+      x-sdk-public: false
+      x-alias-of: tools.invoke
       security:
         - bearerAuth: []
       responses:

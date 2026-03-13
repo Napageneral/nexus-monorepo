@@ -214,7 +214,7 @@ async function login(origin: string): Promise<string> {
   return cookie.split(";")[0]!;
 }
 
-function routeResponseSchema(pathname: string, method: "get" | "post", status: number): OpenApiSchema {
+function routeResponseSchema(pathname: string, method: "get" | "post" | "delete", status: number): OpenApiSchema {
   const route = frontdoorOpenApiRoutes.find((entry) => entry.path === pathname && entry.method === method);
   if (!route) {
     throw new Error(`unknown openapi route: ${method.toUpperCase()} ${pathname}`);
@@ -264,7 +264,12 @@ describe("frontdoor OpenAPI contract conformance", () => {
     const config = baseConfig(runtime.origin);
     seedProducts(config, [{ productId: "glowbot", displayName: "GlowBot" }]);
     stageFakePackage(config, "glowbot");
+    stageFakePackage(config, "glowbot", "1.0.1");
+    stageFakePackage(config, "nexus-adapter-confluence", "0.1.0", "adapter");
+    stageFakePackage(config, "nexus-adapter-confluence", "0.1.1", "adapter");
     vi.spyOn(sshHelper, "installPackageViaRuntimeHttp").mockResolvedValue({ ok: true });
+    vi.spyOn(sshHelper, "upgradePackageViaRuntimeHttp").mockResolvedValue({ ok: true });
+    vi.spyOn(sshHelper, "uninstallPackageViaRuntimeHttp").mockResolvedValue({ ok: true });
     const frontdoor = createFrontdoorServer({ config });
     const frontdoorRunning = await listen(frontdoor.server);
 
@@ -347,6 +352,80 @@ describe("frontdoor OpenAPI contract conformance", () => {
     expectSchemaMatch(
       routeResponseSchema("/api/servers/{serverId}/apps/{appId}/install-status", "get", 200),
       await installStatusResp.json(),
+    );
+
+    const appUpgradeResp = await fetch(
+      `${frontdoorRunning.origin}/api/servers/tenant-dev/apps/glowbot/upgrade`,
+      {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ target_version: "1.0.1" }),
+      },
+    );
+    expect(appUpgradeResp.status).toBe(200);
+    expectSchemaMatch(
+      routeResponseSchema("/api/servers/{serverId}/apps/{appId}/upgrade", "post", 200),
+      await appUpgradeResp.json(),
+    );
+
+    const adapterInstallResp = await fetch(
+      `${frontdoorRunning.origin}/api/servers/tenant-dev/adapters/nexus-adapter-confluence/install`,
+      {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ version: "0.1.0" }),
+      },
+    );
+    expect(adapterInstallResp.status).toBe(200);
+    expectSchemaMatch(
+      routeResponseSchema("/api/servers/{serverId}/adapters/{adapterId}/install", "post", 200),
+      await adapterInstallResp.json(),
+    );
+
+    const adapterStatusResp = await fetch(
+      `${frontdoorRunning.origin}/api/servers/tenant-dev/adapters/nexus-adapter-confluence/install-status`,
+      { headers: { cookie } },
+    );
+    expect(adapterStatusResp.status).toBe(200);
+    expectSchemaMatch(
+      routeResponseSchema("/api/servers/{serverId}/adapters/{adapterId}/install-status", "get", 200),
+      await adapterStatusResp.json(),
+    );
+
+    const adapterUpgradeResp = await fetch(
+      `${frontdoorRunning.origin}/api/servers/tenant-dev/adapters/nexus-adapter-confluence/upgrade`,
+      {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ target_version: "0.1.1" }),
+      },
+    );
+    expect(adapterUpgradeResp.status).toBe(200);
+    expectSchemaMatch(
+      routeResponseSchema("/api/servers/{serverId}/adapters/{adapterId}/upgrade", "post", 200),
+      await adapterUpgradeResp.json(),
+    );
+
+    const adapterUninstallResp = await fetch(
+      `${frontdoorRunning.origin}/api/servers/tenant-dev/adapters/nexus-adapter-confluence/install`,
+      {
+        method: "DELETE",
+        headers: { cookie },
+      },
+    );
+    expect(adapterUninstallResp.status).toBe(200);
+    expectSchemaMatch(
+      routeResponseSchema("/api/servers/{serverId}/adapters/{adapterId}/install", "delete", 200),
+      await adapterUninstallResp.json(),
     );
   });
 

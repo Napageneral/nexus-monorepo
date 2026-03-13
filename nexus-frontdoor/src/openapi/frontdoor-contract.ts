@@ -1,7 +1,7 @@
 export type OpenApiSchema = Record<string, unknown>;
 
 export type FrontdoorOpenApiRoute = {
-  method: "get" | "post";
+  method: "get" | "post" | "delete";
   path: string;
   operationId: string;
   summary: string;
@@ -248,6 +248,57 @@ const installResponseSchema: OpenApiSchema = {
     app_id: { type: "string" },
     install_status: { type: "string" },
     entry_path: { type: "string" },
+    version: { type: "string" },
+  },
+};
+
+const upgradeResponseSchema: OpenApiSchema = {
+  type: "object",
+  required: ["ok", "server_id", "install_status", "version"],
+  properties: {
+    ok: { type: "boolean", enum: [true] },
+    server_id: { type: "string" },
+    app_id: { type: "string" },
+    adapter_id: { type: "string" },
+    install_status: { type: "string" },
+    version: { type: "string" },
+  },
+};
+
+const uninstallResponseSchema: OpenApiSchema = {
+  type: "object",
+  required: ["ok", "server_id", "install_status"],
+  properties: {
+    ok: { type: "boolean", enum: [true] },
+    server_id: { type: "string" },
+    app_id: { type: "string" },
+    adapter_id: { type: "string" },
+    install_status: { type: "string" },
+  },
+};
+
+const adapterInstallStatusSchema: OpenApiSchema = {
+  type: "object",
+  required: ["ok", "server_id", "adapter_id", "install_status", "desired_version", "active_version", "last_error"],
+  properties: {
+    ok: { type: "boolean", enum: [true] },
+    server_id: { type: "string" },
+    adapter_id: { type: "string" },
+    install_status: { type: "string" },
+    desired_version: { type: ["string", "null"] },
+    active_version: { type: ["string", "null"] },
+    last_error: { type: ["string", "null"] },
+  },
+};
+
+const adapterInstallResponseSchema: OpenApiSchema = {
+  type: "object",
+  required: ["ok", "server_id", "adapter_id", "install_status", "version"],
+  properties: {
+    ok: { type: "boolean", enum: [true] },
+    server_id: { type: "string" },
+    adapter_id: { type: "string" },
+    install_status: { type: "string" },
     version: { type: "string" },
   },
 };
@@ -561,6 +612,276 @@ export const frontdoorOpenApiRoutes: FrontdoorOpenApiRoute[] = [
       },
       "404": {
         description: "App not found",
+        content: { "application/json": { schema: errorResponseSchema } },
+      },
+    },
+  },
+  {
+    method: "post",
+    path: "/api/servers/{serverId}/apps/{appId}/upgrade",
+    operationId: "frontdoor.servers.apps.upgrade",
+    summary: "Upgrade an installed app on a hosted server",
+    tags: ["Apps", "Servers"],
+    security: [{ cookieSession: [] }],
+    parameters: [
+      {
+        name: "serverId",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+      },
+      {
+        name: "appId",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+      },
+    ],
+    requestBody: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            required: ["target_version"],
+            properties: {
+              target_version: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+    responses: {
+      "200": {
+        description: "App upgrade result",
+        content: { "application/json": { schema: upgradeResponseSchema } },
+      },
+      "400": {
+        description: "Invalid upgrade request",
+        content: { "application/json": { schema: errorResponseSchema } },
+      },
+      "401": {
+        description: "Not authenticated",
+        content: { "application/json": { schema: errorResponseSchema } },
+      },
+      "404": {
+        description: "App not found",
+        content: { "application/json": { schema: errorResponseSchema } },
+      },
+    },
+  },
+  {
+    method: "delete",
+    path: "/api/servers/{serverId}/apps/{appId}/install",
+    operationId: "frontdoor.servers.apps.uninstall",
+    summary: "Uninstall an app from a hosted server",
+    tags: ["Apps", "Servers"],
+    security: [{ cookieSession: [] }],
+    parameters: [
+      {
+        name: "serverId",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+      },
+      {
+        name: "appId",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+      },
+    ],
+    responses: {
+      "200": {
+        description: "App uninstall result",
+        content: { "application/json": { schema: uninstallResponseSchema } },
+      },
+      "400": {
+        description: "Invalid uninstall request",
+        content: { "application/json": { schema: errorResponseSchema } },
+      },
+      "401": {
+        description: "Not authenticated",
+        content: { "application/json": { schema: errorResponseSchema } },
+      },
+    },
+  },
+  {
+    method: "get",
+    path: "/api/servers/{serverId}/adapters/{adapterId}/install-status",
+    operationId: "frontdoor.servers.adapters.installStatus",
+    summary: "Get adapter install status for a hosted server",
+    tags: ["Adapters", "Servers"],
+    security: [{ cookieSession: [] }],
+    parameters: [
+      {
+        name: "serverId",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+      },
+      {
+        name: "adapterId",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+      },
+    ],
+    responses: {
+      "200": {
+        description: "Adapter install status",
+        content: { "application/json": { schema: adapterInstallStatusSchema } },
+      },
+      "400": {
+        description: "Invalid install status request",
+        content: { "application/json": { schema: errorResponseSchema } },
+      },
+      "401": {
+        description: "Not authenticated",
+        content: { "application/json": { schema: errorResponseSchema } },
+      },
+    },
+  },
+  {
+    method: "post",
+    path: "/api/servers/{serverId}/adapters/{adapterId}/install",
+    operationId: "frontdoor.servers.adapters.install",
+    summary: "Install an adapter on a hosted server",
+    tags: ["Adapters", "Servers"],
+    security: [{ cookieSession: [] }],
+    parameters: [
+      {
+        name: "serverId",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+      },
+      {
+        name: "adapterId",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+      },
+    ],
+    requestBody: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            required: ["version"],
+            properties: {
+              version: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+    responses: {
+      "200": {
+        description: "Adapter install result",
+        content: { "application/json": { schema: adapterInstallResponseSchema } },
+      },
+      "400": {
+        description: "Invalid install request",
+        content: { "application/json": { schema: errorResponseSchema } },
+      },
+      "401": {
+        description: "Not authenticated",
+        content: { "application/json": { schema: errorResponseSchema } },
+      },
+      "404": {
+        description: "Adapter not found",
+        content: { "application/json": { schema: errorResponseSchema } },
+      },
+    },
+  },
+  {
+    method: "post",
+    path: "/api/servers/{serverId}/adapters/{adapterId}/upgrade",
+    operationId: "frontdoor.servers.adapters.upgrade",
+    summary: "Upgrade an installed adapter on a hosted server",
+    tags: ["Adapters", "Servers"],
+    security: [{ cookieSession: [] }],
+    parameters: [
+      {
+        name: "serverId",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+      },
+      {
+        name: "adapterId",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+      },
+    ],
+    requestBody: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            required: ["target_version"],
+            properties: {
+              target_version: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+    responses: {
+      "200": {
+        description: "Adapter upgrade result",
+        content: { "application/json": { schema: upgradeResponseSchema } },
+      },
+      "400": {
+        description: "Invalid upgrade request",
+        content: { "application/json": { schema: errorResponseSchema } },
+      },
+      "401": {
+        description: "Not authenticated",
+        content: { "application/json": { schema: errorResponseSchema } },
+      },
+      "404": {
+        description: "Adapter not found",
+        content: { "application/json": { schema: errorResponseSchema } },
+      },
+    },
+  },
+  {
+    method: "delete",
+    path: "/api/servers/{serverId}/adapters/{adapterId}/install",
+    operationId: "frontdoor.servers.adapters.uninstall",
+    summary: "Uninstall an adapter from a hosted server",
+    tags: ["Adapters", "Servers"],
+    security: [{ cookieSession: [] }],
+    parameters: [
+      {
+        name: "serverId",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+      },
+      {
+        name: "adapterId",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+      },
+    ],
+    responses: {
+      "200": {
+        description: "Adapter uninstall result",
+        content: { "application/json": { schema: uninstallResponseSchema } },
+      },
+      "400": {
+        description: "Invalid uninstall request",
+        content: { "application/json": { schema: errorResponseSchema } },
+      },
+      "401": {
+        description: "Not authenticated",
         content: { "application/json": { schema: errorResponseSchema } },
       },
     },
