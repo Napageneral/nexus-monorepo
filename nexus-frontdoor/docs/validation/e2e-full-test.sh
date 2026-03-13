@@ -178,12 +178,12 @@ else
   fail "Auth chain broken"
 fi
 
-# Test 2: Control UI accessible
+# Test 2: Operator Console accessible
 CONTROL_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$FRONTDOOR/app/control/" -H "Cookie: $SESSION_COOKIE")
 if [ "$CONTROL_STATUS" = "200" ] || [ "$CONTROL_STATUS" = "301" ] || [ "$CONTROL_STATUS" = "302" ]; then
-  pass "Control UI accessible at /app/control/ (HTTP $CONTROL_STATUS)"
+  pass "Operator Console accessible at /app/console/ (HTTP $CONTROL_STATUS)"
 else
-  fail "Control UI not accessible (HTTP $CONTROL_STATUS)"
+  fail "Operator Console not accessible (HTTP $CONTROL_STATUS)"
 fi
 
 # Test 3: Unauthenticated access is rejected
