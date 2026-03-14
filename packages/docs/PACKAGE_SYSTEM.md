@@ -90,6 +90,7 @@ The correct split is:
 
 These should remain the real entrypoints:
 - `nex package release ...`
+- `packages/scripts/publish-package.sh ...`
 - `nex/scripts/contracts/generate-openapi.ts`
 - `nex/scripts/sdk/generate-adapter-sdk-ts.ts`
 

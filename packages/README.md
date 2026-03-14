@@ -51,6 +51,7 @@ Per-package wrapper scripts are optional ergonomics, not the source of truth.
 
 Canonical shared entrypoints are:
 - `nex package release <manifest-root>`
+- `/Users/tyler/nexus/home/projects/nexus/packages/scripts/publish-package.sh <manifest-root-or-package-root>`
 - `node --import tsx /Users/tyler/nexus/home/projects/nexus/nex/scripts/contracts/generate-openapi.ts ...`
 - `node --import tsx /Users/tyler/nexus/home/projects/nexus/nex/scripts/sdk/generate-adapter-sdk-ts.ts <adapter-id>`
 

@@ -13,8 +13,13 @@
 - `apple-maps`
 - `callrail`
 - `confluence`
+- `device-android`
+- `device-headless`
+- `device-ios`
+- `device-macos`
 - `discord`
 - `git`
+- `gog`
 - `google`
 - `jira`
 - `meta-ads`
@@ -25,10 +30,6 @@
 - `twilio`
 - `whatsapp`
 - `zenoti-emr`
-
-### Adapter-modern but not package-shaped
-
-- none
 
 ### Shared tooling, not a package
 
