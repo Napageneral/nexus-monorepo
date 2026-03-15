@@ -60,11 +60,11 @@ Representative drift:
 Current `packages/` manifest counts:
 
 - 7 app manifests
-- 15 adapter manifests
+- 20 adapter manifests
 
 Current missing attached-skill contract:
 
-- 20 manifests are missing a valid `skill` declaration
+- 25 manifests are missing a valid `skill` declaration
 
 ## Core Decisions
 
@@ -111,6 +111,10 @@ Target shape:
   `packages/scripts/`
 - package-local wrappers call that shared path instead of carrying bespoke
   Frontdoor logic
+
+First concrete shared path:
+
+- `packages/scripts/publish-package.sh`
 
 ## Package-Attached Skill Rule Under `packages/`
 

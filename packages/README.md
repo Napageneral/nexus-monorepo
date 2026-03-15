@@ -41,7 +41,7 @@ Adapters:
 3. Publish/install tooling assumes package shape only.
 4. Package-attached `SKILL.md` is required package contract for apps and adapters.
 5. Central OpenAPI publication lives under `/Users/tyler/nexus/home/projects/nexus/contracts/`.
-6. Repo-local consumer SDKs live under each package's `sdk/` directory.
+6. Consumer SDK generation and publication are centralized.
 7. Real package directories under `packages/` must be standalone repos mounted
    into the umbrella repo as submodules.
 
@@ -58,5 +58,5 @@ Canonical shared entrypoints are:
 Canonical publish flow should also converge under `packages/scripts/` rather
 than package-local bespoke Frontdoor wrappers.
 
-Adapters can use package-local `scripts/generate-sdk.sh` wrappers if that improves ergonomics.
-Apps should not invent ad hoc wrappers until app consumer SDK generation exists.
+Package repos should not own SDK publication or bespoke SDK wrappers.
+They own OpenAPI only. The shared generator and artifact system own SDK generation and publication.

@@ -1,0 +1,9 @@
+{
+  "contract": "adapters/device-macos",
+  "generator": "nex/scripts/contracts/generate-openapi.ts",
+  "sources": [
+    "packages/adapters/device-macos",
+    "packages/adapters/nexus-adapter-sdks/nexus-adapter-sdk-ts/src/protocol.ts",
+    "packages/adapters/nexus-adapter-sdks/nexus-adapter-sdk-go/define.go"
+  ]
+}

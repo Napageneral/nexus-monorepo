@@ -1,0 +1,9 @@
+{
+  "id": "eve",
+  "version": "0.1.0",
+  "displayName": "Eve",
+  "description": "Shared Eve iMessage adapter package for Nex.",
+  "platform": "imessage",
+  "command": "./bin/eve-adapter",
+  "skill": "./SKILL.md"
+}

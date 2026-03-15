@@ -1,8 +1,0 @@
-{
-  "id": "nexus-adapter-discord",
-  "version": "0.1.0",
-  "displayName": "Discord",
-  "description": "Shared Discord adapter package for Nex.",
-  "platform": "discord",
-  "command": "./bin/nexus-adapter-discord"
-}

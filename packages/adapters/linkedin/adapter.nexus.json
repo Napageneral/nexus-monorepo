@@ -1,0 +1,9 @@
+{
+  "id": "linkedin",
+  "version": "0.1.0",
+  "displayName": "LinkedIn",
+  "description": "Shared LinkedIn adapter package for Nex.",
+  "platform": "linkedin",
+  "command": "./dist/index.js",
+  "skill": "./SKILL.md"
+}

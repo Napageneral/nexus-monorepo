@@ -10,7 +10,7 @@ For any new Nex package:
 3. get a release script by default
 4. attach one package-local `SKILL.md` by default
 5. publish its contract by default
-5. optionally generate its consumer SDK from the same contract
+6. rely on the shared system to generate and publish consumer SDKs from that contract
 
 The package layer is not an optional cleanup step.
 
@@ -62,7 +62,7 @@ Canonical release path:
 5. Publish/install tooling should assume package shape only.
 6. CI should reject non-package-shaped repos.
 7. Central contract publication lives under `contracts/`.
-8. Repo-local consumer SDKs live under package-local `sdk/` directories.
+8. Consumer SDK generation and publication are centralized platform concerns.
 
 ## Required Files
 
@@ -82,8 +82,6 @@ Required at the package root:
 
 ## Shared vs Package-Local Scripts
 
-Not every package needs its own bespoke `scripts/generate-sdk.sh`.
-
 The correct split is:
 
 ### Shared canonical tools
@@ -100,24 +98,15 @@ Until the CLI owns a first-class `nex package publish`, the canonical publish
 path should live under `packages/scripts/` and package-local wrappers should
 delegate to it.
 
-### Package-local wrappers
-
-These are optional ergonomics only.
-They are useful when:
-- a package has a common one-command local workflow
-- the package wants a stable local shortcut for contributors
-
-They are not required if the shared command is already clear.
-
 ## Consumer SDK Rule
 
 Adapters:
 - should publish central OpenAPI under `contracts/adapters/<id>/openapi.yaml`
-- may generate a repo-local consumer SDK under `sdk/`
+- should not own repo-local consumer SDK publication
 
 Apps:
 - should publish central OpenAPI under `contracts/apps/<id>/openapi.yaml`
-- should only grow repo-local consumer SDKs once the app SDK generation model is locked
+- should not own repo-local consumer SDK publication
 
 ## Artifact Repository Model
 
@@ -125,6 +114,7 @@ The workspace already acts as its own package and contract publication system.
 
 - package artifacts: package-local `dist/`
 - published contracts: central `contracts/`
+- published consumer SDKs: central SDK publication system
 - package sources: central `packages/`
 
 ## Attached Skill Contract

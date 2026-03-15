@@ -1,5 +1,0 @@
-{"type":"endpoint.upsert","endpoint_id":"device-host-1","display_name":"Tyler iPhone","platform":"ios","caps":["camera","screen"],"commands":["camera.snap","screen.record"],"permissions":{"camera":true}}
-{"type":"invoke.result","request_id":"req-1","ok":true,"payload":{"image":"ok"}}
-{"type":"invoke.result","request_id":"req-2","ok":false,"error":{"code":"NOT_ALLOWED","message":"command denied"}}
-{"type":"event.ingest","event":{"operation":"event.ingest","event":{"event_id":"evt-1","timestamp":1700000000000,"content":"hello","content_type":"text"},"delivery":{"platform":"ios","account_id":"device-host-1","sender_id":"device-host-1","container_id":"device-host-1","container_kind":"direct","capabilities":{},"available_channels":[]}}}
-{"type":"endpoint.remove","endpoint_id":"device-host-1"}

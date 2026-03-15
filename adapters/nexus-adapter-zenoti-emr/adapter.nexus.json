@@ -1,8 +1,0 @@
-{
-  "id": "nexus-adapter-zenoti-emr",
-  "version": "0.1.0",
-  "displayName": "Zenoti EMR",
-  "description": "Shared Zenoti EMR adapter package for Nex.",
-  "platform": "zenoti-emr",
-  "command": "./bin/zenoti-emr-adapter"
-}

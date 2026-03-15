@@ -28,7 +28,7 @@ Required checks:
 1. `package validate`
 2. package release wrapper succeeds
 3. contract publication succeeds where applicable
-4. consumer SDK generation succeeds where applicable
+4. central SDK generation succeeds where applicable
 
 ## App Families
 

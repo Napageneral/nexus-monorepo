@@ -1,8 +1,0 @@
-{
-  "id": "nexus-adapter-callrail",
-  "version": "0.1.0",
-  "displayName": "CallRail",
-  "description": "Shared CallRail adapter package for Nex.",
-  "platform": "callrail",
-  "command": "./bin/callrail-adapter"
-}

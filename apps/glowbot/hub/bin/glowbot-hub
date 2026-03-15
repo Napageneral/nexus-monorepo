@@ -1,7 +1,0 @@
-#!/usr/bin/env node
-import { startHubServer } from "../src/server.mjs";
-
-startHubServer().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});

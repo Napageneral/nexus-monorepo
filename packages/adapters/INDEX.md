@@ -25,8 +25,6 @@ Typical package shape:
 ```text
 adapters/<adapter-id>/
   adapter.nexus.json
-  sdk/
-    <adapter-id>-sdk-ts/
   docs/
     specs/
     workplans/
@@ -138,7 +136,8 @@ Use it when:
 Every adapter should publish:
 
 1. a central OpenAPI artifact under `contracts/adapters/<adapter-id>/`
-2. a repo-local consumer SDK under `adapters/<adapter-id>/sdk/`
+2. a centrally generated consumer SDK from that published contract
 
 The shared adapter SDK is for authoring adapters.
-The per-adapter consumer SDK is for apps, agents, and tools that want to call that adapter's package contract.
+The generated per-adapter consumer SDK is for apps, agents, and tools that want to call that adapter's package contract.
+Adapter repos should not own SDK publication logic.

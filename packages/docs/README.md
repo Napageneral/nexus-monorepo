@@ -11,3 +11,4 @@ Recommended reading order:
 5. `PACKAGE_SHARED_PUBLISH_WORKPLAN.md` - implementation plan for the shared package publish wrapper
 6. `PACKAGE_ENFORCEMENT.md` - manifest-root discovery and enforcement model
 7. `APP_FAMILY_NORMALIZATION.md` - app family container vs package-root rules
+8. `SDK_PUBLICATION_MODEL.md` - centralized OpenAPI to SDK publication model

@@ -1,8 +1,0 @@
-{
-  "id": "nexus-adapter-whatsapp",
-  "version": "0.1.0",
-  "displayName": "WhatsApp",
-  "description": "Shared WhatsApp adapter package for Nex.",
-  "platform": "whatsapp",
-  "command": "./bin/nexus-adapter-whatsapp"
-}
