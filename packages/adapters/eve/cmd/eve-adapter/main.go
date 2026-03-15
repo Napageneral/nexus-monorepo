@@ -16,6 +16,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"mime"
 	"os"
@@ -37,7 +38,42 @@ const (
 	adapterName    = "eve"
 	adapterVersion = "0.1.0"
 	platformID     = "imessage"
+	stageChunkSize = 5000
 )
+
+type stagedBackfillChunk struct {
+	Path           string `json:"path"`
+	Records        int    `json:"records"`
+	FirstRecordID  string `json:"first_record_id,omitempty"`
+	LastRecordID   string `json:"last_record_id,omitempty"`
+	MinTimestampMs *int64 `json:"min_timestamp_ms,omitempty"`
+	MaxTimestampMs *int64 `json:"max_timestamp_ms,omitempty"`
+}
+
+type stagedBackfillManifest struct {
+	Version      int                   `json:"version"`
+	Format       string                `json:"format"`
+	StageDir     string                `json:"stage_dir"`
+	ManifestPath string                `json:"manifest_path"`
+	Chunks       []stagedBackfillChunk `json:"chunks"`
+	Totals       struct {
+		Records int `json:"records"`
+	} `json:"totals"`
+}
+
+type stagedChunkWriter struct {
+	stageDir     string
+	chunkSize    int
+	chunkIndex   int
+	currentFile  *os.File
+	currentEnc   *json.Encoder
+	currentChunk *stagedBackfillChunk
+	manifest     stagedBackfillManifest
+}
+
+func boolPtr(value bool) *bool {
+	return &value
+}
 
 func main() {
 	nexadapter.Run(nexadapter.DefineAdapter(adapterConfig()))
@@ -113,6 +149,57 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 			Cancel: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterSetupRequest) (*nexadapter.AdapterSetupResult, error) {
 				return eveSetupCancel(ctx.Context, req)
 			},
+		},
+		Methods: map[string]nexadapter.DeclaredMethod[struct{}]{
+			"records.backfill.stage": nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
+				Description:        "Stage historical Eve backfill into canonical JSONL chunk files for Nex bulk import.",
+				Action:             "read",
+				Params: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"since":     map[string]any{"type": "string"},
+						"stage_dir": map[string]any{"type": "string"},
+					},
+					"required": []string{"since", "stage_dir"},
+				},
+				Response: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"version":       map[string]any{"type": "integer"},
+						"format":        map[string]any{"type": "string"},
+						"stage_dir":     map[string]any{"type": "string"},
+						"manifest_path": map[string]any{"type": "string"},
+						"totals": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"records": map[string]any{"type": "integer"},
+							},
+							"required": []string{"records"},
+						},
+						"chunks": map[string]any{
+							"type": "array",
+							"items": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"path":              map[string]any{"type": "string"},
+									"records":           map[string]any{"type": "integer"},
+									"first_record_id":   map[string]any{"type": "string"},
+									"last_record_id":    map[string]any{"type": "string"},
+									"first_timestamp_ms": map[string]any{"type": "integer"},
+									"last_timestamp_ms":  map[string]any{"type": "integer"},
+								},
+								"required": []string{"path", "records"},
+							},
+						},
+					},
+					"required": []string{"version", "format", "stage_dir", "manifest_path", "totals", "chunks"},
+				},
+				ConnectionRequired: boolPtr(true),
+				MutatesRemote:      boolPtr(false),
+				Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
+					return eveStageBackfill(ctx.Context, ctx.ConnectionID, req.Payload)
+				},
+			}),
 		},
 	}
 }
@@ -333,6 +420,165 @@ end tell`, escapeAppleScript(recipient), escapeAppleScript(text))
 }
 
 // ---------- Backfill ----------
+
+func newStagedChunkWriter(stageDir string) *stagedChunkWriter {
+	writer := &stagedChunkWriter{
+		stageDir:  stageDir,
+		chunkSize: stageChunkSize,
+		manifest: stagedBackfillManifest{
+			Version:  1,
+			Format:   "jsonl_files",
+			StageDir: stageDir,
+		},
+	}
+	writer.manifest.ManifestPath = filepath.Join(stageDir, "manifest.json")
+	return writer
+}
+
+func (w *stagedChunkWriter) openChunk() error {
+	if w.currentFile != nil {
+		return nil
+	}
+	chunkPath := filepath.Join(w.stageDir, fmt.Sprintf("chunk-%05d.jsonl", w.chunkIndex))
+	file, err := os.Create(chunkPath)
+	if err != nil {
+		return err
+	}
+	w.currentFile = file
+	w.currentEnc = json.NewEncoder(file)
+	w.currentChunk = &stagedBackfillChunk{
+		Path: chunkPath,
+	}
+	w.chunkIndex++
+	return nil
+}
+
+func extractRecordProgress(record nexadapter.AdapterInboundRecord) (string, *int64) {
+	recordID := strings.TrimSpace(record.Payload.ExternalRecordID)
+	timestamp := record.Payload.Timestamp
+	if timestamp <= 0 {
+		return recordID, nil
+	}
+	return recordID, &timestamp
+}
+
+func (w *stagedChunkWriter) closeChunk() error {
+	if w.currentFile == nil || w.currentChunk == nil {
+		return nil
+	}
+	if err := w.currentFile.Close(); err != nil {
+		return err
+	}
+	w.manifest.Chunks = append(w.manifest.Chunks, *w.currentChunk)
+	w.currentFile = nil
+	w.currentEnc = nil
+	w.currentChunk = nil
+	return nil
+}
+
+func (w *stagedChunkWriter) write(record nexadapter.AdapterInboundRecord) error {
+	if err := w.openChunk(); err != nil {
+		return err
+	}
+	if err := w.currentEnc.Encode(record); err != nil {
+		return err
+	}
+	recordID, timestamp := extractRecordProgress(record)
+	w.currentChunk.Records++
+	w.manifest.Totals.Records++
+	if w.currentChunk.FirstRecordID == "" {
+		w.currentChunk.FirstRecordID = recordID
+	}
+	w.currentChunk.LastRecordID = recordID
+	if timestamp != nil {
+		if w.currentChunk.MinTimestampMs == nil || *timestamp < *w.currentChunk.MinTimestampMs {
+			value := *timestamp
+			w.currentChunk.MinTimestampMs = &value
+		}
+		if w.currentChunk.MaxTimestampMs == nil || *timestamp > *w.currentChunk.MaxTimestampMs {
+			value := *timestamp
+			w.currentChunk.MaxTimestampMs = &value
+		}
+	}
+	if w.currentChunk.Records >= w.chunkSize {
+		return w.closeChunk()
+	}
+	return nil
+}
+
+func (w *stagedChunkWriter) finish() (*stagedBackfillManifest, error) {
+	if err := w.closeChunk(); err != nil {
+		return nil, err
+	}
+	raw, err := json.MarshalIndent(w.manifest, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(w.manifest.ManifestPath, raw, 0o644); err != nil {
+		return nil, err
+	}
+	return &w.manifest, nil
+}
+
+func resolveStagedBackfillSince(payload map[string]any) (time.Time, error) {
+	raw, _ := payload["since"].(string)
+	since := strings.TrimSpace(raw)
+	if since == "" {
+		return time.Time{}, fmt.Errorf("records.backfill.stage requires payload.since")
+	}
+	parsed, err := time.Parse(time.RFC3339, since)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid staged backfill since %q: %w", since, err)
+	}
+	return parsed, nil
+}
+
+func resolveStageDir(payload map[string]any) (string, error) {
+	if payload != nil {
+		if raw, ok := payload["stage_dir"].(string); ok && strings.TrimSpace(raw) != "" {
+			stageDir := strings.TrimSpace(raw)
+			if err := os.MkdirAll(stageDir, 0o755); err != nil {
+				return "", err
+			}
+			return stageDir, nil
+		}
+	}
+	return os.MkdirTemp("", "nex-eve-staged-backfill-*")
+}
+
+func eveStageBackfill(ctx context.Context, connectionID string, payload map[string]any) (any, error) {
+	since, err := resolveStagedBackfillSince(payload)
+	if err != nil {
+		return nil, err
+	}
+	stageDir, err := resolveStageDir(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	writer := newStagedChunkWriter(stageDir)
+	var stageErr error
+	err = eveBackfill(ctx, connectionID, since, func(record any) {
+		if stageErr != nil {
+			return
+		}
+		inbound, ok := record.(nexadapter.AdapterInboundRecord)
+		if !ok {
+			stageErr = fmt.Errorf("unexpected staged record type %T", record)
+			return
+		}
+		if err := writer.write(inbound); err != nil {
+			stageErr = err
+		}
+	})
+	if err != nil {
+		return nil, err
+	}
+	if stageErr != nil {
+		return nil, stageErr
+	}
+	return writer.finish()
+}
 
 func eveBackfill(ctx context.Context, connectionID string, since time.Time, emit nexadapter.EmitFunc) error {
 	warehouseDB, err := openWarehouse()

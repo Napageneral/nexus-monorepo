@@ -1,0 +1,19 @@
+# {{DISPLAY_NAME}}
+
+This package was scaffolded by `nex package init`.
+
+The scaffold is set up for a source-level inline Nex app package:
+
+- `app.nexus.json` declares the package contract
+- `SKILL.md` is the package-local attached skill
+- `methods/` owns inline method handlers
+- `hooks/` owns lifecycle hooks
+- `jobs/` and `prompts/` are package-local discovery roots for later expansion
+- `docs/` owns the package spec, workplan, and validation ladder
+
+Primary commands:
+
+- `pnpm build`
+- `nex package validate .`
+- `nex package release .`
+- `nex package smoke . --frontdoor-origin <url> --frontdoor-api-token <token> --server-id <id>`

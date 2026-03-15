@@ -23,6 +23,7 @@ There are two package families under `packages/`:
 
 And two shared support areas:
 
+- `packages/package-kit/`
 - `packages/docs/`
 - `packages/scripts/`
 
@@ -61,8 +62,9 @@ Canonical release path:
 4. The umbrella repo should mount those package repos as submodules.
 5. Publish/install tooling should assume package shape only.
 6. CI should reject non-package-shaped repos.
-7. Central contract publication lives under `contracts/`.
-8. Consumer SDK generation and publication are centralized platform concerns.
+7. Package API contracts live in package-local `api/` directories.
+8. Platform API contracts live in top-level `api/`.
+9. Consumer SDK generation and publication are centralized platform concerns under generated artifacts.
 
 ## Required Files
 
@@ -88,6 +90,7 @@ The correct split is:
 
 These should remain the real entrypoints:
 - `nex package release ...`
+- `packages/package-kit/`
 - `packages/scripts/publish-package.sh ...`
 - `nex/scripts/contracts/generate-openapi.ts`
 - `nex/scripts/sdk/generate-adapter-sdk-ts.ts`
@@ -101,11 +104,11 @@ delegate to it.
 ## Consumer SDK Rule
 
 Adapters:
-- should publish central OpenAPI under `contracts/adapters/<id>/openapi.yaml`
+- should own package-local OpenAPI under `packages/adapters/<id>/api/openapi.yaml`
 - should not own repo-local consumer SDK publication
 
 Apps:
-- should publish central OpenAPI under `contracts/apps/<id>/openapi.yaml`
+- should own package-local OpenAPI under `packages/apps/<family>/<manifest-root>/api/openapi.yaml`
 - should not own repo-local consumer SDK publication
 
 ## Artifact Repository Model
@@ -113,9 +116,14 @@ Apps:
 The workspace already acts as its own package and contract publication system.
 
 - package artifacts: package-local `dist/`
-- published contracts: central `contracts/`
-- published consumer SDKs: central SDK publication system
+- package-owned API contracts: package-local `api/`
+- platform-owned API contracts: top-level `api/`
+- published consumer SDKs: top-level generated `artifacts/`
 - package sources: central `packages/`
+
+Canonical layout reference:
+
+- `packages/docs/API_AND_ARTIFACT_LAYOUT_MODEL.md`
 
 ## Attached Skill Contract
 

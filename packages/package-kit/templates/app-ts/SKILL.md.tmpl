@@ -1,0 +1,21 @@
+---
+summary: "Use {{DISPLAY_NAME}} package methods and workflows."
+---
+
+# {{DISPLAY_NAME}}
+
+## When To Use
+
+Use this package when you need its app-native methods or lifecycle-owned
+workflows.
+
+## Public Methods
+
+- `{{PACKAGE_ID}}.healthcheck` confirms the package is installed and reachable.
+
+## Notes
+
+- The inline app handler lives in `methods/`.
+- Lifecycle hooks live in `hooks/`.
+- Add package-specific workflows under `jobs/` and package-local prompt assets
+  under `prompts/`.

@@ -1,0 +1,875 @@
+openapi: 3.1.0
+info:
+  title: nexus-linkedin-adapter Adapter API
+  version: 0.1.0
+  description: Published adapter package contract for linkedin. This artifact
+    covers ordinary JSON request/response adapter operations.
+tags:
+  - name: Adapter
+paths:
+  /operations/adapter.accounts.list:
+    post:
+      operationId: adapter.accounts.list
+      summary: List adapter accounts
+      tags:
+        - Adapter
+      x-sdk-public: true
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdapterAccountsListResultSchema"
+  /operations/adapter.health:
+    post:
+      operationId: adapter.health
+      summary: Check adapter connection health
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdapterConnectionRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdapterHealthSchema"
+  /operations/adapter.info:
+    post:
+      operationId: adapter.info
+      summary: Read adapter package metadata
+      tags:
+        - Adapter
+      x-sdk-public: true
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdapterInfoSchema"
+  /operations/channels.send:
+    post:
+      operationId: channels.send
+      summary: Send outbound content through the adapter
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryResultSchema"
+  /operations/linkedin.comments.list:
+    post:
+      operationId: linkedin.comments.list
+      summary: List comments for a LinkedIn post.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  postUrn: LinkedIn post URN
+                  count: Optional page size
+                  start: Optional pagination offset
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                elements: LinkedIn comments
+  /operations/linkedin.organizations.list:
+    post:
+      operationId: linkedin.organizations.list
+      summary: List the LinkedIn organizations the connected member can administer.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload: {}
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                organizations: LinkedIn administered organizations
+  /operations/linkedin.posts.create:
+    post:
+      operationId: linkedin.posts.create
+      summary: Create an organization-authored LinkedIn post.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  organizationUrn: Optional LinkedIn organization URN
+                  commentary: Post text
+                  imagePath: Optional local filesystem path to an image
+                  imageUrn: Optional pre-uploaded LinkedIn image URN
+                  imageAltText: Optional image alt text
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                postUrn: Created LinkedIn post URN
+  /operations/linkedin.posts.get:
+    post:
+      operationId: linkedin.posts.get
+      summary: Fetch one LinkedIn post by URN.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  postUrn: LinkedIn post URN
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                post: LinkedIn post
+  /operations/linkedin.posts.list:
+    post:
+      operationId: linkedin.posts.list
+      summary: List LinkedIn posts for an organization author.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  organizationUrn: Optional LinkedIn organization URN
+                  count: Optional page size
+                  start: Optional pagination offset
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                elements: LinkedIn posts
+  /operations/linkedin.socialMetadata.get:
+    post:
+      operationId: linkedin.socialMetadata.get
+      summary: Fetch aggregate LinkedIn social metadata for a post or comment URN.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  entityUrn: LinkedIn post or comment URN
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                socialMetadata: LinkedIn social metadata
+components:
+  schemas:
+    AdapterInfoSchema:
+      $schema: http://json-schema.org/draft-07/schema#
+      type: object
+      properties:
+        platform:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        operations:
+          type: array
+          items:
+            type: string
+            enum:
+              - adapter.info
+              - adapter.health
+              - adapter.accounts.list
+              - adapter.monitor.start
+              - adapter.serve.start
+              - adapter.setup.start
+              - adapter.setup.submit
+              - adapter.setup.status
+              - adapter.setup.cancel
+              - records.backfill
+              - channels.send
+              - channels.stream
+              - channels.react
+              - channels.edit
+              - channels.delete
+        methods:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                anyOf:
+                  - type: string
+                  - type: "null"
+              action:
+                type: string
+                enum:
+                  - read
+                  - write
+              params:
+                anyOf:
+                  - type: object
+                    propertyNames:
+                      type: string
+                    additionalProperties: {}
+                  - type: "null"
+              response:
+                anyOf:
+                  - type: object
+                    propertyNames:
+                      type: string
+                    additionalProperties: {}
+                  - type: "null"
+              connection_required:
+                type: boolean
+              mutates_remote:
+                type: boolean
+              context_hints:
+                type: object
+                properties:
+                  params:
+                    type: object
+                    propertyNames:
+                      type: string
+                    additionalProperties:
+                      type: object
+                      properties:
+                        value: {}
+                        source:
+                          type: string
+                        confidence:
+                          type: string
+                          enum:
+                            - exact
+                            - derived
+                            - weak
+                      required:
+                        - value
+                        - source
+                        - confidence
+                      additionalProperties: false
+                required:
+                  - params
+                additionalProperties: false
+              origin:
+                type: object
+                properties:
+                  kind:
+                    type: string
+                    enum:
+                      - core
+                      - app
+                      - adapter
+                  package_id:
+                    anyOf:
+                      - type: string
+                      - type: "null"
+                  package_version:
+                    anyOf:
+                      - type: string
+                      - type: "null"
+                  declaration_mode:
+                    type: string
+                    enum:
+                      - manifest
+                      - openapi
+                      - builtin
+                  declaration_source:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                  - kind
+                  - package_id
+                  - package_version
+                  - declaration_mode
+                  - declaration_source
+                  - namespace
+                additionalProperties: false
+            required:
+              - name
+            additionalProperties: false
+        credential_service:
+          type: string
+        multi_account:
+          type: boolean
+        platform_capabilities:
+          type: object
+          properties:
+            text_limit:
+              type: integer
+              minimum: 0
+              maximum: 9007199254740991
+            caption_limit:
+              type: integer
+              minimum: 0
+              maximum: 9007199254740991
+            supports_markdown:
+              type: boolean
+            markdown_flavor:
+              type: string
+            supports_tables:
+              type: boolean
+            supports_code_blocks:
+              type: boolean
+            supports_embeds:
+              type: boolean
+            supports_threads:
+              type: boolean
+            supports_reactions:
+              type: boolean
+            supports_polls:
+              type: boolean
+            supports_buttons:
+              type: boolean
+            supports_edit:
+              type: boolean
+            supports_delete:
+              type: boolean
+            supports_media:
+              type: boolean
+            supports_voice_notes:
+              type: boolean
+            supports_streaming_edit:
+              type: boolean
+            supports_ptt:
+              type: boolean
+            supports_streaming:
+              type: boolean
+            max_message_length:
+              type: integer
+              exclusiveMinimum: 0
+              maximum: 9007199254740991
+            max_attachments:
+              type: integer
+              exclusiveMinimum: 0
+              maximum: 9007199254740991
+          additionalProperties: {}
+        auth:
+          type: object
+          properties:
+            methods:
+              type: array
+              items:
+                oneOf:
+                  - type: object
+                    properties:
+                      id:
+                        type: string
+                      type:
+                        type: string
+                        const: oauth2
+                      label:
+                        type: string
+                      icon:
+                        type: string
+                      service:
+                        type: string
+                      scopes:
+                        type: array
+                        items:
+                          type: string
+                      platformCredentials:
+                        type: boolean
+                      platformCredentialUrl:
+                        type: string
+                    required:
+                      - id
+                      - type
+                      - label
+                      - icon
+                      - service
+                      - scopes
+                    additionalProperties: false
+                  - type: object
+                    properties:
+                      id:
+                        type: string
+                      type:
+                        type: string
+                        const: api_key
+                      label:
+                        type: string
+                      icon:
+                        type: string
+                      service:
+                        type: string
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                            label:
+                              type: string
+                            type:
+                              type: string
+                              enum:
+                                - secret
+                                - text
+                                - select
+                            required:
+                              type: boolean
+                            placeholder:
+                              type: string
+                            options:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  label:
+                                    type: string
+                                  value:
+                                    type: string
+                                required:
+                                  - label
+                                  - value
+                                additionalProperties: false
+                          required:
+                            - name
+                            - label
+                            - type
+                            - required
+                          additionalProperties: false
+                    required:
+                      - id
+                      - type
+                      - label
+                      - icon
+                      - service
+                      - fields
+                    additionalProperties: false
+                  - type: object
+                    properties:
+                      id:
+                        type: string
+                      type:
+                        type: string
+                        const: file_upload
+                      label:
+                        type: string
+                      icon:
+                        type: string
+                      accept:
+                        type: array
+                        items:
+                          type: string
+                      templateUrl:
+                        type: string
+                      maxSize:
+                        type: integer
+                        exclusiveMinimum: 0
+                        maximum: 9007199254740991
+                    required:
+                      - id
+                      - type
+                      - label
+                      - icon
+                      - accept
+                    additionalProperties: false
+                  - type: object
+                    properties:
+                      id:
+                        type: string
+                      type:
+                        type: string
+                        const: custom_flow
+                      label:
+                        type: string
+                      icon:
+                        type: string
+                      service:
+                        type: string
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                            label:
+                              type: string
+                            type:
+                              type: string
+                              enum:
+                                - secret
+                                - text
+                                - select
+                            required:
+                              type: boolean
+                            placeholder:
+                              type: string
+                            options:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  label:
+                                    type: string
+                                  value:
+                                    type: string
+                                required:
+                                  - label
+                                  - value
+                                additionalProperties: false
+                          required:
+                            - name
+                            - label
+                            - type
+                            - required
+                          additionalProperties: false
+                    required:
+                      - id
+                      - type
+                      - label
+                      - icon
+                      - service
+                    additionalProperties: false
+            setupGuide:
+              type: string
+          required:
+            - methods
+          additionalProperties: false
+        methodCatalog:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - manifest
+                - openapi
+            document:
+              type: string
+            namespace:
+              type: string
+          additionalProperties: false
+      required:
+        - platform
+        - name
+        - version
+        - operations
+        - methods
+        - multi_account
+        - platform_capabilities
+      additionalProperties: false
+    AdapterAccountSchema:
+      $schema: http://json-schema.org/draft-07/schema#
+      type: object
+      properties:
+        id:
+          type: string
+        display_name:
+          type: string
+        credential_ref:
+          type: string
+        status:
+          type: string
+          enum:
+            - ready
+            - active
+            - error
+      required:
+        - id
+        - status
+      additionalProperties: false
+    AdapterHealthSchema:
+      $schema: http://json-schema.org/draft-07/schema#
+      type: object
+      properties:
+        connected:
+          type: boolean
+        connection_id:
+          type: string
+        last_event_at:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+        error:
+          type: string
+        details:
+          type: object
+          propertyNames:
+            type: string
+          additionalProperties: {}
+      required:
+        - connected
+        - connection_id
+      additionalProperties: false
+    SendRequestSchema:
+      $schema: http://json-schema.org/draft-07/schema#
+      type: object
+      properties:
+        target:
+          type: object
+          properties:
+            connection_id:
+              type: string
+            channel:
+              type: object
+              properties:
+                platform:
+                  type: string
+                space_id:
+                  type: string
+                container_kind:
+                  type: string
+                  enum:
+                    - direct
+                    - group
+                container_id:
+                  type: string
+                thread_id:
+                  type: string
+              required:
+                - platform
+              additionalProperties: false
+            reply_to_id:
+              type: string
+          required:
+            - connection_id
+            - channel
+          additionalProperties: false
+        text:
+          type: string
+        media:
+          type: string
+        caption:
+          type: string
+      required:
+        - target
+      additionalProperties: false
+    DeliveryResultSchema:
+      $schema: http://json-schema.org/draft-07/schema#
+      type: object
+      properties:
+        success:
+          type: boolean
+        message_ids:
+          type: array
+          items:
+            type: string
+        chunks_sent:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        total_chars:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        error:
+          anyOf:
+            - type: string
+            - type: object
+              properties:
+                type:
+                  type: string
+                  enum:
+                    - rate_limited
+                    - permission_denied
+                    - not_found
+                    - content_rejected
+                    - network
+                    - unknown
+                message:
+                  type: string
+                retry:
+                  type: boolean
+                retry_after_ms:
+                  type: integer
+                  minimum: 0
+                  maximum: 9007199254740991
+                details:
+                  type: object
+                  propertyNames:
+                    type: string
+                  additionalProperties: {}
+              required:
+                - message
+              additionalProperties: false
+      required:
+        - success
+        - message_ids
+        - chunks_sent
+      additionalProperties: false
+    AdapterSetupResultSchema:
+      $schema: http://json-schema.org/draft-07/schema#
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - pending
+            - requires_input
+            - completed
+            - failed
+            - cancelled
+        session_id:
+          type: string
+        connection_id:
+          type: string
+        service:
+          type: string
+        message:
+          type: string
+        instructions:
+          type: string
+        fields:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              label:
+                type: string
+              type:
+                type: string
+                enum:
+                  - secret
+                  - text
+                  - select
+              required:
+                type: boolean
+              placeholder:
+                type: string
+              options:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    label:
+                      type: string
+                    value:
+                      type: string
+                  required:
+                    - label
+                    - value
+                  additionalProperties: false
+            required:
+              - name
+              - label
+              - type
+              - required
+            additionalProperties: false
+        secret_fields:
+          type: object
+          propertyNames:
+            type: string
+          additionalProperties:
+            type: string
+        metadata:
+          type: object
+          propertyNames:
+            type: string
+          additionalProperties: {}
+      required:
+        - status
+      additionalProperties: {}
+    AdapterAccountsListResultSchema:
+      type: array
+      items:
+        $ref: "#/components/schemas/AdapterAccountSchema"
+    AdapterEmptyRequestSchema:
+      type: object
+      additionalProperties: false
+      properties: {}
+    AdapterConnectionRequestSchema:
+      type: object
+      additionalProperties: false
+      required:
+        - connection_id
+      properties:
+        connection_id:
+          type: string
+    AdapterSetupRequestSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        connection_id:
+          type: string
+        session_id:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true

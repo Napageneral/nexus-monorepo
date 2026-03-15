@@ -17,3 +17,5 @@ go build ./cmd/eve-adapter
 5. if local permissions allow, exercise `records.backfill`
 6. if local permissions allow, exercise `adapter.monitor.start`
 7. exercise `channels.send` against a safe iMessage target
+
+Consumer SDKs are generated centrally from `api/openapi.yaml`; there is no package-local SDK generation step.

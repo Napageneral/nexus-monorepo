@@ -12,3 +12,6 @@ Recommended reading order:
 6. `PACKAGE_ENFORCEMENT.md` - manifest-root discovery and enforcement model
 7. `APP_FAMILY_NORMALIZATION.md` - app family container vs package-root rules
 8. `SDK_PUBLICATION_MODEL.md` - centralized OpenAPI to SDK publication model
+9. `API_AND_ARTIFACT_LAYOUT_MODEL.md` - package-local `api/`, platform `api/`, and generated `artifacts/`
+10. `API_AND_ARTIFACT_LAYOUT_ALIGNMENT_REVIEW_2026-03-15.md` - alignment ledger for the new layout model
+- `APP_PACKAGE_API_COMPLETION_MODEL.md` - canonical model for package-local app API ownership and publication

@@ -1,0 +1,19 @@
+type AppMethodContext = {
+  params: Record<string, unknown>;
+  app: {
+    id: string;
+    version: string;
+  };
+  nex: unknown;
+};
+
+const handlers = {
+  "{{PACKAGE_ID}}.healthcheck": async (ctx: AppMethodContext) => ({
+    ok: true,
+    app_id: ctx.app.id,
+    version: ctx.app.version,
+    params: ctx.params,
+  }),
+};
+
+export default handlers;

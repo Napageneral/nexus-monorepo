@@ -10,7 +10,7 @@ The package author experience should be:
 
 The package consumer experience should be:
 
-1. find the published package contract centrally
+1. find the package-owned OpenAPI contract in the package `api/` directory
 2. install a generated SDK from the shared artifact system
 3. trust that the SDK came from the same canonical OpenAPI contract
 
@@ -30,7 +30,7 @@ Package repos should not carry their own SDK publication logic.
 For package consumer SDKs:
 
 1. package manifest defines the installable package
-2. central OpenAPI artifact defines the callable contract
+2. package-local OpenAPI artifact defines the callable contract
 3. shared SDK generator defines the generated client shape
 
 The package repo should never become a second source of truth for the consumer SDK.
@@ -38,10 +38,8 @@ The package repo should never become a second source of truth for the consumer S
 ## Canonical Flow
 
 1. package repo defines or updates its OpenAPI source inputs
-2. central contract publication writes:
-   - `contracts/apps/<id>/openapi.yaml`
-   - `contracts/adapters/<id>/openapi.yaml`
-3. shared SDK generator produces SDK artifacts from those central contracts
+2. package OpenAPI is generated or maintained in package-local `api/`
+3. shared SDK generator produces SDK artifacts from those package-owned contracts
 4. shared artifact/package publication publishes those SDKs
 
 ## Why This Rule Exists
@@ -92,8 +90,9 @@ Every package repo is not responsible for:
 The workspace should act as its own artifact system:
 
 1. package artifacts published from package release flow
-2. OpenAPI artifacts published centrally under `contracts/`
-3. consumer SDK artifacts published centrally from shared SDK generation
+2. package-owned OpenAPI artifacts under package-local `api/`
+3. platform-owned OpenAPI artifacts under top-level `api/`
+4. consumer SDK artifacts published centrally from shared SDK generation under `artifacts/`
 
 That keeps ownership simple:
 

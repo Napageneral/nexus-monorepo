@@ -4,6 +4,7 @@ This directory is the top-level home for Nex package families.
 
 It contains:
 
+- `package-kit/` - shared package scaffolding, validation, release, and smoke tooling
 - `apps/` - product/application packages built for Nex
 - `adapters/` - integration/provider/device packages built for Nex
 - `docs/` - shared package-system documentation and navigation
@@ -40,9 +41,10 @@ Adapters:
 2. Non-package-shaped repos are not production-ready.
 3. Publish/install tooling assumes package shape only.
 4. Package-attached `SKILL.md` is required package contract for apps and adapters.
-5. Central OpenAPI publication lives under `/Users/tyler/nexus/home/projects/nexus/contracts/`.
-6. Consumer SDK generation and publication are centralized.
-7. Real package directories under `packages/` must be standalone repos mounted
+5. Package API contracts live in package-local `api/` directories.
+6. Platform API contracts live under `/Users/tyler/nexus/home/projects/nexus/api/`.
+7. Consumer SDK generation and publication are centralized under generated artifact outputs.
+8. Real package directories under `packages/` must be standalone repos mounted
    into the umbrella repo as submodules.
 
 ## Notes On Shared Scripts
@@ -60,3 +62,7 @@ than package-local bespoke Frontdoor wrappers.
 
 Package repos should not own SDK publication or bespoke SDK wrappers.
 They own OpenAPI only. The shared generator and artifact system own SDK generation and publication.
+
+Canonical reference:
+
+- `packages/docs/API_AND_ARTIFACT_LAYOUT_MODEL.md`

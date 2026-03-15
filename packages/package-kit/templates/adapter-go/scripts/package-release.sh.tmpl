@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BIN_PATH="${ROOT_DIR}/bin/{{COMMAND_NAME}}"
+
+mkdir -p "${ROOT_DIR}/bin"
+go build -o "${BIN_PATH}" "./cmd/{{COMMAND_NAME}}"
+
+nex package validate "${ROOT_DIR}"
+nex package release "${ROOT_DIR}"

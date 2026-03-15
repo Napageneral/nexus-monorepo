@@ -1,8 +1,0 @@
-{
-  "contract": "apps/aix",
-  "generator": "nex/scripts/contracts/generate-openapi.ts",
-  "sources": [
-    "apps/aix/app/app.nexus.json",
-    "apps/aix/app/openapi/response-schemas.ts"
-  ]
-}

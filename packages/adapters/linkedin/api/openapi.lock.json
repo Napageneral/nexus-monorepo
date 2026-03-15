@@ -1,0 +1,9 @@
+{
+  "contract": "packages/adapters/linkedin/api",
+  "generator": "nex/scripts/contracts/generate-openapi.ts",
+  "sources": [
+    "packages/adapters/linkedin/src/adapter.ts",
+    "packages/adapters/nexus-adapter-sdks/nexus-adapter-sdk-ts/src/protocol.ts",
+    "packages/adapters/nexus-adapter-sdks/nexus-adapter-sdk-ts/src/define.ts"
+  ]
+}

@@ -1,0 +1,13 @@
+type AppHookContext = {
+  app: {
+    id: string;
+    version: string;
+    dataDir: string;
+    packageDir: string;
+  };
+  nex: unknown;
+};
+
+export default async function onInstall(ctx: AppHookContext): Promise<void> {
+  console.log(`[{{PACKAGE_ID}}] install ${ctx.app.version}`);
+}

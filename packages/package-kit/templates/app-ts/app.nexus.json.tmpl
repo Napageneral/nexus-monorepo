@@ -1,0 +1,24 @@
+{
+  "id": "{{PACKAGE_ID}}",
+  "version": "0.1.0",
+  "displayName": "{{DISPLAY_NAME}}",
+  "description": "Scaffolded Nex app",
+  "skill": "./SKILL.md",
+  "handler": "./methods/index.ts",
+  "hooks": {
+    "onInstall": "./hooks/install.ts"
+  },
+  "methods": {
+    "{{PACKAGE_ID}}.healthcheck": {
+      "action": "read",
+      "description": "Confirm the app package is installed and reachable.",
+      "params": {
+        "type": "object",
+        "properties": {}
+      },
+      "response": {
+        "type": "object"
+      }
+    }
+  }
+}

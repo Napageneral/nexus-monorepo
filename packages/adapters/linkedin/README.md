@@ -21,3 +21,8 @@ pnpm build
 ```bash
 ./scripts/package-release.sh
 ```
+
+## Consumer SDK
+
+Consumer SDKs for this package are generated centrally from `api/openapi.yaml` into `artifacts/sdk/ts/adapters/linkedin-sdk-ts/`.
+This package does not own SDK publication logic.

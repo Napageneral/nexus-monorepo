@@ -10,3 +10,5 @@ Green bar:
 - archive contains `adapter.nexus.json`
 - archive contains `dist/`
 - archive contains `node_modules/`
+
+Consumer SDKs are generated centrally from `api/openapi.yaml`; there is no package-local SDK generation step.

@@ -41,8 +41,9 @@ for d in sorted((ROOT / 'adapters').iterdir()):
     print(
         f"{d.name}\t{classify_adapter(d)}\tmanifest={manifest.exists()}\t"
         f"pkg_script={(d/'scripts'/'package-release.sh').exists()}\t"
-        f"sdk_script={(d/'scripts'/'generate-sdk.sh').exists()}\t"
-        f"sdk_dir={(d/'sdk').exists()}\tskill={adapter_skill}"
+        f"api_dir={(d/'api').exists()}\t"
+        f"legacy_sdk_script={(d/'scripts'/'generate-sdk.sh').exists()}\t"
+        f"legacy_sdk_dir={(d/'sdk').exists()}\tskill={adapter_skill}"
     )
 
 print('\nAPPS')

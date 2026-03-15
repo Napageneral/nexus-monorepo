@@ -135,7 +135,7 @@ Use it when:
 
 Every adapter should publish:
 
-1. a central OpenAPI artifact under `contracts/adapters/<adapter-id>/`
+1. a package-owned OpenAPI artifact under `packages/adapters/<adapter-id>/api/`
 2. a centrally generated consumer SDK from that published contract
 
 The shared adapter SDK is for authoring adapters.
