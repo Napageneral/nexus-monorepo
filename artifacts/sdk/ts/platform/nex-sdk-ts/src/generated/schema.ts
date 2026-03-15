@@ -3909,6 +3909,159 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/runtime/operations/models.catalog.get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.catalog.get */
+        post: operations["models.catalog.get"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.catalog.list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.catalog.list */
+        post: operations["models.catalog.list"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.configs.create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.configs.create */
+        post: operations["models.configs.create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.configs.delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.configs.delete */
+        post: operations["models.configs.delete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.configs.get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.configs.get */
+        post: operations["models.configs.get"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.configs.list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.configs.list */
+        post: operations["models.configs.list"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.configs.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.configs.update */
+        post: operations["models.configs.update"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.defaults.get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.defaults.get */
+        post: operations["models.defaults.get"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.defaults.put": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.defaults.put */
+        post: operations["models.defaults.put"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/runtime/operations/models.get": {
         parameters: {
             query?: never;
@@ -3937,6 +4090,91 @@ export type paths = {
         put?: never;
         /** models.list */
         post: operations["models.list"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.providers.delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.providers.delete */
+        post: operations["models.providers.delete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.providers.get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.providers.get */
+        post: operations["models.providers.get"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.providers.list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.providers.list */
+        post: operations["models.providers.list"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.providers.put": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.providers.put */
+        post: operations["models.providers.put"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.providers.test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.providers.test */
+        post: operations["models.providers.test"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4532,6 +4770,40 @@ export type paths = {
         put?: never;
         /** schedules.update */
         post: operations["schedules.update"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/search.rebuild": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** search.rebuild */
+        post: operations["search.rebuild"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/search.status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** search.status */
+        post: operations["search.status"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6132,6 +6404,7 @@ export type components = {
         };
         IdentityEntityRowSchema: {
             created_at: number;
+            default_agent_config_id?: string | null;
             deleted_at?: number | null;
             id: string;
             is_agent?: number | boolean | null;
@@ -23081,6 +23354,609 @@ export interface operations {
             };
         };
     };
+    "models.catalog.get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.catalog.list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.configs.create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.configs.delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.configs.get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.configs.list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.configs.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.defaults.get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.defaults.put": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
     "models.get": {
         parameters: {
             query?: never;
@@ -23179,6 +24055,341 @@ export interface operations {
                                 provider: string;
                                 reasoning?: boolean;
                             }[];
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.providers.delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.providers.get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.providers.list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.providers.put": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.providers.test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
                         };
                     };
                 };
@@ -25578,6 +26789,140 @@ export interface operations {
                         /** @enum {boolean} */
                         ok: true;
                         payload?: components["schemas"]["ScheduleMutationResultSchema"];
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "search.rebuild": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "search.status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
                     };
                 };
             };

@@ -21721,6 +21721,726 @@ paths:
                       - type: object
                         additionalProperties: true
                       - type: "null"
+  /runtime/operations/models.catalog.get:
+    post:
+      operationId: models.catalog.get
+      summary: models.catalog.get
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.catalog.list:
+    post:
+      operationId: models.catalog.list
+      summary: models.catalog.list
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.configs.create:
+    post:
+      operationId: models.configs.create
+      summary: models.configs.create
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.configs.delete:
+    post:
+      operationId: models.configs.delete
+      summary: models.configs.delete
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.configs.get:
+    post:
+      operationId: models.configs.get
+      summary: models.configs.get
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.configs.list:
+    post:
+      operationId: models.configs.list
+      summary: models.configs.list
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.configs.update:
+    post:
+      operationId: models.configs.update
+      summary: models.configs.update
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.defaults.get:
+    post:
+      operationId: models.defaults.get
+      summary: models.defaults.get
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.defaults.put:
+    post:
+      operationId: models.defaults.put
+      summary: models.defaults.put
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
   /runtime/operations/models.get:
     post:
       operationId: models.get
@@ -21867,6 +22587,406 @@ paths:
                               type: integer
                             reasoning:
                               type: boolean
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.providers.delete:
+    post:
+      operationId: models.providers.delete
+      summary: models.providers.delete
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.providers.get:
+    post:
+      operationId: models.providers.get
+      summary: models.providers.get
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.providers.list:
+    post:
+      operationId: models.providers.list
+      summary: models.providers.list
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.providers.put:
+    post:
+      operationId: models.providers.put
+      summary: models.providers.put
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.providers.test:
+    post:
+      operationId: models.providers.test
+      summary: models.providers.test
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
                   meta:
                     anyOf:
                       - type: object
@@ -24978,6 +26098,166 @@ paths:
                       - true
                   payload:
                     $ref: "#/components/schemas/ScheduleMutationResultSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/search.rebuild:
+    post:
+      operationId: search.rebuild
+      summary: search.rebuild
+      tags:
+        - Runtime
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/search.status:
+    post:
+      operationId: search.status
+      summary: search.status
+      tags:
+        - Runtime
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
                   meta:
                     anyOf:
                       - type: object
@@ -32610,6 +33890,9 @@ components:
             - type: number
             - type: boolean
             - type: "null"
+        default_agent_config_id:
+          type: string
+          nullable: true
         origin:
           type: string
           nullable: true

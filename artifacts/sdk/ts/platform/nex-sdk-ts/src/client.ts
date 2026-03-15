@@ -668,11 +668,53 @@ export type MemorySetsMembersAddResponse = OperationResponse<"memory.sets.member
 export type MemorySetsMembersListRequest = OperationRequest<"memory.sets.members.list">;
 export type MemorySetsMembersListResponse = OperationResponse<"memory.sets.members.list">;
 
+export type ModelsCatalogGetRequest = OperationRequest<"models.catalog.get">;
+export type ModelsCatalogGetResponse = OperationResponse<"models.catalog.get">;
+
+export type ModelsCatalogListRequest = OperationRequest<"models.catalog.list">;
+export type ModelsCatalogListResponse = OperationResponse<"models.catalog.list">;
+
+export type ModelsConfigsCreateRequest = OperationRequest<"models.configs.create">;
+export type ModelsConfigsCreateResponse = OperationResponse<"models.configs.create">;
+
+export type ModelsConfigsDeleteRequest = OperationRequest<"models.configs.delete">;
+export type ModelsConfigsDeleteResponse = OperationResponse<"models.configs.delete">;
+
+export type ModelsConfigsGetRequest = OperationRequest<"models.configs.get">;
+export type ModelsConfigsGetResponse = OperationResponse<"models.configs.get">;
+
+export type ModelsConfigsListRequest = OperationRequest<"models.configs.list">;
+export type ModelsConfigsListResponse = OperationResponse<"models.configs.list">;
+
+export type ModelsConfigsUpdateRequest = OperationRequest<"models.configs.update">;
+export type ModelsConfigsUpdateResponse = OperationResponse<"models.configs.update">;
+
+export type ModelsDefaultsGetRequest = OperationRequest<"models.defaults.get">;
+export type ModelsDefaultsGetResponse = OperationResponse<"models.defaults.get">;
+
+export type ModelsDefaultsPutRequest = OperationRequest<"models.defaults.put">;
+export type ModelsDefaultsPutResponse = OperationResponse<"models.defaults.put">;
+
 export type ModelsGetRequest = OperationRequest<"models.get">;
 export type ModelsGetResponse = OperationResponse<"models.get">;
 
 export type ModelsListRequest = OperationRequest<"models.list">;
 export type ModelsListResponse = OperationResponse<"models.list">;
+
+export type ModelsProvidersDeleteRequest = OperationRequest<"models.providers.delete">;
+export type ModelsProvidersDeleteResponse = OperationResponse<"models.providers.delete">;
+
+export type ModelsProvidersGetRequest = OperationRequest<"models.providers.get">;
+export type ModelsProvidersGetResponse = OperationResponse<"models.providers.get">;
+
+export type ModelsProvidersListRequest = OperationRequest<"models.providers.list">;
+export type ModelsProvidersListResponse = OperationResponse<"models.providers.list">;
+
+export type ModelsProvidersPutRequest = OperationRequest<"models.providers.put">;
+export type ModelsProvidersPutResponse = OperationResponse<"models.providers.put">;
+
+export type ModelsProvidersTestRequest = OperationRequest<"models.providers.test">;
+export type ModelsProvidersTestResponse = OperationResponse<"models.providers.test">;
 
 export type OperatorPackagesGetRequest = OperationRequest<"operator.packages.get">;
 export type OperatorPackagesGetResponse = OperationResponse<"operator.packages.get">;
@@ -778,6 +820,12 @@ export type SchedulesTriggerResponse = OperationResponse<"schedules.trigger">;
 
 export type SchedulesUpdateRequest = OperationRequest<"schedules.update">;
 export type SchedulesUpdateResponse = OperationResponse<"schedules.update">;
+
+export type SearchRebuildRequest = OperationRequest<"search.rebuild">;
+export type SearchRebuildResponse = OperationResponse<"search.rebuild">;
+
+export type SearchStatusRequest = OperationRequest<"search.status">;
+export type SearchStatusResponse = OperationResponse<"search.status">;
 
 export type SkillsListRequest = OperationRequest<"skills.list">;
 export type SkillsListResponse = OperationResponse<"skills.list">;
@@ -1203,8 +1251,30 @@ export interface Client {
     };
   };
   "models": {
+    "catalog": {
+      "get": (request: ModelsCatalogGetRequest, options?: RequestOptions) => Promise<ModelsCatalogGetResponse>;
+      "list": (request: ModelsCatalogListRequest, options?: RequestOptions) => Promise<ModelsCatalogListResponse>;
+    };
+    "configs": {
+      "create": (request: ModelsConfigsCreateRequest, options?: RequestOptions) => Promise<ModelsConfigsCreateResponse>;
+      "delete": (request: ModelsConfigsDeleteRequest, options?: RequestOptions) => Promise<ModelsConfigsDeleteResponse>;
+      "get": (request: ModelsConfigsGetRequest, options?: RequestOptions) => Promise<ModelsConfigsGetResponse>;
+      "list": (request: ModelsConfigsListRequest, options?: RequestOptions) => Promise<ModelsConfigsListResponse>;
+      "update": (request: ModelsConfigsUpdateRequest, options?: RequestOptions) => Promise<ModelsConfigsUpdateResponse>;
+    };
+    "defaults": {
+      "get": (request: ModelsDefaultsGetRequest, options?: RequestOptions) => Promise<ModelsDefaultsGetResponse>;
+      "put": (request: ModelsDefaultsPutRequest, options?: RequestOptions) => Promise<ModelsDefaultsPutResponse>;
+    };
     "get": (request: ModelsGetRequest, options?: RequestOptions) => Promise<ModelsGetResponse>;
     "list": (request: ModelsListRequest, options?: RequestOptions) => Promise<ModelsListResponse>;
+    "providers": {
+      "delete": (request: ModelsProvidersDeleteRequest, options?: RequestOptions) => Promise<ModelsProvidersDeleteResponse>;
+      "get": (request: ModelsProvidersGetRequest, options?: RequestOptions) => Promise<ModelsProvidersGetResponse>;
+      "list": (request: ModelsProvidersListRequest, options?: RequestOptions) => Promise<ModelsProvidersListResponse>;
+      "put": (request: ModelsProvidersPutRequest, options?: RequestOptions) => Promise<ModelsProvidersPutResponse>;
+      "test": (request: ModelsProvidersTestRequest, options?: RequestOptions) => Promise<ModelsProvidersTestResponse>;
+    };
   };
   "operator": {
     "packages": {
@@ -1260,6 +1330,10 @@ export interface Client {
     "list": (request: SchedulesListRequest, options?: RequestOptions) => Promise<SchedulesListResponse>;
     "trigger": (request: SchedulesTriggerRequest, options?: RequestOptions) => Promise<SchedulesTriggerResponse>;
     "update": (request: SchedulesUpdateRequest, options?: RequestOptions) => Promise<SchedulesUpdateResponse>;
+  };
+  "search": {
+    "rebuild": (request: SearchRebuildRequest, options?: RequestOptions) => Promise<SearchRebuildResponse>;
+    "status": (request: SearchStatusRequest, options?: RequestOptions) => Promise<SearchStatusResponse>;
   };
   "skills": {
     "list": (request: SkillsListRequest, options?: RequestOptions) => Promise<SkillsListResponse>;
@@ -4141,6 +4215,93 @@ export function createNexClient(options: ClientOptions): Client {
       },
     },
     "models": {
+      "catalog": {
+        "get": async (request: ModelsCatalogGetRequest, options?: RequestOptions) => {
+      return http.request<ModelsCatalogGetResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.catalog.get",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+        "list": async (request: ModelsCatalogListRequest, options?: RequestOptions) => {
+      return http.request<ModelsCatalogListResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.catalog.list",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+      },
+      "configs": {
+        "create": async (request: ModelsConfigsCreateRequest, options?: RequestOptions) => {
+      return http.request<ModelsConfigsCreateResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.configs.create",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+        "delete": async (request: ModelsConfigsDeleteRequest, options?: RequestOptions) => {
+      return http.request<ModelsConfigsDeleteResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.configs.delete",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+        "get": async (request: ModelsConfigsGetRequest, options?: RequestOptions) => {
+      return http.request<ModelsConfigsGetResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.configs.get",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+        "list": async (request: ModelsConfigsListRequest, options?: RequestOptions) => {
+      return http.request<ModelsConfigsListResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.configs.list",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+        "update": async (request: ModelsConfigsUpdateRequest, options?: RequestOptions) => {
+      return http.request<ModelsConfigsUpdateResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.configs.update",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+      },
+      "defaults": {
+        "get": async (request: ModelsDefaultsGetRequest, options?: RequestOptions) => {
+      return http.request<ModelsDefaultsGetResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.defaults.get",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+        "put": async (request: ModelsDefaultsPutRequest, options?: RequestOptions) => {
+      return http.request<ModelsDefaultsPutResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.defaults.put",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+      },
       "get": async (request: ModelsGetRequest, options?: RequestOptions) => {
       const input = request as Record<string, unknown>;
       return http.request<ModelsGetResponse>({
@@ -4162,6 +4323,53 @@ export function createNexClient(options: ClientOptions): Client {
         options,
       })
     },
+      "providers": {
+        "delete": async (request: ModelsProvidersDeleteRequest, options?: RequestOptions) => {
+      return http.request<ModelsProvidersDeleteResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.providers.delete",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+        "get": async (request: ModelsProvidersGetRequest, options?: RequestOptions) => {
+      return http.request<ModelsProvidersGetResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.providers.get",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+        "list": async (request: ModelsProvidersListRequest, options?: RequestOptions) => {
+      return http.request<ModelsProvidersListResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.providers.list",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+        "put": async (request: ModelsProvidersPutRequest, options?: RequestOptions) => {
+      return http.request<ModelsProvidersPutResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.providers.put",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+        "test": async (request: ModelsProvidersTestRequest, options?: RequestOptions) => {
+      return http.request<ModelsProvidersTestResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.providers.test",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+      },
     },
     "operator": {
       "packages": {
@@ -4593,6 +4801,26 @@ export function createNexClient(options: ClientOptions): Client {
         "enabled": input["enabled"],
         "last_run_at": input["last_run_at"],
       },
+        options,
+      })
+    },
+    },
+    "search": {
+      "rebuild": async (request: SearchRebuildRequest, options?: RequestOptions) => {
+      return http.request<SearchRebuildResponse>({
+        method: "POST",
+        path: "/runtime/operations/search.rebuild",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+      "status": async (request: SearchStatusRequest, options?: RequestOptions) => {
+      return http.request<SearchStatusResponse>({
+        method: "POST",
+        path: "/runtime/operations/search.status",
+        query: undefined,
+        body: request,
         options,
       })
     },

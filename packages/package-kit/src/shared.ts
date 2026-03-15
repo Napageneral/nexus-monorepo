@@ -112,6 +112,8 @@ export function validatePackageRoot(targetPath: string): {
     "docs/specs",
     "docs/workplans",
     "docs/validation",
+    "api/openapi.yaml",
+    "api/openapi.lock.json",
     "scripts/package-release.sh",
   ]) {
     if (!fs.existsSync(path.join(detected.rootDir, relative))) {
