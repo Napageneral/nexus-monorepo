@@ -1,0 +1,7 @@
+macos/app/.build/
+macos/app/build/
+macos/app/DerivedData/
+macos/app/*.xcodeproj/
+macos/app/*.xcworkspace/
+macos/adapter/bin/
+macos/adapter/dist/

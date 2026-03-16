@@ -16,7 +16,6 @@
 - `device-android`
 - `device-headless`
 - `device-ios`
-- `device-macos`
 - `discord`
 - `git`
 - `gog`
@@ -34,6 +33,12 @@
 ### Shared tooling, not a package
 
 - `nexus-adapter-sdks`
+
+## Client-Colocated Adapters
+
+- `clients/nexus-mobile/ios/adapter`
+- `clients/nexus-mobile/android/adapter`
+- `clients/nexus-desktop/macos/adapter`
 
 ## Notes
 

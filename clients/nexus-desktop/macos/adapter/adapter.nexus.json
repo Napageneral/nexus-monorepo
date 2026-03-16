@@ -1,0 +1,9 @@
+{
+  "id": "device-macos",
+  "version": "0.1.0",
+  "displayName": "Device macOS",
+  "description": "Shared macOS device adapter package for Nex.",
+  "platform": "device-macos",
+  "command": "./bin/device-macos-adapter",
+  "skill": "./SKILL.md"
+}

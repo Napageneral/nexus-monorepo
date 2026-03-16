@@ -56,7 +56,7 @@ Current package surfaces under `packages/adapters`:
 
 1. `packages/adapters/device-ios`
 2. `packages/adapters/device-android`
-3. `packages/adapters/device-macos`
+3. `clients/nexus-desktop/macos/adapter`
 4. `packages/adapters/device-headless`
 
 These are package-shaped adapter products.
@@ -196,7 +196,7 @@ Reason:
 
 ### What stays where it is for now
 
-1. `packages/adapters/device-macos`
+1. `clients/nexus-desktop/macos/adapter`
 2. `packages/adapters/device-headless`
 3. the rest of the adapter package ecosystem
 
@@ -219,5 +219,5 @@ Proceed with the mobile extraction as a combined mobile-platform monorepo:
 3. move the Android app into `clients/nexus-mobile/android/app`
 4. colocate `device-ios` under `clients/nexus-mobile/ios/adapter`
 5. colocate `device-android` under `clients/nexus-mobile/android/adapter`
-3. leave `device-macos` and `device-headless` outside the mobile monorepo
+3. leave `device-headless` outside the mobile monorepo and place `device-macos` in `clients/nexus-desktop/macos/adapter`
 4. keep the app and adapter contracts separate even though they share a repo
