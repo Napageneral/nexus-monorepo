@@ -10,14 +10,16 @@ The product and repo story should be obvious:
 1. the Nex runtime repo owns runtime core
 2. mobile client engineers work in a client repo, not in runtime core
 3. iOS and Android stay together with their shared client/runtime library
-4. device adapters remain adapter packages and are not confused with the mobile apps
+4. the mobile device adapters are colocated with their matching platform apps
+5. device adapters remain adapter packages and are not confused with the mobile apps
 
 The hard cut is:
 
 1. `nex` stops owning the mobile client source tree
 2. mobile client code moves into one standalone client repo
 3. `NexusKit` moves with the mobile repo in the first wave
-4. `nex` keeps runtime protocol generation, but the output target is rewired cleanly
+4. `device-ios` and `device-android` move with the mobile repo in the first wave
+5. `nex` keeps runtime protocol generation, but the output target is rewired cleanly
 
 ## Purpose
 
@@ -28,6 +30,8 @@ In scope:
 1. `nex/apps/ios`
 2. `nex/apps/android`
 3. `nex/apps/shared/NexusKit`
+4. `packages/adapters/device-ios`
+5. `packages/adapters/device-android`
 
 Target repo form:
 
@@ -134,6 +138,23 @@ Representative files:
 - `apps/shared/NexusKit/Sources/NexusKit/NexusKitResources.swift`
 - `apps/shared/NexusKit/Sources/NexusKit/ToolDisplay.swift`
 
+### Adapter-package coupling
+
+The mobile device adapters are part of the same platform story as the client apps.
+
+Evidence:
+
+1. `packages/adapters/device-ios/cmd/device-ios-adapter/main.go`
+   - setup requires companion install + pairing
+   - served endpoint is `iOS Companion`
+   - capability and command set overlaps the iOS app
+2. `packages/adapters/device-android/cmd/device-android-adapter/main.go`
+   - setup requires companion install + permissions + pairing
+   - served endpoint is `Android Companion`
+   - capability and command set overlaps the Android app
+
+This means the extraction should colocate each platform app with its matching device adapter.
+
 ### Current repo-level CI/workflow reality
 
 There is no active umbrella GitHub workflow coverage for these mobile surfaces.
@@ -192,7 +213,7 @@ Reason:
 
 Target:
 
-- `clients/nexus-mobile/shared/NexusKit`
+- `clients/nexus-mobile/NexusKit`
 
 Reason:
 
@@ -200,7 +221,20 @@ Reason:
 2. Android depends on its resources indirectly
 3. `protocol-gen-swift.ts` currently writes into it directly
 
-### 3. Mobile does not move into `packages/apps/`
+### 3. The mobile device adapters move with the mobile repo in wave 1
+
+Targets:
+
+1. `clients/nexus-mobile/ios/adapter`
+2. `clients/nexus-mobile/android/adapter`
+
+Reason:
+
+1. pairing and companion behavior evolve with the client apps
+2. the served command surfaces overlap directly
+3. the platform story is clearer when each app sits beside its adapter
+
+### 4. Mobile does not move into `packages/apps/`
 
 Reason:
 
@@ -209,7 +243,7 @@ Reason:
 3. mobile is not installed through Frontdoor package lifecycle
 4. mobile is a client surface, not a hosted Nex package
 
-### 4. Mobile does not become device adapters
+### 5. Mobile does not become device adapters
 
 Reason:
 
@@ -217,23 +251,26 @@ Reason:
 2. iOS and Android apps are product/client applications
 3. collapsing them into adapters would destroy a real product boundary
 
-### 5. The first wave should preserve the current relative internal mobile layout
+### 6. The first wave should adopt an explicit platform-family layout
 
 Target layout:
 
 ```text
 clients/nexus-mobile/
+  NexusKit/
   ios/
+    app/
+    adapter/
   android/
-  shared/
-    NexusKit/
+    app/
+    adapter/
 ```
 
 Reason:
 
-1. this preserves the existing iOS relative path expectation with a trivial rewrite
-2. this preserves the Android resource path model with a trivial rewrite
-3. it minimizes accidental behavior change during extraction
+1. each platform owns its app and adapter side by side
+2. `NexusKit` stays visibly shared instead of pretending to belong to one app
+3. the extra path rewrites are acceptable and bounded
 
 ## Exact Extraction Targets
 
@@ -241,7 +278,7 @@ Reason:
 
 Move:
 
-- `nex/apps/ios` -> `clients/nexus-mobile/ios`
+- `nex/apps/ios` -> `clients/nexus-mobile/ios/app`
 
 Includes:
 
@@ -255,7 +292,7 @@ Includes:
 
 Move:
 
-- `nex/apps/android` -> `clients/nexus-mobile/android`
+- `nex/apps/android` -> `clients/nexus-mobile/android/app`
 
 Includes:
 
@@ -273,7 +310,7 @@ Do not carry:
 
 Move:
 
-- `nex/apps/shared/NexusKit` -> `clients/nexus-mobile/shared/NexusKit`
+- `nex/apps/shared/NexusKit` -> `clients/nexus-mobile/NexusKit`
 
 Includes:
 
@@ -287,6 +324,13 @@ Do not carry:
 
 1. `.build/`
 
+### Device adapters
+
+Move:
+
+1. `packages/adapters/device-ios` -> `clients/nexus-mobile/ios/adapter`
+2. `packages/adapters/device-android` -> `clients/nexus-mobile/android/adapter`
+
 ## Required Rewires
 
 ### Phase 1 rewire: local paths inside mobile repo
@@ -295,9 +339,9 @@ Do not carry:
 
 Rewrite:
 
-- `../shared/NexusKit` stays the same relative shape after extraction if iOS lands in `clients/nexus-mobile/ios`
+- `../../NexusKit`
 
-That is a major reason this target layout is correct.
+This is a small bounded rewrite from the current layout.
 
 #### Android resource path
 
@@ -309,7 +353,11 @@ Current:
 
 After extraction under the proposed layout, this can remain the same relative path from `android/app/`.
 
-That is another reason to keep `shared/NexusKit` in the same mobile repo.
+After the new layout, rewrite to:
+
+- `../../../NexusKit/Sources/NexusKit/Resources`
+
+This is a small bounded rewrite and keeps Android on local repo resources.
 
 ### Phase 2 rewire: `nex` root tooling
 
@@ -334,7 +382,7 @@ Current behavior:
 Target behavior for first extraction wave:
 
 1. keep generation in `nex`
-2. rewrite the output path to target `clients/nexus-mobile/shared/NexusKit/Sources/NexusProtocol/RuntimeModels.swift`
+2. rewrite the output path to target `clients/nexus-mobile/NexusKit/Sources/NexusProtocol/RuntimeModels.swift`
 
 This preserves current ownership of the runtime protocol contract while allowing client code to live outside `nex`.
 
@@ -358,6 +406,8 @@ After extraction:
 1. `nex` should no longer contain `apps/ios`
 2. `nex` should no longer contain `apps/android`
 3. `nex` should no longer contain `apps/shared/NexusKit`
+4. `packages/adapters` should no longer contain `device-ios`
+5. `packages/adapters` should no longer contain `device-android`
 4. `clients/nexus-mobile/` should contain those moved sources
 
 ### Build validation

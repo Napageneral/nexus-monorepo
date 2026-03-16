@@ -1,6 +1,6 @@
 # device-android SDK (TypeScript)
 
-Generated TypeScript SDK for the adapter package contract in `packages/adapters/device-android/api/openapi.yaml`.
+Generated TypeScript SDK for the adapter package contract for `device-android`.
 
 This SDK is generated centrally under `artifacts/sdk/ts/adapters/`.
 Package repos do not own SDK publication logic.

@@ -1,0 +1,9 @@
+{
+  "id": "device-android",
+  "version": "0.1.0",
+  "displayName": "Device Android",
+  "description": "Shared Android device adapter package for Nex.",
+  "platform": "device-android",
+  "command": "./bin/device-android-adapter",
+  "skill": "./SKILL.md"
+}

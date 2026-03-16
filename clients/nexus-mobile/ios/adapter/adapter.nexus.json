@@ -1,0 +1,9 @@
+{
+  "id": "device-ios",
+  "version": "0.1.0",
+  "displayName": "Device iOS",
+  "description": "Shared iOS device adapter package for Nex.",
+  "platform": "device-ios",
+  "command": "./bin/device-ios-adapter",
+  "skill": "./SKILL.md"
+}

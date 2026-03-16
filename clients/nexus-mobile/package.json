@@ -1,0 +1,16 @@
+{
+  "name": "@nexus-project/nexus-mobile",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.23.0",
+  "scripts": {
+    "android:assemble": "cd android/app && ./gradlew :app:assembleDebug",
+    "android:install": "cd android/app && ./gradlew :app:installDebug",
+    "android:run": "cd android/app && ./gradlew :app:installDebug && adb shell am start -n ai.nexus.android/.MainActivity",
+    "android:test": "cd android/app && ./gradlew :app:testDebugUnitTest",
+    "ios:build": "bash -lc 'cd ios/app && xcodegen generate && xcodebuild -project Nexus.xcodeproj -scheme Nexus -destination \"${IOS_DEST:-platform=iOS Simulator,name=iPhone 17}\" -configuration Debug build'",
+    "ios:gen": "cd ios/app && xcodegen generate",
+    "ios:open": "cd ios/app && xcodegen generate && open Nexus.xcodeproj",
+    "ios:run": "bash -lc 'cd ios/app && xcodegen generate && xcodebuild -project Nexus.xcodeproj -scheme Nexus -destination \"${IOS_DEST:-platform=iOS Simulator,name=iPhone 17}\" -configuration Debug build && xcrun simctl boot \"${IOS_SIM:-iPhone 17}\" || true && xcrun simctl launch booted ai.nexus.ios'"
+  }
+}

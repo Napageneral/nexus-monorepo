@@ -1,0 +1,9 @@
+{
+  "contract": "clients/nexus-mobile/android/adapter/api",
+  "generator": "nex/scripts/contracts/generate-openapi.ts",
+  "sources": [
+    "clients/nexus-mobile/android/adapter",
+    "packages/adapters/nexus-adapter-sdks/nexus-adapter-sdk-ts/src/protocol.ts",
+    "packages/adapters/nexus-adapter-sdks/nexus-adapter-sdk-go/define.go"
+  ]
+}

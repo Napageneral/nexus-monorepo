@@ -249,6 +249,14 @@ Reason:
 
 A separate shared-client library repo can be considered later if there is a second real consumer beyond the mobile client family.
 
+### 7. `device-ios` and `device-android` should move with the mobile repo in the first extraction wave
+
+Reason:
+
+1. they are adapter packages, not client apps
+2. they are still tightly coupled to the matching platform companion behavior
+3. colocating them with the mobile apps keeps the platform boundary clear without merging the contracts
+
 ## Target-State Layout
 
 ### Package System

@@ -1,0 +1,103 @@
+name: Nexus
+options:
+  bundleIdPrefix: ai.nexus
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "16.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+
+packages:
+  NexusKit:
+    path: ../../NexusKit
+
+schemes:
+  Nexus:
+    shared: true
+    build:
+      targets:
+        Nexus: all
+    test:
+      targets:
+        - NexusTests
+
+targets:
+  Nexus:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    dependencies:
+      - package: NexusKit
+      - package: NexusKit
+        product: NexusChatUI
+      - package: NexusKit
+        product: NexusProtocol
+      - sdk: AppIntents.framework
+    preBuildScripts:
+    settings:
+      base:
+        CODE_SIGN_IDENTITY: "Apple Development"
+        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: Y5PE65HELJ
+        PRODUCT_BUNDLE_IDENTIFIER: ai.nexus.ios
+        PROVISIONING_PROFILE_SPECIFIER: "ai.nexus.ios Development"
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        ENABLE_APPINTENTS_METADATA: NO
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: Nexus
+        CFBundleIconName: AppIcon
+        CFBundleShortVersionString: "2026.2.6"
+        CFBundleVersion: "20260202"
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UIBackgroundModes:
+          - audio
+        NSLocalNetworkUsageDescription: Nexus discovers and connects to your Nexus runtime on the local network.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoadsInWebContent: true
+        NSBonjourServices:
+          - _nexus-gw._tcp
+        NSCameraUsageDescription: Nexus can capture photos or short video clips when requested via the runtime.
+        NSLocationWhenInUseUsageDescription: Nexus uses your location when you allow location sharing.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Nexus can share your location in the background when you enable Always.
+        NSMicrophoneUsageDescription: Nexus needs microphone access for voice wake.
+        NSSpeechRecognitionUsageDescription: Nexus uses on-device speech recognition for voice wake.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+
+  NexusTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: Nexus
+      - sdk: AppIntents.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.nexus.ios.tests
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Nexus.app/Nexus"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+    info:
+      path: Tests/Info.plist
+      properties:
+        CFBundleDisplayName: NexusTests
+        CFBundleShortVersionString: "2026.2.6"
+        CFBundleVersion: "20260202"
