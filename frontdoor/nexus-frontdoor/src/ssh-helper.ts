@@ -195,7 +195,7 @@ export async function installPackageViaSSH(opts: {
       });
 
       try {
-        const stagingDir = `/opt/nex/staging/${operationId}`;
+        const stagingDir = `/opt/nex/state/packages/staging/${operationId}`;
         const mkdirResult = await execCommand({
           client,
           command: `mkdir -p ${stagingDir}`,
@@ -233,7 +233,7 @@ export async function installPackageViaSSH(opts: {
           release_id: opts.releaseId ?? null,
           operation_id: operationId,
           staged_artifact: {
-            server_path: `/opt/nex/staging/${operationId}/${opts.kind}-${opts.packageId}-${opts.version}.tar.gz`,
+            server_path: `/opt/nex/state/packages/staging/${operationId}/${opts.kind}-${opts.packageId}-${opts.version}.tar.gz`,
             sha256,
             size_bytes: stats.size,
           },
@@ -274,7 +274,8 @@ export async function installPackageViaRuntimeHttp(opts: {
 > {
   try {
     const operationId = `op-${randomUUID()}`;
-    const stagingRoot = process.env.NEXUS_PACKAGE_STAGING_DIR?.trim() || "/opt/nex/staging";
+    const stagingRoot =
+      process.env.NEXUS_PACKAGE_STAGING_DIR?.trim() || "/opt/nex/state/packages/staging";
     const stagedDir = `${stagingRoot.replace(/\/+$/g, "")}/${operationId}`;
     const stagedPath = `${stagedDir}/${opts.kind}-${opts.packageId}-${opts.version}.tar.gz`;
     fs.mkdirSync(stagedDir, { recursive: true });
@@ -342,8 +343,8 @@ export async function upgradePackageViaSSH(opts: {
       host: opts.host,
       privateKeyPath: opts.privateKeyPath,
     });
-    try {
-      const stagingDir = `/opt/nex/staging/${operationId}`;
+  try {
+      const stagingDir = `/opt/nex/state/packages/staging/${operationId}`;
       const mkdirResult = await execCommand({
         client,
         command: `mkdir -p ${stagingDir}`,
@@ -370,18 +371,18 @@ export async function upgradePackageViaSSH(opts: {
         "content-type": "application/json",
         authorization: `Bearer ${opts.runtimeBearerToken}`,
       },
-      body: JSON.stringify({
+        body: JSON.stringify({
         kind: opts.kind,
         package_id: opts.packageId,
         target_version: opts.targetVersion,
         release_id: opts.releaseId ?? null,
         operation_id: operationId,
-        staged_artifact: {
-          server_path: `/opt/nex/staging/${operationId}/${opts.kind}-${opts.packageId}-${opts.targetVersion}.tar.gz`,
-          sha256,
-          size_bytes: stats.size,
-        },
-      }),
+          staged_artifact: {
+            server_path: `/opt/nex/state/packages/staging/${operationId}/${opts.kind}-${opts.packageId}-${opts.targetVersion}.tar.gz`,
+            sha256,
+            size_bytes: stats.size,
+          },
+        }),
     });
 
     if (upgradeRes.ok) {
@@ -412,7 +413,8 @@ export async function upgradePackageViaRuntimeHttp(opts: {
 > {
   try {
     const operationId = `op-${randomUUID()}`;
-    const stagingRoot = process.env.NEXUS_PACKAGE_STAGING_DIR?.trim() || "/opt/nex/staging";
+    const stagingRoot =
+      process.env.NEXUS_PACKAGE_STAGING_DIR?.trim() || "/opt/nex/state/packages/staging";
     const stagedDir = `${stagingRoot.replace(/\/+$/g, "")}/${operationId}`;
     const stagedPath = `${stagedDir}/${opts.kind}-${opts.packageId}-${opts.targetVersion}.tar.gz`;
     fs.mkdirSync(stagedDir, { recursive: true });

@@ -315,8 +315,6 @@ function ensurePersistentSession(params: {
   return params.sessions.createSession(params.session.principal);
 }
 
-type ManagedConnectionScope = "server" | "app";
-
 type ManagedConnectionRuntimeContext = {
   server: ServerRecord;
   tenantId: string;
@@ -325,9 +323,7 @@ type ManagedConnectionRuntimeContext = {
   service: string;
   appId: string;
   adapterId: string;
-  connectionProfileId: string;
   authMethodId: string;
-  scope: ManagedConnectionScope;
   managedProfileId?: string;
 };
 
@@ -362,14 +358,6 @@ function readBearerToken(req: IncomingMessage): string {
   return authHeader.slice(7).trim();
 }
 
-function resolveManagedScope(value: string): ManagedConnectionScope | null {
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "server" || normalized === "app") {
-    return normalized;
-  }
-  return null;
-}
-
 function resolveManagedStringField(params: {
   requestValue: string;
   headerValue: string;
@@ -397,9 +385,7 @@ function resolveManagedConnectionRuntimeContext(params: {
     service: string;
     appId: string;
     adapterId: string;
-    connectionProfileId: string;
     authMethodId: string;
-    scope: string;
     managedProfileId?: string;
   };
 }):
@@ -472,21 +458,6 @@ function resolveManagedConnectionRuntimeContext(params: {
     return { ok: false, status: 400, error: adapterField.error ?? "missing_adapter_id" };
   }
 
-  const profileField = resolveManagedStringField({
-    requestValue: params.requestValues.connectionProfileId,
-    headerValue: readHeaderValue(params.req.headers["x-nexus-connection-profile-id"]),
-    label: "connection_profile_id",
-    required: true,
-    normalize: normalizeManagedIdentifier,
-  });
-  if (profileField.error || !profileField.value) {
-    return {
-      ok: false,
-      status: 400,
-      error: profileField.error ?? "missing_connection_profile_id",
-    };
-  }
-
   const authMethodField = resolveManagedStringField({
     requestValue: params.requestValues.authMethodId,
     headerValue: readHeaderValue(params.req.headers["x-nexus-auth-method-id"]),
@@ -496,18 +467,6 @@ function resolveManagedConnectionRuntimeContext(params: {
   });
   if (authMethodField.error || !authMethodField.value) {
     return { ok: false, status: 400, error: authMethodField.error ?? "missing_auth_method_id" };
-  }
-
-  const scopeRequest = resolveManagedScope(params.requestValues.scope);
-  const scopeHeader = resolveManagedScope(
-    readHeaderValue(params.req.headers["x-nexus-connection-scope"]),
-  );
-  if (scopeRequest && scopeHeader && scopeRequest !== scopeHeader) {
-    return { ok: false, status: 400, error: "mismatched_scope" };
-  }
-  const scope = scopeRequest ?? scopeHeader;
-  if (!scope) {
-    return { ok: false, status: 400, error: "missing_scope" };
   }
 
   const managedProfileField = resolveManagedStringField({
@@ -530,9 +489,7 @@ function resolveManagedConnectionRuntimeContext(params: {
       service: serviceField.value,
       appId: appField.value,
       adapterId: adapterField.value,
-      connectionProfileId: profileField.value,
       authMethodId: authMethodField.value,
-      scope,
       ...(managedProfileField.value ? { managedProfileId: managedProfileField.value } : {}),
     },
   };
@@ -703,7 +660,6 @@ function resolveManagedConnectionOwner(params: {
   const profile = params.store.findPlatformManagedConnectionProfile({
     appId: params.context.appId,
     adapterId: params.context.adapterId,
-    connectionProfileId: params.context.connectionProfileId,
     authMethodId: params.context.authMethodId,
     managedProfileId: params.context.managedProfileId,
     status: "active",
@@ -760,9 +716,7 @@ function buildProductControlPlaneHeaders(params: {
   const headers: Record<string, string> = {
     ...buildProductControlPlaneBaseHeaders(params),
     "x-nexus-adapter-id": params.context.adapterId,
-    "x-nexus-connection-profile-id": params.context.connectionProfileId,
     "x-nexus-auth-method-id": params.context.authMethodId,
-    "x-nexus-connection-scope": params.context.scope,
   };
   if (params.context.managedProfileId) {
     headers["x-nexus-managed-profile-id"] = params.context.managedProfileId;
@@ -794,9 +748,7 @@ async function relayManagedConnectionMetadata(params: {
     service: params.context.service,
     app_id: params.context.appId,
     adapter_id: params.context.adapterId,
-    connection_profile_id: params.context.connectionProfileId,
     auth_method_id: params.context.authMethodId,
-    scope: params.context.scope,
   });
   if (params.context.managedProfileId) {
     query.set("managed_profile_id", params.context.managedProfileId);
@@ -821,9 +773,7 @@ async function relayManagedConnectionExchange(params: {
     service: string;
     appId: string;
     adapter: string;
-    connectionProfileId: string;
     authMethodId: string;
-    scope: string;
     managedProfileId?: string;
     code: string;
     state?: string;
@@ -1978,6 +1928,20 @@ function mintPackageOperatorRuntimeBearerToken(params: {
   session?: SessionRecord;
   server: ServerRecord;
 }): string | null {
+  const shouldUseTrustedRuntimeToken = params.server.provider !== "none";
+  if (shouldUseTrustedRuntimeToken) {
+    const resolved = resolvePackageOperatorRuntimePrincipal(params);
+    if (!resolved) {
+      return null;
+    }
+    return mintRuntimeAccessToken({
+      config: params.config,
+      principal: resolved.principal,
+      sessionId: resolved.sessionId,
+      clientId: "nexus-frontdoor-package-operator",
+    }).token;
+  }
+
   const persisted =
     params.server.runtimeAuthToken?.trim() ||
     params.config.tenants.get(params.server.tenantId)?.runtimeAuthToken?.trim() ||
@@ -2473,6 +2437,9 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       authToken: runtimeAuthToken,
       provisionToken,
       frontdoorUrl: config.baseUrl,
+      runtimeTokenIssuer: config.runtimeTokenIssuer,
+      runtimeTokenSecret: config.runtimeTokenSecret,
+      runtimeTokenActiveKid: config.runtimeTokenActiveKid,
     });
     const providerServerName = `nex-${currentServer.tenantId}-recover-${Date.now().toString(36)}`;
     try {
@@ -3126,6 +3093,9 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         authToken: runtimeAuthToken,
         provisionToken,
         frontdoorUrl: config.baseUrl,
+        runtimeTokenIssuer: config.runtimeTokenIssuer,
+        runtimeTokenSecret: config.runtimeTokenSecret,
+        runtimeTokenActiveKid: config.runtimeTokenActiveKid,
       });
 
       try {
@@ -3796,7 +3766,26 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     return `http://${host.host}:${host.runtimePort}`;
   }
 
-  async function resolveServerRuntimePlatform(server: ServerRecord): Promise<{
+  function resolveManagedServerPlatform(server: ServerRecord): { os: string; arch: string } | null {
+    if (!cloudProvider || !server.providerServerId) {
+      return null;
+    }
+    const plan = cloudProvider.listPlans().find((item) => item.id === server.plan);
+    if (!plan) {
+      return null;
+    }
+    const platform = {
+      os: "linux",
+      arch: plan.architecture,
+    };
+    store.updateServer(server.serverId, {
+      runtimeOs: platform.os,
+      runtimeArch: platform.arch,
+    });
+    return platform;
+  }
+
+  async function resolveServerRuntimePlatform(server: ServerRecord, runtimeBearerToken?: string | null): Promise<{
     os: string;
     arch: string;
   } | null> {
@@ -3813,12 +3802,22 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       };
     }
 
+    const managedPlatform = resolveManagedServerPlatform(server);
+    if (managedPlatform) {
+      return managedPlatform;
+    }
+
     const runtimeUrl = resolveServerProbeRuntimeUrl(server);
     if (!runtimeUrl) {
       return null;
     }
     try {
       const response = await fetch(`${runtimeUrl.replace(/\/$/, "")}/health`, {
+        headers: runtimeBearerToken
+          ? {
+              authorization: `Bearer ${runtimeBearerToken}`,
+            }
+          : undefined,
         signal: AbortSignal.timeout(5_000),
       });
       if (!response.ok) {
@@ -4325,7 +4324,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       });
       return { ok: false, error: "server_not_running", status: 409 };
     }
-    const platform = await resolveServerRuntimePlatform(server);
+    const platform = await resolveServerRuntimePlatform(server, runtimeBearerToken);
     if (!platform) {
       store.upsertServerPackageInstall({
         serverId: params.serverId,
@@ -4458,7 +4457,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       });
       return { ok: false, error: "server_not_running", status: 409 };
     }
-    const platform = await resolveServerRuntimePlatform(server);
+    const platform = await resolveServerRuntimePlatform(server, runtimeBearerToken);
     if (!platform) {
       store.upsertServerPackageInstall({
         serverId: params.serverId,
@@ -4818,7 +4817,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     if (!runtimeBearerToken) {
       return { ok: false, error: "runtime_operator_token_unavailable", status: 502 };
     }
-    const platform = await resolveServerRuntimePlatform(server);
+    const platform = await resolveServerRuntimePlatform(server, runtimeBearerToken);
     if (!platform) {
       return { ok: false, error: "server_runtime_platform_unavailable", status: 502 };
     }
@@ -4947,7 +4946,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     if (!runtimeBearerToken) {
       return { ok: false, error: "runtime_operator_token_unavailable", status: 502 };
     }
-    const platform = await resolveServerRuntimePlatform(server);
+    const platform = await resolveServerRuntimePlatform(server, runtimeBearerToken);
     if (!platform) {
       return { ok: false, error: "server_runtime_platform_unavailable", status: 502 };
     }
@@ -5532,8 +5531,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       appId,
     });
     const currentInstall = frame.installedApps.find((item) => item.appId === appId);
-    const appAvailable =
-      appId === "console" || currentInstall?.status === "installed";
+    const appAvailable = currentInstall?.status === "installed";
     let initialTitle: string | undefined;
     let initialDetail: string | undefined;
     let embedSrc: string | undefined;
@@ -5829,6 +5827,9 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           authToken: runtimeAuthToken,
           provisionToken,
           frontdoorUrl: config.baseUrl,
+          runtimeTokenIssuer: config.runtimeTokenIssuer,
+          runtimeTokenSecret: config.runtimeTokenSecret,
+          runtimeTokenActiveKid: config.runtimeTokenActiveKid,
         });
 
         try {
@@ -6328,108 +6329,21 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         // Create account
         const account = store.createAccount(displayName || username, userId);
 
-        // Auto-provision server + auto-install app if intent_app specified
-        let serverId: string | null = null;
         let redirectTo = "/";
 
-        // Map user to a server — use auto-provisioner if available, else first tenant
-        const firstTenantId = Array.from(config.tenants.keys())[0];
-        const tenant = firstTenantId ? config.tenants.get(firstTenantId) : undefined;
-
-        if (tenant) {
-          const server = store.upsertServer({
-            serverId: tenant.id,
+        if (intentApp) {
+          store.createAppSubscription({
             accountId: account.accountId,
-            tenantId: tenant.id,
-            displayName: tenant.id,
-            generatedName: deterministicServerNameFromId(tenant.id),
-            status: "running",
-            plan: "cax11",
-            provider: "local",
-            providerServerId: null,
-            previousProviderServerId: null,
-            privateIp: null,
-            publicIp: null,
-            previousPrivateIp: null,
-            previousPublicIp: null,
-            runtimePort: 8080,
-            runtimeAuthToken: tenant.runtimeAuthToken ?? null,
-            provisionToken: null,
-            backupEnabled: false,
-            deleteProtectionEnabled: false,
-            rebuildProtectionEnabled: false,
-            createdAtMs: Date.now(),
-            updatedAtMs: Date.now(),
-            archivedAtMs: null,
-            destroyedAtMs: null,
-            lastRecoveredAtMs: null,
-            activeRecoveryPointId: null,
+            appId: intentApp,
+            planId: `${intentApp}-free`,
+            status: "active",
+            provider: "none",
           });
-          serverId = server.serverId;
-
-          if (intentApp) {
-            // Create free app subscription
-            store.createAppSubscription({
-              accountId: account.accountId,
-              appId: intentApp,
-              planId: `${intentApp}-free`,
-              status: "active",
-              provider: "none",
-            });
-
-            // Build session early for principal context
-            const earlyPrincipal = store.toPrincipal({
-              user,
-              server,
-              accountId: account.accountId,
-              amr: ["pwd"],
-            });
-            const earlySession = sessions.createSession(earlyPrincipal);
-
-            // Install the app on the server
-            try {
-              await installAppOnServer({
-                serverId: server.serverId,
-                appId: intentApp,
-                accountId: account.accountId,
-                source: "purchase",
-              });
-            } catch {
-              // Non-fatal — user can install from dashboard
-            }
-
-            redirectTo = `/app/${intentApp}/`;
-
-            // Set cookie and respond using the early session
-            setCookie({
-              res,
-              name: config.sessionCookieName,
-              value: earlySession.id,
-              domain: config.sessionCookieDomain,
-              maxAgeSeconds: config.sessionTtlSeconds,
-              secure: cookieSecure,
-            });
-            sendJson(res, 201, {
-              ok: true,
-              session_id: earlySession.id,
-              user_id: userId,
-              account_id: account.accountId,
-              server_id: serverId,
-              redirect_to: redirectTo,
-            });
-            logFrontdoorEvent("auth_signup_succeeded", {
-              request_id: requestId,
-              user_id: userId,
-              intent_app: intentApp || null,
-              client_ip: clientIp,
-            });
-            return;
-          }
         }
 
-        // Create session (no auto-provision path)
         const userServers = store.getServersForUser(userId);
         const defaultServer = userServers.length > 0 ? userServers[0] : null;
+        const serverId = defaultServer?.serverId ?? null;
         const principal = store.toPrincipal({
           user,
           server: defaultServer,
@@ -6446,8 +6360,10 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           secure: cookieSecure,
         });
 
-        if (intentApp) {
+        if (intentApp && defaultServer) {
           redirectTo = `/app/${intentApp}/`;
+        } else if (intentApp && (autoProvisioner || cloudProvider)) {
+          redirectTo = `/?product=${encodeURIComponent(intentApp)}&provisioning=1`;
         }
 
         sendJson(res, 201, {
@@ -7831,9 +7747,9 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             const installStatus = install?.status ?? "not_installed";
             const blockedByEntitlement = appId !== "console" && entitlementStatus !== "active";
             const blockedByRuntimeUnavailable =
-              appId !== "console" && installStatus === "installed" && runtimeApps.ok === false;
+              installStatus === "installed" && runtimeApps.ok === false;
             const blockedByRuntimeMissing =
-              appId !== "console" && installStatus === "installed" && runtimeApps.ok && !runtimeItem;
+              installStatus === "installed" && runtimeApps.ok && !runtimeItem;
             const entryPath =
               runtimeItem?.entryPath || install?.entryPath || defaultEntryPathForApp(appId);
             const blockedReason = blockedByEntitlement
@@ -8073,7 +7989,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           }
         }
         const runtimeBlockedReason =
-          appId === "console" || finalInstallStatus !== "installed"
+          finalInstallStatus !== "installed"
             ? null
             : runtimeProbeOk === false
               ? "runtime_unavailable"
@@ -9035,6 +8951,9 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           authToken: runtimeAuthToken,
           provisionToken,
           frontdoorUrl: config.baseUrl,
+          runtimeTokenIssuer: config.runtimeTokenIssuer,
+          runtimeTokenSecret: config.runtimeTokenSecret,
+          runtimeTokenActiveKid: config.runtimeTokenActiveKid,
         });
 
         // Create VPS (async but we await the initial API call)
@@ -9829,9 +9748,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             service: url.searchParams.get("service") ?? "",
             appId: url.searchParams.get("app_id") ?? "",
             adapterId: url.searchParams.get("adapter_id") ?? "",
-            connectionProfileId: url.searchParams.get("connection_profile_id") ?? "",
             authMethodId: url.searchParams.get("auth_method_id") ?? "",
-            scope: url.searchParams.get("scope") ?? "",
             managedProfileId: url.searchParams.get("managed_profile_id") ?? "",
           },
         });
@@ -9860,7 +9777,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             entity_id: managedContext.entityId,
             app_id: managedContext.appId,
             adapter_id: managedContext.adapterId,
-            connection_profile_id: managedContext.connectionProfileId,
             auth_method_id: managedContext.authMethodId,
             managed_profile_id: managedContext.managedProfileId,
             error: "app_not_installed_on_server",
@@ -9883,7 +9799,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             entity_id: managedContext.entityId,
             app_id: managedContext.appId,
             adapter_id: managedContext.adapterId,
-            connection_profile_id: managedContext.connectionProfileId,
             auth_method_id: managedContext.authMethodId,
             managed_profile_id: managedContext.managedProfileId,
             error: ownerResult.error,
@@ -9905,7 +9820,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
               entity_id: managedContext.entityId,
               app_id: managedContext.appId,
               adapter_id: managedContext.adapterId,
-              connection_profile_id: managedContext.connectionProfileId,
               auth_method_id: managedContext.authMethodId,
               managed_profile_id: profile.managedProfileId,
               owner_kind: owner.ownerKind,
@@ -9925,7 +9839,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
               entity_id: managedContext.entityId,
               app_id: managedContext.appId,
               adapter_id: managedContext.adapterId,
-              connection_profile_id: managedContext.connectionProfileId,
               auth_method_id: managedContext.authMethodId,
               managed_profile_id: profile.managedProfileId,
               owner_kind: owner.ownerKind,
@@ -9941,7 +9854,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             entity_id: managedContext.entityId,
             app_id: managedContext.appId,
             adapter_id: managedContext.adapterId,
-            connection_profile_id: managedContext.connectionProfileId,
             auth_method_id: managedContext.authMethodId,
             managed_profile_id: profile.managedProfileId,
             auth_via: managedContext.authVia,
@@ -9962,7 +9874,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             entity_id: managedContext.entityId,
             app_id: managedContext.appId,
             adapter_id: managedContext.adapterId,
-            connection_profile_id: managedContext.connectionProfileId,
             auth_method_id: managedContext.authMethodId,
             managed_profile_id: managedContext.managedProfileId,
             auth_via: managedContext.authVia,
@@ -9982,7 +9893,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             entity_id: managedContext.entityId,
             app_id: managedContext.appId,
             adapter_id: managedContext.adapterId,
-            connection_profile_id: managedContext.connectionProfileId,
             auth_method_id: managedContext.authMethodId,
             managed_profile_id: managedContext.managedProfileId,
             owner_kind: owner.ownerKind,
@@ -9997,9 +9907,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           service?: string;
           appId?: string;
           adapter?: string;
-          connectionProfileId?: string;
           authMethodId?: string;
-          scope?: string;
           managedProfileId?: string;
           code?: string;
           state?: string;
@@ -10012,10 +9920,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             service: typeof body.service === "string" ? body.service : "",
             appId: typeof body.appId === "string" ? body.appId : "",
             adapterId: typeof body.adapter === "string" ? body.adapter : "",
-            connectionProfileId:
-              typeof body.connectionProfileId === "string" ? body.connectionProfileId : "",
             authMethodId: typeof body.authMethodId === "string" ? body.authMethodId : "",
-            scope: typeof body.scope === "string" ? body.scope : "",
             managedProfileId:
               typeof body.managedProfileId === "string" ? body.managedProfileId : "",
           },
@@ -10046,7 +9951,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             entity_id: managedContext.entityId,
             app_id: managedContext.appId,
             adapter_id: managedContext.adapterId,
-            connection_profile_id: managedContext.connectionProfileId,
             auth_method_id: managedContext.authMethodId,
             managed_profile_id: managedContext.managedProfileId,
             error: "missing_exchange_params",
@@ -10066,7 +9970,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             entity_id: managedContext.entityId,
             app_id: managedContext.appId,
             adapter_id: managedContext.adapterId,
-            connection_profile_id: managedContext.connectionProfileId,
             auth_method_id: managedContext.authMethodId,
             managed_profile_id: managedContext.managedProfileId,
             error: "app_not_installed_on_server",
@@ -10089,7 +9992,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             entity_id: managedContext.entityId,
             app_id: managedContext.appId,
             adapter_id: managedContext.adapterId,
-            connection_profile_id: managedContext.connectionProfileId,
             auth_method_id: managedContext.authMethodId,
             managed_profile_id: managedContext.managedProfileId,
             error: ownerResult.error,
@@ -10111,7 +10013,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
               entity_id: managedContext.entityId,
               app_id: managedContext.appId,
               adapter_id: managedContext.adapterId,
-              connection_profile_id: managedContext.connectionProfileId,
               auth_method_id: managedContext.authMethodId,
               managed_profile_id: profile.managedProfileId,
               owner_kind: owner.ownerKind,
@@ -10131,7 +10032,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
               entity_id: managedContext.entityId,
               app_id: managedContext.appId,
               adapter_id: managedContext.adapterId,
-              connection_profile_id: managedContext.connectionProfileId,
               auth_method_id: managedContext.authMethodId,
               managed_profile_id: profile.managedProfileId,
               owner_kind: owner.ownerKind,
@@ -10153,7 +10053,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
               entity_id: managedContext.entityId,
               app_id: managedContext.appId,
               adapter_id: managedContext.adapterId,
-              connection_profile_id: managedContext.connectionProfileId,
               auth_method_id: managedContext.authMethodId,
               managed_profile_id: profile.managedProfileId,
               auth_via: managedContext.authVia,
@@ -10171,7 +10070,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
               entity_id: managedContext.entityId,
               app_id: managedContext.appId,
               adapter_id: managedContext.adapterId,
-              connection_profile_id: managedContext.connectionProfileId,
               auth_method_id: managedContext.authMethodId,
               managed_profile_id: profile.managedProfileId,
               owner_kind: owner.ownerKind,
@@ -10188,9 +10086,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
               service: managedContext.service,
               appId: managedContext.appId,
               adapter: managedContext.adapterId,
-              connectionProfileId: managedContext.connectionProfileId,
               authMethodId: managedContext.authMethodId,
-              scope: managedContext.scope,
               ...(managedContext.managedProfileId
                 ? { managedProfileId: managedContext.managedProfileId }
                 : {}),
@@ -10209,7 +10105,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             entity_id: managedContext.entityId,
             app_id: managedContext.appId,
             adapter_id: managedContext.adapterId,
-            connection_profile_id: managedContext.connectionProfileId,
             auth_method_id: managedContext.authMethodId,
             managed_profile_id: managedContext.managedProfileId,
             auth_via: managedContext.authVia,
@@ -10229,7 +10124,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             entity_id: managedContext.entityId,
             app_id: managedContext.appId,
             adapter_id: managedContext.adapterId,
-            connection_profile_id: managedContext.connectionProfileId,
             auth_method_id: managedContext.authMethodId,
             managed_profile_id: managedContext.managedProfileId,
             owner_kind: owner.ownerKind,

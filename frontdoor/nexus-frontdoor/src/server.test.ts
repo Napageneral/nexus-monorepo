@@ -245,7 +245,6 @@ function seedPlatformManagedOauthProfile(config: FrontdoorConfig, params?: {
   managedProfileId?: string;
   appId?: string;
   adapterId?: string;
-  connectionProfileId?: string;
   authMethodId?: string;
   service?: string;
   clientSecretRef?: string;
@@ -255,7 +254,6 @@ function seedPlatformManagedOauthProfile(config: FrontdoorConfig, params?: {
       managedProfileId: params?.managedProfileId ?? "glowbot-google-oauth",
       appId: params?.appId ?? "glowbot",
       adapterId: params?.adapterId ?? "google",
-      connectionProfileId: params?.connectionProfileId ?? "glowbot-managed-google-oauth",
       authMethodId: params?.authMethodId ?? "google_oauth_managed",
       flowKind: "oauth2",
       service: params?.service ?? "google",
@@ -393,7 +391,7 @@ describe("managed connection profile endpoints", () => {
     seedPlatformManagedOauthProfile(config);
 
     const response = await fetch(
-      `${frontdoorRunning.origin}/api/internal/managed-connections/profile?service=google&app_id=glowbot&adapter_id=google&connection_profile_id=glowbot-managed-google-oauth&auth_method_id=google_oauth_managed&scope=app&managed_profile_id=glowbot-google-oauth`,
+      `${frontdoorRunning.origin}/api/internal/managed-connections/profile?service=google&app_id=glowbot&adapter_id=google&auth_method_id=google_oauth_managed&managed_profile_id=glowbot-google-oauth`,
       {
         headers: {
           authorization: "Bearer rt-frontdoor-managed-test",
@@ -402,9 +400,7 @@ describe("managed connection profile endpoints", () => {
           "x-nexus-tenant-id": "tenant-dev",
           "x-nexus-app-id": "glowbot",
           "x-nexus-adapter-id": "google",
-          "x-nexus-connection-profile-id": "glowbot-managed-google-oauth",
           "x-nexus-auth-method-id": "google_oauth_managed",
-          "x-nexus-connection-scope": "app",
           "x-nexus-managed-profile-id": "glowbot-google-oauth",
         },
       },
@@ -494,18 +490,14 @@ describe("managed connection profile endpoints", () => {
             "x-nexus-tenant-id": "tenant-dev",
             "x-nexus-app-id": "glowbot",
             "x-nexus-adapter-id": "google",
-            "x-nexus-connection-profile-id": "glowbot-managed-google-oauth",
             "x-nexus-auth-method-id": "google_oauth_managed",
-            "x-nexus-connection-scope": "app",
             "x-nexus-managed-profile-id": "glowbot-google-oauth",
           },
           body: JSON.stringify({
             service: "google",
             appId: "glowbot",
             adapter: "google",
-            connectionProfileId: "glowbot-managed-google-oauth",
             authMethodId: "google_oauth_managed",
-            scope: "app",
             managedProfileId: "glowbot-google-oauth",
             code: "provider-auth-code",
             state: "opaque-state",
@@ -553,20 +545,14 @@ describe("managed connection profile endpoints", () => {
         expect(req.headers["x-nexus-entity-id"]).toBe("entity-owner");
         expect(req.headers["x-nexus-app-id"]).toBe("glowbot");
         expect(req.headers["x-nexus-adapter-id"]).toBe("google");
-        expect(req.headers["x-nexus-connection-profile-id"]).toBe("glowbot-managed-google-oauth");
         expect(req.headers["x-nexus-auth-method-id"]).toBe("google_oauth_managed");
-        expect(req.headers["x-nexus-connection-scope"]).toBe("app");
         expect(req.headers["x-nexus-managed-profile-id"]).toBe("glowbot-google-oauth");
         const requestUrl = new URL(req.url ?? "/", "http://127.0.0.1");
         expect(requestUrl.pathname).toBe("/api/internal/frontdoor/managed-connections/profile");
         expect(requestUrl.searchParams.get("service")).toBe("google");
         expect(requestUrl.searchParams.get("app_id")).toBe("glowbot");
         expect(requestUrl.searchParams.get("adapter_id")).toBe("google");
-        expect(requestUrl.searchParams.get("connection_profile_id")).toBe(
-          "glowbot-managed-google-oauth",
-        );
         expect(requestUrl.searchParams.get("auth_method_id")).toBe("google_oauth_managed");
-        expect(requestUrl.searchParams.get("scope")).toBe("app");
         expect(requestUrl.searchParams.get("managed_profile_id")).toBe("glowbot-google-oauth");
         res.statusCode = 200;
         res.setHeader("content-type", "application/json");
@@ -603,7 +589,7 @@ describe("managed connection profile endpoints", () => {
 
     try {
       const response = await fetch(
-        `${frontdoorRunning.origin}/api/internal/managed-connections/profile?service=google&app_id=glowbot&adapter_id=google&connection_profile_id=glowbot-managed-google-oauth&auth_method_id=google_oauth_managed&scope=app&managed_profile_id=glowbot-google-oauth`,
+        `${frontdoorRunning.origin}/api/internal/managed-connections/profile?service=google&app_id=glowbot&adapter_id=google&auth_method_id=google_oauth_managed&managed_profile_id=glowbot-google-oauth`,
         {
           headers: {
             authorization: "Bearer rt-frontdoor-managed-test",
@@ -612,9 +598,7 @@ describe("managed connection profile endpoints", () => {
             "x-nexus-tenant-id": "tenant-dev",
             "x-nexus-app-id": "glowbot",
             "x-nexus-adapter-id": "google",
-            "x-nexus-connection-profile-id": "glowbot-managed-google-oauth",
             "x-nexus-auth-method-id": "google_oauth_managed",
-            "x-nexus-connection-scope": "app",
             "x-nexus-managed-profile-id": "glowbot-google-oauth",
           },
         },
@@ -657,18 +641,14 @@ describe("managed connection profile endpoints", () => {
         expect(req.headers["x-nexus-entity-id"]).toBe("entity-owner");
         expect(req.headers["x-nexus-app-id"]).toBe("glowbot");
         expect(req.headers["x-nexus-adapter-id"]).toBe("google");
-        expect(req.headers["x-nexus-connection-profile-id"]).toBe("glowbot-managed-google-oauth");
         expect(req.headers["x-nexus-auth-method-id"]).toBe("google_oauth_managed");
-        expect(req.headers["x-nexus-connection-scope"]).toBe("app");
         expect(req.headers["x-nexus-managed-profile-id"]).toBe("glowbot-google-oauth");
         const payload = JSON.parse(await readRequestText(req)) as Record<string, unknown>;
         expect(payload).toEqual({
           service: "google",
           appId: "glowbot",
           adapter: "google",
-          connectionProfileId: "glowbot-managed-google-oauth",
           authMethodId: "google_oauth_managed",
-          scope: "app",
           managedProfileId: "glowbot-google-oauth",
           code: "provider-auth-code",
           state: "opaque-state",
@@ -715,18 +695,14 @@ describe("managed connection profile endpoints", () => {
             "x-nexus-tenant-id": "tenant-dev",
             "x-nexus-app-id": "glowbot",
             "x-nexus-adapter-id": "google",
-            "x-nexus-connection-profile-id": "glowbot-managed-google-oauth",
             "x-nexus-auth-method-id": "google_oauth_managed",
-            "x-nexus-connection-scope": "app",
             "x-nexus-managed-profile-id": "glowbot-google-oauth",
           },
           body: JSON.stringify({
             service: "google",
             appId: "glowbot",
             adapter: "google",
-            connectionProfileId: "glowbot-managed-google-oauth",
             authMethodId: "google_oauth_managed",
-            scope: "app",
             managedProfileId: "glowbot-google-oauth",
             code: "provider-auth-code",
             state: "opaque-state",
@@ -773,7 +749,7 @@ describe("managed connection profile endpoints", () => {
     });
 
     const response = await fetch(
-      `${frontdoorRunning.origin}/api/internal/managed-connections/profile?service=google&app_id=glowbot&adapter_id=google&connection_profile_id=glowbot-managed-google-oauth&auth_method_id=google_oauth_managed&scope=app&managed_profile_id=glowbot-google-oauth`,
+      `${frontdoorRunning.origin}/api/internal/managed-connections/profile?service=google&app_id=glowbot&adapter_id=google&auth_method_id=google_oauth_managed&managed_profile_id=glowbot-google-oauth`,
       {
         headers: {
           authorization: "Bearer rt-frontdoor-managed-test",
@@ -782,9 +758,7 @@ describe("managed connection profile endpoints", () => {
           "x-nexus-tenant-id": "tenant-dev",
           "x-nexus-app-id": "glowbot",
           "x-nexus-adapter-id": "google",
-          "x-nexus-connection-profile-id": "glowbot-managed-google-oauth",
           "x-nexus-auth-method-id": "google_oauth_managed",
-          "x-nexus-connection-scope": "app",
           "x-nexus-managed-profile-id": "glowbot-google-oauth",
         },
       },
@@ -1064,6 +1038,239 @@ describe("frontdoor scaffold", () => {
       }),
     });
     expect(refreshAfterRevoke.status).toBe(401);
+  });
+
+  it("does not reassign a seeded tenant server during password signup", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+
+    const before = withStore(config, (store) => store.getServer("tenant-dev"));
+    expect(before?.accountId).toBe(SEEDED_ACCOUNT_ID);
+
+    const signupResp = await fetch(`${frontdoorRunning.origin}/api/auth/signup`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        email: "new-signup@example.com",
+        username: "new-signup",
+        password: "password123",
+        display_name: "New Signup",
+      }),
+    });
+    expect(signupResp.status).toBe(201);
+    const signupBody = (await signupResp.json()) as {
+      ok?: boolean;
+      user_id?: string;
+      account_id?: string;
+      server_id?: string | null;
+      redirect_to?: string;
+    };
+    expect(signupBody.ok).toBe(true);
+    expect(signupBody.server_id).toBeNull();
+    expect(signupBody.redirect_to).toBe("/");
+
+    const after = withStore(config, (store) => ({
+      seeded: store.getServer("tenant-dev"),
+      user: store.getUserByEmail("new-signup@example.com"),
+    }));
+    expect(after.seeded?.accountId).toBe(SEEDED_ACCOUNT_ID);
+    expect(after.user?.userId).toBe(signupBody.user_id);
+
+    const newUserServerCount = withStore(config, (store) =>
+      after.user ? store.getServersForUser(after.user.userId).length : -1,
+    );
+    expect(newUserServerCount).toBe(0);
+  });
+
+  it("uses authenticated runtime health when resolving hosted install platform", async () => {
+    let seenAuthorization = "";
+    const config = baseConfig("http://127.0.0.1:18789");
+    seedProducts(config, [{ productId: "spike", displayName: "Spike" }]);
+    stageFakePackage(config, "spike", "1.2.3");
+    const sshInstallSpy = vi.spyOn(sshHelper, "installPackageViaSSH").mockResolvedValue({ ok: true });
+    const directInstallSpy = vi.spyOn(sshHelper, "installPackageViaRuntimeHttp").mockResolvedValue({ ok: true });
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      if (url === "http://10.0.0.5:18789/health") {
+        const authHeader = init?.headers && typeof Headers !== "undefined"
+          ? new Headers(init.headers).get("authorization")
+          : null;
+        seenAuthorization = authHeader ?? "";
+        if (!seenAuthorization.startsWith("Bearer eyJ")) {
+          return new Response('{"ok":false,"error":"unauthorized"}', {
+            status: 401,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response('{"status":"healthy","platform":{"os":"darwin","arch":"arm64"}}', {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return realFetch(input, init);
+    }));
+    const frontdoor = createFrontdoorServer({ config });
+    const frontdoorRunning = await listen(frontdoor.server);
+    withStore(config, (store) => {
+      store.updateServer("tenant-dev", {
+        provider: "hetzner",
+        providerServerId: "hcloud-tenant-dev",
+        plan: "unknown-plan",
+        privateIp: "10.0.0.5",
+        runtimePort: 18789,
+        runtimeAuthToken: "rt-probe-test",
+        runtimeOs: null,
+        runtimeArch: null,
+      });
+    });
+    const cookie = await login(frontdoorRunning.origin);
+
+    const purchaseResp = await fetch(`${frontdoorRunning.origin}/api/apps/spike/purchase`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        server_id: "tenant-dev",
+        install: true,
+      }),
+    });
+
+    expect(purchaseResp.status).toBe(200);
+    const purchaseBody = (await purchaseResp.json()) as {
+      ok?: boolean;
+      installed_server_id?: string | null;
+    };
+    expect(purchaseBody.ok).toBe(true);
+    expect(purchaseBody.installed_server_id).toBe("tenant-dev");
+    expect(seenAuthorization.startsWith("Bearer eyJ")).toBe(true);
+    expect(sshInstallSpy.mock.calls.length + directInstallSpy.mock.calls.length).toBe(1);
+
+    const cachedPlatform = withStore(config, (store) => store.getServer("tenant-dev"));
+    expect(cachedPlatform?.runtimeOs).toBe("darwin");
+    expect(cachedPlatform?.runtimeArch).toBe("arm64");
+  });
+
+  it("uses provider plan metadata before runtime health for managed hosted installs", async () => {
+    let healthProbeCount = 0;
+    const config = baseConfig("http://127.0.0.1:18789");
+    seedProducts(config, [{ productId: "spike", displayName: "Spike" }]);
+    const tarballPath = stageFakePackage(config, "spike", "1.2.3");
+    withStore(config, (store) => {
+      store.upsertPackageReleaseVariant({
+        variantId: "variant-spike-1.2.3-linux-arm64",
+        releaseId: "rel-spike-1.2.3",
+        targetOs: "linux",
+        targetArch: "arm64",
+        packageFormat: "tar.gz",
+        tarballPath,
+        sizeBytes: fs.statSync(tarballPath).size,
+      });
+    });
+    const installSpy = vi.spyOn(sshHelper, "installPackageViaSSH").mockResolvedValue({ ok: true });
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        if (url === "http://10.0.0.5:18789/health") {
+          healthProbeCount += 1;
+          return new Response('{"status":"unhealthy","error":"nex_runtime_unavailable"}', {
+            status: 503,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return realFetch(input, init);
+      }),
+    );
+    const provider: CloudProvider = {
+      createServer: vi.fn(),
+      getServerStatus: vi.fn(),
+      archiveServer: vi.fn(),
+      restoreServer: vi.fn(),
+      createRecoveryPoint: vi.fn(),
+      setProtection: vi.fn(),
+      destroyServer: vi.fn(),
+      listPlans: vi.fn(() => [
+        {
+          id: "cax11",
+          name: "Starter",
+          priceMonthlyEur: 3.29,
+          vcpus: 2,
+          memoryMb: 4096,
+          diskGb: 40,
+          architecture: "arm64",
+        },
+      ]),
+    };
+    const frontdoor = createFrontdoorServer({ config, cloudProvider: provider });
+    const frontdoorRunning = await listen(frontdoor.server);
+    withStore(config, (store) => {
+      const seeded = store.getServer("tenant-dev");
+      if (!seeded) {
+        throw new Error("missing_seeded_server");
+      }
+      store.upsertServer({
+        ...seeded,
+        plan: "cax11",
+        provider: "hetzner",
+        providerServerId: "hcloud-tenant-dev",
+        privateIp: "10.0.0.5",
+        runtimePort: 18789,
+        runtimeAuthToken: "rt-probe-test",
+        runtimeOs: null,
+        runtimeArch: null,
+      });
+    });
+    const cookie = await login(frontdoorRunning.origin);
+
+    const purchaseResp = await fetch(`${frontdoorRunning.origin}/api/apps/spike/purchase`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        server_id: "tenant-dev",
+        install: true,
+      }),
+    });
+
+    expect(purchaseResp.status).toBe(200);
+    const purchaseBody = (await purchaseResp.json()) as {
+      ok?: boolean;
+      installed_server_id?: string | null;
+    };
+    expect(purchaseBody.ok).toBe(true);
+    expect(purchaseBody.installed_server_id).toBe("tenant-dev");
+    expect(healthProbeCount).toBe(0);
+    expect(installSpy).toHaveBeenCalledTimes(1);
+
+    const cachedPlatform = withStore(config, (store) => store.getServer("tenant-dev"));
+    expect(cachedPlatform?.runtimeOs).toBe("linux");
+    expect(cachedPlatform?.runtimeArch).toBe("arm64");
   });
 
   it("proxies tenant-origin /runtime paths with the runtime access token and strips the /runtime prefix", async () => {
@@ -3836,6 +4043,54 @@ describe("frontdoor scaffold", () => {
     const installToken = String(directInstallSpy.mock.calls[0]?.[0].runtimeBearerToken ?? "");
     expect(installToken).toBe("runtime-auth-token-local");
     expect(sshInstallSpy).not.toHaveBeenCalled();
+  });
+
+  it("uses a Frontdoor trusted runtime token for hosted adapter installs", async () => {
+    const runtime = await listen(
+      createHttpServer((req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ ok: true }));
+      }),
+    );
+    const config = baseConfig(runtime.origin);
+    stageFakePackage(config, "confluence", "0.1.0", "adapter");
+    const directInstallSpy = vi
+      .spyOn(sshHelper, "installPackageViaRuntimeHttp")
+      .mockResolvedValue({ ok: true });
+    const frontdoor = createFrontdoorServer({ config });
+    withStore(config, (store) => {
+      const server = store.getServer("tenant-dev");
+      expect(server).toBeTruthy();
+      if (!server) {
+        throw new Error("missing_server");
+      }
+      store.updateServer(server.serverId, {
+        provider: "hetzner",
+        providerServerId: "123456",
+        runtimeAuthToken: "runtime-auth-token-hosted",
+      });
+    });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const cookie = await login(frontdoorRunning.origin);
+
+    const installResp = await fetch(
+      `${frontdoorRunning.origin}/api/servers/tenant-dev/adapters/confluence/install`,
+      {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ version: "0.1.0" }),
+      },
+    );
+
+    expect(installResp.status).toBe(200);
+    expect(directInstallSpy).toHaveBeenCalledTimes(1);
+    const installToken = String(directInstallSpy.mock.calls[0]?.[0].runtimeBearerToken ?? "");
+    expect(installToken.startsWith("eyJ")).toBe(true);
+    expect(installToken).not.toBe("runtime-auth-token-hosted");
   });
 
   it("upgrades an installed adapter through the public Frontdoor route", async () => {

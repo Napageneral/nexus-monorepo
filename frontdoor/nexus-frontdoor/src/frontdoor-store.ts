@@ -288,7 +288,6 @@ export type PlatformManagedConnectionProfileRecord = {
   managedProfileId: string;
   appId: string;
   adapterId: string;
-  connectionProfileId: string;
   authMethodId: string;
   flowKind: ManagedConnectionFlowKind;
   service: string;
@@ -1020,7 +1019,6 @@ export class FrontdoorStore {
         managed_profile_id     TEXT PRIMARY KEY,
         app_id                 TEXT NOT NULL,
         adapter_id             TEXT NOT NULL,
-        connection_profile_id  TEXT NOT NULL,
         auth_method_id         TEXT NOT NULL,
         flow_kind              TEXT NOT NULL,
         service                TEXT NOT NULL,
@@ -1041,15 +1039,14 @@ export class FrontdoorStore {
         ON frontdoor_platform_managed_connection_profiles(
           app_id,
           adapter_id,
-          connection_profile_id,
           auth_method_id,
+          managed_profile_id,
           status
         );
       CREATE INDEX IF NOT EXISTS idx_frontdoor_platform_managed_connection_profiles_lookup
         ON frontdoor_platform_managed_connection_profiles(
           app_id,
           adapter_id,
-          connection_profile_id,
           auth_method_id,
           managed_profile_id
         );
@@ -2367,7 +2364,6 @@ export class FrontdoorStore {
     managed_profile_id: string;
     app_id: string;
     adapter_id: string;
-    connection_profile_id: string;
     auth_method_id: string;
     flow_kind: string;
     service: string;
@@ -2388,7 +2384,6 @@ export class FrontdoorStore {
       managedProfileId: row.managed_profile_id,
       appId: row.app_id,
       adapterId: row.adapter_id,
-      connectionProfileId: row.connection_profile_id,
       authMethodId: row.auth_method_id,
       flowKind: row.flow_kind === "custom_flow" ? "custom_flow" : "oauth2",
       service: row.service,
@@ -2414,7 +2409,6 @@ export class FrontdoorStore {
     managedProfileId: string;
     appId: string;
     adapterId: string;
-    connectionProfileId: string;
     authMethodId: string;
     flowKind: ManagedConnectionFlowKind;
     service: string;
@@ -2432,7 +2426,6 @@ export class FrontdoorStore {
     const managedProfileId = normalizeIdentifier(record.managedProfileId);
     const appId = normalizeAppId(record.appId);
     const adapterId = normalizeIdentifier(record.adapterId);
-    const connectionProfileId = normalizeIdentifier(record.connectionProfileId);
     const authMethodId = normalizeIdentifier(record.authMethodId);
     const flowKind = record.flowKind === "custom_flow" ? "custom_flow" : "oauth2";
     const service = normalizeIdentifier(record.service);
@@ -2448,7 +2441,6 @@ export class FrontdoorStore {
           managed_profile_id,
           app_id,
           adapter_id,
-          connection_profile_id,
           auth_method_id,
           flow_kind,
           service,
@@ -2464,11 +2456,10 @@ export class FrontdoorStore {
           config_json,
           created_at_ms,
           updated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(managed_profile_id) DO UPDATE SET
           app_id = excluded.app_id,
           adapter_id = excluded.adapter_id,
-          connection_profile_id = excluded.connection_profile_id,
           auth_method_id = excluded.auth_method_id,
           flow_kind = excluded.flow_kind,
           service = excluded.service,
@@ -2489,7 +2480,6 @@ export class FrontdoorStore {
         managedProfileId,
         appId,
         adapterId,
-        connectionProfileId,
         authMethodId,
         flowKind,
         service,
@@ -2524,7 +2514,7 @@ export class FrontdoorStore {
       .prepare(
         `
         SELECT
-          managed_profile_id, app_id, adapter_id, connection_profile_id,
+          managed_profile_id, app_id, adapter_id,
           auth_method_id, flow_kind, service, display_name, status,
           authorize_url, token_url, client_id, client_secret_ref,
           scopes_json, authorize_params_json, token_params_json, config_json,
@@ -2539,7 +2529,6 @@ export class FrontdoorStore {
           managed_profile_id: string;
           app_id: string;
           adapter_id: string;
-          connection_profile_id: string;
           auth_method_id: string;
           flow_kind: string;
           service: string;
@@ -2563,21 +2552,19 @@ export class FrontdoorStore {
   findPlatformManagedConnectionProfile(params: {
     appId: string;
     adapterId: string;
-    connectionProfileId: string;
     authMethodId: string;
     managedProfileId?: string;
     status?: PlatformManagedConnectionProfileStatus;
   }): PlatformManagedConnectionProfileRecord | null {
     const appId = normalizeAppId(params.appId);
     const adapterId = normalizeIdentifier(params.adapterId);
-    const connectionProfileId = normalizeIdentifier(params.connectionProfileId);
     const authMethodId = normalizeIdentifier(params.authMethodId);
     const managedProfileId = params.managedProfileId ? normalizeIdentifier(params.managedProfileId) : "";
     const status =
       params.status === "disabled" || params.status === "archived"
         ? params.status
         : "active";
-    if (!appId || !adapterId || !connectionProfileId || !authMethodId) {
+    if (!appId || !adapterId || !authMethodId) {
       return null;
     }
     if (managedProfileId) {
@@ -2585,7 +2572,7 @@ export class FrontdoorStore {
         .prepare(
           `
           SELECT
-            managed_profile_id, app_id, adapter_id, connection_profile_id,
+            managed_profile_id, app_id, adapter_id,
             auth_method_id, flow_kind, service, display_name, status,
             authorize_url, token_url, client_id, client_secret_ref,
             scopes_json, authorize_params_json, token_params_json, config_json,
@@ -2594,7 +2581,6 @@ export class FrontdoorStore {
           WHERE managed_profile_id = ?
             AND app_id = ?
             AND adapter_id = ?
-            AND connection_profile_id = ?
             AND auth_method_id = ?
             AND status = ?
           LIMIT 1
@@ -2604,7 +2590,6 @@ export class FrontdoorStore {
           managedProfileId,
           appId,
           adapterId,
-          connectionProfileId,
           authMethodId,
           status,
         ) as
@@ -2612,7 +2597,6 @@ export class FrontdoorStore {
             managed_profile_id: string;
             app_id: string;
             adapter_id: string;
-            connection_profile_id: string;
             auth_method_id: string;
             flow_kind: string;
             service: string;
@@ -2636,7 +2620,7 @@ export class FrontdoorStore {
       .prepare(
         `
         SELECT
-          managed_profile_id, app_id, adapter_id, connection_profile_id,
+          managed_profile_id, app_id, adapter_id,
           auth_method_id, flow_kind, service, display_name, status,
           authorize_url, token_url, client_id, client_secret_ref,
           scopes_json, authorize_params_json, token_params_json, config_json,
@@ -2644,17 +2628,15 @@ export class FrontdoorStore {
         FROM frontdoor_platform_managed_connection_profiles
         WHERE app_id = ?
           AND adapter_id = ?
-          AND connection_profile_id = ?
           AND auth_method_id = ?
           AND status = ?
         LIMIT 2
       `,
       )
-      .all(appId, adapterId, connectionProfileId, authMethodId, status) as Array<{
+      .all(appId, adapterId, authMethodId, status) as Array<{
       managed_profile_id: string;
       app_id: string;
       adapter_id: string;
-      connection_profile_id: string;
       auth_method_id: string;
       flow_kind: string;
       service: string;
@@ -4415,20 +4397,6 @@ export class FrontdoorStore {
     const byApp = new Map<string, ServerAppInstallRecord>();
     for (const install of this.getServerAppInstalls(serverId)) {
       byApp.set(install.appId, install);
-    }
-    // Control app is always implicitly installed
-    if (!byApp.has("console")) {
-      const now = nowMs();
-      byApp.set("console", {
-        serverId,
-        appId: "console",
-        status: "installed",
-        entryPath: "/app/console/chat",
-        source: "system",
-        createdAtMs: now,
-        updatedAtMs: now,
-        installedAtMs: now,
-      });
     }
     return [...byApp.values()].sort((a, b) => a.appId.localeCompare(b.appId));
   }

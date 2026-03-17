@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HetznerProvider } from "./cloud-provider.js";
+import { HetznerProvider, renderCloudInitScript } from "./cloud-provider.js";
 
 describe("HetznerProvider", () => {
   afterEach(() => {
@@ -180,5 +180,27 @@ describe("HetznerProvider", () => {
       "https://api.hetzner.cloud/v1/servers/123",
       expect.objectContaining({ method: "DELETE" }),
     );
+  });
+
+  it("renders hosted trusted-token bootstrap in cloud-init", () => {
+    const script = renderCloudInitScript({
+      tenantId: "t-acme",
+      serverId: "srv-acme",
+      authToken: "rt-legacy",
+      provisionToken: "prov-123",
+      frontdoorUrl: "https://frontdoor.test",
+      runtimeTokenIssuer: "https://frontdoor.test",
+      runtimeTokenSecret: "frontdoor-secret-test",
+      runtimeTokenActiveKid: "v1",
+    });
+
+    expect(script).toContain("/opt/nex/bootstrap-frontdoor.sh");
+    expect(script).toContain("NEXUS_RUNTIME_TRUSTED_TOKEN_ISSUER=https://frontdoor.test");
+    expect(script).toContain("NEXUS_RUNTIME_TRUSTED_TOKEN_SECRET=frontdoor-secret-test");
+    expect(script).toContain('runtime.hostedMode = true');
+    expect(script).toContain('runtime.auth.mode = "trusted_token"');
+    expect(script).toContain("export BOOTSTRAP_TENANT_ID BOOTSTRAP_RUNTIME_TOKEN_ISSUER BOOTSTRAP_RUNTIME_TOKEN_SECRET BOOTSTRAP_RUNTIME_TOKEN_ACTIVE_KID BOOTSTRAP_RUNTIME_SESSION_ID");
+    expect(script).toContain('RUNTIME_JWT=$(sign_runtime_token "$BOOTSTRAP_RUNTIME_SESSION_ID")');
+    expect(script).not.toContain("exec /opt/nex/bootstrap.sh");
   });
 });
