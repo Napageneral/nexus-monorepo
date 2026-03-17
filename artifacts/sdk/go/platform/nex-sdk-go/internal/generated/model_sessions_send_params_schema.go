@@ -20,7 +20,8 @@ var _ MappedNullable = &SessionsSendParamsSchema{}
 
 // SessionsSendParamsSchema struct for SessionsSendParamsSchema
 type SessionsSendParamsSchema struct {
-	SessionKey string `json:"session_key"`
+	SessionId *string `json:"sessionId,omitempty"`
+	SessionKey *string `json:"session_key,omitempty"`
 	Message string `json:"message"`
 	Thinking *string `json:"thinking,omitempty"`
 	Deliver *bool `json:"deliver,omitempty"`
@@ -36,9 +37,8 @@ type _SessionsSendParamsSchema SessionsSendParamsSchema
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewSessionsSendParamsSchema(sessionKey string, message string, idempotencyKey string) *SessionsSendParamsSchema {
+func NewSessionsSendParamsSchema(message string, idempotencyKey string) *SessionsSendParamsSchema {
 	this := SessionsSendParamsSchema{}
-	this.SessionKey = sessionKey
 	this.Message = message
 	this.IdempotencyKey = idempotencyKey
 	return &this
@@ -52,28 +52,68 @@ func NewSessionsSendParamsSchemaWithDefaults() *SessionsSendParamsSchema {
 	return &this
 }
 
-// GetSessionKey returns the SessionKey field value
-func (o *SessionsSendParamsSchema) GetSessionKey() string {
-	if o == nil {
+// GetSessionId returns the SessionId field value if set, zero value otherwise.
+func (o *SessionsSendParamsSchema) GetSessionId() string {
+	if o == nil || IsNil(o.SessionId) {
 		var ret string
 		return ret
 	}
-
-	return o.SessionKey
+	return *o.SessionId
 }
 
-// GetSessionKeyOk returns a tuple with the SessionKey field value
+// GetSessionIdOk returns a tuple with the SessionId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *SessionsSendParamsSchema) GetSessionKeyOk() (*string, bool) {
-	if o == nil {
+func (o *SessionsSendParamsSchema) GetSessionIdOk() (*string, bool) {
+	if o == nil || IsNil(o.SessionId) {
 		return nil, false
 	}
-	return &o.SessionKey, true
+	return o.SessionId, true
 }
 
-// SetSessionKey sets field value
+// HasSessionId returns a boolean if a field has been set.
+func (o *SessionsSendParamsSchema) HasSessionId() bool {
+	if o != nil && !IsNil(o.SessionId) {
+		return true
+	}
+
+	return false
+}
+
+// SetSessionId gets a reference to the given string and assigns it to the SessionId field.
+func (o *SessionsSendParamsSchema) SetSessionId(v string) {
+	o.SessionId = &v
+}
+
+// GetSessionKey returns the SessionKey field value if set, zero value otherwise.
+func (o *SessionsSendParamsSchema) GetSessionKey() string {
+	if o == nil || IsNil(o.SessionKey) {
+		var ret string
+		return ret
+	}
+	return *o.SessionKey
+}
+
+// GetSessionKeyOk returns a tuple with the SessionKey field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SessionsSendParamsSchema) GetSessionKeyOk() (*string, bool) {
+	if o == nil || IsNil(o.SessionKey) {
+		return nil, false
+	}
+	return o.SessionKey, true
+}
+
+// HasSessionKey returns a boolean if a field has been set.
+func (o *SessionsSendParamsSchema) HasSessionKey() bool {
+	if o != nil && !IsNil(o.SessionKey) {
+		return true
+	}
+
+	return false
+}
+
+// SetSessionKey gets a reference to the given string and assigns it to the SessionKey field.
 func (o *SessionsSendParamsSchema) SetSessionKey(v string) {
-	o.SessionKey = v
+	o.SessionKey = &v
 }
 
 // GetMessage returns the Message field value
@@ -262,7 +302,12 @@ func (o SessionsSendParamsSchema) MarshalJSON() ([]byte, error) {
 
 func (o SessionsSendParamsSchema) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["session_key"] = o.SessionKey
+	if !IsNil(o.SessionId) {
+		toSerialize["sessionId"] = o.SessionId
+	}
+	if !IsNil(o.SessionKey) {
+		toSerialize["session_key"] = o.SessionKey
+	}
 	toSerialize["message"] = o.Message
 	if !IsNil(o.Thinking) {
 		toSerialize["thinking"] = o.Thinking
@@ -290,7 +335,6 @@ func (o *SessionsSendParamsSchema) UnmarshalJSON(data []byte) (err error) {
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
-		"session_key",
 		"message",
 		"idempotency_key",
 	}
@@ -322,6 +366,7 @@ func (o *SessionsSendParamsSchema) UnmarshalJSON(data []byte) (err error) {
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
+		delete(additionalProperties, "sessionId")
 		delete(additionalProperties, "session_key")
 		delete(additionalProperties, "message")
 		delete(additionalProperties, "thinking")

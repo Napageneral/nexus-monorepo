@@ -134,21 +134,6 @@ export type AdaptersConnectionsUploadResponse = OperationResponse<"adapters.conn
 export type AdaptersMethodsRequest = OperationRequest<"adapters.methods">;
 export type AdaptersMethodsResponse = OperationResponse<"adapters.methods">;
 
-export type AgentsConfigsCreateRequest = OperationRequest<"agents.configs.create">;
-export type AgentsConfigsCreateResponse = OperationResponse<"agents.configs.create">;
-
-export type AgentsConfigsDeleteRequest = OperationRequest<"agents.configs.delete">;
-export type AgentsConfigsDeleteResponse = OperationResponse<"agents.configs.delete">;
-
-export type AgentsConfigsGetRequest = OperationRequest<"agents.configs.get">;
-export type AgentsConfigsGetResponse = OperationResponse<"agents.configs.get">;
-
-export type AgentsConfigsListRequest = OperationRequest<"agents.configs.list">;
-export type AgentsConfigsListResponse = OperationResponse<"agents.configs.list">;
-
-export type AgentsConfigsUpdateRequest = OperationRequest<"agents.configs.update">;
-export type AgentsConfigsUpdateResponse = OperationResponse<"agents.configs.update">;
-
 export type AgentsConversationsAbortRequest = OperationRequest<"agents.conversations.abort">;
 export type AgentsConversationsAbortResponse = OperationResponse<"agents.conversations.abort">;
 
@@ -533,8 +518,14 @@ export type JobsDeleteResponse = OperationResponse<"jobs.delete">;
 export type JobsGetRequest = OperationRequest<"jobs.get">;
 export type JobsGetResponse = OperationResponse<"jobs.get">;
 
+export type JobsIdempotencyListRequest = OperationRequest<"jobs.idempotency.list">;
+export type JobsIdempotencyListResponse = OperationResponse<"jobs.idempotency.list">;
+
 export type JobsInvokeRequest = OperationRequest<"jobs.invoke">;
 export type JobsInvokeResponse = OperationResponse<"jobs.invoke">;
+
+export type JobsLanesListRequest = OperationRequest<"jobs.lanes.list">;
+export type JobsLanesListResponse = OperationResponse<"jobs.lanes.list">;
 
 export type JobsListRequest = OperationRequest<"jobs.list">;
 export type JobsListResponse = OperationResponse<"jobs.list">;
@@ -556,6 +547,9 @@ export type JobsRunsGetResponse = OperationResponse<"jobs.runs.get">;
 
 export type JobsRunsListRequest = OperationRequest<"jobs.runs.list">;
 export type JobsRunsListResponse = OperationResponse<"jobs.runs.list">;
+
+export type JobsStatusRequest = OperationRequest<"jobs.status">;
+export type JobsStatusResponse = OperationResponse<"jobs.status">;
 
 export type JobsUpdateRequest = OperationRequest<"jobs.update">;
 export type JobsUpdateResponse = OperationResponse<"jobs.update">;
@@ -688,6 +682,27 @@ export type ModelsConfigsListResponse = OperationResponse<"models.configs.list">
 
 export type ModelsConfigsUpdateRequest = OperationRequest<"models.configs.update">;
 export type ModelsConfigsUpdateResponse = OperationResponse<"models.configs.update">;
+
+export type ModelsConnectionsCreateRequest = OperationRequest<"models.connections.create">;
+export type ModelsConnectionsCreateResponse = OperationResponse<"models.connections.create">;
+
+export type ModelsConnectionsDisconnectRequest = OperationRequest<"models.connections.disconnect">;
+export type ModelsConnectionsDisconnectResponse = OperationResponse<"models.connections.disconnect">;
+
+export type ModelsConnectionsGetRequest = OperationRequest<"models.connections.get">;
+export type ModelsConnectionsGetResponse = OperationResponse<"models.connections.get">;
+
+export type ModelsConnectionsListRequest = OperationRequest<"models.connections.list">;
+export type ModelsConnectionsListResponse = OperationResponse<"models.connections.list">;
+
+export type ModelsConnectionsStatusRequest = OperationRequest<"models.connections.status">;
+export type ModelsConnectionsStatusResponse = OperationResponse<"models.connections.status">;
+
+export type ModelsConnectionsTestRequest = OperationRequest<"models.connections.test">;
+export type ModelsConnectionsTestResponse = OperationResponse<"models.connections.test">;
+
+export type ModelsConnectionsUpdateRequest = OperationRequest<"models.connections.update">;
+export type ModelsConnectionsUpdateResponse = OperationResponse<"models.connections.update">;
 
 export type ModelsDefaultsGetRequest = OperationRequest<"models.defaults.get">;
 export type ModelsDefaultsGetResponse = OperationResponse<"models.defaults.get">;
@@ -971,13 +986,6 @@ export interface Client {
     "methods": (request: AdaptersMethodsRequest, options?: RequestOptions) => Promise<AdaptersMethodsResponse>;
   };
   "agents": {
-    "configs": {
-      "create": (request: AgentsConfigsCreateRequest, options?: RequestOptions) => Promise<AgentsConfigsCreateResponse>;
-      "delete": (request: AgentsConfigsDeleteRequest, options?: RequestOptions) => Promise<AgentsConfigsDeleteResponse>;
-      "get": (request: AgentsConfigsGetRequest, options?: RequestOptions) => Promise<AgentsConfigsGetResponse>;
-      "list": (request: AgentsConfigsListRequest, options?: RequestOptions) => Promise<AgentsConfigsListResponse>;
-      "update": (request: AgentsConfigsUpdateRequest, options?: RequestOptions) => Promise<AgentsConfigsUpdateResponse>;
-    };
     "conversations": {
       "abort": (request: AgentsConversationsAbortRequest, options?: RequestOptions) => Promise<AgentsConversationsAbortResponse>;
       "get": (request: AgentsConversationsGetRequest, options?: RequestOptions) => Promise<AgentsConversationsGetResponse>;
@@ -1160,7 +1168,13 @@ export interface Client {
     "create": (request: JobsCreateRequest, options?: RequestOptions) => Promise<JobsCreateResponse>;
     "delete": (request: JobsDeleteRequest, options?: RequestOptions) => Promise<JobsDeleteResponse>;
     "get": (request: JobsGetRequest, options?: RequestOptions) => Promise<JobsGetResponse>;
+    "idempotency": {
+      "list": (request: JobsIdempotencyListRequest, options?: RequestOptions) => Promise<JobsIdempotencyListResponse>;
+    };
     "invoke": (request: JobsInvokeRequest, options?: RequestOptions) => Promise<JobsInvokeResponse>;
+    "lanes": {
+      "list": (request: JobsLanesListRequest, options?: RequestOptions) => Promise<JobsLanesListResponse>;
+    };
     "list": (request: JobsListRequest, options?: RequestOptions) => Promise<JobsListResponse>;
     "queue": {
       "get": (request: JobsQueueGetRequest, options?: RequestOptions) => Promise<JobsQueueGetResponse>;
@@ -1172,6 +1186,7 @@ export interface Client {
       "get": (request: JobsRunsGetRequest, options?: RequestOptions) => Promise<JobsRunsGetResponse>;
       "list": (request: JobsRunsListRequest, options?: RequestOptions) => Promise<JobsRunsListResponse>;
     };
+    "status": (request: JobsStatusRequest, options?: RequestOptions) => Promise<JobsStatusResponse>;
     "update": (request: JobsUpdateRequest, options?: RequestOptions) => Promise<JobsUpdateResponse>;
   };
   "logs": {
@@ -1261,6 +1276,15 @@ export interface Client {
       "get": (request: ModelsConfigsGetRequest, options?: RequestOptions) => Promise<ModelsConfigsGetResponse>;
       "list": (request: ModelsConfigsListRequest, options?: RequestOptions) => Promise<ModelsConfigsListResponse>;
       "update": (request: ModelsConfigsUpdateRequest, options?: RequestOptions) => Promise<ModelsConfigsUpdateResponse>;
+    };
+    "connections": {
+      "create": (request: ModelsConnectionsCreateRequest, options?: RequestOptions) => Promise<ModelsConnectionsCreateResponse>;
+      "disconnect": (request: ModelsConnectionsDisconnectRequest, options?: RequestOptions) => Promise<ModelsConnectionsDisconnectResponse>;
+      "get": (request: ModelsConnectionsGetRequest, options?: RequestOptions) => Promise<ModelsConnectionsGetResponse>;
+      "list": (request: ModelsConnectionsListRequest, options?: RequestOptions) => Promise<ModelsConnectionsListResponse>;
+      "status": (request: ModelsConnectionsStatusRequest, options?: RequestOptions) => Promise<ModelsConnectionsStatusResponse>;
+      "test": (request: ModelsConnectionsTestRequest, options?: RequestOptions) => Promise<ModelsConnectionsTestResponse>;
+      "update": (request: ModelsConnectionsUpdateRequest, options?: RequestOptions) => Promise<ModelsConnectionsUpdateResponse>;
     };
     "defaults": {
       "get": (request: ModelsDefaultsGetRequest, options?: RequestOptions) => Promise<ModelsDefaultsGetResponse>;
@@ -1696,12 +1720,8 @@ export function createNexClient(options: ClientOptions): Client {
         path: "/runtime/operations/adapters.connections.create",
         query: undefined,
         body: {
-        "appId": input["appId"],
         "adapter": input["adapter"],
-        "connectionProfileId": input["connectionProfileId"],
         "authMethodId": input["authMethodId"],
-        "scope": input["scope"],
-        "managedProfileId": input["managedProfileId"],
         "account": input["account"],
         "fields": input["fields"],
         "config": input["config"],
@@ -1745,12 +1765,8 @@ export function createNexClient(options: ClientOptions): Client {
         path: "/runtime/operations/adapters.connections.custom.start",
         query: undefined,
         body: {
-        "appId": input["appId"],
         "adapter": input["adapter"],
-        "connectionProfileId": input["connectionProfileId"],
         "authMethodId": input["authMethodId"],
-        "scope": input["scope"],
-        "managedProfileId": input["managedProfileId"],
         "account": input["account"],
         "payload": input["payload"],
       },
@@ -1839,11 +1855,8 @@ export function createNexClient(options: ClientOptions): Client {
         path: "/runtime/operations/adapters.connections.oauth.start",
         query: undefined,
         body: {
-        "appId": input["appId"],
         "adapter": input["adapter"],
-        "connectionProfileId": input["connectionProfileId"],
         "authMethodId": input["authMethodId"],
-        "scope": input["scope"],
         "managedProfileId": input["managedProfileId"],
         "redirectBaseUrl": input["redirectBaseUrl"],
       },
@@ -1883,12 +1896,8 @@ export function createNexClient(options: ClientOptions): Client {
         query: undefined,
         body: {
         "connectionId": input["connectionId"],
-        "appId": input["appId"],
         "adapter": input["adapter"],
-        "connectionProfileId": input["connectionProfileId"],
         "authMethodId": input["authMethodId"],
-        "scope": input["scope"],
-        "managedProfileId": input["managedProfileId"],
         "account": input["account"],
         "fields": input["fields"],
         "config": input["config"],
@@ -1903,12 +1912,8 @@ export function createNexClient(options: ClientOptions): Client {
         path: "/runtime/operations/adapters.connections.upload",
         query: undefined,
         body: {
-        "appId": input["appId"],
         "adapter": input["adapter"],
-        "connectionProfileId": input["connectionProfileId"],
         "authMethodId": input["authMethodId"],
-        "scope": input["scope"],
-        "managedProfileId": input["managedProfileId"],
         "fileName": input["fileName"],
         "filePath": input["filePath"],
       },
@@ -1927,53 +1932,6 @@ export function createNexClient(options: ClientOptions): Client {
     },
     },
     "agents": {
-      "configs": {
-        "create": async (request: AgentsConfigsCreateRequest, options?: RequestOptions) => {
-      return http.request<AgentsConfigsCreateResponse>({
-        method: "POST",
-        path: "/runtime/operations/agents.configs.create",
-        query: undefined,
-        body: request,
-        options,
-      })
-    },
-        "delete": async (request: AgentsConfigsDeleteRequest, options?: RequestOptions) => {
-      return http.request<AgentsConfigsDeleteResponse>({
-        method: "POST",
-        path: "/runtime/operations/agents.configs.delete",
-        query: undefined,
-        body: request,
-        options,
-      })
-    },
-        "get": async (request: AgentsConfigsGetRequest, options?: RequestOptions) => {
-      return http.request<AgentsConfigsGetResponse>({
-        method: "POST",
-        path: "/runtime/operations/agents.configs.get",
-        query: undefined,
-        body: request,
-        options,
-      })
-    },
-        "list": async (request: AgentsConfigsListRequest, options?: RequestOptions) => {
-      return http.request<AgentsConfigsListResponse>({
-        method: "POST",
-        path: "/runtime/operations/agents.configs.list",
-        query: undefined,
-        body: request,
-        options,
-      })
-    },
-        "update": async (request: AgentsConfigsUpdateRequest, options?: RequestOptions) => {
-      return http.request<AgentsConfigsUpdateResponse>({
-        method: "POST",
-        path: "/runtime/operations/agents.configs.update",
-        query: undefined,
-        body: request,
-        options,
-      })
-    },
-      },
       "conversations": {
         "abort": async (request: AgentsConversationsAbortRequest, options?: RequestOptions) => {
       return http.request<AgentsConversationsAbortResponse>({
@@ -2283,7 +2241,9 @@ export function createNexClient(options: ClientOptions): Client {
         query: undefined,
         body: {
         "key": input["key"],
-        "agent_config_id": input["agent_config_id"],
+        "entity_id": input["entity_id"],
+        "role_config_id": input["role_config_id"],
+        "model_config_id": input["model_config_id"],
         "execution_host_kind": input["execution_host_kind"],
         "sandbox_id": input["sandbox_id"],
         "execution_host_config_json": input["execution_host_config_json"],
@@ -2356,6 +2316,7 @@ export function createNexClient(options: ClientOptions): Client {
         path: "/runtime/operations/agents.sessions.send",
         query: undefined,
         body: {
+        "sessionId": input["sessionId"],
         "session_key": input["session_key"],
         "message": input["message"],
         "thinking": input["thinking"],
@@ -3679,6 +3640,7 @@ export function createNexClient(options: ClientOptions): Client {
         "config_json": input["config_json"],
         "status": input["status"],
         "timeout_ms": input["timeout_ms"],
+        "lane_id": input["lane_id"],
         "workspace_id": input["workspace_id"],
         "hook_points": input["hook_points"],
         "created_by": input["created_by"],
@@ -3710,6 +3672,25 @@ export function createNexClient(options: ClientOptions): Client {
         options,
       })
     },
+      "idempotency": {
+        "list": async (request: JobsIdempotencyListRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<JobsIdempotencyListResponse>({
+        method: "POST",
+        path: "/runtime/operations/jobs.idempotency.list",
+        query: undefined,
+        body: {
+        "job_definition_id": input["job_definition_id"],
+        "status": input["status"],
+        "active_run_id": input["active_run_id"],
+        "latest_run_id": input["latest_run_id"],
+        "limit": input["limit"],
+        "offset": input["offset"],
+      },
+        options,
+      })
+    },
+      },
       "invoke": async (request: JobsInvokeRequest, options?: RequestOptions) => {
       const input = request as Record<string, unknown>;
       return http.request<JobsInvokeResponse>({
@@ -3729,6 +3710,20 @@ export function createNexClient(options: ClientOptions): Client {
         options,
       })
     },
+      "lanes": {
+        "list": async (request: JobsLanesListRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<JobsLanesListResponse>({
+        method: "POST",
+        path: "/runtime/operations/jobs.lanes.list",
+        query: undefined,
+        body: {
+        "status": input["status"],
+      },
+        options,
+      })
+    },
+      },
       "list": async (request: JobsListRequest, options?: RequestOptions) => {
       const input = request as Record<string, unknown>;
       return http.request<JobsListResponse>({
@@ -3822,6 +3817,15 @@ export function createNexClient(options: ClientOptions): Client {
       })
     },
       },
+      "status": async (request: JobsStatusRequest, options?: RequestOptions) => {
+      return http.request<JobsStatusResponse>({
+        method: "POST",
+        path: "/runtime/operations/jobs.status",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
       "update": async (request: JobsUpdateRequest, options?: RequestOptions) => {
       const input = request as Record<string, unknown>;
       return http.request<JobsUpdateResponse>({
@@ -3837,6 +3841,7 @@ export function createNexClient(options: ClientOptions): Client {
         "config_json": input["config_json"],
         "status": input["status"],
         "timeout_ms": input["timeout_ms"],
+        "lane_id": input["lane_id"],
         "workspace_id": input["workspace_id"],
         "hook_points": input["hook_points"],
         "created_by": input["created_by"],
@@ -4276,6 +4281,71 @@ export function createNexClient(options: ClientOptions): Client {
       return http.request<ModelsConfigsUpdateResponse>({
         method: "POST",
         path: "/runtime/operations/models.configs.update",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+      },
+      "connections": {
+        "create": async (request: ModelsConnectionsCreateRequest, options?: RequestOptions) => {
+      return http.request<ModelsConnectionsCreateResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.connections.create",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+        "disconnect": async (request: ModelsConnectionsDisconnectRequest, options?: RequestOptions) => {
+      return http.request<ModelsConnectionsDisconnectResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.connections.disconnect",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+        "get": async (request: ModelsConnectionsGetRequest, options?: RequestOptions) => {
+      return http.request<ModelsConnectionsGetResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.connections.get",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+        "list": async (request: ModelsConnectionsListRequest, options?: RequestOptions) => {
+      return http.request<ModelsConnectionsListResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.connections.list",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+        "status": async (request: ModelsConnectionsStatusRequest, options?: RequestOptions) => {
+      return http.request<ModelsConnectionsStatusResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.connections.status",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+        "test": async (request: ModelsConnectionsTestRequest, options?: RequestOptions) => {
+      return http.request<ModelsConnectionsTestResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.connections.test",
+        query: undefined,
+        body: request,
+        options,
+      })
+    },
+        "update": async (request: ModelsConnectionsUpdateRequest, options?: RequestOptions) => {
+      return http.request<ModelsConnectionsUpdateResponse>({
+        method: "POST",
+        path: "/runtime/operations/models.connections.update",
         query: undefined,
         body: request,
         options,

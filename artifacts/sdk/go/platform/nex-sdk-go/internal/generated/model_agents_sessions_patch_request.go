@@ -21,7 +21,9 @@ var _ MappedNullable = &AgentsSessionsPatchRequest{}
 // AgentsSessionsPatchRequest struct for AgentsSessionsPatchRequest
 type AgentsSessionsPatchRequest struct {
 	Key string `json:"key"`
-	AgentConfigId *string `json:"agent_config_id,omitempty"`
+	EntityId *string `json:"entity_id,omitempty"`
+	RoleConfigId *string `json:"role_config_id,omitempty"`
+	ModelConfigId *string `json:"model_config_id,omitempty"`
 	ExecutionHostKind *AgentsSessionsPatchRequestExecutionHostKind `json:"execution_host_kind,omitempty"`
 	SandboxId *string `json:"sandbox_id,omitempty"`
 	ExecutionHostConfigJson *AgentsSessionsPatchRequestExecutionHostConfigJson `json:"execution_host_config_json,omitempty"`
@@ -86,36 +88,100 @@ func (o *AgentsSessionsPatchRequest) SetKey(v string) {
 	o.Key = v
 }
 
-// GetAgentConfigId returns the AgentConfigId field value if set, zero value otherwise.
-func (o *AgentsSessionsPatchRequest) GetAgentConfigId() string {
-	if o == nil || IsNil(o.AgentConfigId) {
+// GetEntityId returns the EntityId field value if set, zero value otherwise.
+func (o *AgentsSessionsPatchRequest) GetEntityId() string {
+	if o == nil || IsNil(o.EntityId) {
 		var ret string
 		return ret
 	}
-	return *o.AgentConfigId
+	return *o.EntityId
 }
 
-// GetAgentConfigIdOk returns a tuple with the AgentConfigId field value if set, nil otherwise
+// GetEntityIdOk returns a tuple with the EntityId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *AgentsSessionsPatchRequest) GetAgentConfigIdOk() (*string, bool) {
-	if o == nil || IsNil(o.AgentConfigId) {
+func (o *AgentsSessionsPatchRequest) GetEntityIdOk() (*string, bool) {
+	if o == nil || IsNil(o.EntityId) {
 		return nil, false
 	}
-	return o.AgentConfigId, true
+	return o.EntityId, true
 }
 
-// HasAgentConfigId returns a boolean if a field has been set.
-func (o *AgentsSessionsPatchRequest) HasAgentConfigId() bool {
-	if o != nil && !IsNil(o.AgentConfigId) {
+// HasEntityId returns a boolean if a field has been set.
+func (o *AgentsSessionsPatchRequest) HasEntityId() bool {
+	if o != nil && !IsNil(o.EntityId) {
 		return true
 	}
 
 	return false
 }
 
-// SetAgentConfigId gets a reference to the given string and assigns it to the AgentConfigId field.
-func (o *AgentsSessionsPatchRequest) SetAgentConfigId(v string) {
-	o.AgentConfigId = &v
+// SetEntityId gets a reference to the given string and assigns it to the EntityId field.
+func (o *AgentsSessionsPatchRequest) SetEntityId(v string) {
+	o.EntityId = &v
+}
+
+// GetRoleConfigId returns the RoleConfigId field value if set, zero value otherwise.
+func (o *AgentsSessionsPatchRequest) GetRoleConfigId() string {
+	if o == nil || IsNil(o.RoleConfigId) {
+		var ret string
+		return ret
+	}
+	return *o.RoleConfigId
+}
+
+// GetRoleConfigIdOk returns a tuple with the RoleConfigId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentsSessionsPatchRequest) GetRoleConfigIdOk() (*string, bool) {
+	if o == nil || IsNil(o.RoleConfigId) {
+		return nil, false
+	}
+	return o.RoleConfigId, true
+}
+
+// HasRoleConfigId returns a boolean if a field has been set.
+func (o *AgentsSessionsPatchRequest) HasRoleConfigId() bool {
+	if o != nil && !IsNil(o.RoleConfigId) {
+		return true
+	}
+
+	return false
+}
+
+// SetRoleConfigId gets a reference to the given string and assigns it to the RoleConfigId field.
+func (o *AgentsSessionsPatchRequest) SetRoleConfigId(v string) {
+	o.RoleConfigId = &v
+}
+
+// GetModelConfigId returns the ModelConfigId field value if set, zero value otherwise.
+func (o *AgentsSessionsPatchRequest) GetModelConfigId() string {
+	if o == nil || IsNil(o.ModelConfigId) {
+		var ret string
+		return ret
+	}
+	return *o.ModelConfigId
+}
+
+// GetModelConfigIdOk returns a tuple with the ModelConfigId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentsSessionsPatchRequest) GetModelConfigIdOk() (*string, bool) {
+	if o == nil || IsNil(o.ModelConfigId) {
+		return nil, false
+	}
+	return o.ModelConfigId, true
+}
+
+// HasModelConfigId returns a boolean if a field has been set.
+func (o *AgentsSessionsPatchRequest) HasModelConfigId() bool {
+	if o != nil && !IsNil(o.ModelConfigId) {
+		return true
+	}
+
+	return false
+}
+
+// SetModelConfigId gets a reference to the given string and assigns it to the ModelConfigId field.
+func (o *AgentsSessionsPatchRequest) SetModelConfigId(v string) {
+	o.ModelConfigId = &v
 }
 
 // GetExecutionHostKind returns the ExecutionHostKind field value if set, zero value otherwise.
@@ -673,8 +739,14 @@ func (o AgentsSessionsPatchRequest) MarshalJSON() ([]byte, error) {
 func (o AgentsSessionsPatchRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["key"] = o.Key
-	if !IsNil(o.AgentConfigId) {
-		toSerialize["agent_config_id"] = o.AgentConfigId
+	if !IsNil(o.EntityId) {
+		toSerialize["entity_id"] = o.EntityId
+	}
+	if !IsNil(o.RoleConfigId) {
+		toSerialize["role_config_id"] = o.RoleConfigId
+	}
+	if !IsNil(o.ModelConfigId) {
+		toSerialize["model_config_id"] = o.ModelConfigId
 	}
 	if !IsNil(o.ExecutionHostKind) {
 		toSerialize["execution_host_kind"] = o.ExecutionHostKind
@@ -771,7 +843,9 @@ func (o *AgentsSessionsPatchRequest) UnmarshalJSON(data []byte) (err error) {
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
 		delete(additionalProperties, "key")
-		delete(additionalProperties, "agent_config_id")
+		delete(additionalProperties, "entity_id")
+		delete(additionalProperties, "role_config_id")
+		delete(additionalProperties, "model_config_id")
 		delete(additionalProperties, "execution_host_kind")
 		delete(additionalProperties, "sandbox_id")
 		delete(additionalProperties, "execution_host_config_json")

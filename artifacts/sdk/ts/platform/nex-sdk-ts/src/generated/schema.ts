@@ -883,91 +883,6 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
-    "/runtime/operations/agents.configs.create": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** agents.configs.create */
-        post: operations["agents.configs.create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/runtime/operations/agents.configs.delete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** agents.configs.delete */
-        post: operations["agents.configs.delete"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/runtime/operations/agents.configs.get": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** agents.configs.get */
-        post: operations["agents.configs.get"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/runtime/operations/agents.configs.list": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** agents.configs.list */
-        post: operations["agents.configs.list"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/runtime/operations/agents.configs.update": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** agents.configs.update */
-        post: operations["agents.configs.update"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/runtime/operations/agents.conversations.abort": {
         parameters: {
             query?: never;
@@ -3144,6 +3059,23 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/runtime/operations/jobs.idempotency.list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** jobs.idempotency.list */
+        post: operations["jobs.idempotency.list"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/runtime/operations/jobs.invoke": {
         parameters: {
             query?: never;
@@ -3155,6 +3087,23 @@ export type paths = {
         put?: never;
         /** jobs.invoke */
         post: operations["jobs.invoke"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/jobs.lanes.list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** jobs.lanes.list */
+        post: operations["jobs.lanes.list"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3274,6 +3223,23 @@ export type paths = {
         put?: never;
         /** jobs.runs.list */
         post: operations["jobs.runs.list"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/jobs.status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** jobs.status */
+        post: operations["jobs.status"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4022,6 +3988,125 @@ export type paths = {
         put?: never;
         /** models.configs.update */
         post: operations["models.configs.update"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.connections.create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.connections.create */
+        post: operations["models.connections.create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.connections.disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.connections.disconnect */
+        post: operations["models.connections.disconnect"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.connections.get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.connections.get */
+        post: operations["models.connections.get"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.connections.list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.connections.list */
+        post: operations["models.connections.list"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.connections.status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.connections.status */
+        post: operations["models.connections.status"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.connections.test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.connections.test */
+        post: operations["models.connections.test"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runtime/operations/models.connections.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** models.connections.update */
+        post: operations["models.connections.update"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5415,17 +5500,13 @@ export type components = {
         AdapterConnectionsCreateParamsSchema: {
             account?: string;
             adapter: string;
-            appId: string;
             authMethodId?: string;
             config?: {
                 [key: string]: unknown;
             };
-            connectionProfileId: string;
             fields: {
                 [key: string]: string;
             };
-            managedProfileId?: string;
-            scope?: "server" | "app";
         };
         AdapterConnectionsCredentialGetParamsSchema: {
             connection_id: string;
@@ -5452,14 +5533,10 @@ export type components = {
         AdapterConnectionsCustomStartParamsSchema: {
             account?: string;
             adapter: string;
-            appId: string;
             authMethodId?: string;
-            connectionProfileId: string;
-            managedProfileId?: string;
             payload?: {
                 [key: string]: unknown;
             };
-            scope?: "server" | "app";
         };
         AdapterConnectionsCustomStatusParamsSchema: {
             account?: string;
@@ -5482,21 +5559,17 @@ export type components = {
             connections: {
                 account?: string | null;
                 adapter: string;
-                appId?: string;
                 auth?: unknown;
                 authMethod: "oauth2" | "api_key" | "file_upload" | "custom_flow" | null;
                 authMethodId?: string | null;
                 connectionId: string;
-                connectionProfileId?: string;
                 error?: string | null;
                 /** Format: int64 */
                 lastSync?: number | null;
-                managedProfileId?: string;
                 metadata?: {
                     [key: string]: unknown;
                 };
                 name: string;
-                scope: "server" | "app";
                 service?: string;
                 status: "connected" | "disconnected" | "error" | "expired";
                 summary?: {
@@ -5525,12 +5598,9 @@ export type components = {
         };
         AdapterConnectionsOAuthStartParamsSchema: {
             adapter: string;
-            appId: string;
             authMethodId?: string;
-            connectionProfileId: string;
             managedProfileId?: string;
             redirectBaseUrl?: string;
-            scope?: "server" | "app";
         };
         AdapterConnectionsOAuthStartResultSchema: {
             /** Format: int64 */
@@ -5544,21 +5614,17 @@ export type components = {
         AdapterConnectionsStatusResultSchema: {
             account?: string | null;
             adapter: string;
-            appId?: string;
             auth?: unknown;
             authMethod: "oauth2" | "api_key" | "file_upload" | "custom_flow" | null;
             authMethodId?: string | null;
             connectionId: string;
-            connectionProfileId?: string;
             error?: string | null;
             /** Format: int64 */
             lastSync?: number | null;
-            managedProfileId?: string;
             metadata?: {
                 [key: string]: unknown;
             };
             name: string;
-            scope: "server" | "app";
             service?: string;
             status: "connected" | "disconnected" | "error" | "expired";
             summary?: {
@@ -5585,28 +5651,20 @@ export type components = {
         AdapterConnectionsUpdateParamsSchema: {
             account?: string;
             adapter: string;
-            appId: string;
             authMethodId?: string;
             config?: {
                 [key: string]: unknown;
             };
             connectionId: string;
-            connectionProfileId: string;
             fields: {
                 [key: string]: string;
             };
-            managedProfileId?: string;
-            scope?: "server" | "app";
         };
         AdapterConnectionsUploadParamsSchema: {
             adapter: string;
-            appId: string;
             authMethodId?: string;
-            connectionProfileId: string;
             fileName: string;
             filePath: string;
-            managedProfileId?: string;
-            scope?: "server" | "app";
         };
         AgentIdentityParamsSchema: {
             agentId?: string;
@@ -6404,15 +6462,16 @@ export type components = {
         };
         IdentityEntityRowSchema: {
             created_at: number;
-            default_agent_config_id?: string | null;
             deleted_at?: number | null;
             id: string;
             is_agent?: number | boolean | null;
             is_user?: number | boolean | null;
             merged_into?: string | null;
+            model_config_id?: string | null;
             name: string;
             normalized?: string | null;
             origin?: string | null;
+            role_config_id?: string | null;
             type: string;
             updated_at?: number | null;
         };
@@ -6531,6 +6590,7 @@ export type components = {
             description?: string | null;
             hook_points?: string | null;
             id: string;
+            lane_id: string;
             name: string;
             previous_version_id?: string | null;
             script_hash?: string | null;
@@ -6546,6 +6606,20 @@ export type components = {
         };
         JobGetResultSchema: {
             job: components["schemas"]["JobDefinitionSchema"];
+        };
+        JobIdempotencyRowSchema: {
+            active_run_id?: string | null;
+            active_run_status?: string | null;
+            created_at: string;
+            first_run_id?: string | null;
+            idempotency_key: string;
+            job_definition_id: string;
+            job_definition_name?: string | null;
+            latest_run_id?: string | null;
+            latest_run_status?: string | null;
+            request_fingerprint?: string | null;
+            status: string;
+            updated_at: string;
         };
         JobMutationResultSchema: {
             job: components["schemas"]["JobDefinitionSchema"];
@@ -6612,9 +6686,26 @@ export type components = {
             reason?: string;
             run: components["schemas"]["JobRunSchema"];
         };
+        JobsIdempotencyListParamsSchema: {
+            active_run_id?: string;
+            job_definition_id?: string;
+            latest_run_id?: string;
+            limit?: number;
+            offset?: number;
+            status?: string;
+        };
+        JobsIdempotencyListResultSchema: {
+            idempotency: components["schemas"]["JobIdempotencyRowSchema"][];
+        };
         JobsInvokeResultSchema: {
             queue_entry: components["schemas"]["JobQueueRowSchema"];
             run: components["schemas"]["JobRunSchema"];
+        };
+        JobsLanesListParamsSchema: {
+            status?: string;
+        };
+        JobsLanesListResultSchema: {
+            lanes: components["schemas"]["WorkLaneStatusSchema"][];
         };
         JobsListParamsSchema: {
             limit?: number;
@@ -6638,6 +6729,35 @@ export type components = {
         JobsRetryResultSchema: {
             queue_entry: components["schemas"]["JobQueueRowSchema"];
             run: components["schemas"]["JobRunSchema"];
+        };
+        JobsStatusParamsSchema: Record<string, never>;
+        JobsStatusResultSchema: {
+            generated_at: string;
+            global: {
+                configured_concurrency_budget: number;
+                dead_lettered_count: number;
+                delayed_count: number;
+                effective_concurrency_budget: number;
+                eligible_count: number;
+                lane_count: number;
+                leased_count: number;
+                queue_delay_avg_ms?: number | null;
+                queue_delay_max_ms?: number | null;
+                queued_count: number;
+                running_count: number;
+                saturated_lane_count: number;
+                throttled_lane_count: number;
+                throughput_per_minute: number;
+            };
+            idempotency: {
+                active: number;
+                cancelled: number;
+                completed: number;
+                failed: number;
+                other: number;
+            };
+            lanes: components["schemas"]["WorkLaneStatusSchema"][];
+            lookback_window_ms: number;
         };
         LogsTailParamsSchema: {
             cursor?: number;
@@ -6800,6 +6920,7 @@ export type components = {
             };
             id?: string;
             image?: string;
+            lineage_root_id?: string;
             linkage?: {
                 [key: string]: unknown;
             };
@@ -6808,6 +6929,7 @@ export type components = {
                 source_path: string;
                 target_path: string;
             }[];
+            parent_sandbox_id?: string;
             profile?: string;
             workspace_source_path?: string;
         };
@@ -7102,8 +7224,8 @@ export type components = {
             spawnedBy?: string;
         };
         SessionsPatchParamsSchema: {
-            agent_config_id?: string | null;
             elevatedLevel?: string | null;
+            entity_id?: string | null;
             execAsk?: string | null;
             execHost?: string | null;
             execNode?: string | null;
@@ -7113,8 +7235,10 @@ export type components = {
             groupActivation?: "mention" | "always" | null;
             key: string;
             model?: string | null;
+            model_config_id?: string | null;
             reasoningLevel?: string | null;
             responseUsage?: "off" | "tokens" | "full" | "on" | null;
+            role_config_id?: string | null;
             sandbox_id?: string | null;
             sendPolicy?: "allow" | "deny" | null;
             session_key?: string | null;
@@ -7144,7 +7268,8 @@ export type components = {
             deliver?: boolean;
             idempotency_key: string;
             message: string;
-            session_key: string;
+            session_key?: string;
+            sessionId?: string;
             thinking?: string;
             timeout_ms?: number;
         };
@@ -7176,16 +7301,6 @@ export type components = {
             note?: string;
             restartDelayMs?: number;
             sessionKey?: string;
-            timeoutMs?: number;
-        };
-        WebLoginStartParamsSchema: {
-            connectionId?: string;
-            force?: boolean;
-            timeoutMs?: number;
-            verbose?: boolean;
-        };
-        WebLoginWaitParamsSchema: {
-            connectionId?: string;
             timeoutMs?: number;
         };
         WizardCancelParamsSchema: {
@@ -7253,6 +7368,39 @@ export type components = {
         WizardStatusResultSchema: {
             error?: string;
             status: "running" | "done" | "cancelled" | "error";
+        };
+        WorkLaneStatusSchema: {
+            adaptive_mode: string;
+            adaptive_reason?: string | null;
+            batched_writes_enabled: number;
+            completed_runs_recent: number;
+            concurrency_budget: number;
+            config_json?: string | null;
+            created_at: string;
+            dead_lettered_count: number;
+            delayed_count: number;
+            description?: string | null;
+            effective_concurrency_budget: number;
+            eligible_count: number;
+            failed_runs_recent: number;
+            id: string;
+            last_adjusted_at?: string | null;
+            lease_batch_size: number;
+            lease_recoveries_recent: number;
+            leased_count: number;
+            max_attempts_default: number;
+            name: string;
+            oldest_eligible_wait_ms?: number | null;
+            priority: number;
+            queue_delay_avg_ms?: number | null;
+            queue_delay_max_ms?: number | null;
+            queued_count: number;
+            running_count: number;
+            saturated: number;
+            status: string;
+            throttled: number;
+            throughput_per_minute: number;
+            updated_at: string;
         };
         WorkspaceCreateResultSchema: {
             id: string;
@@ -9796,17 +9944,13 @@ export interface operations {
                 "application/json": {
                     account?: string;
                     adapter: string;
-                    appId: string;
                     authMethodId?: string;
                     config?: {
                         [key: string]: unknown;
                     };
-                    connectionProfileId: string;
                     fields: {
                         [key: string]: string;
                     };
-                    managedProfileId?: string;
-                    scope?: "server" | "app";
                 };
             };
         };
@@ -10022,14 +10166,10 @@ export interface operations {
                 "application/json": {
                     account?: string;
                     adapter: string;
-                    appId: string;
                     authMethodId?: string;
-                    connectionProfileId: string;
-                    managedProfileId?: string;
                     payload?: {
                         [key: string]: unknown;
                     };
-                    scope?: "server" | "app";
                 };
             };
         };
@@ -10390,21 +10530,17 @@ export interface operations {
                             connections: {
                                 account?: string | null;
                                 adapter: string;
-                                appId?: string;
                                 auth?: unknown;
                                 authMethod: "oauth2" | "api_key" | "file_upload" | "custom_flow" | null;
                                 authMethodId?: string | null;
                                 connectionId: string;
-                                connectionProfileId?: string;
                                 error?: string | null;
                                 /** Format: int64 */
                                 lastSync?: number | null;
-                                managedProfileId?: string;
                                 metadata?: {
                                     [key: string]: unknown;
                                 };
                                 name: string;
-                                scope: "server" | "app";
                                 service?: string;
                                 status: "connected" | "disconnected" | "error" | "expired";
                                 summary?: {
@@ -10543,12 +10679,9 @@ export interface operations {
             content: {
                 "application/json": {
                     adapter: string;
-                    appId: string;
                     authMethodId?: string;
-                    connectionProfileId: string;
                     managedProfileId?: string;
                     redirectBaseUrl?: string;
-                    scope?: "server" | "app";
                 };
             };
         };
@@ -10638,21 +10771,17 @@ export interface operations {
                         payload?: {
                             account?: string | null;
                             adapter: string;
-                            appId?: string;
                             auth?: unknown;
                             authMethod: "oauth2" | "api_key" | "file_upload" | "custom_flow" | null;
                             authMethodId?: string | null;
                             connectionId: string;
-                            connectionProfileId?: string;
                             error?: string | null;
                             /** Format: int64 */
                             lastSync?: number | null;
-                            managedProfileId?: string;
                             metadata?: {
                                 [key: string]: unknown;
                             };
                             name: string;
-                            scope: "server" | "app";
                             service?: string;
                             status: "connected" | "disconnected" | "error" | "expired";
                             summary?: {
@@ -10789,18 +10918,14 @@ export interface operations {
                 "application/json": {
                     account?: string;
                     adapter: string;
-                    appId: string;
                     authMethodId?: string;
                     config?: {
                         [key: string]: unknown;
                     };
                     connectionId: string;
-                    connectionProfileId: string;
                     fields: {
                         [key: string]: string;
                     };
-                    managedProfileId?: string;
-                    scope?: "server" | "app";
                 };
             };
         };
@@ -10868,13 +10993,9 @@ export interface operations {
             content: {
                 "application/json": {
                     adapter: string;
-                    appId: string;
                     authMethodId?: string;
-                    connectionProfileId: string;
                     fileName: string;
                     filePath: string;
-                    managedProfileId?: string;
-                    scope?: "server" | "app";
                 };
             };
         };
@@ -10932,341 +11053,6 @@ export interface operations {
         };
     };
     "adapters.methods": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful runtime operation response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: true;
-                        payload?: {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-        };
-    };
-    "agents.configs.create": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful runtime operation response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: true;
-                        payload?: {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-        };
-    };
-    "agents.configs.delete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful runtime operation response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: true;
-                        payload?: {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-        };
-    };
-    "agents.configs.get": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful runtime operation response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: true;
-                        payload?: {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-        };
-    };
-    "agents.configs.list": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful runtime operation response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: true;
-                        payload?: {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-        };
-    };
-    "agents.configs.update": {
         parameters: {
             query?: never;
             header?: never;
@@ -13058,8 +12844,8 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    agent_config_id?: string | null;
                     elevatedLevel?: string | null;
+                    entity_id?: string | null;
                     execAsk?: string | null;
                     execHost?: string | null;
                     execNode?: string | null;
@@ -13069,8 +12855,10 @@ export interface operations {
                     groupActivation?: "mention" | "always" | null;
                     key: string;
                     model?: string | null;
+                    model_config_id?: string | null;
                     reasoningLevel?: string | null;
                     responseUsage?: "off" | "tokens" | "full" | "on" | null;
+                    role_config_id?: string | null;
                     sandbox_id?: string | null;
                     sendPolicy?: "allow" | "deny" | null;
                     session_key?: string | null;
@@ -13352,7 +13140,8 @@ export interface operations {
                     deliver?: boolean;
                     idempotency_key: string;
                     message: string;
-                    session_key: string;
+                    session_key?: string;
+                    sessionId?: string;
                     thinking?: string;
                     timeout_ms?: number;
                 };
@@ -20122,6 +19911,7 @@ export interface operations {
                     created_by?: string;
                     description?: string;
                     hook_points?: string | string[];
+                    lane_id?: string;
                     name: string;
                     script_path: string;
                     status?: string;
@@ -20311,6 +20101,76 @@ export interface operations {
             };
         };
     };
+    "jobs.idempotency.list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    active_run_id?: string;
+                    job_definition_id?: string;
+                    latest_run_id?: string;
+                    limit?: number;
+                    offset?: number;
+                    status?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: components["schemas"]["JobsIdempotencyListResultSchema"];
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
     "jobs.invoke": {
         parameters: {
             query?: never;
@@ -20348,6 +20208,71 @@ export interface operations {
                         /** @enum {boolean} */
                         ok: true;
                         payload?: components["schemas"]["JobsInvokeResultSchema"];
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "jobs.lanes.list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    status?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: components["schemas"]["JobsLanesListResultSchema"];
                     };
                 };
             };
@@ -20860,6 +20785,69 @@ export interface operations {
             };
         };
     };
+    "jobs.status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: components["schemas"]["JobsStatusResultSchema"];
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
     "jobs.update": {
         parameters: {
             query?: never;
@@ -20875,6 +20863,7 @@ export interface operations {
                     description?: string;
                     hook_points?: string | string[];
                     id: string;
+                    lane_id?: string;
                     name?: string;
                     script_hash?: string;
                     script_path?: string;
@@ -23757,6 +23746,475 @@ export interface operations {
         };
     };
     "models.configs.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.connections.create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.connections.disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.connections.get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.connections.list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.connections.status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.connections.test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful runtime operation response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: true;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["ErrorShapeSchema"];
+                        meta?: {
+                            [key: string]: unknown;
+                        } | null;
+                        /** @enum {boolean} */
+                        ok: false;
+                    };
+                };
+            };
+        };
+    };
+    "models.connections.update": {
         parameters: {
             query?: never;
             header?: never;

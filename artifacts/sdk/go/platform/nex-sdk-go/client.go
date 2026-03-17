@@ -59,6 +59,7 @@ type Client struct {
   Runtime *RuntimeClient
   Sandboxes *SandboxesClient
   Schedules *SchedulesClient
+  Search *SearchClient
   Skills *SkillsClient
   Talk *TalkClient
   Tools *ToolsClient
@@ -141,15 +142,10 @@ type AdaptersConnectionsOauthClient struct {
 
 type AgentsClient struct {
   raw *generated.APIClient
-  Configs *AgentsConfigsClient
   Conversations *AgentsConversationsClient
   Files *AgentsFilesClient
   Identity *AgentsIdentityClient
   Sessions *AgentsSessionsClient
-}
-
-type AgentsConfigsClient struct {
-  raw *generated.APIClient
 }
 
 type AgentsConversationsClient struct {
@@ -269,8 +265,18 @@ type GroupsMembersClient struct {
 
 type JobsClient struct {
   raw *generated.APIClient
+  Idempotency *JobsIdempotencyClient
+  Lanes *JobsLanesClient
   Queue *JobsQueueClient
   Runs *JobsRunsClient
+}
+
+type JobsIdempotencyClient struct {
+  raw *generated.APIClient
+}
+
+type JobsLanesClient struct {
+  raw *generated.APIClient
 }
 
 type JobsQueueClient struct {
@@ -381,6 +387,31 @@ type MemorySetsMembersClient struct {
 
 type ModelsClient struct {
   raw *generated.APIClient
+  Catalog *ModelsCatalogClient
+  Configs *ModelsConfigsClient
+  Connections *ModelsConnectionsClient
+  Defaults *ModelsDefaultsClient
+  Providers *ModelsProvidersClient
+}
+
+type ModelsCatalogClient struct {
+  raw *generated.APIClient
+}
+
+type ModelsConfigsClient struct {
+  raw *generated.APIClient
+}
+
+type ModelsConnectionsClient struct {
+  raw *generated.APIClient
+}
+
+type ModelsDefaultsClient struct {
+  raw *generated.APIClient
+}
+
+type ModelsProvidersClient struct {
+  raw *generated.APIClient
 }
 
 type OperatorClient struct {
@@ -421,6 +452,10 @@ type SandboxesClient struct {
 }
 
 type SchedulesClient struct {
+  raw *generated.APIClient
+}
+
+type SearchClient struct {
   raw *generated.APIClient
 }
 
@@ -501,11 +536,6 @@ type AdaptersConnectionsTestResponse = generated.AclAuditGet200Response
 type AdaptersConnectionsUpdateResponse = generated.AclAuditGet200Response
 type AdaptersConnectionsUploadResponse = generated.AclAuditGet200Response
 type AdaptersMethodsResponse = generated.AclAuditGet200Response
-type AgentsConfigsCreateResponse = generated.AclAuditGet200Response
-type AgentsConfigsDeleteResponse = generated.AclAuditGet200Response
-type AgentsConfigsGetResponse = generated.AclAuditGet200Response
-type AgentsConfigsListResponse = generated.AclAuditGet200Response
-type AgentsConfigsUpdateResponse = generated.AclAuditGet200Response
 type AgentsConversationsAbortResponse = generated.AclAuditGet200Response
 type AgentsConversationsGetResponse = generated.AclAuditGet200Response
 type AgentsConversationsHistoryResponse = generated.AclAuditGet200Response
@@ -634,7 +664,9 @@ type JobsCancelResponse = generated.JobsCancel200Response
 type JobsCreateResponse = generated.JobsCreate200Response
 type JobsDeleteResponse = generated.JobsDelete200Response
 type JobsGetResponse = generated.JobsGet200Response
+type JobsIdempotencyListResponse = generated.JobsIdempotencyList200Response
 type JobsInvokeResponse = generated.JobsInvoke200Response
+type JobsLanesListResponse = generated.JobsLanesList200Response
 type JobsListResponse = generated.JobsList200Response
 type JobsQueueGetResponse = generated.JobsQueueGet200Response
 type JobsQueueListResponse = generated.JobsQueueList200Response
@@ -642,6 +674,7 @@ type JobsRequeueResponse = generated.JobsRequeue200Response
 type JobsRetryResponse = generated.JobsRetry200Response
 type JobsRunsGetResponse = generated.JobsRunsGet200Response
 type JobsRunsListResponse = generated.JobsRunsList200Response
+type JobsStatusResponse = generated.JobsStatus200Response
 type JobsUpdateResponse = generated.JobsCreate200Response
 type LogsTailResponse = generated.LogsTail200Response
 type MemoryElementsConsolidateResponse = generated.AclAuditGet200Response
@@ -679,8 +712,29 @@ type MemorySetsGetResponse = generated.AclAuditGet200Response
 type MemorySetsListResponse = generated.AclAuditGet200Response
 type MemorySetsMembersAddResponse = generated.AclAuditGet200Response
 type MemorySetsMembersListResponse = generated.AclAuditGet200Response
+type ModelsCatalogGetResponse = generated.AclAuditGet200Response
+type ModelsCatalogListResponse = generated.AclAuditGet200Response
+type ModelsConfigsCreateResponse = generated.AclAuditGet200Response
+type ModelsConfigsDeleteResponse = generated.AclAuditGet200Response
+type ModelsConfigsGetResponse = generated.AclAuditGet200Response
+type ModelsConfigsListResponse = generated.AclAuditGet200Response
+type ModelsConfigsUpdateResponse = generated.AclAuditGet200Response
+type ModelsConnectionsCreateResponse = generated.AclAuditGet200Response
+type ModelsConnectionsDisconnectResponse = generated.AclAuditGet200Response
+type ModelsConnectionsGetResponse = generated.AclAuditGet200Response
+type ModelsConnectionsListResponse = generated.AclAuditGet200Response
+type ModelsConnectionsStatusResponse = generated.AclAuditGet200Response
+type ModelsConnectionsTestResponse = generated.AclAuditGet200Response
+type ModelsConnectionsUpdateResponse = generated.AclAuditGet200Response
+type ModelsDefaultsGetResponse = generated.AclAuditGet200Response
+type ModelsDefaultsPutResponse = generated.AclAuditGet200Response
 type ModelsGetResponse = generated.ModelsGet200Response
 type ModelsListResponse = generated.ModelsList200Response
+type ModelsProvidersDeleteResponse = generated.AclAuditGet200Response
+type ModelsProvidersGetResponse = generated.AclAuditGet200Response
+type ModelsProvidersListResponse = generated.AclAuditGet200Response
+type ModelsProvidersPutResponse = generated.AclAuditGet200Response
+type ModelsProvidersTestResponse = generated.AclAuditGet200Response
 type OperatorPackagesGetResponse = generated.AclAuditGet200Response
 type OperatorPackagesHealthResponse = generated.AclAuditGet200Response
 type OperatorPackagesInstallResponse = generated.AclAuditGet200Response
@@ -716,6 +770,8 @@ type SchedulesGetResponse = generated.SchedulesGet200Response
 type SchedulesListResponse = generated.SchedulesList200Response
 type SchedulesTriggerResponse = generated.SchedulesTrigger200Response
 type SchedulesUpdateResponse = generated.SchedulesCreate200Response
+type SearchRebuildResponse = generated.AclAuditGet200Response
+type SearchStatusResponse = generated.AclAuditGet200Response
 type SkillsListResponse = generated.SkillsList200Response
 type SkillsSearchResponse = generated.SkillsSearch200Response
 type SkillsUseResponse = generated.SkillsUse200Response
@@ -825,16 +881,6 @@ type AdaptersConnectionsUpdateRequest = generated.AdaptersConnectionsUpdateReque
 type AdaptersConnectionsUploadRequest = generated.AdaptersConnectionsUploadRequest
 
 type AdaptersMethodsRequest = map[string]interface{}
-
-type AgentsConfigsCreateRequest = map[string]interface{}
-
-type AgentsConfigsDeleteRequest = map[string]interface{}
-
-type AgentsConfigsGetRequest = map[string]interface{}
-
-type AgentsConfigsListRequest = map[string]interface{}
-
-type AgentsConfigsUpdateRequest = map[string]interface{}
 
 type AgentsConversationsAbortRequest = map[string]interface{}
 
@@ -1092,7 +1138,11 @@ type JobsDeleteRequest = generated.AppsInstallAliasApiAppsInstallRequest
 
 type JobsGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
 
+type JobsIdempotencyListRequest = generated.JobsIdempotencyListRequest
+
 type JobsInvokeRequest = generated.JobsInvokeRequest
+
+type JobsLanesListRequest = generated.JobsLanesListRequest
 
 type JobsListRequest = generated.JobsListRequest
 
@@ -1107,6 +1157,8 @@ type JobsRetryRequest = generated.JobsCancelRequest
 type JobsRunsGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
 
 type JobsRunsListRequest = generated.JobsRunsListRequest
+
+type JobsStatusRequest = map[string]interface{}
 
 type JobsUpdateRequest = generated.JobsUpdateRequest
 
@@ -1182,9 +1234,51 @@ type MemorySetsMembersAddRequest = map[string]interface{}
 
 type MemorySetsMembersListRequest = map[string]interface{}
 
+type ModelsCatalogGetRequest = map[string]interface{}
+
+type ModelsCatalogListRequest = map[string]interface{}
+
+type ModelsConfigsCreateRequest = map[string]interface{}
+
+type ModelsConfigsDeleteRequest = map[string]interface{}
+
+type ModelsConfigsGetRequest = map[string]interface{}
+
+type ModelsConfigsListRequest = map[string]interface{}
+
+type ModelsConfigsUpdateRequest = map[string]interface{}
+
+type ModelsConnectionsCreateRequest = map[string]interface{}
+
+type ModelsConnectionsDisconnectRequest = map[string]interface{}
+
+type ModelsConnectionsGetRequest = map[string]interface{}
+
+type ModelsConnectionsListRequest = map[string]interface{}
+
+type ModelsConnectionsStatusRequest = map[string]interface{}
+
+type ModelsConnectionsTestRequest = map[string]interface{}
+
+type ModelsConnectionsUpdateRequest = map[string]interface{}
+
+type ModelsDefaultsGetRequest = map[string]interface{}
+
+type ModelsDefaultsPutRequest = map[string]interface{}
+
 type ModelsGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
 
 type ModelsListRequest = map[string]interface{}
+
+type ModelsProvidersDeleteRequest = map[string]interface{}
+
+type ModelsProvidersGetRequest = map[string]interface{}
+
+type ModelsProvidersListRequest = map[string]interface{}
+
+type ModelsProvidersPutRequest = map[string]interface{}
+
+type ModelsProvidersTestRequest = map[string]interface{}
 
 type OperatorPackagesGetRequest = map[string]interface{}
 
@@ -1255,6 +1349,10 @@ type SchedulesListRequest = generated.SchedulesListRequest
 type SchedulesTriggerRequest = generated.SchedulesTriggerRequest
 
 type SchedulesUpdateRequest = generated.SchedulesUpdateRequest
+
+type SearchRebuildRequest = map[string]interface{}
+
+type SearchStatusRequest = map[string]interface{}
 
 type SkillsListRequest = generated.SkillsListRequest
 
@@ -1345,6 +1443,7 @@ func NewClient(baseURL string, opts ...Option) *Client {
   client.Runtime = newRuntimeClient(raw)
   client.Sandboxes = newSandboxesClient(raw)
   client.Schedules = newSchedulesClient(raw)
+  client.Search = newSearchClient(raw)
   client.Skills = newSkillsClient(raw)
   client.Talk = newTalkClient(raw)
   client.Tools = newToolsClient(raw)
@@ -1443,16 +1542,10 @@ func newAdaptersConnectionsOauthClient(raw *generated.APIClient) *AdaptersConnec
 
 func newAgentsClient(raw *generated.APIClient) *AgentsClient {
   client := &AgentsClient{raw: raw}
-  client.Configs = newAgentsConfigsClient(raw)
   client.Conversations = newAgentsConversationsClient(raw)
   client.Files = newAgentsFilesClient(raw)
   client.Identity = newAgentsIdentityClient(raw)
   client.Sessions = newAgentsSessionsClient(raw)
-  return client
-}
-
-func newAgentsConfigsClient(raw *generated.APIClient) *AgentsConfigsClient {
-  client := &AgentsConfigsClient{raw: raw}
   return client
 }
 
@@ -1599,8 +1692,20 @@ func newGroupsMembersClient(raw *generated.APIClient) *GroupsMembersClient {
 
 func newJobsClient(raw *generated.APIClient) *JobsClient {
   client := &JobsClient{raw: raw}
+  client.Idempotency = newJobsIdempotencyClient(raw)
+  client.Lanes = newJobsLanesClient(raw)
   client.Queue = newJobsQueueClient(raw)
   client.Runs = newJobsRunsClient(raw)
+  return client
+}
+
+func newJobsIdempotencyClient(raw *generated.APIClient) *JobsIdempotencyClient {
+  client := &JobsIdempotencyClient{raw: raw}
+  return client
+}
+
+func newJobsLanesClient(raw *generated.APIClient) *JobsLanesClient {
+  client := &JobsLanesClient{raw: raw}
   return client
 }
 
@@ -1734,6 +1839,36 @@ func newMemorySetsMembersClient(raw *generated.APIClient) *MemorySetsMembersClie
 
 func newModelsClient(raw *generated.APIClient) *ModelsClient {
   client := &ModelsClient{raw: raw}
+  client.Catalog = newModelsCatalogClient(raw)
+  client.Configs = newModelsConfigsClient(raw)
+  client.Connections = newModelsConnectionsClient(raw)
+  client.Defaults = newModelsDefaultsClient(raw)
+  client.Providers = newModelsProvidersClient(raw)
+  return client
+}
+
+func newModelsCatalogClient(raw *generated.APIClient) *ModelsCatalogClient {
+  client := &ModelsCatalogClient{raw: raw}
+  return client
+}
+
+func newModelsConfigsClient(raw *generated.APIClient) *ModelsConfigsClient {
+  client := &ModelsConfigsClient{raw: raw}
+  return client
+}
+
+func newModelsConnectionsClient(raw *generated.APIClient) *ModelsConnectionsClient {
+  client := &ModelsConnectionsClient{raw: raw}
+  return client
+}
+
+func newModelsDefaultsClient(raw *generated.APIClient) *ModelsDefaultsClient {
+  client := &ModelsDefaultsClient{raw: raw}
+  return client
+}
+
+func newModelsProvidersClient(raw *generated.APIClient) *ModelsProvidersClient {
+  client := &ModelsProvidersClient{raw: raw}
   return client
 }
 
@@ -1785,6 +1920,11 @@ func newSandboxesClient(raw *generated.APIClient) *SandboxesClient {
 
 func newSchedulesClient(raw *generated.APIClient) *SchedulesClient {
   client := &SchedulesClient{raw: raw}
+  return client
+}
+
+func newSearchClient(raw *generated.APIClient) *SearchClient {
+  client := &SearchClient{raw: raw}
   return client
 }
 
@@ -2323,56 +2463,6 @@ func (a *AgentsClient) Update(ctx context.Context, request AgentsUpdateRequest) 
 func (a *AgentsClient) Wait(ctx context.Context, request AgentsWaitRequest) (*AgentsWaitResponse, error) {
   builder := a.raw.AgentsAPI.AgentsWait(ctx)
   builder = builder.AgentsWaitRequest(request)
-  response, _, err := builder.Execute()
-  if err != nil {
-    return nil, err
-  }
-  return response, nil
-}
-
-func (a *AgentsConfigsClient) Create(ctx context.Context, request AgentsConfigsCreateRequest) (*AgentsConfigsCreateResponse, error) {
-  builder := a.raw.AgentsAPI.AgentsConfigsCreate(ctx)
-  builder = builder.RequestBody(request)
-  response, _, err := builder.Execute()
-  if err != nil {
-    return nil, err
-  }
-  return response, nil
-}
-
-func (a *AgentsConfigsClient) Delete(ctx context.Context, request AgentsConfigsDeleteRequest) (*AgentsConfigsDeleteResponse, error) {
-  builder := a.raw.AgentsAPI.AgentsConfigsDelete(ctx)
-  builder = builder.RequestBody(request)
-  response, _, err := builder.Execute()
-  if err != nil {
-    return nil, err
-  }
-  return response, nil
-}
-
-func (a *AgentsConfigsClient) Get(ctx context.Context, request AgentsConfigsGetRequest) (*AgentsConfigsGetResponse, error) {
-  builder := a.raw.AgentsAPI.AgentsConfigsGet(ctx)
-  builder = builder.RequestBody(request)
-  response, _, err := builder.Execute()
-  if err != nil {
-    return nil, err
-  }
-  return response, nil
-}
-
-func (a *AgentsConfigsClient) List(ctx context.Context, request AgentsConfigsListRequest) (*AgentsConfigsListResponse, error) {
-  builder := a.raw.AgentsAPI.AgentsConfigsList(ctx)
-  builder = builder.RequestBody(request)
-  response, _, err := builder.Execute()
-  if err != nil {
-    return nil, err
-  }
-  return response, nil
-}
-
-func (a *AgentsConfigsClient) Update(ctx context.Context, request AgentsConfigsUpdateRequest) (*AgentsConfigsUpdateResponse, error) {
-  builder := a.raw.AgentsAPI.AgentsConfigsUpdate(ctx)
-  builder = builder.RequestBody(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -3650,9 +3740,39 @@ func (j *JobsClient) Retry(ctx context.Context, request JobsRetryRequest) (*Jobs
   return response, nil
 }
 
+func (j *JobsClient) Status(ctx context.Context, request JobsStatusRequest) (*JobsStatusResponse, error) {
+  builder := j.raw.JobsAPI.JobsStatus(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
 func (j *JobsClient) Update(ctx context.Context, request JobsUpdateRequest) (*JobsUpdateResponse, error) {
   builder := j.raw.JobsAPI.JobsUpdate(ctx)
   builder = builder.JobsUpdateRequest(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (j *JobsIdempotencyClient) List(ctx context.Context, request JobsIdempotencyListRequest) (*JobsIdempotencyListResponse, error) {
+  builder := j.raw.JobsAPI.JobsIdempotencyList(ctx)
+  builder = builder.JobsIdempotencyListRequest(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (j *JobsLanesClient) List(ctx context.Context, request JobsLanesListRequest) (*JobsLanesListResponse, error) {
+  builder := j.raw.JobsAPI.JobsLanesList(ctx)
+  builder = builder.JobsLanesListRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -4080,6 +4200,216 @@ func (m *ModelsClient) List(ctx context.Context, request ModelsListRequest) (*Mo
   return response, nil
 }
 
+func (m *ModelsCatalogClient) Get(ctx context.Context, request ModelsCatalogGetRequest) (*ModelsCatalogGetResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsCatalogGet(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsCatalogClient) List(ctx context.Context, request ModelsCatalogListRequest) (*ModelsCatalogListResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsCatalogList(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsConfigsClient) Create(ctx context.Context, request ModelsConfigsCreateRequest) (*ModelsConfigsCreateResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsConfigsCreate(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsConfigsClient) Delete(ctx context.Context, request ModelsConfigsDeleteRequest) (*ModelsConfigsDeleteResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsConfigsDelete(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsConfigsClient) Get(ctx context.Context, request ModelsConfigsGetRequest) (*ModelsConfigsGetResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsConfigsGet(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsConfigsClient) List(ctx context.Context, request ModelsConfigsListRequest) (*ModelsConfigsListResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsConfigsList(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsConfigsClient) Update(ctx context.Context, request ModelsConfigsUpdateRequest) (*ModelsConfigsUpdateResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsConfigsUpdate(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsConnectionsClient) Create(ctx context.Context, request ModelsConnectionsCreateRequest) (*ModelsConnectionsCreateResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsConnectionsCreate(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsConnectionsClient) Disconnect(ctx context.Context, request ModelsConnectionsDisconnectRequest) (*ModelsConnectionsDisconnectResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsConnectionsDisconnect(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsConnectionsClient) Get(ctx context.Context, request ModelsConnectionsGetRequest) (*ModelsConnectionsGetResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsConnectionsGet(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsConnectionsClient) List(ctx context.Context, request ModelsConnectionsListRequest) (*ModelsConnectionsListResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsConnectionsList(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsConnectionsClient) Status(ctx context.Context, request ModelsConnectionsStatusRequest) (*ModelsConnectionsStatusResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsConnectionsStatus(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsConnectionsClient) Test(ctx context.Context, request ModelsConnectionsTestRequest) (*ModelsConnectionsTestResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsConnectionsTest(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsConnectionsClient) Update(ctx context.Context, request ModelsConnectionsUpdateRequest) (*ModelsConnectionsUpdateResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsConnectionsUpdate(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsDefaultsClient) Get(ctx context.Context, request ModelsDefaultsGetRequest) (*ModelsDefaultsGetResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsDefaultsGet(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsDefaultsClient) Put(ctx context.Context, request ModelsDefaultsPutRequest) (*ModelsDefaultsPutResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsDefaultsPut(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsProvidersClient) Delete(ctx context.Context, request ModelsProvidersDeleteRequest) (*ModelsProvidersDeleteResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsProvidersDelete(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsProvidersClient) Get(ctx context.Context, request ModelsProvidersGetRequest) (*ModelsProvidersGetResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsProvidersGet(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsProvidersClient) List(ctx context.Context, request ModelsProvidersListRequest) (*ModelsProvidersListResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsProvidersList(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsProvidersClient) Put(ctx context.Context, request ModelsProvidersPutRequest) (*ModelsProvidersPutResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsProvidersPut(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (m *ModelsProvidersClient) Test(ctx context.Context, request ModelsProvidersTestRequest) (*ModelsProvidersTestResponse, error) {
+  builder := m.raw.ModelsAPI.ModelsProvidersTest(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
 func (o *OperatorPackagesClient) Get(ctx context.Context, request OperatorPackagesGetRequest) (*OperatorPackagesGetResponse, error) {
   builder := o.raw.RuntimeAPI.OperatorPackagesGet(ctx)
   builder = builder.RequestBody(request)
@@ -4423,6 +4753,26 @@ func (s *SchedulesClient) Trigger(ctx context.Context, request SchedulesTriggerR
 func (s *SchedulesClient) Update(ctx context.Context, request SchedulesUpdateRequest) (*SchedulesUpdateResponse, error) {
   builder := s.raw.SchedulesAPI.SchedulesUpdate(ctx)
   builder = builder.SchedulesUpdateRequest(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (s *SearchClient) Rebuild(ctx context.Context, request SearchRebuildRequest) (*SearchRebuildResponse, error) {
+  builder := s.raw.RuntimeAPI.SearchRebuild(ctx)
+  builder = builder.RequestBody(request)
+  response, _, err := builder.Execute()
+  if err != nil {
+    return nil, err
+  }
+  return response, nil
+}
+
+func (s *SearchClient) Status(ctx context.Context, request SearchStatusRequest) (*SearchStatusResponse, error) {
+  builder := s.raw.RuntimeAPI.SearchStatus(ctx)
+  builder = builder.RequestBody(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err

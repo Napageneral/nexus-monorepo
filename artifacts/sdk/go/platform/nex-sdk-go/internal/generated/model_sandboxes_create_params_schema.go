@@ -28,6 +28,8 @@ type SandboxesCreateParamsSchema struct {
 	Mounts []SandboxesCreateRequestMountsInner `json:"mounts,omitempty"`
 	Linkage map[string]interface{} `json:"linkage,omitempty"`
 	ConfigJson map[string]interface{} `json:"config_json,omitempty"`
+	ParentSandboxId *string `json:"parent_sandbox_id,omitempty"`
+	LineageRootId *string `json:"lineage_root_id,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
 
@@ -299,6 +301,70 @@ func (o *SandboxesCreateParamsSchema) SetConfigJson(v map[string]interface{}) {
 	o.ConfigJson = v
 }
 
+// GetParentSandboxId returns the ParentSandboxId field value if set, zero value otherwise.
+func (o *SandboxesCreateParamsSchema) GetParentSandboxId() string {
+	if o == nil || IsNil(o.ParentSandboxId) {
+		var ret string
+		return ret
+	}
+	return *o.ParentSandboxId
+}
+
+// GetParentSandboxIdOk returns a tuple with the ParentSandboxId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SandboxesCreateParamsSchema) GetParentSandboxIdOk() (*string, bool) {
+	if o == nil || IsNil(o.ParentSandboxId) {
+		return nil, false
+	}
+	return o.ParentSandboxId, true
+}
+
+// HasParentSandboxId returns a boolean if a field has been set.
+func (o *SandboxesCreateParamsSchema) HasParentSandboxId() bool {
+	if o != nil && !IsNil(o.ParentSandboxId) {
+		return true
+	}
+
+	return false
+}
+
+// SetParentSandboxId gets a reference to the given string and assigns it to the ParentSandboxId field.
+func (o *SandboxesCreateParamsSchema) SetParentSandboxId(v string) {
+	o.ParentSandboxId = &v
+}
+
+// GetLineageRootId returns the LineageRootId field value if set, zero value otherwise.
+func (o *SandboxesCreateParamsSchema) GetLineageRootId() string {
+	if o == nil || IsNil(o.LineageRootId) {
+		var ret string
+		return ret
+	}
+	return *o.LineageRootId
+}
+
+// GetLineageRootIdOk returns a tuple with the LineageRootId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SandboxesCreateParamsSchema) GetLineageRootIdOk() (*string, bool) {
+	if o == nil || IsNil(o.LineageRootId) {
+		return nil, false
+	}
+	return o.LineageRootId, true
+}
+
+// HasLineageRootId returns a boolean if a field has been set.
+func (o *SandboxesCreateParamsSchema) HasLineageRootId() bool {
+	if o != nil && !IsNil(o.LineageRootId) {
+		return true
+	}
+
+	return false
+}
+
+// SetLineageRootId gets a reference to the given string and assigns it to the LineageRootId field.
+func (o *SandboxesCreateParamsSchema) SetLineageRootId(v string) {
+	o.LineageRootId = &v
+}
+
 func (o SandboxesCreateParamsSchema) MarshalJSON() ([]byte, error) {
 	toSerialize,err := o.ToMap()
 	if err != nil {
@@ -330,6 +396,12 @@ func (o SandboxesCreateParamsSchema) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.ConfigJson) {
 		toSerialize["config_json"] = o.ConfigJson
+	}
+	if !IsNil(o.ParentSandboxId) {
+		toSerialize["parent_sandbox_id"] = o.ParentSandboxId
+	}
+	if !IsNil(o.LineageRootId) {
+		toSerialize["lineage_root_id"] = o.LineageRootId
 	}
 
 	for key, value := range o.AdditionalProperties {
@@ -382,6 +454,8 @@ func (o *SandboxesCreateParamsSchema) UnmarshalJSON(data []byte) (err error) {
 		delete(additionalProperties, "mounts")
 		delete(additionalProperties, "linkage")
 		delete(additionalProperties, "config_json")
+		delete(additionalProperties, "parent_sandbox_id")
+		delete(additionalProperties, "lineage_root_id")
 		o.AdditionalProperties = additionalProperties
 	}
 

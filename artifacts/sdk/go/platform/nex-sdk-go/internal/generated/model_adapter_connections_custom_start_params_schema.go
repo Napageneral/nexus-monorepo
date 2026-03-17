@@ -20,12 +20,8 @@ var _ MappedNullable = &AdapterConnectionsCustomStartParamsSchema{}
 
 // AdapterConnectionsCustomStartParamsSchema struct for AdapterConnectionsCustomStartParamsSchema
 type AdapterConnectionsCustomStartParamsSchema struct {
-	AppId string `json:"appId"`
 	Adapter string `json:"adapter"`
-	ConnectionProfileId string `json:"connectionProfileId"`
 	AuthMethodId *string `json:"authMethodId,omitempty"`
-	Scope *AdaptersConnectionsBackfill200ResponsePayloadStatus `json:"scope,omitempty"`
-	ManagedProfileId *string `json:"managedProfileId,omitempty"`
 	Account *string `json:"account,omitempty"`
 	Payload map[string]interface{} `json:"payload,omitempty"`
 	AdditionalProperties map[string]interface{}
@@ -37,11 +33,9 @@ type _AdapterConnectionsCustomStartParamsSchema AdapterConnectionsCustomStartPar
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewAdapterConnectionsCustomStartParamsSchema(appId string, adapter string, connectionProfileId string) *AdapterConnectionsCustomStartParamsSchema {
+func NewAdapterConnectionsCustomStartParamsSchema(adapter string) *AdapterConnectionsCustomStartParamsSchema {
 	this := AdapterConnectionsCustomStartParamsSchema{}
-	this.AppId = appId
 	this.Adapter = adapter
-	this.ConnectionProfileId = connectionProfileId
 	return &this
 }
 
@@ -51,30 +45,6 @@ func NewAdapterConnectionsCustomStartParamsSchema(appId string, adapter string, 
 func NewAdapterConnectionsCustomStartParamsSchemaWithDefaults() *AdapterConnectionsCustomStartParamsSchema {
 	this := AdapterConnectionsCustomStartParamsSchema{}
 	return &this
-}
-
-// GetAppId returns the AppId field value
-func (o *AdapterConnectionsCustomStartParamsSchema) GetAppId() string {
-	if o == nil {
-		var ret string
-		return ret
-	}
-
-	return o.AppId
-}
-
-// GetAppIdOk returns a tuple with the AppId field value
-// and a boolean to check if the value has been set.
-func (o *AdapterConnectionsCustomStartParamsSchema) GetAppIdOk() (*string, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.AppId, true
-}
-
-// SetAppId sets field value
-func (o *AdapterConnectionsCustomStartParamsSchema) SetAppId(v string) {
-	o.AppId = v
 }
 
 // GetAdapter returns the Adapter field value
@@ -99,30 +69,6 @@ func (o *AdapterConnectionsCustomStartParamsSchema) GetAdapterOk() (*string, boo
 // SetAdapter sets field value
 func (o *AdapterConnectionsCustomStartParamsSchema) SetAdapter(v string) {
 	o.Adapter = v
-}
-
-// GetConnectionProfileId returns the ConnectionProfileId field value
-func (o *AdapterConnectionsCustomStartParamsSchema) GetConnectionProfileId() string {
-	if o == nil {
-		var ret string
-		return ret
-	}
-
-	return o.ConnectionProfileId
-}
-
-// GetConnectionProfileIdOk returns a tuple with the ConnectionProfileId field value
-// and a boolean to check if the value has been set.
-func (o *AdapterConnectionsCustomStartParamsSchema) GetConnectionProfileIdOk() (*string, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.ConnectionProfileId, true
-}
-
-// SetConnectionProfileId sets field value
-func (o *AdapterConnectionsCustomStartParamsSchema) SetConnectionProfileId(v string) {
-	o.ConnectionProfileId = v
 }
 
 // GetAuthMethodId returns the AuthMethodId field value if set, zero value otherwise.
@@ -155,70 +101,6 @@ func (o *AdapterConnectionsCustomStartParamsSchema) HasAuthMethodId() bool {
 // SetAuthMethodId gets a reference to the given string and assigns it to the AuthMethodId field.
 func (o *AdapterConnectionsCustomStartParamsSchema) SetAuthMethodId(v string) {
 	o.AuthMethodId = &v
-}
-
-// GetScope returns the Scope field value if set, zero value otherwise.
-func (o *AdapterConnectionsCustomStartParamsSchema) GetScope() AdaptersConnectionsBackfill200ResponsePayloadStatus {
-	if o == nil || IsNil(o.Scope) {
-		var ret AdaptersConnectionsBackfill200ResponsePayloadStatus
-		return ret
-	}
-	return *o.Scope
-}
-
-// GetScopeOk returns a tuple with the Scope field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *AdapterConnectionsCustomStartParamsSchema) GetScopeOk() (*AdaptersConnectionsBackfill200ResponsePayloadStatus, bool) {
-	if o == nil || IsNil(o.Scope) {
-		return nil, false
-	}
-	return o.Scope, true
-}
-
-// HasScope returns a boolean if a field has been set.
-func (o *AdapterConnectionsCustomStartParamsSchema) HasScope() bool {
-	if o != nil && !IsNil(o.Scope) {
-		return true
-	}
-
-	return false
-}
-
-// SetScope gets a reference to the given AdaptersConnectionsBackfill200ResponsePayloadStatus and assigns it to the Scope field.
-func (o *AdapterConnectionsCustomStartParamsSchema) SetScope(v AdaptersConnectionsBackfill200ResponsePayloadStatus) {
-	o.Scope = &v
-}
-
-// GetManagedProfileId returns the ManagedProfileId field value if set, zero value otherwise.
-func (o *AdapterConnectionsCustomStartParamsSchema) GetManagedProfileId() string {
-	if o == nil || IsNil(o.ManagedProfileId) {
-		var ret string
-		return ret
-	}
-	return *o.ManagedProfileId
-}
-
-// GetManagedProfileIdOk returns a tuple with the ManagedProfileId field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *AdapterConnectionsCustomStartParamsSchema) GetManagedProfileIdOk() (*string, bool) {
-	if o == nil || IsNil(o.ManagedProfileId) {
-		return nil, false
-	}
-	return o.ManagedProfileId, true
-}
-
-// HasManagedProfileId returns a boolean if a field has been set.
-func (o *AdapterConnectionsCustomStartParamsSchema) HasManagedProfileId() bool {
-	if o != nil && !IsNil(o.ManagedProfileId) {
-		return true
-	}
-
-	return false
-}
-
-// SetManagedProfileId gets a reference to the given string and assigns it to the ManagedProfileId field.
-func (o *AdapterConnectionsCustomStartParamsSchema) SetManagedProfileId(v string) {
-	o.ManagedProfileId = &v
 }
 
 // GetAccount returns the Account field value if set, zero value otherwise.
@@ -295,17 +177,9 @@ func (o AdapterConnectionsCustomStartParamsSchema) MarshalJSON() ([]byte, error)
 
 func (o AdapterConnectionsCustomStartParamsSchema) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["appId"] = o.AppId
 	toSerialize["adapter"] = o.Adapter
-	toSerialize["connectionProfileId"] = o.ConnectionProfileId
 	if !IsNil(o.AuthMethodId) {
 		toSerialize["authMethodId"] = o.AuthMethodId
-	}
-	if !IsNil(o.Scope) {
-		toSerialize["scope"] = o.Scope
-	}
-	if !IsNil(o.ManagedProfileId) {
-		toSerialize["managedProfileId"] = o.ManagedProfileId
 	}
 	if !IsNil(o.Account) {
 		toSerialize["account"] = o.Account
@@ -326,9 +200,7 @@ func (o *AdapterConnectionsCustomStartParamsSchema) UnmarshalJSON(data []byte) (
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
-		"appId",
 		"adapter",
-		"connectionProfileId",
 	}
 
 	allProperties := make(map[string]interface{})
@@ -358,12 +230,8 @@ func (o *AdapterConnectionsCustomStartParamsSchema) UnmarshalJSON(data []byte) (
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
-		delete(additionalProperties, "appId")
 		delete(additionalProperties, "adapter")
-		delete(additionalProperties, "connectionProfileId")
 		delete(additionalProperties, "authMethodId")
-		delete(additionalProperties, "scope")
-		delete(additionalProperties, "managedProfileId")
 		delete(additionalProperties, "account")
 		delete(additionalProperties, "payload")
 		o.AdditionalProperties = additionalProperties

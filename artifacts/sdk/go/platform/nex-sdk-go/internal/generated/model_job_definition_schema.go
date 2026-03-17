@@ -30,6 +30,7 @@ type JobDefinitionSchema struct {
 	Version int32 `json:"version"`
 	PreviousVersionId *string `json:"previous_version_id,omitempty"`
 	TimeoutMs *int32 `json:"timeout_ms,omitempty"`
+	LaneId string `json:"lane_id"`
 	WorkspaceId *string `json:"workspace_id,omitempty"`
 	HookPoints *string `json:"hook_points,omitempty"`
 	CreatedBy *string `json:"created_by,omitempty"`
@@ -44,13 +45,14 @@ type _JobDefinitionSchema JobDefinitionSchema
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewJobDefinitionSchema(id string, name string, scriptPath string, status string, version int32, createdAt string, updatedAt string) *JobDefinitionSchema {
+func NewJobDefinitionSchema(id string, name string, scriptPath string, status string, version int32, laneId string, createdAt string, updatedAt string) *JobDefinitionSchema {
 	this := JobDefinitionSchema{}
 	this.Id = id
 	this.Name = name
 	this.ScriptPath = scriptPath
 	this.Status = status
 	this.Version = version
+	this.LaneId = laneId
 	this.CreatedAt = createdAt
 	this.UpdatedAt = updatedAt
 	return &this
@@ -344,6 +346,30 @@ func (o *JobDefinitionSchema) SetTimeoutMs(v int32) {
 	o.TimeoutMs = &v
 }
 
+// GetLaneId returns the LaneId field value
+func (o *JobDefinitionSchema) GetLaneId() string {
+	if o == nil {
+		var ret string
+		return ret
+	}
+
+	return o.LaneId
+}
+
+// GetLaneIdOk returns a tuple with the LaneId field value
+// and a boolean to check if the value has been set.
+func (o *JobDefinitionSchema) GetLaneIdOk() (*string, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.LaneId, true
+}
+
+// SetLaneId sets field value
+func (o *JobDefinitionSchema) SetLaneId(v string) {
+	o.LaneId = v
+}
+
 // GetWorkspaceId returns the WorkspaceId field value if set, zero value otherwise.
 func (o *JobDefinitionSchema) GetWorkspaceId() string {
 	if o == nil || IsNil(o.WorkspaceId) {
@@ -518,6 +544,7 @@ func (o JobDefinitionSchema) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.TimeoutMs) {
 		toSerialize["timeout_ms"] = o.TimeoutMs
 	}
+	toSerialize["lane_id"] = o.LaneId
 	if !IsNil(o.WorkspaceId) {
 		toSerialize["workspace_id"] = o.WorkspaceId
 	}
@@ -547,6 +574,7 @@ func (o *JobDefinitionSchema) UnmarshalJSON(data []byte) (err error) {
 		"script_path",
 		"status",
 		"version",
+		"lane_id",
 		"created_at",
 		"updated_at",
 	}
@@ -588,6 +616,7 @@ func (o *JobDefinitionSchema) UnmarshalJSON(data []byte) (err error) {
 		delete(additionalProperties, "version")
 		delete(additionalProperties, "previous_version_id")
 		delete(additionalProperties, "timeout_ms")
+		delete(additionalProperties, "lane_id")
 		delete(additionalProperties, "workspace_id")
 		delete(additionalProperties, "hook_points")
 		delete(additionalProperties, "created_by")

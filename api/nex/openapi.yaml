@@ -3320,29 +3320,13 @@ paths:
               additionalProperties: false
               type: object
               required:
-                - appId
                 - adapter
-                - connectionProfileId
                 - fields
               properties:
-                appId:
-                  minLength: 1
-                  type: string
                 adapter:
                   minLength: 1
                   type: string
-                connectionProfileId:
-                  minLength: 1
-                  type: string
                 authMethodId:
-                  type: string
-                scope:
-                  anyOf:
-                    - const: server
-                      type: string
-                    - const: app
-                      type: string
-                managedProfileId:
                   type: string
                 account:
                   type: string
@@ -3647,28 +3631,12 @@ paths:
               additionalProperties: false
               type: object
               required:
-                - appId
                 - adapter
-                - connectionProfileId
               properties:
-                appId:
-                  minLength: 1
-                  type: string
                 adapter:
                   minLength: 1
                   type: string
-                connectionProfileId:
-                  minLength: 1
-                  type: string
                 authMethodId:
-                  type: string
-                scope:
-                  anyOf:
-                    - const: server
-                      type: string
-                    - const: app
-                      type: string
-                managedProfileId:
                   type: string
                 account:
                   type: string
@@ -4142,7 +4110,6 @@ paths:
                             - name
                             - status
                             - authMethod
-                            - scope
                           properties:
                             connectionId:
                               minLength: 1
@@ -4180,18 +4147,6 @@ paths:
                                 - const: custom_flow
                                   type: string
                                 - type: "null"
-                            scope:
-                              anyOf:
-                                - const: server
-                                  type: string
-                                - const: app
-                                  type: string
-                            appId:
-                              type: string
-                            connectionProfileId:
-                              type: string
-                            managedProfileId:
-                              type: string
                             auth: {}
                             account:
                               type: string
@@ -4426,27 +4381,13 @@ paths:
               additionalProperties: false
               type: object
               required:
-                - appId
                 - adapter
-                - connectionProfileId
               properties:
-                appId:
-                  minLength: 1
-                  type: string
                 adapter:
-                  minLength: 1
-                  type: string
-                connectionProfileId:
                   minLength: 1
                   type: string
                 authMethodId:
                   type: string
-                scope:
-                  anyOf:
-                    - const: server
-                      type: string
-                    - const: app
-                      type: string
                 managedProfileId:
                   type: string
                 redirectBaseUrl:
@@ -4574,7 +4515,6 @@ paths:
                       - name
                       - status
                       - authMethod
-                      - scope
                     properties:
                       connectionId:
                         minLength: 1
@@ -4612,18 +4552,6 @@ paths:
                           - const: custom_flow
                             type: string
                           - type: "null"
-                      scope:
-                        anyOf:
-                          - const: server
-                            type: string
-                          - const: app
-                            type: string
-                      appId:
-                        type: string
-                      connectionProfileId:
-                        type: string
-                      managedProfileId:
-                        type: string
                       auth: {}
                       account:
                         type: string
@@ -4851,32 +4779,16 @@ paths:
               type: object
               required:
                 - connectionId
-                - appId
                 - adapter
-                - connectionProfileId
                 - fields
               properties:
                 connectionId:
                   minLength: 1
                   type: string
-                appId:
-                  minLength: 1
-                  type: string
                 adapter:
                   minLength: 1
                   type: string
-                connectionProfileId:
-                  minLength: 1
-                  type: string
                 authMethodId:
-                  type: string
-                scope:
-                  anyOf:
-                    - const: server
-                      type: string
-                    - const: app
-                      type: string
-                managedProfileId:
                   type: string
                 account:
                   type: string
@@ -4970,30 +4882,14 @@ paths:
               additionalProperties: false
               type: object
               required:
-                - appId
                 - adapter
-                - connectionProfileId
                 - fileName
                 - filePath
               properties:
-                appId:
-                  minLength: 1
-                  type: string
                 adapter:
                   minLength: 1
                   type: string
-                connectionProfileId:
-                  minLength: 1
-                  type: string
                 authMethodId:
-                  type: string
-                scope:
-                  anyOf:
-                    - const: server
-                      type: string
-                    - const: app
-                      type: string
-                managedProfileId:
                   type: string
                 fileName:
                   minLength: 1
@@ -5071,406 +4967,6 @@ paths:
       summary: adapters.methods
       tags:
         - Adapters
-      x-sdk-public: true
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        "200":
-          description: Successful runtime operation response
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - true
-                  payload:
-                    type: object
-                    additionalProperties: true
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "400":
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-  /runtime/operations/agents.configs.create:
-    post:
-      operationId: agents.configs.create
-      summary: agents.configs.create
-      tags:
-        - Agents
-      x-sdk-public: true
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        "200":
-          description: Successful runtime operation response
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - true
-                  payload:
-                    type: object
-                    additionalProperties: true
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "400":
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-  /runtime/operations/agents.configs.delete:
-    post:
-      operationId: agents.configs.delete
-      summary: agents.configs.delete
-      tags:
-        - Agents
-      x-sdk-public: true
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        "200":
-          description: Successful runtime operation response
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - true
-                  payload:
-                    type: object
-                    additionalProperties: true
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "400":
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-  /runtime/operations/agents.configs.get:
-    post:
-      operationId: agents.configs.get
-      summary: agents.configs.get
-      tags:
-        - Agents
-      x-sdk-public: true
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        "200":
-          description: Successful runtime operation response
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - true
-                  payload:
-                    type: object
-                    additionalProperties: true
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "400":
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-  /runtime/operations/agents.configs.list:
-    post:
-      operationId: agents.configs.list
-      summary: agents.configs.list
-      tags:
-        - Agents
-      x-sdk-public: true
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        "200":
-          description: Successful runtime operation response
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - true
-                  payload:
-                    type: object
-                    additionalProperties: true
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "400":
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-  /runtime/operations/agents.configs.update:
-    post:
-      operationId: agents.configs.update
-      summary: agents.configs.update
-      tags:
-        - Agents
       x-sdk-public: true
       security:
         - bearerAuth: []
@@ -8062,7 +7558,15 @@ paths:
                 key:
                   minLength: 1
                   type: string
-                agent_config_id:
+                entity_id:
+                  minLength: 1
+                  type: string
+                  nullable: true
+                role_config_id:
+                  minLength: 1
+                  type: string
+                  nullable: true
+                model_config_id:
                   minLength: 1
                   type: string
                   nullable: true
@@ -8514,10 +8018,12 @@ paths:
               additionalProperties: false
               type: object
               required:
-                - session_key
                 - message
                 - idempotency_key
               properties:
+                sessionId:
+                  minLength: 1
+                  type: string
                 session_key:
                   minLength: 1
                   type: string
@@ -17705,6 +17211,8 @@ paths:
                   type: string
                 timeout_ms:
                   type: number
+                lane_id:
+                  type: string
                 workspace_id:
                   type: string
                 hook_points:
@@ -17948,6 +17456,101 @@ paths:
                       - type: object
                         additionalProperties: true
                       - type: "null"
+  /runtime/operations/jobs.idempotency.list:
+    post:
+      operationId: jobs.idempotency.list
+      summary: jobs.idempotency.list
+      tags:
+        - Jobs
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              additionalProperties: false
+              type: object
+              properties:
+                job_definition_id:
+                  type: string
+                status:
+                  type: string
+                active_run_id:
+                  type: string
+                latest_run_id:
+                  type: string
+                limit:
+                  minimum: 1
+                  maximum: 1000
+                  type: integer
+                offset:
+                  minimum: 0
+                  type: integer
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    $ref: "#/components/schemas/JobsIdempotencyListResultSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
   /runtime/operations/jobs.invoke:
     post:
       operationId: jobs.invoke
@@ -18003,6 +17606,88 @@ paths:
                       - true
                   payload:
                     $ref: "#/components/schemas/JobsInvokeResultSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/jobs.lanes.list:
+    post:
+      operationId: jobs.lanes.list
+      summary: jobs.lanes.list
+      tags:
+        - Jobs
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              additionalProperties: false
+              type: object
+              properties:
+                status:
+                  type: string
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    $ref: "#/components/schemas/JobsLanesListResultSchema"
                   meta:
                     anyOf:
                       - type: object
@@ -18697,6 +18382,86 @@ paths:
                       - type: object
                         additionalProperties: true
                       - type: "null"
+  /runtime/operations/jobs.status:
+    post:
+      operationId: jobs.status
+      summary: jobs.status
+      tags:
+        - Jobs
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              additionalProperties: false
+              type: object
+              properties: {}
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    $ref: "#/components/schemas/JobsStatusResultSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
   /runtime/operations/jobs.update:
     post:
       operationId: jobs.update
@@ -18733,6 +18498,8 @@ paths:
                   type: string
                 timeout_ms:
                   type: number
+                lane_id:
+                  type: string
                 workspace_id:
                   type: string
                 hook_points:
@@ -22205,6 +21972,566 @@ paths:
     post:
       operationId: models.configs.update
       summary: models.configs.update
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.connections.create:
+    post:
+      operationId: models.connections.create
+      summary: models.connections.create
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.connections.disconnect:
+    post:
+      operationId: models.connections.disconnect
+      summary: models.connections.disconnect
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.connections.get:
+    post:
+      operationId: models.connections.get
+      summary: models.connections.get
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.connections.list:
+    post:
+      operationId: models.connections.list
+      summary: models.connections.list
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.connections.status:
+    post:
+      operationId: models.connections.status
+      summary: models.connections.status
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.connections.test:
+    post:
+      operationId: models.connections.test
+      summary: models.connections.test
+      tags:
+        - Models
+      x-sdk-public: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful runtime operation response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    $ref: "#/components/schemas/ErrorShapeSchema"
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/models.connections.update:
+    post:
+      operationId: models.connections.update
+      summary: models.connections.update
       tags:
         - Models
       x-sdk-public: true
@@ -29132,29 +29459,13 @@ components:
       additionalProperties: false
       type: object
       required:
-        - appId
         - adapter
-        - connectionProfileId
         - fields
       properties:
-        appId:
-          minLength: 1
-          type: string
         adapter:
           minLength: 1
           type: string
-        connectionProfileId:
-          minLength: 1
-          type: string
         authMethodId:
-          type: string
-        scope:
-          anyOf:
-            - const: server
-              type: string
-            - const: app
-              type: string
-        managedProfileId:
           type: string
         account:
           type: string
@@ -29231,28 +29542,12 @@ components:
       additionalProperties: false
       type: object
       required:
-        - appId
         - adapter
-        - connectionProfileId
       properties:
-        appId:
-          minLength: 1
-          type: string
         adapter:
           minLength: 1
           type: string
-        connectionProfileId:
-          minLength: 1
-          type: string
         authMethodId:
-          type: string
-        scope:
-          anyOf:
-            - const: server
-              type: string
-            - const: app
-              type: string
-        managedProfileId:
           type: string
         account:
           type: string
@@ -29324,7 +29619,6 @@ components:
               - name
               - status
               - authMethod
-              - scope
             properties:
               connectionId:
                 minLength: 1
@@ -29362,18 +29656,6 @@ components:
                   - const: custom_flow
                     type: string
                   - type: "null"
-              scope:
-                anyOf:
-                  - const: server
-                    type: string
-                  - const: app
-                    type: string
-              appId:
-                type: string
-              connectionProfileId:
-                type: string
-              managedProfileId:
-                type: string
               auth: {}
               account:
                 type: string
@@ -29471,27 +29753,13 @@ components:
       additionalProperties: false
       type: object
       required:
-        - appId
         - adapter
-        - connectionProfileId
       properties:
-        appId:
-          minLength: 1
-          type: string
         adapter:
-          minLength: 1
-          type: string
-        connectionProfileId:
           minLength: 1
           type: string
         authMethodId:
           type: string
-        scope:
-          anyOf:
-            - const: server
-              type: string
-            - const: app
-              type: string
         managedProfileId:
           type: string
         redirectBaseUrl:
@@ -29531,7 +29799,6 @@ components:
         - name
         - status
         - authMethod
-        - scope
       properties:
         connectionId:
           minLength: 1
@@ -29569,18 +29836,6 @@ components:
             - const: custom_flow
               type: string
             - type: "null"
-        scope:
-          anyOf:
-            - const: server
-              type: string
-            - const: app
-              type: string
-        appId:
-          type: string
-        connectionProfileId:
-          type: string
-        managedProfileId:
-          type: string
         auth: {}
         account:
           type: string
@@ -29671,32 +29926,16 @@ components:
       type: object
       required:
         - connectionId
-        - appId
         - adapter
-        - connectionProfileId
         - fields
       properties:
         connectionId:
           minLength: 1
           type: string
-        appId:
-          minLength: 1
-          type: string
         adapter:
           minLength: 1
           type: string
-        connectionProfileId:
-          minLength: 1
-          type: string
         authMethodId:
-          type: string
-        scope:
-          anyOf:
-            - const: server
-              type: string
-            - const: app
-              type: string
-        managedProfileId:
           type: string
         account:
           type: string
@@ -29713,30 +29952,14 @@ components:
       additionalProperties: false
       type: object
       required:
-        - appId
         - adapter
-        - connectionProfileId
         - fileName
         - filePath
       properties:
-        appId:
-          minLength: 1
-          type: string
         adapter:
           minLength: 1
           type: string
-        connectionProfileId:
-          minLength: 1
-          type: string
         authMethodId:
-          type: string
-        scope:
-          anyOf:
-            - const: server
-              type: string
-            - const: app
-              type: string
-        managedProfileId:
           type: string
         fileName:
           minLength: 1
@@ -31029,6 +31252,7 @@ components:
         - script_path
         - status
         - version
+        - lane_id
         - created_at
         - updated_at
       properties:
@@ -31060,6 +31284,9 @@ components:
         timeout_ms:
           type: integer
           nullable: true
+        lane_id:
+          minLength: 1
+          type: string
         workspace_id:
           type: string
           nullable: true
@@ -31173,6 +31400,31 @@ components:
         offset:
           minimum: 0
           type: integer
+    JobsIdempotencyListParamsSchema:
+      additionalProperties: false
+      type: object
+      properties:
+        job_definition_id:
+          type: string
+        status:
+          type: string
+        active_run_id:
+          type: string
+        latest_run_id:
+          type: string
+        limit:
+          minimum: 1
+          maximum: 1000
+          type: integer
+        offset:
+          minimum: 0
+          type: integer
+    JobsLanesListParamsSchema:
+      additionalProperties: false
+      type: object
+      properties:
+        status:
+          type: string
     JobsListParamsSchema:
       additionalProperties: false
       type: object
@@ -31188,6 +31440,10 @@ components:
         offset:
           minimum: 0
           type: integer
+    JobsStatusParamsSchema:
+      additionalProperties: false
+      type: object
+      properties: {}
     LogsTailParamsSchema:
       additionalProperties: false
       type: object
@@ -31548,6 +31804,10 @@ components:
           type: object
           patternProperties:
             ^(.*)$: {}
+        parent_sandbox_id:
+          type: string
+        lineage_root_id:
+          type: string
     SandboxesDestroyParamsSchema:
       additionalProperties: false
       type: object
@@ -32195,7 +32455,15 @@ components:
         key:
           minLength: 1
           type: string
-        agent_config_id:
+        entity_id:
+          minLength: 1
+          type: string
+          nullable: true
+        role_config_id:
+          minLength: 1
+          type: string
+          nullable: true
+        model_config_id:
           minLength: 1
           type: string
           nullable: true
@@ -32341,10 +32609,12 @@ components:
       additionalProperties: false
       type: object
       required:
-        - session_key
         - message
         - idempotency_key
       properties:
+        sessionId:
+          minLength: 1
+          type: string
         session_key:
           minLength: 1
           type: string
@@ -32387,28 +32657,6 @@ components:
         timeoutMs:
           minimum: 1
           type: integer
-    WebLoginStartParamsSchema:
-      additionalProperties: false
-      type: object
-      properties:
-        force:
-          type: boolean
-        timeoutMs:
-          minimum: 0
-          type: integer
-        verbose:
-          type: boolean
-        connectionId:
-          type: string
-    WebLoginWaitParamsSchema:
-      additionalProperties: false
-      type: object
-      properties:
-        timeoutMs:
-          minimum: 0
-          type: integer
-        connectionId:
-          type: string
     WizardCancelParamsSchema:
       additionalProperties: false
       type: object
@@ -33890,7 +34138,10 @@ components:
             - type: number
             - type: boolean
             - type: "null"
-        default_agent_config_id:
+        role_config_id:
+          type: string
+          nullable: true
+        model_config_id:
           type: string
           nullable: true
         origin:
@@ -33967,6 +34218,47 @@ components:
       properties:
         job:
           $ref: "#/components/schemas/JobDefinitionSchema"
+    JobIdempotencyRowSchema:
+      type: object
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - job_definition_id
+        - status
+        - created_at
+        - updated_at
+      properties:
+        idempotency_key:
+          type: string
+        job_definition_id:
+          type: string
+        job_definition_name:
+          type: string
+          nullable: true
+        request_fingerprint:
+          type: string
+          nullable: true
+        status:
+          type: string
+        first_run_id:
+          type: string
+          nullable: true
+        active_run_id:
+          type: string
+          nullable: true
+        active_run_status:
+          type: string
+          nullable: true
+        latest_run_id:
+          type: string
+          nullable: true
+        latest_run_status:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+        updated_at:
+          type: string
     JobMutationResultSchema:
       type: object
       additionalProperties: false
@@ -34063,6 +34355,16 @@ components:
           type: boolean
         reason:
           type: string
+    JobsIdempotencyListResultSchema:
+      type: object
+      additionalProperties: false
+      required:
+        - idempotency
+      properties:
+        idempotency:
+          type: array
+          items:
+            $ref: "#/components/schemas/JobIdempotencyRowSchema"
     JobsInvokeResultSchema:
       type: object
       additionalProperties: false
@@ -34074,6 +34376,16 @@ components:
           $ref: "#/components/schemas/JobRunSchema"
         queue_entry:
           $ref: "#/components/schemas/JobQueueRowSchema"
+    JobsLanesListResultSchema:
+      type: object
+      additionalProperties: false
+      required:
+        - lanes
+      properties:
+        lanes:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkLaneStatusSchema"
     JobsListResultSchema:
       type: object
       additionalProperties: false
@@ -34124,6 +34436,91 @@ components:
           $ref: "#/components/schemas/JobRunSchema"
         queue_entry:
           $ref: "#/components/schemas/JobQueueRowSchema"
+    JobsStatusResultSchema:
+      type: object
+      additionalProperties: false
+      required:
+        - generated_at
+        - lookback_window_ms
+        - global
+        - idempotency
+        - lanes
+      properties:
+        generated_at:
+          type: string
+        lookback_window_ms:
+          type: number
+        global:
+          type: object
+          additionalProperties: false
+          required:
+            - lane_count
+            - configured_concurrency_budget
+            - effective_concurrency_budget
+            - leased_count
+            - running_count
+            - queued_count
+            - delayed_count
+            - eligible_count
+            - dead_lettered_count
+            - saturated_lane_count
+            - throttled_lane_count
+            - throughput_per_minute
+          properties:
+            lane_count:
+              type: number
+            configured_concurrency_budget:
+              type: number
+            effective_concurrency_budget:
+              type: number
+            leased_count:
+              type: number
+            running_count:
+              type: number
+            queued_count:
+              type: number
+            delayed_count:
+              type: number
+            eligible_count:
+              type: number
+            dead_lettered_count:
+              type: number
+            saturated_lane_count:
+              type: number
+            throttled_lane_count:
+              type: number
+            queue_delay_avg_ms:
+              type: number
+              nullable: true
+            queue_delay_max_ms:
+              type: number
+              nullable: true
+            throughput_per_minute:
+              type: number
+        idempotency:
+          type: object
+          additionalProperties: false
+          required:
+            - active
+            - completed
+            - failed
+            - cancelled
+            - other
+          properties:
+            active:
+              type: number
+            completed:
+              type: number
+            failed:
+              type: number
+            cancelled:
+              type: number
+            other:
+              type: number
+        lanes:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkLaneStatusSchema"
     MergeCandidateRowSchema:
       type: object
       additionalProperties: false
@@ -34480,6 +34877,104 @@ components:
         status:
           type: string
         error:
+          type: string
+          nullable: true
+    WorkLaneStatusSchema:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - status
+        - priority
+        - concurrency_budget
+        - lease_batch_size
+        - max_attempts_default
+        - adaptive_mode
+        - batched_writes_enabled
+        - created_at
+        - updated_at
+        - effective_concurrency_budget
+        - leased_count
+        - running_count
+        - queued_count
+        - delayed_count
+        - eligible_count
+        - dead_lettered_count
+        - completed_runs_recent
+        - failed_runs_recent
+        - lease_recoveries_recent
+        - throughput_per_minute
+        - saturated
+        - throttled
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+        priority:
+          type: number
+        concurrency_budget:
+          type: number
+        lease_batch_size:
+          type: number
+        max_attempts_default:
+          type: number
+        adaptive_mode:
+          type: string
+        batched_writes_enabled:
+          type: number
+        config_json:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+        updated_at:
+          type: string
+        effective_concurrency_budget:
+          type: number
+        leased_count:
+          type: number
+        running_count:
+          type: number
+        queued_count:
+          type: number
+        delayed_count:
+          type: number
+        eligible_count:
+          type: number
+        dead_lettered_count:
+          type: number
+        oldest_eligible_wait_ms:
+          type: number
+          nullable: true
+        queue_delay_avg_ms:
+          type: number
+          nullable: true
+        queue_delay_max_ms:
+          type: number
+          nullable: true
+        completed_runs_recent:
+          type: number
+        failed_runs_recent:
+          type: number
+        lease_recoveries_recent:
+          type: number
+        throughput_per_minute:
+          type: number
+        saturated:
+          type: number
+        throttled:
+          type: number
+        adaptive_reason:
+          type: string
+          nullable: true
+        last_adjusted_at:
           type: string
           nullable: true
     WorkspaceCreateResultSchema:

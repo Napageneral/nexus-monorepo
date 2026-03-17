@@ -26,6 +26,7 @@ type JobsCreateRequest struct {
 	ConfigJson *string `json:"config_json,omitempty"`
 	Status *string `json:"status,omitempty"`
 	TimeoutMs *float32 `json:"timeout_ms,omitempty"`
+	LaneId *string `json:"lane_id,omitempty"`
 	WorkspaceId *string `json:"workspace_id,omitempty"`
 	HookPoints *JobsCreateRequestHookPoints `json:"hook_points,omitempty"`
 	CreatedBy *string `json:"created_by,omitempty"`
@@ -229,6 +230,38 @@ func (o *JobsCreateRequest) SetTimeoutMs(v float32) {
 	o.TimeoutMs = &v
 }
 
+// GetLaneId returns the LaneId field value if set, zero value otherwise.
+func (o *JobsCreateRequest) GetLaneId() string {
+	if o == nil || IsNil(o.LaneId) {
+		var ret string
+		return ret
+	}
+	return *o.LaneId
+}
+
+// GetLaneIdOk returns a tuple with the LaneId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *JobsCreateRequest) GetLaneIdOk() (*string, bool) {
+	if o == nil || IsNil(o.LaneId) {
+		return nil, false
+	}
+	return o.LaneId, true
+}
+
+// HasLaneId returns a boolean if a field has been set.
+func (o *JobsCreateRequest) HasLaneId() bool {
+	if o != nil && !IsNil(o.LaneId) {
+		return true
+	}
+
+	return false
+}
+
+// SetLaneId gets a reference to the given string and assigns it to the LaneId field.
+func (o *JobsCreateRequest) SetLaneId(v string) {
+	o.LaneId = &v
+}
+
 // GetWorkspaceId returns the WorkspaceId field value if set, zero value otherwise.
 func (o *JobsCreateRequest) GetWorkspaceId() string {
 	if o == nil || IsNil(o.WorkspaceId) {
@@ -349,6 +382,9 @@ func (o JobsCreateRequest) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.TimeoutMs) {
 		toSerialize["timeout_ms"] = o.TimeoutMs
 	}
+	if !IsNil(o.LaneId) {
+		toSerialize["lane_id"] = o.LaneId
+	}
 	if !IsNil(o.WorkspaceId) {
 		toSerialize["workspace_id"] = o.WorkspaceId
 	}
@@ -408,6 +444,7 @@ func (o *JobsCreateRequest) UnmarshalJSON(data []byte) (err error) {
 		delete(additionalProperties, "config_json")
 		delete(additionalProperties, "status")
 		delete(additionalProperties, "timeout_ms")
+		delete(additionalProperties, "lane_id")
 		delete(additionalProperties, "workspace_id")
 		delete(additionalProperties, "hook_points")
 		delete(additionalProperties, "created_by")

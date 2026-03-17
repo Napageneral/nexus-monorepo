@@ -27,6 +27,8 @@ type IdentityEntityRowSchema struct {
 	Normalized *string `json:"normalized,omitempty"`
 	IsUser NullableIdentityEntityRowSchemaIsUser `json:"is_user,omitempty"`
 	IsAgent NullableIdentityEntityRowSchemaIsUser `json:"is_agent,omitempty"`
+	RoleConfigId *string `json:"role_config_id,omitempty"`
+	ModelConfigId *string `json:"model_config_id,omitempty"`
 	Origin *string `json:"origin,omitempty"`
 	CreatedAt float32 `json:"created_at"`
 	UpdatedAt *float32 `json:"updated_at,omitempty"`
@@ -277,6 +279,70 @@ func (o *IdentityEntityRowSchema) UnsetIsAgent() {
 	o.IsAgent.Unset()
 }
 
+// GetRoleConfigId returns the RoleConfigId field value if set, zero value otherwise.
+func (o *IdentityEntityRowSchema) GetRoleConfigId() string {
+	if o == nil || IsNil(o.RoleConfigId) {
+		var ret string
+		return ret
+	}
+	return *o.RoleConfigId
+}
+
+// GetRoleConfigIdOk returns a tuple with the RoleConfigId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *IdentityEntityRowSchema) GetRoleConfigIdOk() (*string, bool) {
+	if o == nil || IsNil(o.RoleConfigId) {
+		return nil, false
+	}
+	return o.RoleConfigId, true
+}
+
+// HasRoleConfigId returns a boolean if a field has been set.
+func (o *IdentityEntityRowSchema) HasRoleConfigId() bool {
+	if o != nil && !IsNil(o.RoleConfigId) {
+		return true
+	}
+
+	return false
+}
+
+// SetRoleConfigId gets a reference to the given string and assigns it to the RoleConfigId field.
+func (o *IdentityEntityRowSchema) SetRoleConfigId(v string) {
+	o.RoleConfigId = &v
+}
+
+// GetModelConfigId returns the ModelConfigId field value if set, zero value otherwise.
+func (o *IdentityEntityRowSchema) GetModelConfigId() string {
+	if o == nil || IsNil(o.ModelConfigId) {
+		var ret string
+		return ret
+	}
+	return *o.ModelConfigId
+}
+
+// GetModelConfigIdOk returns a tuple with the ModelConfigId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *IdentityEntityRowSchema) GetModelConfigIdOk() (*string, bool) {
+	if o == nil || IsNil(o.ModelConfigId) {
+		return nil, false
+	}
+	return o.ModelConfigId, true
+}
+
+// HasModelConfigId returns a boolean if a field has been set.
+func (o *IdentityEntityRowSchema) HasModelConfigId() bool {
+	if o != nil && !IsNil(o.ModelConfigId) {
+		return true
+	}
+
+	return false
+}
+
+// SetModelConfigId gets a reference to the given string and assigns it to the ModelConfigId field.
+func (o *IdentityEntityRowSchema) SetModelConfigId(v string) {
+	o.ModelConfigId = &v
+}
+
 // GetOrigin returns the Origin field value if set, zero value otherwise.
 func (o *IdentityEntityRowSchema) GetOrigin() string {
 	if o == nil || IsNil(o.Origin) {
@@ -422,6 +488,12 @@ func (o IdentityEntityRowSchema) ToMap() (map[string]interface{}, error) {
 	if o.IsAgent.IsSet() {
 		toSerialize["is_agent"] = o.IsAgent.Get()
 	}
+	if !IsNil(o.RoleConfigId) {
+		toSerialize["role_config_id"] = o.RoleConfigId
+	}
+	if !IsNil(o.ModelConfigId) {
+		toSerialize["model_config_id"] = o.ModelConfigId
+	}
 	if !IsNil(o.Origin) {
 		toSerialize["origin"] = o.Origin
 	}
@@ -485,6 +557,8 @@ func (o *IdentityEntityRowSchema) UnmarshalJSON(data []byte) (err error) {
 		delete(additionalProperties, "normalized")
 		delete(additionalProperties, "is_user")
 		delete(additionalProperties, "is_agent")
+		delete(additionalProperties, "role_config_id")
+		delete(additionalProperties, "model_config_id")
 		delete(additionalProperties, "origin")
 		delete(additionalProperties, "created_at")
 		delete(additionalProperties, "updated_at")
