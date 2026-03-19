@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+*.log
+.vercel
+.demo-stack/
+.tenants/
+state/
+frontdoor.db

@@ -1,0 +1,48 @@
+{
+  "name": "@nexus-project/nexus-frontdoor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hosted frontdoor scaffold for per-tenant Nexus runtimes",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "sdk:generate:ts": "node --import tsx scripts/sdk/generate-frontdoor-sdk-ts.ts",
+    "sdk:build:ts": "pnpm sdk:generate:ts && tsc -p ../../artifacts/sdk/ts/platform/frontdoor-sdk-ts/tsconfig.json",
+    "sdk:generate:go": "node --import tsx scripts/sdk/generate-frontdoor-sdk-go.ts",
+    "sdk:build:go": "pnpm sdk:generate:go && (cd ../../artifacts/sdk/go/platform/frontdoor-sdk-go && go test ./...)",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "smoke:provisioner": "node ./scripts/provisioner-smoke.mjs",
+    "smoke:launch": "node ./scripts/frontdoor-launch-smoke.mjs",
+    "smoke:one-server-dual-app": "node ./scripts/frontdoor-one-server-dual-app-smoke.mjs",
+    "smoke:package-lifecycle": "node ./scripts/frontdoor-package-lifecycle-smoke.mjs",
+    "smoke:deploy": "pnpm smoke:provisioner && pnpm smoke:launch",
+    "publish:adapter-release": "tsx ./scripts/publish-adapter-release.ts",
+    "migrate:product-mappings:dry-run": "node ./scripts/backfill-product-mappings.mjs",
+    "migrate:product-mappings": "node ./scripts/backfill-product-mappings.mjs --apply",
+    "password:hash": "tsx src/password-hash.ts",
+    "demo-stack:start": "bash ./scripts/demo-stack-start.sh",
+    "demo-stack:stop": "bash ./scripts/demo-stack-stop.sh",
+    "demo-stack:status": "bash ./scripts/demo-stack-status.sh"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ec2": "^3.1011.0",
+    "http-proxy": "^1.18.1",
+    "openid-client": "^6.8.1",
+    "ssh2": "^1.17.0"
+  },
+  "devDependencies": {
+    "@types/http-proxy": "^1.17.16",
+    "@types/node": "^24.3.0",
+    "@types/ssh2": "^1.15.5",
+    "@types/ws": "^8.18.1",
+    "ajv": "^8.18.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.18",
+    "ws": "^8.18.3"
+  }
+}
