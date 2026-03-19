@@ -20,6 +20,7 @@ Cross-repo validation should live under:
 - [FRONTDOOR_CONFIGURED_TENANT_RUNTIME_AUTH_PROJECTION_VALIDATION.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_CONFIGURED_TENANT_RUNTIME_AUTH_PROJECTION_VALIDATION.md)
 - [FRONTDOOR_HOSTED_PACKAGE_LIVE_TESTING.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_HOSTED_PACKAGE_LIVE_TESTING.md)
 - [FRONTDOOR_HOSTED_VALIDATION_ENTRYPOINT.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_HOSTED_VALIDATION_ENTRYPOINT.md)
+- [FRONTDOOR_HIPAA_READINESS_VALIDATION_2026-03-19.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_HIPAA_READINESS_VALIDATION_2026-03-19.md)
 - [FRONTDOOR_SERVER_ADAPTER_INSTALL_VALIDATION.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_SERVER_ADAPTER_INSTALL_VALIDATION.md)
 
 ## Archive

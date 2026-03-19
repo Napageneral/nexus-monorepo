@@ -6433,7 +6433,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     const requestId = readHeaderValue(req.headers["x-request-id"]) || randomToken(10);
     const clientIp = getClientIp(req);
     const cookies = parseCookies(req);
-    const cookieSessionId = cookies[config.sessionCookieName] ?? null;
     const requestSecure = resolveRequestSecureContext(req, config.baseUrl);
     const cookieSecure = config.sessionCookieSecure === true || requestSecure;
     res.setHeader("x-request-id", requestId);
@@ -6449,7 +6448,6 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         status: res.statusCode,
         duration_ms: Date.now() - startedAt,
         client_ip: clientIp,
-        session_cookie_id: cookieSessionId,
       });
     });
     try {
