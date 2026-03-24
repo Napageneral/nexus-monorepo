@@ -5,6 +5,14 @@ import (
 	"unicode"
 )
 
+type ChunkingResult struct {
+	Success    bool           `json:"success"`
+	MessageIDs []string       `json:"message_ids"`
+	ChunksSent int            `json:"chunks_sent"`
+	TotalChars int            `json:"total_chars,omitempty"`
+	Error      *DeliveryError `json:"error,omitempty"`
+}
+
 type chunkSegment struct {
 	kind  string // "text" | "fence"
 	text  string
@@ -374,21 +382,21 @@ func findSplitPoint(text string, limit int) int {
 
 // SendWithChunking is a helper that wraps a platform-specific send function
 // with automatic text chunking. It splits the text into chunks, calls sendFn
-// for each chunk, and assembles the DeliveryResult.
+// for each chunk, and assembles a utility summary for adapter-local use.
 //
 // The sendFn receives a single chunk and returns the platform message ID.
-// SendWithChunking collects all IDs and returns a unified result.
+// SendWithChunking collects all IDs and returns a unified chunking summary.
 //
 // Example:
 //
 //	result := nexadapter.SendWithChunking(req.Text, 2000, func(chunk string) (string, error) {
 //	    return discordAPI.SendMessage(channelID, chunk)
 //	})
-func SendWithChunking(text string, charLimit int, sendFn func(chunk string) (messageID string, err error)) *DeliveryResult {
+func SendWithChunking(text string, charLimit int, sendFn func(chunk string) (messageID string, err error)) *ChunkingResult {
 	totalChars := len(text)
 	chunks := ChunkText(text, charLimit)
 	if len(chunks) == 0 {
-		return &DeliveryResult{
+		return &ChunkingResult{
 			Success:    false,
 			MessageIDs: nil,
 			ChunksSent: 0,
@@ -405,7 +413,7 @@ func SendWithChunking(text string, charLimit int, sendFn func(chunk string) (mes
 	for i, chunk := range chunks {
 		id, err := sendFn(chunk)
 		if err != nil {
-			return &DeliveryResult{
+			return &ChunkingResult{
 				Success:    false,
 				MessageIDs: messageIDs,
 				ChunksSent: i,
@@ -420,7 +428,7 @@ func SendWithChunking(text string, charLimit int, sendFn func(chunk string) (mes
 		messageIDs = append(messageIDs, id)
 	}
 
-	return &DeliveryResult{
+	return &ChunkingResult{
 		Success:    true,
 		MessageIDs: messageIDs,
 		ChunksSent: len(chunks),

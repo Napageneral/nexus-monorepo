@@ -34,6 +34,9 @@ type AgentsSessionsImportExecuteRequestItemsInnerTurnsInner struct {
 	TotalTokens *int32 `json:"totalTokens,omitempty"`
 	ResponseMessageSourceId *string `json:"responseMessageSourceId,omitempty"`
 	QueryMessageSourceIds []string `json:"queryMessageSourceIds,omitempty"`
+	SystemContextProfileId *string `json:"systemContextProfileId,omitempty"`
+	InputArtifactId *string `json:"inputArtifactId,omitempty"`
+	OutputArtifactId *string `json:"outputArtifactId,omitempty"`
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
@@ -491,6 +494,102 @@ func (o *AgentsSessionsImportExecuteRequestItemsInnerTurnsInner) SetQueryMessage
 	o.QueryMessageSourceIds = v
 }
 
+// GetSystemContextProfileId returns the SystemContextProfileId field value if set, zero value otherwise.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerTurnsInner) GetSystemContextProfileId() string {
+	if o == nil || IsNil(o.SystemContextProfileId) {
+		var ret string
+		return ret
+	}
+	return *o.SystemContextProfileId
+}
+
+// GetSystemContextProfileIdOk returns a tuple with the SystemContextProfileId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerTurnsInner) GetSystemContextProfileIdOk() (*string, bool) {
+	if o == nil || IsNil(o.SystemContextProfileId) {
+		return nil, false
+	}
+	return o.SystemContextProfileId, true
+}
+
+// HasSystemContextProfileId returns a boolean if a field has been set.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerTurnsInner) HasSystemContextProfileId() bool {
+	if o != nil && !IsNil(o.SystemContextProfileId) {
+		return true
+	}
+
+	return false
+}
+
+// SetSystemContextProfileId gets a reference to the given string and assigns it to the SystemContextProfileId field.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerTurnsInner) SetSystemContextProfileId(v string) {
+	o.SystemContextProfileId = &v
+}
+
+// GetInputArtifactId returns the InputArtifactId field value if set, zero value otherwise.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerTurnsInner) GetInputArtifactId() string {
+	if o == nil || IsNil(o.InputArtifactId) {
+		var ret string
+		return ret
+	}
+	return *o.InputArtifactId
+}
+
+// GetInputArtifactIdOk returns a tuple with the InputArtifactId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerTurnsInner) GetInputArtifactIdOk() (*string, bool) {
+	if o == nil || IsNil(o.InputArtifactId) {
+		return nil, false
+	}
+	return o.InputArtifactId, true
+}
+
+// HasInputArtifactId returns a boolean if a field has been set.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerTurnsInner) HasInputArtifactId() bool {
+	if o != nil && !IsNil(o.InputArtifactId) {
+		return true
+	}
+
+	return false
+}
+
+// SetInputArtifactId gets a reference to the given string and assigns it to the InputArtifactId field.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerTurnsInner) SetInputArtifactId(v string) {
+	o.InputArtifactId = &v
+}
+
+// GetOutputArtifactId returns the OutputArtifactId field value if set, zero value otherwise.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerTurnsInner) GetOutputArtifactId() string {
+	if o == nil || IsNil(o.OutputArtifactId) {
+		var ret string
+		return ret
+	}
+	return *o.OutputArtifactId
+}
+
+// GetOutputArtifactIdOk returns a tuple with the OutputArtifactId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerTurnsInner) GetOutputArtifactIdOk() (*string, bool) {
+	if o == nil || IsNil(o.OutputArtifactId) {
+		return nil, false
+	}
+	return o.OutputArtifactId, true
+}
+
+// HasOutputArtifactId returns a boolean if a field has been set.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerTurnsInner) HasOutputArtifactId() bool {
+	if o != nil && !IsNil(o.OutputArtifactId) {
+		return true
+	}
+
+	return false
+}
+
+// SetOutputArtifactId gets a reference to the given string and assigns it to the OutputArtifactId field.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerTurnsInner) SetOutputArtifactId(v string) {
+	o.OutputArtifactId = &v
+}
+
 // GetMetadata returns the Metadata field value if set, zero value otherwise.
 func (o *AgentsSessionsImportExecuteRequestItemsInnerTurnsInner) GetMetadata() map[string]interface{} {
 	if o == nil || IsNil(o.Metadata) {
@@ -571,6 +670,15 @@ func (o AgentsSessionsImportExecuteRequestItemsInnerTurnsInner) ToMap() (map[str
 	if !IsNil(o.QueryMessageSourceIds) {
 		toSerialize["queryMessageSourceIds"] = o.QueryMessageSourceIds
 	}
+	if !IsNil(o.SystemContextProfileId) {
+		toSerialize["systemContextProfileId"] = o.SystemContextProfileId
+	}
+	if !IsNil(o.InputArtifactId) {
+		toSerialize["inputArtifactId"] = o.InputArtifactId
+	}
+	if !IsNil(o.OutputArtifactId) {
+		toSerialize["outputArtifactId"] = o.OutputArtifactId
+	}
 	if !IsNil(o.Metadata) {
 		toSerialize["metadata"] = o.Metadata
 	}
@@ -632,6 +740,9 @@ func (o *AgentsSessionsImportExecuteRequestItemsInnerTurnsInner) UnmarshalJSON(d
 		delete(additionalProperties, "totalTokens")
 		delete(additionalProperties, "responseMessageSourceId")
 		delete(additionalProperties, "queryMessageSourceIds")
+		delete(additionalProperties, "systemContextProfileId")
+		delete(additionalProperties, "inputArtifactId")
+		delete(additionalProperties, "outputArtifactId")
 		delete(additionalProperties, "metadata")
 		o.AdditionalProperties = additionalProperties
 	}

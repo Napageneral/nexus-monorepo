@@ -8,8 +8,8 @@ import (
 	"os"
 )
 
-// StreamConfig configures the streaming delivery handler.
-// Only needed for adapters that declare "channels.stream" in adapter.info operations.
+// StreamConfig configures a streaming helper that packages may reuse inside
+// namespaced communication methods.
 type StreamConfig struct {
 	// OnStreamStart is called when a new streaming delivery begins.
 	// The adapter should create a platform message and prepare for token accumulation.
@@ -37,14 +37,13 @@ type StreamConfig struct {
 	OnStreamError func(ctx context.Context, event StreamEvent) error
 }
 
-// EmitStreamStatus writes an AdapterStreamStatus to stdout.
-// Call this from stream callbacks to report delivery progress to NEX.
+// EmitStreamStatus writes an AdapterStreamStatus to stdout. Call this from
+// stream callbacks to report progress to NEX.
 func EmitStreamStatus(status AdapterStreamStatus) error {
 	return writeJSON(status)
 }
 
 // handleStream reads StreamEvent JSONL from stdin and dispatches to callbacks.
-// This is the main loop for the `channels.stream` command.
 func handleStream(ctx context.Context, config *StreamConfig) error {
 	scanner := bufio.NewScanner(os.Stdin)
 	// Increase buffer size for potentially large events
@@ -102,7 +101,7 @@ func handleStream(ctx context.Context, config *StreamConfig) error {
 		if err != nil {
 			LogError("stream handler error for %s: %v", event.Type, err)
 			_ = EmitStreamStatus(AdapterStreamStatus{
-				Type:     "delivery_error",
+				Type:     "error",
 				ErrorMsg: err.Error(),
 			})
 		}

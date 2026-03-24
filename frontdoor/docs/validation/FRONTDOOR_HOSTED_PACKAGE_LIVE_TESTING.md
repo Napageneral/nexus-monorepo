@@ -246,9 +246,9 @@ Use this exact flow for `confluence`:
 6. run health
 7. run historical ingest
 8. start monitor
-9. run `channels.send`
+9. run `confluence.pages.create`
 10. confirm the written page comes back through monitor as canonical ingest
-11. run `channels.delete` for cleanup
+11. run `confluence.pages.move_to_trash` for cleanup
 
 Concrete operator commands:
 

@@ -34,7 +34,7 @@ export { runAdapter } from "./run.js";
 export { runAdapter as runAdapterCLI } from "./run.js";
 
 export {
-  AdapterAccountSchema,
+  AdapterConnectionIdentitySchema,
   AdapterAuthFieldSchema,
   AdapterAuthManifestSchema,
   AdapterMethodSchema,
@@ -73,15 +73,12 @@ export {
   ContentTypeSchema,
   DeliveryErrorTypeSchema,
   DeliveryErrorSchema,
-  DeliveryResultSchema,
-  DeliveryTargetSchema,
   RecipientSchema,
-  SendRequestSchema,
   StreamEventSchema,
 } from "./protocol.js";
 
 export type {
-  AdapterAccount,
+  AdapterConnectionIdentity,
   AdapterAuthField,
   AdapterAuthManifest,
   AdapterMethod,
@@ -120,10 +117,7 @@ export type {
   ContentType,
   DeliveryErrorType,
   DeliveryError,
-  DeliveryResult,
-  DeliveryTarget,
   Recipient,
-  SendRequest,
   StreamEvent,
 } from "./protocol.js";
 

@@ -1,4 +1,12 @@
-import { DeliveryResult } from "./protocol.js";
+import type { DeliveryError } from "./protocol.js";
+
+type ChunkingResult = {
+  success: boolean;
+  message_ids: string[];
+  chunks_sent: number;
+  total_chars?: number;
+  error?: DeliveryError;
+};
 
 // chunkText mirrors the Go SDK chunking behavior:
 // 1) paragraph breaks, 2) line breaks, 3) sentence ends, 4) word boundaries, 5) hard cut.
@@ -304,7 +312,7 @@ export function sendWithChunking(
   text: string,
   charLimit: number,
   sendFn: (chunk: string) => Promise<string> | string,
-): Promise<DeliveryResult> {
+): Promise<ChunkingResult> {
   const totalChars = text ? text.length : 0;
   const chunks = chunkText(text, charLimit);
   if (chunks.length === 0) {

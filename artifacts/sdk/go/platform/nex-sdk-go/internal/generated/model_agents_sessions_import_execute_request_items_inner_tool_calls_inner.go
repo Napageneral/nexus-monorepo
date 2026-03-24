@@ -27,6 +27,8 @@ type AgentsSessionsImportExecuteRequestItemsInnerToolCallsInner struct {
 	ToolNumber *int32 `json:"toolNumber,omitempty"`
 	ParamsJson interface{} `json:"paramsJson,omitempty"`
 	ResultJson interface{} `json:"resultJson,omitempty"`
+	ResultArtifactId *string `json:"resultArtifactId,omitempty"`
+	ResultPreviewText *string `json:"resultPreviewText,omitempty"`
 	Status *AdaptersConnectionsList200ResponsePayloadConnectionsInnerStatus `json:"status,omitempty"`
 	SpawnedSourceSessionId *string `json:"spawnedSourceSessionId,omitempty"`
 	StartedAtMs int64 `json:"startedAtMs"`
@@ -269,6 +271,70 @@ func (o *AgentsSessionsImportExecuteRequestItemsInnerToolCallsInner) SetResultJs
 	o.ResultJson = v
 }
 
+// GetResultArtifactId returns the ResultArtifactId field value if set, zero value otherwise.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerToolCallsInner) GetResultArtifactId() string {
+	if o == nil || IsNil(o.ResultArtifactId) {
+		var ret string
+		return ret
+	}
+	return *o.ResultArtifactId
+}
+
+// GetResultArtifactIdOk returns a tuple with the ResultArtifactId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerToolCallsInner) GetResultArtifactIdOk() (*string, bool) {
+	if o == nil || IsNil(o.ResultArtifactId) {
+		return nil, false
+	}
+	return o.ResultArtifactId, true
+}
+
+// HasResultArtifactId returns a boolean if a field has been set.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerToolCallsInner) HasResultArtifactId() bool {
+	if o != nil && !IsNil(o.ResultArtifactId) {
+		return true
+	}
+
+	return false
+}
+
+// SetResultArtifactId gets a reference to the given string and assigns it to the ResultArtifactId field.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerToolCallsInner) SetResultArtifactId(v string) {
+	o.ResultArtifactId = &v
+}
+
+// GetResultPreviewText returns the ResultPreviewText field value if set, zero value otherwise.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerToolCallsInner) GetResultPreviewText() string {
+	if o == nil || IsNil(o.ResultPreviewText) {
+		var ret string
+		return ret
+	}
+	return *o.ResultPreviewText
+}
+
+// GetResultPreviewTextOk returns a tuple with the ResultPreviewText field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerToolCallsInner) GetResultPreviewTextOk() (*string, bool) {
+	if o == nil || IsNil(o.ResultPreviewText) {
+		return nil, false
+	}
+	return o.ResultPreviewText, true
+}
+
+// HasResultPreviewText returns a boolean if a field has been set.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerToolCallsInner) HasResultPreviewText() bool {
+	if o != nil && !IsNil(o.ResultPreviewText) {
+		return true
+	}
+
+	return false
+}
+
+// SetResultPreviewText gets a reference to the given string and assigns it to the ResultPreviewText field.
+func (o *AgentsSessionsImportExecuteRequestItemsInnerToolCallsInner) SetResultPreviewText(v string) {
+	o.ResultPreviewText = &v
+}
+
 // GetStatus returns the Status field value if set, zero value otherwise.
 func (o *AgentsSessionsImportExecuteRequestItemsInnerToolCallsInner) GetStatus() AdaptersConnectionsList200ResponsePayloadConnectionsInnerStatus {
 	if o == nil || IsNil(o.Status) {
@@ -472,6 +538,12 @@ func (o AgentsSessionsImportExecuteRequestItemsInnerToolCallsInner) ToMap() (map
 	if o.ResultJson != nil {
 		toSerialize["resultJson"] = o.ResultJson
 	}
+	if !IsNil(o.ResultArtifactId) {
+		toSerialize["resultArtifactId"] = o.ResultArtifactId
+	}
+	if !IsNil(o.ResultPreviewText) {
+		toSerialize["resultPreviewText"] = o.ResultPreviewText
+	}
 	if !IsNil(o.Status) {
 		toSerialize["status"] = o.Status
 	}
@@ -539,6 +611,8 @@ func (o *AgentsSessionsImportExecuteRequestItemsInnerToolCallsInner) UnmarshalJS
 		delete(additionalProperties, "toolNumber")
 		delete(additionalProperties, "paramsJson")
 		delete(additionalProperties, "resultJson")
+		delete(additionalProperties, "resultArtifactId")
+		delete(additionalProperties, "resultPreviewText")
 		delete(additionalProperties, "status")
 		delete(additionalProperties, "spawnedSourceSessionId")
 		delete(additionalProperties, "startedAtMs")

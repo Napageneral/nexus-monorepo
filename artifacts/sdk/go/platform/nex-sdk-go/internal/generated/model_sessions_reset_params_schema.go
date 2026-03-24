@@ -20,7 +20,7 @@ var _ MappedNullable = &SessionsResetParamsSchema{}
 
 // SessionsResetParamsSchema struct for SessionsResetParamsSchema
 type SessionsResetParamsSchema struct {
-	Key string `json:"key"`
+	SessionId string `json:"sessionId"`
 	AdditionalProperties map[string]interface{}
 }
 
@@ -30,9 +30,9 @@ type _SessionsResetParamsSchema SessionsResetParamsSchema
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewSessionsResetParamsSchema(key string) *SessionsResetParamsSchema {
+func NewSessionsResetParamsSchema(sessionId string) *SessionsResetParamsSchema {
 	this := SessionsResetParamsSchema{}
-	this.Key = key
+	this.SessionId = sessionId
 	return &this
 }
 
@@ -44,28 +44,28 @@ func NewSessionsResetParamsSchemaWithDefaults() *SessionsResetParamsSchema {
 	return &this
 }
 
-// GetKey returns the Key field value
-func (o *SessionsResetParamsSchema) GetKey() string {
+// GetSessionId returns the SessionId field value
+func (o *SessionsResetParamsSchema) GetSessionId() string {
 	if o == nil {
 		var ret string
 		return ret
 	}
 
-	return o.Key
+	return o.SessionId
 }
 
-// GetKeyOk returns a tuple with the Key field value
+// GetSessionIdOk returns a tuple with the SessionId field value
 // and a boolean to check if the value has been set.
-func (o *SessionsResetParamsSchema) GetKeyOk() (*string, bool) {
+func (o *SessionsResetParamsSchema) GetSessionIdOk() (*string, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.Key, true
+	return &o.SessionId, true
 }
 
-// SetKey sets field value
-func (o *SessionsResetParamsSchema) SetKey(v string) {
-	o.Key = v
+// SetSessionId sets field value
+func (o *SessionsResetParamsSchema) SetSessionId(v string) {
+	o.SessionId = v
 }
 
 func (o SessionsResetParamsSchema) MarshalJSON() ([]byte, error) {
@@ -78,7 +78,7 @@ func (o SessionsResetParamsSchema) MarshalJSON() ([]byte, error) {
 
 func (o SessionsResetParamsSchema) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["key"] = o.Key
+	toSerialize["sessionId"] = o.SessionId
 
 	for key, value := range o.AdditionalProperties {
 		toSerialize[key] = value
@@ -92,7 +92,7 @@ func (o *SessionsResetParamsSchema) UnmarshalJSON(data []byte) (err error) {
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
-		"key",
+		"sessionId",
 	}
 
 	allProperties := make(map[string]interface{})
@@ -122,7 +122,7 @@ func (o *SessionsResetParamsSchema) UnmarshalJSON(data []byte) (err error) {
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
-		delete(additionalProperties, "key")
+		delete(additionalProperties, "sessionId")
 		o.AdditionalProperties = additionalProperties
 	}
 

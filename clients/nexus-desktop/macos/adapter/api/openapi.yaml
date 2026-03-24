@@ -9,10 +9,10 @@ info:
 tags:
   - name: Adapter
 paths:
-  /operations/adapter.accounts.list:
+  /operations/adapter.connections.list:
     post:
-      operationId: adapter.accounts.list
-      summary: List adapter accounts
+      operationId: adapter.connections.list
+      summary: List adapter connections
       tags:
         - Adapter
       x-sdk-public: true
@@ -22,7 +22,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AdapterAccountsListResultSchema"
+                $ref: "#/components/schemas/AdapterConnectionsListResultSchema"
   /operations/adapter.health:
     post:
       operationId: adapter.health
@@ -156,7 +156,7 @@ components:
             enum:
               - adapter.info
               - adapter.health
-              - adapter.accounts.list
+              - adapter.connections.list
               - adapter.monitor.start
               - adapter.serve.start
               - adapter.setup.start
@@ -164,11 +164,6 @@ components:
               - adapter.setup.status
               - adapter.setup.cancel
               - records.backfill
-              - channels.send
-              - channels.stream
-              - channels.react
-              - channels.edit
-              - channels.delete
         methods:
           type: array
           items:
@@ -233,12 +228,6 @@ components:
               origin:
                 type: object
                 properties:
-                  kind:
-                    type: string
-                    enum:
-                      - core
-                      - app
-                      - adapter
                   package_id:
                     anyOf:
                       - type: string
@@ -258,7 +247,6 @@ components:
                   namespace:
                     type: string
                 required:
-                  - kind
                   - package_id
                   - package_version
                   - declaration_mode
@@ -532,7 +520,7 @@ components:
         - multi_account
         - platform_capabilities
       additionalProperties: false
-    AdapterAccountSchema:
+    AdapterConnectionIdentitySchema:
       $schema: http://json-schema.org/draft-07/schema#
       type: object
       properties:
@@ -574,102 +562,6 @@ components:
       required:
         - connected
         - connection_id
-      additionalProperties: false
-    SendRequestSchema:
-      $schema: http://json-schema.org/draft-07/schema#
-      type: object
-      properties:
-        target:
-          type: object
-          properties:
-            connection_id:
-              type: string
-            channel:
-              type: object
-              properties:
-                platform:
-                  type: string
-                space_id:
-                  type: string
-                container_kind:
-                  type: string
-                  enum:
-                    - direct
-                    - group
-                container_id:
-                  type: string
-                thread_id:
-                  type: string
-              required:
-                - platform
-              additionalProperties: false
-            reply_to_id:
-              type: string
-          required:
-            - connection_id
-            - channel
-          additionalProperties: false
-        text:
-          type: string
-        media:
-          type: string
-        caption:
-          type: string
-      required:
-        - target
-      additionalProperties: false
-    DeliveryResultSchema:
-      $schema: http://json-schema.org/draft-07/schema#
-      type: object
-      properties:
-        success:
-          type: boolean
-        message_ids:
-          type: array
-          items:
-            type: string
-        chunks_sent:
-          type: integer
-          minimum: 0
-          maximum: 9007199254740991
-        total_chars:
-          type: integer
-          minimum: 0
-          maximum: 9007199254740991
-        error:
-          anyOf:
-            - type: string
-            - type: object
-              properties:
-                type:
-                  type: string
-                  enum:
-                    - rate_limited
-                    - permission_denied
-                    - not_found
-                    - content_rejected
-                    - network
-                    - unknown
-                message:
-                  type: string
-                retry:
-                  type: boolean
-                retry_after_ms:
-                  type: integer
-                  minimum: 0
-                  maximum: 9007199254740991
-                details:
-                  type: object
-                  propertyNames:
-                    type: string
-                  additionalProperties: {}
-              required:
-                - message
-              additionalProperties: false
-      required:
-        - success
-        - message_ids
-        - chunks_sent
       additionalProperties: false
     AdapterSetupResultSchema:
       $schema: http://json-schema.org/draft-07/schema#
@@ -745,10 +637,10 @@ components:
       required:
         - status
       additionalProperties: {}
-    AdapterAccountsListResultSchema:
+    AdapterConnectionsListResultSchema:
       type: array
       items:
-        $ref: "#/components/schemas/AdapterAccountSchema"
+        $ref: "#/components/schemas/AdapterConnectionIdentitySchema"
     AdapterEmptyRequestSchema:
       type: object
       additionalProperties: false

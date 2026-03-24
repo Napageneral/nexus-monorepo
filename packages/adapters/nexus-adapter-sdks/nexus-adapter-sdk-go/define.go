@@ -24,21 +24,13 @@ type ClientFactory[T any] struct {
 }
 
 type ConnectionHandlers[T any] struct {
-	Accounts func(ctx AdapterContext[T]) ([]AdapterAccount, error)
-	Health   func(ctx AdapterContext[T]) (*AdapterHealth, error)
+	Connections func(ctx AdapterContext[T]) ([]AdapterConnectionIdentity, error)
+	Health      func(ctx AdapterContext[T]) (*AdapterHealth, error)
 }
 
 type IngestHandlers[T any] struct {
 	Monitor  func(ctx AdapterContext[T], emit EmitFunc) error
 	Backfill func(ctx AdapterContext[T], since time.Time, emit EmitFunc) error
-}
-
-type DeliveryHandlers[T any] struct {
-	Send   func(ctx AdapterContext[T], req SendRequest) (*DeliveryResult, error)
-	React  func(ctx AdapterContext[T], req ReactRequest) (*DeliveryResult, error)
-	Edit   func(ctx AdapterContext[T], req EditRequest) (*DeliveryResult, error)
-	Delete func(ctx AdapterContext[T], req DeleteRequest) (*DeliveryResult, error)
-	Stream *StreamConfig
 }
 
 type SetupHandlers[T any] struct {
@@ -72,7 +64,6 @@ type DefineAdapterConfig[T any] struct {
 	Client            ClientFactory[T]
 	Connection        ConnectionHandlers[T]
 	Ingest            IngestHandlers[T]
-	Delivery          DeliveryHandlers[T]
 	Setup             SetupHandlers[T]
 	ServeStart        func(ctx context.Context, connectionID string, session *ServeSession) error
 	Methods           map[string]DeclaredMethod[T]
@@ -94,15 +85,15 @@ func DefineAdapter[T any](config DefineAdapterConfig[T]) Adapter {
 				info := buildAdapterInfo(config, methods)
 				return &info, nil
 			},
-			AdapterAccountsList: func(ctx context.Context) ([]AdapterAccount, error) {
+			AdapterConnectionsList: func(ctx context.Context) ([]AdapterConnectionIdentity, error) {
 				adapterCtx, err := createAdapterContext(ctx, "", config.Client)
 				if err != nil {
 					return nil, err
 				}
-				if config.Connection.Accounts != nil {
-					return config.Connection.Accounts(adapterCtx)
+				if config.Connection.Connections != nil {
+					return config.Connection.Connections(adapterCtx)
 				}
-				return defaultAccounts(adapterCtx), nil
+				return defaultConnections(adapterCtx), nil
 			},
 			AdapterHealth: func(ctx context.Context, connectionID string) (*AdapterHealth, error) {
 				adapterCtx, err := createAdapterContext(ctx, connectionID, config.Client)
@@ -143,46 +134,6 @@ func DefineAdapter[T any](config DefineAdapterConfig[T]) Adapter {
 					return err
 				}
 				return config.Ingest.Backfill(adapterCtx, since, emit)
-			},
-			ChannelsSend: func(ctx context.Context, req SendRequest) (*DeliveryResult, error) {
-				if config.Delivery.Send == nil {
-					return nil, nil
-				}
-				adapterCtx, err := createAdapterContext(ctx, req.Target.ConnectionID, config.Client)
-				if err != nil {
-					return nil, err
-				}
-				return config.Delivery.Send(adapterCtx, req)
-			},
-			ChannelsReact: func(ctx context.Context, req ReactRequest) (*DeliveryResult, error) {
-				if config.Delivery.React == nil {
-					return nil, nil
-				}
-				adapterCtx, err := createAdapterContext(ctx, req.ConnectionID, config.Client)
-				if err != nil {
-					return nil, err
-				}
-				return config.Delivery.React(adapterCtx, req)
-			},
-			ChannelsEdit: func(ctx context.Context, req EditRequest) (*DeliveryResult, error) {
-				if config.Delivery.Edit == nil {
-					return nil, nil
-				}
-				adapterCtx, err := createAdapterContext(ctx, req.ConnectionID, config.Client)
-				if err != nil {
-					return nil, err
-				}
-				return config.Delivery.Edit(adapterCtx, req)
-			},
-			ChannelsDelete: func(ctx context.Context, req DeleteRequest) (*DeliveryResult, error) {
-				if config.Delivery.Delete == nil {
-					return nil, nil
-				}
-				adapterCtx, err := createAdapterContext(ctx, req.Target.ConnectionID, config.Client)
-				if err != nil {
-					return nil, err
-				}
-				return config.Delivery.Delete(adapterCtx, req)
 			},
 			AdapterSetupStart: func(ctx context.Context, req AdapterSetupRequest) (*AdapterSetupResult, error) {
 				if config.Setup.Start == nil {
@@ -226,7 +177,6 @@ func DefineAdapter[T any](config DefineAdapterConfig[T]) Adapter {
 			},
 			ServeStart:     config.ServeStart,
 			Methods:        buildMethodHandlers(config, methods),
-			ChannelsStream: config.Delivery.Stream,
 		},
 	}
 }
@@ -274,25 +224,25 @@ func loadRuntimeContextOptional() (*RuntimeContext, error) {
 	return nil, err
 }
 
-func defaultAccounts[T any](ctx AdapterContext[T]) []AdapterAccount {
+func defaultConnections[T any](ctx AdapterContext[T]) []AdapterConnectionIdentity {
 	connectionID := strings.TrimSpace(ctx.ConnectionID)
 	if connectionID == "" && ctx.Runtime != nil {
 		connectionID = strings.TrimSpace(ctx.Runtime.ConnectionID)
 	}
 	if connectionID == "" {
-		return []AdapterAccount{}
+		return []AdapterConnectionIdentity{}
 	}
 
-	account := AdapterAccount{
+	connection := AdapterConnectionIdentity{
 		ID:     connectionID,
 		Status: "ready",
 	}
 	if ctx.Runtime != nil && ctx.Runtime.Credential != nil {
 		if ref := strings.TrimSpace(ctx.Runtime.Credential.Ref); ref != "" {
-			account.CredentialRef = ref
+			connection.CredentialRef = ref
 		}
 	}
-	return []AdapterAccount{account}
+	return []AdapterConnectionIdentity{connection}
 }
 
 func buildMethodHandlers[T any](config DefineAdapterConfig[T], methods map[string]DeclaredMethod[T]) map[string]func(ctx context.Context, req AdapterMethodRequest) (any, error) {
@@ -316,7 +266,7 @@ func buildMethodHandlers[T any](config DefineAdapterConfig[T], methods map[strin
 func buildAdapterInfo[T any](config DefineAdapterConfig[T], methods map[string]DeclaredMethod[T]) AdapterInfo {
 	operations := []AdapterOperation{
 		OpAdapterInfo,
-		OpAdapterAccountsList,
+		OpAdapterConnectionsList,
 		OpAdapterHealth,
 	}
 	if config.Ingest.Monitor != nil {
@@ -324,21 +274,6 @@ func buildAdapterInfo[T any](config DefineAdapterConfig[T], methods map[string]D
 	}
 	if config.Ingest.Backfill != nil {
 		operations = append(operations, OpRecordsBackfill)
-	}
-	if config.Delivery.Send != nil {
-		operations = append(operations, OpChannelsSend)
-	}
-	if config.Delivery.React != nil {
-		operations = append(operations, OpChannelsReact)
-	}
-	if config.Delivery.Edit != nil {
-		operations = append(operations, OpChannelsEdit)
-	}
-	if config.Delivery.Delete != nil {
-		operations = append(operations, OpChannelsDelete)
-	}
-	if config.Delivery.Stream != nil {
-		operations = append(operations, OpChannelsStream)
 	}
 	if config.Setup.Start != nil {
 		operations = append(operations, OpAdapterSetupStart)
@@ -409,7 +344,6 @@ func buildMethodDescriptor[T any](config DefineAdapterConfig[T], name string, de
 	origin := declaration.Origin
 	if origin == nil {
 		origin = &AdapterMethodOrigin{
-			Kind:              "adapter",
 			PackageID:         config.Platform,
 			PackageVersion:    config.Version,
 			DeclarationMode:   "builtin",

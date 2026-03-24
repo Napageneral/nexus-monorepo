@@ -20,10 +20,8 @@ var _ MappedNullable = &SessionsResolveParamsSchema{}
 // SessionsResolveParamsSchema struct for SessionsResolveParamsSchema
 type SessionsResolveParamsSchema struct {
 	Key *string `json:"key,omitempty"`
-	SessionId *string `json:"sessionId,omitempty"`
-	SessionKey *string `json:"session_key,omitempty"`
 	AgentId *string `json:"agentId,omitempty"`
-	SpawnedBy *string `json:"spawnedBy,omitempty"`
+	ParentSessionId *string `json:"parentSessionId,omitempty"`
 	IncludeGlobal *bool `json:"includeGlobal,omitempty"`
 	IncludeUnknown *bool `json:"includeUnknown,omitempty"`
 	AdditionalProperties map[string]interface{}
@@ -80,70 +78,6 @@ func (o *SessionsResolveParamsSchema) SetKey(v string) {
 	o.Key = &v
 }
 
-// GetSessionId returns the SessionId field value if set, zero value otherwise.
-func (o *SessionsResolveParamsSchema) GetSessionId() string {
-	if o == nil || IsNil(o.SessionId) {
-		var ret string
-		return ret
-	}
-	return *o.SessionId
-}
-
-// GetSessionIdOk returns a tuple with the SessionId field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *SessionsResolveParamsSchema) GetSessionIdOk() (*string, bool) {
-	if o == nil || IsNil(o.SessionId) {
-		return nil, false
-	}
-	return o.SessionId, true
-}
-
-// HasSessionId returns a boolean if a field has been set.
-func (o *SessionsResolveParamsSchema) HasSessionId() bool {
-	if o != nil && !IsNil(o.SessionId) {
-		return true
-	}
-
-	return false
-}
-
-// SetSessionId gets a reference to the given string and assigns it to the SessionId field.
-func (o *SessionsResolveParamsSchema) SetSessionId(v string) {
-	o.SessionId = &v
-}
-
-// GetSessionKey returns the SessionKey field value if set, zero value otherwise.
-func (o *SessionsResolveParamsSchema) GetSessionKey() string {
-	if o == nil || IsNil(o.SessionKey) {
-		var ret string
-		return ret
-	}
-	return *o.SessionKey
-}
-
-// GetSessionKeyOk returns a tuple with the SessionKey field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *SessionsResolveParamsSchema) GetSessionKeyOk() (*string, bool) {
-	if o == nil || IsNil(o.SessionKey) {
-		return nil, false
-	}
-	return o.SessionKey, true
-}
-
-// HasSessionKey returns a boolean if a field has been set.
-func (o *SessionsResolveParamsSchema) HasSessionKey() bool {
-	if o != nil && !IsNil(o.SessionKey) {
-		return true
-	}
-
-	return false
-}
-
-// SetSessionKey gets a reference to the given string and assigns it to the SessionKey field.
-func (o *SessionsResolveParamsSchema) SetSessionKey(v string) {
-	o.SessionKey = &v
-}
-
 // GetAgentId returns the AgentId field value if set, zero value otherwise.
 func (o *SessionsResolveParamsSchema) GetAgentId() string {
 	if o == nil || IsNil(o.AgentId) {
@@ -176,36 +110,36 @@ func (o *SessionsResolveParamsSchema) SetAgentId(v string) {
 	o.AgentId = &v
 }
 
-// GetSpawnedBy returns the SpawnedBy field value if set, zero value otherwise.
-func (o *SessionsResolveParamsSchema) GetSpawnedBy() string {
-	if o == nil || IsNil(o.SpawnedBy) {
+// GetParentSessionId returns the ParentSessionId field value if set, zero value otherwise.
+func (o *SessionsResolveParamsSchema) GetParentSessionId() string {
+	if o == nil || IsNil(o.ParentSessionId) {
 		var ret string
 		return ret
 	}
-	return *o.SpawnedBy
+	return *o.ParentSessionId
 }
 
-// GetSpawnedByOk returns a tuple with the SpawnedBy field value if set, nil otherwise
+// GetParentSessionIdOk returns a tuple with the ParentSessionId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *SessionsResolveParamsSchema) GetSpawnedByOk() (*string, bool) {
-	if o == nil || IsNil(o.SpawnedBy) {
+func (o *SessionsResolveParamsSchema) GetParentSessionIdOk() (*string, bool) {
+	if o == nil || IsNil(o.ParentSessionId) {
 		return nil, false
 	}
-	return o.SpawnedBy, true
+	return o.ParentSessionId, true
 }
 
-// HasSpawnedBy returns a boolean if a field has been set.
-func (o *SessionsResolveParamsSchema) HasSpawnedBy() bool {
-	if o != nil && !IsNil(o.SpawnedBy) {
+// HasParentSessionId returns a boolean if a field has been set.
+func (o *SessionsResolveParamsSchema) HasParentSessionId() bool {
+	if o != nil && !IsNil(o.ParentSessionId) {
 		return true
 	}
 
 	return false
 }
 
-// SetSpawnedBy gets a reference to the given string and assigns it to the SpawnedBy field.
-func (o *SessionsResolveParamsSchema) SetSpawnedBy(v string) {
-	o.SpawnedBy = &v
+// SetParentSessionId gets a reference to the given string and assigns it to the ParentSessionId field.
+func (o *SessionsResolveParamsSchema) SetParentSessionId(v string) {
+	o.ParentSessionId = &v
 }
 
 // GetIncludeGlobal returns the IncludeGlobal field value if set, zero value otherwise.
@@ -285,17 +219,11 @@ func (o SessionsResolveParamsSchema) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.Key) {
 		toSerialize["key"] = o.Key
 	}
-	if !IsNil(o.SessionId) {
-		toSerialize["sessionId"] = o.SessionId
-	}
-	if !IsNil(o.SessionKey) {
-		toSerialize["session_key"] = o.SessionKey
-	}
 	if !IsNil(o.AgentId) {
 		toSerialize["agentId"] = o.AgentId
 	}
-	if !IsNil(o.SpawnedBy) {
-		toSerialize["spawnedBy"] = o.SpawnedBy
+	if !IsNil(o.ParentSessionId) {
+		toSerialize["parentSessionId"] = o.ParentSessionId
 	}
 	if !IsNil(o.IncludeGlobal) {
 		toSerialize["includeGlobal"] = o.IncludeGlobal
@@ -326,10 +254,8 @@ func (o *SessionsResolveParamsSchema) UnmarshalJSON(data []byte) (err error) {
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
 		delete(additionalProperties, "key")
-		delete(additionalProperties, "sessionId")
-		delete(additionalProperties, "session_key")
 		delete(additionalProperties, "agentId")
-		delete(additionalProperties, "spawnedBy")
+		delete(additionalProperties, "parentSessionId")
 		delete(additionalProperties, "includeGlobal")
 		delete(additionalProperties, "includeUnknown")
 		o.AdditionalProperties = additionalProperties

@@ -1,7 +1,7 @@
 # Spec-Driven Development Workflow
 
 **Status:** CANONICAL
-**Last Updated:** 2026-03-10
+**Last Updated:** 2026-03-16
 
 ---
 
@@ -14,7 +14,7 @@ The goal is simple:
 1. define the ideal target state clearly
 2. identify every gap between that target state and reality
 3. sequence the work to close the gaps
-4. validate the finished system against the target state only
+4. preserve a durable validation corpus for the finished system
 
 The active documentation tree must always tell one coherent story. Specs, workplans, validations, and archives are different artifact types and must not be mixed.
 
@@ -67,15 +67,31 @@ Validation ladders, test plans, smoke checks, and scripts exist to prove that th
 
 Validation documents should reference the intended behavior, not historical behavior.
 
+The latest validation ladder for a still-supported behavior remains part of the
+active validation corpus even after the original implementation work is done.
+
 ### 4. Archive finished or superseded material
 
-Completed workplans, superseded specs, stale validations, and abandoned proposals do not stay in the active tree.
+Completed workplans, superseded specs, obsolete validation docs, and abandoned
+proposals do not stay in the active tree.
 
 They move to archive so that:
 
 - the active tree stays clean
 - agents do not treat stale documents as live truth
 - historical context remains easy to search
+
+Archive a validation doc only when:
+
+- the behavior is no longer part of canon
+- a newer validation doc supersedes it for the same behavior
+- it is a one-off campaign proof and not part of the durable validation corpus
+
+Do not archive a validation doc merely because:
+
+- the implementation work landed
+- the paired workplan is archived
+- one dated signoff pass already succeeded
 
 ### 5. Customer experience comes before implementation detail
 
@@ -86,6 +102,27 @@ Every spec pass starts from the user and operator experience:
 - what must feel simple and reliable
 
 Only after that is clear should the docs lock the underlying APIs, schemas, and internals.
+
+### 5a. Consolidate fragmented target state before implementation
+
+When the intended architecture is currently split across:
+
+- multiple active specs
+- workplans carrying target-state decisions
+- partial overlap across domains
+
+the next step is to write one consolidated canonical spec before continuing
+implementation.
+
+That umbrella spec should:
+
+- describe the customer experience first
+- unify naming and object boundaries
+- absorb target-state decisions that accidentally landed in workplans
+- become the document neighboring specs defer to for the shared area
+
+Do not implement from a pile of half-authoritative documents.
+Consolidate first, then align the surrounding canon.
 
 ### 6. Hard cutover is the default
 
@@ -103,6 +140,34 @@ After each major phase, a separate review pass should compare:
 - specs vs validation ladders
 
 This keeps conflicts small and local instead of letting them accumulate.
+
+### 7a. Workplan hygiene is mandatory and recurring
+
+Workplan cleanup is not an end-of-project nicety. It is part of the workflow.
+
+Rules:
+
+- active workplans must describe only real open work
+- completed or superseded workplans must be archived promptly
+- partially stale workplans must be narrowed or split
+- active workplan indexes must reflect only genuine open execution fronts
+- a broader domain may stay active while a narrower completed workplan for that
+  domain archives
+
+### 8. Customer-specific exemplars do not replace generic canon
+
+Real customer runtimes are essential for research, validation, and dogfooding.
+
+But active canonical specs should describe the generic target-state architecture,
+not one person's named local setup.
+
+Rules:
+
+- use generic nouns in active specs
+- keep customer-specific cutovers, inventories, and examples in workplans or
+  validation docs
+- only include a customer-specific example in a canonical spec when it is
+  clearly marked as non-normative and genuinely improves understanding
 
 ---
 
@@ -145,14 +210,27 @@ Characteristics:
 
 ### `validation/`
 
-Validation ladders, test matrices, scripts, and runbooks that prove the system behaves according to the specs.
+Validation ladders, test matrices, scripts, runbooks, and signoff records that
+prove the system behaves according to the specs.
 
 Characteristics:
 
-- iterative
-- updated as specs change
+- maintained as the proof corpus for active canonical behavior
+- updated as specs or proof methods change
 - can include manual and automated checks
-- active until the current target state is fully validated
+- may remain active after implementation work completes
+
+Validation docs fall into three subtypes:
+
+1. canonical validation ladders
+   - the latest proof path for a still-supported behavior
+   - stays active while the behavior remains canonical
+2. signoff or closure records
+   - dated proof snapshots for a specific completion event
+   - historical by nature, even when linked from the active validation index
+3. campaign or migration validation
+   - narrow one-off rollout proof
+   - archives once superseded or no longer the right proof path
 
 ### `archive/`
 
@@ -162,7 +240,7 @@ Characteristics:
 
 - superseded specs
 - completed workplans
-- retired validations
+- obsolete, superseded, or campaign-specific validation docs
 - abandoned proposals
 
 ---
@@ -221,6 +299,8 @@ Gate:
 Outputs:
 
 - new or revised canonical specs
+- one consolidated umbrella spec when the target state is fragmented across
+  multiple active docs
 - stable naming
 - ideal-state APIs, schemas, and data models
 
@@ -233,6 +313,8 @@ Gate:
 Outputs:
 
 - conflict list across the active spec corpus
+- redirected or trimmed neighboring specs when one new umbrella spec becomes
+  the canonical owner of a shared architecture area
 - resolved naming and architecture disagreements
 - updates to the new canonical specs where needed
 
@@ -282,9 +364,11 @@ Gate:
 
 Outputs:
 
-- stale docs moved to archive
+- stale or superseded docs moved to archive
 - active indexes updated
 - remaining contradictions resolved
+- workplan hygiene pass completed
+- validation docs classified as active proof corpus, signoff record, or archive
 
 Gate:
 
@@ -306,16 +390,22 @@ Outputs:
 
 - passing intermediate checks
 - workplan corrections when real implementation findings require them
+- recurring workplan hygiene and archive updates
+- validation ladder updates when the proof method changes but the behavior
+  remains canonical
 
 Gate:
 
 - workplans stay honest as implementation reveals real effort
 
-### 10. Final validation ladder completion
+### 10. Final validation corpus refresh and signoff
 
 Outputs:
 
-- a complete pass of the active validation ladder
+- a complete pass of the active validation ladder for the implemented scope
+- refreshes to any validation ladders whose proof steps changed during
+  implementation
+- a dated signoff or closure record when the slice is complete
 
 Gate:
 
@@ -332,11 +422,13 @@ Gate:
 
 - no known mismatch remains between active code and active specs
 
-### 12. Archive completed workplans
+### 12. Final workplan hygiene and archive pass
 
 Outputs:
 
 - completed workplans moved out of the active tree
+- partial or superseded workplans narrowed or archived
+- active workplan indexes trimmed to real open fronts
 
 Gate:
 
@@ -400,6 +492,9 @@ Promote a proposal into `specs/` only when:
 
 Archive an active spec when it is superseded by a newer canonical spec.
 
+If the older spec still contains unique valid detail, move that detail into the
+new canonical owner first, then archive the superseded document.
+
 ### Active Workplan -> Archive
 
 Archive an active workplan when:
@@ -410,7 +505,17 @@ Archive an active workplan when:
 
 ### Active Validation -> Archive
 
-Archive a validation doc when the target state it validates is no longer active.
+Archive a validation doc when:
+
+1. the behavior it validates is no longer part of canon
+2. a newer validation doc supersedes it for the same behavior
+3. it is a one-off campaign proof and no longer the correct proof path
+
+Do not archive a validation doc merely because:
+
+1. the paired workplan completed
+2. the code landed
+3. a signoff record already exists
 
 ---
 

@@ -20,7 +20,7 @@ var _ MappedNullable = &AgentsSessionsCompactRequest{}
 
 // AgentsSessionsCompactRequest struct for AgentsSessionsCompactRequest
 type AgentsSessionsCompactRequest struct {
-	Key string `json:"key"`
+	SessionId string `json:"sessionId"`
 	MaxLines *int32 `json:"maxLines,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
@@ -31,9 +31,9 @@ type _AgentsSessionsCompactRequest AgentsSessionsCompactRequest
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewAgentsSessionsCompactRequest(key string) *AgentsSessionsCompactRequest {
+func NewAgentsSessionsCompactRequest(sessionId string) *AgentsSessionsCompactRequest {
 	this := AgentsSessionsCompactRequest{}
-	this.Key = key
+	this.SessionId = sessionId
 	return &this
 }
 
@@ -45,28 +45,28 @@ func NewAgentsSessionsCompactRequestWithDefaults() *AgentsSessionsCompactRequest
 	return &this
 }
 
-// GetKey returns the Key field value
-func (o *AgentsSessionsCompactRequest) GetKey() string {
+// GetSessionId returns the SessionId field value
+func (o *AgentsSessionsCompactRequest) GetSessionId() string {
 	if o == nil {
 		var ret string
 		return ret
 	}
 
-	return o.Key
+	return o.SessionId
 }
 
-// GetKeyOk returns a tuple with the Key field value
+// GetSessionIdOk returns a tuple with the SessionId field value
 // and a boolean to check if the value has been set.
-func (o *AgentsSessionsCompactRequest) GetKeyOk() (*string, bool) {
+func (o *AgentsSessionsCompactRequest) GetSessionIdOk() (*string, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.Key, true
+	return &o.SessionId, true
 }
 
-// SetKey sets field value
-func (o *AgentsSessionsCompactRequest) SetKey(v string) {
-	o.Key = v
+// SetSessionId sets field value
+func (o *AgentsSessionsCompactRequest) SetSessionId(v string) {
+	o.SessionId = v
 }
 
 // GetMaxLines returns the MaxLines field value if set, zero value otherwise.
@@ -111,7 +111,7 @@ func (o AgentsSessionsCompactRequest) MarshalJSON() ([]byte, error) {
 
 func (o AgentsSessionsCompactRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["key"] = o.Key
+	toSerialize["sessionId"] = o.SessionId
 	if !IsNil(o.MaxLines) {
 		toSerialize["maxLines"] = o.MaxLines
 	}
@@ -128,7 +128,7 @@ func (o *AgentsSessionsCompactRequest) UnmarshalJSON(data []byte) (err error) {
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
-		"key",
+		"sessionId",
 	}
 
 	allProperties := make(map[string]interface{})
@@ -158,7 +158,7 @@ func (o *AgentsSessionsCompactRequest) UnmarshalJSON(data []byte) (err error) {
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
-		delete(additionalProperties, "key")
+		delete(additionalProperties, "sessionId")
 		delete(additionalProperties, "maxLines")
 		o.AdditionalProperties = additionalProperties
 	}

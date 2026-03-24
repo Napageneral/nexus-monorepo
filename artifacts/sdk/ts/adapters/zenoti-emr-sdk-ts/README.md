@@ -1,6 +1,6 @@
 # zenoti-emr SDK (TypeScript)
 
-Generated TypeScript SDK for the adapter package contract in `packages/adapters/zenoti-emr/api/openapi.yaml`.
+Generated TypeScript SDK for the adapter package contract for `zenoti-emr`.
 
 This SDK is generated centrally under `artifacts/sdk/ts/adapters/`.
 Package repos do not own SDK publication logic.

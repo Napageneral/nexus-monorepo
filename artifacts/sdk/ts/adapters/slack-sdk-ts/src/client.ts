@@ -5,8 +5,8 @@ import {
 } from "./http.js";
 import type { OperationRequest, OperationResponse } from "./types.js";
 
-export type AdapterAccountsListRequest = OperationRequest<"adapter.accounts.list">;
-export type AdapterAccountsListResponse = OperationResponse<"adapter.accounts.list">;
+export type AdapterConnectionsListRequest = OperationRequest<"adapter.connections.list">;
+export type AdapterConnectionsListResponse = OperationResponse<"adapter.connections.list">;
 
 export type AdapterHealthRequest = OperationRequest<"adapter.health">;
 export type AdapterHealthResponse = OperationResponse<"adapter.health">;
@@ -26,8 +26,8 @@ export type AdapterSetupStatusResponse = OperationResponse<"adapter.setup.status
 export type AdapterSetupSubmitRequest = OperationRequest<"adapter.setup.submit">;
 export type AdapterSetupSubmitResponse = OperationResponse<"adapter.setup.submit">;
 
-export type ChannelsSendRequest = OperationRequest<"channels.send">;
-export type ChannelsSendResponse = OperationResponse<"channels.send">;
+export type SlackEditRequest = OperationRequest<"slack.edit">;
+export type SlackEditResponse = OperationResponse<"slack.edit">;
 
 export type SlackProcessingStartRequest = OperationRequest<"slack.processing.start">;
 export type SlackProcessingStartResponse = OperationResponse<"slack.processing.start">;
@@ -35,10 +35,16 @@ export type SlackProcessingStartResponse = OperationResponse<"slack.processing.s
 export type SlackProcessingStopRequest = OperationRequest<"slack.processing.stop">;
 export type SlackProcessingStopResponse = OperationResponse<"slack.processing.stop">;
 
+export type SlackReactRequest = OperationRequest<"slack.react">;
+export type SlackReactResponse = OperationResponse<"slack.react">;
+
+export type SlackSendRequest = OperationRequest<"slack.send">;
+export type SlackSendResponse = OperationResponse<"slack.send">;
+
 export interface Client {
   "adapter": {
-    "accounts": {
-      "list": (options?: RequestOptions) => Promise<AdapterAccountsListResponse>;
+    "connections": {
+      "list": (options?: RequestOptions) => Promise<AdapterConnectionsListResponse>;
     };
     "health": (request: AdapterHealthRequest, options?: RequestOptions) => Promise<AdapterHealthResponse>;
     "info": (options?: RequestOptions) => Promise<AdapterInfoResponse>;
@@ -49,14 +55,14 @@ export interface Client {
       "submit": (request: AdapterSetupSubmitRequest, options?: RequestOptions) => Promise<AdapterSetupSubmitResponse>;
     };
   };
-  "channels": {
-    "send": (request: ChannelsSendRequest, options?: RequestOptions) => Promise<ChannelsSendResponse>;
-  };
   "slack": {
+    "edit": (request: SlackEditRequest, options?: RequestOptions) => Promise<SlackEditResponse>;
     "processing": {
       "start": (request: SlackProcessingStartRequest, options?: RequestOptions) => Promise<SlackProcessingStartResponse>;
       "stop": (request: SlackProcessingStopRequest, options?: RequestOptions) => Promise<SlackProcessingStopResponse>;
     };
+    "react": (request: SlackReactRequest, options?: RequestOptions) => Promise<SlackReactResponse>;
+    "send": (request: SlackSendRequest, options?: RequestOptions) => Promise<SlackSendResponse>;
   };
 }
 
@@ -64,11 +70,11 @@ export function createSlackAdapterClient(options: ClientOptions): Client {
   const http = new HttpClient(options);
   return {
     "adapter": {
-      "accounts": {
+      "connections": {
         "list": async (options?: RequestOptions) => {
-      return http.request<AdapterAccountsListResponse>({
+      return http.request<AdapterConnectionsListResponse>({
         method: "POST",
-        path: "/operations/adapter.accounts.list",
+        path: "/operations/adapter.connections.list",
         query: undefined,
         body: undefined,
         options,
@@ -132,18 +138,20 @@ export function createSlackAdapterClient(options: ClientOptions): Client {
     },
       },
     },
-    "channels": {
-      "send": async (request: ChannelsSendRequest, options?: RequestOptions) => {
-      return http.request<ChannelsSendResponse>({
+    "slack": {
+      "edit": async (request: SlackEditRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<SlackEditResponse>({
         method: "POST",
-        path: "/operations/channels.send",
+        path: "/operations/slack.edit",
         query: undefined,
-        body: request,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
         options,
       })
     },
-    },
-    "slack": {
       "processing": {
         "start": async (request: SlackProcessingStartRequest, options?: RequestOptions) => {
       const input = request as Record<string, unknown>;
@@ -172,6 +180,32 @@ export function createSlackAdapterClient(options: ClientOptions): Client {
       })
     },
       },
+      "react": async (request: SlackReactRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<SlackReactResponse>({
+        method: "POST",
+        path: "/operations/slack.react",
+        query: undefined,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
+        options,
+      })
+    },
+      "send": async (request: SlackSendRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<SlackSendResponse>({
+        method: "POST",
+        path: "/operations/slack.send",
+        query: undefined,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
+        options,
+      })
+    },
     },
   };
 }

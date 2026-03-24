@@ -25,8 +25,7 @@ type SessionsListParamsSchema struct {
 	IncludeUnknown *bool `json:"includeUnknown,omitempty"`
 	IncludeDerivedTitles *bool `json:"includeDerivedTitles,omitempty"`
 	IncludeLastMessage *bool `json:"includeLastMessage,omitempty"`
-	SessionKey *string `json:"session_key,omitempty"`
-	SpawnedBy *string `json:"spawnedBy,omitempty"`
+	ParentSessionId *string `json:"parentSessionId,omitempty"`
 	AgentId *string `json:"agentId,omitempty"`
 	Search *string `json:"search,omitempty"`
 	AdditionalProperties map[string]interface{}
@@ -243,68 +242,36 @@ func (o *SessionsListParamsSchema) SetIncludeLastMessage(v bool) {
 	o.IncludeLastMessage = &v
 }
 
-// GetSessionKey returns the SessionKey field value if set, zero value otherwise.
-func (o *SessionsListParamsSchema) GetSessionKey() string {
-	if o == nil || IsNil(o.SessionKey) {
+// GetParentSessionId returns the ParentSessionId field value if set, zero value otherwise.
+func (o *SessionsListParamsSchema) GetParentSessionId() string {
+	if o == nil || IsNil(o.ParentSessionId) {
 		var ret string
 		return ret
 	}
-	return *o.SessionKey
+	return *o.ParentSessionId
 }
 
-// GetSessionKeyOk returns a tuple with the SessionKey field value if set, nil otherwise
+// GetParentSessionIdOk returns a tuple with the ParentSessionId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *SessionsListParamsSchema) GetSessionKeyOk() (*string, bool) {
-	if o == nil || IsNil(o.SessionKey) {
+func (o *SessionsListParamsSchema) GetParentSessionIdOk() (*string, bool) {
+	if o == nil || IsNil(o.ParentSessionId) {
 		return nil, false
 	}
-	return o.SessionKey, true
+	return o.ParentSessionId, true
 }
 
-// HasSessionKey returns a boolean if a field has been set.
-func (o *SessionsListParamsSchema) HasSessionKey() bool {
-	if o != nil && !IsNil(o.SessionKey) {
+// HasParentSessionId returns a boolean if a field has been set.
+func (o *SessionsListParamsSchema) HasParentSessionId() bool {
+	if o != nil && !IsNil(o.ParentSessionId) {
 		return true
 	}
 
 	return false
 }
 
-// SetSessionKey gets a reference to the given string and assigns it to the SessionKey field.
-func (o *SessionsListParamsSchema) SetSessionKey(v string) {
-	o.SessionKey = &v
-}
-
-// GetSpawnedBy returns the SpawnedBy field value if set, zero value otherwise.
-func (o *SessionsListParamsSchema) GetSpawnedBy() string {
-	if o == nil || IsNil(o.SpawnedBy) {
-		var ret string
-		return ret
-	}
-	return *o.SpawnedBy
-}
-
-// GetSpawnedByOk returns a tuple with the SpawnedBy field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *SessionsListParamsSchema) GetSpawnedByOk() (*string, bool) {
-	if o == nil || IsNil(o.SpawnedBy) {
-		return nil, false
-	}
-	return o.SpawnedBy, true
-}
-
-// HasSpawnedBy returns a boolean if a field has been set.
-func (o *SessionsListParamsSchema) HasSpawnedBy() bool {
-	if o != nil && !IsNil(o.SpawnedBy) {
-		return true
-	}
-
-	return false
-}
-
-// SetSpawnedBy gets a reference to the given string and assigns it to the SpawnedBy field.
-func (o *SessionsListParamsSchema) SetSpawnedBy(v string) {
-	o.SpawnedBy = &v
+// SetParentSessionId gets a reference to the given string and assigns it to the ParentSessionId field.
+func (o *SessionsListParamsSchema) SetParentSessionId(v string) {
+	o.ParentSessionId = &v
 }
 
 // GetAgentId returns the AgentId field value if set, zero value otherwise.
@@ -399,11 +366,8 @@ func (o SessionsListParamsSchema) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.IncludeLastMessage) {
 		toSerialize["includeLastMessage"] = o.IncludeLastMessage
 	}
-	if !IsNil(o.SessionKey) {
-		toSerialize["session_key"] = o.SessionKey
-	}
-	if !IsNil(o.SpawnedBy) {
-		toSerialize["spawnedBy"] = o.SpawnedBy
+	if !IsNil(o.ParentSessionId) {
+		toSerialize["parentSessionId"] = o.ParentSessionId
 	}
 	if !IsNil(o.AgentId) {
 		toSerialize["agentId"] = o.AgentId
@@ -439,8 +403,7 @@ func (o *SessionsListParamsSchema) UnmarshalJSON(data []byte) (err error) {
 		delete(additionalProperties, "includeUnknown")
 		delete(additionalProperties, "includeDerivedTitles")
 		delete(additionalProperties, "includeLastMessage")
-		delete(additionalProperties, "session_key")
-		delete(additionalProperties, "spawnedBy")
+		delete(additionalProperties, "parentSessionId")
 		delete(additionalProperties, "agentId")
 		delete(additionalProperties, "search")
 		o.AdditionalProperties = additionalProperties

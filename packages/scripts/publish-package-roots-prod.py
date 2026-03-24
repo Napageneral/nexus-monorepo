@@ -140,7 +140,7 @@ try {{
 """
     remote_cmd = (
         f"cd {remote_frontdoor_root} && "
-        f"FRONTDOOR_DB={json.dumps(remote_db)} "
+        f"sudo FRONTDOOR_DB={json.dumps(remote_db)} "
         f"PACKAGE_ROOT={json.dumps(remote_package_root)} "
         f"TARBALL_PATH={json.dumps(remote_tarball_path)} "
         f"TARGET_OS={json.dumps(target_os)} "

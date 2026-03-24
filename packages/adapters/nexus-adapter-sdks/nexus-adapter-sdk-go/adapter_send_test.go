@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"strings"
 	"testing"
 )
 
-func TestRunSendParsesCanonicalDeliveryTarget(t *testing.T) {
-	var captured SendRequest
+func TestRunMethodPassesCommunicationShapedPayloadThroughNamespacedMethod(t *testing.T) {
+	var captured AdapterMethodRequest
 
 	originalStdout := os.Stdout
 	reader, writer, err := os.Pipe()
@@ -24,85 +23,48 @@ func TestRunSendParsesCanonicalDeliveryTarget(t *testing.T) {
 
 	adapter := Adapter{
 		Operations: AdapterOperations{
-			ChannelsSend: func(ctx context.Context, req SendRequest) (*DeliveryResult, error) {
-				captured = req
-				return &DeliveryResult{
-					Success:    true,
-					MessageIDs: []string{"msg-1"},
-					ChunksSent: 1,
-				}, nil
-			},
-		},
-	}
-
-	err = runSend(adapter, []string{
-		"--connection", "jira-conn",
-		"--target-json", `{"connection_id":"jira-conn","channel":{"platform":"jira","space_id":"vrtly","container_kind":"group","container_id":"VT","thread_id":"VT-7"},"reply_to_id":"jira:vrtly:VT-7"}`,
-		"--text", `{"action":"comment","body":"hello"}`,
-	})
-	if err != nil {
-		t.Fatalf("runSend: %v", err)
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatalf("close writer: %v", err)
-	}
-	if _, err := io.ReadAll(reader); err != nil {
-		t.Fatalf("read stdout: %v", err)
-	}
-
-	if captured.Target.ConnectionID != "jira-conn" {
-		t.Fatalf("connection_id = %q", captured.Target.ConnectionID)
-	}
-	if captured.Target.Channel.Platform != "jira" {
-		t.Fatalf("platform = %q", captured.Target.Channel.Platform)
-	}
-	if captured.Target.Channel.ContainerID != "VT" {
-		t.Fatalf("container_id = %q", captured.Target.Channel.ContainerID)
-	}
-	if captured.Target.Channel.ThreadID != "VT-7" {
-		t.Fatalf("thread_id = %q", captured.Target.Channel.ThreadID)
-	}
-	if captured.Target.ReplyToID != "jira:vrtly:VT-7" {
-		t.Fatalf("reply_to_id = %q", captured.Target.ReplyToID)
-	}
-	if strings.TrimSpace(captured.Text) != `{"action":"comment","body":"hello"}` {
-		t.Fatalf("text = %q", captured.Text)
-	}
-}
-
-func TestRunSendNormalizesErrorDeliveryResultMessageIDs(t *testing.T) {
-	originalStdout := os.Stdout
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("pipe: %v", err)
-	}
-	os.Stdout = writer
-	defer func() {
-		os.Stdout = originalStdout
-	}()
-
-	adapter := Adapter{
-		Operations: AdapterOperations{
-			ChannelsSend: func(ctx context.Context, req SendRequest) (*DeliveryResult, error) {
-				return &DeliveryResult{
-					Success: false,
-					Error: &DeliveryError{
-						Type:    "unknown",
-						Message: "boom",
-						Retry:   false,
+			AdapterInfo: func(ctx context.Context) (*AdapterInfo, error) {
+				return &AdapterInfo{
+					Platform:   "jira",
+					Name:       "Jira Cloud",
+					Version:    "1.0.0",
+					Operations: []AdapterOperation{OpAdapterInfo},
+					Methods: []AdapterMethod{
+						{
+							Name:               "jira.comments.create",
+							Action:             "write",
+							ConnectionRequired: true,
+							MutatesRemote:      true,
+							ContextHints:       AdapterMethodContextHints{Params: map[string]AdapterMethodContextHintValue{}},
+							Origin: AdapterMethodOrigin{
+								PackageID:         "jira",
+								PackageVersion:    "1.0.0",
+								DeclarationMode:   "manifest",
+								DeclarationSource: "adapter.info",
+								Namespace:         "jira",
+							},
+						},
 					},
 				}, nil
 			},
+			Methods: map[string]func(ctx context.Context, req AdapterMethodRequest) (any, error){
+				"jira.comments.create": func(ctx context.Context, req AdapterMethodRequest) (any, error) {
+					captured = req
+					return map[string]any{
+						"ok":      true,
+						"payload": req.Payload,
+					}, nil
+				},
+			},
 		},
 	}
 
-	err = runSend(adapter, []string{
+	err = runMethod(adapter, "jira.comments.create", []string{
 		"--connection", "jira-conn",
-		"--target-json", `{"connection_id":"jira-conn","channel":{"platform":"jira","space_id":"vrtly","container_kind":"group","container_id":"VT"}}`,
-		"--text", `{"action":"comment","body":"hello"}`,
+		"--payload-json", `{"target":{"connection_id":"jira-conn","channel":{"platform":"jira","space_id":"vrtly","container_kind":"group","container_id":"VT","thread_id":"VT-7"},"reply_to_id":"jira:vrtly:VT-7"},"text":"hello"}`,
 	})
 	if err != nil {
-		t.Fatalf("runSend: %v", err)
+		t.Fatalf("runMethod: %v", err)
 	}
 	if err := writer.Close(); err != nil {
 		t.Fatalf("close writer: %v", err)
@@ -112,15 +74,24 @@ func TestRunSendNormalizesErrorDeliveryResultMessageIDs(t *testing.T) {
 		t.Fatalf("read stdout: %v", err)
 	}
 
+	if captured.ConnectionID != "jira-conn" {
+		t.Fatalf("connection_id = %q", captured.ConnectionID)
+	}
+	target, ok := captured.Payload["target"].(map[string]any)
+	if !ok {
+		t.Fatalf("target type = %T", captured.Payload["target"])
+	}
+	if target["connection_id"] != "jira-conn" {
+		t.Fatalf("target.connection_id = %#v", target["connection_id"])
+	}
+	if captured.Payload["text"] != "hello" {
+		t.Fatalf("text = %#v", captured.Payload["text"])
+	}
 	var payload map[string]any
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		t.Fatalf("json unmarshal: %v", err)
 	}
-	messageIDs, ok := payload["message_ids"].([]any)
-	if !ok {
-		t.Fatalf("message_ids type = %T, want []any", payload["message_ids"])
-	}
-	if len(messageIDs) != 0 {
-		t.Fatalf("len(message_ids) = %d, want 0", len(messageIDs))
+	if payload["ok"] != true {
+		t.Fatalf("ok = %#v", payload["ok"])
 	}
 }

@@ -123,7 +123,7 @@ The stepping-stone green bar is:
 3. the runtime activates the adapter package
 4. a live Confluence connection is created against that installed adapter
 5. records, contacts, and channels ingest correctly
-6. `channels.send` and `channels.delete` work through that server/runtime
+6. truthful adapter methods like `confluence.pages.create` and `confluence.pages.move_to_trash` work through that server/runtime
 
 ## Current Implementation State
 
@@ -149,4 +149,4 @@ end-to-end proof that:
 2. the installed Confluence adapter can complete the canonical custom setup flow
 3. backfill and monitor ingest materialize records, channels, and contacts
 4. adapter package upgrade/uninstall behave cleanly on real hosted servers
-5. `channels.send` and `channels.delete` preserve write-read coherence
+5. truthful adapter methods preserve write-read coherence

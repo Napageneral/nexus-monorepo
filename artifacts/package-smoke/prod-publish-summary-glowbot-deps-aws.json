@@ -1,0 +1,157 @@
+{
+  "generated_at": "2026-03-17T23:57:38.188863+00:00",
+  "host": "frontdoor-aws-publish",
+  "remote_frontdoor_root": "/opt/nexus/frontdoor",
+  "remote_db": "/var/lib/nexus-frontdoor/frontdoor.db",
+  "target_os": "linux",
+  "target_arch": "arm64",
+  "count": 5,
+  "failures": 0,
+  "results": [
+    {
+      "kind": "adapter",
+      "id": "google",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/google",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/google/dist/google-0.1.0.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/google/0.1.0/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/google/0.1.0/google-0.1.0.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "google",
+        "version": "0.1.0",
+        "release_id": "rel-google-0.1.0",
+        "variant_id": "variant-google-0.1.0-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/google/0.1.0/google-0.1.0.tar.gz",
+        "sha256": "07845ad2d1a216a410ebe2a18908d0b5ccf325cac9404f6a46426a3ee4cbd568",
+        "size_bytes": 4071721,
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"google\",\n  \"version\": \"0.1.0\",\n  \"release_id\": \"rel-google-0.1.0\",\n  \"variant_id\": \"variant-google-0.1.0-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/google/0.1.0/google-0.1.0.tar.gz\",\n  \"sha256\": \"07845ad2d1a216a410ebe2a18908d0b5ccf325cac9404f6a46426a3ee4cbd568\",\n  \"size_bytes\": 4071721,\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:29973) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    },
+    {
+      "kind": "adapter",
+      "id": "meta-ads",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/meta-ads",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/meta-ads/dist/meta-ads-0.1.0.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/meta-ads/0.1.0/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/meta-ads/0.1.0/meta-ads-0.1.0.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "meta-ads",
+        "version": "0.1.0",
+        "release_id": "rel-meta-ads-0.1.0",
+        "variant_id": "variant-meta-ads-0.1.0-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/meta-ads/0.1.0/meta-ads-0.1.0.tar.gz",
+        "sha256": "cba844b26670005af99a21980a29f8b07a587cc89572e3666914d7cb7f3f123f",
+        "size_bytes": 9387949,
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"meta-ads\",\n  \"version\": \"0.1.0\",\n  \"release_id\": \"rel-meta-ads-0.1.0\",\n  \"variant_id\": \"variant-meta-ads-0.1.0-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/meta-ads/0.1.0/meta-ads-0.1.0.tar.gz\",\n  \"sha256\": \"cba844b26670005af99a21980a29f8b07a587cc89572e3666914d7cb7f3f123f\",\n  \"size_bytes\": 9387949,\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:30182) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    },
+    {
+      "kind": "adapter",
+      "id": "callrail",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/callrail",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/callrail/dist/callrail-0.1.0.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/callrail/0.1.0/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/callrail/0.1.0/callrail-0.1.0.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "callrail",
+        "version": "0.1.0",
+        "release_id": "rel-callrail-0.1.0",
+        "variant_id": "variant-callrail-0.1.0-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/callrail/0.1.0/callrail-0.1.0.tar.gz",
+        "sha256": "a56b2a363228df903ebed099251fa09e77cf9d818e0c41b1a388df337f0645cc",
+        "size_bytes": 9425438,
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"callrail\",\n  \"version\": \"0.1.0\",\n  \"release_id\": \"rel-callrail-0.1.0\",\n  \"variant_id\": \"variant-callrail-0.1.0-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/callrail/0.1.0/callrail-0.1.0.tar.gz\",\n  \"sha256\": \"a56b2a363228df903ebed099251fa09e77cf9d818e0c41b1a388df337f0645cc\",\n  \"size_bytes\": 9425438,\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:30391) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    },
+    {
+      "kind": "adapter",
+      "id": "twilio",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/twilio",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/twilio/dist/twilio-0.1.0.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/twilio/0.1.0/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/twilio/0.1.0/twilio-0.1.0.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "twilio",
+        "version": "0.1.0",
+        "release_id": "rel-twilio-0.1.0",
+        "variant_id": "variant-twilio-0.1.0-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/twilio/0.1.0/twilio-0.1.0.tar.gz",
+        "sha256": "9c73fe306d0695dd7c8e92e2e9ed8b46305e99d6abc3094066c7710fdc2609d7",
+        "size_bytes": 9385754,
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"twilio\",\n  \"version\": \"0.1.0\",\n  \"release_id\": \"rel-twilio-0.1.0\",\n  \"variant_id\": \"variant-twilio-0.1.0-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/twilio/0.1.0/twilio-0.1.0.tar.gz\",\n  \"sha256\": \"9c73fe306d0695dd7c8e92e2e9ed8b46305e99d6abc3094066c7710fdc2609d7\",\n  \"size_bytes\": 9385754,\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:30600) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    },
+    {
+      "kind": "adapter",
+      "id": "apple-maps",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/apple-maps",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/apple-maps/dist/apple-maps-0.1.0.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/apple-maps/0.1.0/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/apple-maps/0.1.0/apple-maps-0.1.0.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "apple-maps",
+        "version": "0.1.0",
+        "release_id": "rel-apple-maps-0.1.0",
+        "variant_id": "variant-apple-maps-0.1.0-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/apple-maps/0.1.0/apple-maps-0.1.0.tar.gz",
+        "sha256": "d6b4f172dc861e5aaac340510b69182a4192814a92a9a2ba65938de0574259ea",
+        "size_bytes": 1875096,
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"apple-maps\",\n  \"version\": \"0.1.0\",\n  \"release_id\": \"rel-apple-maps-0.1.0\",\n  \"variant_id\": \"variant-apple-maps-0.1.0-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/apple-maps/0.1.0/apple-maps-0.1.0.tar.gz\",\n  \"sha256\": \"d6b4f172dc861e5aaac340510b69182a4192814a92a9a2ba65938de0574259ea\",\n  \"size_bytes\": 1875096,\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:30809) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    }
+  ]
+}

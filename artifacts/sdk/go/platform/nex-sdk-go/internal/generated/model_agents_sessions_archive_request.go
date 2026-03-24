@@ -20,7 +20,7 @@ var _ MappedNullable = &AgentsSessionsArchiveRequest{}
 
 // AgentsSessionsArchiveRequest struct for AgentsSessionsArchiveRequest
 type AgentsSessionsArchiveRequest struct {
-	Key string `json:"key"`
+	SessionId string `json:"sessionId"`
 	DeleteTranscript *bool `json:"deleteTranscript,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
@@ -31,9 +31,9 @@ type _AgentsSessionsArchiveRequest AgentsSessionsArchiveRequest
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewAgentsSessionsArchiveRequest(key string) *AgentsSessionsArchiveRequest {
+func NewAgentsSessionsArchiveRequest(sessionId string) *AgentsSessionsArchiveRequest {
 	this := AgentsSessionsArchiveRequest{}
-	this.Key = key
+	this.SessionId = sessionId
 	return &this
 }
 
@@ -45,28 +45,28 @@ func NewAgentsSessionsArchiveRequestWithDefaults() *AgentsSessionsArchiveRequest
 	return &this
 }
 
-// GetKey returns the Key field value
-func (o *AgentsSessionsArchiveRequest) GetKey() string {
+// GetSessionId returns the SessionId field value
+func (o *AgentsSessionsArchiveRequest) GetSessionId() string {
 	if o == nil {
 		var ret string
 		return ret
 	}
 
-	return o.Key
+	return o.SessionId
 }
 
-// GetKeyOk returns a tuple with the Key field value
+// GetSessionIdOk returns a tuple with the SessionId field value
 // and a boolean to check if the value has been set.
-func (o *AgentsSessionsArchiveRequest) GetKeyOk() (*string, bool) {
+func (o *AgentsSessionsArchiveRequest) GetSessionIdOk() (*string, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.Key, true
+	return &o.SessionId, true
 }
 
-// SetKey sets field value
-func (o *AgentsSessionsArchiveRequest) SetKey(v string) {
-	o.Key = v
+// SetSessionId sets field value
+func (o *AgentsSessionsArchiveRequest) SetSessionId(v string) {
+	o.SessionId = v
 }
 
 // GetDeleteTranscript returns the DeleteTranscript field value if set, zero value otherwise.
@@ -111,7 +111,7 @@ func (o AgentsSessionsArchiveRequest) MarshalJSON() ([]byte, error) {
 
 func (o AgentsSessionsArchiveRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["key"] = o.Key
+	toSerialize["sessionId"] = o.SessionId
 	if !IsNil(o.DeleteTranscript) {
 		toSerialize["deleteTranscript"] = o.DeleteTranscript
 	}
@@ -128,7 +128,7 @@ func (o *AgentsSessionsArchiveRequest) UnmarshalJSON(data []byte) (err error) {
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
-		"key",
+		"sessionId",
 	}
 
 	allProperties := make(map[string]interface{})
@@ -158,7 +158,7 @@ func (o *AgentsSessionsArchiveRequest) UnmarshalJSON(data []byte) (err error) {
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
-		delete(additionalProperties, "key")
+		delete(additionalProperties, "sessionId")
 		delete(additionalProperties, "deleteTranscript")
 		o.AdditionalProperties = additionalProperties
 	}

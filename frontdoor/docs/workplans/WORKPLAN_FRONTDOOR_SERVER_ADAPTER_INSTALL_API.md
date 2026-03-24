@@ -119,8 +119,8 @@ Implement:
   - `POST /api/servers/:serverId/adapters/:adapterId/install`
   - runtime `adapters.connections.custom.*`
   - runtime `adapters.connections.backfill`
-  - runtime `channels.send`
-  - runtime `channels.delete`
+  - runtime `confluence.pages.create`
+  - runtime `confluence.pages.move_to_trash`
 
 Exit criteria:
 

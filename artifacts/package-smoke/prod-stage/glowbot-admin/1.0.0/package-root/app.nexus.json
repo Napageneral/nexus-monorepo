@@ -1,0 +1,182 @@
+{
+  "id": "glowbot-admin",
+  "version": "1.0.0",
+  "displayName": "GlowBot Admin",
+  "description": "Administrative console for managing GlowBot clinic instances",
+  "hosting": {
+    "required_server_class": "compliant",
+    "deployment_class": "product_control_plane"
+  },
+  "product": {
+    "tagline": "Operator console for GlowBot",
+    "visibility": "operator",
+    "plans": [
+      {
+        "id": "internal",
+        "name": "Internal",
+        "isDefault": true
+      }
+    ]
+  },
+  "requires": {
+    "apps": [
+      {
+        "id": "glowbot-hub",
+        "version": "^1.0.0"
+      }
+    ]
+  },
+  "handler": "methods/index.ts",
+  "ui": {
+    "root": "dist",
+    "entryPath": "/app/glowbot-admin/",
+    "spa": true
+  },
+  "methods": {
+    "glowbotAdmin.overview.get": {
+      "description": "Get GlowBot control-plane overview state",
+      "handler": "methods/overview-get.ts",
+      "access": "admin"
+    },
+    "glowbotAdmin.managedProfiles.list": {
+      "description": "List GlowBot-managed profiles",
+      "handler": "methods/managed-profiles-list.ts",
+      "access": "admin"
+    },
+    "glowbotAdmin.managedProfiles.get": {
+      "description": "Get a GlowBot-managed profile",
+      "handler": "methods/managed-profiles-get.ts",
+      "params": {
+        "type": "object",
+        "properties": {
+          "managedProfileId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "managedProfileId"
+        ]
+      },
+      "access": "admin"
+    },
+    "glowbotAdmin.managedProfiles.create": {
+      "description": "Create a GlowBot-managed profile",
+      "handler": "methods/managed-profiles-create.ts",
+      "access": "admin"
+    },
+    "glowbotAdmin.managedProfiles.update": {
+      "description": "Update a GlowBot-managed profile",
+      "handler": "methods/managed-profiles-update.ts",
+      "params": {
+        "type": "object",
+        "properties": {
+          "managedProfileId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "managedProfileId"
+        ]
+      },
+      "access": "admin"
+    },
+    "glowbotAdmin.managedProfiles.archive": {
+      "description": "Archive a GlowBot-managed profile",
+      "handler": "methods/managed-profiles-archive.ts",
+      "params": {
+        "type": "object",
+        "properties": {
+          "managedProfileId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "managedProfileId"
+        ]
+      },
+      "access": "admin"
+    },
+    "glowbotAdmin.clinics.list": {
+      "description": "List clinic participation summaries",
+      "handler": "methods/clinics-list.ts",
+      "access": "admin"
+    },
+    "glowbotAdmin.clinics.get": {
+      "description": "Get clinic participation detail",
+      "handler": "methods/clinics-detail.ts",
+      "params": {
+        "type": "object",
+        "properties": {
+          "clinicId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinicId"
+        ]
+      },
+      "access": "admin"
+    },
+    "glowbotAdmin.diagnostics.summary": {
+      "description": "Get GlowBot hub diagnostics summary",
+      "handler": "methods/diagnostics-summary.ts",
+      "access": "admin"
+    },
+    "glowbotAdmin.benchmarks.networkHealth": {
+      "description": "Get benchmark network health",
+      "handler": "methods/benchmarks-network-health.ts",
+      "access": "admin"
+    },
+    "glowbotAdmin.benchmarks.seed.publish": {
+      "description": "Publish benchmark seed records",
+      "handler": "methods/benchmarks-seed-publish.ts",
+      "access": "admin"
+    },
+    "glowbotAdmin.cohorts.list": {
+      "description": "List benchmark cohorts",
+      "handler": "methods/cohorts-list.ts",
+      "access": "admin"
+    },
+    "glowbotAdmin.cohorts.update": {
+      "description": "Replace benchmark cohorts",
+      "handler": "methods/cohorts-update.ts",
+      "access": "admin"
+    },
+    "glowbotAdmin.productFlags.list": {
+      "description": "List GlowBot product flags",
+      "handler": "methods/product-flags-list.ts",
+      "access": "admin"
+    },
+    "glowbotAdmin.productFlags.update": {
+      "description": "Update a GlowBot product flag",
+      "handler": "methods/product-flags-update.ts",
+      "params": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {}
+        },
+        "required": [
+          "key",
+          "value"
+        ]
+      },
+      "access": "admin"
+    },
+    "glowbotAdmin.audit.list": {
+      "description": "List GlowBot hub audit events",
+      "handler": "methods/audit-list.ts",
+      "access": "admin"
+    }
+  },
+  "hooks": {
+    "onInstall": "hooks/install.ts",
+    "onActivate": "hooks/activate.ts",
+    "onDeactivate": "hooks/deactivate.ts",
+    "onUpgrade": "hooks/upgrade.ts",
+    "onUninstall": "hooks/uninstall.ts"
+  },
+  "skill": "./SKILL.md"
+}

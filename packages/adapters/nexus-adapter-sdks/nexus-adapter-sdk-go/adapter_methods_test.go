@@ -29,7 +29,6 @@ func testAdapterMethod() AdapterMethod {
 		ConnectionRequired: true,
 		MutatesRemote:      true,
 		Origin: AdapterMethodOrigin{
-			Kind:              "adapter",
 			PackageID:         "jira",
 			PackageVersion:    "1.0.0",
 			DeclarationMode:   "manifest",

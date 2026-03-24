@@ -22,7 +22,7 @@ var _ MappedNullable = &ConfigApplyRequest{}
 type ConfigApplyRequest struct {
 	Raw string `json:"raw"`
 	BaseHash *string `json:"baseHash,omitempty"`
-	SessionKey *string `json:"sessionKey,omitempty"`
+	SessionId *string `json:"sessionId,omitempty"`
 	Note *string `json:"note,omitempty"`
 	RestartDelayMs *int32 `json:"restartDelayMs,omitempty"`
 	AdditionalProperties map[string]interface{}
@@ -104,36 +104,36 @@ func (o *ConfigApplyRequest) SetBaseHash(v string) {
 	o.BaseHash = &v
 }
 
-// GetSessionKey returns the SessionKey field value if set, zero value otherwise.
-func (o *ConfigApplyRequest) GetSessionKey() string {
-	if o == nil || IsNil(o.SessionKey) {
+// GetSessionId returns the SessionId field value if set, zero value otherwise.
+func (o *ConfigApplyRequest) GetSessionId() string {
+	if o == nil || IsNil(o.SessionId) {
 		var ret string
 		return ret
 	}
-	return *o.SessionKey
+	return *o.SessionId
 }
 
-// GetSessionKeyOk returns a tuple with the SessionKey field value if set, nil otherwise
+// GetSessionIdOk returns a tuple with the SessionId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *ConfigApplyRequest) GetSessionKeyOk() (*string, bool) {
-	if o == nil || IsNil(o.SessionKey) {
+func (o *ConfigApplyRequest) GetSessionIdOk() (*string, bool) {
+	if o == nil || IsNil(o.SessionId) {
 		return nil, false
 	}
-	return o.SessionKey, true
+	return o.SessionId, true
 }
 
-// HasSessionKey returns a boolean if a field has been set.
-func (o *ConfigApplyRequest) HasSessionKey() bool {
-	if o != nil && !IsNil(o.SessionKey) {
+// HasSessionId returns a boolean if a field has been set.
+func (o *ConfigApplyRequest) HasSessionId() bool {
+	if o != nil && !IsNil(o.SessionId) {
 		return true
 	}
 
 	return false
 }
 
-// SetSessionKey gets a reference to the given string and assigns it to the SessionKey field.
-func (o *ConfigApplyRequest) SetSessionKey(v string) {
-	o.SessionKey = &v
+// SetSessionId gets a reference to the given string and assigns it to the SessionId field.
+func (o *ConfigApplyRequest) SetSessionId(v string) {
+	o.SessionId = &v
 }
 
 // GetNote returns the Note field value if set, zero value otherwise.
@@ -214,8 +214,8 @@ func (o ConfigApplyRequest) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.BaseHash) {
 		toSerialize["baseHash"] = o.BaseHash
 	}
-	if !IsNil(o.SessionKey) {
-		toSerialize["sessionKey"] = o.SessionKey
+	if !IsNil(o.SessionId) {
+		toSerialize["sessionId"] = o.SessionId
 	}
 	if !IsNil(o.Note) {
 		toSerialize["note"] = o.Note
@@ -268,7 +268,7 @@ func (o *ConfigApplyRequest) UnmarshalJSON(data []byte) (err error) {
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
 		delete(additionalProperties, "raw")
 		delete(additionalProperties, "baseHash")
-		delete(additionalProperties, "sessionKey")
+		delete(additionalProperties, "sessionId")
 		delete(additionalProperties, "note")
 		delete(additionalProperties, "restartDelayMs")
 		o.AdditionalProperties = additionalProperties

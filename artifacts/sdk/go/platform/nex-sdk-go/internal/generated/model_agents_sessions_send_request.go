@@ -21,7 +21,6 @@ var _ MappedNullable = &AgentsSessionsSendRequest{}
 // AgentsSessionsSendRequest struct for AgentsSessionsSendRequest
 type AgentsSessionsSendRequest struct {
 	SessionId *string `json:"sessionId,omitempty"`
-	SessionKey *string `json:"session_key,omitempty"`
 	Message string `json:"message"`
 	Thinking *string `json:"thinking,omitempty"`
 	Deliver *bool `json:"deliver,omitempty"`
@@ -82,38 +81,6 @@ func (o *AgentsSessionsSendRequest) HasSessionId() bool {
 // SetSessionId gets a reference to the given string and assigns it to the SessionId field.
 func (o *AgentsSessionsSendRequest) SetSessionId(v string) {
 	o.SessionId = &v
-}
-
-// GetSessionKey returns the SessionKey field value if set, zero value otherwise.
-func (o *AgentsSessionsSendRequest) GetSessionKey() string {
-	if o == nil || IsNil(o.SessionKey) {
-		var ret string
-		return ret
-	}
-	return *o.SessionKey
-}
-
-// GetSessionKeyOk returns a tuple with the SessionKey field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *AgentsSessionsSendRequest) GetSessionKeyOk() (*string, bool) {
-	if o == nil || IsNil(o.SessionKey) {
-		return nil, false
-	}
-	return o.SessionKey, true
-}
-
-// HasSessionKey returns a boolean if a field has been set.
-func (o *AgentsSessionsSendRequest) HasSessionKey() bool {
-	if o != nil && !IsNil(o.SessionKey) {
-		return true
-	}
-
-	return false
-}
-
-// SetSessionKey gets a reference to the given string and assigns it to the SessionKey field.
-func (o *AgentsSessionsSendRequest) SetSessionKey(v string) {
-	o.SessionKey = &v
 }
 
 // GetMessage returns the Message field value
@@ -305,9 +272,6 @@ func (o AgentsSessionsSendRequest) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.SessionId) {
 		toSerialize["sessionId"] = o.SessionId
 	}
-	if !IsNil(o.SessionKey) {
-		toSerialize["session_key"] = o.SessionKey
-	}
 	toSerialize["message"] = o.Message
 	if !IsNil(o.Thinking) {
 		toSerialize["thinking"] = o.Thinking
@@ -367,7 +331,6 @@ func (o *AgentsSessionsSendRequest) UnmarshalJSON(data []byte) (err error) {
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
 		delete(additionalProperties, "sessionId")
-		delete(additionalProperties, "session_key")
 		delete(additionalProperties, "message")
 		delete(additionalProperties, "thinking")
 		delete(additionalProperties, "deliver")

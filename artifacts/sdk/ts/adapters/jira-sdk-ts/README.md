@@ -1,6 +1,6 @@
 # jira SDK (TypeScript)
 
-Generated TypeScript SDK for the adapter package contract in `packages/adapters/jira/api/openapi.yaml`.
+Generated TypeScript SDK for the adapter package contract for `jira`.
 
 This SDK is generated centrally under `artifacts/sdk/ts/adapters/`.
 Package repos do not own SDK publication logic.

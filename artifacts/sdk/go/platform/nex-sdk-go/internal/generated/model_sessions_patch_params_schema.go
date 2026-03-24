@@ -20,14 +20,13 @@ var _ MappedNullable = &SessionsPatchParamsSchema{}
 
 // SessionsPatchParamsSchema struct for SessionsPatchParamsSchema
 type SessionsPatchParamsSchema struct {
-	Key string `json:"key"`
+	SessionId string `json:"session_id"`
 	EntityId *string `json:"entity_id,omitempty"`
 	RoleConfigId *string `json:"role_config_id,omitempty"`
 	ModelConfigId *string `json:"model_config_id,omitempty"`
 	ExecutionHostKind *AdaptersConnectionsList200ResponsePayloadConnectionsInnerStatus `json:"execution_host_kind,omitempty"`
 	SandboxId *string `json:"sandbox_id,omitempty"`
 	ExecutionHostConfigJson *AgentsSessionsPatchRequestExecutionHostConfigJson `json:"execution_host_config_json,omitempty"`
-	SessionKey *string `json:"session_key,omitempty"`
 	ThinkingLevel *string `json:"thinkingLevel,omitempty"`
 	VerboseLevel *string `json:"verboseLevel,omitempty"`
 	ReasoningLevel *string `json:"reasoningLevel,omitempty"`
@@ -38,7 +37,8 @@ type SessionsPatchParamsSchema struct {
 	ExecAsk *string `json:"execAsk,omitempty"`
 	ExecNode *string `json:"execNode,omitempty"`
 	Model *string `json:"model,omitempty"`
-	SpawnedBy *string `json:"spawnedBy,omitempty"`
+	ParentSessionId *string `json:"parentSessionId,omitempty"`
+	Label *string `json:"label,omitempty"`
 	SendPolicy *AclRequestsApproveRequestMode `json:"sendPolicy,omitempty"`
 	GroupActivation *AclRequestsApproveRequestMode `json:"groupActivation,omitempty"`
 	AdditionalProperties map[string]interface{}
@@ -50,9 +50,9 @@ type _SessionsPatchParamsSchema SessionsPatchParamsSchema
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewSessionsPatchParamsSchema(key string) *SessionsPatchParamsSchema {
+func NewSessionsPatchParamsSchema(sessionId string) *SessionsPatchParamsSchema {
 	this := SessionsPatchParamsSchema{}
-	this.Key = key
+	this.SessionId = sessionId
 	return &this
 }
 
@@ -64,28 +64,28 @@ func NewSessionsPatchParamsSchemaWithDefaults() *SessionsPatchParamsSchema {
 	return &this
 }
 
-// GetKey returns the Key field value
-func (o *SessionsPatchParamsSchema) GetKey() string {
+// GetSessionId returns the SessionId field value
+func (o *SessionsPatchParamsSchema) GetSessionId() string {
 	if o == nil {
 		var ret string
 		return ret
 	}
 
-	return o.Key
+	return o.SessionId
 }
 
-// GetKeyOk returns a tuple with the Key field value
+// GetSessionIdOk returns a tuple with the SessionId field value
 // and a boolean to check if the value has been set.
-func (o *SessionsPatchParamsSchema) GetKeyOk() (*string, bool) {
+func (o *SessionsPatchParamsSchema) GetSessionIdOk() (*string, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.Key, true
+	return &o.SessionId, true
 }
 
-// SetKey sets field value
-func (o *SessionsPatchParamsSchema) SetKey(v string) {
-	o.Key = v
+// SetSessionId sets field value
+func (o *SessionsPatchParamsSchema) SetSessionId(v string) {
+	o.SessionId = v
 }
 
 // GetEntityId returns the EntityId field value if set, zero value otherwise.
@@ -278,38 +278,6 @@ func (o *SessionsPatchParamsSchema) HasExecutionHostConfigJson() bool {
 // SetExecutionHostConfigJson gets a reference to the given AgentsSessionsPatchRequestExecutionHostConfigJson and assigns it to the ExecutionHostConfigJson field.
 func (o *SessionsPatchParamsSchema) SetExecutionHostConfigJson(v AgentsSessionsPatchRequestExecutionHostConfigJson) {
 	o.ExecutionHostConfigJson = &v
-}
-
-// GetSessionKey returns the SessionKey field value if set, zero value otherwise.
-func (o *SessionsPatchParamsSchema) GetSessionKey() string {
-	if o == nil || IsNil(o.SessionKey) {
-		var ret string
-		return ret
-	}
-	return *o.SessionKey
-}
-
-// GetSessionKeyOk returns a tuple with the SessionKey field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *SessionsPatchParamsSchema) GetSessionKeyOk() (*string, bool) {
-	if o == nil || IsNil(o.SessionKey) {
-		return nil, false
-	}
-	return o.SessionKey, true
-}
-
-// HasSessionKey returns a boolean if a field has been set.
-func (o *SessionsPatchParamsSchema) HasSessionKey() bool {
-	if o != nil && !IsNil(o.SessionKey) {
-		return true
-	}
-
-	return false
-}
-
-// SetSessionKey gets a reference to the given string and assigns it to the SessionKey field.
-func (o *SessionsPatchParamsSchema) SetSessionKey(v string) {
-	o.SessionKey = &v
 }
 
 // GetThinkingLevel returns the ThinkingLevel field value if set, zero value otherwise.
@@ -632,36 +600,68 @@ func (o *SessionsPatchParamsSchema) SetModel(v string) {
 	o.Model = &v
 }
 
-// GetSpawnedBy returns the SpawnedBy field value if set, zero value otherwise.
-func (o *SessionsPatchParamsSchema) GetSpawnedBy() string {
-	if o == nil || IsNil(o.SpawnedBy) {
+// GetParentSessionId returns the ParentSessionId field value if set, zero value otherwise.
+func (o *SessionsPatchParamsSchema) GetParentSessionId() string {
+	if o == nil || IsNil(o.ParentSessionId) {
 		var ret string
 		return ret
 	}
-	return *o.SpawnedBy
+	return *o.ParentSessionId
 }
 
-// GetSpawnedByOk returns a tuple with the SpawnedBy field value if set, nil otherwise
+// GetParentSessionIdOk returns a tuple with the ParentSessionId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *SessionsPatchParamsSchema) GetSpawnedByOk() (*string, bool) {
-	if o == nil || IsNil(o.SpawnedBy) {
+func (o *SessionsPatchParamsSchema) GetParentSessionIdOk() (*string, bool) {
+	if o == nil || IsNil(o.ParentSessionId) {
 		return nil, false
 	}
-	return o.SpawnedBy, true
+	return o.ParentSessionId, true
 }
 
-// HasSpawnedBy returns a boolean if a field has been set.
-func (o *SessionsPatchParamsSchema) HasSpawnedBy() bool {
-	if o != nil && !IsNil(o.SpawnedBy) {
+// HasParentSessionId returns a boolean if a field has been set.
+func (o *SessionsPatchParamsSchema) HasParentSessionId() bool {
+	if o != nil && !IsNil(o.ParentSessionId) {
 		return true
 	}
 
 	return false
 }
 
-// SetSpawnedBy gets a reference to the given string and assigns it to the SpawnedBy field.
-func (o *SessionsPatchParamsSchema) SetSpawnedBy(v string) {
-	o.SpawnedBy = &v
+// SetParentSessionId gets a reference to the given string and assigns it to the ParentSessionId field.
+func (o *SessionsPatchParamsSchema) SetParentSessionId(v string) {
+	o.ParentSessionId = &v
+}
+
+// GetLabel returns the Label field value if set, zero value otherwise.
+func (o *SessionsPatchParamsSchema) GetLabel() string {
+	if o == nil || IsNil(o.Label) {
+		var ret string
+		return ret
+	}
+	return *o.Label
+}
+
+// GetLabelOk returns a tuple with the Label field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SessionsPatchParamsSchema) GetLabelOk() (*string, bool) {
+	if o == nil || IsNil(o.Label) {
+		return nil, false
+	}
+	return o.Label, true
+}
+
+// HasLabel returns a boolean if a field has been set.
+func (o *SessionsPatchParamsSchema) HasLabel() bool {
+	if o != nil && !IsNil(o.Label) {
+		return true
+	}
+
+	return false
+}
+
+// SetLabel gets a reference to the given string and assigns it to the Label field.
+func (o *SessionsPatchParamsSchema) SetLabel(v string) {
+	o.Label = &v
 }
 
 // GetSendPolicy returns the SendPolicy field value if set, zero value otherwise.
@@ -738,7 +738,7 @@ func (o SessionsPatchParamsSchema) MarshalJSON() ([]byte, error) {
 
 func (o SessionsPatchParamsSchema) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["key"] = o.Key
+	toSerialize["session_id"] = o.SessionId
 	if !IsNil(o.EntityId) {
 		toSerialize["entity_id"] = o.EntityId
 	}
@@ -756,9 +756,6 @@ func (o SessionsPatchParamsSchema) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.ExecutionHostConfigJson) {
 		toSerialize["execution_host_config_json"] = o.ExecutionHostConfigJson
-	}
-	if !IsNil(o.SessionKey) {
-		toSerialize["session_key"] = o.SessionKey
 	}
 	if !IsNil(o.ThinkingLevel) {
 		toSerialize["thinkingLevel"] = o.ThinkingLevel
@@ -790,8 +787,11 @@ func (o SessionsPatchParamsSchema) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.Model) {
 		toSerialize["model"] = o.Model
 	}
-	if !IsNil(o.SpawnedBy) {
-		toSerialize["spawnedBy"] = o.SpawnedBy
+	if !IsNil(o.ParentSessionId) {
+		toSerialize["parentSessionId"] = o.ParentSessionId
+	}
+	if !IsNil(o.Label) {
+		toSerialize["label"] = o.Label
 	}
 	if !IsNil(o.SendPolicy) {
 		toSerialize["sendPolicy"] = o.SendPolicy
@@ -812,7 +812,7 @@ func (o *SessionsPatchParamsSchema) UnmarshalJSON(data []byte) (err error) {
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
-		"key",
+		"session_id",
 	}
 
 	allProperties := make(map[string]interface{})
@@ -842,14 +842,13 @@ func (o *SessionsPatchParamsSchema) UnmarshalJSON(data []byte) (err error) {
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
-		delete(additionalProperties, "key")
+		delete(additionalProperties, "session_id")
 		delete(additionalProperties, "entity_id")
 		delete(additionalProperties, "role_config_id")
 		delete(additionalProperties, "model_config_id")
 		delete(additionalProperties, "execution_host_kind")
 		delete(additionalProperties, "sandbox_id")
 		delete(additionalProperties, "execution_host_config_json")
-		delete(additionalProperties, "session_key")
 		delete(additionalProperties, "thinkingLevel")
 		delete(additionalProperties, "verboseLevel")
 		delete(additionalProperties, "reasoningLevel")
@@ -860,7 +859,8 @@ func (o *SessionsPatchParamsSchema) UnmarshalJSON(data []byte) (err error) {
 		delete(additionalProperties, "execAsk")
 		delete(additionalProperties, "execNode")
 		delete(additionalProperties, "model")
-		delete(additionalProperties, "spawnedBy")
+		delete(additionalProperties, "parentSessionId")
+		delete(additionalProperties, "label")
 		delete(additionalProperties, "sendPolicy")
 		delete(additionalProperties, "groupActivation")
 		o.AdditionalProperties = additionalProperties

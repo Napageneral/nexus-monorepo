@@ -20,7 +20,7 @@ var _ MappedNullable = &SessionsDeleteParamsSchema{}
 
 // SessionsDeleteParamsSchema struct for SessionsDeleteParamsSchema
 type SessionsDeleteParamsSchema struct {
-	Key string `json:"key"`
+	SessionId string `json:"sessionId"`
 	DeleteTranscript *bool `json:"deleteTranscript,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
@@ -31,9 +31,9 @@ type _SessionsDeleteParamsSchema SessionsDeleteParamsSchema
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewSessionsDeleteParamsSchema(key string) *SessionsDeleteParamsSchema {
+func NewSessionsDeleteParamsSchema(sessionId string) *SessionsDeleteParamsSchema {
 	this := SessionsDeleteParamsSchema{}
-	this.Key = key
+	this.SessionId = sessionId
 	return &this
 }
 
@@ -45,28 +45,28 @@ func NewSessionsDeleteParamsSchemaWithDefaults() *SessionsDeleteParamsSchema {
 	return &this
 }
 
-// GetKey returns the Key field value
-func (o *SessionsDeleteParamsSchema) GetKey() string {
+// GetSessionId returns the SessionId field value
+func (o *SessionsDeleteParamsSchema) GetSessionId() string {
 	if o == nil {
 		var ret string
 		return ret
 	}
 
-	return o.Key
+	return o.SessionId
 }
 
-// GetKeyOk returns a tuple with the Key field value
+// GetSessionIdOk returns a tuple with the SessionId field value
 // and a boolean to check if the value has been set.
-func (o *SessionsDeleteParamsSchema) GetKeyOk() (*string, bool) {
+func (o *SessionsDeleteParamsSchema) GetSessionIdOk() (*string, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.Key, true
+	return &o.SessionId, true
 }
 
-// SetKey sets field value
-func (o *SessionsDeleteParamsSchema) SetKey(v string) {
-	o.Key = v
+// SetSessionId sets field value
+func (o *SessionsDeleteParamsSchema) SetSessionId(v string) {
+	o.SessionId = v
 }
 
 // GetDeleteTranscript returns the DeleteTranscript field value if set, zero value otherwise.
@@ -111,7 +111,7 @@ func (o SessionsDeleteParamsSchema) MarshalJSON() ([]byte, error) {
 
 func (o SessionsDeleteParamsSchema) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["key"] = o.Key
+	toSerialize["sessionId"] = o.SessionId
 	if !IsNil(o.DeleteTranscript) {
 		toSerialize["deleteTranscript"] = o.DeleteTranscript
 	}
@@ -128,7 +128,7 @@ func (o *SessionsDeleteParamsSchema) UnmarshalJSON(data []byte) (err error) {
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
-		"key",
+		"sessionId",
 	}
 
 	allProperties := make(map[string]interface{})
@@ -158,7 +158,7 @@ func (o *SessionsDeleteParamsSchema) UnmarshalJSON(data []byte) (err error) {
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
-		delete(additionalProperties, "key")
+		delete(additionalProperties, "sessionId")
 		delete(additionalProperties, "deleteTranscript")
 		o.AdditionalProperties = additionalProperties
 	}

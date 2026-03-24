@@ -1,6 +1,6 @@
 # eve SDK (TypeScript)
 
-Generated TypeScript SDK for the adapter package contract in `packages/adapters/eve/api/openapi.yaml`.
+Generated TypeScript SDK for the adapter package contract for `eve`.
 
 This SDK is generated centrally under `artifacts/sdk/ts/adapters/`.
 Package repos do not own SDK publication logic.

@@ -7,10 +7,10 @@
 //
 //	eve-adapter adapter.info
 //	eve-adapter adapter.monitor.start --connection conn-eve
-//	eve-adapter channels.send --connection conn-eve --container "+14155551234" --text "Hello"
+//	eve-adapter imessage.send --connection conn-eve --payload-json '{"target":{"channel":{"platform":"imessage","container_id":"+14155551234"}},"text":"Hello"}'
 //	eve-adapter records.backfill --connection conn-eve --since 2026-01-01
 //	eve-adapter adapter.health --connection conn-eve
-//	eve-adapter adapter.accounts.list
+//	eve-adapter adapter.connections.list
 package main
 
 import (
@@ -71,8 +71,73 @@ type stagedChunkWriter struct {
 	manifest     stagedBackfillManifest
 }
 
+type imessageMethodTarget struct {
+	ConnectionID string                `json:"connection_id"`
+	Channel      nexadapter.ChannelRef `json:"channel"`
+	ReplyToID    string                `json:"reply_to_id,omitempty"`
+}
+
+type imessageSendRequest struct {
+	Target  imessageMethodTarget `json:"target"`
+	Text    string               `json:"text,omitempty"`
+	Media   string               `json:"media,omitempty"`
+	Caption string               `json:"caption,omitempty"`
+}
+
+type imessageMethodResult struct {
+	Success    bool                     `json:"success"`
+	MessageIDs []string                 `json:"message_ids"`
+	ChunksSent int                      `json:"chunks_sent"`
+	TotalChars int                      `json:"total_chars,omitempty"`
+	Error      *nexadapter.DeliveryError `json:"error,omitempty"`
+}
+
 func boolPtr(value bool) *bool {
 	return &value
+}
+
+func stringFromAny(value any) string {
+	text, ok := value.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(text)
+}
+
+func readMethodSendRequest(req nexadapter.AdapterMethodRequest) (imessageSendRequest, error) {
+	payload := req.Payload
+	if payload == nil {
+		payload = map[string]any{}
+	}
+
+	targetRaw, ok := payload["target"].(map[string]any)
+	if !ok {
+		return imessageSendRequest{}, fmt.Errorf("imessage.send requires payload.target")
+	}
+
+	if stringFromAny(targetRaw["connection_id"]) == "" {
+		connectionID := strings.TrimSpace(req.ConnectionID)
+		if connectionID == "" {
+			return imessageSendRequest{}, fmt.Errorf("imessage.send requires --connection or payload.target.connection_id")
+		}
+		targetRaw["connection_id"] = connectionID
+	}
+
+	encoded, err := json.Marshal(map[string]any{
+		"target":  targetRaw,
+		"text":    payload["text"],
+		"media":   payload["media"],
+		"caption": payload["caption"],
+	})
+	if err != nil {
+		return imessageSendRequest{}, err
+	}
+
+	var sendReq imessageSendRequest
+	if err := json.Unmarshal(encoded, &sendReq); err != nil {
+		return imessageSendRequest{}, err
+	}
+	return sendReq, nil
 }
 
 func main() {
@@ -116,8 +181,8 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 			SupportsStreamingEdit: false,
 		},
 		Connection: nexadapter.ConnectionHandlers[struct{}]{
-			Accounts: func(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterAccount, error) {
-				return eveAccounts(ctx.Context)
+			Connections: func(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterConnectionIdentity, error) {
+				return eveConnections(ctx.Context)
 			},
 			Health: func(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth, error) {
 				return eveHealth(ctx.Context, ctx.ConnectionID)
@@ -129,11 +194,6 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 			},
 			Backfill: func(ctx nexadapter.AdapterContext[struct{}], since time.Time, emit nexadapter.EmitFunc) error {
 				return eveBackfill(ctx.Context, ctx.ConnectionID, since, emit)
-			},
-		},
-		Delivery: nexadapter.DeliveryHandlers[struct{}]{
-			Send: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.SendRequest) (*nexadapter.DeliveryResult, error) {
-				return eveSend(ctx.Context, req)
 			},
 		},
 		Setup: nexadapter.SetupHandlers[struct{}]{
@@ -151,9 +211,41 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 			},
 		},
 		Methods: map[string]nexadapter.DeclaredMethod[struct{}]{
+			"imessage.send": nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
+				Description: "Send an outbound iMessage through the local Messages app.",
+				Action:      "write",
+				Params: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"target":  map[string]any{"type": "object"},
+						"text":    map[string]any{"type": "string"},
+						"media":   map[string]any{"type": "string"},
+						"caption": map[string]any{"type": "string"},
+					},
+					"required": []string{"target"},
+				},
+				Response: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"success":     map[string]any{"type": "boolean"},
+						"message_ids": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+						"chunks_sent": map[string]any{"type": "integer"},
+						"total_chars": map[string]any{"type": "integer"},
+					},
+				},
+				ConnectionRequired: boolPtr(true),
+				MutatesRemote:      boolPtr(true),
+				Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
+					sendReq, err := readMethodSendRequest(req)
+					if err != nil {
+						return nil, err
+					}
+					return eveSend(ctx.Context, sendReq)
+				},
+			}),
 			"records.backfill.stage": nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
-				Description:        "Stage historical Eve backfill into canonical JSONL chunk files for Nex bulk import.",
-				Action:             "read",
+				Description: "Stage historical Eve backfill into canonical JSONL chunk files for Nex bulk import.",
+				Action:      "read",
 				Params: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -181,10 +273,10 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 							"items": map[string]any{
 								"type": "object",
 								"properties": map[string]any{
-									"path":              map[string]any{"type": "string"},
-									"records":           map[string]any{"type": "integer"},
-									"first_record_id":   map[string]any{"type": "string"},
-									"last_record_id":    map[string]any{"type": "string"},
+									"path":               map[string]any{"type": "string"},
+									"records":            map[string]any{"type": "integer"},
+									"first_record_id":    map[string]any{"type": "string"},
+									"last_record_id":     map[string]any{"type": "string"},
 									"first_timestamp_ms": map[string]any{"type": "integer"},
 									"last_timestamp_ms":  map[string]any{"type": "integer"},
 								},
@@ -345,13 +437,13 @@ func eveMonitor(ctx context.Context, connectionID string, emit nexadapter.EmitFu
 
 // ---------- Send ----------
 
-func eveSend(ctx context.Context, req nexadapter.SendRequest) (*nexadapter.DeliveryResult, error) {
+func eveSend(ctx context.Context, req imessageSendRequest) (*imessageMethodResult, error) {
 	target := strings.TrimSpace(req.Target.Channel.ContainerID)
 	if target == "" {
 		target = recipientFromThreadID(req.Target.Channel.ThreadID)
 	}
 	if target == "" {
-		return &nexadapter.DeliveryResult{
+		return &imessageMethodResult{
 			Success: false,
 			Error: &nexadapter.DeliveryError{
 				Type:    "content_rejected",
@@ -361,7 +453,7 @@ func eveSend(ctx context.Context, req nexadapter.SendRequest) (*nexadapter.Deliv
 		}, nil
 	}
 	if strings.TrimSpace(req.Target.ReplyToID) != "" {
-		return &nexadapter.DeliveryResult{
+		return &imessageMethodResult{
 			Success: false,
 			Error: &nexadapter.DeliveryError{
 				Type:    "content_rejected",
@@ -383,7 +475,13 @@ func eveSend(ctx context.Context, req nexadapter.SendRequest) (*nexadapter.Deliv
 		return fmt.Sprintf("imessage:sent:%d", time.Now().UnixNano()), nil
 	})
 
-	return result, nil
+	return &imessageMethodResult{
+		Success:    result.Success,
+		MessageIDs: result.MessageIDs,
+		ChunksSent: result.ChunksSent,
+		TotalChars: result.TotalChars,
+		Error:      result.Error,
+	}, nil
 }
 
 func recipientFromThreadID(threadID string) string {
@@ -767,17 +865,18 @@ func eveHealth(_ context.Context, connectionID string) (*nexadapter.AdapterHealt
 		ConnectionID: connectionID,
 		LastEventAt:  lastEventAt,
 		Details: map[string]any{
-			"chat_db_path":   chatDBPath,
-			"warehouse_path": cfg.EveDBPath,
-			"message_count":  msgCount,
+			"chat_db_path":     chatDBPath,
+			"warehouse_path":   cfg.EveDBPath,
+			"message_count":    msgCount,
+			"adapter_contacts": getSelfContactSeeds(),
 		},
 	}, nil
 }
 
-// ---------- Accounts ----------
+// ---------- Connections ----------
 
-func eveAccounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {
-	return []nexadapter.AdapterAccount{
+func eveConnections(_ context.Context) ([]nexadapter.AdapterConnectionIdentity, error) {
+	return []nexadapter.AdapterConnectionIdentity{
 		{
 			ID:          "default",
 			DisplayName: getFullName(),
@@ -861,6 +960,7 @@ func buildEveSetupResult(ctx context.Context, req nexadapter.AdapterSetupRequest
 			Metadata: map[string]any{
 				"connected":    true,
 				"health_error": health.Error,
+				"details":      health.Details,
 			},
 		}, nil
 	}
@@ -877,6 +977,7 @@ func buildEveSetupResult(ctx context.Context, req nexadapter.AdapterSetupRequest
 			Metadata: map[string]any{
 				"connected":    false,
 				"health_error": health.Error,
+				"details":      health.Details,
 			},
 		}, nil
 	}
@@ -1112,7 +1213,7 @@ func convertWarehouseMessage(
 	if row.IsFromMe {
 		senderID = meIdentifier
 		if senderID == "" {
-			senderID = "me"
+			senderID = preferredSelfIdentifier(getSelfIdentity())
 		}
 		senderName = getFullName()
 	} else {
@@ -1373,7 +1474,7 @@ func convertWarehouseReaction(row warehouseReactionRow, meIdentifier string) nex
 	if row.IsFromMe {
 		senderID = meIdentifier
 		if senderID == "" {
-			senderID = "me"
+			senderID = preferredSelfIdentifier(getSelfIdentity())
 		}
 		senderName = getFullName()
 	} else {
@@ -1553,7 +1654,7 @@ func convertWarehouseMembership(row warehouseMembershipRow, meIdentifier string)
 	if row.IsFromMe {
 		senderID = meIdentifier
 		if senderID == "" {
-			senderID = "me"
+			senderID = preferredSelfIdentifier(getSelfIdentity())
 		}
 		senderName = getFullName()
 	} else {
@@ -1720,8 +1821,111 @@ func getFullName() string {
 	return cachedFullName
 }
 
+type selfIdentity struct {
+	Name   string   `json:"name"`
+	Phones []string `json:"phones,omitempty"`
+	Emails []string `json:"emails,omitempty"`
+}
+
+var cachedSelfIdentity *selfIdentity
+
+func appendUnique(values []string, value string) []string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return values
+	}
+	for _, existing := range values {
+		if strings.EqualFold(strings.TrimSpace(existing), trimmed) {
+			return values
+		}
+	}
+	return append(values, trimmed)
+}
+
+func getSelfIdentity() selfIdentity {
+	if cachedSelfIdentity != nil {
+		return *cachedSelfIdentity
+	}
+
+	identity := selfIdentity{Name: getFullName()}
+	chatDBPath := etl.GetChatDBPath()
+	if chatDBPath != "" {
+		chatDB, err := sql.Open("sqlite3", chatDBPath+"?mode=ro")
+		if err == nil {
+			defer chatDB.Close()
+			rows, queryErr := chatDB.Query(`
+			SELECT DISTINCT account
+			FROM message
+			WHERE is_from_me = 1
+			  AND account IS NOT NULL
+			  AND account != ''
+		`)
+			if queryErr == nil {
+				defer rows.Close()
+				for rows.Next() {
+					var account string
+					if err := rows.Scan(&account); err != nil {
+						continue
+					}
+					switch {
+					case strings.HasPrefix(account, "E:"):
+						identity.Emails = appendUnique(identity.Emails, strings.TrimPrefix(account, "E:"))
+					case strings.HasPrefix(account, "P:"):
+						identity.Phones = appendUnique(identity.Phones, strings.TrimPrefix(account, "P:"))
+					}
+				}
+			}
+		}
+	}
+
+	cachedSelfIdentity = &identity
+	return identity
+}
+
+func preferredSelfIdentifier(identity selfIdentity) string {
+	for _, email := range identity.Emails {
+		if trimmed := strings.TrimSpace(email); trimmed != "" {
+			return trimmed
+		}
+	}
+	for _, phone := range identity.Phones {
+		if trimmed := strings.TrimSpace(phone); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func getSelfContactSeeds() []map[string]any {
+	identity := getSelfIdentity()
+	seeds := make([]map[string]any, 0, len(identity.Emails)+len(identity.Phones))
+	for _, email := range identity.Emails {
+		trimmed := strings.TrimSpace(email)
+		if trimmed == "" {
+			continue
+		}
+		seeds = append(seeds, map[string]any{
+			"platform":    "email",
+			"sender_id":   trimmed,
+			"sender_name": identity.Name,
+		})
+	}
+	for _, phone := range identity.Phones {
+		trimmed := strings.TrimSpace(phone)
+		if trimmed == "" {
+			continue
+		}
+		seeds = append(seeds, map[string]any{
+			"platform":    "phone",
+			"sender_id":   trimmed,
+			"sender_name": identity.Name,
+		})
+	}
+	return seeds
+}
+
 // cachedMeIdentifier stores the best-effort local user's identifier from the warehouse.
-// This is usually a phone number or email (preferred over "me").
+// This is usually an email or phone number and must never fall back to "me".
 var cachedMeIdentifier string
 
 func getMeIdentifier(db *sql.DB) string {
@@ -1740,8 +1944,8 @@ func getMeIdentifier(db *sql.DB) string {
 		WHERE c.is_me = 1
 		ORDER BY
 			CASE ci.type
-				WHEN 'phone' THEN 1
-				WHEN 'email' THEN 2
+				WHEN 'email' THEN 1
+				WHEN 'phone' THEN 2
 				WHEN 'handle' THEN 3
 				ELSE 4
 			END,
@@ -1750,10 +1954,14 @@ func getMeIdentifier(db *sql.DB) string {
 		LIMIT 1
 	`).Scan(&identifier)
 	if err != nil {
-		return ""
+		cachedMeIdentifier = preferredSelfIdentifier(getSelfIdentity())
+		return cachedMeIdentifier
 	}
 
 	cachedMeIdentifier = strings.TrimSpace(identifier.String)
+	if cachedMeIdentifier == "" {
+		cachedMeIdentifier = preferredSelfIdentifier(getSelfIdentity())
+	}
 	return cachedMeIdentifier
 }
 

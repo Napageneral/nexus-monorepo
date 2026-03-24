@@ -5,8 +5,8 @@ import {
 } from "./http.js";
 import type { OperationRequest, OperationResponse } from "./types.js";
 
-export type AdapterAccountsListRequest = OperationRequest<"adapter.accounts.list">;
-export type AdapterAccountsListResponse = OperationResponse<"adapter.accounts.list">;
+export type AdapterConnectionsListRequest = OperationRequest<"adapter.connections.list">;
+export type AdapterConnectionsListResponse = OperationResponse<"adapter.connections.list">;
 
 export type AdapterHealthRequest = OperationRequest<"adapter.health">;
 export type AdapterHealthResponse = OperationResponse<"adapter.health">;
@@ -20,13 +20,22 @@ export type AdapterSetupStartResponse = OperationResponse<"adapter.setup.start">
 export type AdapterSetupSubmitRequest = OperationRequest<"adapter.setup.submit">;
 export type AdapterSetupSubmitResponse = OperationResponse<"adapter.setup.submit">;
 
-export type ChannelsSendRequest = OperationRequest<"channels.send">;
-export type ChannelsSendResponse = OperationResponse<"channels.send">;
+export type QaseCasesCreateRequest = OperationRequest<"qase.cases.create">;
+export type QaseCasesCreateResponse = OperationResponse<"qase.cases.create">;
+
+export type QaseCasesUpdateRequest = OperationRequest<"qase.cases.update">;
+export type QaseCasesUpdateResponse = OperationResponse<"qase.cases.update">;
+
+export type QaseDefectsCreateRequest = OperationRequest<"qase.defects.create">;
+export type QaseDefectsCreateResponse = OperationResponse<"qase.defects.create">;
+
+export type QaseResultsLogRequest = OperationRequest<"qase.results.log">;
+export type QaseResultsLogResponse = OperationResponse<"qase.results.log">;
 
 export interface Client {
   "adapter": {
-    "accounts": {
-      "list": (options?: RequestOptions) => Promise<AdapterAccountsListResponse>;
+    "connections": {
+      "list": (options?: RequestOptions) => Promise<AdapterConnectionsListResponse>;
     };
     "health": (request: AdapterHealthRequest, options?: RequestOptions) => Promise<AdapterHealthResponse>;
     "info": (options?: RequestOptions) => Promise<AdapterInfoResponse>;
@@ -35,8 +44,17 @@ export interface Client {
       "submit": (request: AdapterSetupSubmitRequest, options?: RequestOptions) => Promise<AdapterSetupSubmitResponse>;
     };
   };
-  "channels": {
-    "send": (request: ChannelsSendRequest, options?: RequestOptions) => Promise<ChannelsSendResponse>;
+  "qase": {
+    "cases": {
+      "create": (request: QaseCasesCreateRequest, options?: RequestOptions) => Promise<QaseCasesCreateResponse>;
+      "update": (request: QaseCasesUpdateRequest, options?: RequestOptions) => Promise<QaseCasesUpdateResponse>;
+    };
+    "defects": {
+      "create": (request: QaseDefectsCreateRequest, options?: RequestOptions) => Promise<QaseDefectsCreateResponse>;
+    };
+    "results": {
+      "log": (request: QaseResultsLogRequest, options?: RequestOptions) => Promise<QaseResultsLogResponse>;
+    };
   };
 }
 
@@ -44,11 +62,11 @@ export function createQaseAdapterClient(options: ClientOptions): Client {
   const http = new HttpClient(options);
   return {
     "adapter": {
-      "accounts": {
+      "connections": {
         "list": async (options?: RequestOptions) => {
-      return http.request<AdapterAccountsListResponse>({
+      return http.request<AdapterConnectionsListResponse>({
         method: "POST",
-        path: "/operations/adapter.accounts.list",
+        path: "/operations/adapter.connections.list",
         query: undefined,
         body: undefined,
         options,
@@ -94,16 +112,65 @@ export function createQaseAdapterClient(options: ClientOptions): Client {
     },
       },
     },
-    "channels": {
-      "send": async (request: ChannelsSendRequest, options?: RequestOptions) => {
-      return http.request<ChannelsSendResponse>({
+    "qase": {
+      "cases": {
+        "create": async (request: QaseCasesCreateRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<QaseCasesCreateResponse>({
         method: "POST",
-        path: "/operations/channels.send",
+        path: "/operations/qase.cases.create",
         query: undefined,
-        body: request,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
         options,
       })
     },
+        "update": async (request: QaseCasesUpdateRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<QaseCasesUpdateResponse>({
+        method: "POST",
+        path: "/operations/qase.cases.update",
+        query: undefined,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
+        options,
+      })
+    },
+      },
+      "defects": {
+        "create": async (request: QaseDefectsCreateRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<QaseDefectsCreateResponse>({
+        method: "POST",
+        path: "/operations/qase.defects.create",
+        query: undefined,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
+        options,
+      })
+    },
+      },
+      "results": {
+        "log": async (request: QaseResultsLogRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<QaseResultsLogResponse>({
+        method: "POST",
+        path: "/operations/qase.results.log",
+        query: undefined,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
+        options,
+      })
+    },
+      },
     },
   };
 }

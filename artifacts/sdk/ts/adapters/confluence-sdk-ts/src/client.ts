@@ -5,8 +5,8 @@ import {
 } from "./http.js";
 import type { OperationRequest, OperationResponse } from "./types.js";
 
-export type AdapterAccountsListRequest = OperationRequest<"adapter.accounts.list">;
-export type AdapterAccountsListResponse = OperationResponse<"adapter.accounts.list">;
+export type AdapterConnectionsListRequest = OperationRequest<"adapter.connections.list">;
+export type AdapterConnectionsListResponse = OperationResponse<"adapter.connections.list">;
 
 export type AdapterHealthRequest = OperationRequest<"adapter.health">;
 export type AdapterHealthResponse = OperationResponse<"adapter.health">;
@@ -26,13 +26,25 @@ export type AdapterSetupStatusResponse = OperationResponse<"adapter.setup.status
 export type AdapterSetupSubmitRequest = OperationRequest<"adapter.setup.submit">;
 export type AdapterSetupSubmitResponse = OperationResponse<"adapter.setup.submit">;
 
-export type ChannelsSendRequest = OperationRequest<"channels.send">;
-export type ChannelsSendResponse = OperationResponse<"channels.send">;
+export type ConfluenceCommentsCreateRequest = OperationRequest<"confluence.comments.create">;
+export type ConfluenceCommentsCreateResponse = OperationResponse<"confluence.comments.create">;
+
+export type ConfluenceCommentsDeleteRequest = OperationRequest<"confluence.comments.delete">;
+export type ConfluenceCommentsDeleteResponse = OperationResponse<"confluence.comments.delete">;
+
+export type ConfluencePagesCreateRequest = OperationRequest<"confluence.pages.create">;
+export type ConfluencePagesCreateResponse = OperationResponse<"confluence.pages.create">;
+
+export type ConfluencePagesMoveToTrashRequest = OperationRequest<"confluence.pages.move_to_trash">;
+export type ConfluencePagesMoveToTrashResponse = OperationResponse<"confluence.pages.move_to_trash">;
+
+export type ConfluencePagesUpdateRequest = OperationRequest<"confluence.pages.update">;
+export type ConfluencePagesUpdateResponse = OperationResponse<"confluence.pages.update">;
 
 export interface Client {
   "adapter": {
-    "accounts": {
-      "list": (options?: RequestOptions) => Promise<AdapterAccountsListResponse>;
+    "connections": {
+      "list": (options?: RequestOptions) => Promise<AdapterConnectionsListResponse>;
     };
     "health": (request: AdapterHealthRequest, options?: RequestOptions) => Promise<AdapterHealthResponse>;
     "info": (options?: RequestOptions) => Promise<AdapterInfoResponse>;
@@ -43,8 +55,16 @@ export interface Client {
       "submit": (request: AdapterSetupSubmitRequest, options?: RequestOptions) => Promise<AdapterSetupSubmitResponse>;
     };
   };
-  "channels": {
-    "send": (request: ChannelsSendRequest, options?: RequestOptions) => Promise<ChannelsSendResponse>;
+  "confluence": {
+    "comments": {
+      "create": (request: ConfluenceCommentsCreateRequest, options?: RequestOptions) => Promise<ConfluenceCommentsCreateResponse>;
+      "delete": (request: ConfluenceCommentsDeleteRequest, options?: RequestOptions) => Promise<ConfluenceCommentsDeleteResponse>;
+    };
+    "pages": {
+      "create": (request: ConfluencePagesCreateRequest, options?: RequestOptions) => Promise<ConfluencePagesCreateResponse>;
+      "move_to_trash": (request: ConfluencePagesMoveToTrashRequest, options?: RequestOptions) => Promise<ConfluencePagesMoveToTrashResponse>;
+      "update": (request: ConfluencePagesUpdateRequest, options?: RequestOptions) => Promise<ConfluencePagesUpdateResponse>;
+    };
   };
 }
 
@@ -52,11 +72,11 @@ export function createConfluenceAdapterClient(options: ClientOptions): Client {
   const http = new HttpClient(options);
   return {
     "adapter": {
-      "accounts": {
+      "connections": {
         "list": async (options?: RequestOptions) => {
-      return http.request<AdapterAccountsListResponse>({
+      return http.request<AdapterConnectionsListResponse>({
         method: "POST",
-        path: "/operations/adapter.accounts.list",
+        path: "/operations/adapter.connections.list",
         query: undefined,
         body: undefined,
         options,
@@ -120,16 +140,76 @@ export function createConfluenceAdapterClient(options: ClientOptions): Client {
     },
       },
     },
-    "channels": {
-      "send": async (request: ChannelsSendRequest, options?: RequestOptions) => {
-      return http.request<ChannelsSendResponse>({
+    "confluence": {
+      "comments": {
+        "create": async (request: ConfluenceCommentsCreateRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<ConfluenceCommentsCreateResponse>({
         method: "POST",
-        path: "/operations/channels.send",
+        path: "/operations/confluence.comments.create",
         query: undefined,
-        body: request,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
         options,
       })
     },
+        "delete": async (request: ConfluenceCommentsDeleteRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<ConfluenceCommentsDeleteResponse>({
+        method: "POST",
+        path: "/operations/confluence.comments.delete",
+        query: undefined,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
+        options,
+      })
+    },
+      },
+      "pages": {
+        "create": async (request: ConfluencePagesCreateRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<ConfluencePagesCreateResponse>({
+        method: "POST",
+        path: "/operations/confluence.pages.create",
+        query: undefined,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
+        options,
+      })
+    },
+        "move_to_trash": async (request: ConfluencePagesMoveToTrashRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<ConfluencePagesMoveToTrashResponse>({
+        method: "POST",
+        path: "/operations/confluence.pages.move_to_trash",
+        query: undefined,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
+        options,
+      })
+    },
+        "update": async (request: ConfluencePagesUpdateRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<ConfluencePagesUpdateResponse>({
+        method: "POST",
+        path: "/operations/confluence.pages.update",
+        query: undefined,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
+        options,
+      })
+    },
+      },
     },
   };
 }

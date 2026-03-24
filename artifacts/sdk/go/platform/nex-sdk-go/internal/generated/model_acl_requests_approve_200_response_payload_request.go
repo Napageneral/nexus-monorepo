@@ -29,7 +29,7 @@ type AclRequestsApprove200ResponsePayloadRequest struct {
 	Kind *string `json:"kind,omitempty"`
 	ToolName *string `json:"toolName,omitempty"`
 	ToolCallId *string `json:"toolCallId,omitempty"`
-	SessionKey *string `json:"sessionKey,omitempty"`
+	SessionId *string `json:"sessionId,omitempty"`
 	NexusRequestId *string `json:"nexusRequestId,omitempty"`
 	Summary *string `json:"summary,omitempty"`
 	Reason *string `json:"reason,omitempty"`
@@ -322,36 +322,36 @@ func (o *AclRequestsApprove200ResponsePayloadRequest) SetToolCallId(v string) {
 	o.ToolCallId = &v
 }
 
-// GetSessionKey returns the SessionKey field value if set, zero value otherwise.
-func (o *AclRequestsApprove200ResponsePayloadRequest) GetSessionKey() string {
-	if o == nil || IsNil(o.SessionKey) {
+// GetSessionId returns the SessionId field value if set, zero value otherwise.
+func (o *AclRequestsApprove200ResponsePayloadRequest) GetSessionId() string {
+	if o == nil || IsNil(o.SessionId) {
 		var ret string
 		return ret
 	}
-	return *o.SessionKey
+	return *o.SessionId
 }
 
-// GetSessionKeyOk returns a tuple with the SessionKey field value if set, nil otherwise
+// GetSessionIdOk returns a tuple with the SessionId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *AclRequestsApprove200ResponsePayloadRequest) GetSessionKeyOk() (*string, bool) {
-	if o == nil || IsNil(o.SessionKey) {
+func (o *AclRequestsApprove200ResponsePayloadRequest) GetSessionIdOk() (*string, bool) {
+	if o == nil || IsNil(o.SessionId) {
 		return nil, false
 	}
-	return o.SessionKey, true
+	return o.SessionId, true
 }
 
-// HasSessionKey returns a boolean if a field has been set.
-func (o *AclRequestsApprove200ResponsePayloadRequest) HasSessionKey() bool {
-	if o != nil && !IsNil(o.SessionKey) {
+// HasSessionId returns a boolean if a field has been set.
+func (o *AclRequestsApprove200ResponsePayloadRequest) HasSessionId() bool {
+	if o != nil && !IsNil(o.SessionId) {
 		return true
 	}
 
 	return false
 }
 
-// SetSessionKey gets a reference to the given string and assigns it to the SessionKey field.
-func (o *AclRequestsApprove200ResponsePayloadRequest) SetSessionKey(v string) {
-	o.SessionKey = &v
+// SetSessionId gets a reference to the given string and assigns it to the SessionId field.
+func (o *AclRequestsApprove200ResponsePayloadRequest) SetSessionId(v string) {
+	o.SessionId = &v
 }
 
 // GetNexusRequestId returns the NexusRequestId field value if set, zero value otherwise.
@@ -664,8 +664,8 @@ func (o AclRequestsApprove200ResponsePayloadRequest) ToMap() (map[string]interfa
 	if !IsNil(o.ToolCallId) {
 		toSerialize["toolCallId"] = o.ToolCallId
 	}
-	if !IsNil(o.SessionKey) {
-		toSerialize["sessionKey"] = o.SessionKey
+	if !IsNil(o.SessionId) {
+		toSerialize["sessionId"] = o.SessionId
 	}
 	if !IsNil(o.NexusRequestId) {
 		toSerialize["nexusRequestId"] = o.NexusRequestId
@@ -748,7 +748,7 @@ func (o *AclRequestsApprove200ResponsePayloadRequest) UnmarshalJSON(data []byte)
 		delete(additionalProperties, "kind")
 		delete(additionalProperties, "toolName")
 		delete(additionalProperties, "toolCallId")
-		delete(additionalProperties, "sessionKey")
+		delete(additionalProperties, "sessionId")
 		delete(additionalProperties, "nexusRequestId")
 		delete(additionalProperties, "summary")
 		delete(additionalProperties, "reason")

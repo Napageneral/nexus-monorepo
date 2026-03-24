@@ -3,7 +3,7 @@ import { z } from "zod";
 export const AdapterOperationSchema = z.enum([
   "adapter.info",
   "adapter.health",
-  "adapter.accounts.list",
+  "adapter.connections.list",
   "adapter.monitor.start",
   "adapter.serve.start",
   "adapter.setup.start",
@@ -11,11 +11,6 @@ export const AdapterOperationSchema = z.enum([
   "adapter.setup.status",
   "adapter.setup.cancel",
   "records.backfill",
-  "channels.send",
-  "channels.stream",
-  "channels.react",
-  "channels.edit",
-  "channels.delete",
 ]);
 
 export type AdapterOperation = z.infer<typeof AdapterOperationSchema>;
@@ -123,7 +118,6 @@ export const AdapterMethodContextHintsSchema = z.object({
 });
 
 export const AdapterMethodOriginSchema = z.object({
-  kind: z.enum(["core", "app", "adapter"]),
   package_id: z.string().nullable(),
   package_version: z.string().nullable(),
   declaration_mode: z.enum(["manifest", "openapi", "builtin"]),
@@ -267,16 +261,6 @@ export const DeliveryErrorSchema = z.object({
 
 export type DeliveryError = z.infer<typeof DeliveryErrorSchema>;
 
-export const DeliveryResultSchema = z.object({
-  success: z.boolean(),
-  message_ids: z.array(z.string()),
-  chunks_sent: z.number().int().nonnegative(),
-  total_chars: z.number().int().nonnegative().optional(),
-  error: z.union([z.string(), DeliveryErrorSchema]).optional(),
-});
-
-export type DeliveryResult = z.infer<typeof DeliveryResultSchema>;
-
 export const ChannelRefSchema = z.object({
   platform: z.string(),
   space_id: z.string().optional(),
@@ -286,23 +270,6 @@ export const ChannelRefSchema = z.object({
 });
 
 export type ChannelRef = z.infer<typeof ChannelRefSchema>;
-
-export const DeliveryTargetSchema = z.object({
-  connection_id: z.string(),
-  channel: ChannelRefSchema,
-  reply_to_id: z.string().optional(),
-});
-
-export type DeliveryTarget = z.infer<typeof DeliveryTargetSchema>;
-
-export const SendRequestSchema = z.object({
-  target: DeliveryTargetSchema,
-  text: z.string().optional(),
-  media: z.string().optional(),
-  caption: z.string().optional(),
-});
-
-export type SendRequest = z.infer<typeof SendRequestSchema>;
 
 export const AdapterHealthSchema = z.object({
   connected: z.boolean(),
@@ -314,14 +281,14 @@ export const AdapterHealthSchema = z.object({
 
 export type AdapterHealth = z.infer<typeof AdapterHealthSchema>;
 
-export const AdapterAccountSchema = z.object({
+export const AdapterConnectionIdentitySchema = z.object({
   id: z.string(),
   display_name: z.string().optional(),
   credential_ref: z.string().optional(),
   status: z.enum(["ready", "active", "error"]),
 });
 
-export type AdapterAccount = z.infer<typeof AdapterAccountSchema>;
+export type AdapterConnectionIdentity = z.infer<typeof AdapterConnectionIdentitySchema>;
 
 export const AdapterServeEndpointSchema = z.object({
   endpoint_id: z.string(),
@@ -429,7 +396,9 @@ export const StreamEventSchema = z.discriminatedUnion("type", [
     type: z.literal("stream_start"),
     runId: z.string(),
     session_id: z.string().optional(),
-    target: DeliveryTargetSchema,
+    connection_id: z.string(),
+    channel: ChannelRefSchema,
+    reply_to_id: z.string().optional(),
   }),
   z.object({ type: z.literal("token"), text: z.string() }),
   z.object({
@@ -462,8 +431,6 @@ export const AdapterStreamStatusSchema = z.discriminatedUnion("type", [
     chars: z.number().int().nonnegative(),
   }),
   z.object({ type: z.literal("message_sent"), messageId: z.string(), final: z.boolean() }),
-  z.object({ type: z.literal("delivery_complete"), messageIds: z.array(z.string()) }),
-  z.object({ type: z.literal("delivery_error"), error: z.string() }),
   z.object({ type: z.literal("error"), error: z.string() }),
 ]);
 

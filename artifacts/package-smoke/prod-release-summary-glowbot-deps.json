@@ -1,0 +1,40 @@
+{
+  "generated_at": "2026-03-17T23:56:00Z",
+  "results": [
+    {
+      "id": "google",
+      "kind": "adapter",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/google",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/google/dist/google-0.1.0.tar.gz",
+      "ok": true
+    },
+    {
+      "id": "meta-ads",
+      "kind": "adapter",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/meta-ads",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/meta-ads/dist/meta-ads-0.1.0.tar.gz",
+      "ok": true
+    },
+    {
+      "id": "callrail",
+      "kind": "adapter",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/callrail",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/callrail/dist/callrail-0.1.0.tar.gz",
+      "ok": true
+    },
+    {
+      "id": "twilio",
+      "kind": "adapter",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/twilio",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/twilio/dist/twilio-0.1.0.tar.gz",
+      "ok": true
+    },
+    {
+      "id": "apple-maps",
+      "kind": "adapter",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/apple-maps",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/apple-maps/dist/apple-maps-0.1.0.tar.gz",
+      "ok": true
+    }
+  ]
+}

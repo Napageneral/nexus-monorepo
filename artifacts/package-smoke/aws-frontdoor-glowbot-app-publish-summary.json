@@ -1,0 +1,54 @@
+{
+  "generated_at": "2026-03-18T00:38:44.186325+00:00",
+  "host": "frontdoor-aws-publish",
+  "remote_frontdoor_root": "/opt/nexus/frontdoor",
+  "remote_db": "/var/lib/nexus-frontdoor/frontdoor.db",
+  "target_os": "linux",
+  "target_arch": "arm64",
+  "count": 1,
+  "failures": 0,
+  "results": [
+    {
+      "kind": "app",
+      "id": "glowbot",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/apps/glowbot/app",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/glowbot/dist/releases/glowbot/glowbot-1.0.0.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/glowbot/1.0.0/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/glowbot/1.0.0/glowbot-1.0.0.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "glowbot",
+        "version": "1.0.0",
+        "release_id": "rel-glowbot-1.0.0",
+        "variant_id": "variant-glowbot-1.0.0-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/glowbot/1.0.0/glowbot-1.0.0.tar.gz",
+        "sha256": "810ddeb656ad464a6544183c006c76417e3d7a66afb881e5993eb0e14ad08ce3",
+        "size_bytes": 309837379,
+        "product_sync": {
+          "appId": "glowbot",
+          "productsUpserted": 1,
+          "plansUpserted": 4,
+          "plansArchived": 0,
+          "changes": [
+            "glowbot: upserted product \"GlowBot\" (v1.0.0)",
+            "glowbot: upserted plan \"free\" (undefined)",
+            "glowbot: upserted plan \"starter\" (undefined)",
+            "glowbot: upserted plan \"professional\" (undefined)",
+            "glowbot: upserted plan \"enterprise\" (undefined)"
+          ]
+        },
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"glowbot\",\n  \"version\": \"1.0.0\",\n  \"release_id\": \"rel-glowbot-1.0.0\",\n  \"variant_id\": \"variant-glowbot-1.0.0-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/glowbot/1.0.0/glowbot-1.0.0.tar.gz\",\n  \"sha256\": \"810ddeb656ad464a6544183c006c76417e3d7a66afb881e5993eb0e14ad08ce3\",\n  \"size_bytes\": 309837379,\n  \"product_sync\": {\n    \"appId\": \"glowbot\",\n    \"productsUpserted\": 1,\n    \"plansUpserted\": 4,\n    \"plansArchived\": 0,\n    \"changes\": [\n      \"glowbot: upserted product \\\"GlowBot\\\" (v1.0.0)\",\n      \"glowbot: upserted plan \\\"free\\\" (undefined)\",\n      \"glowbot: upserted plan \\\"starter\\\" (undefined)\",\n      \"glowbot: upserted plan \\\"professional\\\" (undefined)\",\n      \"glowbot: upserted plan \\\"enterprise\\\" (undefined)\"\n    ]\n  },\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:36865) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # patient-now-emr SDK (TypeScript)
 
-Generated TypeScript SDK for the adapter package contract in `packages/adapters/patient-now-emr/api/openapi.yaml`.
+Generated TypeScript SDK for the adapter package contract for `patient-now-emr`.
 
 This SDK is generated centrally under `artifacts/sdk/ts/adapters/`.
 Package repos do not own SDK publication logic.

@@ -7,9 +7,9 @@ title: "Go Unified Adapter SDK Migration Workplan"
 
 ## Goal
 
-Hard-cut the shared Go SDK from low-level `AdapterOperations` authoring to the
-unified `DefineAdapter(...)` authoring model, then migrate the first settled Go
-adapters onto that surface.
+Hard-cut the shared Go SDK from low-level `AdapterOperations` and `channels.*`
+authoring to the unified method-first `DefineAdapter(...)` authoring model,
+then migrate the first settled Go adapters onto that surface.
 
 ## Customer Experience
 
@@ -28,11 +28,13 @@ Current state:
 - the Go SDK protocol/types are mostly current
 - generic adapter-native method execution already exists
 - adapter authors still hand-build `AdapterInfo` and `AdapterOperations`
+- `DeliveryHandlers`, `OpChannels*`, and CLI parsing still encode the old
+  bundled outward model
 - the same connection/account/health/target plumbing repeats across adapters
 
 Representative proof adapters:
 
-- Jira: setup + health + monitor + backfill + delivery
+- Jira: setup + health + monitor + backfill + provider-native outward methods
 - CallRail: classic polling ingest and connection-backed accounts/health
 - Google: multi-monitor composition and polling helpers
 
@@ -47,6 +49,9 @@ Create the unified Go authoring layer in the shared SDK:
 - add connection/client context types
 - derive `AdapterInfo` from the top-level declaration
 - derive runtime handlers from the same declaration
+- remove `DeliveryHandlers` as target-state outward authoring
+- remove `OpChannels*` as target-state outward execution vocabulary
+- route outward communication through truthful namespaced methods
 
 Files:
 
@@ -81,9 +86,11 @@ Add focused tests for:
 - single-source methods
 - default accounts
 - default health
-- send target helpers
+- communication target helpers
 - retry helpers
 - polling helpers
+- explicit rejection of bundled outward channel-operation nouns as outward
+  truth
 
 Files:
 
@@ -102,7 +109,7 @@ Migrate the first settled Go adapters:
 
 These prove:
 
-- setup + delivery + provider methods
+- setup + truthful outward methods
 - simple poll monitor/backfill
 - composite poll monitor orchestration
 
@@ -155,11 +162,8 @@ This phase includes:
 - switching package imports off private SDK module paths
 - replacing hand-built `AdapterOperations` entrypoints with `DefineAdapter(...)`
 - removing old request-shape fallbacks like `req.Account` / `req.To`
+- removing old `channels.*` outward handler surfaces
 - cutting tests over to canonical `AdapterInboundRecord`
-
-Status:
-
-- completed
 
 ## Phase 7: Validation
 
@@ -174,28 +178,28 @@ Run:
 Minimum pass set:
 
 ```bash
-cd /Users/tyler/nexus/home/projects/nexus/adapters/nexus-adapter-sdks/nexus-adapter-sdk-go
+cd /Users/tyler/nexus/home/projects/nexus/packages/adapters/nexus-adapter-sdks/nexus-adapter-sdk-go
 go test ./...
 
-cd /Users/tyler/nexus/home/projects/nexus/adapters/jira
+cd /Users/tyler/nexus/home/projects/nexus/packages/adapters/jira
 go test ./...
 
-cd /Users/tyler/nexus/home/projects/nexus/adapters/callrail
+cd /Users/tyler/nexus/home/projects/nexus/packages/adapters/callrail
 go test ./...
 
-cd /Users/tyler/nexus/home/projects/nexus/adapters/google
+cd /Users/tyler/nexus/home/projects/nexus/packages/adapters/google
 go test ./...
 
-cd /Users/tyler/nexus/home/projects/nexus/adapters/git
+cd /Users/tyler/nexus/home/projects/nexus/packages/adapters/git
 go test ./...
 
-cd /Users/tyler/nexus/home/projects/nexus/adapters/qase
+cd /Users/tyler/nexus/home/projects/nexus/packages/adapters/qase
 go test ./...
 
-cd /Users/tyler/nexus/home/projects/nexus/adapters/slack
+cd /Users/tyler/nexus/home/projects/nexus/packages/adapters/slack
 go test ./...
 
-cd /Users/tyler/nexus/home/projects/nexus/adapters/confluence
+cd /Users/tyler/nexus/home/projects/nexus/packages/adapters/confluence
 go test ./...
 ```
 

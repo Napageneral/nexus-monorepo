@@ -48,7 +48,7 @@ describe("linkedin adapter contract smoke", () => {
     expect(payload.platform).toBe("linkedin");
 
     const operations = Array.isArray(payload.operations) ? payload.operations : [];
-    expect(operations).toContain("channels.send");
+    expect(operations).toContain("adapter.info");
 
     const auth = (payload.auth ?? {}) as Record<string, unknown>;
     const methods = Array.isArray(auth.methods) ? auth.methods : [];
@@ -66,7 +66,7 @@ describe("linkedin adapter contract smoke", () => {
     expect(methodNames).toContain("linkedin.organizations.list");
   });
 
-  it("lists accounts when runtime context is present", () => {
+  it("lists connections when runtime context is present", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "linkedin-adapter-test-"));
     const contextPath = path.join(tempDir, "runtime-context.json");
     fs.writeFileSync(
@@ -97,7 +97,7 @@ describe("linkedin adapter contract smoke", () => {
     );
 
     try {
-      const result = runLinkedInAdapter(["adapter.accounts.list", "--connection", "default"], {
+      const result = runLinkedInAdapter(["adapter.connections.list"], {
         ...process.env,
         NEXUS_ADAPTER_CONTEXT_PATH: contextPath,
       });

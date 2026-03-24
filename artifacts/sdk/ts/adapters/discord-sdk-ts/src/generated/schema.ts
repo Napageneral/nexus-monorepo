@@ -1,5 +1,5 @@
 export type paths = {
-    "/operations/adapter.accounts.list": {
+    "/operations/adapter.connections.list": {
         parameters: {
             query?: never;
             header?: never;
@@ -8,8 +8,8 @@ export type paths = {
         };
         get?: never;
         put?: never;
-        /** List adapter accounts */
-        post: operations["adapter.accounts.list"];
+        /** List adapter connections */
+        post: operations["adapter.connections.list"];
         delete?: never;
         options?: never;
         head?: never;
@@ -50,7 +50,7 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
-    "/operations/channels.send": {
+    "/operations/discord.send": {
         parameters: {
             query?: never;
             header?: never;
@@ -59,8 +59,25 @@ export type paths = {
         };
         get?: never;
         put?: never;
-        /** Send outbound content through the adapter */
-        post: operations["channels.send"];
+        /** Send a Discord message into a channel, DM, or thread. */
+        post: operations["discord.send"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/discord.stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stream a Discord response by consuming stream events from stdin and emitting adapter stream statuses to stdout. */
+        post: operations["discord.stream"];
         delete?: never;
         options?: never;
         head?: never;
@@ -71,17 +88,17 @@ export type paths = {
 export type webhooks = Record<string, never>;
 export type components = {
     schemas: {
-        AdapterAccountSchema: {
+        AdapterConnectionIdentitySchema: {
             credential_ref?: string;
             display_name?: string;
             id: string;
             /** @enum {string} */
             status: "ready" | "active" | "error";
         };
-        AdapterAccountsListResultSchema: components["schemas"]["AdapterAccountSchema"][];
         AdapterConnectionRequestSchema: {
             connection_id: string;
         };
+        AdapterConnectionsListResultSchema: components["schemas"]["AdapterConnectionIdentitySchema"][];
         AdapterEmptyRequestSchema: Record<string, never>;
         AdapterHealthSchema: {
             connected: boolean;
@@ -182,8 +199,6 @@ export type components = {
                     /** @enum {string} */
                     declaration_mode: "manifest" | "openapi" | "builtin";
                     declaration_source: string;
-                    /** @enum {string} */
-                    kind: "core" | "app" | "adapter";
                     namespace: string;
                     package_id: string | null;
                     package_version: string | null;
@@ -197,7 +212,7 @@ export type components = {
             }[];
             multi_account: boolean;
             name: string;
-            operations: ("adapter.info" | "adapter.health" | "adapter.accounts.list" | "adapter.monitor.start" | "adapter.serve.start" | "adapter.setup.start" | "adapter.setup.submit" | "adapter.setup.status" | "adapter.setup.cancel" | "records.backfill" | "channels.send" | "channels.stream" | "channels.react" | "channels.edit" | "channels.delete")[];
+            operations: ("adapter.info" | "adapter.health" | "adapter.connections.list" | "adapter.monitor.start" | "adapter.serve.start" | "adapter.setup.start" | "adapter.setup.submit" | "adapter.setup.status" | "adapter.setup.cancel" | "records.backfill")[];
             platform: string;
             platform_capabilities: {
                 caption_limit?: number;
@@ -261,39 +276,6 @@ export type components = {
         } & {
             [key: string]: unknown;
         };
-        DeliveryResultSchema: {
-            chunks_sent: number;
-            error?: string | {
-                details?: {
-                    [key: string]: unknown;
-                };
-                message: string;
-                retry?: boolean;
-                retry_after_ms?: number;
-                /** @enum {string} */
-                type?: "rate_limited" | "permission_denied" | "not_found" | "content_rejected" | "network" | "unknown";
-            };
-            message_ids: string[];
-            success: boolean;
-            total_chars?: number;
-        };
-        SendRequestSchema: {
-            caption?: string;
-            media?: string;
-            target: {
-                channel: {
-                    container_id?: string;
-                    /** @enum {string} */
-                    container_kind?: "direct" | "group";
-                    platform: string;
-                    space_id?: string;
-                    thread_id?: string;
-                };
-                connection_id: string;
-                reply_to_id?: string;
-            };
-            text?: string;
-        };
     };
     responses: never;
     parameters: never;
@@ -303,7 +285,7 @@ export type components = {
 };
 export type $defs = Record<string, never>;
 export interface operations {
-    "adapter.accounts.list": {
+    "adapter.connections.list": {
         parameters: {
             query?: never;
             header?: never;
@@ -318,7 +300,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AdapterAccountsListResultSchema"];
+                    "application/json": components["schemas"]["AdapterConnectionsListResultSchema"];
                 };
             };
         };
@@ -367,26 +349,68 @@ export interface operations {
             };
         };
     };
-    "channels.send": {
+    "discord.send": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
+        requestBody?: {
             content: {
-                "application/json": components["schemas"]["SendRequestSchema"];
+                "application/json": {
+                    connection_id?: string;
+                    payload?: {
+                        caption?: string;
+                        media?: string;
+                        target: Record<string, never>;
+                        text?: string;
+                    };
+                };
             };
         };
         responses: {
-            /** @description Successful adapter package response */
+            /** @description Successful adapter method response */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeliveryResultSchema"];
+                    "application/json": {
+                        chunks_sent?: number;
+                        message_ids?: string[];
+                        success?: boolean;
+                        total_chars?: number;
+                    };
+                };
+            };
+        };
+    };
+    "discord.stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    connection_id?: string;
+                    payload?: {
+                        target: Record<string, never>;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful adapter method response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
                 };
             };
         };

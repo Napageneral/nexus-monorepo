@@ -273,6 +273,11 @@ async function sha256File(filePath: string): Promise<string> {
 function createTarArchive(stageDir: string, archivePath: string): void {
   const result = spawnSync("tar", ["-czf", archivePath, "-C", stageDir, "."], {
     encoding: "utf8",
+    env: {
+      ...process.env,
+      COPYFILE_DISABLE: "1",
+      COPY_EXTENDED_ATTRIBUTES_DISABLE: "1",
+    },
   });
   if (result.status !== 0) {
     throw new Error(

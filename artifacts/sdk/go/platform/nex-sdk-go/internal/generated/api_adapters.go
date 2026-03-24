@@ -22,29 +22,29 @@ import (
 // AdaptersAPIService AdaptersAPI service
 type AdaptersAPIService service
 
-type ApiAdapterAccountsListRequest struct {
+type ApiAdapterConnectionsListRequest struct {
 	ctx context.Context
 	ApiService *AdaptersAPIService
 	requestBody *map[string]interface{}
 }
 
-func (r ApiAdapterAccountsListRequest) RequestBody(requestBody map[string]interface{}) ApiAdapterAccountsListRequest {
+func (r ApiAdapterConnectionsListRequest) RequestBody(requestBody map[string]interface{}) ApiAdapterConnectionsListRequest {
 	r.requestBody = &requestBody
 	return r
 }
 
-func (r ApiAdapterAccountsListRequest) Execute() (*AclAuditGet200Response, *http.Response, error) {
-	return r.ApiService.AdapterAccountsListExecute(r)
+func (r ApiAdapterConnectionsListRequest) Execute() (*AclAuditGet200Response, *http.Response, error) {
+	return r.ApiService.AdapterConnectionsListExecute(r)
 }
 
 /*
-AdapterAccountsList adapter.accounts.list
+AdapterConnectionsList adapter.connections.list
 
  @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
- @return ApiAdapterAccountsListRequest
+ @return ApiAdapterConnectionsListRequest
 */
-func (a *AdaptersAPIService) AdapterAccountsList(ctx context.Context) ApiAdapterAccountsListRequest {
-	return ApiAdapterAccountsListRequest{
+func (a *AdaptersAPIService) AdapterConnectionsList(ctx context.Context) ApiAdapterConnectionsListRequest {
+	return ApiAdapterConnectionsListRequest{
 		ApiService: a,
 		ctx: ctx,
 	}
@@ -52,7 +52,7 @@ func (a *AdaptersAPIService) AdapterAccountsList(ctx context.Context) ApiAdapter
 
 // Execute executes the request
 //  @return AclAuditGet200Response
-func (a *AdaptersAPIService) AdapterAccountsListExecute(r ApiAdapterAccountsListRequest) (*AclAuditGet200Response, *http.Response, error) {
+func (a *AdaptersAPIService) AdapterConnectionsListExecute(r ApiAdapterConnectionsListRequest) (*AclAuditGet200Response, *http.Response, error) {
 	var (
 		localVarHTTPMethod   = http.MethodPost
 		localVarPostBody     interface{}
@@ -60,12 +60,12 @@ func (a *AdaptersAPIService) AdapterAccountsListExecute(r ApiAdapterAccountsList
 		localVarReturnValue  *AclAuditGet200Response
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "AdaptersAPIService.AdapterAccountsList")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "AdaptersAPIService.AdapterConnectionsList")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/runtime/operations/adapter.accounts.list"
+	localVarPath := localBasePath + "/runtime/operations/adapter.connections.list"
 
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}

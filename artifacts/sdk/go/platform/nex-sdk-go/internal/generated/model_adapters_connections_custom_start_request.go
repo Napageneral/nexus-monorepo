@@ -22,7 +22,6 @@ var _ MappedNullable = &AdaptersConnectionsCustomStartRequest{}
 type AdaptersConnectionsCustomStartRequest struct {
 	Adapter string `json:"adapter"`
 	AuthMethodId *string `json:"authMethodId,omitempty"`
-	Account *string `json:"account,omitempty"`
 	Payload map[string]interface{} `json:"payload,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
@@ -103,38 +102,6 @@ func (o *AdaptersConnectionsCustomStartRequest) SetAuthMethodId(v string) {
 	o.AuthMethodId = &v
 }
 
-// GetAccount returns the Account field value if set, zero value otherwise.
-func (o *AdaptersConnectionsCustomStartRequest) GetAccount() string {
-	if o == nil || IsNil(o.Account) {
-		var ret string
-		return ret
-	}
-	return *o.Account
-}
-
-// GetAccountOk returns a tuple with the Account field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *AdaptersConnectionsCustomStartRequest) GetAccountOk() (*string, bool) {
-	if o == nil || IsNil(o.Account) {
-		return nil, false
-	}
-	return o.Account, true
-}
-
-// HasAccount returns a boolean if a field has been set.
-func (o *AdaptersConnectionsCustomStartRequest) HasAccount() bool {
-	if o != nil && !IsNil(o.Account) {
-		return true
-	}
-
-	return false
-}
-
-// SetAccount gets a reference to the given string and assigns it to the Account field.
-func (o *AdaptersConnectionsCustomStartRequest) SetAccount(v string) {
-	o.Account = &v
-}
-
 // GetPayload returns the Payload field value if set, zero value otherwise.
 func (o *AdaptersConnectionsCustomStartRequest) GetPayload() map[string]interface{} {
 	if o == nil || IsNil(o.Payload) {
@@ -180,9 +147,6 @@ func (o AdaptersConnectionsCustomStartRequest) ToMap() (map[string]interface{}, 
 	toSerialize["adapter"] = o.Adapter
 	if !IsNil(o.AuthMethodId) {
 		toSerialize["authMethodId"] = o.AuthMethodId
-	}
-	if !IsNil(o.Account) {
-		toSerialize["account"] = o.Account
 	}
 	if !IsNil(o.Payload) {
 		toSerialize["payload"] = o.Payload
@@ -232,7 +196,6 @@ func (o *AdaptersConnectionsCustomStartRequest) UnmarshalJSON(data []byte) (err 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
 		delete(additionalProperties, "adapter")
 		delete(additionalProperties, "authMethodId")
-		delete(additionalProperties, "account")
 		delete(additionalProperties, "payload")
 		o.AdditionalProperties = additionalProperties
 	}

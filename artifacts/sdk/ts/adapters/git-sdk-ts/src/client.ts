@@ -5,8 +5,8 @@ import {
 } from "./http.js";
 import type { OperationRequest, OperationResponse } from "./types.js";
 
-export type AdapterAccountsListRequest = OperationRequest<"adapter.accounts.list">;
-export type AdapterAccountsListResponse = OperationResponse<"adapter.accounts.list">;
+export type AdapterConnectionsListRequest = OperationRequest<"adapter.connections.list">;
+export type AdapterConnectionsListResponse = OperationResponse<"adapter.connections.list">;
 
 export type AdapterHealthRequest = OperationRequest<"adapter.health">;
 export type AdapterHealthResponse = OperationResponse<"adapter.health">;
@@ -26,13 +26,22 @@ export type AdapterSetupStatusResponse = OperationResponse<"adapter.setup.status
 export type AdapterSetupSubmitRequest = OperationRequest<"adapter.setup.submit">;
 export type AdapterSetupSubmitResponse = OperationResponse<"adapter.setup.submit">;
 
-export type ChannelsSendRequest = OperationRequest<"channels.send">;
-export type ChannelsSendResponse = OperationResponse<"channels.send">;
+export type GitBranchesCreateRequest = OperationRequest<"git.branches.create">;
+export type GitBranchesCreateResponse = OperationResponse<"git.branches.create">;
+
+export type GitPullRequestsCommentsCreateRequest = OperationRequest<"git.pull_requests.comments.create">;
+export type GitPullRequestsCommentsCreateResponse = OperationResponse<"git.pull_requests.comments.create">;
+
+export type GitPullRequestsCreateRequest = OperationRequest<"git.pull_requests.create">;
+export type GitPullRequestsCreateResponse = OperationResponse<"git.pull_requests.create">;
+
+export type GitPullRequestsMergeRequest = OperationRequest<"git.pull_requests.merge">;
+export type GitPullRequestsMergeResponse = OperationResponse<"git.pull_requests.merge">;
 
 export interface Client {
   "adapter": {
-    "accounts": {
-      "list": (options?: RequestOptions) => Promise<AdapterAccountsListResponse>;
+    "connections": {
+      "list": (options?: RequestOptions) => Promise<AdapterConnectionsListResponse>;
     };
     "health": (request: AdapterHealthRequest, options?: RequestOptions) => Promise<AdapterHealthResponse>;
     "info": (options?: RequestOptions) => Promise<AdapterInfoResponse>;
@@ -43,8 +52,17 @@ export interface Client {
       "submit": (request: AdapterSetupSubmitRequest, options?: RequestOptions) => Promise<AdapterSetupSubmitResponse>;
     };
   };
-  "channels": {
-    "send": (request: ChannelsSendRequest, options?: RequestOptions) => Promise<ChannelsSendResponse>;
+  "git": {
+    "branches": {
+      "create": (request: GitBranchesCreateRequest, options?: RequestOptions) => Promise<GitBranchesCreateResponse>;
+    };
+    "pull_requests": {
+      "comments": {
+        "create": (request: GitPullRequestsCommentsCreateRequest, options?: RequestOptions) => Promise<GitPullRequestsCommentsCreateResponse>;
+      };
+      "create": (request: GitPullRequestsCreateRequest, options?: RequestOptions) => Promise<GitPullRequestsCreateResponse>;
+      "merge": (request: GitPullRequestsMergeRequest, options?: RequestOptions) => Promise<GitPullRequestsMergeResponse>;
+    };
   };
 }
 
@@ -52,11 +70,11 @@ export function createGitAdapterClient(options: ClientOptions): Client {
   const http = new HttpClient(options);
   return {
     "adapter": {
-      "accounts": {
+      "connections": {
         "list": async (options?: RequestOptions) => {
-      return http.request<AdapterAccountsListResponse>({
+      return http.request<AdapterConnectionsListResponse>({
         method: "POST",
-        path: "/operations/adapter.accounts.list",
+        path: "/operations/adapter.connections.list",
         query: undefined,
         body: undefined,
         options,
@@ -120,16 +138,65 @@ export function createGitAdapterClient(options: ClientOptions): Client {
     },
       },
     },
-    "channels": {
-      "send": async (request: ChannelsSendRequest, options?: RequestOptions) => {
-      return http.request<ChannelsSendResponse>({
+    "git": {
+      "branches": {
+        "create": async (request: GitBranchesCreateRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<GitBranchesCreateResponse>({
         method: "POST",
-        path: "/operations/channels.send",
+        path: "/operations/git.branches.create",
         query: undefined,
-        body: request,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
         options,
       })
     },
+      },
+      "pull_requests": {
+        "comments": {
+          "create": async (request: GitPullRequestsCommentsCreateRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<GitPullRequestsCommentsCreateResponse>({
+        method: "POST",
+        path: "/operations/git.pull_requests.comments.create",
+        query: undefined,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
+        options,
+      })
+    },
+        },
+        "create": async (request: GitPullRequestsCreateRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<GitPullRequestsCreateResponse>({
+        method: "POST",
+        path: "/operations/git.pull_requests.create",
+        query: undefined,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
+        options,
+      })
+    },
+        "merge": async (request: GitPullRequestsMergeRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<GitPullRequestsMergeResponse>({
+        method: "POST",
+        path: "/operations/git.pull_requests.merge",
+        query: undefined,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
+        options,
+      })
+    },
+      },
     },
   };
 }

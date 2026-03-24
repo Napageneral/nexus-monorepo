@@ -5,8 +5,8 @@ import {
 } from "./http.js";
 import type { OperationRequest, OperationResponse } from "./types.js";
 
-export type AdapterAccountsListRequest = OperationRequest<"adapter.accounts.list">;
-export type AdapterAccountsListResponse = OperationResponse<"adapter.accounts.list">;
+export type AdapterConnectionsListRequest = OperationRequest<"adapter.connections.list">;
+export type AdapterConnectionsListResponse = OperationResponse<"adapter.connections.list">;
 
 export type AdapterHealthRequest = OperationRequest<"adapter.health">;
 export type AdapterHealthResponse = OperationResponse<"adapter.health">;
@@ -14,19 +14,23 @@ export type AdapterHealthResponse = OperationResponse<"adapter.health">;
 export type AdapterInfoRequest = OperationRequest<"adapter.info">;
 export type AdapterInfoResponse = OperationResponse<"adapter.info">;
 
-export type ChannelsSendRequest = OperationRequest<"channels.send">;
-export type ChannelsSendResponse = OperationResponse<"channels.send">;
+export type DiscordSendRequest = OperationRequest<"discord.send">;
+export type DiscordSendResponse = OperationResponse<"discord.send">;
+
+export type DiscordStreamRequest = OperationRequest<"discord.stream">;
+export type DiscordStreamResponse = OperationResponse<"discord.stream">;
 
 export interface Client {
   "adapter": {
-    "accounts": {
-      "list": (options?: RequestOptions) => Promise<AdapterAccountsListResponse>;
+    "connections": {
+      "list": (options?: RequestOptions) => Promise<AdapterConnectionsListResponse>;
     };
     "health": (request: AdapterHealthRequest, options?: RequestOptions) => Promise<AdapterHealthResponse>;
     "info": (options?: RequestOptions) => Promise<AdapterInfoResponse>;
   };
-  "channels": {
-    "send": (request: ChannelsSendRequest, options?: RequestOptions) => Promise<ChannelsSendResponse>;
+  "discord": {
+    "send": (request: DiscordSendRequest, options?: RequestOptions) => Promise<DiscordSendResponse>;
+    "stream": (request: DiscordStreamRequest, options?: RequestOptions) => Promise<DiscordStreamResponse>;
   };
 }
 
@@ -34,11 +38,11 @@ export function createDiscordAdapterClient(options: ClientOptions): Client {
   const http = new HttpClient(options);
   return {
     "adapter": {
-      "accounts": {
+      "connections": {
         "list": async (options?: RequestOptions) => {
-      return http.request<AdapterAccountsListResponse>({
+      return http.request<AdapterConnectionsListResponse>({
         method: "POST",
-        path: "/operations/adapter.accounts.list",
+        path: "/operations/adapter.connections.list",
         query: undefined,
         body: undefined,
         options,
@@ -64,13 +68,30 @@ export function createDiscordAdapterClient(options: ClientOptions): Client {
       })
     },
     },
-    "channels": {
-      "send": async (request: ChannelsSendRequest, options?: RequestOptions) => {
-      return http.request<ChannelsSendResponse>({
+    "discord": {
+      "send": async (request: DiscordSendRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<DiscordSendResponse>({
         method: "POST",
-        path: "/operations/channels.send",
+        path: "/operations/discord.send",
         query: undefined,
-        body: request,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
+        options,
+      })
+    },
+      "stream": async (request: DiscordStreamRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<DiscordStreamResponse>({
+        method: "POST",
+        path: "/operations/discord.stream",
+        query: undefined,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
         options,
       })
     },

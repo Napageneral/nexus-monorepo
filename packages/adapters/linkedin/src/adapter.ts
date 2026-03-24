@@ -5,8 +5,6 @@ import {
   method,
   requireCredential,
   type AdapterContext,
-  type DeliveryResult,
-  type DeliveryTarget,
 } from "@nexus-project/adapter-sdk-ts";
 
 type UnknownRecord = Record<string, unknown>;
@@ -28,6 +26,32 @@ type LinkedInOrganizationSummary = {
   role?: string;
   state?: string;
   raw: UnknownRecord;
+};
+
+type LinkedInMethodTarget = {
+  connection_id?: string;
+  channel?: {
+    platform?: string;
+    space_id?: string;
+    container_kind?: string;
+    container_id?: string;
+    thread_id?: string;
+  };
+  reply_to_id?: string;
+};
+
+type LinkedInMethodResult = {
+  success: boolean;
+  message_ids: string[];
+  chunks_sent: number;
+  total_chars?: number;
+  error?: {
+    type?: "rate_limited" | "permission_denied" | "not_found" | "content_rejected" | "network" | "unknown";
+    message: string;
+    retry?: boolean;
+    retry_after_ms?: number;
+    details?: Record<string, unknown>;
+  };
 };
 
 const LINKEDIN_DEFAULT_VERSION = "202601";
@@ -179,7 +203,7 @@ export function resolveLinkedInOrganizationInput(params: {
 function resolveOrganizationUrn(
   ctx: AdapterContext,
   payload?: UnknownRecord,
-  target?: DeliveryTarget,
+  target?: LinkedInMethodTarget,
 ): string {
   return resolveLinkedInOrganizationInput({
     payloadOrganizationUrn: asString(payload?.organizationUrn),
@@ -537,11 +561,11 @@ async function createPost(client: LinkedInClient, args: {
 async function sendOrganizationPost(
   ctx: AdapterContext,
   client: LinkedInClient,
-  target: DeliveryTarget,
+  target: LinkedInMethodTarget,
   text?: string,
   media?: string,
   caption?: string,
-): Promise<DeliveryResult> {
+): Promise<LinkedInMethodResult> {
   const organizationUrn = resolveOrganizationUrn(ctx, undefined, target);
   const created = await createPost(client, {
     organizationUrn,
@@ -652,10 +676,6 @@ export const linkedinAdapter = defineAdapter<LinkedInClient>({
   },
   connection: {
     health: async (ctx) => await health(ctx, ctx.client!),
-  },
-  delivery: {
-    send: async (ctx, req) =>
-      await sendOrganizationPost(ctx, ctx.client!, req.target, req.text, req.media, req.caption),
   },
   methods: {
     "linkedin.organizations.list": method({

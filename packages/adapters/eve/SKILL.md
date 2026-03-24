@@ -30,7 +30,7 @@ Use `eve` when you need:
 ## Main Operations
 
 - `adapter.info`
-- `adapter.accounts.list`
+- `adapter.connections.list`
 - `adapter.setup.start`
 - `adapter.setup.submit`
 - `adapter.setup.status`
@@ -38,7 +38,7 @@ Use `eve` when you need:
 - `adapter.health`
 - `records.backfill`
 - `adapter.monitor.start`
-- `channels.send`
+- `imessage.send`
 - `records.backfill.stage`
 
 ## CLI Examples
@@ -64,7 +64,7 @@ Run the guided setup flow:
 Check local readiness:
 
 ```bash
-./bin/eve-adapter adapter.accounts.list
+./bin/eve-adapter adapter.connections.list
 ./bin/eve-adapter adapter.health --connection default
 ```
 
@@ -86,10 +86,9 @@ Stage a bulk backfill into JSONL chunks:
 Send an iMessage:
 
 ```bash
-./bin/eve-adapter channels.send \
+./bin/eve-adapter imessage.send \
   --connection default \
-  --target-json '{"connection_id":"default","channel":{"platform":"imessage","container_id":"+14155551234"}}' \
-  --text 'Hello from Nex'
+  --payload-json '{"target":{"channel":{"platform":"imessage","container_id":"+14155551234"}},"text":"Hello from Nex"}'
 ```
 
 ## Key Data Models
@@ -120,7 +119,7 @@ Send an iMessage:
 4. Run `adapter.health` to verify `chat.db` and warehouse access.
 5. Run `records.backfill` to import historical iMessage messages, reactions, and membership events.
 6. Start `adapter.monitor.start` so new local iMessage activity continuously lands in Nex.
-7. Use `channels.send` to send an outbound iMessage through the local Messages app.
+7. Use `imessage.send` to send an outbound iMessage through the local Messages app.
 
 That is the customer experience defined in [ADAPTER_SPEC_EVE.md](/Users/tyler/nexus/home/projects/nexus/packages/adapters/eve/docs/specs/ADAPTER_SPEC_EVE.md) and validated in [EVE_ADAPTER_VALIDATION.md](/Users/tyler/nexus/home/projects/nexus/packages/adapters/eve/docs/validation/EVE_ADAPTER_VALIDATION.md).
 

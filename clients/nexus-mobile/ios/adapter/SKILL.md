@@ -30,7 +30,7 @@ Use `device-ios` when you need:
 ## Main Operations
 
 - `adapter.info`
-- `adapter.accounts.list`
+- `adapter.connections.list`
 - `adapter.health`
 - `adapter.setup.start`
 - `adapter.setup.submit`

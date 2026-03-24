@@ -53,8 +53,8 @@ export type AclRequestsListResponse = OperationResponse<"acl.requests.list">;
 export type AclRequestsShowRequest = OperationRequest<"acl.requests.show">;
 export type AclRequestsShowResponse = OperationResponse<"acl.requests.show">;
 
-export type AdapterAccountsListRequest = OperationRequest<"adapter.accounts.list">;
-export type AdapterAccountsListResponse = OperationResponse<"adapter.accounts.list">;
+export type AdapterConnectionsListRequest = OperationRequest<"adapter.connections.list">;
+export type AdapterConnectionsListResponse = OperationResponse<"adapter.connections.list">;
 
 export type AdapterHealthRequest = OperationRequest<"adapter.health">;
 export type AdapterHealthResponse = OperationResponse<"adapter.health">;
@@ -284,12 +284,6 @@ export type BrowserRequestResponse = OperationResponse<"browser.request">;
 export type ChannelsCreateRequest = OperationRequest<"channels.create">;
 export type ChannelsCreateResponse = OperationResponse<"channels.create">;
 
-export type ChannelsDeleteRequest = OperationRequest<"channels.delete">;
-export type ChannelsDeleteResponse = OperationResponse<"channels.delete">;
-
-export type ChannelsEditRequest = OperationRequest<"channels.edit">;
-export type ChannelsEditResponse = OperationResponse<"channels.edit">;
-
 export type ChannelsGetRequest = OperationRequest<"channels.get">;
 export type ChannelsGetResponse = OperationResponse<"channels.get">;
 
@@ -308,23 +302,14 @@ export type ChannelsParticipantsHistoryResponse = OperationResponse<"channels.pa
 export type ChannelsParticipantsListRequest = OperationRequest<"channels.participants.list">;
 export type ChannelsParticipantsListResponse = OperationResponse<"channels.participants.list">;
 
-export type ChannelsReactRequest = OperationRequest<"channels.react">;
-export type ChannelsReactResponse = OperationResponse<"channels.react">;
-
 export type ChannelsResolveRequest = OperationRequest<"channels.resolve">;
 export type ChannelsResolveResponse = OperationResponse<"channels.resolve">;
 
 export type ChannelsSearchRequest = OperationRequest<"channels.search">;
 export type ChannelsSearchResponse = OperationResponse<"channels.search">;
 
-export type ChannelsSendRequest = OperationRequest<"channels.send">;
-export type ChannelsSendResponse = OperationResponse<"channels.send">;
-
 export type ChannelsStatusRequest = OperationRequest<"channels.status">;
 export type ChannelsStatusResponse = OperationResponse<"channels.status">;
-
-export type ChannelsStreamRequest = OperationRequest<"channels.stream">;
-export type ChannelsStreamResponse = OperationResponse<"channels.stream">;
 
 export type ChannelsUpdateRequest = OperationRequest<"channels.update">;
 export type ChannelsUpdateResponse = OperationResponse<"channels.update">;
@@ -939,8 +924,8 @@ export interface Client {
     };
   };
   "adapter": {
-    "accounts": {
-      "list": (request: AdapterAccountsListRequest, options?: RequestOptions) => Promise<AdapterAccountsListResponse>;
+    "connections": {
+      "list": (request: AdapterConnectionsListRequest, options?: RequestOptions) => Promise<AdapterConnectionsListResponse>;
     };
     "health": (request: AdapterHealthRequest, options?: RequestOptions) => Promise<AdapterHealthResponse>;
     "info": (request: AdapterInfoRequest, options?: RequestOptions) => Promise<AdapterInfoResponse>;
@@ -1060,8 +1045,6 @@ export interface Client {
   };
   "channels": {
     "create": (request: ChannelsCreateRequest, options?: RequestOptions) => Promise<ChannelsCreateResponse>;
-    "delete": (request: ChannelsDeleteRequest, options?: RequestOptions) => Promise<ChannelsDeleteResponse>;
-    "edit": (request: ChannelsEditRequest, options?: RequestOptions) => Promise<ChannelsEditResponse>;
     "get": (request: ChannelsGetRequest, options?: RequestOptions) => Promise<ChannelsGetResponse>;
     "history": (request: ChannelsHistoryRequest, options?: RequestOptions) => Promise<ChannelsHistoryResponse>;
     "list": (request: ChannelsListRequest, options?: RequestOptions) => Promise<ChannelsListResponse>;
@@ -1070,12 +1053,9 @@ export interface Client {
       "history": (request: ChannelsParticipantsHistoryRequest, options?: RequestOptions) => Promise<ChannelsParticipantsHistoryResponse>;
       "list": (request: ChannelsParticipantsListRequest, options?: RequestOptions) => Promise<ChannelsParticipantsListResponse>;
     };
-    "react": (request: ChannelsReactRequest, options?: RequestOptions) => Promise<ChannelsReactResponse>;
     "resolve": (request: ChannelsResolveRequest, options?: RequestOptions) => Promise<ChannelsResolveResponse>;
     "search": (request: ChannelsSearchRequest, options?: RequestOptions) => Promise<ChannelsSearchResponse>;
-    "send": (request: ChannelsSendRequest, options?: RequestOptions) => Promise<ChannelsSendResponse>;
     "status": (request: ChannelsStatusRequest, options?: RequestOptions) => Promise<ChannelsStatusResponse>;
-    "stream": (request: ChannelsStreamRequest, options?: RequestOptions) => Promise<ChannelsStreamResponse>;
     "update": (request: ChannelsUpdateRequest, options?: RequestOptions) => Promise<ChannelsUpdateResponse>;
   };
   "config": {
@@ -1419,7 +1399,7 @@ export function createNexClient(options: ClientOptions): Client {
         "kind": input["kind"],
         "toolName": input["toolName"],
         "toolCallId": input["toolCallId"],
-        "sessionKey": input["sessionKey"],
+        "sessionId": input["sessionId"],
         "nexusRequestId": input["nexusRequestId"],
         "summary": input["summary"],
         "reason": input["reason"],
@@ -1598,11 +1578,11 @@ export function createNexClient(options: ClientOptions): Client {
       },
     },
     "adapter": {
-      "accounts": {
-        "list": async (request: AdapterAccountsListRequest, options?: RequestOptions) => {
-      return http.request<AdapterAccountsListResponse>({
+      "connections": {
+        "list": async (request: AdapterConnectionsListRequest, options?: RequestOptions) => {
+      return http.request<AdapterConnectionsListResponse>({
         method: "POST",
-        path: "/runtime/operations/adapter.accounts.list",
+        path: "/runtime/operations/adapter.connections.list",
         query: undefined,
         body: request,
         options,
@@ -1722,7 +1702,6 @@ export function createNexClient(options: ClientOptions): Client {
         body: {
         "adapter": input["adapter"],
         "authMethodId": input["authMethodId"],
-        "account": input["account"],
         "fields": input["fields"],
         "config": input["config"],
       },
@@ -1753,7 +1732,6 @@ export function createNexClient(options: ClientOptions): Client {
         body: {
         "adapter": input["adapter"],
         "sessionId": input["sessionId"],
-        "account": input["account"],
       },
         options,
       })
@@ -1767,7 +1745,6 @@ export function createNexClient(options: ClientOptions): Client {
         body: {
         "adapter": input["adapter"],
         "authMethodId": input["authMethodId"],
-        "account": input["account"],
         "payload": input["payload"],
       },
         options,
@@ -1782,7 +1759,6 @@ export function createNexClient(options: ClientOptions): Client {
         body: {
         "adapter": input["adapter"],
         "sessionId": input["sessionId"],
-        "account": input["account"],
       },
         options,
       })
@@ -1796,7 +1772,6 @@ export function createNexClient(options: ClientOptions): Client {
         body: {
         "adapter": input["adapter"],
         "sessionId": input["sessionId"],
-        "account": input["account"],
         "payload": input["payload"],
       },
         options,
@@ -1898,7 +1873,6 @@ export function createNexClient(options: ClientOptions): Client {
         "connectionId": input["connectionId"],
         "adapter": input["adapter"],
         "authMethodId": input["authMethodId"],
-        "account": input["account"],
         "fields": input["fields"],
         "config": input["config"],
       },
@@ -2066,7 +2040,7 @@ export function createNexClient(options: ClientOptions): Client {
         query: undefined,
         body: {
         "agentId": input["agentId"],
-        "sessionKey": input["sessionKey"],
+        "sessionId": input["sessionId"],
       },
         options,
       })
@@ -2089,7 +2063,7 @@ export function createNexClient(options: ClientOptions): Client {
         path: "/runtime/operations/agents.sessions.archive",
         query: undefined,
         body: {
-        "key": input["key"],
+        "sessionId": input["sessionId"],
         "deleteTranscript": input["deleteTranscript"],
       },
         options,
@@ -2102,7 +2076,7 @@ export function createNexClient(options: ClientOptions): Client {
         path: "/runtime/operations/agents.sessions.compact",
         query: undefined,
         body: {
-        "key": input["key"],
+        "sessionId": input["sessionId"],
         "maxLines": input["maxLines"],
       },
         options,
@@ -2225,8 +2199,7 @@ export function createNexClient(options: ClientOptions): Client {
         "includeUnknown": input["includeUnknown"],
         "includeDerivedTitles": input["includeDerivedTitles"],
         "includeLastMessage": input["includeLastMessage"],
-        "session_key": input["session_key"],
-        "spawnedBy": input["spawnedBy"],
+        "parentSessionId": input["parentSessionId"],
         "agentId": input["agentId"],
         "search": input["search"],
       },
@@ -2240,14 +2213,13 @@ export function createNexClient(options: ClientOptions): Client {
         path: "/runtime/operations/agents.sessions.patch",
         query: undefined,
         body: {
-        "key": input["key"],
+        "session_id": input["session_id"],
         "entity_id": input["entity_id"],
         "role_config_id": input["role_config_id"],
         "model_config_id": input["model_config_id"],
         "execution_host_kind": input["execution_host_kind"],
         "sandbox_id": input["sandbox_id"],
         "execution_host_config_json": input["execution_host_config_json"],
-        "session_key": input["session_key"],
         "thinkingLevel": input["thinkingLevel"],
         "verboseLevel": input["verboseLevel"],
         "reasoningLevel": input["reasoningLevel"],
@@ -2258,7 +2230,8 @@ export function createNexClient(options: ClientOptions): Client {
         "execAsk": input["execAsk"],
         "execNode": input["execNode"],
         "model": input["model"],
-        "spawnedBy": input["spawnedBy"],
+        "parentSessionId": input["parentSessionId"],
+        "label": input["label"],
         "sendPolicy": input["sendPolicy"],
         "groupActivation": input["groupActivation"],
       },
@@ -2286,7 +2259,7 @@ export function createNexClient(options: ClientOptions): Client {
         path: "/runtime/operations/agents.sessions.reset",
         query: undefined,
         body: {
-        "key": input["key"],
+        "sessionId": input["sessionId"],
       },
         options,
       })
@@ -2299,10 +2272,8 @@ export function createNexClient(options: ClientOptions): Client {
         query: undefined,
         body: {
         "key": input["key"],
-        "sessionId": input["sessionId"],
-        "session_key": input["session_key"],
         "agentId": input["agentId"],
-        "spawnedBy": input["spawnedBy"],
+        "parentSessionId": input["parentSessionId"],
         "includeGlobal": input["includeGlobal"],
         "includeUnknown": input["includeUnknown"],
       },
@@ -2317,7 +2288,6 @@ export function createNexClient(options: ClientOptions): Client {
         query: undefined,
         body: {
         "sessionId": input["sessionId"],
-        "session_key": input["session_key"],
         "message": input["message"],
         "thinking": input["thinking"],
         "deliver": input["deliver"],
@@ -2630,24 +2600,6 @@ export function createNexClient(options: ClientOptions): Client {
         options,
       })
     },
-      "delete": async (request: ChannelsDeleteRequest, options?: RequestOptions) => {
-      return http.request<ChannelsDeleteResponse>({
-        method: "POST",
-        path: "/runtime/operations/channels.delete",
-        query: undefined,
-        body: request,
-        options,
-      })
-    },
-      "edit": async (request: ChannelsEditRequest, options?: RequestOptions) => {
-      return http.request<ChannelsEditResponse>({
-        method: "POST",
-        path: "/runtime/operations/channels.edit",
-        query: undefined,
-        body: request,
-        options,
-      })
-    },
       "get": async (request: ChannelsGetRequest, options?: RequestOptions) => {
       const input = request as Record<string, unknown>;
       return http.request<ChannelsGetResponse>({
@@ -2730,15 +2682,6 @@ export function createNexClient(options: ClientOptions): Client {
       })
     },
       },
-      "react": async (request: ChannelsReactRequest, options?: RequestOptions) => {
-      return http.request<ChannelsReactResponse>({
-        method: "POST",
-        path: "/runtime/operations/channels.react",
-        query: undefined,
-        body: request,
-        options,
-      })
-    },
       "resolve": async (request: ChannelsResolveRequest, options?: RequestOptions) => {
       const input = request as Record<string, unknown>;
       return http.request<ChannelsResolveResponse>({
@@ -2780,15 +2723,6 @@ export function createNexClient(options: ClientOptions): Client {
         options,
       })
     },
-      "send": async (request: ChannelsSendRequest, options?: RequestOptions) => {
-      return http.request<ChannelsSendResponse>({
-        method: "POST",
-        path: "/runtime/operations/channels.send",
-        query: undefined,
-        body: request,
-        options,
-      })
-    },
       "status": async (request: ChannelsStatusRequest, options?: RequestOptions) => {
       const input = request as Record<string, unknown>;
       return http.request<ChannelsStatusResponse>({
@@ -2799,15 +2733,6 @@ export function createNexClient(options: ClientOptions): Client {
         "probe": input["probe"],
         "timeoutMs": input["timeoutMs"],
       },
-        options,
-      })
-    },
-      "stream": async (request: ChannelsStreamRequest, options?: RequestOptions) => {
-      return http.request<ChannelsStreamResponse>({
-        method: "POST",
-        path: "/runtime/operations/channels.stream",
-        query: undefined,
-        body: request,
         options,
       })
     },
@@ -2846,7 +2771,7 @@ export function createNexClient(options: ClientOptions): Client {
         body: {
         "raw": input["raw"],
         "baseHash": input["baseHash"],
-        "sessionKey": input["sessionKey"],
+        "sessionId": input["sessionId"],
         "note": input["note"],
         "restartDelayMs": input["restartDelayMs"],
       },
@@ -2871,7 +2796,7 @@ export function createNexClient(options: ClientOptions): Client {
         body: {
         "raw": input["raw"],
         "baseHash": input["baseHash"],
-        "sessionKey": input["sessionKey"],
+        "sessionId": input["sessionId"],
         "note": input["note"],
         "restartDelayMs": input["restartDelayMs"],
       },
@@ -4996,7 +4921,7 @@ export function createNexClient(options: ClientOptions): Client {
         path: "/runtime/operations/update.run",
         query: undefined,
         body: {
-        "sessionKey": input["sessionKey"],
+        "sessionId": input["sessionId"],
         "note": input["note"],
         "restartDelayMs": input["restartDelayMs"],
         "timeoutMs": input["timeoutMs"],

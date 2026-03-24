@@ -1,0 +1,710 @@
+{
+  "id": "spike",
+  "version": "1.0.3",
+  "displayName": "Spike",
+  "description": "AI-powered code intelligence and repository analysis",
+  "skill": "./SKILL.md",
+  "requires": {
+    "adapters": [
+      { "id": "git", "version": "^1.0.0" }
+    ]
+  },
+  "icon": "./assets/icon.svg",
+  "ui": {
+    "root": "./dist",
+    "entryPath": "/app/spike/",
+    "spa": true
+  },
+  "services": [
+    {
+      "id": "engine",
+      "command": "./bin/spike-engine",
+      "args": ["serve", "--port", "{{port}}"],
+      "healthCheck": "/health",
+      "env": {
+        "NEX_APP_DATA_DIR": "{{dataDir}}",
+        "NEX_SERVICE_PORT": "{{port}}"
+      }
+    }
+  ],
+  "methods": {
+    "spike.jobs.get": {
+      "action": "read",
+      "service": "engine",
+      "description": "Get details of a specific Spike job",
+      "params": {
+        "type": "object",
+        "required": ["job_id"],
+        "properties": {
+          "job_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.jobs.list": {
+      "action": "read",
+      "service": "engine",
+      "description": "List Spike jobs",
+      "params": {
+        "type": "object",
+        "properties": {
+          "tree_id": { "type": "string" },
+          "status": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.repositories.get": {
+      "action": "read",
+      "service": "engine",
+      "description": "Get a repository record",
+      "params": {
+        "type": "object",
+        "required": ["repo_id"],
+        "properties": {
+          "repo_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.repositories.list": {
+      "action": "read",
+      "service": "engine",
+      "description": "List repository records",
+      "params": {
+        "type": "object",
+        "properties": {
+          "repo_id": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.repo-refs.get": {
+      "action": "read",
+      "service": "engine",
+      "description": "Get a repository ref record",
+      "params": {
+        "type": "object",
+        "required": ["repo_id", "ref_name"],
+        "properties": {
+          "repo_id": { "type": "string" },
+          "ref_name": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.repo-refs.list": {
+      "action": "read",
+      "service": "engine",
+      "description": "List repository ref records",
+      "params": {
+        "type": "object",
+        "properties": {
+          "repo_id": { "type": "string" },
+          "ref_name": { "type": "string" },
+          "commit_sha": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.mirrors.ensure": {
+      "action": "write",
+      "service": "engine",
+      "description": "Ensure a local mirror exists for a remote repository",
+      "params": {
+        "type": "object",
+        "required": ["remote_url"],
+        "properties": {
+          "remote_url": { "type": "string" },
+          "connection_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.mirrors.refresh": {
+      "action": "write",
+      "service": "engine",
+      "description": "Refresh an existing local mirror",
+      "params": {
+        "type": "object",
+        "required": ["mirror_id"],
+        "properties": {
+          "mirror_id": { "type": "string" },
+          "connection_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.mirrors.status": {
+      "action": "read",
+      "service": "engine",
+      "description": "Get status for a local mirror",
+      "params": {
+        "type": "object",
+        "required": ["mirror_id"],
+        "properties": {
+          "mirror_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.mirrors.list": {
+      "action": "read",
+      "service": "engine",
+      "description": "List local mirrors",
+      "params": {
+        "type": "object",
+        "properties": {}
+      },
+      "response": { "type": "object" }
+    },
+    "spike.worktrees.create": {
+      "action": "write",
+      "service": "engine",
+      "description": "Create or reuse a pinned worktree",
+      "params": {
+        "type": "object",
+        "properties": {
+          "repo_id": { "type": "string" },
+          "remote_url": { "type": "string" },
+          "connection_id": { "type": "string" },
+          "ref": { "type": "string" },
+          "commit_sha": { "type": "string" },
+          "archive_local_path": { "type": "string" },
+          "archive_format": { "type": "string" },
+          "archive_root_prefix": { "type": "string" },
+          "archive_attachment_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.worktrees.destroy": {
+      "action": "write",
+      "service": "engine",
+      "description": "Destroy a pinned worktree",
+      "params": {
+        "type": "object",
+        "required": ["worktree_id"],
+        "properties": {
+          "worktree_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.worktrees.list": {
+      "action": "read",
+      "service": "engine",
+      "description": "List pinned worktrees",
+      "params": {
+        "type": "object",
+        "properties": {}
+      },
+      "response": { "type": "object" }
+    },
+    "spike.indexes.create": {
+      "action": "write",
+      "service": "engine",
+      "description": "Create a code intelligence index from a repository",
+      "params": {
+        "type": "object",
+        "required": ["repo_url"],
+        "properties": {
+          "index_id": { "type": "string" },
+          "repo_id": { "type": "string" },
+          "repo_url": { "type": "string" },
+          "remote_url": { "type": "string" },
+          "connection_id": { "type": "string" },
+          "ref": { "type": "string" },
+          "commit_sha": { "type": "string" },
+          "archive_local_path": { "type": "string" },
+          "archive_format": { "type": "string" },
+          "archive_root_prefix": { "type": "string" },
+          "archive_attachment_id": { "type": "string" },
+          "display_name": { "type": "string" },
+          "config_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.indexes.list": {
+      "action": "read",
+      "service": "engine",
+      "description": "List code intelligence indexes",
+      "params": {
+        "type": "object",
+        "properties": {}
+      },
+      "response": { "type": "object" }
+    },
+    "spike.indexes.get": {
+      "action": "read",
+      "service": "engine",
+      "description": "Get one code intelligence index",
+      "params": {
+        "type": "object",
+        "required": ["index_id"],
+        "properties": {
+          "index_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.indexes.delete": {
+      "action": "write",
+      "service": "engine",
+      "description": "Delete a code intelligence index",
+      "params": {
+        "type": "object",
+        "required": ["index_id"],
+        "properties": {
+          "index_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.indexes.status": {
+      "action": "read",
+      "service": "engine",
+      "description": "Get status for a code intelligence index",
+      "params": {
+        "type": "object",
+        "required": ["index_id"],
+        "properties": {
+          "index_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.code.build": {
+      "action": "write",
+      "service": "engine",
+      "description": "Build code intelligence for a filesystem root",
+      "params": {
+        "type": "object",
+        "required": ["root_path"],
+        "properties": {
+          "snapshot_id": { "type": "string" },
+          "root_path": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.code.status": {
+      "action": "read",
+      "service": "engine",
+      "description": "Get code intelligence snapshot status",
+      "params": {
+        "type": "object",
+        "required": ["snapshot_id"],
+        "properties": {
+          "snapshot_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.code.search": {
+      "action": "read",
+      "service": "engine",
+      "description": "Search code semantically",
+      "params": {
+        "type": "object",
+        "required": ["snapshot_id", "query"],
+        "properties": {
+          "snapshot_id": { "type": "string" },
+          "query": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.code.symbols": {
+      "action": "read",
+      "service": "engine",
+      "description": "Resolve symbols in a snapshot",
+      "params": {
+        "type": "object",
+        "required": ["snapshot_id"],
+        "properties": {
+          "snapshot_id": { "type": "string" },
+          "symbol_query": { "type": "string" },
+          "query": { "type": "string" },
+          "language": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.code.references": {
+      "action": "read",
+      "service": "engine",
+      "description": "Find symbol references",
+      "params": {
+        "type": "object",
+        "required": ["snapshot_id"],
+        "properties": {
+          "snapshot_id": { "type": "string" },
+          "target_id": { "type": "string" },
+          "symbol_query": { "type": "string" },
+          "language": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.code.callers": {
+      "action": "read",
+      "service": "engine",
+      "description": "Find callers for a symbol",
+      "params": {
+        "type": "object",
+        "required": ["snapshot_id"],
+        "properties": {
+          "snapshot_id": { "type": "string" },
+          "target_id": { "type": "string" },
+          "symbol_query": { "type": "string" },
+          "language": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.code.callees": {
+      "action": "read",
+      "service": "engine",
+      "description": "Find callees for a symbol or chunk",
+      "params": {
+        "type": "object",
+        "required": ["snapshot_id"],
+        "properties": {
+          "snapshot_id": { "type": "string" },
+          "target_id": { "type": "string" },
+          "path": { "type": "string" },
+          "line": { "type": "number" },
+          "symbol_query": { "type": "string" },
+          "language": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.code.imports": {
+      "action": "read",
+      "service": "engine",
+      "description": "List imports for a file",
+      "params": {
+        "type": "object",
+        "required": ["snapshot_id", "path"],
+        "properties": {
+          "snapshot_id": { "type": "string" },
+          "path": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.code.importers": {
+      "action": "read",
+      "service": "engine",
+      "description": "List importers for an import path",
+      "params": {
+        "type": "object",
+        "required": ["snapshot_id", "import_path"],
+        "properties": {
+          "snapshot_id": { "type": "string" },
+          "import_path": { "type": "string" },
+          "path": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.code.context": {
+      "action": "read",
+      "service": "engine",
+      "description": "Build a code context pack",
+      "params": {
+        "type": "object",
+        "required": ["snapshot_id"],
+        "properties": {
+          "snapshot_id": { "type": "string" },
+          "query": { "type": "string" },
+          "symbol_query": { "type": "string" },
+          "target_id": { "type": "string" },
+          "path": { "type": "string" },
+          "line": { "type": "number" },
+          "limit": { "type": "number" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.code.tests.impact": {
+      "action": "read",
+      "service": "engine",
+      "description": "Estimate impacted tests",
+      "params": {
+        "type": "object",
+        "required": ["snapshot_id"],
+        "properties": {
+          "snapshot_id": { "type": "string" },
+          "target_id": { "type": "string" },
+          "symbol_query": { "type": "string" },
+          "path": { "type": "string" },
+          "query": { "type": "string" },
+          "language": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.code.source.file": {
+      "action": "read",
+      "service": "engine",
+      "description": "Get source for a file",
+      "params": {
+        "type": "object",
+        "required": ["snapshot_id", "path"],
+        "properties": {
+          "snapshot_id": { "type": "string" },
+          "path": { "type": "string" },
+          "include_source": { "type": "boolean" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.code.source.chunk": {
+      "action": "read",
+      "service": "engine",
+      "description": "Get a source chunk",
+      "params": {
+        "type": "object",
+        "required": ["snapshot_id"],
+        "properties": {
+          "snapshot_id": { "type": "string" },
+          "target_id": { "type": "string" },
+          "path": { "type": "string" },
+          "line": { "type": "number" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.config.defaults": {
+      "action": "read",
+      "service": "engine",
+      "description": "Get default Spike config",
+      "params": {
+        "type": "object",
+        "properties": {}
+      },
+      "response": { "type": "object" }
+    },
+    "spike.config.get": {
+      "action": "read",
+      "service": "engine",
+      "description": "Get a Spike config",
+      "params": {
+        "type": "object",
+        "properties": {
+          "config_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.config.update": {
+      "action": "write",
+      "service": "engine",
+      "description": "Update a Spike config",
+      "params": {
+        "type": "object",
+        "properties": {
+          "config_id": { "type": "string" },
+          "display_name": { "type": "string" },
+          "capacity": { "type": "number" },
+          "max_children": { "type": "number" },
+          "max_parallel": { "type": "number" },
+          "hydrate_model": { "type": "string" },
+          "ask_model": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.github.installations.list": {
+      "action": "read",
+      "service": "engine",
+      "description": "List configured GitHub installations",
+      "params": {
+        "type": "object",
+        "properties": {}
+      },
+      "response": { "type": "object" }
+    },
+    "spike.github.installations.get": {
+      "action": "read",
+      "service": "engine",
+      "description": "Get one configured GitHub installation",
+      "params": {
+        "type": "object",
+        "required": ["installation_id"],
+        "properties": {
+          "installation_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.connectors.github.bind": {
+      "action": "write",
+      "service": "engine",
+      "description": "Bind a GitHub connector account",
+      "params": {
+        "type": "object",
+        "required": ["account"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "service": { "type": "string" },
+          "account": { "type": "string" },
+          "auth_id": { "type": "string" },
+          "metadata": { "type": "object" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.connectors.github.get": {
+      "action": "read",
+      "service": "engine",
+      "description": "Get the active GitHub connector binding",
+      "params": {
+        "type": "object",
+        "properties": {
+          "tree_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.connectors.github.install.start": {
+      "action": "write",
+      "service": "engine",
+      "description": "Start the managed GitHub App install flow",
+      "params": {
+        "type": "object",
+        "properties": {}
+      },
+      "response": { "type": "object" }
+    },
+    "spike.connectors.github.repos": {
+      "action": "read",
+      "service": "engine",
+      "description": "List repositories visible to a GitHub installation",
+      "params": {
+        "type": "object",
+        "required": ["installation_id"],
+        "properties": {
+          "installation_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.connectors.github.branches": {
+      "action": "read",
+      "service": "engine",
+      "description": "List branches for a GitHub repository",
+      "params": {
+        "type": "object",
+        "required": ["installation_id", "repo_id"],
+        "properties": {
+          "installation_id": { "type": "string" },
+          "repo_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.connectors.github.commits": {
+      "action": "read",
+      "service": "engine",
+      "description": "List commits for a GitHub repository ref",
+      "params": {
+        "type": "object",
+        "required": ["installation_id", "repo_id"],
+        "properties": {
+          "installation_id": { "type": "string" },
+          "repo_id": { "type": "string" },
+          "ref": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.connectors.github.remove": {
+      "action": "write",
+      "service": "engine",
+      "description": "Remove a GitHub connector binding",
+      "params": {
+        "type": "object",
+        "properties": {
+          "tree_id": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.connectors.github.setup": {
+      "action": "write",
+      "service": "engine",
+      "description": "Persist GitHub App installation credentials",
+      "params": {
+        "type": "object",
+        "required": ["account", "app_id", "installation_id", "private_key_pem"],
+        "properties": {
+          "tree_id": { "type": "string" },
+          "account": { "type": "string" },
+          "auth_id": { "type": "string" },
+          "app_id": { "type": "string" },
+          "installation_id": { "type": "string" },
+          "installation_account_login": { "type": "string" },
+          "api_base_url": { "type": "string" },
+          "private_key_pem": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    },
+    "spike.github.webhook": {
+      "action": "write",
+      "service": "engine",
+      "description": "Process a GitHub webhook payload",
+      "params": {
+        "type": "object",
+        "required": ["event", "delivery_id", "payload"],
+        "properties": {
+          "event": { "type": "string" },
+          "delivery_id": { "type": "string" },
+          "payload": { "type": "string" }
+        }
+      },
+      "response": { "type": "object" }
+    }
+  },
+  "requires": {
+    "nex": ">=0.10.0"
+  },
+  "product": {
+    "tagline": "AI-powered code intelligence for private repositories",
+    "accentColor": "#0f766e",
+    "plans": [
+      {
+        "id": "default",
+        "name": "Free",
+        "tier": "free",
+        "price": {
+          "amount": 0,
+          "currency": "USD",
+          "interval": "month"
+        },
+        "entitlements": {}
+      }
+    ]
+  },
+  "hooks": {
+    "onInstall": "./hooks/install.ts",
+    "onActivate": "./hooks/activate.ts",
+    "onDeactivate": "./hooks/deactivate.ts",
+    "onUpgrade": "./hooks/upgrade.ts",
+    "onUninstall": "./hooks/uninstall.ts"
+  }
+}

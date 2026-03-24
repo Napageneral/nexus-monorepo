@@ -30,9 +30,8 @@ Use `linkedin` when you need:
 ## Main Operations
 
 - `adapter.info`
-- `adapter.accounts.list`
+- `adapter.connections.list`
 - `adapter.health`
-- `channels.send`
 - `linkedin.organizations.list`
 - `linkedin.posts.list`
 - `linkedin.posts.get`
@@ -78,15 +77,6 @@ node ./dist/index.js linkedin.posts.create \
   --payload-json '{"organizationUrn":"urn:li:organization:2414183","commentary":"hello from nex"}'
 ```
 
-Or publish through the canonical delivery surface:
-
-```bash
-node ./dist/index.js channels.send \
-  --connection <connection-id> \
-  --target-json '{"connection_id":"<connection-id>","channel":{"platform":"linkedin","container_id":"urn:li:organization:2414183"}}' \
-  --text 'hello from nex'
-```
-
 ## Key Data Models
 
 - `connection_id`
@@ -102,8 +92,7 @@ node ./dist/index.js channels.send \
   - comment list
   - social metadata get
 - outbound publishing
-  - `channels.send` resolves the organization from the delivery target
-  - `linkedin.posts.create` exposes the same publishing capability as an explicit typed method
+  - `linkedin.posts.create` publishes in provider-native LinkedIn terms
 
 ## End-To-End Example
 
@@ -111,7 +100,7 @@ node ./dist/index.js channels.send \
 2. Run `linkedin.organizations.list` to see which organizations the member can administer.
 3. Configure or select the organization URN you want to publish to.
 4. Run `adapter.health` to verify the configured organization is accessible.
-5. Publish an organization-authored post through `linkedin.posts.create` or `channels.send`.
+5. Publish an organization-authored post through `linkedin.posts.create`.
 6. Read posts, comments, and social metadata back through the typed `linkedin.*` methods.
 
 This package’s contract is currently defined by [src/adapter.ts](/Users/tyler/nexus/home/projects/nexus/packages/adapters/linkedin/src/adapter.ts), [api/openapi.yaml](/Users/tyler/nexus/home/projects/nexus/packages/adapters/linkedin/api/openapi.yaml), and [test/adapter.test.ts](/Users/tyler/nexus/home/projects/nexus/packages/adapters/linkedin/test/adapter.test.ts).
@@ -121,7 +110,7 @@ This package’s contract is currently defined by [src/adapter.ts](/Users/tyler/
 - This package is not LinkedIn messaging.
 - Publishing requires the correct organization-admin and social scopes.
 - The organization URN must resolve to an administered organization or health should fail.
-- Treat `channels.send` and `linkedin.posts.create` as organization-feed publishing surfaces, not general-purpose social actions.
+- Treat `linkedin.posts.create` as an organization-feed publishing surface, not a general-purpose social action.
 
 ## Related Docs
 

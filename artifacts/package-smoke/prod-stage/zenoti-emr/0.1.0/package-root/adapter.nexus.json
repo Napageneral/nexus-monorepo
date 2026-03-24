@@ -1,0 +1,13 @@
+{
+  "id": "zenoti-emr",
+  "version": "0.1.0",
+  "displayName": "Zenoti EMR",
+  "description": "Shared Zenoti EMR adapter package for Nex.",
+  "platform": "zenoti-emr",
+  "hosting": {
+    "required_server_class": "compliant",
+    "deployment_class": "customer_server"
+  },
+  "command": "./bin/zenoti-emr-adapter",
+  "skill": "./SKILL.md"
+}

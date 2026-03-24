@@ -74,7 +74,7 @@ describe("defineAdapter", () => {
     expect(code).toBe(0);
     expect(stderr.read()).toBe("");
     const info = JSON.parse(stdout.read().trim());
-    expect(info.operations).toEqual(["adapter.info", "adapter.accounts.list", "adapter.health"]);
+    expect(info.operations).toEqual(["adapter.info", "adapter.connections.list", "adapter.health"]);
     expect(info.methods).toHaveLength(1);
     expect(info.methods[0]).toMatchObject({
       name: "test.echo",

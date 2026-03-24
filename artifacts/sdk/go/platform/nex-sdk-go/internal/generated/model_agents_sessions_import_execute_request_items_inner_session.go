@@ -19,7 +19,6 @@ var _ MappedNullable = &AgentsSessionsImportExecuteRequestItemsInnerSession{}
 
 // AgentsSessionsImportExecuteRequestItemsInnerSession struct for AgentsSessionsImportExecuteRequestItemsInnerSession
 type AgentsSessionsImportExecuteRequestItemsInnerSession struct {
-	SessionKeyHint *string `json:"sessionKeyHint,omitempty"`
 	CreatedAtMs *int64 `json:"createdAtMs,omitempty"`
 	UpdatedAtMs *int64 `json:"updatedAtMs,omitempty"`
 	Model *string `json:"model,omitempty"`
@@ -53,38 +52,6 @@ func NewAgentsSessionsImportExecuteRequestItemsInnerSession() *AgentsSessionsImp
 func NewAgentsSessionsImportExecuteRequestItemsInnerSessionWithDefaults() *AgentsSessionsImportExecuteRequestItemsInnerSession {
 	this := AgentsSessionsImportExecuteRequestItemsInnerSession{}
 	return &this
-}
-
-// GetSessionKeyHint returns the SessionKeyHint field value if set, zero value otherwise.
-func (o *AgentsSessionsImportExecuteRequestItemsInnerSession) GetSessionKeyHint() string {
-	if o == nil || IsNil(o.SessionKeyHint) {
-		var ret string
-		return ret
-	}
-	return *o.SessionKeyHint
-}
-
-// GetSessionKeyHintOk returns a tuple with the SessionKeyHint field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *AgentsSessionsImportExecuteRequestItemsInnerSession) GetSessionKeyHintOk() (*string, bool) {
-	if o == nil || IsNil(o.SessionKeyHint) {
-		return nil, false
-	}
-	return o.SessionKeyHint, true
-}
-
-// HasSessionKeyHint returns a boolean if a field has been set.
-func (o *AgentsSessionsImportExecuteRequestItemsInnerSession) HasSessionKeyHint() bool {
-	if o != nil && !IsNil(o.SessionKeyHint) {
-		return true
-	}
-
-	return false
-}
-
-// SetSessionKeyHint gets a reference to the given string and assigns it to the SessionKeyHint field.
-func (o *AgentsSessionsImportExecuteRequestItemsInnerSession) SetSessionKeyHint(v string) {
-	o.SessionKeyHint = &v
 }
 
 // GetCreatedAtMs returns the CreatedAtMs field value if set, zero value otherwise.
@@ -513,9 +480,6 @@ func (o AgentsSessionsImportExecuteRequestItemsInnerSession) MarshalJSON() ([]by
 
 func (o AgentsSessionsImportExecuteRequestItemsInnerSession) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	if !IsNil(o.SessionKeyHint) {
-		toSerialize["sessionKeyHint"] = o.SessionKeyHint
-	}
 	if !IsNil(o.CreatedAtMs) {
 		toSerialize["createdAtMs"] = o.CreatedAtMs
 	}
@@ -577,7 +541,6 @@ func (o *AgentsSessionsImportExecuteRequestItemsInnerSession) UnmarshalJSON(data
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
-		delete(additionalProperties, "sessionKeyHint")
 		delete(additionalProperties, "createdAtMs")
 		delete(additionalProperties, "updatedAtMs")
 		delete(additionalProperties, "model")

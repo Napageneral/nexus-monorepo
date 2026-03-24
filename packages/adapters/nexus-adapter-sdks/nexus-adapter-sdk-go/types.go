@@ -50,7 +50,6 @@ type AdapterMethodCatalog struct {
 }
 
 type AdapterMethodOrigin struct {
-	Kind              string `json:"kind"` // "core" | "app" | "adapter"
 	PackageID         string `json:"package_id,omitempty"`
 	PackageVersion    string `json:"package_version,omitempty"`
 	DeclarationMode   string `json:"declaration_mode"`   // "manifest" | "openapi" | "builtin"
@@ -118,22 +117,16 @@ type AdapterAuthMethod struct {
 type AdapterOperation string
 
 const (
-	OpAdapterInfo         AdapterOperation = "adapter.info"
-	OpAdapterMonitorStart AdapterOperation = "adapter.monitor.start"
-	OpAdapterServeStart   AdapterOperation = "adapter.serve.start"
-	OpAdapterSetupStart   AdapterOperation = "adapter.setup.start"
-	OpAdapterSetupSubmit  AdapterOperation = "adapter.setup.submit"
-	OpAdapterSetupStatus  AdapterOperation = "adapter.setup.status"
-	OpAdapterSetupCancel  AdapterOperation = "adapter.setup.cancel"
-	OpRecordsBackfill     AdapterOperation = "records.backfill"
-	OpChannelsSend        AdapterOperation = "channels.send"
-	OpAdapterHealth       AdapterOperation = "adapter.health"
-	OpAdapterAccountsList AdapterOperation = "adapter.accounts.list"
-	OpChannelsStream      AdapterOperation = "channels.stream"
-	OpChannelsReact       AdapterOperation = "channels.react"
-	OpChannelsEdit        AdapterOperation = "channels.edit"
-	OpChannelsDelete      AdapterOperation = "channels.delete"
-	OpChannelsPoll        AdapterOperation = "channels.poll"
+	OpAdapterInfo            AdapterOperation = "adapter.info"
+	OpAdapterMonitorStart    AdapterOperation = "adapter.monitor.start"
+	OpAdapterServeStart      AdapterOperation = "adapter.serve.start"
+	OpAdapterSetupStart      AdapterOperation = "adapter.setup.start"
+	OpAdapterSetupSubmit     AdapterOperation = "adapter.setup.submit"
+	OpAdapterSetupStatus     AdapterOperation = "adapter.setup.status"
+	OpAdapterSetupCancel     AdapterOperation = "adapter.setup.cancel"
+	OpRecordsBackfill        AdapterOperation = "records.backfill"
+	OpAdapterHealth          AdapterOperation = "adapter.health"
+	OpAdapterConnectionsList AdapterOperation = "adapter.connections.list"
 )
 
 // ChannelCapabilities describes what a channel supports. Reported by the
@@ -215,7 +208,7 @@ type Attachment struct {
 	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
-// --- Outbound Delivery ---
+// --- Shared Method Routing ---
 
 type ChannelRef struct {
 	Platform      string `json:"platform"`
@@ -225,53 +218,7 @@ type ChannelRef struct {
 	ThreadID      string `json:"thread_id,omitempty"`
 }
 
-type DeliveryTarget struct {
-	ConnectionID string     `json:"connection_id"`
-	Channel      ChannelRef `json:"channel"`
-	ReplyToID    string     `json:"reply_to_id,omitempty"`
-}
-
-// SendRequest contains the parameters for a `send` command invocation.
-type SendRequest struct {
-	Target  DeliveryTarget `json:"target"`
-	Text    string         `json:"text,omitempty"`
-	Media   string         `json:"media,omitempty"` // File path
-	Caption string         `json:"caption,omitempty"`
-}
-
-// DeleteRequest contains the parameters for a `channels.delete` invocation.
-type DeleteRequest struct {
-	Target    DeliveryTarget `json:"target"`
-	MessageID string         `json:"message_id"`
-}
-
-// DeliveryResult is the structured output of a `send` command.
-type DeliveryResult struct {
-	Success    bool           `json:"success"`
-	MessageIDs []string       `json:"message_ids"`
-	ChunksSent int            `json:"chunks_sent"`
-	TotalChars int            `json:"total_chars,omitempty"`
-	Error      *DeliveryError `json:"error,omitempty"`
-}
-
-// ReactRequest contains the parameters for a `channels.react` invocation.
-type ReactRequest struct {
-	ConnectionID string `json:"connection_id"`
-	To           string `json:"to"`
-	MessageID    string `json:"message_id"`
-	Emoji        string `json:"emoji"`
-	Remove       bool   `json:"remove,omitempty"`
-}
-
-// EditRequest contains the parameters for a `channels.edit` invocation.
-type EditRequest struct {
-	ConnectionID string `json:"connection_id"`
-	To           string `json:"to"`
-	MessageID    string `json:"message_id"`
-	Text         string `json:"text"`
-}
-
-// DeliveryError describes why a delivery failed.
+// DeliveryError describes why a method-side communication action failed.
 type DeliveryError struct {
 	Type         string         `json:"type"` // "rate_limited", "permission_denied", "not_found", "content_rejected", "network", "unknown"
 	Message      string         `json:"message"`
@@ -293,8 +240,8 @@ type AdapterHealth struct {
 
 // --- Accounts ---
 
-// AdapterAccount represents a configured account within the adapter.
-type AdapterAccount struct {
+// AdapterConnectionIdentity represents a configured account within the adapter.
+type AdapterConnectionIdentity struct {
 	ID            string `json:"id"`
 	DisplayName   string `json:"display_name,omitempty"`
 	CredentialRef string `json:"credential_ref,omitempty"` // "google/tnapathy@gmail.com"
@@ -365,15 +312,18 @@ type AdapterServeRecordIngestFrame struct {
 
 // --- Streaming Protocol ---
 
-// StreamEvent represents an event from NEX piped to the adapter's stdin
-// during streaming delivery. Type determines which fields are populated.
+// StreamEvent represents an event from NEX piped to the adapter's stdin during
+// a streaming namespaced method invocation. Type determines which fields are
+// populated.
 type StreamEvent struct {
 	Type string `json:"type"` // "stream_start", "token", "tool_status", "reasoning", "stream_end", "stream_error"
 
 	// stream_start
-	RunID     string          `json:"runId,omitempty"`
-	SessionID string          `json:"session_id,omitempty"`
-	Target    *DeliveryTarget `json:"target,omitempty"`
+	RunID        string      `json:"runId,omitempty"`
+	SessionID    string      `json:"session_id,omitempty"`
+	ConnectionID string      `json:"connection_id,omitempty"`
+	Channel      *ChannelRef `json:"channel,omitempty"`
+	ReplyToID    string      `json:"reply_to_id,omitempty"`
 
 	// token, reasoning
 	Text string `json:"text,omitempty"`
@@ -394,7 +344,7 @@ type StreamEvent struct {
 
 // AdapterStreamStatus is emitted by the adapter on stdout during streaming.
 type AdapterStreamStatus struct {
-	Type string `json:"type"` // "message_created", "message_updated", "message_sent", "delivery_complete", "delivery_error"
+	Type string `json:"type"` // "message_created", "message_updated", "message_sent", "error"
 
 	// message_created, message_updated, message_sent
 	MessageID string `json:"messageId,omitempty"`
@@ -405,10 +355,7 @@ type AdapterStreamStatus struct {
 	// message_sent
 	IsFinal bool `json:"final,omitempty"`
 
-	// delivery_complete
-	MessageIDs []string `json:"messageIds,omitempty"`
-
-	// delivery_error
+	// error
 	ErrorMsg string `json:"error,omitempty"`
 }
 

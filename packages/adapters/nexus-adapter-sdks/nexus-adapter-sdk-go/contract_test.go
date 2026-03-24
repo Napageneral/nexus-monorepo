@@ -23,7 +23,7 @@ func contractDir(t *testing.T) string {
 	}
 
 	// Default assumes the authoritative contract lives under nex/docs/specs/adapters/contract.
-	p := filepath.Join("..", "..", "..", "nex", "docs", "specs", "adapters", "contract")
+	p := filepath.Join("..", "..", "..", "..", "nex", "docs", "specs", "adapters", "contract")
 	abs, err := filepath.Abs(p)
 	if err != nil {
 		t.Fatalf("abs(%s): %v", p, err)
@@ -106,10 +106,8 @@ func TestAdapterProtocolContract_FixturesValidate(t *testing.T) {
 	// Validate fixtures against the canonical schema.
 	requireValid(t, compileContractRef(t, "AdapterInfo"), loadFixtureJSON(t, "adapter_info.json"))
 	requireValid(t, compileContractRef(t, "AdapterInboundRecord"), loadFixtureJSON(t, "inbound_record.json"))
-	requireValid(t, compileContractRef(t, "DeliveryResult"), loadFixtureJSON(t, "delivery_result_success.json"))
-	requireValid(t, compileContractRef(t, "DeliveryResult"), loadFixtureJSON(t, "delivery_result_rate_limited.json"))
 	requireValid(t, compileContractRef(t, "AdapterHealth"), loadFixtureJSON(t, "adapter_health.json"))
-	requireValid(t, compileContractRef(t, "AdapterAccount"), loadFixtureJSON(t, "adapter_account.json"))
+	requireValid(t, compileContractRef(t, "AdapterConnectionIdentity"), loadFixtureJSON(t, "adapter_connection_identity.json"))
 
 	for _, e := range loadFixtureJSONL(t, "stream_events.jsonl") {
 		requireValid(t, compileContractRef(t, "StreamEvent"), e)
@@ -149,10 +147,8 @@ func TestAdapterProtocolContract_GoTypesRoundTrip(t *testing.T) {
 
 	roundTrip("AdapterInfo", "adapter_info.json", &AdapterInfo{})
 	roundTrip("AdapterInboundRecord", "inbound_record.json", &AdapterInboundRecord{})
-	roundTrip("DeliveryResult", "delivery_result_success.json", &DeliveryResult{})
-	roundTrip("DeliveryResult", "delivery_result_rate_limited.json", &DeliveryResult{})
 	roundTrip("AdapterHealth", "adapter_health.json", &AdapterHealth{})
-	roundTrip("AdapterAccount", "adapter_account.json", &AdapterAccount{})
+	roundTrip("AdapterConnectionIdentity", "adapter_connection_identity.json", &AdapterConnectionIdentity{})
 
 	raw, err := json.Marshal(loadFixtureJSON(t, "runtime_context.json"))
 	if err != nil {

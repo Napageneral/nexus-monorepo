@@ -3,14 +3,13 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import Ajv2020 from "ajv/dist/2020";
 import {
-  AdapterAccountSchema,
+  AdapterConnectionIdentitySchema,
   AdapterServeInputFrameSchema,
   AdapterServeOutputFrameSchema,
   AdapterHealthSchema,
   AdapterInfoSchema,
   AdapterInboundRecordSchema,
   AdapterStreamStatusSchema,
-  DeliveryResultSchema,
   StreamEventSchema,
 } from "./protocol.js";
 import { readAdapterRuntimeContextFile } from "./runtime-context.js";
@@ -20,7 +19,7 @@ function contractDir(): string {
   if (env && env.trim()) {
     return path.resolve(env);
   }
-  return path.resolve(process.cwd(), "../../../nex/docs/specs/adapters/contract");
+  return path.resolve(process.cwd(), "../../../../nex/docs/specs/adapters/contract");
 }
 
 function loadJSON(filePath: string): unknown {
@@ -66,21 +65,13 @@ describe("adapter protocol contract (active Nex docs)", () => {
     expect(get("AdapterInboundRecord")(inboundRecord)).toBe(true);
     AdapterInboundRecordSchema.parse(inboundRecord);
 
-    const deliveryOk = loadJSON(path.join(fixturesDir, "delivery_result_success.json"));
-    expect(get("DeliveryResult")(deliveryOk)).toBe(true);
-    DeliveryResultSchema.parse(deliveryOk);
-
-    const deliveryRateLimited = loadJSON(path.join(fixturesDir, "delivery_result_rate_limited.json"));
-    expect(get("DeliveryResult")(deliveryRateLimited)).toBe(true);
-    DeliveryResultSchema.parse(deliveryRateLimited);
-
     const health = loadJSON(path.join(fixturesDir, "adapter_health.json"));
     expect(get("AdapterHealth")(health)).toBe(true);
     AdapterHealthSchema.parse(health);
 
-    const account = loadJSON(path.join(fixturesDir, "adapter_account.json"));
-    expect(get("AdapterAccount")(account)).toBe(true);
-    AdapterAccountSchema.parse(account);
+    const account = loadJSON(path.join(fixturesDir, "adapter_connection_identity.json"));
+    expect(get("AdapterConnectionIdentity")(account)).toBe(true);
+    AdapterConnectionIdentitySchema.parse(account);
 
     const runtimeContextPath = path.join(fixturesDir, "runtime_context.json");
     // RuntimeContext is a supporting fixture, not a published schema definition.
@@ -149,13 +140,7 @@ describe("adapter protocol contract (active Nex docs)", () => {
     roundTrip("AdapterInboundRecord", "inbound_record.json", (value) =>
       AdapterInboundRecordSchema.parse(value),
     );
-    roundTrip("DeliveryResult", "delivery_result_success.json", (value) =>
-      DeliveryResultSchema.parse(value),
-    );
-    roundTrip("DeliveryResult", "delivery_result_rate_limited.json", (value) =>
-      DeliveryResultSchema.parse(value),
-    );
     roundTrip("AdapterHealth", "adapter_health.json", (value) => AdapterHealthSchema.parse(value));
-    roundTrip("AdapterAccount", "adapter_account.json", (value) => AdapterAccountSchema.parse(value));
+    roundTrip("AdapterConnectionIdentity", "adapter_connection_identity.json", (value) => AdapterConnectionIdentitySchema.parse(value));
   });
 });

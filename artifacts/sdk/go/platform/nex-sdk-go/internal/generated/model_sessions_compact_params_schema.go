@@ -20,7 +20,7 @@ var _ MappedNullable = &SessionsCompactParamsSchema{}
 
 // SessionsCompactParamsSchema struct for SessionsCompactParamsSchema
 type SessionsCompactParamsSchema struct {
-	Key string `json:"key"`
+	SessionId string `json:"sessionId"`
 	MaxLines *int32 `json:"maxLines,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
@@ -31,9 +31,9 @@ type _SessionsCompactParamsSchema SessionsCompactParamsSchema
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewSessionsCompactParamsSchema(key string) *SessionsCompactParamsSchema {
+func NewSessionsCompactParamsSchema(sessionId string) *SessionsCompactParamsSchema {
 	this := SessionsCompactParamsSchema{}
-	this.Key = key
+	this.SessionId = sessionId
 	return &this
 }
 
@@ -45,28 +45,28 @@ func NewSessionsCompactParamsSchemaWithDefaults() *SessionsCompactParamsSchema {
 	return &this
 }
 
-// GetKey returns the Key field value
-func (o *SessionsCompactParamsSchema) GetKey() string {
+// GetSessionId returns the SessionId field value
+func (o *SessionsCompactParamsSchema) GetSessionId() string {
 	if o == nil {
 		var ret string
 		return ret
 	}
 
-	return o.Key
+	return o.SessionId
 }
 
-// GetKeyOk returns a tuple with the Key field value
+// GetSessionIdOk returns a tuple with the SessionId field value
 // and a boolean to check if the value has been set.
-func (o *SessionsCompactParamsSchema) GetKeyOk() (*string, bool) {
+func (o *SessionsCompactParamsSchema) GetSessionIdOk() (*string, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.Key, true
+	return &o.SessionId, true
 }
 
-// SetKey sets field value
-func (o *SessionsCompactParamsSchema) SetKey(v string) {
-	o.Key = v
+// SetSessionId sets field value
+func (o *SessionsCompactParamsSchema) SetSessionId(v string) {
+	o.SessionId = v
 }
 
 // GetMaxLines returns the MaxLines field value if set, zero value otherwise.
@@ -111,7 +111,7 @@ func (o SessionsCompactParamsSchema) MarshalJSON() ([]byte, error) {
 
 func (o SessionsCompactParamsSchema) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["key"] = o.Key
+	toSerialize["sessionId"] = o.SessionId
 	if !IsNil(o.MaxLines) {
 		toSerialize["maxLines"] = o.MaxLines
 	}
@@ -128,7 +128,7 @@ func (o *SessionsCompactParamsSchema) UnmarshalJSON(data []byte) (err error) {
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
-		"key",
+		"sessionId",
 	}
 
 	allProperties := make(map[string]interface{})
@@ -158,7 +158,7 @@ func (o *SessionsCompactParamsSchema) UnmarshalJSON(data []byte) (err error) {
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
-		delete(additionalProperties, "key")
+		delete(additionalProperties, "sessionId")
 		delete(additionalProperties, "maxLines")
 		o.AdditionalProperties = additionalProperties
 	}

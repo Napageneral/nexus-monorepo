@@ -22,7 +22,6 @@ var _ MappedNullable = &AdapterConnectionsCustomStatusParamsSchema{}
 type AdapterConnectionsCustomStatusParamsSchema struct {
 	Adapter string `json:"adapter"`
 	SessionId string `json:"sessionId"`
-	Account *string `json:"account,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
 
@@ -95,38 +94,6 @@ func (o *AdapterConnectionsCustomStatusParamsSchema) SetSessionId(v string) {
 	o.SessionId = v
 }
 
-// GetAccount returns the Account field value if set, zero value otherwise.
-func (o *AdapterConnectionsCustomStatusParamsSchema) GetAccount() string {
-	if o == nil || IsNil(o.Account) {
-		var ret string
-		return ret
-	}
-	return *o.Account
-}
-
-// GetAccountOk returns a tuple with the Account field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *AdapterConnectionsCustomStatusParamsSchema) GetAccountOk() (*string, bool) {
-	if o == nil || IsNil(o.Account) {
-		return nil, false
-	}
-	return o.Account, true
-}
-
-// HasAccount returns a boolean if a field has been set.
-func (o *AdapterConnectionsCustomStatusParamsSchema) HasAccount() bool {
-	if o != nil && !IsNil(o.Account) {
-		return true
-	}
-
-	return false
-}
-
-// SetAccount gets a reference to the given string and assigns it to the Account field.
-func (o *AdapterConnectionsCustomStatusParamsSchema) SetAccount(v string) {
-	o.Account = &v
-}
-
 func (o AdapterConnectionsCustomStatusParamsSchema) MarshalJSON() ([]byte, error) {
 	toSerialize,err := o.ToMap()
 	if err != nil {
@@ -139,9 +106,6 @@ func (o AdapterConnectionsCustomStatusParamsSchema) ToMap() (map[string]interfac
 	toSerialize := map[string]interface{}{}
 	toSerialize["adapter"] = o.Adapter
 	toSerialize["sessionId"] = o.SessionId
-	if !IsNil(o.Account) {
-		toSerialize["account"] = o.Account
-	}
 
 	for key, value := range o.AdditionalProperties {
 		toSerialize[key] = value
@@ -188,7 +152,6 @@ func (o *AdapterConnectionsCustomStatusParamsSchema) UnmarshalJSON(data []byte) 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
 		delete(additionalProperties, "adapter")
 		delete(additionalProperties, "sessionId")
-		delete(additionalProperties, "account")
 		o.AdditionalProperties = additionalProperties
 	}
 

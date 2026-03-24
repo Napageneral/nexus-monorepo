@@ -424,7 +424,7 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
-    "/runtime/operations/adapter.accounts.list": {
+    "/runtime/operations/adapter.connections.list": {
         parameters: {
             query?: never;
             header?: never;
@@ -433,8 +433,8 @@ export type paths = {
         };
         get?: never;
         put?: never;
-        /** adapter.accounts.list */
-        post: operations["adapter.accounts.list"];
+        /** adapter.connections.list */
+        post: operations["adapter.connections.list"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1733,40 +1733,6 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
-    "/runtime/operations/channels.delete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** channels.delete */
-        post: operations["channels.delete"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/runtime/operations/channels.edit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** channels.edit */
-        post: operations["channels.edit"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/runtime/operations/channels.get": {
         parameters: {
             query?: never;
@@ -1869,23 +1835,6 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
-    "/runtime/operations/channels.react": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** channels.react */
-        post: operations["channels.react"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/runtime/operations/channels.resolve": {
         parameters: {
             query?: never;
@@ -1920,23 +1869,6 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
-    "/runtime/operations/channels.send": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** channels.send */
-        post: operations["channels.send"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/runtime/operations/channels.status": {
         parameters: {
             query?: never;
@@ -1948,23 +1880,6 @@ export type paths = {
         put?: never;
         /** channels.status */
         post: operations["channels.status"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/runtime/operations/channels.stream": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** channels.stream */
-        post: operations["channels.stream"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5334,7 +5249,7 @@ export type components = {
             requesterChannel?: string | null;
             requesterId?: string | null;
             resources: string[];
-            sessionKey?: string | null;
+            sessionId?: string | null;
             summary?: string | null;
             timeoutMs?: number;
             toolCallId?: string | null;
@@ -5379,7 +5294,7 @@ export type components = {
                 /** Format: int64 */
                 responseAtMs?: number | null;
                 responseChannel?: string | null;
-                sessionKey?: string | null;
+                sessionId?: string | null;
                 status: "pending" | "approved" | "denied" | "expired";
                 summary?: string | null;
                 toolCallId?: string | null;
@@ -5412,7 +5327,7 @@ export type components = {
                 /** Format: int64 */
                 responseAtMs?: number | null;
                 responseChannel?: string | null;
-                sessionKey?: string | null;
+                sessionId?: string | null;
                 status: "pending" | "approved" | "denied" | "expired";
                 summary?: string | null;
                 toolCallId?: string | null;
@@ -5445,7 +5360,7 @@ export type components = {
                 /** Format: int64 */
                 responseAtMs?: number | null;
                 responseChannel?: string | null;
-                sessionKey?: string | null;
+                sessionId?: string | null;
                 status: "pending" | "approved" | "denied" | "expired";
                 summary?: string | null;
                 toolCallId?: string | null;
@@ -5474,7 +5389,7 @@ export type components = {
                 /** Format: int64 */
                 responseAtMs?: number | null;
                 responseChannel?: string | null;
-                sessionKey?: string | null;
+                sessionId?: string | null;
                 status: "pending" | "approved" | "denied" | "expired";
                 summary?: string | null;
                 toolCallId?: string | null;
@@ -5498,7 +5413,6 @@ export type components = {
             status: "queued" | "running";
         };
         AdapterConnectionsCreateParamsSchema: {
-            account?: string;
             adapter: string;
             authMethodId?: string;
             config?: {
@@ -5526,12 +5440,10 @@ export type components = {
             service: string;
         };
         AdapterConnectionsCustomCancelParamsSchema: {
-            account?: string;
             adapter: string;
             sessionId: string;
         };
         AdapterConnectionsCustomStartParamsSchema: {
-            account?: string;
             adapter: string;
             authMethodId?: string;
             payload?: {
@@ -5539,12 +5451,10 @@ export type components = {
             };
         };
         AdapterConnectionsCustomStatusParamsSchema: {
-            account?: string;
             adapter: string;
             sessionId: string;
         };
         AdapterConnectionsCustomSubmitParamsSchema: {
-            account?: string;
             adapter: string;
             payload?: {
                 [key: string]: unknown;
@@ -5649,7 +5559,6 @@ export type components = {
             connectionId: string;
         };
         AdapterConnectionsUpdateParamsSchema: {
-            account?: string;
             adapter: string;
             authMethodId?: string;
             config?: {
@@ -5668,7 +5577,7 @@ export type components = {
         };
         AgentIdentityParamsSchema: {
             agentId?: string;
-            sessionKey?: string;
+            sessionId?: string;
         };
         AgentIdentityResultSchema: {
             agentId: string;
@@ -5912,8 +5821,6 @@ export type components = {
             /** @enum {string} */
             declaration_mode: "manifest" | "openapi" | "builtin";
             declaration_source: string;
-            /** @enum {string} */
-            kind: "core" | "app" | "adapter";
             namespace: string;
             package_id?: string | null;
             package_version?: string | null;
@@ -6006,26 +5913,28 @@ export type components = {
         };
         ChannelParticipantHistoryRowSchema: {
             avatar_url?: string | null;
+            canonical_entity_id?: string | null;
             channel_id: string;
             contact_id: string;
             contact_name?: string | null;
-            entity_id?: string | null;
             id: string;
             message_count: number;
             observed_at: number;
+            observed_entity_id?: string | null;
             participant_id: string;
             role?: string | null;
             status?: string | null;
         };
         ChannelParticipantRowSchema: {
             avatar_url?: string | null;
+            canonical_entity_id?: string | null;
             channel_id: string;
             contact_id: string;
             contact_name?: string | null;
             created_at: number;
-            entity_id?: string | null;
             id: string;
             message_count: number;
+            observed_entity_id?: string | null;
             role?: string | null;
             status: string;
             updated_at: number;
@@ -6164,7 +6073,7 @@ export type components = {
             note?: string;
             raw: string;
             restartDelayMs?: number;
-            sessionKey?: string;
+            sessionId?: string;
         };
         ConfigFileSnapshotSchema: {
             config: {
@@ -6186,7 +6095,7 @@ export type components = {
             note?: string;
             raw: string;
             restartDelayMs?: number;
-            sessionKey?: string;
+            sessionId?: string;
         };
         ConfigSchemaParamsSchema: Record<string, never>;
         ConfigSchemaResponseSchema: {
@@ -6450,12 +6359,13 @@ export type components = {
         };
         IdentityContactRowSchema: {
             avatar_url?: string | null;
+            canonical_entity_id: string;
             contact_id: string;
             contact_name?: string | null;
             created_at: number;
             deleted_at?: number | null;
-            entity_id: string;
             id: string;
+            observed_entity_id: string;
             origin: string;
             platform: string;
             space_id: string;
@@ -6871,7 +6781,7 @@ export type components = {
             /** @enum {string} */
             kind: "config-apply" | "update" | "restart";
             message?: string | null;
-            sessionKey?: string;
+            sessionId?: string;
             stats?: components["schemas"]["RestartSentinelStatsSchema"] | null;
             /** @enum {string} */
             status: "ok" | "error" | "skipped";
@@ -7074,12 +6984,12 @@ export type components = {
             timezone?: string;
         };
         SessionsCompactParamsSchema: {
-            key: string;
             maxLines?: number;
+            sessionId: string;
         };
         SessionsDeleteParamsSchema: {
             deleteTranscript?: boolean;
-            key: string;
+            sessionId: string;
         };
         SessionsImportChunkParamsSchema: {
             aixSourceId?: string;
@@ -7105,6 +7015,20 @@ export type components = {
             aixSourceId?: string;
             idempotencyKey: string;
             items: {
+                artifacts?: {
+                    agentPath: string;
+                    bytes: number;
+                    contentType?: string | null;
+                    /** Format: int64 */
+                    createdAtMs: number;
+                    encoding?: string | null;
+                    hostPath: string;
+                    id: string;
+                    kind: string;
+                    metadataJson?: unknown;
+                    relativePath?: string | null;
+                    sha256?: string | null;
+                }[];
                 /** Format: int64 */
                 importedAtMs: number;
                 messages: {
@@ -7131,7 +7055,6 @@ export type components = {
                     parentSourceSessionId?: string;
                     project?: string;
                     provider?: string;
-                    sessionKeyHint?: string;
                     spawnToolCallId?: string;
                     taskDescription?: string;
                     taskStatus?: string;
@@ -7142,12 +7065,25 @@ export type components = {
                 sourceProvider: string;
                 sourceSessionFingerprint: string;
                 sourceSessionId: string;
+                systemContextProfiles?: {
+                    contextJson?: unknown;
+                    /** Format: int64 */
+                    createdAtMs: number;
+                    hash: string;
+                    id: string;
+                    metadataJson?: unknown;
+                    systemPrompt: string;
+                    /** Format: int64 */
+                    updatedAtMs: number;
+                }[];
                 toolCalls?: {
                     /** Format: int64 */
                     completedAtMs?: number;
                     error?: string;
                     paramsJson?: unknown;
+                    resultArtifactId?: string;
                     resultJson?: unknown;
+                    resultPreviewText?: string;
                     sequence: number;
                     sourceMessageId?: string;
                     sourceToolCallId: string;
@@ -7164,11 +7100,13 @@ export type components = {
                     cacheWriteTokens?: number;
                     /** Format: int64 */
                     completedAtMs?: number;
+                    inputArtifactId?: string;
                     inputTokens?: number;
                     metadata?: {
                         [key: string]: unknown;
                     };
                     model?: string;
+                    outputArtifactId?: string;
                     outputTokens?: number;
                     parentSourceTurnId?: string;
                     provider?: string;
@@ -7178,6 +7116,7 @@ export type components = {
                     sourceTurnId: string;
                     /** Format: int64 */
                     startedAtMs: number;
+                    systemContextProfileId?: string;
                     totalTokens?: number;
                 }[];
             }[];
@@ -7191,7 +7130,7 @@ export type components = {
         };
         SessionsImportsListItemSchema: {
             aixSourceId: string;
-            sessionKey: string;
+            sessionId: string;
             sourceEntityId: string;
             sourceProvider: string;
             sourceSessionId: string;
@@ -7219,9 +7158,8 @@ export type components = {
             includeLastMessage?: boolean;
             includeUnknown?: boolean;
             limit?: number;
+            parentSessionId?: string;
             search?: string;
-            session_key?: string;
-            spawnedBy?: string;
         };
         SessionsPatchParamsSchema: {
             elevatedLevel?: string | null;
@@ -7233,16 +7171,16 @@ export type components = {
             execution_host_config_json?: unknown | null;
             execution_host_kind?: "host.runtime" | "host.node" | "sandbox" | null;
             groupActivation?: "mention" | "always" | null;
-            key: string;
+            label?: string | null;
             model?: string | null;
             model_config_id?: string | null;
+            parentSessionId?: string | null;
             reasoningLevel?: string | null;
             responseUsage?: "off" | "tokens" | "full" | "on" | null;
             role_config_id?: string | null;
             sandbox_id?: string | null;
             sendPolicy?: "allow" | "deny" | null;
-            session_key?: string | null;
-            spawnedBy?: string | null;
+            session_id: string;
             thinkingLevel?: string | null;
             verboseLevel?: string | null;
         };
@@ -7252,23 +7190,20 @@ export type components = {
             maxChars?: number;
         };
         SessionsResetParamsSchema: {
-            key: string;
+            sessionId: string;
         };
         SessionsResolveParamsSchema: {
             agentId?: string;
             includeGlobal?: boolean;
             includeUnknown?: boolean;
             key?: string;
-            session_key?: string;
-            sessionId?: string;
-            spawnedBy?: string;
+            parentSessionId?: string;
         };
         SessionsSendParamsSchema: {
             attachments?: unknown[];
             deliver?: boolean;
             idempotency_key: string;
             message: string;
-            session_key?: string;
             sessionId?: string;
             thinking?: string;
             timeout_ms?: number;
@@ -7300,7 +7235,7 @@ export type components = {
         UpdateRunParamsSchema: {
             note?: string;
             restartDelayMs?: number;
-            sessionKey?: string;
+            sessionId?: string;
             timeoutMs?: number;
         };
         WizardCancelParamsSchema: {
@@ -8005,7 +7940,7 @@ export interface operations {
                     requesterChannel?: string | null;
                     requesterId?: string | null;
                     resources: string[];
-                    sessionKey?: string | null;
+                    sessionId?: string | null;
                     summary?: string | null;
                     timeoutMs?: number;
                     toolCallId?: string | null;
@@ -8863,7 +8798,7 @@ export interface operations {
                                 /** Format: int64 */
                                 responseAtMs?: number | null;
                                 responseChannel?: string | null;
-                                sessionKey?: string | null;
+                                sessionId?: string | null;
                                 status: "pending" | "approved" | "denied" | "expired";
                                 summary?: string | null;
                                 toolCallId?: string | null;
@@ -8957,7 +8892,7 @@ export interface operations {
                                 /** Format: int64 */
                                 responseAtMs?: number | null;
                                 responseChannel?: string | null;
-                                sessionKey?: string | null;
+                                sessionId?: string | null;
                                 status: "pending" | "approved" | "denied" | "expired";
                                 summary?: string | null;
                                 toolCallId?: string | null;
@@ -9051,7 +8986,7 @@ export interface operations {
                                 /** Format: int64 */
                                 responseAtMs?: number | null;
                                 responseChannel?: string | null;
-                                sessionKey?: string | null;
+                                sessionId?: string | null;
                                 status: "pending" | "approved" | "denied" | "expired";
                                 summary?: string | null;
                                 toolCallId?: string | null;
@@ -9141,7 +9076,7 @@ export interface operations {
                                 /** Format: int64 */
                                 responseAtMs?: number | null;
                                 responseChannel?: string | null;
-                                sessionKey?: string | null;
+                                sessionId?: string | null;
                                 status: "pending" | "approved" | "denied" | "expired";
                                 summary?: string | null;
                                 toolCallId?: string | null;
@@ -9185,7 +9120,7 @@ export interface operations {
             };
         };
     };
-    "adapter.accounts.list": {
+    "adapter.connections.list": {
         parameters: {
             query?: never;
             header?: never;
@@ -9942,7 +9877,6 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    account?: string;
                     adapter: string;
                     authMethodId?: string;
                     config?: {
@@ -10095,7 +10029,6 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    account?: string;
                     adapter: string;
                     sessionId: string;
                 };
@@ -10164,7 +10097,6 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    account?: string;
                     adapter: string;
                     authMethodId?: string;
                     payload?: {
@@ -10236,7 +10168,6 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    account?: string;
                     adapter: string;
                     sessionId: string;
                 };
@@ -10305,7 +10236,6 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    account?: string;
                     adapter: string;
                     payload?: {
                         [key: string]: unknown;
@@ -10916,7 +10846,6 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    account?: string;
                     adapter: string;
                     authMethodId?: string;
                     config?: {
@@ -11912,7 +11841,7 @@ export interface operations {
             content: {
                 "application/json": {
                     agentId?: string;
-                    sessionKey?: string;
+                    sessionId?: string;
                 };
             };
         };
@@ -12061,7 +11990,7 @@ export interface operations {
             content: {
                 "application/json": {
                     deleteTranscript?: boolean;
-                    key: string;
+                    sessionId: string;
                 };
             };
         };
@@ -12128,8 +12057,8 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    key: string;
                     maxLines?: number;
+                    sessionId: string;
                 };
             };
         };
@@ -12551,6 +12480,20 @@ export interface operations {
                     aixSourceId?: string;
                     idempotencyKey: string;
                     items: {
+                        artifacts?: {
+                            agentPath: string;
+                            bytes: number;
+                            contentType?: string | null;
+                            /** Format: int64 */
+                            createdAtMs: number;
+                            encoding?: string | null;
+                            hostPath: string;
+                            id: string;
+                            kind: string;
+                            metadataJson?: unknown;
+                            relativePath?: string | null;
+                            sha256?: string | null;
+                        }[];
                         /** Format: int64 */
                         importedAtMs: number;
                         messages: {
@@ -12577,7 +12520,6 @@ export interface operations {
                             parentSourceSessionId?: string;
                             project?: string;
                             provider?: string;
-                            sessionKeyHint?: string;
                             spawnToolCallId?: string;
                             taskDescription?: string;
                             taskStatus?: string;
@@ -12588,12 +12530,25 @@ export interface operations {
                         sourceProvider: string;
                         sourceSessionFingerprint: string;
                         sourceSessionId: string;
+                        systemContextProfiles?: {
+                            contextJson?: unknown;
+                            /** Format: int64 */
+                            createdAtMs: number;
+                            hash: string;
+                            id: string;
+                            metadataJson?: unknown;
+                            systemPrompt: string;
+                            /** Format: int64 */
+                            updatedAtMs: number;
+                        }[];
                         toolCalls?: {
                             /** Format: int64 */
                             completedAtMs?: number;
                             error?: string;
                             paramsJson?: unknown;
+                            resultArtifactId?: string;
                             resultJson?: unknown;
+                            resultPreviewText?: string;
                             sequence: number;
                             sourceMessageId?: string;
                             sourceToolCallId: string;
@@ -12610,11 +12565,13 @@ export interface operations {
                             cacheWriteTokens?: number;
                             /** Format: int64 */
                             completedAtMs?: number;
+                            inputArtifactId?: string;
                             inputTokens?: number;
                             metadata?: {
                                 [key: string]: unknown;
                             };
                             model?: string;
+                            outputArtifactId?: string;
                             outputTokens?: number;
                             parentSourceTurnId?: string;
                             provider?: string;
@@ -12624,6 +12581,7 @@ export interface operations {
                             sourceTurnId: string;
                             /** Format: int64 */
                             startedAtMs: number;
+                            systemContextProfileId?: string;
                             totalTokens?: number;
                         }[];
                     }[];
@@ -12777,9 +12735,8 @@ export interface operations {
                     includeLastMessage?: boolean;
                     includeUnknown?: boolean;
                     limit?: number;
+                    parentSessionId?: string;
                     search?: string;
-                    session_key?: string;
-                    spawnedBy?: string;
                 };
             };
         };
@@ -12853,16 +12810,16 @@ export interface operations {
                     execution_host_config_json?: unknown | null;
                     execution_host_kind?: "host.runtime" | "host.node" | "sandbox" | null;
                     groupActivation?: "mention" | "always" | null;
-                    key: string;
+                    label?: string | null;
                     model?: string | null;
                     model_config_id?: string | null;
+                    parentSessionId?: string | null;
                     reasoningLevel?: string | null;
                     responseUsage?: "off" | "tokens" | "full" | "on" | null;
                     role_config_id?: string | null;
                     sandbox_id?: string | null;
                     sendPolicy?: "allow" | "deny" | null;
-                    session_key?: string | null;
-                    spawnedBy?: string | null;
+                    session_id: string;
                     thinkingLevel?: string | null;
                     verboseLevel?: string | null;
                 };
@@ -12998,7 +12955,7 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    key: string;
+                    sessionId: string;
                 };
             };
         };
@@ -13069,9 +13026,7 @@ export interface operations {
                     includeGlobal?: boolean;
                     includeUnknown?: boolean;
                     key?: string;
-                    session_key?: string;
-                    sessionId?: string;
-                    spawnedBy?: string;
+                    parentSessionId?: string;
                 };
             };
         };
@@ -13140,7 +13095,6 @@ export interface operations {
                     deliver?: boolean;
                     idempotency_key: string;
                     message: string;
-                    session_key?: string;
                     sessionId?: string;
                     thinking?: string;
                     timeout_ms?: number;
@@ -14771,140 +14725,6 @@ export interface operations {
             };
         };
     };
-    "channels.delete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful runtime operation response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: true;
-                        payload?: {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-        };
-    };
-    "channels.edit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful runtime operation response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: true;
-                        payload?: {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-        };
-    };
     "channels.get": {
         parameters: {
             query?: never;
@@ -15303,73 +15123,6 @@ export interface operations {
             };
         };
     };
-    "channels.react": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful runtime operation response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: true;
-                        payload?: {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-        };
-    };
     "channels.resolve": {
         parameters: {
             query?: never;
@@ -15522,73 +15275,6 @@ export interface operations {
             };
         };
     };
-    "channels.send": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful runtime operation response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: true;
-                        payload?: {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-        };
-    };
     "channels.status": {
         parameters: {
             query?: never;
@@ -15618,73 +15304,6 @@ export interface operations {
                         /** @enum {boolean} */
                         ok: true;
                         payload?: components["schemas"]["ChannelsStatusDataResultSchema"];
-                    };
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: components["schemas"]["ErrorShapeSchema"];
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: false;
-                    };
-                };
-            };
-        };
-    };
-    "channels.stream": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful runtime operation response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        meta?: {
-                            [key: string]: unknown;
-                        } | null;
-                        /** @enum {boolean} */
-                        ok: true;
-                        payload?: {
-                            [key: string]: unknown;
-                        };
                     };
                 };
             };
@@ -15815,7 +15434,7 @@ export interface operations {
                     note?: string;
                     raw: string;
                     restartDelayMs?: number;
-                    sessionKey?: string;
+                    sessionId?: string;
                 };
             };
         };
@@ -15947,7 +15566,7 @@ export interface operations {
                     note?: string;
                     raw: string;
                     restartDelayMs?: number;
-                    sessionKey?: string;
+                    sessionId?: string;
                 };
             };
         };
@@ -27961,7 +27580,7 @@ export interface operations {
                 "application/json": {
                     note?: string;
                     restartDelayMs?: number;
-                    sessionKey?: string;
+                    sessionId?: string;
                     timeoutMs?: number;
                 };
             };

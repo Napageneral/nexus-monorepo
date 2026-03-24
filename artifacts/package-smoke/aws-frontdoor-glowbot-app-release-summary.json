@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-03-18T00:00:00Z",
+  "repo_root": "/Users/tyler/nexus/home/projects/nexus",
+  "count": 1,
+  "failures": 0,
+  "results": [
+    {
+      "kind": "app",
+      "id": "glowbot",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/apps/glowbot/app",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/glowbot/dist/releases/glowbot/glowbot-1.0.0.tar.gz",
+      "ok": true
+    }
+  ]
+}

@@ -684,7 +684,7 @@ paths:
                 toolCallId:
                   type: string
                   nullable: true
-                sessionKey:
+                sessionId:
                   type: string
                   nullable: true
                 nexusRequestId:
@@ -1777,7 +1777,7 @@ paths:
                           toolCallId:
                             type: string
                             nullable: true
-                          sessionKey:
+                          sessionId:
                             type: string
                             nullable: true
                           nexusRequestId:
@@ -1955,7 +1955,7 @@ paths:
                           toolCallId:
                             type: string
                             nullable: true
-                          sessionKey:
+                          sessionId:
                             type: string
                             nullable: true
                           nexusRequestId:
@@ -2131,7 +2131,7 @@ paths:
                             toolCallId:
                               type: string
                               nullable: true
-                            sessionKey:
+                            sessionId:
                               type: string
                               nullable: true
                             nexusRequestId:
@@ -2298,7 +2298,7 @@ paths:
                           toolCallId:
                             type: string
                             nullable: true
-                          sessionKey:
+                          sessionId:
                             type: string
                             nullable: true
                           nexusRequestId:
@@ -2376,10 +2376,10 @@ paths:
                       - type: object
                         additionalProperties: true
                       - type: "null"
-  /runtime/operations/adapter.accounts.list:
+  /runtime/operations/adapter.connections.list:
     post:
-      operationId: adapter.accounts.list
-      summary: adapter.accounts.list
+      operationId: adapter.connections.list
+      summary: adapter.connections.list
       tags:
         - Adapters
       x-sdk-public: true
@@ -3328,8 +3328,6 @@ paths:
                   type: string
                 authMethodId:
                   type: string
-                account:
-                  type: string
                 fields:
                   type: object
                   patternProperties:
@@ -3548,8 +3546,6 @@ paths:
                 sessionId:
                   minLength: 1
                   type: string
-                account:
-                  type: string
       responses:
         "200":
           description: Successful runtime operation response
@@ -3637,8 +3633,6 @@ paths:
                   minLength: 1
                   type: string
                 authMethodId:
-                  type: string
-                account:
                   type: string
                 payload:
                   type: object
@@ -3734,8 +3728,6 @@ paths:
                 sessionId:
                   minLength: 1
                   type: string
-                account:
-                  type: string
       responses:
         "200":
           description: Successful runtime operation response
@@ -3825,8 +3817,6 @@ paths:
                   type: string
                 sessionId:
                   minLength: 1
-                  type: string
-                account:
                   type: string
                 payload:
                   type: object
@@ -4789,8 +4779,6 @@ paths:
                   minLength: 1
                   type: string
                 authMethodId:
-                  type: string
-                account:
                   type: string
                 fields:
                   type: object
@@ -6134,7 +6122,7 @@ paths:
                 agentId:
                   minLength: 1
                   type: string
-                sessionKey:
+                sessionId:
                   type: string
       responses:
         "200":
@@ -6364,9 +6352,9 @@ paths:
               additionalProperties: false
               type: object
               required:
-                - key
+                - sessionId
               properties:
-                key:
+                sessionId:
                   minLength: 1
                   type: string
                 deleteTranscript:
@@ -6452,9 +6440,9 @@ paths:
               additionalProperties: false
               type: object
               required:
-                - key
+                - sessionId
               properties:
-                key:
+                sessionId:
                   minLength: 1
                   type: string
                 maxLines:
@@ -7072,10 +7060,6 @@ paths:
                         additionalProperties: false
                         type: object
                         properties:
-                          sessionKeyHint:
-                            minLength: 1
-                            maxLength: 64
-                            type: string
                           createdAtMs:
                             minimum: 0
                             type: integer
@@ -7113,6 +7097,81 @@ paths:
                             type: object
                             patternProperties:
                               ^(.*)$: {}
+                      systemContextProfiles:
+                        type: array
+                        items:
+                          additionalProperties: false
+                          type: object
+                          required:
+                            - id
+                            - hash
+                            - systemPrompt
+                            - createdAtMs
+                            - updatedAtMs
+                          properties:
+                            id:
+                              minLength: 1
+                              type: string
+                            hash:
+                              minLength: 1
+                              type: string
+                            systemPrompt:
+                              type: string
+                            contextJson: {}
+                            metadataJson: {}
+                            createdAtMs:
+                              minimum: 0
+                              type: integer
+                              format: int64
+                            updatedAtMs:
+                              minimum: 0
+                              type: integer
+                              format: int64
+                      artifacts:
+                        type: array
+                        items:
+                          additionalProperties: false
+                          type: object
+                          required:
+                            - id
+                            - kind
+                            - createdAtMs
+                            - bytes
+                            - hostPath
+                            - agentPath
+                          properties:
+                            id:
+                              minLength: 1
+                              type: string
+                            kind:
+                              minLength: 1
+                              type: string
+                            createdAtMs:
+                              minimum: 0
+                              type: integer
+                              format: int64
+                            bytes:
+                              minimum: 0
+                              type: integer
+                            sha256:
+                              type: string
+                              nullable: true
+                            hostPath:
+                              minLength: 1
+                              type: string
+                            agentPath:
+                              minLength: 1
+                              type: string
+                            relativePath:
+                              type: string
+                              nullable: true
+                            contentType:
+                              type: string
+                              nullable: true
+                            encoding:
+                              type: string
+                              nullable: true
+                            metadataJson: {}
                       turns:
                         type: array
                         items:
@@ -7168,6 +7227,15 @@ paths:
                               items:
                                 minLength: 1
                                 type: string
+                            systemContextProfileId:
+                              minLength: 1
+                              type: string
+                            inputArtifactId:
+                              minLength: 1
+                              type: string
+                            outputArtifactId:
+                              minLength: 1
+                              type: string
                             metadata:
                               type: object
                               patternProperties:
@@ -7240,6 +7308,11 @@ paths:
                               type: integer
                             paramsJson: {}
                             resultJson: {}
+                            resultArtifactId:
+                              minLength: 1
+                              type: string
+                            resultPreviewText:
+                              type: string
                             status:
                               anyOf:
                                 - const: pending
@@ -7461,11 +7534,7 @@ paths:
                   type: boolean
                 includeLastMessage:
                   type: boolean
-                session_key:
-                  minLength: 1
-                  maxLength: 64
-                  type: string
-                spawnedBy:
+                parentSessionId:
                   minLength: 1
                   type: string
                 agentId:
@@ -7553,9 +7622,9 @@ paths:
               additionalProperties: false
               type: object
               required:
-                - key
+                - session_id
               properties:
-                key:
+                session_id:
                   minLength: 1
                   type: string
                 entity_id:
@@ -7587,11 +7656,6 @@ paths:
                   anyOf:
                     - {}
                     - type: "null"
-                session_key:
-                  minLength: 1
-                  maxLength: 64
-                  type: string
-                  nullable: true
                 thinkingLevel:
                   minLength: 1
                   type: string
@@ -7639,8 +7703,11 @@ paths:
                   minLength: 1
                   type: string
                   nullable: true
-                spawnedBy:
+                parentSessionId:
                   minLength: 1
+                  type: string
+                  nullable: true
+                label:
                   type: string
                   nullable: true
                 sendPolicy:
@@ -7832,9 +7899,9 @@ paths:
               additionalProperties: false
               type: object
               required:
-                - key
+                - sessionId
               properties:
-                key:
+                sessionId:
                   minLength: 1
                   type: string
       responses:
@@ -7921,17 +7988,10 @@ paths:
                 key:
                   minLength: 1
                   type: string
-                sessionId:
-                  minLength: 1
-                  type: string
-                session_key:
-                  minLength: 1
-                  maxLength: 64
-                  type: string
                 agentId:
                   minLength: 1
                   type: string
-                spawnedBy:
+                parentSessionId:
                   minLength: 1
                   type: string
                 includeGlobal:
@@ -8022,9 +8082,6 @@ paths:
                 - idempotency_key
               properties:
                 sessionId:
-                  minLength: 1
-                  type: string
-                session_key:
                   minLength: 1
                   type: string
                 message:
@@ -10344,166 +10401,6 @@ paths:
                       - type: object
                         additionalProperties: true
                       - type: "null"
-  /runtime/operations/channels.delete:
-    post:
-      operationId: channels.delete
-      summary: channels.delete
-      tags:
-        - Channels
-      x-sdk-public: true
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        "200":
-          description: Successful runtime operation response
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - true
-                  payload:
-                    type: object
-                    additionalProperties: true
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "400":
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-  /runtime/operations/channels.edit:
-    post:
-      operationId: channels.edit
-      summary: channels.edit
-      tags:
-        - Channels
-      x-sdk-public: true
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        "200":
-          description: Successful runtime operation response
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - true
-                  payload:
-                    type: object
-                    additionalProperties: true
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "400":
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
   /runtime/operations/channels.get:
     post:
       operationId: channels.get
@@ -11024,86 +10921,6 @@ paths:
                       - type: object
                         additionalProperties: true
                       - type: "null"
-  /runtime/operations/channels.react:
-    post:
-      operationId: channels.react
-      summary: channels.react
-      tags:
-        - Channels
-      x-sdk-public: true
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        "200":
-          description: Successful runtime operation response
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - true
-                  payload:
-                    type: object
-                    additionalProperties: true
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "400":
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
   /runtime/operations/channels.resolve:
     post:
       operationId: channels.resolve
@@ -11314,86 +11131,6 @@ paths:
                       - type: object
                         additionalProperties: true
                       - type: "null"
-  /runtime/operations/channels.send:
-    post:
-      operationId: channels.send
-      summary: channels.send
-      tags:
-        - Channels
-      x-sdk-public: true
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        "200":
-          description: Successful runtime operation response
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - true
-                  payload:
-                    type: object
-                    additionalProperties: true
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "400":
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
   /runtime/operations/channels.status:
     post:
       operationId: channels.status
@@ -11432,86 +11169,6 @@ paths:
                       - true
                   payload:
                     $ref: "#/components/schemas/ChannelsStatusDataResultSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "400":
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                  - error
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    $ref: "#/components/schemas/ErrorShapeSchema"
-                  meta:
-                    anyOf:
-                      - type: object
-                        additionalProperties: true
-                      - type: "null"
-  /runtime/operations/channels.stream:
-    post:
-      operationId: channels.stream
-      summary: channels.stream
-      tags:
-        - Channels
-      x-sdk-public: true
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        "200":
-          description: Successful runtime operation response
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - ok
-                properties:
-                  ok:
-                    type: boolean
-                    enum:
-                      - true
-                  payload:
-                    type: object
-                    additionalProperties: true
                   meta:
                     anyOf:
                       - type: object
@@ -11691,7 +11348,7 @@ paths:
                 baseHash:
                   minLength: 1
                   type: string
-                sessionKey:
+                sessionId:
                   type: string
                 note:
                   type: string
@@ -11866,7 +11523,7 @@ paths:
                 baseHash:
                   minLength: 1
                   type: string
-                sessionKey:
+                sessionId:
                   type: string
                 note:
                   type: string
@@ -27311,7 +26968,7 @@ paths:
               additionalProperties: false
               type: object
               properties:
-                sessionKey:
+                sessionId:
                   type: string
                 note:
                   type: string
@@ -28947,7 +28604,7 @@ components:
         toolCallId:
           type: string
           nullable: true
-        sessionKey:
+        sessionId:
           type: string
           nullable: true
         nexusRequestId:
@@ -29072,7 +28729,7 @@ components:
             toolCallId:
               type: string
               nullable: true
-            sessionKey:
+            sessionId:
               type: string
               nullable: true
             nexusRequestId:
@@ -29176,7 +28833,7 @@ components:
             toolCallId:
               type: string
               nullable: true
-            sessionKey:
+            sessionId:
               type: string
               nullable: true
             nexusRequestId:
@@ -29278,7 +28935,7 @@ components:
               toolCallId:
                 type: string
                 nullable: true
-              sessionKey:
+              sessionId:
                 type: string
                 nullable: true
               nexusRequestId:
@@ -29371,7 +29028,7 @@ components:
             toolCallId:
               type: string
               nullable: true
-            sessionKey:
+            sessionId:
               type: string
               nullable: true
             nexusRequestId:
@@ -29467,8 +29124,6 @@ components:
           type: string
         authMethodId:
           type: string
-        account:
-          type: string
         fields:
           type: object
           patternProperties:
@@ -29536,8 +29191,6 @@ components:
         sessionId:
           minLength: 1
           type: string
-        account:
-          type: string
     AdapterConnectionsCustomStartParamsSchema:
       additionalProperties: false
       type: object
@@ -29548,8 +29201,6 @@ components:
           minLength: 1
           type: string
         authMethodId:
-          type: string
-        account:
           type: string
         payload:
           type: object
@@ -29568,8 +29219,6 @@ components:
         sessionId:
           minLength: 1
           type: string
-        account:
-          type: string
     AdapterConnectionsCustomSubmitParamsSchema:
       additionalProperties: false
       type: object
@@ -29582,8 +29231,6 @@ components:
           type: string
         sessionId:
           minLength: 1
-          type: string
-        account:
           type: string
         payload:
           type: object
@@ -29937,8 +29584,6 @@ components:
           type: string
         authMethodId:
           type: string
-        account:
-          type: string
         fields:
           type: object
           patternProperties:
@@ -29974,7 +29619,7 @@ components:
         agentId:
           minLength: 1
           type: string
-        sessionKey:
+        sessionId:
           type: string
     AgentIdentityResultSchema:
       additionalProperties: false
@@ -30615,7 +30260,7 @@ components:
         baseHash:
           minLength: 1
           type: string
-        sessionKey:
+        sessionId:
           type: string
         note:
           type: string
@@ -30638,7 +30283,7 @@ components:
         baseHash:
           minLength: 1
           type: string
-        sessionKey:
+        sessionId:
           type: string
         note:
           type: string
@@ -32041,9 +31686,9 @@ components:
       additionalProperties: false
       type: object
       required:
-        - key
+        - sessionId
       properties:
-        key:
+        sessionId:
           minLength: 1
           type: string
         maxLines:
@@ -32053,9 +31698,9 @@ components:
       additionalProperties: false
       type: object
       required:
-        - key
+        - sessionId
       properties:
-        key:
+        sessionId:
           minLength: 1
           type: string
         deleteTranscript:
@@ -32198,10 +31843,6 @@ components:
                 additionalProperties: false
                 type: object
                 properties:
-                  sessionKeyHint:
-                    minLength: 1
-                    maxLength: 64
-                    type: string
                   createdAtMs:
                     minimum: 0
                     type: integer
@@ -32239,6 +31880,81 @@ components:
                     type: object
                     patternProperties:
                       ^(.*)$: {}
+              systemContextProfiles:
+                type: array
+                items:
+                  additionalProperties: false
+                  type: object
+                  required:
+                    - id
+                    - hash
+                    - systemPrompt
+                    - createdAtMs
+                    - updatedAtMs
+                  properties:
+                    id:
+                      minLength: 1
+                      type: string
+                    hash:
+                      minLength: 1
+                      type: string
+                    systemPrompt:
+                      type: string
+                    contextJson: {}
+                    metadataJson: {}
+                    createdAtMs:
+                      minimum: 0
+                      type: integer
+                      format: int64
+                    updatedAtMs:
+                      minimum: 0
+                      type: integer
+                      format: int64
+              artifacts:
+                type: array
+                items:
+                  additionalProperties: false
+                  type: object
+                  required:
+                    - id
+                    - kind
+                    - createdAtMs
+                    - bytes
+                    - hostPath
+                    - agentPath
+                  properties:
+                    id:
+                      minLength: 1
+                      type: string
+                    kind:
+                      minLength: 1
+                      type: string
+                    createdAtMs:
+                      minimum: 0
+                      type: integer
+                      format: int64
+                    bytes:
+                      minimum: 0
+                      type: integer
+                    sha256:
+                      type: string
+                      nullable: true
+                    hostPath:
+                      minLength: 1
+                      type: string
+                    agentPath:
+                      minLength: 1
+                      type: string
+                    relativePath:
+                      type: string
+                      nullable: true
+                    contentType:
+                      type: string
+                      nullable: true
+                    encoding:
+                      type: string
+                      nullable: true
+                    metadataJson: {}
               turns:
                 type: array
                 items:
@@ -32294,6 +32010,15 @@ components:
                       items:
                         minLength: 1
                         type: string
+                    systemContextProfileId:
+                      minLength: 1
+                      type: string
+                    inputArtifactId:
+                      minLength: 1
+                      type: string
+                    outputArtifactId:
+                      minLength: 1
+                      type: string
                     metadata:
                       type: object
                       patternProperties:
@@ -32366,6 +32091,11 @@ components:
                       type: integer
                     paramsJson: {}
                     resultJson: {}
+                    resultArtifactId:
+                      minLength: 1
+                      type: string
+                    resultPreviewText:
+                      type: string
                     status:
                       anyOf:
                         - const: pending
@@ -32434,11 +32164,7 @@ components:
           type: boolean
         includeLastMessage:
           type: boolean
-        session_key:
-          minLength: 1
-          maxLength: 64
-          type: string
-        spawnedBy:
+        parentSessionId:
           minLength: 1
           type: string
         agentId:
@@ -32450,9 +32176,9 @@ components:
       additionalProperties: false
       type: object
       required:
-        - key
+        - session_id
       properties:
-        key:
+        session_id:
           minLength: 1
           type: string
         entity_id:
@@ -32484,11 +32210,6 @@ components:
           anyOf:
             - {}
             - type: "null"
-        session_key:
-          minLength: 1
-          maxLength: 64
-          type: string
-          nullable: true
         thinkingLevel:
           minLength: 1
           type: string
@@ -32536,8 +32257,11 @@ components:
           minLength: 1
           type: string
           nullable: true
-        spawnedBy:
+        parentSessionId:
           minLength: 1
+          type: string
+          nullable: true
+        label:
           type: string
           nullable: true
         sendPolicy:
@@ -32576,9 +32300,9 @@ components:
       additionalProperties: false
       type: object
       required:
-        - key
+        - sessionId
       properties:
-        key:
+        sessionId:
           minLength: 1
           type: string
     SessionsResolveParamsSchema:
@@ -32588,17 +32312,10 @@ components:
         key:
           minLength: 1
           type: string
-        sessionId:
-          minLength: 1
-          type: string
-        session_key:
-          minLength: 1
-          maxLength: 64
-          type: string
         agentId:
           minLength: 1
           type: string
-        spawnedBy:
+        parentSessionId:
           minLength: 1
           type: string
         includeGlobal:
@@ -32613,9 +32330,6 @@ components:
         - idempotency_key
       properties:
         sessionId:
-          minLength: 1
-          type: string
-        session_key:
           minLength: 1
           type: string
         message:
@@ -32647,7 +32361,7 @@ components:
       additionalProperties: false
       type: object
       properties:
-        sessionKey:
+        sessionId:
           type: string
         note:
           type: string
@@ -33202,17 +32916,10 @@ components:
       type: object
       additionalProperties: false
       required:
-        - kind
         - declaration_mode
         - declaration_source
         - namespace
       properties:
-        kind:
-          type: string
-          enum:
-            - core
-            - app
-            - adapter
         package_id:
           type: string
           nullable: true
@@ -33378,7 +33085,10 @@ components:
           type: string
         contact_id:
           type: string
-        entity_id:
+        observed_entity_id:
+          type: string
+          nullable: true
+        canonical_entity_id:
           type: string
           nullable: true
         role:
@@ -33415,7 +33125,10 @@ components:
           type: string
         contact_id:
           type: string
-        entity_id:
+        observed_entity_id:
+          type: string
+          nullable: true
+        canonical_entity_id:
           type: string
           nullable: true
         role:
@@ -34077,7 +33790,8 @@ components:
       additionalProperties: false
       required:
         - id
-        - entity_id
+        - observed_entity_id
+        - canonical_entity_id
         - platform
         - space_id
         - contact_id
@@ -34086,7 +33800,9 @@ components:
       properties:
         id:
           type: string
-        entity_id:
+        observed_entity_id:
+          type: string
+        canonical_entity_id:
           type: string
         platform:
           type: string
@@ -34624,7 +34340,7 @@ components:
             - skipped
         ts:
           type: number
-        sessionKey:
+        sessionId:
           type: string
         deliveryContext:
           type: object
@@ -34787,14 +34503,14 @@ components:
       type: object
       additionalProperties: false
       required:
-        - sessionKey
+        - sessionId
         - sourceEntityId
         - aixSourceId
         - sourceProvider
         - sourceSessionId
         - updatedAt
       properties:
-        sessionKey:
+        sessionId:
           type: string
         sourceEntityId:
           type: string

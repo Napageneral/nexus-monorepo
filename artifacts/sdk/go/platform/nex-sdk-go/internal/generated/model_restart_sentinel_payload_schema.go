@@ -23,7 +23,7 @@ type RestartSentinelPayloadSchema struct {
 	Kind string `json:"kind"`
 	Status string `json:"status"`
 	Ts float32 `json:"ts"`
-	SessionKey *string `json:"sessionKey,omitempty"`
+	SessionId *string `json:"sessionId,omitempty"`
 	DeliveryContext map[string]interface{} `json:"deliveryContext,omitempty"`
 	ThreadId *string `json:"threadId,omitempty"`
 	Message *string `json:"message,omitempty"`
@@ -126,36 +126,36 @@ func (o *RestartSentinelPayloadSchema) SetTs(v float32) {
 	o.Ts = v
 }
 
-// GetSessionKey returns the SessionKey field value if set, zero value otherwise.
-func (o *RestartSentinelPayloadSchema) GetSessionKey() string {
-	if o == nil || IsNil(o.SessionKey) {
+// GetSessionId returns the SessionId field value if set, zero value otherwise.
+func (o *RestartSentinelPayloadSchema) GetSessionId() string {
+	if o == nil || IsNil(o.SessionId) {
 		var ret string
 		return ret
 	}
-	return *o.SessionKey
+	return *o.SessionId
 }
 
-// GetSessionKeyOk returns a tuple with the SessionKey field value if set, nil otherwise
+// GetSessionIdOk returns a tuple with the SessionId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *RestartSentinelPayloadSchema) GetSessionKeyOk() (*string, bool) {
-	if o == nil || IsNil(o.SessionKey) {
+func (o *RestartSentinelPayloadSchema) GetSessionIdOk() (*string, bool) {
+	if o == nil || IsNil(o.SessionId) {
 		return nil, false
 	}
-	return o.SessionKey, true
+	return o.SessionId, true
 }
 
-// HasSessionKey returns a boolean if a field has been set.
-func (o *RestartSentinelPayloadSchema) HasSessionKey() bool {
-	if o != nil && !IsNil(o.SessionKey) {
+// HasSessionId returns a boolean if a field has been set.
+func (o *RestartSentinelPayloadSchema) HasSessionId() bool {
+	if o != nil && !IsNil(o.SessionId) {
 		return true
 	}
 
 	return false
 }
 
-// SetSessionKey gets a reference to the given string and assigns it to the SessionKey field.
-func (o *RestartSentinelPayloadSchema) SetSessionKey(v string) {
-	o.SessionKey = &v
+// SetSessionId gets a reference to the given string and assigns it to the SessionId field.
+func (o *RestartSentinelPayloadSchema) SetSessionId(v string) {
+	o.SessionId = &v
 }
 
 // GetDeliveryContext returns the DeliveryContext field value if set, zero value otherwise.
@@ -341,8 +341,8 @@ func (o RestartSentinelPayloadSchema) ToMap() (map[string]interface{}, error) {
 	toSerialize["kind"] = o.Kind
 	toSerialize["status"] = o.Status
 	toSerialize["ts"] = o.Ts
-	if !IsNil(o.SessionKey) {
-		toSerialize["sessionKey"] = o.SessionKey
+	if !IsNil(o.SessionId) {
+		toSerialize["sessionId"] = o.SessionId
 	}
 	if !IsNil(o.DeliveryContext) {
 		toSerialize["deliveryContext"] = o.DeliveryContext
@@ -407,7 +407,7 @@ func (o *RestartSentinelPayloadSchema) UnmarshalJSON(data []byte) (err error) {
 		delete(additionalProperties, "kind")
 		delete(additionalProperties, "status")
 		delete(additionalProperties, "ts")
-		delete(additionalProperties, "sessionKey")
+		delete(additionalProperties, "sessionId")
 		delete(additionalProperties, "deliveryContext")
 		delete(additionalProperties, "threadId")
 		delete(additionalProperties, "message")

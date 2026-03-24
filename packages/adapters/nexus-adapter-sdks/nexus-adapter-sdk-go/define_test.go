@@ -87,9 +87,9 @@ func TestDefineAdapterDefaultAccountsUsesRuntimeContext(t *testing.T) {
 		},
 	})
 
-	accounts, err := adapter.Operations.AdapterAccountsList(context.Background())
+	accounts, err := adapter.Operations.AdapterConnectionsList(context.Background())
 	if err != nil {
-		t.Fatalf("AdapterAccountsList: %v", err)
+		t.Fatalf("AdapterConnectionsList: %v", err)
 	}
 	if len(accounts) != 1 {
 		t.Fatalf("accounts len = %d", len(accounts))

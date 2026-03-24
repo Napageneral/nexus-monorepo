@@ -94,13 +94,13 @@ type AclRequestsClient struct {
 
 type AdapterClient struct {
   raw *generated.APIClient
-  Accounts *AdapterAccountsClient
+  Connections *AdapterConnectionsClient
   Monitor *AdapterMonitorClient
   Serve *AdapterServeClient
   Setup *AdapterSetupClient
 }
 
-type AdapterAccountsClient struct {
+type AdapterConnectionsClient struct {
   raw *generated.APIClient
 }
 
@@ -509,7 +509,7 @@ type AclRequestsApproveResponse = generated.AclRequestsApprove200Response
 type AclRequestsDenyResponse = generated.AclRequestsDeny200Response
 type AclRequestsListResponse = generated.AclRequestsList200Response
 type AclRequestsShowResponse = generated.AclRequestsShow200Response
-type AdapterAccountsListResponse = generated.AclAuditGet200Response
+type AdapterConnectionsListResponse = generated.AclAuditGet200Response
 type AdapterHealthResponse = generated.AclAuditGet200Response
 type AdapterInfoResponse = generated.AclAuditGet200Response
 type AdapterMonitorStartResponse = generated.AclAuditGet200Response
@@ -586,20 +586,15 @@ type AuthUsersListResponse = generated.AuthUsersList200Response
 type AuthUsersSetPasswordResponse = generated.AuthUsersSetPassword200Response
 type BrowserRequestResponse = generated.AclAuditGet200Response
 type ChannelsCreateResponse = generated.ChannelsCreate200Response
-type ChannelsDeleteResponse = generated.AclAuditGet200Response
-type ChannelsEditResponse = generated.AclAuditGet200Response
 type ChannelsGetResponse = generated.ChannelsCreate200Response
 type ChannelsHistoryResponse = generated.ChannelsHistory200Response
 type ChannelsListResponse = generated.ChannelsList200Response
 type ChannelsParticipantsGetResponse = generated.ChannelsParticipantsGet200Response
 type ChannelsParticipantsHistoryResponse = generated.ChannelsParticipantsHistory200Response
 type ChannelsParticipantsListResponse = generated.ChannelsParticipantsList200Response
-type ChannelsReactResponse = generated.AclAuditGet200Response
 type ChannelsResolveResponse = generated.ChannelsResolve200Response
 type ChannelsSearchResponse = generated.ChannelsSearch200Response
-type ChannelsSendResponse = generated.AclAuditGet200Response
 type ChannelsStatusResponse = generated.ChannelsStatus200Response
-type ChannelsStreamResponse = generated.AclAuditGet200Response
 type ChannelsUpdateResponse = generated.ChannelsUpdate200Response
 type ConfigApplyResponse = generated.ConfigApply200Response
 type ConfigGetResponse = generated.ConfigGet200Response
@@ -828,7 +823,7 @@ type AclRequestsListRequest = generated.AclRequestsListRequest
 
 type AclRequestsShowRequest = generated.AppsInstallAliasApiAppsInstallRequest
 
-type AdapterAccountsListRequest = map[string]interface{}
+type AdapterConnectionsListRequest = map[string]interface{}
 
 type AdapterHealthRequest = map[string]interface{}
 
@@ -982,10 +977,6 @@ type BrowserRequestRequest = map[string]interface{}
 
 type ChannelsCreateRequest = generated.ChannelsCreateRequest
 
-type ChannelsDeleteRequest = map[string]interface{}
-
-type ChannelsEditRequest = map[string]interface{}
-
 type ChannelsGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
 
 type ChannelsHistoryRequest = generated.ChannelsHistoryRequest
@@ -998,17 +989,11 @@ type ChannelsParticipantsHistoryRequest = generated.ChannelsParticipantsHistoryR
 
 type ChannelsParticipantsListRequest = generated.ChannelsParticipantsListRequest
 
-type ChannelsReactRequest = map[string]interface{}
-
 type ChannelsResolveRequest = generated.ChannelsResolveRequest
 
 type ChannelsSearchRequest = generated.ChannelsSearchRequest
 
-type ChannelsSendRequest = map[string]interface{}
-
 type ChannelsStatusRequest = generated.ChannelsStatusRequest
-
-type ChannelsStreamRequest = map[string]interface{}
 
 type ChannelsUpdateRequest = generated.ChannelsUpdateRequest
 
@@ -1372,13 +1357,13 @@ type ToolsInvokeRequest = map[string]interface{}
 
 type UpdateRunRequest = generated.UpdateRunRequest
 
-type WizardCancelRequest = generated.WizardCancelRequest
+type WizardCancelRequest = generated.AgentsSessionsResetRequest
 
 type WizardNextRequest = generated.WizardNextRequest
 
 type WizardStartRequest = generated.WizardStartRequest
 
-type WizardStatusRequest = generated.WizardCancelRequest
+type WizardStatusRequest = generated.AgentsSessionsResetRequest
 
 type WorkspacesCreateRequest = generated.WorkspacesCreateRequest
 
@@ -1484,15 +1469,15 @@ func newAclRequestsClient(raw *generated.APIClient) *AclRequestsClient {
 
 func newAdapterClient(raw *generated.APIClient) *AdapterClient {
   client := &AdapterClient{raw: raw}
-  client.Accounts = newAdapterAccountsClient(raw)
+  client.Connections = newAdapterConnectionsClient(raw)
   client.Monitor = newAdapterMonitorClient(raw)
   client.Serve = newAdapterServeClient(raw)
   client.Setup = newAdapterSetupClient(raw)
   return client
 }
 
-func newAdapterAccountsClient(raw *generated.APIClient) *AdapterAccountsClient {
-  client := &AdapterAccountsClient{raw: raw}
+func newAdapterConnectionsClient(raw *generated.APIClient) *AdapterConnectionsClient {
+  client := &AdapterConnectionsClient{raw: raw}
   return client
 }
 
@@ -2170,8 +2155,8 @@ func (a *AdapterClient) Info(ctx context.Context, request AdapterInfoRequest) (*
   return response, nil
 }
 
-func (a *AdapterAccountsClient) List(ctx context.Context, request AdapterAccountsListRequest) (*AdapterAccountsListResponse, error) {
-  builder := a.raw.AdaptersAPI.AdapterAccountsList(ctx)
+func (a *AdapterConnectionsClient) List(ctx context.Context, request AdapterConnectionsListRequest) (*AdapterConnectionsListResponse, error) {
+  builder := a.raw.AdaptersAPI.AdapterConnectionsList(ctx)
   builder = builder.RequestBody(request)
   response, _, err := builder.Execute()
   if err != nil {
@@ -2920,26 +2905,6 @@ func (c *ChannelsClient) Create(ctx context.Context, request ChannelsCreateReque
   return response, nil
 }
 
-func (c *ChannelsClient) Delete(ctx context.Context, request ChannelsDeleteRequest) (*ChannelsDeleteResponse, error) {
-  builder := c.raw.ChannelsAPI.ChannelsDelete(ctx)
-  builder = builder.RequestBody(request)
-  response, _, err := builder.Execute()
-  if err != nil {
-    return nil, err
-  }
-  return response, nil
-}
-
-func (c *ChannelsClient) Edit(ctx context.Context, request ChannelsEditRequest) (*ChannelsEditResponse, error) {
-  builder := c.raw.ChannelsAPI.ChannelsEdit(ctx)
-  builder = builder.RequestBody(request)
-  response, _, err := builder.Execute()
-  if err != nil {
-    return nil, err
-  }
-  return response, nil
-}
-
 func (c *ChannelsClient) Get(ctx context.Context, request ChannelsGetRequest) (*ChannelsGetResponse, error) {
   builder := c.raw.ChannelsAPI.ChannelsGet(ctx)
   builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
@@ -2970,16 +2935,6 @@ func (c *ChannelsClient) List(ctx context.Context, request ChannelsListRequest) 
   return response, nil
 }
 
-func (c *ChannelsClient) React(ctx context.Context, request ChannelsReactRequest) (*ChannelsReactResponse, error) {
-  builder := c.raw.ChannelsAPI.ChannelsReact(ctx)
-  builder = builder.RequestBody(request)
-  response, _, err := builder.Execute()
-  if err != nil {
-    return nil, err
-  }
-  return response, nil
-}
-
 func (c *ChannelsClient) Resolve(ctx context.Context, request ChannelsResolveRequest) (*ChannelsResolveResponse, error) {
   builder := c.raw.ChannelsAPI.ChannelsResolve(ctx)
   builder = builder.ChannelsResolveRequest(request)
@@ -3000,29 +2955,9 @@ func (c *ChannelsClient) Search(ctx context.Context, request ChannelsSearchReque
   return response, nil
 }
 
-func (c *ChannelsClient) Send(ctx context.Context, request ChannelsSendRequest) (*ChannelsSendResponse, error) {
-  builder := c.raw.ChannelsAPI.ChannelsSend(ctx)
-  builder = builder.RequestBody(request)
-  response, _, err := builder.Execute()
-  if err != nil {
-    return nil, err
-  }
-  return response, nil
-}
-
 func (c *ChannelsClient) Status(ctx context.Context, request ChannelsStatusRequest) (*ChannelsStatusResponse, error) {
   builder := c.raw.ChannelsAPI.ChannelsStatus(ctx)
   builder = builder.ChannelsStatusRequest(request)
-  response, _, err := builder.Execute()
-  if err != nil {
-    return nil, err
-  }
-  return response, nil
-}
-
-func (c *ChannelsClient) Stream(ctx context.Context, request ChannelsStreamRequest) (*ChannelsStreamResponse, error) {
-  builder := c.raw.ChannelsAPI.ChannelsStream(ctx)
-  builder = builder.RequestBody(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -4852,7 +4787,7 @@ func (u *UpdateClient) Run(ctx context.Context, request UpdateRunRequest) (*Upda
 
 func (w *WizardClient) Cancel(ctx context.Context, request WizardCancelRequest) (*WizardCancelResponse, error) {
   builder := w.raw.WizardAPI.WizardCancel(ctx)
-  builder = builder.WizardCancelRequest(request)
+  builder = builder.AgentsSessionsResetRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -4882,7 +4817,7 @@ func (w *WizardClient) Start(ctx context.Context, request WizardStartRequest) (*
 
 func (w *WizardClient) Status(ctx context.Context, request WizardStatusRequest) (*WizardStatusResponse, error) {
   builder := w.raw.WizardAPI.WizardStatus(ctx)
-  builder = builder.WizardCancelRequest(request)
+  builder = builder.AgentsSessionsResetRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err

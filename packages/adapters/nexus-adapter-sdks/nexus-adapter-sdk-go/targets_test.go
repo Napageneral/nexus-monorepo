@@ -3,14 +3,11 @@ package nexadapter
 import "testing"
 
 func TestRequireContainerTarget(t *testing.T) {
-	target := DeliveryTarget{
-		ConnectionID: "conn-1",
-		Channel: ChannelRef{
-			Platform:    "discord",
-			ContainerID: "room-1",
-		},
+	channel := ChannelRef{
+		Platform:    "discord",
+		ContainerID: "room-1",
 	}
-	containerID, err := RequireContainerTarget(target)
+	containerID, err := RequireContainerTarget(channel)
 	if err != nil {
 		t.Fatalf("RequireContainerTarget: %v", err)
 	}
@@ -20,7 +17,7 @@ func TestRequireContainerTarget(t *testing.T) {
 }
 
 func TestRequireContainerTargetErrorsWhenMissing(t *testing.T) {
-	_, err := RequireContainerTarget(DeliveryTarget{})
+	_, err := RequireContainerTarget(ChannelRef{})
 	if err == nil {
 		t.Fatalf("expected error")
 	}

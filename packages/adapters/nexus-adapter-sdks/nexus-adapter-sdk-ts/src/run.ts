@@ -2,30 +2,22 @@ import { createAdapterLogger, patchConsoleToStderr, type AdapterLogger } from ".
 import { writeJSONLine } from "./io.js";
 import { createAdapterServeSession, type AdapterServeSession } from "./serve.js";
 import {
-  AdapterAccountSchema,
+  AdapterConnectionIdentitySchema,
   AdapterHealthSchema,
   AdapterInboundRecordSchema,
   AdapterInfoSchema,
   AdapterSetupResultSchema,
-  AdapterStreamStatusSchema,
-  DeliveryResultSchema,
-  DeliveryTargetSchema,
-  SendRequestSchema,
-  type AdapterAccount,
+  type AdapterConnectionIdentity,
   type AdapterHealth,
   type AdapterInboundRecord,
   type AdapterInfo,
   type AdapterSetupResult,
-  type AdapterStreamStatus,
-  type DeliveryResult,
-  type SendRequest,
 } from "./protocol.js";
 import {
   loadAdapterRuntimeContext,
   requireAdapterRuntimeContext,
   type AdapterRuntimeContext,
 } from "./runtime-context.js";
-import { handleStream, type StreamHandlers } from "./stream.js";
 
 export type AdapterContext = {
   signal: AbortSignal;
@@ -58,12 +50,11 @@ export type AdapterOperations = {
     args: { connection_id: string; since: Date },
     emit: (record: AdapterInboundRecord) => void,
   ) => void | Promise<void>;
-  "channels.send"?: (ctx: AdapterContext, req: SendRequest) => DeliveryResult | Promise<DeliveryResult>;
   "adapter.health"?: (
     ctx: AdapterContext,
     args: { connection_id: string },
   ) => AdapterHealth | Promise<AdapterHealth>;
-  "adapter.accounts.list"?: (ctx: AdapterContext) => AdapterAccount[] | Promise<AdapterAccount[]>;
+  "adapter.connections.list"?: (ctx: AdapterContext) => AdapterConnectionIdentity[] | Promise<AdapterConnectionIdentity[]>;
   "adapter.setup.start"?: (
     ctx: AdapterContext,
     req: AdapterSetupRequest,
@@ -85,7 +76,6 @@ export type AdapterOperations = {
     args: { connection_id: string },
     session: AdapterServeSession,
   ) => void | Promise<void>;
-  "channels.stream"?: StreamHandlers;
   methods?: Record<
     string,
     (ctx: AdapterContext, req: AdapterMethodInvokeRequest) => unknown | Promise<unknown>
@@ -216,60 +206,6 @@ export async function runAdapter(adapter: AdapterDefinition, opts: RunAdapterOpt
         ctx.log.info("backfill completed");
         return 0;
       }
-      case "channels.send": {
-        const handler = operations["channels.send"];
-        if (!handler) {
-          throw new Error("channels.send not supported by this adapter");
-        }
-        const connectionID = requireFlag(filteredArgs, "--connection");
-        const targetRaw = requireFlag(filteredArgs, "--target-json");
-        const target = DeliveryTargetSchema.parse(parseJsonObjectFlag(targetRaw, "--target-json"));
-        if (target.connection_id !== connectionID) {
-          throw new Error(
-            `--connection ${JSON.stringify(connectionID)} does not match target.connection_id ${JSON.stringify(target.connection_id)}`,
-          );
-        }
-        const text = readFlag(filteredArgs, "--text");
-        const media = readFlag(filteredArgs, "--media");
-        const caption = readFlag(filteredArgs, "--caption");
-
-        if (!text && !media) {
-          throw new Error("channels.send requires --text or --media");
-        }
-        if (text && media) {
-          throw new Error("channels.send must not specify both --text and --media");
-        }
-        if (caption && !media) {
-          throw new Error("channels.send --caption requires --media");
-        }
-
-        const req: SendRequest = {
-          target,
-          ...(text ? { text } : {}),
-          ...(media ? { media } : {}),
-          ...(caption ? { caption } : {}),
-        };
-        const parsedReq = validateOutput ? SendRequestSchema.parse(req) : req;
-
-        try {
-          const result = await handler(ctx, parsedReq);
-          writeJSONLine(stdout, validateOutput ? DeliveryResultSchema.parse(result) : result);
-          return 0;
-        } catch (err) {
-          const failure: DeliveryResult = {
-            success: false,
-            message_ids: [],
-            chunks_sent: 0,
-            error: {
-              type: "unknown",
-              message: errorToString(err),
-              retry: false,
-            },
-          };
-          writeJSONLine(stdout, validateOutput ? DeliveryResultSchema.parse(failure) : failure);
-          return 0;
-        }
-      }
       case "adapter.health": {
         const handler = operations["adapter.health"];
         if (!handler) {
@@ -290,13 +226,13 @@ export async function runAdapter(adapter: AdapterDefinition, opts: RunAdapterOpt
           return 0;
         }
       }
-      case "adapter.accounts.list": {
-        const handler = operations["adapter.accounts.list"];
+      case "adapter.connections.list": {
+        const handler = operations["adapter.connections.list"];
         if (!handler) {
-          throw new Error("adapter.accounts.list not supported by this adapter");
+          throw new Error("adapter.connections.list not supported by this adapter");
         }
         const accounts = await handler(ctx);
-        const payload = validateOutput ? zArray(AdapterAccountSchema).parse(accounts) : accounts;
+        const payload = validateOutput ? zArray(AdapterConnectionIdentitySchema).parse(accounts) : accounts;
         writeJSONLine(stdout, payload);
         return 0;
       }
@@ -356,17 +292,6 @@ export async function runAdapter(adapter: AdapterDefinition, opts: RunAdapterOpt
         await handler(ctx, { connection_id: connectionID }, session);
         return 0;
       }
-      case "channels.stream": {
-        const handler = operations["channels.stream"];
-        if (!handler) {
-          throw new Error("channels.stream not supported by this adapter");
-        }
-        void requireFlag(filteredArgs, "--connection");
-        ctx.log.info("stream handler starting");
-        await handleStream({ ctx, handlers: handler, stdin, stdout, validate: validateOutput });
-        ctx.log.info("stream handler stopped cleanly");
-        return 0;
-      }
       default: {
         const handler = operations.methods?.[command];
         if (!handler) {
@@ -397,15 +322,13 @@ function printUsage(name: string, stderr: NodeJS.WriteStream): void {
   stderr.write("  adapter.info\n");
   stderr.write("  adapter.monitor.start --connection <id>\n");
   stderr.write("  records.backfill --connection <id> --since <date>\n");
-  stderr.write("  channels.send --connection <id> --target-json <json> --text \"...\"\n");
   stderr.write("  adapter.health --connection <id>\n");
-  stderr.write("  adapter.accounts.list\n");
+  stderr.write("  adapter.connections.list\n");
   stderr.write("  adapter.setup.start [--connection <id>] [--session-id <id>] [--payload-json <json>]\n");
   stderr.write("  adapter.setup.submit --session-id <id> [--connection <id>] [--payload-json <json>]\n");
   stderr.write("  adapter.setup.status --session-id <id> [--connection <id>]\n");
   stderr.write("  adapter.setup.cancel --session-id <id> [--connection <id>]\n");
   stderr.write("  adapter.serve.start --connection <id>\n");
-  stderr.write("  channels.stream --connection <id>\n\n");
   stderr.write("  <namespace.method> [--connection <id>] [--payload-json <json>]\n\n");
   stderr.write("Global flags:\n");
   stderr.write("  --verbose, -v                     Enable debug logging\n");

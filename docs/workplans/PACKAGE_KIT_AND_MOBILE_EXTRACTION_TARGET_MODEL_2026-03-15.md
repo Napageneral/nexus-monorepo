@@ -64,9 +64,9 @@ This is broader than adapter SDK authoring and broader than Frontdoor publicatio
 
 Evidence:
 
-- `frontdoor/nexus-frontdoor/src/publish-app-release.ts`
-- `frontdoor/nexus-frontdoor/src/publish-adapter-release.ts`
-- `frontdoor/nexus-frontdoor/scripts/package-app.sh`
+- `frontdoor/src/publish-app-release.ts`
+- `frontdoor/src/publish-adapter-release.ts`
+- `frontdoor/scripts/package-app.sh`
 
 Frontdoor owns:
 

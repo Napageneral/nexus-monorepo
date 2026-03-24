@@ -23,7 +23,6 @@ type AdapterConnectionsUpdateParamsSchema struct {
 	ConnectionId string `json:"connectionId"`
 	Adapter string `json:"adapter"`
 	AuthMethodId *string `json:"authMethodId,omitempty"`
-	Account *string `json:"account,omitempty"`
 	Fields map[string]interface{} `json:"fields"`
 	Config map[string]interface{} `json:"config,omitempty"`
 	AdditionalProperties map[string]interface{}
@@ -131,38 +130,6 @@ func (o *AdapterConnectionsUpdateParamsSchema) SetAuthMethodId(v string) {
 	o.AuthMethodId = &v
 }
 
-// GetAccount returns the Account field value if set, zero value otherwise.
-func (o *AdapterConnectionsUpdateParamsSchema) GetAccount() string {
-	if o == nil || IsNil(o.Account) {
-		var ret string
-		return ret
-	}
-	return *o.Account
-}
-
-// GetAccountOk returns a tuple with the Account field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *AdapterConnectionsUpdateParamsSchema) GetAccountOk() (*string, bool) {
-	if o == nil || IsNil(o.Account) {
-		return nil, false
-	}
-	return o.Account, true
-}
-
-// HasAccount returns a boolean if a field has been set.
-func (o *AdapterConnectionsUpdateParamsSchema) HasAccount() bool {
-	if o != nil && !IsNil(o.Account) {
-		return true
-	}
-
-	return false
-}
-
-// SetAccount gets a reference to the given string and assigns it to the Account field.
-func (o *AdapterConnectionsUpdateParamsSchema) SetAccount(v string) {
-	o.Account = &v
-}
-
 // GetFields returns the Fields field value
 func (o *AdapterConnectionsUpdateParamsSchema) GetFields() map[string]interface{} {
 	if o == nil {
@@ -234,9 +201,6 @@ func (o AdapterConnectionsUpdateParamsSchema) ToMap() (map[string]interface{}, e
 	if !IsNil(o.AuthMethodId) {
 		toSerialize["authMethodId"] = o.AuthMethodId
 	}
-	if !IsNil(o.Account) {
-		toSerialize["account"] = o.Account
-	}
 	toSerialize["fields"] = o.Fields
 	if !IsNil(o.Config) {
 		toSerialize["config"] = o.Config
@@ -289,7 +253,6 @@ func (o *AdapterConnectionsUpdateParamsSchema) UnmarshalJSON(data []byte) (err e
 		delete(additionalProperties, "connectionId")
 		delete(additionalProperties, "adapter")
 		delete(additionalProperties, "authMethodId")
-		delete(additionalProperties, "account")
 		delete(additionalProperties, "fields")
 		delete(additionalProperties, "config")
 		o.AdditionalProperties = additionalProperties

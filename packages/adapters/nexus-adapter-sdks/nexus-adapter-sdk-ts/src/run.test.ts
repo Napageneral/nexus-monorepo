@@ -65,7 +65,7 @@ describe("runAdapter", () => {
     });
   });
 
-  it("channels.send handler errors are returned as a structured DeliveryResult (exit 0)", async () => {
+  it("namespaced method invocation passes payload-json through the method dispatch path", async () => {
     const stdout = captureStream();
     const stderr = captureStream();
 
@@ -76,8 +76,23 @@ describe("runAdapter", () => {
             platform: "test",
             name: "test-adapter",
             version: "0.0.0",
-            operations: ["adapter.info", "channels.send"],
-            methods: [],
+            operations: ["adapter.info"],
+            methods: [
+              {
+                name: "test.send",
+                action: "write",
+                connection_required: true,
+                mutates_remote: true,
+                context_hints: { params: {} },
+                origin: {
+                  package_id: "test",
+                  package_version: "0.0.0",
+                  declaration_mode: "manifest",
+                  declaration_source: "adapter.info",
+                  namespace: "test",
+                },
+              },
+            ],
             multi_account: false,
             platform_capabilities: {
               text_limit: 2000,
@@ -96,8 +111,12 @@ describe("runAdapter", () => {
               supports_streaming_edit: false,
             },
           }),
-          "channels.send": async () => {
-            throw new Error("boom");
+          methods: {
+            "test.send": async (_ctx, req) => ({
+              ok: true,
+              connection_id: req.connection_id,
+              payload: req.payload,
+            }),
           },
         },
       },
@@ -105,13 +124,11 @@ describe("runAdapter", () => {
         argv: [
           "node",
           "adapter",
-          "channels.send",
+          "test.send",
           "--connection",
           "default",
-          "--target-json",
-          "{\"connection_id\":\"default\",\"channel\":{\"platform\":\"test\",\"container_kind\":\"group\",\"container_id\":\"channel:1\"}}",
-          "--text",
-          "hi",
+          "--payload-json",
+          "{\"target\":{\"connection_id\":\"default\",\"channel\":{\"platform\":\"test\",\"container_kind\":\"group\",\"container_id\":\"channel:1\"}},\"text\":\"hi\"}",
         ],
         stdout: stdout.stream,
         stderr: stderr.stream,
@@ -122,11 +139,21 @@ describe("runAdapter", () => {
     );
 
     expect(code).toBe(0);
+    expect(stderr.read()).toBe("");
     expect(JSON.parse(stdout.read().trim())).toMatchObject({
-      success: false,
-      message_ids: [],
-      chunks_sent: 0,
-      error: { type: "unknown", message: "boom", retry: false },
+      ok: true,
+      connection_id: "default",
+      payload: {
+        target: {
+          connection_id: "default",
+          channel: {
+            platform: "test",
+            container_kind: "group",
+            container_id: "channel:1",
+          },
+        },
+        text: "hi",
+      },
     });
   });
 

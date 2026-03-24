@@ -35,7 +35,7 @@ Out of scope:
 4. implement post get/list/create helpers
 5. implement image upload initialization and upload helpers
 6. implement comments and social metadata read helpers
-7. map publishing into `channels.send`
+7. expose publishing through `linkedin.posts.create`
 8. add contract smoke tests and focused unit tests for payload shaping
 9. validate build, test, and package flows
 
@@ -44,6 +44,6 @@ Out of scope:
 1. `adapter.info` advertises the intended auth and method surface
 2. `adapter.health` validates token and organization access
 3. `linkedin.organizations.list` returns administered organizations
-4. `linkedin.posts.create` and `channels.send` both create organization posts
+4. `linkedin.posts.create` creates organization posts
 5. read methods return LinkedIn-native ids and raw payloads
 6. `pnpm test`, `pnpm build`, and `./scripts/package-release.sh` pass

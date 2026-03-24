@@ -21,7 +21,8 @@ var _ MappedNullable = &IdentityContactRowSchema{}
 // IdentityContactRowSchema struct for IdentityContactRowSchema
 type IdentityContactRowSchema struct {
 	Id string `json:"id"`
-	EntityId string `json:"entity_id"`
+	ObservedEntityId string `json:"observed_entity_id"`
+	CanonicalEntityId string `json:"canonical_entity_id"`
 	Platform string `json:"platform"`
 	SpaceId string `json:"space_id"`
 	ContactId string `json:"contact_id"`
@@ -39,10 +40,11 @@ type _IdentityContactRowSchema IdentityContactRowSchema
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewIdentityContactRowSchema(id string, entityId string, platform string, spaceId string, contactId string, origin string, createdAt float32) *IdentityContactRowSchema {
+func NewIdentityContactRowSchema(id string, observedEntityId string, canonicalEntityId string, platform string, spaceId string, contactId string, origin string, createdAt float32) *IdentityContactRowSchema {
 	this := IdentityContactRowSchema{}
 	this.Id = id
-	this.EntityId = entityId
+	this.ObservedEntityId = observedEntityId
+	this.CanonicalEntityId = canonicalEntityId
 	this.Platform = platform
 	this.SpaceId = spaceId
 	this.ContactId = contactId
@@ -83,28 +85,52 @@ func (o *IdentityContactRowSchema) SetId(v string) {
 	o.Id = v
 }
 
-// GetEntityId returns the EntityId field value
-func (o *IdentityContactRowSchema) GetEntityId() string {
+// GetObservedEntityId returns the ObservedEntityId field value
+func (o *IdentityContactRowSchema) GetObservedEntityId() string {
 	if o == nil {
 		var ret string
 		return ret
 	}
 
-	return o.EntityId
+	return o.ObservedEntityId
 }
 
-// GetEntityIdOk returns a tuple with the EntityId field value
+// GetObservedEntityIdOk returns a tuple with the ObservedEntityId field value
 // and a boolean to check if the value has been set.
-func (o *IdentityContactRowSchema) GetEntityIdOk() (*string, bool) {
+func (o *IdentityContactRowSchema) GetObservedEntityIdOk() (*string, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.EntityId, true
+	return &o.ObservedEntityId, true
 }
 
-// SetEntityId sets field value
-func (o *IdentityContactRowSchema) SetEntityId(v string) {
-	o.EntityId = v
+// SetObservedEntityId sets field value
+func (o *IdentityContactRowSchema) SetObservedEntityId(v string) {
+	o.ObservedEntityId = v
+}
+
+// GetCanonicalEntityId returns the CanonicalEntityId field value
+func (o *IdentityContactRowSchema) GetCanonicalEntityId() string {
+	if o == nil {
+		var ret string
+		return ret
+	}
+
+	return o.CanonicalEntityId
+}
+
+// GetCanonicalEntityIdOk returns a tuple with the CanonicalEntityId field value
+// and a boolean to check if the value has been set.
+func (o *IdentityContactRowSchema) GetCanonicalEntityIdOk() (*string, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.CanonicalEntityId, true
+}
+
+// SetCanonicalEntityId sets field value
+func (o *IdentityContactRowSchema) SetCanonicalEntityId(v string) {
+	o.CanonicalEntityId = v
 }
 
 // GetPlatform returns the Platform field value
@@ -334,7 +360,8 @@ func (o IdentityContactRowSchema) MarshalJSON() ([]byte, error) {
 func (o IdentityContactRowSchema) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["id"] = o.Id
-	toSerialize["entity_id"] = o.EntityId
+	toSerialize["observed_entity_id"] = o.ObservedEntityId
+	toSerialize["canonical_entity_id"] = o.CanonicalEntityId
 	toSerialize["platform"] = o.Platform
 	toSerialize["space_id"] = o.SpaceId
 	toSerialize["contact_id"] = o.ContactId
@@ -363,7 +390,8 @@ func (o *IdentityContactRowSchema) UnmarshalJSON(data []byte) (err error) {
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
 		"id",
-		"entity_id",
+		"observed_entity_id",
+		"canonical_entity_id",
 		"platform",
 		"space_id",
 		"contact_id",
@@ -399,7 +427,8 @@ func (o *IdentityContactRowSchema) UnmarshalJSON(data []byte) (err error) {
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
 		delete(additionalProperties, "id")
-		delete(additionalProperties, "entity_id")
+		delete(additionalProperties, "observed_entity_id")
+		delete(additionalProperties, "canonical_entity_id")
 		delete(additionalProperties, "platform")
 		delete(additionalProperties, "space_id")
 		delete(additionalProperties, "contact_id")

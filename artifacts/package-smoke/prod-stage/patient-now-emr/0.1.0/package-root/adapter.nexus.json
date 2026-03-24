@@ -1,0 +1,13 @@
+{
+  "id": "patient-now-emr",
+  "version": "0.1.0",
+  "displayName": "PatientNow EMR",
+  "description": "Shared PatientNow EMR adapter package for Nex.",
+  "platform": "patient-now-emr",
+  "hosting": {
+    "required_server_class": "compliant",
+    "deployment_class": "customer_server"
+  },
+  "command": "./bin/patient-now-emr-adapter",
+  "skill": "./SKILL.md"
+}

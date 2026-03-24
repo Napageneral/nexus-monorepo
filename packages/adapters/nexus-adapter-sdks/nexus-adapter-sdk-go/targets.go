@@ -2,18 +2,18 @@ package nexadapter
 
 import "strings"
 
-func RequireContainerTarget(target DeliveryTarget) (string, error) {
-	containerID := strings.TrimSpace(target.Channel.ContainerID)
+func RequireContainerTarget(channel ChannelRef) (string, error) {
+	containerID := strings.TrimSpace(channel.ContainerID)
 	if containerID == "" {
 		return "", ErrTargetContainerRequired
 	}
 	return containerID, nil
 }
 
-func ReadThreadTarget(target DeliveryTarget) string {
-	return strings.TrimSpace(target.Channel.ThreadID)
+func ReadThreadTarget(channel ChannelRef) string {
+	return strings.TrimSpace(channel.ThreadID)
 }
 
-func ReadReplyToTarget(target DeliveryTarget) string {
-	return strings.TrimSpace(target.ReplyToID)
+func ReadReplyToTarget(replyToID string) string {
+	return strings.TrimSpace(replyToID)
 }

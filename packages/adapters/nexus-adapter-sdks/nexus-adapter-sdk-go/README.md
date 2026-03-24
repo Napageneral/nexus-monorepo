@@ -7,7 +7,7 @@ Use it when you are implementing a Go adapter package that needs to:
 - expose the canonical adapter CLI operations
 - read injected runtime context
 - emit canonical `record.ingest`
-- implement monitor, backfill, health, send, and delete behavior
+- implement monitor, backfill, health, setup, and truthful namespaced methods
 
 ## Place In The Flow
 
@@ -27,7 +27,7 @@ Canonical references:
 - [Apps, Adapters, and Method Surfaces](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/apps-adapters-and-method-surfaces.md)
 - [Package Method Catalog and IAM](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/package-method-catalog-and-iam.md)
 - [Adapter Protocol](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/adapters/adapter-protocol.md)
-- [Unified Go Adapter SDK API](/Users/tyler/nexus/home/projects/nexus/adapters/nexus-adapter-sdks/docs/specs/UNIFIED_GO_ADAPTER_SDK_API.md)
+- [Unified Go Adapter SDK API](/Users/tyler/nexus/home/projects/nexus/packages/adapters/nexus-adapter-sdks/docs/specs/UNIFIED_GO_ADAPTER_SDK_API.md)
 
 ## What This SDK Owns
 
@@ -39,8 +39,8 @@ Shared behavior such as:
 - canonical adapter state-root discovery via `NEXUS_ADAPTER_STATE_DIR`
 - canonical serve-session output helpers
 - `record.ingest` builders
-- delivery target parsing and validation
-- send/delete request envelopes
+- target parsing and validation helpers for communication-shaped methods
+- reusable request/result envelopes for communication-shaped methods
 - adapter `methods` declaration on `adapter.info`
 
 It does not own:

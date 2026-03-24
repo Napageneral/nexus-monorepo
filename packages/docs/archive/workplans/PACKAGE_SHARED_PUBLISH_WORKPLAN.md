@@ -30,8 +30,8 @@ They should not have to know:
 ## Research Summary
 
 - Frontdoor already exposes the canonical publish implementations at:
-  - `frontdoor/nexus-frontdoor/scripts/publish-app-release.ts`
-  - `frontdoor/nexus-frontdoor/scripts/publish-adapter-release.ts`
+  - `frontdoor/scripts/publish-app-release.ts`
+  - `frontdoor/scripts/publish-adapter-release.ts`
 - Those scripts already share the same input model:
   - `--package-root`
   - `--tarball`

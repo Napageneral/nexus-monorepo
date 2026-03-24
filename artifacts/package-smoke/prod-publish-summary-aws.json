@@ -1,0 +1,153 @@
+{
+  "generated_at": "2026-03-17T23:41:16.691332+00:00",
+  "host": "frontdoor-aws-publish",
+  "remote_frontdoor_root": "/opt/nexus/frontdoor",
+  "remote_db": "/var/lib/nexus-frontdoor/frontdoor.db",
+  "target_os": "linux",
+  "target_arch": "arm64",
+  "count": 4,
+  "failures": 0,
+  "results": [
+    {
+      "kind": "app",
+      "id": "spike",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/apps/spike/app",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/spike/app/dist/spike-1.0.3.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/spike/1.0.3/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/spike/1.0.3/spike-1.0.3.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "spike",
+        "version": "1.0.3",
+        "release_id": "rel-spike-1.0.3",
+        "variant_id": "variant-spike-1.0.3-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/spike/1.0.3/spike-1.0.3.tar.gz",
+        "sha256": "e08a52a6af0e94a76ca4bd43b1685a42df0c895b799d73cc284aff8d0f34fe17",
+        "size_bytes": 141223890,
+        "product_sync": {
+          "appId": "spike",
+          "productsUpserted": 1,
+          "plansUpserted": 1,
+          "plansArchived": 2,
+          "changes": [
+            "spike: upserted product \"Spike\" (v1.0.3)",
+            "spike: upserted plan \"default\" (undefined)",
+            "spike: archived plan \"spike-free\" (no longer in manifest)",
+            "spike: archived plan \"spike-pro\" (no longer in manifest)"
+          ]
+        },
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"spike\",\n  \"version\": \"1.0.3\",\n  \"release_id\": \"rel-spike-1.0.3\",\n  \"variant_id\": \"variant-spike-1.0.3-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/spike/1.0.3/spike-1.0.3.tar.gz\",\n  \"sha256\": \"e08a52a6af0e94a76ca4bd43b1685a42df0c895b799d73cc284aff8d0f34fe17\",\n  \"size_bytes\": 141223890,\n  \"product_sync\": {\n    \"appId\": \"spike\",\n    \"productsUpserted\": 1,\n    \"plansUpserted\": 1,\n    \"plansArchived\": 2,\n    \"changes\": [\n      \"spike: upserted product \\\"Spike\\\" (v1.0.3)\",\n      \"spike: upserted plan \\\"default\\\" (undefined)\",\n      \"spike: archived plan \\\"spike-free\\\" (no longer in manifest)\",\n      \"spike: archived plan \\\"spike-pro\\\" (no longer in manifest)\"\n    ]\n  },\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:26720) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    },
+    {
+      "kind": "app",
+      "id": "glowbot",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/apps/glowbot/app",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/glowbot/app/dist/glowbot-1.0.0.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/glowbot/1.0.0/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/glowbot/1.0.0/glowbot-1.0.0.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "glowbot",
+        "version": "1.0.0",
+        "release_id": "rel-glowbot-1.0.0",
+        "variant_id": "variant-glowbot-1.0.0-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/glowbot/1.0.0/glowbot-1.0.0.tar.gz",
+        "sha256": "753d97c3f506349f412b8e910f095028df5b7112ba5c6b0f47fb8489336a2085",
+        "size_bytes": 310550383,
+        "product_sync": {
+          "appId": "glowbot",
+          "productsUpserted": 1,
+          "plansUpserted": 4,
+          "plansArchived": 0,
+          "changes": [
+            "glowbot: upserted product \"GlowBot\" (v1.0.0)",
+            "glowbot: upserted plan \"free\" (undefined)",
+            "glowbot: upserted plan \"starter\" (undefined)",
+            "glowbot: upserted plan \"professional\" (undefined)",
+            "glowbot: upserted plan \"enterprise\" (undefined)"
+          ]
+        },
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"glowbot\",\n  \"version\": \"1.0.0\",\n  \"release_id\": \"rel-glowbot-1.0.0\",\n  \"variant_id\": \"variant-glowbot-1.0.0-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/glowbot/1.0.0/glowbot-1.0.0.tar.gz\",\n  \"sha256\": \"753d97c3f506349f412b8e910f095028df5b7112ba5c6b0f47fb8489336a2085\",\n  \"size_bytes\": 310550383,\n  \"product_sync\": {\n    \"appId\": \"glowbot\",\n    \"productsUpserted\": 1,\n    \"plansUpserted\": 4,\n    \"plansArchived\": 0,\n    \"changes\": [\n      \"glowbot: upserted product \\\"GlowBot\\\" (v1.0.0)\",\n      \"glowbot: upserted plan \\\"free\\\" (undefined)\",\n      \"glowbot: upserted plan \\\"starter\\\" (undefined)\",\n      \"glowbot: upserted plan \\\"professional\\\" (undefined)\",\n      \"glowbot: upserted plan \\\"enterprise\\\" (undefined)\"\n    ]\n  },\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:26929) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    },
+    {
+      "kind": "adapter",
+      "id": "zenoti-emr",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/zenoti-emr",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/zenoti-emr/dist/zenoti-emr-0.1.0.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/zenoti-emr/0.1.0/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/zenoti-emr/0.1.0/zenoti-emr-0.1.0.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "zenoti-emr",
+        "version": "0.1.0",
+        "release_id": "rel-zenoti-emr-0.1.0",
+        "variant_id": "variant-zenoti-emr-0.1.0-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/zenoti-emr/0.1.0/zenoti-emr-0.1.0.tar.gz",
+        "sha256": "b5da566cb69ccf47a2609ea55fff732f602350f8f858641d07f4ecdb1803452f",
+        "size_bytes": 9399990,
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"zenoti-emr\",\n  \"version\": \"0.1.0\",\n  \"release_id\": \"rel-zenoti-emr-0.1.0\",\n  \"variant_id\": \"variant-zenoti-emr-0.1.0-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/zenoti-emr/0.1.0/zenoti-emr-0.1.0.tar.gz\",\n  \"sha256\": \"b5da566cb69ccf47a2609ea55fff732f602350f8f858641d07f4ecdb1803452f\",\n  \"size_bytes\": 9399990,\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:27138) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    },
+    {
+      "kind": "adapter",
+      "id": "patient-now-emr",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/patient-now-emr",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/patient-now-emr/dist/patient-now-emr-0.1.0.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/patient-now-emr/0.1.0/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/patient-now-emr/0.1.0/patient-now-emr-0.1.0.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "patient-now-emr",
+        "version": "0.1.0",
+        "release_id": "rel-patient-now-emr-0.1.0",
+        "variant_id": "variant-patient-now-emr-0.1.0-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/patient-now-emr/0.1.0/patient-now-emr-0.1.0.tar.gz",
+        "sha256": "4d04737309060339d88db4a7d50c0ad16de9c3f8dd7c19396de6c5295e8e960d",
+        "size_bytes": 9386668,
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"patient-now-emr\",\n  \"version\": \"0.1.0\",\n  \"release_id\": \"rel-patient-now-emr-0.1.0\",\n  \"variant_id\": \"variant-patient-now-emr-0.1.0-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/patient-now-emr/0.1.0/patient-now-emr-0.1.0.tar.gz\",\n  \"sha256\": \"4d04737309060339d88db4a7d50c0ad16de9c3f8dd7c19396de6c5295e8e960d\",\n  \"size_bytes\": 9386668,\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:27356) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    }
+  ]
+}

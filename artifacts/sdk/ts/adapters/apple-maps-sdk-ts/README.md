@@ -1,6 +1,6 @@
 # apple-maps SDK (TypeScript)
 
-Generated TypeScript SDK for the adapter package contract in `packages/adapters/apple-maps/api/openapi.yaml`.
+Generated TypeScript SDK for the adapter package contract for `apple-maps`.
 
 This SDK is generated centrally under `artifacts/sdk/ts/adapters/`.
 Package repos do not own SDK publication logic.

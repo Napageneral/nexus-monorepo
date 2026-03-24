@@ -1,5 +1,5 @@
 import type {
-  AdapterAccount,
+  AdapterConnectionIdentity,
   AdapterAuthManifest,
   AdapterHealth,
   AdapterInboundRecord,
@@ -10,8 +10,6 @@ import type {
   AdapterOperation,
   AdapterSetupResult,
   ChannelCapabilities,
-  DeliveryResult,
-  SendRequest,
 } from "./protocol.js";
 import type {
   AdapterContext,
@@ -20,7 +18,6 @@ import type {
   AdapterOperations,
   AdapterSetupRequest,
 } from "./run.js";
-import type { StreamHandlers } from "./stream.js";
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -56,7 +53,7 @@ export type DefineAdapterConfig<TClient> = {
     create?: (args: { ctx: AdapterContext; connectionId?: string }) => MaybePromise<TClient>;
   };
   connection?: {
-    accounts?: (ctx: DefinedAdapterContext<TClient>) => MaybePromise<AdapterAccount[]>;
+    connections?: (ctx: DefinedAdapterContext<TClient>) => MaybePromise<AdapterConnectionIdentity[]>;
     health?: (ctx: DefinedAdapterContext<TClient>) => MaybePromise<Omit<AdapterHealth, "connection_id">>;
   };
   ingest?: {
@@ -69,10 +66,6 @@ export type DefineAdapterConfig<TClient> = {
       args: { since: Date },
       emit: (record: AdapterInboundRecord) => void,
     ) => MaybePromise<void>;
-  };
-  delivery?: {
-    send?: (ctx: DefinedAdapterContext<TClient>, req: SendRequest) => MaybePromise<DeliveryResult>;
-    stream?: StreamHandlers;
   };
   setup?: {
     start?: (
@@ -109,12 +102,12 @@ export function defineAdapter<TClient = unknown>(
 
   const operations: AdapterOperations = {
     "adapter.info": async () => buildAdapterInfo(config, methodDefinitions),
-    "adapter.accounts.list": async (ctx) => {
+    "adapter.connections.list": async (ctx) => {
       const definedCtx = await createDefinedContext(config, ctx, ctx.runtime?.connection_id);
-      if (config.connection?.accounts) {
-        return await config.connection.accounts(definedCtx);
+      if (config.connection?.connections) {
+        return await config.connection.connections(definedCtx);
       }
-      return defaultAccounts(ctx);
+      return defaultConnections(ctx);
     },
     "adapter.health": async (ctx, args) => {
       const definedCtx = await createDefinedContext(config, ctx, args.connection_id);
@@ -145,17 +138,6 @@ export function defineAdapter<TClient = unknown>(
       const definedCtx = await createDefinedContext(config, ctx, args.connection_id);
       await config.ingest!.backfill!(definedCtx, { since: args.since }, emit);
     };
-  }
-
-  if (config.delivery?.send) {
-    operations["channels.send"] = async (ctx, req) => {
-      const definedCtx = await createDefinedContext(config, ctx, req.target.connection_id);
-      return await config.delivery!.send!(definedCtx, req);
-    };
-  }
-
-  if (config.delivery?.stream) {
-    operations["channels.stream"] = config.delivery.stream;
   }
 
   if (config.setup?.start) {
@@ -203,7 +185,7 @@ async function createDefinedContext<TClient>(
   };
 }
 
-function defaultAccounts(ctx: AdapterContext): AdapterAccount[] {
+function defaultConnections(ctx: AdapterContext): AdapterConnectionIdentity[] {
   const connectionId = ctx.runtime?.connection_id?.trim();
   if (!connectionId) {
     return [];
@@ -241,12 +223,10 @@ function buildAdapterInfo<TClient>(
 ): AdapterInfo {
   const operations: AdapterOperation[] = [
     "adapter.info",
-    "adapter.accounts.list",
+    "adapter.connections.list",
     "adapter.health",
     ...(config.ingest?.monitor ? (["adapter.monitor.start"] as const) : []),
     ...(config.ingest?.backfill ? (["records.backfill"] as const) : []),
-    ...(config.delivery?.send ? (["channels.send"] as const) : []),
-    ...(config.delivery?.stream ? (["channels.stream"] as const) : []),
     ...(config.setup?.start ? (["adapter.setup.start"] as const) : []),
     ...(config.setup?.submit ? (["adapter.setup.submit"] as const) : []),
     ...(config.setup?.status ? (["adapter.setup.status"] as const) : []),
@@ -299,7 +279,6 @@ function buildMethodDescriptor<TClient>(
         : declaration.action === "write",
     context_hints: declaration.context_hints ?? { params: {} },
     origin: {
-      kind: "adapter",
       package_id: config.platform,
       package_version: config.version,
       declaration_mode: "manifest",

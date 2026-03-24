@@ -5,8 +5,8 @@ import {
 } from "./http.js";
 import type { OperationRequest, OperationResponse } from "./types.js";
 
-export type AdapterAccountsListRequest = OperationRequest<"adapter.accounts.list">;
-export type AdapterAccountsListResponse = OperationResponse<"adapter.accounts.list">;
+export type AdapterConnectionsListRequest = OperationRequest<"adapter.connections.list">;
+export type AdapterConnectionsListResponse = OperationResponse<"adapter.connections.list">;
 
 export type AdapterHealthRequest = OperationRequest<"adapter.health">;
 export type AdapterHealthResponse = OperationResponse<"adapter.health">;
@@ -14,19 +14,19 @@ export type AdapterHealthResponse = OperationResponse<"adapter.health">;
 export type AdapterInfoRequest = OperationRequest<"adapter.info">;
 export type AdapterInfoResponse = OperationResponse<"adapter.info">;
 
-export type ChannelsSendRequest = OperationRequest<"channels.send">;
-export type ChannelsSendResponse = OperationResponse<"channels.send">;
+export type WhatsappSendRequest = OperationRequest<"whatsapp.send">;
+export type WhatsappSendResponse = OperationResponse<"whatsapp.send">;
 
 export interface Client {
   "adapter": {
-    "accounts": {
-      "list": (options?: RequestOptions) => Promise<AdapterAccountsListResponse>;
+    "connections": {
+      "list": (options?: RequestOptions) => Promise<AdapterConnectionsListResponse>;
     };
     "health": (request: AdapterHealthRequest, options?: RequestOptions) => Promise<AdapterHealthResponse>;
     "info": (options?: RequestOptions) => Promise<AdapterInfoResponse>;
   };
-  "channels": {
-    "send": (request: ChannelsSendRequest, options?: RequestOptions) => Promise<ChannelsSendResponse>;
+  "whatsapp": {
+    "send": (request: WhatsappSendRequest, options?: RequestOptions) => Promise<WhatsappSendResponse>;
   };
 }
 
@@ -34,11 +34,11 @@ export function createWhatsappAdapterClient(options: ClientOptions): Client {
   const http = new HttpClient(options);
   return {
     "adapter": {
-      "accounts": {
+      "connections": {
         "list": async (options?: RequestOptions) => {
-      return http.request<AdapterAccountsListResponse>({
+      return http.request<AdapterConnectionsListResponse>({
         method: "POST",
-        path: "/operations/adapter.accounts.list",
+        path: "/operations/adapter.connections.list",
         query: undefined,
         body: undefined,
         options,
@@ -64,13 +64,17 @@ export function createWhatsappAdapterClient(options: ClientOptions): Client {
       })
     },
     },
-    "channels": {
-      "send": async (request: ChannelsSendRequest, options?: RequestOptions) => {
-      return http.request<ChannelsSendResponse>({
+    "whatsapp": {
+      "send": async (request: WhatsappSendRequest, options?: RequestOptions) => {
+      const input = request as Record<string, unknown>;
+      return http.request<WhatsappSendResponse>({
         method: "POST",
-        path: "/operations/channels.send",
+        path: "/operations/whatsapp.send",
         query: undefined,
-        body: request,
+        body: {
+        "connection_id": input["connection_id"],
+        "payload": input["payload"],
+      },
         options,
       })
     },

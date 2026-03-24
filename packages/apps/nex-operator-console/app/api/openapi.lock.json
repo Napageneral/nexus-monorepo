@@ -1,0 +1,7 @@
+{
+  "contract": "packages/apps/nex-operator-console/app/api",
+  "generator": "nex/scripts/contracts/generate-openapi.ts",
+  "sources": [
+    "packages/apps/nex-operator-console/app/app.nexus.json"
+  ]
+}

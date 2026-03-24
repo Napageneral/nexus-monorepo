@@ -1,0 +1,36 @@
+{
+  "generated_at": "2026-03-17T23:35:07.113421Z",
+  "repo_root": "/Users/tyler/nexus/home/projects/nexus",
+  "count": 4,
+  "failures": 0,
+  "results": [
+    {
+      "kind": "app",
+      "id": "spike",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/apps/spike/app",
+      "ok": true,
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/spike/app/dist/spike-1.0.3.tar.gz"
+    },
+    {
+      "kind": "app",
+      "id": "glowbot",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/apps/glowbot/app",
+      "ok": true,
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/glowbot/app/dist/glowbot-1.0.0.tar.gz"
+    },
+    {
+      "kind": "adapter",
+      "id": "zenoti-emr",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/zenoti-emr",
+      "ok": true,
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/zenoti-emr/dist/zenoti-emr-0.1.0.tar.gz"
+    },
+    {
+      "kind": "adapter",
+      "id": "patient-now-emr",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/patient-now-emr",
+      "ok": true,
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/patient-now-emr/dist/patient-now-emr-0.1.0.tar.gz"
+    }
+  ]
+}

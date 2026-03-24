@@ -19,7 +19,7 @@ var _ MappedNullable = &UpdateRunRequest{}
 
 // UpdateRunRequest struct for UpdateRunRequest
 type UpdateRunRequest struct {
-	SessionKey *string `json:"sessionKey,omitempty"`
+	SessionId *string `json:"sessionId,omitempty"`
 	Note *string `json:"note,omitempty"`
 	RestartDelayMs *int32 `json:"restartDelayMs,omitempty"`
 	TimeoutMs *int32 `json:"timeoutMs,omitempty"`
@@ -45,36 +45,36 @@ func NewUpdateRunRequestWithDefaults() *UpdateRunRequest {
 	return &this
 }
 
-// GetSessionKey returns the SessionKey field value if set, zero value otherwise.
-func (o *UpdateRunRequest) GetSessionKey() string {
-	if o == nil || IsNil(o.SessionKey) {
+// GetSessionId returns the SessionId field value if set, zero value otherwise.
+func (o *UpdateRunRequest) GetSessionId() string {
+	if o == nil || IsNil(o.SessionId) {
 		var ret string
 		return ret
 	}
-	return *o.SessionKey
+	return *o.SessionId
 }
 
-// GetSessionKeyOk returns a tuple with the SessionKey field value if set, nil otherwise
+// GetSessionIdOk returns a tuple with the SessionId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *UpdateRunRequest) GetSessionKeyOk() (*string, bool) {
-	if o == nil || IsNil(o.SessionKey) {
+func (o *UpdateRunRequest) GetSessionIdOk() (*string, bool) {
+	if o == nil || IsNil(o.SessionId) {
 		return nil, false
 	}
-	return o.SessionKey, true
+	return o.SessionId, true
 }
 
-// HasSessionKey returns a boolean if a field has been set.
-func (o *UpdateRunRequest) HasSessionKey() bool {
-	if o != nil && !IsNil(o.SessionKey) {
+// HasSessionId returns a boolean if a field has been set.
+func (o *UpdateRunRequest) HasSessionId() bool {
+	if o != nil && !IsNil(o.SessionId) {
 		return true
 	}
 
 	return false
 }
 
-// SetSessionKey gets a reference to the given string and assigns it to the SessionKey field.
-func (o *UpdateRunRequest) SetSessionKey(v string) {
-	o.SessionKey = &v
+// SetSessionId gets a reference to the given string and assigns it to the SessionId field.
+func (o *UpdateRunRequest) SetSessionId(v string) {
+	o.SessionId = &v
 }
 
 // GetNote returns the Note field value if set, zero value otherwise.
@@ -183,8 +183,8 @@ func (o UpdateRunRequest) MarshalJSON() ([]byte, error) {
 
 func (o UpdateRunRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	if !IsNil(o.SessionKey) {
-		toSerialize["sessionKey"] = o.SessionKey
+	if !IsNil(o.SessionId) {
+		toSerialize["sessionId"] = o.SessionId
 	}
 	if !IsNil(o.Note) {
 		toSerialize["note"] = o.Note
@@ -217,7 +217,7 @@ func (o *UpdateRunRequest) UnmarshalJSON(data []byte) (err error) {
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
-		delete(additionalProperties, "sessionKey")
+		delete(additionalProperties, "sessionId")
 		delete(additionalProperties, "note")
 		delete(additionalProperties, "restartDelayMs")
 		delete(additionalProperties, "timeoutMs")

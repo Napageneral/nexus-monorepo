@@ -20,7 +20,6 @@ var _ MappedNullable = &AppsMethodOriginSchema{}
 
 // AppsMethodOriginSchema struct for AppsMethodOriginSchema
 type AppsMethodOriginSchema struct {
-	Kind string `json:"kind"`
 	PackageId *string `json:"package_id,omitempty"`
 	PackageVersion *string `json:"package_version,omitempty"`
 	DeclarationMode string `json:"declaration_mode"`
@@ -35,9 +34,8 @@ type _AppsMethodOriginSchema AppsMethodOriginSchema
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewAppsMethodOriginSchema(kind string, declarationMode string, declarationSource string, namespace string) *AppsMethodOriginSchema {
+func NewAppsMethodOriginSchema(declarationMode string, declarationSource string, namespace string) *AppsMethodOriginSchema {
 	this := AppsMethodOriginSchema{}
-	this.Kind = kind
 	this.DeclarationMode = declarationMode
 	this.DeclarationSource = declarationSource
 	this.Namespace = namespace
@@ -50,30 +48,6 @@ func NewAppsMethodOriginSchema(kind string, declarationMode string, declarationS
 func NewAppsMethodOriginSchemaWithDefaults() *AppsMethodOriginSchema {
 	this := AppsMethodOriginSchema{}
 	return &this
-}
-
-// GetKind returns the Kind field value
-func (o *AppsMethodOriginSchema) GetKind() string {
-	if o == nil {
-		var ret string
-		return ret
-	}
-
-	return o.Kind
-}
-
-// GetKindOk returns a tuple with the Kind field value
-// and a boolean to check if the value has been set.
-func (o *AppsMethodOriginSchema) GetKindOk() (*string, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.Kind, true
-}
-
-// SetKind sets field value
-func (o *AppsMethodOriginSchema) SetKind(v string) {
-	o.Kind = v
 }
 
 // GetPackageId returns the PackageId field value if set, zero value otherwise.
@@ -222,7 +196,6 @@ func (o AppsMethodOriginSchema) MarshalJSON() ([]byte, error) {
 
 func (o AppsMethodOriginSchema) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["kind"] = o.Kind
 	if !IsNil(o.PackageId) {
 		toSerialize["package_id"] = o.PackageId
 	}
@@ -245,7 +218,6 @@ func (o *AppsMethodOriginSchema) UnmarshalJSON(data []byte) (err error) {
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
-		"kind",
 		"declaration_mode",
 		"declaration_source",
 		"namespace",
@@ -278,7 +250,6 @@ func (o *AppsMethodOriginSchema) UnmarshalJSON(data []byte) (err error) {
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
-		delete(additionalProperties, "kind")
 		delete(additionalProperties, "package_id")
 		delete(additionalProperties, "package_version")
 		delete(additionalProperties, "declaration_mode")

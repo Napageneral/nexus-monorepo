@@ -20,7 +20,7 @@ var _ MappedNullable = &SessionsImportsListItemSchema{}
 
 // SessionsImportsListItemSchema struct for SessionsImportsListItemSchema
 type SessionsImportsListItemSchema struct {
-	SessionKey string `json:"sessionKey"`
+	SessionId string `json:"sessionId"`
 	SourceEntityId string `json:"sourceEntityId"`
 	AixSourceId string `json:"aixSourceId"`
 	SourceProvider string `json:"sourceProvider"`
@@ -37,9 +37,9 @@ type _SessionsImportsListItemSchema SessionsImportsListItemSchema
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewSessionsImportsListItemSchema(sessionKey string, sourceEntityId string, aixSourceId string, sourceProvider string, sourceSessionId string, updatedAt float32) *SessionsImportsListItemSchema {
+func NewSessionsImportsListItemSchema(sessionId string, sourceEntityId string, aixSourceId string, sourceProvider string, sourceSessionId string, updatedAt float32) *SessionsImportsListItemSchema {
 	this := SessionsImportsListItemSchema{}
-	this.SessionKey = sessionKey
+	this.SessionId = sessionId
 	this.SourceEntityId = sourceEntityId
 	this.AixSourceId = aixSourceId
 	this.SourceProvider = sourceProvider
@@ -56,28 +56,28 @@ func NewSessionsImportsListItemSchemaWithDefaults() *SessionsImportsListItemSche
 	return &this
 }
 
-// GetSessionKey returns the SessionKey field value
-func (o *SessionsImportsListItemSchema) GetSessionKey() string {
+// GetSessionId returns the SessionId field value
+func (o *SessionsImportsListItemSchema) GetSessionId() string {
 	if o == nil {
 		var ret string
 		return ret
 	}
 
-	return o.SessionKey
+	return o.SessionId
 }
 
-// GetSessionKeyOk returns a tuple with the SessionKey field value
+// GetSessionIdOk returns a tuple with the SessionId field value
 // and a boolean to check if the value has been set.
-func (o *SessionsImportsListItemSchema) GetSessionKeyOk() (*string, bool) {
+func (o *SessionsImportsListItemSchema) GetSessionIdOk() (*string, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.SessionKey, true
+	return &o.SessionId, true
 }
 
-// SetSessionKey sets field value
-func (o *SessionsImportsListItemSchema) SetSessionKey(v string) {
-	o.SessionKey = v
+// SetSessionId sets field value
+func (o *SessionsImportsListItemSchema) SetSessionId(v string) {
+	o.SessionId = v
 }
 
 // GetSourceEntityId returns the SourceEntityId field value
@@ -274,7 +274,7 @@ func (o SessionsImportsListItemSchema) MarshalJSON() ([]byte, error) {
 
 func (o SessionsImportsListItemSchema) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["sessionKey"] = o.SessionKey
+	toSerialize["sessionId"] = o.SessionId
 	toSerialize["sourceEntityId"] = o.SourceEntityId
 	toSerialize["aixSourceId"] = o.AixSourceId
 	toSerialize["sourceProvider"] = o.SourceProvider
@@ -299,7 +299,7 @@ func (o *SessionsImportsListItemSchema) UnmarshalJSON(data []byte) (err error) {
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
-		"sessionKey",
+		"sessionId",
 		"sourceEntityId",
 		"aixSourceId",
 		"sourceProvider",
@@ -334,7 +334,7 @@ func (o *SessionsImportsListItemSchema) UnmarshalJSON(data []byte) (err error) {
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
-		delete(additionalProperties, "sessionKey")
+		delete(additionalProperties, "sessionId")
 		delete(additionalProperties, "sourceEntityId")
 		delete(additionalProperties, "aixSourceId")
 		delete(additionalProperties, "sourceProvider")

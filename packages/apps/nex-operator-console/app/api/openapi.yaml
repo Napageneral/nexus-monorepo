@@ -1,0 +1,49 @@
+openapi: 3.1.0
+info:
+  title: Operator Console App API
+  version: 1.0.0
+  description: Operator-facing control panel for the core Nex runtime.
+servers:
+  - url: https://{tenantId}.nexushub.sh
+    variables:
+      tenantId:
+        default: t-example
+tags:
+  - name: Operator Console
+paths: {}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    UnauthorizedError:
+      type: object
+      required:
+        - ok
+        - error
+      properties:
+        ok:
+          type: boolean
+          enum:
+            - false
+        error:
+          type: string
+          enum:
+            - unauthorized
+            - not_authenticated
+    GenericError:
+      type: object
+      required:
+        - ok
+        - error
+      properties:
+        ok:
+          type: boolean
+        error:
+          type: string
+        detail:
+          type:
+            - string
+            - "null"

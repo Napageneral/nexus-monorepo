@@ -1,0 +1,9 @@
+{
+  "id": "apple-maps",
+  "version": "0.1.0",
+  "displayName": "Apple Maps",
+  "description": "Shared Apple Maps adapter package for Nex.",
+  "platform": "apple-maps",
+  "command": "./bin/apple-maps-adapter",
+  "skill": "./SKILL.md"
+}

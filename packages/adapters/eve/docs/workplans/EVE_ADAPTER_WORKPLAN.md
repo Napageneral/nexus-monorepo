@@ -78,7 +78,7 @@ Target checks:
 
 - `adapter.info`
 - `adapter.health`
-- `adapter.accounts.list`
+- `adapter.connections.list`
 - setup lifecycle calls
 
 Stretch checks if local permissions allow:

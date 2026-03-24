@@ -5,17 +5,14 @@ import {
 } from "./http.js";
 import type { OperationRequest, OperationResponse } from "./types.js";
 
-export type AdapterAccountsListRequest = OperationRequest<"adapter.accounts.list">;
-export type AdapterAccountsListResponse = OperationResponse<"adapter.accounts.list">;
+export type AdapterConnectionsListRequest = OperationRequest<"adapter.connections.list">;
+export type AdapterConnectionsListResponse = OperationResponse<"adapter.connections.list">;
 
 export type AdapterHealthRequest = OperationRequest<"adapter.health">;
 export type AdapterHealthResponse = OperationResponse<"adapter.health">;
 
 export type AdapterInfoRequest = OperationRequest<"adapter.info">;
 export type AdapterInfoResponse = OperationResponse<"adapter.info">;
-
-export type ChannelsSendRequest = OperationRequest<"channels.send">;
-export type ChannelsSendResponse = OperationResponse<"channels.send">;
 
 export type LinkedinCommentsListRequest = OperationRequest<"linkedin.comments.list">;
 export type LinkedinCommentsListResponse = OperationResponse<"linkedin.comments.list">;
@@ -37,14 +34,11 @@ export type LinkedinSocialMetadataGetResponse = OperationResponse<"linkedin.soci
 
 export interface Client {
   "adapter": {
-    "accounts": {
-      "list": (options?: RequestOptions) => Promise<AdapterAccountsListResponse>;
+    "connections": {
+      "list": (options?: RequestOptions) => Promise<AdapterConnectionsListResponse>;
     };
     "health": (request: AdapterHealthRequest, options?: RequestOptions) => Promise<AdapterHealthResponse>;
     "info": (options?: RequestOptions) => Promise<AdapterInfoResponse>;
-  };
-  "channels": {
-    "send": (request: ChannelsSendRequest, options?: RequestOptions) => Promise<ChannelsSendResponse>;
   };
   "linkedin": {
     "comments": {
@@ -68,11 +62,11 @@ export function createLinkedinAdapterClient(options: ClientOptions): Client {
   const http = new HttpClient(options);
   return {
     "adapter": {
-      "accounts": {
+      "connections": {
         "list": async (options?: RequestOptions) => {
-      return http.request<AdapterAccountsListResponse>({
+      return http.request<AdapterConnectionsListResponse>({
         method: "POST",
-        path: "/operations/adapter.accounts.list",
+        path: "/operations/adapter.connections.list",
         query: undefined,
         body: undefined,
         options,
@@ -94,17 +88,6 @@ export function createLinkedinAdapterClient(options: ClientOptions): Client {
         path: "/operations/adapter.info",
         query: undefined,
         body: undefined,
-        options,
-      })
-    },
-    },
-    "channels": {
-      "send": async (request: ChannelsSendRequest, options?: RequestOptions) => {
-      return http.request<ChannelsSendResponse>({
-        method: "POST",
-        path: "/operations/channels.send",
-        query: undefined,
-        body: request,
         options,
       })
     },

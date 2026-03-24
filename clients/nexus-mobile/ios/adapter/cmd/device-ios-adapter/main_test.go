@@ -16,14 +16,14 @@ func TestInfoIncludesControlAndSetupOperations(t *testing.T) {
 	}
 
 	want := map[string]bool{
-		"adapter.info":          false,
-		"adapter.health":        false,
-		"adapter.accounts.list": false,
-		"adapter.serve.start":   false,
-		"adapter.setup.start":   false,
-		"adapter.setup.submit":  false,
-		"adapter.setup.status":  false,
-		"adapter.setup.cancel":  false,
+		"adapter.info":             false,
+		"adapter.health":           false,
+		"adapter.connections.list": false,
+		"adapter.serve.start":      false,
+		"adapter.setup.start":      false,
+		"adapter.setup.submit":     false,
+		"adapter.setup.status":     false,
+		"adapter.setup.cancel":     false,
 	}
 	for _, operation := range adapterInfo.Operations {
 		if _, ok := want[string(operation)]; ok {

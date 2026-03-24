@@ -50,7 +50,7 @@ export async function handleStream(opts: {
 
   const dispatchError = async (log: AdapterLogger, message: string) => {
     log.error("%s", message);
-    emitStreamStatus({ type: "delivery_error", error: message }, stdout, validate);
+    emitStreamStatus({ type: "error", error: message }, stdout, validate);
   };
 
   for await (const raw of readJSONLines(stdin)) {
@@ -111,4 +111,3 @@ export async function handleStream(opts: {
 function errorToString(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
-

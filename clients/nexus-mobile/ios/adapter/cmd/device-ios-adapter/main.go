@@ -73,8 +73,8 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 		Name:     adapterName,
 		Version:  adapterVersion,
 		Connection: nexadapter.ConnectionHandlers[struct{}]{
-			Accounts: func(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterAccount, error) {
-				return accounts(ctx.Context)
+			Connections: func(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterConnectionIdentity, error) {
+				return connections(ctx.Context)
 			},
 			Health: func(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth, error) {
 				return health(ctx.Context, ctx.ConnectionID)
@@ -138,8 +138,8 @@ func info(ctx context.Context) (*nexadapter.AdapterInfo, error) {
 	return adapter.Operations.AdapterInfo(ctx)
 }
 
-func accounts(_ context.Context) ([]nexadapter.AdapterAccount, error) {
-	return []nexadapter.AdapterAccount{
+func connections(_ context.Context) ([]nexadapter.AdapterConnectionIdentity, error) {
+	return []nexadapter.AdapterConnectionIdentity{
 		{
 			ID:            "default",
 			DisplayName:   "Default iOS host",

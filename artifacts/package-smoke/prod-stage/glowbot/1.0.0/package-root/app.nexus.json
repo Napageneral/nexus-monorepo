@@ -1,0 +1,645 @@
+{
+  "id": "glowbot",
+  "version": "1.0.0",
+  "displayName": "GlowBot",
+  "description": "AI-powered growth intelligence for healthcare practices",
+  "hosting": {
+    "required_server_class": "compliant",
+    "deployment_class": "customer_server"
+  },
+  "requires": {
+    "adapters": [
+      {
+        "id": "google",
+        "version": "^0.1.0"
+      },
+      {
+        "id": "meta-ads",
+        "version": "^0.1.0"
+      },
+      {
+        "id": "patient-now-emr",
+        "version": "^0.1.0"
+      },
+      {
+        "id": "zenoti-emr",
+        "version": "^0.1.0"
+      },
+      {
+        "id": "callrail",
+        "version": "^0.1.0"
+      },
+      {
+        "id": "twilio",
+        "version": "^0.1.0"
+      },
+      {
+        "id": "apple-maps",
+        "version": "^0.1.0"
+      }
+    ]
+  },
+  "handler": "methods/index.ts",
+  "ui": {
+    "root": "dist",
+    "entryPath": "/app/glowbot/",
+    "spa": true
+  },
+  "methods": {
+    "glowbot.overview": {
+      "description": "Get high-level metrics overview for the practice",
+      "handler": "methods/overview.ts",
+      "params": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "type": "string",
+            "enum": [
+              "7d",
+              "30d",
+              "90d"
+            ],
+            "default": "30d"
+          }
+        }
+      },
+      "access": "authenticated"
+    },
+    "glowbot.funnel": {
+      "description": "Get conversion funnel metrics",
+      "handler": "methods/funnel.ts",
+      "params": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "type": "string",
+            "enum": [
+              "7d",
+              "30d",
+              "90d"
+            ],
+            "default": "30d"
+          }
+        }
+      },
+      "access": "authenticated"
+    },
+    "glowbot.modeling": {
+      "description": "Get predictive modeling insights",
+      "handler": "methods/modeling.ts",
+      "params": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "Model type to use for predictions"
+          },
+          "window": {
+            "type": "string",
+            "enum": [
+              "3m",
+              "6m",
+              "12m"
+            ],
+            "default": "6m"
+          }
+        },
+        "required": [
+          "model"
+        ]
+      },
+      "access": "authenticated"
+    },
+    "glowbot.agents": {
+      "description": "Get list of available AI agents",
+      "handler": "methods/agents.ts",
+      "access": "authenticated"
+    },
+    "glowbot.agents.recommendations": {
+      "description": "Get AI-powered recommendations from agents",
+      "handler": "methods/agents-recommendations.ts",
+      "params": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "Filter recommendations by category"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Maximum number of recommendations to return",
+            "default": 10
+          }
+        }
+      },
+      "access": "authenticated"
+    },
+    "glowbot.clinicProfile.get": {
+      "description": "Get the canonical clinic benchmark profile for this GlowBot install",
+      "handler": "methods/clinic-profile-get.ts",
+      "access": "authenticated"
+    },
+    "glowbot.clinicProfile.update": {
+      "description": "Update the canonical clinic benchmark profile for this GlowBot install",
+      "handler": "methods/clinic-profile-update.ts",
+      "params": {
+        "type": "object",
+        "properties": {
+          "specialty": {
+            "type": "string",
+            "description": "Clinic specialty cohort key"
+          },
+          "monthlyAdSpendBand": {
+            "type": "string",
+            "description": "Symbolic monthly ad spend band"
+          },
+          "patientVolumeBand": {
+            "type": "string",
+            "description": "Symbolic patient volume band"
+          },
+          "locationCountBand": {
+            "type": "string",
+            "description": "Symbolic location count band"
+          }
+        },
+        "required": [
+          "specialty"
+        ]
+      },
+      "access": "authenticated"
+    },
+    "glowbot.integrations": {
+      "description": "List all configured integrations and their status",
+      "handler": "methods/integrations.ts",
+      "access": "authenticated"
+    },
+    "glowbot.integrations.connect.oauth.start": {
+      "description": "Start OAuth flow for an adapter",
+      "handler": "methods/integrations-connect-oauth-start.ts",
+      "params": {
+        "type": "object",
+        "properties": {
+          "adapterId": {
+            "type": "string",
+            "description": "ID of the adapter to connect"
+          },
+          "authMethodId": {
+            "type": "string",
+            "description": "Stable auth method ID for the selected connection option"
+          },
+          "managedProfileId": {
+            "type": "string",
+            "description": "Optional managed profile selector for hosted OAuth"
+          }
+        },
+        "required": [
+          "adapterId",
+          "authMethodId"
+        ]
+      },
+      "access": "authenticated"
+    },
+    "glowbot.integrations.connect.apikey": {
+      "description": "Connect an adapter using API key authentication",
+      "handler": "methods/integrations-connect-apikey.ts",
+      "params": {
+        "type": "object",
+        "properties": {
+          "adapterId": {
+            "type": "string",
+            "description": "ID of the adapter to connect"
+          },
+          "authMethodId": {
+            "type": "string",
+            "description": "Stable auth method ID for the selected connection option"
+          },
+          "managedProfileId": {
+            "type": "string",
+            "description": "Optional managed profile selector for hosted OAuth"
+          },
+          "fields": {
+            "type": "object",
+            "description": "Authentication fields (API keys, tokens, etc.)"
+          }
+        },
+        "required": [
+          "adapterId",
+          "authMethodId",
+          "fields"
+        ]
+      },
+      "access": "authenticated"
+    },
+    "glowbot.integrations.connect.upload": {
+      "description": "Connect an adapter by uploading a credentials file",
+      "handler": "methods/integrations-connect-upload.ts",
+      "params": {
+        "type": "object",
+        "properties": {
+          "adapterId": {
+            "type": "string",
+            "description": "ID of the adapter to connect"
+          },
+          "authMethodId": {
+            "type": "string",
+            "description": "Stable auth method ID for the selected connection option"
+          },
+          "managedProfileId": {
+            "type": "string",
+            "description": "Optional managed profile selector for hosted OAuth"
+          },
+          "file": {
+            "type": "string",
+            "description": "Base64-encoded file content"
+          },
+          "filename": {
+            "type": "string",
+            "description": "Original filename"
+          }
+        },
+        "required": [
+          "adapterId",
+          "authMethodId",
+          "file",
+          "filename"
+        ]
+      },
+      "access": "authenticated"
+    },
+    "glowbot.integrations.test": {
+      "description": "Test connection to an adapter",
+      "handler": "methods/integrations-test.ts",
+      "params": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "ID of the connection to test"
+          }
+        },
+        "required": [
+          "connectionId"
+        ]
+      },
+      "access": "authenticated"
+    },
+    "glowbot.integrations.backfill": {
+      "description": "Run adapter backfill for a connected integration using the manifest default window or an explicit since date",
+      "handler": "methods/integrations-backfill.ts",
+      "params": {
+        "type": "object",
+        "properties": {
+          "adapterId": {
+            "type": "string",
+            "description": "ID of the adapter to backfill"
+          },
+          "connectionId": {
+            "type": "string",
+            "description": "ID of the connection to backfill"
+          },
+          "since": {
+            "type": "string",
+            "description": "Optional YYYY-MM-DD lower bound. If omitted, use the adapter manifest backfill default."
+          }
+        },
+        "required": [
+          "adapterId",
+          "connectionId"
+        ]
+      },
+      "access": "authenticated"
+    },
+    "glowbot.integrations.disconnect": {
+      "description": "Disconnect an adapter and remove credentials",
+      "handler": "methods/integrations-disconnect.ts",
+      "params": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "ID of the connection to disconnect"
+          }
+        },
+        "required": [
+          "connectionId"
+        ]
+      },
+      "access": "authenticated"
+    },
+    "glowbot.productFlags.list": {
+      "description": "List GlowBot product flags from the product control plane",
+      "handler": "methods/product-flags-list.ts",
+      "access": "authenticated"
+    },
+    "glowbot.pipeline.status": {
+      "description": "Get current status of the data pipeline",
+      "handler": "methods/pipeline-status.ts",
+      "access": "authenticated"
+    },
+    "glowbot.pipeline.trigger": {
+      "description": "Manually trigger a pipeline run",
+      "handler": "methods/pipeline-trigger.ts",
+      "access": "admin"
+    }
+  },
+  "adapters": [
+    {
+      "id": "google",
+      "packageId": "google",
+      "displayName": "Google",
+      "description": "Google Ads and Google Business Profile in one connection",
+      "connectionProfiles": [
+        {
+          "displayName": "Connect with GlowBot Google",
+          "authMethodId": "google_oauth_managed",
+          "managedProfileId": "glowbot-google-oauth"
+        },
+        {
+          "displayName": "Upload CSV / Manual Entry",
+          "authMethodId": "csv_upload"
+        }
+      ],
+      "syncSchedule": {
+        "backfillDefault": "90d",
+        "liveInterval": "6h/24h"
+      },
+      "metricsProduced": [
+        "ad_spend",
+        "ad_impressions",
+        "ad_clicks",
+        "ad_conversions",
+        "ad_cost_per_click",
+        "ad_cost_per_conversion",
+        "listing_views_search",
+        "listing_views_maps",
+        "listing_clicks_website",
+        "listing_clicks_directions",
+        "listing_clicks_phone",
+        "reviews_count",
+        "reviews_rating_avg",
+        "reviews_new",
+        "search_keyword_impressions"
+      ]
+    },
+    {
+      "id": "meta-ads",
+      "packageId": "meta-ads",
+      "displayName": "Meta Ads",
+      "description": "Sync advertising campaign data from Meta (Facebook/Instagram)",
+      "connectionProfiles": [
+        {
+          "displayName": "Connect with GlowBot Meta",
+          "authMethodId": "meta_oauth_managed",
+          "managedProfileId": "glowbot-meta-oauth"
+        },
+        {
+          "displayName": "Upload CSV Export",
+          "authMethodId": "csv_upload"
+        }
+      ],
+      "syncSchedule": {
+        "backfillDefault": "90d",
+        "liveInterval": "6h"
+      },
+      "metricsProduced": [
+        "ad_spend",
+        "ad_impressions",
+        "ad_clicks",
+        "ad_conversions",
+        "ad_cost_per_result",
+        "ad_reach"
+      ]
+    },
+    {
+      "id": "patient-now-emr",
+      "packageId": "patient-now-emr",
+      "displayName": "Patient Now",
+      "description": "Sync patient and appointment data from PatientNow EMR",
+      "connectionProfiles": [
+        {
+          "displayName": "Upload CSV Export",
+          "authMethodId": "csv_upload"
+        }
+      ],
+      "syncSchedule": {
+        "backfillDefault": "365d",
+        "liveInterval": "15m"
+      },
+      "metricsProduced": [
+        "patients_new",
+        "patients_returning",
+        "appointments_booked",
+        "appointments_completed",
+        "appointments_noshow",
+        "appointments_cancelled",
+        "treatments_completed",
+        "revenue"
+      ]
+    },
+    {
+      "id": "zenoti-emr",
+      "packageId": "zenoti-emr",
+      "displayName": "Zenoti",
+      "description": "Sync patient and appointment data from Zenoti EMR",
+      "connectionProfiles": [
+        {
+          "displayName": "Connect with GlowBot Zenoti",
+          "authMethodId": "zenoti_oauth_managed",
+          "managedProfileId": "glowbot-zenoti-oauth"
+        },
+        {
+          "displayName": "Upload CSV Export",
+          "authMethodId": "csv_upload"
+        }
+      ],
+      "syncSchedule": {
+        "backfillDefault": "365d",
+        "liveInterval": "1h"
+      },
+      "metricsProduced": [
+        "patients_new",
+        "patients_returning",
+        "appointments_booked",
+        "appointments_completed",
+        "appointments_noshow",
+        "appointments_cancelled",
+        "treatments_completed",
+        "revenue",
+        "revenue_per_service_category"
+      ]
+    },
+    {
+      "id": "callrail",
+      "packageId": "callrail",
+      "displayName": "CallRail",
+      "description": "Sync phone call tracking data from CallRail",
+      "connectionProfiles": [
+        {
+          "displayName": "Upload CSV Export",
+          "authMethodId": "csv_upload"
+        }
+      ],
+      "syncSchedule": {
+        "backfillDefault": "365d",
+        "liveInterval": "6h"
+      },
+      "metricsProduced": [
+        "calls_total",
+        "calls_answered",
+        "calls_missed",
+        "calls_first_time",
+        "calls_duration_avg",
+        "calls_by_source",
+        "calls_by_campaign",
+        "leads_qualified",
+        "leads_converted"
+      ]
+    },
+    {
+      "id": "twilio",
+      "packageId": "twilio",
+      "displayName": "Twilio",
+      "description": "Sync call data from Twilio",
+      "connectionProfiles": [
+        {
+          "displayName": "Upload CSV Export",
+          "authMethodId": "csv_upload"
+        }
+      ],
+      "syncSchedule": {
+        "backfillDefault": "90d",
+        "liveInterval": "1h"
+      },
+      "metricsProduced": [
+        "calls_total",
+        "calls_inbound",
+        "calls_outbound",
+        "calls_completed",
+        "calls_failed",
+        "calls_duration_avg",
+        "calls_cost_total"
+      ]
+    },
+    {
+      "id": "apple-maps",
+      "packageId": "apple-maps",
+      "displayName": "Apple Maps",
+      "description": "Sync business profile data from Apple Maps",
+      "connectionProfiles": [
+        {
+          "displayName": "Upload CSV / Manual Entry",
+          "authMethodId": "csv_upload"
+        }
+      ],
+      "syncSchedule": {
+        "backfillDefault": "365d",
+        "liveInterval": "manual"
+      },
+      "metricsProduced": [
+        "reviews_count",
+        "reviews_rating_avg",
+        "reviews_new"
+      ]
+    }
+  ],
+  "hooks": {
+    "onInstall": "hooks/install.ts",
+    "onActivate": "hooks/activate.ts",
+    "onDeactivate": "hooks/deactivate.ts",
+    "onUpgrade": "hooks/upgrade.ts",
+    "onUninstall": "hooks/uninstall.ts"
+  },
+  "product": {
+    "icon": "assets/icon.svg",
+    "color": "#6366f1",
+    "tagline": "AI-powered growth intelligence",
+    "plans": [
+      {
+        "id": "free",
+        "name": "Free",
+        "tier": "free",
+        "entitlements": {
+          "adapters_max": "2",
+          "pipeline_runs_per_day": "1",
+          "retention_days": "30",
+          "hub_access": "false",
+          "custom_models": "false"
+        }
+      },
+      {
+        "id": "starter",
+        "name": "Starter",
+        "tier": "starter",
+        "price": {
+          "amount": 99,
+          "currency": "USD",
+          "interval": "month"
+        },
+        "entitlements": {
+          "adapters_max": "5",
+          "pipeline_runs_per_day": "4",
+          "retention_days": "90",
+          "hub_access": "true",
+          "custom_models": "false"
+        }
+      },
+      {
+        "id": "professional",
+        "name": "Professional",
+        "tier": "professional",
+        "price": {
+          "amount": 299,
+          "currency": "USD",
+          "interval": "month"
+        },
+        "entitlements": {
+          "adapters_max": "10",
+          "pipeline_runs_per_day": "12",
+          "retention_days": "365",
+          "hub_access": "true",
+          "custom_models": "true"
+        }
+      },
+      {
+        "id": "enterprise",
+        "name": "Enterprise",
+        "tier": "enterprise",
+        "entitlements": {
+          "adapters_max": "unlimited",
+          "pipeline_runs_per_day": "unlimited",
+          "retention_days": "unlimited",
+          "hub_access": "true",
+          "custom_models": "true"
+        }
+      }
+    ]
+  },
+  "entitlements": {
+    "adapters_max": {
+      "description": "Maximum number of adapters that can be configured",
+      "type": "number",
+      "default": "2"
+    },
+    "pipeline_runs_per_day": {
+      "description": "Maximum number of pipeline runs allowed per day",
+      "type": "number",
+      "default": "1"
+    },
+    "retention_days": {
+      "description": "Number of days to retain historical data",
+      "type": "number",
+      "default": "30"
+    },
+    "hub_access": {
+      "description": "Access to GlowBot Hub for publishing and sharing insights",
+      "type": "boolean",
+      "default": "false"
+    },
+    "custom_models": {
+      "description": "Ability to create and deploy custom AI models",
+      "type": "boolean",
+      "default": "false"
+    }
+  },
+  "skill": "./SKILL.md"
+}

@@ -11,11 +11,11 @@ go build ./cmd/eve-adapter
 ## Manual Runtime Sanity
 
 1. run `adapter.info`
-2. run `adapter.accounts.list`
+2. run `adapter.connections.list`
 3. run `adapter.health`
 4. exercise `adapter.setup.start` / `adapter.setup.submit`
 5. if local permissions allow, exercise `records.backfill`
 6. if local permissions allow, exercise `adapter.monitor.start`
-7. exercise `channels.send` against a safe iMessage target
+7. exercise `imessage.send` against a safe iMessage target
 
 Consumer SDKs are generated centrally from `api/openapi.yaml`; there is no package-local SDK generation step.

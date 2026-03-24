@@ -1,5 +1,14 @@
 # Eve Adapter Validation
 
+## Shared Hosted Lifecycle Gate
+
+For hosted package signoff, run the shared hosted lifecycle proof first.
+
+Use
+[Frontdoor Hosted Package Live Testing](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_HOSTED_PACKAGE_LIVE_TESTING.md)
+for package publication, Frontdoor install, runtime token mint, and runtime
+health before attempting the Eve-specific ladder below.
+
 ## Level 1: Static Package Contract
 
 Pass when:
@@ -39,7 +48,7 @@ Pass when:
 
 Pass when:
 
-- `adapter.accounts.list` returns the default local Eve account projection
+- `adapter.connections.list` returns the default local Eve account projection
 - `adapter.health` returns a coherent readiness state
 - missing Full Disk Access yields an actionable blocked result instead of a
   crash
@@ -57,7 +66,7 @@ Pass when:
 
 Pass when:
 
-- `channels.send` accepts a valid iMessage target
+- `imessage.send` accepts a valid iMessage target
 - text chunking behaves correctly at the text limit
 - attachment send path is wired
 - unsupported reply-to behavior fails cleanly

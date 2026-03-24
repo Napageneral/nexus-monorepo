@@ -1,7 +1,7 @@
 # Spec Standards
 
 **Status:** CANONICAL
-**Last Updated:** 2026-03-10
+**Last Updated:** 2026-03-16
 
 ---
 
@@ -10,7 +10,7 @@
 These conventions define how governance, canonical specs, proposals, workplans, validation docs, and archived material should be written and maintained across Nexus projects.
 
 This document complements:
-- [Spec-Driven Development Workflow](/Users/tyler/nexus/home/projects/nexus/docs/governance/spec-driven-development-workflow.md)
+- [Spec-Driven Development Workflow](/Users/tyler/nexus/home/projects/nexus/docs/spec-driven-development-workflow.md)
 
 The workflow defines the process.
 This document defines the writing and organization standards.
@@ -22,8 +22,9 @@ This document defines the writing and organization standards.
 1. The active tree must tell one coherent story.
 2. Canonical specs describe only the finished system.
 3. Workplans describe only gap closure.
-4. Validation documents describe how to prove the specs.
-5. Historical material stays searchable, but not active.
+4. Validation documents define and preserve the proof corpus for canonical behavior.
+5. Workplan hygiene is mandatory; stale workplans do not stay active.
+6. Historical material stays searchable, but not active.
 
 ---
 
@@ -64,6 +65,19 @@ Documents that prove the implementation matches the canonical specs.
 Characteristics:
 - pass/fail oriented
 - may include smoke checks, test matrices, runbooks, or scripts
+- may remain active after the paired implementation workplan is complete
+- should describe the latest proof path for a still-supported behavior
+- should be revised, not archived, when the behavior remains canonical but the
+  proof method changes
+
+### Signoff records
+
+Dated closure proofs for a specific implementation or rollout milestone.
+
+Characteristics:
+- historical evidence for a concrete completion event
+- may summarize a full validation run
+- do not replace the durable validation ladder for the same behavior
 
 ### Reference docs
 
@@ -82,8 +96,10 @@ Historical material no longer active.
 Characteristics:
 - superseded specs
 - completed workplans
-- retired validations
+- obsolete, superseded, or campaign-specific validations
 - abandoned proposals
+- historical signoff records when they no longer belong on the active reading
+  path
 
 ---
 
@@ -224,6 +240,7 @@ Workplans should:
 - describe the current gap
 - define sequencing and cutover steps
 - stay honest as execution reveals new work
+- be narrowed or archived once parts of the scope are no longer genuinely open
 
 Workplans should not:
 - redefine product behavior
@@ -235,6 +252,16 @@ Validation docs should:
 - reference the canonical intended behavior
 - define explicit pass/fail conditions
 - stay current with the active spec set
+- remain active when they are still the latest proof path for a live behavior
+- avoid stale campaign-specific framing if they are intended to be part of the
+  durable validation corpus
+
+### Signoff records
+
+Signoff records should:
+- clearly identify the dated completion event they certify
+- summarize the proof that passed
+- point back to the durable validation ladder where relevant
 
 ### Reference docs
 
@@ -269,6 +296,19 @@ Archive when:
 1. the execution scope is complete
 2. the relevant validation passes
 3. the remaining active gap no longer belongs in that workplan
+
+### Validation -> Archive
+
+Archive when:
+1. the behavior is removed from canon
+2. a newer validation doc supersedes it for the same behavior
+3. the doc is a one-off campaign proof rather than part of the durable
+   validation corpus
+
+Do not archive when:
+1. the workplan completed
+2. the code landed
+3. one dated signoff record already exists
 
 ### Canonical spec -> Archive
 

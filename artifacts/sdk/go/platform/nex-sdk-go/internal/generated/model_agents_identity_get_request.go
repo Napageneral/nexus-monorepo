@@ -20,7 +20,7 @@ var _ MappedNullable = &AgentsIdentityGetRequest{}
 // AgentsIdentityGetRequest struct for AgentsIdentityGetRequest
 type AgentsIdentityGetRequest struct {
 	AgentId *string `json:"agentId,omitempty"`
-	SessionKey *string `json:"sessionKey,omitempty"`
+	SessionId *string `json:"sessionId,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
 
@@ -75,36 +75,36 @@ func (o *AgentsIdentityGetRequest) SetAgentId(v string) {
 	o.AgentId = &v
 }
 
-// GetSessionKey returns the SessionKey field value if set, zero value otherwise.
-func (o *AgentsIdentityGetRequest) GetSessionKey() string {
-	if o == nil || IsNil(o.SessionKey) {
+// GetSessionId returns the SessionId field value if set, zero value otherwise.
+func (o *AgentsIdentityGetRequest) GetSessionId() string {
+	if o == nil || IsNil(o.SessionId) {
 		var ret string
 		return ret
 	}
-	return *o.SessionKey
+	return *o.SessionId
 }
 
-// GetSessionKeyOk returns a tuple with the SessionKey field value if set, nil otherwise
+// GetSessionIdOk returns a tuple with the SessionId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *AgentsIdentityGetRequest) GetSessionKeyOk() (*string, bool) {
-	if o == nil || IsNil(o.SessionKey) {
+func (o *AgentsIdentityGetRequest) GetSessionIdOk() (*string, bool) {
+	if o == nil || IsNil(o.SessionId) {
 		return nil, false
 	}
-	return o.SessionKey, true
+	return o.SessionId, true
 }
 
-// HasSessionKey returns a boolean if a field has been set.
-func (o *AgentsIdentityGetRequest) HasSessionKey() bool {
-	if o != nil && !IsNil(o.SessionKey) {
+// HasSessionId returns a boolean if a field has been set.
+func (o *AgentsIdentityGetRequest) HasSessionId() bool {
+	if o != nil && !IsNil(o.SessionId) {
 		return true
 	}
 
 	return false
 }
 
-// SetSessionKey gets a reference to the given string and assigns it to the SessionKey field.
-func (o *AgentsIdentityGetRequest) SetSessionKey(v string) {
-	o.SessionKey = &v
+// SetSessionId gets a reference to the given string and assigns it to the SessionId field.
+func (o *AgentsIdentityGetRequest) SetSessionId(v string) {
+	o.SessionId = &v
 }
 
 func (o AgentsIdentityGetRequest) MarshalJSON() ([]byte, error) {
@@ -120,8 +120,8 @@ func (o AgentsIdentityGetRequest) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.AgentId) {
 		toSerialize["agentId"] = o.AgentId
 	}
-	if !IsNil(o.SessionKey) {
-		toSerialize["sessionKey"] = o.SessionKey
+	if !IsNil(o.SessionId) {
+		toSerialize["sessionId"] = o.SessionId
 	}
 
 	for key, value := range o.AdditionalProperties {
@@ -146,7 +146,7 @@ func (o *AgentsIdentityGetRequest) UnmarshalJSON(data []byte) (err error) {
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
 		delete(additionalProperties, "agentId")
-		delete(additionalProperties, "sessionKey")
+		delete(additionalProperties, "sessionId")
 		o.AdditionalProperties = additionalProperties
 	}
 

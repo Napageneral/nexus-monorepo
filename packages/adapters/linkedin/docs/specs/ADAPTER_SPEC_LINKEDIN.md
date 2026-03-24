@@ -61,8 +61,8 @@ Provider facts that shape the design:
 3. OAuth is the only supported auth method in v1.
 4. The adapter is organization-feed scoped, not member-feed scoped.
 5. The adapter does not implement LinkedIn messaging or inbox behavior.
-6. The adapter exposes publishing through `channels.send` and provider-native
-   reads through typed adapter methods.
+6. The adapter exposes publishing and reads through provider-native typed
+   adapter methods.
 7. The adapter uses one explicit configured or call-scoped organization URN.
 8. The adapter does not invent backwards-compat scope aliases; it declares the
    current scope set explicitly.
@@ -82,8 +82,8 @@ The canonical runtime-owned connection config for v1 is:
   `urn:li:organization:2414183`
 
 If `organizationUrn` is absent, read and write methods may still accept an
-organization URN in their payload, but `channels.send` should fail with a clear
-error unless the target or config resolves the organization.
+organization URN in their payload, but publish methods should fail clearly
+unless the payload or config resolves the organization.
 
 ## Auth Model
 
@@ -112,9 +112,8 @@ Reasoning:
 The target-state runtime surface for v1 is:
 
 - `adapter.info`
-- `adapter.accounts.list`
+- `adapter.connections.list`
 - `adapter.health`
-- `channels.send`
 - `linkedin.organizations.list`
 - `linkedin.posts.list`
 - `linkedin.posts.get`
@@ -126,31 +125,10 @@ V1 intentionally does not include:
 
 - `adapter.monitor.start`
 - `records.backfill`
-- `channels.stream`
-- `channels.edit`
-- `channels.delete`
+- conversational streaming methods
+- post edit methods
+- post delete methods
 - `linkedin.messages.*`
-
-## Delivery Model
-
-`channels.send` is the communication-shaped publish surface for organization
-posts.
-
-Target resolution rules:
-
-1. if `target.channel.container_id` is present, it is treated as the
-   destination organization identifier
-2. if the target omits `container_id`, the adapter uses
-   `runtime.config.organizationUrn`
-3. numeric organization ids are normalized into `urn:li:organization:<id>`
-4. the resolved author is always the organization URN for v1
-
-Send behavior:
-
-1. `text` publishes a text-only post
-2. `media` plus optional `caption` publishes an image post
-3. image upload happens through the LinkedIn Images API before post creation
-4. the delivery result returns the created LinkedIn post URN
 
 ## Typed Method Model
 
@@ -256,7 +234,7 @@ The LinkedIn adapter is at parity for v1 only when:
 
 1. Nex can create a LinkedIn OAuth-backed connection
 2. the adapter can enumerate administered organizations
-3. `channels.send` can publish an organization post
+3. `linkedin.posts.create` can publish an organization post
 4. typed methods can read posts, comments, and social metadata
 5. image post publishing works through the Images API path
 6. the package builds, tests, and packages cleanly as a standard Nex adapter

@@ -1,0 +1,9 @@
+{
+  "id": "google",
+  "version": "0.1.0",
+  "displayName": "Google",
+  "description": "Shared Google Ads and Business Profile adapter package for Nex.",
+  "platform": "google",
+  "command": "./bin/google-adapter",
+  "skill": "./SKILL.md"
+}

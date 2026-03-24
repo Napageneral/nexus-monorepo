@@ -22,7 +22,6 @@ var _ MappedNullable = &AdapterConnectionsCustomSubmitParamsSchema{}
 type AdapterConnectionsCustomSubmitParamsSchema struct {
 	Adapter string `json:"adapter"`
 	SessionId string `json:"sessionId"`
-	Account *string `json:"account,omitempty"`
 	Payload map[string]interface{} `json:"payload,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
@@ -96,38 +95,6 @@ func (o *AdapterConnectionsCustomSubmitParamsSchema) SetSessionId(v string) {
 	o.SessionId = v
 }
 
-// GetAccount returns the Account field value if set, zero value otherwise.
-func (o *AdapterConnectionsCustomSubmitParamsSchema) GetAccount() string {
-	if o == nil || IsNil(o.Account) {
-		var ret string
-		return ret
-	}
-	return *o.Account
-}
-
-// GetAccountOk returns a tuple with the Account field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *AdapterConnectionsCustomSubmitParamsSchema) GetAccountOk() (*string, bool) {
-	if o == nil || IsNil(o.Account) {
-		return nil, false
-	}
-	return o.Account, true
-}
-
-// HasAccount returns a boolean if a field has been set.
-func (o *AdapterConnectionsCustomSubmitParamsSchema) HasAccount() bool {
-	if o != nil && !IsNil(o.Account) {
-		return true
-	}
-
-	return false
-}
-
-// SetAccount gets a reference to the given string and assigns it to the Account field.
-func (o *AdapterConnectionsCustomSubmitParamsSchema) SetAccount(v string) {
-	o.Account = &v
-}
-
 // GetPayload returns the Payload field value if set, zero value otherwise.
 func (o *AdapterConnectionsCustomSubmitParamsSchema) GetPayload() map[string]interface{} {
 	if o == nil || IsNil(o.Payload) {
@@ -172,9 +139,6 @@ func (o AdapterConnectionsCustomSubmitParamsSchema) ToMap() (map[string]interfac
 	toSerialize := map[string]interface{}{}
 	toSerialize["adapter"] = o.Adapter
 	toSerialize["sessionId"] = o.SessionId
-	if !IsNil(o.Account) {
-		toSerialize["account"] = o.Account
-	}
 	if !IsNil(o.Payload) {
 		toSerialize["payload"] = o.Payload
 	}
@@ -224,7 +188,6 @@ func (o *AdapterConnectionsCustomSubmitParamsSchema) UnmarshalJSON(data []byte) 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
 		delete(additionalProperties, "adapter")
 		delete(additionalProperties, "sessionId")
-		delete(additionalProperties, "account")
 		delete(additionalProperties, "payload")
 		o.AdditionalProperties = additionalProperties
 	}

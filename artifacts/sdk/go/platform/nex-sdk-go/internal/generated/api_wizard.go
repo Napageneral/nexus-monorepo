@@ -25,11 +25,11 @@ type WizardAPIService service
 type ApiWizardCancelRequest struct {
 	ctx context.Context
 	ApiService *WizardAPIService
-	wizardCancelRequest *WizardCancelRequest
+	agentsSessionsResetRequest *AgentsSessionsResetRequest
 }
 
-func (r ApiWizardCancelRequest) WizardCancelRequest(wizardCancelRequest WizardCancelRequest) ApiWizardCancelRequest {
-	r.wizardCancelRequest = &wizardCancelRequest
+func (r ApiWizardCancelRequest) AgentsSessionsResetRequest(agentsSessionsResetRequest AgentsSessionsResetRequest) ApiWizardCancelRequest {
+	r.agentsSessionsResetRequest = &agentsSessionsResetRequest
 	return r
 }
 
@@ -89,7 +89,7 @@ func (a *WizardAPIService) WizardCancelExecute(r ApiWizardCancelRequest) (*Wizar
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
 	}
 	// body params
-	localVarPostBody = r.wizardCancelRequest
+	localVarPostBody = r.agentsSessionsResetRequest
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
 	if err != nil {
 		return localVarReturnValue, nil, err
@@ -403,11 +403,11 @@ func (a *WizardAPIService) WizardStartExecute(r ApiWizardStartRequest) (*WizardS
 type ApiWizardStatusRequest struct {
 	ctx context.Context
 	ApiService *WizardAPIService
-	wizardCancelRequest *WizardCancelRequest
+	agentsSessionsResetRequest *AgentsSessionsResetRequest
 }
 
-func (r ApiWizardStatusRequest) WizardCancelRequest(wizardCancelRequest WizardCancelRequest) ApiWizardStatusRequest {
-	r.wizardCancelRequest = &wizardCancelRequest
+func (r ApiWizardStatusRequest) AgentsSessionsResetRequest(agentsSessionsResetRequest AgentsSessionsResetRequest) ApiWizardStatusRequest {
+	r.agentsSessionsResetRequest = &agentsSessionsResetRequest
 	return r
 }
 
@@ -467,7 +467,7 @@ func (a *WizardAPIService) WizardStatusExecute(r ApiWizardStatusRequest) (*Wizar
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
 	}
 	// body params
-	localVarPostBody = r.wizardCancelRequest
+	localVarPostBody = r.agentsSessionsResetRequest
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
 	if err != nil {
 		return localVarReturnValue, nil, err

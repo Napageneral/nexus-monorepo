@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGES_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_ROOT="$(cd "${PACKAGES_DIR}/.." && pwd)"
-FRONTDOOR_DIR="${REPO_ROOT}/frontdoor/nexus-frontdoor"
+FRONTDOOR_DIR="${REPO_ROOT}/frontdoor"
 
 usage() {
   cat <<'EOF'

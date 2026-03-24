@@ -80,9 +80,9 @@ Open evidence target:
 Pass when:
 
 - monitor starts successfully
-- `channels.send` creates a Confluence page
+- `confluence.pages.create` creates a Confluence page
 - monitor ingests that page back as canonical `record.ingest`
-- `channels.delete` moves the page to trash
+- `confluence.pages.move_to_trash` moves the page to trash
 
 Open evidence target:
 

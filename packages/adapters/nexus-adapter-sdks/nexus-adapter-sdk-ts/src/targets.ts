@@ -1,22 +1,22 @@
-import type { DeliveryTarget } from "./protocol.js";
+import type { ChannelRef } from "./protocol.js";
 
 function asNonEmptyString(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
 }
 
-export function requireContainerTarget(target: DeliveryTarget): string {
-  const value = asNonEmptyString(target.channel.container_id);
+export function requireContainerTarget(channel: ChannelRef): string {
+  const value = asNonEmptyString(channel.container_id);
   if (!value) {
-    throw new Error("target.channel.container_id is required");
+    throw new Error("channel.container_id is required");
   }
   return value;
 }
 
-export function readThreadTarget(target: DeliveryTarget): string | undefined {
-  return asNonEmptyString(target.channel.thread_id);
+export function readThreadTarget(channel: ChannelRef): string | undefined {
+  return asNonEmptyString(channel.thread_id);
 }
 
-export function readReplyToTarget(target: DeliveryTarget): string | undefined {
-  return asNonEmptyString(target.reply_to_id);
+export function readReplyToTarget(replyToID: string | undefined): string | undefined {
+  return asNonEmptyString(replyToID);
 }

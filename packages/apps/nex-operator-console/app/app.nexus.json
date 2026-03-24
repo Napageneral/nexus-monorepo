@@ -1,0 +1,16 @@
+{
+  "id": "console",
+  "version": "1.0.0",
+  "displayName": "Operator Console",
+  "description": "Operator-facing control panel for the core Nex runtime.",
+  "icon": "./public/favicon.svg",
+  "product": {
+    "visibility": "operator"
+  },
+  "ui": {
+    "root": "./dist",
+    "entryPath": "/app/console/chat",
+    "spa": true
+  },
+  "skill": "./SKILL.md"
+}

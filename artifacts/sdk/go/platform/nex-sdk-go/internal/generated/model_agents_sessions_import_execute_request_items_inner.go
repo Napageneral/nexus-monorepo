@@ -25,6 +25,8 @@ type AgentsSessionsImportExecuteRequestItemsInner struct {
 	SourceSessionFingerprint string `json:"sourceSessionFingerprint"`
 	ImportedAtMs int64 `json:"importedAtMs"`
 	Session AgentsSessionsImportExecuteRequestItemsInnerSession `json:"session"`
+	SystemContextProfiles []AgentsSessionsImportExecuteRequestItemsInnerSystemContextProfilesInner `json:"systemContextProfiles,omitempty"`
+	Artifacts []AgentsSessionsImportExecuteRequestItemsInnerArtifactsInner `json:"artifacts,omitempty"`
 	Turns []AgentsSessionsImportExecuteRequestItemsInnerTurnsInner `json:"turns"`
 	Messages []AgentsSessionsImportExecuteRequestItemsInnerMessagesInner `json:"messages"`
 	ToolCalls []AgentsSessionsImportExecuteRequestItemsInnerToolCallsInner `json:"toolCalls,omitempty"`
@@ -177,6 +179,70 @@ func (o *AgentsSessionsImportExecuteRequestItemsInner) SetSession(v AgentsSessio
 	o.Session = v
 }
 
+// GetSystemContextProfiles returns the SystemContextProfiles field value if set, zero value otherwise.
+func (o *AgentsSessionsImportExecuteRequestItemsInner) GetSystemContextProfiles() []AgentsSessionsImportExecuteRequestItemsInnerSystemContextProfilesInner {
+	if o == nil || IsNil(o.SystemContextProfiles) {
+		var ret []AgentsSessionsImportExecuteRequestItemsInnerSystemContextProfilesInner
+		return ret
+	}
+	return o.SystemContextProfiles
+}
+
+// GetSystemContextProfilesOk returns a tuple with the SystemContextProfiles field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentsSessionsImportExecuteRequestItemsInner) GetSystemContextProfilesOk() ([]AgentsSessionsImportExecuteRequestItemsInnerSystemContextProfilesInner, bool) {
+	if o == nil || IsNil(o.SystemContextProfiles) {
+		return nil, false
+	}
+	return o.SystemContextProfiles, true
+}
+
+// HasSystemContextProfiles returns a boolean if a field has been set.
+func (o *AgentsSessionsImportExecuteRequestItemsInner) HasSystemContextProfiles() bool {
+	if o != nil && !IsNil(o.SystemContextProfiles) {
+		return true
+	}
+
+	return false
+}
+
+// SetSystemContextProfiles gets a reference to the given []AgentsSessionsImportExecuteRequestItemsInnerSystemContextProfilesInner and assigns it to the SystemContextProfiles field.
+func (o *AgentsSessionsImportExecuteRequestItemsInner) SetSystemContextProfiles(v []AgentsSessionsImportExecuteRequestItemsInnerSystemContextProfilesInner) {
+	o.SystemContextProfiles = v
+}
+
+// GetArtifacts returns the Artifacts field value if set, zero value otherwise.
+func (o *AgentsSessionsImportExecuteRequestItemsInner) GetArtifacts() []AgentsSessionsImportExecuteRequestItemsInnerArtifactsInner {
+	if o == nil || IsNil(o.Artifacts) {
+		var ret []AgentsSessionsImportExecuteRequestItemsInnerArtifactsInner
+		return ret
+	}
+	return o.Artifacts
+}
+
+// GetArtifactsOk returns a tuple with the Artifacts field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentsSessionsImportExecuteRequestItemsInner) GetArtifactsOk() ([]AgentsSessionsImportExecuteRequestItemsInnerArtifactsInner, bool) {
+	if o == nil || IsNil(o.Artifacts) {
+		return nil, false
+	}
+	return o.Artifacts, true
+}
+
+// HasArtifacts returns a boolean if a field has been set.
+func (o *AgentsSessionsImportExecuteRequestItemsInner) HasArtifacts() bool {
+	if o != nil && !IsNil(o.Artifacts) {
+		return true
+	}
+
+	return false
+}
+
+// SetArtifacts gets a reference to the given []AgentsSessionsImportExecuteRequestItemsInnerArtifactsInner and assigns it to the Artifacts field.
+func (o *AgentsSessionsImportExecuteRequestItemsInner) SetArtifacts(v []AgentsSessionsImportExecuteRequestItemsInnerArtifactsInner) {
+	o.Artifacts = v
+}
+
 // GetTurns returns the Turns field value
 func (o *AgentsSessionsImportExecuteRequestItemsInner) GetTurns() []AgentsSessionsImportExecuteRequestItemsInnerTurnsInner {
 	if o == nil {
@@ -272,6 +338,12 @@ func (o AgentsSessionsImportExecuteRequestItemsInner) ToMap() (map[string]interf
 	toSerialize["sourceSessionFingerprint"] = o.SourceSessionFingerprint
 	toSerialize["importedAtMs"] = o.ImportedAtMs
 	toSerialize["session"] = o.Session
+	if !IsNil(o.SystemContextProfiles) {
+		toSerialize["systemContextProfiles"] = o.SystemContextProfiles
+	}
+	if !IsNil(o.Artifacts) {
+		toSerialize["artifacts"] = o.Artifacts
+	}
 	toSerialize["turns"] = o.Turns
 	toSerialize["messages"] = o.Messages
 	if !IsNil(o.ToolCalls) {
@@ -331,6 +403,8 @@ func (o *AgentsSessionsImportExecuteRequestItemsInner) UnmarshalJSON(data []byte
 		delete(additionalProperties, "sourceSessionFingerprint")
 		delete(additionalProperties, "importedAtMs")
 		delete(additionalProperties, "session")
+		delete(additionalProperties, "systemContextProfiles")
+		delete(additionalProperties, "artifacts")
 		delete(additionalProperties, "turns")
 		delete(additionalProperties, "messages")
 		delete(additionalProperties, "toolCalls")

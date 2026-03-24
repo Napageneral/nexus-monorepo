@@ -23,7 +23,8 @@ type ChannelParticipantRowSchema struct {
 	Id string `json:"id"`
 	ChannelId string `json:"channel_id"`
 	ContactId string `json:"contact_id"`
-	EntityId *string `json:"entity_id,omitempty"`
+	ObservedEntityId *string `json:"observed_entity_id,omitempty"`
+	CanonicalEntityId *string `json:"canonical_entity_id,omitempty"`
 	Role *string `json:"role,omitempty"`
 	MessageCount float32 `json:"message_count"`
 	Status string `json:"status"`
@@ -132,36 +133,68 @@ func (o *ChannelParticipantRowSchema) SetContactId(v string) {
 	o.ContactId = v
 }
 
-// GetEntityId returns the EntityId field value if set, zero value otherwise.
-func (o *ChannelParticipantRowSchema) GetEntityId() string {
-	if o == nil || IsNil(o.EntityId) {
+// GetObservedEntityId returns the ObservedEntityId field value if set, zero value otherwise.
+func (o *ChannelParticipantRowSchema) GetObservedEntityId() string {
+	if o == nil || IsNil(o.ObservedEntityId) {
 		var ret string
 		return ret
 	}
-	return *o.EntityId
+	return *o.ObservedEntityId
 }
 
-// GetEntityIdOk returns a tuple with the EntityId field value if set, nil otherwise
+// GetObservedEntityIdOk returns a tuple with the ObservedEntityId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *ChannelParticipantRowSchema) GetEntityIdOk() (*string, bool) {
-	if o == nil || IsNil(o.EntityId) {
+func (o *ChannelParticipantRowSchema) GetObservedEntityIdOk() (*string, bool) {
+	if o == nil || IsNil(o.ObservedEntityId) {
 		return nil, false
 	}
-	return o.EntityId, true
+	return o.ObservedEntityId, true
 }
 
-// HasEntityId returns a boolean if a field has been set.
-func (o *ChannelParticipantRowSchema) HasEntityId() bool {
-	if o != nil && !IsNil(o.EntityId) {
+// HasObservedEntityId returns a boolean if a field has been set.
+func (o *ChannelParticipantRowSchema) HasObservedEntityId() bool {
+	if o != nil && !IsNil(o.ObservedEntityId) {
 		return true
 	}
 
 	return false
 }
 
-// SetEntityId gets a reference to the given string and assigns it to the EntityId field.
-func (o *ChannelParticipantRowSchema) SetEntityId(v string) {
-	o.EntityId = &v
+// SetObservedEntityId gets a reference to the given string and assigns it to the ObservedEntityId field.
+func (o *ChannelParticipantRowSchema) SetObservedEntityId(v string) {
+	o.ObservedEntityId = &v
+}
+
+// GetCanonicalEntityId returns the CanonicalEntityId field value if set, zero value otherwise.
+func (o *ChannelParticipantRowSchema) GetCanonicalEntityId() string {
+	if o == nil || IsNil(o.CanonicalEntityId) {
+		var ret string
+		return ret
+	}
+	return *o.CanonicalEntityId
+}
+
+// GetCanonicalEntityIdOk returns a tuple with the CanonicalEntityId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ChannelParticipantRowSchema) GetCanonicalEntityIdOk() (*string, bool) {
+	if o == nil || IsNil(o.CanonicalEntityId) {
+		return nil, false
+	}
+	return o.CanonicalEntityId, true
+}
+
+// HasCanonicalEntityId returns a boolean if a field has been set.
+func (o *ChannelParticipantRowSchema) HasCanonicalEntityId() bool {
+	if o != nil && !IsNil(o.CanonicalEntityId) {
+		return true
+	}
+
+	return false
+}
+
+// SetCanonicalEntityId gets a reference to the given string and assigns it to the CanonicalEntityId field.
+func (o *ChannelParticipantRowSchema) SetCanonicalEntityId(v string) {
+	o.CanonicalEntityId = &v
 }
 
 // GetRole returns the Role field value if set, zero value otherwise.
@@ -369,8 +402,11 @@ func (o ChannelParticipantRowSchema) ToMap() (map[string]interface{}, error) {
 	toSerialize["id"] = o.Id
 	toSerialize["channel_id"] = o.ChannelId
 	toSerialize["contact_id"] = o.ContactId
-	if !IsNil(o.EntityId) {
-		toSerialize["entity_id"] = o.EntityId
+	if !IsNil(o.ObservedEntityId) {
+		toSerialize["observed_entity_id"] = o.ObservedEntityId
+	}
+	if !IsNil(o.CanonicalEntityId) {
+		toSerialize["canonical_entity_id"] = o.CanonicalEntityId
 	}
 	if !IsNil(o.Role) {
 		toSerialize["role"] = o.Role
@@ -437,7 +473,8 @@ func (o *ChannelParticipantRowSchema) UnmarshalJSON(data []byte) (err error) {
 		delete(additionalProperties, "id")
 		delete(additionalProperties, "channel_id")
 		delete(additionalProperties, "contact_id")
-		delete(additionalProperties, "entity_id")
+		delete(additionalProperties, "observed_entity_id")
+		delete(additionalProperties, "canonical_entity_id")
 		delete(additionalProperties, "role")
 		delete(additionalProperties, "message_count")
 		delete(additionalProperties, "status")

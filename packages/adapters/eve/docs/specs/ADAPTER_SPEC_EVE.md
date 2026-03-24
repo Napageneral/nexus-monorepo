@@ -74,7 +74,7 @@ The Eve adapter package must cover:
 - account listing
 - historical backfill from Eve warehouse
 - continuous monitor with best-effort warehouse sync before emit
-- `channels.send` text and attachment delivery through Messages/AppleScript
+- `imessage.send` text and attachment delivery through Messages/AppleScript
 
 The initial packaged cut does not expand scope into separate Eve analytics,
 embeddings, or context-engine product methods. The first goal is a reliable
@@ -156,7 +156,7 @@ Backfill and monitor are not allowed to diverge on record shape.
 
 ## Delivery Behavior
 
-`channels.send` must preserve the proven Eve behavior:
+`imessage.send` must preserve the proven Eve behavior:
 
 - resolve recipient from target or thread identity
 - reject unsupported reply threading behavior

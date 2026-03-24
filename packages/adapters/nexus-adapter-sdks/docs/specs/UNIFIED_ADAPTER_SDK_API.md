@@ -1,5 +1,5 @@
 ---
-summary: "Exact TS-first unified adapter SDK API contract for defineAdapter, helper surfaces, and proof-of-migration work."
+summary: "Exact TS-first unified adapter SDK API contract for a method-first adapter authoring model."
 title: "Unified Adapter SDK API"
 ---
 
@@ -8,15 +8,13 @@ title: "Unified Adapter SDK API"
 ## Purpose
 
 This document defines the exact shared adapter SDK API that concrete adapters
-should author against after the SDK lift.
+must author against after the hard cut.
 
-It translates the platform-level target in:
+It translates:
 
 - [Unified Adapter SDK and Authoring Model](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/unified-adapter-sdk-and-authoring-model.md)
 
 into a concrete SDK contract.
-
-This is the SDK-author and adapter-author reference.
 
 ## Customer Experience
 
@@ -24,8 +22,8 @@ An adapter author should be able to:
 
 1. import one top-level `defineAdapter(...)`
 2. declare package metadata once
-3. optionally declare typed methods once
-4. plug in provider-specific connection, ingest, and delivery handlers
+3. declare outward methods once
+4. plug in provider-specific connection, ingest, and method handlers
 5. reuse helpers for credentials, targets, retries, records, and polling
 
 The author should not need to:
@@ -33,20 +31,22 @@ The author should not need to:
 - manually assemble the `operations` table
 - manually repeat `adapter.info`
 - manually duplicate method discovery metadata and method handlers
-- hand-roll common connection and retry plumbing
+- maintain a second outward `delivery` declaration surface
 
 ## Core Decision
 
-The SDK contract should provide one top-level authoring model:
+The SDK contract provides one top-level authoring model:
 
 - `defineAdapter(...)`
 
-Everything else is a helper under that model.
+Outward behavior is method-first.
 
-There should not be:
+There is not:
 
-- a separate higher-level communication SDK
-- a second competing adapter authoring surface
+- a separate communication SDK
+- a second competing outward declaration surface
+- a target-state `delivery` block for `channels.*`
+- a dual-surface `methods + delivery` model
 
 ## Exact Top-Level Shape
 
@@ -65,6 +65,26 @@ sleepWithSignal(...)
 withRetry(...)
 messageRecord(...)
 ```
+
+Canonical authoring shape:
+
+```ts
+export default defineAdapter({
+  platform: "slack",
+  name: "slack",
+  version: "0.1.0",
+  multi_account: true,
+  credential_service: "slack",
+  auth: { ... },
+  capabilities: { ... },
+  client: { ... },
+  connection: { ... },
+  ingest: { ... },
+  methods: { ... },
+});
+```
+
+There is no top-level `delivery` section in the target-state SDK API.
 
 ## `defineAdapter(...)`
 
@@ -91,7 +111,7 @@ export default defineAdapter({
   },
 
   connection: {
-    accounts: async ({ ctx }) => [ ... ],
+    connections: async ({ ctx }) => [ ... ],
     health: async ({ client, connectionId, ctx }) => ({ ... }),
   },
 
@@ -100,14 +120,17 @@ export default defineAdapter({
     backfill: pollBackfill({ ... }),
   },
 
-  delivery: {
-    send: async ({ client, target, text, media, caption, ctx }) => ({ ... }),
-    stream: { ... },
-    edit: async (...) => ({ ... }),
-    delete: async (...) => ({ ... }),
-  },
-
   methods: {
+    "telegram.send": method({
+      description: "Send a Telegram message",
+      action: "write",
+      params: { ... },
+      response: { ... },
+      connection_required: true,
+      mutates_remote: true,
+      handler: async ({ client, input, connectionId, ctx }) => ({ ... }),
+    }),
+
     "jira.issues.transition": method({
       description: "Transition a Jira issue",
       action: "write",
@@ -129,7 +152,11 @@ Rules:
 2. the SDK derives `adapter.info.operations`
 3. the SDK derives `adapter.info.methods`
 4. the SDK derives runtime method dispatch from declared `methods`
-5. adapter packages provide provider behavior only
+5. outward communication and provider mutation both live under truthful
+   namespaced methods
+6. package-native operational methods also live under `methods`, but keep their
+   package-native namespace
+7. the runtime/ingest `operations` surface is not a second outward method path
 
 ## Client Factory
 
@@ -153,16 +180,10 @@ Canonical shape:
 
 ```ts
 connection: {
-  accounts?: async ({ ctx, client }) => AdapterAccount[],
+  connections?: async ({ ctx, client }) => AdapterConnectionIdentity[],
   health?: async ({ ctx, client, connectionId }) => AdapterHealth,
 }
 ```
-
-Rules:
-
-1. `accounts` should default to a single runtime-backed account when omitted
-2. `health` may default to a client-creation probe when omitted
-3. adapters may override either one
 
 ## Ingest Section
 
@@ -175,68 +196,32 @@ ingest: {
 }
 ```
 
-This is the canonical runtime ingest surface.
+This remains the canonical runtime ingest surface.
 
-## `pollMonitor(...)`
-
-`pollMonitor(...)` is a helper implementation strategy for `ingest.monitor`.
-
-Canonical illustrative shape:
-
-```ts
-monitor: pollMonitor({
-  initialCursor: () => 0,
-  poll: async ({ client, cursor, signal }) => client.getUpdates(cursor),
-  items: (page) => page,
-  toRecord: ({ item, connectionId }) => buildTelegramRecord(item, connectionId),
-  nextCursor: ({ item, cursor }) => item.update_id + 1,
-  idleMs: 0,
-  errorDelayMs: 1500,
-})
-```
-
-Rules:
-
-1. `pollMonitor(...)` returns a function compatible with `ingest.monitor`
-2. adapters with socket or webhook behavior can skip it and implement
-   `ingest.monitor` directly
-
-## `pollBackfill(...)`
-
-`pollBackfill(...)` is the same idea for historical ingest:
-
-```ts
-backfill: pollBackfill({
-  initialCursor: ({ since }) => since,
-  poll: async ({ client, cursor, since }) => client.fetchHistory(cursor, since),
-  items: (page) => page.items,
-  toRecord: ({ item, connectionId }) => buildRecord(item, connectionId),
-  nextCursor: ({ page, item, cursor }) => ...,
-})
-```
-
-Rules:
-
-1. `backfill` remains a canonical distinct operation
-2. the helper only standardizes one common cursoring pattern
-
-## Delivery Section
+## Method Section
 
 Canonical shape:
 
 ```ts
-delivery: {
-  send?: async ({ ctx, client, target, text, media, caption, signal }) => DeliveryResult,
-  stream?: StreamHandlers,
-  edit?: async (...) => DeliveryResult,
-  delete?: async (...) => DeliveryResult,
+methods: {
+  "slack.send": method({ ... }),
+  "slack.edit": method({ ... }),
+  "jira.issues.transition": method({ ... }),
 }
 ```
 
 Rules:
 
-1. communication delivery remains distinct from typed methods
-2. the SDK should wire canonical `channels.*` operations from this section
+1. authors declare outward communication and provider methods together
+2. the SDK derives runtime dispatch from `methods`
+3. the SDK derives `adapter.info.methods` from `methods`
+4. there is no target-state `delivery` section that wires canonical
+   `channels.*` operations
+5. communication methods use truthful platform namespaces such as
+   `slack.send`, `imessage.send`, or `discord.send`
+6. provider/work/content methods use truthful provider namespaces such as
+   `jira.issues.create`, `git.pull_requests.merge`, or
+   `confluence.pages.update`
 
 ## `method(...)`
 
@@ -259,9 +244,8 @@ methods: {
 Rules:
 
 1. authors declare method descriptor and handler together
-2. the SDK derives `adapter.info.methods` from this declaration
-3. the SDK derives the runtime method handler map from this declaration
-4. `methods` is the single source of truth for adapter-native methods
+2. `methods` is the single source of truth for outward callables
+3. the SDK derives both discovery and dispatch from this declaration
 
 ## Credential Helpers
 
@@ -274,85 +258,32 @@ requireCredential(ctx, {
 })
 ```
 
-Rules:
-
-1. runtime credential fields win over runtime credential value when explicitly
-   requested
-2. env fallback is optional and explicit
-3. errors should clearly name the missing credential source
-
 ## Target Helpers
 
-The SDK should expose:
+Helpers such as `requireContainerTarget`, `readThreadTarget`, and
+`readReplyToTarget` may still exist.
 
-- `requireContainerTarget(target)`
-- `readThreadTarget(target)`
-- `readReplyToTarget(target)`
+They survive the hard cut as reusable parsing helpers for truthful communication
+methods.
 
-Rules:
+They do not justify a separate canonical `delivery` declaration surface.
 
-1. helpers operate on canonical delivery targets
-2. helpers standardize validation and error messages
-3. provider-specific target syntax still belongs in the adapter
-
-## Retry Helpers
-
-The SDK should expose:
-
-- `sleepWithSignal(signal, ms)`
-- `withRetry(...)`
-- `parseRetryAfterMs(...)`
+## Namespace Rules
 
 Rules:
 
-1. retry helpers should be generic and reusable
-2. provider-specific retry policy stays adapter-local
+1. communication methods use platform-truthful namespaces
+2. provider/work/content methods use provider-truthful namespaces
+3. package-native operational methods use package-native namespaces only when
+   they are not themselves the outward provider/platform action
+4. the SDK must not normalize unlike provider actions through generic outward
+   verbs
 
-## Record Helpers
+## Non-Negotiable Rules
 
-The SDK should keep `newRecord(...)` and add a more convenient helper:
-
-```ts
-messageRecord({
-  platform: "telegram",
-  connectionId,
-  externalRecordId,
-  senderId,
-  senderName,
-  containerId,
-  containerKind,
-  content,
-  timestamp,
-  attachments,
-  metadata,
-})
-```
-
-Rules:
-
-1. record helpers generate canonical `record.ingest`
-2. they do not erase provider-specific metadata mapping
-
-## First Proof Adapter
-
-The first proof adapter should be:
-
-- `telegram`
-
-Why:
-
-1. it is small
-2. it is communication-oriented
-3. it repeats many of the helpers we want to lift
-4. it does not require a provider-native methods showcase in the first cut
-
-## Validation Target
-
-This SDK cutover is complete for the first tranche only when:
-
-1. the SDK exports the unified authoring APIs
-2. Telegram uses `defineAdapter(...)`
-3. Telegram no longer hand-builds `adapter.info`
-4. Telegram uses SDK credential, target, retry, and monitor helpers where
-   appropriate
-5. SDK tests and Telegram tests/builds pass
+1. the SDK authoring model is method-first
+2. outward communication is expressed as truthful namespaced methods
+3. provider-native work is expressed as truthful namespaced methods
+4. there is no backward-compatible dual-surface `methods + delivery` target
+   model
+5. bundled outward channel-operation nouns are not target-state outward truth
