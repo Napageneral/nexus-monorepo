@@ -1,5 +1,7 @@
 # Frontdoor IAM Review Validation 2026-03-25
 
+**Status:** ACTIVE VALIDATION
+
 ## Scope
 
 This validation covers the final least-privilege review for the live frontdoor

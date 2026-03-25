@@ -33,3 +33,4 @@ Cross-repo validation should live under:
 Completed and historical Frontdoor validation artifacts live under:
 
 - [archive/](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/archive)
+- [_archive/](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/_archive)

@@ -1,5 +1,7 @@
 # Frontdoor Restore Drill Validation 2026-03-25
 
+**Status:** ACTIVE VALIDATION
+
 ## Scope
 
 This validation proves that the live hosted frontdoor can be restored into an

@@ -1,6 +1,6 @@
 # Workplan Frontdoor AWS DNS Cutover And Hetzner Retirement
 
-**Status:** ACTIVE
+**Status:** COMPLETED (archived 2026-03-17)
 
 ## Purpose
 

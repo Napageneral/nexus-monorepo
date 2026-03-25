@@ -1,6 +1,6 @@
 # Frontdoor Internal Creator Bypass And Create Server Modal
 
-**Status:** Active  
+**Status:** CANONICAL
 **Date:** 2026-03-18
 
 ## Customer Experience

@@ -2,7 +2,7 @@
 
 **Status:** VALIDATION
 **Last Updated:** 2026-03-17
-**Related:** `/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_AWS_HOSTING_AND_SERVER_CLASS_MODEL.md`, `/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/WORKPLAN_FRONTDOOR_AWS_HOSTING_AND_PROVIDER_CLASS_CUTOVER.md`
+**Related:** `/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_AWS_HOSTING_AND_SERVER_CLASS_MODEL.md`, `/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_AWS_STANDARD_AND_COMPLIANT_LIVE_PROOF_2026-03-17.md`
 
 ---
 

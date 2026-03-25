@@ -1,5 +1,7 @@
 # Frontdoor Secret Tightening Validation 2026-03-25
 
+**Status:** ACTIVE VALIDATION
+
 ## Scope
 
 This validation covers the hosted frontdoor secret/config posture only.

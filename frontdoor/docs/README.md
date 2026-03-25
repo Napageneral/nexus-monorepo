@@ -26,8 +26,8 @@ architecture.
 
 Shared governance and umbrella platform narrative live in:
 
-- [/Users/tyler/nexus/home/projects/nexus/docs/README.md](/Users/tyler/nexus/home/projects/nexus/docs/README.md)
 - [/Users/tyler/nexus/home/projects/nexus/docs/spec-driven-development-workflow.md](/Users/tyler/nexus/home/projects/nexus/docs/spec-driven-development-workflow.md)
+- [/Users/tyler/nexus/home/projects/nexus/docs/spec-standards.md](/Users/tyler/nexus/home/projects/nexus/docs/spec-standards.md)
 
 Frontdoor artifact roots:
 

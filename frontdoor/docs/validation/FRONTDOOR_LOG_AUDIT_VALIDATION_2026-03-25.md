@@ -1,5 +1,7 @@
 # Frontdoor Log Audit Validation 2026-03-25
 
+**Status:** ACTIVE VALIDATION
+
 ## Scope
 
 This validation covers exceptional-path log hygiene for the hosted frontdoor.

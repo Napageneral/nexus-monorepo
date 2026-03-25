@@ -309,7 +309,7 @@ Use these as the primary live proof references:
 - Nex hosted validation packet:
   [canonical-api-validation-ladder.md](/Users/tyler/nexus/home/projects/nexus/nex/docs/validation/canonical-api-validation-ladder.md)
 - Live Frontdoor + Confluence runtime test:
-  [server.frontdoor-confluence-adapter.live.test.ts](/Users/tyler/nexus/home/projects/nexus/nex/src/nex/runtime-api/server.frontdoor-confluence-adapter.live.test.ts)
+  [server.frontdoor-confluence-adapter.live.test.ts](/Users/tyler/nexus/home/projects/nexus/nex/src/api/server.frontdoor-confluence-adapter.live.test.ts)
 
 ## Operational Notes
 

@@ -130,7 +130,7 @@ Exit criteria:
 
 Implement:
 
-- execute `server.frontdoor-confluence-adapter.live.test.ts` against the real Confluence credential set
+- execute `nex/src/api/server.frontdoor-confluence-adapter.live.test.ts` against the real Confluence credential set
 - fix any runtime, setup-flow, ingest, or delivery mismatches exposed by the live run
 - preserve non-destructive page create/delete cleanup behavior
 

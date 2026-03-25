@@ -8,6 +8,8 @@ title: "Frontdoor Server Adapter Install Validation"
 
 # Frontdoor Server Adapter Install Validation
 
+**Status:** ACTIVE VALIDATION
+
 ## Purpose
 
 This ladder proves that Frontdoor can manage adapter install on a server and
@@ -23,7 +25,7 @@ Pass when:
 
 Current evidence:
 
-- covered in `nexus-frontdoor/src/server.test.ts`
+- covered in `frontdoor/src/server.test.ts`
 - local runtime path proves the public API exists and is callable
 
 ## Rung 2: Durable package state
@@ -61,7 +63,7 @@ Pass when:
 
 Open evidence target:
 
-- `nex/src/nex/runtime-api/server.frontdoor-confluence-adapter.live.test.ts`
+- `nex/src/api/server.frontdoor-confluence-adapter.live.test.ts`
 
 ## Rung 5: Historical ingest
 
@@ -96,6 +98,6 @@ Pass when:
 - installed adapter package remains active
 - the Confluence connection still works after restart
 
-Status:
+Current status:
 
 - still pending as a distinct hosted proof step

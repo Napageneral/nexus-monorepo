@@ -1,6 +1,6 @@
 # Frontdoor Server Class Pricing And Create Flow
 
-**Status:** Active  
+**Status:** CANONICAL
 **Date:** 2026-03-19
 
 ## Customer Experience

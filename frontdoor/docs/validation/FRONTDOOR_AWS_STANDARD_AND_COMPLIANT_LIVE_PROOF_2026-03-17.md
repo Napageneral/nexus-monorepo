@@ -2,7 +2,7 @@
 
 **Status:** ACTIVE VALIDATION
 **Last Updated:** 2026-03-18
-**Related:** `/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_AWS_HOSTING_AND_SERVER_CLASS_MODEL.md`, `/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_HOSTED_PACKAGE_INSTALL_POLICY_AND_DEPLOYMENT_CLASSES.md`, `/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/WORKPLAN_FRONTDOOR_AWS_HOSTING_AND_PROVIDER_CLASS_CUTOVER.md`
+**Related:** `/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_AWS_HOSTING_AND_SERVER_CLASS_MODEL.md`, `/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_HOSTED_PACKAGE_INSTALL_POLICY_AND_DEPLOYMENT_CLASSES.md`, `/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_HIPAA_READINESS_HARDENING.md`
 
 ## Purpose
 

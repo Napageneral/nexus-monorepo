@@ -1,5 +1,7 @@
 # Frontdoor AWS Account Evidence Validation 2026-03-25
 
+**Status:** ACTIVE VALIDATION
+
 ## Scope
 
 This validation covers the AWS-side account evidence posture relevant to the

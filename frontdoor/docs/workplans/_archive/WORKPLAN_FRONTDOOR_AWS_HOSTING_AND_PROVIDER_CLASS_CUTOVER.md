@@ -1,6 +1,6 @@
 # Workplan Frontdoor AWS Hosting And Provider Class Cutover
 
-**Status:** ACTIVE
+**Status:** COMPLETED (archived 2026-03-17)
 
 ## Purpose
 

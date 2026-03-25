@@ -17,7 +17,6 @@ Completed and historical Frontdoor workplans live in:
 Recently archived as complete:
 
 - [/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/WORKPLAN_FRONTDOOR_FINAL_AUDIT_READINESS.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/WORKPLAN_FRONTDOOR_FINAL_AUDIT_READINESS.md)
-
 - [/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/WORKPLAN_FRONTDOOR_REPO_HARD_CUT_AND_DOC_REALIGNMENT.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/WORKPLAN_FRONTDOOR_REPO_HARD_CUT_AND_DOC_REALIGNMENT.md)
 - [/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/FRONTDOOR_RUNTIME_OPERATOR_PACKAGE_AUTH_WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/FRONTDOOR_RUNTIME_OPERATOR_PACKAGE_AUTH_WORKPLAN.md)
 - [/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/FRONTDOOR_PROD_SIGNUP_AND_RUNTIME_PLATFORM_FAILURES_2026-03-16.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/FRONTDOOR_PROD_SIGNUP_AND_RUNTIME_PLATFORM_FAILURES_2026-03-16.md)
