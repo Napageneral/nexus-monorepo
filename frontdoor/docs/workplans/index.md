@@ -4,6 +4,7 @@ This folder contains the active Frontdoor workplans.
 
 ## Active
 
+- [WORKPLAN_FRONTDOOR_FINAL_AUDIT_READINESS.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/WORKPLAN_FRONTDOOR_FINAL_AUDIT_READINESS.md)
 - [WORKPLAN_FRONTDOOR_RELEASE_DEPENDENCY_METADATA_AND_INSTALL_PLANNING.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/WORKPLAN_FRONTDOOR_RELEASE_DEPENDENCY_METADATA_AND_INSTALL_PLANNING.md)
 - [WORKPLAN_FRONTDOOR_SERVER_ADAPTER_INSTALL_API.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/WORKPLAN_FRONTDOOR_SERVER_ADAPTER_INSTALL_API.md)
 - [WORKPLAN_FRONTDOOR_UI_SERVER_CLASS_AND_INSTALL_POLICY_ALIGNMENT.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/WORKPLAN_FRONTDOOR_UI_SERVER_CLASS_AND_INSTALL_POLICY_ALIGNMENT.md)

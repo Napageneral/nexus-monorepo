@@ -253,6 +253,22 @@ function parseOidcProviders(raw: unknown): Map<string, OidcProviderConfig> {
   return providers;
 }
 
+function toEnvSegment(value: string): string {
+  return value
+    .trim()
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
+}
+
+function oidcClientSecretEnvName(providerId: string): string | null {
+  const segment = toEnvSegment(providerId);
+  if (!segment) {
+    return null;
+  }
+  return `FRONTDOOR_OIDC_${segment}_CLIENT_SECRET`;
+}
+
 function parseOidcMappings(raw: unknown): OidcMapping[] {
   if (!Array.isArray(raw)) {
     return [];
@@ -566,6 +582,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): FrontdoorConfi
     String(env.FRONTDOOR_OIDC_ENABLED ?? String(raw.oidc?.enabled ?? "false")).toLowerCase() ===
     "true";
   const oidcProviders = parseOidcProviders(raw.oidc?.providers);
+  for (const [providerId, provider] of oidcProviders.entries()) {
+    const envName = oidcClientSecretEnvName(providerId);
+    const envSecret = envName ? readString(env[envName], "") : "";
+    if (!envSecret) {
+      continue;
+    }
+    oidcProviders.set(providerId, {
+      ...provider,
+      clientSecret: envSecret,
+    });
+  }
   const oidcMappings = parseOidcMappings(raw.oidc?.mappings);
 
   const autoProvisionEnabled =

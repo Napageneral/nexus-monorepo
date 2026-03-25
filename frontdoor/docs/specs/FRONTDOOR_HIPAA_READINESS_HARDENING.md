@@ -122,6 +122,13 @@ Decision:
 - host-env managed secrets are acceptable for frontdoor for now
 - they are not acceptable as undocumented operational folklore
 - frontdoor must have an explicit live secret inventory and rotation ownership
+- live sensitive values should prefer:
+  - `/etc/nexus-frontdoor/frontdoor.env`
+  - not `/etc/nexus-frontdoor/frontdoor.config.json`
+- runtime signing secrets must not live in the JSON config file
+- OIDC client secrets should not live in the JSON config file when env override
+  is available
+- dead placeholder secret values must be removed rather than carried forward
 
 ### Logging
 
@@ -258,6 +265,8 @@ This spec is only complete when all of the following are true:
 4. Restore posture is documented concretely enough that SQLite remains
    defensible.
 5. Live secret inventory exists in frontdoor docs.
+6. sensitive runtime signing and OIDC client secrets are not stored in the
+   live JSON config file.
 6. Sampled frontdoor logs no longer include `session_cookie_id`.
 7. No customer-facing UX regression is introduced.
 

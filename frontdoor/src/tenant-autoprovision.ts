@@ -169,8 +169,12 @@ async function runProvisionCommand(params: {
   const exited = await exitPromise;
   clearTimeout(timeout);
   if (exited.code !== 0) {
-    const summary = normalizeText(stderr) || normalizeText(stdout) || `exit_code_${String(exited.code)}`;
-    throw new Error(`autoprovision_command_failed:${summary}`);
+    const exitMarker = exited.signal
+      ? `signal_${exited.signal}`
+      : `exit_code_${String(exited.code ?? "unknown")}`;
+    const stdoutState = normalizeText(stdout) ? "stdout_present" : "stdout_empty";
+    const stderrState = normalizeText(stderr) ? "stderr_present" : "stderr_empty";
+    throw new Error(`autoprovision_command_failed:${exitMarker}:${stdoutState}:${stderrState}`);
   }
   let parsed: unknown;
   try {

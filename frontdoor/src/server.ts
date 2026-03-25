@@ -655,9 +655,7 @@ async function exchangeManagedOAuthCode(params: {
   });
   const payload = await parseJsonOrFormResponse(response);
   if (!response.ok) {
-    throw new Error(
-      `managed_oauth_exchange_failed:${response.status}:${JSON.stringify(payload)}`,
-    );
+    throw new Error(`managed_oauth_exchange_failed:${response.status}`);
   }
   return payload;
 }
