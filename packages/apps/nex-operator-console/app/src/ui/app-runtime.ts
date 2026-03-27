@@ -217,6 +217,42 @@ function handleRuntimeEventUnsafe(host: RuntimeHost, evt: RuntimeEventFrame) {
       void loadAclRequests(host as unknown as Parameters<typeof loadAclRequests>[0]);
     }
   }
+
+  // ─── New event listeners for v2 UI reactivity ───────────────────────
+
+  // Agent lifecycle — refresh agents list when agents are created/deleted
+  if (evt.event === "agent.created" || evt.event === "agent.deleted") {
+    void loadAgents(host as unknown as Parameters<typeof loadAgents>[0]);
+  }
+
+  // Adapter connection changes — refresh integrations
+  if (evt.event === "adapter.connected" || evt.event === "adapter.disconnected") {
+    // Only auto-refresh if we have a client — avoids stale state
+    if (host.client && host.connected) {
+      const integrationsHost = host as unknown as Parameters<typeof import("./controllers/integrations.ts").loadIntegrations>[0];
+      void import("./controllers/integrations.ts").then((mod) => mod.loadIntegrations(integrationsHost));
+    }
+  }
+
+  // Config changes — refresh config snapshot
+  if (evt.event === "config.changed") {
+    if (host.client && host.connected) {
+      void import("./controllers/config.ts").then((mod) => mod.loadConfig(host as unknown as Parameters<typeof mod.loadConfig>[0]));
+    }
+  }
+
+  // Health changes — update debug health snapshot
+  if (evt.event === "health.changed" || evt.event === "health") {
+    const healthPayload = evt.payload as HealthSnapshot | undefined;
+    if (healthPayload) {
+      host.debugHealth = healthPayload;
+    }
+  }
+
+  // Shutdown warning — set connection state
+  if (evt.event === "shutdown") {
+    host.lastError = "Runtime is shutting down...";
+  }
 }
 
 export function applySnapshot(host: RuntimeHost, hello: RuntimeHelloOk) {

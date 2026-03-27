@@ -35,3 +35,52 @@ export async function loadAgents(state: AgentsState) {
     state.agentsLoading = false;
   }
 }
+
+export async function createAgent(
+  state: AgentsState & { agentsLoading: boolean },
+  params: { name: string; model?: string; description?: string; memory?: string }
+): Promise<string | null> {
+  if (!state.client || !state.connected) return null;
+  try {
+    state.agentsLoading = true;
+    const result = await state.client.request<{ agentId?: string; id?: string }>("agents.create", params);
+    await loadAgents(state);
+    return result?.agentId ?? result?.id ?? null;
+  } catch (err) {
+    state.agentsError = err instanceof Error ? err.message : String(err);
+    return null;
+  } finally {
+    state.agentsLoading = false;
+  }
+}
+
+export async function updateAgent(
+  state: AgentsState,
+  agentId: string,
+  params: Record<string, unknown>
+): Promise<boolean> {
+  if (!state.client || !state.connected) return false;
+  try {
+    await state.client.request("agents.update", { agentId, ...params });
+    await loadAgents(state);
+    return true;
+  } catch (err) {
+    state.agentsError = err instanceof Error ? err.message : String(err);
+    return false;
+  }
+}
+
+export async function deleteAgent(
+  state: AgentsState,
+  agentId: string
+): Promise<boolean> {
+  if (!state.client || !state.connected) return false;
+  try {
+    await state.client.request("agents.delete", { agentId });
+    await loadAgents(state);
+    return true;
+  } catch (err) {
+    state.agentsError = err instanceof Error ? err.message : String(err);
+    return false;
+  }
+}

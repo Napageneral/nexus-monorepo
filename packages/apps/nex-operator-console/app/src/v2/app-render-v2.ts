@@ -1,7 +1,7 @@
 import { html, nothing } from "lit";
 import type { AppViewState } from "../ui/app-view-state.ts";
 import { icons } from "../ui/icons.ts";
-import { loadAgents } from "../ui/controllers/agents.ts";
+import { loadAgents, createAgent } from "../ui/controllers/agents.ts";
 import { loadIntegrations } from "../ui/controllers/integrations.ts";
 import { renderAppsPage } from "./pages/apps.ts";
 import { renderAgentsPage } from "./pages/agents.ts";
@@ -460,7 +460,19 @@ export function renderAppV2(state: AppViewState) {
                     (state as any).tab = "__v2_force__"; state.setTab("agents" as any);
                   },
                   onCancel: () => closeWizard(state),
-                  onCreate: () => closeWizard(state),
+                  onCreate: async () => {
+                    const form = wiz.form;
+                    const agentId = await createAgent(state as any, {
+                      name: form.name,
+                      model: form.model,
+                      description: form.description,
+                      memory: form.memory,
+                    });
+                    if (agentId) {
+                      (state as any)._v2AgentDetailId = agentId;
+                    }
+                    closeWizard(state);
+                  },
                 });
               }
               // Check if we're viewing an agent detail

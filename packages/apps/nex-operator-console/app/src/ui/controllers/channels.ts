@@ -94,3 +94,46 @@ export async function logoutWhatsApp(state: ChannelsState) {
   state.whatsappLoginQrDataUrl = null;
   state.whatsappLoginConnected = null;
 }
+
+export async function configureChannel(
+  state: ChannelsState,
+  channel: string,
+  config: Record<string, unknown>,
+): Promise<boolean> {
+  if (!state.client || !state.connected) return false;
+  try {
+    await state.client.request("channels.configure", { channel, ...config });
+    return true;
+  } catch (err) {
+    state.channelsError = err instanceof Error ? err.message : String(err);
+    return false;
+  }
+}
+
+export async function enableChannel(
+  state: ChannelsState,
+  channel: string,
+): Promise<boolean> {
+  if (!state.client || !state.connected) return false;
+  try {
+    await state.client.request("channels.enable", { channel });
+    return true;
+  } catch (err) {
+    state.channelsError = err instanceof Error ? err.message : String(err);
+    return false;
+  }
+}
+
+export async function disableChannel(
+  state: ChannelsState,
+  channel: string,
+): Promise<boolean> {
+  if (!state.client || !state.connected) return false;
+  try {
+    await state.client.request("channels.disable", { channel });
+    return true;
+  } catch (err) {
+    state.channelsError = err instanceof Error ? err.message : String(err);
+    return false;
+  }
+}

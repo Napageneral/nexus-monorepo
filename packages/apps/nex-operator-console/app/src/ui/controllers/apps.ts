@@ -106,3 +106,18 @@ export async function loadInstalledAppMethods(state: AppsState, id: string) {
     state.appMethodsLoading = false;
   }
 }
+
+export async function installApp(
+  state: AppsState,
+  appId: string,
+): Promise<boolean> {
+  if (!state.client || !state.connected) return false;
+  try {
+    await state.client.request("apps.install", { id: appId });
+    await loadInstalledApps(state);
+    return true;
+  } catch (err) {
+    // silently fail for now
+    return false;
+  }
+}

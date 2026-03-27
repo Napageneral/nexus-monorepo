@@ -279,6 +279,8 @@ export type ConfigSnapshot = {
   valid?: boolean | null;
   config?: Record<string, unknown> | null;
   issues?: ConfigSnapshotIssue[] | null;
+  warnings?: Array<{ message: string; path?: string }>;
+  legacyIssues?: Array<{ message: string; path?: string }>;
 };
 
 export type ConfigUiHint = {
@@ -316,6 +318,8 @@ export type PresenceEntry = {
   reason?: string | null;
   text?: string | null;
   ts?: number | null;
+  tags?: string[];
+  deviceId?: string;
 };
 
 export type RuntimeSessionsDefaults = {
@@ -383,9 +387,9 @@ export type RuntimeSessionRow = {
   conversationId?: string;
   label?: string;
   displayName?: string;
-  surface?: string;
+  surface?: string; // deprecated — use platform
   subject?: string;
-  room?: string;
+  room?: string; // deprecated — use groupChannel
   space?: string;
   updatedAt: number | null;
   sessionId?: string;
@@ -401,6 +405,17 @@ export type RuntimeSessionRow = {
   model?: string;
   modelProvider?: string;
   contextTokens?: number;
+  agentId?: string;
+  derivedTitle?: string;
+  lastMessagePreview?: string;
+  platform?: string;
+  groupChannel?: string;
+  chatType?: string;
+  sendPolicy?: string;
+  lastPlatform?: string;
+  lastTo?: string;
+  lastAccountId?: string;
+  lastThreadId?: string;
 };
 
 export type SessionsListResult = {
@@ -414,8 +429,12 @@ export type SessionsListResult = {
 export type RuntimeConversationRow = {
   id: string;
   kind: "direct" | "group";
-  local_entity_id: string;
-  remote_entity_id?: string | null;
+  local_entity_id: string; // deprecated — use observed_/canonical_ variants
+  remote_entity_id?: string | null; // deprecated — use observed_/canonical_ variants
+  observed_local_entity_id?: string;
+  canonical_local_entity_id?: string;
+  observed_remote_entity_id?: string;
+  canonical_remote_entity_id?: string;
   platform?: string | null;
   container_id?: string | null;
   created_at: number;
@@ -687,7 +706,7 @@ export type ScheduleJob = {
   timezone: string | null;
   active_from: string | null;
   active_until: string | null;
-  enabled: boolean;
+  enabled: boolean | number; // runtime returns 0 | 1 from SQLite; accept both
   next_run_at: string | null;
   last_run_at: string | null;
   created_at: string;
@@ -728,7 +747,7 @@ export type SkillsStatusConfigCheck = {
 
 export type SkillInstallOption = {
   id: string;
-  kind: "brew" | "node" | "go" | "uv";
+  kind: "brew" | "node" | "go" | "uv" | "download";
   label: string;
   bins: string[];
 };
