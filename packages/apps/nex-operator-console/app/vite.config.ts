@@ -36,6 +36,11 @@ export default defineConfig(() => {
       host: true,
       port: 5173,
       strictPort: true,
+      headers: {
+        // Allow embedding in frontdoor shell iframe during development
+        "X-Frame-Options": "SAMEORIGIN",
+        "Content-Security-Policy": "frame-ancestors 'self' http://localhost:* http://127.0.0.1:*",
+      },
     },
   };
 });

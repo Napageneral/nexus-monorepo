@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nexus – Dev Shell Preview</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: #0c0e14; }
+
+  /* ─── Frontdoor Bar (matches production shell styles) ──────────── */
+  #nexus-app-frame {
+    position: fixed; top: 0; left: 0; right: 0; height: 44px;
+    background: #0c0e14; z-index: 999999;
+    display: flex; align-items: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 13px; color: #e8e6e1; padding: 0 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    user-select: none; -webkit-user-select: none;
+  }
+  .nxf-logo {
+    display: flex; align-items: center; gap: 6px; text-decoration: none;
+    color: #e8e6e1; font-weight: 600; font-size: 14px; padding: 4px 8px 4px 0;
+    margin-right: 4px; flex-shrink: 0; transition: color 0.15s;
+  }
+  .nxf-logo:hover { color: #d4a843; }
+  .nxf-logo svg { width: 20px; height: 20px; flex-shrink: 0; }
+  .nxf-sep {
+    width: 1px; height: 20px; background: rgba(255,255,255,0.10); margin: 0 8px; flex-shrink: 0;
+  }
+  .nxf-app-badge {
+    display: flex; align-items: center; gap: 6px; padding: 4px 8px; flex-shrink: 0;
+  }
+  .nxf-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .nxf-dropdown-wrap { position: relative; flex-shrink: 0; }
+  .nxf-dropdown-btn {
+    display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px;
+    cursor: pointer; border: none; background: transparent; color: #e8e6e1;
+    font-size: 13px; font-family: inherit; line-height: 1; transition: background 0.15s;
+  }
+  .nxf-dropdown-btn:hover { background: rgba(255,255,255,0.08); }
+  .nxf-caret {
+    border: solid rgba(255,255,255,0.5); border-width: 0 1.5px 1.5px 0;
+    display: inline-block; padding: 2.5px; transform: rotate(45deg); margin-top: -2px;
+  }
+  .nxf-dropdown-panel {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0;
+    background: #1c1b19; border: 1px solid rgba(255,255,255,0.10); border-radius: 10px;
+    min-width: 220px; padding: 6px 0; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    z-index: 1000000;
+  }
+  .nxf-dropdown-panel.nxf-right { left: auto; right: 0; }
+  .nxf-dropdown-panel.nxf-open { display: block; }
+  .nxf-dropdown-header {
+    padding: 6px 14px 4px; color: #94918b; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.05em; font-weight: 600;
+  }
+  .nxf-dropdown-item {
+    display: flex; align-items: center; gap: 8px; padding: 8px 14px; cursor: pointer;
+    color: #c4c1bb; font-size: 13px; text-decoration: none; border: none; background: none;
+    width: 100%; text-align: left; font-family: inherit; transition: background 0.15s, color 0.15s;
+  }
+  .nxf-dropdown-item:hover { background: rgba(255,255,255,0.06); color: #f1f5f9; }
+  .nxf-dropdown-item.nxf-active { color: #d4a843; font-weight: 500; }
+  .nxf-dropdown-divider { height: 1px; background: rgba(255,255,255,0.08); margin: 4px 0; }
+  .nxf-status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .nxf-class-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.02em; border: 1px solid transparent; flex-shrink: 0;
+    color: #c4c1bb; background: rgba(148,163,184,0.12); border-color: rgba(148,163,184,0.24);
+  }
+  .nxf-spacer { flex: 1; }
+  .nxf-avatar {
+    width: 24px; height: 24px; border-radius: 50%; background: #2a2925;
+    display: flex; align-items: center; justify-content: center; font-size: 11px;
+    font-weight: 600; color: #e8e6e1; flex-shrink: 0; text-transform: uppercase;
+    transition: box-shadow 0.15s;
+  }
+  .nxf-dropdown-btn:hover .nxf-avatar { box-shadow: 0 0 0 2px #d4a843; }
+
+  /* ─── App iframe ───────────────────────────────────────────────── */
+  #app-frame {
+    position: fixed; top: 44px; left: 0; right: 0; bottom: 0;
+    border: none; width: 100%; height: calc(100vh - 44px);
+  }
+</style>
+</head>
+<body>
+  <div id="nexus-app-frame">
+    <a class="nxf-logo" href="#" title="Nexus Dashboard">
+      <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="2" width="16" height="16" rx="4" fill="#d4a843"/>
+        <path d="M7 7l3 3-3 3M11 13h3" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>nexus</span>
+    </a>
+    <div class="nxf-sep"></div>
+    <div class="nxf-app-badge">
+      <span class="nxf-dot" style="background:#d4a843"></span>
+      <span>Operator Console</span>
+    </div>
+    <div class="nxf-sep"></div>
+    <div class="nxf-dropdown-wrap" data-nxf-dropdown="server">
+      <button class="nxf-dropdown-btn" data-nxf-toggle="server">
+        <span class="nxf-status-dot" style="background:#22c55e"></span>
+        <span>Primary</span>
+        <span class="nxf-class-badge">Standard</span>
+        <span class="nxf-caret"></span>
+      </button>
+      <div class="nxf-dropdown-panel" data-nxf-panel="server">
+        <div class="nxf-dropdown-header">Servers</div>
+        <button class="nxf-dropdown-item nxf-active">
+          <span class="nxf-status-dot" style="background:#22c55e"></span>
+          <span>Primary</span>
+          <span class="nxf-class-badge">Standard</span>
+        </button>
+      </div>
+    </div>
+    <div class="nxf-sep"></div>
+    <div class="nxf-dropdown-wrap" data-nxf-dropdown="apps">
+      <button class="nxf-dropdown-btn" data-nxf-toggle="apps">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="flex-shrink:0">
+          <rect x="1" y="1" width="5" height="5" rx="1" fill="#94918b"/>
+          <rect x="8" y="1" width="5" height="5" rx="1" fill="#94918b"/>
+          <rect x="1" y="8" width="5" height="5" rx="1" fill="#94918b"/>
+          <rect x="8" y="8" width="5" height="5" rx="1" fill="#94918b"/>
+        </svg>
+        <span>Apps</span>
+        <span class="nxf-caret"></span>
+      </button>
+      <div class="nxf-dropdown-panel" data-nxf-panel="apps">
+        <div class="nxf-dropdown-header">Installed Apps</div>
+        <button class="nxf-dropdown-item nxf-active">
+          <span class="nxf-dot" style="background:#d4a843;width:6px;height:6px"></span>
+          Operator Console
+        </button>
+        <button class="nxf-dropdown-item">
+          <span class="nxf-dot" style="background:#6366f1;width:6px;height:6px"></span>
+          GlowBot
+        </button>
+        <button class="nxf-dropdown-item">
+          <span class="nxf-dot" style="background:#22c55e;width:6px;height:6px"></span>
+          Spike
+        </button>
+      </div>
+    </div>
+    <div class="nxf-spacer"></div>
+    <div class="nxf-dropdown-wrap" data-nxf-dropdown="account">
+      <button class="nxf-dropdown-btn" data-nxf-toggle="account">
+        <span class="nxf-avatar">T</span>
+        <span>Tyler Brandt</span>
+        <span class="nxf-caret"></span>
+      </button>
+      <div class="nxf-dropdown-panel nxf-right" data-nxf-panel="account">
+        <div class="nxf-dropdown-header">Personal</div>
+        <a class="nxf-dropdown-item" href="#">Billing &amp; Plans</a>
+        <a class="nxf-dropdown-item" href="#">Team &amp; Access</a>
+        <a class="nxf-dropdown-item" href="#">Account Settings</a>
+        <div class="nxf-dropdown-divider"></div>
+        <button class="nxf-dropdown-item">Sign Out</button>
+      </div>
+    </div>
+  </div>
+
+  <iframe id="app-frame" src="http://localhost:5173"></iframe>
+
+  <script>
+    // Dropdown toggle logic
+    document.getElementById("nexus-app-frame").addEventListener("click", function(e) {
+      var toggle = e.target.closest("[data-nxf-toggle]");
+      if (toggle) {
+        e.preventDefault();
+        e.stopPropagation();
+        var name = toggle.getAttribute("data-nxf-toggle");
+        var panel = document.querySelector('[data-nxf-panel="' + name + '"]');
+        // Close all other panels first
+        document.querySelectorAll(".nxf-dropdown-panel.nxf-open").forEach(function(p) {
+          if (p !== panel) p.classList.remove("nxf-open");
+        });
+        if (panel) panel.classList.toggle("nxf-open");
+        return;
+      }
+    });
+    // Click outside to close
+    document.addEventListener("click", function(e) {
+      if (!e.target.closest(".nxf-dropdown-wrap")) {
+        document.querySelectorAll(".nxf-dropdown-panel.nxf-open").forEach(function(p) {
+          p.classList.remove("nxf-open");
+        });
+      }
+    });
+  </script>
+</body>
+</html>
