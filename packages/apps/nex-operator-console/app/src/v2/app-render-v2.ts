@@ -8,6 +8,8 @@ import { renderAgentsPage } from "./pages/agents.ts";
 import { renderAgentCreateWizard, type AgentCreateStep, type AgentCreateForm } from "./pages/agent-create.ts";
 import { renderAgentDetail, type AgentDetailTab, type AgentDetailModal } from "./pages/agent-detail.ts";
 import { renderMonitorPage } from "./pages/monitor.ts";
+import { renderJobsPage, type JobsPageProps } from "./pages/jobs.ts";
+import { renderRecordsPage, type RecordsPageProps } from "./pages/records.ts";
 import { renderIdentityPage, type IdentityPageProps } from "./pages/identity.ts";
 import { renderMemoryPage, type MemoryPageProps } from "./pages/memory.ts";
 import { V2_PRIMARY_TABS, V2_SECONDARY_TABS, v2IconForTab, v2TitleForTab, type V2Tab } from "./navigation.ts";
@@ -80,12 +82,24 @@ function closeWizard(state: AppViewState) {
 // ─── Extended tab type (adds settings) ───────────────────────────────
 type V2ActiveView = V2Tab | "settings";
 
+function formatUptime(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ${m % 60}m`;
+  const d = Math.floor(h / 24);
+  return `${d}d ${h % 24}h`;
+}
+
 function resolveV2Tab(state: AppViewState): V2ActiveView {
   const t = (state as any).v2Tab as V2ActiveView | undefined;
   if (t) return t;
   switch (state.tab) {
     case "integrations": return "connectors";
     case "agents": return "agents";
+    case "operations": return "jobs";
     case "system": return "monitor";
     case "identity": return "identity";
     case "memory": return "memory";
@@ -98,6 +112,8 @@ function legacyTabFor(tab: V2ActiveView): string {
     case "connectors": return "integrations";
     case "agents": return "agents";
     case "monitor": return "system";
+    case "jobs": return "operations";
+    case "records": return "integrations";
     case "identity": return "identity";
     case "memory": return "memory";
     case "settings": return "system";
@@ -182,7 +198,19 @@ function renderSettingsSidebar(state: AppViewState, activeSub: SettingsSubPage) 
   `;
 }
 
-function renderSettingsContent(sub: SettingsSubPage) {
+function renderSettingsContent(sub: SettingsSubPage, state?: AppViewState) {
+  // Resolve identity from runtime state
+  const hello = state?.connected ? (state as any).hello as { snapshot?: any; session?: any } | null : null;
+  const snapshot = hello?.snapshot ?? {};
+  const sessionInfo = hello?.session ?? {};
+  const userName = sessionInfo?.name ?? sessionInfo?.displayName ?? snapshot?.operatorName ?? "Unknown User";
+  const userEmail = sessionInfo?.email ?? snapshot?.operatorEmail ?? "Not connected";
+  const userRole = sessionInfo?.role ?? (state?.connected ? "Operator" : "Disconnected");
+  const userInitial = userName.charAt(0).toUpperCase();
+  const serverName = snapshot?.serverName ?? snapshot?.name ?? "Primary";
+  const uptime = snapshot?.uptimeMs ? formatUptime(snapshot.uptimeMs) : "n/a";
+  const isConnected = state?.connected ?? false;
+
   switch (sub) {
     case "profile":
       return html`
@@ -192,13 +220,13 @@ function renderSettingsContent(sub: SettingsSubPage) {
         </div>
         <div class="v2-card" style="margin-bottom: var(--v2-space-4);">
           <div class="v2-row" style="gap: var(--v2-space-4); align-items: center;">
-            <div class="v2-avatar" style="width: 48px; height: 48px; font-size: 18px;"><span>T</span></div>
+            <div class="v2-avatar" style="width: 48px; height: 48px; font-size: 18px;"><span>${userInitial}</span></div>
             <div>
-              <div class="v2-strong" style="font-size: var(--v2-text-base);">Tyler Brandt</div>
-              <div class="v2-muted" style="font-size: var(--v2-text-xs);">tyler@intent-systems.com</div>
+              <div class="v2-strong" style="font-size: var(--v2-text-base);">${userName}</div>
+              <div class="v2-muted" style="font-size: var(--v2-text-xs);">${userEmail}</div>
             </div>
             <div style="margin-left: auto;">
-              <span class="v2-badge v2-badge--success">Operator</span>
+              <span class="v2-badge ${isConnected ? "v2-badge--success" : "v2-badge--neutral"}">${userRole}</span>
             </div>
           </div>
         </div>
@@ -207,11 +235,11 @@ function renderSettingsContent(sub: SettingsSubPage) {
           <div class="v2-grid-2" style="gap: var(--v2-space-4);">
             <div>
               <div class="v2-label">Role</div>
-              <div class="v2-strong">Operator (Full Access)</div>
+              <div class="v2-strong">${userRole}${isConnected ? " (Full Access)" : ""}</div>
             </div>
             <div>
               <div class="v2-label">Server</div>
-              <div class="v2-strong">Primary</div>
+              <div class="v2-strong">${serverName}</div>
             </div>
             <div>
               <div class="v2-label">Agents</div>
@@ -278,7 +306,7 @@ function renderSettingsPage(state: AppViewState) {
     <div class="v2-settings-page">
       ${renderSettingsSidebar(state, sub)}
       <div class="v2-settings-page-content">
-        ${renderSettingsContent(sub)}
+        ${renderSettingsContent(sub, state)}
       </div>
     </div>
   `;
@@ -431,6 +459,80 @@ export function renderAppV2(state: AppViewState) {
           : nothing}
 
         ${activeTab === "monitor" ? renderMonitorPage({ connected: state.connected, loading: false }) : nothing}
+
+        ${activeTab === "jobs" ? renderJobsPage({
+          subTab: ((state as any)._v2JobsSubTab as JobsPageProps["subTab"]) ?? "overview",
+          onSubTabChange: (tab: string) => { (state as any)._v2JobsSubTab = tab; state.requestUpdate(); },
+          definitions: (state as any).jobDefinitions ?? [],
+          definitionsLoading: state.scheduleLoading,
+          queueItems: [],
+          queueLoading: false,
+          queueFilter: (state as any)._v2JobsQueueFilter ?? "all",
+          onQueueFilterChange: (f: string) => { (state as any)._v2JobsQueueFilter = f; state.requestUpdate(); },
+          runs: (state.scheduleRuns ?? []).map((r: any) => ({
+            id: r.id ?? r.runId ?? "",
+            jobId: r.jobId ?? "",
+            trigger: r.trigger ?? "schedule",
+            status: r.status ?? "unknown",
+            startedAt: r.startedAt ?? r.startedAtMs ?? Date.now(),
+            durationMs: r.durationMs,
+            output: r.output,
+          })),
+          runsLoading: state.scheduleLoading,
+          schedules: state.scheduleJobs.map((j: any) => ({
+            id: j.id ?? "",
+            name: j.name ?? j.id ?? "",
+            jobId: j.jobDefinitionId ?? j.jobId ?? "",
+            cron: j.cron ?? "",
+            nextRunAt: j.nextRunAtMs,
+            lastRunAt: j.lastRunAtMs,
+            enabled: Boolean(j.enabled),
+          })),
+          schedulesLoading: state.scheduleLoading,
+          onScheduleToggle: (id: string, enabled: boolean) => {
+            const job = state.scheduleJobs.find((j: any) => j.id === id);
+            if (job) { import("../ui/controllers/schedules.ts").then(m => m.toggleScheduleJob(state as any, job, enabled)); }
+          },
+          onScheduleRun: (id: string) => {
+            const job = state.scheduleJobs.find((j: any) => j.id === id);
+            if (job) { import("../ui/controllers/schedules.ts").then(m => m.runScheduleJob(state as any, job)); }
+          },
+          onScheduleRemove: (id: string) => {
+            const job = state.scheduleJobs.find((j: any) => j.id === id);
+            if (job) { import("../ui/controllers/schedules.ts").then(m => m.removeScheduleJob(state as any, job)); }
+          },
+          onNewSchedule: () => { /* TODO: open schedule template modal */ },
+          onRefresh: () => { import("../ui/controllers/schedules.ts").then(m => m.loadScheduleRuns(state as any)); },
+        }) : nothing}
+
+        ${activeTab === "records" ? renderRecordsPage({
+          subTab: ((state as any)._v2RecordsSubTab as RecordsPageProps["subTab"]) ?? "browse",
+          onSubTabChange: (tab: string) => { (state as any)._v2RecordsSubTab = tab; state.requestUpdate(); },
+          records: [],
+          recordsLoading: false,
+          recordsTotal: 0,
+          recordsOffset: 0,
+          recordsLimit: 50,
+          platformFilter: (state as any)._v2RecordsPlatform ?? "all",
+          statusFilter: (state as any)._v2RecordsStatus ?? "all",
+          onPlatformFilterChange: (p: string) => { (state as any)._v2RecordsPlatform = p; state.requestUpdate(); },
+          onStatusFilterChange: (s: string) => { (state as any)._v2RecordsStatus = s; state.requestUpdate(); },
+          onRecordsPage: () => {},
+          expandedRecordId: (state as any)._v2RecordsExpanded ?? null,
+          onRecordExpand: (id: string | null) => { (state as any)._v2RecordsExpanded = id; state.requestUpdate(); },
+          channels: [],
+          channelsLoading: false,
+          onChannelSelect: () => {},
+          searchQuery: (state as any)._v2RecordsSearchQuery ?? "",
+          searchType: (state as any)._v2RecordsSearchType ?? "all",
+          searchResults: null,
+          searchLoading: false,
+          onSearchQueryChange: (q: string) => { (state as any)._v2RecordsSearchQuery = q; state.requestUpdate(); },
+          onSearchTypeChange: (t: string) => { (state as any)._v2RecordsSearchType = t; state.requestUpdate(); },
+          onSearch: () => {},
+          onRefresh: () => {},
+        }) : nothing}
+
         ${activeTab === "settings" ? renderSettingsPage(state) : nothing}
 
         ${activeTab === "identity" ? renderIdentityPage({

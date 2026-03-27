@@ -6,6 +6,8 @@ export type V2Tab =
   | "connectors"
   | "agents"
   | "monitor"
+  | "jobs"
+  | "records"
   | "identity"
   | "memory";
 
@@ -15,9 +17,9 @@ export type V2SubRoute =
   | { kind: "agent-create" }
 ;
 
-export const V2_TABS: V2Tab[] = ["connectors", "agents", "monitor", "identity", "memory"];
+export const V2_TABS: V2Tab[] = ["connectors", "agents", "monitor", "jobs", "records", "identity", "memory"];
 
-export const V2_PRIMARY_TABS: V2Tab[] = ["connectors", "agents", "monitor"];
+export const V2_PRIMARY_TABS: V2Tab[] = ["connectors", "agents", "monitor", "jobs", "records"];
 export const V2_SECONDARY_TABS: V2Tab[] = ["identity", "memory"];
 
 export function v2IconForTab(tab: V2Tab): IconName {
@@ -28,6 +30,10 @@ export function v2IconForTab(tab: V2Tab): IconName {
       return "bot";
     case "monitor":
       return "scrollText";
+    case "jobs":
+      return "fileText";
+    case "records":
+      return "database";
     case "identity":
       return "users";
     case "memory":
@@ -45,6 +51,10 @@ export function v2TitleForTab(tab: V2Tab): string {
       return "Agents";
     case "monitor":
       return "Monitor";
+    case "jobs":
+      return "Jobs";
+    case "records":
+      return "Records";
     case "identity":
       return "Identity";
     case "memory":
@@ -64,6 +74,7 @@ export function v2TabFromLegacy(legacyTab: string): V2Tab {
     case "agents":
       return "agents";
     case "operations":
+      return "jobs";
     case "system":
     case "console":
       return "monitor";
