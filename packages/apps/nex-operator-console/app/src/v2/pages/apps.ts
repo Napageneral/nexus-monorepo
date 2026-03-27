@@ -37,7 +37,7 @@ function renderPlatformGridIcon(name: string) {
 function renderPlatformPicker() {
   return html`
     <div class="v2-platform-picker">
-      <h1 class="v2-platform-picker-title">Hey Tyler Brandt, connect a connector</h1>
+      <h1 class="v2-platform-picker-title">Hey Tyler Brandt, connect a platform</h1>
       <p class="v2-platform-picker-subtitle">Pick a platform to give your AI agents superpowers.</p>
       <div class="v2-platform-grid">
         ${PLATFORM_NAMES.map(renderPlatformGridIcon)}
@@ -137,7 +137,7 @@ export function renderAppsPage(props: AppsPageProps) {
       <div class="v2-page-header-row">
         <div>
           <h1 class="v2-page-title">Connectors</h1>
-          <p class="v2-page-subtitle">Connectors connect your agents to external platforms. Connect them here, then use them via the CLI or API.</p>
+          <p class="v2-page-subtitle">Link external platforms to your agents. Connect them here, then use them via the CLI or API.</p>
         </div>
         <button class="v2-btn v2-btn--primary" @click=${props.onRefresh}>+ Add new app</button>
       </div>
