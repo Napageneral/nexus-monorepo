@@ -6,7 +6,6 @@ export type V2Tab =
   | "apps"
   | "agents"
   | "monitor"
-  | "webhooks"
   | "identity"
   | "memory";
 
@@ -14,12 +13,12 @@ export type V2SubRoute =
   | { kind: "tab"; tab: V2Tab }
   | { kind: "agent-detail"; agentId: string }
   | { kind: "agent-create" }
-  | { kind: "webhook-events" };
+;
 
-export const V2_TABS: V2Tab[] = ["apps", "agents", "monitor", "webhooks", "identity", "memory"];
+export const V2_TABS: V2Tab[] = ["apps", "agents", "monitor", "identity", "memory"];
 
 export const V2_PRIMARY_TABS: V2Tab[] = ["apps", "agents", "monitor"];
-export const V2_SECONDARY_TABS: V2Tab[] = ["webhooks", "identity", "memory"];
+export const V2_SECONDARY_TABS: V2Tab[] = ["identity", "memory"];
 
 export function v2IconForTab(tab: V2Tab): IconName {
   switch (tab) {
@@ -29,8 +28,6 @@ export function v2IconForTab(tab: V2Tab): IconName {
       return "bot";
     case "monitor":
       return "scrollText";
-    case "webhooks":
-      return "radio";
     case "identity":
       return "users";
     case "memory":
@@ -48,8 +45,6 @@ export function v2TitleForTab(tab: V2Tab): string {
       return "Agents";
     case "monitor":
       return "Monitor";
-    case "webhooks":
-      return "Webhooks";
     case "identity":
       return "Identity";
     case "memory":

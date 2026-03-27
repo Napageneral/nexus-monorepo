@@ -8,7 +8,8 @@ import { renderAgentsPage } from "./pages/agents.ts";
 import { renderAgentCreateWizard, type AgentCreateStep, type AgentCreateForm } from "./pages/agent-create.ts";
 import { renderAgentDetail, type AgentDetailTab, type AgentDetailModal } from "./pages/agent-detail.ts";
 import { renderMonitorPage } from "./pages/monitor.ts";
-import { renderWebhooksPage } from "./pages/webhooks.ts";
+import { renderIdentityPage, type IdentityPageProps } from "./pages/identity.ts";
+import { renderMemoryPage, type MemoryPageProps } from "./pages/memory.ts";
 import { V2_PRIMARY_TABS, V2_SECONDARY_TABS, v2IconForTab, v2TitleForTab, type V2Tab } from "./navigation.ts";
 import { renderUserMenuDropdown, renderWorkspaceSwitcher } from "./components/dropdowns.ts";
 
@@ -96,7 +97,6 @@ function legacyTabFor(tab: V2ActiveView): string {
     case "apps": return "integrations";
     case "agents": return "agents";
     case "monitor": return "system";
-    case "webhooks": return "integrations";
     case "identity": return "identity";
     case "memory": return "memory";
     case "settings": return "system";
@@ -536,39 +536,94 @@ export function renderAppV2(state: AppViewState) {
           : nothing}
 
         ${activeTab === "monitor" ? renderMonitorPage({ connected: state.connected, loading: false }) : nothing}
-        ${activeTab === "webhooks" ? renderWebhooksPage({
-          showCreateModal: (state as any)._v2WebhookModalOpen ?? false,
-          onToggleCreateModal: () => {
-            (state as any)._v2WebhookModalOpen = !(state as any)._v2WebhookModalOpen;
-            (state as any).tab = "__v2_force__";
-            state.setTab("integrations" as any);
-          },
-        }) : nothing}
         ${activeTab === "settings" ? renderSettingsPage(state) : nothing}
 
-        ${activeTab === "identity" ? html`
-          <div class="v2-page-header">
-            <h1 class="v2-page-title">Identity</h1>
-            <p class="v2-page-subtitle">Entities, contacts, channels, groups, policies, and merge review.</p>
-          </div>
-          <div class="v2-card"><div class="v2-empty">
-            <div class="v2-empty-icon">${icons.users}</div>
-            <div class="v2-empty-title">Identity management</div>
-            <div class="v2-empty-description">Will be ported with the new design system.</div>
-          </div></div>
-        ` : nothing}
+        ${activeTab === "identity" ? renderIdentityPage({
+          subTab: (state as any)._v2IdentitySubTab ?? "entities",
+          onSubTabChange: (sub) => { (state as any)._v2IdentitySubTab = sub; state.tab = "__v2_force__" as any; state.setTab("identity" as any); },
+          loading: state.identityLoading ?? false,
+          error: state.identityError ?? null,
+          entities: ((state as any).identityEntities ?? []),
+          onEntitySelect: (id) => { (state as any)._v2IdentitySubTab = "entities"; state.tab = "__v2_force__" as any; state.setTab("identity" as any); },
+          contacts: (state as any).identityContacts ?? [],
+          channels: (state as any).identityChannels ?? [],
+          groups: (state as any).identityGroups ?? [],
+          policies: (state as any).identityPolicies ?? [],
+          mergeCandidates: state.identityMergeCandidates ?? [],
+          mergeBusyId: state.identityMergeBusyId ?? null,
+          onResolveMerge: (id, status) => {
+            const { resolveIdentityMergeCandidate } = require("../ui/controllers/identity.ts");
+            void resolveIdentityMergeCandidate(state, id, status);
+          },
+          onRefresh: () => {
+            const { loadIdentitySurface } = require("../ui/controllers/identity.ts");
+            void loadIdentitySurface(state as any);
+          },
+        } as IdentityPageProps) : nothing}
 
-        ${activeTab === "memory" ? html`
-          <div class="v2-page-header">
-            <h1 class="v2-page-title">Memory</h1>
-            <p class="v2-page-subtitle">Observations, facts, models, review, and source lineage.</p>
-          </div>
-          <div class="v2-card"><div class="v2-empty">
-            <div class="v2-empty-icon">${icons.brain}</div>
-            <div class="v2-empty-title">Memory review</div>
-            <div class="v2-empty-description">Will be ported with the new design system.</div>
-          </div></div>
-        ` : nothing}
+        ${activeTab === "memory" ? renderMemoryPage({
+          subTab: (state as any)._v2MemorySubTab ?? "library",
+          onSubTabChange: (sub) => { (state as any)._v2MemorySubTab = sub; state.tab = "__v2_force__" as any; state.setTab("memory" as any); },
+          loading: (state as any).memoryLoading ?? false,
+          error: (state as any).memoryError ?? null,
+          runs: (state as any).memoryRuns ?? [],
+          selectedRunId: (state as any).memorySelectedRunId ?? null,
+          onRunSelect: (runId) => {
+            (state as any).memorySelectedRunId = runId;
+            const { loadMemoryRunEpisodes } = require("../ui/controllers/memory-review.ts");
+            void loadMemoryRunEpisodes(state as any, runId);
+          },
+          episodes: (state as any).memoryEpisodes ?? [],
+          episodesLoading: (state as any).memoryEpisodesLoading ?? false,
+          selectedEpisodeId: (state as any).memorySelectedEpisodeId ?? null,
+          onEpisodeSelect: (episodeId) => {
+            (state as any).memorySelectedEpisodeId = episodeId;
+            const { loadMemoryEpisodeInspector } = require("../ui/controllers/memory-review.ts");
+            void loadMemoryEpisodeInspector(state as any, episodeId);
+          },
+          inspectorLoading: (state as any).memoryInspectorLoading ?? false,
+          episodeDetail: (state as any).memoryEpisodeDetail ?? null,
+          searchQuery: (state as any).memorySearchQuery ?? "",
+          searchType: (state as any).memorySearchType ?? "semantic",
+          searchLoading: (state as any).memorySearchLoading ?? false,
+          searchResults: (state as any).memorySearchResults ?? [],
+          onSearchQueryChange: (q) => { (state as any).memorySearchQuery = q; },
+          onSearchTypeChange: (t) => { (state as any).memorySearchType = t; },
+          onSearch: () => {
+            const { runMemorySearch } = require("../ui/controllers/memory-review.ts");
+            void runMemorySearch(state as any);
+          },
+          qualityLoading: (state as any).memoryQualityLoading ?? false,
+          qualitySummary: (state as any).memoryQualitySummary ?? null,
+          qualityBucket: (state as any).memoryQualityBucket ?? "high",
+          qualityItems: (state as any).memoryQualityItems ?? [],
+          onQualityBucketSelect: (bucket) => {
+            (state as any).memoryQualityBucket = bucket;
+            const { loadMemoryQualityItems } = require("../ui/controllers/memory-review.ts");
+            void loadMemoryQualityItems(state as any, bucket);
+          },
+          detailKind: (state as any).memoryDetailKind ?? null,
+          detailLoading: (state as any).memoryDetailLoading ?? false,
+          detailEntity: (state as any).memoryDetailEntity ?? null,
+          detailFact: (state as any).memoryDetailFact ?? null,
+          detailObservation: (state as any).memoryDetailObservation ?? null,
+          onEntitySelect: (id) => {
+            const { loadMemoryEntityDetail } = require("../ui/controllers/memory-review.ts");
+            void loadMemoryEntityDetail(state as any, id);
+          },
+          onFactSelect: (id) => {
+            const { loadMemoryFactDetail } = require("../ui/controllers/memory-review.ts");
+            void loadMemoryFactDetail(state as any, id);
+          },
+          onObservationSelect: (id) => {
+            const { loadMemoryObservationDetail } = require("../ui/controllers/memory-review.ts");
+            void loadMemoryObservationDetail(state as any, id);
+          },
+          onRefresh: () => {
+            const { loadMemoryRuns } = require("../ui/controllers/memory-review.ts");
+            void loadMemoryRuns(state as any);
+          },
+        } as MemoryPageProps) : nothing}
       </main>
 
       <!-- ═══ OVERLAYS ═══ -->
