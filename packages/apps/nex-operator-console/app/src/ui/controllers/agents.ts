@@ -44,6 +44,7 @@ export async function createAgent(
   try {
     state.agentsLoading = true;
     const result = await state.client.request<{ agentId?: string; id?: string }>("agents.create", params);
+    state.agentsLoading = false; // reset before refresh so loadAgents doesn't bail
     await loadAgents(state);
     return result?.agentId ?? result?.id ?? null;
   } catch (err) {
