@@ -3,7 +3,7 @@ import type { AppViewState } from "../ui/app-view-state.ts";
 import { icons } from "../ui/icons.ts";
 import { loadAgents, createAgent } from "../ui/controllers/agents.ts";
 import { loadIntegrations } from "../ui/controllers/integrations.ts";
-import { renderAppsPage } from "./pages/apps.ts";
+import { renderAppsPage as renderPluginsPage } from "./pages/apps.ts";
 import { renderAgentsPage } from "./pages/agents.ts";
 import { renderAgentCreateWizard, type AgentCreateStep, type AgentCreateForm } from "./pages/agent-create.ts";
 import { renderAgentDetail, type AgentDetailTab, type AgentDetailModal } from "./pages/agent-detail.ts";
@@ -11,7 +11,8 @@ import { renderMonitorPage } from "./pages/monitor.ts";
 import { renderIdentityPage, type IdentityPageProps } from "./pages/identity.ts";
 import { renderMemoryPage, type MemoryPageProps } from "./pages/memory.ts";
 import { V2_PRIMARY_TABS, V2_SECONDARY_TABS, v2IconForTab, v2TitleForTab, type V2Tab } from "./navigation.ts";
-import { renderUserMenuDropdown, renderWorkspaceSwitcher } from "./components/dropdowns.ts";
+// User menu and workspace switcher available for future frontdoor integration
+// import { renderUserMenuDropdown, renderWorkspaceSwitcher } from "./components/dropdowns.ts";
 
 // ─── Inline SVG icons for v2 chrome ──────────────────────────────────
 const v2 = {
@@ -83,18 +84,18 @@ function resolveV2Tab(state: AppViewState): V2ActiveView {
   const t = (state as any).v2Tab as V2ActiveView | undefined;
   if (t) return t;
   switch (state.tab) {
-    case "integrations": return "apps";
+    case "integrations": return "plugins";
     case "agents": return "agents";
     case "system": return "monitor";
     case "identity": return "identity";
     case "memory": return "memory";
-    default: return "apps";
+    default: return "plugins";
   }
 }
 
 function legacyTabFor(tab: V2ActiveView): string {
   switch (tab) {
-    case "apps": return "integrations";
+    case "plugins": return "integrations";
     case "agents": return "agents";
     case "monitor": return "system";
     case "identity": return "identity";
@@ -146,10 +147,13 @@ function renderNotificationsPanel(state: AppViewState) {
 }
 
 // ─── Settings page (rendered inline under nav, not overlay) ──────────
-type SettingsSubPage = "profile" | "billing" | "usage" | "invoices" | "api-keys" | "auth";
+type SettingsSubPage = "profile" | "api-keys" | "auth";
 
 function resolveSettingsSub(state: AppViewState): SettingsSubPage {
-  return ((state as any).v2SettingsSub as SettingsSubPage) ?? "profile";
+  const raw = (state as any).v2SettingsSub as string;
+  // Redirect removed pages to profile
+  if (raw === "billing" || raw === "usage" || raw === "invoices") return "profile";
+  return (raw as SettingsSubPage) ?? "profile";
 }
 
 function setSettingsSub(state: AppViewState, sub: SettingsSubPage) {
@@ -169,14 +173,8 @@ function renderSettingsSidebar(state: AppViewState, activeSub: SettingsSubPage) 
   return html`
     <aside class="v2-settings-sidebar-inline">
       <div>
-        <div class="v2-section-label">Account</div>
+        <div class="v2-section-label">Server</div>
         ${item("profile", v2.user, "Profile")}
-        ${item("billing", v2.creditCard, "Billing")}
-        ${item("usage", v2.barChart2, "Usage")}
-        ${item("invoices", v2.fileText, "Invoices")}
-      </div>
-      <div>
-        <div class="v2-section-label">Manage</div>
         ${item("api-keys", v2.key, "API Keys")}
         ${item("auth", v2.shield, "Auth")}
       </div>
@@ -188,106 +186,48 @@ function renderSettingsContent(sub: SettingsSubPage) {
   switch (sub) {
     case "profile":
       return html`
-        <div class="v2-row-between" style="margin-bottom: var(--v2-space-5);">
-          <div>
-            <div class="v2-page-title" style="font-size: var(--v2-text-xl);">Profile</div>
-            <div class="v2-page-subtitle">Manage your profile and account details.</div>
-          </div>
-          <button class="v2-btn v2-btn--primary">Save</button>
-        </div>
-        <div class="v2-grid-2" style="gap: var(--v2-space-5);">
-          <div class="v2-col" style="gap: 6px;">
-            <label class="v2-label">Username</label>
-            <input class="v2-input" value="tyler" />
-          </div>
-          <div class="v2-col" style="gap: 6px;">
-            <label class="v2-label">Email</label>
-            <input class="v2-input" value="tyler@intent-systems.com" />
-          </div>
-          <div class="v2-col" style="gap: 6px;">
-            <label class="v2-label">First Name</label>
-            <input class="v2-input" value="Tyler Brandt" />
-          </div>
-          <div class="v2-col" style="gap: 6px;">
-            <label class="v2-label">Last Name</label>
-            <input class="v2-input" value="Brandt" />
-          </div>
-        </div>
-      `;
-    case "billing":
-      return html`
-        <div class="v2-row-between" style="margin-bottom: var(--v2-space-5);">
-          <div>
-            <div class="v2-page-title" style="font-size: var(--v2-text-xl);">Billing</div>
-            <div class="v2-page-subtitle">Manage your subscription, billing cards, and payment details.</div>
-          </div>
-          <button class="v2-btn v2-btn--ghost">Manage Billing</button>
+        <div style="margin-bottom: var(--v2-space-5);">
+          <div class="v2-page-title" style="font-size: var(--v2-text-xl);">Profile</div>
+          <div class="v2-page-subtitle">Your identity and permissions on this server.</div>
         </div>
         <div class="v2-card" style="margin-bottom: var(--v2-space-4);">
-          <div class="v2-card-title">Always Free Plan</div>
-          <div class="v2-card-sub">$0.00 due</div>
-        </div>
-        <div class="v2-card" style="margin-bottom: var(--v2-space-6);">
-          <div class="v2-row-between">
+          <div class="v2-row" style="gap: var(--v2-space-4); align-items: center;">
+            <div class="v2-avatar" style="width: 48px; height: 48px; font-size: 18px;"><span>T</span></div>
             <div>
-              <div class="v2-card-title">Agent Seats</div>
-              <div class="v2-card-sub">$20/mo per seat &middot; 1 seat</div>
+              <div class="v2-strong" style="font-size: var(--v2-text-base);">Tyler Brandt</div>
+              <div class="v2-muted" style="font-size: var(--v2-text-xs);">tyler@intent-systems.com</div>
             </div>
-            <button class="v2-btn v2-btn--secondary v2-btn--sm">Buy Seats</button>
-          </div>
-        </div>
-        <div class="v2-section-label" style="margin-bottom: var(--v2-space-4);">Available Plans</div>
-        <div class="v2-grid-4">
-          <div class="v2-card"><div class="v2-card-title">Free</div><div class="v2-card-sub">$0/mo</div><div class="v2-badge v2-badge--neutral" style="margin-top: 8px;">Current Plan</div></div>
-          <div class="v2-card"><div class="v2-card-title">Starter</div><div class="v2-card-sub">$29/mo</div><button class="v2-btn v2-btn--primary v2-btn--sm v2-btn--full" style="margin-top: 8px;">Upgrade</button></div>
-          <div class="v2-card" style="border-color: var(--v2-success);"><div class="v2-card-title">Pro <span class="v2-badge v2-badge--success" style="margin-left: 4px;">Popular</span></div><div class="v2-card-sub">$199/mo</div><button class="v2-btn v2-btn--primary v2-btn--sm v2-btn--full" style="margin-top: 8px;">Upgrade</button></div>
-          <div class="v2-card"><div class="v2-card-title">Enterprise</div><div class="v2-card-sub">Contact Sales</div><button class="v2-btn v2-btn--secondary v2-btn--sm v2-btn--full" style="margin-top: 8px;">Contact</button></div>
-        </div>
-      `;
-    case "usage":
-      return html`
-        <div>
-          <div class="v2-page-title" style="font-size: var(--v2-text-xl);">Usage</div>
-          <div class="v2-page-subtitle" style="margin-bottom: var(--v2-space-5);">Monitor your connections and API usage.</div>
-        </div>
-        <div class="v2-card" style="margin-bottom: var(--v2-space-4);">
-          <div class="v2-card-title">Connections</div>
-          <div class="v2-card-sub">A breakdown of your existing connected accounts</div>
-          <div style="height: 120px; display: flex; align-items: center; justify-content: center; color: var(--v2-text-faint); font-size: var(--v2-text-xs);">Chart placeholder</div>
-        </div>
-        <div class="v2-card">
-          <div class="v2-card-title">API Calls</div>
-          <div class="v2-card-sub">Number of API calls made by your agents</div>
-          <div style="height: 120px; display: flex; align-items: center; justify-content: center; color: var(--v2-text-faint); font-size: var(--v2-text-xs);">Chart placeholder</div>
-        </div>
-      `;
-    case "invoices":
-      return html`
-        <div>
-          <div class="v2-page-title" style="font-size: var(--v2-text-xl);">Invoices</div>
-          <div class="v2-page-subtitle" style="margin-bottom: var(--v2-space-5);">View and download your past invoices.</div>
-        </div>
-        <div class="v2-card" style="margin-bottom: var(--v2-space-3);">
-          <div class="v2-row-between">
-            <div>
-              <div class="v2-strong">March 2026</div>
-              <div class="v2-muted" style="font-size: var(--v2-text-xs);">Yxxxlrdx-0002</div>
-            </div>
-            <div class="v2-row" style="gap: var(--v2-space-3);">
-              <span class="v2-badge v2-badge--success">Paid</span>
-              <span class="v2-strong">$20.00</span>
+            <div style="margin-left: auto;">
+              <span class="v2-badge v2-badge--success">Operator</span>
             </div>
           </div>
         </div>
+        <div class="v2-section-label" style="margin-bottom: var(--v2-space-3);">Server Permissions</div>
         <div class="v2-card">
-          <div class="v2-row-between">
+          <div class="v2-grid-2" style="gap: var(--v2-space-4);">
             <div>
-              <div class="v2-strong">March 2026</div>
-              <div class="v2-muted" style="font-size: var(--v2-text-xs);">Yxxxlrdx-0001</div>
+              <div class="v2-label">Role</div>
+              <div class="v2-strong">Operator (Full Access)</div>
             </div>
-            <div class="v2-row" style="gap: var(--v2-space-3);">
-              <span class="v2-badge v2-badge--success">Paid</span>
-              <span class="v2-strong">$0.00</span>
+            <div>
+              <div class="v2-label">Server</div>
+              <div class="v2-strong">Primary</div>
+            </div>
+            <div>
+              <div class="v2-label">Agents</div>
+              <div class="v2-muted" style="font-size: var(--v2-text-xs);">Create, configure, delete</div>
+            </div>
+            <div>
+              <div class="v2-label">Integrations</div>
+              <div class="v2-muted" style="font-size: var(--v2-text-xs);">Connect, disconnect, configure</div>
+            </div>
+            <div>
+              <div class="v2-label">Identity</div>
+              <div class="v2-muted" style="font-size: var(--v2-text-xs);">Resolve merges, manage policies</div>
+            </div>
+            <div>
+              <div class="v2-label">System</div>
+              <div class="v2-muted" style="font-size: var(--v2-text-xs);">Full runtime access, config, debug</div>
             </div>
           </div>
         </div>
@@ -297,7 +237,7 @@ function renderSettingsContent(sub: SettingsSubPage) {
         <div class="v2-row-between" style="margin-bottom: var(--v2-space-5);">
           <div>
             <div class="v2-page-title" style="font-size: var(--v2-text-xl);">API Keys</div>
-            <div class="v2-page-subtitle">These keys allow you to authenticate API requests.</div>
+            <div class="v2-page-subtitle">These keys allow you to authenticate API requests to this server.</div>
           </div>
           <button class="v2-btn v2-btn--primary">+ Create API Key</button>
         </div>
@@ -313,18 +253,17 @@ function renderSettingsContent(sub: SettingsSubPage) {
       return html`
         <div>
           <div class="v2-page-title" style="font-size: var(--v2-text-xl);">Auth</div>
-          <div class="v2-page-subtitle" style="margin-bottom: var(--v2-space-5);">Manage integrations, configure OAuth settings, and control visibility.</div>
+          <div class="v2-page-subtitle" style="margin-bottom: var(--v2-space-5);">Manage connection credentials and OAuth settings.</div>
         </div>
         <div class="v2-filter-bar">
           <div class="v2-search-wrap">
             <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            <input class="v2-search-input" type="text" placeholder="Search integrations..." />
+            <input class="v2-search-input" type="text" placeholder="Search connections..." />
           </div>
-          <button class="v2-filter-pill">All visibility ${v2.chevronDown}</button>
         </div>
         <div class="v2-card">
           <div class="v2-muted" style="padding: var(--v2-space-4); text-align: center; font-size: var(--v2-text-xs);">
-            Integration auth management will be connected to the runtime adapter list.
+            Connection auth management will be connected to the runtime adapter list.
           </div>
         </div>
       `;
@@ -354,32 +293,14 @@ export function renderAppV2(state: AppViewState) {
 
   return html`
     <div class="v2-shell" data-v2-theme="${state.themeResolved === "dark" ? "dark" : "light"}">
-      <!-- ═══ TOP NAV ═══ -->
+      <!-- ═══ TOP NAV (app-level chrome) ═══ -->
       <nav class="v2-topnav">
         <div class="v2-topnav-left">
-          <div class="v2-logo" @click=${() => setV2Tab(state, "apps")} style="cursor: pointer;">
+          <div class="v2-logo" @click=${() => setV2Tab(state, "plugins")} style="cursor: pointer;">
             <div class="v2-logo-mark">
               <img src="${basePath ? `${basePath}/favicon.svg` : "/favicon.svg"}" alt="" />
             </div>
             <span class="v2-logo-text">nexus</span>
-          </div>
-          <div class="v2-divider-v"></div>
-          <div class="v2-workspace-wrap">
-            <button class="v2-workspace" @click=${() => {
-              (state as any)._v2WorkspaceOpen = !(state as any)._v2WorkspaceOpen;
-              (state as any)._v2UserMenuOpen = false;
-              (state as any).tab = "__v2_force__";
-              state.setTab(legacyTabFor(activeTab === "settings" ? "apps" : activeTab as V2Tab) as any);
-            }}>
-              Personal
-              ${v2.sparkle}
-            </button>
-            ${renderWorkspaceSwitcher({
-              open: (state as any)._v2WorkspaceOpen ?? false,
-              currentWorkspace: "Personal",
-              onClose: () => { (state as any)._v2WorkspaceOpen = false; (state as any).tab = "__v2_force__"; state.setTab(legacyTabFor(activeTab === "settings" ? "apps" : activeTab as V2Tab) as any); },
-              onCreateOrg: () => { (state as any)._v2WorkspaceOpen = false; },
-            })}
           </div>
         </div>
 
@@ -400,42 +321,16 @@ export function renderAppV2(state: AppViewState) {
           <button class="v2-icon-btn" title="Command palette">${v2.command}</button>
           <button class="v2-icon-btn" title="Notifications" @click=${() => {
             (state as any).v2NotificationsOpen = !(state as any).v2NotificationsOpen;
-            // Force re-render
             (state as any).tab = "__v2_force__";
-            state.setTab(legacyTabFor(activeTab === "settings" ? "apps" : activeTab as V2Tab) as any);
+            state.setTab(legacyTabFor(activeTab === "settings" ? "plugins" : activeTab as V2Tab) as any);
           }}>${v2.bell}</button>
-          <button class="v2-icon-btn" title="Integrations" @click=${() => setV2Tab(state, "apps")}>${v2.puzzle}</button>
-          <button class="v2-icon-btn" title="Chat" @click=${() => {
-            // Open chat/console — maps to the legacy console tab
-            (state as any).v2Tab = "monitor";
-            state.setTab("console" as any);
-          }}>${v2.messageCircle}</button>
           <button class="v2-icon-btn ${isSettings ? "v2-icon-btn--active" : ""}" title="Settings" @click=${() => setV2Tab(state, "settings")}>${icons.settings}</button>
-
-          <div class="v2-divider-v"></div>
-          <div class="v2-user-menu">
-            <div class="v2-avatar" @click=${() => {
-              (state as any)._v2UserMenuOpen = !(state as any)._v2UserMenuOpen;
-              (state as any)._v2WorkspaceOpen = false;
-              (state as any).tab = "__v2_force__";
-              state.setTab(legacyTabFor(activeTab === "settings" ? "apps" : activeTab as V2Tab) as any);
-            }}><span>T</span></div>
-            ${renderUserMenuDropdown({
-              open: (state as any)._v2UserMenuOpen ?? false,
-              name: "Tyler Brandt",
-              email: "tyler@intent-systems.com",
-              plan: "Free Plan",
-              onClose: () => { (state as any)._v2UserMenuOpen = false; (state as any).tab = "__v2_force__"; state.setTab(legacyTabFor(activeTab === "settings" ? "apps" : activeTab as V2Tab) as any); },
-              onProfile: () => { (state as any)._v2UserMenuOpen = false; setV2Tab(state, "settings"); },
-              onLogout: () => { (state as any)._v2UserMenuOpen = false; },
-            })}
-          </div>
         </div>
       </nav>
 
       <!-- ═══ MAIN CONTENT ═══ -->
       <main class="v2-main ${isSettings ? "v2-main--settings" : ""} ${isAgentDetail ? "v2-main--agent-detail" : ""}">
-        ${activeTab === "apps" ? renderAppsPage({
+        ${activeTab === "plugins" ? renderPluginsPage({
           loading: state.integrationsLoading,
           error: state.integrationsError,
           adapters: state.integrationsAdapters,

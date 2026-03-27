@@ -3,7 +3,7 @@ import type { IconName } from "../ui/icons.js";
 // ─── v2 tab definitions ──────────────────────────────────────────────
 
 export type V2Tab =
-  | "apps"
+  | "plugins"
   | "agents"
   | "monitor"
   | "identity"
@@ -15,14 +15,14 @@ export type V2SubRoute =
   | { kind: "agent-create" }
 ;
 
-export const V2_TABS: V2Tab[] = ["apps", "agents", "monitor", "identity", "memory"];
+export const V2_TABS: V2Tab[] = ["plugins", "agents", "monitor", "identity", "memory"];
 
-export const V2_PRIMARY_TABS: V2Tab[] = ["apps", "agents", "monitor"];
+export const V2_PRIMARY_TABS: V2Tab[] = ["plugins", "agents", "monitor"];
 export const V2_SECONDARY_TABS: V2Tab[] = ["identity", "memory"];
 
 export function v2IconForTab(tab: V2Tab): IconName {
   switch (tab) {
-    case "apps":
+    case "plugins":
       return "plug";
     case "agents":
       return "bot";
@@ -39,8 +39,8 @@ export function v2IconForTab(tab: V2Tab): IconName {
 
 export function v2TitleForTab(tab: V2Tab): string {
   switch (tab) {
-    case "apps":
-      return "Apps";
+    case "plugins":
+      return "Plugins";
     case "agents":
       return "Agents";
     case "monitor":
@@ -59,7 +59,8 @@ export function v2TabFromLegacy(legacyTab: string): V2Tab {
   switch (legacyTab) {
     case "home":
     case "integrations":
-      return "apps";
+    case "apps":
+      return "plugins";
     case "agents":
       return "agents";
     case "operations":
@@ -71,6 +72,6 @@ export function v2TabFromLegacy(legacyTab: string): V2Tab {
     case "memory":
       return "memory";
     default:
-      return "apps";
+      return "plugins";
   }
 }
