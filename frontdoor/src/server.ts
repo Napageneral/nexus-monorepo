@@ -1080,7 +1080,7 @@ function customerFacingServerPlanName(planId: string): string {
   return planId || "Plan";
 }
 
-function injectAppFrame(html: string, params: AppFrameParams): string {
+function buildAppFrameBar(params: AppFrameParams): { css: string; bodyHtml: string } {
   const ac = params.appAccentColor || "#6366f1";
 
   // Build server status dot color helper
@@ -1105,16 +1105,17 @@ body { padding-top: 44px !important; }
   position: fixed; top: 0; left: 0; right: 0; height: 44px;
   background: #0c0e14; z-index: 999999;
   display: flex; align-items: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  font-size: 13px; color: #e2e8f0; box-sizing: border-box; padding: 0 12px;
+  font-size: 13px; color: #e8e6e1; box-sizing: border-box; padding: 0 12px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
   user-select: none; -webkit-user-select: none;
 }
 #nexus-app-frame *, #nexus-app-frame *::before, #nexus-app-frame *::after { box-sizing: border-box; }
 #nexus-app-frame .nxf-logo {
-  display: flex; align-items: center; gap: 6px; text-decoration: none; color: #e2e8f0;
+  display: flex; align-items: center; gap: 6px; text-decoration: none; color: #e8e6e1;
   font-weight: 600; font-size: 14px; padding: 4px 8px 4px 0; margin-right: 4px; flex-shrink: 0;
+  transition: color 0.15s ease;
 }
-#nexus-app-frame .nxf-logo:hover { color: #fff; }
+#nexus-app-frame .nxf-logo:hover { color: #d4a843; }
 #nexus-app-frame .nxf-logo svg { width: 20px; height: 20px; flex-shrink: 0; }
 #nexus-app-frame .nxf-sep {
   width: 1px; height: 20px; background: rgba(255,255,255,0.12); margin: 0 8px; flex-shrink: 0;
@@ -1130,8 +1131,8 @@ body { padding-top: 44px !important; }
 }
 #nexus-app-frame .nxf-dropdown-btn {
   display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px;
-  cursor: pointer; border: none; background: transparent; color: #e2e8f0; font-size: 13px;
-  font-family: inherit; line-height: 1;
+  cursor: pointer; border: none; background: transparent; color: #e8e6e1; font-size: 13px;
+  font-family: inherit; line-height: 1; transition: background 0.15s ease;
 }
 #nexus-app-frame .nxf-dropdown-btn:hover { background: rgba(255,255,255,0.08); }
 #nexus-app-frame .nxf-dropdown-btn .nxf-caret {
@@ -1140,7 +1141,7 @@ body { padding-top: 44px !important; }
 }
 #nexus-app-frame .nxf-dropdown-panel {
   display: none; position: absolute; top: calc(100% + 6px); left: 0;
-  background: #1a1d27; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+  background: #1c1b19; border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
   min-width: 220px; padding: 6px 0; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
   z-index: 1000000;
 }
@@ -1148,11 +1149,11 @@ body { padding-top: 44px !important; }
 #nexus-app-frame .nxf-dropdown-panel.nxf-open { display: block; }
 #nexus-app-frame .nxf-dropdown-item {
   display: flex; align-items: center; gap: 8px; padding: 8px 14px; cursor: pointer;
-  color: #cbd5e1; font-size: 13px; text-decoration: none; border: none; background: none;
-  width: 100%; text-align: left; font-family: inherit;
+  color: #c4c1bb; font-size: 13px; text-decoration: none; border: none; background: none;
+  width: 100%; text-align: left; font-family: inherit; transition: background 0.15s ease, color 0.15s ease;
 }
-#nexus-app-frame .nxf-dropdown-item:hover { background: rgba(255,255,255,0.06); color: #f1f5f9; }
-#nexus-app-frame .nxf-dropdown-item.nxf-active { color: #fff; font-weight: 500; }
+#nexus-app-frame .nxf-dropdown-item:hover { background: rgba(255,255,255,0.06); color: #e8e6e1; }
+#nexus-app-frame .nxf-dropdown-item.nxf-active { color: #d4a843; font-weight: 500; }
 #nexus-app-frame .nxf-dropdown-item.nxf-disabled {
   opacity: 0.4; cursor: default; pointer-events: none;
 }
@@ -1160,7 +1161,7 @@ body { padding-top: 44px !important; }
   height: 1px; background: rgba(255,255,255,0.08); margin: 4px 0;
 }
 #nexus-app-frame .nxf-dropdown-header {
-  padding: 6px 14px 4px; color: #94a3b8; font-size: 11px; text-transform: uppercase;
+  padding: 6px 14px 4px; color: #94918b; font-size: 11px; text-transform: uppercase;
   letter-spacing: 0.05em; font-weight: 600;
 }
 #nexus-app-frame .nxf-status-dot {
@@ -1172,22 +1173,25 @@ body { padding-top: 44px !important; }
   letter-spacing: 0.02em; border: 1px solid transparent; flex-shrink: 0;
 }
 #nexus-app-frame .nxf-class-badge-standard {
-  color: #cbd5e1; background: rgba(148,163,184,0.12); border-color: rgba(148,163,184,0.24);
+  color: #c4c1bb; background: rgba(148,145,139,0.12); border-color: rgba(148,145,139,0.24);
 }
 #nexus-app-frame .nxf-class-badge-compliant {
-  color: #fcd34d; background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.32);
+  color: #d4a843; background: rgba(212,168,67,0.14); border-color: rgba(212,168,67,0.32);
 }
 #nexus-app-frame .nxf-spacer { flex: 1; }
 #nexus-app-frame .nxf-avatar {
-  width: 24px; height: 24px; border-radius: 50%; background: #374151;
+  width: 24px; height: 24px; border-radius: 50%; background: #2a2925;
   display: flex; align-items: center; justify-content: center; font-size: 11px;
-  font-weight: 600; color: #e2e8f0; flex-shrink: 0; text-transform: uppercase;
+  font-weight: 600; color: #e8e6e1; flex-shrink: 0; text-transform: uppercase;
+  border: 2px solid transparent; transition: border-color 0.15s ease;
 }
+#nexus-app-frame .nxf-avatar:hover { border-color: #d4a843; }
 #nexus-app-frame .nxf-dash-link {
   display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 6px;
-  text-decoration: none; color: #94a3b8; font-size: 12px; margin-left: 4px; flex-shrink: 0;
+  text-decoration: none; color: #94918b; font-size: 12px; margin-left: 4px; flex-shrink: 0;
+  transition: color 0.15s ease, background 0.15s ease;
 }
-#nexus-app-frame .nxf-dash-link:hover { color: #e2e8f0; background: rgba(255,255,255,0.06); }
+#nexus-app-frame .nxf-dash-link:hover { color: #e8e6e1; background: rgba(255,255,255,0.06); }
 #nexus-app-frame .nxf-apps-grid {
   display: grid; grid-template-columns: 1fr; gap: 2px; padding: 4px 0;
 }
@@ -1362,24 +1366,7 @@ body { padding-top: 44px !important; }
   }
 })();</script>`;
 
-  // ── Inject CSS before </head> ─────────────────────────────────
-  const headClose = html.indexOf("</head>");
-  let result = html;
-  if (headClose >= 0) {
-    result = result.slice(0, headClose) + frameCSS + result.slice(headClose);
-  } else {
-    result = frameCSS + result;
-  }
-
-  // ── Inject HTML+JS before </body> ─────────────────────────────
-  const bodyClose = result.indexOf("</body>");
-  if (bodyClose >= 0) {
-    result = result.slice(0, bodyClose) + frameHTML + result.slice(bodyClose);
-  } else {
-    result = result + frameHTML;
-  }
-
-  return result;
+  return { css: frameCSS, bodyHtml: frameHTML };
 }
 
 function injectScriptBeforeBody(html: string, scriptId: string, scriptBody: string): string {
@@ -1595,6 +1582,27 @@ function deterministicServerNameFromId(serverId: string): string {
   const adjective = adjectives[hash % adjectives.length] ?? "Nova";
   const noun = nouns[Math.floor(hash / adjectives.length) % nouns.length] ?? "Nexus";
   return `${adjective} ${noun}`;
+}
+
+function renderHostedOwnerBootstrapSeed(params: {
+  displayName?: string | null;
+  email?: string | null;
+}): string | null {
+  const name = params.displayName?.trim() || params.email?.trim() || "";
+  if (!name) {
+    return null;
+  }
+  const email = params.email?.trim().toLowerCase() || "";
+  const lines = [
+    "owner:",
+    `  name: ${JSON.stringify(name)}`,
+  ];
+  if (email) {
+    lines.push("  emails:");
+    lines.push(`    - ${JSON.stringify(email)}`);
+  }
+  lines.push("");
+  return lines.join("\n");
 }
 
 function normalizeText(input: unknown): string {
@@ -3480,6 +3488,10 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         runtimeTokenActiveKid: config.runtimeTokenActiveKid,
         tailscaleAuthKey: bootstrapTransport.tailscaleAuthKey,
         tailscaleHostname: bootstrapTransport.tailscaleHostname,
+        bootstrapSeedYaml: renderHostedOwnerBootstrapSeed({
+          displayName: user.displayName ?? params.session.principal.displayName ?? undefined,
+          email: user.email ?? params.session.principal.email ?? undefined,
+        }) ?? undefined,
       });
 
       try {
@@ -5848,6 +5860,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     const initialDetail =
       params.initialDetail ??
       `Opening ${params.frame.appDisplayName} inside the frontdoor shell.`;
+    const frameBar = buildAppFrameBar(params.frame);
     const shellHtml = `<!doctype html>
 <html lang="en">
 <head>
@@ -5855,14 +5868,11 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escHtml(params.frame.appDisplayName)} | Nexus</title>
   <style>
-    html, body { margin: 0; min-height: 100%; background: #020617; }
+    html, body { margin: 0; min-height: 100%; background: #0c0e14; }
     #nxf-shell-root {
       position: fixed;
       inset: 44px 0 0 0;
-      background:
-        radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 34%),
-        radial-gradient(circle at top right, rgba(14, 165, 233, 0.14), transparent 30%),
-        linear-gradient(180deg, #020617 0%, #0f172a 100%);
+      background: #111318;
     }
     #nxf-shell-embed {
       position: absolute;
@@ -5880,8 +5890,8 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       justify-content: center;
       padding: 32px;
       z-index: 2;
-      background: linear-gradient(180deg, rgba(2, 6, 23, 0.86), rgba(15, 23, 42, 0.94));
-      color: #e2e8f0;
+      background: rgba(12, 14, 20, 0.92);
+      color: #e8e6e1;
     }
     .nxf-shell-overlay.hidden { display: none; }
     .nxf-shell-card {
@@ -5889,21 +5899,21 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       width: 100%;
       padding: 28px;
       border-radius: 20px;
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(28, 27, 25, 0.95);
       box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
     }
     .nxf-shell-card h1 {
       margin: 0 0 12px;
       font-size: 26px;
       line-height: 1.1;
-      color: #f8fafc;
+      color: #e8e6e1;
     }
     .nxf-shell-card p {
       margin: 0;
       font-size: 15px;
       line-height: 1.6;
-      color: #cbd5e1;
+      color: #94918b;
     }
     .nxf-shell-actions {
       display: flex;
@@ -5917,13 +5927,15 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       padding: 10px 14px;
       font: inherit;
       cursor: pointer;
-      color: #e2e8f0;
-      background: rgba(59, 130, 246, 0.22);
+      color: #e8e6e1;
+      background: rgba(212, 168, 67, 0.18);
+      transition: background 0.15s ease;
     }
     .nxf-shell-actions button:hover {
-      background: rgba(59, 130, 246, 0.32);
+      background: rgba(212, 168, 67, 0.28);
     }
   </style>
+  ${frameBar.css}
 </head>
 <body>
   <div id="nxf-shell-root">
@@ -6052,9 +6064,10 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       });
     })();
   </script>
+  ${frameBar.bodyHtml}
 </body>
 </html>`;
-    return injectAppFrame(shellHtml, params.frame);
+    return shellHtml;
   }
 
   function renderAppShellDocument(params: {
@@ -6356,6 +6369,10 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         const provisionToken = `prov-${randomToken(32)}`;
         const runtimeAuthToken = `rt-${randomToken(32)}`;
         const generatedName = `Server ${Date.now().toString(36)}`;
+        const bootstrapSeedYaml = renderHostedOwnerBootstrapSeed({
+          displayName: params.session.principal.displayName ?? undefined,
+          email: params.session.principal.email ?? undefined,
+        });
         const bootstrapTransport = resolveBootstrapTransportConfig({
           serverClass: "standard",
           providerName: "hetzner",
@@ -6393,6 +6410,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           runtimeTokenActiveKid: config.runtimeTokenActiveKid,
           tailscaleAuthKey: bootstrapTransport.tailscaleAuthKey,
           tailscaleHostname: bootstrapTransport.tailscaleHostname,
+          bootstrapSeedYaml: bootstrapSeedYaml ?? undefined,
         });
 
         try {
@@ -9555,6 +9573,10 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         const provisionToken = `prov-${randomToken(32)}`;
         const runtimeAuthToken = `rt-${randomToken(32)}`;
         const generatedName = `Server ${Date.now().toString(36)}`;
+        const bootstrapSeedYaml = renderHostedOwnerBootstrapSeed({
+          displayName: session.principal.displayName ?? undefined,
+          email: session.principal.email ?? undefined,
+        });
         const bootstrapTransport = resolveBootstrapTransportConfig({
           serverClass: requestedServerClass,
           providerName: provisionProvider.providerName,
@@ -9595,6 +9617,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           runtimeTokenActiveKid: config.runtimeTokenActiveKid,
           tailscaleAuthKey: bootstrapTransport.tailscaleAuthKey,
           tailscaleHostname: bootstrapTransport.tailscaleHostname,
+          bootstrapSeedYaml: bootstrapSeedYaml ?? undefined,
         });
 
         // Create VPS (async but we await the initial API call)
