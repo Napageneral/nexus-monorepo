@@ -3,7 +3,7 @@ import type { AppViewState } from "../ui/app-view-state.ts";
 import { icons } from "../ui/icons.ts";
 import { loadAgents, createAgent } from "../ui/controllers/agents.ts";
 import { loadIntegrations } from "../ui/controllers/integrations.ts";
-import { renderAppsPage as renderPluginsPage } from "./pages/apps.ts";
+import { renderAppsPage as renderConnectorsPage } from "./pages/apps.ts";
 import { renderAgentsPage } from "./pages/agents.ts";
 import { renderAgentCreateWizard, type AgentCreateStep, type AgentCreateForm } from "./pages/agent-create.ts";
 import { renderAgentDetail, type AgentDetailTab, type AgentDetailModal } from "./pages/agent-detail.ts";
@@ -84,18 +84,18 @@ function resolveV2Tab(state: AppViewState): V2ActiveView {
   const t = (state as any).v2Tab as V2ActiveView | undefined;
   if (t) return t;
   switch (state.tab) {
-    case "integrations": return "plugins";
+    case "integrations": return "connectors";
     case "agents": return "agents";
     case "system": return "monitor";
     case "identity": return "identity";
     case "memory": return "memory";
-    default: return "plugins";
+    default: return "connectors";
   }
 }
 
 function legacyTabFor(tab: V2ActiveView): string {
   switch (tab) {
-    case "plugins": return "integrations";
+    case "connectors": return "integrations";
     case "agents": return "agents";
     case "monitor": return "system";
     case "identity": return "identity";
@@ -296,7 +296,7 @@ export function renderAppV2(state: AppViewState) {
       <!-- ═══ TOP NAV (app-level chrome) ═══ -->
       <nav class="v2-topnav">
         <div class="v2-topnav-left">
-          <div class="v2-logo" @click=${() => setV2Tab(state, "plugins")} style="cursor: pointer;">
+          <div class="v2-logo" @click=${() => setV2Tab(state, "connectors")} style="cursor: pointer;">
             <div class="v2-logo-mark">
               <img src="${basePath ? `${basePath}/favicon.svg` : "/favicon.svg"}" alt="" />
             </div>
@@ -322,7 +322,7 @@ export function renderAppV2(state: AppViewState) {
           <button class="v2-icon-btn" title="Notifications" @click=${() => {
             (state as any).v2NotificationsOpen = !(state as any).v2NotificationsOpen;
             (state as any).tab = "__v2_force__";
-            state.setTab(legacyTabFor(activeTab === "settings" ? "plugins" : activeTab as V2Tab) as any);
+            state.setTab(legacyTabFor(activeTab === "settings" ? "connectors" : activeTab as V2Tab) as any);
           }}>${v2.bell}</button>
           <button class="v2-icon-btn ${isSettings ? "v2-icon-btn--active" : ""}" title="Settings" @click=${() => setV2Tab(state, "settings")}>${icons.settings}</button>
         </div>
@@ -330,7 +330,7 @@ export function renderAppV2(state: AppViewState) {
 
       <!-- ═══ MAIN CONTENT ═══ -->
       <main class="v2-main ${isSettings ? "v2-main--settings" : ""} ${isAgentDetail ? "v2-main--agent-detail" : ""}">
-        ${activeTab === "plugins" ? renderPluginsPage({
+        ${activeTab === "connectors" ? renderConnectorsPage({
           loading: state.integrationsLoading,
           error: state.integrationsError,
           adapters: state.integrationsAdapters,
