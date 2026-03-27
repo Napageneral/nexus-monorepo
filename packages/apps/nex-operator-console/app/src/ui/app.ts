@@ -78,6 +78,7 @@ import {
   handleUpdated,
 } from "./app-lifecycle.ts";
 import { renderApp } from "./app-render.ts";
+import { renderAppV2 } from "../v2/app-render-v2.ts";
 import { connectRuntime as connectRuntimeInternal } from "./app-runtime.ts";
 import {
   exportLogs as exportLogsInternal,
@@ -643,6 +644,11 @@ export class NexusApp extends LitElement {
   }
 
   render() {
+    // v2 UI — set USE_V2=true to enable new design
+    const useV2 = (this as any).__useV2 ?? true;
+    if (useV2) {
+      return renderAppV2(this as unknown as AppViewState);
+    }
     return renderApp(this as unknown as AppViewState);
   }
 }

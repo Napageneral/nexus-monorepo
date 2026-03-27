@@ -1,0 +1,486 @@
+/* ─── v2 Shell Layout ──────────────────────────────────────────────── */
+
+.v2-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--v2-bg);
+  color: var(--v2-text);
+  font-family: var(--v2-font);
+  font-size: var(--v2-text-base);
+  line-height: var(--v2-leading-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Top Navigation ──────────────────────────────────────────────── */
+/* Reference: ~40px height, very compact, no visible border in dark */
+
+.v2-topnav {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  height: 44px;
+  padding: 0 var(--v2-space-5);
+  background: var(--v2-bg-nav);
+  border-bottom: 1px solid var(--v2-border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  flex-shrink: 0;
+}
+
+/* Reference: tabs are LEFT-aligned, flowing after Personal, not centered.
+   Layout: [logo] [Personal] [Apps] [Agents] [Monitor] ---- [Production] [icons] [avatar] */
+
+.v2-topnav-left {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-3);
+}
+
+.v2-topnav-center {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: var(--v2-space-3);
+}
+
+.v2-topnav-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+/* ─── Logo ────────────────────────────────────────────────────────── */
+/* Reference: "one" wordmark ~18px, bold */
+
+.v2-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-2);
+  text-decoration: none;
+  color: var(--v2-text-strong);
+}
+
+.v2-logo-mark {
+  width: 22px;
+  height: 22px;
+}
+
+.v2-logo-mark img {
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+}
+
+.v2-logo-text {
+  font-size: var(--v2-text-md);
+  font-weight: var(--v2-weight-bold);
+  letter-spacing: -0.03em;
+}
+
+/* ─── Workspace Switcher ──────────────────────────────────────────── */
+/* Reference: "Personal" + sparkle icon, compact */
+
+.v2-workspace {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: var(--v2-radius-sm);
+  cursor: pointer;
+  color: var(--v2-text);
+  font-size: var(--v2-text-sm);
+  font-weight: var(--v2-weight-medium);
+  transition: color var(--v2-transition-fast);
+  background: none;
+  border: none;
+  font-family: inherit;
+}
+
+.v2-workspace:hover {
+  color: var(--v2-text-strong);
+}
+
+.v2-workspace svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.5;
+}
+
+/* ─── Nav Tabs (pill-shaped) ──────────────────────────────────────── */
+/* Reference: very compact pills, ~28px height, tiny icons, ~12px text */
+
+.v2-nav-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: var(--v2-radius-full);
+  font-size: var(--v2-text-xs);
+  font-weight: var(--v2-weight-medium);
+  color: var(--v2-nav-text);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--v2-transition-fast);
+  white-space: nowrap;
+  font-family: inherit;
+  text-decoration: none;
+  height: 28px;
+  line-height: 1;
+}
+
+.v2-nav-tab:hover {
+  background: var(--v2-bg-nav-pill);
+  color: var(--v2-nav-text-active);
+}
+
+.v2-nav-tab--active {
+  background: var(--v2-bg-nav-pill-active);
+  color: var(--v2-nav-text-active);
+}
+
+.v2-nav-tab svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ─── Nav separator ───────────────────────────────────────────────── */
+
+.v2-nav-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--v2-border-strong);
+  margin: 0 4px;
+  opacity: 0.5;
+}
+
+/* ─── Utility Icons (right side) ──────────────────────────────────── */
+/* Reference: "Production" is a small text label with a toggle-style look */
+
+/* Reference: "Production" with a toggle switch next to it */
+.v2-env-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--v2-text-xs);
+  font-weight: var(--v2-weight-medium);
+  color: var(--v2-text);
+  cursor: default;
+  margin-right: 4px;
+}
+
+.v2-env-toggle-switch {
+  width: 34px;
+  height: 18px;
+  border-radius: var(--v2-radius-full);
+  background: var(--v2-border-strong);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.v2-env-toggle-switch::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--v2-text-muted);
+  top: 2px;
+  right: 2px;
+}
+
+/* Reference: icons are ~16px, tightly spaced, muted color */
+
+.v2-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--v2-radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--v2-text-muted);
+  cursor: pointer;
+  transition: all var(--v2-transition-fast);
+  position: relative;
+  padding: 0;
+}
+
+.v2-icon-btn:hover {
+  color: var(--v2-text);
+}
+
+.v2-icon-btn svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ─── User Avatar ─────────────────────────────────────────────────── */
+/* Reference: ~28px circle with photo, colored border */
+
+.v2-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid var(--v2-border-strong);
+  transition: border-color var(--v2-transition-fast);
+  background: var(--v2-bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--v2-text-muted);
+  font-size: 10px;
+  font-weight: var(--v2-weight-bold);
+  margin-left: 4px;
+}
+
+.v2-avatar:hover {
+  border-color: var(--v2-gold);
+}
+
+.v2-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ─── Vertical divider ────────────────────────────────────────────── */
+
+.v2-divider-v {
+  width: 1px;
+  height: 18px;
+  background: var(--v2-border);
+  margin: 0 6px;
+}
+
+/* ─── Main Content Area ───────────────────────────────────────────── */
+/* Reference: content hugs top, generous horizontal padding */
+
+.v2-main {
+  flex: 1;
+  padding: var(--v2-space-6) var(--v2-space-8);
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.v2-main--wide {
+  max-width: 1440px;
+}
+
+/* ─── Page Header ─────────────────────────────────────────────────── */
+/* Reference: title ~22-24px bold, subtitle ~12px muted, tight spacing */
+
+.v2-page-header {
+  margin-bottom: var(--v2-space-5);
+}
+
+.v2-page-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--v2-space-4);
+}
+
+.v2-page-title {
+  font-size: var(--v2-text-2xl);
+  font-weight: var(--v2-weight-bold);
+  color: var(--v2-text-strong);
+  letter-spacing: -0.02em;
+  line-height: var(--v2-leading-tight);
+  margin: 0;
+}
+
+.v2-page-subtitle {
+  font-size: var(--v2-text-xs);
+  color: var(--v2-text-muted);
+  margin-top: 3px;
+  line-height: var(--v2-leading-relaxed);
+}
+
+/* ─── Dropdown Menus ──────────────────────────────────────────────── */
+
+.v2-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  background: var(--v2-bg-card);
+  border: 1px solid var(--v2-border);
+  border-radius: var(--v2-radius-lg);
+  box-shadow: var(--v2-shadow-lg);
+  padding: var(--v2-space-1);
+  min-width: 180px;
+  z-index: 200;
+}
+
+.v2-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-2);
+  padding: 6px 10px;
+  border-radius: var(--v2-radius-sm);
+  font-size: var(--v2-text-sm);
+  color: var(--v2-text);
+  cursor: pointer;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  transition: background var(--v2-transition-fast);
+}
+
+.v2-dropdown-item:hover {
+  background: var(--v2-bg-card-hover);
+}
+
+.v2-dropdown-item--active {
+  background: var(--v2-bg-nav-pill-active);
+  color: var(--v2-text-strong);
+  font-weight: var(--v2-weight-medium);
+}
+
+.v2-dropdown-item svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  opacity: 0.6;
+}
+
+.v2-dropdown-sep {
+  height: 1px;
+  background: var(--v2-border);
+  margin: 4px 0;
+}
+
+/* ─── Notifications Slide-Out ─────────────────────────────────────── */
+
+.v2-notifications-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 340px;
+  height: 100vh;
+  background: var(--v2-bg-raised);
+  border-left: 1px solid var(--v2-border);
+  box-shadow: var(--v2-shadow-overlay);
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform var(--v2-transition-slow);
+}
+
+.v2-notifications-panel--open {
+  transform: translateX(0);
+}
+
+.v2-notifications-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--v2-space-4) var(--v2-space-5);
+  border-bottom: 1px solid var(--v2-border);
+}
+
+.v2-notifications-title {
+  font-size: var(--v2-text-md);
+  font-weight: var(--v2-weight-semibold);
+}
+
+.v2-notifications-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--v2-space-8);
+  color: var(--v2-text-faint);
+  text-align: center;
+  font-size: var(--v2-text-sm);
+}
+
+.v2-notifications-body svg {
+  width: 40px;
+  height: 40px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.5;
+  margin-bottom: var(--v2-space-3);
+  opacity: 0.4;
+}
+
+/* ─── Settings Page (inline under nav, with sidebar) ──────────────── */
+
+.v2-main--settings {
+  max-width: none;
+  padding: 0;
+}
+
+.v2-settings-page {
+  display: flex;
+  min-height: calc(100vh - 44px);
+}
+
+.v2-settings-sidebar-inline {
+  width: 200px;
+  border-right: 1px solid var(--v2-border);
+  padding: var(--v2-space-5) var(--v2-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-5);
+  flex-shrink: 0;
+  background: var(--v2-bg);
+}
+
+.v2-settings-page-content {
+  flex: 1;
+  padding: var(--v2-space-6) var(--v2-space-8);
+  max-width: 900px;
+}
+
+/* Active icon button (settings gear when on settings page) */
+.v2-icon-btn--active {
+  color: var(--v2-text-strong);
+  background: var(--v2-bg-nav-pill-active);
+}
+
+/* ─── Responsive ──────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .v2-topnav {
+    padding: 0 var(--v2-space-3);
+  }
+
+  .v2-main {
+    padding: var(--v2-space-4) var(--v2-space-4);
+  }
+
+  .v2-topnav-center {
+    display: none;
+  }
+}
