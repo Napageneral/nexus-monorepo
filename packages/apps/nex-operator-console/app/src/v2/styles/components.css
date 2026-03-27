@@ -72,6 +72,94 @@
   font-size: var(--v2-text-2xs);
 }
 
+/* ─── Sub-Tabs (page-level navigation within a tab) ───────────────── */
+/* Text links with underline indicator — NOT bordered buttons */
+
+.v2-detail-tabs {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid var(--v2-border);
+  margin-bottom: var(--v2-space-5);
+  padding: 0;
+}
+
+.v2-detail-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 2px;
+  font-size: var(--v2-text-sm);
+  font-weight: var(--v2-weight-medium);
+  font-family: inherit;
+  color: var(--v2-text-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: color var(--v2-transition-fast), border-color var(--v2-transition-fast);
+  white-space: nowrap;
+}
+
+.v2-detail-tab:hover {
+  color: var(--v2-text);
+}
+
+.v2-detail-tab--active,
+.v2-detail-tab.v2-detail-tab--active {
+  color: var(--v2-text-strong);
+  border-bottom-color: var(--v2-gold);
+}
+
+.v2-detail-tab svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ─── Filter Pills (segmented filter buttons) ─────────────────────── */
+
+.v2-filter-bar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: var(--v2-space-4);
+  flex-wrap: wrap;
+}
+
+.v2-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--v2-radius-full);
+  font-size: var(--v2-text-xs);
+  font-weight: var(--v2-weight-medium);
+  font-family: inherit;
+  color: var(--v2-text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--v2-transition-fast);
+  white-space: nowrap;
+}
+
+.v2-filter-pill:hover {
+  background: var(--v2-bg-nav-pill);
+  color: var(--v2-text);
+}
+
+.v2-filter-pill--active,
+.v2-filter-pill.v2-filter-pill--active {
+  background: var(--v2-bg-nav-pill-active);
+  color: var(--v2-text-strong);
+}
+
 .v2-btn--lg {
   height: 38px;
   padding: 0 20px;
