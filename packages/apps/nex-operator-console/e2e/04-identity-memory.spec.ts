@@ -39,7 +39,7 @@ test.describe('OCI-005: Identity Page', () => {
 
     // Should have a table with at least one contact from seeding
     const table = page.locator('.v2-table');
-    const emptyState = page.locator('.v2-empty, text=No contacts');
+    const emptyState = page.locator('.v2-empty').or(page.getByText('No contacts'));
     const hasContent = await table.count() > 0 || await emptyState.count() > 0;
     expect(hasContent).toBeTruthy();
   });
@@ -95,8 +95,8 @@ test.describe('OCI-005: Memory Page', () => {
 
     await screenshot(page, 'memory-search');
 
-    // Search input should exist
-    const searchInput = page.locator('.v2-search-input, input[placeholder*="Search"]');
+    // Search text input should exist (not the type select)
+    const searchInput = page.locator('input.v2-search-input, input[placeholder*="Search"]');
     expect(await searchInput.count()).toBeGreaterThanOrEqual(1);
   });
 
@@ -105,17 +105,12 @@ test.describe('OCI-005: Memory Page', () => {
     await navigateToTab(page, 'Memory');
     await clickSubTab(page, 'Search');
 
-    const searchInput = page.locator('.v2-search-input, input[placeholder*="Search"]').first();
+    const searchInput = page.locator('input.v2-search-input, input[placeholder*="Search"]').first();
     if (await searchInput.isVisible()) {
       await searchInput.fill('test memory query');
 
-      // Try pressing Enter or clicking search button
-      const searchBtn = page.locator('button:has-text("Search")');
-      if (await searchBtn.isVisible()) {
-        await searchBtn.click();
-      } else {
-        await searchInput.press('Enter');
-      }
+      // Press Enter to trigger search
+      await searchInput.press('Enter');
 
       await page.waitForTimeout(500);
       await screenshot(page, 'memory-search-executed');
@@ -130,7 +125,7 @@ test.describe('OCI-005: Memory Page', () => {
     await screenshot(page, 'memory-quality');
 
     // Should show quality summary cards or empty state
-    const content = page.locator('.v2-card, .v2-empty, text=No quality data');
+    const content = page.locator('.v2-card').or(page.locator('.v2-empty')).or(page.getByText('No quality data'));
     expect(await content.count()).toBeGreaterThanOrEqual(1);
   });
 

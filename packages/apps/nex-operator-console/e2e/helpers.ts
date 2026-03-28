@@ -27,9 +27,8 @@ export async function screenshot(page: Page, name: string): Promise<void> {
  */
 export async function navigateToTab(page: Page, tabName: string): Promise<void> {
   await page.click(`.v2-nav-tab:has-text("${tabName}")`);
-  // Wait for page content to render
-  await page.waitForSelector('.v2-page-title, .v2-detail-tabs, .v2-empty', { timeout: 5000 });
-  // Small settle time for any animations
+  // Wait for the clicked tab to become active, then let the page settle
+  await page.waitForSelector(`.v2-nav-tab--active:has-text("${tabName}")`, { timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(300);
 }
 

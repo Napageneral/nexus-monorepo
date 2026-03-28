@@ -8,9 +8,9 @@ test.describe('OCI-003: Connectors Page', () => {
 
     await screenshot(page, 'connectors-page');
 
-    // Should show either platform picker (empty) or connected list
-    const pageTitle = page.locator('.v2-page-title');
-    await expect(pageTitle).toBeVisible();
+    // Should show either platform picker heading or connected list title
+    const heading = page.locator('h1, .v2-page-title').first();
+    await expect(heading).toBeVisible();
   });
 
   test('connectors shows platform picker or connected list', async ({ page }) => {
@@ -19,7 +19,7 @@ test.describe('OCI-003: Connectors Page', () => {
 
     // Either the platform picker grid or the connected apps table should be visible
     const platformGrid = page.locator('.v2-platform-grid, .v2-table, [class*="platform"]');
-    const emptyState = page.locator('text=connect a platform, text=Browse all connectors');
+    const emptyState = page.getByText('connect a platform').or(page.getByText('Browse all connectors'));
 
     const hasContent = await platformGrid.count() > 0 || await emptyState.count() > 0;
     expect(hasContent).toBeTruthy();
@@ -37,7 +37,7 @@ test.describe('OCI-003: Agents List', () => {
 
     // Should show agent cards from seeded data or empty state
     const agentCards = page.locator('.v2-card--interactive, .v2-agent-card');
-    const emptyState = page.locator('text=No agents yet, text=Create agent');
+    const emptyState = page.getByText('No agents yet').or(page.getByText('Create agent'));
 
     const hasAgents = await agentCards.count() > 0;
     const hasEmpty = await emptyState.count() > 0;
@@ -65,7 +65,7 @@ test.describe('OCI-003: Agent Creation Wizard', () => {
     await screenshot(page, 'wizard-step1-basics');
 
     // Step 1: Fill name
-    const nameInput = page.locator('input[placeholder*="name" i], input[type="text"]').first();
+    const nameInput = page.locator('input[placeholder="e.g. Sales Assistant"], input.v2-input').first();
     if (await nameInput.isVisible()) {
       await nameInput.fill('Cleanroom Browser Agent');
     }
@@ -94,7 +94,7 @@ test.describe('OCI-003: Agent Creation Wizard', () => {
       await screenshot(page, 'wizard-step4-review');
 
       // Step 4: Review — verify name appears
-      await expect(page.locator('text=Cleanroom Browser Agent')).toBeVisible();
+      await expect(page.getByText('Cleanroom Browser Agent')).toBeVisible();
 
       // Click Create
       const createFinalBtn = page.locator('button:has-text("Create agent"), button:has-text("Create")').last();

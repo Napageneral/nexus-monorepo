@@ -17,7 +17,7 @@ test.describe('Smoke Test', () => {
     expect(tabCount).toBeGreaterThanOrEqual(5);
 
     // Verify brand is present
-    await expect(page.locator('.v2-brand-text')).toContainText('nexus');
+    await expect(page.locator('.v2-logo-text')).toContainText('nexus');
 
     // No critical JS errors
     const criticalErrors = errors.filter(e =>

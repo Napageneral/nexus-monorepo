@@ -110,7 +110,7 @@ test.describe('OCI-004: Jobs Page', () => {
 
     // Should have a table or empty state
     const table = page.locator('.v2-table');
-    const emptyState = page.locator('.v2-empty, text=No job definitions');
+    const emptyState = page.locator('.v2-empty').or(page.getByText('No job definitions'));
     expect(await table.count() > 0 || await emptyState.count() > 0).toBeTruthy();
   });
 });
