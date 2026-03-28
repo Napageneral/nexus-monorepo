@@ -78,11 +78,13 @@ func DefineAdapter[T any](config DefineAdapterConfig[T]) Adapter {
 	if methods == nil {
 		methods = map[string]DeclaredMethod[T]{}
 	}
+	declaredMethods := buildDeclaredMethods(config, methods)
 
 	return Adapter{
+		DeclaredMethods: declaredMethods,
 		Operations: AdapterOperations{
 			AdapterInfo: func(ctx context.Context) (*AdapterInfo, error) {
-				info := buildAdapterInfo(config, methods)
+				info := buildAdapterInfo(config, declaredMethods)
 				return &info, nil
 			},
 			AdapterConnectionsList: func(ctx context.Context) ([]AdapterConnectionIdentity, error) {
@@ -175,8 +177,8 @@ func DefineAdapter[T any](config DefineAdapterConfig[T]) Adapter {
 				}
 				return config.Setup.Cancel(adapterCtx, req)
 			},
-			ServeStart:     config.ServeStart,
-			Methods:        buildMethodHandlers(config, methods),
+			ServeStart: config.ServeStart,
+			Methods:    buildMethodHandlers(config, methods),
 		},
 	}
 }
@@ -263,7 +265,18 @@ func buildMethodHandlers[T any](config DefineAdapterConfig[T], methods map[strin
 	return built
 }
 
-func buildAdapterInfo[T any](config DefineAdapterConfig[T], methods map[string]DeclaredMethod[T]) AdapterInfo {
+func buildDeclaredMethods[T any](config DefineAdapterConfig[T], methods map[string]DeclaredMethod[T]) map[string]AdapterMethod {
+	if len(methods) == 0 {
+		return nil
+	}
+	declaredMethods := make(map[string]AdapterMethod, len(methods))
+	for name, declaration := range methods {
+		declaredMethods[name] = buildMethodDescriptor(config, name, declaration)
+	}
+	return declaredMethods
+}
+
+func buildAdapterInfo[T any](config DefineAdapterConfig[T], declaredMethods map[string]AdapterMethod) AdapterInfo {
 	operations := []AdapterOperation{
 		OpAdapterInfo,
 		OpAdapterConnectionsList,
@@ -291,9 +304,9 @@ func buildAdapterInfo[T any](config DefineAdapterConfig[T], methods map[string]D
 		operations = append(operations, OpAdapterServeStart)
 	}
 
-	methodDescriptors := make([]AdapterMethod, 0, len(methods))
-	for name, declaration := range methods {
-		methodDescriptors = append(methodDescriptors, buildMethodDescriptor(config, name, declaration))
+	methodDescriptors := make([]AdapterMethod, 0, len(declaredMethods))
+	for _, descriptor := range declaredMethods {
+		methodDescriptors = append(methodDescriptors, descriptor)
 	}
 
 	info := AdapterInfo{
@@ -344,6 +357,7 @@ func buildMethodDescriptor[T any](config DefineAdapterConfig[T], name string, de
 	origin := declaration.Origin
 	if origin == nil {
 		origin = &AdapterMethodOrigin{
+			PackageKind:       "adapter",
 			PackageID:         config.Platform,
 			PackageVersion:    config.Version,
 			DeclarationMode:   "builtin",

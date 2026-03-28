@@ -47,7 +47,7 @@ Create the unified Go authoring layer in the shared SDK:
 - add `DefineAdapter(...)`
 - add single-source method declaration helpers
 - add connection/client context types
-- derive `AdapterInfo` from the top-level declaration
+- derive runtime reflection from the top-level declaration
 - derive runtime handlers from the same declaration
 - remove `DeliveryHandlers` as target-state outward authoring
 - remove `OpChannels*` as target-state outward execution vocabulary
@@ -82,7 +82,7 @@ Files:
 
 Add focused tests for:
 
-- derived `adapter.info`
+- derived runtime reflection
 - single-source methods
 - default accounts
 - default health

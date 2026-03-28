@@ -252,8 +252,6 @@ export function renderApp(state: AppViewState) {
                   state.sessionKey = resolveConversationSessionKey(state.sessionsResult, next);
                   state.chatMessage = "";
                   state.chatAttachments = [];
-                  state.chatStream = null;
-                  state.chatStreamStartedAt = null;
                   state.chatRunId = null;
                   state.chatQueue = [];
                   state.resetToolStream();
@@ -275,8 +273,6 @@ export function renderApp(state: AppViewState) {
                 assistantAvatarUrl: chatAvatarUrl,
                 messages: state.chatMessages,
                 toolMessages: state.chatToolMessages,
-                stream: state.chatStream,
-                streamStartedAt: state.chatStreamStartedAt,
                 draft: state.chatMessage,
                 queue: state.chatQueue,
                 connected: state.connected,

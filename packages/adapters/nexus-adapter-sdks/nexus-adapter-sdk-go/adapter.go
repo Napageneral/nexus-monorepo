@@ -1,8 +1,7 @@
 // Package nexadapter provides shared infrastructure for building Nexus adapters.
 //
 // Instead of each adapter reimplementing operation dispatch, JSONL emission,
-// signal handling, record emission, text chunking, and streaming
-// protocol support, this SDK handles all of it. Adapter authors write only the
+// signal handling, and record emission, this SDK handles all of it. Adapter authors write only the
 // platform-specific logic.
 //
 // # Quick Start
@@ -83,7 +82,8 @@ type AdapterMethodRequest struct {
 
 // Adapter defines the operation handlers for a Nexus adapter.
 type Adapter struct {
-	Operations AdapterOperations
+	Operations      AdapterOperations
+	DeclaredMethods map[string]AdapterMethod
 }
 
 // Run is the main entry point for an adapter binary.
@@ -366,9 +366,6 @@ func runControl(adapter Adapter, args []string) error {
 }
 
 func runMethod(adapter Adapter, methodName string, args []string) error {
-	if adapter.Operations.AdapterInfo == nil {
-		return fmt.Errorf("adapter.info handler not implemented")
-	}
 	if adapter.Operations.Methods == nil {
 		return fmt.Errorf("unknown command: %s", methodName)
 	}
@@ -377,13 +374,9 @@ func runMethod(adapter Adapter, methodName string, args []string) error {
 		return fmt.Errorf("unknown command: %s", methodName)
 	}
 
-	info, err := adapter.Operations.AdapterInfo(context.Background())
-	if err != nil {
-		return fmt.Errorf("adapter.info: %w", err)
-	}
-	method, ok := findDeclaredMethod(info, methodName)
+	method, ok := findDeclaredMethod(adapter, methodName)
 	if !ok {
-		return fmt.Errorf("adapter method not declared in adapter.info: %s", methodName)
+		return fmt.Errorf("adapter method not declared in package declaration: %s", methodName)
 	}
 
 	fs := flag.NewFlagSet(methodName, flag.ContinueOnError)
@@ -424,16 +417,12 @@ func runMethod(adapter Adapter, methodName string, args []string) error {
 	return writeJSON(result)
 }
 
-func findDeclaredMethod(info *AdapterInfo, methodName string) (AdapterMethod, bool) {
-	if info == nil {
+func findDeclaredMethod(adapter Adapter, methodName string) (AdapterMethod, bool) {
+	if adapter.DeclaredMethods == nil {
 		return AdapterMethod{}, false
 	}
-	for _, method := range info.Methods {
-		if method.Name == methodName {
-			return method, true
-		}
-	}
-	return AdapterMethod{}, false
+	method, ok := adapter.DeclaredMethods[methodName]
+	return method, ok
 }
 
 // --- Helpers ---

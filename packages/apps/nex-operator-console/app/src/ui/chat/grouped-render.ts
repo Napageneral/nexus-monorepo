@@ -69,40 +69,6 @@ export function renderReadingIndicatorGroup(assistant?: AssistantIdentity) {
   `;
 }
 
-export function renderStreamingGroup(
-  text: string,
-  startedAt: number,
-  onOpenSidebar?: (content: string) => void,
-  assistant?: AssistantIdentity,
-) {
-  const timestamp = new Date(startedAt).toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  const name = assistant?.name ?? "Assistant";
-
-  return html`
-    <div class="chat-group assistant">
-      ${renderAvatar("assistant", assistant)}
-      <div class="chat-group-messages">
-        ${renderGroupedMessage(
-          {
-            role: "assistant",
-            content: [{ type: "text", text }],
-            timestamp: startedAt,
-          },
-          { isStreaming: true, showReasoning: false },
-          onOpenSidebar,
-        )}
-        <div class="chat-group-footer">
-          <span class="chat-sender-name">${name}</span>
-          <span class="chat-group-timestamp">${timestamp}</span>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
 export function renderMessageGroup(
   group: MessageGroup,
   opts: {
@@ -138,7 +104,6 @@ export function renderMessageGroup(
           renderGroupedMessage(
             item.message,
             {
-              isStreaming: group.isStreaming && index === group.messages.length - 1,
               showReasoning: opts.showReasoning,
             },
             opts.onOpenSidebar,
@@ -217,7 +182,7 @@ function renderMessageImages(images: ImageBlock[]) {
 
 function renderGroupedMessage(
   message: unknown,
-  opts: { isStreaming: boolean; showReasoning: boolean },
+  opts: { showReasoning: boolean },
   onOpenSidebar?: (content: string) => void,
 ) {
   const m = message as Record<string, unknown>;
@@ -245,7 +210,6 @@ function renderGroupedMessage(
   const bubbleClasses = [
     "chat-bubble",
     canCopyMarkdown ? "has-copy" : "",
-    opts.isStreaming ? "streaming" : "",
     "fade-in",
   ]
     .filter(Boolean)

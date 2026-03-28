@@ -130,8 +130,8 @@ func main() {
 Rules:
 
 1. authors declare adapter metadata once
-2. the SDK derives `adapter.info.operations`
-3. the SDK derives `adapter.info.methods`
+2. the SDK derives runtime reflection metadata for control operations
+3. the SDK derives reflected callable capability metadata
 4. the SDK derives runtime method dispatch from declared `Methods`
 5. truthful communication methods and provider-native mutation methods both live
    under `Methods`
@@ -164,6 +164,10 @@ Connection: ConnectionHandlers[T]{
 }
 ```
 
+`AdapterConnectionIdentity`, `AdapterHealth`, and `AdapterSetupResult` may
+each carry `AccountContact` when the adapter can state the provider account it
+represents as a stable logical contact reference.
+
 Rules:
 
 1. `Connections` should default to one runtime-backed connection identity when omitted
@@ -182,6 +186,9 @@ Ingest: IngestHandlers[T]{
 ```
 
 This is the canonical runtime ingest surface.
+
+`adapter.setup.*` results should also use `AccountContact` for the same stable
+logical provider-account reference when the adapter can state it explicitly.
 
 ## `PollMonitor(...)`
 
@@ -235,7 +242,7 @@ Methods: map[string]DeclaredMethod[T]{
 Rules:
 
 1. method metadata is declared once
-2. the SDK derives the `adapter.info.methods` descriptor from the declaration
+2. the SDK derives reflected callable capability metadata from the declaration
 3. the SDK derives the runtime method handler from the same declaration
 4. outward communication uses truthful platform namespaces such as
    `slack.send`, `imessage.send`, or `discord.send`

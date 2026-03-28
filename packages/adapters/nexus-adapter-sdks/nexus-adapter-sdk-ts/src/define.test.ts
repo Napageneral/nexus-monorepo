@@ -16,7 +16,7 @@ function captureStream() {
 }
 
 describe("defineAdapter", () => {
-  it("derives adapter.info and methods from one declaration", async () => {
+  it("derives adapter.info and methods from one package declaration", async () => {
     const adapter = defineAdapter({
       platform: "test",
       name: "test-adapter",
@@ -34,7 +34,6 @@ describe("defineAdapter", () => {
         supports_delete: false,
         supports_media: false,
         supports_voice_notes: false,
-        supports_streaming_edit: false,
       },
       methods: {
         "test.echo": method({
@@ -80,6 +79,11 @@ describe("defineAdapter", () => {
       name: "test.echo",
       action: "read",
       connection_required: false,
+      origin: {
+        package_kind: "adapter",
+        declaration_mode: "manifest",
+        declaration_source: "package declaration",
+      },
     });
     expect(info.methodCatalog).toMatchObject({
       source: "manifest",
@@ -105,7 +109,6 @@ describe("defineAdapter", () => {
         supports_delete: false,
         supports_media: false,
         supports_voice_notes: false,
-        supports_streaming_edit: false,
       },
       methods: {
         "test.sum": method({

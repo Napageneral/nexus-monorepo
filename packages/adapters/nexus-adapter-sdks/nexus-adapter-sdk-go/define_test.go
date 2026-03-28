@@ -45,6 +45,9 @@ func TestDefineAdapterBuildsInfoAndDefaults(t *testing.T) {
 	if len(info.Methods) != 1 {
 		t.Fatalf("methods = %d", len(info.Methods))
 	}
+	if len(adapter.DeclaredMethods) != 1 {
+		t.Fatalf("declared methods = %d", len(adapter.DeclaredMethods))
+	}
 	if info.Methods[0].Name != "jira.issues.transition" {
 		t.Fatalf("method name = %q", info.Methods[0].Name)
 	}

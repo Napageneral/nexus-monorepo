@@ -17,7 +17,7 @@ This document answers one practical question:
 The intended package-author experience is:
 
 1. pick up one shared SDK surface
-2. declare `adapter.info` in the canonical shape
+2. declare package metadata and capabilities once
 3. emit canonical `record.ingest`
 4. declare truthful outward methods once
 5. package the adapter through the shared package kit
@@ -28,7 +28,7 @@ The intended package-author experience is:
 Every adapter package should converge on:
 
 - the shared SDK workspace
-- canonical `adapter.info` including truthful `methods`
+- package declarations plus derived runtime reflection including truthful `methods`
 - canonical `record.ingest`
 - canonical state root via `NEXUS_ADAPTER_STATE_DIR`
 - one method-first outward declaration path

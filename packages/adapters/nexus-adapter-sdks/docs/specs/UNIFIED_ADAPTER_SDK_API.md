@@ -149,8 +149,8 @@ export default defineAdapter({
 Rules:
 
 1. authors declare adapter metadata once
-2. the SDK derives `adapter.info.operations`
-3. the SDK derives `adapter.info.methods`
+2. the SDK derives runtime reflection metadata for control operations
+3. the SDK derives reflected callable capability metadata
 4. the SDK derives runtime method dispatch from declared `methods`
 5. outward communication and provider mutation both live under truthful
    namespaced methods
@@ -185,6 +185,10 @@ connection: {
 }
 ```
 
+`AdapterConnectionIdentity`, `AdapterHealth`, and `AdapterSetupResult` may
+each carry `account_contact` when the adapter can state the provider account
+it represents as a stable logical contact reference.
+
 ## Ingest Section
 
 Canonical shape:
@@ -214,7 +218,7 @@ Rules:
 
 1. authors declare outward communication and provider methods together
 2. the SDK derives runtime dispatch from `methods`
-3. the SDK derives `adapter.info.methods` from `methods`
+3. the SDK derives reflected callable capability metadata from `methods`
 4. there is no target-state `delivery` section that wires canonical
    `channels.*` operations
 5. communication methods use truthful platform namespaces such as
@@ -240,6 +244,9 @@ methods: {
   }),
 }
 ```
+
+`adapter.setup.*` results should also use `account_contact` for the same stable
+logical provider-account reference when the adapter can state it explicitly.
 
 Rules:
 

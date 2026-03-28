@@ -63,7 +63,7 @@ describe("stripThinkingTags", () => {
   });
 
   it("handles incomplete <final tag gracefully", () => {
-    // When streaming splits mid-tag, we may see "<final" without closing ">"
+    // Partial model output can leave "<final" without a closing ">"
     // This should not crash and should handle gracefully
     expect(stripThinkingTags("<final\nHello")).toBe("<final\nHello");
     expect(stripThinkingTags("Hello</final>")).toBe("Hello");

@@ -43,6 +43,7 @@ func testAdapterMethod() AdapterMethod {
 
 func TestRunMethodParsesNamespacedOperation(t *testing.T) {
 	var captured AdapterMethodRequest
+	adapterInfoCalls := 0
 
 	originalStdout := os.Stdout
 	reader, writer, err := os.Pipe()
@@ -55,8 +56,12 @@ func TestRunMethodParsesNamespacedOperation(t *testing.T) {
 	}()
 
 	adapter := Adapter{
+		DeclaredMethods: map[string]AdapterMethod{
+			"jira.issues.transition": testAdapterMethod(),
+		},
 		Operations: AdapterOperations{
 			AdapterInfo: func(ctx context.Context) (*AdapterInfo, error) {
+				adapterInfoCalls += 1
 				return &AdapterInfo{
 					Platform:   "jira",
 					Name:       "Jira Cloud",
@@ -116,19 +121,17 @@ func TestRunMethodParsesNamespacedOperation(t *testing.T) {
 	if payload["status"] != "Done" {
 		t.Fatalf("result status = %#v", payload["status"])
 	}
+	if adapterInfoCalls != 0 {
+		t.Fatalf("adapter.info should not be consulted during method execution, got %d calls", adapterInfoCalls)
+	}
 }
 
 func TestRunMethodRequiresDeclaredConnectionWhenMethodNeedsOne(t *testing.T) {
 	adapter := Adapter{
+		DeclaredMethods: map[string]AdapterMethod{
+			"jira.issues.transition": testAdapterMethod(),
+		},
 		Operations: AdapterOperations{
-			AdapterInfo: func(ctx context.Context) (*AdapterInfo, error) {
-				return &AdapterInfo{
-					Platform: "jira",
-					Name:     "Jira Cloud",
-					Version:  "1.0.0",
-					Methods:  []AdapterMethod{testAdapterMethod()},
-				}, nil
-			},
 			Methods: map[string]func(ctx context.Context, req AdapterMethodRequest) (any, error){
 				"jira.issues.transition": func(ctx context.Context, req AdapterMethodRequest) (any, error) {
 					return map[string]any{"ok": true}, nil
@@ -151,14 +154,6 @@ func TestRunMethodRequiresDeclaredConnectionWhenMethodNeedsOne(t *testing.T) {
 func TestRunMethodRejectsUndeclaredHandlers(t *testing.T) {
 	adapter := Adapter{
 		Operations: AdapterOperations{
-			AdapterInfo: func(ctx context.Context) (*AdapterInfo, error) {
-				return &AdapterInfo{
-					Platform: "jira",
-					Name:     "Jira Cloud",
-					Version:  "1.0.0",
-					Methods:  []AdapterMethod{},
-				}, nil
-			},
 			Methods: map[string]func(ctx context.Context, req AdapterMethodRequest) (any, error){
 				"jira.issues.transition": func(ctx context.Context, req AdapterMethodRequest) (any, error) {
 					return map[string]any{"ok": true}, nil
@@ -174,7 +169,7 @@ func TestRunMethodRejectsUndeclaredHandlers(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected undeclared method error")
 	}
-	if got := err.Error(); got != "adapter method not declared in adapter.info: jira.issues.transition" {
+	if got := err.Error(); got != "adapter method not declared in package declaration: jira.issues.transition" {
 		t.Fatalf("unexpected error: %q", got)
 	}
 }

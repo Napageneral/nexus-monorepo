@@ -279,10 +279,11 @@ function buildMethodDescriptor<TClient>(
         : declaration.action === "write",
     context_hints: declaration.context_hints ?? { params: {} },
     origin: {
+      package_kind: "adapter",
       package_id: config.platform,
       package_version: config.version,
       declaration_mode: "manifest",
-      declaration_source: "adapter.info",
+      declaration_source: "package declaration",
       namespace: config.platform,
     },
   } as AdapterMethod;

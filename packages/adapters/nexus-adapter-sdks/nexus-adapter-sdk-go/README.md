@@ -41,7 +41,7 @@ Shared behavior such as:
 - `record.ingest` builders
 - target parsing and validation helpers for communication-shaped methods
 - reusable request/result envelopes for communication-shaped methods
-- adapter `methods` declaration on `adapter.info`
+- declaration-first capability execution, with runtime reflection emitted from package declarations
 
 It does not own:
 

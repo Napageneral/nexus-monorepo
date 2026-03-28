@@ -34,6 +34,7 @@ export { runAdapter } from "./run.js";
 export { runAdapter as runAdapterCLI } from "./run.js";
 
 export {
+  ConnectionAccountContactSchema,
   AdapterConnectionIdentitySchema,
   AdapterAuthFieldSchema,
   AdapterAuthManifestSchema,
@@ -65,7 +66,6 @@ export {
   AdapterSetupStatusSchema,
   AdapterHealthSchema,
   AdapterInfoSchema,
-  AdapterStreamStatusSchema,
   AttachmentSchema,
   ChannelCapabilitiesSchema,
   ChannelRefSchema,
@@ -74,10 +74,10 @@ export {
   DeliveryErrorTypeSchema,
   DeliveryErrorSchema,
   RecipientSchema,
-  StreamEventSchema,
 } from "./protocol.js";
 
 export type {
+  ConnectionAccountContact,
   AdapterConnectionIdentity,
   AdapterAuthField,
   AdapterAuthManifest,
@@ -109,7 +109,6 @@ export type {
   AdapterSetupStatus,
   AdapterHealth,
   AdapterInfo,
-  AdapterStreamStatus,
   Attachment,
   ChannelRef,
   ChannelCapabilities,
@@ -118,11 +117,7 @@ export type {
   DeliveryErrorType,
   DeliveryError,
   Recipient,
-  StreamEvent,
 } from "./protocol.js";
-
-export type { StreamHandlers } from "./stream.js";
-export { emitStreamStatus, handleStream } from "./stream.js";
 
 export type { PollConfig, PollBackfillConfig, EmitFunc, MonitorHandler, BackfillHandler } from "./monitor.js";
 export { pollMonitor, pollBackfill } from "./monitor.js";

@@ -100,8 +100,6 @@ export function renderChatControls(state: AppViewState) {
             const nextSessionKey = resolveConversationSessionKey(state.sessionsResult, next);
             state.sessionKey = nextSessionKey;
             state.chatMessage = "";
-            state.chatStream = null;
-            (state as unknown as NexusApp).chatStreamStartedAt = null;
             state.chatRunId = null;
             (state as unknown as NexusApp).resetToolStream();
             (state as unknown as NexusApp).resetChatScroll();

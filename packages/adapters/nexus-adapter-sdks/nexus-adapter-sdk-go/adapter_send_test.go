@@ -22,31 +22,23 @@ func TestRunMethodPassesCommunicationShapedPayloadThroughNamespacedMethod(t *tes
 	}()
 
 	adapter := Adapter{
-		Operations: AdapterOperations{
-			AdapterInfo: func(ctx context.Context) (*AdapterInfo, error) {
-				return &AdapterInfo{
-					Platform:   "jira",
-					Name:       "Jira Cloud",
-					Version:    "1.0.0",
-					Operations: []AdapterOperation{OpAdapterInfo},
-					Methods: []AdapterMethod{
-						{
-							Name:               "jira.comments.create",
-							Action:             "write",
-							ConnectionRequired: true,
-							MutatesRemote:      true,
-							ContextHints:       AdapterMethodContextHints{Params: map[string]AdapterMethodContextHintValue{}},
-							Origin: AdapterMethodOrigin{
-								PackageID:         "jira",
-								PackageVersion:    "1.0.0",
-								DeclarationMode:   "manifest",
-								DeclarationSource: "adapter.info",
-								Namespace:         "jira",
-							},
-						},
-					},
-				}, nil
+		DeclaredMethods: map[string]AdapterMethod{
+			"jira.comments.create": {
+				Name:               "jira.comments.create",
+				Action:             "write",
+				ConnectionRequired: true,
+				MutatesRemote:      true,
+				ContextHints:       AdapterMethodContextHints{Params: map[string]AdapterMethodContextHintValue{}},
+				Origin: AdapterMethodOrigin{
+					PackageID:         "jira",
+					PackageVersion:    "1.0.0",
+					DeclarationMode:   "manifest",
+					DeclarationSource: "adapter.nexus.json",
+					Namespace:         "jira",
+				},
 			},
+		},
+		Operations: AdapterOperations{
 			Methods: map[string]func(ctx context.Context, req AdapterMethodRequest) (any, error){
 				"jira.comments.create": func(ctx context.Context, req AdapterMethodRequest) (any, error) {
 					captured = req

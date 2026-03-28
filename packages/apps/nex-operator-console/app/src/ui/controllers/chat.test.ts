@@ -29,8 +29,6 @@ function createState(overrides: Partial<ChatState> = {}): ChatState {
     chatMessages: [],
     chatRunId: null,
     chatSending: false,
-    chatStream: null,
-    chatStreamStartedAt: null,
     chatThinkingLevel: null,
     client: null,
     connected: true,
@@ -62,29 +60,25 @@ describe("handleChatEvent", () => {
     expect(handleChatEvent(state, payload)).toBe(null);
   });
 
-  it("returns null for delta from another run", () => {
+  it("returns 'final' for final from another run when the conversation still owns it", () => {
     const state = createState({
       sessionKey: "main",
       chatRunId: "run-user",
-      chatStream: "Hello",
     });
     const payload: ChatEventPayload = {
       runId: "run-announce",
       sessionKey: "main",
-      state: "delta",
+      state: "final",
       message: { role: "assistant", content: [{ type: "text", text: "Done" }] },
     };
-    expect(handleChatEvent(state, payload)).toBe(null);
+    expect(handleChatEvent(state, payload)).toBe("final");
     expect(state.chatRunId).toBe("run-user");
-    expect(state.chatStream).toBe("Hello");
   });
 
   it("returns 'final' for final from another run (e.g. sub-agent announce) without clearing state", () => {
     const state = createState({
       sessionKey: "main",
       chatRunId: "run-user",
-      chatStream: "Working...",
-      chatStreamStartedAt: 123,
     });
     const payload: ChatEventPayload = {
       runId: "run-announce",
@@ -97,16 +91,12 @@ describe("handleChatEvent", () => {
     };
     expect(handleChatEvent(state, payload)).toBe("final");
     expect(state.chatRunId).toBe("run-user");
-    expect(state.chatStream).toBe("Working...");
-    expect(state.chatStreamStartedAt).toBe(123);
   });
 
   it("processes final from own run and clears state", () => {
     const state = createState({
       sessionKey: "main",
       chatRunId: "run-1",
-      chatStream: "Reply",
-      chatStreamStartedAt: 100,
     });
     const payload: ChatEventPayload = {
       runId: "run-1",
@@ -115,8 +105,6 @@ describe("handleChatEvent", () => {
     };
     expect(handleChatEvent(state, payload)).toBe("final");
     expect(state.chatRunId).toBe(null);
-    expect(state.chatStream).toBe(null);
-    expect(state.chatStreamStartedAt).toBe(null);
   });
 
   it("accepts events for the active run even when the session key rotated", () => {
@@ -130,10 +118,9 @@ describe("handleChatEvent", () => {
     const payload: ChatEventPayload = {
       runId: "run-1",
       sessionKey: "new-session",
-      state: "delta",
-      message: { role: "assistant", content: [{ type: "text", text: "Reply" }] },
+      state: "final",
     };
-    expect(handleChatEvent(state, payload)).toBe("delta");
-    expect(state.chatStream).toBe("Reply");
+    expect(handleChatEvent(state, payload)).toBe("final");
+    expect(state.chatRunId).toBe(null);
   });
 });

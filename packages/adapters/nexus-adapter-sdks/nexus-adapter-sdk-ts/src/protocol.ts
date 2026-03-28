@@ -32,9 +32,7 @@ export const ChannelCapabilitiesSchema = z
     supports_delete: z.boolean().optional(),
     supports_media: z.boolean().optional(),
     supports_voice_notes: z.boolean().optional(),
-    supports_streaming_edit: z.boolean().optional(),
     supports_ptt: z.boolean().optional(),
-    supports_streaming: z.boolean().optional(),
     max_message_length: z.number().int().positive().optional(),
     max_attachments: z.number().int().positive().optional(),
   })
@@ -118,6 +116,7 @@ export const AdapterMethodContextHintsSchema = z.object({
 });
 
 export const AdapterMethodOriginSchema = z.object({
+  package_kind: z.enum(["runtime", "app", "adapter"]).optional(),
   package_id: z.string().nullable(),
   package_version: z.string().nullable(),
   declaration_mode: z.enum(["manifest", "openapi", "builtin"]),
@@ -271,9 +270,18 @@ export const ChannelRefSchema = z.object({
 
 export type ChannelRef = z.infer<typeof ChannelRefSchema>;
 
+export const ConnectionAccountContactSchema = z.object({
+  platform: z.string(),
+  space_id: z.string(),
+  contact_id: z.string(),
+});
+
+export type ConnectionAccountContact = z.infer<typeof ConnectionAccountContactSchema>;
+
 export const AdapterHealthSchema = z.object({
   connected: z.boolean(),
   connection_id: z.string(),
+  account_contact: ConnectionAccountContactSchema.optional(),
   last_event_at: z.number().int().optional(),
   error: z.string().optional(),
   details: z.record(z.string(), z.unknown()).optional(),
@@ -285,6 +293,7 @@ export const AdapterConnectionIdentitySchema = z.object({
   id: z.string(),
   display_name: z.string().optional(),
   credential_ref: z.string().optional(),
+  account_contact: ConnectionAccountContactSchema.optional(),
   status: z.enum(["ready", "active", "error"]),
 });
 
@@ -391,51 +400,6 @@ export const AdapterServeOutputFrameSchema = z.discriminatedUnion("type", [
 
 export type AdapterServeOutputFrame = z.infer<typeof AdapterServeOutputFrameSchema>;
 
-export const StreamEventSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("stream_start"),
-    runId: z.string(),
-    session_id: z.string().optional(),
-    connection_id: z.string(),
-    channel: ChannelRefSchema,
-    reply_to_id: z.string().optional(),
-  }),
-  z.object({ type: z.literal("token"), text: z.string() }),
-  z.object({
-    type: z.literal("tool_status"),
-    toolName: z.string(),
-    toolCallId: z.string(),
-    status: z.enum(["started", "completed", "failed"]),
-    summary: z.string().optional(),
-  }),
-  z.object({ type: z.literal("reasoning"), text: z.string() }),
-  z.object({
-    type: z.literal("stream_end"),
-    runId: z.string(),
-    final: z.boolean().optional(),
-  }),
-  z.object({
-    type: z.literal("stream_error"),
-    error: z.string(),
-    partial: z.boolean().optional(),
-  }),
-]);
-
-export type StreamEvent = z.infer<typeof StreamEventSchema>;
-
-export const AdapterStreamStatusSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("message_created"), messageId: z.string() }),
-  z.object({
-    type: z.literal("message_updated"),
-    messageId: z.string(),
-    chars: z.number().int().nonnegative(),
-  }),
-  z.object({ type: z.literal("message_sent"), messageId: z.string(), final: z.boolean() }),
-  z.object({ type: z.literal("error"), error: z.string() }),
-]);
-
-export type AdapterStreamStatus = z.infer<typeof AdapterStreamStatusSchema>;
-
 export const AdapterSetupStatusSchema = z.enum([
   "pending",
   "requires_input",
@@ -450,6 +414,7 @@ export const AdapterSetupResultSchema = z
     session_id: z.string().optional(),
     connection_id: z.string().optional(),
     service: z.string().optional(),
+    account_contact: ConnectionAccountContactSchema.optional(),
     message: z.string().optional(),
     instructions: z.string().optional(),
     fields: z.array(AdapterAuthFieldSchema).optional(),

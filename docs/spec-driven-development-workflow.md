@@ -1,7 +1,7 @@
 # Spec-Driven Development Workflow
 
 **Status:** CANONICAL
-**Last Updated:** 2026-03-16
+**Last Updated:** 2026-03-27
 
 ---
 
@@ -69,6 +69,27 @@ Validation documents should reference the intended behavior, not historical beha
 
 The latest validation ladder for a still-supported behavior remains part of the
 active validation corpus even after the original implementation work is done.
+
+### 3a. Cleanroom validation is the default proof posture
+
+For runtime-affecting work, the primary proof path should run in a disposable
+cleanroom rather than against the operator's live local runtime.
+
+This applies especially to work involving:
+
+- bootstrap and onboarding
+- runtime state or storage
+- apps and adapters
+- identity and credentials
+- hosted provisioning and install flows
+
+Prefer a Docker-backed or otherwise containerized cleanroom when practical.
+
+Live local dogfood is still important, but it is a secondary pass for:
+
+- repair and forensics
+- final operator confirmation
+- behaviors that truly depend on an already-lived-in local runtime
 
 ### 4. Archive finished or superseded material
 
@@ -208,6 +229,49 @@ Characteristics:
 - may include sequencing, deletion, and cutover details
 - temporary by nature
 
+Workplans may also use a board-style subtype when a lane benefits from atomic
+ticket movement and parallel execution:
+
+- folder name should normally end with `-board`
+- one folder per execution lane
+- one board `README.md` describing purpose, canonical inputs, scope, and the
+  active ticket set
+- status subfolders such as:
+  - `not-started/`
+  - `in-progress/`
+  - `completed/`
+- one `README.md` inside each status subfolder describing the movement rule
+- one ticket file per bounded execution unit
+- ticket filenames should use a stable short prefix such as `SCW-001` or
+  `CAI-003`
+- moving the ticket file between status folders is the status change
+- the board `README.md` should be linked from the active workplan index like
+  any other active workplan
+
+Board-style workplans are still workplans, not a new artifact type.
+They exist to make subagent dispatch, status movement, and closure hygiene
+cleaner on larger or more parallelizable lanes.
+
+Prefer a board-style workplan when:
+
+- the lane has more than a few bounded implementation units
+- different tickets can be dispatched independently to subagents
+- status movement matters more than one long narrative workplan
+- the lane is likely to stay active across multiple implementation or cleanup
+  rounds
+
+Additional board rules:
+
+1. the board `README.md` owns scope, canonical inputs, and the ticket list
+2. each ticket file owns one bounded execution unit with goal, scope,
+   acceptance, validation, and dependencies
+3. completed tickets may remain in the active board while the broader lane is
+   still open so closure state stays visible
+4. the whole board archives only when the lane is actually complete or
+   superseded
+5. if a ticket discovers target-state conflict, update the spec before moving
+   implementation forward
+
 ### `validation/`
 
 Validation ladders, test matrices, scripts, runbooks, and signoff records that
@@ -219,6 +283,9 @@ Characteristics:
 - updated as specs or proof methods change
 - can include manual and automated checks
 - may remain active after implementation work completes
+- should prefer disposable cleanroom or containerized proof paths when the
+  behavior touches runtime, bootstrap, storage, apps, adapters, or hosted
+  provisioning
 
 Validation docs fall into three subtypes:
 
@@ -254,6 +321,12 @@ docs/
   proposals/
   specs/
   workplans/
+    some-workplan.md
+    some-board/
+      README.md
+      not-started/
+      in-progress/
+      completed/
   validation/
   archive/
     proposals/
@@ -266,10 +339,20 @@ Rules:
 
 1. `docs/specs/` contains only active canonical specs.
 2. `docs/workplans/` contains only active execution plans.
-3. `docs/validation/` contains only active validation ladders and support scripts.
-4. `docs/archive/` contains anything no longer active.
-5. If exploratory drafts exist, `docs/proposals/` should exist and those drafts belong there, not in `docs/specs/`.
-6. `docs/specs/` must not contain files whose own status is `DRAFT`, `DESIGN`, `seed`, `TODO`, `not started`, or `superseded`.
+3. board-style workplans may live under `docs/workplans/<board-name>/` when a lane benefits from atomic tickets and folder-based status movement.
+4. `docs/validation/` contains only active validation ladders and support scripts.
+5. `docs/archive/` contains anything no longer active.
+6. If exploratory drafts exist, `docs/proposals/` should exist and those drafts belong there, not in `docs/specs/`.
+7. `docs/specs/` must not contain files whose own status is `DRAFT`, `DESIGN`, `seed`, `TODO`, `not started`, or `superseded`.
+
+For board-style workplans:
+
+1. each ticket lives in exactly one status folder
+2. moving the ticket file between status folders is the status change
+3. each ticket must be atomic enough for one bounded implementation lane
+4. each ticket must define acceptance and validation
+5. the board README is the index and shared context for all tickets on that lane
+6. when the board is fully complete, archive the whole board folder or keep it only until a paired closure ticket retires it
 
 For a centralized spec repository such as `nexus-specs`, the same logical split still applies even if the directory names differ. The important constraint is semantic, not cosmetic:
 
@@ -340,6 +423,7 @@ Gate:
 Outputs:
 
 - one or more sequenced workplans
+- board-style ticket folders when the lane benefits from atomic execution units
 - dependency ordering
 - implementation phases
 - explicit cutovers and deletions
@@ -354,11 +438,13 @@ Outputs:
 
 - validation ladders
 - supporting scripts
+- reusable cleanroom proof paths when the implemented behavior materially
+  changes runtime-facing or provisioning behavior
 - explicit pass/fail criteria tied to the specs
 
 Gate:
 
-- there is a concrete way to prove the target state works
+- there is a concrete cleanroom-first way to prove the target state works
 
 ### 7. Full spec/workplan/archive alignment pass
 
@@ -409,7 +495,9 @@ Outputs:
 
 Gate:
 
-- the system is proven against the current target-state specs
+- the system is proven against the current target-state specs, starting from a
+  disposable cleanroom unless the behavior explicitly requires a lived-in local
+  runtime
 
 ### 11. Independent final gap review
 

@@ -25,8 +25,6 @@ function createProps(overrides: Partial<ChatProps> = {}): ChatProps {
     compactionStatus: null,
     messages: [],
     toolMessages: [],
-    stream: null,
-    streamStartedAt: null,
     assistantAvatarUrl: null,
     draft: "",
     queue: [],

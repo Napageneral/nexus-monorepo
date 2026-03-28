@@ -7,7 +7,6 @@ import type { ChatAttachment, ChatQueueItem } from "../ui-types.ts";
 import {
   renderMessageGroup,
   renderReadingIndicatorGroup,
-  renderStreamingGroup,
 } from "../chat/grouped-render.ts";
 import { normalizeMessage, normalizeRoleForGrouping } from "../chat/message-normalizer.ts";
 import { icons } from "../icons.ts";
@@ -31,8 +30,6 @@ export type ChatProps = {
   compactionStatus?: CompactionIndicatorStatus | null;
   messages: unknown[];
   toolMessages: unknown[];
-  stream: string | null;
-  streamStartedAt: number | null;
   assistantAvatarUrl?: string | null;
   draft: string;
   queue: ChatQueueItem[];
@@ -188,7 +185,7 @@ function renderAttachmentPreview(props: ChatProps) {
 
 export function renderChat(props: ChatProps) {
   const canCompose = props.connected;
-  const isBusy = props.sending || props.stream !== null;
+  const isBusy = props.sending || Boolean(props.canAbort);
   const canAbort = Boolean(props.canAbort && props.onAbort);
   const activeSession = props.sessions?.sessions?.find(
     (row) => row.conversationId === props.conversationId,
@@ -239,15 +236,6 @@ export function renderChat(props: ChatProps) {
 
           if (item.kind === "reading-indicator") {
             return renderReadingIndicatorGroup(assistantIdentity);
-          }
-
-          if (item.kind === "stream") {
-            return renderStreamingGroup(
-              item.text,
-              item.startedAt,
-              props.onOpenSidebar,
-              assistantIdentity,
-            );
           }
 
           if (item.kind === "group") {
@@ -458,7 +446,6 @@ function groupMessages(items: ChatItem[]): Array<ChatItem | MessageGroup> {
         role,
         messages: [{ message: item.message, key: item.key }],
         timestamp,
-        isStreaming: false,
       };
     } else {
       currentGroup.messages.push({ message: item.message, key: item.key });
@@ -525,18 +512,9 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
     }
   }
 
-  if (props.stream !== null) {
-    const key = `stream:${props.conversationId || "active"}:${props.streamStartedAt ?? "live"}`;
-    if (props.stream.trim().length > 0) {
-      items.push({
-        kind: "stream",
-        key,
-        text: props.stream,
-        startedAt: props.streamStartedAt ?? Date.now(),
-      });
-    } else {
-      items.push({ kind: "reading-indicator", key });
-    }
+  if (props.canAbort) {
+    const key = `pending:${props.conversationId || "active"}`;
+    items.push({ kind: "reading-indicator", key });
   }
 
   return groupMessages(items);

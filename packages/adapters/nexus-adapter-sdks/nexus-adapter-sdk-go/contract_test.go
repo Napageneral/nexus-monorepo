@@ -108,13 +108,7 @@ func TestAdapterProtocolContract_FixturesValidate(t *testing.T) {
 	requireValid(t, compileContractRef(t, "AdapterInboundRecord"), loadFixtureJSON(t, "inbound_record.json"))
 	requireValid(t, compileContractRef(t, "AdapterHealth"), loadFixtureJSON(t, "adapter_health.json"))
 	requireValid(t, compileContractRef(t, "AdapterConnectionIdentity"), loadFixtureJSON(t, "adapter_connection_identity.json"))
-
-	for _, e := range loadFixtureJSONL(t, "stream_events.jsonl") {
-		requireValid(t, compileContractRef(t, "StreamEvent"), e)
-	}
-	for _, s := range loadFixtureJSONL(t, "stream_statuses.jsonl") {
-		requireValid(t, compileContractRef(t, "AdapterStreamStatus"), s)
-	}
+	requireValid(t, compileContractRef(t, "AdapterSetupResult"), loadFixtureJSON(t, "adapter_setup_result.json"))
 	for _, f := range loadFixtureJSONL(t, "control_input_frames.jsonl") {
 		requireValid(t, compileContractRef(t, "AdapterServeInputFrame"), f)
 	}
@@ -149,6 +143,7 @@ func TestAdapterProtocolContract_GoTypesRoundTrip(t *testing.T) {
 	roundTrip("AdapterInboundRecord", "inbound_record.json", &AdapterInboundRecord{})
 	roundTrip("AdapterHealth", "adapter_health.json", &AdapterHealth{})
 	roundTrip("AdapterConnectionIdentity", "adapter_connection_identity.json", &AdapterConnectionIdentity{})
+	roundTrip("AdapterSetupResult", "adapter_setup_result.json", &AdapterSetupResult{})
 
 	raw, err := json.Marshal(loadFixtureJSON(t, "runtime_context.json"))
 	if err != nil {

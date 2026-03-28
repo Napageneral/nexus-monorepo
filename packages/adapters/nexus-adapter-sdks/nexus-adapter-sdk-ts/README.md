@@ -4,8 +4,8 @@ This package is the TypeScript/Node SDK for Nexus external adapter binaries.
 
 It provides:
 - The adapter CLI protocol types + zod schemas (aligned with the Go SDK + adapter specs)
-- A `runAdapter()` harness for implementing runtime operations (`adapter.info`, `adapter.monitor.start`, `records.backfill`, `adapter.setup.*`, and truthful namespaced methods)
-- A declarative `defineAdapter()` authoring API that derives `adapter.info` and method dispatch from one adapter declaration
+- A `runAdapter()` harness for implementing runtime reflection/control operations (`adapter.info`, `adapter.monitor.start`, `records.backfill`, `adapter.setup.*`, and truthful namespaced methods)
+- A declarative `defineAdapter()` authoring API that declares package metadata and capabilities once, then derives runtime reflection and method dispatch from that declaration
 - Serve-session helpers for `adapter.serve.start` (endpoint registry + invoke responder loop)
 - Helpers for reading runtime context injected by Nex via `NEXUS_ADAPTER_CONTEXT_PATH`
 - Helpers for reading the canonical writable state root injected via `NEXUS_ADAPTER_STATE_DIR`
@@ -77,7 +77,6 @@ export const discordAdapter = defineAdapter({
     supports_delete: true,
     supports_media: true,
     supports_voice_notes: false,
-    supports_streaming_edit: true,
   },
   client: {
     create: ({ ctx }) => ({

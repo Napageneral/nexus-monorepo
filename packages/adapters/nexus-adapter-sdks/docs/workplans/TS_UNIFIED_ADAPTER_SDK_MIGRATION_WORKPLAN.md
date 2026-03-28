@@ -11,7 +11,7 @@ After this tranche, a TS adapter author should see the same top-level shape in
 Telegram, Discord, and WhatsApp:
 
 - `defineAdapter(...)`
-- SDK-derived `adapter.info`
+- SDK-derived runtime reflection
 - single-source outward method declaration
 - shared credential/target/retry/record helpers
 
@@ -66,7 +66,7 @@ Telegram is the right proof for:
 
 ## Implementation Steps
 
-1. Replace manual `adapter.info` with `defineAdapter(...)`
+1. Replace manual reflection wiring with `defineAdapter(...)`
 2. remove bundled outward `channels.*` assumptions from package code
 3. declare truthful outward methods once under `methods`
 4. keep provider-specific socket/gateway behavior adapter-local

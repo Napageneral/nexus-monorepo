@@ -412,8 +412,6 @@ export function renderAppV2(state: AppViewState) {
                   sending: state.chatSending,
                   messages: state.chatMessages,
                   toolMessages: state.chatToolMessages,
-                  stream: state.chatStream,
-                  streamStartedAt: state.chatStreamStartedAt,
                   draft: state.chatMessage,
                   queue: state.chatQueue,
                   connected: state.connected,

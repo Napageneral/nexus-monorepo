@@ -50,6 +50,7 @@ type AdapterMethodCatalog struct {
 }
 
 type AdapterMethodOrigin struct {
+	PackageKind       string `json:"package_kind"` // "runtime" | "app" | "adapter"
 	PackageID         string `json:"package_id,omitempty"`
 	PackageVersion    string `json:"package_version,omitempty"`
 	DeclarationMode   string `json:"declaration_mode"`   // "manifest" | "openapi" | "builtin"
@@ -153,9 +154,6 @@ type ChannelCapabilities struct {
 	SupportsDelete     bool `json:"supports_delete"`
 	SupportsMedia      bool `json:"supports_media"`
 	SupportsVoiceNotes bool `json:"supports_voice_notes"`
-
-	// Behavioral
-	SupportsStreamingEdit bool `json:"supports_streaming_edit"` // Can pseudo-stream by editing messages
 }
 
 // --- Canonical Inbound Records ---
@@ -229,23 +227,35 @@ type DeliveryError struct {
 
 // --- Health ---
 
+// ConnectionAccountContact identifies the provider account or actor that a
+// connection represents.
+type ConnectionAccountContact struct {
+	Platform  string `json:"platform"`
+	SpaceID   string `json:"space_id"`
+	ContactID string `json:"contact_id"`
+}
+
 // AdapterHealth is the structured output of a `health` command.
 type AdapterHealth struct {
-	Connected    bool           `json:"connected"`
-	ConnectionID string         `json:"connection_id"`
-	LastEventAt  int64          `json:"last_event_at,omitempty"` // Unix ms
-	Error        string         `json:"error,omitempty"`
-	Details      map[string]any `json:"details,omitempty"`
+	Connected     bool                      `json:"connected"`
+	ConnectionID  string                    `json:"connection_id"`
+	Account       string                    `json:"account,omitempty"`
+	AccountContact *ConnectionAccountContact `json:"account_contact,omitempty"`
+	LastEventAt   int64                     `json:"last_event_at,omitempty"` // Unix ms
+	Error         string                    `json:"error,omitempty"`
+	Details       map[string]any            `json:"details,omitempty"`
 }
 
 // --- Accounts ---
 
 // AdapterConnectionIdentity represents a configured account within the adapter.
 type AdapterConnectionIdentity struct {
-	ID            string `json:"id"`
-	DisplayName   string `json:"display_name,omitempty"`
-	CredentialRef string `json:"credential_ref,omitempty"` // "google/tnapathy@gmail.com"
-	Status        string `json:"status"`                   // "ready", "active", "error"
+	ID            string                    `json:"id"`
+	DisplayName   string                    `json:"display_name,omitempty"`
+	Account       string                    `json:"account,omitempty"`
+	AccountContact *ConnectionAccountContact `json:"account_contact,omitempty"`
+	CredentialRef string                    `json:"credential_ref,omitempty"` // "google/tnapathy@gmail.com"
+	Status        string                    `json:"status"`                   // "ready", "active", "error"
 }
 
 // --- Adapter Control Session Protocol ---
@@ -310,55 +320,6 @@ type AdapterServeRecordIngestFrame struct {
 	Record any    `json:"record"`
 }
 
-// --- Streaming Protocol ---
-
-// StreamEvent represents an event from NEX piped to the adapter's stdin during
-// a streaming namespaced method invocation. Type determines which fields are
-// populated.
-type StreamEvent struct {
-	Type string `json:"type"` // "stream_start", "token", "tool_status", "reasoning", "stream_end", "stream_error"
-
-	// stream_start
-	RunID        string      `json:"runId,omitempty"`
-	SessionID    string      `json:"session_id,omitempty"`
-	ConnectionID string      `json:"connection_id,omitempty"`
-	Channel      *ChannelRef `json:"channel,omitempty"`
-	ReplyToID    string      `json:"reply_to_id,omitempty"`
-
-	// token, reasoning
-	Text string `json:"text,omitempty"`
-
-	// tool_status
-	ToolName   string `json:"toolName,omitempty"`
-	ToolCallID string `json:"toolCallId,omitempty"`
-	Status     string `json:"status,omitempty"` // "started", "completed", "failed"
-	Summary    string `json:"summary,omitempty"`
-
-	// stream_end
-	Final bool `json:"final,omitempty"`
-
-	// stream_error
-	ErrorMsg string `json:"error,omitempty"`
-	Partial  bool   `json:"partial,omitempty"`
-}
-
-// AdapterStreamStatus is emitted by the adapter on stdout during streaming.
-type AdapterStreamStatus struct {
-	Type string `json:"type"` // "message_created", "message_updated", "message_sent", "error"
-
-	// message_created, message_updated, message_sent
-	MessageID string `json:"messageId,omitempty"`
-
-	// message_updated
-	Chars int `json:"chars,omitempty"`
-
-	// message_sent
-	IsFinal bool `json:"final,omitempty"`
-
-	// error
-	ErrorMsg string `json:"error,omitempty"`
-}
-
 // AdapterSetupStatus is the status emitted by adapter.setup.* operations.
 type AdapterSetupStatus string
 
@@ -379,13 +340,15 @@ type AdapterSetupRequest struct {
 
 // AdapterSetupResult is the generic output for adapter.setup.* operations.
 type AdapterSetupResult struct {
-	Status       AdapterSetupStatus `json:"status"`
-	SessionID    string             `json:"session_id,omitempty"`
-	ConnectionID string             `json:"connection_id,omitempty"`
-	Service      string             `json:"service,omitempty"`
-	Message      string             `json:"message,omitempty"`
-	Instructions string             `json:"instructions,omitempty"`
-	Fields       []AdapterAuthField `json:"fields,omitempty"`
-	SecretFields map[string]string  `json:"secret_fields,omitempty"`
-	Metadata     map[string]any     `json:"metadata,omitempty"`
+	Status        AdapterSetupStatus         `json:"status"`
+	SessionID     string                     `json:"session_id,omitempty"`
+	ConnectionID  string                     `json:"connection_id,omitempty"`
+	Service       string                     `json:"service,omitempty"`
+	Account       string                     `json:"account,omitempty"`
+	AccountContact *ConnectionAccountContact `json:"account_contact,omitempty"`
+	Message       string                     `json:"message,omitempty"`
+	Instructions  string                     `json:"instructions,omitempty"`
+	Fields        []AdapterAuthField         `json:"fields,omitempty"`
+	SecretFields  map[string]string          `json:"secret_fields,omitempty"`
+	Metadata      map[string]any             `json:"metadata,omitempty"`
 }

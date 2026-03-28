@@ -204,10 +204,10 @@ describe("scheduleChatScroll", () => {
 });
 
 /* ------------------------------------------------------------------ */
-/*  Streaming: rapid chatStream changes should not reset scroll        */
+/*  Rapid active-run updates should not reset scroll                   */
 /* ------------------------------------------------------------------ */
 
-describe("streaming scroll behavior", () => {
+describe("active-run scroll behavior", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
@@ -231,7 +231,7 @@ describe("streaming scroll behavior", () => {
     host.chatHasAutoScrolled = true;
     const originalScrollTop = container.scrollTop;
 
-    // Simulate rapid streaming token updates
+    // Simulate rapid active-run UI updates
     scheduleChatScroll(host);
     scheduleChatScroll(host);
     scheduleChatScroll(host);
@@ -240,7 +240,7 @@ describe("streaming scroll behavior", () => {
     expect(container.scrollTop).toBe(originalScrollTop);
   });
 
-  it("streaming scrolls correctly when user IS at bottom", async () => {
+  it("active-run updates scroll correctly when user IS at bottom", async () => {
     const { host, container } = createScrollHost({
       scrollHeight: 2000,
       scrollTop: 1600,
@@ -249,7 +249,7 @@ describe("streaming scroll behavior", () => {
     host.chatUserNearBottom = true;
     host.chatHasAutoScrolled = true;
 
-    // Simulate streaming
+    // Simulate an active run update
     scheduleChatScroll(host);
     await host.updateComplete;
 

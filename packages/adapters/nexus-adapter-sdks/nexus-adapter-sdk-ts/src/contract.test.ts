@@ -9,8 +9,7 @@ import {
   AdapterHealthSchema,
   AdapterInfoSchema,
   AdapterInboundRecordSchema,
-  AdapterStreamStatusSchema,
-  StreamEventSchema,
+  AdapterSetupResultSchema,
 } from "./protocol.js";
 import { readAdapterRuntimeContextFile } from "./runtime-context.js";
 
@@ -73,6 +72,10 @@ describe("adapter protocol contract (active Nex docs)", () => {
     expect(get("AdapterConnectionIdentity")(account)).toBe(true);
     AdapterConnectionIdentitySchema.parse(account);
 
+    const setupResult = loadJSON(path.join(fixturesDir, "adapter_setup_result.json"));
+    expect(get("AdapterSetupResult")(setupResult)).toBe(true);
+    AdapterSetupResultSchema.parse(setupResult);
+
     const runtimeContextPath = path.join(fixturesDir, "runtime_context.json");
     // RuntimeContext is a supporting fixture, not a published schema definition.
     expect(loadJSON(runtimeContextPath)).toMatchObject({
@@ -83,18 +86,6 @@ describe("adapter protocol contract (active Nex docs)", () => {
       platform: "discord",
       connection_id: "echo-bot",
     });
-
-    const streamEvents = loadJSONL(path.join(fixturesDir, "stream_events.jsonl"));
-    for (const e of streamEvents) {
-      expect(get("StreamEvent")(e)).toBe(true);
-      StreamEventSchema.parse(e);
-    }
-
-    const streamStatuses = loadJSONL(path.join(fixturesDir, "stream_statuses.jsonl"));
-    for (const s of streamStatuses) {
-      expect(get("AdapterStreamStatus")(s)).toBe(true);
-      AdapterStreamStatusSchema.parse(s);
-    }
 
     const controlInputs = loadJSONL(path.join(fixturesDir, "control_input_frames.jsonl"));
     for (const frame of controlInputs) {
@@ -142,5 +133,6 @@ describe("adapter protocol contract (active Nex docs)", () => {
     );
     roundTrip("AdapterHealth", "adapter_health.json", (value) => AdapterHealthSchema.parse(value));
     roundTrip("AdapterConnectionIdentity", "adapter_connection_identity.json", (value) => AdapterConnectionIdentitySchema.parse(value));
+    roundTrip("AdapterSetupResult", "adapter_setup_result.json", (value) => AdapterSetupResultSchema.parse(value));
   });
 });

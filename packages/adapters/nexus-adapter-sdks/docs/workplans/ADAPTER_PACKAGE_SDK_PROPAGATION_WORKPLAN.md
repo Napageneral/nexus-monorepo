@@ -87,7 +87,7 @@ Required changes:
 Validation:
 
 - `go test ./...` in each package
-- verify `adapter.info` still describes control/setup operations correctly
+- verify derived runtime reflection still describes control/setup operations correctly
 
 ## Phase 2: Shared-Go Mixed Atlassian Tranche
 
@@ -215,7 +215,7 @@ Required changes:
 - replace `newEvent` with `newRecord`
 - replace `type NexusEvent` with current canonical inbound record types
 - update helper code that indexes into old `NexusEvent` field names
-- ensure `adapter.info` declares `methods`
+- ensure declared capabilities are reflected correctly
 - rerun build + tests against the shared TS SDK workspace
 
 Recommended order:
@@ -262,7 +262,7 @@ one giant cleanup at the end.
 Every migrated package must pass:
 
 1. package-local build/test
-2. package-local contract checks for `adapter.info`
+2. package-local contract checks for derived runtime reflection
 3. ingress proof for canonical `record.ingest`
 4. state-dir proof for `NEXUS_ADAPTER_STATE_DIR` if package has mutable state
 5. shared hosted lifecycle proof where that package is already installable

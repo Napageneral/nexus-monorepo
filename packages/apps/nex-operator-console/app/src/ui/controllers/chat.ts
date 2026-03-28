@@ -1,7 +1,6 @@
 import type { RuntimeBrowserClient } from "../runtime.ts";
 import type { SessionsListResult } from "../types.ts";
 import type { ChatAttachment } from "../ui-types.ts";
-import { extractText } from "../chat/message-extract.ts";
 import { sessionBelongsToConversation } from "../conversation-session.ts";
 import { generateUUID } from "../uuid.ts";
 
@@ -18,15 +17,13 @@ export type ChatState = {
   chatMessage: string;
   chatAttachments: ChatAttachment[];
   chatRunId: string | null;
-  chatStream: string | null;
-  chatStreamStartedAt: number | null;
   lastError: string | null;
 };
 
 export type ChatEventPayload = {
   runId: string;
   sessionKey: string;
-  state: "delta" | "final" | "aborted" | "error";
+  state: "final" | "aborted" | "error";
   message?: unknown;
   errorMessage?: string;
 };
@@ -139,8 +136,6 @@ export async function sendChatMessage(
   state.lastError = null;
   const runId = generateUUID();
   state.chatRunId = runId;
-  state.chatStream = "";
-  state.chatStreamStartedAt = now;
 
   // Convert attachments to API format
   const apiAttachments = hasAttachments
@@ -171,8 +166,6 @@ export async function sendChatMessage(
   } catch (err) {
     const error = String(err);
     state.chatRunId = null;
-    state.chatStream = null;
-    state.chatStreamStartedAt = null;
     state.lastError = error;
     state.chatMessages = [
       ...state.chatMessages,
@@ -227,26 +220,12 @@ export function handleChatEvent(state: ChatState, payload?: ChatEventPayload) {
     return null;
   }
 
-  if (payload.state === "delta") {
-    const next = extractText(payload.message);
-    if (typeof next === "string") {
-      const current = state.chatStream ?? "";
-      if (!current || next.length >= current.length) {
-        state.chatStream = next;
-      }
-    }
-  } else if (payload.state === "final") {
-    state.chatStream = null;
+  if (payload.state === "final") {
     state.chatRunId = null;
-    state.chatStreamStartedAt = null;
   } else if (payload.state === "aborted") {
-    state.chatStream = null;
     state.chatRunId = null;
-    state.chatStreamStartedAt = null;
   } else if (payload.state === "error") {
-    state.chatStream = null;
     state.chatRunId = null;
-    state.chatStreamStartedAt = null;
     state.lastError = payload.errorMessage ?? "chat error";
   }
   return payload.state;

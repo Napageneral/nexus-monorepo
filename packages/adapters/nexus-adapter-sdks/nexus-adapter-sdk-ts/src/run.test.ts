@@ -43,7 +43,6 @@ describe("runAdapter", () => {
               supports_delete: false,
               supports_media: false,
               supports_voice_notes: false,
-              supports_streaming_edit: false,
             },
           }),
         },
@@ -88,7 +87,7 @@ describe("runAdapter", () => {
                   package_id: "test",
                   package_version: "0.0.0",
                   declaration_mode: "manifest",
-                  declaration_source: "adapter.info",
+                  declaration_source: "package declaration",
                   namespace: "test",
                 },
               },
@@ -108,7 +107,6 @@ describe("runAdapter", () => {
               supports_delete: false,
               supports_media: false,
               supports_voice_notes: false,
-              supports_streaming_edit: false,
             },
           }),
           methods: {
@@ -185,7 +183,6 @@ describe("runAdapter", () => {
               supports_delete: false,
               supports_media: false,
               supports_voice_notes: false,
-              supports_streaming_edit: false,
             },
           }),
           "adapter.monitor.start": async () => {},
@@ -242,7 +239,6 @@ describe("runAdapter", () => {
               supports_delete: false,
               supports_media: false,
               supports_voice_notes: false,
-              supports_streaming_edit: false,
             },
           }),
           "adapter.setup.start": async (_ctx, req) => ({
@@ -250,6 +246,11 @@ describe("runAdapter", () => {
             session_id: req.session_id ?? "setup-1",
             connection_id: req.connection_id ?? "default",
             service: "test",
+            account_contact: {
+              platform: "slack",
+              space_id: "T123",
+              contact_id: "U456",
+            },
             message: "ok",
           }),
         },
@@ -278,6 +279,75 @@ describe("runAdapter", () => {
       status: "pending",
       session_id: "setup-1",
       service: "test",
+      account_contact: {
+        platform: "slack",
+        space_id: "T123",
+        contact_id: "U456",
+      },
+    });
+  });
+
+  it("adapter.health can emit account_contact through the harness", async () => {
+    const stdout = captureStream();
+    const stderr = captureStream();
+
+    const code = await runAdapter(
+      {
+        operations: {
+          "adapter.info": () => ({
+            platform: "test",
+            name: "test-adapter",
+            version: "0.0.0",
+            operations: ["adapter.info", "adapter.health"],
+            methods: [],
+            multi_account: false,
+            platform_capabilities: {
+              text_limit: 1,
+              supports_markdown: false,
+              supports_tables: false,
+              supports_code_blocks: false,
+              supports_embeds: false,
+              supports_threads: false,
+              supports_reactions: false,
+              supports_polls: false,
+              supports_buttons: false,
+              supports_edit: false,
+              supports_delete: false,
+              supports_media: false,
+              supports_voice_notes: false,
+            },
+          }),
+          "adapter.health": async (_ctx, req) => ({
+            connected: true,
+            connection_id: req.connection_id,
+            account_contact: {
+              platform: "email",
+              space_id: "",
+              contact_id: "tyler@vrtly.ai",
+            },
+          }),
+        },
+      },
+      {
+        argv: ["node", "adapter", "adapter.health", "--connection", "default"],
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+        requireRuntimeContext: false,
+        patchConsole: false,
+        installSignalHandlers: false,
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(stderr.read()).toBe("");
+    expect(JSON.parse(stdout.read().trim())).toMatchObject({
+      connected: true,
+      connection_id: "default",
+      account_contact: {
+        platform: "email",
+        space_id: "",
+        contact_id: "tyler@vrtly.ai",
+      },
     });
   });
 
@@ -310,7 +380,6 @@ describe("runAdapter", () => {
               supports_delete: false,
               supports_media: false,
               supports_voice_notes: false,
-              supports_streaming_edit: false,
             },
           }),
           "adapter.serve.start": async (_ctx, { connection_id }, session) => {

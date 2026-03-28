@@ -268,21 +268,6 @@ img.chat-avatar {
   background: rgba(255, 77, 77, 0.15);
 }
 
-/* Streaming animation */
-.chat-bubble.streaming {
-  animation: pulsing-border 1.5s ease-out infinite;
-}
-
-@keyframes pulsing-border {
-  0%,
-  100% {
-    border-color: var(--border);
-  }
-  50% {
-    border-color: var(--accent);
-  }
-}
-
 /* Fade-in animation for new messages */
 .chat-bubble.fade-in {
   animation: fade-in 200ms ease-out;
