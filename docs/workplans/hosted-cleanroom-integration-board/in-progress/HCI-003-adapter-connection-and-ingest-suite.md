@@ -2,8 +2,9 @@
 
 ## Goal
 
-Prove adapter install, connection setup, health, and ingest on disposable
-hosted servers using the real hosted seams.
+Prove adapter install, connection setup, health, and ingest from a
+Docker-backed executor against disposable sandbox-backed hosted targets using
+the real hosted seams.
 
 ## Initial Targets
 
@@ -24,8 +25,13 @@ The reusable hosted adapter harness is now landed:
 - durable proof capture is available through the adapter capture wrapper
 - the first concrete proof lane is now Jira, using a reusable hosted proof
   command on top of the same fresh server
-- the remaining work is live credentialed execution of that Jira lane, then
-  adapter-by-adapter expansion for Git, Eve, and Slack
+- the registry/bootstrap substrate slice is landed
+- the remaining work is the sandbox provider backend plus Docker executor
+  wrapping, then credentialed execution there, followed by adapter-by-adapter
+  expansion for Git, Eve, and Slack
+
+The current fresh-server adapter wrapper is inner proof logic. It is not yet
+the final executor boundary until the Docker cleanroom wrapper lands.
 
 ## Jira-First Direction
 
@@ -83,9 +89,10 @@ That means the Slack slice of this ticket should cover:
 - manager-turn-scoped runtime-owned status as observed through the real adapter
   seam
 
-The runtime-facing local proof is now green on the synthetic no-human capture:
+The runtime-facing local proof is now green on the synthetic Slack Docker
+cleanroom capture:
 
-- `/Users/tyler/nexus/state/artifacts/validation/cleanroom/synthetic-slack-nohuman-e2e/20260328T060005Z`
+- `/Users/tyler/nexus/state/artifacts/validation/cleanroom/slack-synthetic-nohuman-cleanroom/20260328T065627Z`
 
 That capture proves:
 
@@ -99,7 +106,7 @@ It does not prove:
 
 - real inbound Slack Socket Mode or webhook ingress on a disposable hosted
   server
-- durable direct transport-status start/stop evidence in a ledger
+- the real hosted inbound adapter/account seam on disposable infrastructure
 
 This ticket is therefore no longer blocked on uncertainty about the local
 runtime behavior. It now owns the remaining real hosted adapter/account seam.
@@ -121,8 +128,8 @@ Build on the existing fresh-server hosted package lifecycle path first:
 - `packages/scripts/hosted-cleanroom-package-smoke.py`
 
 Then layer adapter-specific connection create, health, and ingest checks on top
-of the same freshly provisioned server rather than inventing a separate
-provisioning path.
+of the same freshly provisioned sandbox-backed target rather than inventing a
+separate provisioning path.
 
 The shared helpers for operator-supplied proof commands are now:
 
@@ -144,9 +151,9 @@ The shared helpers for operator-supplied proof commands are now:
 
 ## Acceptance
 
-1. adapters install on a fresh hosted server
+1. adapters install on a fresh sandbox-backed hosted target through Frontdoor
 2. connections can be created and checked for health
 3. ingest or monitor proof runs through the real runtime and adapter seams
 4. cleanup remains disposable by default
-5. the command and proof-capture path are documented in the hosted validation
-   ladder
+5. the command and proof-capture path are documented as the inner proof logic
+   under the Docker-backed hosted cleanroom executor
