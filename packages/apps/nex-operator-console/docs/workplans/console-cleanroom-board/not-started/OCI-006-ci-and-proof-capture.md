@@ -5,18 +5,23 @@
 Wire the browser cleanroom suite into CI with manual dispatch, durable proof
 capture with video/traces/screenshots, and documentation.
 
+This lane is about packaging the operator-console producer cleanly inside the
+shared cleanroom proof bundle model, not about making browser recording an
+operator-console-only special case.
+
 ## Scope
 
 1. `nex/scripts/e2e/operator-console-cleanroom-capture.sh` — wraps the Docker
    script with `capture-cleanroom-proof.sh` for durable proof bundles that
-   include videos, traces, and screenshots
+   include browser review artifacts as an optional producer overlay
 
 2. GitHub Actions workflow (`.github/workflows/console-cleanroom.yml`):
    - Manual dispatch trigger (`workflow_dispatch`)
    - Builds the multi-stage Docker image
    - Runs the full Playwright browser suite
-   - Uploads proof bundle as workflow artifact (videos, traces, screenshots,
-     results.json)
+   - Uploads proof bundle as workflow artifact
+   - Preserves the shared cleanroom root files plus the browser producer
+     namespace and shared review media
    - Separate job or step to upload trace as its own artifact for easy
      Trace Viewer access
 
@@ -28,8 +33,10 @@ capture with video/traces/screenshots, and documentation.
 4. Proof bundle packaging:
    - Ensure `capture-cleanroom-proof.sh` correctly captures the nested
      Playwright output (videos/ traces/ screenshots/) into the proof bundle
-   - Add `metadata.json` with: nex version, console version, Playwright version,
-     browser version, viewport size, test count, pass/fail counts, total duration
+   - Ensure producer-local Playwright outputs remain namespaced under
+     `playwright/`
+   - Add operator-console-specific metadata without overwriting the generic
+     bundle root metadata owned by the shared wrapper
 
 ## Dependencies
 
@@ -45,12 +52,13 @@ capture with video/traces/screenshots, and documentation.
    - Watch the video
    - Open the trace with `npx playwright show-trace`
    - Review screenshots
-   - Check results.json for pass/fail
+   - Check `playwright/results.json` for pass/fail
 
 ## Validation
 
 - Proof bundle directory structure matches the spec
-- `metadata.json` has all required fields
+- generic root metadata remains wrapper-owned
+- operator-console / Playwright metadata is present in producer-specific files
 - Videos are playable
 - Traces are openable in Playwright Trace Viewer
 - GitHub Actions workflow completes and artifact is downloadable

@@ -23,6 +23,11 @@ The proof bundle is the primary evidence that the v2 console works. A reviewer c
 - Review screenshots at key moments (page loads, form submissions, modal states)
 - Check the structured JSON results for pass/fail per domain
 
+This spec defines the operator-console implementation of the broader browser
+proof overlay model. It is not the owner of recording/video/trace capture as a
+concept; it is the first concrete producer that plugs into the shared cleanroom
+bundle contract.
+
 ---
 
 ## Conceptual Model
@@ -33,6 +38,12 @@ A browser integration test uses Playwright to drive a real Chromium browser
 through the operator console UI. The console is connected to a live nex runtime
 via WebSocket. Tests validate what the user sees — real data in the DOM, not
 mocked responses.
+
+In the cleanroom proof model, Playwright is a producer:
+
+- shared cleanroom capture owns the bundle root
+- shared review media projects into `videos/`, `traces/`, and `screenshots/`
+- Playwright-specific logs and structured results live under `playwright/`
 
 Each test:
 - Navigates to a page or tab
@@ -63,8 +74,10 @@ Each test:
 ```
 operator-console-cleanroom-proof/
   <timestamp>/
-    metadata.json              # runtime version, console version, test count, duration
-    results.json               # per-domain pass/fail with individual test details
+    metadata.json              # generic cleanroom wrapper metadata
+    result.json                # generic cleanroom wrapper pass/fail
+    bundle-files.json          # generic inventory of every file in the bundle
+    operator-console-runtime.json
     videos/
       full-session.webm        # complete screen recording of the test run
     traces/
@@ -94,6 +107,12 @@ operator-console-cleanroom-proof/
       22-settings-profile.png
       23-settings-api-keys.png
       ...
+    playwright/
+      stdout.log
+      stderr.log
+      results.json             # per-domain pass/fail with individual test details
+      artifacts.json           # copied Playwright artifact summary
+      output/                  # raw Playwright output tree
     stdout.log
     stderr.log
 ```
@@ -207,9 +226,13 @@ export default {
     viewport: { width: 1400, height: 900 },
     baseURL: 'http://localhost:5173',
   },
-  outputDir: '/proof-bundle/',
+  outputDir: '/proof-bundle/playwright/output',
 };
 ```
+
+The important rule is not the exact directory name. The rule is that browser
+producer internals stay namespaced while shared review media is copied into the
+canonical bundle locations.
 
 ---
 
@@ -222,17 +245,17 @@ export default {
 | nex Docker build | `nex/scripts/e2e/Dockerfile` | Base image or multi-stage source |
 | Boot + init + onboard pattern | `runtime-capability-matrix-cleanroom-docker.sh` | Same sequence |
 | `callRuntime()` | `nex/src/api/call.ts` | Test data seeding only |
-| Proof capture | `capture-cleanroom-proof.sh` | Outer wrapper |
+| Proof capture | `capture-cleanroom-proof.sh` | Shared cleanroom wrapper that owns bundle root files |
 
 ### New
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | Dockerfile.console-cleanroom | `nex/scripts/e2e/Dockerfile.console-cleanroom` | Multi-stage: nex + console + Playwright |
-| Playwright test suite | `packages/apps/nex-operator-console/e2e/` | Browser integration tests |
-| Playwright config | `packages/apps/nex-operator-console/e2e/playwright.config.ts` | Video + trace + screenshot config |
+| Playwright test suite | `packages/apps/nex-operator-console/e2e/` | First browser proof producer implementation |
+| Playwright config | `packages/apps/nex-operator-console/e2e/playwright.config.ts` | Producer-local video + trace + screenshot config |
 | Docker wrapper script | `nex/scripts/e2e/operator-console-cleanroom-docker.sh` | Boot + serve + test |
-| Capture wrapper | `nex/scripts/e2e/operator-console-cleanroom-capture.sh` | Proof bundle |
+| Capture wrapper | `nex/scripts/e2e/operator-console-cleanroom-capture.sh` | Shared bundle wrapper around this producer |
 
 ---
 
@@ -248,3 +271,5 @@ The work is complete when:
 6. The proof bundle is self-contained and reviewable offline
 7. A reviewer can watch the video and confirm the UI matches the reference design
 8. The test can be wrapped with `capture-cleanroom-proof.sh` for durable proof
+9. Playwright-specific logs and structured results do not overwrite the
+   generic cleanroom bundle root files
