@@ -2,7 +2,7 @@
 
 **Status:** CANONICAL
 **Domain:** Operator Console — Integration Validation
-**Depends on:** nex Docker cleanroom boot, operator console controller layer, WebSocket RPC surface
+**Depends on:** nex Docker cleanroom boot, Playwright browser automation, operator console v2 UI
 
 ---
 
@@ -11,137 +11,205 @@
 An operator or developer can run a single command that:
 
 1. Boots a disposable nex runtime in Docker
-2. Exercises every operator console data path against that runtime via WebSocket RPC
-3. Reports pass/fail results for each domain
-4. Captures a durable proof bundle
+2. Builds and serves the operator console v2 UI
+3. Launches a Playwright-driven browser that navigates the full console
+4. Exercises every page, tab, form, and modal against the live runtime
+5. Records video of the entire session, captures Playwright traces, and takes screenshots at key moments
+6. Produces a durable proof bundle with structured results, video, traces, and screenshots
 
-The test suite proves that the operator console's controller layer correctly calls the nex runtime and handles real responses — not mocked data. It validates the full chain: controller function → WebSocket RPC → runtime handler → response → type parsing.
-
-This is the primary proof that the v2 console works. Browser rendering tests and unit tests are complementary but secondary.
+The proof bundle is the primary evidence that the v2 console works. A reviewer can:
+- Watch the video to see the full user journey
+- Open the Playwright trace in Trace Viewer for interactive replay with DOM snapshots
+- Review screenshots at key moments (page loads, form submissions, modal states)
+- Check the structured JSON results for pass/fail per domain
 
 ---
 
 ## Conceptual Model
 
-### Integration Test
+### Browser Integration Test
 
-An integration test connects to a live nex runtime via WebSocket and exercises a specific controller function or RPC method. It validates:
+A browser integration test uses Playwright to drive a real Chromium browser
+through the operator console UI. The console is connected to a live nex runtime
+via WebSocket. Tests validate what the user sees — real data in the DOM, not
+mocked responses.
 
-- The RPC call succeeds (no protocol or auth errors)
-- The response shape matches the expected TypeScript type
-- The data makes sense (e.g., listing agents after creating one returns at least one agent)
-- Error paths behave correctly (e.g., deleting a nonexistent agent returns an error, not a crash)
+Each test:
+- Navigates to a page or tab
+- Waits for data to load (DOM assertions, not timers)
+- Validates that runtime data appears correctly in the rendered UI
+- Interacts with forms, buttons, modals as a user would
+- Captures screenshots at meaningful moments
 
-### Test Suite
+### Test Domains
 
-The full suite covers every domain the operator console touches:
-
-| Domain | Controller Functions | RPC Methods |
-|--------|---------------------|-------------|
-| **System** | loadPresence, loadSessions, loadConfig, loadLogs, loadDebug, loadUsage | runtime.hello, status, health, presence.list, sessions.list, config.get, logs.recent, debug.snapshot, usage.* |
-| **Agents** | loadAgents, createAgent, updateAgent, deleteAgent | agents.list, agents.create, agents.update, agents.delete |
-| **Agent Identity** | loadAgentIdentity, loadAgentIdentities | agents.identity.get |
-| **Agent Files** | loadAgentFiles, loadAgentFileContent, saveAgentFile | agents.files.list, agents.files.read, agents.files.write |
-| **Agent Skills** | loadAgentSkills | agents.skills.status |
-| **Chat** | loadChatHistory, sendChat, abortChat | agents.conversations.list, agents.conversations.history, agents.sessions.send |
-| **Integrations** | loadIntegrations, startIntegrationOAuth, testIntegrationAdapter, disconnectIntegrationAdapter | adapters.connections.list, adapters.connections.test |
-| **Channels** | configureChannel, enableChannel, disableChannel | channels.configure, channels.enable, channels.disable |
-| **Apps** | loadInstalledApps, loadInstalledAppMethods, installApp | apps.list, apps.methods |
-| **Identity** | loadIdentitySurface, resolveIdentityMergeCandidate | identity.surface, identity.merge.resolve |
-| **Memory** | loadMemoryRuns, loadMemoryRunEpisodes, runMemorySearch, loadMemoryQualitySummary | memory.review.runs, memory.review.episodes, memory.search |
-| **Schedules** | loadScheduleRuns, toggleScheduleJob, runScheduleJob, addScheduleJob, removeScheduleJob | schedule.jobs.list, schedule.jobs.add, schedule.jobs.toggle, schedule.jobs.run, schedule.jobs.remove |
-| **Config** | loadConfig, saveConfig, applyConfig | config.get, config.set, config.apply |
-| **Ingress Credentials** | loadIngressCredentials, createIngressCredential, revokeIngressCredential, rotateIngressCredential | auth.tokens.list, auth.tokens.create, auth.tokens.revoke, auth.tokens.rotate |
-| **Monitor** | loadMonitorHistory, loadMonitorStats | monitor.operations.list, monitor.operations.stats |
-| **ACL** | loadAclRequests, approveAclRequest, denyAclRequest | acl.requests.list, acl.requests.resolve |
+| Domain | What Gets Tested |
+|--------|-----------------|
+| **Shell & Navigation** | Top nav renders all tabs, clicking each tab navigates, brand/logo present, settings gear works |
+| **Connectors** | Platform picker empty state renders, "Browse all connectors" link works, connected list shows data when adapters exist |
+| **Agents — List** | Empty state renders, create button visible |
+| **Agents — Creation Wizard** | 4-step wizard: fill name → select model → set guardrails → review → create. Validate agent appears in list after creation |
+| **Agents — Detail** | Settings tab loads with agent data, sub-tabs (Settings/Skills/Run History) navigate, chat panel renders |
+| **Agents — Detail Modals** | Open and interact with: schedule templates, manage tools, edit guardrails, manage memory, Slack setup |
+| **Monitor** | Live tab renders stat cards and empty table, History tab renders with filters |
+| **Jobs** | Overview shows stat cards, Definitions/Queue/Runs/Schedules sub-tabs render. Create a schedule, verify it appears in list |
+| **Records** | Browse/Channels/Search sub-tabs render, filters work, empty states display correctly |
+| **Identity** | All 6 sub-tabs render (Entities, Contacts, Channels, Groups, Policies, Merge Queue), search works |
+| **Memory** | Library/Search/Quality sub-tabs render, episode inspector shows empty state |
+| **Settings** | Profile shows user identity from runtime, API Keys section renders, Auth section renders |
 
 ### Proof Bundle
-
-Each test run produces a proof bundle:
 
 ```
 operator-console-cleanroom-proof/
   <timestamp>/
-    metadata.json       # runtime version, test count, duration
-    results.json        # per-domain pass/fail/skip with details
-    stdout.log          # full test output
-    stderr.log          # errors
+    metadata.json              # runtime version, console version, test count, duration
+    results.json               # per-domain pass/fail with individual test details
+    videos/
+      full-session.webm        # complete screen recording of the test run
+    traces/
+      trace.zip                # Playwright trace (open with: npx playwright show-trace trace.zip)
+    screenshots/
+      01-shell-initial-load.png
+      02-connectors-empty-state.png
+      03-agents-empty-state.png
+      04-agents-wizard-step1.png
+      05-agents-wizard-step2.png
+      06-agents-wizard-step3.png
+      07-agents-wizard-step4-review.png
+      08-agents-wizard-created.png
+      09-agent-detail-settings.png
+      10-agent-detail-skills.png
+      11-agent-detail-run-history.png
+      12-monitor-live.png
+      13-monitor-history.png
+      14-jobs-overview.png
+      15-jobs-schedules.png
+      16-records-browse.png
+      17-records-search.png
+      18-identity-entities.png
+      19-identity-merge-queue.png
+      20-memory-library.png
+      21-memory-search.png
+      22-settings-profile.png
+      23-settings-api-keys.png
+      ...
+    stdout.log
+    stderr.log
 ```
 
 ---
 
 ## Test Harness Architecture
 
-### Boot Pattern
+### Docker Container Layout
 
-Follow the existing nex Docker cleanroom pattern from `nex/scripts/e2e/`:
-
-1. Build the nex Docker image (reuse existing `scripts/e2e/Dockerfile`)
-2. Start a disposable container with:
-   - Isolated home and workspace
-   - Skip optional subsystems (channels, gmail watcher, schedules, canvas, browser control)
-   - Token auth enabled with a known test token
-   - Loopback binding on a known port
-3. Wait for runtime readiness (TCP poll)
-4. Run the test suite via `callRuntime()` WebSocket JSON-RPC
-
-### Test Runner
-
-A single Node.js script that:
-
-1. Connects to the runtime via WebSocket (reusing the `callRuntime()` pattern from existing cleanroom scripts)
-2. Authenticates with the known test token
-3. Runs each domain's tests sequentially
-4. Reports results as structured JSON
-5. Exits with code 0 (all pass) or 1 (any fail)
-
-### Domain Test Pattern
-
-Each domain test follows a standard pattern:
-
-```typescript
-async function testAgentsCRUD(call: CallRuntime): Promise<DomainResult> {
-  const results: TestResult[] = [];
-
-  // 1. List (should work even when empty)
-  const list = await call("agents.list", {});
-  results.push(assert("agents.list returns array", Array.isArray(list?.agents)));
-
-  // 2. Create
-  const created = await call("agents.create", { name: "test-agent" });
-  results.push(assert("agents.create returns id", Boolean(created?.agentId || created?.id)));
-
-  // 3. List again (should include new agent)
-  const list2 = await call("agents.list", {});
-  results.push(assert("agents.list includes created agent", list2?.agents?.length > list?.agents?.length));
-
-  // 4. Update
-  const updated = await call("agents.update", { agentId: created.agentId, description: "updated" });
-  results.push(assert("agents.update succeeds", updated !== undefined));
-
-  // 5. Delete
-  const deleted = await call("agents.delete", { agentId: created.agentId });
-  results.push(assert("agents.delete succeeds", deleted !== undefined));
-
-  return { domain: "agents", results };
-}
+```
+Docker container (based on mcr.microsoft.com/playwright + nex build):
+  ├── nex runtime (port 18792, token auth, loopback)
+  ├── console static server (port 5173, vite preview)
+  └── Playwright test runner
+       ├── Chromium (headless, 1400x900 viewport)
+       ├── video recording enabled
+       ├── tracing enabled (screenshots + snapshots + sources)
+       ├── navigates http://localhost:5173
+       └── writes proof artifacts to /proof-bundle/
 ```
 
-### What This Does NOT Test
+### Dockerfile
 
-- Browser rendering (covered by existing `*.browser.test.ts` component tests)
-- CSS styling (covered by visual review against reference designs)
-- User interaction flows (would need Playwright page-level tests, future work)
-- Adapter OAuth flows (require real external credentials)
-- Chat streaming (requires model provider credentials)
+Extends the existing nex cleanroom Dockerfile with:
+- Playwright browser dependencies (Chromium)
+- Console build step (`cd packages/apps/nex-operator-console/app && pnpm build`)
+- Static file server for the built console
+- Playwright test runner
 
-### What This DOES Test
+Alternatively, use a multi-stage build:
+1. Stage 1: Build nex (existing Dockerfile)
+2. Stage 2: Build console UI
+3. Stage 3: Playwright runner image with both artifacts
 
-- Every RPC method the console calls actually exists and responds
-- Response shapes match what the console's TypeScript types expect
-- CRUD lifecycles work end-to-end (create → list → update → delete)
-- Error handling paths work (e.g., invalid params, missing resources)
-- The runtime boots and serves the full API surface
+### Boot Sequence
+
+1. Init nex workspace (`nexus init`)
+2. Seed owner identity
+3. Onboard non-interactively (creates agent, workspace, identity)
+4. Start runtime with token auth
+5. Wait for runtime readiness (TCP poll)
+6. Optionally: seed additional test data via `callRuntime()` (create extra agents, schedules, etc. so the UI has data to display)
+7. Start static file server for console build output
+8. Run Playwright test suite
+
+### Test Data Seeding
+
+Before the browser tests run, use `callRuntime()` (the existing WebSocket RPC
+helper) to seed the runtime with test data:
+
+- Create 2-3 agents with different names and models
+- Create a schedule attached to an agent
+- Create an ingress credential
+- This ensures the UI has real data to render, not just empty states
+
+This is the only use of `callRuntime()` — for test setup, not for testing the
+RPC layer directly.
+
+### Playwright Test Structure
+
+```typescript
+import { test, expect } from '@playwright/test';
+
+test.describe('Operator Console Cleanroom', () => {
+  test.beforeAll(async () => {
+    // Boot runtime + seed data (or assume Docker already did this)
+  });
+
+  test('shell and navigation', async ({ page }) => {
+    await page.goto('http://localhost:5173');
+    await page.screenshot({ path: '/proof-bundle/screenshots/01-shell-initial-load.png' });
+
+    // Verify nav tabs exist
+    await expect(page.locator('.v2-nav-tab')).toHaveCount(7);
+
+    // Click each tab and verify navigation
+    for (const tab of ['Connectors', 'Agents', 'Monitor', 'Jobs', 'Records', 'Identity', 'Memory']) {
+      await page.click(`.v2-nav-tab:has-text("${tab}")`);
+      await expect(page.locator('.v2-page-title')).toBeVisible();
+    }
+  });
+
+  test('agent creation wizard', async ({ page }) => {
+    await page.goto('http://localhost:5173');
+    await page.click('.v2-nav-tab:has-text("Agents")');
+    await page.click('button:has-text("Create agent")');
+    await page.screenshot({ path: '/proof-bundle/screenshots/04-agents-wizard-step1.png' });
+
+    // Fill step 1
+    await page.fill('input[placeholder*="name"]', 'Cleanroom Test Agent');
+    await page.click('button:has-text("Next")');
+    await page.screenshot({ path: '/proof-bundle/screenshots/05-agents-wizard-step2.png' });
+
+    // Continue through steps...
+  });
+
+  // ... more tests per domain
+});
+```
+
+### Video and Tracing Configuration
+
+```typescript
+// playwright.config.ts
+export default {
+  use: {
+    video: 'on',                    // Record video for every test
+    trace: 'on',                    // Capture full trace
+    screenshot: 'on',              // Screenshot on failure (plus manual captures)
+    viewport: { width: 1400, height: 900 },
+    baseURL: 'http://localhost:5173',
+  },
+  outputDir: '/proof-bundle/',
+};
+```
 
 ---
 
@@ -151,19 +219,20 @@ async function testAgentsCRUD(call: CallRuntime): Promise<DomainResult> {
 
 | Component | Source | How We Use It |
 |-----------|--------|--------------|
-| Docker image | `nex/scripts/e2e/Dockerfile` | Same image, same build |
-| Boot pattern | `owner-first-agent-cleanroom-docker.sh` | Same env vars, same readiness poll |
-| `callRuntime()` | Inline in existing scripts | Extract to shared module or inline |
-| Proof capture | `capture-cleanroom-proof.sh` | Wrap our script with it |
-| CI workflow | `.github/workflows/` | Add manual dispatch trigger |
+| nex Docker build | `nex/scripts/e2e/Dockerfile` | Base image or multi-stage source |
+| Boot + init + onboard pattern | `runtime-capability-matrix-cleanroom-docker.sh` | Same sequence |
+| `callRuntime()` | `nex/src/api/call.ts` | Test data seeding only |
+| Proof capture | `capture-cleanroom-proof.sh` | Outer wrapper |
 
 ### New
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| Test runner script | `nex/scripts/e2e/operator-console-integration-docker.sh` | Docker wrapper |
-| Test suite | `nex/scripts/e2e/operator-console-integration.mts` | Node.js test runner |
-| Capture wrapper | `nex/scripts/e2e/operator-console-integration-capture.sh` | Proof bundle |
+| Dockerfile.console-cleanroom | `nex/scripts/e2e/Dockerfile.console-cleanroom` | Multi-stage: nex + console + Playwright |
+| Playwright test suite | `packages/apps/nex-operator-console/e2e/` | Browser integration tests |
+| Playwright config | `packages/apps/nex-operator-console/e2e/playwright.config.ts` | Video + trace + screenshot config |
+| Docker wrapper script | `nex/scripts/e2e/operator-console-cleanroom-docker.sh` | Boot + serve + test |
+| Capture wrapper | `nex/scripts/e2e/operator-console-cleanroom-capture.sh` | Proof bundle |
 
 ---
 
@@ -171,9 +240,11 @@ async function testAgentsCRUD(call: CallRuntime): Promise<DomainResult> {
 
 The work is complete when:
 
-1. A single command boots nex in Docker and runs the operator console integration suite
-2. Every domain listed in the test suite table has at least one passing test
-3. CRUD lifecycles (agents, schedules, credentials, config) are proven end-to-end
-4. The proof bundle captures structured pass/fail results
-5. The test can be wrapped with `capture-cleanroom-proof.sh` for durable proof
-6. The test is runnable from CI via manual dispatch
+1. A single command boots nex + console in Docker and runs the Playwright suite
+2. Every domain listed has at least one passing browser test
+3. Video recording captures the complete test session
+4. Playwright trace is viewable in Trace Viewer
+5. Screenshots are captured at every key moment listed in the proof bundle spec
+6. The proof bundle is self-contained and reviewable offline
+7. A reviewer can watch the video and confirm the UI matches the reference design
+8. The test can be wrapped with `capture-cleanroom-proof.sh` for durable proof

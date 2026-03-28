@@ -1,61 +1,63 @@
-# OCI-001 Harness and Boot Infrastructure
+# OCI-001 Docker Image and Boot Infrastructure
 
 ## Goal
 
-Create the operator console cleanroom integration script that extends the
-existing nex Docker cleanroom infrastructure to test console-specific RPC paths.
+Create the Docker image and wrapper script that boots nex + serves the console
++ runs Playwright with video recording, tracing, and screenshots.
 
-## Existing Infrastructure (DO NOT DUPLICATE)
+## Existing Infrastructure (reuse, don't duplicate)
 
-The following already exist and must be reused:
-
-- `nex/scripts/e2e/Dockerfile` — shared Docker image
-- `nex/scripts/e2e/runtime-capability-matrix-cleanroom-docker.sh` — existing
-  capability matrix that already tests: runtime.health, status, search.status,
-  models.defaults.get, memory.sets/elements, entities.list, contacts.list,
-  credentials CRUD, workspaces CRUD+files, roles CRUD, agents.sessions lifecycle
-- `nex/src/api/call.ts` — the `callRuntime()` WebSocket RPC helper
-- `nex/scripts/e2e/capture-cleanroom-proof.sh` — shared proof capture
+- `nex/scripts/e2e/Dockerfile` — nex build image
+- `nex/scripts/e2e/runtime-capability-matrix-cleanroom-docker.sh` — boot pattern
+- `nex/src/api/call.ts` — `callRuntime()` for test data seeding
+- `nex/scripts/e2e/capture-cleanroom-proof.sh` — proof capture wrapper
 
 ## Scope
 
-- `nex/scripts/e2e/operator-console-domains-cleanroom-docker.sh` — Docker
-  wrapper following the exact same pattern as
-  `runtime-capability-matrix-cleanroom-docker.sh` (same Dockerfile, same boot,
-  same init+onboard sequence, same `callRuntime` import)
-- The inline Node.js test section covers ONLY the console-specific RPC methods
-  NOT already covered by the capability matrix:
-  - agents.list/create/update/delete
-  - agents.identity.get, agents.files.*, agents.skills.status
-  - adapters.connections.list, channels.*, apps.*
-  - config.get/set/apply
-  - schedule.jobs.* CRUD
-  - identity.surface, identity.merge.*
-  - memory.review.*, memory.search
-  - monitor.operations.list/stats
-  - auth.tokens.* (ingress credentials)
-  - acl.requests.list
-  - presence.list, sessions.list, logs.recent, debug.snapshot, usage.*
-  - agents.conversations.*, agents.sessions.send
-- `nex/scripts/e2e/operator-console-domains-cleanroom-capture.sh` — Proof
-  capture wrapper
+1. `nex/scripts/e2e/Dockerfile.console-cleanroom` — Multi-stage Docker image:
+   - Stage 1: Build nex (reuse existing Dockerfile as base or copy pattern)
+   - Stage 2: Build console UI (`pnpm build` in operator-console/app)
+   - Stage 3: Playwright runner (`mcr.microsoft.com/playwright`) with nex
+     binaries, built console, and test files
+
+2. `nex/scripts/e2e/operator-console-cleanroom-docker.sh` — Docker wrapper:
+   - Builds the multi-stage image
+   - Runs the container with proof bundle mount
+   - Inside container: init → seed owner → onboard → start runtime → start
+     static server for console → seed test data via callRuntime() → run
+     Playwright tests → collect proof artifacts
+
+3. `packages/apps/nex-operator-console/e2e/playwright.config.ts`:
+   - Video: `'on'` for every test
+   - Trace: `'on'` with screenshots + snapshots + sources
+   - Viewport: 1400x900
+   - Base URL: `http://localhost:5173`
+   - Output dir mapped to proof bundle
+
+4. `packages/apps/nex-operator-console/e2e/setup.ts` — Global setup:
+   - Seeds test data via `callRuntime()`: 2-3 agents, a schedule, an ingress
+     credential, so the UI has real data to display
+
+5. `nex/scripts/e2e/operator-console-cleanroom-capture.sh` — Proof capture
+   wrapper
 
 ## Dependencies
 
-- Working `nex/scripts/e2e/Dockerfile` (already exists)
-- `capture-cleanroom-proof.sh` (already exists)
-- `src/api/call.ts` with `callRuntime` (already exists)
+- Working `nex/scripts/e2e/Dockerfile`
+- Playwright npm package
 
 ## Acceptance
 
-1. The script boots nex in Docker using the existing Dockerfile
-2. Uses the same init+onboard+start_runtime pattern as the capability matrix
-3. Exercises every console-specific RPC method listed above
-4. Writes structured proof artifacts (domain-level JSON files)
-5. The capture wrapper produces a proof bundle
+1. `./operator-console-cleanroom-docker.sh` builds the image and runs
+2. Nex boots, console is served, Playwright connects
+3. A minimal smoke test (navigate to console, verify nav renders) passes
+4. Video file is produced in the proof bundle
+5. Playwright trace is produced and openable with `npx playwright show-trace`
+6. At least one screenshot is captured
 
 ## Validation
 
-- The script runs to completion inside Docker
-- All domain tests pass or fail with structured error messages
-- No overlap with tests already in runtime-capability-matrix
+- Docker build completes without errors
+- Container runs to completion
+- Proof bundle contains: `videos/*.webm`, `traces/trace.zip`,
+  `screenshots/*.png`, `results.json`
