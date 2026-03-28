@@ -7,6 +7,7 @@ import type { RuntimeEventFrame, RuntimeHelloOk } from "./runtime.ts";
 import type { UiSettings } from "./storage.ts";
 import type {
   AgentsListResult,
+  MonitorOperation,
   PresenceEntry,
   HealthSnapshot,
   StatusSummary,
@@ -213,6 +214,17 @@ function handleRuntimeEventUnsafe(host: RuntimeHost, evt: RuntimeEventFrame) {
   if (evt.event === "acl.approval.requested" || evt.event === "acl.approval.resolved") {
     if (host.tab === "identity") {
       void loadAclRequests(host as unknown as Parameters<typeof loadAclRequests>[0]);
+    }
+  }
+
+  // ─── Monitor operation events ────────────────────────────────────────
+  if (evt.event === "monitor.operation") {
+    const op = evt.payload as MonitorOperation;
+    if (!(host as any).monitorPaused) {
+      const live = (host as any).monitorLiveOps ?? [];
+      live.unshift(op);
+      if (live.length > 500) live.length = 500;
+      (host as any).monitorLiveOps = live;
     }
   }
 

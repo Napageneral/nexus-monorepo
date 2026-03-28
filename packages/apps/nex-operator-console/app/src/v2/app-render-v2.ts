@@ -7,7 +7,8 @@ import { renderAppsPage as renderConnectorsPage } from "./pages/apps.ts";
 import { renderAgentsPage } from "./pages/agents.ts";
 import { renderAgentCreateWizard, type AgentCreateStep, type AgentCreateForm } from "./pages/agent-create.ts";
 import { renderAgentDetail, type AgentDetailTab, type AgentDetailModal } from "./pages/agent-detail.ts";
-import { renderMonitorPage } from "./pages/monitor.ts";
+import { renderMonitorPage, type MonitorPageProps } from "./pages/monitor.ts";
+import { loadMonitorHistory, loadMonitorStats } from "../ui/controllers/monitor.ts";
 import { renderJobsPage, type JobsPageProps } from "./pages/jobs.ts";
 import { renderRecordsPage, type RecordsPageProps } from "./pages/records.ts";
 import { renderIdentityPage, type IdentityPageProps } from "./pages/identity.ts";
@@ -456,7 +457,52 @@ export function renderAppV2(state: AppViewState) {
             })()
           : nothing}
 
-        ${activeTab === "monitor" ? renderMonitorPage({ connected: state.connected, loading: false }) : nothing}
+        ${activeTab === "monitor" ? renderMonitorPage({
+          subTab: ((state as any)._v2MonitorSubTab as MonitorPageProps["subTab"]) ?? "live",
+          onSubTabChange: (tab: string) => { (state as any)._v2MonitorSubTab = tab; state.requestUpdate(); },
+          // Live
+          liveOps: (state as any).monitorLiveOps ?? [],
+          paused: (state as any).monitorPaused ?? false,
+          onTogglePause: () => { (state as any).monitorPaused = !(state as any).monitorPaused; state.requestUpdate(); },
+          onClear: () => { (state as any).monitorLiveOps = []; state.requestUpdate(); },
+          // History
+          historyOps: (state as any).monitorHistoryOps ?? [],
+          historyTotal: (state as any).monitorHistoryTotal ?? 0,
+          historyLoading: (state as any).monitorHistoryLoading ?? false,
+          historyError: (state as any).monitorHistoryError ?? null,
+          historyOffset: (state as any)._v2MonitorHistoryOffset ?? 0,
+          onHistoryPage: (offset: number) => {
+            (state as any)._v2MonitorHistoryOffset = offset;
+            void loadMonitorHistory(state as any, {
+              method: (state as any)._v2MonitorMethodFilter || undefined,
+              action: ((state as any)._v2MonitorActionFilter && (state as any)._v2MonitorActionFilter !== "all") ? (state as any)._v2MonitorActionFilter : undefined,
+              status: ((state as any)._v2MonitorStatusFilter && (state as any)._v2MonitorStatusFilter !== "all") ? (state as any)._v2MonitorStatusFilter : undefined,
+              limit: 50,
+              offset,
+            });
+            state.requestUpdate();
+          },
+          onHistoryRefresh: () => {
+            void loadMonitorHistory(state as any, {
+              method: (state as any)._v2MonitorMethodFilter || undefined,
+              action: ((state as any)._v2MonitorActionFilter && (state as any)._v2MonitorActionFilter !== "all") ? (state as any)._v2MonitorActionFilter : undefined,
+              status: ((state as any)._v2MonitorStatusFilter && (state as any)._v2MonitorStatusFilter !== "all") ? (state as any)._v2MonitorStatusFilter : undefined,
+              limit: 50,
+              offset: (state as any)._v2MonitorHistoryOffset ?? 0,
+            });
+            void loadMonitorStats(state as any);
+            state.requestUpdate();
+          },
+          // Filters
+          methodFilter: (state as any)._v2MonitorMethodFilter ?? "",
+          actionFilter: (state as any)._v2MonitorActionFilter ?? "all",
+          statusFilter: (state as any)._v2MonitorStatusFilter ?? "all",
+          onMethodFilterChange: (v: string) => { (state as any)._v2MonitorMethodFilter = v; state.requestUpdate(); },
+          onActionFilterChange: (v: string) => { (state as any)._v2MonitorActionFilter = v; state.requestUpdate(); },
+          onStatusFilterChange: (v: string) => { (state as any)._v2MonitorStatusFilter = v; state.requestUpdate(); },
+          // Stats
+          stats: (state as any).monitorStats ?? null,
+        }) : nothing}
 
         ${activeTab === "jobs" ? renderJobsPage({
           subTab: ((state as any)._v2JobsSubTab as JobsPageProps["subTab"]) ?? "overview",

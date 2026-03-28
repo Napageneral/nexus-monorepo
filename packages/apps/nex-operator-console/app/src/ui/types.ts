@@ -1074,3 +1074,35 @@ export type MemoryReviewObservationDetail = {
   supporting_entities: MemoryReviewEntity[];
   source_episode: MemoryReviewEpisodeSummary | null;
 };
+
+// ─── Monitor ──────────────────────────────────────────────────────────
+
+export type MonitorOperation = {
+  requestId: string;
+  method: string;
+  action: string;
+  resource: string;
+  permission: string;
+  callerEntityId: string | null;
+  phase: "started" | "completed" | "failed";
+  startedAt: number;
+  latencyMs: number | null;
+  error: string | null;
+};
+
+export type MonitorOperationsListResult = {
+  operations: MonitorOperation[];
+  total: number;
+  hasMore: boolean;
+};
+
+export type MonitorOperationsStatsResult = {
+  totalOperations: number;
+  completedCount: number;
+  failedCount: number;
+  avgLatencyMs: number;
+  p95LatencyMs: number;
+  operationsPerMinute: number;
+  topMethods: Array<{ method: string; count: number; avgLatencyMs: number }>;
+  topErrors: Array<{ method: string; error: string; count: number }>;
+};
