@@ -1,5 +1,13 @@
 # Operator Console — Development Guidelines
 
+## Hard Rules
+
+1. **Never paper over errors with mock/fallback data.** If an RPC call or API request fails, show a loud error state (red banner, actual error message, retry button). NEVER silently substitute mock data. Mock data is ONLY used when explicitly opted in via `NEXT_PUBLIC_USE_MOCK=true` or equivalent — never as a catch-block fallback.
+
+2. **Follow the style guide.** See `STYLE-GUIDE.md` for the complete design system. No exceptions.
+
+3. **Fail loud, debug fast.** Console.error with context, not console.log with vague messages. Error states must show the actual error, not "Something went wrong."
+
 ## V2 UI Architecture
 
 The v2 UI lives in `app/src/v2/` and is a complete view layer rebuild on top of the existing controller/types/runtime data layer.
