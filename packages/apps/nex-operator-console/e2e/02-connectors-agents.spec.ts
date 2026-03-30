@@ -118,7 +118,7 @@ test.describe('OCI-003: Agent Detail', () => {
       await screenshot(page, 'agent-detail-settings');
 
       // Verify detail sub-tabs exist
-      const detailTabs = page.locator('.v2-detail-tab');
+      const detailTabs = page.locator('.v2-detail-tab, .v2-agent-tab');
       expect(await detailTabs.count()).toBeGreaterThanOrEqual(2);
     }
   });
@@ -133,7 +133,7 @@ test.describe('OCI-003: Agent Detail', () => {
       await page.waitForTimeout(500);
 
       // Click Skills tab
-      const skillsTab = page.locator('.v2-detail-tab:has-text("Skills")');
+      const skillsTab = page.locator('.v2-detail-tab:has-text("Skills"), .v2-agent-tab:has-text("Skills")');
       if (await skillsTab.isVisible()) {
         await skillsTab.click();
         await page.waitForTimeout(300);
@@ -141,7 +141,7 @@ test.describe('OCI-003: Agent Detail', () => {
       }
 
       // Click Run History tab
-      const historyTab = page.locator('.v2-detail-tab:has-text("Run History"), .v2-detail-tab:has-text("History")');
+      const historyTab = page.locator('.v2-detail-tab:has-text("Run History"), .v2-detail-tab:has-text("History"), .v2-agent-tab:has-text("Run History"), .v2-agent-tab:has-text("History")');
       if (await historyTab.isVisible()) {
         await historyTab.click();
         await page.waitForTimeout(300);
@@ -166,12 +166,12 @@ test.describe('OCI-003: Agent Detail', () => {
         await page.waitForTimeout(300);
 
         // Verify modal appeared
-        const modal = page.locator('.v2-modal-backdrop, .v2-modal');
+        const modal = page.locator('.v2-modal').first();
         if (await modal.isVisible()) {
           await screenshot(page, 'agent-detail-modal-open');
 
           // Close modal
-          const closeBtn = page.locator('.v2-modal button:has-text("Cancel"), .v2-modal-close');
+          const closeBtn = modal.locator('button:has-text("Cancel"), .v2-modal-close').first();
           if (await closeBtn.first().isVisible()) {
             await closeBtn.first().click();
             await page.waitForTimeout(300);

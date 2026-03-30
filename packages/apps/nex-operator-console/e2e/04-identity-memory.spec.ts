@@ -121,6 +121,7 @@ test.describe('OCI-005: Memory Page', () => {
     await waitForConsoleReady(page);
     await navigateToTab(page, 'Memory');
     await clickSubTab(page, 'Quality');
+    await page.waitForFunction(() => !document.body.innerText.includes('Loading…'), { timeout: 10000 }).catch(() => {});
 
     await screenshot(page, 'memory-quality');
 

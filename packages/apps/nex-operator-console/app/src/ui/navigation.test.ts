@@ -51,6 +51,8 @@ describe("path helpers", () => {
     expect(pathForTab("console")).toBe("/console");
     expect(pathForTab("operations")).toBe("/operations");
     expect(pathForTab("system", "/ui")).toBe("/ui/system");
+    expect(pathForTab("console", "/app/console")).toBe("/app/console/chat");
+    expect(pathForTab("console", "/nexus/app/console")).toBe("/nexus/app/console/chat");
   });
 
   it("resolves canonical tabs from paths", () => {
@@ -60,6 +62,8 @@ describe("path helpers", () => {
     expect(tabFromPath("/operations")).toBe("operations");
     expect(tabFromPath("/ui/system", "/ui")).toBe("system");
     expect(tabFromPath("/apps/nexus/integrations", "/apps/nexus")).toBe("integrations");
+    expect(tabFromPath("/app/console/chat", "/app/console")).toBe("console");
+    expect(tabFromPath("/nexus/app/console/chat", "/nexus/app/console")).toBe("console");
   });
 
   it("rejects removed legacy routes", () => {
@@ -76,6 +80,8 @@ describe("path helpers", () => {
     expect(inferBasePathFromPathname("/console")).toBe("");
     expect(inferBasePathFromPathname("/ui/system")).toBe("/ui");
     expect(inferBasePathFromPathname("/apps/nexus/integrations")).toBe("/apps/nexus");
+    expect(inferBasePathFromPathname("/app/console/chat")).toBe("/app/console");
+    expect(inferBasePathFromPathname("/nexus/app/console/chat")).toBe("/nexus/app/console");
     expect(inferBasePathFromPathname("/index.html")).toBe("");
   });
 });

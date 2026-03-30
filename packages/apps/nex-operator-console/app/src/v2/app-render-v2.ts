@@ -459,7 +459,20 @@ export function renderAppV2(state: AppViewState) {
 
         ${activeTab === "monitor" ? renderMonitorPage({
           subTab: ((state as any)._v2MonitorSubTab as MonitorPageProps["subTab"]) ?? "live",
-          onSubTabChange: (tab: string) => { (state as any)._v2MonitorSubTab = tab; state.requestUpdate(); },
+          onSubTabChange: (tab: string) => {
+            (state as any)._v2MonitorSubTab = tab;
+            if (tab === "history") {
+              void loadMonitorHistory(state as any, {
+                method: (state as any)._v2MonitorMethodFilter || undefined,
+                action: ((state as any)._v2MonitorActionFilter && (state as any)._v2MonitorActionFilter !== "all") ? (state as any)._v2MonitorActionFilter : undefined,
+                status: ((state as any)._v2MonitorStatusFilter && (state as any)._v2MonitorStatusFilter !== "all") ? (state as any)._v2MonitorStatusFilter : undefined,
+                limit: 50,
+                offset: (state as any)._v2MonitorHistoryOffset ?? 0,
+              });
+              void loadMonitorStats(state as any);
+            }
+            state.requestUpdate();
+          },
           // Live
           liveOps: (state as any).monitorLiveOps ?? [],
           paused: (state as any).monitorPaused ?? false,

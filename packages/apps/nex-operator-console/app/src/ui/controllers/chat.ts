@@ -52,7 +52,7 @@ export async function loadChatHistory(state: ChatState) {
   if (!conversationId) {
     state.chatMessages = [];
     state.chatThinkingLevel = null;
-    state.lastError = "No active conversation selected.";
+    state.lastError = null;
     return;
   }
   state.chatLoading = true;

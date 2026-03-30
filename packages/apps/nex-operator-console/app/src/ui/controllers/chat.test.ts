@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { SessionsListResult } from "../types.ts";
-import { handleChatEvent, type ChatEventPayload, type ChatState } from "./chat.ts";
+import { handleChatEvent, loadChatHistory, type ChatEventPayload, type ChatState } from "./chat.ts";
 
 function createSessionsResult(
   entries: Array<{ key: string; conversationId?: string }> = [
@@ -122,5 +122,25 @@ describe("handleChatEvent", () => {
     };
     expect(handleChatEvent(state, payload)).toBe("final");
     expect(state.chatRunId).toBe(null);
+  });
+});
+
+describe("loadChatHistory", () => {
+  it("treats missing conversation as an empty startup state", async () => {
+    const request = vi.fn();
+    const state = createState({
+      client: { request } as unknown as ChatState["client"],
+      conversationId: "",
+      lastError: "stale error",
+      chatMessages: [{ role: "assistant", content: "old" }],
+      chatThinkingLevel: "medium",
+    });
+
+    await loadChatHistory(state);
+
+    expect(request).not.toHaveBeenCalled();
+    expect(state.chatMessages).toEqual([]);
+    expect(state.chatThinkingLevel).toBeNull();
+    expect(state.lastError).toBeNull();
   });
 });

@@ -220,4 +220,13 @@ describe("operator console routing", () => {
     expect(app.tab).toBe("operations");
     expect(window.location.pathname).toBe("/ui/operations");
   });
+
+  it("keeps mounted runtime app entry routes stable", async () => {
+    const app = mountApp("/app/console/chat");
+    await app.updateComplete;
+
+    expect(app.basePath).toBe("/app/console");
+    expect(app.tab).toBe("console");
+    expect(window.location.pathname).toBe("/app/console/chat");
+  });
 });
