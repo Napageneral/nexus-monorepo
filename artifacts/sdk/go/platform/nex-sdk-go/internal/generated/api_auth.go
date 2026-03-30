@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -25,11 +25,11 @@ type AuthAPIService service
 type ApiAuthLoginRequest struct {
 	ctx context.Context
 	ApiService *AuthAPIService
-	authLoginAliasApiAuthLoginRequest *AuthLoginAliasApiAuthLoginRequest
+	authLoginRequest *AuthLoginRequest
 }
 
-func (r ApiAuthLoginRequest) AuthLoginAliasApiAuthLoginRequest(authLoginAliasApiAuthLoginRequest AuthLoginAliasApiAuthLoginRequest) ApiAuthLoginRequest {
-	r.authLoginAliasApiAuthLoginRequest = &authLoginAliasApiAuthLoginRequest
+func (r ApiAuthLoginRequest) AuthLoginRequest(authLoginRequest AuthLoginRequest) ApiAuthLoginRequest {
+	r.authLoginRequest = &authLoginRequest
 	return r
 }
 
@@ -89,7 +89,7 @@ func (a *AuthAPIService) AuthLoginExecute(r ApiAuthLoginRequest) (*AuthLogin200R
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
 	}
 	// body params
-	localVarPostBody = r.authLoginAliasApiAuthLoginRequest
+	localVarPostBody = r.authLoginRequest
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
 	if err != nil {
 		return localVarReturnValue, nil, err
@@ -113,7 +113,7 @@ func (a *AuthAPIService) AuthLoginExecute(r ApiAuthLoginRequest) (*AuthLogin200R
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -124,133 +124,7 @@ func (a *AuthAPIService) AuthLoginExecute(r ApiAuthLoginRequest) (*AuthLogin200R
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
-			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
-			if err != nil {
-				newErr.error = err.Error()
-				return localVarReturnValue, localVarHTTPResponse, newErr
-			}
-					newErr.error = formatErrorMessage(localVarHTTPResponse.Status, &v)
-					newErr.model = v
-		}
-		return localVarReturnValue, localVarHTTPResponse, newErr
-	}
-
-	err = a.client.decode(&localVarReturnValue, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
-	if err != nil {
-		newErr := &GenericOpenAPIError{
-			body:  localVarBody,
-			error: err.Error(),
-		}
-		return localVarReturnValue, localVarHTTPResponse, newErr
-	}
-
-	return localVarReturnValue, localVarHTTPResponse, nil
-}
-
-type ApiAuthLoginAliasApiAuthLoginRequest struct {
-	ctx context.Context
-	ApiService *AuthAPIService
-	authLoginAliasApiAuthLoginRequest *AuthLoginAliasApiAuthLoginRequest
-}
-
-func (r ApiAuthLoginAliasApiAuthLoginRequest) AuthLoginAliasApiAuthLoginRequest(authLoginAliasApiAuthLoginRequest AuthLoginAliasApiAuthLoginRequest) ApiAuthLoginAliasApiAuthLoginRequest {
-	r.authLoginAliasApiAuthLoginRequest = &authLoginAliasApiAuthLoginRequest
-	return r
-}
-
-func (r ApiAuthLoginAliasApiAuthLoginRequest) Execute() (*AuthLoginAliasApiAuthLogin200Response, *http.Response, error) {
-	return r.ApiService.AuthLoginAliasApiAuthLoginExecute(r)
-}
-
-/*
-AuthLoginAliasApiAuthLogin auth.login HTTP alias
-
- @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
- @return ApiAuthLoginAliasApiAuthLoginRequest
-*/
-func (a *AuthAPIService) AuthLoginAliasApiAuthLogin(ctx context.Context) ApiAuthLoginAliasApiAuthLoginRequest {
-	return ApiAuthLoginAliasApiAuthLoginRequest{
-		ApiService: a,
-		ctx: ctx,
-	}
-}
-
-// Execute executes the request
-//  @return AuthLoginAliasApiAuthLogin200Response
-func (a *AuthAPIService) AuthLoginAliasApiAuthLoginExecute(r ApiAuthLoginAliasApiAuthLoginRequest) (*AuthLoginAliasApiAuthLogin200Response, *http.Response, error) {
-	var (
-		localVarHTTPMethod   = http.MethodPost
-		localVarPostBody     interface{}
-		formFiles            []formFile
-		localVarReturnValue  *AuthLoginAliasApiAuthLogin200Response
-	)
-
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "AuthAPIService.AuthLoginAliasApiAuthLogin")
-	if err != nil {
-		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
-	}
-
-	localVarPath := localBasePath + "/api/auth/login"
-
-	localVarHeaderParams := make(map[string]string)
-	localVarQueryParams := url.Values{}
-	localVarFormParams := url.Values{}
-
-	// to determine the Content-Type header
-	localVarHTTPContentTypes := []string{"application/json"}
-
-	// set Content-Type header
-	localVarHTTPContentType := selectHeaderContentType(localVarHTTPContentTypes)
-	if localVarHTTPContentType != "" {
-		localVarHeaderParams["Content-Type"] = localVarHTTPContentType
-	}
-
-	// to determine the Accept header
-	localVarHTTPHeaderAccepts := []string{"application/json"}
-
-	// set Accept header
-	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
-	if localVarHTTPHeaderAccept != "" {
-		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
-	}
-	// body params
-	localVarPostBody = r.authLoginAliasApiAuthLoginRequest
-	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
-	if err != nil {
-		return localVarReturnValue, nil, err
-	}
-
-	localVarHTTPResponse, err := a.client.callAPI(req)
-	if err != nil || localVarHTTPResponse == nil {
-		return localVarReturnValue, localVarHTTPResponse, err
-	}
-
-	localVarBody, err := io.ReadAll(localVarHTTPResponse.Body)
-	localVarHTTPResponse.Body.Close()
-	localVarHTTPResponse.Body = io.NopCloser(bytes.NewBuffer(localVarBody))
-	if err != nil {
-		return localVarReturnValue, localVarHTTPResponse, err
-	}
-
-	if localVarHTTPResponse.StatusCode >= 300 {
-		newErr := &GenericOpenAPIError{
-			body:  localVarBody,
-			error: localVarHTTPResponse.Status,
-		}
-		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
-			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
-			if err != nil {
-				newErr.error = err.Error()
-				return localVarReturnValue, localVarHTTPResponse, newErr
-			}
-					newErr.error = formatErrorMessage(localVarHTTPResponse.Status, &v)
-					newErr.model = v
-			return localVarReturnValue, localVarHTTPResponse, newErr
-		}
-		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -365,7 +239,7 @@ func (a *AuthAPIService) AuthTokensCreateExecute(r ApiAuthTokensCreateRequest) (
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -376,7 +250,7 @@ func (a *AuthAPIService) AuthTokensCreateExecute(r ApiAuthTokensCreateRequest) (
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -491,7 +365,7 @@ func (a *AuthAPIService) AuthTokensListExecute(r ApiAuthTokensListRequest) (*Aut
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -502,7 +376,7 @@ func (a *AuthAPIService) AuthTokensListExecute(r ApiAuthTokensListRequest) (*Aut
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -529,11 +403,11 @@ func (a *AuthAPIService) AuthTokensListExecute(r ApiAuthTokensListRequest) (*Aut
 type ApiAuthTokensRevokeRequest struct {
 	ctx context.Context
 	ApiService *AuthAPIService
-	appsInstallAliasApiAppsInstallRequest *AppsInstallAliasApiAppsInstallRequest
+	aclRequestsShowRequest *AclRequestsShowRequest
 }
 
-func (r ApiAuthTokensRevokeRequest) AppsInstallAliasApiAppsInstallRequest(appsInstallAliasApiAppsInstallRequest AppsInstallAliasApiAppsInstallRequest) ApiAuthTokensRevokeRequest {
-	r.appsInstallAliasApiAppsInstallRequest = &appsInstallAliasApiAppsInstallRequest
+func (r ApiAuthTokensRevokeRequest) AclRequestsShowRequest(aclRequestsShowRequest AclRequestsShowRequest) ApiAuthTokensRevokeRequest {
+	r.aclRequestsShowRequest = &aclRequestsShowRequest
 	return r
 }
 
@@ -593,7 +467,7 @@ func (a *AuthAPIService) AuthTokensRevokeExecute(r ApiAuthTokensRevokeRequest) (
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
 	}
 	// body params
-	localVarPostBody = r.appsInstallAliasApiAppsInstallRequest
+	localVarPostBody = r.aclRequestsShowRequest
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
 	if err != nil {
 		return localVarReturnValue, nil, err
@@ -617,7 +491,7 @@ func (a *AuthAPIService) AuthTokensRevokeExecute(r ApiAuthTokensRevokeRequest) (
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -628,7 +502,7 @@ func (a *AuthAPIService) AuthTokensRevokeExecute(r ApiAuthTokensRevokeRequest) (
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -743,7 +617,7 @@ func (a *AuthAPIService) AuthTokensRotateExecute(r ApiAuthTokensRotateRequest) (
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -754,7 +628,7 @@ func (a *AuthAPIService) AuthTokensRotateExecute(r ApiAuthTokensRotateRequest) (
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -869,7 +743,7 @@ func (a *AuthAPIService) AuthUsersCreateExecute(r ApiAuthUsersCreateRequest) (*A
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -880,7 +754,7 @@ func (a *AuthAPIService) AuthUsersCreateExecute(r ApiAuthUsersCreateRequest) (*A
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -995,7 +869,7 @@ func (a *AuthAPIService) AuthUsersListExecute(r ApiAuthUsersListRequest) (*AuthU
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1006,7 +880,7 @@ func (a *AuthAPIService) AuthUsersListExecute(r ApiAuthUsersListRequest) (*AuthU
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1121,7 +995,7 @@ func (a *AuthAPIService) AuthUsersSetPasswordExecute(r ApiAuthUsersSetPasswordRe
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1132,7 +1006,7 @@ func (a *AuthAPIService) AuthUsersSetPasswordExecute(r ApiAuthUsersSetPasswordRe
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()

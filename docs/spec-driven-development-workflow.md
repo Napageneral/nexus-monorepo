@@ -166,6 +166,10 @@ The validation script may live in:
 
 Until that script is explicit, the validation plan is incomplete.
 
+When the validation lane is run-backed, the same script should attach to the
+owning run as structured review data so the reviewer does not have to recover
+it from logs after execution.
+
 ### 4. Archive finished or superseded material
 
 Completed workplans, superseded specs, obsolete validation docs, and abandoned

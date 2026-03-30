@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -113,7 +113,7 @@ func (a *RecordsAPIService) RecordIngestExecute(r ApiRecordIngestRequest) (*AclA
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -124,7 +124,7 @@ func (a *RecordsAPIService) RecordIngestExecute(r ApiRecordIngestRequest) (*AclA
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -151,11 +151,11 @@ func (a *RecordsAPIService) RecordIngestExecute(r ApiRecordIngestRequest) (*AclA
 type ApiRecordsGetRequest struct {
 	ctx context.Context
 	ApiService *RecordsAPIService
-	appsInstallAliasApiAppsInstallRequest *AppsInstallAliasApiAppsInstallRequest
+	aclRequestsShowRequest *AclRequestsShowRequest
 }
 
-func (r ApiRecordsGetRequest) AppsInstallAliasApiAppsInstallRequest(appsInstallAliasApiAppsInstallRequest AppsInstallAliasApiAppsInstallRequest) ApiRecordsGetRequest {
-	r.appsInstallAliasApiAppsInstallRequest = &appsInstallAliasApiAppsInstallRequest
+func (r ApiRecordsGetRequest) AclRequestsShowRequest(aclRequestsShowRequest AclRequestsShowRequest) ApiRecordsGetRequest {
+	r.aclRequestsShowRequest = &aclRequestsShowRequest
 	return r
 }
 
@@ -215,7 +215,7 @@ func (a *RecordsAPIService) RecordsGetExecute(r ApiRecordsGetRequest) (*RecordsG
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
 	}
 	// body params
-	localVarPostBody = r.appsInstallAliasApiAppsInstallRequest
+	localVarPostBody = r.aclRequestsShowRequest
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
 	if err != nil {
 		return localVarReturnValue, nil, err
@@ -239,7 +239,7 @@ func (a *RecordsAPIService) RecordsGetExecute(r ApiRecordsGetRequest) (*RecordsG
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -250,7 +250,7 @@ func (a *RecordsAPIService) RecordsGetExecute(r ApiRecordsGetRequest) (*RecordsG
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -365,7 +365,7 @@ func (a *RecordsAPIService) RecordsListExecute(r ApiRecordsListRequest) (*Record
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -376,7 +376,7 @@ func (a *RecordsAPIService) RecordsListExecute(r ApiRecordsListRequest) (*Record
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -491,7 +491,7 @@ func (a *RecordsAPIService) RecordsSearchExecute(r ApiRecordsSearchRequest) (*Re
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -502,7 +502,7 @@ func (a *RecordsAPIService) RecordsSearchExecute(r ApiRecordsSearchRequest) (*Re
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()

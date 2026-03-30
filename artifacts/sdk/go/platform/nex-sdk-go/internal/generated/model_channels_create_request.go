@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -346,9 +346,9 @@ func (o *ChannelsCreateRequest) SetThreadName(v string) {
 	o.ThreadName = &v
 }
 
-// GetMetadata returns the Metadata field value if set, zero value otherwise (both if not set or set to explicit null).
+// GetMetadata returns the Metadata field value if set, zero value otherwise.
 func (o *ChannelsCreateRequest) GetMetadata() map[string]interface{} {
-	if o == nil {
+	if o == nil || IsNil(o.Metadata) {
 		var ret map[string]interface{}
 		return ret
 	}
@@ -357,7 +357,6 @@ func (o *ChannelsCreateRequest) GetMetadata() map[string]interface{} {
 
 // GetMetadataOk returns a tuple with the Metadata field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-// NOTE: If the value is an explicit nil, `nil, true` will be returned
 func (o *ChannelsCreateRequest) GetMetadataOk() (map[string]interface{}, bool) {
 	if o == nil || IsNil(o.Metadata) {
 		return map[string]interface{}{}, false
@@ -443,7 +442,7 @@ func (o ChannelsCreateRequest) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.ThreadName) {
 		toSerialize["thread_name"] = o.ThreadName
 	}
-	if o.Metadata != nil {
+	if !IsNil(o.Metadata) {
 		toSerialize["metadata"] = o.Metadata
 	}
 	if !IsNil(o.MetadataJson) {

@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -113,7 +113,7 @@ func (a *EntitiesAPIService) EntitiesCreateExecute(r ApiEntitiesCreateRequest) (
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -124,7 +124,7 @@ func (a *EntitiesAPIService) EntitiesCreateExecute(r ApiEntitiesCreateRequest) (
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -151,11 +151,11 @@ func (a *EntitiesAPIService) EntitiesCreateExecute(r ApiEntitiesCreateRequest) (
 type ApiEntitiesGetRequest struct {
 	ctx context.Context
 	ApiService *EntitiesAPIService
-	appsInstallAliasApiAppsInstallRequest *AppsInstallAliasApiAppsInstallRequest
+	aclRequestsShowRequest *AclRequestsShowRequest
 }
 
-func (r ApiEntitiesGetRequest) AppsInstallAliasApiAppsInstallRequest(appsInstallAliasApiAppsInstallRequest AppsInstallAliasApiAppsInstallRequest) ApiEntitiesGetRequest {
-	r.appsInstallAliasApiAppsInstallRequest = &appsInstallAliasApiAppsInstallRequest
+func (r ApiEntitiesGetRequest) AclRequestsShowRequest(aclRequestsShowRequest AclRequestsShowRequest) ApiEntitiesGetRequest {
+	r.aclRequestsShowRequest = &aclRequestsShowRequest
 	return r
 }
 
@@ -215,7 +215,7 @@ func (a *EntitiesAPIService) EntitiesGetExecute(r ApiEntitiesGetRequest) (*Entit
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
 	}
 	// body params
-	localVarPostBody = r.appsInstallAliasApiAppsInstallRequest
+	localVarPostBody = r.aclRequestsShowRequest
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
 	if err != nil {
 		return localVarReturnValue, nil, err
@@ -239,7 +239,7 @@ func (a *EntitiesAPIService) EntitiesGetExecute(r ApiEntitiesGetRequest) (*Entit
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -250,7 +250,7 @@ func (a *EntitiesAPIService) EntitiesGetExecute(r ApiEntitiesGetRequest) (*Entit
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -365,7 +365,7 @@ func (a *EntitiesAPIService) EntitiesListExecute(r ApiEntitiesListRequest) (*Ent
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -376,7 +376,7 @@ func (a *EntitiesAPIService) EntitiesListExecute(r ApiEntitiesListRequest) (*Ent
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -491,7 +491,7 @@ func (a *EntitiesAPIService) EntitiesMergeApplyExecute(r ApiEntitiesMergeApplyRe
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -502,7 +502,7 @@ func (a *EntitiesAPIService) EntitiesMergeApplyExecute(r ApiEntitiesMergeApplyRe
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -617,7 +617,7 @@ func (a *EntitiesAPIService) EntitiesMergeCandidatesExecute(r ApiEntitiesMergeCa
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -628,7 +628,7 @@ func (a *EntitiesAPIService) EntitiesMergeCandidatesExecute(r ApiEntitiesMergeCa
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -743,7 +743,7 @@ func (a *EntitiesAPIService) EntitiesMergeProposeExecute(r ApiEntitiesMergePropo
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -754,7 +754,7 @@ func (a *EntitiesAPIService) EntitiesMergeProposeExecute(r ApiEntitiesMergePropo
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -869,7 +869,7 @@ func (a *EntitiesAPIService) EntitiesMergeResolveExecute(r ApiEntitiesMergeResol
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -880,7 +880,7 @@ func (a *EntitiesAPIService) EntitiesMergeResolveExecute(r ApiEntitiesMergeResol
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -995,7 +995,7 @@ func (a *EntitiesAPIService) EntitiesResolveExecute(r ApiEntitiesResolveRequest)
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1006,7 +1006,7 @@ func (a *EntitiesAPIService) EntitiesResolveExecute(r ApiEntitiesResolveRequest)
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1121,7 +1121,7 @@ func (a *EntitiesAPIService) EntitiesTagsAddExecute(r ApiEntitiesTagsAddRequest)
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1132,7 +1132,7 @@ func (a *EntitiesAPIService) EntitiesTagsAddExecute(r ApiEntitiesTagsAddRequest)
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1247,7 +1247,7 @@ func (a *EntitiesAPIService) EntitiesTagsListExecute(r ApiEntitiesTagsListReques
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1258,7 +1258,7 @@ func (a *EntitiesAPIService) EntitiesTagsListExecute(r ApiEntitiesTagsListReques
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1373,7 +1373,7 @@ func (a *EntitiesAPIService) EntitiesTagsRemoveExecute(r ApiEntitiesTagsRemoveRe
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1384,7 +1384,7 @@ func (a *EntitiesAPIService) EntitiesTagsRemoveExecute(r ApiEntitiesTagsRemoveRe
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1499,7 +1499,7 @@ func (a *EntitiesAPIService) EntitiesUpdateExecute(r ApiEntitiesUpdateRequest) (
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1510,7 +1510,7 @@ func (a *EntitiesAPIService) EntitiesUpdateExecute(r ApiEntitiesUpdateRequest) (
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()

@@ -11,9 +11,10 @@ import {
   AwsEc2Provider,
   HetznerProvider,
   getServerPlanMonthlyCostCents,
-  renderCloudInitScript,
   type CloudProvider,
+  type HostedBootstrapSpec,
 } from "./cloud-provider.js";
+import { DockerSandboxProvider } from "./sandbox-provider.js";
 import {
   installPackageViaRuntimeHttp,
   installPackageViaSSH,
@@ -64,6 +65,9 @@ type CreateServerOptions = {
   cloudProvider?: CloudProvider | null;
   standardCloudProvider?: CloudProvider | null;
   compliantCloudProvider?: CloudProvider | null;
+  namedCloudProviders?: Record<string, CloudProvider | null | undefined>;
+  standardProvisionProviderName?: string;
+  compliantProvisionProviderName?: string;
 };
 
 type JsonResponse = Record<string, unknown>;
@@ -1605,6 +1609,39 @@ function renderHostedOwnerBootstrapSeed(params: {
   return lines.join("\n");
 }
 
+function buildHostedBootstrapSpec(params: {
+  tenantId: string;
+  serverId: string;
+  runtimeAuthToken: string;
+  provisionToken: string;
+  frontdoorUrl: string;
+  runtimeTokenIssuer: string;
+  runtimeTokenSecret: string;
+  runtimeTokenActiveKid?: string;
+  tailscaleAuthKey?: string;
+  tailscaleHostname?: string;
+  bootstrapSeedYaml?: string | null;
+}): HostedBootstrapSpec {
+  return {
+    tenantId: params.tenantId,
+    serverId: params.serverId,
+    runtimeAuthToken: params.runtimeAuthToken,
+    provisionToken: params.provisionToken,
+    frontdoorUrl: params.frontdoorUrl,
+    runtimeTokenIssuer: params.runtimeTokenIssuer,
+    runtimeTokenSecret: params.runtimeTokenSecret,
+    runtimeTokenActiveKid: params.runtimeTokenActiveKid,
+    tailscaleAuthKey: params.tailscaleAuthKey,
+    tailscaleHostname: params.tailscaleHostname,
+    bootstrapSeedYaml: params.bootstrapSeedYaml ?? undefined,
+  };
+}
+
+function normalizeProvisionProviderName(value: string | null | undefined, fallback: string): string {
+  const normalized = value?.trim().toLowerCase();
+  return normalized || fallback;
+}
+
 function normalizeText(input: unknown): string {
   return typeof input === "string" ? input.trim() : "";
 }
@@ -2168,18 +2205,57 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         })
       : null;
   const resolvedCompliantCloudProvider = compliantCloudProvider ?? envCompliantCloudProvider;
+  const sandboxRuntimeImage = normalizeText(process.env.FRONTDOOR_SANDBOX_RUNTIME_IMAGE);
+  const sandboxRuntimeContainerPortRaw = normalizeText(
+    process.env.FRONTDOOR_SANDBOX_RUNTIME_CONTAINER_PORT,
+  );
+  const sandboxRuntimeContainerPort = sandboxRuntimeContainerPortRaw
+    ? Number.parseInt(sandboxRuntimeContainerPortRaw, 10)
+    : undefined;
+  const envSandboxCloudProvider: CloudProvider | null = sandboxRuntimeImage
+    ? new DockerSandboxProvider({
+        imageName: sandboxRuntimeImage,
+        hostStateRoot: normalizeText(process.env.FRONTDOOR_SANDBOX_HOST_STATE_ROOT) || undefined,
+        dockerBin: normalizeText(process.env.FRONTDOOR_SANDBOX_DOCKER_BIN) || undefined,
+        frontdoorHostAlias:
+          normalizeText(process.env.FRONTDOOR_SANDBOX_FRONTDOOR_HOST_ALIAS) || undefined,
+        runtimeContainerPort:
+          sandboxRuntimeContainerPort && Number.isFinite(sandboxRuntimeContainerPort) && sandboxRuntimeContainerPort > 0
+            ? sandboxRuntimeContainerPort
+            : undefined,
+        containerRoot: normalizeText(process.env.FRONTDOOR_SANDBOX_CONTAINER_ROOT) || undefined,
+      })
+    : null;
+  const standardProvisionProviderName = normalizeProvisionProviderName(
+    options.standardProvisionProviderName ?? process.env.FRONTDOOR_STANDARD_PROVIDER,
+    "hetzner",
+  );
+  const compliantProvisionProviderName = normalizeProvisionProviderName(
+    options.compliantProvisionProviderName ?? process.env.FRONTDOOR_COMPLIANT_PROVIDER,
+    "aws",
+  );
   const standardTailscaleAuthKey = (process.env.FRONTDOOR_STANDARD_TAILSCALE_AUTH_KEY || "").trim();
   const frontdoorTailscaleBaseUrl = (process.env.FRONTDOOR_TAILSCALE_BASE_URL || "").trim().replace(/\/+$/g, "");
   const cloudProviders = new Map<string, CloudProvider>();
-  if (standardCloudProvider) {
-    cloudProviders.set("hetzner", standardCloudProvider);
+  function registerCloudProvider(
+    providerName: string | null | undefined,
+    provider: CloudProvider | null | undefined,
+  ): void {
+    const normalized = providerName?.trim().toLowerCase();
+    if (!normalized || !provider) {
+      return;
+    }
+    cloudProviders.set(normalized, provider);
   }
-  if (resolvedCompliantCloudProvider) {
-    cloudProviders.set("aws", resolvedCompliantCloudProvider);
+  registerCloudProvider("sandbox", envSandboxCloudProvider);
+  for (const [providerName, provider] of Object.entries(options.namedCloudProviders ?? {})) {
+    registerCloudProvider(providerName, provider);
   }
+  registerCloudProvider(standardProvisionProviderName, standardCloudProvider);
+  registerCloudProvider(compliantProvisionProviderName, resolvedCompliantCloudProvider);
 
   function resolveCloudProviderForServer(server: { provider: string }): CloudProvider | null {
-    const providerName = server.provider.trim();
+    const providerName = server.provider.trim().toLowerCase();
     if (!providerName) {
       return null;
     }
@@ -2189,20 +2265,17 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
   function resolveProvisionProviderForServerClass(
     serverClass: ServerClass,
   ): { providerName: string; provider: CloudProvider } | null {
-    if (serverClass === "compliant") {
-      if (!resolvedCompliantCloudProvider) {
-        return null;
-      }
-      return { providerName: "aws", provider: resolvedCompliantCloudProvider };
-    }
-    if (!standardCloudProvider) {
+    const providerName =
+      serverClass === "compliant" ? compliantProvisionProviderName : standardProvisionProviderName;
+    const provider = cloudProviders.get(providerName) ?? null;
+    if (!provider) {
       return null;
     }
-    return { providerName: "hetzner", provider: standardCloudProvider };
+    return { providerName, provider };
   }
 
   function requiresStandardOverlayTransport(): boolean {
-    return resolvedCompliantCloudProvider !== null;
+    return resolveProvisionProviderForServerClass("compliant") !== null;
   }
 
   function resolveBootstrapTransportConfig(params: {
@@ -2626,10 +2699,10 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         error: "tailscale_not_configured",
       };
     }
-    const cloudInitScript = renderCloudInitScript({
+    const hostedBootstrap = buildHostedBootstrapSpec({
       tenantId: currentServer.tenantId,
       serverId: currentServer.serverId,
-      authToken: runtimeAuthToken,
+      runtimeAuthToken,
       provisionToken,
       frontdoorUrl: bootstrapTransport.frontdoorUrl,
       runtimeTokenIssuer: config.runtimeTokenIssuer,
@@ -2643,7 +2716,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       const result = await serverCloudProvider.createServer({
         tenantId: currentServer.tenantId,
         planId: currentServer.plan,
-        cloudInitScript,
+        hostedBootstrap,
         imageId: params.recoveryPoint.providerArtifactId,
         serverName: providerServerName,
       });
@@ -3477,10 +3550,10 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         runtimeAuthToken,
       });
 
-      const cloudInitScript = renderCloudInitScript({
+      const hostedBootstrap = buildHostedBootstrapSpec({
         tenantId,
         serverId,
-        authToken: runtimeAuthToken,
+        runtimeAuthToken,
         provisionToken,
         frontdoorUrl: bootstrapTransport.frontdoorUrl,
         runtimeTokenIssuer: config.runtimeTokenIssuer,
@@ -3491,14 +3564,14 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         bootstrapSeedYaml: renderHostedOwnerBootstrapSeed({
           displayName: user.displayName ?? params.session.principal.displayName ?? undefined,
           email: user.email ?? params.session.principal.email ?? undefined,
-        }) ?? undefined,
+        }),
       });
 
       try {
         const result = await provisionProvider!.provider.createServer({
           tenantId,
           planId: "cax11",
-          cloudInitScript,
+          hostedBootstrap,
         });
         store.updateServer(serverId, {
           providerServerId: result.providerServerId,
@@ -3616,7 +3689,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       serverClass: "standard",
       deploymentClass: "customer_server",
       plan: "cax11",
-      provider: "hetzner",
+      provider: standardProvisionProviderName,
       providerServerId: null,
       previousProviderServerId: null,
       privateIp: null,
@@ -4176,6 +4249,24 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     }
   }
 
+  function resolveDirectRuntimePackageStagingRoots(server: ServerRecord): {
+    stagingHostRoot?: string;
+    runtimeStagingRoot?: string;
+  } {
+    const provider = resolveCloudProviderForServer(server);
+    if (!(provider instanceof DockerSandboxProvider) || !readOptionalString(server.providerServerId)) {
+      return {};
+    }
+    const providerServerId = readOptionalString(server.providerServerId);
+    if (!providerServerId) {
+      return {};
+    }
+    return {
+      stagingHostRoot: provider.resolveHostPackageStagingRoot(providerServerId),
+      runtimeStagingRoot: provider.resolveRuntimePackageStagingRoot(),
+    };
+  }
+
   function resolveServerProbeRuntimeUrl(server: ServerRecord): string | null {
     const direct = resolveServerOperatorRuntimeUrl(server);
     if (direct) {
@@ -4218,16 +4309,16 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       return { os: cachedOs, arch: cachedArch };
     }
 
+    const managedPlatform = resolveManagedServerPlatform(server);
+    if (managedPlatform) {
+      return managedPlatform;
+    }
+
     if (shouldUseDirectRuntimeOperatorApi(server)) {
       return {
         os: process.platform,
         arch: process.arch,
       };
-    }
-
-    const managedPlatform = resolveManagedServerPlatform(server);
-    if (managedPlatform) {
-      return managedPlatform;
     }
 
     const runtimeUrl = resolveServerProbeRuntimeUrl(server);
@@ -4628,6 +4719,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           version: params.packageStep.variant.version,
           releaseId: params.packageStep.variant.releaseId,
           runtimeBearerToken: params.runtimeBearerToken,
+          ...resolveDirectRuntimePackageStagingRoots(params.server),
         })
       : await (async () => {
           const operatorTarget = resolveServerOperatorHost(params.server);
@@ -5094,6 +5186,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           version: variant.version,
           releaseId: variant.releaseId,
           runtimeBearerToken,
+          ...resolveDirectRuntimePackageStagingRoots(server),
         })
       : await (async () => {
           const operatorTarget = resolveServerOperatorHost(server);
@@ -5414,6 +5507,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           targetVersion: variant.version,
           releaseId: variant.releaseId,
           runtimeBearerToken,
+          ...resolveDirectRuntimePackageStagingRoots(server),
         })
       : await (async () => {
           const operatorTarget = resolveServerOperatorHost(server);
@@ -5552,6 +5646,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           targetVersion: variant.version,
           releaseId: variant.releaseId,
           runtimeBearerToken,
+          ...resolveDirectRuntimePackageStagingRoots(server),
         })
       : await (async () => {
           const operatorTarget = resolveServerOperatorHost(server);
@@ -6340,7 +6435,8 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         if (!accountId) {
           return { ok: false as const, error: "no_account" };
         }
-        if (!standardCloudProvider) {
+        const provisionProvider = resolveProvisionProviderForServerClass("standard");
+        if (!provisionProvider) {
           return { ok: false as const, error: "cloud_provider_not_configured" };
         }
 
@@ -6375,7 +6471,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         });
         const bootstrapTransport = resolveBootstrapTransportConfig({
           serverClass: "standard",
-          providerName: "hetzner",
+          providerName: provisionProvider.providerName,
           tenantId,
         });
         if (!bootstrapTransport) {
@@ -6394,15 +6490,15 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           serverClass: "standard",
           deploymentClass: "customer_server",
           plan,
-          provider: "hetzner",
+          provider: provisionProvider.providerName,
           provisionToken,
           runtimeAuthToken,
         });
 
-        const cloudInitScript = renderCloudInitScript({
+        const hostedBootstrap = buildHostedBootstrapSpec({
           tenantId,
           serverId,
-          authToken: runtimeAuthToken,
+          runtimeAuthToken,
           provisionToken,
           frontdoorUrl: bootstrapTransport.frontdoorUrl,
           runtimeTokenIssuer: config.runtimeTokenIssuer,
@@ -6410,14 +6506,14 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           runtimeTokenActiveKid: config.runtimeTokenActiveKid,
           tailscaleAuthKey: bootstrapTransport.tailscaleAuthKey,
           tailscaleHostname: bootstrapTransport.tailscaleHostname,
-          bootstrapSeedYaml: bootstrapSeedYaml ?? undefined,
+          bootstrapSeedYaml,
         });
 
         try {
-          const result = await standardCloudProvider.createServer({
+          const result = await provisionProvider.provider.createServer({
             tenantId,
             planId: plan,
-            cloudInitScript,
+            hostedBootstrap,
           });
           store.updateServer(serverId, {
             providerServerId: result.providerServerId,
@@ -6590,7 +6686,10 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           session,
           store,
           config,
-          cloudProvider: standardCloudProvider ?? resolvedCompliantCloudProvider,
+          cloudProvider:
+            resolveProvisionProviderForServerClass("standard")?.provider ??
+            resolveProvisionProviderForServerClass("compliant")?.provider ??
+            null,
           helpers: buildMcpHelpers(),
         };
 
@@ -6956,7 +7055,14 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
         if (intentApp && defaultServer) {
           redirectTo = `/app/${intentApp}/`;
-        } else if (intentApp && (autoProvisioner || standardCloudProvider || resolvedCompliantCloudProvider)) {
+        } else if (
+          intentApp &&
+          (
+            autoProvisioner ||
+            resolveProvisionProviderForServerClass("standard") ||
+            resolveProvisionProviderForServerClass("compliant")
+          )
+        ) {
           redirectTo = `/?product=${encodeURIComponent(intentApp)}&provisioning=1`;
         }
 
@@ -9605,11 +9711,10 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           runtimeAuthToken,
         });
 
-        // Render cloud-init (apps auto-install after VPS phones home, not via cloud-init)
-        const cloudInitScript = renderCloudInitScript({
+        const hostedBootstrap = buildHostedBootstrapSpec({
           tenantId,
           serverId,
-          authToken: runtimeAuthToken,
+          runtimeAuthToken,
           provisionToken,
           frontdoorUrl: bootstrapTransport.frontdoorUrl,
           runtimeTokenIssuer: config.runtimeTokenIssuer,
@@ -9617,7 +9722,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           runtimeTokenActiveKid: config.runtimeTokenActiveKid,
           tailscaleAuthKey: bootstrapTransport.tailscaleAuthKey,
           tailscaleHostname: bootstrapTransport.tailscaleHostname,
-          bootstrapSeedYaml: bootstrapSeedYaml ?? undefined,
+          bootstrapSeedYaml,
         });
 
         // Create VPS (async but we await the initial API call)
@@ -9625,7 +9730,7 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           const result = await provisionProvider.provider.createServer({
             tenantId,
             planId: plan,
-            cloudInitScript,
+            hostedBootstrap,
           });
           store.updateServer(serverId, {
             providerServerId: result.providerServerId,
@@ -9760,9 +9865,8 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           sendJson(res, 400, { ok: false, error: "invalid_server_class" });
           return;
         }
-        const provider =
-          requestedServerClass === "compliant" ? resolvedCompliantCloudProvider : standardCloudProvider;
-        const plans = provider?.listPlans() ?? [];
+        const provisionProvider = resolveProvisionProviderForServerClass(requestedServerClass);
+        const plans = provisionProvider?.provider.listPlans() ?? [];
         sendJson(res, 200, {
           plans: plans.map((plan) => ({
             id: plan.id,
@@ -10286,7 +10390,11 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           const hasTenant = !!completed.principal?.tenantId;
           const needsProvision =
             !hasTenant &&
-            (!!autoProvisioner || !!standardCloudProvider || !!resolvedCompliantCloudProvider) &&
+            (
+              !!autoProvisioner ||
+              !!resolveProvisionProviderForServerClass("standard") ||
+              !!resolveProvisionProviderForServerClass("compliant")
+            ) &&
             !!completed.productId;
           let oidcRedirect = completed.returnTo || "/";
           if (hasTenant && oidcRedirect === "/" && completed.productId) {

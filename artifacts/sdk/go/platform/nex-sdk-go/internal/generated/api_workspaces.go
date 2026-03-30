@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -113,7 +113,7 @@ func (a *WorkspacesAPIService) WorkspacesCreateExecute(r ApiWorkspacesCreateRequ
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -124,7 +124,7 @@ func (a *WorkspacesAPIService) WorkspacesCreateExecute(r ApiWorkspacesCreateRequ
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -151,11 +151,11 @@ func (a *WorkspacesAPIService) WorkspacesCreateExecute(r ApiWorkspacesCreateRequ
 type ApiWorkspacesDeleteRequest struct {
 	ctx context.Context
 	ApiService *WorkspacesAPIService
-	appsInstallAliasApiAppsInstallRequest *AppsInstallAliasApiAppsInstallRequest
+	aclRequestsShowRequest *AclRequestsShowRequest
 }
 
-func (r ApiWorkspacesDeleteRequest) AppsInstallAliasApiAppsInstallRequest(appsInstallAliasApiAppsInstallRequest AppsInstallAliasApiAppsInstallRequest) ApiWorkspacesDeleteRequest {
-	r.appsInstallAliasApiAppsInstallRequest = &appsInstallAliasApiAppsInstallRequest
+func (r ApiWorkspacesDeleteRequest) AclRequestsShowRequest(aclRequestsShowRequest AclRequestsShowRequest) ApiWorkspacesDeleteRequest {
+	r.aclRequestsShowRequest = &aclRequestsShowRequest
 	return r
 }
 
@@ -215,7 +215,7 @@ func (a *WorkspacesAPIService) WorkspacesDeleteExecute(r ApiWorkspacesDeleteRequ
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
 	}
 	// body params
-	localVarPostBody = r.appsInstallAliasApiAppsInstallRequest
+	localVarPostBody = r.aclRequestsShowRequest
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
 	if err != nil {
 		return localVarReturnValue, nil, err
@@ -239,7 +239,7 @@ func (a *WorkspacesAPIService) WorkspacesDeleteExecute(r ApiWorkspacesDeleteRequ
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -250,7 +250,7 @@ func (a *WorkspacesAPIService) WorkspacesDeleteExecute(r ApiWorkspacesDeleteRequ
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -365,7 +365,7 @@ func (a *WorkspacesAPIService) WorkspacesFilesDeleteExecute(r ApiWorkspacesFiles
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -376,7 +376,7 @@ func (a *WorkspacesAPIService) WorkspacesFilesDeleteExecute(r ApiWorkspacesFiles
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -491,7 +491,7 @@ func (a *WorkspacesAPIService) WorkspacesFilesGetExecute(r ApiWorkspacesFilesGet
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -502,7 +502,7 @@ func (a *WorkspacesAPIService) WorkspacesFilesGetExecute(r ApiWorkspacesFilesGet
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -529,11 +529,11 @@ func (a *WorkspacesAPIService) WorkspacesFilesGetExecute(r ApiWorkspacesFilesGet
 type ApiWorkspacesFilesListRequest struct {
 	ctx context.Context
 	ApiService *WorkspacesAPIService
-	appsInstallAliasApiAppsInstallRequest *AppsInstallAliasApiAppsInstallRequest
+	aclRequestsShowRequest *AclRequestsShowRequest
 }
 
-func (r ApiWorkspacesFilesListRequest) AppsInstallAliasApiAppsInstallRequest(appsInstallAliasApiAppsInstallRequest AppsInstallAliasApiAppsInstallRequest) ApiWorkspacesFilesListRequest {
-	r.appsInstallAliasApiAppsInstallRequest = &appsInstallAliasApiAppsInstallRequest
+func (r ApiWorkspacesFilesListRequest) AclRequestsShowRequest(aclRequestsShowRequest AclRequestsShowRequest) ApiWorkspacesFilesListRequest {
+	r.aclRequestsShowRequest = &aclRequestsShowRequest
 	return r
 }
 
@@ -593,7 +593,7 @@ func (a *WorkspacesAPIService) WorkspacesFilesListExecute(r ApiWorkspacesFilesLi
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
 	}
 	// body params
-	localVarPostBody = r.appsInstallAliasApiAppsInstallRequest
+	localVarPostBody = r.aclRequestsShowRequest
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
 	if err != nil {
 		return localVarReturnValue, nil, err
@@ -617,7 +617,7 @@ func (a *WorkspacesAPIService) WorkspacesFilesListExecute(r ApiWorkspacesFilesLi
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -628,7 +628,7 @@ func (a *WorkspacesAPIService) WorkspacesFilesListExecute(r ApiWorkspacesFilesLi
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -743,7 +743,7 @@ func (a *WorkspacesAPIService) WorkspacesFilesSetExecute(r ApiWorkspacesFilesSet
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -754,7 +754,7 @@ func (a *WorkspacesAPIService) WorkspacesFilesSetExecute(r ApiWorkspacesFilesSet
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -781,11 +781,11 @@ func (a *WorkspacesAPIService) WorkspacesFilesSetExecute(r ApiWorkspacesFilesSet
 type ApiWorkspacesGetRequest struct {
 	ctx context.Context
 	ApiService *WorkspacesAPIService
-	appsInstallAliasApiAppsInstallRequest *AppsInstallAliasApiAppsInstallRequest
+	aclRequestsShowRequest *AclRequestsShowRequest
 }
 
-func (r ApiWorkspacesGetRequest) AppsInstallAliasApiAppsInstallRequest(appsInstallAliasApiAppsInstallRequest AppsInstallAliasApiAppsInstallRequest) ApiWorkspacesGetRequest {
-	r.appsInstallAliasApiAppsInstallRequest = &appsInstallAliasApiAppsInstallRequest
+func (r ApiWorkspacesGetRequest) AclRequestsShowRequest(aclRequestsShowRequest AclRequestsShowRequest) ApiWorkspacesGetRequest {
+	r.aclRequestsShowRequest = &aclRequestsShowRequest
 	return r
 }
 
@@ -845,7 +845,7 @@ func (a *WorkspacesAPIService) WorkspacesGetExecute(r ApiWorkspacesGetRequest) (
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
 	}
 	// body params
-	localVarPostBody = r.appsInstallAliasApiAppsInstallRequest
+	localVarPostBody = r.aclRequestsShowRequest
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
 	if err != nil {
 		return localVarReturnValue, nil, err
@@ -869,7 +869,7 @@ func (a *WorkspacesAPIService) WorkspacesGetExecute(r ApiWorkspacesGetRequest) (
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -880,7 +880,7 @@ func (a *WorkspacesAPIService) WorkspacesGetExecute(r ApiWorkspacesGetRequest) (
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -995,7 +995,7 @@ func (a *WorkspacesAPIService) WorkspacesListExecute(r ApiWorkspacesListRequest)
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1006,7 +1006,7 @@ func (a *WorkspacesAPIService) WorkspacesListExecute(r ApiWorkspacesListRequest)
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1033,11 +1033,11 @@ func (a *WorkspacesAPIService) WorkspacesListExecute(r ApiWorkspacesListRequest)
 type ApiWorkspacesManifestGetRequest struct {
 	ctx context.Context
 	ApiService *WorkspacesAPIService
-	appsInstallAliasApiAppsInstallRequest *AppsInstallAliasApiAppsInstallRequest
+	aclRequestsShowRequest *AclRequestsShowRequest
 }
 
-func (r ApiWorkspacesManifestGetRequest) AppsInstallAliasApiAppsInstallRequest(appsInstallAliasApiAppsInstallRequest AppsInstallAliasApiAppsInstallRequest) ApiWorkspacesManifestGetRequest {
-	r.appsInstallAliasApiAppsInstallRequest = &appsInstallAliasApiAppsInstallRequest
+func (r ApiWorkspacesManifestGetRequest) AclRequestsShowRequest(aclRequestsShowRequest AclRequestsShowRequest) ApiWorkspacesManifestGetRequest {
+	r.aclRequestsShowRequest = &aclRequestsShowRequest
 	return r
 }
 
@@ -1097,7 +1097,7 @@ func (a *WorkspacesAPIService) WorkspacesManifestGetExecute(r ApiWorkspacesManif
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
 	}
 	// body params
-	localVarPostBody = r.appsInstallAliasApiAppsInstallRequest
+	localVarPostBody = r.aclRequestsShowRequest
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
 	if err != nil {
 		return localVarReturnValue, nil, err
@@ -1121,7 +1121,7 @@ func (a *WorkspacesAPIService) WorkspacesManifestGetExecute(r ApiWorkspacesManif
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1132,7 +1132,7 @@ func (a *WorkspacesAPIService) WorkspacesManifestGetExecute(r ApiWorkspacesManif
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1247,7 +1247,7 @@ func (a *WorkspacesAPIService) WorkspacesManifestUpdateExecute(r ApiWorkspacesMa
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1258,7 +1258,7 @@ func (a *WorkspacesAPIService) WorkspacesManifestUpdateExecute(r ApiWorkspacesMa
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()

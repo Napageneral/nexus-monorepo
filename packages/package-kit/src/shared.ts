@@ -7,8 +7,8 @@ import path from "node:path";
 import {
   parseAdapterManifest,
   validateAdapterManifest,
-} from "../../../nex/src/apps/adapter-manifest.js";
-import { parseManifest, validateManifest } from "../../../nex/src/apps/manifest.js";
+} from "../../../nex/src/runtime/domains/apps/adapter-manifest.ts";
+import { parseManifest, validateManifest } from "../../../nex/src/runtime/domains/apps/manifest.ts";
 
 export type PackageKind = "app" | "adapter";
 export type PackageLanguage = "ts" | "go";

@@ -93,11 +93,9 @@ test.describe('OCI-005: Memory Page', () => {
     await navigateToTab(page, 'Memory');
     await clickSubTab(page, 'Search');
 
+    const searchInput = page.locator('input[placeholder*="memory graph"]');
+    await expect(searchInput).toBeVisible();
     await screenshot(page, 'memory-search');
-
-    // Search text input should exist (not the type select)
-    const searchInput = page.locator('input.v2-search-input, input[placeholder*="Search"]');
-    expect(await searchInput.count()).toBeGreaterThanOrEqual(1);
   });
 
   test('memory search accepts query', async ({ page }) => {
@@ -105,16 +103,15 @@ test.describe('OCI-005: Memory Page', () => {
     await navigateToTab(page, 'Memory');
     await clickSubTab(page, 'Search');
 
-    const searchInput = page.locator('input.v2-search-input, input[placeholder*="Search"]').first();
-    if (await searchInput.isVisible()) {
-      await searchInput.fill('test memory query');
+    const searchInput = page.locator('input[placeholder*="memory graph"]').first();
+    await expect(searchInput).toBeVisible();
+    await searchInput.fill('test memory query');
 
-      // Press Enter to trigger search
-      await searchInput.press('Enter');
+    // Press Enter to trigger search
+    await searchInput.press('Enter');
 
-      await page.waitForTimeout(500);
-      await screenshot(page, 'memory-search-executed');
-    }
+    await page.waitForTimeout(500);
+    await screenshot(page, 'memory-search-executed');
   });
 
   test('memory quality tab renders', async ({ page }) => {

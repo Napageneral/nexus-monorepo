@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -113,7 +113,7 @@ func (a *JobsAPIService) JobsCancelExecute(r ApiJobsCancelRequest) (*JobsCancel2
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -124,7 +124,7 @@ func (a *JobsAPIService) JobsCancelExecute(r ApiJobsCancelRequest) (*JobsCancel2
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -239,7 +239,7 @@ func (a *JobsAPIService) JobsCreateExecute(r ApiJobsCreateRequest) (*JobsCreate2
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -250,7 +250,7 @@ func (a *JobsAPIService) JobsCreateExecute(r ApiJobsCreateRequest) (*JobsCreate2
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -277,11 +277,11 @@ func (a *JobsAPIService) JobsCreateExecute(r ApiJobsCreateRequest) (*JobsCreate2
 type ApiJobsDeleteRequest struct {
 	ctx context.Context
 	ApiService *JobsAPIService
-	appsInstallAliasApiAppsInstallRequest *AppsInstallAliasApiAppsInstallRequest
+	aclRequestsShowRequest *AclRequestsShowRequest
 }
 
-func (r ApiJobsDeleteRequest) AppsInstallAliasApiAppsInstallRequest(appsInstallAliasApiAppsInstallRequest AppsInstallAliasApiAppsInstallRequest) ApiJobsDeleteRequest {
-	r.appsInstallAliasApiAppsInstallRequest = &appsInstallAliasApiAppsInstallRequest
+func (r ApiJobsDeleteRequest) AclRequestsShowRequest(aclRequestsShowRequest AclRequestsShowRequest) ApiJobsDeleteRequest {
+	r.aclRequestsShowRequest = &aclRequestsShowRequest
 	return r
 }
 
@@ -341,7 +341,7 @@ func (a *JobsAPIService) JobsDeleteExecute(r ApiJobsDeleteRequest) (*JobsDelete2
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
 	}
 	// body params
-	localVarPostBody = r.appsInstallAliasApiAppsInstallRequest
+	localVarPostBody = r.aclRequestsShowRequest
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
 	if err != nil {
 		return localVarReturnValue, nil, err
@@ -365,7 +365,7 @@ func (a *JobsAPIService) JobsDeleteExecute(r ApiJobsDeleteRequest) (*JobsDelete2
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -376,7 +376,7 @@ func (a *JobsAPIService) JobsDeleteExecute(r ApiJobsDeleteRequest) (*JobsDelete2
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -403,11 +403,11 @@ func (a *JobsAPIService) JobsDeleteExecute(r ApiJobsDeleteRequest) (*JobsDelete2
 type ApiJobsGetRequest struct {
 	ctx context.Context
 	ApiService *JobsAPIService
-	appsInstallAliasApiAppsInstallRequest *AppsInstallAliasApiAppsInstallRequest
+	aclRequestsShowRequest *AclRequestsShowRequest
 }
 
-func (r ApiJobsGetRequest) AppsInstallAliasApiAppsInstallRequest(appsInstallAliasApiAppsInstallRequest AppsInstallAliasApiAppsInstallRequest) ApiJobsGetRequest {
-	r.appsInstallAliasApiAppsInstallRequest = &appsInstallAliasApiAppsInstallRequest
+func (r ApiJobsGetRequest) AclRequestsShowRequest(aclRequestsShowRequest AclRequestsShowRequest) ApiJobsGetRequest {
+	r.aclRequestsShowRequest = &aclRequestsShowRequest
 	return r
 }
 
@@ -467,7 +467,7 @@ func (a *JobsAPIService) JobsGetExecute(r ApiJobsGetRequest) (*JobsGet200Respons
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
 	}
 	// body params
-	localVarPostBody = r.appsInstallAliasApiAppsInstallRequest
+	localVarPostBody = r.aclRequestsShowRequest
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
 	if err != nil {
 		return localVarReturnValue, nil, err
@@ -491,7 +491,7 @@ func (a *JobsAPIService) JobsGetExecute(r ApiJobsGetRequest) (*JobsGet200Respons
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -502,7 +502,7 @@ func (a *JobsAPIService) JobsGetExecute(r ApiJobsGetRequest) (*JobsGet200Respons
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -617,7 +617,7 @@ func (a *JobsAPIService) JobsIdempotencyListExecute(r ApiJobsIdempotencyListRequ
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -628,7 +628,7 @@ func (a *JobsAPIService) JobsIdempotencyListExecute(r ApiJobsIdempotencyListRequ
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -743,7 +743,7 @@ func (a *JobsAPIService) JobsInvokeExecute(r ApiJobsInvokeRequest) (*JobsInvoke2
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -754,7 +754,7 @@ func (a *JobsAPIService) JobsInvokeExecute(r ApiJobsInvokeRequest) (*JobsInvoke2
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -869,7 +869,7 @@ func (a *JobsAPIService) JobsLanesListExecute(r ApiJobsLanesListRequest) (*JobsL
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -880,7 +880,7 @@ func (a *JobsAPIService) JobsLanesListExecute(r ApiJobsLanesListRequest) (*JobsL
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -995,7 +995,7 @@ func (a *JobsAPIService) JobsListExecute(r ApiJobsListRequest) (*JobsList200Resp
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1006,7 +1006,7 @@ func (a *JobsAPIService) JobsListExecute(r ApiJobsListRequest) (*JobsList200Resp
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1121,7 +1121,7 @@ func (a *JobsAPIService) JobsQueueGetExecute(r ApiJobsQueueGetRequest) (*JobsQue
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1132,7 +1132,7 @@ func (a *JobsAPIService) JobsQueueGetExecute(r ApiJobsQueueGetRequest) (*JobsQue
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1247,7 +1247,7 @@ func (a *JobsAPIService) JobsQueueListExecute(r ApiJobsQueueListRequest) (*JobsQ
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1258,7 +1258,7 @@ func (a *JobsAPIService) JobsQueueListExecute(r ApiJobsQueueListRequest) (*JobsQ
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1373,7 +1373,7 @@ func (a *JobsAPIService) JobsRequeueExecute(r ApiJobsRequeueRequest) (*JobsReque
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1384,7 +1384,7 @@ func (a *JobsAPIService) JobsRequeueExecute(r ApiJobsRequeueRequest) (*JobsReque
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1499,7 +1499,7 @@ func (a *JobsAPIService) JobsRetryExecute(r ApiJobsRetryRequest) (*JobsRetry200R
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1510,7 +1510,7 @@ func (a *JobsAPIService) JobsRetryExecute(r ApiJobsRetryRequest) (*JobsRetry200R
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1537,11 +1537,11 @@ func (a *JobsAPIService) JobsRetryExecute(r ApiJobsRetryRequest) (*JobsRetry200R
 type ApiJobsRunsGetRequest struct {
 	ctx context.Context
 	ApiService *JobsAPIService
-	appsInstallAliasApiAppsInstallRequest *AppsInstallAliasApiAppsInstallRequest
+	aclRequestsShowRequest *AclRequestsShowRequest
 }
 
-func (r ApiJobsRunsGetRequest) AppsInstallAliasApiAppsInstallRequest(appsInstallAliasApiAppsInstallRequest AppsInstallAliasApiAppsInstallRequest) ApiJobsRunsGetRequest {
-	r.appsInstallAliasApiAppsInstallRequest = &appsInstallAliasApiAppsInstallRequest
+func (r ApiJobsRunsGetRequest) AclRequestsShowRequest(aclRequestsShowRequest AclRequestsShowRequest) ApiJobsRunsGetRequest {
+	r.aclRequestsShowRequest = &aclRequestsShowRequest
 	return r
 }
 
@@ -1601,7 +1601,7 @@ func (a *JobsAPIService) JobsRunsGetExecute(r ApiJobsRunsGetRequest) (*JobsRunsG
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
 	}
 	// body params
-	localVarPostBody = r.appsInstallAliasApiAppsInstallRequest
+	localVarPostBody = r.aclRequestsShowRequest
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
 	if err != nil {
 		return localVarReturnValue, nil, err
@@ -1625,7 +1625,7 @@ func (a *JobsAPIService) JobsRunsGetExecute(r ApiJobsRunsGetRequest) (*JobsRunsG
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1636,7 +1636,7 @@ func (a *JobsAPIService) JobsRunsGetExecute(r ApiJobsRunsGetRequest) (*JobsRunsG
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1751,7 +1751,7 @@ func (a *JobsAPIService) JobsRunsListExecute(r ApiJobsRunsListRequest) (*JobsRun
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1762,7 +1762,7 @@ func (a *JobsAPIService) JobsRunsListExecute(r ApiJobsRunsListRequest) (*JobsRun
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1877,7 +1877,7 @@ func (a *JobsAPIService) JobsStatusExecute(r ApiJobsStatusRequest) (*JobsStatus2
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -1888,7 +1888,7 @@ func (a *JobsAPIService) JobsStatusExecute(r ApiJobsStatusRequest) (*JobsStatus2
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -2003,7 +2003,7 @@ func (a *JobsAPIService) JobsUpdateExecute(r ApiJobsUpdateRequest) (*JobsCreate2
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -2014,7 +2014,7 @@ func (a *JobsAPIService) JobsUpdateExecute(r ApiJobsUpdateRequest) (*JobsCreate2
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 401 {
-			var v AppsListAliasApiApps400Response
+			var v AclApprovalRequest400Response
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()

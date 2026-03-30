@@ -36,8 +36,8 @@ What already exists:
 
 - Frontdoor has public app install/list/status routes
 - Frontdoor has generic package registry tables and server package install state
-- Frontdoor has generic package transport helpers that already accept `kind = "adapter"`
-- Nex runtime now supports `kind = "adapter"` package install and restart-safe activation
+- Frontdoor has generic package transport helpers that already accept adapter package installs
+- Nex runtime now supports adapter package install and restart-safe activation
 - Frontdoor already has public adapter install/list/status routes
 - Frontdoor already chooses between direct runtime install and SSH/SCP delivery
 - Frontdoor server tests already cover local adapter install through the public API
@@ -148,4 +148,7 @@ Implement:
 
 Exit criteria:
 
-- the local hosted Frontdoor-to-runtime-to-Confluence proof is canonical and repeatable
+- the sandbox-backed hosted Frontdoor-to-runtime-to-Confluence proof is
+  canonical and repeatable
+- the earlier local hosted proof is retained only as historical stepping-stone
+  evidence

@@ -14,12 +14,17 @@ Cross-repo validation should live under:
 
 ## Active
 
+Primary hosted cleanroom entrypoints:
+
+- [FRONTDOOR_HOSTED_VALIDATION_ENTRYPOINT.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_HOSTED_VALIDATION_ENTRYPOINT.md)
+- [FRONTDOOR_HOSTED_PACKAGE_LIVE_TESTING.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_HOSTED_PACKAGE_LIVE_TESTING.md)
+
+Provider-specific or infrastructure-specific signoff remains active separately:
+
 - [FRONTDOOR_AWS_STANDARD_AND_COMPLIANT_LIVE_PROOF_2026-03-17.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_AWS_STANDARD_AND_COMPLIANT_LIVE_PROOF_2026-03-17.md)
 - [FRONTDOOR_AWS_COMPLIANT_LIVE_PROOF_2026-03-17.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_AWS_COMPLIANT_LIVE_PROOF_2026-03-17.md)
 - [FRONTDOOR_AWS_OPERATOR_ACCESS_BASELINE.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_AWS_OPERATOR_ACCESS_BASELINE.md)
 - [FRONTDOOR_CONFIGURED_TENANT_RUNTIME_AUTH_PROJECTION_VALIDATION.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_CONFIGURED_TENANT_RUNTIME_AUTH_PROJECTION_VALIDATION.md)
-- [FRONTDOOR_HOSTED_PACKAGE_LIVE_TESTING.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_HOSTED_PACKAGE_LIVE_TESTING.md)
-- [FRONTDOOR_HOSTED_VALIDATION_ENTRYPOINT.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_HOSTED_VALIDATION_ENTRYPOINT.md)
 - [FRONTDOOR_AWS_ACCOUNT_EVIDENCE_VALIDATION_2026-03-25.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_AWS_ACCOUNT_EVIDENCE_VALIDATION_2026-03-25.md)
 - [FRONTDOOR_HIPAA_READINESS_VALIDATION_2026-03-19.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_HIPAA_READINESS_VALIDATION_2026-03-19.md)
 - [FRONTDOOR_IAM_REVIEW_VALIDATION_2026-03-25.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_IAM_REVIEW_VALIDATION_2026-03-25.md)

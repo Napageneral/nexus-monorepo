@@ -669,7 +669,6 @@ export const linkedinAdapter = defineAdapter<LinkedInClient>({
     supports_delete: false,
     supports_media: true,
     supports_voice_notes: false,
-    supports_streaming_edit: false,
   },
   client: {
     create: ({ ctx }) => buildClient(ctx),

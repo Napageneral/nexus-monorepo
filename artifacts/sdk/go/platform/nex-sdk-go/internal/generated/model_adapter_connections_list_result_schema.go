@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -20,7 +20,7 @@ var _ MappedNullable = &AdapterConnectionsListResultSchema{}
 
 // AdapterConnectionsListResultSchema struct for AdapterConnectionsListResultSchema
 type AdapterConnectionsListResultSchema struct {
-	Connections []AdaptersConnectionsStatus200ResponsePayload `json:"connections"`
+	Connections []AdaptersConnectionsList200ResponsePayloadConnectionsInner `json:"connections"`
 	AdditionalProperties map[string]interface{}
 }
 
@@ -30,7 +30,7 @@ type _AdapterConnectionsListResultSchema AdapterConnectionsListResultSchema
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewAdapterConnectionsListResultSchema(connections []AdaptersConnectionsStatus200ResponsePayload) *AdapterConnectionsListResultSchema {
+func NewAdapterConnectionsListResultSchema(connections []AdaptersConnectionsList200ResponsePayloadConnectionsInner) *AdapterConnectionsListResultSchema {
 	this := AdapterConnectionsListResultSchema{}
 	this.Connections = connections
 	return &this
@@ -45,9 +45,9 @@ func NewAdapterConnectionsListResultSchemaWithDefaults() *AdapterConnectionsList
 }
 
 // GetConnections returns the Connections field value
-func (o *AdapterConnectionsListResultSchema) GetConnections() []AdaptersConnectionsStatus200ResponsePayload {
+func (o *AdapterConnectionsListResultSchema) GetConnections() []AdaptersConnectionsList200ResponsePayloadConnectionsInner {
 	if o == nil {
-		var ret []AdaptersConnectionsStatus200ResponsePayload
+		var ret []AdaptersConnectionsList200ResponsePayloadConnectionsInner
 		return ret
 	}
 
@@ -56,7 +56,7 @@ func (o *AdapterConnectionsListResultSchema) GetConnections() []AdaptersConnecti
 
 // GetConnectionsOk returns a tuple with the Connections field value
 // and a boolean to check if the value has been set.
-func (o *AdapterConnectionsListResultSchema) GetConnectionsOk() ([]AdaptersConnectionsStatus200ResponsePayload, bool) {
+func (o *AdapterConnectionsListResultSchema) GetConnectionsOk() ([]AdaptersConnectionsList200ResponsePayloadConnectionsInner, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -64,7 +64,7 @@ func (o *AdapterConnectionsListResultSchema) GetConnectionsOk() ([]AdaptersConne
 }
 
 // SetConnections sets field value
-func (o *AdapterConnectionsListResultSchema) SetConnections(v []AdaptersConnectionsStatus200ResponsePayload) {
+func (o *AdapterConnectionsListResultSchema) SetConnections(v []AdaptersConnectionsList200ResponsePayloadConnectionsInner) {
 	o.Connections = v
 }
 

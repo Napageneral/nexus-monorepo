@@ -46,8 +46,8 @@ type stagedBackfillChunk struct {
 	Records        int    `json:"records"`
 	FirstRecordID  string `json:"first_record_id,omitempty"`
 	LastRecordID   string `json:"last_record_id,omitempty"`
-	MinTimestampMs *int64 `json:"min_timestamp_ms,omitempty"`
-	MaxTimestampMs *int64 `json:"max_timestamp_ms,omitempty"`
+	FirstTimestampMs *int64 `json:"first_timestamp_ms,omitempty"`
+	LastTimestampMs  *int64 `json:"last_timestamp_ms,omitempty"`
 }
 
 type stagedBackfillManifest struct {
@@ -85,10 +85,10 @@ type imessageSendRequest struct {
 }
 
 type imessageMethodResult struct {
-	Success    bool                     `json:"success"`
-	MessageIDs []string                 `json:"message_ids"`
-	ChunksSent int                      `json:"chunks_sent"`
-	TotalChars int                      `json:"total_chars,omitempty"`
+	Success    bool                      `json:"success"`
+	MessageIDs []string                  `json:"message_ids"`
+	ChunksSent int                       `json:"chunks_sent"`
+	TotalChars int                       `json:"total_chars,omitempty"`
 	Error      *nexadapter.DeliveryError `json:"error,omitempty"`
 }
 
@@ -589,13 +589,13 @@ func (w *stagedChunkWriter) write(record nexadapter.AdapterInboundRecord) error 
 	}
 	w.currentChunk.LastRecordID = recordID
 	if timestamp != nil {
-		if w.currentChunk.MinTimestampMs == nil || *timestamp < *w.currentChunk.MinTimestampMs {
+		if w.currentChunk.FirstTimestampMs == nil || *timestamp < *w.currentChunk.FirstTimestampMs {
 			value := *timestamp
-			w.currentChunk.MinTimestampMs = &value
+			w.currentChunk.FirstTimestampMs = &value
 		}
-		if w.currentChunk.MaxTimestampMs == nil || *timestamp > *w.currentChunk.MaxTimestampMs {
+		if w.currentChunk.LastTimestampMs == nil || *timestamp > *w.currentChunk.LastTimestampMs {
 			value := *timestamp
-			w.currentChunk.MaxTimestampMs = &value
+			w.currentChunk.LastTimestampMs = &value
 		}
 	}
 	if w.currentChunk.Records >= w.chunkSize {
@@ -859,11 +859,14 @@ func eveHealth(_ context.Context, connectionID string) (*nexadapter.AdapterHealt
 
 	var msgCount int64
 	_ = warehouseDB.QueryRow("SELECT COUNT(*) FROM messages").Scan(&msgCount)
+	account, accountContact := getSelfAccountProjection()
 
 	return &nexadapter.AdapterHealth{
-		Connected:    true,
-		ConnectionID: connectionID,
-		LastEventAt:  lastEventAt,
+		Connected:      true,
+		ConnectionID:   connectionID,
+		Account:        account,
+		AccountContact: accountContact,
+		LastEventAt:    lastEventAt,
 		Details: map[string]any{
 			"chat_db_path":     chatDBPath,
 			"warehouse_path":   cfg.EveDBPath,
@@ -876,11 +879,14 @@ func eveHealth(_ context.Context, connectionID string) (*nexadapter.AdapterHealt
 // ---------- Connections ----------
 
 func eveConnections(_ context.Context) ([]nexadapter.AdapterConnectionIdentity, error) {
+	account, accountContact := getSelfAccountProjection()
 	return []nexadapter.AdapterConnectionIdentity{
 		{
-			ID:          "default",
-			DisplayName: getFullName(),
-			Status:      "active",
+			ID:             "default",
+			DisplayName:    getFullName(),
+			Account:        account,
+			AccountContact: accountContact,
+			Status:         "active",
 		},
 	}, nil
 }
@@ -946,17 +952,20 @@ func buildEveSetupResult(ctx context.Context, req nexadapter.AdapterSetupRequest
 	connectionID := setupConnectionIDOrDefault(req.ConnectionID)
 	sessionID := setupSessionIDOrDefault(req.SessionID)
 
-	health, err := eveHealth(ctx, connectionID)
+	health, err := eveHealthFn(ctx, connectionID)
 	if err != nil {
 		return nil, err
 	}
+	account, accountContact := getSelfAccountProjection()
 	if health.Connected {
 		return &nexadapter.AdapterSetupResult{
-			Status:       nexadapter.SetupStatusCompleted,
-			SessionID:    sessionID,
-			ConnectionID: connectionID,
-			Service:      "eve",
-			Message:      "Eve can access chat.db and is ready.",
+			Status:         nexadapter.SetupStatusCompleted,
+			SessionID:      sessionID,
+			ConnectionID:   connectionID,
+			Service:        "eve",
+			Account:        account,
+			AccountContact: accountContact,
+			Message:        "Eve can access chat.db and is ready.",
 			Metadata: map[string]any{
 				"connected":    true,
 				"health_error": health.Error,
@@ -967,13 +976,15 @@ func buildEveSetupResult(ctx context.Context, req nexadapter.AdapterSetupRequest
 
 	if requireConfirm && !isEveSetupConfirmed(req.Payload) {
 		return &nexadapter.AdapterSetupResult{
-			Status:       nexadapter.SetupStatusRequiresInput,
-			SessionID:    sessionID,
-			ConnectionID: connectionID,
-			Service:      "eve",
-			Message:      "Confirm Full Disk Access after enabling it in System Settings.",
-			Instructions: "System Settings -> Privacy & Security -> Full Disk Access -> enable access for Eve and your runtime shell, then submit again.",
-			Fields:       eveSetupFields(),
+			Status:         nexadapter.SetupStatusRequiresInput,
+			SessionID:      sessionID,
+			ConnectionID:   connectionID,
+			Service:        "eve",
+			Account:        account,
+			AccountContact: accountContact,
+			Message:        "Confirm Full Disk Access after enabling it in System Settings.",
+			Instructions:   "System Settings -> Privacy & Security -> Full Disk Access -> enable access for Eve and your runtime shell, then submit again.",
+			Fields:         eveSetupFields(),
 			Metadata: map[string]any{
 				"connected":    false,
 				"health_error": health.Error,
@@ -983,13 +994,15 @@ func buildEveSetupResult(ctx context.Context, req nexadapter.AdapterSetupRequest
 	}
 
 	return &nexadapter.AdapterSetupResult{
-		Status:       nexadapter.SetupStatusRequiresInput,
-		SessionID:    sessionID,
-		ConnectionID: connectionID,
-		Service:      "eve",
-		Message:      "Eve still cannot read chat.db.",
-		Instructions: "Grant Full Disk Access to Eve and your runtime shell, then submit again.",
-		Fields:       eveSetupFields(),
+		Status:         nexadapter.SetupStatusRequiresInput,
+		SessionID:      sessionID,
+		ConnectionID:   connectionID,
+		Service:        "eve",
+		Account:        account,
+		AccountContact: accountContact,
+		Message:        "Eve still cannot read chat.db.",
+		Instructions:   "Grant Full Disk Access to Eve and your runtime shell, then submit again.",
+		Fields:         eveSetupFields(),
 		Metadata: map[string]any{
 			"connected":    false,
 			"health_error": health.Error,
@@ -1828,6 +1841,7 @@ type selfIdentity struct {
 }
 
 var cachedSelfIdentity *selfIdentity
+var eveHealthFn = eveHealth
 
 func appendUnique(values []string, value string) []string {
 	trimmed := strings.TrimSpace(value)
@@ -1894,6 +1908,36 @@ func preferredSelfIdentifier(identity selfIdentity) string {
 		}
 	}
 	return ""
+}
+
+func resolveSelfAccountProjection(identity selfIdentity) (string, *nexadapter.ConnectionAccountContact) {
+	for _, email := range identity.Emails {
+		trimmed := strings.TrimSpace(email)
+		if trimmed == "" {
+			continue
+		}
+		return trimmed, &nexadapter.ConnectionAccountContact{
+			Platform:  "email",
+			SpaceID:   "",
+			ContactID: trimmed,
+		}
+	}
+	for _, phone := range identity.Phones {
+		trimmed := strings.TrimSpace(phone)
+		if trimmed == "" {
+			continue
+		}
+		return trimmed, &nexadapter.ConnectionAccountContact{
+			Platform:  "phone",
+			SpaceID:   "",
+			ContactID: trimmed,
+		}
+	}
+	return "default", nil
+}
+
+func getSelfAccountProjection() (string, *nexadapter.ConnectionAccountContact) {
+	return resolveSelfAccountProjection(getSelfIdentity())
 }
 
 func getSelfContactSeeds() []map[string]any {

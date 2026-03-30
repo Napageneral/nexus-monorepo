@@ -1,138 +1,16 @@
 #!/usr/bin/env node
-import process from "node:process";
-
-function text(value) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function boolEnv(name, defaultValue = false) {
-  const raw = text(process.env[name]).toLowerCase();
-  if (!raw) {
-    return defaultValue;
-  }
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
-}
-
-function fail(message, details = {}) {
-  const payload = {
-    ok: false,
-    error: message,
-    ...details,
-  };
-  process.stderr.write(`${JSON.stringify(payload, null, 2)}\n`);
-  process.exit(1);
-}
-
-function responseSummary(response, body, raw) {
-  return {
-    status: response.status,
-    ok: response.ok,
-    body: body ?? raw,
-  };
-}
-
-function sessionCookieFromSetCookie(setCookie) {
-  if (!setCookie) {
-    return "";
-  }
-  const first = setCookie.split(",")[0] ?? "";
-  return first.split(";")[0] ?? "";
-}
-
-async function requestJson(url, options = {}) {
-  const response = await fetch(url, {
-    cache: "no-store",
-    redirect: "manual",
-    ...options,
-  });
-  const raw = await response.text();
-  let body = null;
-  try {
-    body = raw ? JSON.parse(raw) : null;
-  } catch {
-    body = null;
-  }
-  return { response, raw, body };
-}
-
-async function getJson(url, headers) {
-  return await requestJson(url, {
-    method: "GET",
-    headers,
-  });
-}
-
-async function postJson(url, payload, headers) {
-  return await requestJson(url, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...headers,
-    },
-    body: JSON.stringify(payload),
-  });
-}
-
-async function deleteJson(url, headers) {
-  return await requestJson(url, {
-    method: "DELETE",
-    headers,
-  });
-}
-
-async function loginAndGetCookie(origin) {
-  const username = text(process.env.FRONTDOOR_SMOKE_USERNAME);
-  const password = text(process.env.FRONTDOOR_SMOKE_PASSWORD);
-  if (!username || !password) {
-    fail("missing login credentials", {
-      required_env: ["FRONTDOOR_SMOKE_USERNAME", "FRONTDOOR_SMOKE_PASSWORD"],
-    });
-  }
-  const login = await requestJson(`${origin}/api/auth/login`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ username, password }),
-  });
-  if (!login.response.ok || login.body?.ok !== true) {
-    fail("frontdoor login failed", {
-      login: responseSummary(login.response, login.body, login.raw),
-    });
-  }
-  const setCookie = login.response.headers.get("set-cookie");
-  const cookie = sessionCookieFromSetCookie(setCookie);
-  if (!cookie) {
-    fail("frontdoor login did not return session cookie", {
-      login: responseSummary(login.response, login.body, login.raw),
-    });
-  }
-  return cookie;
-}
-
-async function resolveSessionCookie(origin) {
-  const raw =
-    text(process.env.FRONTDOOR_SMOKE_SESSION_COOKIE) ||
-    text(process.env.FRONTDOOR_SMOKE_SESSION_ID);
-  if (raw) {
-    if (raw.includes("=")) {
-      return raw;
-    }
-    return `nexus_fd_session=${raw}`;
-  }
-  return await loginAndGetCookie(origin);
-}
-
-async function resolveFrontdoorHeaders(origin) {
-  const apiToken = text(process.env.FRONTDOOR_SMOKE_API_TOKEN);
-  if (apiToken) {
-    return {
-      authorization: `Bearer ${apiToken}`,
-    };
-  }
-  const cookie = await resolveSessionCookie(origin);
-  return { cookie };
-}
+import {
+  boolEnv,
+  deleteJson,
+  fail,
+  getJson,
+  mintRuntimeToken,
+  postJson,
+  resolveFrontdoorHeaders,
+  responseSummary,
+  runtimeGetJson,
+  text,
+} from "./frontdoor-smoke-lib.mjs";
 
 function pickServer(params) {
   const explicitServerId = text(process.env.FRONTDOOR_SMOKE_SERVER_ID);
@@ -427,18 +305,16 @@ async function main() {
           version: installVersion || undefined,
         });
 
-  const runtimeToken = await postJson(
-    `${origin}/api/runtime/token`,
-    { server_id: serverId, audience: "runtime-api" },
+  const runtimeToken = await mintRuntimeToken({
+    origin,
     headers,
-  );
-  if (!runtimeToken.response.ok || runtimeToken.body?.ok !== true || !text(runtimeToken.body?.access_token)) {
-    fail("runtime token mint failed", {
-      runtime_token: responseSummary(runtimeToken.response, runtimeToken.body, runtimeToken.raw),
-    });
-  }
+    serverId,
+  });
 
-  const runtimeHealth = await getJson(`${origin}/runtime/health`, headers);
+  const runtimeHealth = await runtimeGetJson(
+    `${runtimeToken.runtime.baseUrl}/health`,
+    runtimeToken.accessToken,
+  );
   const runtimeHealthy =
     runtimeHealth.response.ok &&
     (runtimeHealth.body?.ok === true || text(runtimeHealth.body?.status) === "healthy");
@@ -446,6 +322,29 @@ async function main() {
     fail("runtime health probe failed", {
       runtime_health: responseSummary(runtimeHealth.response, runtimeHealth.body, runtimeHealth.raw),
     });
+  }
+
+  let runtimeApps = null;
+  if (kind === "app") {
+    runtimeApps = await runtimeGetJson(
+      `${runtimeToken.runtime.httpBaseUrl}/api/apps`,
+      runtimeToken.accessToken,
+    );
+    if (!runtimeApps.response.ok || runtimeApps.body?.ok !== true || !Array.isArray(runtimeApps.body?.items)) {
+      fail("runtime apps catalog probe failed", {
+        runtime_apps: responseSummary(runtimeApps.response, runtimeApps.body, runtimeApps.raw),
+      });
+    }
+    if (
+      !runtimeApps.body.items.some(
+        (item) => text(item?.id) === appId || text(item?.app_id) === appId,
+      )
+    ) {
+      fail("runtime apps catalog missing installed app", {
+        app_id: appId,
+        runtime_apps: runtimeApps.body,
+      });
+    }
   }
 
   let entryPath = null;
@@ -548,7 +447,22 @@ async function main() {
         uninstall_status: uninstallStatus?.install_status ?? null,
         entry_path: entryPath,
         launch_status: launchStatus,
+        runtime_token: {
+          server_id: runtimeToken.serverId,
+          tenant_id: runtimeToken.tenantId,
+          entity_id: runtimeToken.entityId,
+          runtime: {
+            base_url: runtimeToken.runtime.baseUrl,
+            http_base_url: runtimeToken.runtime.httpBaseUrl,
+            ws_url: runtimeToken.runtime.wsUrl,
+            sse_url: runtimeToken.runtime.sseUrl,
+          },
+        },
         runtime_health: runtimeHealth.body,
+        runtime_apps_count:
+          kind === "app" && runtimeApps?.body && Array.isArray(runtimeApps.body.items)
+            ? runtimeApps.body.items.length
+            : null,
       },
       null,
       2,

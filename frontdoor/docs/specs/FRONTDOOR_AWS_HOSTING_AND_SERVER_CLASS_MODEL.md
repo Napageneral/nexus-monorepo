@@ -2,7 +2,7 @@
 
 **Status:** CANONICAL
 **Last Updated:** 2026-03-17
-**Related:** FRONTDOOR_ARCHITECTURE.md, CLOUD_PROVISIONING_ARCHITECTURE_2026-03-04.md, FRONTDOOR_HOSTED_ACCESS_AND_ROUTING.md, `nex/docs/specs/platform/server-lifecycle-and-durability.md`, `/Users/tyler/nexus/home/projects/nexus/packages/apps/glowbot/docs/specs/HIPAA_COMPLIANCE.md`
+**Related:** FRONTDOOR_ARCHITECTURE.md, CLOUD_PROVISIONING_ARCHITECTURE_2026-03-04.md, FRONTDOOR_SANDBOX_HOSTED_CLEANROOM_VALIDATION_MODEL.md, FRONTDOOR_HOSTED_ACCESS_AND_ROUTING.md, `nex/docs/specs/platform/server-lifecycle-and-durability.md`, `/Users/tyler/nexus/home/projects/nexus/packages/apps/glowbot/docs/specs/HIPAA_COMPLIANCE.md`
 
 ---
 
@@ -73,6 +73,8 @@ No separate customer-facing frontdoor service is part of the target state.
    decision
 9. hard cutover only; no legacy provider-selection UI survives in the target
    state
+10. hosted validation may use a sandbox-backed provider without creating a new
+    customer-facing server class or changing production provider policy
 
 ---
 
@@ -232,6 +234,20 @@ Canonical rule:
 3. `provider="aws"` dispatches to the compliant-provider implementation
 4. recovery points remain provider-specific infrastructure artifacts; restore
    does not silently cross providers
+
+### 6.5 Validation cleanroom provider
+
+Hosted validation uses an additional internal provider implementation:
+
+1. `provider="sandbox"` is valid for hosted cleanroom proof only
+2. it preserves the Frontdoor hosted lifecycle and runtime-token seams
+3. it does not introduce a third customer-facing server class
+4. it does not weaken the production rule that compliant customer servers are
+   AWS-only
+
+This provider exists so the default hosted proof path can stay Docker-backed,
+disposable, and reproducible without treating external cloud provisioning as
+the ordinary validation substrate.
 
 ### 6.4 Install policy
 

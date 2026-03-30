@@ -12,6 +12,38 @@ type AdapterConnectionEntry = {
   error: string | null;
 };
 
+function summarizeAdapterConnections(entries: AdapterConnectionEntry[]): AdapterConnectionEntry[] {
+  const grouped = new Map<string, AdapterConnectionEntry[]>();
+  for (const entry of entries) {
+    const adapter = typeof entry.adapter === "string" ? entry.adapter.trim() : "";
+    if (!adapter) {
+      continue;
+    }
+    const existing = grouped.get(adapter) ?? [];
+    existing.push({ ...entry, adapter });
+    grouped.set(adapter, existing);
+  }
+  return [...grouped.values()]
+    .map((group) => {
+      const first = group[0]!;
+      const connected = group.find((entry) => entry.status === "connected");
+      const error = group.find((entry) => entry.status === "error");
+      const expired = group.find((entry) => entry.status === "expired");
+      const chosen = connected ?? error ?? expired ?? first;
+      const lastSyncValues = group
+        .map((entry) => entry.lastSync)
+        .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+      return {
+        ...first,
+        status: chosen.status,
+        account: chosen.account ?? group.find((entry) => entry.account)?.account ?? null,
+        lastSync: lastSyncValues.length > 0 ? Math.max(...lastSyncValues) : null,
+        error: chosen.error ?? group.find((entry) => entry.error)?.error ?? null,
+      };
+    })
+    .toSorted((a, b) => a.name.localeCompare(b.name));
+}
+
 export async function loadChannels(state: ChannelsState, probe: boolean) {
   if (!state.client || !state.connected) {
     return;
@@ -22,11 +54,13 @@ export async function loadChannels(state: ChannelsState, probe: boolean) {
   state.channelsLoading = true;
   state.channelsError = null;
   try {
-    const res = await state.client.request<{ adapters?: AdapterConnectionEntry[] }>(
-      "adapter.connections.list",
+    const res = await state.client.request<{ connections?: AdapterConnectionEntry[] }>(
+      "adapters.connections.list",
       {},
     );
-    const adapters = Array.isArray(res.adapters) ? res.adapters : [];
+    const adapters = summarizeAdapterConnections(
+      Array.isArray(res.connections) ? res.connections : [],
+    );
     const snapshot: ChannelsStatusSnapshot = {
       ts: Date.now(),
       channelOrder: adapters.map((entry) => entry.adapter),

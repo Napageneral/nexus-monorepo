@@ -14,6 +14,10 @@ They should link to active docs in:
 - `/Users/tyler/nexus/home/projects/nexus/docs/`
 - `/Users/tyler/nexus/home/projects/nexus/nex/docs/`
 
+For canonical hosted owner bootstrap handoff, read:
+
+- `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/environment/hosted-owner-provisioning-bootstrap-handoff.md`
+
 ## Active Core Specs
 
 - [FRONTDOOR_ARCHITECTURE.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_ARCHITECTURE.md)
@@ -24,6 +28,7 @@ They should link to active docs in:
 - [FRONTDOOR_SHELL_AND_EMBEDDED_APP_MODEL.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_SHELL_AND_EMBEDDED_APP_MODEL.md)
 - [FRONTDOOR_AWS_HOSTING_AND_SERVER_CLASS_MODEL.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_AWS_HOSTING_AND_SERVER_CLASS_MODEL.md)
 - [CLOUD_PROVISIONING_ARCHITECTURE_2026-03-04.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/CLOUD_PROVISIONING_ARCHITECTURE_2026-03-04.md)
+- [FRONTDOOR_SANDBOX_HOSTED_CLEANROOM_VALIDATION_MODEL.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_SANDBOX_HOSTED_CLEANROOM_VALIDATION_MODEL.md)
 - [TENANT_NETWORKING_AND_ROUTING_2026-03-04.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/TENANT_NETWORKING_AND_ROUTING_2026-03-04.md)
 - [FRONTDOOR_HOSTED_PACKAGE_INSTALL_POLICY_AND_DEPLOYMENT_CLASSES.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_HOSTED_PACKAGE_INSTALL_POLICY_AND_DEPLOYMENT_CLASSES.md)
 - [FRONTDOOR_PACKAGE_REGISTRY_AND_LIFECYCLE.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_PACKAGE_REGISTRY_AND_LIFECYCLE.md)

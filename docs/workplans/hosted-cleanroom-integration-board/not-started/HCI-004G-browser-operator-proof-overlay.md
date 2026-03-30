@@ -7,6 +7,8 @@ runtime proofs without blocking core runtime correctness.
 
 This lane is about the overlay model itself, not only the operator console.
 Operator-console Playwright coverage is the first concrete implementation.
+This lane should reuse that producer model instead of creating a second browser
+artifact stack.
 
 ## Scope
 

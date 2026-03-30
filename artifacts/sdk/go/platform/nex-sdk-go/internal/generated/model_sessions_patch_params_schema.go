@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -26,11 +26,11 @@ type SessionsPatchParamsSchema struct {
 	ModelConfigId *string `json:"model_config_id,omitempty"`
 	ExecutionHostKind *AdaptersConnectionsList200ResponsePayloadConnectionsInnerStatus `json:"execution_host_kind,omitempty"`
 	SandboxId *string `json:"sandbox_id,omitempty"`
-	ExecutionHostConfigJson *AgentsSessionsPatchRequestExecutionHostConfigJson `json:"execution_host_config_json,omitempty"`
+	ExecutionHostConfigJson *AdaptersConnectionsBackfill200ResponsePayloadStatus `json:"execution_host_config_json,omitempty"`
 	ThinkingLevel *string `json:"thinkingLevel,omitempty"`
 	VerboseLevel *string `json:"verboseLevel,omitempty"`
 	ReasoningLevel *string `json:"reasoningLevel,omitempty"`
-	ResponseUsage *AdaptersConnectionsStatus200ResponsePayloadAuthMethod `json:"responseUsage,omitempty"`
+	ResponseUsage *AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod `json:"responseUsage,omitempty"`
 	ElevatedLevel *string `json:"elevatedLevel,omitempty"`
 	ExecHost *string `json:"execHost,omitempty"`
 	ExecSecurity *string `json:"execSecurity,omitempty"`
@@ -249,9 +249,9 @@ func (o *SessionsPatchParamsSchema) SetSandboxId(v string) {
 }
 
 // GetExecutionHostConfigJson returns the ExecutionHostConfigJson field value if set, zero value otherwise.
-func (o *SessionsPatchParamsSchema) GetExecutionHostConfigJson() AgentsSessionsPatchRequestExecutionHostConfigJson {
+func (o *SessionsPatchParamsSchema) GetExecutionHostConfigJson() AdaptersConnectionsBackfill200ResponsePayloadStatus {
 	if o == nil || IsNil(o.ExecutionHostConfigJson) {
-		var ret AgentsSessionsPatchRequestExecutionHostConfigJson
+		var ret AdaptersConnectionsBackfill200ResponsePayloadStatus
 		return ret
 	}
 	return *o.ExecutionHostConfigJson
@@ -259,7 +259,7 @@ func (o *SessionsPatchParamsSchema) GetExecutionHostConfigJson() AgentsSessionsP
 
 // GetExecutionHostConfigJsonOk returns a tuple with the ExecutionHostConfigJson field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *SessionsPatchParamsSchema) GetExecutionHostConfigJsonOk() (*AgentsSessionsPatchRequestExecutionHostConfigJson, bool) {
+func (o *SessionsPatchParamsSchema) GetExecutionHostConfigJsonOk() (*AdaptersConnectionsBackfill200ResponsePayloadStatus, bool) {
 	if o == nil || IsNil(o.ExecutionHostConfigJson) {
 		return nil, false
 	}
@@ -275,8 +275,8 @@ func (o *SessionsPatchParamsSchema) HasExecutionHostConfigJson() bool {
 	return false
 }
 
-// SetExecutionHostConfigJson gets a reference to the given AgentsSessionsPatchRequestExecutionHostConfigJson and assigns it to the ExecutionHostConfigJson field.
-func (o *SessionsPatchParamsSchema) SetExecutionHostConfigJson(v AgentsSessionsPatchRequestExecutionHostConfigJson) {
+// SetExecutionHostConfigJson gets a reference to the given AdaptersConnectionsBackfill200ResponsePayloadStatus and assigns it to the ExecutionHostConfigJson field.
+func (o *SessionsPatchParamsSchema) SetExecutionHostConfigJson(v AdaptersConnectionsBackfill200ResponsePayloadStatus) {
 	o.ExecutionHostConfigJson = &v
 }
 
@@ -377,9 +377,9 @@ func (o *SessionsPatchParamsSchema) SetReasoningLevel(v string) {
 }
 
 // GetResponseUsage returns the ResponseUsage field value if set, zero value otherwise.
-func (o *SessionsPatchParamsSchema) GetResponseUsage() AdaptersConnectionsStatus200ResponsePayloadAuthMethod {
+func (o *SessionsPatchParamsSchema) GetResponseUsage() AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod {
 	if o == nil || IsNil(o.ResponseUsage) {
-		var ret AdaptersConnectionsStatus200ResponsePayloadAuthMethod
+		var ret AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod
 		return ret
 	}
 	return *o.ResponseUsage
@@ -387,7 +387,7 @@ func (o *SessionsPatchParamsSchema) GetResponseUsage() AdaptersConnectionsStatus
 
 // GetResponseUsageOk returns a tuple with the ResponseUsage field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *SessionsPatchParamsSchema) GetResponseUsageOk() (*AdaptersConnectionsStatus200ResponsePayloadAuthMethod, bool) {
+func (o *SessionsPatchParamsSchema) GetResponseUsageOk() (*AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod, bool) {
 	if o == nil || IsNil(o.ResponseUsage) {
 		return nil, false
 	}
@@ -403,8 +403,8 @@ func (o *SessionsPatchParamsSchema) HasResponseUsage() bool {
 	return false
 }
 
-// SetResponseUsage gets a reference to the given AdaptersConnectionsStatus200ResponsePayloadAuthMethod and assigns it to the ResponseUsage field.
-func (o *SessionsPatchParamsSchema) SetResponseUsage(v AdaptersConnectionsStatus200ResponsePayloadAuthMethod) {
+// SetResponseUsage gets a reference to the given AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod and assigns it to the ResponseUsage field.
+func (o *SessionsPatchParamsSchema) SetResponseUsage(v AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod) {
 	o.ResponseUsage = &v
 }
 

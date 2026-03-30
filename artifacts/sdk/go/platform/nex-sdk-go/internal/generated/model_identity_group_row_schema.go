@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -26,7 +26,7 @@ type IdentityGroupRowSchema struct {
 	ParentGroupId *string `json:"parent_group_id,omitempty"`
 	CreatedAt float32 `json:"created_at"`
 	UpdatedAt float32 `json:"updated_at"`
-	MemberCount IdentityGroupRowSchemaMemberCount `json:"member_count"`
+	MemberCount AdaptersConnectionsBackfill200ResponsePayloadStatus `json:"member_count"`
 	AdditionalProperties map[string]interface{}
 }
 
@@ -36,7 +36,7 @@ type _IdentityGroupRowSchema IdentityGroupRowSchema
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewIdentityGroupRowSchema(id string, name string, createdAt float32, updatedAt float32, memberCount IdentityGroupRowSchemaMemberCount) *IdentityGroupRowSchema {
+func NewIdentityGroupRowSchema(id string, name string, createdAt float32, updatedAt float32, memberCount AdaptersConnectionsBackfill200ResponsePayloadStatus) *IdentityGroupRowSchema {
 	this := IdentityGroupRowSchema{}
 	this.Id = id
 	this.Name = name
@@ -215,9 +215,9 @@ func (o *IdentityGroupRowSchema) SetUpdatedAt(v float32) {
 }
 
 // GetMemberCount returns the MemberCount field value
-func (o *IdentityGroupRowSchema) GetMemberCount() IdentityGroupRowSchemaMemberCount {
+func (o *IdentityGroupRowSchema) GetMemberCount() AdaptersConnectionsBackfill200ResponsePayloadStatus {
 	if o == nil {
-		var ret IdentityGroupRowSchemaMemberCount
+		var ret AdaptersConnectionsBackfill200ResponsePayloadStatus
 		return ret
 	}
 
@@ -226,7 +226,7 @@ func (o *IdentityGroupRowSchema) GetMemberCount() IdentityGroupRowSchemaMemberCo
 
 // GetMemberCountOk returns a tuple with the MemberCount field value
 // and a boolean to check if the value has been set.
-func (o *IdentityGroupRowSchema) GetMemberCountOk() (*IdentityGroupRowSchemaMemberCount, bool) {
+func (o *IdentityGroupRowSchema) GetMemberCountOk() (*AdaptersConnectionsBackfill200ResponsePayloadStatus, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -234,7 +234,7 @@ func (o *IdentityGroupRowSchema) GetMemberCountOk() (*IdentityGroupRowSchemaMemb
 }
 
 // SetMemberCount sets field value
-func (o *IdentityGroupRowSchema) SetMemberCount(v IdentityGroupRowSchemaMemberCount) {
+func (o *IdentityGroupRowSchema) SetMemberCount(v AdaptersConnectionsBackfill200ResponsePayloadStatus) {
 	o.MemberCount = v
 }
 

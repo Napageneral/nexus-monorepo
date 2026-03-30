@@ -1,33 +1,13 @@
 import type { NexusApp } from "./app.ts";
 import { loadDebug } from "./controllers/debug.ts";
 import { loadLogs } from "./controllers/logs.ts";
-import { loadNodes } from "./controllers/nodes.ts";
 
 type PollingHost = {
-  nodesPollInterval: number | null;
   logsPollInterval: number | null;
   debugPollInterval: number | null;
   tab: string;
   systemSubTab?: "overview" | "config" | "logs" | "debug" | "usage";
 };
-
-export function startNodesPolling(host: PollingHost) {
-  if (host.nodesPollInterval != null) {
-    return;
-  }
-  host.nodesPollInterval = window.setInterval(
-    () => void loadNodes(host as unknown as NexusApp, { quiet: true }),
-    5000,
-  );
-}
-
-export function stopNodesPolling(host: PollingHost) {
-  if (host.nodesPollInterval == null) {
-    return;
-  }
-  clearInterval(host.nodesPollInterval);
-  host.nodesPollInterval = null;
-}
 
 export function startLogsPolling(host: PollingHost) {
   if (host.logsPollInterval != null) {

@@ -105,6 +105,22 @@ Provider-side identifiers such as:
 must remain metadata on records and health details, not replace the Nex
 connection identity.
 
+When Eve can identify the local self account precisely, setup or health should
+also expose that identity explicitly as the connection-account linkage using
+the stable logical contact key:
+
+- `platform`
+- `space_id`
+- `contact_id`
+
+For Eve that normally means a self phone number or self email with empty
+`space_id`, not a local slot label such as `default`.
+
+When Eve can authoritatively determine the local self identity, setup and
+health should emit that identity explicitly as the connection-account contact.
+That should normally be the primary local phone or email identity, not the
+operational slot label `default`.
+
 ## Setup Experience
 
 The adapter uses a `custom_flow` auth/setup method because this is not an OAuth
@@ -123,6 +139,8 @@ The setup flow must return:
 - `requires_input` when permissions are missing or unconfirmed
 - `completed` only when health proves the local environment is ready
 - useful health metadata when setup is blocked
+- the explicit connection-account contact when Eve can state the local self
+  identity authoritatively
 
 ## Monitor Behavior
 
@@ -180,6 +198,9 @@ At minimum, health must verify:
 
 Health metadata should include path and warehouse facts that help explain setup
 or runtime failure without exposing unnecessary secrets.
+
+When available, health should also expose the explicit connection-account
+contact for the local self identity.
 
 ## Record Model
 

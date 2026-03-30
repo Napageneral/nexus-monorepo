@@ -77,7 +77,7 @@ export type AdapterConnectionEntry = {
 };
 
 type AdapterConnectionsListResult = {
-  adapters: AdapterConnectionEntry[];
+  connections?: AdapterConnectionEntry[];
 };
 
 type AdapterConnectionsResult = {
@@ -209,6 +209,38 @@ function mergeAdapterConnections(
   return [...merged.values()].toSorted((a, b) => a.id.localeCompare(b.id));
 }
 
+function summarizeAdapterInventory(entries: AdapterConnectionEntry[]): AdapterConnectionEntry[] {
+  const grouped = new Map<string, AdapterConnectionEntry[]>();
+  for (const entry of entries) {
+    const adapter = trimOrEmpty(entry.adapter);
+    if (!adapter) {
+      continue;
+    }
+    const existing = grouped.get(adapter) ?? [];
+    existing.push({ ...entry, adapter });
+    grouped.set(adapter, existing);
+  }
+  return [...grouped.values()]
+    .map((group) => {
+      const first = group[0]!;
+      const connected = group.find((entry) => entry.status === "connected");
+      const error = group.find((entry) => entry.status === "error");
+      const expired = group.find((entry) => entry.status === "expired");
+      const chosen = connected ?? error ?? expired ?? first;
+      const lastSyncValues = group
+        .map((entry) => entry.lastSync)
+        .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+      return {
+        ...first,
+        status: chosen.status,
+        account: chosen.account ?? group.find((entry) => trimOrEmpty(entry.account))?.account ?? null,
+        lastSync: lastSyncValues.length > 0 ? Math.max(...lastSyncValues) : null,
+        error: chosen.error ?? group.find((entry) => trimOrEmpty(entry.error))?.error ?? null,
+      };
+    })
+    .toSorted((a, b) => a.name.localeCompare(b.name));
+}
+
 function selectedAdapterEntry(state: IntegrationsState): AdapterConnectionEntry | null {
   const selected = trimOrEmpty(state.integrationsSelectedAdapter);
   if (!selected) {
@@ -320,10 +352,12 @@ export async function loadIntegrations(state: IntegrationsState): Promise<void> 
   try {
     const client = state.client;
     const result = await client.request<AdapterConnectionsListResult>(
-      "adapter.connections.list",
+      "adapters.connections.list",
       {},
     );
-    const baseEntries = Array.isArray(result.adapters) ? result.adapters : [];
+    const baseEntries = summarizeAdapterInventory(
+      Array.isArray(result.connections) ? result.connections : [],
+    );
     state.integrationsAdapters = await Promise.all(
       baseEntries.map(async (entry) => {
         try {

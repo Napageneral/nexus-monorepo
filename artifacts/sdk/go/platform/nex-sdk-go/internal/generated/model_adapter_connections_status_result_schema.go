@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -26,7 +26,7 @@ type AdapterConnectionsStatusResultSchema struct {
 	Service *string `json:"service,omitempty"`
 	Status AdaptersConnectionsList200ResponsePayloadConnectionsInnerStatus `json:"status"`
 	AuthMethodId *string `json:"authMethodId,omitempty"`
-	AuthMethod AdaptersConnectionsStatus200ResponsePayloadAuthMethod `json:"authMethod"`
+	AuthMethod AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod `json:"authMethod"`
 	Auth interface{} `json:"auth,omitempty"`
 	Account *string `json:"account,omitempty"`
 	LastSync *int64 `json:"lastSync,omitempty"`
@@ -42,7 +42,7 @@ type _AdapterConnectionsStatusResultSchema AdapterConnectionsStatusResultSchema
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewAdapterConnectionsStatusResultSchema(connectionId string, adapter string, name string, status AdaptersConnectionsList200ResponsePayloadConnectionsInnerStatus, authMethod AdaptersConnectionsStatus200ResponsePayloadAuthMethod) *AdapterConnectionsStatusResultSchema {
+func NewAdapterConnectionsStatusResultSchema(connectionId string, adapter string, name string, status AdaptersConnectionsList200ResponsePayloadConnectionsInnerStatus, authMethod AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod) *AdapterConnectionsStatusResultSchema {
 	this := AdapterConnectionsStatusResultSchema{}
 	this.ConnectionId = connectionId
 	this.Adapter = adapter
@@ -221,9 +221,9 @@ func (o *AdapterConnectionsStatusResultSchema) SetAuthMethodId(v string) {
 }
 
 // GetAuthMethod returns the AuthMethod field value
-func (o *AdapterConnectionsStatusResultSchema) GetAuthMethod() AdaptersConnectionsStatus200ResponsePayloadAuthMethod {
+func (o *AdapterConnectionsStatusResultSchema) GetAuthMethod() AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod {
 	if o == nil {
-		var ret AdaptersConnectionsStatus200ResponsePayloadAuthMethod
+		var ret AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod
 		return ret
 	}
 
@@ -232,7 +232,7 @@ func (o *AdapterConnectionsStatusResultSchema) GetAuthMethod() AdaptersConnectio
 
 // GetAuthMethodOk returns a tuple with the AuthMethod field value
 // and a boolean to check if the value has been set.
-func (o *AdapterConnectionsStatusResultSchema) GetAuthMethodOk() (*AdaptersConnectionsStatus200ResponsePayloadAuthMethod, bool) {
+func (o *AdapterConnectionsStatusResultSchema) GetAuthMethodOk() (*AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -240,7 +240,7 @@ func (o *AdapterConnectionsStatusResultSchema) GetAuthMethodOk() (*AdaptersConne
 }
 
 // SetAuthMethod sets field value
-func (o *AdapterConnectionsStatusResultSchema) SetAuthMethod(v AdaptersConnectionsStatus200ResponsePayloadAuthMethod) {
+func (o *AdapterConnectionsStatusResultSchema) SetAuthMethod(v AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod) {
 	o.AuthMethod = v
 }
 

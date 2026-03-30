@@ -6,7 +6,6 @@ import { refreshChatAvatar } from "./app-chat.ts";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.ts";
 import { approveAclRequest, denyAclRequest, loadAclRequests } from "./controllers/acl-requests.ts";
 import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files.ts";
-import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
 import { loadAgents } from "./controllers/agents.ts";
 import { loadInstalledAppMethods, loadInstalledApps } from "./controllers/apps.ts";
@@ -261,7 +260,6 @@ export function renderApp(state: AppViewState) {
                     conversationId: next,
                     lastActiveSessionKey: state.sessionKey || state.settings.lastActiveSessionKey,
                   });
-                  void state.loadAssistantIdentity();
                   void loadChatHistory(state);
                   void refreshChatAvatar(state);
                 },
@@ -346,21 +344,12 @@ export function renderApp(state: AppViewState) {
                 agentFileContents: state.agentFileContents,
                 agentFileDrafts: state.agentFileDrafts,
                 agentFileSaving: state.agentFileSaving,
-                agentIdentityLoading: state.agentIdentityLoading,
-                agentIdentityError: state.agentIdentityError,
-                agentIdentityById: state.agentIdentityById,
                 agentSkillsLoading: state.agentSkillsLoading,
                 agentSkillsReport: state.agentSkillsReport,
                 agentSkillsError: state.agentSkillsError,
                 agentSkillsAgentId: state.agentSkillsAgentId,
                 skillsFilter: state.skillsFilter,
-                onRefresh: async () => {
-                  await loadAgents(state);
-                  const agentIds = state.agentsList?.agents?.map((entry) => entry.id) ?? [];
-                  if (agentIds.length > 0) {
-                    void loadAgentIdentities(state, agentIds);
-                  }
-                },
+                onRefresh: () => loadAgents(state),
                 onSelectAgent: (agentId) => {
                   if (state.agentsSelectedId === agentId) {
                     return;
@@ -375,7 +364,6 @@ export function renderApp(state: AppViewState) {
                   state.agentSkillsReport = null;
                   state.agentSkillsError = null;
                   state.agentSkillsAgentId = null;
-                  void loadAgentIdentity(state, agentId);
                   if (state.agentsPanel === "files") {
                     void loadAgentFiles(state, agentId);
                   }
@@ -1064,9 +1052,7 @@ export function renderApp(state: AppViewState) {
                 debugProps: {
                   loading: state.debugLoading,
                   status: state.debugStatus,
-                  health: state.debugHealth,
                   models: state.debugModels,
-                  heartbeat: state.debugHeartbeat,
                   eventLog: state.eventLog,
                   callMethod: state.debugCallMethod,
                   callParams: state.debugCallParams,

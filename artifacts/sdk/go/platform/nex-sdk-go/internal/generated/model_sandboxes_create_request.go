@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -235,9 +235,9 @@ func (o *SandboxesCreateRequest) SetMounts(v []SandboxesCreateRequestMountsInner
 	o.Mounts = v
 }
 
-// GetLinkage returns the Linkage field value if set, zero value otherwise (both if not set or set to explicit null).
+// GetLinkage returns the Linkage field value if set, zero value otherwise.
 func (o *SandboxesCreateRequest) GetLinkage() map[string]interface{} {
-	if o == nil {
+	if o == nil || IsNil(o.Linkage) {
 		var ret map[string]interface{}
 		return ret
 	}
@@ -246,7 +246,6 @@ func (o *SandboxesCreateRequest) GetLinkage() map[string]interface{} {
 
 // GetLinkageOk returns a tuple with the Linkage field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-// NOTE: If the value is an explicit nil, `nil, true` will be returned
 func (o *SandboxesCreateRequest) GetLinkageOk() (map[string]interface{}, bool) {
 	if o == nil || IsNil(o.Linkage) {
 		return map[string]interface{}{}, false
@@ -268,9 +267,9 @@ func (o *SandboxesCreateRequest) SetLinkage(v map[string]interface{}) {
 	o.Linkage = v
 }
 
-// GetConfigJson returns the ConfigJson field value if set, zero value otherwise (both if not set or set to explicit null).
+// GetConfigJson returns the ConfigJson field value if set, zero value otherwise.
 func (o *SandboxesCreateRequest) GetConfigJson() map[string]interface{} {
-	if o == nil {
+	if o == nil || IsNil(o.ConfigJson) {
 		var ret map[string]interface{}
 		return ret
 	}
@@ -279,7 +278,6 @@ func (o *SandboxesCreateRequest) GetConfigJson() map[string]interface{} {
 
 // GetConfigJsonOk returns a tuple with the ConfigJson field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-// NOTE: If the value is an explicit nil, `nil, true` will be returned
 func (o *SandboxesCreateRequest) GetConfigJsonOk() (map[string]interface{}, bool) {
 	if o == nil || IsNil(o.ConfigJson) {
 		return map[string]interface{}{}, false
@@ -327,10 +325,10 @@ func (o SandboxesCreateRequest) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.Mounts) {
 		toSerialize["mounts"] = o.Mounts
 	}
-	if o.Linkage != nil {
+	if !IsNil(o.Linkage) {
 		toSerialize["linkage"] = o.Linkage
 	}
-	if o.ConfigJson != nil {
+	if !IsNil(o.ConfigJson) {
 		toSerialize["config_json"] = o.ConfigJson
 	}
 

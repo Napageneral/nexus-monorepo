@@ -1,6 +1,11 @@
 # Testing
 
 1. `pnpm build`
-2. `nex package validate .`
-3. `nex package release .`
-4. `nex package smoke . --frontdoor-origin <url> --frontdoor-api-token <token> --server-id <id>`
+2. validate the package in a disposable cleanroom or containerized runtime
+   first
+3. `nex package validate .`
+4. `nex package release .`
+5. `nex package smoke . --frontdoor-origin <url> --frontdoor-api-token <token> --server-id <id>`
+
+Use already-lived-in local or hosted runtimes only for secondary dogfood after
+the cleanroom path passes.

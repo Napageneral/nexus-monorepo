@@ -309,6 +309,12 @@ components:
               origin:
                 type: object
                 properties:
+                  package_kind:
+                    type: string
+                    enum:
+                      - runtime
+                      - app
+                      - adapter
                   package_id:
                     anyOf:
                       - type: string
@@ -328,6 +334,7 @@ components:
                   namespace:
                     type: string
                 required:
+                  - package_kind
                   - package_id
                   - package_version
                   - declaration_mode
@@ -378,11 +385,7 @@ components:
               type: boolean
             supports_voice_notes:
               type: boolean
-            supports_streaming_edit:
-              type: boolean
             supports_ptt:
-              type: boolean
-            supports_streaming:
               type: boolean
             max_message_length:
               type: integer

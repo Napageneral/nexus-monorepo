@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -24,9 +24,9 @@ type AgentsSessionsPatchRequest struct {
 	EntityId *string `json:"entity_id,omitempty"`
 	RoleConfigId *string `json:"role_config_id,omitempty"`
 	ModelConfigId *string `json:"model_config_id,omitempty"`
-	ExecutionHostKind *AgentsSessionsPatchRequestExecutionHostKind `json:"execution_host_kind,omitempty"`
+	ExecutionHostKind *AdaptersConnectionsList200ResponsePayloadConnectionsInnerStatus `json:"execution_host_kind,omitempty"`
 	SandboxId *string `json:"sandbox_id,omitempty"`
-	ExecutionHostConfigJson *AgentsSessionsPatchRequestExecutionHostConfigJson `json:"execution_host_config_json,omitempty"`
+	ExecutionHostConfigJson *AdaptersConnectionsBackfill200ResponsePayloadStatus `json:"execution_host_config_json,omitempty"`
 	ThinkingLevel *string `json:"thinkingLevel,omitempty"`
 	VerboseLevel *string `json:"verboseLevel,omitempty"`
 	ReasoningLevel *string `json:"reasoningLevel,omitempty"`
@@ -39,8 +39,8 @@ type AgentsSessionsPatchRequest struct {
 	Model *string `json:"model,omitempty"`
 	ParentSessionId *string `json:"parentSessionId,omitempty"`
 	Label *string `json:"label,omitempty"`
-	SendPolicy *AgentsSessionsPatchRequestSendPolicy `json:"sendPolicy,omitempty"`
-	GroupActivation *AgentsSessionsPatchRequestSendPolicy `json:"groupActivation,omitempty"`
+	SendPolicy *AclRequestsApproveRequestMode `json:"sendPolicy,omitempty"`
+	GroupActivation *AclRequestsApproveRequestMode `json:"groupActivation,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
 
@@ -185,9 +185,9 @@ func (o *AgentsSessionsPatchRequest) SetModelConfigId(v string) {
 }
 
 // GetExecutionHostKind returns the ExecutionHostKind field value if set, zero value otherwise.
-func (o *AgentsSessionsPatchRequest) GetExecutionHostKind() AgentsSessionsPatchRequestExecutionHostKind {
+func (o *AgentsSessionsPatchRequest) GetExecutionHostKind() AdaptersConnectionsList200ResponsePayloadConnectionsInnerStatus {
 	if o == nil || IsNil(o.ExecutionHostKind) {
-		var ret AgentsSessionsPatchRequestExecutionHostKind
+		var ret AdaptersConnectionsList200ResponsePayloadConnectionsInnerStatus
 		return ret
 	}
 	return *o.ExecutionHostKind
@@ -195,7 +195,7 @@ func (o *AgentsSessionsPatchRequest) GetExecutionHostKind() AgentsSessionsPatchR
 
 // GetExecutionHostKindOk returns a tuple with the ExecutionHostKind field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *AgentsSessionsPatchRequest) GetExecutionHostKindOk() (*AgentsSessionsPatchRequestExecutionHostKind, bool) {
+func (o *AgentsSessionsPatchRequest) GetExecutionHostKindOk() (*AdaptersConnectionsList200ResponsePayloadConnectionsInnerStatus, bool) {
 	if o == nil || IsNil(o.ExecutionHostKind) {
 		return nil, false
 	}
@@ -211,8 +211,8 @@ func (o *AgentsSessionsPatchRequest) HasExecutionHostKind() bool {
 	return false
 }
 
-// SetExecutionHostKind gets a reference to the given AgentsSessionsPatchRequestExecutionHostKind and assigns it to the ExecutionHostKind field.
-func (o *AgentsSessionsPatchRequest) SetExecutionHostKind(v AgentsSessionsPatchRequestExecutionHostKind) {
+// SetExecutionHostKind gets a reference to the given AdaptersConnectionsList200ResponsePayloadConnectionsInnerStatus and assigns it to the ExecutionHostKind field.
+func (o *AgentsSessionsPatchRequest) SetExecutionHostKind(v AdaptersConnectionsList200ResponsePayloadConnectionsInnerStatus) {
 	o.ExecutionHostKind = &v
 }
 
@@ -249,9 +249,9 @@ func (o *AgentsSessionsPatchRequest) SetSandboxId(v string) {
 }
 
 // GetExecutionHostConfigJson returns the ExecutionHostConfigJson field value if set, zero value otherwise.
-func (o *AgentsSessionsPatchRequest) GetExecutionHostConfigJson() AgentsSessionsPatchRequestExecutionHostConfigJson {
+func (o *AgentsSessionsPatchRequest) GetExecutionHostConfigJson() AdaptersConnectionsBackfill200ResponsePayloadStatus {
 	if o == nil || IsNil(o.ExecutionHostConfigJson) {
-		var ret AgentsSessionsPatchRequestExecutionHostConfigJson
+		var ret AdaptersConnectionsBackfill200ResponsePayloadStatus
 		return ret
 	}
 	return *o.ExecutionHostConfigJson
@@ -259,7 +259,7 @@ func (o *AgentsSessionsPatchRequest) GetExecutionHostConfigJson() AgentsSessions
 
 // GetExecutionHostConfigJsonOk returns a tuple with the ExecutionHostConfigJson field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *AgentsSessionsPatchRequest) GetExecutionHostConfigJsonOk() (*AgentsSessionsPatchRequestExecutionHostConfigJson, bool) {
+func (o *AgentsSessionsPatchRequest) GetExecutionHostConfigJsonOk() (*AdaptersConnectionsBackfill200ResponsePayloadStatus, bool) {
 	if o == nil || IsNil(o.ExecutionHostConfigJson) {
 		return nil, false
 	}
@@ -275,8 +275,8 @@ func (o *AgentsSessionsPatchRequest) HasExecutionHostConfigJson() bool {
 	return false
 }
 
-// SetExecutionHostConfigJson gets a reference to the given AgentsSessionsPatchRequestExecutionHostConfigJson and assigns it to the ExecutionHostConfigJson field.
-func (o *AgentsSessionsPatchRequest) SetExecutionHostConfigJson(v AgentsSessionsPatchRequestExecutionHostConfigJson) {
+// SetExecutionHostConfigJson gets a reference to the given AdaptersConnectionsBackfill200ResponsePayloadStatus and assigns it to the ExecutionHostConfigJson field.
+func (o *AgentsSessionsPatchRequest) SetExecutionHostConfigJson(v AdaptersConnectionsBackfill200ResponsePayloadStatus) {
 	o.ExecutionHostConfigJson = &v
 }
 
@@ -665,9 +665,9 @@ func (o *AgentsSessionsPatchRequest) SetLabel(v string) {
 }
 
 // GetSendPolicy returns the SendPolicy field value if set, zero value otherwise.
-func (o *AgentsSessionsPatchRequest) GetSendPolicy() AgentsSessionsPatchRequestSendPolicy {
+func (o *AgentsSessionsPatchRequest) GetSendPolicy() AclRequestsApproveRequestMode {
 	if o == nil || IsNil(o.SendPolicy) {
-		var ret AgentsSessionsPatchRequestSendPolicy
+		var ret AclRequestsApproveRequestMode
 		return ret
 	}
 	return *o.SendPolicy
@@ -675,7 +675,7 @@ func (o *AgentsSessionsPatchRequest) GetSendPolicy() AgentsSessionsPatchRequestS
 
 // GetSendPolicyOk returns a tuple with the SendPolicy field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *AgentsSessionsPatchRequest) GetSendPolicyOk() (*AgentsSessionsPatchRequestSendPolicy, bool) {
+func (o *AgentsSessionsPatchRequest) GetSendPolicyOk() (*AclRequestsApproveRequestMode, bool) {
 	if o == nil || IsNil(o.SendPolicy) {
 		return nil, false
 	}
@@ -691,15 +691,15 @@ func (o *AgentsSessionsPatchRequest) HasSendPolicy() bool {
 	return false
 }
 
-// SetSendPolicy gets a reference to the given AgentsSessionsPatchRequestSendPolicy and assigns it to the SendPolicy field.
-func (o *AgentsSessionsPatchRequest) SetSendPolicy(v AgentsSessionsPatchRequestSendPolicy) {
+// SetSendPolicy gets a reference to the given AclRequestsApproveRequestMode and assigns it to the SendPolicy field.
+func (o *AgentsSessionsPatchRequest) SetSendPolicy(v AclRequestsApproveRequestMode) {
 	o.SendPolicy = &v
 }
 
 // GetGroupActivation returns the GroupActivation field value if set, zero value otherwise.
-func (o *AgentsSessionsPatchRequest) GetGroupActivation() AgentsSessionsPatchRequestSendPolicy {
+func (o *AgentsSessionsPatchRequest) GetGroupActivation() AclRequestsApproveRequestMode {
 	if o == nil || IsNil(o.GroupActivation) {
-		var ret AgentsSessionsPatchRequestSendPolicy
+		var ret AclRequestsApproveRequestMode
 		return ret
 	}
 	return *o.GroupActivation
@@ -707,7 +707,7 @@ func (o *AgentsSessionsPatchRequest) GetGroupActivation() AgentsSessionsPatchReq
 
 // GetGroupActivationOk returns a tuple with the GroupActivation field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *AgentsSessionsPatchRequest) GetGroupActivationOk() (*AgentsSessionsPatchRequestSendPolicy, bool) {
+func (o *AgentsSessionsPatchRequest) GetGroupActivationOk() (*AclRequestsApproveRequestMode, bool) {
 	if o == nil || IsNil(o.GroupActivation) {
 		return nil, false
 	}
@@ -723,8 +723,8 @@ func (o *AgentsSessionsPatchRequest) HasGroupActivation() bool {
 	return false
 }
 
-// SetGroupActivation gets a reference to the given AgentsSessionsPatchRequestSendPolicy and assigns it to the GroupActivation field.
-func (o *AgentsSessionsPatchRequest) SetGroupActivation(v AgentsSessionsPatchRequestSendPolicy) {
+// SetGroupActivation gets a reference to the given AclRequestsApproveRequestMode and assigns it to the GroupActivation field.
+func (o *AgentsSessionsPatchRequest) SetGroupActivation(v AclRequestsApproveRequestMode) {
 	o.GroupActivation = &v
 }
 

@@ -9,7 +9,6 @@ import type {
   AgentsListResult,
   MonitorOperation,
   PresenceEntry,
-  HealthSnapshot,
   StatusSummary,
   SessionsListResult,
 } from "./types.ts";
@@ -23,10 +22,9 @@ import {
 import { handleAgentEvent, resetToolStream, type AgentEventPayload } from "./app-tool-stream.ts";
 import { loadAclRequests } from "./controllers/acl-requests.ts";
 import { loadAgents } from "./controllers/agents.ts";
-import { loadAssistantIdentity } from "./controllers/assistant-identity.ts";
 import { loadChatHistory } from "./controllers/chat.ts";
 import { handleChatEvent, type ChatEventPayload } from "./controllers/chat.ts";
-import { loadNodes } from "./controllers/nodes.ts";
+import { normalizeMonitorOperation } from "./controllers/monitor.ts";
 import { loadSessions } from "./controllers/sessions.ts";
 import { sessionBelongsToConversation } from "./conversation-session.ts";
 import { RuntimeBrowserClient } from "./runtime.ts";
@@ -49,10 +47,9 @@ type RuntimeHost = {
   agentsLoading: boolean;
   agentsList: AgentsListResult | null;
   agentsError: string | null;
-  debugHealth: HealthSnapshot | null;
-  assistantName: string;
-  assistantAvatar: string | null;
   assistantAgentId: string | null;
+  monitorPaused: boolean;
+  monitorLiveOps: MonitorOperation[];
   conversationId: string;
   sessionsResult: SessionsListResult | null;
   sessionKey: string;
@@ -113,9 +110,7 @@ export function connectRuntime(host: RuntimeHost) {
       // Any in-flight run's final event was lost during the disconnect window.
       host.chatRunId = null;
       resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
-      void loadAssistantIdentity(host as unknown as NexusApp);
       void loadAgents(host as unknown as NexusApp);
-      void loadNodes(host as unknown as NexusApp, { quiet: true });
       void refreshActiveTab(host as unknown as Parameters<typeof refreshActiveTab>[0]);
     },
     onClose: ({ code, reason }) => {
@@ -219,12 +214,9 @@ function handleRuntimeEventUnsafe(host: RuntimeHost, evt: RuntimeEventFrame) {
 
   // ─── Monitor operation events ────────────────────────────────────────
   if (evt.event === "monitor.operation") {
-    const op = evt.payload as MonitorOperation;
-    if (!(host as any).monitorPaused) {
-      const live = (host as any).monitorLiveOps ?? [];
-      live.unshift(op);
-      if (live.length > 500) live.length = 500;
-      (host as any).monitorLiveOps = live;
+    const op = normalizeMonitorOperation((evt.payload ?? {}) as Record<string, unknown>);
+    if (!host.monitorPaused) {
+      host.monitorLiveOps = [op, ...(host.monitorLiveOps ?? [])].slice(0, 500);
     }
   }
 
@@ -251,14 +243,6 @@ function handleRuntimeEventUnsafe(host: RuntimeHost, evt: RuntimeEventFrame) {
     }
   }
 
-  // Health changes — update debug health snapshot
-  if (evt.event === "health.changed" || evt.event === "health") {
-    const healthPayload = evt.payload as HealthSnapshot | undefined;
-    if (healthPayload) {
-      host.debugHealth = healthPayload;
-    }
-  }
-
   // Shutdown warning — set connection state
   if (evt.event === "shutdown") {
     host.lastError = "Runtime is shutting down...";
@@ -269,15 +253,11 @@ export function applySnapshot(host: RuntimeHost, hello: RuntimeHelloOk) {
   const snapshot = hello.snapshot as
     | {
         presence?: PresenceEntry[];
-        health?: HealthSnapshot;
         sessionDefaults?: SessionDefaultsSnapshot;
       }
     | undefined;
   if (snapshot?.presence && Array.isArray(snapshot.presence)) {
     host.presenceEntries = snapshot.presence;
-  }
-  if (snapshot?.health) {
-    host.debugHealth = snapshot.health;
   }
   if (snapshot?.sessionDefaults) {
     applySessionDefaults(host, snapshot.sessionDefaults);

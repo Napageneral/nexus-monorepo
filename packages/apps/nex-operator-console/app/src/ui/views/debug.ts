@@ -5,9 +5,7 @@ import { formatEventPayload } from "../presenter.ts";
 export type DebugProps = {
   loading: boolean;
   status: Record<string, unknown> | null;
-  health: Record<string, unknown> | null;
   models: unknown[];
-  heartbeat: unknown;
   eventLog: EventLogEntry[];
   callMethod: string;
   callParams: string;
@@ -38,7 +36,7 @@ export function renderDebug(props: DebugProps) {
         <div class="row" style="justify-content: space-between;">
           <div>
             <div class="card-title">Snapshots</div>
-            <div class="card-sub">Status, health, and heartbeat data.</div>
+            <div class="card-sub">Status and model snapshots for the current runtime.</div>
           </div>
           <button class="btn" ?disabled=${props.loading} @click=${props.onRefresh}>
             ${props.loading ? "Refreshing…" : "Refresh"}
@@ -56,14 +54,6 @@ export function renderDebug(props: DebugProps) {
                 : nothing
             }
             <pre class="code-block">${JSON.stringify(props.status ?? {}, null, 2)}</pre>
-          </div>
-          <div>
-            <div class="muted">Health</div>
-            <pre class="code-block">${JSON.stringify(props.health ?? {}, null, 2)}</pre>
-          </div>
-          <div>
-            <div class="muted">Last heartbeat</div>
-            <pre class="code-block">${JSON.stringify(props.heartbeat ?? {}, null, 2)}</pre>
           </div>
         </div>
       </div>

@@ -4,7 +4,6 @@ import type {
   AgentFileEntry,
   AgentsFilesListResult,
   AgentsListResult,
-  AgentIdentityResult,
   ScheduleJob,
   ScheduleStatus,
   SkillStatusEntry,
@@ -49,9 +48,6 @@ export type AgentsProps = {
   agentFileContents: Record<string, string>;
   agentFileDrafts: Record<string, string>;
   agentFileSaving: boolean;
-  agentIdentityLoading: boolean;
-  agentIdentityError: string | null;
-  agentIdentityById: Record<string, AgentIdentityResult>;
   agentSkillsLoading: boolean;
   agentSkillsReport: SkillStatusReport | null;
   agentSkillsError: string | null;
@@ -231,21 +227,10 @@ function isLikelyEmoji(value: string) {
   return true;
 }
 
-function resolveAgentEmoji(
-  agent: { identity?: { emoji?: string; avatar?: string } },
-  agentIdentity?: AgentIdentityResult | null,
-) {
-  const identityEmoji = agentIdentity?.emoji?.trim();
-  if (identityEmoji && isLikelyEmoji(identityEmoji)) {
-    return identityEmoji;
-  }
+function resolveAgentEmoji(agent: { identity?: { emoji?: string; avatar?: string } }) {
   const agentEmoji = agent.identity?.emoji?.trim();
   if (agentEmoji && isLikelyEmoji(agentEmoji)) {
     return agentEmoji;
-  }
-  const identityAvatar = agentIdentity?.avatar?.trim();
-  if (identityAvatar && isLikelyEmoji(identityAvatar)) {
-    return identityAvatar;
   }
   const avatar = agent.identity?.avatar?.trim();
   if (avatar && isLikelyEmoji(avatar)) {
@@ -300,7 +285,6 @@ function buildAgentContext(
   configForm: Record<string, unknown> | null,
   agentFilesList: AgentsFilesListResult | null,
   defaultId: string | null,
-  agentIdentity?: AgentIdentityResult | null,
 ): AgentContext {
   const config = resolveAgentConfig(configForm, agent.id);
   const workspaceFromFiles =
@@ -311,12 +295,11 @@ function buildAgentContext(
     ? resolveModelLabel(config.entry?.model)
     : resolveModelLabel(config.defaults?.model);
   const identityName =
-    agentIdentity?.name?.trim() ||
     agent.identity?.name?.trim() ||
     agent.name?.trim() ||
     config.entry?.name ||
     agent.id;
-  const identityEmoji = resolveAgentEmoji(agent, agentIdentity) || "-";
+  const identityEmoji = resolveAgentEmoji(agent) || "-";
   const skillFilter = Array.isArray(config.entry?.skills) ? config.entry?.skills : null;
   const skillCount = skillFilter?.length ?? null;
   return {
@@ -564,7 +547,7 @@ export function renderAgents(props: AgentsProps) {
                 `
               : agents.map((agent) => {
                   const badge = agentBadgeText(agent.id, defaultId);
-                  const emoji = resolveAgentEmoji(agent, props.agentIdentityById[agent.id] ?? null);
+                  const emoji = resolveAgentEmoji(agent);
                   return html`
                     <button
                       type="button"
@@ -598,7 +581,6 @@ export function renderAgents(props: AgentsProps) {
               ${renderAgentHeader(
                 selectedAgent,
                 defaultId,
-                props.agentIdentityById[selectedAgent.id] ?? null,
               )}
               ${renderAgentTabs(props.activePanel, (panel) => props.onSelectPanel(panel))}
               ${
@@ -608,9 +590,6 @@ export function renderAgents(props: AgentsProps) {
                       defaultId,
                       configForm: props.configForm,
                       agentFilesList: props.agentFilesList,
-                      agentIdentity: props.agentIdentityById[selectedAgent.id] ?? null,
-                      agentIdentityError: props.agentIdentityError,
-                      agentIdentityLoading: props.agentIdentityLoading,
                       configLoading: props.configLoading,
                       configSaving: props.configSaving,
                       configDirty: props.configDirty,
@@ -685,7 +664,6 @@ export function renderAgents(props: AgentsProps) {
                       defaultId,
                       configForm: props.configForm,
                       agentFilesList: props.agentFilesList,
-                      agentIdentity: props.agentIdentityById[selectedAgent.id] ?? null,
                       adapterConnections: props.adapterConnections,
                       loading: props.adapterConnectionsLoading,
                       error: props.adapterConnectionsError,
@@ -700,7 +678,6 @@ export function renderAgents(props: AgentsProps) {
                       defaultId,
                       configForm: props.configForm,
                       agentFilesList: props.agentFilesList,
-                      agentIdentity: props.agentIdentityById[selectedAgent.id] ?? null,
                       jobs: props.scheduleJobs,
                       status: props.scheduleStatus,
                       loading: props.scheduleLoading,
@@ -719,12 +696,11 @@ export function renderAgents(props: AgentsProps) {
 function renderAgentHeader(
   agent: AgentsListResult["agents"][number],
   defaultId: string | null,
-  agentIdentity: AgentIdentityResult | null,
 ) {
   const badge = agentBadgeText(agent.id, defaultId);
   const displayName = normalizeAgentLabel(agent);
   const subtitle = agent.identity?.theme?.trim() || "Agent workspace and routing.";
-  const emoji = resolveAgentEmoji(agent, agentIdentity);
+  const emoji = resolveAgentEmoji(agent);
   return html`
     <section class="card agent-header">
       <div class="agent-header-main">
@@ -775,9 +751,6 @@ function renderAgentOverview(params: {
   defaultId: string | null;
   configForm: Record<string, unknown> | null;
   agentFilesList: AgentsFilesListResult | null;
-  agentIdentity: AgentIdentityResult | null;
-  agentIdentityLoading: boolean;
-  agentIdentityError: string | null;
   configLoading: boolean;
   configSaving: boolean;
   configDirty: boolean;
@@ -790,9 +763,6 @@ function renderAgentOverview(params: {
     agent,
     configForm,
     agentFilesList,
-    agentIdentity,
-    agentIdentityLoading,
-    agentIdentityError,
     configLoading,
     configSaving,
     configDirty,
@@ -819,20 +789,14 @@ function renderAgentOverview(params: {
   const modelFallbacks = resolveModelFallbacks(config.entry?.model);
   const fallbackText = modelFallbacks ? modelFallbacks.join(", ") : "";
   const identityName =
-    agentIdentity?.name?.trim() ||
     agent.identity?.name?.trim() ||
     agent.name?.trim() ||
     config.entry?.name ||
     "-";
-  const resolvedEmoji = resolveAgentEmoji(agent, agentIdentity);
+  const resolvedEmoji = resolveAgentEmoji(agent);
   const identityEmoji = resolvedEmoji || "-";
   const skillFilter = Array.isArray(config.entry?.skills) ? config.entry?.skills : null;
   const skillCount = skillFilter?.length ?? null;
-  const identityStatus = agentIdentityLoading
-    ? "Loading…"
-    : agentIdentityError
-      ? "Unavailable"
-      : "";
   const isDefault = Boolean(params.defaultId && agent.id === params.defaultId);
 
   return html`
@@ -851,7 +815,6 @@ function renderAgentOverview(params: {
         <div class="agent-kv">
           <div class="label">Identity Name</div>
           <div>${identityName}</div>
-          ${identityStatus ? html`<div class="agent-kv-sub muted">${identityStatus}</div>` : nothing}
         </div>
         <div class="agent-kv">
           <div class="label">Default</div>
@@ -967,7 +930,6 @@ function renderAgentChannels(params: {
   defaultId: string | null;
   configForm: Record<string, unknown> | null;
   agentFilesList: AgentsFilesListResult | null;
-  agentIdentity: AgentIdentityResult | null;
   adapterConnections: AdapterConnectionEntry[];
   loading: boolean;
   error: string | null;
@@ -978,7 +940,6 @@ function renderAgentChannels(params: {
     params.configForm,
     params.agentFilesList,
     params.defaultId,
-    params.agentIdentity,
   );
   const entries = params.adapterConnections;
   const connected = entries.filter((entry) => entry.status === "connected").length;
@@ -1051,7 +1012,6 @@ function renderAgentSchedule(params: {
   defaultId: string | null;
   configForm: Record<string, unknown> | null;
   agentFilesList: AgentsFilesListResult | null;
-  agentIdentity: AgentIdentityResult | null;
   jobs: ScheduleJob[];
   status: ScheduleStatus | null;
   loading: boolean;
@@ -1063,7 +1023,6 @@ function renderAgentSchedule(params: {
     params.configForm,
     params.agentFilesList,
     params.defaultId,
-    params.agentIdentity,
   );
   const recentJobs = params.jobs
     .toSorted((a, b) => {

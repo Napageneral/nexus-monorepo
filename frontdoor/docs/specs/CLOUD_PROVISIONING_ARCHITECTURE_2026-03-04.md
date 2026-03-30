@@ -1,26 +1,37 @@
 # Cloud Provisioning Architecture
 
 **Status:** CANONICAL
-**Last Updated:** 2026-03-06
-**Related:** FRONTDOOR_ARCHITECTURE.md, FRONTDOOR_AWS_HOSTING_AND_SERVER_CLASS_MODEL.md, FRONTDOOR_HOSTED_ACCESS_AND_ROUTING.md, FRONTDOOR_PACKAGE_REGISTRY_AND_LIFECYCLE.md, BILLING_ARCHITECTURE_ACCOUNT_MODEL_2026-03-02.md, CRITICAL_CUSTOMER_FLOWS_2026-03-02.md, `nex/docs/specs/platform/server-lifecycle-and-durability.md`
+**Last Updated:** 2026-03-27
+**Related:** FRONTDOOR_ARCHITECTURE.md, FRONTDOOR_AWS_HOSTING_AND_SERVER_CLASS_MODEL.md, FRONTDOOR_SANDBOX_HOSTED_CLEANROOM_VALIDATION_MODEL.md, FRONTDOOR_HOSTED_ACCESS_AND_ROUTING.md, FRONTDOOR_PACKAGE_REGISTRY_AND_LIFECYCLE.md, BILLING_ARCHITECTURE_ACCOUNT_MODEL_2026-03-02.md, CRITICAL_CUSTOMER_FLOWS_2026-03-02.md, `nex/docs/specs/platform/server-lifecycle-and-durability.md`
 
 ---
 
 ## 1) Overview
 
-Frontdoor is the provisioning and recovery orchestrator for durable hosted servers. It creates, manages, archives, restores, and only exceptionally destroys the backing tenant VPS instances on cloud providers. Each tenant gets a dedicated VPS — full VM isolation, not containers.
+Frontdoor is the provisioning and recovery orchestrator for durable hosted
+servers. It creates, manages, archives, restores, and only exceptionally
+destroys the backing tenant server instances.
+
+For customer production hosting, each tenant gets a dedicated VPS — full VM
+isolation, not containers.
+
+For hosted validation cleanrooms, Frontdoor also provisions disposable
+sandbox-backed server surrogates through the same lifecycle seams.
 
 **Core decisions:**
 - One VPS per tenant (simplicity, full isolation, nex runtime agents have full freedom)
 - Frontdoor owns all provisioning logic (no separate provisioning service)
 - Durable server lifecycle — archive and restore are first-class; provider VM destroy is the final low-level step, not the normal lifecycle story
 - Cloud Provider Abstraction — frontdoor runs in AWS, `standard` servers default to Hetzner, `compliant` servers run on AWS
+- Validation cleanroom abstraction — hosted proof defaults to a sandbox-backed
+  provider rather than external cloud by default
 - Golden snapshot images with minimal cloud-init bootstrap for tenant-specific config
+- Hosted provisioning establishes the initial owner by passing canonical owner bootstrap input into Nex at first boot
 - Provision callback (phone-home) pattern for VPS readiness signaling
 
 ---
 
-## 2) Architecture: One VPS Per Tenant
+## 2) Architecture: Production VPS Per Tenant
 
 Each server a user creates maps to a dedicated cloud VPS:
 
@@ -31,6 +42,7 @@ Frontdoor (provisioning orchestrator)
     ↓ Hetzner Cloud API (or AWS EC2 API)
 New VPS created from golden snapshot
     ↓ boots, runs cloud-init bootstrap
+    ↓ writes hosted owner bootstrap seed for Nex
     ↓ starts nex runtime
     ↓ phones home to frontdoor
 Frontdoor adds VPS to routing table → server is "running"
@@ -46,9 +58,50 @@ Frontdoor adds VPS to routing table → server is "running"
 
 **Tradeoff:** More expensive per-tenant than containers. Acceptable at current scale and aligns with the paid-server billing model (users pay for their VPS).
 
+### 2.2 Hosted Cleanroom Validation Substrate
+
+Hosted validation cleanrooms do not default to provisioning external VPS
+instances.
+
+Instead, the canonical validation substrate is:
+
+1. a Docker-backed cleanroom executor
+2. a Frontdoor-managed sandbox provider
+3. a disposable sandbox-backed Nex server target
+4. the same create/bootstrap/runtime-token/install/archive/destroy seams used
+   by ordinary hosted flows
+
+This validation substrate is not the production hosting substrate. It exists to
+prove hosted lifecycle and integration behavior without using the operator's
+host runtime or paying the full cloud cost for every proof run.
+
+### 2.1 Hosted Owner Bootstrap Rule
+
+Frontdoor owns the purchasing and provisioning account identity.
+That makes Frontdoor the authoritative source for the initial hosted owner at
+provision time.
+
+But Frontdoor is not the canonical owner materializer.
+
+The rule is:
+
+1. Frontdoor derives canonical owner bootstrap input from the provisioning
+   user
+2. Frontdoor writes that input onto the fresh tenant during cloud-init
+3. Nex runtime boot materializes the real human owner and owner-role group
+4. Frontdoor does not need to pre-seed the first assistant or agent
+
+Validation and cleanroom harnesses that claim to prove hosted provisioning
+should reuse this same owner-bootstrap and cloud-init seam rather than invent a
+parallel hosted-only bootstrap path.
+
+The detailed runtime-side contract lives in:
+
+- `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/environment/hosted-owner-provisioning-bootstrap-handoff.md`
+
 ---
 
-## 3) Cloud Provider Abstraction
+## 3) Provider Abstraction
 
 ### 3.1 Provider Interface
 
@@ -182,6 +235,14 @@ interface ProviderRegion {
   available: boolean;
 }
 ```
+
+The active provider interface also admits the validation sandbox provider
+defined in:
+
+- [FRONTDOOR_SANDBOX_HOSTED_CLEANROOM_VALIDATION_MODEL.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_SANDBOX_HOSTED_CLEANROOM_VALIDATION_MODEL.md)
+
+That provider is not customer-facing infrastructure policy. It is the
+canonical validation implementation under the same hosted lifecycle contract.
 
 ### 3.2 Provider Registration
 

@@ -1,7 +1,7 @@
 # Spec Standards
 
 **Status:** CANONICAL
-**Last Updated:** 2026-03-16
+**Last Updated:** 2026-03-27
 
 ---
 
@@ -255,6 +255,12 @@ Validation docs should:
 - remain active when they are still the latest proof path for a live behavior
 - avoid stale campaign-specific framing if they are intended to be part of the
   durable validation corpus
+- name the primary Docker-backed or equivalently containerized proof path for
+  runtime-affecting behavior
+- explain explicitly when a runtime-affecting validation lane is not
+  Docker-backed
+- treat live local runtime checks as secondary dogfood unless the behavior
+  specifically requires live-state validation
 
 ### Signoff records
 

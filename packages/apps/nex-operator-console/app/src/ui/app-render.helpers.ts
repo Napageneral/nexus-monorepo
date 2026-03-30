@@ -108,7 +108,6 @@ export function renderChatControls(state: AppViewState) {
               conversationId: next,
               lastActiveSessionKey: nextSessionKey || state.settings.lastActiveSessionKey,
             });
-            void state.loadAssistantIdentity();
             syncUrlWithConversationId(
               state as unknown as Parameters<typeof syncUrlWithConversationId>[0],
               next,

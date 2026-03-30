@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -18,24 +18,15 @@ import (
 
 // AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod struct for AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod
 type AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod struct {
-	Any *interface{}
 	String *string
 }
 
 // Unmarshal JSON data into any of the pointers in the struct
 func (dst *AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod) UnmarshalJSON(data []byte) error {
 	var err error
-	// try to unmarshal JSON data into Any
-	err = json.Unmarshal(data, &dst.Any);
-	if err == nil {
-		jsonAny, _ := json.Marshal(dst.Any)
-		if string(jsonAny) == "{}" { // empty struct
-			dst.Any = nil
-		} else {
-			return nil // data stored in dst.Any, return on the first match
-		}
-	} else {
-		dst.Any = nil
+	// this object is nullable so check if the payload is null or empty string
+	if string(data) == "" || string(data) == "{}" {
+		return nil
 	}
 
 	// try to unmarshal JSON data into String
@@ -56,10 +47,6 @@ func (dst *AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod) 
 
 // Marshal data from the first non-nil pointers in the struct to JSON
 func (src AdaptersConnectionsList200ResponsePayloadConnectionsInnerAuthMethod) MarshalJSON() ([]byte, error) {
-	if src.Any != nil {
-		return json.Marshal(&src.Any)
-	}
-
 	if src.String != nil {
 		return json.Marshal(&src.String)
 	}

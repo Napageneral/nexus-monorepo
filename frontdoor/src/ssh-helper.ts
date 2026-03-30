@@ -274,16 +274,26 @@ export async function installPackageViaRuntimeHttp(opts: {
   version: string;
   releaseId?: string;
   runtimeBearerToken: string;
+  stagingHostRoot?: string;
+  runtimeStagingRoot?: string;
 }): Promise<
   | { ok: true }
   | { ok: false; error: string; detail?: string }
 > {
   try {
     const operationId = `op-${randomUUID()}`;
-    const stagingRoot =
-      process.env.NEXUS_PACKAGE_STAGING_DIR?.trim() || "/opt/nex/state/packages/staging";
-    const stagedDir = `${stagingRoot.replace(/\/+$/g, "")}/${operationId}`;
+    const stagingHostRoot =
+      opts.stagingHostRoot?.trim() ||
+      process.env.NEXUS_PACKAGE_STAGING_DIR?.trim() ||
+      "/opt/nex/state/packages/staging";
+    const runtimeStagingRoot =
+      opts.runtimeStagingRoot?.trim() ||
+      stagingHostRoot;
+    const stagedDir = `${stagingHostRoot.replace(/\/+$/g, "")}/${operationId}`;
     const stagedPath = `${stagedDir}/${opts.kind}-${opts.packageId}-${opts.version}.tar.gz`;
+    const runtimeStagedDir = `${runtimeStagingRoot.replace(/\/+$/g, "")}/${operationId}`;
+    const runtimeStagedPath =
+      `${runtimeStagedDir}/${opts.kind}-${opts.packageId}-${opts.version}.tar.gz`;
     fs.mkdirSync(stagedDir, { recursive: true });
     fs.copyFileSync(opts.localTarballPath, stagedPath);
 
@@ -302,7 +312,7 @@ export async function installPackageViaRuntimeHttp(opts: {
         release_id: opts.releaseId ?? null,
         operation_id: operationId,
         staged_artifact: {
-          server_path: stagedPath,
+          server_path: runtimeStagedPath,
           sha256,
           size_bytes: stats.size,
         },
@@ -431,16 +441,26 @@ export async function upgradePackageViaRuntimeHttp(opts: {
   targetVersion: string;
   releaseId?: string;
   runtimeBearerToken: string;
+  stagingHostRoot?: string;
+  runtimeStagingRoot?: string;
 }): Promise<
   | { ok: true }
   | { ok: false; error: string; detail?: string }
 > {
   try {
     const operationId = `op-${randomUUID()}`;
-    const stagingRoot =
-      process.env.NEXUS_PACKAGE_STAGING_DIR?.trim() || "/opt/nex/state/packages/staging";
-    const stagedDir = `${stagingRoot.replace(/\/+$/g, "")}/${operationId}`;
+    const stagingHostRoot =
+      opts.stagingHostRoot?.trim() ||
+      process.env.NEXUS_PACKAGE_STAGING_DIR?.trim() ||
+      "/opt/nex/state/packages/staging";
+    const runtimeStagingRoot =
+      opts.runtimeStagingRoot?.trim() ||
+      stagingHostRoot;
+    const stagedDir = `${stagingHostRoot.replace(/\/+$/g, "")}/${operationId}`;
     const stagedPath = `${stagedDir}/${opts.kind}-${opts.packageId}-${opts.targetVersion}.tar.gz`;
+    const runtimeStagedDir = `${runtimeStagingRoot.replace(/\/+$/g, "")}/${operationId}`;
+    const runtimeStagedPath =
+      `${runtimeStagedDir}/${opts.kind}-${opts.packageId}-${opts.targetVersion}.tar.gz`;
     fs.mkdirSync(stagedDir, { recursive: true });
     fs.copyFileSync(opts.localTarballPath, stagedPath);
 
@@ -459,7 +479,7 @@ export async function upgradePackageViaRuntimeHttp(opts: {
         release_id: opts.releaseId ?? null,
         operation_id: operationId,
         staged_artifact: {
-          server_path: stagedPath,
+          server_path: runtimeStagedPath,
           sha256,
           size_bytes: stats.size,
         },

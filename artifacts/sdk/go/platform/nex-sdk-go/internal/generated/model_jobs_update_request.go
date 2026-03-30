@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -30,7 +30,7 @@ type JobsUpdateRequest struct {
 	TimeoutMs *float32 `json:"timeout_ms,omitempty"`
 	LaneId *string `json:"lane_id,omitempty"`
 	WorkspaceId *string `json:"workspace_id,omitempty"`
-	HookPoints *JobsUpdateRequestHookPoints `json:"hook_points,omitempty"`
+	HookPoints *JobsCreateRequestHookPoints `json:"hook_points,omitempty"`
 	CreatedBy *string `json:"created_by,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
@@ -368,9 +368,9 @@ func (o *JobsUpdateRequest) SetWorkspaceId(v string) {
 }
 
 // GetHookPoints returns the HookPoints field value if set, zero value otherwise.
-func (o *JobsUpdateRequest) GetHookPoints() JobsUpdateRequestHookPoints {
+func (o *JobsUpdateRequest) GetHookPoints() JobsCreateRequestHookPoints {
 	if o == nil || IsNil(o.HookPoints) {
-		var ret JobsUpdateRequestHookPoints
+		var ret JobsCreateRequestHookPoints
 		return ret
 	}
 	return *o.HookPoints
@@ -378,7 +378,7 @@ func (o *JobsUpdateRequest) GetHookPoints() JobsUpdateRequestHookPoints {
 
 // GetHookPointsOk returns a tuple with the HookPoints field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *JobsUpdateRequest) GetHookPointsOk() (*JobsUpdateRequestHookPoints, bool) {
+func (o *JobsUpdateRequest) GetHookPointsOk() (*JobsCreateRequestHookPoints, bool) {
 	if o == nil || IsNil(o.HookPoints) {
 		return nil, false
 	}
@@ -394,8 +394,8 @@ func (o *JobsUpdateRequest) HasHookPoints() bool {
 	return false
 }
 
-// SetHookPoints gets a reference to the given JobsUpdateRequestHookPoints and assigns it to the HookPoints field.
-func (o *JobsUpdateRequest) SetHookPoints(v JobsUpdateRequestHookPoints) {
+// SetHookPoints gets a reference to the given JobsCreateRequestHookPoints and assigns it to the HookPoints field.
+func (o *JobsUpdateRequest) SetHookPoints(v JobsCreateRequestHookPoints) {
 	o.HookPoints = &v
 }
 

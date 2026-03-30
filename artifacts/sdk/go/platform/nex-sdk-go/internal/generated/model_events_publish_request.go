@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -69,9 +69,9 @@ func (o *EventsPublishRequest) SetType(v string) {
 	o.Type = v
 }
 
-// GetProperties returns the Properties field value if set, zero value otherwise (both if not set or set to explicit null).
+// GetProperties returns the Properties field value if set, zero value otherwise.
 func (o *EventsPublishRequest) GetProperties() map[string]interface{} {
-	if o == nil {
+	if o == nil || IsNil(o.Properties) {
 		var ret map[string]interface{}
 		return ret
 	}
@@ -80,7 +80,6 @@ func (o *EventsPublishRequest) GetProperties() map[string]interface{} {
 
 // GetPropertiesOk returns a tuple with the Properties field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-// NOTE: If the value is an explicit nil, `nil, true` will be returned
 func (o *EventsPublishRequest) GetPropertiesOk() (map[string]interface{}, bool) {
 	if o == nil || IsNil(o.Properties) {
 		return map[string]interface{}{}, false
@@ -113,7 +112,7 @@ func (o EventsPublishRequest) MarshalJSON() ([]byte, error) {
 func (o EventsPublishRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["type"] = o.Type
-	if o.Properties != nil {
+	if !IsNil(o.Properties) {
 		toSerialize["properties"] = o.Properties
 	}
 

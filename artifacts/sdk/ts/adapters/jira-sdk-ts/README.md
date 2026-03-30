@@ -17,5 +17,6 @@ const client = createJiraAdapterClient({
   },
 });
 
-await client.adapter.info();
+// Call a canonical package method from this adapter's generated surface.
+await client.jira.comments.create({} as JiraCommentsCreateRequest);
 ```

@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -28,7 +28,7 @@ type RestartSentinelPayloadSchema struct {
 	ThreadId *string `json:"threadId,omitempty"`
 	Message *string `json:"message,omitempty"`
 	DoctorHint *string `json:"doctorHint,omitempty"`
-	Stats NullableRestartSentinelStatsSchema `json:"stats,omitempty"`
+	Stats *RestartSentinelPayloadSchemaStats `json:"stats,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
 
@@ -286,46 +286,36 @@ func (o *RestartSentinelPayloadSchema) SetDoctorHint(v string) {
 	o.DoctorHint = &v
 }
 
-// GetStats returns the Stats field value if set, zero value otherwise (both if not set or set to explicit null).
-func (o *RestartSentinelPayloadSchema) GetStats() RestartSentinelStatsSchema {
-	if o == nil || IsNil(o.Stats.Get()) {
-		var ret RestartSentinelStatsSchema
+// GetStats returns the Stats field value if set, zero value otherwise.
+func (o *RestartSentinelPayloadSchema) GetStats() RestartSentinelPayloadSchemaStats {
+	if o == nil || IsNil(o.Stats) {
+		var ret RestartSentinelPayloadSchemaStats
 		return ret
 	}
-	return *o.Stats.Get()
+	return *o.Stats
 }
 
 // GetStatsOk returns a tuple with the Stats field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-// NOTE: If the value is an explicit nil, `nil, true` will be returned
-func (o *RestartSentinelPayloadSchema) GetStatsOk() (*RestartSentinelStatsSchema, bool) {
-	if o == nil {
+func (o *RestartSentinelPayloadSchema) GetStatsOk() (*RestartSentinelPayloadSchemaStats, bool) {
+	if o == nil || IsNil(o.Stats) {
 		return nil, false
 	}
-	return o.Stats.Get(), o.Stats.IsSet()
+	return o.Stats, true
 }
 
 // HasStats returns a boolean if a field has been set.
 func (o *RestartSentinelPayloadSchema) HasStats() bool {
-	if o != nil && o.Stats.IsSet() {
+	if o != nil && !IsNil(o.Stats) {
 		return true
 	}
 
 	return false
 }
 
-// SetStats gets a reference to the given NullableRestartSentinelStatsSchema and assigns it to the Stats field.
-func (o *RestartSentinelPayloadSchema) SetStats(v RestartSentinelStatsSchema) {
-	o.Stats.Set(&v)
-}
-// SetStatsNil sets the value for Stats to be an explicit nil
-func (o *RestartSentinelPayloadSchema) SetStatsNil() {
-	o.Stats.Set(nil)
-}
-
-// UnsetStats ensures that no value is present for Stats, not even an explicit nil
-func (o *RestartSentinelPayloadSchema) UnsetStats() {
-	o.Stats.Unset()
+// SetStats gets a reference to the given RestartSentinelPayloadSchemaStats and assigns it to the Stats field.
+func (o *RestartSentinelPayloadSchema) SetStats(v RestartSentinelPayloadSchemaStats) {
+	o.Stats = &v
 }
 
 func (o RestartSentinelPayloadSchema) MarshalJSON() ([]byte, error) {
@@ -356,8 +346,8 @@ func (o RestartSentinelPayloadSchema) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.DoctorHint) {
 		toSerialize["doctorHint"] = o.DoctorHint
 	}
-	if o.Stats.IsSet() {
-		toSerialize["stats"] = o.Stats.Get()
+	if !IsNil(o.Stats) {
+		toSerialize["stats"] = o.Stats
 	}
 
 	for key, value := range o.AdditionalProperties {

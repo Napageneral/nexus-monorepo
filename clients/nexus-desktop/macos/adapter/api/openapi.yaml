@@ -228,6 +228,12 @@ components:
               origin:
                 type: object
                 properties:
+                  package_kind:
+                    type: string
+                    enum:
+                      - runtime
+                      - app
+                      - adapter
                   package_id:
                     anyOf:
                       - type: string
@@ -247,6 +253,7 @@ components:
                   namespace:
                     type: string
                 required:
+                  - package_kind
                   - package_id
                   - package_version
                   - declaration_mode

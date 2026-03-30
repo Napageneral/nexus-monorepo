@@ -1,5 +1,5 @@
 ---
-summary: "Use {{DISPLAY_NAME}} adapter methods and platform workflows."
+summary: "Use {{DISPLAY_NAME}} package capabilities and platform workflows."
 ---
 
 # {{DISPLAY_NAME}}
@@ -7,11 +7,12 @@ summary: "Use {{DISPLAY_NAME}} adapter methods and platform workflows."
 ## When To Use
 
 Use this adapter when you need Nex-managed access to the `{{PACKAGE_ID}}`
-platform through its adapter runtime and custom methods.
+platform through its adapter runtime and declared package capabilities.
 
 ## Package Contract
 
 - The adapter manifest is `adapter.nexus.json`.
+- The package capability declarations live in `api/openapi.yaml`.
 - The adapter binary entrypoint is `./bin/{{COMMAND_NAME}}`.
 - Package-local operator guidance lives in this `SKILL.md`.
 
@@ -19,4 +20,5 @@ platform through its adapter runtime and custom methods.
 
 - Document the adapter's main use cases, setup expectations, and customer-facing
   workflows here.
-- Explain what the adapter methods do and what callers should avoid.
+- Explain what the declared package capabilities do and what callers should
+  avoid.

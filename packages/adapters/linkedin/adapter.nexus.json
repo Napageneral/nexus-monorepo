@@ -4,6 +4,7 @@
   "displayName": "LinkedIn",
   "description": "Shared LinkedIn adapter package for Nex.",
   "platform": "linkedin",
-  "command": "./dist/index.js",
+  "command": "node",
+  "args": ["./dist/index.js"],
   "skill": "./SKILL.md"
 }

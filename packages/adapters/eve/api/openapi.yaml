@@ -423,11 +423,7 @@ components:
               type: boolean
             supports_voice_notes:
               type: boolean
-            supports_streaming_edit:
-              type: boolean
             supports_ptt:
-              type: boolean
-            supports_streaming:
               type: boolean
             max_message_length:
               type: integer
@@ -654,6 +650,10 @@ components:
           type: string
         display_name:
           type: string
+        account:
+          type: string
+        account_contact:
+          $ref: "#/components/schemas/ConnectionAccountContactSchema"
         credential_ref:
           type: string
         status:
@@ -674,6 +674,10 @@ components:
           type: boolean
         connection_id:
           type: string
+        account:
+          type: string
+        account_contact:
+          $ref: "#/components/schemas/ConnectionAccountContactSchema"
         last_event_at:
           type: integer
           minimum: -9007199254740991
@@ -707,6 +711,10 @@ components:
           type: string
         service:
           type: string
+        account:
+          type: string
+        account_contact:
+          $ref: "#/components/schemas/ConnectionAccountContactSchema"
         message:
           type: string
         instructions:
@@ -770,7 +778,21 @@ components:
     AdapterEmptyRequestSchema:
       type: object
       additionalProperties: false
-      properties: {}
+    ConnectionAccountContactSchema:
+      $schema: http://json-schema.org/draft-07/schema#
+      type: object
+      properties:
+        platform:
+          type: string
+        space_id:
+          type: string
+        contact_id:
+          type: string
+      required:
+        - platform
+        - space_id
+        - contact_id
+      additionalProperties: false
     AdapterConnectionRequestSchema:
       type: object
       additionalProperties: false

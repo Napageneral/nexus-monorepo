@@ -1,123 +1,4 @@
 export type paths = {
-    "/operations/adapter.connections.list": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** List adapter connections */
-        post: operations["adapter.connections.list"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/operations/adapter.health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Check adapter connection health */
-        post: operations["adapter.health"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/operations/adapter.info": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Read adapter package metadata */
-        post: operations["adapter.info"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/operations/adapter.setup.cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Cancel adapter setup */
-        post: operations["adapter.setup.cancel"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/operations/adapter.setup.start": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Start adapter setup */
-        post: operations["adapter.setup.start"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/operations/adapter.setup.status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Check adapter setup status */
-        post: operations["adapter.setup.status"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/operations/adapter.setup.submit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Submit adapter setup input */
-        post: operations["adapter.setup.submit"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/operations/jira.comments.create": {
         parameters: {
             query?: never;
@@ -208,6 +89,8 @@ export type webhooks = Record<string, never>;
 export type components = {
     schemas: {
         AdapterConnectionIdentitySchema: {
+            account?: string;
+            account_contact?: components["schemas"]["ConnectionAccountContactSchema"];
             credential_ref?: string;
             display_name?: string;
             id: string;
@@ -220,6 +103,8 @@ export type components = {
         AdapterConnectionsListResultSchema: components["schemas"]["AdapterConnectionIdentitySchema"][];
         AdapterEmptyRequestSchema: Record<string, never>;
         AdapterHealthSchema: {
+            account?: string;
+            account_contact?: components["schemas"]["ConnectionAccountContactSchema"];
             connected: boolean;
             connection_id: string;
             details?: {
@@ -320,6 +205,8 @@ export type components = {
                     declaration_source: string;
                     namespace: string;
                     package_id: string | null;
+                    /** @enum {string} */
+                    package_kind: "runtime" | "app" | "adapter";
                     package_version: string | null;
                 };
                 params?: {
@@ -367,6 +254,8 @@ export type components = {
             session_id?: string;
         };
         AdapterSetupResultSchema: {
+            account?: string;
+            account_contact?: components["schemas"]["ConnectionAccountContactSchema"];
             connection_id?: string;
             fields?: {
                 label: string;
@@ -395,6 +284,11 @@ export type components = {
         } & {
             [key: string]: unknown;
         };
+        ConnectionAccountContactSchema: {
+            contact_id: string;
+            platform: string;
+            space_id: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -404,166 +298,6 @@ export type components = {
 };
 export type $defs = Record<string, never>;
 export interface operations {
-    "adapter.connections.list": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful adapter package response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdapterConnectionsListResultSchema"];
-                };
-            };
-        };
-    };
-    "adapter.health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AdapterConnectionRequestSchema"];
-            };
-        };
-        responses: {
-            /** @description Successful adapter package response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdapterHealthSchema"];
-                };
-            };
-        };
-    };
-    "adapter.info": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful adapter package response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdapterInfoSchema"];
-                };
-            };
-        };
-    };
-    "adapter.setup.cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AdapterSetupRequestSchema"];
-            };
-        };
-        responses: {
-            /** @description Successful adapter package response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdapterSetupResultSchema"];
-                };
-            };
-        };
-    };
-    "adapter.setup.start": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AdapterSetupRequestSchema"];
-            };
-        };
-        responses: {
-            /** @description Successful adapter package response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdapterSetupResultSchema"];
-                };
-            };
-        };
-    };
-    "adapter.setup.status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AdapterSetupRequestSchema"];
-            };
-        };
-        responses: {
-            /** @description Successful adapter package response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdapterSetupResultSchema"];
-                };
-            };
-        };
-    };
-    "adapter.setup.submit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AdapterSetupRequestSchema"];
-            };
-        };
-        responses: {
-            /** @description Successful adapter package response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdapterSetupResultSchema"];
-                };
-            };
-        };
-    };
     "jira.comments.create": {
         parameters: {
             query?: never;

@@ -21,7 +21,6 @@ import type { ThemeMode } from "./theme.ts";
 import type {
   AgentsListResult,
   AgentsFilesListResult,
-  AgentIdentityResult,
   ChannelsStatusSnapshot,
   ConversationsListResult,
   ConfigSnapshot,
@@ -30,19 +29,20 @@ import type {
   ScheduleJob,
   ScheduleRunLogEntry,
   ScheduleStatus,
-  HealthSnapshot,
   LogEntry,
   LogLevel,
   NostrProfile,
   PresenceEntry,
   MemoryReviewEpisode,
   MemoryReviewEpisodeDetail,
-  MemoryReviewEpisodeOutputs,
-  MemoryReviewEntityDetail,
-  MemoryReviewFactDetail,
-  MemoryReviewObservationDetail,
-  MemoryReviewQualityBucket,
-  MemoryReviewQualityItemsResult,
+    MemoryReviewEpisodeOutputs,
+    MemoryReviewEntityDetail,
+    MemoryReviewFactDetail,
+    MonitorOperation,
+    MonitorOperationsStatsResult,
+    MemoryReviewObservationDetail,
+    MemoryReviewQualityBucket,
+    MemoryReviewQualityItemsResult,
   MemoryReviewQualitySummary,
   MemoryReviewRun,
   MemoryReviewSearchResult,
@@ -93,8 +93,6 @@ export type AppViewState = {
   chatThinkingLevel: string | null;
   chatQueue: ChatQueueItem[];
   chatManualRefreshInFlight: boolean;
-  nodesLoading: boolean;
-  nodes: Array<Record<string, unknown>>;
   chatNewMessagesBelow: boolean;
   sidebarOpen: boolean;
   sidebarContent: string | null;
@@ -182,6 +180,14 @@ export type AppViewState = {
   agentsList: AgentsListResult | null;
   agentsError: string | null;
   agentsSelectedId: string | null;
+  monitorPaused: boolean;
+  monitorLiveOps: MonitorOperation[];
+  monitorHistoryOps: MonitorOperation[];
+  monitorHistoryTotal: number;
+  monitorHistoryLoading: boolean;
+  monitorHistoryError: string | null;
+  monitorStats: MonitorOperationsStatsResult | null;
+  monitorStatsLoading: boolean;
   agentsPanel: "overview" | "files" | "tools" | "skills" | "accounts" | "automations";
   agentFilesLoading: boolean;
   agentFilesError: string | null;
@@ -190,9 +196,6 @@ export type AppViewState = {
   agentFileDrafts: Record<string, string>;
   agentFileActive: string | null;
   agentFileSaving: boolean;
-  agentIdentityLoading: boolean;
-  agentIdentityError: string | null;
-  agentIdentityById: Record<string, AgentIdentityResult>;
   agentSkillsLoading: boolean;
   agentSkillsError: string | null;
   agentSkillsReport: SkillStatusReport | null;
@@ -288,9 +291,7 @@ export type AppViewState = {
   skillsBusyKey: string | null;
   debugLoading: boolean;
   debugStatus: StatusSummary | null;
-  debugHealth: HealthSnapshot | null;
   debugModels: unknown[];
-  debugHeartbeat: unknown;
   debugCallMethod: string;
   debugCallParams: string;
   debugCallResult: string | null;
@@ -325,7 +326,6 @@ export type AppViewState = {
   setTheme: (theme: ThemeMode, context?: ThemeTransitionContext) => void;
   applySettings: (next: UiSettings) => void;
   loadOverview: () => Promise<void>;
-  loadAssistantIdentity: () => Promise<void>;
   loadSchedules: () => Promise<void>;
   handleWhatsAppStart: (force: boolean) => Promise<void>;
   handleWhatsAppWait: () => Promise<void>;

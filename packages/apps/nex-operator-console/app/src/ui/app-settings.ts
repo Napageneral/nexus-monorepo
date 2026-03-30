@@ -9,7 +9,6 @@ import {
 } from "./app-polling.ts";
 import { scheduleChatScroll, scheduleLogsScroll } from "./app-scroll.ts";
 import { loadAclRequests } from "./controllers/acl-requests.ts";
-import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
 import { loadAgents } from "./controllers/agents.ts";
 import { loadInstalledApps } from "./controllers/apps.ts";
@@ -208,14 +207,9 @@ export async function refreshActiveTab(host: SettingsHost) {
   if (host.tab === "agents") {
     await loadAgents(host as unknown as NexusApp);
     await loadConfig(host as unknown as NexusApp);
-    const agentIds = host.agentsList?.agents?.map((entry) => entry.id) ?? [];
-    if (agentIds.length > 0) {
-      void loadAgentIdentities(host as unknown as NexusApp, agentIds);
-    }
     const agentId =
       host.agentsSelectedId ?? host.agentsList?.defaultId ?? host.agentsList?.agents?.[0]?.id;
     if (agentId) {
-      void loadAgentIdentity(host as unknown as NexusApp, agentId);
       if (host.agentsPanel === "skills") {
         void loadAgentSkills(host as unknown as NexusApp, agentId);
       }
@@ -458,7 +452,6 @@ export async function loadOverview(host: SettingsHost) {
     loadConversations(host as unknown as NexusApp),
     loadSessions(host as unknown as NexusApp),
     loadScheduleJobs(host as unknown as NexusApp),
-    loadDebug(host as unknown as NexusApp),
   ]);
 }
 

@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -22,7 +22,7 @@ var _ MappedNullable = &AdaptersConnectionsStatus200Response{}
 // AdaptersConnectionsStatus200Response struct for AdaptersConnectionsStatus200Response
 type AdaptersConnectionsStatus200Response struct {
 	Ok bool `json:"ok"`
-	Payload *AdaptersConnectionsStatus200ResponsePayload `json:"payload,omitempty"`
+	Payload *AdaptersConnectionsList200ResponsePayloadConnectionsInner `json:"payload,omitempty"`
 	Meta map[string]interface{} `json:"meta,omitempty"`
 }
 
@@ -71,9 +71,9 @@ func (o *AdaptersConnectionsStatus200Response) SetOk(v bool) {
 }
 
 // GetPayload returns the Payload field value if set, zero value otherwise.
-func (o *AdaptersConnectionsStatus200Response) GetPayload() AdaptersConnectionsStatus200ResponsePayload {
+func (o *AdaptersConnectionsStatus200Response) GetPayload() AdaptersConnectionsList200ResponsePayloadConnectionsInner {
 	if o == nil || IsNil(o.Payload) {
-		var ret AdaptersConnectionsStatus200ResponsePayload
+		var ret AdaptersConnectionsList200ResponsePayloadConnectionsInner
 		return ret
 	}
 	return *o.Payload
@@ -81,7 +81,7 @@ func (o *AdaptersConnectionsStatus200Response) GetPayload() AdaptersConnectionsS
 
 // GetPayloadOk returns a tuple with the Payload field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *AdaptersConnectionsStatus200Response) GetPayloadOk() (*AdaptersConnectionsStatus200ResponsePayload, bool) {
+func (o *AdaptersConnectionsStatus200Response) GetPayloadOk() (*AdaptersConnectionsList200ResponsePayloadConnectionsInner, bool) {
 	if o == nil || IsNil(o.Payload) {
 		return nil, false
 	}
@@ -97,8 +97,8 @@ func (o *AdaptersConnectionsStatus200Response) HasPayload() bool {
 	return false
 }
 
-// SetPayload gets a reference to the given AdaptersConnectionsStatus200ResponsePayload and assigns it to the Payload field.
-func (o *AdaptersConnectionsStatus200Response) SetPayload(v AdaptersConnectionsStatus200ResponsePayload) {
+// SetPayload gets a reference to the given AdaptersConnectionsList200ResponsePayloadConnectionsInner and assigns it to the Payload field.
+func (o *AdaptersConnectionsStatus200Response) SetPayload(v AdaptersConnectionsList200ResponsePayloadConnectionsInner) {
 	o.Payload = &v
 }
 

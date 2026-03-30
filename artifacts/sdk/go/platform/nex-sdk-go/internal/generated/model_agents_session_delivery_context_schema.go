@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -22,7 +22,7 @@ type AgentsSessionDeliveryContextSchema struct {
 	Platform *string `json:"platform,omitempty"`
 	To *string `json:"to,omitempty"`
 	AccountId *string `json:"accountId,omitempty"`
-	ThreadId *AgentsSessionDeliveryContextSchemaThreadId `json:"threadId,omitempty"`
+	ThreadId *AdaptersConnectionsBackfill200ResponsePayloadStatus `json:"threadId,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
 
@@ -142,9 +142,9 @@ func (o *AgentsSessionDeliveryContextSchema) SetAccountId(v string) {
 }
 
 // GetThreadId returns the ThreadId field value if set, zero value otherwise.
-func (o *AgentsSessionDeliveryContextSchema) GetThreadId() AgentsSessionDeliveryContextSchemaThreadId {
+func (o *AgentsSessionDeliveryContextSchema) GetThreadId() AdaptersConnectionsBackfill200ResponsePayloadStatus {
 	if o == nil || IsNil(o.ThreadId) {
-		var ret AgentsSessionDeliveryContextSchemaThreadId
+		var ret AdaptersConnectionsBackfill200ResponsePayloadStatus
 		return ret
 	}
 	return *o.ThreadId
@@ -152,7 +152,7 @@ func (o *AgentsSessionDeliveryContextSchema) GetThreadId() AgentsSessionDelivery
 
 // GetThreadIdOk returns a tuple with the ThreadId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *AgentsSessionDeliveryContextSchema) GetThreadIdOk() (*AgentsSessionDeliveryContextSchemaThreadId, bool) {
+func (o *AgentsSessionDeliveryContextSchema) GetThreadIdOk() (*AdaptersConnectionsBackfill200ResponsePayloadStatus, bool) {
 	if o == nil || IsNil(o.ThreadId) {
 		return nil, false
 	}
@@ -168,8 +168,8 @@ func (o *AgentsSessionDeliveryContextSchema) HasThreadId() bool {
 	return false
 }
 
-// SetThreadId gets a reference to the given AgentsSessionDeliveryContextSchemaThreadId and assigns it to the ThreadId field.
-func (o *AgentsSessionDeliveryContextSchema) SetThreadId(v AgentsSessionDeliveryContextSchemaThreadId) {
+// SetThreadId gets a reference to the given AdaptersConnectionsBackfill200ResponsePayloadStatus and assigns it to the ThreadId field.
+func (o *AgentsSessionDeliveryContextSchema) SetThreadId(v AdaptersConnectionsBackfill200ResponsePayloadStatus) {
 	o.ThreadId = &v
 }
 

@@ -38,7 +38,7 @@ export async function loadAgents(state: AgentsState) {
 
 export async function createAgent(
   state: AgentsState & { agentsLoading: boolean },
-  params: { name: string; model?: string; description?: string; memory?: string }
+  params: { name: string; workspace: string; emoji?: string; avatar?: string }
 ): Promise<string | null> {
   if (!state.client || !state.connected) return null;
   try {

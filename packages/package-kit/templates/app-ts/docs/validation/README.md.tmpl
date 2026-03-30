@@ -5,9 +5,14 @@ Replace this placeholder with the package validation ladder.
 At minimum, validate:
 
 1. `pnpm build`
-2. `nex package validate`
-3. `nex package release`
-4. hosted smoke lifecycle
-5. package-specific behavior
+2. disposable cleanroom or containerized baseline
+3. `nex package validate`
+4. `nex package release`
+5. hosted smoke lifecycle
+6. package-specific behavior
+
+Treat cleanroom proof as the primary validation path. Use lived-in local or
+hosted environments only as secondary dogfood after the disposable baseline is
+green.
 
 Write the app validation ladder here.

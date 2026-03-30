@@ -1,9 +1,7 @@
 import type { Tab } from "./navigation.ts";
 import {
   startLogsPolling,
-  startNodesPolling,
   stopLogsPolling,
-  stopNodesPolling,
   startDebugPolling,
   stopDebugPolling,
 } from "./app-polling.ts";
@@ -42,7 +40,6 @@ export function handleConnected(host: LifecycleHost) {
   attachThemeListener(host as unknown as Parameters<typeof attachThemeListener>[0]);
   window.addEventListener("popstate", host.popStateHandler);
   connectRuntime(host as unknown as Parameters<typeof connectRuntime>[0]);
-  startNodesPolling(host as unknown as Parameters<typeof startNodesPolling>[0]);
   if (host.tab === "system" && host.systemSubTab === "logs") {
     startLogsPolling(host as unknown as Parameters<typeof startLogsPolling>[0]);
   }
@@ -57,7 +54,6 @@ export function handleFirstUpdated(host: LifecycleHost) {
 
 export function handleDisconnected(host: LifecycleHost) {
   window.removeEventListener("popstate", host.popStateHandler);
-  stopNodesPolling(host as unknown as Parameters<typeof stopNodesPolling>[0]);
   stopLogsPolling(host as unknown as Parameters<typeof stopLogsPolling>[0]);
   stopDebugPolling(host as unknown as Parameters<typeof stopDebugPolling>[0]);
   detachThemeListener(host as unknown as Parameters<typeof detachThemeListener>[0]);

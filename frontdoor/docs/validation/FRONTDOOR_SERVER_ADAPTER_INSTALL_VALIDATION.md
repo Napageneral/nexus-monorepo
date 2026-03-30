@@ -1,19 +1,24 @@
 ---
-summary: "Validation ladder for Frontdoor-managed server adapter install and Confluence hosted stepping-stone testing."
+summary: "Transitional validation ladder for Frontdoor-managed adapter install while the canonical hosted proof moves onto the sandbox-backed cleanroom substrate."
 read_when:
   - You are validating Frontdoor public adapter install routes
-  - You need the local hosted proof path before production rollout
+  - You are migrating older local-hosted evidence onto the hosted cleanroom lane
 title: "Frontdoor Server Adapter Install Validation"
 ---
 
 # Frontdoor Server Adapter Install Validation
 
-**Status:** ACTIVE VALIDATION
+**Status:** TRANSITIONAL ACTIVE VALIDATION
 
 ## Purpose
 
 This ladder proves that Frontdoor can manage adapter install on a server and
 that the installed Confluence adapter works through the runtime.
+
+This document is no longer the canonical hosted substrate. The canonical hosted
+proof path is the sandbox-backed cleanroom lane under `HCI-003`. The local
+hosted evidence below is a stepping stone and regression reference until that
+lane replaces it completely.
 
 ## Rung 1: Public route contract
 
@@ -27,6 +32,7 @@ Current evidence:
 
 - covered in `frontdoor/src/server.test.ts`
 - local runtime path proves the public API exists and is callable
+- this is contract evidence only, not the final hosted cleanroom proof
 
 ## Rung 2: Durable package state
 
@@ -53,6 +59,7 @@ Current evidence:
 
 - local hosted adapter route test proves direct runtime install transport selection
 - Nex runtime package-operator tests already prove adapter activation and health
+- canonical hosted proof still needs the sandbox-backed cleanroom target
 
 ## Rung 4: Live Confluence connection
 
@@ -100,4 +107,4 @@ Pass when:
 
 Current status:
 
-- still pending as a distinct hosted proof step
+- still pending as a distinct sandbox-backed hosted cleanroom proof step

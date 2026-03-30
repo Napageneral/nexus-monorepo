@@ -20,10 +20,24 @@ import {
 // ---------------------------------------------------------------------------
 
 /** Options passed to createServer. */
+export type HostedBootstrapSpec = {
+  tenantId: string;
+  serverId: string;
+  runtimeAuthToken: string;
+  provisionToken: string;
+  frontdoorUrl: string;
+  runtimeTokenIssuer: string;
+  runtimeTokenSecret: string;
+  runtimeTokenActiveKid?: string;
+  tailscaleAuthKey?: string;
+  tailscaleHostname?: string;
+  bootstrapSeedYaml?: string;
+};
+
 export type CreateServerOpts = {
   tenantId: string;
   planId: string;
-  cloudInitScript: string;
+  hostedBootstrap: HostedBootstrapSpec;
   imageId?: string;
   serverName?: string;
 };
@@ -335,13 +349,14 @@ export class HetznerProvider implements CloudProvider {
   // -----------------------------------------------------------------------
 
   async createServer(opts: CreateServerOpts): Promise<CreateServerResult> {
-    const cloudInitMode = opts.cloudInitScript.includes("bootstrap-frontdoor.sh")
+    const cloudInitScript = renderCloudInitScript(opts.hostedBootstrap);
+    const cloudInitMode = cloudInitScript.includes("bootstrap-frontdoor.sh")
       ? "trusted_token"
-      : opts.cloudInitScript.includes("exec /opt/nex/bootstrap.sh")
+      : cloudInitScript.includes("exec /opt/nex/bootstrap.sh")
         ? "legacy"
         : "unknown";
     const cloudInitSha = createHash("sha256")
-      .update(opts.cloudInitScript, "utf8")
+      .update(cloudInitScript, "utf8")
       .digest("hex")
       .slice(0, 16);
     console.log(
@@ -356,7 +371,7 @@ export class HetznerProvider implements CloudProvider {
       ssh_keys: this.sshKeyIds.map(Number),
       networks: [Number(this.networkId)],
       firewalls: [{ firewall: Number(this.firewallId) }],
-      user_data: opts.cloudInitScript,
+      user_data: cloudInitScript,
       labels: {
         "managed-by": "nexus-frontdoor",
         "tenant-id": opts.tenantId,
@@ -611,6 +626,7 @@ export class AwsEc2Provider implements CloudProvider {
   }
 
   async createServer(opts: CreateServerOpts): Promise<CreateServerResult> {
+    const cloudInitScript = renderCloudInitScript(opts.hostedBootstrap);
     const instanceType = this.resolveInstanceType(opts.planId);
     const networkInterface = {
       DeviceIndex: 0,
@@ -626,7 +642,7 @@ export class AwsEc2Provider implements CloudProvider {
         InstanceType: instanceType,
         MinCount: 1,
         MaxCount: 1,
-        UserData: Buffer.from(opts.cloudInitScript, "utf8").toString("base64"),
+        UserData: Buffer.from(cloudInitScript, "utf8").toString("base64"),
         KeyName: this.sshKeyName,
         MetadataOptions: {
           HttpTokens: "required",
@@ -802,23 +818,12 @@ export class AwsEc2Provider implements CloudProvider {
 // renderCloudInitScript
 // ---------------------------------------------------------------------------
 
-export function renderCloudInitScript(opts: {
-  tenantId: string;
-  serverId: string;
-  authToken: string;
-  provisionToken: string;
-  frontdoorUrl: string;
-  runtimeTokenIssuer: string;
-  runtimeTokenSecret: string;
-  runtimeTokenActiveKid?: string;
-  tailscaleAuthKey?: string;
-  tailscaleHostname?: string;
-}): string {
+export function renderCloudInitScript(opts: HostedBootstrapSpec): string {
   const configJson = JSON.stringify(
     {
       tenantId: opts.tenantId,
       serverId: opts.serverId,
-      authToken: opts.authToken,
+      authToken: opts.runtimeAuthToken,
       provisionToken: opts.provisionToken,
       frontdoorUrl: opts.frontdoorUrl,
     },
@@ -916,10 +921,26 @@ export function renderCloudInitScript(opts: {
     ...(opts.runtimeTokenActiveKid?.trim()
       ? [`NEXUS_RUNTIME_TRUSTED_TOKEN_ACTIVE_KID=${opts.runtimeTokenActiveKid.trim()}`]
       : []),
+    ...(opts.bootstrapSeedYaml
+      ? [
+          "NEXUS_BOOTSTRAP_SEED_FILE=/opt/nex/config/bootstrap-seed.yml",
+        ]
+      : []),
     "ENVEOF",
     "",
     "chown nex:nex /opt/nex/config/nex.env",
     "chmod 600 /opt/nex/config/nex.env",
+    "",
+    ...(opts.bootstrapSeedYaml
+      ? [
+          "cat > /opt/nex/config/bootstrap-seed.yml << 'BOOTSTRAPEOF'",
+          opts.bootstrapSeedYaml.trimEnd(),
+          "BOOTSTRAPEOF",
+          "chown nex:nex /opt/nex/config/bootstrap-seed.yml",
+          "chmod 600 /opt/nex/config/bootstrap-seed.yml",
+          "",
+        ]
+      : []),
     "",
     "log \"Initializing nexus workspace...\"",
     "INIT_RETRIES=5",

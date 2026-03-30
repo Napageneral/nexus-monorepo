@@ -208,10 +208,11 @@ This registry drives:
    - `standard` servers default to Hetzner
    - `compliant` servers are AWS-only
 5. Golden snapshot images have nex runtime pre-installed; cloud-init handles tenant-specific config.
-6. VPS phones home to frontdoor when ready (provision callback with one-time token).
-7. Frontdoor adds VPS to routing table and marks server as "running".
-8. Full architecture: `CLOUD_PROVISIONING_ARCHITECTURE_2026-03-04.md`
-9. Hosting and class policy: `FRONTDOOR_AWS_HOSTING_AND_SERVER_CLASS_MODEL.md`
+6. Cloud-init must also hand canonical owner bootstrap input to Nex for fresh hosted tenants.
+7. VPS phones home to frontdoor when ready (provision callback with one-time token).
+8. Frontdoor adds VPS to routing table and marks server as "running".
+9. Full architecture: `CLOUD_PROVISIONING_ARCHITECTURE_2026-03-04.md`
+10. Hosting and class policy: `FRONTDOOR_AWS_HOSTING_AND_SERVER_CLASS_MODEL.md`
 
 ### 8.2 Tenant networking and routing
 

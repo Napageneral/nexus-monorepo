@@ -13,6 +13,10 @@ const REQUIRE_RUNTIME = process.env.E2E_REQUIRE_RUNTIME === '1';
 
 let screenshotCounter = 0;
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * Take a named screenshot and save to the proof bundle.
  */
@@ -41,17 +45,35 @@ export async function navigateToTab(page: Page, tabName: string): Promise<void> 
  * Click a sub-tab within a page.
  */
 export async function clickSubTab(page: Page, tabName: string): Promise<void> {
-  await page
-    .locator(`.v2-detail-tab:has-text("${tabName}"), .v2-agent-tab:has-text("${tabName}")`)
-    .first()
-    .click();
-  await page
-    .locator(
-      `.v2-detail-tab--active:has-text("${tabName}"), .v2-agent-tab--active:has-text("${tabName}")`,
-    )
-    .first()
-    .waitFor({ state: 'visible', timeout: 5000 })
-    .catch(() => {});
+  const label = new RegExp(`^\\s*${escapeRegExp(tabName)}\\s*$`);
+  const button = page
+    .locator('.v2-detail-tab:visible, .v2-agent-tab:visible')
+    .filter({ hasText: label })
+    .first();
+
+  await button.waitFor({ state: 'visible', timeout: 5000 });
+  const isActive = async () => {
+    try {
+      return await button.evaluate((element) => {
+        return (
+          element.classList.contains('v2-detail-tab--active') ||
+          element.classList.contains('v2-agent-tab--active')
+        );
+      });
+    } catch {
+      return false;
+    }
+  };
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await button.click();
+    if (await isActive()) {
+      break;
+    }
+    await page.waitForTimeout(200);
+  }
+
+  await expect.poll(isActive, { timeout: 5000 }).toBe(true);
   await page.waitForTimeout(150);
 }
 

@@ -2,7 +2,22 @@ import { html, nothing } from "lit";
 import type { AppViewState } from "../ui/app-view-state.ts";
 import { icons } from "../ui/icons.ts";
 import { loadAgents, createAgent } from "../ui/controllers/agents.ts";
+import {
+  loadIdentitySurface,
+  resolveIdentityMergeCandidate,
+} from "../ui/controllers/identity.ts";
 import { loadIntegrations } from "../ui/controllers/integrations.ts";
+import {
+  loadMemoryEntityDetail,
+  loadMemoryEpisodeInspector,
+  loadMemoryFactDetail,
+  loadMemoryObservationDetail,
+  loadMemoryQualityItems,
+  loadMemoryQualitySummary,
+  loadMemoryRunEpisodes,
+  loadMemoryRuns,
+  runMemorySearch,
+} from "../ui/controllers/memory-review.ts";
 import { renderAppsPage as renderConnectorsPage } from "./pages/apps.ts";
 import { renderAgentsPage } from "./pages/agents.ts";
 import { renderAgentCreateWizard, type AgentCreateStep, type AgentCreateForm } from "./pages/agent-create.ts";
@@ -33,6 +48,81 @@ const v2 = {
   key: html`<svg viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.3 9.3"/><path d="m18 5 3-3"/></svg>`,
   shield: html`<svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>`,
 };
+
+function flattenMemorySearchResult(result: AppViewState["memorySearchResult"]) {
+  if (!result) {
+    return [];
+  }
+  return [
+    ...(result.entities ?? []).map((entity) => ({
+      id: entity.id,
+      kind: "entity",
+      text: entity.name || entity.id,
+      score: entity.score,
+      entity_id: entity.id,
+    })),
+    ...(result.facts ?? []).map((fact) => ({
+      id: fact.id,
+      kind: "fact",
+      text: [fact.subject, fact.predicate, fact.object].filter(Boolean).join(" -> ") || fact.id,
+      score: fact.score,
+      entity_id: undefined,
+    })),
+    ...(result.observations ?? []).map((observation) => ({
+      id: observation.id,
+      kind: "observation",
+      text: observation.text,
+      score: observation.score,
+      entity_id: observation.entity_id,
+    })),
+  ];
+}
+
+function normalizeAgentIdCandidate(value: string): string {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) {
+    return "agent";
+  }
+  return (
+    trimmed
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/^-+/, "")
+      .replace(/-+$/, "")
+      .slice(0, 64) || "agent"
+  );
+}
+
+function resolveWorkspaceRoot(state: AppViewState): { dir: string; separator: "/" | "\\" } | null {
+  const config = (state.configForm ?? state.configSnapshot?.config ?? null) as
+    | { agents?: { defaults?: { workspace?: unknown } } }
+    | null;
+  const workspace =
+    config?.agents?.defaults && typeof config.agents.defaults.workspace === "string"
+      ? config.agents.defaults.workspace.trim()
+      : "";
+  if (!workspace) {
+    return null;
+  }
+  const trimmed = workspace.replace(/[\\/]+$/, "");
+  const slashIndex = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  if (slashIndex <= 0) {
+    return null;
+  }
+  const separator: "/" | "\\" =
+    trimmed.lastIndexOf("\\") === slashIndex && trimmed.includes("\\") ? "\\" : "/";
+  return {
+    dir: trimmed.slice(0, slashIndex),
+    separator,
+  };
+}
+
+function resolveCreateAgentWorkspace(state: AppViewState, name: string): string | null {
+  const root = resolveWorkspaceRoot(state);
+  if (!root) {
+    return null;
+  }
+  return `${root.dir}${root.separator}${normalizeAgentIdCandidate(name)}`;
+}
 
 // ─── Agent wizard state helpers ──────────────────────────────────────
 function getWizardState(state: AppViewState): { active: boolean; step: AgentCreateStep; form: AgentCreateForm } {
@@ -386,16 +476,20 @@ export function renderAppV2(state: AppViewState) {
                   onCancel: () => closeWizard(state),
                   onCreate: async () => {
                     const form = wiz.form;
+                    const workspace = resolveCreateAgentWorkspace(state, form.name);
+                    if (!workspace) {
+                      state.agentsError =
+                        "Unable to determine a default agent workspace from runtime config.";
+                      return;
+                    }
                     const agentId = await createAgent(state as any, {
                       name: form.name,
-                      model: form.model,
-                      description: form.description,
-                      memory: form.memory,
+                      workspace,
                     });
                     if (agentId) {
                       (state as any)._v2AgentDetailId = agentId;
+                      closeWizard(state);
                     }
-                    closeWizard(state);
                   },
                 });
               }
@@ -606,11 +700,9 @@ export function renderAppV2(state: AppViewState) {
           mergeCandidates: state.identityMergeCandidates ?? [],
           mergeBusyId: state.identityMergeBusyId ?? null,
           onResolveMerge: (id, status) => {
-            const { resolveIdentityMergeCandidate } = require("../ui/controllers/identity.ts");
             void resolveIdentityMergeCandidate(state, id, status);
           },
           onRefresh: () => {
-            const { loadIdentitySurface } = require("../ui/controllers/identity.ts");
             void loadIdentitySurface(state as any);
           },
         } as IdentityPageProps) : nothing}
@@ -619,11 +711,6 @@ export function renderAppV2(state: AppViewState) {
           subTab: (state as any)._v2MemorySubTab ?? "library",
           onSubTabChange: (sub) => {
             (state as any)._v2MemorySubTab = sub;
-            const {
-              loadMemoryQualitySummary,
-              loadMemoryRuns,
-              runMemorySearch,
-            } = require("../ui/controllers/memory-review.ts");
             if (sub === "quality") {
               void loadMemoryQualitySummary(state as any, { loadItems: true });
             } else if (
@@ -647,7 +734,6 @@ export function renderAppV2(state: AppViewState) {
           selectedRunId: (state as any).memorySelectedRunId ?? null,
           onRunSelect: (runId) => {
             (state as any).memorySelectedRunId = runId;
-            const { loadMemoryRunEpisodes } = require("../ui/controllers/memory-review.ts");
             void loadMemoryRunEpisodes(state as any, runId);
           },
           episodes: (state as any).memoryEpisodes ?? [],
@@ -655,7 +741,6 @@ export function renderAppV2(state: AppViewState) {
           selectedEpisodeId: (state as any).memorySelectedEpisodeId ?? null,
           onEpisodeSelect: (episodeId) => {
             (state as any).memorySelectedEpisodeId = episodeId;
-            const { loadMemoryEpisodeInspector } = require("../ui/controllers/memory-review.ts");
             void loadMemoryEpisodeInspector(state as any, episodeId);
           },
           inspectorLoading: (state as any).memoryInspectorLoading ?? false,
@@ -663,11 +748,10 @@ export function renderAppV2(state: AppViewState) {
           searchQuery: (state as any).memorySearchQuery ?? "",
           searchType: (state as any).memorySearchType ?? "all",
           searchLoading: (state as any).memorySearchLoading ?? false,
-          searchResults: (state as any).memorySearchResults ?? [],
+          searchResults: flattenMemorySearchResult((state as any).memorySearchResult ?? null),
           onSearchQueryChange: (q) => { (state as any).memorySearchQuery = q; },
           onSearchTypeChange: (t) => { (state as any).memorySearchType = t; },
           onSearch: () => {
-            const { runMemorySearch } = require("../ui/controllers/memory-review.ts");
             void runMemorySearch(state as any);
           },
           qualityScope: (state as any).memoryQualityScope ?? "run",
@@ -679,18 +763,15 @@ export function renderAppV2(state: AppViewState) {
           onQualityScopeChange: (scope) => {
             (state as any).memoryQualityScope = scope;
             (state as any).memoryQualityItemsOffset = 0;
-            const { loadMemoryQualitySummary } = require("../ui/controllers/memory-review.ts");
             void loadMemoryQualitySummary(state as any, { loadItems: true });
           },
           onQualityBucketSelect: (bucket) => {
             (state as any).memoryQualityBucket = bucket;
-            const { loadMemoryQualityItems } = require("../ui/controllers/memory-review.ts");
             (state as any).memoryQualityItemsOffset = 0;
             void loadMemoryQualityItems(state as any, bucket, { offset: 0 });
           },
           onQualityPage: (offset) => {
             (state as any).memoryQualityItemsOffset = Math.max(0, Math.trunc(offset));
-            const { loadMemoryQualityItems } = require("../ui/controllers/memory-review.ts");
             void loadMemoryQualityItems(state as any, (state as any).memoryQualityBucket, {
               offset: (state as any).memoryQualityItemsOffset,
             });
@@ -701,19 +782,15 @@ export function renderAppV2(state: AppViewState) {
           detailFact: (state as any).memoryDetailFact ?? null,
           detailObservation: (state as any).memoryDetailObservation ?? null,
           onEntitySelect: (id) => {
-            const { loadMemoryEntityDetail } = require("../ui/controllers/memory-review.ts");
             void loadMemoryEntityDetail(state as any, id);
           },
           onFactSelect: (id) => {
-            const { loadMemoryFactDetail } = require("../ui/controllers/memory-review.ts");
             void loadMemoryFactDetail(state as any, id);
           },
           onObservationSelect: (id) => {
-            const { loadMemoryObservationDetail } = require("../ui/controllers/memory-review.ts");
             void loadMemoryObservationDetail(state as any, id);
           },
           onRefresh: () => {
-            const { loadMemoryRuns } = require("../ui/controllers/memory-review.ts");
             void loadMemoryRuns(state as any);
           },
         } as MemoryPageProps) : nothing}

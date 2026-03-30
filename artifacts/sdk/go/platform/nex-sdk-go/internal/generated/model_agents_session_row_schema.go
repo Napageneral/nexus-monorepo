@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -54,7 +54,7 @@ type AgentsSessionRowSchema struct {
 	LastPlatform *string `json:"lastPlatform,omitempty"`
 	LastTo *string `json:"lastTo,omitempty"`
 	LastAccountId *string `json:"lastAccountId,omitempty"`
-	LastThreadId *AgentsSessionDeliveryContextSchemaThreadId `json:"lastThreadId,omitempty"`
+	LastThreadId *AdaptersConnectionsBackfill200ResponsePayloadStatus `json:"lastThreadId,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
 
@@ -1152,9 +1152,9 @@ func (o *AgentsSessionRowSchema) SetLastAccountId(v string) {
 }
 
 // GetLastThreadId returns the LastThreadId field value if set, zero value otherwise.
-func (o *AgentsSessionRowSchema) GetLastThreadId() AgentsSessionDeliveryContextSchemaThreadId {
+func (o *AgentsSessionRowSchema) GetLastThreadId() AdaptersConnectionsBackfill200ResponsePayloadStatus {
 	if o == nil || IsNil(o.LastThreadId) {
-		var ret AgentsSessionDeliveryContextSchemaThreadId
+		var ret AdaptersConnectionsBackfill200ResponsePayloadStatus
 		return ret
 	}
 	return *o.LastThreadId
@@ -1162,7 +1162,7 @@ func (o *AgentsSessionRowSchema) GetLastThreadId() AgentsSessionDeliveryContextS
 
 // GetLastThreadIdOk returns a tuple with the LastThreadId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *AgentsSessionRowSchema) GetLastThreadIdOk() (*AgentsSessionDeliveryContextSchemaThreadId, bool) {
+func (o *AgentsSessionRowSchema) GetLastThreadIdOk() (*AdaptersConnectionsBackfill200ResponsePayloadStatus, bool) {
 	if o == nil || IsNil(o.LastThreadId) {
 		return nil, false
 	}
@@ -1178,8 +1178,8 @@ func (o *AgentsSessionRowSchema) HasLastThreadId() bool {
 	return false
 }
 
-// SetLastThreadId gets a reference to the given AgentsSessionDeliveryContextSchemaThreadId and assigns it to the LastThreadId field.
-func (o *AgentsSessionRowSchema) SetLastThreadId(v AgentsSessionDeliveryContextSchemaThreadId) {
+// SetLastThreadId gets a reference to the given AdaptersConnectionsBackfill200ResponsePayloadStatus and assigns it to the LastThreadId field.
+func (o *AgentsSessionRowSchema) SetLastThreadId(v AdaptersConnectionsBackfill200ResponsePayloadStatus) {
 	o.LastThreadId = &v
 }
 

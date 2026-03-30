@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -25,8 +25,8 @@ type IdentityEntityRowSchema struct {
 	Type string `json:"type"`
 	MergedInto *string `json:"merged_into,omitempty"`
 	Normalized *string `json:"normalized,omitempty"`
-	IsUser NullableIdentityEntityRowSchemaIsUser `json:"is_user,omitempty"`
-	IsAgent NullableIdentityEntityRowSchemaIsUser `json:"is_agent,omitempty"`
+	IsUser *AclRequestsApproveRequestMode `json:"is_user,omitempty"`
+	IsAgent *AclRequestsApproveRequestMode `json:"is_agent,omitempty"`
 	RoleConfigId *string `json:"role_config_id,omitempty"`
 	ModelConfigId *string `json:"model_config_id,omitempty"`
 	Origin *string `json:"origin,omitempty"`
@@ -195,88 +195,68 @@ func (o *IdentityEntityRowSchema) SetNormalized(v string) {
 	o.Normalized = &v
 }
 
-// GetIsUser returns the IsUser field value if set, zero value otherwise (both if not set or set to explicit null).
-func (o *IdentityEntityRowSchema) GetIsUser() IdentityEntityRowSchemaIsUser {
-	if o == nil || IsNil(o.IsUser.Get()) {
-		var ret IdentityEntityRowSchemaIsUser
+// GetIsUser returns the IsUser field value if set, zero value otherwise.
+func (o *IdentityEntityRowSchema) GetIsUser() AclRequestsApproveRequestMode {
+	if o == nil || IsNil(o.IsUser) {
+		var ret AclRequestsApproveRequestMode
 		return ret
 	}
-	return *o.IsUser.Get()
+	return *o.IsUser
 }
 
 // GetIsUserOk returns a tuple with the IsUser field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-// NOTE: If the value is an explicit nil, `nil, true` will be returned
-func (o *IdentityEntityRowSchema) GetIsUserOk() (*IdentityEntityRowSchemaIsUser, bool) {
-	if o == nil {
+func (o *IdentityEntityRowSchema) GetIsUserOk() (*AclRequestsApproveRequestMode, bool) {
+	if o == nil || IsNil(o.IsUser) {
 		return nil, false
 	}
-	return o.IsUser.Get(), o.IsUser.IsSet()
+	return o.IsUser, true
 }
 
 // HasIsUser returns a boolean if a field has been set.
 func (o *IdentityEntityRowSchema) HasIsUser() bool {
-	if o != nil && o.IsUser.IsSet() {
+	if o != nil && !IsNil(o.IsUser) {
 		return true
 	}
 
 	return false
 }
 
-// SetIsUser gets a reference to the given NullableIdentityEntityRowSchemaIsUser and assigns it to the IsUser field.
-func (o *IdentityEntityRowSchema) SetIsUser(v IdentityEntityRowSchemaIsUser) {
-	o.IsUser.Set(&v)
-}
-// SetIsUserNil sets the value for IsUser to be an explicit nil
-func (o *IdentityEntityRowSchema) SetIsUserNil() {
-	o.IsUser.Set(nil)
+// SetIsUser gets a reference to the given AclRequestsApproveRequestMode and assigns it to the IsUser field.
+func (o *IdentityEntityRowSchema) SetIsUser(v AclRequestsApproveRequestMode) {
+	o.IsUser = &v
 }
 
-// UnsetIsUser ensures that no value is present for IsUser, not even an explicit nil
-func (o *IdentityEntityRowSchema) UnsetIsUser() {
-	o.IsUser.Unset()
-}
-
-// GetIsAgent returns the IsAgent field value if set, zero value otherwise (both if not set or set to explicit null).
-func (o *IdentityEntityRowSchema) GetIsAgent() IdentityEntityRowSchemaIsUser {
-	if o == nil || IsNil(o.IsAgent.Get()) {
-		var ret IdentityEntityRowSchemaIsUser
+// GetIsAgent returns the IsAgent field value if set, zero value otherwise.
+func (o *IdentityEntityRowSchema) GetIsAgent() AclRequestsApproveRequestMode {
+	if o == nil || IsNil(o.IsAgent) {
+		var ret AclRequestsApproveRequestMode
 		return ret
 	}
-	return *o.IsAgent.Get()
+	return *o.IsAgent
 }
 
 // GetIsAgentOk returns a tuple with the IsAgent field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-// NOTE: If the value is an explicit nil, `nil, true` will be returned
-func (o *IdentityEntityRowSchema) GetIsAgentOk() (*IdentityEntityRowSchemaIsUser, bool) {
-	if o == nil {
+func (o *IdentityEntityRowSchema) GetIsAgentOk() (*AclRequestsApproveRequestMode, bool) {
+	if o == nil || IsNil(o.IsAgent) {
 		return nil, false
 	}
-	return o.IsAgent.Get(), o.IsAgent.IsSet()
+	return o.IsAgent, true
 }
 
 // HasIsAgent returns a boolean if a field has been set.
 func (o *IdentityEntityRowSchema) HasIsAgent() bool {
-	if o != nil && o.IsAgent.IsSet() {
+	if o != nil && !IsNil(o.IsAgent) {
 		return true
 	}
 
 	return false
 }
 
-// SetIsAgent gets a reference to the given NullableIdentityEntityRowSchemaIsUser and assigns it to the IsAgent field.
-func (o *IdentityEntityRowSchema) SetIsAgent(v IdentityEntityRowSchemaIsUser) {
-	o.IsAgent.Set(&v)
-}
-// SetIsAgentNil sets the value for IsAgent to be an explicit nil
-func (o *IdentityEntityRowSchema) SetIsAgentNil() {
-	o.IsAgent.Set(nil)
-}
-
-// UnsetIsAgent ensures that no value is present for IsAgent, not even an explicit nil
-func (o *IdentityEntityRowSchema) UnsetIsAgent() {
-	o.IsAgent.Unset()
+// SetIsAgent gets a reference to the given AclRequestsApproveRequestMode and assigns it to the IsAgent field.
+func (o *IdentityEntityRowSchema) SetIsAgent(v AclRequestsApproveRequestMode) {
+	o.IsAgent = &v
 }
 
 // GetRoleConfigId returns the RoleConfigId field value if set, zero value otherwise.
@@ -482,11 +462,11 @@ func (o IdentityEntityRowSchema) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.Normalized) {
 		toSerialize["normalized"] = o.Normalized
 	}
-	if o.IsUser.IsSet() {
-		toSerialize["is_user"] = o.IsUser.Get()
+	if !IsNil(o.IsUser) {
+		toSerialize["is_user"] = o.IsUser
 	}
-	if o.IsAgent.IsSet() {
-		toSerialize["is_agent"] = o.IsAgent.Get()
+	if !IsNil(o.IsAgent) {
+		toSerialize["is_agent"] = o.IsAgent
 	}
 	if !IsNil(o.RoleConfigId) {
 		toSerialize["role_config_id"] = o.RoleConfigId

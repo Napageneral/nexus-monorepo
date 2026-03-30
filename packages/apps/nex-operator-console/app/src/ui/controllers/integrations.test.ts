@@ -33,37 +33,33 @@ function makeState(requestMock: ClientRequestMock): IntegrationsState {
 describe("integrations controller", () => {
   it("loads adapters and selects the first adapter by default", async () => {
     const request = vi.fn(async (method: string, params?: unknown) => {
-      if (method === "adapter.connections.list" && !(params as { adapter?: string } | undefined)?.adapter) {
+      if (method === "adapters.connections.list") {
         return {
-          adapters: [
+          connections: [
             {
+              connectionId: "connection-github",
               adapter: "github",
               name: "GitHub",
-              status: "disconnected",
+              status: "connected",
+              authMethodId: null,
               authMethod: "custom_flow",
               account: null,
               lastSync: null,
               error: null,
             },
             {
+              connectionId: "connection-slack",
               adapter: "slack",
               name: "Slack",
-              status: "connected",
+              status: "disconnected",
+              authMethodId: null,
               authMethod: "oauth2",
-              account: "default",
+              account: null,
               lastSync: 123,
               error: null,
             },
           ],
         };
-      }
-      if (method === "adapter.connections.list") {
-        if ((params as { adapter?: string })?.adapter === "slack") {
-          return {
-            connections: [{ id: "default", display_name: "Slack Bot", status: "ready" }],
-          };
-        }
-        return { connections: [] };
       }
       throw new Error(`unexpected method: ${method}`);
     });
@@ -71,9 +67,7 @@ describe("integrations controller", () => {
 
     await loadIntegrations(state);
 
-    expect(request).toHaveBeenNthCalledWith(1, "adapter.connections.list", {});
-    expect(request).toHaveBeenNthCalledWith(2, "adapter.connections.list", { adapter: "github" });
-    expect(request).toHaveBeenNthCalledWith(3, "adapter.connections.list", { adapter: "slack" });
+    expect(request).toHaveBeenNthCalledWith(1, "adapters.connections.list", {});
     expect(state.integrationsAdapters).toHaveLength(2);
     expect(state.integrationsSelectedAdapter).toBe("github");
     expect(state.integrationsError).toBeNull();
@@ -90,14 +84,16 @@ describe("integrations controller", () => {
         fields: [{ name: "app_id", label: "App ID", type: "text", required: true }],
       })
       .mockResolvedValueOnce({
-        adapters: [
+        connections: [
           {
+            connectionId: "connection-github",
             adapter: "github",
             name: "GitHub",
-            status: "disconnected",
+            status: "connected",
             authMethod: "custom_flow",
-            account: null,
-            lastSync: null,
+            authMethodId: null,
+            account: "installation-42",
+            lastSync: 1,
             error: null,
           },
         ],
@@ -111,12 +107,14 @@ describe("integrations controller", () => {
         message: "Connected",
       })
       .mockResolvedValueOnce({
-        adapters: [
+        connections: [
           {
+            connectionId: "connection-github",
             adapter: "github",
             name: "GitHub",
             status: "connected",
             authMethod: "custom_flow",
+            authMethodId: null,
             account: "installation-42",
             lastSync: 999,
             error: null,
@@ -125,7 +123,7 @@ describe("integrations controller", () => {
       })
       .mockResolvedValueOnce({
         connections: [{ id: "installation-42", status: "active" }],
-      });
+      })
 
     const state = makeState(request);
     state.integrationsAdapters = [
@@ -158,10 +156,10 @@ describe("integrations controller", () => {
 
     expect(request.mock.calls.map(([method]) => method)).toEqual([
       "adapter.connections.custom.start",
-      "adapter.connections.list",
+      "adapters.connections.list",
       "adapter.connections.list",
       "adapter.connections.custom.submit",
-      "adapter.connections.list",
+      "adapters.connections.list",
       "adapter.connections.list",
     ]);
   });
@@ -194,12 +192,14 @@ describe("integrations controller", () => {
       .fn()
       .mockResolvedValueOnce({ ok: true, latency: 19 })
       .mockResolvedValueOnce({
-        adapters: [
+        connections: [
           {
+            connectionId: "connection-github",
             adapter: "github",
             name: "GitHub",
             status: "connected",
             authMethod: "custom_flow",
+            authMethodId: null,
             account: "installation-42",
             lastSync: 1,
             error: null,
@@ -215,12 +215,14 @@ describe("integrations controller", () => {
         service: "github",
       })
       .mockResolvedValueOnce({
-        adapters: [
+        connections: [
           {
+            connectionId: "connection-github",
             adapter: "github",
             name: "GitHub",
             status: "disconnected",
             authMethod: "custom_flow",
+            authMethodId: null,
             account: null,
             lastSync: 2,
             error: null,
@@ -229,7 +231,7 @@ describe("integrations controller", () => {
       })
       .mockResolvedValueOnce({
         connections: [],
-      });
+      })
 
     const state = makeState(request);
     state.integrationsAdapters = [
@@ -261,10 +263,10 @@ describe("integrations controller", () => {
 
     expect(request.mock.calls.map(([method]) => method)).toEqual([
       "adapter.connections.test",
-      "adapter.connections.list",
+      "adapters.connections.list",
       "adapter.connections.list",
       "adapter.connections.disconnect",
-      "adapter.connections.list",
+      "adapters.connections.list",
       "adapter.connections.list",
     ]);
   });

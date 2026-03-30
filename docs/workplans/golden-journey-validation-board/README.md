@@ -49,11 +49,11 @@ Out of scope:
 
 ## Ticket Order
 
-1. [GJV-001](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/in-progress/GJV-001-whole-sandbox-session-recording-substrate.md)
-2. [GJV-002](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/not-started/GJV-002-primary-demo-artifact-contract-and-retention.md)
-3. [GJV-003](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/not-started/GJV-003-human-shaped-validation-script-preview.md)
-4. [GJV-004](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/not-started/GJV-004-flagship-journey-harnesses.md)
-5. [GJV-005](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/not-started/GJV-005-dispatch-review-surface-and-board-ownership.md)
+1. [GJV-001](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/completed/GJV-001-whole-sandbox-session-recording-substrate.md)
+2. [GJV-002](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/completed/GJV-002-primary-demo-artifact-contract-and-retention.md)
+3. [GJV-003](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/in-progress/GJV-003-human-shaped-validation-script-preview.md)
+4. [GJV-004](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/completed/GJV-004-flagship-journey-harnesses.md)
+5. [GJV-005](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/in-progress/GJV-005-dispatch-review-surface-and-board-ownership.md)
 6. [GJV-006](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/not-started/GJV-006-first-dogfood-ticket-through-the-golden-journey.md)
 
 ## Status
@@ -61,3 +61,20 @@ Out of scope:
 - [Not Started](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/not-started/README.md)
 - [In Progress](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/in-progress/README.md)
 - [Completed](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/completed/README.md)
+
+## Live Snapshot
+
+In progress now:
+
+- `GJV-003` run-scoped validation script preview
+- `GJV-005` Dispatch run review surface
+
+Completed now:
+
+- `GJV-001` whole-session recording substrate and receipt truth
+- `GJV-002` primary demo artifact retention and success-path pruning
+- `GJV-004` first flagship owner-bootstrap-to-console harness
+
+Still not started:
+
+- `GJV-006` first real dogfood ticket through the new model

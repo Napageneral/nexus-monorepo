@@ -16,6 +16,7 @@ import type { CloudProvider } from "./cloud-provider.js";
 import { createPasswordHash } from "./crypto.js";
 import { FrontdoorStore } from "./frontdoor-store.js";
 import { publishAppRelease } from "./publish-app-release.js";
+import { DockerSandboxProvider } from "./sandbox-provider.js";
 import { createFrontdoorServer } from "./server.js";
 import * as sshHelper from "./ssh-helper.js";
 import type { FrontdoorConfig } from "./types.js";
@@ -212,6 +213,7 @@ function stageFakePackage(
   version = "latest",
   kind: "app" | "adapter" | "service" | "runtime" = "app",
   manifestOverride?: Record<string, unknown>,
+  targetPlatform?: { os?: string; arch?: string },
 ): string {
   const dir = path.join(config.appStoragePath, packageId, version);
   fs.mkdirSync(dir, { recursive: true });
@@ -232,10 +234,10 @@ function stageFakePackage(
       manifestJson: JSON.stringify(manifestOverride ?? { id: packageId, version }),
     });
     store.upsertPackageReleaseVariant({
-      variantId: `variant-${packageId}-${version}-darwin-arm64`,
+      variantId: `variant-${packageId}-${version}-${targetPlatform?.os ?? process.platform}-${targetPlatform?.arch ?? process.arch}`,
       releaseId,
-      targetOs: "darwin",
-      targetArch: "arm64",
+      targetOs: targetPlatform?.os ?? process.platform,
+      targetArch: targetPlatform?.arch ?? process.arch,
       packageFormat: "tar.gz",
       tarballPath,
       sizeBytes: fs.statSync(tarballPath).size,
@@ -2342,6 +2344,27 @@ describe("frontdoor scaffold", () => {
     expect(createBody.server_class).toBe("compliant");
     expect(createBody.deployment_class).toBe("customer_server");
     expect(compliantProvider.createServer).toHaveBeenCalledTimes(1);
+    expect(compliantProvider.createServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostedBootstrap: expect.objectContaining({
+          bootstrapSeedYaml: expect.stringContaining('owner:'),
+        }),
+      }),
+    );
+    expect(compliantProvider.createServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostedBootstrap: expect.objectContaining({
+          bootstrapSeedYaml: expect.stringContaining('name: "Owner"'),
+        }),
+      }),
+    );
+    expect(compliantProvider.createServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostedBootstrap: expect.objectContaining({
+          bootstrapSeedYaml: expect.stringContaining('"owner@example.com"'),
+        }),
+      }),
+    );
 
     withStore(frontdoor.config, (store) => {
       const created = store.getServer(String(createBody.server_id));
@@ -2408,6 +2431,121 @@ describe("frontdoor scaffold", () => {
     expect(createBody.error).toBeUndefined();
     expect(createBody.server_class).toBe("compliant");
     expect(provider.createServer).toHaveBeenCalledTimes(1);
+    expect(provider.createServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostedBootstrap: expect.objectContaining({
+          bootstrapSeedYaml: expect.stringContaining('owner:'),
+        }),
+      }),
+    );
+    expect(provider.createServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostedBootstrap: expect.objectContaining({
+          bootstrapSeedYaml: expect.stringContaining('name: "Owner"'),
+        }),
+      }),
+    );
+    expect(provider.createServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostedBootstrap: expect.objectContaining({
+          bootstrapSeedYaml: expect.stringContaining('"owner@example.com"'),
+        }),
+      }),
+    );
+  });
+
+  it("uses a named standard provision provider for plans and hosted server creation", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const sandboxProvider: CloudProvider = {
+      createServer: vi.fn().mockResolvedValue({
+        providerServerId: "sandbox-srv-1",
+        publicIp: "",
+        privateIp: "127.0.0.1",
+        backupEnabled: false,
+        deleteProtectionEnabled: false,
+        rebuildProtectionEnabled: false,
+      }),
+      getServerStatus: vi.fn(),
+      archiveServer: vi.fn(),
+      restoreServer: vi.fn(),
+      createRecoveryPoint: vi.fn(),
+      setProtection: vi.fn(),
+      destroyServer: vi.fn(),
+      listPlans: vi.fn(() => [
+        {
+          id: "cax11",
+          name: "Starter",
+          monthlyCostCents: 4000,
+          vcpus: 2,
+          memoryMb: 4096,
+          diskGb: 40,
+          architecture: "arm64" as const,
+        },
+      ]),
+    };
+    const frontdoor = createFrontdoorServer({
+      config: baseConfig(runtime.origin),
+      namedCloudProviders: { sandbox: sandboxProvider },
+      standardProvisionProviderName: "sandbox",
+    });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const plansResp = await fetch(`${frontdoorRunning.origin}/api/plans?server_class=standard`);
+    expect(plansResp.status).toBe(200);
+    const plansBody = (await plansResp.json()) as {
+      plans?: Array<{ id?: string; name?: string }>;
+    };
+    expect(plansBody.plans?.[0]?.id).toBe("cax11");
+    expect(plansBody.plans?.[0]?.name).toBe("Small");
+
+    const cookie = await login(frontdoorRunning.origin);
+    withStore(frontdoor.config, (store) => {
+      const account = store.getAccountsForUser("u-owner")[0];
+      if (!account) {
+        throw new Error("missing_owner_account");
+      }
+      store.addCredits({
+        accountId: account.accountId,
+        amountCents: 500,
+        type: "deposit",
+        description: "test credits",
+      });
+    });
+
+    const createResp = await fetch(`${frontdoorRunning.origin}/api/servers/create`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        display_name: "Sandbox Hosted Server",
+        server_class: "standard",
+        deployment_class: "customer_server",
+        plan: "cax11",
+      }),
+    });
+
+    expect(createResp.status).toBe(200);
+    expect(sandboxProvider.createServer).toHaveBeenCalledTimes(1);
+    expect(sandboxProvider.createServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostedBootstrap: expect.objectContaining({
+          runtimeAuthToken: expect.any(String),
+          bootstrapSeedYaml: expect.stringContaining('name: "Owner"'),
+        }),
+      }),
+    );
+    withStore(frontdoor.config, (store) => {
+      const created = store.getServersForAccount(SEEDED_ACCOUNT_ID).find((item) => item.provider === "sandbox");
+      expect(created?.provider).toBe("sandbox");
+      expect(created?.privateIp).toBe("127.0.0.1");
+    });
   });
 
   it("uses the aws-backed provider for lifecycle actions on compliant servers", async () => {
@@ -5869,5 +6007,224 @@ process.stdin.on("end", () => {
       rebuild: false,
     });
     expect(provider.destroyServer).toHaveBeenCalledWith("hcloud-broken-1");
+  });
+
+  it("creates a sandbox-backed hosted server and completes the provision callback path", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const hostStateRoot = fs.mkdtempSync(path.join(tmpdir(), "frontdoor-sandbox-callback-"));
+    const runnerCalls: string[][] = [];
+    try {
+      const sandboxProvider = new DockerSandboxProvider({
+        imageName: "nex-cleanroom:local",
+        hostStateRoot,
+        allocatePort: async () => 19123,
+        runner: async (args) => {
+          runnerCalls.push(args);
+          return { stdout: "", stderr: "" };
+        },
+      });
+      const frontdoor = createFrontdoorServer({
+        config: baseConfig(runtime.origin),
+        namedCloudProviders: { sandbox: sandboxProvider },
+        standardProvisionProviderName: "sandbox",
+      });
+      const frontdoorRunning = await listen(frontdoor.server);
+      const cookie = await login(frontdoorRunning.origin);
+      withStore(frontdoor.config, (store) => {
+        const account = store.getAccountsForUser("u-owner")[0];
+        if (!account) {
+          throw new Error("missing_owner_account");
+        }
+        store.addCredits({
+          accountId: account.accountId,
+          amountCents: 500,
+          type: "deposit",
+          description: "test credits",
+        });
+      });
+
+      const createResp = await fetch(`${frontdoorRunning.origin}/api/servers/create`, {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          display_name: "Sandbox Callback Server",
+          server_class: "standard",
+          deployment_class: "customer_server",
+          plan: "cax11",
+        }),
+      });
+      expect(createResp.status).toBe(200);
+
+      const created = withStore(frontdoor.config, (store) =>
+        store
+          .getServersForAccount(SEEDED_ACCOUNT_ID)
+          .find((item) => item.provider === "sandbox" && item.displayName === "Sandbox Callback Server"),
+      );
+      expect(created?.status).toBe("provisioning");
+      expect(created?.providerServerId).toMatch(/^sandbox-/);
+      expect(created?.provisionToken).toMatch(/^prov-/);
+      expect(runnerCalls).toEqual(
+        expect.arrayContaining([
+          ["rm", "-f", created?.providerServerId ?? ""],
+          expect.arrayContaining(["run", "-d", "--name", created?.providerServerId ?? ""]),
+        ]),
+      );
+
+      const callbackResp = await fetch(`${frontdoorRunning.origin}/api/internal/provision-callback`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${created?.provisionToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          tenant_id: created?.tenantId,
+          server_id: created?.serverId,
+          private_ip: "127.0.0.1",
+          transport_host: "127.0.0.1",
+          runtime_port: 19123,
+          status: "running",
+        }),
+      });
+      expect(callbackResp.status).toBe(200);
+
+      const updated = withStore(frontdoor.config, (store) => store.getServer(created?.serverId ?? ""));
+      expect(updated?.status).toBe("running");
+      expect(updated?.transportHost).toBe("127.0.0.1");
+      expect(updated?.runtimePort).toBe(19123);
+      expect(updated?.provisionToken).toBeNull();
+    } finally {
+      fs.rmSync(hostStateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("passes sandbox staging roots to direct runtime package installs", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const hostStateRoot = fs.mkdtempSync(path.join(tmpdir(), "frontdoor-sandbox-install-"));
+    try {
+      const config = baseConfig(runtime.origin);
+      seedProducts(config, [{ productId: "spike", displayName: "Spike" }]);
+      stageFakePackage(config, "spike", "1.0.3", "app", undefined, {
+        os: "linux",
+        arch: "arm64",
+      });
+      const sandboxProvider = new DockerSandboxProvider({
+        imageName: "nex-cleanroom:local",
+        hostStateRoot,
+        allocatePort: async () => 19124,
+        runner: async () => ({ stdout: "", stderr: "" }),
+      });
+      const frontdoor = createFrontdoorServer({
+        config,
+        namedCloudProviders: { sandbox: sandboxProvider },
+        standardProvisionProviderName: "sandbox",
+      });
+      const frontdoorRunning = await listen(frontdoor.server);
+      const cookie = await login(frontdoorRunning.origin);
+      withStore(frontdoor.config, (store) => {
+        const account = store.getAccountsForUser("u-owner")[0];
+        if (!account) {
+          throw new Error("missing_owner_account");
+        }
+        store.addCredits({
+          accountId: account.accountId,
+          amountCents: 500,
+          type: "deposit",
+          description: "sandbox install test credits",
+        });
+      });
+
+      const createResp = await fetch(`${frontdoorRunning.origin}/api/servers/create`, {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          display_name: "Sandbox Install Server",
+          server_class: "standard",
+          deployment_class: "customer_server",
+          plan: "cax11",
+        }),
+      });
+      expect(createResp.status).toBe(200);
+
+      const created = withStore(frontdoor.config, (store) =>
+        store
+          .getServersForAccount(SEEDED_ACCOUNT_ID)
+          .find((item) => item.provider === "sandbox" && item.displayName === "Sandbox Install Server"),
+      );
+      expect(created?.providerServerId).toMatch(/^sandbox-/);
+
+      const callbackResp = await fetch(`${frontdoorRunning.origin}/api/internal/provision-callback`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${created?.provisionToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          tenant_id: created?.tenantId,
+          server_id: created?.serverId,
+          private_ip: "127.0.0.1",
+          transport_host: "127.0.0.1",
+          runtime_port: 19124,
+          status: "running",
+        }),
+      });
+      expect(callbackResp.status).toBe(200);
+
+      const installSpy = vi
+        .spyOn(sshHelper, "installPackageViaRuntimeHttp")
+        .mockResolvedValue({ ok: true });
+
+      const purchaseResp = await fetch(`${frontdoorRunning.origin}/api/apps/spike/purchase`, {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ install: false }),
+      });
+      expect(purchaseResp.status).toBe(200);
+
+      const installResp = await fetch(
+        `${frontdoorRunning.origin}/api/servers/${encodeURIComponent(created?.serverId ?? "")}/apps/spike/install`,
+        {
+          method: "POST",
+          headers: {
+            cookie,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({}),
+        },
+      );
+
+      expect(installResp.status).toBe(200);
+      expect(installSpy).toHaveBeenCalledTimes(1);
+      expect(installSpy.mock.calls[0]?.[0]).toMatchObject({
+        runtimeUrl: "http://127.0.0.1:19124",
+        kind: "app",
+        packageId: "spike",
+        version: "1.0.3",
+        stagingHostRoot: path.join(hostStateRoot, created?.providerServerId ?? "", "state/packages/staging"),
+        runtimeStagingRoot: "/opt/nex/state/packages/staging",
+      });
+    } finally {
+      fs.rmSync(hostStateRoot, { recursive: true, force: true });
+    }
   });
 });

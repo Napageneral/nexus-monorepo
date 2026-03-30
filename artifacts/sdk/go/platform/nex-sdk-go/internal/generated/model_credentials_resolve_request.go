@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -18,24 +18,24 @@ import (
 
 // CredentialsResolveRequest struct for CredentialsResolveRequest
 type CredentialsResolveRequest struct {
-	AppsInstallAliasApiAppsInstallRequest *AppsInstallAliasApiAppsInstallRequest
+	AclRequestsShowRequest *AclRequestsShowRequest
 	CredentialsResolveRequestAnyOf *CredentialsResolveRequestAnyOf
 }
 
 // Unmarshal JSON data into any of the pointers in the struct
 func (dst *CredentialsResolveRequest) UnmarshalJSON(data []byte) error {
 	var err error
-	// try to unmarshal JSON data into AppsInstallAliasApiAppsInstallRequest
-	err = json.Unmarshal(data, &dst.AppsInstallAliasApiAppsInstallRequest);
+	// try to unmarshal JSON data into AclRequestsShowRequest
+	err = json.Unmarshal(data, &dst.AclRequestsShowRequest);
 	if err == nil {
-		jsonAppsInstallAliasApiAppsInstallRequest, _ := json.Marshal(dst.AppsInstallAliasApiAppsInstallRequest)
-		if string(jsonAppsInstallAliasApiAppsInstallRequest) == "{}" { // empty struct
-			dst.AppsInstallAliasApiAppsInstallRequest = nil
+		jsonAclRequestsShowRequest, _ := json.Marshal(dst.AclRequestsShowRequest)
+		if string(jsonAclRequestsShowRequest) == "{}" { // empty struct
+			dst.AclRequestsShowRequest = nil
 		} else {
-			return nil // data stored in dst.AppsInstallAliasApiAppsInstallRequest, return on the first match
+			return nil // data stored in dst.AclRequestsShowRequest, return on the first match
 		}
 	} else {
-		dst.AppsInstallAliasApiAppsInstallRequest = nil
+		dst.AclRequestsShowRequest = nil
 	}
 
 	// try to unmarshal JSON data into CredentialsResolveRequestAnyOf
@@ -56,8 +56,8 @@ func (dst *CredentialsResolveRequest) UnmarshalJSON(data []byte) error {
 
 // Marshal data from the first non-nil pointers in the struct to JSON
 func (src CredentialsResolveRequest) MarshalJSON() ([]byte, error) {
-	if src.AppsInstallAliasApiAppsInstallRequest != nil {
-		return json.Marshal(&src.AppsInstallAliasApiAppsInstallRequest)
+	if src.AclRequestsShowRequest != nil {
+		return json.Marshal(&src.AclRequestsShowRequest)
 	}
 
 	if src.CredentialsResolveRequestAnyOf != nil {

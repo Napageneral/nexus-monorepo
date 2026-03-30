@@ -821,7 +821,7 @@ type AclRequestsDenyRequest = generated.AclRequestsDenyRequest
 
 type AclRequestsListRequest = generated.AclRequestsListRequest
 
-type AclRequestsShowRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type AclRequestsShowRequest = generated.AclRequestsShowRequest
 
 type AdapterConnectionsListRequest = map[string]interface{}
 
@@ -939,31 +939,31 @@ type AgentsUpdateRequest = generated.AgentsUpdateRequest
 
 type AgentsWaitRequest = generated.AgentsWaitRequest
 
-type AppsGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type AppsGetRequest = generated.AclRequestsShowRequest
 
-type AppsInstallRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type AppsInstallRequest = generated.AclRequestsShowRequest
 
 type AppsListRequest = map[string]interface{}
 
-type AppsLogsRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type AppsLogsRequest = generated.AclRequestsShowRequest
 
-type AppsMethodsRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type AppsMethodsRequest = generated.AclRequestsShowRequest
 
-type AppsStartRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type AppsStartRequest = generated.AclRequestsShowRequest
 
-type AppsStatusRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type AppsStatusRequest = generated.AclRequestsShowRequest
 
-type AppsStopRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type AppsStopRequest = generated.AclRequestsShowRequest
 
-type AppsUninstallRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type AppsUninstallRequest = generated.AclRequestsShowRequest
 
-type AuthLoginRequest = generated.AuthLoginAliasApiAuthLoginRequest
+type AuthLoginRequest = generated.AuthLoginRequest
 
 type AuthTokensCreateRequest = generated.AuthTokensCreateRequest
 
 type AuthTokensListRequest = generated.AuthTokensListRequest
 
-type AuthTokensRevokeRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type AuthTokensRevokeRequest = generated.AclRequestsShowRequest
 
 type AuthTokensRotateRequest = generated.AuthTokensRotateRequest
 
@@ -977,13 +977,13 @@ type BrowserRequestRequest = map[string]interface{}
 
 type ChannelsCreateRequest = generated.ChannelsCreateRequest
 
-type ChannelsGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type ChannelsGetRequest = generated.AclRequestsShowRequest
 
 type ChannelsHistoryRequest = generated.ChannelsHistoryRequest
 
 type ChannelsListRequest = generated.ChannelsListRequest
 
-type ChannelsParticipantsGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type ChannelsParticipantsGetRequest = generated.AclRequestsShowRequest
 
 type ChannelsParticipantsHistoryRequest = generated.ChannelsParticipantsHistoryRequest
 
@@ -1009,7 +1009,7 @@ type ConfigSetRequest = generated.ConfigSetRequest
 
 type ContactsCreateRequest = generated.ContactsCreateRequest
 
-type ContactsGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type ContactsGetRequest = generated.AclRequestsShowRequest
 
 type ContactsHistoryRequest = generated.ContactsHistoryRequest
 
@@ -1023,13 +1023,13 @@ type ContactsUpdateRequest = generated.ContactsUpdateRequest
 
 type CredentialsCreateRequest = generated.CredentialsCreateRequest
 
-type CredentialsGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type CredentialsGetRequest = generated.AclRequestsShowRequest
 
 type CredentialsListRequest = generated.CredentialsListRequest
 
 type CredentialsResolveRequest = generated.CredentialsResolveRequest
 
-type CredentialsRevokeRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type CredentialsRevokeRequest = generated.AclRequestsShowRequest
 
 type CredentialsUpdateRequest = generated.CredentialsUpdateRequest
 
@@ -1061,7 +1061,7 @@ type DagsUpdateRequest = map[string]interface{}
 
 type EntitiesCreateRequest = generated.EntitiesCreateRequest
 
-type EntitiesGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type EntitiesGetRequest = generated.AclRequestsShowRequest
 
 type EntitiesListRequest = generated.EntitiesListRequest
 
@@ -1089,9 +1089,9 @@ type EventsSubscribeRequest = map[string]interface{}
 
 type EventsSubscriptionsCreateRequest = generated.EventsSubscriptionsCreateRequest
 
-type EventsSubscriptionsDeleteRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type EventsSubscriptionsDeleteRequest = generated.AclRequestsShowRequest
 
-type EventsSubscriptionsGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type EventsSubscriptionsGetRequest = generated.AclRequestsShowRequest
 
 type EventsSubscriptionsListRequest = generated.EventsSubscriptionsListRequest
 
@@ -1101,9 +1101,9 @@ type EventsUnsubscribeRequest = map[string]interface{}
 
 type GroupsCreateRequest = generated.GroupsCreateRequest
 
-type GroupsDeleteRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type GroupsDeleteRequest = generated.AclRequestsShowRequest
 
-type GroupsGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type GroupsGetRequest = generated.AclRequestsShowRequest
 
 type GroupsListRequest = generated.EntitiesMergeCandidatesRequest
 
@@ -1119,9 +1119,9 @@ type JobsCancelRequest = generated.JobsCancelRequest
 
 type JobsCreateRequest = generated.JobsCreateRequest
 
-type JobsDeleteRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type JobsDeleteRequest = generated.AclRequestsShowRequest
 
-type JobsGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type JobsGetRequest = generated.AclRequestsShowRequest
 
 type JobsIdempotencyListRequest = generated.JobsIdempotencyListRequest
 
@@ -1139,7 +1139,7 @@ type JobsRequeueRequest = generated.JobsCancelRequest
 
 type JobsRetryRequest = generated.JobsCancelRequest
 
-type JobsRunsGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type JobsRunsGetRequest = generated.AclRequestsShowRequest
 
 type JobsRunsListRequest = generated.JobsRunsListRequest
 
@@ -1251,7 +1251,7 @@ type ModelsDefaultsGetRequest = map[string]interface{}
 
 type ModelsDefaultsPutRequest = map[string]interface{}
 
-type ModelsGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type ModelsGetRequest = generated.AclRequestsShowRequest
 
 type ModelsListRequest = map[string]interface{}
 
@@ -1289,7 +1289,7 @@ type ProductControlPlaneCallRequest = generated.ProductControlPlaneCallRequest
 
 type RecordIngestRequest = generated.RecordIngestRequest
 
-type RecordsGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type RecordsGetRequest = generated.AclRequestsShowRequest
 
 type RecordsListRequest = generated.RecordsListRequest
 
@@ -1309,25 +1309,25 @@ type RuntimeHealthRequest = generated.RuntimeHealthRequest
 
 type SandboxesCreateRequest = generated.SandboxesCreateRequest
 
-type SandboxesDestroyRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type SandboxesDestroyRequest = generated.AclRequestsShowRequest
 
 type SandboxesExecRequest = generated.SandboxesExecRequest
 
 type SandboxesForkRequest = generated.SandboxesForkRequest
 
-type SandboxesGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type SandboxesGetRequest = generated.AclRequestsShowRequest
 
 type SandboxesListRequest = generated.SandboxesListRequest
 
-type SandboxesResumeRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type SandboxesResumeRequest = generated.AclRequestsShowRequest
 
-type SandboxesRetainRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type SandboxesRetainRequest = generated.AclRequestsShowRequest
 
 type SchedulesCreateRequest = generated.SchedulesCreateRequest
 
-type SchedulesDeleteRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type SchedulesDeleteRequest = generated.AclRequestsShowRequest
 
-type SchedulesGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type SchedulesGetRequest = generated.AclRequestsShowRequest
 
 type SchedulesListRequest = generated.SchedulesListRequest
 
@@ -1367,21 +1367,21 @@ type WizardStatusRequest = generated.AgentsSessionsResetRequest
 
 type WorkspacesCreateRequest = generated.WorkspacesCreateRequest
 
-type WorkspacesDeleteRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type WorkspacesDeleteRequest = generated.AclRequestsShowRequest
 
 type WorkspacesFilesDeleteRequest = generated.WorkspacesFilesDeleteRequest
 
 type WorkspacesFilesGetRequest = generated.WorkspacesFilesDeleteRequest
 
-type WorkspacesFilesListRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type WorkspacesFilesListRequest = generated.AclRequestsShowRequest
 
 type WorkspacesFilesSetRequest = generated.WorkspacesFilesSetRequest
 
-type WorkspacesGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type WorkspacesGetRequest = generated.AclRequestsShowRequest
 
 type WorkspacesListRequest = generated.WorkspacesListRequest
 
-type WorkspacesManifestGetRequest = generated.AppsInstallAliasApiAppsInstallRequest
+type WorkspacesManifestGetRequest = generated.AclRequestsShowRequest
 
 type WorkspacesManifestUpdateRequest = generated.WorkspacesManifestUpdateRequest
 
@@ -2127,7 +2127,7 @@ func (a *AclRequestsClient) List(ctx context.Context, request AclRequestsListReq
 
 func (a *AclRequestsClient) Show(ctx context.Context, request AclRequestsShowRequest) (*AclRequestsShowResponse, error) {
   builder := a.raw.ACLAPI.AclRequestsShow(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -2717,7 +2717,7 @@ func (a *AgentsSessionsImportsClient) List(ctx context.Context, request AgentsSe
 
 func (a *AppsClient) Get(ctx context.Context, request AppsGetRequest) (*AppsGetResponse, error) {
   builder := a.raw.AppsAPI.AppsGet(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -2727,7 +2727,7 @@ func (a *AppsClient) Get(ctx context.Context, request AppsGetRequest) (*AppsGetR
 
 func (a *AppsClient) Install(ctx context.Context, request AppsInstallRequest) (*AppsInstallResponse, error) {
   builder := a.raw.AppsAPI.AppsInstall(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -2747,7 +2747,7 @@ func (a *AppsClient) List(ctx context.Context, request AppsListRequest) (*AppsLi
 
 func (a *AppsClient) Logs(ctx context.Context, request AppsLogsRequest) (*AppsLogsResponse, error) {
   builder := a.raw.AppsAPI.AppsLogs(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -2757,7 +2757,7 @@ func (a *AppsClient) Logs(ctx context.Context, request AppsLogsRequest) (*AppsLo
 
 func (a *AppsClient) Methods(ctx context.Context, request AppsMethodsRequest) (*AppsMethodsResponse, error) {
   builder := a.raw.AppsAPI.AppsMethods(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -2767,7 +2767,7 @@ func (a *AppsClient) Methods(ctx context.Context, request AppsMethodsRequest) (*
 
 func (a *AppsClient) Start(ctx context.Context, request AppsStartRequest) (*AppsStartResponse, error) {
   builder := a.raw.AppsAPI.AppsStart(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -2777,7 +2777,7 @@ func (a *AppsClient) Start(ctx context.Context, request AppsStartRequest) (*Apps
 
 func (a *AppsClient) Status(ctx context.Context, request AppsStatusRequest) (*AppsStatusResponse, error) {
   builder := a.raw.AppsAPI.AppsStatus(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -2787,7 +2787,7 @@ func (a *AppsClient) Status(ctx context.Context, request AppsStatusRequest) (*Ap
 
 func (a *AppsClient) Stop(ctx context.Context, request AppsStopRequest) (*AppsStopResponse, error) {
   builder := a.raw.AppsAPI.AppsStop(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -2797,7 +2797,7 @@ func (a *AppsClient) Stop(ctx context.Context, request AppsStopRequest) (*AppsSt
 
 func (a *AppsClient) Uninstall(ctx context.Context, request AppsUninstallRequest) (*AppsUninstallResponse, error) {
   builder := a.raw.AppsAPI.AppsUninstall(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -2807,7 +2807,7 @@ func (a *AppsClient) Uninstall(ctx context.Context, request AppsUninstallRequest
 
 func (a *AuthClient) Login(ctx context.Context, request AuthLoginRequest) (*AuthLoginResponse, error) {
   builder := a.raw.AuthAPI.AuthLogin(ctx)
-  builder = builder.AuthLoginAliasApiAuthLoginRequest(request)
+  builder = builder.AuthLoginRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -2837,7 +2837,7 @@ func (a *AuthTokensClient) List(ctx context.Context, request AuthTokensListReque
 
 func (a *AuthTokensClient) Revoke(ctx context.Context, request AuthTokensRevokeRequest) (*AuthTokensRevokeResponse, error) {
   builder := a.raw.AuthAPI.AuthTokensRevoke(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -2907,7 +2907,7 @@ func (c *ChannelsClient) Create(ctx context.Context, request ChannelsCreateReque
 
 func (c *ChannelsClient) Get(ctx context.Context, request ChannelsGetRequest) (*ChannelsGetResponse, error) {
   builder := c.raw.ChannelsAPI.ChannelsGet(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -2977,7 +2977,7 @@ func (c *ChannelsClient) Update(ctx context.Context, request ChannelsUpdateReque
 
 func (c *ChannelsParticipantsClient) Get(ctx context.Context, request ChannelsParticipantsGetRequest) (*ChannelsParticipantsGetResponse, error) {
   builder := c.raw.ChannelsAPI.ChannelsParticipantsGet(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -3067,7 +3067,7 @@ func (c *ContactsClient) Create(ctx context.Context, request ContactsCreateReque
 
 func (c *ContactsClient) Get(ctx context.Context, request ContactsGetRequest) (*ContactsGetResponse, error) {
   builder := c.raw.ContactsAPI.ContactsGet(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -3137,7 +3137,7 @@ func (c *CredentialsClient) Create(ctx context.Context, request CredentialsCreat
 
 func (c *CredentialsClient) Get(ctx context.Context, request CredentialsGetRequest) (*CredentialsGetResponse, error) {
   builder := c.raw.CredentialsAPI.CredentialsGet(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -3167,7 +3167,7 @@ func (c *CredentialsClient) Resolve(ctx context.Context, request CredentialsReso
 
 func (c *CredentialsClient) Revoke(ctx context.Context, request CredentialsRevokeRequest) (*CredentialsRevokeResponse, error) {
   builder := c.raw.CredentialsAPI.CredentialsRevoke(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -3327,7 +3327,7 @@ func (e *EntitiesClient) Create(ctx context.Context, request EntitiesCreateReque
 
 func (e *EntitiesClient) Get(ctx context.Context, request EntitiesGetRequest) (*EntitiesGetResponse, error) {
   builder := e.raw.EntitiesAPI.EntitiesGet(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -3477,7 +3477,7 @@ func (e *EventsSubscriptionsClient) Create(ctx context.Context, request EventsSu
 
 func (e *EventsSubscriptionsClient) Delete(ctx context.Context, request EventsSubscriptionsDeleteRequest) (*EventsSubscriptionsDeleteResponse, error) {
   builder := e.raw.EventsAPI.EventsSubscriptionsDelete(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -3487,7 +3487,7 @@ func (e *EventsSubscriptionsClient) Delete(ctx context.Context, request EventsSu
 
 func (e *EventsSubscriptionsClient) Get(ctx context.Context, request EventsSubscriptionsGetRequest) (*EventsSubscriptionsGetResponse, error) {
   builder := e.raw.EventsAPI.EventsSubscriptionsGet(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -3527,7 +3527,7 @@ func (g *GroupsClient) Create(ctx context.Context, request GroupsCreateRequest) 
 
 func (g *GroupsClient) Delete(ctx context.Context, request GroupsDeleteRequest) (*GroupsDeleteResponse, error) {
   builder := g.raw.GroupsAPI.GroupsDelete(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -3537,7 +3537,7 @@ func (g *GroupsClient) Delete(ctx context.Context, request GroupsDeleteRequest) 
 
 func (g *GroupsClient) Get(ctx context.Context, request GroupsGetRequest) (*GroupsGetResponse, error) {
   builder := g.raw.GroupsAPI.GroupsGet(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -3617,7 +3617,7 @@ func (j *JobsClient) Create(ctx context.Context, request JobsCreateRequest) (*Jo
 
 func (j *JobsClient) Delete(ctx context.Context, request JobsDeleteRequest) (*JobsDeleteResponse, error) {
   builder := j.raw.JobsAPI.JobsDelete(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -3627,7 +3627,7 @@ func (j *JobsClient) Delete(ctx context.Context, request JobsDeleteRequest) (*Jo
 
 func (j *JobsClient) Get(ctx context.Context, request JobsGetRequest) (*JobsGetResponse, error) {
   builder := j.raw.JobsAPI.JobsGet(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -3737,7 +3737,7 @@ func (j *JobsQueueClient) List(ctx context.Context, request JobsQueueListRequest
 
 func (j *JobsRunsClient) Get(ctx context.Context, request JobsRunsGetRequest) (*JobsRunsGetResponse, error) {
   builder := j.raw.JobsAPI.JobsRunsGet(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -4117,7 +4117,7 @@ func (m *MemorySetsMembersClient) List(ctx context.Context, request MemorySetsMe
 
 func (m *ModelsClient) Get(ctx context.Context, request ModelsGetRequest) (*ModelsGetResponse, error) {
   builder := m.raw.ModelsAPI.ModelsGet(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -4467,7 +4467,7 @@ func (r *RecordClient) Ingest(ctx context.Context, request RecordIngestRequest) 
 
 func (r *RecordsClient) Get(ctx context.Context, request RecordsGetRequest) (*RecordsGetResponse, error) {
   builder := r.raw.RecordsAPI.RecordsGet(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -4567,7 +4567,7 @@ func (s *SandboxesClient) Create(ctx context.Context, request SandboxesCreateReq
 
 func (s *SandboxesClient) Destroy(ctx context.Context, request SandboxesDestroyRequest) (*SandboxesDestroyResponse, error) {
   builder := s.raw.RuntimeAPI.SandboxesDestroy(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -4597,7 +4597,7 @@ func (s *SandboxesClient) Fork(ctx context.Context, request SandboxesForkRequest
 
 func (s *SandboxesClient) Get(ctx context.Context, request SandboxesGetRequest) (*SandboxesGetResponse, error) {
   builder := s.raw.RuntimeAPI.SandboxesGet(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -4617,7 +4617,7 @@ func (s *SandboxesClient) List(ctx context.Context, request SandboxesListRequest
 
 func (s *SandboxesClient) Resume(ctx context.Context, request SandboxesResumeRequest) (*SandboxesResumeResponse, error) {
   builder := s.raw.RuntimeAPI.SandboxesResume(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -4627,7 +4627,7 @@ func (s *SandboxesClient) Resume(ctx context.Context, request SandboxesResumeReq
 
 func (s *SandboxesClient) Retain(ctx context.Context, request SandboxesRetainRequest) (*SandboxesRetainResponse, error) {
   builder := s.raw.RuntimeAPI.SandboxesRetain(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -4647,7 +4647,7 @@ func (s *SchedulesClient) Create(ctx context.Context, request SchedulesCreateReq
 
 func (s *SchedulesClient) Delete(ctx context.Context, request SchedulesDeleteRequest) (*SchedulesDeleteResponse, error) {
   builder := s.raw.SchedulesAPI.SchedulesDelete(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -4657,7 +4657,7 @@ func (s *SchedulesClient) Delete(ctx context.Context, request SchedulesDeleteReq
 
 func (s *SchedulesClient) Get(ctx context.Context, request SchedulesGetRequest) (*SchedulesGetResponse, error) {
   builder := s.raw.SchedulesAPI.SchedulesGet(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -4837,7 +4837,7 @@ func (w *WorkspacesClient) Create(ctx context.Context, request WorkspacesCreateR
 
 func (w *WorkspacesClient) Delete(ctx context.Context, request WorkspacesDeleteRequest) (*WorkspacesDeleteResponse, error) {
   builder := w.raw.WorkspacesAPI.WorkspacesDelete(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -4847,7 +4847,7 @@ func (w *WorkspacesClient) Delete(ctx context.Context, request WorkspacesDeleteR
 
 func (w *WorkspacesClient) Get(ctx context.Context, request WorkspacesGetRequest) (*WorkspacesGetResponse, error) {
   builder := w.raw.WorkspacesAPI.WorkspacesGet(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -4887,7 +4887,7 @@ func (w *WorkspacesFilesClient) Get(ctx context.Context, request WorkspacesFiles
 
 func (w *WorkspacesFilesClient) List(ctx context.Context, request WorkspacesFilesListRequest) (*WorkspacesFilesListResponse, error) {
   builder := w.raw.WorkspacesAPI.WorkspacesFilesList(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err
@@ -4907,7 +4907,7 @@ func (w *WorkspacesFilesClient) Set(ctx context.Context, request WorkspacesFiles
 
 func (w *WorkspacesManifestClient) Get(ctx context.Context, request WorkspacesManifestGetRequest) (*WorkspacesManifestGetResponse, error) {
   builder := w.raw.WorkspacesAPI.WorkspacesManifestGet(ctx)
-  builder = builder.AppsInstallAliasApiAppsInstallRequest(request)
+  builder = builder.AclRequestsShowRequest(request)
   response, _, err := builder.Execute()
   if err != nil {
     return nil, err

@@ -98,10 +98,16 @@ describe("agents controller", () => {
         });
       const state = makeState(request);
 
-      const id = await createAgent(state, { name: "New Agent" });
+      const id = await createAgent(state, {
+        name: "New Agent",
+        workspace: "/tmp/state/workspaces/new-agent",
+      });
 
       expect(id).toBe("new-1");
-      expect(request).toHaveBeenNthCalledWith(1, "agents.create", { name: "New Agent" });
+      expect(request).toHaveBeenNthCalledWith(1, "agents.create", {
+        name: "New Agent",
+        workspace: "/tmp/state/workspaces/new-agent",
+      });
       expect(request).toHaveBeenNthCalledWith(2, "agents.list", {});
       expect(state.agentsLoading).toBe(false);
     });
@@ -113,7 +119,10 @@ describe("agents controller", () => {
         .mockResolvedValueOnce({ agents: [{ id: "fallback-1", name: "F" }] });
       const state = makeState(request);
 
-      const id = await createAgent(state, { name: "F" });
+      const id = await createAgent(state, {
+        name: "F",
+        workspace: "/tmp/state/workspaces/f",
+      });
 
       expect(id).toBe("fallback-1");
     });
@@ -122,7 +131,10 @@ describe("agents controller", () => {
       const request = vi.fn().mockRejectedValueOnce(new Error("bad request"));
       const state = makeState(request);
 
-      const id = await createAgent(state, { name: "Fail" });
+      const id = await createAgent(state, {
+        name: "Fail",
+        workspace: "/tmp/state/workspaces/fail",
+      });
 
       expect(id).toBeNull();
       expect(state.agentsError).toContain("bad request");
@@ -134,7 +146,10 @@ describe("agents controller", () => {
       const state = makeState(request);
       state.connected = false;
 
-      const id = await createAgent(state, { name: "Nope" });
+      const id = await createAgent(state, {
+        name: "Nope",
+        workspace: "/tmp/state/workspaces/nope",
+      });
 
       expect(id).toBeNull();
       expect(request).not.toHaveBeenCalled();

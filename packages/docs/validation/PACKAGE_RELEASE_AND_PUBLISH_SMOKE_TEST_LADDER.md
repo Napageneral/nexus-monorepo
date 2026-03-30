@@ -14,8 +14,9 @@ The user-facing bar for this ladder is:
 
 1. every discovered package root is exercised
 2. the smoke test uses one controlled Frontdoor store
-3. only failing packages are patched
-4. after fixes, the same ladder reruns to green
+3. hosted cleanroom smoke can prove a released package on a fresh Frontdoor-created server
+4. only failing packages are patched
+5. after fixes, the same ladder reruns to green
 
 ## Scope
 
@@ -35,6 +36,7 @@ That currently includes:
 3. The controlled publish target must not be the live Frontdoor store.
 4. Failures are fixed only where they occur.
 5. The same shared ladder must be rerunnable after each fix.
+6. Hosted live smoke should prefer a fresh Frontdoor-created server rather than an already-lived-in server.
 
 ## Controlled Publish Target
 
@@ -84,6 +86,34 @@ If a package fails here, classify the failure as one of:
 3. Frontdoor publish script failure
 4. Frontdoor store consistency failure
 
+## Hosted Cleanroom Ladder
+
+For packages that need real hosted proof, continue with the shared hosted
+cleanroom wrapper:
+
+- `packages/scripts/hosted-cleanroom-package-smoke.py`
+
+The canonical hosted cleanroom flow is:
+
+1. release the package from its package root
+2. optionally publish it through the existing shared Frontdoor publish path
+3. provision a fresh server through Frontdoor
+4. run package install and runtime smoke on that fresh server
+5. destroy or archive the server as cleanup
+
+For durable proof capture, prefer the shared wrapper:
+
+- `packages/scripts/capture-hosted-cleanroom-package-smoke.sh`
+
+The green bar is:
+
+1. the package releases successfully
+2. hosted smoke runs on a fresh Frontdoor-created server
+3. app installs launch and runtime-token-authenticated runtime health and
+   catalog proof pass, or adapter installs converge and runtime-token-authenticated
+   runtime health passes
+4. cleanup succeeds and the server does not remain stranded by default
+
 ## Fix Policy
 
 Only fix packages that fail the ladder.
@@ -110,7 +140,8 @@ Success requires all of the following:
 2. every discovered package root passes release
 3. every released package publishes into the controlled Frontdoor DB
 4. the controlled Frontdoor DB contains the expected package, release, and variant records
-5. a rerun after fixes remains green
+5. hosted cleanroom smoke passes for the packages being actively certified for hosted operation
+6. a rerun after fixes remains green
 
 ## Deliverables
 
@@ -120,4 +151,6 @@ This ladder produces:
 2. one shared batch publish smoke-test script
 3. one controlled Frontdoor DB for the smoke run
 4. a per-package result summary for release and publish
-5. only the minimal package/shared fixes required to make the ladder pass
+5. one shared hosted cleanroom smoke wrapper for fresh-server package proof
+6. optional cleanroom proof bundles with command, stdout, stderr, and result metadata
+7. only the minimal package/shared fixes required to make the ladder pass

@@ -1,7 +1,7 @@
 /*
 Nex API
 
-Published HTTP projection of the Nex runtime API from the canonical runtime-api operation layer. Canonical operation paths are /runtime/operations/<method>; static alias routes are included where the runtime exposes them.
+Published HTTP projection of the Nex runtime API from the canonical runtime operation layer. Canonical operation paths are /runtime/operations/<method>.
 
 API version: 2026-03-12
 */
@@ -70,9 +70,9 @@ func (o *AclAuditGet200Response) SetOk(v bool) {
 	o.Ok = v
 }
 
-// GetPayload returns the Payload field value if set, zero value otherwise (both if not set or set to explicit null).
+// GetPayload returns the Payload field value if set, zero value otherwise.
 func (o *AclAuditGet200Response) GetPayload() map[string]interface{} {
-	if o == nil {
+	if o == nil || IsNil(o.Payload) {
 		var ret map[string]interface{}
 		return ret
 	}
@@ -81,7 +81,6 @@ func (o *AclAuditGet200Response) GetPayload() map[string]interface{} {
 
 // GetPayloadOk returns a tuple with the Payload field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-// NOTE: If the value is an explicit nil, `nil, true` will be returned
 func (o *AclAuditGet200Response) GetPayloadOk() (map[string]interface{}, bool) {
 	if o == nil || IsNil(o.Payload) {
 		return map[string]interface{}{}, false
@@ -147,7 +146,7 @@ func (o AclAuditGet200Response) MarshalJSON() ([]byte, error) {
 func (o AclAuditGet200Response) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["ok"] = o.Ok
-	if o.Payload != nil {
+	if !IsNil(o.Payload) {
 		toSerialize["payload"] = o.Payload
 	}
 	if o.Meta != nil {
