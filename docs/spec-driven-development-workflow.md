@@ -1,7 +1,7 @@
 # Spec-Driven Development Workflow
 
 **Status:** CANONICAL
-**Last Updated:** 2026-03-27
+**Last Updated:** 2026-03-28
 
 ---
 
@@ -72,8 +72,15 @@ active validation corpus even after the original implementation work is done.
 
 ### 3a. Cleanroom validation is the default proof posture
 
-For runtime-affecting work, the primary proof path should run in a disposable
+For runtime-affecting work, the primary proof path must run in a disposable
 cleanroom rather than against the operator's live local runtime.
+
+The canonical cleanroom model is layered:
+
+- keep a small host-level cleanroom kernel outside Nex for source-release,
+  bootstrap, launcher, and substrate proof
+- run most feature and integration validation inside runtime-managed sandboxes
+  once that kernel already passes
 
 This applies especially to work involving:
 
@@ -83,13 +90,81 @@ This applies especially to work involving:
 - identity and credentials
 - hosted provisioning and install flows
 
-Prefer a Docker-backed or otherwise containerized cleanroom when practical.
+The default outer cleanroom executor is Docker-backed or equivalently
+containerized.
+
+That outer layer is not the whole validation world.
+
+When the behavior being proven does not require proving Nex bootstrap from
+absolute zero, prefer runtime-managed sandbox validation over one-off host shell
+glue.
+
+Any validation lane that does not use a Docker-backed or otherwise explicitly
+containerized cleanroom must justify the exception in the active validation
+doc.
+
+For hosted validation, the preferred target is also disposable:
+
+- a fresh Frontdoor-managed hosted server surrogate
+- provisioned through the same create/bootstrap/runtime-token/install seams
+- but backed by a sandboxed local cleanroom substrate unless the behavior is
+  explicitly provider-specific or compliance-bound
 
 Live local dogfood is still important, but it is a secondary pass for:
 
 - repair and forensics
 - final operator confirmation
 - behaviors that truly depend on an already-lived-in local runtime
+
+### 3b. Golden-journey proof is the default review artifact
+
+For user-facing or operator-facing runtime work, the default review artifact is
+not a pile of tiny test recordings.
+
+The default review shape is layered:
+
+- one primary narrative proof run that demonstrates the feature in a human
+  end-to-end flow
+- smaller coverage tests that protect correctness and speed diagnosis
+
+The primary narrative proof should usually be a cumulative golden journey that:
+
+- starts from sandbox startup or fresh bootstrap when that is part of the
+  feature story
+- records the whole sandbox session, not only the browser surface
+- shows the same sequence a human operator would care about
+- proves the new feature integrated into the real product flow
+
+The smaller coverage suite is still required.
+
+But its debug media is secondary. Successful runs should retain only the
+minimal media needed for diagnosis or audit, while the golden-journey artifact
+is the thing a reviewer watches first.
+
+### 3c. Human-shaped validation scripts must be explicit before execution
+
+When an agent proposes a user-facing or operator-facing validation run, it must
+surface the exact validation script before execution.
+
+That script should include:
+
+- what the validating agent will say
+- what buttons, commands, or product actions it will take
+- what external messages or prompts it will send
+- what expected outcomes it is checking
+- which steps are happy-path proof versus edge-case or failure-case proof
+
+The point is to prevent agents from inventing synthetic, un-human phrasing that
+technically exercises a feature without truthfully validating it.
+
+The validation script may live in:
+
+- the active workplan ticket
+- the validation ladder
+- or the owning Dispatch job packet once Dispatch becomes the primary operator
+  surface
+
+Until that script is explicit, the validation plan is incomplete.
 
 ### 4. Archive finished or superseded material
 
@@ -271,6 +346,12 @@ Additional board rules:
    superseded
 5. if a ticket discovers target-state conflict, update the spec before moving
    implementation forward
+6. until Dispatch can durably own board state and review artifacts, the repo
+   workplan board remains the canonical planning surface even if execution is
+   mirrored into Dispatch
+7. once Dispatch is ready, the preferred operator-facing execution surface is a
+   Dispatch board backed by the same canonical specs, tickets, and validation
+   rules rather than a second ad hoc workflow
 
 ### `validation/`
 
@@ -283,9 +364,11 @@ Characteristics:
 - updated as specs or proof methods change
 - can include manual and automated checks
 - may remain active after implementation work completes
-- should prefer disposable cleanroom or containerized proof paths when the
-  behavior touches runtime, bootstrap, storage, apps, adapters, or hosted
-  provisioning
+- should use a Docker-backed or equivalently containerized cleanroom executor
+  by default when the behavior touches runtime, bootstrap, storage, apps,
+  adapters, or hosted provisioning
+- should explain any non-containerized exception explicitly in the active
+  validation ladder
 
 Validation docs fall into three subtypes:
 
@@ -298,6 +381,16 @@ Validation docs fall into three subtypes:
 3. campaign or migration validation
    - narrow one-off rollout proof
    - archives once superseded or no longer the right proof path
+
+Validation docs for user-facing flows should also distinguish two evidence
+layers:
+
+1. primary golden-journey review artifact
+   - the main demo proof a human reviewer watches
+   - normally one whole-sandbox session recording plus structured receipts
+2. secondary debug artifact set
+   - traces, per-test logs, screenshots, and optional per-test video
+   - kept for diagnosis, not as the first review surface
 
 ### `archive/`
 
@@ -438,13 +531,16 @@ Outputs:
 
 - validation ladders
 - supporting scripts
-- reusable cleanroom proof paths when the implemented behavior materially
-  changes runtime-facing or provisioning behavior
+- reusable proof paths when the implemented behavior materially changes
+  runtime-facing or provisioning behavior
+  - host-level Docker or VM cleanrooms for bootstrap and substrate proof
+  - runtime-managed sandbox campaigns for most feature and integration proof
 - explicit pass/fail criteria tied to the specs
 
 Gate:
 
-- there is a concrete cleanroom-first way to prove the target state works
+- there is a concrete layered cleanroom-first way to prove the target state
+  works
 
 ### 7. Full spec/workplan/archive alignment pass
 
@@ -496,8 +592,8 @@ Outputs:
 Gate:
 
 - the system is proven against the current target-state specs, starting from a
-  disposable cleanroom unless the behavior explicitly requires a lived-in local
-  runtime
+  Docker-backed disposable cleanroom unless the behavior explicitly requires a
+  lived-in local runtime
 
 ### 11. Independent final gap review
 
