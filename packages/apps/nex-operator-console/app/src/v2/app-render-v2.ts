@@ -617,7 +617,30 @@ export function renderAppV2(state: AppViewState) {
 
         ${activeTab === "memory" ? renderMemoryPage({
           subTab: (state as any)._v2MemorySubTab ?? "library",
-          onSubTabChange: (sub) => { (state as any)._v2MemorySubTab = sub; state.tab = "__v2_force__" as any; state.setTab("memory" as any); },
+          onSubTabChange: (sub) => {
+            (state as any)._v2MemorySubTab = sub;
+            const {
+              loadMemoryQualitySummary,
+              loadMemoryRuns,
+              runMemorySearch,
+            } = require("../ui/controllers/memory-review.ts");
+            if (sub === "quality") {
+              void loadMemoryQualitySummary(state as any, { loadItems: true });
+            } else if (
+              sub === "search" &&
+              !(state as any).memorySearchLoading &&
+              !(state as any).memorySearchResult
+            ) {
+              void runMemorySearch(state as any);
+            } else if (
+              sub === "library" &&
+              !(state as any).memoryLoading &&
+              (!Array.isArray((state as any).memoryRuns) || (state as any).memoryRuns.length === 0)
+            ) {
+              void loadMemoryRuns(state as any);
+            }
+            state.requestUpdate();
+          },
           loading: (state as any).memoryLoading ?? false,
           error: (state as any).memoryError ?? null,
           runs: (state as any).memoryRuns ?? [],
@@ -638,7 +661,7 @@ export function renderAppV2(state: AppViewState) {
           inspectorLoading: (state as any).memoryInspectorLoading ?? false,
           episodeDetail: (state as any).memoryEpisodeDetail ?? null,
           searchQuery: (state as any).memorySearchQuery ?? "",
-          searchType: (state as any).memorySearchType ?? "semantic",
+          searchType: (state as any).memorySearchType ?? "all",
           searchLoading: (state as any).memorySearchLoading ?? false,
           searchResults: (state as any).memorySearchResults ?? [],
           onSearchQueryChange: (q) => { (state as any).memorySearchQuery = q; },
@@ -647,14 +670,30 @@ export function renderAppV2(state: AppViewState) {
             const { runMemorySearch } = require("../ui/controllers/memory-review.ts");
             void runMemorySearch(state as any);
           },
+          qualityScope: (state as any).memoryQualityScope ?? "run",
           qualityLoading: (state as any).memoryQualityLoading ?? false,
           qualitySummary: (state as any).memoryQualitySummary ?? null,
-          qualityBucket: (state as any).memoryQualityBucket ?? "high",
-          qualityItems: (state as any).memoryQualityItems ?? [],
+          qualityItemsLoading: (state as any).memoryQualityItemsLoading ?? false,
+          qualityBucket: (state as any).memoryQualityBucket ?? "unconsolidated_facts",
+          qualityItems: (state as any).memoryQualityItems ?? null,
+          onQualityScopeChange: (scope) => {
+            (state as any).memoryQualityScope = scope;
+            (state as any).memoryQualityItemsOffset = 0;
+            const { loadMemoryQualitySummary } = require("../ui/controllers/memory-review.ts");
+            void loadMemoryQualitySummary(state as any, { loadItems: true });
+          },
           onQualityBucketSelect: (bucket) => {
             (state as any).memoryQualityBucket = bucket;
             const { loadMemoryQualityItems } = require("../ui/controllers/memory-review.ts");
-            void loadMemoryQualityItems(state as any, bucket);
+            (state as any).memoryQualityItemsOffset = 0;
+            void loadMemoryQualityItems(state as any, bucket, { offset: 0 });
+          },
+          onQualityPage: (offset) => {
+            (state as any).memoryQualityItemsOffset = Math.max(0, Math.trunc(offset));
+            const { loadMemoryQualityItems } = require("../ui/controllers/memory-review.ts");
+            void loadMemoryQualityItems(state as any, (state as any).memoryQualityBucket, {
+              offset: (state as any).memoryQualityItemsOffset,
+            });
           },
           detailKind: (state as any).memoryDetailKind ?? null,
           detailLoading: (state as any).memoryDetailLoading ?? false,

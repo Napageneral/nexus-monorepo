@@ -1,5 +1,11 @@
 import { html, nothing } from "lit";
 import { icons } from "../../ui/icons.ts";
+import type {
+  MemoryReviewSearchType,
+  MemoryReviewQualityBucket,
+  MemoryReviewQualityItemsResult,
+  MemoryReviewQualitySummary,
+} from "../../ui/types.ts";
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -49,7 +55,7 @@ export type MemoryPageProps = {
 
   // Search
   searchQuery: string;
-  searchType: "semantic" | "entity" | "fact" | "observation";
+  searchType: MemoryReviewSearchType;
   searchLoading: boolean;
   searchResults: Array<{
     id: string;
@@ -63,23 +69,15 @@ export type MemoryPageProps = {
   onSearch: () => void;
 
   // Quality
+  qualityScope: "run" | "global";
   qualityLoading: boolean;
-  qualitySummary: {
-    total?: number;
-    high?: number;
-    medium?: number;
-    low?: number;
-    unscored?: number;
-  } | null;
-  qualityBucket: "high" | "medium" | "low" | "unscored";
-  qualityItems: Array<{
-    id: string;
-    kind: string;
-    text: string;
-    score?: number;
-    reason?: string;
-  }>;
+  qualitySummary: MemoryReviewQualitySummary | null;
+  qualityItemsLoading: boolean;
+  qualityBucket: MemoryReviewQualityBucket;
+  qualityItems: MemoryReviewQualityItemsResult | null;
+  onQualityScopeChange: (scope: MemoryPageProps["qualityScope"]) => void;
   onQualityBucketSelect: (bucket: MemoryPageProps["qualityBucket"]) => void;
+  onQualityPage: (offset: number) => void;
 
   // Detail panel
   detailKind: "entity" | "fact" | "observation" | null;
@@ -405,10 +403,10 @@ function renderLibraryTab(props: MemoryPageProps) {
 
 function renderSearchTab(props: MemoryPageProps) {
   const types: { key: MemoryPageProps["searchType"]; label: string }[] = [
-    { key: "semantic", label: "Semantic" },
-    { key: "entity", label: "Entity" },
-    { key: "fact", label: "Fact" },
-    { key: "observation", label: "Observation" },
+    { key: "all", label: "All" },
+    { key: "entities", label: "Entities" },
+    { key: "facts", label: "Facts" },
+    { key: "observations", label: "Observations" },
   ];
 
   return html`
@@ -510,136 +508,182 @@ function renderQualityTab(props: MemoryPageProps) {
   const buckets: {
     key: MemoryPageProps["qualityBucket"];
     label: string;
-    color: string;
-    badgeCls: string;
+    description: string;
     count: number;
-  }[] = [
-    {
-      key: "high",
-      label: "High",
-      color: "var(--v2-green, #22c55e)",
-      badgeCls: "v2-badge--success",
-      count: summary?.high ?? 0,
-    },
-    {
-      key: "medium",
-      label: "Medium",
-      color: "var(--v2-yellow, #eab308)",
-      badgeCls: "v2-badge--warning",
-      count: summary?.medium ?? 0,
-    },
-    {
-      key: "low",
-      label: "Low",
-      color: "var(--v2-red, #ef4444)",
-      badgeCls: "v2-badge--danger",
-      count: summary?.low ?? 0,
-    },
-    {
-      key: "unscored",
-      label: "Unscored",
-      color: "var(--v2-text-muted, #888)",
-      badgeCls: "v2-badge--neutral",
-      count: summary?.unscored ?? 0,
-    },
-  ];
+  }[] = summary
+    ? Object.values(summary.buckets)
+    : [];
+  const qualityItems = props.qualityItems?.items ?? [];
+  const qualityTotal = props.qualityItems?.total ?? 0;
+  const qualityLimit = props.qualityItems?.limit ?? 100;
+  const qualityOffset = props.qualityItems?.offset ?? 0;
+  const hasPrev = qualityOffset > 0;
+  const nextOffset = qualityOffset + qualityLimit;
+  const hasNext = nextOffset < qualityTotal;
 
   return html`
     <div>
       <!-- Summary cards -->
       ${props.qualityLoading && !summary
         ? renderSpinner()
-        : html`
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--v2-space-3); margin-bottom: var(--v2-space-5);">
-              ${buckets.map(
-                (b) => html`
-                  <div
-                    class="v2-card v2-card--interactive"
-                    style="
-                      padding: var(--v2-space-4); text-align: center; cursor: pointer;
-                      ${props.qualityBucket === b.key ? `border-color: var(--v2-accent); box-shadow: 0 0 0 1px var(--v2-accent);` : ""}
-                    "
-                    @click=${() => props.onQualityBucketSelect(b.key)}
-                  >
-                    <div style="font-size: var(--v2-text-2xl, 28px); font-weight: 700; color: ${b.color};">
-                      ${b.count}
-                    </div>
-                    <div class="v2-muted" style="font-size: var(--v2-text-xs); margin-top: var(--v2-space-1);">
-                      ${b.label}
-                    </div>
-                  </div>
-                `,
-              )}
-            </div>
-          `}
-
-      <!-- Quality items table -->
-      ${props.qualityLoading
-        ? renderSpinner()
-        : props.qualityItems.length === 0
+        : !summary
           ? html`
-              <div class="v2-card">
+              <div class="v2-card" style="margin-bottom: var(--v2-space-5);">
                 <div class="v2-empty">
                   <div class="v2-empty-icon">${icons.barChart}</div>
-                  <div class="v2-empty-title">No ${props.qualityBucket} quality items found</div>
+                  <div class="v2-empty-title">No quality data</div>
                   <div class="v2-empty-description">
-                    Items scored as "${props.qualityBucket}" will appear here.
+                    Quality triage data will appear here once memory review has completed.
                   </div>
                 </div>
               </div>
             `
           : html`
+              <div class="v2-card" style="padding: var(--v2-space-4); margin-bottom: var(--v2-space-4);">
+                <div style="display: flex; align-items: end; justify-content: space-between; gap: var(--v2-space-4); flex-wrap: wrap;">
+                  <div>
+                    <div class="v2-label">Scope</div>
+                    <div class="v2-muted" style="font-size: var(--v2-text-xs);">
+                      ${summary.scope.mode === "run"
+                        ? summary.scope.run_id
+                          ? `run ${summary.scope.run_id}`
+                          : "run"
+                        : "global"}
+                    </div>
+                  </div>
+                  <label class="v2-field" style="min-width: 160px;">
+                    <span class="v2-label">View</span>
+                    <select
+                      class="v2-select"
+                      .value=${props.qualityScope}
+                      @change=${(event: Event) =>
+                        props.onQualityScopeChange(
+                          (event.target as HTMLSelectElement).value as MemoryPageProps["qualityScope"],
+                        )}
+                    >
+                      <option value="run">Run</option>
+                      <option value="global">Global</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--v2-space-3); margin-bottom: var(--v2-space-5);">
+                ${buckets.map(
+                  (bucket) => html`
+                    <div
+                      class="v2-card v2-card--interactive"
+                      style="
+                        padding: var(--v2-space-4); cursor: pointer;
+                        ${props.qualityBucket === bucket.key ? `border-color: var(--v2-accent); box-shadow: 0 0 0 1px var(--v2-accent);` : ""}
+                      "
+                      title=${bucket.description}
+                      @click=${() => props.onQualityBucketSelect(bucket.key)}
+                    >
+                      <div style="display: flex; align-items: center; justify-content: space-between; gap: var(--v2-space-3);">
+                        <div class="v2-strong" style="font-size: var(--v2-text-sm);">${bucket.label}</div>
+                        <span class="v2-badge v2-badge--neutral">${bucket.count}</span>
+                      </div>
+                      <div class="v2-muted" style="font-size: var(--v2-text-xs); margin-top: var(--v2-space-2); line-height: 1.4;">
+                        ${bucket.description}
+                      </div>
+                    </div>
+                  `,
+                )}
+              </div>
+            `}
+
+      <!-- Quality items table -->
+      ${props.qualityItemsLoading
+        ? renderSpinner()
+        : qualityItems.length === 0
+          ? html`
+              <div class="v2-card">
+                <div class="v2-empty">
+                  <div class="v2-empty-icon">${icons.barChart}</div>
+                  <div class="v2-empty-title">No quality items found</div>
+                  <div class="v2-empty-description">
+                    This bucket is currently clear for the selected scope.
+                  </div>
+                </div>
+              </div>
+            `
+          : html`
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: var(--v2-space-3); margin-bottom: var(--v2-space-3);">
+                <div class="v2-muted" style="font-size: var(--v2-text-xs);">
+                  ${qualityTotal} total item${qualityTotal === 1 ? "" : "s"}
+                </div>
+                <div style="display: flex; gap: var(--v2-space-2);">
+                  <button
+                    class="v2-btn v2-btn--secondary"
+                    ?disabled=${!hasPrev}
+                    @click=${() => props.onQualityPage(Math.max(0, qualityOffset - qualityLimit))}
+                  >
+                    Prev
+                  </button>
+                  <button
+                    class="v2-btn v2-btn--secondary"
+                    ?disabled=${!hasNext}
+                    @click=${() => props.onQualityPage(nextOffset)}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
               <div class="v2-card" style="padding: 0; overflow: hidden;">
                 <table class="v2-table">
                   <thead>
                     <tr>
-                      <th>Kind</th>
+                      <th>Type</th>
                       <th>Content</th>
-                      <th>Score</th>
-                      <th>Reason</th>
+                      <th>Status</th>
+                      <th>Provenance</th>
+                      <th>Time</th>
                     </tr>
                   </thead>
                   <tbody>
-                    ${props.qualityItems.map(
+                    ${qualityItems.map(
                       (item) => html`
                         <tr
-                          style="cursor: pointer;"
+                          style="${item.record_type !== "episode" ? "cursor: pointer;" : ""}"
                           @click=${() => {
-                            if (item.kind === "entity") props.onEntitySelect(item.id);
-                            else if (item.kind === "fact") props.onFactSelect(item.id);
-                            else props.onObservationSelect(item.id);
+                            if (item.record_type === "entity" && item.entity_id) props.onEntitySelect(item.entity_id);
+                            else if (item.record_type === "fact" && item.fact_id) props.onFactSelect(item.fact_id);
+                            else if (item.record_type === "observation" && item.observation_id) props.onObservationSelect(item.observation_id);
                           }}
                         >
-                          <td>${kindBadge(item.kind)}</td>
+                          <td>${kindBadge(item.record_type)}</td>
                           <td>
-                            <span style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: var(--v2-text-sm);">
-                              ${item.text}
+                            <span class="v2-strong" style="display: block; font-size: var(--v2-text-sm);">
+                              ${item.primary_text}
                             </span>
-                          </td>
-                          <td>
-                            ${item.score != null
+                            ${item.secondary_text
                               ? html`
-                                  <div style="display: flex; align-items: center; gap: var(--v2-space-2); min-width: 80px;">
-                                    <div style="
-                                      flex: 1; height: 6px; border-radius: 3px;
-                                      background: var(--v2-bg-nav-pill, rgba(255,255,255,0.06));
-                                    ">
-                                      <div style="
-                                        width: ${Math.round((item.score ?? 0) * 100)}%;
-                                        height: 100%; border-radius: 3px;
-                                        background: ${(item.score ?? 0) >= 0.8 ? "var(--v2-green, #22c55e)" : (item.score ?? 0) >= 0.5 ? "var(--v2-yellow, #eab308)" : "var(--v2-red, #ef4444)"};
-                                      "></div>
-                                    </div>
-                                    <span class="v2-mono" style="font-size: var(--v2-text-2xs); min-width: 32px;">
-                                      ${Math.round((item.score ?? 0) * 100)}%
-                                    </span>
-                                  </div>
+                                  <span class="v2-faint" style="display: block; margin-top: var(--v2-space-1); font-size: var(--v2-text-xs);">
+                                    ${item.secondary_text}
+                                  </span>
                                 `
-                              : html`<span class="v2-faint" style="font-size: var(--v2-text-xs);">—</span>`}
+                              : nothing}
                           </td>
                           <td>
                             <span class="v2-faint" style="font-size: var(--v2-text-xs);">
-                              ${item.reason || "—"}
+                              ${item.status || "n/a"}
+                            </span>
+                          </td>
+                          <td>
+                            <div class="v2-mono" style="font-size: var(--v2-text-2xs); line-height: 1.5;">
+                              ${item.record_type === "entity" && item.entity_id
+                                ? item.entity_id
+                                : item.record_type === "fact" && item.fact_id
+                                  ? item.fact_id
+                                  : item.record_type === "observation" && item.observation_id
+                                    ? item.observation_id
+                                    : item.episode_id || item.record_id}
+                            </div>
+                          </td>
+                          <td>
+                            <span class="v2-faint" style="font-size: var(--v2-text-xs);">
+                              ${item.timestamp_iso || item.ingested_at_iso || "—"}
                             </span>
                           </td>
                         </tr>
@@ -829,6 +873,14 @@ function renderObservationDetail(
 // ─── Main render ──────────────────────────────────────────────────────
 
 export function renderMemoryPage(props: MemoryPageProps) {
+  const content =
+    props.subTab === "library"
+      ? (props.loading ? renderSpinner() : renderLibraryTab(props))
+      : props.subTab === "search"
+        ? renderSearchTab(props)
+        : props.subTab === "quality"
+          ? renderQualityTab(props)
+          : nothing;
   return html`
     <div class="v2-page-header">
       <div class="v2-page-header-row">
@@ -860,15 +912,7 @@ export function renderMemoryPage(props: MemoryPageProps) {
         `
       : nothing}
 
-    ${props.loading
-      ? renderSpinner()
-      : props.subTab === "library"
-        ? renderLibraryTab(props)
-        : props.subTab === "search"
-          ? renderSearchTab(props)
-          : props.subTab === "quality"
-            ? renderQualityTab(props)
-            : nothing}
+    ${content}
 
     ${renderDetailPanel(props)}
   `;

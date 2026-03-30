@@ -41,8 +41,18 @@ export async function navigateToTab(page: Page, tabName: string): Promise<void> 
  * Click a sub-tab within a page.
  */
 export async function clickSubTab(page: Page, tabName: string): Promise<void> {
-  await page.locator(`.v2-detail-tab:has-text("${tabName}"), .v2-agent-tab:has-text("${tabName}")`).first().click();
-  await page.waitForTimeout(300);
+  await page
+    .locator(`.v2-detail-tab:has-text("${tabName}"), .v2-agent-tab:has-text("${tabName}")`)
+    .first()
+    .click();
+  await page
+    .locator(
+      `.v2-detail-tab--active:has-text("${tabName}"), .v2-agent-tab--active:has-text("${tabName}")`,
+    )
+    .first()
+    .waitFor({ state: 'visible', timeout: 5000 })
+    .catch(() => {});
+  await page.waitForTimeout(150);
 }
 
 /**
