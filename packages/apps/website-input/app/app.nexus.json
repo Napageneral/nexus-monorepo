@@ -1,0 +1,122 @@
+{
+  "id": "website-input",
+  "version": "0.1.0",
+  "displayName": "Website Input",
+  "description": "Shared first-party website input collector for attribution installs.",
+  "skill": "./SKILL.md",
+  "handler": "methods/index.ts",
+  "hosting": {
+    "required_server_class": "standard",
+    "deployment_class": "customer_server"
+  },
+  "methods": {
+    "website-input.installations.create": {
+      "description": "Create a website input installation and issue its sender token.",
+      "action": "write",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "properties": {
+          "label": { "type": "string" },
+          "siteOrigin": { "type": "string" },
+          "collectorBaseUrl": { "type": "string" },
+          "expiresAt": { "type": "number" },
+          "metadata": { "type": "object" }
+        }
+      }
+    },
+    "website-input.installations.get": {
+      "description": "Get a website input installation.",
+      "action": "read",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "required": ["websiteInstallationId"],
+        "properties": {
+          "websiteInstallationId": { "type": "string" }
+        }
+      }
+    },
+    "website-input.installations.list": {
+      "description": "List website input installations.",
+      "action": "read",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      }
+    },
+    "website-input.installations.rotate": {
+      "description": "Rotate the sender token for a website input installation.",
+      "action": "write",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "required": ["websiteInstallationId"],
+        "properties": {
+          "websiteInstallationId": { "type": "string" },
+          "label": { "type": "string" },
+          "expiresAt": { "type": "number" },
+          "collectorBaseUrl": { "type": "string" }
+        }
+      }
+    },
+    "website-input.collect": {
+      "description": "Ingest one canonical website event.",
+      "action": "write",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "required": ["event"],
+        "properties": {
+          "websiteInstallationId": { "type": "string" },
+          "event": { "type": "object" }
+        }
+      }
+    },
+    "website-input.collect.batch": {
+      "description": "Ingest a batch of canonical website events.",
+      "action": "write",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "required": ["events"],
+        "properties": {
+          "websiteInstallationId": { "type": "string" },
+          "events": { "type": "array" }
+        }
+      }
+    },
+    "website-input.events.list": {
+      "description": "List canonical website events for an installation.",
+      "action": "read",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "required": ["websiteInstallationId"],
+        "properties": {
+          "websiteInstallationId": { "type": "string" },
+          "sessionId": { "type": "string" },
+          "eventName": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      }
+    },
+    "website-input.events.get": {
+      "description": "Get one canonical website event by installation and event id.",
+      "action": "read",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "required": ["websiteInstallationId", "eventId"],
+        "properties": {
+          "websiteInstallationId": { "type": "string" },
+          "eventId": { "type": "string" }
+        }
+      }
+    }
+  }
+}

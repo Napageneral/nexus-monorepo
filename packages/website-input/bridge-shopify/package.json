@@ -1,0 +1,25 @@
+{
+  "name": "@nexus-project/website-input-bridge-shopify",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared Shopify bridge helpers for website-input checkout handoff persistence.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@nexus-project/website-input-core": "file:../core"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.5"
+  }
+}

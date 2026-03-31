@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Attribution Intelligence</title>
+    <style>
+      :root {
+        --bg: #f4efe4;
+        --ink: #1f2a2a;
+        --muted: #5d6a69;
+        --accent: #0b7a75;
+        --accent-soft: rgba(11, 122, 117, 0.12);
+        --danger: #9d3e2f;
+        --panel: rgba(255, 255, 255, 0.72);
+        --line: rgba(31, 42, 42, 0.12);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Iowan Old Style", "Palatino Linotype", serif;
+        background:
+          radial-gradient(circle at top left, rgba(11, 122, 117, 0.12), transparent 28rem),
+          linear-gradient(160deg, #f7f1e5 0%, #efe7d8 48%, #e8deca 100%);
+        color: var(--ink);
+      }
+      main {
+        max-width: 82rem;
+        margin: 0 auto;
+        padding: 4rem 1.5rem 5rem;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: flex-start;
+      }
+      h1 {
+        font-size: clamp(2.6rem, 6vw, 5rem);
+        line-height: 0.95;
+        margin: 0 0 1rem;
+        letter-spacing: -0.05em;
+      }
+      p.lead {
+        max-width: 42rem;
+        color: var(--muted);
+        font-size: 1.05rem;
+        line-height: 1.6;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+        gap: 1rem;
+        margin-top: 2rem;
+      }
+      .stack {
+        display: grid;
+        gap: 1rem;
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: center;
+        justify-content: flex-end;
+      }
+      .toolbar select,
+      .toolbar button {
+        font: inherit;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        padding: 0.7rem 1rem;
+        background: rgba(255, 255, 255, 0.82);
+        color: var(--ink);
+      }
+      .toolbar button {
+        cursor: pointer;
+      }
+      .toolbar button.primary {
+        background: var(--accent);
+        color: #fff;
+        border-color: transparent;
+      }
+      .toolbar button:disabled,
+      .toolbar select:disabled {
+        opacity: 0.55;
+        cursor: wait;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 1.25rem;
+        padding: 1.1rem 1.15rem;
+        backdrop-filter: blur(10px);
+      }
+      .section {
+        margin-top: 1.5rem;
+      }
+      .section-head {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 0.75rem;
+      }
+      .label {
+        color: var(--accent);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      .value {
+        font-size: 1.35rem;
+        margin-top: 0.35rem;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .status {
+        min-height: 1.5rem;
+        color: var(--muted);
+        margin-top: 0.75rem;
+      }
+      .status.error {
+        color: var(--danger);
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        border-radius: 999px;
+        padding: 0.3rem 0.7rem;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 0.8rem;
+      }
+      .two-col {
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr);
+        gap: 1rem;
+      }
+      .split {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.95rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.7rem 0.35rem;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      th {
+        color: var(--muted);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
+      tbody tr:last-child td {
+        border-bottom: none;
+      }
+      .channel-list,
+      .binding-list {
+        display: grid;
+        gap: 0.75rem;
+      }
+      .binding-item {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        border-top: 1px solid var(--line);
+        padding-top: 0.75rem;
+      }
+      .binding-item:first-child {
+        border-top: none;
+        padding-top: 0;
+      }
+      .outcome-button {
+        width: 100%;
+        text-align: left;
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: 0.95rem;
+        padding: 0.85rem;
+        cursor: pointer;
+        font: inherit;
+        color: inherit;
+      }
+      .outcome-button.active {
+        border-color: var(--accent);
+        background: rgba(11, 122, 117, 0.08);
+      }
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: "SFMono-Regular", "Menlo", monospace;
+        font-size: 0.82rem;
+        line-height: 1.5;
+      }
+      .empty {
+        color: var(--muted);
+        border: 1px dashed var(--line);
+        border-radius: 1rem;
+        padding: 1rem;
+      }
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+        gap: 0.75rem;
+      }
+      @media (max-width: 720px) {
+        main {
+          padding-top: 2rem;
+        }
+        .two-col,
+        .split {
+          grid-template-columns: 1fr;
+        }
+        h1 {
+          font-size: 2.4rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <div class="label">Attribution Intelligence</div>
+          <h1>Bind inputs. Preserve evidence. Reconcile outcomes.</h1>
+          <p class="lead">
+            The app owns business-scope bindings, materialized attribution
+            facts, replay-safe reconciliation, and operator reads on top of
+            shared acquisition, website, and backend inputs.
+          </p>
+        </div>
+        <div class="toolbar">
+          <label class="muted" for="scopeSelect">Scope</label>
+          <select id="scopeSelect" aria-label="Scope"></select>
+          <button id="refreshButton" type="button">Refresh</button>
+          <button id="replayButton" class="primary" type="button">Replay Bound Records</button>
+        </div>
+      </header>
+
+      <div id="statusLine" class="status">Loading scopes…</div>
+
+      <section class="section">
+        <div class="grid" id="totalsGrid"></div>
+      </section>
+
+      <section class="section two-col">
+        <article class="card">
+          <div class="section-head">
+            <div>
+              <div class="label">Connected Inputs</div>
+              <div class="value" style="font-size: 1.1rem;">Bindings and role coverage</div>
+            </div>
+            <span id="bindingCount" class="pill">0 bindings</span>
+          </div>
+          <div id="bindingsPanel" class="binding-list"></div>
+        </article>
+
+        <article class="card">
+          <div class="section-head">
+            <div>
+              <div class="label">Freshness</div>
+              <div class="value" style="font-size: 1.1rem;">Pipeline and materialization</div>
+            </div>
+            <span id="latestRunPill" class="pill">No runs yet</span>
+          </div>
+          <div id="freshnessPanel" class="stack"></div>
+        </article>
+      </section>
+
+      <section class="section split">
+        <article class="card">
+          <div class="section-head">
+            <div>
+              <div class="label">Paid Performance</div>
+              <div class="value" style="font-size: 1.1rem;">Top channels and totals</div>
+            </div>
+          </div>
+          <div id="channelsPanel" class="channel-list"></div>
+          <div style="margin-top: 1rem;">
+            <div class="label" style="margin-bottom: 0.5rem;">Recent Paid Rows</div>
+            <div id="adFactsPanel"></div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="section-head">
+            <div>
+              <div class="label">Website Funnel</div>
+              <div class="value" style="font-size: 1.1rem;">Sessions, handoffs, outcomes</div>
+            </div>
+          </div>
+          <div id="funnelPanel"></div>
+        </article>
+      </section>
+
+      <section class="section two-col">
+        <article class="card">
+          <div class="section-head">
+            <div>
+              <div class="label">Backend Outcomes</div>
+              <div class="value" style="font-size: 1.1rem;">Inspectable attribution decisions</div>
+            </div>
+          </div>
+          <div id="outcomesPanel" class="stack"></div>
+        </article>
+
+        <article class="card">
+          <div class="section-head">
+            <div>
+              <div class="label">Row Inspector</div>
+              <div class="value" style="font-size: 1.1rem;">Bridge and evidence detail</div>
+            </div>
+          </div>
+          <div id="inspectorPanel" class="stack"></div>
+        </article>
+      </section>
+    </main>
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>

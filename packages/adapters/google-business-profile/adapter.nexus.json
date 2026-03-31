@@ -1,0 +1,9 @@
+{
+  "id": "google-business-profile",
+  "version": "0.1.0",
+  "displayName": "Google Business Profile",
+  "description": "Shared Google Business Profile adapter package for Nex.",
+  "platform": "google-business-profile",
+  "command": "./bin/google-business-profile-adapter",
+  "skill": "./SKILL.md"
+}
