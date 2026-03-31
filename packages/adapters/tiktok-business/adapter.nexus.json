@@ -1,0 +1,9 @@
+{
+  "id": "tiktok-business",
+  "version": "0.1.0",
+  "displayName": "TikTok Business",
+  "description": "Shared TikTok Business adapter package for Nex.",
+  "platform": "tiktok-business",
+  "command": "./bin/tiktok-business-adapter",
+  "skill": "./SKILL.md"
+}

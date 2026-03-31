@@ -1,0 +1,147 @@
+openapi: 3.1.0
+info:
+  title: tiktok-business-adapter Adapter API
+  version: 0.1.0
+  description: "Published adapter package contract for tiktok-business. This
+    scaffold currently exposes package metadata and basic connection-health
+    surfaces. Streaming operations are added in later implementation tickets."
+tags:
+  - name: Adapter
+paths:
+  /operations/adapter.connections.list:
+    post:
+      operationId: adapter.connections.list
+      summary: List adapter connections
+      tags:
+        - Adapter
+      x-sdk-public: true
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdapterConnectionsListResultSchema"
+  /operations/adapter.health:
+    post:
+      operationId: adapter.health
+      summary: Check adapter connection health
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdapterConnectionRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdapterHealthSchema"
+  /operations/adapter.info:
+    post:
+      operationId: adapter.info
+      summary: Read adapter package metadata
+      tags:
+        - Adapter
+      x-sdk-public: true
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdapterInfoSchema"
+components:
+  schemas:
+    AdapterConnectionRequestSchema:
+      type: object
+      properties:
+        connection_id:
+          type: string
+      required:
+        - connection_id
+      additionalProperties: false
+    AdapterConnectionsListResultSchema:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: string
+          display_name:
+            type: string
+          credential_ref:
+            type: string
+          status:
+            type: string
+        required:
+          - id
+        additionalProperties: false
+    AdapterHealthSchema:
+      type: object
+      properties:
+        connected:
+          type: boolean
+        connection_id:
+          type: string
+        error:
+          anyOf:
+            - type: string
+            - type: "null"
+        last_event_at:
+          anyOf:
+            - type: integer
+            - type: "null"
+        details:
+          type: object
+          propertyNames:
+            type: string
+          additionalProperties: true
+      required:
+        - connected
+        - connection_id
+      additionalProperties: false
+    AdapterInfoSchema:
+      type: object
+      properties:
+        platform:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        operations:
+          type: array
+          items:
+            type: string
+        methods:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        credential_service:
+          type: string
+        multi_account:
+          type: boolean
+        platform_capabilities:
+          type: object
+          propertyNames:
+            type: string
+          additionalProperties: true
+        auth:
+          type: object
+          propertyNames:
+            type: string
+          additionalProperties: true
+      required:
+        - platform
+        - name
+        - version
+        - operations
+        - methods
+      additionalProperties: false

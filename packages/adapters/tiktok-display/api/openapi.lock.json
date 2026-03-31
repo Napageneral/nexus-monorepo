@@ -1,0 +1,8 @@
+{
+  "contract": "packages/adapters/tiktok-display/api",
+  "generator": "nex/scripts/contracts/generate-openapi.ts",
+  "sources": [
+    "packages/adapters/tiktok-display",
+    "packages/adapters/nexus-adapter-sdks/nexus-adapter-sdk-go/define.go"
+  ]
+}

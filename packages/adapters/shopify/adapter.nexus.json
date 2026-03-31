@@ -1,0 +1,9 @@
+{
+  "id": "shopify",
+  "version": "0.1.0",
+  "displayName": "Shopify",
+  "description": "Shared Shopify adapter package for Nex.",
+  "platform": "shopify",
+  "command": "./bin/shopify-adapter",
+  "skill": "./SKILL.md"
+}

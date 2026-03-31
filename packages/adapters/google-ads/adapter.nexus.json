@@ -1,0 +1,9 @@
+{
+  "id": "google-ads",
+  "version": "0.1.0",
+  "displayName": "Google Ads",
+  "description": "Shared Google Ads adapter package for Nex.",
+  "platform": "google-ads",
+  "command": "./bin/google-ads-adapter",
+  "skill": "./SKILL.md"
+}
