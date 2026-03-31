@@ -1,0 +1,76 @@
+import ivm from "isolated-vm";
+import type { CommandExecutor, NetworkAdapter, RuntimeDriverOptions, SpawnedProcess, VirtualFileSystem, Permissions } from "@secure-exec/core";
+import type { StdioHook, OSConfig, ProcessConfig, TimingMitigation } from "@secure-exec/core/internal/shared/api-types";
+import type { ResolutionCache } from "@secure-exec/core";
+export interface NodeExecutionDriverOptions extends RuntimeDriverOptions {
+    createIsolate?(memoryLimit: number): unknown;
+}
+export interface BudgetState {
+    outputBytes: number;
+    bridgeCalls: number;
+    activeTimers: number;
+    childProcesses: number;
+}
+/** Shared mutable state owned by NodeExecutionDriver, passed to extracted modules. */
+export interface DriverDeps {
+    isolate: ivm.Isolate;
+    filesystem: VirtualFileSystem;
+    commandExecutor: CommandExecutor;
+    networkAdapter: NetworkAdapter;
+    permissions?: Permissions;
+    processConfig: ProcessConfig;
+    osConfig: OSConfig;
+    onStdio?: StdioHook;
+    cpuTimeLimitMs?: number;
+    timingMitigation: TimingMitigation;
+    bridgeBase64TransferLimitBytes: number;
+    isolateJsonPayloadLimitBytes: number;
+    maxOutputBytes?: number;
+    maxBridgeCalls?: number;
+    maxTimers?: number;
+    maxChildProcesses?: number;
+    maxHandles?: number;
+    budgetState: BudgetState;
+    activeHttpServerIds: Set<number>;
+    activeChildProcesses: Map<number, SpawnedProcess>;
+    activeHostTimers: Set<ReturnType<typeof setTimeout>>;
+    esmModuleCache: Map<string, ivm.Module>;
+    esmModuleReverseCache: Map<ivm.Module, string>;
+    moduleFormatCache: Map<string, "esm" | "cjs" | "json">;
+    packageTypeCache: Map<string, "module" | "commonjs" | null>;
+    dynamicImportCache: Map<string, ivm.Reference<unknown>>;
+    dynamicImportPending: Map<string, Promise<ivm.Reference<unknown>>>;
+    resolutionCache: ResolutionCache;
+}
+export declare const DEFAULT_BRIDGE_BASE64_TRANSFER_BYTES: number;
+export declare const DEFAULT_ISOLATE_JSON_PAYLOAD_BYTES: number;
+export declare const MIN_CONFIGURED_PAYLOAD_BYTES = 1024;
+export declare const MAX_CONFIGURED_PAYLOAD_BYTES: number;
+export declare const PAYLOAD_LIMIT_ERROR_CODE = "ERR_SANDBOX_PAYLOAD_TOO_LARGE";
+export declare const RESOURCE_BUDGET_ERROR_CODE = "ERR_RESOURCE_BUDGET_EXCEEDED";
+export declare const DEFAULT_MAX_TIMERS = 10000;
+export declare const DEFAULT_MAX_HANDLES = 10000;
+export declare const DEFAULT_SANDBOX_CWD = "/root";
+export declare const DEFAULT_SANDBOX_HOME = "/root";
+export declare const DEFAULT_SANDBOX_TMPDIR = "/tmp";
+export declare class PayloadLimitError extends Error {
+    constructor(payloadLabel: string, maxBytes: number, actualBytes: number);
+}
+export declare function normalizePayloadLimit(configuredValue: number | undefined, defaultValue: number, optionName: string): number;
+export declare function getUtf8ByteLength(text: string): number;
+export declare function getBase64EncodedByteLength(rawByteLength: number): number;
+export declare function assertPayloadByteLength(payloadLabel: string, actualBytes: number, maxBytes: number): void;
+export declare function assertTextPayloadSize(payloadLabel: string, text: string, maxBytes: number): void;
+export declare function createBudgetState(): BudgetState;
+export declare function clearActiveHostTimers(deps: Pick<DriverDeps, "activeHostTimers">): void;
+export declare function killActiveChildProcesses(deps: Pick<DriverDeps, "activeChildProcesses">): void;
+export declare function checkBridgeBudget(deps: Pick<DriverDeps, "maxBridgeCalls" | "budgetState">): void;
+export declare function parseJsonWithLimit<T>(payloadLabel: string, jsonText: string, maxBytes: number): T;
+export declare function getExecutionTimeoutMs(override: number | undefined, cpuTimeLimitMs: number | undefined): number | undefined;
+export declare function getTimingMitigation(override: TimingMitigation | undefined, defaultMitigation: TimingMitigation): TimingMitigation;
+export declare const polyfillCodeCache: Map<string, string>;
+export declare const polyfillNamedExportsCache: Map<string, string[]>;
+export declare const hostBuiltinNamedExportsCache: Map<string, string[]>;
+export declare const hostRequire: NodeJS.Require;
+export declare function isValidExportName(name: string): boolean;
+export declare function getHostBuiltinNamedExports(moduleName: string): string[];

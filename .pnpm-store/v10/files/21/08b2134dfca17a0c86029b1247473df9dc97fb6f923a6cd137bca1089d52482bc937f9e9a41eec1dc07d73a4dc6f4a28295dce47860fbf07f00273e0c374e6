@@ -1,0 +1,36 @@
+import type { VirtualFileSystem } from "./types.js";
+type ResolveMode = "require" | "import";
+interface PackageJson {
+    main?: string;
+    type?: "module" | "commonjs";
+    exports?: unknown;
+    imports?: unknown;
+}
+/** Caches for module resolution to avoid redundant VFS probes. */
+export interface ResolutionCache {
+    /** Top-level resolution results keyed by `request\0fromDir\0mode` */
+    resolveResults: Map<string, string | null>;
+    /** Parsed package.json content by path */
+    packageJsonResults: Map<string, PackageJson | null>;
+    /** File existence by path */
+    existsResults: Map<string, boolean>;
+    /** Stat results by path (null = ENOENT) */
+    statResults: Map<string, {
+        isDirectory: boolean;
+    } | null>;
+}
+export declare function createResolutionCache(): ResolutionCache;
+/**
+ * Resolve a module request to an absolute path in the virtual filesystem
+ */
+export declare function resolveModule(request: string, fromDir: string, fs: VirtualFileSystem, mode?: ResolveMode, cache?: ResolutionCache): Promise<string | null>;
+/**
+ * Load a file's content from the virtual filesystem
+ */
+export declare function loadFile(path: string, fs: VirtualFileSystem): Promise<string | null>;
+/**
+ * Legacy function - bundle a package from node_modules (simple approach)
+ * This is kept for backwards compatibility but the new dynamic resolution is preferred
+ */
+export declare function bundlePackage(packageName: string, fs: VirtualFileSystem): Promise<string | null>;
+export {};

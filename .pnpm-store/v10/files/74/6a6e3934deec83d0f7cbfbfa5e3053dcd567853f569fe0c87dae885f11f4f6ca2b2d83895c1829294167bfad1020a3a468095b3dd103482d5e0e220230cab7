@@ -1,0 +1,10 @@
+import "./polyfills.js";
+import { _registerHandle, _unregisterHandle, _waitForActiveHandles, _getActiveHandles } from "./active-handles.js";
+import fs from "./fs.js";
+import os from "./os.js";
+import * as childProcess from "./child-process.js";
+import * as network from "./network.js";
+import process, { setupGlobals, setTimeout, clearTimeout, setInterval, clearInterval, setImmediate, clearImmediate, URL, URLSearchParams, TextEncoder, TextDecoder, Buffer, cryptoPolyfill, ProcessExitError } from "./process.js";
+import moduleModule, { createRequire, Module, SourceMap } from "./module.js";
+export { fs, os, childProcess, process, moduleModule as module, network, setupGlobals, setTimeout, clearTimeout, setInterval, clearInterval, setImmediate, clearImmediate, URL, URLSearchParams, TextEncoder, TextDecoder, Buffer, cryptoPolyfill, ProcessExitError, createRequire, Module, SourceMap, _registerHandle, _unregisterHandle, _waitForActiveHandles, _getActiveHandles, };
+export default fs;

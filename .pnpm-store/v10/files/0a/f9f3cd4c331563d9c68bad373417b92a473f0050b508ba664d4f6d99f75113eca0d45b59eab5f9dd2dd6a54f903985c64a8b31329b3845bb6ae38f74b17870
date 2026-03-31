@@ -1,0 +1,14 @@
+/**
+ * ESM wrapper generator for built-in modules inside the isolate.
+ *
+ * isolated-vm's ESM `import` can only resolve modules we explicitly provide.
+ * For Node built-ins (fs, path, etc.) we generate thin ESM wrappers that
+ * re-export the bridge-provided globalThis objects as proper ESM modules
+ * with both default and named exports.
+ */
+/** Get a pre-built ESM wrapper for a bridge-backed built-in, or null if not bridge-handled. */
+export declare function getStaticBuiltinWrapperSource(moduleName: string): string | null;
+/** Build a custom ESM wrapper for a dynamically-resolved module (e.g. polyfills). */
+export declare function createBuiltinESMWrapper(bindingExpression: string, namedExports: string[]): string;
+/** Wrapper for unsupported built-ins: exports an empty object as default. */
+export declare function getEmptyBuiltinESMWrapper(): string;

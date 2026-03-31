@@ -1,0 +1,33 @@
+import ivm from "isolated-vm";
+import type { NetworkAdapter, RuntimeDriver } from "@secure-exec/core";
+import type { ExecOptions, ExecResult, RunResult } from "@secure-exec/core/internal/shared/api-types";
+import { type NodeExecutionDriverOptions } from "./isolate-bootstrap.js";
+export { NodeExecutionDriverOptions };
+export declare class NodeExecutionDriver implements RuntimeDriver {
+    private deps;
+    private memoryLimit;
+    private disposed;
+    private runtimeCreateIsolate;
+    constructor(options: NodeExecutionDriverOptions);
+    get network(): Pick<NetworkAdapter, "fetch" | "dnsLookup" | "httpRequest">;
+    get unsafeIsolate(): unknown;
+    get __unsafeIsoalte(): ivm.Isolate;
+    createUnsafeContext(options?: {
+        env?: Record<string, string>;
+        cwd?: string;
+        filePath?: string;
+    }): Promise<unknown>;
+    __unsafeCreateContext(options?: {
+        env?: Record<string, string>;
+        cwd?: string;
+        filePath?: string;
+    }): Promise<ivm.Context>;
+    run<T = unknown>(code: string, filePath?: string): Promise<RunResult<T>>;
+    exec(code: string, options?: ExecOptions): Promise<ExecResult>;
+    private executeInternal;
+    private recycleIsolate;
+    dispose(): void;
+    terminate(): Promise<void>;
+    /** Close all tracked HTTP servers without awaiting. */
+    private closeActiveHttpServers;
+}

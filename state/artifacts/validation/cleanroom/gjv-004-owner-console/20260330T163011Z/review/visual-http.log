@@ -1,0 +1,9 @@
+127.0.0.1 - - [30/Mar/2026 16:30:14] "GET /review/visual-terminal.html HTTP/1.1" 200 -
+127.0.0.1 - - [30/Mar/2026 16:30:14] code 404, message File not found
+127.0.0.1 - - [30/Mar/2026 16:30:14] "GET /stdout.log?ts=1774888214360 HTTP/1.1" 404 -
+127.0.0.1 - - [30/Mar/2026 16:30:14] code 404, message File not found
+127.0.0.1 - - [30/Mar/2026 16:30:14] "GET /stderr.log?ts=1774888214361 HTTP/1.1" 404 -
+127.0.0.1 - - [30/Mar/2026 16:30:14] code 404, message File not found
+127.0.0.1 - - [30/Mar/2026 16:30:14] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [30/Mar/2026 16:30:15] "GET /stdout.log?ts=1774888215361 HTTP/1.1" 200 -
+127.0.0.1 - - [30/Mar/2026 16:30:15] "GET /stderr.log?ts=1774888215362 HTTP/1.1" 200 -

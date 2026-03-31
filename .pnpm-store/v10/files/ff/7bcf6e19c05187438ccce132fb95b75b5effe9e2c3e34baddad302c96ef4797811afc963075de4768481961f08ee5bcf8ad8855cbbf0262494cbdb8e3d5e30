@@ -1,0 +1,99 @@
+import type * as nodeChildProcess from "child_process";
+type EventListener = (...args: unknown[]) => void;
+interface StdinStream {
+    writable: boolean;
+    write(data: unknown): boolean;
+    end(): void;
+    on(): StdinStream;
+    once(): StdinStream;
+    emit(): boolean;
+}
+interface OutputStreamStub {
+    readable: boolean;
+    _listeners: Record<string, EventListener[]>;
+    _onceListeners: Record<string, EventListener[]>;
+    _maxListeners: number;
+    _maxListenersWarned: Set<string>;
+    on(event: string, listener: EventListener): OutputStreamStub;
+    once(event: string, listener: EventListener): OutputStreamStub;
+    emit(event: string, ...args: unknown[]): boolean;
+    read(): null;
+    setEncoding(): OutputStreamStub;
+    setMaxListeners(n: number): OutputStreamStub;
+    getMaxListeners(): number;
+    pipe<T extends NodeJS.WritableStream>(dest: T): T;
+}
+/**
+ * Polyfill of Node.js `ChildProcess`. Provides event-emitting stdin/stdout/stderr
+ * streams. In streaming mode, data arrives via the `_childProcessDispatch` global
+ * that the host calls with stdout/stderr/exit events keyed by session ID.
+ */
+declare class ChildProcess {
+    private _listeners;
+    private _onceListeners;
+    private _maxListeners;
+    private _maxListenersWarned;
+    pid: number;
+    killed: boolean;
+    exitCode: number | null;
+    signalCode: NodeJS.Signals | null;
+    connected: boolean;
+    spawnfile: string;
+    spawnargs: string[];
+    stdin: StdinStream;
+    stdout: OutputStreamStub;
+    stderr: OutputStreamStub;
+    stdio: [StdinStream, OutputStreamStub, OutputStreamStub];
+    constructor();
+    on(event: string, listener: EventListener): this;
+    once(event: string, listener: EventListener): this;
+    off(event: string, listener: EventListener): this;
+    removeListener(event: string, listener: EventListener): this;
+    setMaxListeners(n: number): this;
+    getMaxListeners(): number;
+    private _checkMaxListeners;
+    emit(event: string, ...args: unknown[]): boolean;
+    kill(_signal?: NodeJS.Signals | number): boolean;
+    ref(): this;
+    unref(): this;
+    disconnect(): void;
+    _complete(stdout: string, stderr: string, code: number): void;
+}
+interface ExecError extends Error {
+    code?: number;
+    killed?: boolean;
+    signal?: string | null;
+    cmd?: string;
+    stdout?: string;
+    stderr?: string;
+    status?: number;
+    output?: [null, string, string];
+}
+declare function exec(command: string, options?: nodeChildProcess.ExecOptions | ((error: ExecError | null, stdout: string, stderr: string) => void), callback?: (error: ExecError | null, stdout: string, stderr: string) => void): ChildProcess;
+declare function execSync(command: string, options?: nodeChildProcess.ExecSyncOptions): string | Buffer;
+declare function spawn(command: string, args?: readonly string[] | nodeChildProcess.SpawnOptions, options?: nodeChildProcess.SpawnOptions): ChildProcess;
+interface SpawnSyncResult {
+    pid: number;
+    output: [null, string | Buffer, string | Buffer];
+    stdout: string | Buffer;
+    stderr: string | Buffer;
+    status: number | null;
+    signal: NodeJS.Signals | null;
+    error?: Error;
+}
+declare function spawnSync(command: string, args?: readonly string[] | nodeChildProcess.SpawnSyncOptions, options?: nodeChildProcess.SpawnSyncOptions): SpawnSyncResult;
+declare function execFile(file: string, args?: readonly string[] | nodeChildProcess.ExecFileOptions | ((error: ExecError | null, stdout: string, stderr: string) => void), options?: nodeChildProcess.ExecFileOptions | ((error: ExecError | null, stdout: string, stderr: string) => void), callback?: (error: ExecError | null, stdout: string, stderr: string) => void): ChildProcess;
+declare function execFileSync(file: string, args?: readonly string[] | nodeChildProcess.ExecFileSyncOptions, options?: nodeChildProcess.ExecFileSyncOptions): string | Buffer;
+declare function fork(_modulePath: string, _args?: readonly string[] | nodeChildProcess.ForkOptions, _options?: nodeChildProcess.ForkOptions): never;
+declare const childProcess: {
+    ChildProcess: typeof ChildProcess;
+    exec: typeof exec;
+    execSync: typeof execSync;
+    spawn: typeof spawn;
+    spawnSync: typeof spawnSync;
+    execFile: typeof execFile;
+    execFileSync: typeof execFileSync;
+    fork: typeof fork;
+};
+export { ChildProcess, exec, execSync, spawn, spawnSync, execFile, execFileSync, fork };
+export default childProcess;

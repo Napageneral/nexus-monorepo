@@ -699,7 +699,7 @@ function renderAgentHeader(
 ) {
   const badge = agentBadgeText(agent.id, defaultId);
   const displayName = normalizeAgentLabel(agent);
-  const subtitle = agent.identity?.theme?.trim() || "Agent workspace and routing.";
+  const subtitle = agent.identity?.theme?.trim() || "Entity-backed identity, bindings, and runtime posture.";
   const emoji = resolveAgentEmoji(agent);
   return html`
     <section class="card agent-header">
@@ -722,7 +722,7 @@ function renderAgentHeader(
 
 function renderAgentTabs(active: AgentsPanel, onSelect: (panel: AgentsPanel) => void) {
   const tabs: Array<{ id: AgentsPanel; label: string }> = [
-    { id: "overview", label: "Config" },
+    { id: "overview", label: "Profile" },
     { id: "files", label: "Workspaces & Files" },
     { id: "tools", label: "Tools & Permissions" },
     { id: "skills", label: "Skills" },
@@ -801,11 +801,11 @@ function renderAgentOverview(params: {
 
   return html`
     <section class="card">
-      <div class="card-title">Agent Config</div>
-      <div class="card-sub">Workspace paths, identity metadata, and operator-owned model config.</div>
+      <div class="card-title">Agent Profile</div>
+      <div class="card-sub">Entity identity, workspace binding, and operator-owned model settings.</div>
       <div class="agents-overview-grid" style="margin-top: 16px;">
         <div class="agent-kv">
-          <div class="label">Workspace</div>
+          <div class="label">Workspace Binding</div>
           <div class="mono">${workspace}</div>
         </div>
         <div class="agent-kv">
@@ -893,11 +893,11 @@ function renderAgentOverview(params: {
 function renderAgentContextCard(context: AgentContext, subtitle: string) {
   return html`
     <section class="card">
-      <div class="card-title">Agent Context</div>
+      <div class="card-title">Agent Profile</div>
       <div class="card-sub">${subtitle}</div>
       <div class="agents-overview-grid" style="margin-top: 16px;">
         <div class="agent-kv">
-          <div class="label">Workspace</div>
+          <div class="label">Workspace Binding</div>
           <div class="mono">${context.workspace}</div>
         </div>
         <div class="agent-kv">
@@ -946,7 +946,7 @@ function renderAgentChannels(params: {
   const configured = entries.filter((entry) => (entry.account ?? "").trim().length > 0).length;
   return html`
     <section class="grid grid-cols-2">
-      ${renderAgentContextCard(context, "Workspace, identity, and model configuration.")}
+      ${renderAgentContextCard(context, "Identity, workspace binding, and model settings.")}
       <section class="card">
         <div class="row" style="justify-content: space-between;">
           <div>

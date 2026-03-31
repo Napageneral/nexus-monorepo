@@ -34,9 +34,7 @@ describe("agents page", () => {
       renderAgentsPage(
         createProps({
           agentsList: {
-            defaultId: "main",
-            mainKey: "agent:main",
-            scope: "local",
+            defaultId: "entity-assistant",
             agents: [
               { id: "sales-bot", name: "Sales Bot", identity: { name: "Sales Bot" } },
             ],

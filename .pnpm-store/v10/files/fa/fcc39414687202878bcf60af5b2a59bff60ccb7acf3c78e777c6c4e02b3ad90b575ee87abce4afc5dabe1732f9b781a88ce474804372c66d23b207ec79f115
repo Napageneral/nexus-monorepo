@@ -1,0 +1,54 @@
+"use strict";
+(() => {
+  // isolate-runtime/src/common/global-access.ts
+  function hasOwnGlobal(name) {
+    return Object.prototype.hasOwnProperty.call(globalThis, name);
+  }
+  function getGlobalValue(name) {
+    return Reflect.get(globalThis, name);
+  }
+
+  // isolate-runtime/src/common/global-exposure.ts
+  function defineRuntimeGlobalBinding(name, value, mutable) {
+    Object.defineProperty(globalThis, name, {
+      value,
+      writable: mutable,
+      configurable: mutable,
+      enumerable: true
+    });
+  }
+  function createRuntimeGlobalExposer(mutable) {
+    return (name, value) => {
+      defineRuntimeGlobalBinding(name, value, mutable);
+    };
+  }
+  function getRuntimeExposeCustomGlobal() {
+    if (typeof globalThis.__runtimeExposeCustomGlobal === "function") {
+      return globalThis.__runtimeExposeCustomGlobal;
+    }
+    return createRuntimeGlobalExposer(false);
+  }
+  function getRuntimeExposeMutableGlobal() {
+    if (typeof globalThis.__runtimeExposeMutableGlobal === "function") {
+      return globalThis.__runtimeExposeMutableGlobal;
+    }
+    return createRuntimeGlobalExposer(true);
+  }
+
+  // isolate-runtime/src/inject/apply-custom-global-policy.ts
+  var __runtimeExposeCustomGlobal = getRuntimeExposeCustomGlobal();
+  var __runtimeExposeMutableGlobal = getRuntimeExposeMutableGlobal();
+  var __globalPolicy = globalThis.__runtimeCustomGlobalPolicy ?? {};
+  var __hardenedGlobals = Array.isArray(__globalPolicy.hardenedGlobals) ? __globalPolicy.hardenedGlobals : [];
+  var __mutableGlobals = Array.isArray(__globalPolicy.mutableGlobals) ? __globalPolicy.mutableGlobals : [];
+  for (const globalName of __hardenedGlobals) {
+    if (hasOwnGlobal(globalName)) {
+      __runtimeExposeCustomGlobal(globalName, getGlobalValue(globalName));
+    }
+  }
+  for (const globalName of __mutableGlobals) {
+    if (hasOwnGlobal(globalName)) {
+      __runtimeExposeMutableGlobal(globalName, getGlobalValue(globalName));
+    }
+  }
+})();

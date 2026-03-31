@@ -1,0 +1,42 @@
+import type { VirtualFileSystem, VirtualStat } from "../types.js";
+/**
+ * A fully in-memory VirtualFileSystem backed by Maps.
+ * Used as the default filesystem for the browser sandbox and for tests.
+ * Paths are always POSIX-style (forward slashes, rooted at "/").
+ */
+export declare class InMemoryFileSystem implements VirtualFileSystem {
+    private files;
+    private dirs;
+    private symlinks;
+    private modes;
+    private owners;
+    private timestamps;
+    private hardLinks;
+    private listDirEntries;
+    readFile(path: string): Promise<Uint8Array>;
+    readTextFile(path: string): Promise<string>;
+    readDir(path: string): Promise<string[]>;
+    readDirWithTypes(path: string): Promise<Array<{
+        name: string;
+        isDirectory: boolean;
+    }>>;
+    writeFile(path: string, content: string | Uint8Array): Promise<void>;
+    createDir(path: string): Promise<void>;
+    mkdir(path: string): Promise<void>;
+    private resolveSymlink;
+    private statEntry;
+    exists(path: string): Promise<boolean>;
+    stat(path: string): Promise<VirtualStat>;
+    removeFile(path: string): Promise<void>;
+    removeDir(path: string): Promise<void>;
+    rename(oldPath: string, newPath: string): Promise<void>;
+    symlink(target: string, linkPath: string): Promise<void>;
+    readlink(path: string): Promise<string>;
+    lstat(path: string): Promise<VirtualStat>;
+    link(oldPath: string, newPath: string): Promise<void>;
+    chmod(path: string, mode: number): Promise<void>;
+    chown(path: string, uid: number, gid: number): Promise<void>;
+    utimes(path: string, atime: number, mtime: number): Promise<void>;
+    truncate(path: string, length: number): Promise<void>;
+}
+export declare function createInMemoryFileSystem(): InMemoryFileSystem;

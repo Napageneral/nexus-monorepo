@@ -1,0 +1,1 @@
+export { emitConsoleEvent, setupConsole, setupRequire, setupESMGlobals, } from "@secure-exec/node/internal/bridge-setup";

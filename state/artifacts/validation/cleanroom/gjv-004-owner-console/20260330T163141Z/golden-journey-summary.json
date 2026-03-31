@@ -1,0 +1,13 @@
+{
+  "proof": "golden-journey-owner-console",
+  "steps": [
+    "owner-only bootstrap",
+    "bootstrap-pending primary agent",
+    "first-agent finalization in place",
+    "console catalog verification"
+  ],
+  "pending_orientation_path": "/artifacts/validation/cleanroom/gjv-004-owner-console/20260330T163141Z/pending-orientation.json",
+  "final_orientation_path": "/artifacts/validation/cleanroom/gjv-004-owner-console/20260330T163141Z/final-orientation.json",
+  "console_apps_path": "/artifacts/validation/cleanroom/gjv-004-owner-console/20260330T163141Z/console-apps.json",
+  "validation_script_path": "/artifacts/validation/cleanroom/gjv-004-owner-console/20260330T163141Z/validation-script.md"
+}

@@ -1,0 +1,28 @@
+"use strict";
+(() => {
+  // isolate-runtime/src/common/global-exposure.ts
+  function defineRuntimeGlobalBinding(name, value, mutable) {
+    Object.defineProperty(globalThis, name, {
+      value,
+      writable: mutable,
+      configurable: mutable,
+      enumerable: true
+    });
+  }
+  function createRuntimeGlobalExposer(mutable) {
+    return (name, value) => {
+      defineRuntimeGlobalBinding(name, value, mutable);
+    };
+  }
+  function getRuntimeExposeMutableGlobal() {
+    if (typeof globalThis.__runtimeExposeMutableGlobal === "function") {
+      return globalThis.__runtimeExposeMutableGlobal;
+    }
+    return createRuntimeGlobalExposer(true);
+  }
+
+  // isolate-runtime/src/inject/init-commonjs-module-globals.ts
+  var __runtimeExposeMutableGlobal = getRuntimeExposeMutableGlobal();
+  __runtimeExposeMutableGlobal("module", { exports: {} });
+  __runtimeExposeMutableGlobal("exports", globalThis.module.exports);
+})();

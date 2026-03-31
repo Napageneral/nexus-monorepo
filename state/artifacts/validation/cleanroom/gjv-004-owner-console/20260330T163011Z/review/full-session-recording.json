@@ -1,0 +1,10 @@
+{
+  "enabled": true,
+  "started_at": "2026-03-30T16:30:12Z",
+  "ended_at": "2026-03-30T16:30:16Z",
+  "display": ":99",
+  "recording_path": "/artifacts/validation/cleanroom/gjv-004-owner-console/20260330T163011Z/videos/full-session.webm",
+  "log_path": "/artifacts/validation/cleanroom/gjv-004-owner-console/20260330T163011Z/review/full-session-recording.log",
+  "window_manager_log_path": "/artifacts/validation/cleanroom/gjv-004-owner-console/20260330T163011Z/review/openbox.log",
+  "recording_present": true
+}

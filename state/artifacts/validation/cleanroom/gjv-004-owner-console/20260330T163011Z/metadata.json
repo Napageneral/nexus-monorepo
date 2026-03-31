@@ -1,0 +1,6 @@
+{
+  "proof_id": "gjv-004-owner-console",
+  "timestamp_utc": "20260330T163011Z",
+  "cwd": "/workspace",
+  "command": "bash ./nex/scripts/e2e/golden-journey-owner-console-proof.sh"
+}

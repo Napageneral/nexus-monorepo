@@ -1,0 +1,128 @@
+"use strict";
+(() => {
+  // isolate-runtime/src/common/global-access.ts
+  function setGlobalValue(name, value) {
+    Reflect.set(globalThis, name, value);
+  }
+
+  // isolate-runtime/src/inject/apply-timing-mitigation-freeze.ts
+  var __timingConfig = globalThis.__runtimeTimingMitigationConfig ?? {};
+  var __frozenTimeMs = typeof __timingConfig.frozenTimeMs === "number" && Number.isFinite(__timingConfig.frozenTimeMs) ? __timingConfig.frozenTimeMs : Date.now();
+  var __frozenDateNow = () => __frozenTimeMs;
+  try {
+    Object.defineProperty(Date, "now", {
+      value: __frozenDateNow,
+      configurable: false,
+      writable: false
+    });
+  } catch {
+    Date.now = __frozenDateNow;
+  }
+  var __OrigDate = Date;
+  var __FrozenDate = function Date2(...args) {
+    if (new.target) {
+      if (args.length === 0) {
+        return new __OrigDate(__frozenTimeMs);
+      }
+      return new __OrigDate(...args);
+    }
+    return __OrigDate();
+  };
+  Object.defineProperty(__FrozenDate, "prototype", {
+    value: __OrigDate.prototype,
+    writable: false,
+    configurable: false
+  });
+  __FrozenDate.now = __frozenDateNow;
+  __FrozenDate.parse = __OrigDate.parse;
+  __FrozenDate.UTC = __OrigDate.UTC;
+  Object.defineProperty(__FrozenDate, "now", {
+    value: __frozenDateNow,
+    configurable: false,
+    writable: false
+  });
+  try {
+    Object.defineProperty(globalThis, "Date", {
+      value: __FrozenDate,
+      configurable: false,
+      writable: false
+    });
+  } catch {
+    globalThis.Date = __FrozenDate;
+  }
+  var __frozenPerformanceNow = () => 0;
+  var __origPerf = globalThis.performance;
+  var __frozenPerf = /* @__PURE__ */ Object.create(null);
+  if (typeof __origPerf !== "undefined" && __origPerf !== null) {
+    const src = __origPerf;
+    for (const key of Object.getOwnPropertyNames(
+      Object.getPrototypeOf(__origPerf) ?? __origPerf
+    )) {
+      if (key !== "now") {
+        try {
+          const val = src[key];
+          if (typeof val === "function") {
+            __frozenPerf[key] = val.bind(__origPerf);
+          } else {
+            __frozenPerf[key] = val;
+          }
+        } catch {
+        }
+      }
+    }
+  }
+  Object.defineProperty(__frozenPerf, "now", {
+    value: __frozenPerformanceNow,
+    configurable: false,
+    writable: false
+  });
+  Object.freeze(__frozenPerf);
+  try {
+    Object.defineProperty(globalThis, "performance", {
+      value: __frozenPerf,
+      configurable: false,
+      writable: false
+    });
+  } catch {
+    globalThis.performance = __frozenPerf;
+  }
+  var __OrigSAB = globalThis.SharedArrayBuffer;
+  if (typeof __OrigSAB === "function") {
+    try {
+      const proto = __OrigSAB.prototype;
+      if (proto) {
+        for (const key of [
+          "byteLength",
+          "slice",
+          "grow",
+          "maxByteLength",
+          "growable"
+        ]) {
+          try {
+            Object.defineProperty(proto, key, {
+              get() {
+                throw new TypeError(
+                  "SharedArrayBuffer is not available in sandbox"
+                );
+              },
+              configurable: false
+            });
+          } catch {
+          }
+        }
+      }
+    } catch {
+    }
+  }
+  try {
+    Object.defineProperty(globalThis, "SharedArrayBuffer", {
+      value: void 0,
+      configurable: false,
+      writable: false,
+      enumerable: false
+    });
+  } catch {
+    Reflect.deleteProperty(globalThis, "SharedArrayBuffer");
+    setGlobalValue("SharedArrayBuffer", void 0);
+  }
+})();

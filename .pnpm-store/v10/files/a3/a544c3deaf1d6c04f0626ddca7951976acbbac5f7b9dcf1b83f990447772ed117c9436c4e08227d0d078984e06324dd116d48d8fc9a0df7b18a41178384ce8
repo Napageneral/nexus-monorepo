@@ -1,0 +1,8 @@
+"use strict";
+(() => {
+  // isolate-runtime/src/inject/override-process-env.ts
+  var __envPatch = globalThis.__runtimeProcessEnvOverride;
+  if (__envPatch && typeof __envPatch === "object") {
+    Object.assign(process.env, __envPatch);
+  }
+})();

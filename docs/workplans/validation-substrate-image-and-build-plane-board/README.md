@@ -75,6 +75,9 @@ Rules:
 Completed:
 
 - `VSB-001`
+- `VSB-002`
+- `VSB-003`
+- `VSB-004`
 
 In Progress:
 
@@ -86,12 +89,9 @@ Blocked:
 
 Not Started:
 
-1. `VSB-002`
-2. `VSB-003`
-3. `VSB-004`
-4. `VSB-005`
-5. `VSB-006`
-6. `VSB-007`
+1. `VSB-005`
+2. `VSB-006`
+3. `VSB-007`
 
 ## Ownership Split
 
@@ -104,9 +104,9 @@ Not Started:
 ## Ticket Order
 
 1. [VSB-001](/Users/tyler/nexus/home/projects/nexus/docs/workplans/validation-substrate-image-and-build-plane-board/completed/VSB-001-canon-and-board-bootstrap.md)
-2. [VSB-002](/Users/tyler/nexus/home/projects/nexus/docs/workplans/validation-substrate-image-and-build-plane-board/not-started/VSB-002-content-addressed-image-identity-and-ensure-contract.md)
-3. [VSB-003](/Users/tyler/nexus/home/projects/nexus/docs/workplans/validation-substrate-image-and-build-plane-board/not-started/VSB-003-host-docker-build-lock-and-shared-build-queue.md)
-4. [VSB-004](/Users/tyler/nexus/home/projects/nexus/docs/workplans/validation-substrate-image-and-build-plane-board/not-started/VSB-004-runtime-managed-proof-lane-migration.md)
+2. [VSB-002](/Users/tyler/nexus/home/projects/nexus/docs/workplans/validation-substrate-image-and-build-plane-board/completed/VSB-002-content-addressed-image-identity-and-ensure-contract.md)
+3. [VSB-003](/Users/tyler/nexus/home/projects/nexus/docs/workplans/validation-substrate-image-and-build-plane-board/completed/VSB-003-host-docker-build-lock-and-shared-build-queue.md)
+4. [VSB-004](/Users/tyler/nexus/home/projects/nexus/docs/workplans/validation-substrate-image-and-build-plane-board/completed/VSB-004-runtime-managed-proof-lane-migration.md)
 5. [VSB-005](/Users/tyler/nexus/home/projects/nexus/docs/workplans/validation-substrate-image-and-build-plane-board/not-started/VSB-005-host-cleanroom-script-migration-and-build-context-discipline.md)
 6. [VSB-006](/Users/tyler/nexus/home/projects/nexus/docs/workplans/validation-substrate-image-and-build-plane-board/not-started/VSB-006-frontdoor-and-hosted-cleanroom-image-family-alignment.md)
 7. [VSB-007](/Users/tyler/nexus/home/projects/nexus/docs/workplans/validation-substrate-image-and-build-plane-board/not-started/VSB-007-prewarm-throughput-proof-and-board-closeout.md)

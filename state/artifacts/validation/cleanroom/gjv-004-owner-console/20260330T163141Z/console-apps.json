@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "items": [
+    {
+      "app_id": "console",
+      "display_name": "Operator Console",
+      "entry_path": "/app/console/chat",
+      "kind": "static",
+      "icon": "./public/favicon.svg",
+      "order": 100
+    }
+  ]
+}

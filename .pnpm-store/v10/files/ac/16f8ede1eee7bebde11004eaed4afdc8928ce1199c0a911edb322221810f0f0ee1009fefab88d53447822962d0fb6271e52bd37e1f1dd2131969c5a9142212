@@ -1,0 +1,8 @@
+"use strict";
+(() => {
+  // isolate-runtime/src/inject/override-process-cwd.ts
+  var __cwd = globalThis.__runtimeProcessCwdOverride;
+  if (typeof __cwd === "string") {
+    process.cwd = () => __cwd;
+  }
+})();

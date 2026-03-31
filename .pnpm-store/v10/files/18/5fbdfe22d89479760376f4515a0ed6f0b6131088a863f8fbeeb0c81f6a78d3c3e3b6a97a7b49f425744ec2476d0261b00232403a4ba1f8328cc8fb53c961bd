@@ -1,0 +1,48 @@
+"use strict";
+(() => {
+  // isolate-runtime/src/common/global-exposure.ts
+  function defineRuntimeGlobalBinding(name, value, mutable) {
+    Object.defineProperty(globalThis, name, {
+      value,
+      writable: mutable,
+      configurable: mutable,
+      enumerable: true
+    });
+  }
+  function createRuntimeGlobalExposer(mutable) {
+    return (name, value) => {
+      defineRuntimeGlobalBinding(name, value, mutable);
+    };
+  }
+  function getRuntimeExposeCustomGlobal() {
+    if (typeof globalThis.__runtimeExposeCustomGlobal === "function") {
+      return globalThis.__runtimeExposeCustomGlobal;
+    }
+    return createRuntimeGlobalExposer(false);
+  }
+
+  // isolate-runtime/src/inject/setup-fs-facade.ts
+  var __runtimeExposeCustomGlobal = getRuntimeExposeCustomGlobal();
+  var __fsFacade = {
+    readFile: globalThis._fsReadFile,
+    writeFile: globalThis._fsWriteFile,
+    readFileBinary: globalThis._fsReadFileBinary,
+    writeFileBinary: globalThis._fsWriteFileBinary,
+    readDir: globalThis._fsReadDir,
+    mkdir: globalThis._fsMkdir,
+    rmdir: globalThis._fsRmdir,
+    exists: globalThis._fsExists,
+    stat: globalThis._fsStat,
+    unlink: globalThis._fsUnlink,
+    rename: globalThis._fsRename,
+    chmod: globalThis._fsChmod,
+    chown: globalThis._fsChown,
+    link: globalThis._fsLink,
+    symlink: globalThis._fsSymlink,
+    readlink: globalThis._fsReadlink,
+    lstat: globalThis._fsLstat,
+    truncate: globalThis._fsTruncate,
+    utimes: globalThis._fsUtimes
+  };
+  __runtimeExposeCustomGlobal("_fs", __fsFacade);
+})();

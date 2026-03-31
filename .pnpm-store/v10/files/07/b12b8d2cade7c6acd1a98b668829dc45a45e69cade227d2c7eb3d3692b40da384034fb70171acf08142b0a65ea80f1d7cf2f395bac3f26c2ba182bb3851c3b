@@ -1,0 +1,31 @@
+import ivm from "isolated-vm";
+import type { Permissions } from "@secure-exec/core";
+/**
+ * Apply runtime overrides used by script-style execution.
+ */
+export declare function applyExecutionOverrides(context: ivm.Context, permissions: Permissions | undefined, env?: Record<string, string>, cwd?: string, stdin?: string): Promise<void>;
+/**
+ * Initialize mutable CommonJS globals before script execution.
+ */
+export declare function initCommonJsModuleGlobals(context: ivm.Context): Promise<void>;
+/**
+ * Set CommonJS file globals for accurate relative require() behavior.
+ */
+export declare function setCommonJsFileGlobals(context: ivm.Context, filePath: string): Promise<void>;
+/**
+ * Apply descriptor policy to custom globals before user code executes.
+ */
+export declare function applyCustomGlobalExposurePolicy(context: ivm.Context): Promise<void>;
+/**
+ * Await script result when eval() returns a Promise.
+ */
+export declare function awaitScriptResult(context: ivm.Context, executionDeadlineMs?: number): Promise<void>;
+/**
+ * Override process.env and process.cwd for a specific execution context.
+ */
+export declare function overrideProcessConfig(context: ivm.Context, permissions: Permissions | undefined, env?: Record<string, string>, cwd?: string): Promise<void>;
+/**
+ * Set stdin data for a specific execution context.
+ * This injects stdin data that will be emitted when process.stdin listeners are added.
+ */
+export declare function setStdinData(context: ivm.Context, stdin: string): Promise<void>;

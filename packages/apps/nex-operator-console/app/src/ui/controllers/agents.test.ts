@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createAgent,
   deleteAgent,
+  deriveAgentWorkspaceBindingId,
   loadAgents,
   updateAgent,
   type AgentsState,
@@ -87,6 +88,13 @@ describe("agents controller", () => {
   // ---------------------------------------------------------------------------
   // createAgent
   // ---------------------------------------------------------------------------
+  describe("deriveAgentWorkspaceBindingId", () => {
+    it("derives a stable logical workspace id from the agent name", () => {
+      expect(deriveAgentWorkspaceBindingId("Sales Bot")).toBe("sales-bot");
+      expect(deriveAgentWorkspaceBindingId("  $$$  ")).toBe("agent");
+    });
+  });
+
   describe("createAgent", () => {
     it("creates an agent and refreshes the list", async () => {
       const request = vi
@@ -100,13 +108,13 @@ describe("agents controller", () => {
 
       const id = await createAgent(state, {
         name: "New Agent",
-        workspace: "/tmp/state/workspaces/new-agent",
+        workspace: "new-agent",
       });
 
       expect(id).toBe("new-1");
       expect(request).toHaveBeenNthCalledWith(1, "agents.create", {
         name: "New Agent",
-        workspace: "/tmp/state/workspaces/new-agent",
+        workspace: "new-agent",
       });
       expect(request).toHaveBeenNthCalledWith(2, "agents.list", {});
       expect(state.agentsLoading).toBe(false);
@@ -121,7 +129,7 @@ describe("agents controller", () => {
 
       const id = await createAgent(state, {
         name: "F",
-        workspace: "/tmp/state/workspaces/f",
+        workspace: "f",
       });
 
       expect(id).toBe("fallback-1");
@@ -133,7 +141,7 @@ describe("agents controller", () => {
 
       const id = await createAgent(state, {
         name: "Fail",
-        workspace: "/tmp/state/workspaces/fail",
+        workspace: "fail",
       });
 
       expect(id).toBeNull();
@@ -148,7 +156,7 @@ describe("agents controller", () => {
 
       const id = await createAgent(state, {
         name: "Nope",
-        workspace: "/tmp/state/workspaces/nope",
+        workspace: "nope",
       });
 
       expect(id).toBeNull();

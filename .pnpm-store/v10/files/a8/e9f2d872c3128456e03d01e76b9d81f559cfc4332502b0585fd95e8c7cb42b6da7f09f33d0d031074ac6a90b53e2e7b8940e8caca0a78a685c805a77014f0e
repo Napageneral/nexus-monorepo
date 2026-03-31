@@ -1,0 +1,25 @@
+// Re-export core runtime surface.
+export { NodeRuntime } from "./runtime.js";
+// Re-export Node driver factories.
+export { createDefaultNetworkAdapter, createNodeDriver, createNodeRuntimeDriverFactory, NodeExecutionDriver, NodeFileSystem, } from "@secure-exec/node";
+// TODO: Re-enable once node-stdlib-browser ESM entry is fixed (mock/empty.js missing from published package).
+// Eagerly importing @secure-exec/python and @secure-exec/browser pulls in node-stdlib-browser,
+// which crashes on Node.js. Use "secure-exec/python" or "secure-exec/browser" subpath imports instead.
+// export {
+// 	createPyodideRuntimeDriverFactory,
+// 	PyodideRuntimeDriver,
+// } from "@secure-exec/python";
+//
+// export {
+// 	createBrowserDriver,
+// 	createBrowserNetworkAdapter,
+// 	createBrowserRuntimeDriverFactory,
+// 	createOpfsFileSystem,
+// } from "@secure-exec/browser";
+// export type {
+// 	BrowserDriverOptions,
+// 	BrowserRuntimeDriverFactoryOptions,
+// 	BrowserRuntimeSystemOptions,
+// } from "@secure-exec/browser";
+export { createInMemoryFileSystem } from "./shared/in-memory-fs.js";
+export { allowAll, allowAllChildProcess, allowAllEnv, allowAllFs, allowAllNetwork, } from "./shared/permissions.js";

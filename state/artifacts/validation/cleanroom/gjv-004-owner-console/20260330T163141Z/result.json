@@ -1,0 +1,8 @@
+{
+  "proof_id": "gjv-004-owner-console",
+  "timestamp_utc": "20260330T163141Z",
+  "status": "passed",
+  "exit_code": 0,
+  "stdout_log": "/artifacts/validation/cleanroom/gjv-004-owner-console/20260330T163141Z/stdout.log",
+  "stderr_log": "/artifacts/validation/cleanroom/gjv-004-owner-console/20260330T163141Z/stderr.log"
+}

@@ -1,0 +1,14 @@
+"use strict";
+(() => {
+  // isolate-runtime/src/common/global-access.ts
+  function setGlobalValue(name, value) {
+    Reflect.set(globalThis, name, value);
+  }
+
+  // isolate-runtime/src/inject/apply-timing-mitigation-off.ts
+  if (typeof globalThis.performance === "undefined" || globalThis.performance === null) {
+    setGlobalValue("performance", {
+      now: () => Date.now()
+    });
+  }
+})();

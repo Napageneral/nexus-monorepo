@@ -1,0 +1,302 @@
+/**
+ * Bridge contract: typed declarations for the globals shared between the
+ * host (Node.js) and the isolate (sandbox V8 context).
+ *
+ * Two categories:
+ * - Host bridge globals: set by the host before bridge code runs (fs refs, timers, etc.)
+ * - Runtime bridge globals: installed by the bridge bundle itself (active handles, modules, etc.)
+ *
+ * The typed `Ref` aliases describe the isolated-vm calling convention for each global.
+ */
+export type ValueOf<T> = T[keyof T];
+/** Globals injected by the host before the bridge bundle executes. */
+export declare const HOST_BRIDGE_GLOBAL_KEYS: {
+    readonly dynamicImport: "_dynamicImport";
+    readonly loadPolyfill: "_loadPolyfill";
+    readonly resolveModule: "_resolveModule";
+    readonly loadFile: "_loadFile";
+    readonly scheduleTimer: "_scheduleTimer";
+    readonly cryptoRandomFill: "_cryptoRandomFill";
+    readonly cryptoRandomUuid: "_cryptoRandomUUID";
+    readonly fsReadFile: "_fsReadFile";
+    readonly fsWriteFile: "_fsWriteFile";
+    readonly fsReadFileBinary: "_fsReadFileBinary";
+    readonly fsWriteFileBinary: "_fsWriteFileBinary";
+    readonly fsReadDir: "_fsReadDir";
+    readonly fsMkdir: "_fsMkdir";
+    readonly fsRmdir: "_fsRmdir";
+    readonly fsExists: "_fsExists";
+    readonly fsStat: "_fsStat";
+    readonly fsUnlink: "_fsUnlink";
+    readonly fsRename: "_fsRename";
+    readonly fsChmod: "_fsChmod";
+    readonly fsChown: "_fsChown";
+    readonly fsLink: "_fsLink";
+    readonly fsSymlink: "_fsSymlink";
+    readonly fsReadlink: "_fsReadlink";
+    readonly fsLstat: "_fsLstat";
+    readonly fsTruncate: "_fsTruncate";
+    readonly fsUtimes: "_fsUtimes";
+    readonly childProcessSpawnStart: "_childProcessSpawnStart";
+    readonly childProcessStdinWrite: "_childProcessStdinWrite";
+    readonly childProcessStdinClose: "_childProcessStdinClose";
+    readonly childProcessKill: "_childProcessKill";
+    readonly childProcessSpawnSync: "_childProcessSpawnSync";
+    readonly networkFetchRaw: "_networkFetchRaw";
+    readonly networkDnsLookupRaw: "_networkDnsLookupRaw";
+    readonly networkHttpRequestRaw: "_networkHttpRequestRaw";
+    readonly networkHttpServerListenRaw: "_networkHttpServerListenRaw";
+    readonly networkHttpServerCloseRaw: "_networkHttpServerCloseRaw";
+    readonly processConfig: "_processConfig";
+    readonly osConfig: "_osConfig";
+    readonly log: "_log";
+    readonly error: "_error";
+};
+/** Globals exposed by the bridge bundle and runtime scripts inside the isolate. */
+export declare const RUNTIME_BRIDGE_GLOBAL_KEYS: {
+    readonly registerHandle: "_registerHandle";
+    readonly unregisterHandle: "_unregisterHandle";
+    readonly waitForActiveHandles: "_waitForActiveHandles";
+    readonly getActiveHandles: "_getActiveHandles";
+    readonly childProcessDispatch: "_childProcessDispatch";
+    readonly childProcessModule: "_childProcessModule";
+    readonly moduleModule: "_moduleModule";
+    readonly osModule: "_osModule";
+    readonly httpModule: "_httpModule";
+    readonly httpsModule: "_httpsModule";
+    readonly http2Module: "_http2Module";
+    readonly dnsModule: "_dnsModule";
+    readonly httpServerDispatch: "_httpServerDispatch";
+    readonly fsFacade: "_fs";
+    readonly requireFrom: "_requireFrom";
+    readonly moduleCache: "_moduleCache";
+    readonly processExitError: "ProcessExitError";
+};
+export type HostBridgeGlobalKey = ValueOf<typeof HOST_BRIDGE_GLOBAL_KEYS>;
+export type RuntimeBridgeGlobalKey = ValueOf<typeof RUNTIME_BRIDGE_GLOBAL_KEYS>;
+export type BridgeGlobalKey = HostBridgeGlobalKey | RuntimeBridgeGlobalKey;
+export declare const HOST_BRIDGE_GLOBAL_KEY_LIST: ValueOf<{
+    readonly dynamicImport: "_dynamicImport";
+    readonly loadPolyfill: "_loadPolyfill";
+    readonly resolveModule: "_resolveModule";
+    readonly loadFile: "_loadFile";
+    readonly scheduleTimer: "_scheduleTimer";
+    readonly cryptoRandomFill: "_cryptoRandomFill";
+    readonly cryptoRandomUuid: "_cryptoRandomUUID";
+    readonly fsReadFile: "_fsReadFile";
+    readonly fsWriteFile: "_fsWriteFile";
+    readonly fsReadFileBinary: "_fsReadFileBinary";
+    readonly fsWriteFileBinary: "_fsWriteFileBinary";
+    readonly fsReadDir: "_fsReadDir";
+    readonly fsMkdir: "_fsMkdir";
+    readonly fsRmdir: "_fsRmdir";
+    readonly fsExists: "_fsExists";
+    readonly fsStat: "_fsStat";
+    readonly fsUnlink: "_fsUnlink";
+    readonly fsRename: "_fsRename";
+    readonly fsChmod: "_fsChmod";
+    readonly fsChown: "_fsChown";
+    readonly fsLink: "_fsLink";
+    readonly fsSymlink: "_fsSymlink";
+    readonly fsReadlink: "_fsReadlink";
+    readonly fsLstat: "_fsLstat";
+    readonly fsTruncate: "_fsTruncate";
+    readonly fsUtimes: "_fsUtimes";
+    readonly childProcessSpawnStart: "_childProcessSpawnStart";
+    readonly childProcessStdinWrite: "_childProcessStdinWrite";
+    readonly childProcessStdinClose: "_childProcessStdinClose";
+    readonly childProcessKill: "_childProcessKill";
+    readonly childProcessSpawnSync: "_childProcessSpawnSync";
+    readonly networkFetchRaw: "_networkFetchRaw";
+    readonly networkDnsLookupRaw: "_networkDnsLookupRaw";
+    readonly networkHttpRequestRaw: "_networkHttpRequestRaw";
+    readonly networkHttpServerListenRaw: "_networkHttpServerListenRaw";
+    readonly networkHttpServerCloseRaw: "_networkHttpServerCloseRaw";
+    readonly processConfig: "_processConfig";
+    readonly osConfig: "_osConfig";
+    readonly log: "_log";
+    readonly error: "_error";
+}>[];
+export declare const RUNTIME_BRIDGE_GLOBAL_KEY_LIST: ValueOf<{
+    readonly registerHandle: "_registerHandle";
+    readonly unregisterHandle: "_unregisterHandle";
+    readonly waitForActiveHandles: "_waitForActiveHandles";
+    readonly getActiveHandles: "_getActiveHandles";
+    readonly childProcessDispatch: "_childProcessDispatch";
+    readonly childProcessModule: "_childProcessModule";
+    readonly moduleModule: "_moduleModule";
+    readonly osModule: "_osModule";
+    readonly httpModule: "_httpModule";
+    readonly httpsModule: "_httpsModule";
+    readonly http2Module: "_http2Module";
+    readonly dnsModule: "_dnsModule";
+    readonly httpServerDispatch: "_httpServerDispatch";
+    readonly fsFacade: "_fs";
+    readonly requireFrom: "_requireFrom";
+    readonly moduleCache: "_moduleCache";
+    readonly processExitError: "ProcessExitError";
+}>[];
+export declare const BRIDGE_GLOBAL_KEY_LIST: readonly (ValueOf<{
+    readonly dynamicImport: "_dynamicImport";
+    readonly loadPolyfill: "_loadPolyfill";
+    readonly resolveModule: "_resolveModule";
+    readonly loadFile: "_loadFile";
+    readonly scheduleTimer: "_scheduleTimer";
+    readonly cryptoRandomFill: "_cryptoRandomFill";
+    readonly cryptoRandomUuid: "_cryptoRandomUUID";
+    readonly fsReadFile: "_fsReadFile";
+    readonly fsWriteFile: "_fsWriteFile";
+    readonly fsReadFileBinary: "_fsReadFileBinary";
+    readonly fsWriteFileBinary: "_fsWriteFileBinary";
+    readonly fsReadDir: "_fsReadDir";
+    readonly fsMkdir: "_fsMkdir";
+    readonly fsRmdir: "_fsRmdir";
+    readonly fsExists: "_fsExists";
+    readonly fsStat: "_fsStat";
+    readonly fsUnlink: "_fsUnlink";
+    readonly fsRename: "_fsRename";
+    readonly fsChmod: "_fsChmod";
+    readonly fsChown: "_fsChown";
+    readonly fsLink: "_fsLink";
+    readonly fsSymlink: "_fsSymlink";
+    readonly fsReadlink: "_fsReadlink";
+    readonly fsLstat: "_fsLstat";
+    readonly fsTruncate: "_fsTruncate";
+    readonly fsUtimes: "_fsUtimes";
+    readonly childProcessSpawnStart: "_childProcessSpawnStart";
+    readonly childProcessStdinWrite: "_childProcessStdinWrite";
+    readonly childProcessStdinClose: "_childProcessStdinClose";
+    readonly childProcessKill: "_childProcessKill";
+    readonly childProcessSpawnSync: "_childProcessSpawnSync";
+    readonly networkFetchRaw: "_networkFetchRaw";
+    readonly networkDnsLookupRaw: "_networkDnsLookupRaw";
+    readonly networkHttpRequestRaw: "_networkHttpRequestRaw";
+    readonly networkHttpServerListenRaw: "_networkHttpServerListenRaw";
+    readonly networkHttpServerCloseRaw: "_networkHttpServerCloseRaw";
+    readonly processConfig: "_processConfig";
+    readonly osConfig: "_osConfig";
+    readonly log: "_log";
+    readonly error: "_error";
+}> | ValueOf<{
+    readonly registerHandle: "_registerHandle";
+    readonly unregisterHandle: "_unregisterHandle";
+    readonly waitForActiveHandles: "_waitForActiveHandles";
+    readonly getActiveHandles: "_getActiveHandles";
+    readonly childProcessDispatch: "_childProcessDispatch";
+    readonly childProcessModule: "_childProcessModule";
+    readonly moduleModule: "_moduleModule";
+    readonly osModule: "_osModule";
+    readonly httpModule: "_httpModule";
+    readonly httpsModule: "_httpsModule";
+    readonly http2Module: "_http2Module";
+    readonly dnsModule: "_dnsModule";
+    readonly httpServerDispatch: "_httpServerDispatch";
+    readonly fsFacade: "_fs";
+    readonly requireFrom: "_requireFrom";
+    readonly moduleCache: "_moduleCache";
+    readonly processExitError: "ProcessExitError";
+}>)[];
+/** An isolated-vm Reference that resolves async via `{ result: { promise: true } }`. */
+export interface BridgeApplyRef<TArgs extends unknown[], TResult> {
+    apply(ctx: undefined, args: TArgs, options: {
+        result: {
+            promise: true;
+        };
+    }): Promise<TResult>;
+}
+/** An isolated-vm Reference called synchronously (blocks the isolate). */
+export interface BridgeApplySyncRef<TArgs extends unknown[], TResult> {
+    applySync(ctx: undefined, args: TArgs): TResult;
+}
+/**
+ * An isolated-vm Reference that blocks the isolate while the host resolves
+ * a Promise. Used for sync-looking APIs (require, readFileSync) that need
+ * async host operations.
+ */
+export interface BridgeApplySyncPromiseRef<TArgs extends unknown[], TResult> {
+    applySyncPromise(ctx: undefined, args: TArgs): TResult;
+}
+export type DynamicImportBridgeRef = BridgeApplyRef<[
+    string,
+    string
+], Record<string, unknown> | null>;
+export type LoadPolyfillBridgeRef = BridgeApplyRef<[string], string | null>;
+export type ResolveModuleBridgeRef = BridgeApplySyncPromiseRef<[
+    string,
+    string
+], string | null>;
+export type LoadFileBridgeRef = BridgeApplySyncPromiseRef<[string], string | null>;
+export type RequireFromBridgeFn = (request: string, dirname: string) => unknown;
+export type ModuleCacheBridgeRecord = Record<string, unknown>;
+export type ProcessLogBridgeRef = BridgeApplySyncRef<[string], void>;
+export type ProcessErrorBridgeRef = BridgeApplySyncRef<[string], void>;
+export type ScheduleTimerBridgeRef = BridgeApplyRef<[number], void>;
+export type CryptoRandomFillBridgeRef = BridgeApplySyncRef<[number], string>;
+export type CryptoRandomUuidBridgeRef = BridgeApplySyncRef<[], string>;
+export type FsReadFileBridgeRef = BridgeApplySyncPromiseRef<[string], string>;
+export type FsWriteFileBridgeRef = BridgeApplySyncPromiseRef<[string, string], void>;
+export type FsReadFileBinaryBridgeRef = BridgeApplySyncPromiseRef<[string], string>;
+export type FsWriteFileBinaryBridgeRef = BridgeApplySyncPromiseRef<[
+    string,
+    string
+], void>;
+export type FsReadDirBridgeRef = BridgeApplySyncPromiseRef<[string], string>;
+export type FsMkdirBridgeRef = BridgeApplySyncPromiseRef<[string, boolean], void>;
+export type FsRmdirBridgeRef = BridgeApplySyncPromiseRef<[string], void>;
+export type FsExistsBridgeRef = BridgeApplySyncPromiseRef<[string], boolean>;
+export type FsStatBridgeRef = BridgeApplySyncPromiseRef<[string], string>;
+export type FsUnlinkBridgeRef = BridgeApplySyncPromiseRef<[string], void>;
+export type FsRenameBridgeRef = BridgeApplySyncPromiseRef<[string, string], void>;
+export type FsChmodBridgeRef = BridgeApplySyncPromiseRef<[string, number], void>;
+export type FsChownBridgeRef = BridgeApplySyncPromiseRef<[string, number, number], void>;
+export type FsLinkBridgeRef = BridgeApplySyncPromiseRef<[string, string], void>;
+export type FsSymlinkBridgeRef = BridgeApplySyncPromiseRef<[string, string], void>;
+export type FsReadlinkBridgeRef = BridgeApplySyncPromiseRef<[string], string>;
+export type FsLstatBridgeRef = BridgeApplySyncPromiseRef<[string], string>;
+export type FsTruncateBridgeRef = BridgeApplySyncPromiseRef<[string, number], void>;
+export type FsUtimesBridgeRef = BridgeApplySyncPromiseRef<[string, number, number], void>;
+/** Combined filesystem bridge facade installed as `globalThis._fs` in the isolate. */
+export interface FsFacadeBridge {
+    readFile: FsReadFileBridgeRef;
+    writeFile: FsWriteFileBridgeRef;
+    readFileBinary: FsReadFileBinaryBridgeRef;
+    writeFileBinary: FsWriteFileBinaryBridgeRef;
+    readDir: FsReadDirBridgeRef;
+    mkdir: FsMkdirBridgeRef;
+    rmdir: FsRmdirBridgeRef;
+    exists: FsExistsBridgeRef;
+    stat: FsStatBridgeRef;
+    unlink: FsUnlinkBridgeRef;
+    rename: FsRenameBridgeRef;
+    chmod: FsChmodBridgeRef;
+    chown: FsChownBridgeRef;
+    link: FsLinkBridgeRef;
+    symlink: FsSymlinkBridgeRef;
+    readlink: FsReadlinkBridgeRef;
+    lstat: FsLstatBridgeRef;
+    truncate: FsTruncateBridgeRef;
+    utimes: FsUtimesBridgeRef;
+}
+export type ChildProcessSpawnStartBridgeRef = BridgeApplySyncRef<[
+    string,
+    string,
+    string
+], number>;
+export type ChildProcessStdinWriteBridgeRef = BridgeApplySyncRef<[
+    number,
+    Uint8Array
+], void>;
+export type ChildProcessStdinCloseBridgeRef = BridgeApplySyncRef<[number], void>;
+export type ChildProcessKillBridgeRef = BridgeApplySyncRef<[number, number], void>;
+export type ChildProcessSpawnSyncBridgeRef = BridgeApplySyncPromiseRef<[
+    string,
+    string,
+    string
+], string>;
+export type NetworkFetchRawBridgeRef = BridgeApplyRef<[string, string], string>;
+export type NetworkDnsLookupRawBridgeRef = BridgeApplyRef<[string], string>;
+export type NetworkHttpRequestRawBridgeRef = BridgeApplyRef<[string, string], string>;
+export type NetworkHttpServerListenRawBridgeRef = BridgeApplyRef<[string], string>;
+export type NetworkHttpServerCloseRawBridgeRef = BridgeApplyRef<[number], void>;
+export type RegisterHandleBridgeFn = (id: string, description: string) => void;
+export type UnregisterHandleBridgeFn = (id: string) => void;

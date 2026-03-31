@@ -1,0 +1,16 @@
+import type { ExecOptions, ExecResult, PythonRunOptions, PythonRunResult, StdioHook } from "./shared/api-types.js";
+import type { PythonRuntimeDriverFactory, SystemDriver } from "./types.js";
+export interface PythonRuntimeOptions {
+    systemDriver: SystemDriver;
+    runtimeDriverFactory: PythonRuntimeDriverFactory;
+    cpuTimeLimitMs?: number;
+    onStdio?: StdioHook;
+}
+export declare class PythonRuntime {
+    private readonly runtimeDriver;
+    constructor(options: PythonRuntimeOptions);
+    run<T = unknown>(code: string, options?: PythonRunOptions): Promise<PythonRunResult<T>>;
+    exec(code: string, options?: ExecOptions): Promise<ExecResult>;
+    dispose(): void;
+    terminate(): Promise<void>;
+}

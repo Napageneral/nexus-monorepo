@@ -1,0 +1,246 @@
+"use strict";
+(() => {
+  // isolate-runtime/src/common/global-exposure.ts
+  function defineRuntimeGlobalBinding(name, value, mutable) {
+    Object.defineProperty(globalThis, name, {
+      value,
+      writable: mutable,
+      configurable: mutable,
+      enumerable: true
+    });
+  }
+  function createRuntimeGlobalExposer(mutable) {
+    return (name, value) => {
+      defineRuntimeGlobalBinding(name, value, mutable);
+    };
+  }
+  function getRuntimeExposeMutableGlobal() {
+    if (typeof globalThis.__runtimeExposeMutableGlobal === "function") {
+      return globalThis.__runtimeExposeMutableGlobal;
+    }
+    return createRuntimeGlobalExposer(true);
+  }
+
+  // isolate-runtime/src/inject/bridge-initial-globals.ts
+  var __runtimeExposeMutableGlobal = getRuntimeExposeMutableGlobal();
+  var __bridgeSetupConfig = globalThis.__runtimeBridgeSetupConfig ?? {};
+  var __initialCwd = typeof __bridgeSetupConfig.initialCwd === "string" ? __bridgeSetupConfig.initialCwd : "/";
+  var __jsonPayloadLimitBytes = typeof __bridgeSetupConfig.jsonPayloadLimitBytes === "number" && Number.isFinite(__bridgeSetupConfig.jsonPayloadLimitBytes) ? Math.max(0, Math.floor(__bridgeSetupConfig.jsonPayloadLimitBytes)) : 4 * 1024 * 1024;
+  var __payloadLimitErrorCode = typeof __bridgeSetupConfig.payloadLimitErrorCode === "string" && __bridgeSetupConfig.payloadLimitErrorCode.length > 0 ? __bridgeSetupConfig.payloadLimitErrorCode : "ERR_SANDBOX_PAYLOAD_TOO_LARGE";
+  function __scEncode(value, seen) {
+    if (value === null) return null;
+    if (value === void 0) return { t: "undef" };
+    if (typeof value === "boolean") return value;
+    if (typeof value === "string") return value;
+    if (typeof value === "bigint") return { t: "bigint", v: String(value) };
+    if (typeof value === "number") {
+      if (Object.is(value, -0)) return { t: "-0" };
+      if (Number.isNaN(value)) return { t: "nan" };
+      if (value === Infinity) return { t: "inf" };
+      if (value === -Infinity) return { t: "-inf" };
+      return value;
+    }
+    const obj = value;
+    if (seen.has(obj)) return { t: "ref", i: seen.get(obj) };
+    const idx = seen.size;
+    seen.set(obj, idx);
+    if (value instanceof Date)
+      return { t: "date", v: value.getTime() };
+    if (value instanceof RegExp)
+      return { t: "regexp", p: value.source, f: value.flags };
+    if (value instanceof Map) {
+      const entries = [];
+      value.forEach((v, k) => {
+        entries.push([__scEncode(k, seen), __scEncode(v, seen)]);
+      });
+      return { t: "map", v: entries };
+    }
+    if (value instanceof Set) {
+      const elems = [];
+      value.forEach((v) => {
+        elems.push(__scEncode(v, seen));
+      });
+      return { t: "set", v: elems };
+    }
+    if (value instanceof ArrayBuffer) {
+      return { t: "ab", v: Array.from(new Uint8Array(value)) };
+    }
+    if (ArrayBuffer.isView(value) && !(value instanceof DataView)) {
+      return {
+        t: "ta",
+        k: value.constructor.name,
+        v: Array.from(
+          new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+        )
+      };
+    }
+    if (Array.isArray(value)) {
+      return {
+        t: "arr",
+        v: value.map((v) => __scEncode(v, seen))
+      };
+    }
+    const result = {};
+    for (const key of Object.keys(value)) {
+      result[key] = __scEncode(
+        value[key],
+        seen
+      );
+    }
+    return { t: "obj", v: result };
+  }
+  function __scDecode(tagged, refs) {
+    if (tagged === null) return null;
+    if (typeof tagged === "boolean" || typeof tagged === "string" || typeof tagged === "number")
+      return tagged;
+    const tag = tagged.t;
+    if (tag === void 0) return tagged;
+    switch (tag) {
+      case "undef":
+        return void 0;
+      case "nan":
+        return NaN;
+      case "inf":
+        return Infinity;
+      case "-inf":
+        return -Infinity;
+      case "-0":
+        return -0;
+      case "bigint":
+        return BigInt(tagged.v);
+      case "ref":
+        return refs[tagged.i];
+      case "date": {
+        const d = new Date(tagged.v);
+        refs.push(d);
+        return d;
+      }
+      case "regexp": {
+        const r = new RegExp(
+          tagged.p,
+          tagged.f
+        );
+        refs.push(r);
+        return r;
+      }
+      case "map": {
+        const m = /* @__PURE__ */ new Map();
+        refs.push(m);
+        for (const [k, v] of tagged.v) {
+          m.set(__scDecode(k, refs), __scDecode(v, refs));
+        }
+        return m;
+      }
+      case "set": {
+        const s = /* @__PURE__ */ new Set();
+        refs.push(s);
+        for (const v of tagged.v) {
+          s.add(__scDecode(v, refs));
+        }
+        return s;
+      }
+      case "ab": {
+        const bytes = tagged.v;
+        const ab = new ArrayBuffer(bytes.length);
+        const u8 = new Uint8Array(ab);
+        for (let i = 0; i < bytes.length; i++) u8[i] = bytes[i];
+        refs.push(ab);
+        return ab;
+      }
+      case "ta": {
+        const { k, v: bytes } = tagged;
+        const ctors = {
+          Int8Array,
+          Uint8Array,
+          Uint8ClampedArray,
+          Int16Array,
+          Uint16Array,
+          Int32Array,
+          Uint32Array,
+          Float32Array,
+          Float64Array
+        };
+        const Ctor = ctors[k] ?? Uint8Array;
+        const ab = new ArrayBuffer(bytes.length);
+        const u8 = new Uint8Array(ab);
+        for (let i = 0; i < bytes.length; i++) u8[i] = bytes[i];
+        const ta = new Ctor(ab);
+        refs.push(ta);
+        return ta;
+      }
+      case "arr": {
+        const arr = [];
+        refs.push(arr);
+        for (const v of tagged.v) {
+          arr.push(__scDecode(v, refs));
+        }
+        return arr;
+      }
+      case "obj": {
+        const obj = {};
+        refs.push(obj);
+        const entries = tagged.v;
+        for (const key of Object.keys(entries)) {
+          obj[key] = __scDecode(entries[key], refs);
+        }
+        return obj;
+      }
+      default:
+        return tagged;
+    }
+  }
+  __runtimeExposeMutableGlobal("_moduleCache", {});
+  globalThis._moduleCache = globalThis._moduleCache ?? {};
+  var __moduleCache = globalThis._moduleCache;
+  if (__moduleCache) {
+    __moduleCache["v8"] = {
+      getHeapStatistics: function() {
+        return {
+          total_heap_size: 67108864,
+          total_heap_size_executable: 1048576,
+          total_physical_size: 67108864,
+          total_available_size: 67108864,
+          used_heap_size: 52428800,
+          heap_size_limit: 134217728,
+          malloced_memory: 8192,
+          peak_malloced_memory: 16384,
+          does_zap_garbage: 0,
+          number_of_native_contexts: 1,
+          number_of_detached_contexts: 0,
+          external_memory: 0
+        };
+      },
+      getHeapSpaceStatistics: function() {
+        return [];
+      },
+      getHeapCodeStatistics: function() {
+        return {};
+      },
+      setFlagsFromString: function() {
+      },
+      serialize: function(value) {
+        return Buffer.from(
+          JSON.stringify({ $v8sc: 1, d: __scEncode(value, /* @__PURE__ */ new Map()) })
+        );
+      },
+      deserialize: function(buffer) {
+        if (buffer.length > __jsonPayloadLimitBytes) {
+          throw new Error(
+            __payloadLimitErrorCode + ": v8.deserialize exceeds " + String(__jsonPayloadLimitBytes) + " bytes"
+          );
+        }
+        const text = buffer.toString();
+        const envelope = JSON.parse(text);
+        if (envelope !== null && typeof envelope === "object" && envelope.$v8sc === 1) {
+          return __scDecode(envelope.d, []);
+        }
+        return envelope;
+      },
+      cachedDataVersionTag: function() {
+        return 0;
+      }
+    };
+  }
+  __runtimeExposeMutableGlobal("_pendingModules", {});
+  __runtimeExposeMutableGlobal("_currentModule", { dirname: __initialCwd });
+})();

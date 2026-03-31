@@ -1,0 +1,223 @@
+[visual-browser] running: bash ./nex/scripts/e2e/golden-journey-owner-console-proof.sh
+
+[16:31:46] Installing Nex workspace dependencies
+Lockfile is up to date, resolution step is skipped
+Already up to date
+
+   ╭───────────────────────────────────────────────╮
+   │                                               │
+   │     Update available! 10.23.0 → 10.33.0.      │
+   │     Changelog: https://pnpm.io/v/10.33.0      │
+   │   To update, run: corepack use pnpm@10.33.0   │
+   │                                               │
+   ╰───────────────────────────────────────────────╯
+
+
+╭ Warning ─────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│   Ignored build scripts: @nestjs/core,                                       │
+│   @openapitools/openapi-generator-cli, koffi.                                │
+│   Run "pnpm approve-builds" to pick which dependencies should be allowed     │
+│   to run scripts.                                                            │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+. prepare$ command -v git >/dev/null 2>&1 && git config core.hooksPath git-hooks || exit 0
+. prepare: Done
+Done in 1s using pnpm v10.23.0
+
+[16:31:48] Building Nex runtime
+
+> nexus@2026.2.6-3 build /workspace/nex
+> node -e "require('node:fs').rmSync('dist', { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })" && tsdown && node --import tsx scripts/copy-hook-metadata.ts && node --import tsx scripts/copy-runtime-skills.ts && node --import tsx scripts/write-build-info.ts && node --import tsx scripts/write-cli-compat.ts
+
+ℹ tsdown v0.20.3 powered by rolldown v1.0.0-rc.3
+ℹ config file: /workspace/nex/tsdown.config.ts 
+ℹ entry: src/index.ts
+ℹ target: node22.12.0
+ℹ tsconfig: tsconfig.json
+ℹ entry: src/entry.ts
+ℹ target: node22.12.0
+ℹ tsconfig: tsconfig.json
+ℹ entry: src/support/infra/warning-filter.ts
+ℹ target: node22.12.0
+ℹ tsconfig: tsconfig.json
+ℹ entry: src/support/hooks/llm-slug-generator.ts, src/support/hooks/bundled/session-memory/handler.ts, src/support/hooks/bundled/command-logger/handler.ts
+ℹ target: node22.12.0
+ℹ tsconfig: tsconfig.json
+ℹ Build start
+ℹ dist/warning-filter.js  1.74 kB │ gzip: 0.65 kB
+ℹ 1 files, total: 1.74 kB
+✔ Build complete in 64ms
+ℹ dist/llm-slug-generator.js               484.76 kB │ gzip: 114.82 kB
+ℹ dist/bundled/command-logger/handler.js     0.15 kB │ gzip:   0.14 kB
+ℹ dist/bundled/session-memory/handler.js     0.15 kB │ gzip:   0.13 kB
+ℹ dist/agent-scope-DOsXz31S.js            1080.27 kB
+ℹ 4 files, total: 1565.34 kB
+✔ Build complete in 501ms
+ℹ Granting execute permission to dist/entry.js
+ℹ Granting execute permission to dist/index.js
+ℹ dist/entry.js                              1474.48 kB
+ℹ dist/server-methods-txdZrqFa.js            1212.34 kB
+ℹ dist/pi-embedded-XVU9VO8U.js                472.96 kB │ gzip: 111.54 kB
+ℹ dist/run-B60vKKQX.js                        440.24 kB │ gzip: 103.64 kB
+ℹ dist/config-guard-BT2HFXVf.js               339.15 kB │ gzip:  73.22 kB
+ℹ dist/models-cli-7QKGqGNz.js                 127.97 kB │ gzip:  29.24 kB
+ℹ dist/onboard-skills-Cem8Cv_a.js             126.95 kB │ gzip:  28.26 kB
+ℹ dist/adapter-connections-BHbDI0Cx.js        126.61 kB │ gzip:  23.07 kB
+ℹ dist/manager-BbSFqRiG.js                     96.68 kB │ gzip:  20.24 kB
+ℹ dist/resolveAccess-COuCJBYR.js               88.88 kB │ gzip:  20.82 kB
+ℹ dist/doctor-B5H-FtkF.js                      78.56 kB │ gzip:  20.18 kB
+ℹ dist/retain-live-DUrDllrL.js                 76.37 kB │ gzip:  19.97 kB
+ℹ dist/onboard-helpers-BLHEYqYk.js             68.44 kB │ gzip:  16.47 kB
+ℹ dist/management-api-CzIvKVDw.js              66.82 kB │ gzip:  10.97 kB
+ℹ dist/pw-ai-Cz_GvNWE.js                       54.85 kB │ gzip:  12.62 kB
+ℹ dist/update-runner-kYMbAgeN.js               52.12 kB │ gzip:  11.90 kB
+ℹ dist/skills-pzkT3gB6.js                      51.53 kB │ gzip:  13.27 kB
+ℹ dist/chrome-CohLFmjC.js                      51.03 kB │ gzip:  12.82 kB
+ℹ dist/daemon-cli-GGyknaTu.js                  47.65 kB │ gzip:  11.31 kB
+ℹ dist/memory-backfill-cli-ixAmit0u.js         37.64 kB │ gzip:   9.73 kB
+ℹ dist/update-cli-C-DM3epj.js                  37.13 kB │ gzip:  10.04 kB
+ℹ dist/auth-token-CPbjdbdJ.js                  36.34 kB │ gzip:   6.24 kB
+ℹ dist/runtime-cli-B1MrV-ux.js                 35.96 kB │ gzip:   9.89 kB
+ℹ dist/control-service-D6j9RNWI.js             29.85 kB │ gzip:   7.69 kB
+ℹ dist/service-audit-CMiMjPyz.js               29.71 kB │ gzip:   7.77 kB
+ℹ dist/configure-HL39137g.js                   26.09 kB │ gzip:   6.70 kB
+ℹ dist/qmd-manager-BC659rB7.js                 22.73 kB │ gzip:   6.57 kB
+ℹ dist/discovery-DJbTYSr3.js                   20.23 kB │ gzip:   4.98 kB
+ℹ dist/identity-CS87yDEr.js                    19.63 kB │ gzip:   4.00 kB
+ℹ dist/completion-cli-6289tz9E.js              16.66 kB │ gzip:   4.43 kB
+ℹ dist/health-format-DSCI2-ym.js               16.54 kB │ gzip:   4.56 kB
+ℹ dist/service-manager-CGJ5yHXi.js             14.93 kB │ gzip:   4.65 kB
+ℹ dist/audit-BM_DcXSO.js                       14.31 kB │ gzip:   3.29 kB
+ℹ dist/tailscale-CSWZuLe7.js                   13.95 kB │ gzip:   4.08 kB
+ℹ dist/services-DcW5cbQs.js                    13.34 kB │ gzip:   3.68 kB
+ℹ dist/operator-console-shared-DmYiBZxa.js     12.69 kB │ gzip:   3.59 kB
+ℹ dist/ledger-sessions-CvbQyv_d.js             11.30 kB │ gzip:   3.60 kB
+ℹ dist/runtime-handlers-Co-9sUAs.js            10.20 kB │ gzip:   3.34 kB
+ℹ dist/ports-BQZNdmOy.js                       10.11 kB │ gzip:   2.92 kB
+ℹ dist/logs-cli-DJv4-Dwl.js                     8.76 kB │ gzip:   2.83 kB
+ℹ dist/table-yAoqrHXQ.js                        8.44 kB │ gzip:   2.74 kB
+ℹ dist/register.subclis-BOLnkrq5.js             7.67 kB │ gzip:   2.34 kB
+ℹ dist/command-queue-BP_92cin.js                7.18 kB │ gzip:   2.16 kB
+ℹ dist/memory-retain-cli-Csyv4eOf.js            7.17 kB │ gzip:   2.38 kB
+ℹ dist/operator-console-package-C-EHx7GZ.js     6.83 kB │ gzip:   1.93 kB
+ℹ dist/ssrf-z7oe8Lsf.js                         6.71 kB │ gzip:   2.01 kB
+ℹ dist/program-BOkUoEvH.js                      6.46 kB │ gzip:   2.53 kB
+ℹ dist/memory-filters-cli-BzvFzfh-.js           6.25 kB │ gzip:   1.95 kB
+ℹ dist/run-main-C_uatgzk.js                     5.63 kB │ gzip:   2.22 kB
+ℹ dist/systemd-linger-Bq-BxASp.js               5.53 kB │ gzip:   1.66 kB
+ℹ dist/ledger-entry-UjxQcadk.js                 5.24 kB │ gzip:   1.39 kB
+ℹ dist/canonical-identity-ChxQGewR.js           4.82 kB │ gzip:   1.61 kB
+ℹ dist/memory-entities-cli-Cnf84HfP.js          4.29 kB │ gzip:   1.58 kB
+ℹ dist/package-cli-B9Yxa4Xi.js                  4.13 kB │ gzip:   1.33 kB
+ℹ dist/completion-doctor-Bqulpfhw.js            3.50 kB │ gzip:   1.12 kB
+ℹ dist/registry-CMOMUGij.js                     3.46 kB │ gzip:   1.28 kB
+ℹ dist/memory-vec-cli-BzJ-3lHY.js               3.20 kB │ gzip:   1.32 kB
+ℹ dist/health-X7x4IzkO.js                       2.99 kB │ gzip:   1.05 kB
+ℹ dist/note-Ch8Arn44.js                         2.80 kB │ gzip:   1.00 kB
+ℹ dist/memory-compact-cli-DQ5oc0TI.js           2.69 kB │ gzip:   0.85 kB
+ℹ dist/model-catalog-J-rA-P4G.js                2.24 kB │ gzip:   0.87 kB
+ℹ dist/format-duration-D-2kxvXA.js              1.82 kB │ gzip:   0.77 kB
+ℹ dist/format-Ca-6ccKj.js                       1.75 kB │ gzip:   0.80 kB
+ℹ dist/pi-model-discovery-Dlr0mbvo.js           1.13 kB │ gzip:   0.44 kB
+ℹ dist/runtime-rpc-CN2FEGGu.js                  1.07 kB │ gzip:   0.58 kB
+ℹ dist/ulid-CrmwMI4i.js                         0.89 kB │ gzip:   0.49 kB
+ℹ dist/logging-CxVyA0hD.js                      0.21 kB │ gzip:   0.14 kB
+ℹ dist/systemd-linger-C503wGUa.js               0.01 kB │ gzip:   0.03 kB
+ℹ 68 files, total: 5605.82 kB
+✔ Build complete in 696ms
+ℹ dist/index.js                               347.74 kB │ gzip:  75.96 kB
+ℹ dist/server-methods-FZR0mrf6.js            1212.90 kB
+ℹ dist/config-ClqYuoaR.js                    1110.24 kB
+ℹ dist/pi-embedded-D9wUcu1b.js                473.19 kB │ gzip: 111.54 kB
+ℹ dist/run-9ZPPFJtM.js                        440.46 kB │ gzip: 103.65 kB
+ℹ dist/runtime-Cn_5melC.js                    202.39 kB │ gzip:  35.81 kB
+ℹ dist/models-cli-Bu1FoR0A.js                 128.20 kB │ gzip:  29.34 kB
+ℹ dist/onboard-skills-Bbj7HPfR.js             127.00 kB │ gzip:  28.38 kB
+ℹ dist/adapter-connections-kxXlFOuB.js        126.73 kB │ gzip:  23.13 kB
+ℹ dist/storage-CGmKHHVv.js                    125.21 kB │ gzip:  25.50 kB
+ℹ dist/manager-BrS4FINd.js                     96.88 kB │ gzip:  20.32 kB
+ℹ dist/seeder-BS_ird99.js                      88.99 kB │ gzip:  20.77 kB
+ℹ dist/doctor-LnHMY9zx.js                      78.80 kB │ gzip:  20.24 kB
+ℹ dist/retain-dispatch-CKYFLAf3.js             76.46 kB │ gzip:  20.15 kB
+ℹ dist/runtime-choice-BEXHuLhw.js              68.73 kB │ gzip:  16.52 kB
+ℹ dist/management-api-CrjTmQjK.js              67.02 kB │ gzip:  11.03 kB
+ℹ dist/pw-ai-BllbM1XQ.js                       55.03 kB │ gzip:  12.71 kB
+ℹ dist/update-runner-CGBk0tDk.js               52.39 kB │ gzip:  11.93 kB
+ℹ dist/skills-C4IPdOYE.js                      51.69 kB │ gzip:  13.33 kB
+ℹ dist/chrome-C_cANZ2L.js                      51.07 kB │ gzip:  12.84 kB
+ℹ dist/daemon-cli-Dyr-BwPt.js                  47.79 kB │ gzip:  11.35 kB
+ℹ dist/memory-backfill-cli-DTX_G9pm.js         37.85 kB │ gzip:   9.82 kB
+ℹ dist/update-cli-DovsKuBc.js                  37.33 kB │ gzip:  10.10 kB
+ℹ dist/github-copilot-auth-DTDEVw76.js         36.34 kB │ gzip:   6.25 kB
+ℹ dist/runtime-cli-BBFxbQU5.js                 36.12 kB │ gzip:   9.96 kB
+ℹ dist/control-service-D_kMf48V.js             29.93 kB │ gzip:   7.73 kB
+ℹ dist/service-audit-Cn_SrT8L.js               29.85 kB │ gzip:   7.78 kB
+ℹ dist/configure-DYnfnqId.js                   26.20 kB │ gzip:   6.74 kB
+ℹ dist/completion-cli-BDYpRz9X.js              24.03 kB │ gzip:   6.33 kB
+ℹ dist/qmd-manager-CzRNO1dJ.js                 23.03 kB │ gzip:   6.66 kB
+ℹ dist/env-Bl7BbPEH.js                         20.59 kB │ gzip:   5.96 kB
+ℹ dist/discovery-Ct_pC_EX.js                   20.27 kB │ gzip:   5.00 kB
+ℹ dist/identity-Q8sb5ugU.js                    19.71 kB │ gzip:   4.04 kB
+ℹ dist/logging-SJYMvKTC.js                     16.65 kB │ gzip:   4.59 kB
+ℹ dist/tailscale-RfD2w4Ye.js                   14.96 kB │ gzip:   4.45 kB
+ℹ dist/service-manager-DoOsxrXR.js             14.93 kB │ gzip:   4.64 kB
+ℹ dist/grants-DUs3F8pO.js                      14.31 kB │ gzip:   3.29 kB
+ℹ dist/services-DY_aRKjq.js                    13.39 kB │ gzip:   3.70 kB
+ℹ dist/sessions-CaMYdfS6.js                    12.78 kB │ gzip:   3.64 kB
+ℹ dist/ports-9SeROb0S.js                       11.40 kB │ gzip:   3.36 kB
+ℹ dist/ledger-sessions-DEZiPr3z.js             11.36 kB │ gzip:   3.61 kB
+ℹ dist/runtime-handlers-D1zNC5Ah.js            10.21 kB │ gzip:   3.35 kB
+ℹ dist/paths-BzHZz24M.js                        9.10 kB │ gzip:   2.03 kB
+ℹ dist/logs-cli-D04CUAsP.js                     8.97 kB │ gzip:   2.92 kB
+ℹ dist/table-CnSG4CUF.js                        8.49 kB │ gzip:   2.77 kB
+ℹ dist/memory-retain-cli-DHfWPHca.js            7.39 kB │ gzip:   2.47 kB
+ℹ dist/command-queue-ZgF82WXR.js                7.18 kB │ gzip:   2.17 kB
+ℹ dist/operator-console-package-Bw5otqCK.js     6.96 kB │ gzip:   1.97 kB
+ℹ dist/ssrf-DoXzRs4e.js                         6.71 kB │ gzip:   2.01 kB
+ℹ dist/memory-filters-cli-CM8Q6kL9.js           6.36 kB │ gzip:   2.01 kB
+ℹ dist/systemd-linger-TDELn6mz.js               5.54 kB │ gzip:   1.67 kB
+ℹ dist/ledger-entry-B0w1IGUx.js                 5.29 kB │ gzip:   1.41 kB
+ℹ dist/canonical-identity-CqSFiWdh.js           4.87 kB │ gzip:   1.64 kB
+ℹ dist/memory-entities-cli-T5HTpp1m.js          4.41 kB │ gzip:   1.64 kB
+ℹ dist/package-cli-Bwtz2ovS.js                  4.14 kB │ gzip:   1.34 kB
+ℹ dist/completion-doctor-BlAy12Jk.js            3.51 kB │ gzip:   1.13 kB
+ℹ dist/registry-BJiZqpuR.js                     3.47 kB │ gzip:   1.29 kB
+ℹ dist/memory-vec-cli-BJdTZ4Fn.js               3.42 kB │ gzip:   1.42 kB
+ℹ dist/health-DI5sU32g.js                       2.99 kB │ gzip:   1.05 kB
+ℹ dist/memory-compact-cli-B4cXUEtp.js           2.81 kB │ gzip:   0.90 kB
+ℹ dist/note-hpdcn_Zu.js                         2.80 kB │ gzip:   1.01 kB
+ℹ dist/model-catalog-C8ZO0SVC.js                2.25 kB │ gzip:   0.88 kB
+ℹ dist/runtime-env-ivVSSN85.js                  2.12 kB │ gzip:   0.76 kB
+ℹ dist/format-duration-BjmUuG_X.js              1.82 kB │ gzip:   0.77 kB
+ℹ dist/onboard-auth-ikSPo7YI.js                 1.75 kB │ gzip:   0.80 kB
+ℹ dist/ansi-BtI5-97m.js                         1.75 kB │ gzip:   0.72 kB
+ℹ dist/pi-model-discovery-CY5m2NWB.js           1.14 kB │ gzip:   0.45 kB
+ℹ dist/runtime-rpc-CjawshHV.js                  1.08 kB │ gzip:   0.59 kB
+ℹ dist/ulid-C_IpKxNZ.js                         0.89 kB │ gzip:   0.49 kB
+ℹ dist/logging-CqjJmNOA.js                      0.21 kB │ gzip:   0.14 kB
+ℹ dist/systemd-linger-DapoTTo7.js               0.01 kB │ gzip:   0.03 kB
+ℹ 71 files, total: 5607.58 kB
+✔ Build complete in 716ms
+[copy-hook-metadata] No HOOK.md found for boot-md
+[copy-hook-metadata] Copied command-logger/HOOK.md
+[copy-hook-metadata] Copied session-memory/HOOK.md
+[copy-hook-metadata] No HOOK.md found for soul-evil
+[copy-hook-metadata] Done
+[copy-runtime-skills] Copied runtime skills bundle to dist/runtime-skills
+
+[16:31:50] Syncing operator-console package into the runtime
+synced operator console 1.0.0 -> /artifacts/golden-journey-owner-console-workspace/state/packages/installed/app/console/releases/1.0.0
+
+[16:31:56] Initializing fresh workspace
+
+[16:32:00] Booting owner-only runtime
+
+[16:32:04] Asserting bootstrap-pending primary agent state
+
+[16:32:08] Finalizing the canonical primary agent in place
+
+[16:32:12] Restarting finalized runtime
+
+[16:32:19] Golden journey owner->console proof completed

@@ -1,0 +1,22 @@
+/**
+ * Register an active handle that keeps the sandbox alive.
+ * Throws if the handle cap (_maxHandles) would be exceeded.
+ * @param id Unique identifier for the handle
+ * @param description Human-readable description for debugging
+ */
+export declare function _registerHandle(id: string, description: string): void;
+/**
+ * Unregister a handle. If no handles remain, resolves all waiters.
+ * @param id The handle identifier to unregister
+ */
+export declare function _unregisterHandle(id: string): void;
+/**
+ * Wait for all active handles to complete.
+ * Returns immediately if no handles are active.
+ */
+export declare function _waitForActiveHandles(): Promise<void>;
+/**
+ * Get list of currently active handles (for debugging).
+ * Returns array of [id, description] tuples.
+ */
+export declare function _getActiveHandles(): Array<[string, string]>;

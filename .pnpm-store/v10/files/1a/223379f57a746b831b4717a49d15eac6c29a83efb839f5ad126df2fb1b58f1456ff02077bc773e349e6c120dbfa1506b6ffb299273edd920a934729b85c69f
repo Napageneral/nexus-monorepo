@@ -1,0 +1,8 @@
+"use strict";
+(() => {
+  // isolate-runtime/src/inject/eval-script-result.ts
+  var __runtimeIndirectEval = globalThis.eval;
+  globalThis.__scriptResult__ = __runtimeIndirectEval(
+    String(globalThis.__runtimeExecCode)
+  );
+})();

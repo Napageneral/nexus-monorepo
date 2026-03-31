@@ -1,0 +1,713 @@
+{
+  "system": {
+    "purpose": "Exhaustive runtime-owned index for proving Nex system understanding in general and enumerating the concrete local state present in this instance.",
+    "workspace_root": "/artifacts/golden-journey-owner-console-workspace",
+    "state_root": "/artifacts/golden-journey-owner-console-workspace/state",
+    "home_root": "/artifacts/golden-journey-owner-console-workspace/home",
+    "data_root": "/artifacts/golden-journey-owner-console-workspace/state/data",
+    "runtime_reachable": true
+  },
+  "concept_index": {
+    "nouns": [
+      "records",
+      "entities",
+      "contacts",
+      "channels",
+      "conversations",
+      "sessions",
+      "jobs",
+      "workspaces",
+      "tools",
+      "apps",
+      "adapters"
+    ],
+    "distinctions": [
+      {
+        "name": "workspace root vs workspaces",
+        "detail": "The Nex workspace root is the local filesystem root. Runtime/user-facing workspaces are database-backed product nouns that can also have readable state under state/workspaces/."
+      },
+      {
+        "name": "identity workspace vs session/work workspace",
+        "detail": "Identity workspaces hold readable context for entities such as owner or assistant. Session/work workspaces hold execution-local state for active work."
+      },
+      {
+        "name": "records vs conversations vs sessions",
+        "detail": "Records are raw source events, conversations are agent-facing communication threads, and sessions are lower-level runtime execution continuity."
+      },
+      {
+        "name": "Nex API vs Frontdoor/App/Adapter APIs",
+        "detail": "The local nexus CLI projects the Nex runtime API directly. Frontdoor is a separate hosted API contract, while app and adapter APIs are discovered through runtime method catalogs plus published contracts."
+      }
+    ],
+    "runtime_domains": [
+      {
+        "domain": "Adapters",
+        "operation_count": 27,
+        "sample_operations": [
+          "adapter.connections.list",
+          "adapter.health",
+          "adapter.info",
+          "adapter.monitor.start",
+          "adapter.monitor.stop"
+        ]
+      },
+      {
+        "domain": "Agents",
+        "operation_count": 32,
+        "sample_operations": [
+          "agents.conversations.abort",
+          "agents.conversations.get",
+          "agents.conversations.history",
+          "agents.conversations.list",
+          "agents.conversations.search"
+        ]
+      },
+      {
+        "domain": "Apps",
+        "operation_count": 10,
+        "sample_operations": [
+          "apps.console.manage",
+          "apps.get",
+          "apps.install",
+          "apps.list",
+          "apps.logs"
+        ]
+      },
+      {
+        "domain": "Channels",
+        "operation_count": 11,
+        "sample_operations": [
+          "channels.create",
+          "channels.get",
+          "channels.history",
+          "channels.list",
+          "channels.participants.get"
+        ]
+      },
+      {
+        "domain": "Identity",
+        "operation_count": 59,
+        "sample_operations": [
+          "acl.approval.request",
+          "acl.audit.get",
+          "acl.audit.list",
+          "acl.audit.stats",
+          "acl.evaluate"
+        ]
+      },
+      {
+        "domain": "Jobs",
+        "operation_count": 46,
+        "sample_operations": [
+          "dags.create",
+          "dags.delete",
+          "dags.get",
+          "dags.list",
+          "dags.runs.cancel"
+        ]
+      },
+      {
+        "domain": "Memory",
+        "operation_count": 35,
+        "sample_operations": [
+          "memory.elements.consolidate",
+          "memory.elements.create",
+          "memory.elements.definitions.create",
+          "memory.elements.definitions.get",
+          "memory.elements.definitions.list"
+        ]
+      },
+      {
+        "domain": "Records",
+        "operation_count": 5,
+        "sample_operations": [
+          "record.ingest",
+          "records.backfill",
+          "records.get",
+          "records.list",
+          "records.search"
+        ]
+      },
+      {
+        "domain": "Runtime",
+        "operation_count": 66,
+        "sample_operations": [
+          "browser.request",
+          "config.apply",
+          "config.get",
+          "config.patch",
+          "config.schema"
+        ]
+      },
+      {
+        "domain": "Workspaces",
+        "operation_count": 10,
+        "sample_operations": [
+          "workspaces.create",
+          "workspaces.delete",
+          "workspaces.files.delete",
+          "workspaces.files.get",
+          "workspaces.files.list"
+        ]
+      }
+    ],
+    "runtime_operations_total": 301,
+    "core_tool_catalog_total": 295
+  },
+  "self_index": {
+    "owner_role_group": {
+      "group_id": "group-owner",
+      "group": {
+        "id": "group-owner",
+        "name": "Owner",
+        "description": "Role group for the current owner of this runtime.",
+        "created_at": 1774888324437,
+        "updated_at": 1774888335882,
+        "deleted_at": null
+      },
+      "current_owner_entity_id": "entity-owner"
+    },
+    "owner": {
+      "entity_id": "entity-owner",
+      "entity": {
+        "id": "entity-owner",
+        "name": "Tyler Brandt",
+        "type": "person",
+        "is_user": 1,
+        "is_agent": 0,
+        "merged_into": null,
+        "origin": "manual",
+        "deleted_at": null
+      },
+      "workspace_path": "/artifacts/golden-journey-owner-console-workspace/state/workspaces/entity-owner",
+      "workspace_files": [
+        "IDENTITY.md"
+      ],
+      "identity_file": {
+        "path": "/artifacts/golden-journey-owner-console-workspace/state/workspaces/entity-owner/IDENTITY.md",
+        "exists": true,
+        "parsed": {
+          "name": "Tyler Brandt"
+        }
+      },
+      "contacts": [
+        {
+          "observed_entity_id": "entity-owner",
+          "canonical_entity_id": "entity-owner",
+          "platform": "email",
+          "contact_id": "tyler@example.com",
+          "contact_name": "Tyler Brandt",
+          "space_id": "",
+          "origin": "manual"
+        }
+      ],
+      "notes": []
+    },
+    "system": {
+      "entity_id": "system",
+      "entity": {
+        "id": "system",
+        "name": "Nexus System",
+        "type": "system",
+        "is_user": false,
+        "origin": "runtime"
+      },
+      "notes": [
+        "Canonical non-human principal for runtime-origin work."
+      ]
+    },
+    "assistant": {
+      "entity_id": "entity-assistant",
+      "entity": {
+        "id": "entity-assistant",
+        "name": "Echo",
+        "type": "agent",
+        "is_user": 0,
+        "is_agent": 1,
+        "merged_into": null,
+        "origin": "manual",
+        "deleted_at": null
+      },
+      "workspace_path": "/artifacts/golden-journey-owner-console-workspace/state/workspaces/entity-assistant",
+      "workspace_files": [
+        "IDENTITY.md",
+        "SOUL.md"
+      ],
+      "identity_file": {
+        "path": "/artifacts/golden-journey-owner-console-workspace/state/workspaces/entity-assistant/IDENTITY.md",
+        "exists": true,
+        "parsed": {
+          "name": "Echo",
+          "theme": "signal familiar",
+          "vibe": "Direct, sharp, grounded."
+        }
+      },
+      "contacts": [
+        {
+          "observed_entity_id": "entity-assistant",
+          "canonical_entity_id": "entity-assistant",
+          "platform": "email",
+          "contact_id": "echo@example.com",
+          "contact_name": "Echo",
+          "space_id": "",
+          "origin": "manual"
+        }
+      ],
+      "notes": []
+    }
+  },
+  "runtime_index": {
+    "available": true,
+    "identity": {
+      "entities": {
+        "count": 2,
+        "source": "identity.db.entities WHERE merged_into IS NULL AND deleted_at IS NULL",
+        "inspect": "nexus entities list --json",
+        "examples": [
+          "Tyler Brandt",
+          "Echo"
+        ],
+        "breakdown": [
+          {
+            "label": "person",
+            "count": 1
+          },
+          {
+            "label": "agent",
+            "count": 1
+          }
+        ],
+        "note": "users=1, agents=1"
+      },
+      "contacts": {
+        "count": 2,
+        "source": "identity.db.contacts WHERE deleted_at IS NULL",
+        "inspect": "nexus contacts list --json",
+        "examples": [
+          "echo@example.com",
+          "tyler@example.com"
+        ],
+        "breakdown": [
+          {
+            "label": "email",
+            "count": 2
+          }
+        ]
+      },
+      "channels": {
+        "count": 0,
+        "source": "identity.db.channels WHERE deleted_at IS NULL",
+        "inspect": "nexus channels list --json"
+      },
+      "groups": {
+        "count": 1,
+        "source": "identity.db.groups WHERE deleted_at IS NULL",
+        "inspect": "nexus groups list --json",
+        "examples": [
+          "Owner"
+        ]
+      },
+      "credentials": {
+        "count": 3,
+        "source": "identity.db.credentials",
+        "inspect": "nexus credentials list --json",
+        "breakdown": [
+          {
+            "label": "anthropic",
+            "count": 1
+          },
+          {
+            "label": "openai-codex",
+            "count": 1
+          },
+          {
+            "label": "qwen-portal",
+            "count": 1
+          }
+        ],
+        "details": [
+          {
+            "id": "f0e78df5-59a1-461b-8a20-be9032ea1346",
+            "service": "anthropic",
+            "account": "claude-cli",
+            "type": "external_cli",
+            "status": "active",
+            "storage_type": "external",
+            "source": null
+          },
+          {
+            "id": "d1d7b5c0-d155-4c2b-91c2-ada64c6911cb",
+            "service": "openai-codex",
+            "account": "codex-cli",
+            "type": "external_cli",
+            "status": "active",
+            "storage_type": "external",
+            "source": null
+          },
+          {
+            "id": "aa28e83c-d9fe-4adc-aea7-13450e773ef1",
+            "service": "qwen-portal",
+            "account": "qwen-cli",
+            "type": "external_cli",
+            "status": "active",
+            "storage_type": "external",
+            "source": null
+          }
+        ]
+      },
+      "connections": {
+        "count": 0,
+        "source": "adapters.connections.list + ledger-backed corpus summary",
+        "inspect": "nexus adapters connections list --json",
+        "note": "distinct adapters=0; live_statuses=none"
+      },
+      "workspace_bindings": {
+        "count": 2,
+        "source": "identity.db.entity_workspace_bindings WHERE deleted_at IS NULL",
+        "inspect": "nexus entities list --json"
+      }
+    },
+    "communications": {
+      "conversations": {
+        "count": 0,
+        "source": "agents.db.conversations",
+        "inspect": "nexus agents conversations list --json"
+      },
+      "sessions": {
+        "count": 0,
+        "source": "agents.db.sessions",
+        "inspect": "nexus agents sessions list --json",
+        "note": "subagents=0"
+      },
+      "turns": {
+        "count": 0,
+        "source": "agents.db.turns",
+        "inspect": "nexus runtime status"
+      },
+      "messages": {
+        "count": 0,
+        "source": "agents.db.messages",
+        "inspect": "nexus runtime status"
+      },
+      "tool_calls": {
+        "count": 0,
+        "source": "agents.db.tool_calls",
+        "inspect": "nexus runtime status"
+      }
+    },
+    "knowledge": {
+      "records": {
+        "count": 0,
+        "source": "records.db.records",
+        "inspect": "nexus records search --params '{\"query\":\"...\"}' --json"
+      },
+      "memory_elements": {
+        "count": 0,
+        "source": "memory.db.elements head rows",
+        "inspect": "nexus runtime call memory.elements.list --params '{}' --json",
+        "note": "all versions=0"
+      },
+      "memory_sets": {
+        "count": 0,
+        "source": "memory.db.sets",
+        "inspect": "nexus runtime call memory.sets.list --params '{}' --json",
+        "note": "members=0"
+      },
+      "search_projection": {
+        "count": 0,
+        "source": "search.db.search_documents + search.db.search_projection_state + work.db.job_runs",
+        "inspect": "nexus search status --json",
+        "note": "status=empty; queued=0; running=0; cache_entries=0; cache_version=0",
+        "details": [
+          {
+            "status": "empty",
+            "documents_total": 0,
+            "projection_sources": [],
+            "recent_runs": [],
+            "cache": {
+              "kind": "process_local",
+              "version": 0,
+              "entries": 0,
+              "hits": 0,
+              "misses": 0,
+              "invalidations": 0,
+              "evictions": 0
+            }
+          }
+        ]
+      }
+    },
+    "work": {
+      "jobs": {
+        "count": 8,
+        "source": "work.db.job_definitions",
+        "inspect": "nexus jobs list --json",
+        "note": "raw job definitions; the public jobs.list view filters internal lifecycle jobs"
+      },
+      "schedules": {
+        "count": 0,
+        "source": "work.db.job_schedules",
+        "inspect": "nexus schedules list --json"
+      },
+      "runtime_workspaces": {
+        "count": 0,
+        "source": "runtime.db.workspaces",
+        "inspect": "nexus workspaces list --json"
+      }
+    },
+    "capabilities": {
+      "apps": {
+        "count": 1,
+        "source": "installed app manifests",
+        "inspect": "nexus apps list --json",
+        "examples": [
+          "Operator Console"
+        ],
+        "note": "methods=0"
+      },
+      "app_methods": {
+        "count": 0,
+        "source": "installed app manifests",
+        "inspect": "nexus runtime call apps.methods --params '{\"id\":\"<app-id>\"}' --json",
+        "breakdown": [
+          {
+            "label": "console",
+            "count": 0
+          }
+        ]
+      },
+      "adapters": {
+        "count": 0,
+        "source": "runtime adapter manager",
+        "inspect": "nexus runtime call adapters.methods --params '{\"id\":\"<adapter-id>\"}' --json"
+      },
+      "adapter_methods": {
+        "count": 0,
+        "source": "runtime adapter method catalog",
+        "inspect": "nexus runtime call adapters.methods --params '{\"id\":\"<adapter-id>\"}' --json"
+      },
+      "tools": {
+        "count": 295,
+        "source": "session-scoped capability projection",
+        "inspect": "generated from the unified runtime capability registry plus session posture",
+        "examples": [
+          "acl.approval.request",
+          "acl.audit.get",
+          "acl.audit.list",
+          "acl.audit.stats",
+          "acl.evaluate"
+        ],
+        "breakdown": [
+          {
+            "label": "memory",
+            "count": 35
+          },
+          {
+            "label": "agents",
+            "count": 32
+          },
+          {
+            "label": "models",
+            "count": 23
+          },
+          {
+            "label": "acl",
+            "count": 16
+          },
+          {
+            "label": "adapters",
+            "count": 16
+          },
+          {
+            "label": "jobs",
+            "count": 16
+          },
+          {
+            "label": "entities",
+            "count": 12
+          },
+          {
+            "label": "channels",
+            "count": 11
+          },
+          {
+            "label": "dags",
+            "count": 11
+          },
+          {
+            "label": "local",
+            "count": 11
+          },
+          {
+            "label": "adapter",
+            "count": 10
+          },
+          {
+            "label": "workspaces",
+            "count": 10
+          },
+          {
+            "label": "credentials",
+            "count": 8
+          },
+          {
+            "label": "groups",
+            "count": 8
+          },
+          {
+            "label": "sandboxes",
+            "count": 8
+          },
+          {
+            "label": "apps",
+            "count": 7
+          },
+          {
+            "label": "auth",
+            "count": 7
+          },
+          {
+            "label": "contacts",
+            "count": 7
+          },
+          {
+            "label": "events",
+            "count": 7
+          },
+          {
+            "label": "schedules",
+            "count": 6
+          },
+          {
+            "label": "config",
+            "count": 5
+          },
+          {
+            "label": "orientation",
+            "count": 5
+          },
+          {
+            "label": "roles",
+            "count": 5
+          },
+          {
+            "label": "wizard",
+            "count": 4
+          },
+          {
+            "label": "records",
+            "count": 3
+          },
+          {
+            "label": "skills",
+            "count": 3
+          },
+          {
+            "label": "search",
+            "count": 2
+          },
+          {
+            "label": "logs",
+            "count": 1
+          },
+          {
+            "label": "productControlPlane",
+            "count": 1
+          },
+          {
+            "label": "runtime",
+            "count": 1
+          },
+          {
+            "label": "status",
+            "count": 1
+          },
+          {
+            "label": "system-presence",
+            "count": 1
+          },
+          {
+            "label": "talk",
+            "count": 1
+          },
+          {
+            "label": "update",
+            "count": 1
+          }
+        ]
+      }
+    }
+  },
+  "workspace_index": {
+    "readable_workspaces": [
+      {
+        "id": "entity-assistant",
+        "path": "/artifacts/golden-journey-owner-console-workspace/state/workspaces/entity-assistant",
+        "file_count": 2,
+        "files": [
+          "IDENTITY.md",
+          "SOUL.md"
+        ]
+      },
+      {
+        "id": "entity-owner",
+        "path": "/artifacts/golden-journey-owner-console-workspace/state/workspaces/entity-owner",
+        "file_count": 1,
+        "files": [
+          "IDENTITY.md"
+        ]
+      },
+      {
+        "id": "memory-consolidator",
+        "path": "/artifacts/golden-journey-owner-console-workspace/state/workspaces/memory-consolidator",
+        "file_count": 4,
+        "files": [
+          "ERRORS.md",
+          "PATTERNS.md",
+          "ROLE.md",
+          "SKILLS.md"
+        ]
+      },
+      {
+        "id": "memory-reader",
+        "path": "/artifacts/golden-journey-owner-console-workspace/state/workspaces/memory-reader",
+        "file_count": 4,
+        "files": [
+          "ERRORS.md",
+          "PATTERNS.md",
+          "ROLE.md",
+          "SKILLS.md"
+        ]
+      },
+      {
+        "id": "memory-writer",
+        "path": "/artifacts/golden-journey-owner-console-workspace/state/workspaces/memory-writer",
+        "file_count": 4,
+        "files": [
+          "ERRORS.md",
+          "PATTERNS.md",
+          "ROLE.md",
+          "SKILLS.md"
+        ]
+      }
+    ],
+    "skill_library": {
+      "total": 0,
+      "ready": 0,
+      "examples": [],
+      "inspect": "nexus skill list",
+      "source": "workspace skill library discovery",
+      "default_agent_id": "entity-assistant",
+      "agent_workspace_dir": "/artifacts/golden-journey-owner-console-workspace/state/workspaces/entity-assistant"
+    },
+    "installed_apps": [
+      {
+        "id": "console",
+        "version": "1.0.0",
+        "display_name": "Operator Console",
+        "method_count": 0,
+        "package_dir": "/artifacts/golden-journey-owner-console-workspace/state/packages/installed/app/console/releases/1.0.0"
+      }
+    ]
+  }
+}

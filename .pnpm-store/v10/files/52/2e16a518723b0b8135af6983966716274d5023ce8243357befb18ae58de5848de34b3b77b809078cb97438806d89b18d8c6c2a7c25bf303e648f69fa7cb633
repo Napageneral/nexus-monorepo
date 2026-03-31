@@ -1,0 +1,36 @@
+"use strict";
+(() => {
+  // isolate-runtime/src/common/global-exposure.ts
+  function defineRuntimeGlobalBinding(name, value, mutable) {
+    Object.defineProperty(globalThis, name, {
+      value,
+      writable: mutable,
+      configurable: mutable,
+      enumerable: true
+    });
+  }
+  function createRuntimeGlobalExposer(mutable) {
+    return (name, value) => {
+      defineRuntimeGlobalBinding(name, value, mutable);
+    };
+  }
+  function getRuntimeExposeMutableGlobal() {
+    if (typeof globalThis.__runtimeExposeMutableGlobal === "function") {
+      return globalThis.__runtimeExposeMutableGlobal;
+    }
+    return createRuntimeGlobalExposer(true);
+  }
+
+  // isolate-runtime/src/inject/set-commonjs-file-globals.ts
+  var __runtimeExposeMutableGlobal = getRuntimeExposeMutableGlobal();
+  var __commonJsFileConfig = globalThis.__runtimeCommonJsFileConfig ?? {};
+  var __filePath = typeof __commonJsFileConfig.filePath === "string" ? __commonJsFileConfig.filePath : "/<entry>.js";
+  var __dirname = typeof __commonJsFileConfig.dirname === "string" ? __commonJsFileConfig.dirname : "/";
+  __runtimeExposeMutableGlobal("__filename", __filePath);
+  __runtimeExposeMutableGlobal("__dirname", __dirname);
+  var __currentModule = globalThis._currentModule;
+  if (__currentModule) {
+    __currentModule.dirname = __dirname;
+    __currentModule.filename = __filePath;
+  }
+})();

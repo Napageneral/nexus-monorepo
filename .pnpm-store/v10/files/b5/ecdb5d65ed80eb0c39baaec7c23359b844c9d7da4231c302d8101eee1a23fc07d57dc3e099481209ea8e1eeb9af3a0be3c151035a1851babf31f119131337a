@@ -1,0 +1,249 @@
+import type * as nodeHttp from "http";
+interface FetchOptions {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string | null;
+    mode?: string;
+    credentials?: string;
+    cache?: string;
+    redirect?: string;
+    referrer?: string;
+    integrity?: string;
+}
+interface FetchResponse {
+    ok: boolean;
+    status: number;
+    statusText: string;
+    headers: Map<string, string>;
+    url: string;
+    redirected: boolean;
+    type: string;
+    text(): Promise<string>;
+    json(): Promise<unknown>;
+    arrayBuffer(): Promise<ArrayBuffer>;
+    blob(): Promise<never>;
+    clone(): FetchResponse;
+}
+export declare function fetch(url: string | URL, options?: FetchOptions): Promise<FetchResponse>;
+export declare class Headers {
+    private _headers;
+    constructor(init?: HeadersInit | Headers | Record<string, string> | [string, string][]);
+    get(name: string): string | null;
+    set(name: string, value: string): void;
+    has(name: string): boolean;
+    delete(name: string): void;
+    entries(): IterableIterator<[string, string]>;
+    [Symbol.iterator](): IterableIterator<[string, string]>;
+    keys(): IterableIterator<string>;
+    values(): IterableIterator<string>;
+    forEach(callback: (value: string, key: string, parent: Headers) => void): void;
+}
+export declare class Request {
+    url: string;
+    method: string;
+    headers: Headers;
+    body: string | null;
+    mode: string;
+    credentials: string;
+    cache: string;
+    redirect: string;
+    referrer: string;
+    integrity: string;
+    constructor(input: string | Request, init?: FetchOptions);
+    clone(): Request;
+}
+export declare class Response {
+    private _body;
+    status: number;
+    statusText: string;
+    headers: Headers;
+    ok: boolean;
+    type: string;
+    url: string;
+    redirected: boolean;
+    constructor(body?: string | null, init?: {
+        status?: number;
+        statusText?: string;
+        headers?: Record<string, string>;
+    });
+    text(): Promise<string>;
+    json(): Promise<unknown>;
+    clone(): Response;
+    static error(): Response;
+    static redirect(url: string, status?: number): Response;
+}
+type DnsCallback = (err: Error | null, address?: string, family?: number) => void;
+type DnsResolveCallback = (err: Error | null, addresses?: string[]) => void;
+export declare const dns: {
+    lookup(hostname: string, options: unknown, callback?: DnsCallback): void;
+    resolve(hostname: string, rrtype: string | DnsResolveCallback, callback?: DnsResolveCallback): void;
+    resolve4(hostname: string, callback: DnsResolveCallback): void;
+    resolve6(hostname: string, callback: DnsResolveCallback): void;
+    promises: {
+        lookup(hostname: string, _options?: unknown): Promise<{
+            address: string;
+            family: number;
+        }>;
+        resolve(hostname: string, rrtype?: string): Promise<string[]>;
+    };
+};
+type EventListener = (...args: unknown[]) => void;
+/**
+ * Polyfill of Node.js `http.IncomingMessage` (client-side response). Buffers
+ * the response body eagerly and emits `data`/`end` events on listener
+ * registration (flowing mode). Supports base64 binary decoding via
+ * `x-body-encoding` header.
+ */
+export declare class IncomingMessage {
+    headers: Record<string, string>;
+    rawHeaders: string[];
+    trailers: Record<string, string>;
+    rawTrailers: string[];
+    httpVersion: string;
+    httpVersionMajor: number;
+    httpVersionMinor: number;
+    method: string | null;
+    url: string;
+    statusCode: number | undefined;
+    statusMessage: string | undefined;
+    private _body;
+    private _isBinary;
+    private _listeners;
+    complete: boolean;
+    aborted: boolean;
+    socket: null;
+    private _bodyConsumed;
+    private _ended;
+    private _flowing;
+    readable: boolean;
+    readableEnded: boolean;
+    readableFlowing: boolean | null;
+    destroyed: boolean;
+    private _encoding?;
+    constructor(response?: {
+        headers?: Record<string, string>;
+        url?: string;
+        status?: number;
+        statusText?: string;
+        body?: string;
+        trailers?: Record<string, string>;
+    });
+    on(event: string, listener: EventListener): this;
+    once(event: string, listener: EventListener): this;
+    off(event: string, listener: EventListener): this;
+    removeListener(event: string, listener: EventListener): this;
+    removeAllListeners(event?: string): this;
+    emit(event: string, ...args: unknown[]): boolean;
+    setEncoding(encoding: string): this;
+    read(_size?: number): string | Buffer | null;
+    pipe<T extends NodeJS.WritableStream>(dest: T): T;
+    pause(): this;
+    resume(): this;
+    unpipe(_dest?: NodeJS.WritableStream): this;
+    destroy(err?: Error): this;
+    [Symbol.asyncIterator](): AsyncIterator<string | Buffer>;
+}
+/**
+ * Polyfill of Node.js `http.ClientRequest`. Executes the request asynchronously
+ * via the `_networkHttpRequestRaw` bridge and emits a `response` event with
+ * an IncomingMessage. Supports Agent-based connection pooling, socket events,
+ * HTTP upgrade (101), and trailer headers.
+ */
+export declare class ClientRequest {
+    private _options;
+    private _callback?;
+    private _listeners;
+    private _body;
+    private _ended;
+    private _agent;
+    private _hostKey;
+    socket: FakeSocket;
+    finished: boolean;
+    aborted: boolean;
+    constructor(options: nodeHttp.RequestOptions, callback?: (res: IncomingMessage) => void);
+    private _execute;
+    private _buildUrl;
+    on(event: string, listener: EventListener): this;
+    once(event: string, listener: EventListener): this;
+    off(event: string, listener: EventListener): this;
+    private _emit;
+    write(data: string): boolean;
+    end(data?: string): this;
+    abort(): void;
+    setTimeout(_timeout: number): this;
+    setNoDelay(): this;
+    setSocketKeepAlive(): this;
+    flushHeaders(): void;
+}
+declare class FakeSocket {
+    remoteAddress: string;
+    remotePort: number;
+    localAddress: string;
+    localPort: number;
+    connecting: boolean;
+    destroyed: boolean;
+    writable: boolean;
+    readable: boolean;
+    private _listeners;
+    constructor(options?: {
+        host?: string;
+        port?: number;
+    });
+    setTimeout(_ms: number, _cb?: () => void): this;
+    setNoDelay(_noDelay?: boolean): this;
+    setKeepAlive(_enable?: boolean, _delay?: number): this;
+    on(event: string, listener: EventListener): this;
+    once(event: string, listener: EventListener): this;
+    off(event: string, listener: EventListener): this;
+    removeListener(event: string, listener: EventListener): this;
+    emit(event: string, ...args: unknown[]): boolean;
+    write(_data: unknown): boolean;
+    end(): this;
+    destroy(): this;
+}
+export declare const http: Record<string, unknown>;
+export declare const https: Record<string, unknown>;
+export declare const http2: {
+    Http2ServerRequest: {
+        new (): {};
+    };
+    Http2ServerResponse: {
+        new (): {};
+    };
+    createServer(): never;
+    createSecureServer(): never;
+};
+declare const _default: {
+    fetch: typeof fetch;
+    Headers: typeof Headers;
+    Request: typeof Request;
+    Response: typeof Response;
+    dns: {
+        lookup(hostname: string, options: unknown, callback?: DnsCallback): void;
+        resolve(hostname: string, rrtype: string | DnsResolveCallback, callback?: DnsResolveCallback): void;
+        resolve4(hostname: string, callback: DnsResolveCallback): void;
+        resolve6(hostname: string, callback: DnsResolveCallback): void;
+        promises: {
+            lookup(hostname: string, _options?: unknown): Promise<{
+                address: string;
+                family: number;
+            }>;
+            resolve(hostname: string, rrtype?: string): Promise<string[]>;
+        };
+    };
+    http: Record<string, unknown>;
+    https: Record<string, unknown>;
+    http2: {
+        Http2ServerRequest: {
+            new (): {};
+        };
+        Http2ServerResponse: {
+            new (): {};
+        };
+        createServer(): never;
+        createSecureServer(): never;
+    };
+    IncomingMessage: typeof IncomingMessage;
+    ClientRequest: typeof ClientRequest;
+};
+export default _default;

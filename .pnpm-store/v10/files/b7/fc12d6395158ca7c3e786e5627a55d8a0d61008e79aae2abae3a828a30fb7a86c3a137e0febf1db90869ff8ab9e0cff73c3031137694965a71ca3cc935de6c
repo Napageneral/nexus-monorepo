@@ -1,0 +1,686 @@
+"use strict";
+(() => {
+  // isolate-runtime/src/inject/require-setup.ts
+  var __requireExposeCustomGlobal = typeof globalThis.__runtimeExposeCustomGlobal === "function" ? globalThis.__runtimeExposeCustomGlobal : function exposeCustomGlobal(name2, value) {
+    Object.defineProperty(globalThis, name2, {
+      value,
+      writable: false,
+      configurable: false,
+      enumerable: true
+    });
+  };
+  if (typeof globalThis.AbortController === "undefined" || typeof globalThis.AbortSignal === "undefined") {
+    class AbortSignal {
+      constructor() {
+        this.aborted = false;
+        this.reason = void 0;
+        this.onabort = null;
+        this._listeners = [];
+      }
+      addEventListener(type, listener) {
+        if (type !== "abort" || typeof listener !== "function") return;
+        this._listeners.push(listener);
+      }
+      removeEventListener(type, listener) {
+        if (type !== "abort" || typeof listener !== "function") return;
+        const index = this._listeners.indexOf(listener);
+        if (index !== -1) {
+          this._listeners.splice(index, 1);
+        }
+      }
+      dispatchEvent(event) {
+        if (!event || event.type !== "abort") return false;
+        if (typeof this.onabort === "function") {
+          try {
+            this.onabort.call(this, event);
+          } catch {
+          }
+        }
+        const listeners = this._listeners.slice();
+        for (const listener of listeners) {
+          try {
+            listener.call(this, event);
+          } catch {
+          }
+        }
+        return true;
+      }
+    }
+    class AbortController {
+      constructor() {
+        this.signal = new AbortSignal();
+      }
+      abort(reason) {
+        if (this.signal.aborted) return;
+        this.signal.aborted = true;
+        this.signal.reason = reason;
+        this.signal.dispatchEvent({ type: "abort" });
+      }
+    }
+    __requireExposeCustomGlobal("AbortSignal", AbortSignal);
+    __requireExposeCustomGlobal("AbortController", AbortController);
+  }
+  if (typeof globalThis.structuredClone !== "function") {
+    let structuredClonePolyfill = function(value) {
+      if (value === null || typeof value !== "object") {
+        return value;
+      }
+      if (value instanceof ArrayBuffer) {
+        return value.slice(0);
+      }
+      if (ArrayBuffer.isView(value)) {
+        if (value instanceof Uint8Array) {
+          return new Uint8Array(value);
+        }
+        return new value.constructor(value);
+      }
+      return JSON.parse(JSON.stringify(value));
+    };
+    structuredClonePolyfill2 = structuredClonePolyfill;
+    __requireExposeCustomGlobal("structuredClone", structuredClonePolyfill);
+  }
+  var structuredClonePolyfill2;
+  if (typeof globalThis.btoa !== "function") {
+    __requireExposeCustomGlobal("btoa", function btoa(input) {
+      return Buffer.from(String(input), "binary").toString("base64");
+    });
+  }
+  if (typeof globalThis.atob !== "function") {
+    __requireExposeCustomGlobal("atob", function atob(input) {
+      return Buffer.from(String(input), "base64").toString("binary");
+    });
+  }
+  function _dirname(p) {
+    const lastSlash = p.lastIndexOf("/");
+    if (lastSlash === -1) return ".";
+    if (lastSlash === 0) return "/";
+    return p.slice(0, lastSlash);
+  }
+  function _patchPolyfill(name2, result2) {
+    if (typeof result2 !== "object" && typeof result2 !== "function" || result2 === null) {
+      return result2;
+    }
+    if (name2 === "buffer") {
+      const maxLength = typeof result2.kMaxLength === "number" ? result2.kMaxLength : 2147483647;
+      const maxStringLength = typeof result2.kStringMaxLength === "number" ? result2.kStringMaxLength : 536870888;
+      if (typeof result2.constants !== "object" || result2.constants === null) {
+        result2.constants = {};
+      }
+      if (typeof result2.constants.MAX_LENGTH !== "number") {
+        result2.constants.MAX_LENGTH = maxLength;
+      }
+      if (typeof result2.constants.MAX_STRING_LENGTH !== "number") {
+        result2.constants.MAX_STRING_LENGTH = maxStringLength;
+      }
+      if (typeof result2.kMaxLength !== "number") {
+        result2.kMaxLength = maxLength;
+      }
+      if (typeof result2.kStringMaxLength !== "number") {
+        result2.kStringMaxLength = maxStringLength;
+      }
+      const BufferCtor = result2.Buffer;
+      if ((typeof BufferCtor === "function" || typeof BufferCtor === "object") && BufferCtor !== null) {
+        if (typeof BufferCtor.kMaxLength !== "number") {
+          BufferCtor.kMaxLength = maxLength;
+        }
+        if (typeof BufferCtor.kStringMaxLength !== "number") {
+          BufferCtor.kStringMaxLength = maxStringLength;
+        }
+        if (typeof BufferCtor.constants !== "object" || BufferCtor.constants === null) {
+          BufferCtor.constants = result2.constants;
+        }
+      }
+      return result2;
+    }
+    if (name2 === "util" && typeof result2.formatWithOptions === "undefined" && typeof result2.format === "function") {
+      result2.formatWithOptions = function formatWithOptions(inspectOptions, ...args) {
+        return result2.format.apply(null, args);
+      };
+      return result2;
+    }
+    if (name2 === "url") {
+      const OriginalURL = result2.URL;
+      if (typeof OriginalURL !== "function" || OriginalURL._patched) {
+        return result2;
+      }
+      const PatchedURL = function PatchedURL2(url, base) {
+        if (typeof url === "string" && url.startsWith("file:") && !url.startsWith("file://") && base === void 0) {
+          if (typeof process !== "undefined" && typeof process.cwd === "function") {
+            const cwd = process.cwd();
+            if (cwd) {
+              try {
+                return new OriginalURL(url, "file://" + cwd + "/");
+              } catch (e) {
+              }
+            }
+          }
+        }
+        return base !== void 0 ? new OriginalURL(url, base) : new OriginalURL(url);
+      };
+      Object.keys(OriginalURL).forEach(function(key) {
+        try {
+          PatchedURL[key] = OriginalURL[key];
+        } catch {
+        }
+      });
+      Object.setPrototypeOf(PatchedURL, OriginalURL);
+      PatchedURL.prototype = OriginalURL.prototype;
+      PatchedURL._patched = true;
+      const descriptor = Object.getOwnPropertyDescriptor(result2, "URL");
+      if (descriptor && descriptor.configurable !== true && descriptor.writable !== true && typeof descriptor.set !== "function") {
+        return result2;
+      }
+      try {
+        result2.URL = PatchedURL;
+      } catch {
+        try {
+          Object.defineProperty(result2, "URL", {
+            value: PatchedURL,
+            writable: true,
+            configurable: true,
+            enumerable: descriptor?.enumerable ?? true
+          });
+        } catch {
+        }
+      }
+      return result2;
+    }
+    if (name2 === "path") {
+      if (result2.win32 === null || result2.win32 === void 0) {
+        result2.win32 = result2.posix || result2;
+      }
+      if (result2.posix === null || result2.posix === void 0) {
+        result2.posix = result2;
+      }
+      const hasAbsoluteSegment = function(args) {
+        return args.some(function(arg) {
+          return typeof arg === "string" && arg.length > 0 && arg.charAt(0) === "/";
+        });
+      };
+      const prependCwd = function(args) {
+        if (hasAbsoluteSegment(args)) return;
+        if (typeof process !== "undefined" && typeof process.cwd === "function") {
+          const cwd = process.cwd();
+          if (cwd && cwd.charAt(0) === "/") {
+            args.unshift(cwd);
+          }
+        }
+      };
+      const originalResolve = result2.resolve;
+      if (typeof originalResolve === "function" && !originalResolve._patchedForCwd) {
+        const patchedResolve = function resolve2() {
+          const args = Array.from(arguments);
+          prependCwd(args);
+          return originalResolve.apply(this, args);
+        };
+        patchedResolve._patchedForCwd = true;
+        result2.resolve = patchedResolve;
+      }
+      if (result2.posix && typeof result2.posix.resolve === "function" && !result2.posix.resolve._patchedForCwd) {
+        const originalPosixResolve = result2.posix.resolve;
+        const patchedPosixResolve = function resolve2() {
+          const args = Array.from(arguments);
+          prependCwd(args);
+          return originalPosixResolve.apply(this, args);
+        };
+        patchedPosixResolve._patchedForCwd = true;
+        result2.posix.resolve = patchedPosixResolve;
+      }
+    }
+    return result2;
+  }
+  var _deferredCoreModules = /* @__PURE__ */ new Set([
+    "net",
+    "tls",
+    "readline",
+    "perf_hooks",
+    "async_hooks",
+    "worker_threads",
+    "diagnostics_channel"
+  ]);
+  var _unsupportedCoreModules = /* @__PURE__ */ new Set([
+    "dgram",
+    "cluster",
+    "wasi",
+    "inspector",
+    "repl",
+    "trace_events",
+    "domain"
+  ]);
+  function _unsupportedApiError(moduleName2, apiName) {
+    return new Error(moduleName2 + "." + apiName + " is not supported in sandbox");
+  }
+  function _createDeferredModuleStub(moduleName2) {
+    const methodCache = {};
+    let stub = null;
+    stub = new Proxy({}, {
+      get(_target, prop) {
+        if (prop === "__esModule") return false;
+        if (prop === "default") return stub;
+        if (prop === Symbol.toStringTag) return "Module";
+        if (prop === "then") return void 0;
+        if (typeof prop !== "string") return void 0;
+        if (!methodCache[prop]) {
+          methodCache[prop] = function deferredApiStub() {
+            throw _unsupportedApiError(moduleName2, prop);
+          };
+        }
+        return methodCache[prop];
+      }
+    });
+    return stub;
+  }
+  var __internalModuleCache = _moduleCache;
+  var __require = function require2(moduleName2) {
+    return _requireFrom(moduleName2, _currentModule.dirname);
+  };
+  __requireExposeCustomGlobal("require", __require);
+  function _resolveFrom(moduleName2, fromDir2) {
+    const resolved2 = _resolveModule.applySyncPromise(void 0, [moduleName2, fromDir2]);
+    if (resolved2 === null) {
+      const err = new Error("Cannot find module '" + moduleName2 + "'");
+      err.code = "MODULE_NOT_FOUND";
+      throw err;
+    }
+    return resolved2;
+  }
+  globalThis.require.resolve = function resolve(moduleName2) {
+    return _resolveFrom(moduleName2, _currentModule.dirname);
+  };
+  function _debugRequire(phase, moduleName2, extra) {
+    if (globalThis.__sandboxRequireDebug !== true) {
+      return;
+    }
+    if (moduleName2 !== "rivetkit" && moduleName2 !== "@rivetkit/traces" && moduleName2 !== "@rivetkit/on-change" && moduleName2 !== "async_hooks" && !moduleName2.startsWith("rivetkit/") && !moduleName2.startsWith("@rivetkit/")) {
+      return;
+    }
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      console.log(
+        "[sandbox.require] " + phase + " " + moduleName2 + (extra ? " " + extra : "")
+      );
+    }
+  }
+  function _requireFrom(moduleName, fromDir) {
+    _debugRequire("start", moduleName, fromDir);
+    const name = moduleName.replace(/^node:/, "");
+    let cacheKey = name;
+    let resolved = null;
+    const isRelative = name.startsWith("./") || name.startsWith("../");
+    if (!isRelative && __internalModuleCache[name]) {
+      _debugRequire("cache-hit", name, name);
+      return __internalModuleCache[name];
+    }
+    if (name === "fs") {
+      if (__internalModuleCache["fs"]) return __internalModuleCache["fs"];
+      const fsModule = globalThis.bridge?.fs || globalThis.bridge?.default || globalThis._fsModule || {};
+      __internalModuleCache["fs"] = fsModule;
+      _debugRequire("loaded", name, "fs-special");
+      return fsModule;
+    }
+    if (name === "fs/promises") {
+      if (__internalModuleCache["fs/promises"]) return __internalModuleCache["fs/promises"];
+      const fsModule = _requireFrom("fs", fromDir);
+      __internalModuleCache["fs/promises"] = fsModule.promises;
+      _debugRequire("loaded", name, "fs-promises-special");
+      return fsModule.promises;
+    }
+    if (name === "stream/promises") {
+      if (__internalModuleCache["stream/promises"]) return __internalModuleCache["stream/promises"];
+      const streamModule = _requireFrom("stream", fromDir);
+      const promisesModule = {
+        finished(stream, options) {
+          return new Promise(function(resolve2, reject) {
+            if (typeof streamModule.finished !== "function") {
+              resolve2();
+              return;
+            }
+            if (options && typeof options === "object" && !Array.isArray(options)) {
+              streamModule.finished(stream, options, function(error) {
+                if (error) {
+                  reject(error);
+                  return;
+                }
+                resolve2();
+              });
+              return;
+            }
+            streamModule.finished(stream, function(error) {
+              if (error) {
+                reject(error);
+                return;
+              }
+              resolve2();
+            });
+          });
+        },
+        pipeline() {
+          const args = Array.prototype.slice.call(arguments);
+          return new Promise(function(resolve2, reject) {
+            if (typeof streamModule.pipeline !== "function") {
+              reject(new Error("stream.pipeline is not supported in sandbox"));
+              return;
+            }
+            args.push(function(error) {
+              if (error) {
+                reject(error);
+                return;
+              }
+              resolve2();
+            });
+            streamModule.pipeline.apply(streamModule, args);
+          });
+        }
+      };
+      __internalModuleCache["stream/promises"] = promisesModule;
+      _debugRequire("loaded", name, "stream-promises-special");
+      return promisesModule;
+    }
+    if (name === "child_process") {
+      if (__internalModuleCache["child_process"]) return __internalModuleCache["child_process"];
+      __internalModuleCache["child_process"] = _childProcessModule;
+      _debugRequire("loaded", name, "child-process-special");
+      return _childProcessModule;
+    }
+    if (name === "http") {
+      if (__internalModuleCache["http"]) return __internalModuleCache["http"];
+      __internalModuleCache["http"] = _httpModule;
+      _debugRequire("loaded", name, "http-special");
+      return _httpModule;
+    }
+    if (name === "https") {
+      if (__internalModuleCache["https"]) return __internalModuleCache["https"];
+      __internalModuleCache["https"] = _httpsModule;
+      _debugRequire("loaded", name, "https-special");
+      return _httpsModule;
+    }
+    if (name === "http2") {
+      if (__internalModuleCache["http2"]) return __internalModuleCache["http2"];
+      __internalModuleCache["http2"] = _http2Module;
+      _debugRequire("loaded", name, "http2-special");
+      return _http2Module;
+    }
+    if (name === "dns") {
+      if (__internalModuleCache["dns"]) return __internalModuleCache["dns"];
+      __internalModuleCache["dns"] = _dnsModule;
+      _debugRequire("loaded", name, "dns-special");
+      return _dnsModule;
+    }
+    if (name === "os") {
+      if (__internalModuleCache["os"]) return __internalModuleCache["os"];
+      __internalModuleCache["os"] = _osModule;
+      _debugRequire("loaded", name, "os-special");
+      return _osModule;
+    }
+    if (name === "module") {
+      if (__internalModuleCache["module"]) return __internalModuleCache["module"];
+      __internalModuleCache["module"] = _moduleModule;
+      _debugRequire("loaded", name, "module-special");
+      return _moduleModule;
+    }
+    if (name === "process") {
+      _debugRequire("loaded", name, "process-special");
+      return globalThis.process;
+    }
+    if (name === "async_hooks") {
+      if (__internalModuleCache["async_hooks"]) return __internalModuleCache["async_hooks"];
+      class AsyncLocalStorage {
+        constructor() {
+          this._store = void 0;
+        }
+        run(store, callback) {
+          const previousStore = this._store;
+          this._store = store;
+          try {
+            const args = Array.prototype.slice.call(arguments, 2);
+            return callback.apply(void 0, args);
+          } finally {
+            this._store = previousStore;
+          }
+        }
+        enterWith(store) {
+          this._store = store;
+        }
+        getStore() {
+          return this._store;
+        }
+        disable() {
+          this._store = void 0;
+        }
+        exit(callback) {
+          const previousStore = this._store;
+          this._store = void 0;
+          try {
+            const args = Array.prototype.slice.call(arguments, 1);
+            return callback.apply(void 0, args);
+          } finally {
+            this._store = previousStore;
+          }
+        }
+      }
+      class AsyncResource {
+        constructor(type) {
+          this.type = type;
+        }
+        runInAsyncScope(callback, thisArg) {
+          const args = Array.prototype.slice.call(arguments, 2);
+          return callback.apply(thisArg, args);
+        }
+        emitDestroy() {
+        }
+      }
+      const asyncHooksModule = {
+        AsyncLocalStorage,
+        AsyncResource,
+        createHook() {
+          return {
+            enable() {
+              return this;
+            },
+            disable() {
+              return this;
+            }
+          };
+        },
+        executionAsyncId() {
+          return 1;
+        },
+        triggerAsyncId() {
+          return 0;
+        },
+        executionAsyncResource() {
+          return null;
+        }
+      };
+      __internalModuleCache["async_hooks"] = asyncHooksModule;
+      _debugRequire("loaded", name, "async-hooks-special");
+      return asyncHooksModule;
+    }
+    if (name === "diagnostics_channel") {
+      let _createChannel2 = function() {
+        return {
+          hasSubscribers: false,
+          publish: function() {
+          },
+          subscribe: function() {
+          },
+          unsubscribe: function() {
+          }
+        };
+      };
+      var _createChannel = _createChannel2;
+      if (__internalModuleCache[name]) return __internalModuleCache[name];
+      const dcModule = {
+        channel: function() {
+          return _createChannel2();
+        },
+        hasSubscribers: function() {
+          return false;
+        },
+        tracingChannel: function() {
+          return {
+            start: _createChannel2(),
+            end: _createChannel2(),
+            asyncStart: _createChannel2(),
+            asyncEnd: _createChannel2(),
+            error: _createChannel2()
+          };
+        },
+        Channel: function Channel(name2) {
+          this.hasSubscribers = false;
+          this.publish = function() {
+          };
+          this.subscribe = function() {
+          };
+          this.unsubscribe = function() {
+          };
+        }
+      };
+      __internalModuleCache[name] = dcModule;
+      _debugRequire("loaded", name, "diagnostics-channel-special");
+      return dcModule;
+    }
+    if (_deferredCoreModules.has(name)) {
+      if (__internalModuleCache[name]) return __internalModuleCache[name];
+      const deferredStub = _createDeferredModuleStub(name);
+      __internalModuleCache[name] = deferredStub;
+      _debugRequire("loaded", name, "deferred-stub");
+      return deferredStub;
+    }
+    if (_unsupportedCoreModules.has(name)) {
+      throw new Error(name + " is not supported in sandbox");
+    }
+    const polyfillCode = _loadPolyfill.applySyncPromise(void 0, [name]);
+    if (polyfillCode !== null) {
+      if (__internalModuleCache[name]) return __internalModuleCache[name];
+      const moduleObj = { exports: {} };
+      _pendingModules[name] = moduleObj;
+      let result = eval(polyfillCode);
+      result = _patchPolyfill(name, result);
+      if (typeof result === "object" && result !== null) {
+        Object.assign(moduleObj.exports, result);
+      } else {
+        moduleObj.exports = result;
+      }
+      __internalModuleCache[name] = moduleObj.exports;
+      delete _pendingModules[name];
+      _debugRequire("loaded", name, "polyfill");
+      return __internalModuleCache[name];
+    }
+    resolved = _resolveFrom(name, fromDir);
+    cacheKey = resolved;
+    if (__internalModuleCache[cacheKey]) {
+      _debugRequire("cache-hit", name, cacheKey);
+      return __internalModuleCache[cacheKey];
+    }
+    if (_pendingModules[cacheKey]) {
+      _debugRequire("pending-hit", name, cacheKey);
+      return _pendingModules[cacheKey].exports;
+    }
+    const source = _loadFile.applySyncPromise(void 0, [resolved]);
+    if (source === null) {
+      const err = new Error("Cannot find module '" + resolved + "'");
+      err.code = "MODULE_NOT_FOUND";
+      throw err;
+    }
+    if (resolved.endsWith(".json")) {
+      const parsed = JSON.parse(source);
+      __internalModuleCache[cacheKey] = parsed;
+      return parsed;
+    }
+    const normalizedSource = typeof source === "string" ? source.replace(/import\.meta\.url/g, "__filename").replace(/fileURLToPath\(__filename\)/g, "__filename").replace(/url\.fileURLToPath\(__filename\)/g, "__filename").replace(/fileURLToPath\.call\(void 0, __filename\)/g, "__filename") : source;
+    const module = {
+      exports: {},
+      filename: resolved,
+      dirname: _dirname(resolved),
+      id: resolved,
+      loaded: false
+    };
+    _pendingModules[cacheKey] = module;
+    const prevModule = _currentModule;
+    _currentModule = module;
+    try {
+      let wrapper;
+      try {
+        wrapper = new Function(
+          "exports",
+          "require",
+          "module",
+          "__filename",
+          "__dirname",
+          "__dynamicImport",
+          normalizedSource + "\n//# sourceURL=" + resolved
+        );
+      } catch (error) {
+        const details = error && error.stack ? error.stack : String(error);
+        throw new Error("failed to compile module " + resolved + ": " + details);
+      }
+      const moduleRequire = function(request) {
+        return _requireFrom(request, module.dirname);
+      };
+      moduleRequire.resolve = function(request) {
+        return _resolveFrom(request, module.dirname);
+      };
+      const moduleDynamicImport = function(specifier) {
+        if (typeof globalThis.__dynamicImport === "function") {
+          return globalThis.__dynamicImport(specifier, module.dirname);
+        }
+        return Promise.reject(new Error("Dynamic import is not initialized"));
+      };
+      wrapper(
+        module.exports,
+        moduleRequire,
+        module,
+        resolved,
+        module.dirname,
+        moduleDynamicImport
+      );
+      module.loaded = true;
+    } catch (error) {
+      const details = error && error.stack ? error.stack : String(error);
+      throw new Error("failed to execute module " + resolved + ": " + details);
+    } finally {
+      _currentModule = prevModule;
+    }
+    __internalModuleCache[cacheKey] = module.exports;
+    delete _pendingModules[cacheKey];
+    _debugRequire("loaded", name, cacheKey);
+    return module.exports;
+  }
+  __requireExposeCustomGlobal("_requireFrom", _requireFrom);
+  var __moduleCacheProxy = new Proxy(__internalModuleCache, {
+    get(target, prop, receiver) {
+      return Reflect.get(target, prop, receiver);
+    },
+    set(_target, prop) {
+      throw new TypeError("Cannot set require.cache['" + String(prop) + "']");
+    },
+    deleteProperty(_target, prop) {
+      throw new TypeError("Cannot delete require.cache['" + String(prop) + "']");
+    },
+    defineProperty(_target, prop) {
+      throw new TypeError("Cannot define property '" + String(prop) + "' on require.cache");
+    },
+    has(target, prop) {
+      return Reflect.has(target, prop);
+    },
+    ownKeys(target) {
+      return Reflect.ownKeys(target);
+    },
+    getOwnPropertyDescriptor(target, prop) {
+      return Reflect.getOwnPropertyDescriptor(target, prop);
+    }
+  });
+  globalThis.require.cache = __moduleCacheProxy;
+  Object.defineProperty(globalThis, "_moduleCache", {
+    value: __moduleCacheProxy,
+    writable: false,
+    configurable: true,
+    enumerable: false
+  });
+  if (typeof _moduleModule !== "undefined") {
+    if (_moduleModule.Module) {
+      _moduleModule.Module._cache = __moduleCacheProxy;
+    }
+    _moduleModule._cache = __moduleCacheProxy;
+  }
+})();

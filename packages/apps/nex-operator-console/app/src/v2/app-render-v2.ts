@@ -1,7 +1,7 @@
 import { html, nothing } from "lit";
 import type { AppViewState } from "../ui/app-view-state.ts";
 import { icons } from "../ui/icons.ts";
-import { loadAgents, createAgent } from "../ui/controllers/agents.ts";
+import { loadAgents, createAgent, deriveAgentWorkspaceBindingId } from "../ui/controllers/agents.ts";
 import {
   loadIdentitySurface,
   resolveIdentityMergeCandidate,
@@ -76,52 +76,6 @@ function flattenMemorySearchResult(result: AppViewState["memorySearchResult"]) {
       entity_id: observation.entity_id,
     })),
   ];
-}
-
-function normalizeAgentIdCandidate(value: string): string {
-  const trimmed = value.trim().toLowerCase();
-  if (!trimmed) {
-    return "agent";
-  }
-  return (
-    trimmed
-      .replace(/[^a-z0-9_-]+/g, "-")
-      .replace(/^-+/, "")
-      .replace(/-+$/, "")
-      .slice(0, 64) || "agent"
-  );
-}
-
-function resolveWorkspaceRoot(state: AppViewState): { dir: string; separator: "/" | "\\" } | null {
-  const config = (state.configForm ?? state.configSnapshot?.config ?? null) as
-    | { agents?: { defaults?: { workspace?: unknown } } }
-    | null;
-  const workspace =
-    config?.agents?.defaults && typeof config.agents.defaults.workspace === "string"
-      ? config.agents.defaults.workspace.trim()
-      : "";
-  if (!workspace) {
-    return null;
-  }
-  const trimmed = workspace.replace(/[\\/]+$/, "");
-  const slashIndex = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
-  if (slashIndex <= 0) {
-    return null;
-  }
-  const separator: "/" | "\\" =
-    trimmed.lastIndexOf("\\") === slashIndex && trimmed.includes("\\") ? "\\" : "/";
-  return {
-    dir: trimmed.slice(0, slashIndex),
-    separator,
-  };
-}
-
-function resolveCreateAgentWorkspace(state: AppViewState, name: string): string | null {
-  const root = resolveWorkspaceRoot(state);
-  if (!root) {
-    return null;
-  }
-  return `${root.dir}${root.separator}${normalizeAgentIdCandidate(name)}`;
 }
 
 // ─── Agent wizard state helpers ──────────────────────────────────────
@@ -476,15 +430,9 @@ export function renderAppV2(state: AppViewState) {
                   onCancel: () => closeWizard(state),
                   onCreate: async () => {
                     const form = wiz.form;
-                    const workspace = resolveCreateAgentWorkspace(state, form.name);
-                    if (!workspace) {
-                      state.agentsError =
-                        "Unable to determine a default agent workspace from runtime config.";
-                      return;
-                    }
                     const agentId = await createAgent(state as any, {
                       name: form.name,
-                      workspace,
+                      workspace: deriveAgentWorkspaceBindingId(form.name),
                     });
                     if (agentId) {
                       (state as any)._v2AgentDetailId = agentId;

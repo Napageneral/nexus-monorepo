@@ -85,7 +85,7 @@ function renderStep1(props: AgentCreateProps) {
           .value=${form.description}
           @input=${(e: InputEvent) => props.onFormChange({ description: (e.target as HTMLTextAreaElement).value })}
         ></textarea>
-        <div class="v2-helper">This becomes your agent's initial persona in CLAUDE.md. You can edit it anytime from the settings.</div>
+        <div class="v2-helper">This seeds the agent's initial persona and instructions. You can edit it later from the agent profile.</div>
       </div>
 
       <div class="v2-col" style="gap: 6px; margin-bottom: var(--v2-space-5);">
@@ -210,7 +210,7 @@ function renderStep4(props: AgentCreateProps) {
   return html`
     <div class="v2-wizard-form">
       <div class="v2-muted" style="margin-bottom: var(--v2-space-5); font-size: var(--v2-text-sm);">
-        Review your agent configuration before creating it.
+        Review the agent profile before creating it.
       </div>
       <div class="v2-card" style="margin-bottom: var(--v2-space-3);">
         <div class="v2-section-label" style="margin-top: 0;">Basics</div>

@@ -1,0 +1,31 @@
+import type { NetworkAdapter, NodeRuntimeDriverFactory, SystemDriver } from "./types.js";
+import type { StdioHook, ExecOptions, ExecResult, RunResult, TimingMitigation } from "./shared/api-types.js";
+import type { ResourceBudgets } from "./runtime-driver.js";
+export interface NodeRuntimeOptions {
+    systemDriver: SystemDriver;
+    runtimeDriverFactory: NodeRuntimeDriverFactory;
+    memoryLimit?: number;
+    cpuTimeLimitMs?: number;
+    timingMitigation?: TimingMitigation;
+    onStdio?: StdioHook;
+    payloadLimits?: {
+        base64TransferBytes?: number;
+        jsonPayloadBytes?: number;
+    };
+    resourceBudgets?: ResourceBudgets;
+}
+export declare class NodeRuntime {
+    private readonly runtimeDriver;
+    constructor(options: NodeRuntimeOptions);
+    get network(): Pick<NetworkAdapter, "fetch" | "dnsLookup" | "httpRequest">;
+    get __unsafeIsoalte(): unknown;
+    __unsafeCreateContext(options?: {
+        env?: Record<string, string>;
+        cwd?: string;
+        filePath?: string;
+    }): Promise<unknown>;
+    run<T = unknown>(code: string, filePath?: string): Promise<RunResult<T>>;
+    exec(code: string, options?: ExecOptions): Promise<ExecResult>;
+    dispose(): void;
+    terminate(): Promise<void>;
+}

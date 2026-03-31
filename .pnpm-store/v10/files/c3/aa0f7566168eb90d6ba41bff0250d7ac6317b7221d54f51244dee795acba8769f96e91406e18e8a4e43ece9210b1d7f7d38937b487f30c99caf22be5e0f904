@@ -1,0 +1,69 @@
+import { createNetworkStub, filterEnv } from "./shared/permissions.js";
+const DEFAULT_SANDBOX_CWD = "/root";
+const DEFAULT_SANDBOX_HOME = "/root";
+const DEFAULT_SANDBOX_TMPDIR = "/tmp";
+export class NodeRuntime {
+    runtimeDriver;
+    constructor(options) {
+        const { systemDriver, runtimeDriverFactory } = options;
+        const processConfig = {
+            ...(systemDriver.runtime.process ?? {}),
+        };
+        processConfig.cwd ??= DEFAULT_SANDBOX_CWD;
+        processConfig.env = filterEnv(processConfig.env, systemDriver.permissions);
+        const osConfig = {
+            ...(systemDriver.runtime.os ?? {}),
+        };
+        osConfig.homedir ??= DEFAULT_SANDBOX_HOME;
+        osConfig.tmpdir ??= DEFAULT_SANDBOX_TMPDIR;
+        this.runtimeDriver = runtimeDriverFactory.createRuntimeDriver({
+            system: systemDriver,
+            runtime: {
+                process: processConfig,
+                os: osConfig,
+            },
+            memoryLimit: options.memoryLimit,
+            cpuTimeLimitMs: options.cpuTimeLimitMs,
+            timingMitigation: options.timingMitigation,
+            onStdio: options.onStdio,
+            payloadLimits: options.payloadLimits,
+            resourceBudgets: options.resourceBudgets,
+        });
+    }
+    get network() {
+        const adapter = this.runtimeDriver.network ?? createNetworkStub();
+        return {
+            fetch: (url, options) => adapter.fetch(url, options),
+            dnsLookup: (hostname) => adapter.dnsLookup(hostname),
+            httpRequest: (url, options) => adapter.httpRequest(url, options),
+        };
+    }
+    get __unsafeIsoalte() {
+        if (this.runtimeDriver.unsafeIsolate === undefined) {
+            throw new Error("Driver runtime does not expose unsafe isolate access");
+        }
+        return this.runtimeDriver.unsafeIsolate;
+    }
+    async __unsafeCreateContext(options = {}) {
+        if (!this.runtimeDriver.createUnsafeContext) {
+            throw new Error("Driver runtime does not expose unsafe context creation");
+        }
+        return this.runtimeDriver.createUnsafeContext(options);
+    }
+    async run(code, filePath) {
+        return this.runtimeDriver.run(code, filePath);
+    }
+    async exec(code, options) {
+        return this.runtimeDriver.exec(code, options);
+    }
+    dispose() {
+        this.runtimeDriver.dispose();
+    }
+    async terminate() {
+        if (this.runtimeDriver.terminate) {
+            await this.runtimeDriver.terminate();
+            return;
+        }
+        this.runtimeDriver.dispose();
+    }
+}

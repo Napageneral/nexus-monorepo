@@ -36,6 +36,20 @@ export async function loadAgents(state: AgentsState) {
   }
 }
 
+export function deriveAgentWorkspaceBindingId(name: string): string {
+  const trimmed = name.trim().toLowerCase();
+  if (!trimmed) {
+    return "agent";
+  }
+  return (
+    trimmed
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/^-+/, "")
+      .replace(/-+$/, "")
+      .slice(0, 64) || "agent"
+  );
+}
+
 export async function createAgent(
   state: AgentsState & { agentsLoading: boolean },
   params: { name: string; workspace: string; emoji?: string; avatar?: string }

@@ -1,0 +1,38 @@
+/**
+ * Permission enforcement layer.
+ *
+ * Wraps filesystem, network, and command-executor adapters with permission
+ * checks that throw EACCES on denial. When no permission callback is provided
+ * for a category, guarded operations in that category are denied by default.
+ */
+import type { CommandExecutor, EnvAccessRequest, NetworkAdapter, Permissions, VirtualFileSystem } from "../types.js";
+export declare const allowAllFs: Pick<Permissions, "fs">;
+export declare const allowAllNetwork: Pick<Permissions, "network">;
+export declare const allowAllChildProcess: Pick<Permissions, "childProcess">;
+export declare const allowAllEnv: Pick<Permissions, "env">;
+export declare const allowAll: Permissions;
+/**
+ * Wrap a VirtualFileSystem so every operation passes through the fs permission check.
+ * Throws EACCES if the permission callback denies or is absent.
+ */
+export declare function wrapFileSystem(fs: VirtualFileSystem, permissions?: Permissions): VirtualFileSystem;
+/**
+ * Wrap a NetworkAdapter so externally-originating operations (`listen`, `fetch`,
+ * `dns`, `http`) pass through the network permission check.
+ * `httpServerClose` is forwarded as-is.
+ */
+export declare function wrapNetworkAdapter(adapter: NetworkAdapter, permissions?: Permissions): NetworkAdapter;
+/** Wrap a CommandExecutor so spawn passes through the childProcess permission check. */
+export declare function wrapCommandExecutor(executor: CommandExecutor, permissions?: Permissions): CommandExecutor;
+export declare function envAccessAllowed(permissions: Permissions | undefined, request: EnvAccessRequest): void;
+/** Create a stub VFS where every operation throws ENOSYS (no filesystem configured). */
+export declare function createFsStub(): VirtualFileSystem;
+/** Create a stub network adapter where every operation throws ENOSYS. */
+export declare function createNetworkStub(): NetworkAdapter;
+/** Create a stub executor where spawn throws ENOSYS. */
+export declare function createCommandExecutorStub(): CommandExecutor;
+/**
+ * Filter an env record through the env permission check, returning only
+ * allowed key-value pairs. Returns empty object if no permissions configured.
+ */
+export declare function filterEnv(env: Record<string, string> | undefined, permissions?: Permissions): Record<string, string>;

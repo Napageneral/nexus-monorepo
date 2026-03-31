@@ -2,7 +2,7 @@
 
 **Status:** CANONICAL
 **Domain:** Operator Console — Integration Validation
-**Depends on:** nex Docker cleanroom boot, Playwright browser automation, operator console v2 UI
+**Depends on:** sandbox-managed cleanroom execution, Playwright browser automation, shared proof capture, operator console v2 UI
 
 ---
 
@@ -10,11 +10,11 @@
 
 An operator or developer can run a single command that:
 
-1. Boots a disposable nex runtime in Docker
-2. Builds and serves the operator console v2 UI
+1. Creates a disposable Nex-backed proof environment on the Docker sandbox substrate
+2. Boots a fresh runtime under test and serves the operator console v2 UI
 3. Launches a Playwright-driven browser that navigates the full console
 4. Exercises every page, tab, form, and modal against the live runtime
-5. Records video of the entire session, captures Playwright traces, and takes screenshots at key moments
+5. Records the whole session, captures Playwright traces, and takes screenshots at key moments
 6. Produces a durable proof bundle with structured results, video, traces, and screenshots
 
 The proof bundle is the primary evidence that the v2 console works. A reviewer can:
@@ -27,6 +27,13 @@ This spec defines the operator-console implementation of the broader browser
 proof overlay model. It is not the owner of recording/video/trace capture as a
 concept; it is the first concrete producer that plugs into the shared cleanroom
 bundle contract.
+
+Current execution note:
+
+- the representative proof lane now runs as the runtime-managed
+  `operator-console-browser-proof` path on the shared validation substrate
+- the older host Docker wrapper remains as a useful bootstrap/backstop path,
+  not the only execution shape
 
 ---
 
@@ -121,10 +128,10 @@ operator-console-cleanroom-proof/
 
 ## Test Harness Architecture
 
-### Docker Container Layout
+### Representative Runtime-Managed Sandbox Layout
 
 ```
-Docker container (based on mcr.microsoft.com/playwright + nex build):
+Docker-backed sandbox (provisioned by the runtime-managed proof lane):
   ├── nex runtime (port 18792, token auth, loopback)
   ├── console static server (port 5173, vite preview)
   └── Playwright test runner
@@ -135,22 +142,20 @@ Docker container (based on mcr.microsoft.com/playwright + nex build):
        └── writes proof artifacts to /proof-bundle/
 ```
 
-### Dockerfile
+### Validation Substrate Image
 
-Extends the existing nex cleanroom Dockerfile with:
+The representative lane uses a reusable validation substrate image with:
 - Playwright browser dependencies (Chromium)
 - Console build step (`cd packages/apps/nex-operator-console/app && pnpm build`)
 - Static file server for the built console
 - Playwright test runner
 
-Alternatively, use a multi-stage build:
-1. Stage 1: Build nex (existing Dockerfile)
-2. Stage 2: Build console UI
-3. Stage 3: Playwright runner image with both artifacts
+Fresh Nex and console source are still staged per proof run. The image is the
+tooling substrate, not the source snapshot under test.
 
 ### Boot Sequence
 
-1. Init nex workspace (`nexus init`)
+1. Init fresh Nex workspace (`nexus init`)
 2. Seed owner identity
 3. Onboard non-interactively (creates agent, workspace, identity)
 4. Start runtime with token auth
@@ -242,8 +247,8 @@ canonical bundle locations.
 
 | Component | Source | How We Use It |
 |-----------|--------|--------------|
-| nex Docker build | `nex/scripts/e2e/Dockerfile` | Base image or multi-stage source |
-| Boot + init + onboard pattern | `runtime-capability-matrix-cleanroom-docker.sh` | Same sequence |
+| Shared substrate image resolution | `nex/src/support/infra/validation-substrate-images.ts` | Reusable content-addressed image ensure path |
+| Boot + init + onboard pattern | `nex/scripts/e2e/operator-console-browser-proof.sh` | Same sequence for the representative lane |
 | `callRuntime()` | `nex/src/api/call.ts` | Test data seeding only |
 | Proof capture | `capture-cleanroom-proof.sh` | Shared cleanroom wrapper that owns bundle root files |
 
@@ -251,10 +256,9 @@ canonical bundle locations.
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| Dockerfile.console-cleanroom | `nex/scripts/e2e/Dockerfile.console-cleanroom` | Multi-stage: nex + console + Playwright |
 | Playwright test suite | `packages/apps/nex-operator-console/e2e/` | First browser proof producer implementation |
 | Playwright config | `packages/apps/nex-operator-console/e2e/playwright.config.ts` | Producer-local video + trace + screenshot config |
-| Docker wrapper script | `nex/scripts/e2e/operator-console-cleanroom-docker.sh` | Boot + serve + test |
+| Runtime-managed proof script | `nex/scripts/e2e/operator-console-browser-proof.sh` | Boot + serve + test inside the sandbox |
 | Capture wrapper | `nex/scripts/e2e/operator-console-cleanroom-capture.sh` | Shared bundle wrapper around this producer |
 
 ---

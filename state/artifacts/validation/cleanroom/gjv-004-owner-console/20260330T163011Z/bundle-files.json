@@ -1,0 +1,861 @@
+{
+  "generated_at_utc": "2026-03-30T16:30:16.210Z",
+  "bundle_dir": "/artifacts/validation/cleanroom/gjv-004-owner-console/20260330T163011Z",
+  "files": [
+    {
+      "path": "command.txt",
+      "bytes": 61,
+      "modified_at_utc": "2026-03-30T16:30:11.118Z"
+    },
+    {
+      "path": "metadata.json",
+      "bytes": 181,
+      "modified_at_utc": "2026-03-30T16:30:11.132Z"
+    },
+    {
+      "path": "result.json",
+      "bytes": 323,
+      "modified_at_utc": "2026-03-30T16:30:16.143Z"
+    },
+    {
+      "path": "review/chromium-profile/BrowserMetrics/BrowserMetrics-69CAA516-42.pma",
+      "bytes": 4194304,
+      "modified_at_utc": "2026-03-30T16:30:15.767Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/.org.chromium.Chromium.qgFXJW",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:15.773Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Account Web Data",
+      "bytes": 77824,
+      "modified_at_utc": "2026-03-30T16:30:14.371Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Account Web Data-journal",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.372Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Affiliation Database",
+      "bytes": 53248,
+      "modified_at_utc": "2026-03-30T16:30:14.321Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Affiliation Database-journal",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.322Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Cache/Cache_Data/index",
+      "bytes": 9,
+      "modified_at_utc": "2026-03-30T16:30:14.288Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Cache/Cache_Data/sqldb0",
+      "bytes": 49152,
+      "modified_at_utc": "2026-03-30T16:30:15.773Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Cache/Cache_Data/sqldb0-wal",
+      "bytes": 304912,
+      "modified_at_utc": "2026-03-30T16:30:14.497Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Cache/Cache_Data/sqldb1",
+      "bytes": 40960,
+      "modified_at_utc": "2026-03-30T16:30:15.773Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Cache/Cache_Data/sqldb1-wal",
+      "bytes": 115392,
+      "modified_at_utc": "2026-03-30T16:30:14.350Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Cache/Cache_Data/sqldb2",
+      "bytes": 532480,
+      "modified_at_utc": "2026-03-30T16:30:15.773Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Cache/Cache_Data/sqldb2-wal",
+      "bytes": 1676872,
+      "modified_at_utc": "2026-03-30T16:30:14.526Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Cache/No_Vary_Search/journal.baj",
+      "bytes": 4,
+      "modified_at_utc": "2026-03-30T16:30:14.314Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Cache/No_Vary_Search/snapshot.baf",
+      "bytes": 20,
+      "modified_at_utc": "2026-03-30T16:30:14.312Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/chrome_cart_db/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.278Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/chrome_cart_db/LOG",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.278Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/ClientCertificates/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.283Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/ClientCertificates/LOG",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.282Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Code Cache/pc/5bb[`6`2`2wx!uvuvuw`2.db",
+      "bytes": 12288,
+      "modified_at_utc": "2026-03-30T16:30:14.362Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Code Cache/pc/5bb[`6`2`2wx!uvuvuw`2.journal",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.363Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/commerce_subscription_db/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.288Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/commerce_subscription_db/LOG",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.287Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Cookies",
+      "bytes": 20480,
+      "modified_at_utc": "2026-03-30T16:30:14.336Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Cookies-journal",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.337Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/DawnGraphiteCache/data_0",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.394Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/DawnGraphiteCache/data_1",
+      "bytes": 270336,
+      "modified_at_utc": "2026-03-30T16:30:14.397Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/DawnGraphiteCache/data_2",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.395Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/DawnGraphiteCache/data_3",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.396Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/DawnGraphiteCache/index",
+      "bytes": 262512,
+      "modified_at_utc": "2026-03-30T16:30:14.397Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/DawnWebGPUCache/data_0",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.387Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/DawnWebGPUCache/data_1",
+      "bytes": 270336,
+      "modified_at_utc": "2026-03-30T16:30:14.396Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/DawnWebGPUCache/data_2",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.389Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/DawnWebGPUCache/data_3",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.389Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/DawnWebGPUCache/index",
+      "bytes": 262512,
+      "modified_at_utc": "2026-03-30T16:30:15.767Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/discount_infos_db/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.285Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/discount_infos_db/LOG",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.284Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/discounts_db/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.280Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/discounts_db/LOG",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.279Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Extension Rules/000003.log",
+      "bytes": 76,
+      "modified_at_utc": "2026-03-30T16:30:14.332Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Extension Rules/CURRENT",
+      "bytes": 16,
+      "modified_at_utc": "2026-03-30T16:30:14.305Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Extension Rules/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.301Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Extension Rules/LOG",
+      "bytes": 359,
+      "modified_at_utc": "2026-03-30T16:30:14.308Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Extension Rules/MANIFEST-000001",
+      "bytes": 41,
+      "modified_at_utc": "2026-03-30T16:30:14.303Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Extension Scripts/000003.log",
+      "bytes": 38,
+      "modified_at_utc": "2026-03-30T16:30:14.333Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Extension Scripts/CURRENT",
+      "bytes": 16,
+      "modified_at_utc": "2026-03-30T16:30:14.324Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Extension Scripts/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.321Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Extension Scripts/LOG",
+      "bytes": 363,
+      "modified_at_utc": "2026-03-30T16:30:14.326Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Extension Scripts/MANIFEST-000001",
+      "bytes": 41,
+      "modified_at_utc": "2026-03-30T16:30:14.322Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Extension State/000003.log",
+      "bytes": 114,
+      "modified_at_utc": "2026-03-30T16:30:14.352Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Extension State/CURRENT",
+      "bytes": 16,
+      "modified_at_utc": "2026-03-30T16:30:14.345Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Extension State/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.342Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Extension State/LOG",
+      "bytes": 359,
+      "modified_at_utc": "2026-03-30T16:30:14.346Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Extension State/MANIFEST-000001",
+      "bytes": 41,
+      "modified_at_utc": "2026-03-30T16:30:14.343Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Favicons",
+      "bytes": 20480,
+      "modified_at_utc": "2026-03-30T16:30:14.332Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Favicons-journal",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.332Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/GPUCache/data_0",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.375Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/GPUCache/data_1",
+      "bytes": 270336,
+      "modified_at_utc": "2026-03-30T16:30:14.384Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/GPUCache/data_2",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.380Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/GPUCache/data_3",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.381Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/GPUCache/index",
+      "bytes": 262512,
+      "modified_at_utc": "2026-03-30T16:30:15.767Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/History",
+      "bytes": 163840,
+      "modified_at_utc": "2026-03-30T16:30:14.315Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/History-journal",
+      "bytes": 66176,
+      "modified_at_utc": "2026-03-30T16:30:14.374Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Local Storage/leveldb/000003.log",
+      "bytes": 30,
+      "modified_at_utc": "2026-03-30T16:30:14.332Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Local Storage/leveldb/CURRENT",
+      "bytes": 16,
+      "modified_at_utc": "2026-03-30T16:30:14.318Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Local Storage/leveldb/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.311Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Local Storage/leveldb/LOG",
+      "bytes": 371,
+      "modified_at_utc": "2026-03-30T16:30:14.323Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Local Storage/leveldb/MANIFEST-000001",
+      "bytes": 41,
+      "modified_at_utc": "2026-03-30T16:30:14.315Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.312Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/LOG",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.308Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Login Data",
+      "bytes": 40960,
+      "modified_at_utc": "2026-03-30T16:30:14.328Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Login Data For Account",
+      "bytes": 40960,
+      "modified_at_utc": "2026-03-30T16:30:14.328Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Login Data For Account-journal",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.328Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Login Data-journal",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.328Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/parcel_tracking_db/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.282Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/parcel_tracking_db/LOG",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.281Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/PersistentOriginTrials/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.299Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/PersistentOriginTrials/LOG",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.298Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/power_bookmarks/PowerBookmarks.db",
+      "bytes": 24576,
+      "modified_at_utc": "2026-03-30T16:30:14.292Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/power_bookmarks/PowerBookmarks.db-journal",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.292Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Preferences",
+      "bytes": 18541,
+      "modified_at_utc": "2026-03-30T16:30:15.764Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/README",
+      "bytes": 170,
+      "modified_at_utc": "2026-03-30T16:30:14.264Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Reporting and NEL",
+      "bytes": 36864,
+      "modified_at_utc": "2026-03-30T16:30:14.380Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Reporting and NEL-journal",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.380Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Safe Browsing Cookies",
+      "bytes": 20480,
+      "modified_at_utc": "2026-03-30T16:30:14.336Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Safe Browsing Cookies-journal",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.337Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/SCT Auditing Pending Reports",
+      "bytes": 2,
+      "modified_at_utc": "2026-03-30T16:30:14.304Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Secure Preferences",
+      "bytes": 95,
+      "modified_at_utc": "2026-03-30T16:30:15.765Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Segmentation Platform/SegmentInfoDB/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.296Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Segmentation Platform/SegmentInfoDB/LOG",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.295Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Segmentation Platform/SignalDB/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.301Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Segmentation Platform/SignalDB/LOG",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.299Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Segmentation Platform/SignalStorageConfigDB/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.306Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Segmentation Platform/SignalStorageConfigDB/LOG",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.304Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/ServerCertificate",
+      "bytes": 20480,
+      "modified_at_utc": "2026-03-30T16:30:14.293Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/ServerCertificate-journal",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.294Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Session Storage/000003.log",
+      "bytes": 157,
+      "modified_at_utc": "2026-03-30T16:30:14.355Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Session Storage/CURRENT",
+      "bytes": 16,
+      "modified_at_utc": "2026-03-30T16:30:14.319Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Session Storage/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.313Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Session Storage/LOG",
+      "bytes": 359,
+      "modified_at_utc": "2026-03-30T16:30:14.325Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Session Storage/MANIFEST-000001",
+      "bytes": 41,
+      "modified_at_utc": "2026-03-30T16:30:14.316Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Shared Dictionary/cache/index",
+      "bytes": 24,
+      "modified_at_utc": "2026-03-30T16:30:14.289Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Shared Dictionary/cache/index-dir/the-real-index",
+      "bytes": 48,
+      "modified_at_utc": "2026-03-30T16:30:14.293Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Shared Dictionary/db",
+      "bytes": 45056,
+      "modified_at_utc": "2026-03-30T16:30:14.313Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Shared Dictionary/db-journal",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.314Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/shared_proto_db/000003.log",
+      "bytes": 7786,
+      "modified_at_utc": "2026-03-30T16:30:14.370Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/shared_proto_db/CURRENT",
+      "bytes": 16,
+      "modified_at_utc": "2026-03-30T16:30:14.333Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/shared_proto_db/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.330Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/shared_proto_db/LOG",
+      "bytes": 359,
+      "modified_at_utc": "2026-03-30T16:30:14.337Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/shared_proto_db/MANIFEST-000001",
+      "bytes": 41,
+      "modified_at_utc": "2026-03-30T16:30:14.331Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/shared_proto_db/metadata/000003.log",
+      "bytes": 706,
+      "modified_at_utc": "2026-03-30T16:30:14.358Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/shared_proto_db/metadata/CURRENT",
+      "bytes": 16,
+      "modified_at_utc": "2026-03-30T16:30:14.320Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/shared_proto_db/metadata/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.317Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/shared_proto_db/metadata/LOG",
+      "bytes": 377,
+      "modified_at_utc": "2026-03-30T16:30:14.324Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/shared_proto_db/metadata/MANIFEST-000001",
+      "bytes": 41,
+      "modified_at_utc": "2026-03-30T16:30:14.318Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/SharedStorage",
+      "bytes": 4096,
+      "modified_at_utc": "2026-03-30T16:30:14.382Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/SharedStorage-wal",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.383Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Site Characteristics Database/000003.log",
+      "bytes": 40,
+      "modified_at_utc": "2026-03-30T16:30:14.303Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Site Characteristics Database/CURRENT",
+      "bytes": 16,
+      "modified_at_utc": "2026-03-30T16:30:14.291Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Site Characteristics Database/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.288Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Site Characteristics Database/LOG",
+      "bytes": 387,
+      "modified_at_utc": "2026-03-30T16:30:14.295Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Site Characteristics Database/MANIFEST-000001",
+      "bytes": 41,
+      "modified_at_utc": "2026-03-30T16:30:14.289Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Sync Data/LevelDB/000003.log",
+      "bytes": 137,
+      "modified_at_utc": "2026-03-30T16:30:14.296Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Sync Data/LevelDB/CURRENT",
+      "bytes": 16,
+      "modified_at_utc": "2026-03-30T16:30:14.283Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Sync Data/LevelDB/LOCK",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.280Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Sync Data/LevelDB/LOG",
+      "bytes": 363,
+      "modified_at_utc": "2026-03-30T16:30:14.288Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Sync Data/LevelDB/MANIFEST-000001",
+      "bytes": 41,
+      "modified_at_utc": "2026-03-30T16:30:14.282Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Top Sites",
+      "bytes": 20480,
+      "modified_at_utc": "2026-03-30T16:30:14.354Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Top Sites-journal",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.354Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Trust Tokens",
+      "bytes": 36864,
+      "modified_at_utc": "2026-03-30T16:30:14.322Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Trust Tokens-journal",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.322Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/trusted_vault.pb",
+      "bytes": 84,
+      "modified_at_utc": "2026-03-30T16:30:14.436Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Web Data",
+      "bytes": 147456,
+      "modified_at_utc": "2026-03-30T16:30:14.384Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/Web Data-journal",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.384Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/WebStorage/QuotaManager",
+      "bytes": 40960,
+      "modified_at_utc": "2026-03-30T16:30:14.379Z"
+    },
+    {
+      "path": "review/chromium-profile/Default/WebStorage/QuotaManager-journal",
+      "bytes": 8720,
+      "modified_at_utc": "2026-03-30T16:30:14.384Z"
+    },
+    {
+      "path": "review/chromium-profile/Dictionaries/en-US-10-1.bdic",
+      "bytes": 451968,
+      "modified_at_utc": "2026-03-30T16:30:14.517Z"
+    },
+    {
+      "path": "review/chromium-profile/GraphiteDawnCache/data_0",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.356Z"
+    },
+    {
+      "path": "review/chromium-profile/GraphiteDawnCache/data_1",
+      "bytes": 270336,
+      "modified_at_utc": "2026-03-30T16:30:14.364Z"
+    },
+    {
+      "path": "review/chromium-profile/GraphiteDawnCache/data_2",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.359Z"
+    },
+    {
+      "path": "review/chromium-profile/GraphiteDawnCache/data_3",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.360Z"
+    },
+    {
+      "path": "review/chromium-profile/GraphiteDawnCache/index",
+      "bytes": 262512,
+      "modified_at_utc": "2026-03-30T16:30:14.364Z"
+    },
+    {
+      "path": "review/chromium-profile/GrShaderCache/data_0",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.333Z"
+    },
+    {
+      "path": "review/chromium-profile/GrShaderCache/data_1",
+      "bytes": 270336,
+      "modified_at_utc": "2026-03-30T16:30:14.350Z"
+    },
+    {
+      "path": "review/chromium-profile/GrShaderCache/data_2",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.337Z"
+    },
+    {
+      "path": "review/chromium-profile/GrShaderCache/data_3",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.339Z"
+    },
+    {
+      "path": "review/chromium-profile/GrShaderCache/index",
+      "bytes": 262512,
+      "modified_at_utc": "2026-03-30T16:30:14.346Z"
+    },
+    {
+      "path": "review/chromium-profile/Last Version",
+      "bytes": 12,
+      "modified_at_utc": "2026-03-30T16:30:14.263Z"
+    },
+    {
+      "path": "review/chromium-profile/Local State",
+      "bytes": 2880,
+      "modified_at_utc": "2026-03-30T16:30:15.764Z"
+    },
+    {
+      "path": "review/chromium-profile/segmentation_platform/ukm_db",
+      "bytes": 49152,
+      "modified_at_utc": "2026-03-30T16:30:14.278Z"
+    },
+    {
+      "path": "review/chromium-profile/segmentation_platform/ukm_db-wal",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.278Z"
+    },
+    {
+      "path": "review/chromium-profile/ShaderCache/data_0",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.305Z"
+    },
+    {
+      "path": "review/chromium-profile/ShaderCache/data_1",
+      "bytes": 270336,
+      "modified_at_utc": "2026-03-30T16:30:14.323Z"
+    },
+    {
+      "path": "review/chromium-profile/ShaderCache/data_2",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.309Z"
+    },
+    {
+      "path": "review/chromium-profile/ShaderCache/data_3",
+      "bytes": 8192,
+      "modified_at_utc": "2026-03-30T16:30:14.310Z"
+    },
+    {
+      "path": "review/chromium-profile/ShaderCache/index",
+      "bytes": 262512,
+      "modified_at_utc": "2026-03-30T16:30:14.319Z"
+    },
+    {
+      "path": "review/chromium-profile/SingletonSocket",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:14.220Z"
+    },
+    {
+      "path": "review/chromium-profile/Variations",
+      "bytes": 85,
+      "modified_at_utc": "2026-03-30T16:30:15.764Z"
+    },
+    {
+      "path": "review/full-session-recording.json",
+      "bytes": 512,
+      "modified_at_utc": "2026-03-30T16:30:16.119Z"
+    },
+    {
+      "path": "review/full-session-recording.log",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:12.141Z"
+    },
+    {
+      "path": "review/visual-browser.log",
+      "bytes": 4744,
+      "modified_at_utc": "2026-03-30T16:30:14.364Z"
+    },
+    {
+      "path": "review/visual-http.log",
+      "bytes": 716,
+      "modified_at_utc": "2026-03-30T16:30:15.361Z"
+    },
+    {
+      "path": "review/visual-terminal.html",
+      "bytes": 3371,
+      "modified_at_utc": "2026-03-30T16:30:13.159Z"
+    },
+    {
+      "path": "review/xvfb.log",
+      "bytes": 0,
+      "modified_at_utc": "2026-03-30T16:30:11.136Z"
+    },
+    {
+      "path": "stderr.log",
+      "bytes": 117,
+      "modified_at_utc": "2026-03-30T16:30:15.237Z"
+    },
+    {
+      "path": "stdout.log",
+      "bytes": 87,
+      "modified_at_utc": "2026-03-30T16:30:15.191Z"
+    },
+    {
+      "path": "validation-script.md",
+      "bytes": 324,
+      "modified_at_utc": "2026-03-30T16:30:15.198Z"
+    },
+    {
+      "path": "videos/full-session.webm",
+      "bytes": 21533,
+      "modified_at_utc": "2026-03-30T16:30:15.732Z"
+    }
+  ]
+}

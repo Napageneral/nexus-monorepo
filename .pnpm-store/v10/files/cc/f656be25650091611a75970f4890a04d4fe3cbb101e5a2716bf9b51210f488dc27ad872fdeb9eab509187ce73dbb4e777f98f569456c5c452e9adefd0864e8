@@ -1,0 +1,36 @@
+"use strict";
+(() => {
+  // isolate-runtime/src/common/global-exposure.ts
+  function defineRuntimeGlobalBinding(name, value, mutable) {
+    Object.defineProperty(globalThis, name, {
+      value,
+      writable: mutable,
+      configurable: mutable,
+      enumerable: true
+    });
+  }
+  function createRuntimeGlobalExposer(mutable) {
+    return (name, value) => {
+      defineRuntimeGlobalBinding(name, value, mutable);
+    };
+  }
+  function ensureRuntimeExposureHelpers() {
+    if (typeof globalThis.__runtimeExposeCustomGlobal !== "function") {
+      defineRuntimeGlobalBinding(
+        "__runtimeExposeCustomGlobal",
+        createRuntimeGlobalExposer(false),
+        false
+      );
+    }
+    if (typeof globalThis.__runtimeExposeMutableGlobal !== "function") {
+      defineRuntimeGlobalBinding(
+        "__runtimeExposeMutableGlobal",
+        createRuntimeGlobalExposer(true),
+        false
+      );
+    }
+  }
+
+  // isolate-runtime/src/inject/global-exposure-helpers.ts
+  ensureRuntimeExposureHelpers();
+})();

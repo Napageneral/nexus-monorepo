@@ -1,0 +1,239 @@
+{
+  "config": {
+    "configFile": "/Users/tyler/nexus/home/projects/nexus/packages/apps/nex-operator-console/e2e/playwright.config.ts",
+    "rootDir": "/Users/tyler/nexus/home/projects/nexus/packages/apps/nex-operator-console/e2e",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/tyler/nexus/home/projects/nexus/packages/apps/nex-operator-console/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "console-cleanroom",
+        "name": "console-cleanroom",
+        "testDir": "/Users/tyler/nexus/home/projects/nexus/packages/apps/nex-operator-console/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.spec.ts"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "line",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "./test-results/results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "04-identity-memory.spec.ts",
+      "file": "04-identity-memory.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "OCI-005: Memory Page",
+          "file": "04-identity-memory.spec.ts",
+          "line": 79,
+          "column": 6,
+          "specs": [
+            {
+              "title": "memory search tab renders with input",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "console-cleanroom",
+                  "projectName": "console-cleanroom",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1501,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-30T15:30:05.956Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/nex-operator-console/e2e/test-results/04-identity-memory-OCI-005-bd36c-arch-tab-renders-with-input-console-cleanroom/test-finished-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/nex-operator-console/e2e/test-results/04-identity-memory-OCI-005-bd36c-arch-tab-renders-with-input-console-cleanroom/video.webm"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/nex-operator-console/e2e/test-results/04-identity-memory-OCI-005-bd36c-arch-tab-renders-with-input-console-cleanroom/trace.zip"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "6703f835ab183dfbd144-6675f38d988641b2ccb5",
+              "file": "04-identity-memory.spec.ts",
+              "line": 91,
+              "column": 7
+            },
+            {
+              "title": "memory search accepts query",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "console-cleanroom",
+                  "projectName": "console-cleanroom",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2016,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-30T15:30:07.912Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/nex-operator-console/e2e/test-results/04-identity-memory-OCI-005-10962-memory-search-accepts-query-console-cleanroom/test-finished-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/nex-operator-console/e2e/test-results/04-identity-memory-OCI-005-10962-memory-search-accepts-query-console-cleanroom/video.webm"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/nex-operator-console/e2e/test-results/04-identity-memory-OCI-005-10962-memory-search-accepts-query-console-cleanroom/trace.zip"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "6703f835ab183dfbd144-888313b279c0d2756f9e",
+              "file": "04-identity-memory.spec.ts",
+              "line": 101,
+              "column": 7
+            },
+            {
+              "title": "memory quality tab renders",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "console-cleanroom",
+                  "projectName": "console-cleanroom",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1409,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-30T15:30:09.956Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/nex-operator-console/e2e/test-results/04-identity-memory-OCI-005-28bf6--memory-quality-tab-renders-console-cleanroom/test-finished-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/nex-operator-console/e2e/test-results/04-identity-memory-OCI-005-28bf6--memory-quality-tab-renders-console-cleanroom/video.webm"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/nex-operator-console/e2e/test-results/04-identity-memory-OCI-005-28bf6--memory-quality-tab-renders-console-cleanroom/trace.zip"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "6703f835ab183dfbd144-3498c9e6bc39595de091",
+              "file": "04-identity-memory.spec.ts",
+              "line": 117,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-03-30T15:30:05.339Z",
+    "duration": 6086.715,
+    "expected": 3,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

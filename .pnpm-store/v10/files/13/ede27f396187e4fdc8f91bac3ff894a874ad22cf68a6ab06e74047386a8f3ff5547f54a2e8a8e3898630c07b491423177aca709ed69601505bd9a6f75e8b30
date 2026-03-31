@@ -1,0 +1,82 @@
+/**
+ * Bridge contract: typed declarations for the globals shared between the
+ * host (Node.js) and the isolate (sandbox V8 context).
+ *
+ * Two categories:
+ * - Host bridge globals: set by the host before bridge code runs (fs refs, timers, etc.)
+ * - Runtime bridge globals: installed by the bridge bundle itself (active handles, modules, etc.)
+ *
+ * The typed `Ref` aliases describe the isolated-vm calling convention for each global.
+ */
+function valuesOf(object) {
+    return Object.values(object);
+}
+/** Globals injected by the host before the bridge bundle executes. */
+export const HOST_BRIDGE_GLOBAL_KEYS = {
+    dynamicImport: "_dynamicImport",
+    loadPolyfill: "_loadPolyfill",
+    resolveModule: "_resolveModule",
+    loadFile: "_loadFile",
+    scheduleTimer: "_scheduleTimer",
+    cryptoRandomFill: "_cryptoRandomFill",
+    cryptoRandomUuid: "_cryptoRandomUUID",
+    fsReadFile: "_fsReadFile",
+    fsWriteFile: "_fsWriteFile",
+    fsReadFileBinary: "_fsReadFileBinary",
+    fsWriteFileBinary: "_fsWriteFileBinary",
+    fsReadDir: "_fsReadDir",
+    fsMkdir: "_fsMkdir",
+    fsRmdir: "_fsRmdir",
+    fsExists: "_fsExists",
+    fsStat: "_fsStat",
+    fsUnlink: "_fsUnlink",
+    fsRename: "_fsRename",
+    fsChmod: "_fsChmod",
+    fsChown: "_fsChown",
+    fsLink: "_fsLink",
+    fsSymlink: "_fsSymlink",
+    fsReadlink: "_fsReadlink",
+    fsLstat: "_fsLstat",
+    fsTruncate: "_fsTruncate",
+    fsUtimes: "_fsUtimes",
+    childProcessSpawnStart: "_childProcessSpawnStart",
+    childProcessStdinWrite: "_childProcessStdinWrite",
+    childProcessStdinClose: "_childProcessStdinClose",
+    childProcessKill: "_childProcessKill",
+    childProcessSpawnSync: "_childProcessSpawnSync",
+    networkFetchRaw: "_networkFetchRaw",
+    networkDnsLookupRaw: "_networkDnsLookupRaw",
+    networkHttpRequestRaw: "_networkHttpRequestRaw",
+    networkHttpServerListenRaw: "_networkHttpServerListenRaw",
+    networkHttpServerCloseRaw: "_networkHttpServerCloseRaw",
+    processConfig: "_processConfig",
+    osConfig: "_osConfig",
+    log: "_log",
+    error: "_error",
+};
+/** Globals exposed by the bridge bundle and runtime scripts inside the isolate. */
+export const RUNTIME_BRIDGE_GLOBAL_KEYS = {
+    registerHandle: "_registerHandle",
+    unregisterHandle: "_unregisterHandle",
+    waitForActiveHandles: "_waitForActiveHandles",
+    getActiveHandles: "_getActiveHandles",
+    childProcessDispatch: "_childProcessDispatch",
+    childProcessModule: "_childProcessModule",
+    moduleModule: "_moduleModule",
+    osModule: "_osModule",
+    httpModule: "_httpModule",
+    httpsModule: "_httpsModule",
+    http2Module: "_http2Module",
+    dnsModule: "_dnsModule",
+    httpServerDispatch: "_httpServerDispatch",
+    fsFacade: "_fs",
+    requireFrom: "_requireFrom",
+    moduleCache: "_moduleCache",
+    processExitError: "ProcessExitError",
+};
+export const HOST_BRIDGE_GLOBAL_KEY_LIST = valuesOf(HOST_BRIDGE_GLOBAL_KEYS);
+export const RUNTIME_BRIDGE_GLOBAL_KEY_LIST = valuesOf(RUNTIME_BRIDGE_GLOBAL_KEYS);
+export const BRIDGE_GLOBAL_KEY_LIST = [
+    ...HOST_BRIDGE_GLOBAL_KEY_LIST,
+    ...RUNTIME_BRIDGE_GLOBAL_KEY_LIST,
+];

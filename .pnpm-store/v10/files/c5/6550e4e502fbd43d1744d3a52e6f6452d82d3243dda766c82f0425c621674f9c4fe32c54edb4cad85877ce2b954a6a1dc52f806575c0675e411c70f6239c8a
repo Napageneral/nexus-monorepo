@@ -1,0 +1,1416 @@
+// Network module polyfill for isolated-vm
+// Provides fetch, http, https, and dns module emulation that bridges to host
+import { exposeCustomGlobal } from "../shared/global-exposure.js";
+// Fetch polyfill
+export async function fetch(url, options = {}) {
+    if (typeof _networkFetchRaw === 'undefined') {
+        console.error('fetch requires NetworkAdapter to be configured');
+        throw new Error('fetch requires NetworkAdapter to be configured');
+    }
+    const optionsJson = JSON.stringify({
+        method: options.method || "GET",
+        headers: options.headers || {},
+        body: options.body || null,
+    });
+    const responseJson = await _networkFetchRaw.apply(undefined, [String(url), optionsJson], {
+        result: { promise: true },
+    });
+    const response = JSON.parse(responseJson);
+    // Create Response-like object
+    return {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        headers: new Map(Object.entries(response.headers || {})),
+        url: response.url || String(url),
+        redirected: response.redirected || false,
+        type: "basic",
+        async text() {
+            return response.body || "";
+        },
+        async json() {
+            return JSON.parse(response.body || "{}");
+        },
+        async arrayBuffer() {
+            // Not fully supported - return empty buffer
+            return new ArrayBuffer(0);
+        },
+        async blob() {
+            throw new Error("Blob not supported in sandbox");
+        },
+        clone() {
+            return { ...this };
+        },
+    };
+}
+// Headers class
+export class Headers {
+    _headers = {};
+    constructor(init) {
+        if (init && init !== null) {
+            if (init instanceof Headers) {
+                this._headers = { ...init._headers };
+            }
+            else if (Array.isArray(init)) {
+                init.forEach(([key, value]) => {
+                    this._headers[key.toLowerCase()] = value;
+                });
+            }
+            else if (typeof init === "object") {
+                Object.entries(init).forEach(([key, value]) => {
+                    this._headers[key.toLowerCase()] = value;
+                });
+            }
+        }
+    }
+    get(name) {
+        return this._headers[name.toLowerCase()] || null;
+    }
+    set(name, value) {
+        this._headers[name.toLowerCase()] = value;
+    }
+    has(name) {
+        return name.toLowerCase() in this._headers;
+    }
+    delete(name) {
+        delete this._headers[name.toLowerCase()];
+    }
+    entries() {
+        return Object.entries(this._headers)[Symbol.iterator]();
+    }
+    [Symbol.iterator]() {
+        return this.entries();
+    }
+    keys() {
+        return Object.keys(this._headers)[Symbol.iterator]();
+    }
+    values() {
+        return Object.values(this._headers)[Symbol.iterator]();
+    }
+    forEach(callback) {
+        Object.entries(this._headers).forEach(([k, v]) => callback(v, k, this));
+    }
+}
+// Request class
+export class Request {
+    url;
+    method;
+    headers;
+    body;
+    mode;
+    credentials;
+    cache;
+    redirect;
+    referrer;
+    integrity;
+    constructor(input, init = {}) {
+        this.url = typeof input === "string" ? input : input.url;
+        this.method = init.method || (typeof input !== "string" ? input.method : undefined) || "GET";
+        this.headers = new Headers(init.headers || (typeof input !== "string" ? input.headers : undefined));
+        this.body = init.body || null;
+        this.mode = init.mode || "cors";
+        this.credentials = init.credentials || "same-origin";
+        this.cache = init.cache || "default";
+        this.redirect = init.redirect || "follow";
+        this.referrer = init.referrer || "about:client";
+        this.integrity = init.integrity || "";
+    }
+    clone() {
+        return new Request(this.url, this);
+    }
+}
+// Response class
+export class Response {
+    _body;
+    status;
+    statusText;
+    headers;
+    ok;
+    type;
+    url;
+    redirected;
+    constructor(body, init = {}) {
+        this._body = body || null;
+        this.status = init.status || 200;
+        this.statusText = init.statusText || "OK";
+        this.headers = new Headers(init.headers);
+        this.ok = this.status >= 200 && this.status < 300;
+        this.type = "default";
+        this.url = "";
+        this.redirected = false;
+    }
+    async text() {
+        return String(this._body || "");
+    }
+    async json() {
+        return JSON.parse(this._body || "{}");
+    }
+    clone() {
+        return new Response(this._body, { status: this.status, statusText: this.statusText });
+    }
+    static error() {
+        return new Response(null, { status: 0, statusText: "" });
+    }
+    static redirect(url, status = 302) {
+        return new Response(null, { status, headers: { Location: url } });
+    }
+}
+// DNS module polyfill
+export const dns = {
+    lookup(hostname, options, callback) {
+        let cb = callback;
+        if (typeof options === "function") {
+            cb = options;
+        }
+        _networkDnsLookupRaw
+            .apply(undefined, [hostname], { result: { promise: true } })
+            .then((resultJson) => {
+            const result = JSON.parse(resultJson);
+            if (result.error) {
+                const err = new Error(result.error);
+                err.code = result.code || "ENOTFOUND";
+                cb?.(err);
+            }
+            else {
+                cb?.(null, result.address, result.family);
+            }
+        })
+            .catch((err) => {
+            cb?.(err);
+        });
+    },
+    resolve(hostname, rrtype, callback) {
+        let cb = callback;
+        if (typeof rrtype === "function") {
+            cb = rrtype;
+        }
+        // Simplified - just do lookup for A records
+        dns.lookup(hostname, (err, address) => {
+            if (err) {
+                cb?.(err);
+            }
+            else {
+                cb?.(null, address ? [address] : []);
+            }
+        });
+    },
+    resolve4(hostname, callback) {
+        dns.resolve(hostname, "A", callback);
+    },
+    resolve6(hostname, callback) {
+        dns.resolve(hostname, "AAAA", callback);
+    },
+    promises: {
+        lookup(hostname, _options) {
+            return new Promise((resolve, reject) => {
+                dns.lookup(hostname, _options, (err, address, family) => {
+                    if (err)
+                        reject(err);
+                    else
+                        resolve({ address: address || "", family: family || 4 });
+                });
+            });
+        },
+        resolve(hostname, rrtype) {
+            return new Promise((resolve, reject) => {
+                dns.resolve(hostname, rrtype || "A", (err, addresses) => {
+                    if (err)
+                        reject(err);
+                    else
+                        resolve(addresses || []);
+                });
+            });
+        },
+    },
+};
+// Module-level globalAgent used by ClientRequest when no agent option is provided.
+// Initialized lazily after Agent class is defined; set by createHttpModule().
+let _moduleGlobalAgent = null;
+/**
+ * Polyfill of Node.js `http.IncomingMessage` (client-side response). Buffers
+ * the response body eagerly and emits `data`/`end` events on listener
+ * registration (flowing mode). Supports base64 binary decoding via
+ * `x-body-encoding` header.
+ */
+export class IncomingMessage {
+    headers;
+    rawHeaders;
+    trailers;
+    rawTrailers;
+    httpVersion;
+    httpVersionMajor;
+    httpVersionMinor;
+    method;
+    url;
+    statusCode;
+    statusMessage;
+    _body;
+    _isBinary;
+    _listeners;
+    complete;
+    aborted;
+    socket;
+    _bodyConsumed;
+    _ended;
+    _flowing;
+    readable;
+    readableEnded;
+    readableFlowing;
+    destroyed;
+    _encoding;
+    constructor(response) {
+        this.headers = response?.headers || {};
+        this.rawHeaders = [];
+        if (this.headers && typeof this.headers === "object") {
+            Object.entries(this.headers).forEach(([k, v]) => {
+                this.rawHeaders.push(k, v);
+            });
+        }
+        // Populate trailers if provided
+        if (response?.trailers && typeof response.trailers === "object") {
+            this.trailers = response.trailers;
+            this.rawTrailers = [];
+            Object.entries(response.trailers).forEach(([k, v]) => {
+                this.rawTrailers.push(k, v);
+            });
+        }
+        else {
+            this.trailers = {};
+            this.rawTrailers = [];
+        }
+        this.httpVersion = "1.1";
+        this.httpVersionMajor = 1;
+        this.httpVersionMinor = 1;
+        this.method = null;
+        this.url = response?.url || "";
+        this.statusCode = response?.status;
+        this.statusMessage = response?.statusText;
+        // Decode base64 body if x-body-encoding header is set
+        const bodyEncoding = this.headers['x-body-encoding'];
+        if (bodyEncoding === 'base64' && response?.body && typeof Buffer !== 'undefined') {
+            this._body = Buffer.from(response.body, 'base64').toString('binary');
+            this._isBinary = true;
+        }
+        else {
+            this._body = response?.body || "";
+            this._isBinary = false;
+        }
+        this._listeners = {};
+        this.complete = false;
+        this.aborted = false;
+        this.socket = null;
+        this._bodyConsumed = false;
+        this._ended = false;
+        this._flowing = false;
+        this.readable = true;
+        this.readableEnded = false;
+        this.readableFlowing = null;
+        this.destroyed = false;
+    }
+    on(event, listener) {
+        if (!this._listeners[event])
+            this._listeners[event] = [];
+        this._listeners[event].push(listener);
+        // When 'data' listener is added, start flowing mode
+        // Note: We check for non-empty body (this._body.length > 0) because we need to
+        // emit 'end' even for empty responses, but only emit 'data' if there's actual data
+        if (event === "data" && !this._bodyConsumed) {
+            this._flowing = true;
+            this.readableFlowing = true;
+            // Emit data in next microtask
+            Promise.resolve().then(() => {
+                if (!this._bodyConsumed) {
+                    this._bodyConsumed = true;
+                    // Only emit data if there's actual content
+                    if (this._body && this._body.length > 0) {
+                        let buf;
+                        if (typeof Buffer !== "undefined") {
+                            // For binary data, use 'binary' encoding to preserve bytes
+                            buf = this._isBinary ? Buffer.from(this._body, 'binary') : Buffer.from(this._body);
+                        }
+                        else {
+                            buf = this._body;
+                        }
+                        this.emit("data", buf);
+                    }
+                    // Always emit end after data (even if no data was emitted)
+                    Promise.resolve().then(() => {
+                        if (!this._ended) {
+                            this._ended = true;
+                            this.complete = true;
+                            this.readable = false;
+                            this.readableEnded = true;
+                            this.emit("end");
+                        }
+                    });
+                }
+            });
+        }
+        // If 'end' listener is added after data was already consumed, emit end
+        if (event === "end" && this._bodyConsumed && !this._ended) {
+            Promise.resolve().then(() => {
+                if (!this._ended) {
+                    this._ended = true;
+                    this.complete = true;
+                    this.readable = false;
+                    this.readableEnded = true;
+                    listener();
+                }
+            });
+        }
+        return this;
+    }
+    once(event, listener) {
+        const wrapper = (...args) => {
+            this.off(event, wrapper);
+            listener(...args);
+        };
+        wrapper._originalListener = listener;
+        return this.on(event, wrapper);
+    }
+    off(event, listener) {
+        if (this._listeners[event]) {
+            const idx = this._listeners[event].findIndex((fn) => fn === listener || fn._originalListener === listener);
+            if (idx !== -1)
+                this._listeners[event].splice(idx, 1);
+        }
+        return this;
+    }
+    removeListener(event, listener) {
+        return this.off(event, listener);
+    }
+    removeAllListeners(event) {
+        if (event) {
+            delete this._listeners[event];
+        }
+        else {
+            this._listeners = {};
+        }
+        return this;
+    }
+    emit(event, ...args) {
+        const handlers = this._listeners[event];
+        if (handlers) {
+            handlers.slice().forEach((fn) => fn(...args));
+        }
+        return handlers !== undefined && handlers.length > 0;
+    }
+    setEncoding(encoding) {
+        this._encoding = encoding;
+        return this;
+    }
+    read(_size) {
+        if (this._bodyConsumed)
+            return null;
+        this._bodyConsumed = true;
+        let buf;
+        if (typeof Buffer !== "undefined") {
+            buf = this._isBinary ? Buffer.from(this._body, 'binary') : Buffer.from(this._body);
+        }
+        else {
+            buf = this._body;
+        }
+        // Schedule end event
+        Promise.resolve().then(() => {
+            if (!this._ended) {
+                this._ended = true;
+                this.complete = true;
+                this.readable = false;
+                this.readableEnded = true;
+                this.emit("end");
+            }
+        });
+        return buf;
+    }
+    pipe(dest) {
+        let buf;
+        if (typeof Buffer !== "undefined") {
+            buf = this._isBinary ? Buffer.from(this._body || "", 'binary') : Buffer.from(this._body || "");
+        }
+        else {
+            buf = this._body || "";
+        }
+        if (typeof dest.write === "function" && (typeof buf === "string" ? buf.length : buf.length) > 0) {
+            dest.write(buf);
+        }
+        if (typeof dest.end === "function") {
+            Promise.resolve().then(() => dest.end());
+        }
+        this._bodyConsumed = true;
+        this._ended = true;
+        this.complete = true;
+        this.readable = false;
+        this.readableEnded = true;
+        return dest;
+    }
+    pause() {
+        this._flowing = false;
+        this.readableFlowing = false;
+        return this;
+    }
+    resume() {
+        this._flowing = true;
+        this.readableFlowing = true;
+        if (!this._bodyConsumed && this._body) {
+            Promise.resolve().then(() => {
+                if (!this._bodyConsumed) {
+                    this._bodyConsumed = true;
+                    let buf;
+                    if (typeof Buffer !== "undefined") {
+                        buf = this._isBinary ? Buffer.from(this._body, 'binary') : Buffer.from(this._body);
+                    }
+                    else {
+                        buf = this._body;
+                    }
+                    this.emit("data", buf);
+                    Promise.resolve().then(() => {
+                        if (!this._ended) {
+                            this._ended = true;
+                            this.complete = true;
+                            this.readable = false;
+                            this.readableEnded = true;
+                            this.emit("end");
+                        }
+                    });
+                }
+            });
+        }
+        return this;
+    }
+    unpipe(_dest) {
+        return this;
+    }
+    destroy(err) {
+        this.destroyed = true;
+        this.readable = false;
+        if (err)
+            this.emit("error", err);
+        this.emit("close");
+        return this;
+    }
+    [Symbol.asyncIterator]() {
+        const self = this;
+        let dataEmitted = false;
+        let ended = false;
+        return {
+            async next() {
+                if (ended || self._ended) {
+                    return { done: true, value: undefined };
+                }
+                if (!dataEmitted && !self._bodyConsumed) {
+                    dataEmitted = true;
+                    self._bodyConsumed = true;
+                    let buf;
+                    if (typeof Buffer !== "undefined") {
+                        buf = self._isBinary ? Buffer.from(self._body || "", 'binary') : Buffer.from(self._body || "");
+                    }
+                    else {
+                        buf = self._body || "";
+                    }
+                    return { done: false, value: buf };
+                }
+                ended = true;
+                self._ended = true;
+                self.complete = true;
+                self.readable = false;
+                self.readableEnded = true;
+                return { done: true, value: undefined };
+            },
+            return() {
+                ended = true;
+                return Promise.resolve({ done: true, value: undefined });
+            },
+            throw(err) {
+                ended = true;
+                self.emit("error", err);
+                return Promise.resolve({ done: true, value: undefined });
+            },
+        };
+    }
+}
+/**
+ * Polyfill of Node.js `http.ClientRequest`. Executes the request asynchronously
+ * via the `_networkHttpRequestRaw` bridge and emits a `response` event with
+ * an IncomingMessage. Supports Agent-based connection pooling, socket events,
+ * HTTP upgrade (101), and trailer headers.
+ */
+export class ClientRequest {
+    _options;
+    _callback;
+    _listeners = {};
+    _body = "";
+    _ended = false;
+    _agent;
+    _hostKey;
+    socket;
+    finished = false;
+    aborted = false;
+    constructor(options, callback) {
+        this._options = options;
+        this._callback = callback;
+        // Resolve agent: false = no agent, undefined = globalAgent, or explicit Agent
+        const agentOpt = options.agent;
+        if (agentOpt === false) {
+            this._agent = null;
+        }
+        else if (agentOpt instanceof Agent) {
+            this._agent = agentOpt;
+        }
+        else {
+            this._agent = _moduleGlobalAgent;
+        }
+        this._hostKey = this._agent ? this._agent._getHostKey(options) : "";
+        // Create socket-like object and emit 'socket' event
+        this.socket = new FakeSocket({
+            host: (options.hostname || options.host || "localhost"),
+            port: Number(options.port) || 80,
+        });
+        Promise.resolve().then(() => this._emit("socket", this.socket));
+        // Execute request asynchronously
+        Promise.resolve().then(() => this._execute());
+    }
+    async _execute() {
+        // Acquire agent slot before executing
+        if (this._agent) {
+            await this._agent._acquireSlot(this._hostKey);
+        }
+        try {
+            if (typeof _networkHttpRequestRaw === 'undefined') {
+                console.error('http/https request requires NetworkAdapter to be configured');
+                throw new Error('http/https request requires NetworkAdapter to be configured');
+            }
+            const url = this._buildUrl();
+            const optionsJson = JSON.stringify({
+                method: this._options.method || "GET",
+                headers: this._options.headers || {},
+                body: this._body || null,
+            });
+            const responseJson = await _networkHttpRequestRaw.apply(undefined, [url, optionsJson], {
+                result: { promise: true },
+            });
+            const response = JSON.parse(responseJson);
+            this.finished = true;
+            // 101 Switching Protocols → fire 'upgrade' event
+            if (response.status === 101) {
+                const res = new IncomingMessage(response);
+                const head = typeof Buffer !== "undefined" ? Buffer.alloc(0) : new Uint8Array(0);
+                this._emit("upgrade", res, this.socket, head);
+                return;
+            }
+            const res = new IncomingMessage(response);
+            if (this._callback) {
+                this._callback(res);
+            }
+            this._emit("response", res);
+        }
+        catch (err) {
+            this._emit("error", err);
+        }
+        finally {
+            // Release agent slot
+            if (this._agent) {
+                this._agent._releaseSlot(this._hostKey);
+            }
+        }
+    }
+    _buildUrl() {
+        const opts = this._options;
+        const protocol = opts.protocol || (opts.port === 443 ? "https:" : "http:");
+        const host = opts.hostname || opts.host || "localhost";
+        const port = opts.port ? ":" + opts.port : "";
+        const path = opts.path || "/";
+        return protocol + "//" + host + port + path;
+    }
+    on(event, listener) {
+        if (!this._listeners[event])
+            this._listeners[event] = [];
+        this._listeners[event].push(listener);
+        return this;
+    }
+    once(event, listener) {
+        const wrapper = (...args) => {
+            this.off(event, wrapper);
+            listener(...args);
+        };
+        return this.on(event, wrapper);
+    }
+    off(event, listener) {
+        if (this._listeners[event]) {
+            const idx = this._listeners[event].indexOf(listener);
+            if (idx !== -1)
+                this._listeners[event].splice(idx, 1);
+        }
+        return this;
+    }
+    _emit(event, ...args) {
+        if (this._listeners[event]) {
+            this._listeners[event].forEach((fn) => fn(...args));
+        }
+    }
+    write(data) {
+        this._body += data;
+        return true;
+    }
+    end(data) {
+        if (data)
+            this._body += data;
+        this._ended = true;
+        return this;
+    }
+    abort() {
+        this.aborted = true;
+    }
+    setTimeout(_timeout) {
+        return this;
+    }
+    setNoDelay() {
+        return this;
+    }
+    setSocketKeepAlive() {
+        return this;
+    }
+    flushHeaders() {
+        // no-op
+    }
+}
+// Minimal socket-like object emitted by ClientRequest 'socket' event
+class FakeSocket {
+    remoteAddress;
+    remotePort;
+    localAddress = "127.0.0.1";
+    localPort = 0;
+    connecting = false;
+    destroyed = false;
+    writable = true;
+    readable = true;
+    _listeners = {};
+    constructor(options) {
+        this.remoteAddress = options?.host || "127.0.0.1";
+        this.remotePort = options?.port || 80;
+    }
+    setTimeout(_ms, _cb) { return this; }
+    setNoDelay(_noDelay) { return this; }
+    setKeepAlive(_enable, _delay) { return this; }
+    on(event, listener) {
+        if (!this._listeners[event])
+            this._listeners[event] = [];
+        this._listeners[event].push(listener);
+        return this;
+    }
+    once(event, listener) {
+        const wrapper = (...args) => {
+            this.off(event, wrapper);
+            listener(...args);
+        };
+        return this.on(event, wrapper);
+    }
+    off(event, listener) {
+        if (this._listeners[event]) {
+            const idx = this._listeners[event].indexOf(listener);
+            if (idx !== -1)
+                this._listeners[event].splice(idx, 1);
+        }
+        return this;
+    }
+    removeListener(event, listener) {
+        return this.off(event, listener);
+    }
+    emit(event, ...args) {
+        const handlers = this._listeners[event];
+        if (handlers)
+            handlers.slice().forEach((fn) => fn(...args));
+        return handlers !== undefined && handlers.length > 0;
+    }
+    write(_data) { return true; }
+    end() { return this; }
+    destroy() {
+        this.destroyed = true;
+        this.writable = false;
+        this.readable = false;
+        return this;
+    }
+}
+// HTTP Agent with connection pooling via maxSockets
+class Agent {
+    maxSockets;
+    maxFreeSockets;
+    keepAlive;
+    keepAliveMsecs;
+    timeout;
+    requests;
+    sockets;
+    freeSockets;
+    // Per-host active count and pending queue
+    _activeCounts = new Map();
+    _queues = new Map();
+    constructor(options) {
+        this.keepAlive = options?.keepAlive ?? false;
+        this.keepAliveMsecs = options?.keepAliveMsecs ?? 1000;
+        this.maxSockets = options?.maxSockets ?? Infinity;
+        this.maxFreeSockets = options?.maxFreeSockets ?? 256;
+        this.timeout = options?.timeout ?? -1;
+        this.requests = {};
+        this.sockets = {};
+        this.freeSockets = {};
+    }
+    _getHostKey(options) {
+        const host = options.hostname || options.host || "localhost";
+        const port = options.port || 80;
+        return `${host}:${port}`;
+    }
+    // Wait for an available slot; resolves immediately if under maxSockets
+    _acquireSlot(hostKey) {
+        const active = this._activeCounts.get(hostKey) || 0;
+        if (active < this.maxSockets) {
+            this._activeCounts.set(hostKey, active + 1);
+            return Promise.resolve();
+        }
+        return new Promise((resolve) => {
+            let queue = this._queues.get(hostKey);
+            if (!queue) {
+                queue = [];
+                this._queues.set(hostKey, queue);
+            }
+            queue.push(resolve);
+        });
+    }
+    // Release a slot; dequeues next pending request if any
+    _releaseSlot(hostKey) {
+        const queue = this._queues.get(hostKey);
+        if (queue && queue.length > 0) {
+            const next = queue.shift();
+            if (queue.length === 0)
+                this._queues.delete(hostKey);
+            next();
+        }
+        else {
+            const active = this._activeCounts.get(hostKey) || 1;
+            const next = active - 1;
+            if (next <= 0)
+                this._activeCounts.delete(hostKey);
+            else
+                this._activeCounts.set(hostKey, next);
+        }
+    }
+    destroy() {
+        this._activeCounts.clear();
+        for (const [, queue] of this._queues) {
+            queue.length = 0;
+        }
+        this._queues.clear();
+    }
+}
+let nextServerId = 1;
+const serverRequestListeners = new Map();
+class ServerIncomingMessage {
+    headers;
+    rawHeaders;
+    method;
+    url;
+    socket;
+    connection;
+    rawBody;
+    destroyed = false;
+    errored;
+    readable = true;
+    httpVersion = "1.1";
+    httpVersionMajor = 1;
+    httpVersionMinor = 1;
+    complete = true;
+    // Readable stream state stub for frameworks that inspect internal state
+    _readableState = { flowing: null, length: 0, ended: false, objectMode: false };
+    _listeners = {};
+    constructor(request) {
+        this.headers = request.headers || {};
+        this.rawHeaders = request.rawHeaders || [];
+        if (!Array.isArray(this.rawHeaders) || this.rawHeaders.length % 2 !== 0) {
+            this.rawHeaders = [];
+        }
+        this.method = request.method || "GET";
+        this.url = request.url || "/";
+        const fakeSocket = {
+            encrypted: false,
+            remoteAddress: "127.0.0.1",
+            remotePort: 0,
+            writable: true,
+            on() { return fakeSocket; },
+            once() { return fakeSocket; },
+            removeListener() { return fakeSocket; },
+            destroy() { },
+            end() { },
+        };
+        this.socket = fakeSocket;
+        this.connection = fakeSocket;
+        const rawHost = this.headers.host;
+        if (typeof rawHost === "string" && rawHost.includes(",")) {
+            this.headers.host = rawHost.split(",")[0].trim();
+        }
+        if (!this.headers.host) {
+            this.headers.host = "127.0.0.1";
+        }
+        if (this.rawHeaders.length === 0) {
+            Object.entries(this.headers).forEach(([key, value]) => {
+                this.rawHeaders.push(key, value);
+            });
+        }
+        if (request.bodyBase64 && typeof Buffer !== "undefined") {
+            this.rawBody = Buffer.from(request.bodyBase64, "base64");
+        }
+    }
+    on(event, listener) {
+        if (!this._listeners[event])
+            this._listeners[event] = [];
+        this._listeners[event].push(listener);
+        return this;
+    }
+    once(event, listener) {
+        const wrapped = (...args) => {
+            this.off(event, wrapped);
+            listener(...args);
+        };
+        return this.on(event, wrapped);
+    }
+    off(event, listener) {
+        const listeners = this._listeners[event];
+        if (!listeners)
+            return this;
+        const index = listeners.indexOf(listener);
+        if (index !== -1)
+            listeners.splice(index, 1);
+        return this;
+    }
+    removeListener(event, listener) {
+        return this.off(event, listener);
+    }
+    emit(event, ...args) {
+        const listeners = this._listeners[event];
+        if (!listeners || listeners.length === 0)
+            return false;
+        listeners.slice().forEach((fn) => fn(...args));
+        return true;
+    }
+    // Readable stream stubs for framework compatibility
+    unpipe() { return this; }
+    pause() { return this; }
+    resume() { return this; }
+    read() { return null; }
+    pipe(dest) { return dest; }
+    isPaused() { return false; }
+    setEncoding() { return this; }
+    destroy(err) {
+        this.destroyed = true;
+        this.errored = err;
+        if (err) {
+            this.emit("error", err);
+        }
+        this.emit("close");
+        return this;
+    }
+}
+/**
+ * Sandbox-side response writer for HTTP server requests. Collects headers and
+ * body chunks, then serializes to JSON for transfer back to the host.
+ */
+class ServerResponseBridge {
+    statusCode = 200;
+    statusMessage = "OK";
+    headersSent = false;
+    writable = true;
+    writableFinished = false;
+    _headers = new Map();
+    _chunks = [];
+    _listeners = {};
+    _closedPromise;
+    _resolveClosed = null;
+    constructor() {
+        this._closedPromise = new Promise((resolve) => {
+            this._resolveClosed = resolve;
+        });
+    }
+    on(event, listener) {
+        if (!this._listeners[event])
+            this._listeners[event] = [];
+        this._listeners[event].push(listener);
+        return this;
+    }
+    once(event, listener) {
+        const wrapped = (...args) => {
+            this.off(event, wrapped);
+            listener(...args);
+        };
+        return this.on(event, wrapped);
+    }
+    off(event, listener) {
+        const listeners = this._listeners[event];
+        if (!listeners)
+            return this;
+        const index = listeners.indexOf(listener);
+        if (index !== -1)
+            listeners.splice(index, 1);
+        return this;
+    }
+    removeListener(event, listener) {
+        return this.off(event, listener);
+    }
+    emit(event, ...args) {
+        const listeners = this._listeners[event];
+        if (!listeners || listeners.length === 0)
+            return false;
+        listeners.slice().forEach((fn) => fn(...args));
+        return true;
+    }
+    _emit(event, ...args) {
+        this.emit(event, ...args);
+    }
+    writeHead(statusCode, headers) {
+        this.statusCode = statusCode;
+        if (headers) {
+            if (Array.isArray(headers)) {
+                headers.forEach(([key, value]) => this.setHeader(key, value));
+            }
+            else {
+                Object.entries(headers).forEach(([key, value]) => this.setHeader(key, value));
+            }
+        }
+        this.headersSent = true;
+        return this;
+    }
+    setHeader(name, value) {
+        const normalized = Array.isArray(value) ? value.join(", ") : String(value);
+        this._headers.set(name.toLowerCase(), normalized);
+        return this;
+    }
+    getHeader(name) {
+        return this._headers.get(name.toLowerCase());
+    }
+    hasHeader(name) {
+        return this._headers.has(name.toLowerCase());
+    }
+    removeHeader(name) {
+        this._headers.delete(name.toLowerCase());
+    }
+    write(chunk) {
+        if (chunk == null)
+            return true;
+        this.headersSent = true;
+        if (typeof chunk === "string") {
+            this._chunks.push(Buffer.from(chunk));
+        }
+        else {
+            this._chunks.push(chunk);
+        }
+        return true;
+    }
+    end(chunk) {
+        if (chunk != null) {
+            this.write(chunk);
+        }
+        this._finalize();
+        return this;
+    }
+    getHeaderNames() {
+        return Array.from(this._headers.keys());
+    }
+    getHeaders() {
+        const result = {};
+        for (const [key, value] of this._headers)
+            result[key] = value;
+        return result;
+    }
+    // Writable stream state stub for frameworks that inspect internal state
+    _writableState = { length: 0, ended: false, finished: false, objectMode: false, corked: 0 };
+    // Fake socket for frameworks that access res.socket/res.connection
+    socket = {
+        writable: true,
+        on: () => this.socket,
+        once: () => this.socket,
+        removeListener: () => this.socket,
+        destroy: () => { },
+        end: () => { },
+        cork: () => { },
+        uncork: () => { },
+        write: () => true,
+    };
+    connection = this.socket;
+    // Node.js http.ServerResponse socket/stream compatibility stubs
+    assignSocket() { }
+    detachSocket() { }
+    writeContinue() { }
+    writeProcessing() { }
+    addTrailers() { }
+    cork() { }
+    uncork() { }
+    setTimeout(_msecs) { return this; }
+    flushHeaders() {
+        this.headersSent = true;
+    }
+    destroy(err) {
+        if (err) {
+            this._emit("error", err);
+        }
+        this._finalize();
+    }
+    async waitForClose() {
+        await this._closedPromise;
+    }
+    serialize() {
+        const bodyBuffer = this._chunks.length > 0 ? Buffer.concat(this._chunks) : Buffer.alloc(0);
+        return {
+            status: this.statusCode,
+            headers: Array.from(this._headers.entries()),
+            body: bodyBuffer.toString("base64"),
+            bodyEncoding: "base64",
+        };
+    }
+    _finalize() {
+        if (this.writableFinished) {
+            return;
+        }
+        this.writableFinished = true;
+        this.writable = false;
+        this._emit("finish");
+        this._emit("close");
+        this._resolveClosed?.();
+        this._resolveClosed = null;
+    }
+}
+/**
+ * Polyfill of Node.js `http.Server`. Delegates actual listening to the host
+ * via the `_networkHttpServerListenRaw` bridge. Incoming requests are
+ * dispatched through `_httpServerDispatch` which invokes the request listener
+ * inside the isolate. Registers an active handle to keep the sandbox alive.
+ */
+class Server {
+    listening = false;
+    _listeners = {};
+    _serverId;
+    _listenPromise = null;
+    _address = null;
+    _handleId = null;
+    constructor(requestListener) {
+        this._serverId = nextServerId++;
+        if (requestListener) {
+            serverRequestListeners.set(this._serverId, requestListener);
+        }
+        else {
+            serverRequestListeners.set(this._serverId, () => undefined);
+        }
+    }
+    _emit(event, ...args) {
+        const listeners = this._listeners[event];
+        if (!listeners || listeners.length === 0)
+            return;
+        listeners.slice().forEach((listener) => listener(...args));
+    }
+    async _start(port, hostname) {
+        if (typeof _networkHttpServerListenRaw === "undefined") {
+            throw new Error("http.createServer requires NetworkAdapter.httpServerListen support");
+        }
+        const resultJson = await _networkHttpServerListenRaw.apply(undefined, [JSON.stringify({ serverId: this._serverId, port, hostname })], { result: { promise: true } });
+        const result = JSON.parse(resultJson);
+        this._address = result.address;
+        this.listening = true;
+        this._handleId = `http-server:${this._serverId}`;
+        if (typeof _registerHandle === "function") {
+            _registerHandle(this._handleId, "http server");
+        }
+    }
+    listen(portOrCb, hostOrCb, cb) {
+        const port = typeof portOrCb === "number" ? portOrCb : undefined;
+        const hostname = typeof hostOrCb === "string" ? hostOrCb : undefined;
+        const callback = typeof cb === "function"
+            ? cb
+            : typeof hostOrCb === "function"
+                ? hostOrCb
+                : typeof portOrCb === "function"
+                    ? portOrCb
+                    : undefined;
+        if (!this._listenPromise) {
+            this._listenPromise = this._start(port, hostname)
+                .then(() => {
+                this._emit("listening");
+                callback?.();
+            })
+                .catch((error) => {
+                this._emit("error", error);
+            });
+        }
+        return this;
+    }
+    close(cb) {
+        const run = async () => {
+            try {
+                if (this._listenPromise) {
+                    await this._listenPromise;
+                }
+                if (this.listening && typeof _networkHttpServerCloseRaw !== "undefined") {
+                    await _networkHttpServerCloseRaw.apply(undefined, [this._serverId], {
+                        result: { promise: true },
+                    });
+                }
+                this.listening = false;
+                this._address = null;
+                if (this._handleId && typeof _unregisterHandle === "function") {
+                    _unregisterHandle(this._handleId);
+                }
+                this._handleId = null;
+                cb?.();
+                this._emit("close");
+            }
+            catch (err) {
+                const error = err instanceof Error ? err : new Error(String(err));
+                cb?.(error);
+                this._emit("error", error);
+            }
+        };
+        void run();
+        return this;
+    }
+    address() {
+        return this._address;
+    }
+    on(event, listener) {
+        if (!this._listeners[event])
+            this._listeners[event] = [];
+        this._listeners[event].push(listener);
+        return this;
+    }
+    once(event, listener) {
+        const wrapped = (...args) => {
+            this.off(event, wrapped);
+            listener(...args);
+        };
+        return this.on(event, wrapped);
+    }
+    off(event, listener) {
+        const listeners = this._listeners[event];
+        if (!listeners)
+            return this;
+        const index = listeners.indexOf(listener);
+        if (index !== -1)
+            listeners.splice(index, 1);
+        return this;
+    }
+    removeListener(event, listener) {
+        return this.off(event, listener);
+    }
+    removeAllListeners(event) {
+        if (event) {
+            delete this._listeners[event];
+        }
+        else {
+            this._listeners = {};
+        }
+        return this;
+    }
+    // Node.js Server timeout properties (no-op in sandbox)
+    keepAliveTimeout = 5000;
+    requestTimeout = 300000;
+    headersTimeout = 60000;
+    timeout = 0;
+    maxRequestsPerSocket = 0;
+    setTimeout(_msecs, _callback) {
+        if (typeof _msecs === "number")
+            this.timeout = _msecs;
+        return this;
+    }
+    ref() {
+        return this;
+    }
+    unref() {
+        return this;
+    }
+}
+/** Route an incoming HTTP request to the server's request listener and return the serialized response. */
+async function dispatchServerRequest(serverId, requestJson) {
+    const listener = serverRequestListeners.get(serverId);
+    if (!listener) {
+        throw new Error(`Unknown HTTP server: ${serverId}`);
+    }
+    const request = JSON.parse(requestJson);
+    const incoming = new ServerIncomingMessage(request);
+    const outgoing = new ServerResponseBridge();
+    try {
+        // Call listener synchronously — frameworks register event handlers here
+        const listenerResult = listener(incoming, outgoing);
+        // Emit readable stream events so body-parsing middleware (e.g. express.json()) can proceed
+        if (incoming.rawBody && incoming.rawBody.length > 0) {
+            incoming.emit("data", incoming.rawBody);
+        }
+        incoming.emit("end");
+        await Promise.resolve(listenerResult);
+    }
+    catch (err) {
+        outgoing.statusCode = 500;
+        outgoing.end(err instanceof Error ? `Error: ${err.message}` : "Error");
+    }
+    if (!outgoing.writableFinished) {
+        outgoing.end();
+    }
+    await outgoing.waitForClose();
+    return JSON.stringify(outgoing.serialize());
+}
+// Function-based ServerResponse constructor — allows .call() inheritance
+// used by light-my-request (Fastify's inject), which does
+// http.ServerResponse.call(this, req) + util.inherits(Response, http.ServerResponse)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ServerResponseCallable() {
+    this.statusCode = 200;
+    this.statusMessage = "OK";
+    this.headersSent = false;
+    this.writable = true;
+    this.writableFinished = false;
+    this._headers = new Map();
+    this._chunks = [];
+    this._listeners = {};
+    this._closedPromise = new Promise((resolve) => {
+        this._resolveClosed = resolve;
+    });
+    // Writable stream state stub
+    this._writableState = { length: 0, ended: false, finished: false, objectMode: false, corked: 0 };
+    // Fake socket for frameworks/inject libraries that access res.socket
+    const fakeSocket = {
+        writable: true,
+        on() { return fakeSocket; },
+        once() { return fakeSocket; },
+        removeListener() { return fakeSocket; },
+        destroy() { },
+        end() { },
+        cork() { },
+        uncork() { },
+        write() { return true; },
+    };
+    this.socket = fakeSocket;
+    this.connection = fakeSocket;
+}
+ServerResponseCallable.prototype = Object.create(ServerResponseBridge.prototype, {
+    constructor: { value: ServerResponseCallable, writable: true, configurable: true },
+});
+// Create HTTP module
+function createHttpModule(_protocol) {
+    const moduleAgent = new Agent({ keepAlive: false });
+    // Set module-level globalAgent so ClientRequest defaults to it
+    _moduleGlobalAgent = moduleAgent;
+    return {
+        request(options, callback) {
+            let opts;
+            if (typeof options === "string") {
+                const url = new URL(options);
+                opts = {
+                    protocol: url.protocol,
+                    hostname: url.hostname,
+                    port: url.port,
+                    path: url.pathname + url.search,
+                };
+            }
+            else if (options instanceof URL) {
+                opts = {
+                    protocol: options.protocol,
+                    hostname: options.hostname,
+                    port: options.port,
+                    path: options.pathname + options.search,
+                };
+            }
+            else {
+                opts = options;
+            }
+            return new ClientRequest(opts, callback);
+        },
+        get(options, callback) {
+            let opts;
+            if (typeof options === "string") {
+                const url = new URL(options);
+                opts = {
+                    protocol: url.protocol,
+                    hostname: url.hostname,
+                    port: url.port,
+                    path: url.pathname + url.search,
+                    method: "GET",
+                };
+            }
+            else if (options instanceof URL) {
+                opts = {
+                    protocol: options.protocol,
+                    hostname: options.hostname,
+                    port: options.port,
+                    path: options.pathname + options.search,
+                    method: "GET",
+                };
+            }
+            else {
+                opts = { ...options, method: "GET" };
+            }
+            const req = new ClientRequest(opts, callback);
+            req.end();
+            return req;
+        },
+        createServer(_optionsOrListener, maybeListener) {
+            const listener = typeof _optionsOrListener === "function"
+                ? _optionsOrListener
+                : maybeListener;
+            return new Server(listener);
+        },
+        Agent,
+        globalAgent: moduleAgent,
+        Server: Server,
+        ServerResponse: ServerResponseCallable,
+        IncomingMessage: IncomingMessage,
+        ClientRequest: ClientRequest,
+        METHODS: ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+        STATUS_CODES: {
+            200: "OK",
+            201: "Created",
+            204: "No Content",
+            301: "Moved Permanently",
+            302: "Found",
+            304: "Not Modified",
+            400: "Bad Request",
+            401: "Unauthorized",
+            403: "Forbidden",
+            404: "Not Found",
+            500: "Internal Server Error",
+        },
+    };
+}
+export const http = createHttpModule("http");
+export const https = createHttpModule("https");
+export const http2 = {
+    Http2ServerRequest: class Http2ServerRequest {
+    },
+    Http2ServerResponse: class Http2ServerResponse {
+    },
+    createServer() {
+        throw new Error("http2.createServer is not supported in sandbox");
+    },
+    createSecureServer() {
+        throw new Error("http2.createSecureServer is not supported in sandbox");
+    },
+};
+// Export modules and make them available as globals for require()
+exposeCustomGlobal("_httpModule", http);
+exposeCustomGlobal("_httpsModule", https);
+exposeCustomGlobal("_http2Module", http2);
+exposeCustomGlobal("_dnsModule", dns);
+exposeCustomGlobal("_httpServerDispatch", dispatchServerRequest);
+// Harden fetch API globals (non-writable, non-configurable)
+exposeCustomGlobal("fetch", fetch);
+exposeCustomGlobal("Headers", Headers);
+exposeCustomGlobal("Request", Request);
+exposeCustomGlobal("Response", Response);
+if (typeof globalThis.Blob === "undefined") {
+    // Minimal Blob stub used by server frameworks for instanceof checks.
+    exposeCustomGlobal("Blob", class BlobStub {
+    });
+}
+export default {
+    fetch,
+    Headers,
+    Request,
+    Response,
+    dns,
+    http,
+    https,
+    http2,
+    IncomingMessage,
+    ClientRequest,
+};

@@ -1,0 +1,2 @@
+export { ModuleAccessFileSystem } from "@secure-exec/node/internal/module-access";
+export type { ModuleAccessOptions } from "@secure-exec/node/internal/module-access";

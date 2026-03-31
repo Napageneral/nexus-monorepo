@@ -340,9 +340,7 @@ export type RuntimeAgentRow = {
 };
 
 export type AgentsListResult = {
-  defaultId: string;
-  mainKey: string;
-  scope: string;
+  defaultId?: string;
   agents: RuntimeAgentRow[];
 };
 

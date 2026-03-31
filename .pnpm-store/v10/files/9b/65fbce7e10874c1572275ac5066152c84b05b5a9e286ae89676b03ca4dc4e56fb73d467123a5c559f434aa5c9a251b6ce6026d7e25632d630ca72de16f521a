@@ -1,0 +1,86 @@
+import type * as nodeProcess from "process";
+import { TextEncoder, TextDecoder } from "./polyfills.js";
+/**
+ * Process configuration injected by the host before the bridge bundle loads.
+ * Values default to sensible Linux/x64 stubs when unset.
+ */
+export interface ProcessConfig {
+    platform?: string;
+    arch?: string;
+    version?: string;
+    cwd?: string;
+    env?: Record<string, string>;
+    argv?: string[];
+    execPath?: string;
+    pid?: number;
+    ppid?: number;
+    uid?: number;
+    gid?: number;
+    stdin?: string;
+    timingMitigation?: "off" | "freeze";
+    frozenTimeMs?: number;
+}
+/**
+ * Thrown by `process.exit()` to unwind the sandbox call stack. The host
+ * catches this to extract the exit code without killing the isolate.
+ */
+export declare class ProcessExitError extends Error {
+    code: number;
+    constructor(code: number);
+}
+declare const _default: typeof nodeProcess;
+export default _default;
+/**
+ * Timer handle that mimics Node.js Timeout (ref/unref/Symbol.toPrimitive).
+ * Timers with delay > 0 use the host's `_scheduleTimer` bridge to sleep
+ * without blocking the isolate's event loop.
+ */
+declare class TimerHandle {
+    _id: number;
+    _destroyed: boolean;
+    constructor(id: number);
+    ref(): this;
+    unref(): this;
+    hasRef(): boolean;
+    refresh(): this;
+    [Symbol.toPrimitive](): number;
+}
+export declare function setTimeout(callback: (...args: unknown[]) => void, delay?: number, ...args: unknown[]): TimerHandle;
+export declare function clearTimeout(timer: TimerHandle | number | undefined): void;
+export declare function setInterval(callback: (...args: unknown[]) => void, delay?: number, ...args: unknown[]): TimerHandle;
+export declare function clearInterval(timer: TimerHandle | number | undefined): void;
+export declare function setImmediate(callback: (...args: unknown[]) => void, ...args: unknown[]): TimerHandle;
+export declare function clearImmediate(id: TimerHandle | number | undefined): void;
+export declare const URL: {
+    new (url: string | URL, base?: string | URL): URL;
+    prototype: URL;
+    canParse(url: string | URL, base?: string | URL): boolean;
+    createObjectURL(obj: Blob | MediaSource): string;
+    parse(url: string | URL, base?: string | URL): URL | null;
+    revokeObjectURL(url: string): void;
+};
+export declare const URLSearchParams: {
+    new (init?: string[][] | Record<string, string> | string | URLSearchParams): URLSearchParams;
+    prototype: URLSearchParams;
+};
+export { TextEncoder, TextDecoder };
+export declare const Buffer: BufferConstructor;
+/**
+ * Crypto polyfill that delegates to the host for entropy. `getRandomValues`
+ * calls the host's `_cryptoRandomFill` bridge to get cryptographically secure
+ * random bytes. Subtle crypto operations are unsupported.
+ */
+export declare const cryptoPolyfill: {
+    getRandomValues<T extends ArrayBufferView>(array: T): T;
+    randomUUID(): string;
+    subtle: {
+        digest(): Promise<ArrayBuffer>;
+        encrypt(): Promise<ArrayBuffer>;
+        decrypt(): Promise<ArrayBuffer>;
+    };
+};
+/**
+ * Install all process/timer/URL/Buffer/crypto polyfills onto `globalThis`.
+ * Called once during bridge initialization before user code runs.
+ */
+export declare function setupGlobals(): void;

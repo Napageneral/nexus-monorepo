@@ -1,0 +1,670 @@
+// child_process module polyfill for isolated-vm
+// Provides Node.js child_process module emulation that bridges to host
+//
+// Uses the active handles mechanism to keep the sandbox alive while child
+// processes are running. See: docs-internal/node/ACTIVE_HANDLES.md
+import { exposeCustomGlobal } from "../shared/global-exposure.js";
+// Active children registry - maps session ID to ChildProcess
+const activeChildren = new Map();
+/**
+ * Global dispatcher invoked by the host when child process data arrives.
+ * Routes stdout/stderr chunks and exit codes to the corresponding ChildProcess
+ * instance by session ID, and unregisters the active handle on exit.
+ */
+const childProcessDispatch = (sessionId, type, data) => {
+    const child = activeChildren.get(sessionId);
+    if (!child)
+        return;
+    if (type === "stdout") {
+        const buf = typeof Buffer !== "undefined" ? Buffer.from(data) : data;
+        child.stdout.emit("data", buf);
+    }
+    else if (type === "stderr") {
+        const buf = typeof Buffer !== "undefined" ? Buffer.from(data) : data;
+        child.stderr.emit("data", buf);
+    }
+    else if (type === "exit") {
+        child.exitCode = data;
+        child.stdout.emit("end");
+        child.stderr.emit("end");
+        child.emit("close", data, null);
+        child.emit("exit", data, null);
+        activeChildren.delete(sessionId);
+        // Unregister handle - allows sandbox to exit if no other handles remain
+        // See: docs-internal/node/ACTIVE_HANDLES.md
+        if (typeof _unregisterHandle === "function") {
+            _unregisterHandle(`child:${sessionId}`);
+        }
+    }
+};
+exposeCustomGlobal("_childProcessDispatch", childProcessDispatch);
+/** Warn when listener count exceeds max (Node.js: warn, don't crash) */
+function checkStreamMaxListeners(stream, event) {
+    if (stream._maxListeners > 0 && !stream._maxListenersWarned.has(event)) {
+        const total = (stream._listeners[event]?.length ?? 0) + (stream._onceListeners[event]?.length ?? 0);
+        if (total > stream._maxListeners) {
+            stream._maxListenersWarned.add(event);
+            const warning = `MaxListenersExceededWarning: Possible EventEmitter memory leak detected. ${total} ${event} listeners added. MaxListeners is ${stream._maxListeners}. Use emitter.setMaxListeners() to increase limit`;
+            if (typeof console !== "undefined" && console.error) {
+                console.error(warning);
+            }
+        }
+    }
+}
+// Monotonic counter for unique ChildProcess PIDs
+let _nextChildPid = 1000;
+/**
+ * Polyfill of Node.js `ChildProcess`. Provides event-emitting stdin/stdout/stderr
+ * streams. In streaming mode, data arrives via the `_childProcessDispatch` global
+ * that the host calls with stdout/stderr/exit events keyed by session ID.
+ */
+class ChildProcess {
+    _listeners = {};
+    _onceListeners = {};
+    _maxListeners = 10;
+    _maxListenersWarned = new Set();
+    pid = _nextChildPid++;
+    killed = false;
+    exitCode = null;
+    signalCode = null;
+    connected = false;
+    spawnfile = "";
+    spawnargs = [];
+    stdin;
+    stdout;
+    stderr;
+    stdio;
+    constructor() {
+        // Create stdin stream stub
+        this.stdin = {
+            writable: true,
+            write(_data) {
+                return true;
+            },
+            end() {
+                this.writable = false;
+            },
+            on() {
+                return this;
+            },
+            once() {
+                return this;
+            },
+            emit() {
+                return false;
+            },
+        };
+        // Create stdout stream stub
+        this.stdout = {
+            readable: true,
+            _listeners: {},
+            _onceListeners: {},
+            _maxListeners: 10,
+            _maxListenersWarned: new Set(),
+            on(event, listener) {
+                if (!this._listeners[event])
+                    this._listeners[event] = [];
+                this._listeners[event].push(listener);
+                checkStreamMaxListeners(this, event);
+                return this;
+            },
+            once(event, listener) {
+                if (!this._onceListeners[event])
+                    this._onceListeners[event] = [];
+                this._onceListeners[event].push(listener);
+                checkStreamMaxListeners(this, event);
+                return this;
+            },
+            emit(event, ...args) {
+                if (this._listeners[event]) {
+                    this._listeners[event].forEach((fn) => fn(...args));
+                }
+                if (this._onceListeners[event]) {
+                    this._onceListeners[event].forEach((fn) => fn(...args));
+                    this._onceListeners[event] = [];
+                }
+                return true;
+            },
+            read() {
+                return null;
+            },
+            setEncoding() {
+                return this;
+            },
+            setMaxListeners(n) {
+                this._maxListeners = n;
+                return this;
+            },
+            getMaxListeners() {
+                return this._maxListeners;
+            },
+            pipe(dest) {
+                return dest;
+            },
+        };
+        // Create stderr stream stub
+        this.stderr = {
+            readable: true,
+            _listeners: {},
+            _onceListeners: {},
+            _maxListeners: 10,
+            _maxListenersWarned: new Set(),
+            on(event, listener) {
+                if (!this._listeners[event])
+                    this._listeners[event] = [];
+                this._listeners[event].push(listener);
+                checkStreamMaxListeners(this, event);
+                return this;
+            },
+            once(event, listener) {
+                if (!this._onceListeners[event])
+                    this._onceListeners[event] = [];
+                this._onceListeners[event].push(listener);
+                checkStreamMaxListeners(this, event);
+                return this;
+            },
+            emit(event, ...args) {
+                if (this._listeners[event]) {
+                    this._listeners[event].forEach((fn) => fn(...args));
+                }
+                if (this._onceListeners[event]) {
+                    this._onceListeners[event].forEach((fn) => fn(...args));
+                    this._onceListeners[event] = [];
+                }
+                return true;
+            },
+            read() {
+                return null;
+            },
+            setEncoding() {
+                return this;
+            },
+            setMaxListeners(n) {
+                this._maxListeners = n;
+                return this;
+            },
+            getMaxListeners() {
+                return this._maxListeners;
+            },
+            pipe(dest) {
+                return dest;
+            },
+        };
+        this.stdio = [this.stdin, this.stdout, this.stderr];
+    }
+    on(event, listener) {
+        if (!this._listeners[event])
+            this._listeners[event] = [];
+        this._listeners[event].push(listener);
+        this._checkMaxListeners(event);
+        return this;
+    }
+    once(event, listener) {
+        if (!this._onceListeners[event])
+            this._onceListeners[event] = [];
+        this._onceListeners[event].push(listener);
+        this._checkMaxListeners(event);
+        return this;
+    }
+    off(event, listener) {
+        if (this._listeners[event]) {
+            const idx = this._listeners[event].indexOf(listener);
+            if (idx !== -1)
+                this._listeners[event].splice(idx, 1);
+        }
+        return this;
+    }
+    removeListener(event, listener) {
+        return this.off(event, listener);
+    }
+    setMaxListeners(n) {
+        this._maxListeners = n;
+        return this;
+    }
+    getMaxListeners() {
+        return this._maxListeners;
+    }
+    _checkMaxListeners(event) {
+        if (this._maxListeners > 0 && !this._maxListenersWarned.has(event)) {
+            const total = (this._listeners[event]?.length ?? 0) + (this._onceListeners[event]?.length ?? 0);
+            if (total > this._maxListeners) {
+                this._maxListenersWarned.add(event);
+                const warning = `MaxListenersExceededWarning: Possible EventEmitter memory leak detected. ${total} ${event} listeners added to [ChildProcess]. MaxListeners is ${this._maxListeners}. Use emitter.setMaxListeners() to increase limit`;
+                if (typeof console !== "undefined" && console.error) {
+                    console.error(warning);
+                }
+            }
+        }
+    }
+    emit(event, ...args) {
+        let handled = false;
+        if (this._listeners[event]) {
+            this._listeners[event].forEach((fn) => {
+                fn(...args);
+                handled = true;
+            });
+        }
+        if (this._onceListeners[event]) {
+            this._onceListeners[event].forEach((fn) => {
+                fn(...args);
+                handled = true;
+            });
+            this._onceListeners[event] = [];
+        }
+        return handled;
+    }
+    kill(_signal) {
+        this.killed = true;
+        this.signalCode = (typeof _signal === "string" ? _signal : "SIGTERM");
+        return true;
+    }
+    ref() {
+        return this;
+    }
+    unref() {
+        return this;
+    }
+    disconnect() {
+        this.connected = false;
+    }
+    _complete(stdout, stderr, code) {
+        this.exitCode = code;
+        // Emit data events for stdout/stderr as single chunks
+        if (stdout) {
+            const buf = typeof Buffer !== "undefined" ? Buffer.from(stdout) : stdout;
+            this.stdout.emit("data", buf);
+        }
+        if (stderr) {
+            const buf = typeof Buffer !== "undefined" ? Buffer.from(stderr) : stderr;
+            this.stderr.emit("data", buf);
+        }
+        // Emit end events
+        this.stdout.emit("end");
+        this.stderr.emit("end");
+        // Emit close event (code, signal)
+        this.emit("close", code, this.signalCode);
+        // Emit exit event
+        this.emit("exit", code, this.signalCode);
+    }
+}
+// exec - execute shell command, callback when done
+// Uses spawn("bash", ["-c", command]) internally
+// NOTE: WASIX bash returns incorrect exit codes (45 instead of 0) for -c flag,
+// so error will be set even on successful commands. The stdout/stderr are correct.
+function exec(command, options, callback) {
+    if (typeof options === "function") {
+        callback = options;
+        options = {};
+    }
+    // Use spawn with shell to execute the command
+    const child = spawn("bash", ["-c", command], { shell: false });
+    child.spawnargs = ["bash", "-c", command];
+    child.spawnfile = "bash";
+    // Collect output and invoke callback with maxBuffer enforcement
+    const maxBuffer = options?.maxBuffer ?? 1024 * 1024;
+    let stdout = "";
+    let stderr = "";
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    let maxBufferExceeded = false;
+    child.stdout.on("data", (data) => {
+        if (maxBufferExceeded)
+            return;
+        const chunk = String(data);
+        stdout += chunk;
+        stdoutBytes += chunk.length;
+        if (stdoutBytes > maxBuffer) {
+            maxBufferExceeded = true;
+            child.kill("SIGTERM");
+        }
+    });
+    child.stderr.on("data", (data) => {
+        if (maxBufferExceeded)
+            return;
+        const chunk = String(data);
+        stderr += chunk;
+        stderrBytes += chunk.length;
+        if (stderrBytes > maxBuffer) {
+            maxBufferExceeded = true;
+            child.kill("SIGTERM");
+        }
+    });
+    child.on("close", (...args) => {
+        const code = args[0];
+        if (callback) {
+            if (maxBufferExceeded) {
+                const err = new Error("stdout maxBuffer length exceeded");
+                err.code = "ERR_CHILD_PROCESS_STDIO_MAXBUFFER";
+                err.killed = true;
+                err.cmd = command;
+                err.stdout = stdout;
+                err.stderr = stderr;
+                callback(err, stdout, stderr);
+            }
+            else if (code !== 0) {
+                const err = new Error("Command failed: " + command);
+                err.code = code;
+                err.killed = false;
+                err.signal = null;
+                err.cmd = command;
+                err.stdout = stdout;
+                err.stderr = stderr;
+                callback(err, stdout, stderr);
+            }
+            else {
+                callback(null, stdout, stderr);
+            }
+        }
+    });
+    child.on("error", (err) => {
+        if (callback) {
+            const error = err instanceof Error ? err : new Error(String(err));
+            error.code = 1;
+            error.stdout = stdout;
+            error.stderr = stderr;
+            callback(error, stdout, stderr);
+        }
+    });
+    return child;
+}
+// execSync - synchronous shell execution
+// Uses spawnSync("bash", ["-c", command]) internally
+function execSync(command, options) {
+    const opts = options || {};
+    if (typeof _childProcessSpawnSync === "undefined") {
+        throw new Error("child_process.execSync requires CommandExecutor to be configured");
+    }
+    // Default maxBuffer 1MB (Node.js convention)
+    const maxBuffer = opts.maxBuffer ?? 1024 * 1024;
+    // Use synchronous bridge call - result is JSON string
+    const jsonResult = _childProcessSpawnSync.applySyncPromise(undefined, [
+        "bash",
+        JSON.stringify(["-c", command]),
+        JSON.stringify({ cwd: opts.cwd, env: opts.env, maxBuffer }),
+    ]);
+    const result = JSON.parse(jsonResult);
+    if (result.maxBufferExceeded) {
+        const err = new Error("stdout maxBuffer length exceeded");
+        err.code = "ERR_CHILD_PROCESS_STDIO_MAXBUFFER";
+        err.stdout = result.stdout;
+        err.stderr = result.stderr;
+        throw err;
+    }
+    if (result.code !== 0) {
+        const err = new Error("Command failed: " + command);
+        err.status = result.code;
+        err.stdout = result.stdout;
+        err.stderr = result.stderr;
+        err.output = [null, result.stdout, result.stderr];
+        throw err;
+    }
+    if (opts.encoding === "buffer" || !opts.encoding) {
+        return typeof Buffer !== "undefined" ? Buffer.from(result.stdout) : result.stdout;
+    }
+    return result.stdout;
+}
+// spawn - spawn a command with streaming
+function spawn(command, args, options) {
+    let argsArray = [];
+    let opts = {};
+    if (!Array.isArray(args)) {
+        opts = args || {};
+    }
+    else {
+        argsArray = args;
+        opts = options || {};
+    }
+    const child = new ChildProcess();
+    child.spawnfile = command;
+    child.spawnargs = [command, ...argsArray];
+    // Check if streaming mode is available
+    if (typeof _childProcessSpawnStart !== "undefined") {
+        // Use process.cwd() as default if no cwd specified
+        // This ensures process.chdir() changes are reflected in child processes
+        const effectiveCwd = opts.cwd ?? (typeof process !== "undefined" ? process.cwd() : "/");
+        // Streaming mode - spawn immediately
+        const sessionId = _childProcessSpawnStart.applySync(undefined, [
+            command,
+            JSON.stringify(argsArray),
+            JSON.stringify({ cwd: effectiveCwd, env: opts.env }),
+        ]);
+        activeChildren.set(sessionId, child);
+        // Register handle to keep sandbox alive until child exits
+        // See: docs-internal/node/ACTIVE_HANDLES.md
+        if (typeof _registerHandle === "function") {
+            _registerHandle(`child:${sessionId}`, `child_process: ${command} ${argsArray.join(" ")}`);
+        }
+        // Override stdin methods for streaming
+        child.stdin.write = (data) => {
+            if (typeof _childProcessStdinWrite === "undefined")
+                return false;
+            const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data;
+            _childProcessStdinWrite.applySync(undefined, [sessionId, bytes]);
+            return true;
+        };
+        child.stdin.end = () => {
+            if (typeof _childProcessStdinClose !== "undefined") {
+                _childProcessStdinClose.applySync(undefined, [sessionId]);
+            }
+            child.stdin.writable = false;
+        };
+        // Override kill method
+        child.kill = (signal) => {
+            if (typeof _childProcessKill === "undefined")
+                return false;
+            const sig = signal === "SIGKILL" || signal === 9
+                ? 9
+                : signal === "SIGINT" || signal === 2
+                    ? 2
+                    : 15;
+            _childProcessKill.applySync(undefined, [sessionId, sig]);
+            child.killed = true;
+            child.signalCode = (typeof signal === "string" ? signal : "SIGTERM");
+            return true;
+        };
+        return child;
+    }
+    // Fallback: no CommandExecutor available
+    const err = new Error("child_process.spawn requires CommandExecutor to be configured");
+    // Emit error asynchronously to match Node.js behavior
+    setTimeout(() => {
+        child.emit("error", err);
+        child._complete("", err.message, 1);
+    }, 0);
+    return child;
+}
+// spawnSync - synchronous spawn
+function spawnSync(command, args, options) {
+    let argsArray = [];
+    let opts = {};
+    if (!Array.isArray(args)) {
+        opts = args || {};
+    }
+    else {
+        argsArray = args;
+        opts = options || {};
+    }
+    if (typeof _childProcessSpawnSync === "undefined") {
+        return {
+            pid: _nextChildPid++,
+            output: [null, "", "child_process.spawnSync requires CommandExecutor to be configured"],
+            stdout: "",
+            stderr: "child_process.spawnSync requires CommandExecutor to be configured",
+            status: 1,
+            signal: null,
+            error: new Error("child_process.spawnSync requires CommandExecutor to be configured"),
+        };
+    }
+    try {
+        // Use process.cwd() as default if no cwd specified
+        // This ensures process.chdir() changes are reflected in child processes
+        const effectiveCwd = opts.cwd ?? (typeof process !== "undefined" ? process.cwd() : "/");
+        // Pass maxBuffer through to host for enforcement
+        const maxBuffer = opts.maxBuffer;
+        // Args passed as JSON string for transferability
+        const jsonResult = _childProcessSpawnSync.applySyncPromise(undefined, [
+            command,
+            JSON.stringify(argsArray),
+            JSON.stringify({ cwd: effectiveCwd, env: opts.env, maxBuffer }),
+        ]);
+        const result = JSON.parse(jsonResult);
+        const stdoutBuf = typeof Buffer !== "undefined" ? Buffer.from(result.stdout) : result.stdout;
+        const stderrBuf = typeof Buffer !== "undefined" ? Buffer.from(result.stderr) : result.stderr;
+        if (result.maxBufferExceeded) {
+            const err = new Error("stdout maxBuffer length exceeded");
+            err.code = "ERR_CHILD_PROCESS_STDIO_MAXBUFFER";
+            return {
+                pid: _nextChildPid++,
+                output: [null, stdoutBuf, stderrBuf],
+                stdout: stdoutBuf,
+                stderr: stderrBuf,
+                status: result.code,
+                signal: null,
+                error: err,
+            };
+        }
+        return {
+            pid: _nextChildPid++,
+            output: [null, stdoutBuf, stderrBuf],
+            stdout: stdoutBuf,
+            stderr: stderrBuf,
+            status: result.code,
+            signal: null,
+            error: undefined,
+        };
+    }
+    catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const stderrBuf = typeof Buffer !== "undefined" ? Buffer.from(errMsg) : errMsg;
+        return {
+            pid: _nextChildPid++,
+            output: [null, "", stderrBuf],
+            stdout: typeof Buffer !== "undefined" ? Buffer.from("") : "",
+            stderr: stderrBuf,
+            status: 1,
+            signal: null,
+            error: err instanceof Error ? err : new Error(String(err)),
+        };
+    }
+}
+// execFile - execute a file directly
+function execFile(file, args, options, callback) {
+    let argsArray = [];
+    let opts = {};
+    let cb;
+    if (typeof args === "function") {
+        cb = args;
+    }
+    else if (typeof options === "function") {
+        argsArray = args.slice();
+        cb = options;
+    }
+    else {
+        argsArray = Array.isArray(args) ? args : [];
+        opts = options || {};
+        cb = callback;
+    }
+    // execFile is like spawn but with callback, with maxBuffer enforcement
+    const maxBuffer = opts.maxBuffer ?? 1024 * 1024;
+    const child = spawn(file, argsArray, opts);
+    let stdout = "";
+    let stderr = "";
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    let maxBufferExceeded = false;
+    child.stdout.on("data", (data) => {
+        const chunk = String(data);
+        stdout += chunk;
+        stdoutBytes += chunk.length;
+        if (stdoutBytes > maxBuffer && !maxBufferExceeded) {
+            maxBufferExceeded = true;
+            child.kill("SIGTERM");
+        }
+    });
+    child.stderr.on("data", (data) => {
+        const chunk = String(data);
+        stderr += chunk;
+        stderrBytes += chunk.length;
+        if (stderrBytes > maxBuffer && !maxBufferExceeded) {
+            maxBufferExceeded = true;
+            child.kill("SIGTERM");
+        }
+    });
+    child.on("close", (...args) => {
+        const code = args[0];
+        if (cb) {
+            if (maxBufferExceeded) {
+                const err = new Error("stdout maxBuffer length exceeded");
+                err.code = "ERR_CHILD_PROCESS_STDIO_MAXBUFFER";
+                err.killed = true;
+                err.stdout = stdout;
+                err.stderr = stderr;
+                cb(err, stdout, stderr);
+            }
+            else if (code !== 0) {
+                const err = new Error("Command failed: " + file);
+                err.code = code;
+                err.stdout = stdout;
+                err.stderr = stderr;
+                cb(err, stdout, stderr);
+            }
+            else {
+                cb(null, stdout, stderr);
+            }
+        }
+    });
+    child.on("error", (err) => {
+        if (cb) {
+            cb(err, stdout, stderr);
+        }
+    });
+    return child;
+}
+// execFileSync
+function execFileSync(file, args, options) {
+    let argsArray = [];
+    let opts = {};
+    if (!Array.isArray(args)) {
+        opts = args || {};
+    }
+    else {
+        argsArray = args;
+        opts = options || {};
+    }
+    // Default maxBuffer 1MB for execFileSync (Node.js convention)
+    const maxBuffer = opts.maxBuffer ?? 1024 * 1024;
+    const result = spawnSync(file, argsArray, { ...opts, maxBuffer });
+    if (result.error && String(result.error.code) === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
+        throw result.error;
+    }
+    if (result.status !== 0) {
+        const err = new Error("Command failed: " + file);
+        err.status = result.status ?? undefined;
+        err.stdout = String(result.stdout);
+        err.stderr = String(result.stderr);
+        throw err;
+    }
+    if (opts.encoding === "buffer" || !opts.encoding) {
+        return result.stdout;
+    }
+    return typeof result.stdout === "string" ? result.stdout : result.stdout.toString(opts.encoding);
+}
+// fork - intentionally not implemented (IPC between processes not supported in sandbox)
+function fork(_modulePath, _args, _options) {
+    throw new Error("child_process.fork is not supported in sandbox");
+}
+// Create the child_process module
+const childProcess = {
+    ChildProcess,
+    exec,
+    execSync,
+    spawn,
+    spawnSync,
+    execFile,
+    execFileSync,
+    fork,
+};
+// Expose to global for require() to use
+exposeCustomGlobal("_childProcessModule", childProcess);
+export { ChildProcess, exec, execSync, spawn, spawnSync, execFile, execFileSync, fork };
+export default childProcess;

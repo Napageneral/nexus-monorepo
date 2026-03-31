@@ -5,11 +5,7 @@ Tickets here are the active execution slices.
 Only one ticket should normally be in progress at a time unless the work is
 truly independent and parallel-safe.
 
-This board currently has multiple tickets in progress because the active slices
-share one theme but touch largely independent seams:
+There are no active execution slices at the moment.
 
-- recording substrate
-- artifact retention
-- validation-script projection
-- flagship harness construction
-- Dispatch review UI
+The next honest move is to start [GJV-006](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/not-started/GJV-006-first-dogfood-ticket-through-the-golden-journey.md)
+with one real downstream ticket.

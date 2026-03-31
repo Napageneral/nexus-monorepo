@@ -1,0 +1,79 @@
+import { filterEnv } from "@secure-exec/core/internal/shared/permissions";
+import { NodeExecutionDriver } from "./execution-driver.js";
+import type { OSConfig, ProcessConfig } from "@secure-exec/core/internal/shared/api-types";
+import type { CommandExecutor, NetworkAdapter, NodeRuntimeDriverFactory, Permissions, SystemDriver, VirtualFileSystem } from "@secure-exec/core";
+import type { ModuleAccessOptions } from "./module-access.js";
+/** Options for assembling a Node.js-backed SystemDriver. */
+export interface NodeDriverOptions {
+    filesystem?: VirtualFileSystem;
+    moduleAccess?: ModuleAccessOptions;
+    networkAdapter?: NetworkAdapter;
+    commandExecutor?: CommandExecutor;
+    permissions?: Permissions;
+    useDefaultNetwork?: boolean;
+    processConfig?: ProcessConfig;
+    osConfig?: OSConfig;
+}
+export interface NodeRuntimeDriverFactoryOptions {
+    createIsolate?(memoryLimit: number): unknown;
+}
+/** Thin VFS adapter that delegates directly to `node:fs/promises`. */
+export declare class NodeFileSystem implements VirtualFileSystem {
+    readFile(path: string): Promise<Uint8Array>;
+    readTextFile(path: string): Promise<string>;
+    readDir(path: string): Promise<string[]>;
+    readDirWithTypes(path: string): Promise<Array<{
+        name: string;
+        isDirectory: boolean;
+    }>>;
+    writeFile(path: string, content: string | Uint8Array): Promise<void>;
+    createDir(path: string): Promise<void>;
+    mkdir(path: string): Promise<void>;
+    exists(path: string): Promise<boolean>;
+    stat(path: string): Promise<{
+        mode: number;
+        size: number;
+        isDirectory: boolean;
+        atimeMs: number;
+        mtimeMs: number;
+        ctimeMs: number;
+        birthtimeMs: number;
+    }>;
+    removeFile(path: string): Promise<void>;
+    removeDir(path: string): Promise<void>;
+    rename(oldPath: string, newPath: string): Promise<void>;
+    symlink(target: string, linkPath: string): Promise<void>;
+    readlink(path: string): Promise<string>;
+    lstat(path: string): Promise<{
+        mode: number;
+        size: number;
+        isDirectory: boolean;
+        isSymbolicLink?: boolean;
+        atimeMs: number;
+        mtimeMs: number;
+        ctimeMs: number;
+        birthtimeMs: number;
+    }>;
+    link(oldPath: string, newPath: string): Promise<void>;
+    chmod(path: string, mode: number): Promise<void>;
+    chown(path: string, uid: number, gid: number): Promise<void>;
+    utimes(path: string, atime: number, mtime: number): Promise<void>;
+    truncate(path: string, length: number): Promise<void>;
+}
+/** Check whether an IP address falls in a private/reserved range (SSRF protection). */
+export declare function isPrivateIp(ip: string): boolean;
+/**
+ * Create a Node.js network adapter that provides real fetch, DNS, HTTP client,
+ * and loopback-only HTTP server support. Binary responses are base64-encoded
+ * with an `x-body-encoding` header so the bridge can decode them.
+ */
+export declare function createDefaultNetworkAdapter(): NetworkAdapter;
+/**
+ * Assemble a SystemDriver from Node.js-native adapters. Wraps the filesystem
+ * in a ModuleAccessFileSystem overlay and keeps capabilities deny-by-default
+ * unless explicit permissions are provided.
+ */
+export declare function createNodeDriver(options?: NodeDriverOptions): SystemDriver;
+export declare function createNodeRuntimeDriverFactory(options?: NodeRuntimeDriverFactoryOptions): NodeRuntimeDriverFactory;
+export { filterEnv, NodeExecutionDriver };
+export type { ModuleAccessOptions };

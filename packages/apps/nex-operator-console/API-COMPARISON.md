@@ -42,6 +42,7 @@ The console currently uses **73 unique RPC methods** out of **230+ operations** 
 | `adapter.connections.custom.cancel` | Yes | Yes | |
 | `adapter.connections.test` | Yes | Yes | |
 | `adapter.connections.disconnect` | Yes | Yes | |
+| `adapters.connections.list` | Yes | Yes | Canonical aggregate adapter inventory used for the integrations overview |
 | `adapter.connections.oauth.callback` | No | Yes | Usually handled server-side |
 | `adapters.list` | No | Yes | List available adapter definitions |
 | `adapters.install` | No | Yes | Install new adapter |
@@ -64,10 +65,10 @@ The console currently uses **73 unique RPC methods** out of **230+ operations** 
 | `agents.files.list` | Yes | Yes | |
 | `agents.files.get` | Yes | Yes | |
 | `agents.files.set` | Yes | Yes | |
-| `agent.identity.get` | Yes | Yes | Note: singular "agent" not "agents" |
-| `agents.create` | **No** | **Yes** | **CRITICAL GAP** — v2 wizard needs this |
-| `agents.update` | **No** | **Yes** | **CRITICAL GAP** — v2 detail editing needs this |
-| `agents.delete` | **No** | **Yes** | **GAP** — v2 needs for agent management |
+| `agent.identity.get` | No | Yes | No longer required; agent identity is read from the entity-backed roster |
+| `agents.create` | Yes | Yes | Used by the v2 agent creation flow |
+| `agents.update` | Yes | Yes | Used for agent editing |
+| `agents.delete` | Yes | Yes | Used for agent management |
 | `agents.conversations.create` | No | Yes | May be needed for new sessions |
 
 ### Apps (Installed Applications)
@@ -122,11 +123,8 @@ The console currently uses **73 unique RPC methods** out of **230+ operations** 
 | Method | Console Uses | Nex Has | Notes |
 |--------|-------------|---------|-------|
 | `status` | Yes | Yes | |
-| `health` | Yes | Yes | |
 | `models.list` | Yes | Yes | |
-| `last-heartbeat` | Yes | Yes | |
 | `system-presence` | Yes | Yes | |
-| `device.host.list` | Yes | Yes | |
 
 ### Jobs / Schedules
 | Method | Console Uses | Nex Has | Notes |
@@ -198,16 +196,11 @@ The console currently uses **73 unique RPC methods** out of **230+ operations** 
 
 ## Critical Gaps for v2 UI
 
-### 1. Agent CRUD (blocks agent creation wizard)
-- `agents.create` — needed when wizard finishes "Create agent"
-- `agents.update` — needed for editing agent settings (model, description, guardrails)
-- `agents.delete` — needed for "Delete agent" action
-
-### 2. Channel Configuration (blocks channel setup in agent detail)
+### 1. Channel Configuration (blocks channel setup in agent detail)
 - `channels.configure` — needed for Telegram/Slack/WhatsApp setup
 - `channels.enable` / `channels.disable` — needed for channel toggles
 
-### 3. Webhook Subscriptions (NEW — may not exist in runtime yet)
+### 2. Webhook Subscriptions (NEW — may not exist in runtime yet)
 - `webhooks.list` — list webhook subscriptions
 - `webhooks.create` — create new subscription
 - `webhooks.update` — update subscription
@@ -215,12 +208,12 @@ The console currently uses **73 unique RPC methods** out of **230+ operations** 
 - `webhooks.events.list` — list event history
 - **These likely need runtime implementation**
 
-### 4. Missing Event Listeners
+### 3. Missing Event Listeners
 The console should subscribe to more events to keep the UI reactive:
 - `agent.created` / `agent.deleted` → refresh agents list
 - `adapter.connected` / `adapter.disconnected` → refresh integrations
 - `config.changed` → refresh config
 - `shutdown` → show disconnect warning
 
-### 5. Billing / Profile (NEW — external service)
+### 4. Billing / Profile (NEW — external service)
 The Settings pages for Profile, Billing, Invoices are likely backed by an external service (not nex runtime). These may need a separate API client.

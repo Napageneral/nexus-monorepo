@@ -51,9 +51,9 @@ Out of scope:
 
 1. [GJV-001](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/completed/GJV-001-whole-sandbox-session-recording-substrate.md)
 2. [GJV-002](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/completed/GJV-002-primary-demo-artifact-contract-and-retention.md)
-3. [GJV-003](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/in-progress/GJV-003-human-shaped-validation-script-preview.md)
+3. [GJV-003](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/completed/GJV-003-human-shaped-validation-script-preview.md)
 4. [GJV-004](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/completed/GJV-004-flagship-journey-harnesses.md)
-5. [GJV-005](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/in-progress/GJV-005-dispatch-review-surface-and-board-ownership.md)
+5. [GJV-005](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/completed/GJV-005-dispatch-review-surface-and-board-ownership.md)
 6. [GJV-006](/Users/tyler/nexus/home/projects/nexus/docs/workplans/golden-journey-validation-board/not-started/GJV-006-first-dogfood-ticket-through-the-golden-journey.md)
 
 ## Status
@@ -64,16 +64,13 @@ Out of scope:
 
 ## Live Snapshot
 
-In progress now:
-
-- `GJV-003` run-scoped validation script preview
-- `GJV-005` Dispatch run review surface
-
 Completed now:
 
 - `GJV-001` whole-session recording substrate and receipt truth
 - `GJV-002` primary demo artifact retention and success-path pruning
+- `GJV-003` validation-script preview and pre-execution approval loop
 - `GJV-004` first flagship owner-bootstrap-to-console harness
+- `GJV-005` Dispatch issue/run review surface
 
 Still not started:
 

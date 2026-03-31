@@ -75,7 +75,7 @@ export function renderOperationsView(props: OperationsViewProps): TemplateResult
                 <section class="grid grid-cols-2" style="gap: 12px; margin-top: 12px;">
                   <section class="card">
                     <div class="card-title">Canonical Runtime Work</div>
-                    <div class="card-sub">Operations are built on jobs, schedules, DAGs, event subscriptions, and agent configs.</div>
+                    <div class="card-sub">Operations are built on jobs, schedules, DAGs, event subscriptions, and agent entities.</div>
                     <div class="muted" style="margin-top: 12px;">
                       Legacy <code>work.tasks.*</code>, <code>work.items.*</code>, <code>work.workflows.*</code>, <code>work.sequences.*</code>,
                       <code>work.campaigns.*</code>, <code>work.dashboard.*</code>, and <code>work.entities.*</code> surfaces were hard-cut.

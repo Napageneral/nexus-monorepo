@@ -1,0 +1,127 @@
+import { getIsolateRuntimeSource } from "@secure-exec/core";
+import { transformDynamicImport } from "@secure-exec/core/internal/shared/esm-utils";
+const MAX_ERROR_MESSAGE_CHARS = 8192;
+/** Truncate long error messages to prevent unbounded output. */
+function boundErrorMessage(message) {
+    if (message.length <= MAX_ERROR_MESSAGE_CHARS) {
+        return message;
+    }
+    return `${message.slice(0, MAX_ERROR_MESSAGE_CHARS)}...[Truncated]`;
+}
+/**
+ * Core execution loop shared between `run()` and `exec()` modes.
+ *
+ * Creates a fresh V8 context, installs console/bridge/module globals, detects
+ * ESM vs CJS format, compiles and runs the code, waits for active handles
+ * (child processes, HTTP servers) to drain, and returns the exit code.
+ *
+ * On timeout the isolate is recycled to free any stuck V8 state.
+ */
+export async function executeWithRuntime(runtime, options) {
+    runtime.esmModuleCache.clear();
+    runtime.esmModuleReverseCache.clear();
+    runtime.dynamicImportCache.clear();
+    runtime.dynamicImportPending.clear();
+    runtime.resolutionCache.resolveResults.clear();
+    runtime.resolutionCache.packageJsonResults.clear();
+    runtime.resolutionCache.existsResults.clear();
+    runtime.resolutionCache.statResults.clear();
+    runtime.moduleFormatCache.clear();
+    runtime.packageTypeCache.clear();
+    const context = await runtime.isolate.createContext();
+    const timingMitigation = runtime.getTimingMitigation(options.timingMitigation);
+    const frozenTimeMs = Date.now();
+    const cpuTimeLimitMs = runtime.getExecutionTimeoutMs(options.cpuTimeLimitMs);
+    const executionDeadlineMs = runtime.getExecutionDeadlineMs(cpuTimeLimitMs);
+    let recycleIsolateAfterTimeout = false;
+    try {
+        const jail = context.global;
+        await jail.set("global", jail.derefInto());
+        await runtime.setupConsole(context, jail, options.onStdio);
+        let exports;
+        const transformedCode = transformDynamicImport(options.code);
+        const entryReferrerPath = options.filePath ?? "/";
+        if (await runtime.shouldRunAsESM(options.code, options.filePath)) {
+            await runtime.setupESMGlobals(context, jail, timingMitigation, frozenTimeMs);
+            if (options.mode === "exec") {
+                await runtime.applyExecutionOverrides(context, options.env, options.cwd, options.stdin);
+            }
+            await runtime.precompileDynamicImports(transformedCode, context, entryReferrerPath);
+            await runtime.setupDynamicImport(context, jail, entryReferrerPath, executionDeadlineMs);
+            await runtime.applyCustomGlobalExposurePolicy(context);
+            const esmResult = await runtime.runESM(transformedCode, context, options.filePath, executionDeadlineMs);
+            if (options.mode === "run") {
+                exports = esmResult;
+            }
+        }
+        else {
+            await runtime.setupRequire(context, jail, timingMitigation, frozenTimeMs);
+            await runtime.initCommonJsModuleGlobals(context);
+            if (options.mode === "exec") {
+                await runtime.applyExecutionOverrides(context, options.env, options.cwd, options.stdin);
+                if (options.filePath) {
+                    await runtime.setCommonJsFileGlobals(context, options.filePath);
+                }
+            }
+            await runtime.precompileDynamicImports(transformedCode, context, entryReferrerPath);
+            await runtime.setupDynamicImport(context, jail, entryReferrerPath, executionDeadlineMs);
+            await runtime.applyCustomGlobalExposurePolicy(context);
+            if (options.mode === "exec") {
+                await jail.set("__runtimeExecCode", transformedCode, { copy: true });
+                const script = await runtime.isolate.compileScript(getIsolateRuntimeSource("evalScriptResult"));
+                await script.run(context, runtime.getExecutionRunOptions(executionDeadlineMs));
+                await runtime.awaitScriptResult(context, executionDeadlineMs);
+            }
+            else {
+                const script = await runtime.isolate.compileScript(transformedCode);
+                await script.run(context, runtime.getExecutionRunOptions(executionDeadlineMs));
+                exports = (await context.eval("module.exports", {
+                    copy: true,
+                    ...runtime.getExecutionRunOptions(executionDeadlineMs),
+                }));
+            }
+        }
+        await runtime.runWithExecutionDeadline(context.eval('typeof _waitForActiveHandles === "function" ? _waitForActiveHandles() : Promise.resolve()', {
+            promise: true,
+            ...runtime.getExecutionRunOptions(executionDeadlineMs),
+        }), executionDeadlineMs);
+        const exitCode = (await context.eval("process.exitCode || 0", {
+            copy: true,
+            ...runtime.getExecutionRunOptions(executionDeadlineMs),
+        }));
+        return {
+            code: exitCode,
+            exports,
+        };
+    }
+    catch (err) {
+        if (runtime.isExecutionTimeoutError(err)) {
+            recycleIsolateAfterTimeout = true;
+            return {
+                code: runtime.timeoutExitCode,
+                errorMessage: runtime.timeoutErrorMessage,
+                exports: undefined,
+            };
+        }
+        const errMessage = err instanceof Error ? err.message : String(err);
+        const exitMatch = errMessage.match(/process\.exit\((\d+)\)/);
+        if (exitMatch) {
+            const exitCode = parseInt(exitMatch[1], 10);
+            return {
+                code: exitCode,
+                exports: undefined,
+            };
+        }
+        return {
+            code: 1,
+            errorMessage: boundErrorMessage(errMessage),
+            exports: undefined,
+        };
+    }
+    finally {
+        context.release();
+        if (recycleIsolateAfterTimeout) {
+            runtime.recycleIsolate();
+        }
+    }
+}

@@ -1,0 +1,59 @@
+{
+  "name": "secure-exec",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rivet-dev/secure-exec.git",
+    "directory": "packages/secure-exec"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./browser": {
+      "import": "./dist/browser-runtime.js",
+      "types": "./dist/browser-runtime.d.ts"
+    },
+    "./python": {
+      "import": "./dist/python-runtime.js",
+      "types": "./dist/python-runtime.d.ts"
+    }
+  },
+  "dependencies": {
+    "@secure-exec/node": "0.1.0",
+    "@secure-exec/core": "0.1.0"
+  },
+  "optionalDependencies": {
+    "@secure-exec/browser": "0.1.0",
+    "@secure-exec/python": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@vitest/browser": "^2.1.8",
+    "playwright": "^1.52.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "check-types:test": "vitest --typecheck --run tests/types/",
+    "build": "tsc",
+    "test:test-suite": "vitest run tests/test-suite.test.ts tests/test-suite-python.test.ts",
+    "test:runtime-driver": "vitest run tests/runtime-driver/*.test.ts",
+    "test:integration:node": "pnpm run test:test-suite && pnpm run test:runtime-driver",
+    "test:integration:browser": "vitest run --config vitest.browser.config.ts tests/test-suite/node.test.ts tests/runtime-driver/browser/runtime.test.ts",
+    "test:project-matrix": "vitest run tests/project-matrix.test.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  }
+}

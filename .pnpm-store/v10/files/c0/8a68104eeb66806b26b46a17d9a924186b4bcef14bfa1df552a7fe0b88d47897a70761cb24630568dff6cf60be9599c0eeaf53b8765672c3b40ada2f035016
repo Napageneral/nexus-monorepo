@@ -1,0 +1,23 @@
+import type { VirtualDirEntry, VirtualFileSystem, VirtualStat } from "./types.js";
+export type DirEntry = VirtualDirEntry;
+export type StatInfo = VirtualStat;
+/**
+ * Check if a path exists in the filesystem
+ */
+export declare function exists(fs: VirtualFileSystem, path: string): Promise<boolean>;
+/**
+ * Get file/directory stats
+ */
+export declare function stat(fs: VirtualFileSystem, path: string): Promise<StatInfo>;
+/**
+ * Rename/move a file
+ */
+export declare function rename(fs: VirtualFileSystem, oldPath: string, newPath: string): Promise<void>;
+/**
+ * Read directory with type info
+ */
+export declare function readDirWithTypes(fs: VirtualFileSystem, path: string): Promise<DirEntry[]>;
+/**
+ * Create a directory (recursively creates parent directories)
+ */
+export declare function mkdir(fs: VirtualFileSystem, path: string): Promise<void>;

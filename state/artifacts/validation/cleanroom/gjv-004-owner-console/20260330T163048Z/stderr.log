@@ -1,0 +1,9 @@
+file:///workspace/nex/[eval1]:26
+  throw new Error(`console app missing from runtime apps catalog: ${JSON.stringify(payload)}`);
+        ^
+
+Error: console app missing from runtime apps catalog: {"ok":true,"items":[]}
+    at file:///workspace/nex/[eval1]:26:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+
+Node.js v22.22.2

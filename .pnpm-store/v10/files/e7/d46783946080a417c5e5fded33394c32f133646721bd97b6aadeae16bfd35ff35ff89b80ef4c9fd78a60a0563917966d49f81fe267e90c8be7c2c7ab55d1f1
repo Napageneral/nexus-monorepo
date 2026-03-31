@@ -1,0 +1,66 @@
+import type { VirtualDirEntry, VirtualFileSystem, VirtualStat } from "@secure-exec/core";
+/**
+ * Options controlling which host node_modules are projected into the sandbox.
+ * The overlay exposes `<cwd>/node_modules` read-only by default.
+ */
+export interface ModuleAccessOptions {
+    cwd?: string;
+    /**
+     * Deprecated: retained for API compatibility only.
+     * The overlay now exposes scoped <cwd>/node_modules read-only by default.
+     */
+    allowPackages?: string[];
+}
+/**
+ * Union filesystem that overlays host `node_modules` (read-only) onto a base
+ * VFS. Sandbox code sees `/root/node_modules/...` which maps to the host's
+ * real `<cwd>/node_modules/...`. Write operations to the overlay throw EACCES.
+ * Symlinks are resolved and validated against the allowed-roots allowlist to
+ * prevent path-traversal escapes. Native `.node` addons are rejected.
+ */
+export declare class ModuleAccessFileSystem implements VirtualFileSystem {
+    private readonly baseFileSystem?;
+    private readonly hostNodeModulesRoot;
+    private readonly overlayAllowedRoots;
+    constructor(baseFileSystem: VirtualFileSystem | undefined, options: ModuleAccessOptions);
+    private isWithinAllowedOverlayRoots;
+    private isSyntheticPath;
+    private syntheticChildren;
+    private isReadOnlyProjectionPath;
+    private shouldMergeBase;
+    private overlayHostPathFor;
+    private resolveOverlayHostPath;
+    private readMergedDir;
+    private fallbackReadFile;
+    private fallbackReadTextFile;
+    private fallbackReadDir;
+    private fallbackReadDirWithTypes;
+    private fallbackWriteFile;
+    private fallbackCreateDir;
+    private fallbackMkdir;
+    private fallbackExists;
+    private fallbackStat;
+    private fallbackRemoveFile;
+    private fallbackRemoveDir;
+    private fallbackRename;
+    readFile(pathValue: string): Promise<Uint8Array>;
+    readTextFile(pathValue: string): Promise<string>;
+    readDir(pathValue: string): Promise<string[]>;
+    readDirWithTypes(pathValue: string): Promise<VirtualDirEntry[]>;
+    writeFile(pathValue: string, content: string | Uint8Array): Promise<void>;
+    createDir(pathValue: string): Promise<void>;
+    mkdir(pathValue: string): Promise<void>;
+    exists(pathValue: string): Promise<boolean>;
+    stat(pathValue: string): Promise<VirtualStat>;
+    removeFile(pathValue: string): Promise<void>;
+    removeDir(pathValue: string): Promise<void>;
+    rename(oldPath: string, newPath: string): Promise<void>;
+    symlink(target: string, linkPath: string): Promise<void>;
+    readlink(path: string): Promise<string>;
+    lstat(path: string): Promise<VirtualStat>;
+    link(oldPath: string, newPath: string): Promise<void>;
+    chmod(path: string, mode: number): Promise<void>;
+    chown(path: string, uid: number, gid: number): Promise<void>;
+    utimes(path: string, atime: number, mtime: number): Promise<void>;
+    truncate(path: string, length: number): Promise<void>;
+}

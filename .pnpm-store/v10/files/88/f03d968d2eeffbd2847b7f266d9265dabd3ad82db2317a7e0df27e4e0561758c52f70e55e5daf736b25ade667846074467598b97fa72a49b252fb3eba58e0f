@@ -1,0 +1,4 @@
+// Browser-safe entrypoint for NodeRuntime + browser driver factories.
+export { NodeRuntime } from "@secure-exec/core";
+export { createBrowserDriver, createBrowserNetworkAdapter, createBrowserRuntimeDriverFactory, createOpfsFileSystem, } from "@secure-exec/browser";
+export { allowAll, allowAllChildProcess, allowAllEnv, allowAllFs, allowAllNetwork, } from "@secure-exec/core";
