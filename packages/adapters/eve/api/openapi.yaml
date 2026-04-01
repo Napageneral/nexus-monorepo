@@ -161,12 +161,23 @@ paths:
                     media:
                       type: string
                     target:
-                      type: object
+                      $ref: "#/components/schemas/ImessageTargetSchema"
                     text:
                       type: string
                   required:
                     - target
                   type: object
+              example:
+                connection_id: eve-self
+                payload:
+                  target:
+                    connection_id: eve-self
+                    channel:
+                      platform: imessage
+                      container_id: "+17072876731"
+                      thread_id: "imessage:+17072876731"
+                  caption: Here is the chart.
+                  media: /tmp/chart.png
       responses:
         "200":
           description: Successful adapter method response
@@ -195,7 +206,7 @@ paths:
                   type: object
                   properties:
                     target:
-                      type: object
+                      $ref: "#/components/schemas/ImessageTargetSchema"
                     reply_to_id:
                       type: string
                     text:
@@ -235,7 +246,7 @@ paths:
                   type: object
                   properties:
                     target:
-                      type: object
+                      $ref: "#/components/schemas/ImessageTargetSchema"
                     message_id:
                       type: string
                     reaction:
@@ -272,7 +283,7 @@ paths:
                   type: object
                   properties:
                     target:
-                      type: object
+                      $ref: "#/components/schemas/ImessageTargetSchema"
                     message_id:
                       type: string
                     reaction:
@@ -309,7 +320,7 @@ paths:
                   type: object
                   properties:
                     target:
-                      type: object
+                      $ref: "#/components/schemas/ImessageTargetSchema"
                     message_id:
                       type: string
                     text:
@@ -346,7 +357,7 @@ paths:
                   type: object
                   properties:
                     target:
-                      type: object
+                      $ref: "#/components/schemas/ImessageTargetSchema"
                     message_id:
                       type: string
                   required:
@@ -421,7 +432,7 @@ paths:
                   type: object
                   properties:
                     target:
-                      type: object
+                      $ref: "#/components/schemas/ImessageTargetSchema"
                     name:
                       type: string
                   required:
@@ -455,7 +466,7 @@ paths:
                   type: object
                   properties:
                     target:
-                      type: object
+                      $ref: "#/components/schemas/ImessageTargetSchema"
                     participants:
                       type: array
                       items:
@@ -491,7 +502,7 @@ paths:
                   type: object
                   properties:
                     target:
-                      type: object
+                      $ref: "#/components/schemas/ImessageTargetSchema"
                     participants:
                       type: array
                       items:
@@ -586,6 +597,44 @@ paths:
                 type: object
 components:
   schemas:
+    ImessageChannelTargetSchema:
+      type: object
+      additionalProperties: false
+      description: Conversation routing for Eve iMessage sends and thread-bound actions.
+      properties:
+        platform:
+          type: string
+          enum:
+            - imessage
+        container_id:
+          type: string
+          description: Phone number, email, or thread container identity for the conversation.
+        thread_id:
+          type: string
+          description: Optional explicit thread id when replying into an already-known thread.
+      required:
+        - platform
+        - container_id
+    ImessageTargetSchema:
+      type: object
+      additionalProperties: false
+      description: >
+        Use target.connection_id to route through a specific Eve connection and
+        target.channel.container_id to identify the iMessage conversation.
+      properties:
+        connection_id:
+          type: string
+          description: Optional explicit Eve connection id when multiple Eve edges are paired.
+        channel:
+          $ref: "#/components/schemas/ImessageChannelTargetSchema"
+      required:
+        - channel
+      example:
+        connection_id: eve-self
+        channel:
+          platform: imessage
+          container_id: "+17072876731"
+          thread_id: "imessage:+17072876731"
     ImessageMethodResultSchema:
       type: object
       properties:
@@ -601,10 +650,49 @@ components:
           type: integer
         attempt_id:
           type: string
+        status:
+          type: string
         confirmed:
           type: boolean
         executor:
           type: string
+        delivery:
+          type: object
+          properties:
+            stage:
+              type: string
+            record_id:
+              type: string
+            thread_id:
+              type: string
+            message_guid:
+              type: string
+            local_row_seen:
+              type: boolean
+            text_row_seen:
+              type: boolean
+            media_row_seen:
+              type: boolean
+            text_record_id:
+              type: string
+            text_message_guid:
+              type: string
+            media_record_id:
+              type: string
+            media_message_guid:
+              type: string
+            messages_is_sent:
+              type: boolean
+            messages_is_delivered:
+              type: boolean
+            messages_is_finished:
+              type: boolean
+            messages_error_code:
+              type: integer
+            attachment_transfer_state:
+              type: integer
+            attachment_filename:
+              type: string
         error:
           type: object
           additionalProperties: true

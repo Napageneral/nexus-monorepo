@@ -27,6 +27,22 @@ type Message struct {
 	ChatStyle             sql.NullInt64
 }
 
+// MessageDeliveryState captures the current Messages-side delivery state for a
+// single message row, including its first attachment transfer when present.
+type MessageDeliveryState struct {
+	RowID                   int64
+	GUID                    string
+	Text                    string
+	IsSent                  bool
+	IsDelivered             bool
+	IsFinished              bool
+	ErrorCode               int64
+	ChatIdentifier          string
+	TimestampUnixMilli      int64
+	AttachmentTransferState sql.NullInt64
+	AttachmentFilename      sql.NullString
+}
+
 // SyncMessages copies messages from chat.db to messages table in eve.db
 // Supports incremental sync via sinceRowID watermark
 // Returns the number of messages synced
@@ -270,6 +286,201 @@ func (c *ChatDB) GetMessagesByGUIDs(guids []string) ([]Message, error) {
 	}
 
 	return messages, nil
+}
+
+// GetMessageDeliveryStateByGUID reads the current delivery state for a message
+// row directly from chat.db, including the first attachment transfer if one is
+// linked to the message.
+func (c *ChatDB) GetMessageDeliveryStateByGUID(guid string) (*MessageDeliveryState, error) {
+	trimmed := strings.TrimSpace(guid)
+	if trimmed == "" {
+		return nil, nil
+	}
+
+	query := `
+		SELECT
+			m.ROWID,
+			m.guid,
+			COALESCE(m.text, ''),
+			m.is_sent,
+			m.is_delivered,
+			m.is_finished,
+			COALESCE(m.error, 0),
+			COALESCE(c.chat_identifier, ''),
+			COALESCE((m.date / 1000000) + 978307200000, 0),
+			a.transfer_state,
+			a.filename
+		FROM message m
+		LEFT JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+		LEFT JOIN chat c ON c.ROWID = cmj.chat_id
+		LEFT JOIN message_attachment_join maj ON maj.message_id = m.ROWID
+		LEFT JOIN attachment a ON a.ROWID = maj.attachment_id
+		WHERE m.guid = ?
+		ORDER BY a.ROWID
+		LIMIT 1
+	`
+
+	var state MessageDeliveryState
+	err := c.db.QueryRow(query, trimmed).Scan(
+		&state.RowID,
+		&state.GUID,
+		&state.Text,
+		&state.IsSent,
+		&state.IsDelivered,
+		&state.IsFinished,
+		&state.ErrorCode,
+		&state.ChatIdentifier,
+		&state.TimestampUnixMilli,
+		&state.AttachmentTransferState,
+		&state.AttachmentFilename,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to query delivery state for guid %q: %w", trimmed, err)
+	}
+	return &state, nil
+}
+
+func (c *ChatDB) GetRecentOutboundDeliveryStates(selectors []string, minRowID int64) ([]MessageDeliveryState, error) {
+	if len(selectors) == 0 {
+		return nil, nil
+	}
+	conditions := make([]string, 0, len(selectors))
+	args := []any{minRowID}
+	for _, selector := range selectors {
+		trimmed := strings.TrimSpace(selector)
+		if trimmed == "" {
+			continue
+		}
+		conditions = append(conditions, "(c.chat_identifier = ? OR c.guid = ?)")
+		args = append(args, trimmed, trimmed)
+	}
+	if len(conditions) == 0 {
+		return nil, nil
+	}
+
+	query := `
+		SELECT
+			m.ROWID,
+			m.guid,
+			COALESCE(m.text, ''),
+			m.is_sent,
+			m.is_delivered,
+			m.is_finished,
+			COALESCE(m.error, 0),
+			COALESCE(c.chat_identifier, ''),
+			COALESCE((m.date / 1000000) + 978307200000, 0),
+			a.transfer_state,
+			a.filename
+		FROM message m
+		INNER JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+		INNER JOIN chat c ON c.ROWID = cmj.chat_id
+		LEFT JOIN message_attachment_join maj ON maj.message_id = m.ROWID
+		LEFT JOIN attachment a ON a.ROWID = maj.attachment_id
+		WHERE m.ROWID > ?
+		  AND COALESCE(m.is_from_me, 0) = 1
+		  AND (` + strings.Join(conditions, " OR ") + `)
+		ORDER BY m.ROWID ASC, a.ROWID ASC
+	`
+
+	rows, err := c.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query recent outbound delivery states: %w", err)
+	}
+	defer rows.Close()
+
+	var states []MessageDeliveryState
+	for rows.Next() {
+		var state MessageDeliveryState
+		if err := rows.Scan(
+			&state.RowID,
+			&state.GUID,
+			&state.Text,
+			&state.IsSent,
+			&state.IsDelivered,
+			&state.IsFinished,
+			&state.ErrorCode,
+			&state.ChatIdentifier,
+			&state.TimestampUnixMilli,
+			&state.AttachmentTransferState,
+			&state.AttachmentFilename,
+		); err != nil {
+			return nil, fmt.Errorf("scan recent outbound delivery state: %w", err)
+		}
+		states = append(states, state)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate recent outbound delivery states: %w", err)
+	}
+	return states, nil
+}
+
+func (c *ChatDB) GetMaxMessageRowIDForChatSelectors(selectors []string) (int64, error) {
+	if len(selectors) == 0 {
+		return 0, nil
+	}
+	conditions := make([]string, 0, len(selectors))
+	args := []any{}
+	for _, selector := range selectors {
+		trimmed := strings.TrimSpace(selector)
+		if trimmed == "" {
+			continue
+		}
+		conditions = append(conditions, "(c.chat_identifier = ? OR c.guid = ?)")
+		args = append(args, trimmed, trimmed)
+	}
+	if len(conditions) == 0 {
+		return 0, nil
+	}
+
+	query := `
+		SELECT COALESCE(MAX(m.ROWID), 0)
+		FROM message m
+		INNER JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+		INNER JOIN chat c ON c.ROWID = cmj.chat_id
+		WHERE ` + strings.Join(conditions, " OR ")
+
+	var maxRowID int64
+	if err := c.db.QueryRow(query, args...).Scan(&maxRowID); err != nil {
+		return 0, fmt.Errorf("failed to query max message rowid for selectors: %w", err)
+	}
+	return maxRowID, nil
+}
+
+func (c *ChatDB) GetMaxRecentOutboundMessageRowID(selectors []string) (int64, error) {
+	if len(selectors) == 0 {
+		return 0, nil
+	}
+	conditions := make([]string, 0, len(selectors))
+	args := make([]any, 0, len(selectors)*2)
+	for _, selector := range selectors {
+		trimmed := strings.TrimSpace(selector)
+		if trimmed == "" {
+			continue
+		}
+		conditions = append(conditions, "(c.chat_identifier = ? OR c.guid = ?)")
+		args = append(args, trimmed, trimmed)
+	}
+	if len(conditions) == 0 {
+		return 0, nil
+	}
+
+	query := `
+		SELECT COALESCE(MAX(m.ROWID), 0)
+		FROM message m
+		INNER JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+		INNER JOIN chat c ON c.ROWID = cmj.chat_id
+		WHERE COALESCE(m.is_from_me, 0) = 1
+		  AND (` + strings.Join(conditions, " OR ") + `)
+	`
+
+	var maxRowID int64
+	if err := c.db.QueryRow(query, args...).Scan(&maxRowID); err != nil {
+		return 0, fmt.Errorf("failed to query max recent outbound message rowid: %w", err)
+	}
+	return maxRowID, nil
 }
 
 // insertMessage inserts a message into the messages table

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -128,6 +129,7 @@ func (appleScriptSendOnlyExecutor) Send(ctx context.Context, req imessageSendReq
 			MessageIDs: []string{},
 			ChunksSent: 0,
 			TotalChars: 0,
+			Status:     string(ActionAttemptStatusFailed),
 			Executor:   caps.Executor,
 			Error: &nexadapter.DeliveryError{
 				Type:    "content_rejected",
@@ -144,7 +146,11 @@ func (appleScriptSendOnlyExecutor) Send(ctx context.Context, req imessageSendReq
 	defer warehouseDB.Close()
 
 	chunks := expectedSendChunks(req)
-	attempt, err := createSendActionAttempt(warehouseDB, req, chunks)
+	baselineRowID, err := querySendChatMaxRowID(target, req)
+	if err != nil {
+		baselineRowID = 0
+	}
+	attempt, err := createSendActionAttempt(warehouseDB, req, chunks, baselineRowID)
 	if err != nil {
 		return nil, fmt.Errorf("create send action attempt: %w", err)
 	}
@@ -173,6 +179,7 @@ func (appleScriptSendOnlyExecutor) Send(ctx context.Context, req imessageSendReq
 				ChunksSent: chunksSent,
 				TotalChars: totalChars,
 				AttemptID:  attempt.AttemptID,
+				Status:     string(ActionAttemptStatusFailed),
 				Confirmed:  false,
 				Executor:   caps.Executor,
 				Error: &nexadapter.DeliveryError{
@@ -197,15 +204,35 @@ func (appleScriptSendOnlyExecutor) Send(ctx context.Context, req imessageSendReq
 		return nil, fmt.Errorf("mark send action attempt dispatched: %w", err)
 	}
 
-	return &imessageMethodResult{
+	attempt, observation, err := waitForSendActionAttemptStatus(ctx, warehouseDB, attempt.AttemptID, defaultSendObservationTimeout)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		return nil, fmt.Errorf("wait for send action attempt status: %w", err)
+	}
+
+	result := &imessageMethodResult{
 		Success:    true,
 		MessageIDs: []string{},
 		ChunksSent: chunksSent,
 		TotalChars: totalChars,
 		AttemptID:  attempt.AttemptID,
-		Confirmed:  false,
+		Status:     string(attempt.Status),
+		Confirmed:  attempt.Status == ActionAttemptStatusConfirmed,
 		Executor:   caps.Executor,
-	}, nil
+		Delivery:   observation,
+	}
+	if attempt.Status == ActionAttemptStatusFailed {
+		result.Success = false
+		result.Error = &nexadapter.DeliveryError{
+			Type:    "delivery_failed",
+			Message: strings.TrimSpace(attempt.ErrorMessage),
+			Retry:   true,
+		}
+		if strings.TrimSpace(result.Error.Message) == "" {
+			result.Error.Message = deliveryFailureMessage(observation)
+		}
+	}
+
+	return result, nil
 }
 
 func actionCapabilityFields(caps actionCapabilities) map[string]any {

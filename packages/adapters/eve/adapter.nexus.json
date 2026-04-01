@@ -4,6 +4,11 @@
   "displayName": "Eve",
   "description": "Shared Eve iMessage adapter package for Nex.",
   "platform": "imessage",
+  "methodCatalog": {
+    "source": "openapi",
+    "document": "api/openapi.yaml",
+    "namespace": "imessage"
+  },
   "command": "./bin/eve-adapter",
   "skill": "./SKILL.md"
 }

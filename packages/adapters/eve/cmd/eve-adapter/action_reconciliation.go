@@ -29,14 +29,18 @@ func expectedSendChunks(req imessageSendRequest) []string {
 	return chunks
 }
 
-func attemptMetadataForSend(req imessageSendRequest, chunks []string) map[string]any {
-	return map[string]any{
+func attemptMetadataForSend(req imessageSendRequest, chunks []string, baselineRowID int64) map[string]any {
+	metadata := map[string]any{
 		"executor":            currentActionCapabilities().Executor,
 		"target_container_id": strings.TrimSpace(req.Target.Channel.ContainerID),
 		"target_thread_id":    strings.TrimSpace(req.Target.Channel.ThreadID),
 		"has_media":           strings.TrimSpace(req.Media) != "",
 		"expected_chunks":     chunks,
 	}
+	if baselineRowID > 0 {
+		metadata["rowid_baseline"] = baselineRowID
+	}
+	return metadata
 }
 
 func mergeActionAttemptMetadata(base map[string]any, extra map[string]any) map[string]any {
@@ -53,14 +57,14 @@ func mergeActionAttemptMetadata(base map[string]any, extra map[string]any) map[s
 	return merged
 }
 
-func createSendActionAttempt(db *sql.DB, req imessageSendRequest, chunks []string) (ActionAttemptRecord, error) {
+func createSendActionAttempt(db *sql.DB, req imessageSendRequest, chunks []string, baselineRowID int64) (ActionAttemptRecord, error) {
 	return CreateActionAttempt(db, ActionAttemptCreateInput{
 		ConnectionID:      strings.TrimSpace(req.Target.ConnectionID),
 		Action:            imessageSendMethodID,
 		Request:           req,
 		TargetThreadID:    strings.TrimSpace(req.Target.Channel.ThreadID),
 		TargetMessageGUID: strings.TrimSpace(req.Target.ReplyToID),
-		Metadata:          attemptMetadataForSend(req, chunks),
+		Metadata:          attemptMetadataForSend(req, chunks, baselineRowID),
 	})
 }
 
@@ -195,34 +199,54 @@ func matchSendAttempt(attempt ActionAttemptRecord, record nexadapter.AdapterInbo
 	return false
 }
 
-func confirmSendAttempt(
+func observeSendAttempt(
 	db *sql.DB,
 	attempt ActionAttemptRecord,
 	record nexadapter.AdapterInboundRecord,
-) error {
-	status := ActionAttemptStatusConfirmed
+) (ActionAttemptRecord, *imessageDeliveryObservation, error) {
 	now := time.Now()
+	hasMedia := recordPayloadBool(attempt.Metadata, "has_media")
+	isMediaRecord := len(record.Payload.Attachments) > 0
 	targetRecordID := strings.TrimSpace(record.Payload.ExternalRecordID)
 	targetThreadID := strings.TrimSpace(record.Routing.ThreadID)
 	targetMessageGUID := strings.TrimSpace(strings.TrimPrefix(targetRecordID, "imessage:"))
-	metadata := mergeActionAttemptMetadata(attempt.Metadata, map[string]any{
-		"confirmed_record_id": targetRecordID,
-		"confirmed_at_ms":     now.UnixMilli(),
-	})
-	response := map[string]any{
-		"record_id": targetRecordID,
+	metadata := map[string]any{
+		"observed_record_id":    targetRecordID,
+		"observed_thread_id":    targetThreadID,
+		"observed_message_guid": targetMessageGUID,
+		"observed_at_ms":        now.UnixMilli(),
 	}
-	_, err := UpdateActionAttemptByAttemptID(db, attempt.AttemptID, ActionAttemptUpdateInput{
-		Status:            &status,
-		Response:          response,
-		TargetRecordID:    &targetRecordID,
-		TargetThreadID:    &targetThreadID,
-		TargetMessageGUID: &targetMessageGUID,
-		Metadata:          metadata,
-		ConfirmedAt:       &now,
-		UpdatedAt:         &now,
-	})
-	return err
+	if isMediaRecord {
+		metadata["observed_media_record_id"] = targetRecordID
+		metadata["observed_media_thread_id"] = targetThreadID
+		metadata["observed_media_message_guid"] = targetMessageGUID
+		metadata["observed_media_at_ms"] = now.UnixMilli()
+	} else {
+		metadata["observed_text_record_id"] = targetRecordID
+		metadata["observed_text_thread_id"] = targetThreadID
+		metadata["observed_text_message_guid"] = targetMessageGUID
+		metadata["observed_text_at_ms"] = now.UnixMilli()
+	}
+	update := ActionAttemptUpdateInput{
+		Response: map[string]any{
+			"record_id":      targetRecordID,
+			"thread_id":      targetThreadID,
+			"message_id":     targetMessageGUID,
+			"observed_media": isMediaRecord,
+		},
+		Metadata:  mergeActionAttemptMetadata(attempt.Metadata, metadata),
+		UpdatedAt: &now,
+	}
+	if isMediaRecord || !hasMedia {
+		update.TargetRecordID = &targetRecordID
+		update.TargetThreadID = &targetThreadID
+		update.TargetMessageGUID = &targetMessageGUID
+	}
+	updated, err := UpdateActionAttemptByAttemptID(db, attempt.AttemptID, update)
+	if err != nil {
+		return ActionAttemptRecord{}, nil, err
+	}
+	return refreshSendActionAttemptStatus(db, updated)
 }
 
 func reconcileActionAttempts(
@@ -250,19 +274,19 @@ func reconcileActionAttempts(
 		if len(attempts) == 0 {
 			continue
 		}
-		usedAttempts := make(map[string]struct{})
 		for _, record := range connectionRecords {
-			for _, attempt := range attempts {
-				if _, alreadyUsed := usedAttempts[attempt.AttemptID]; alreadyUsed {
+			for index, attempt := range attempts {
+				if attempt.Status == ActionAttemptStatusConfirmed || attempt.Status == ActionAttemptStatusFailed {
 					continue
 				}
 				if !matchSendAttempt(attempt, record) {
 					continue
 				}
-				if err := confirmSendAttempt(db, attempt, record); err != nil {
-					return fmt.Errorf("confirm action attempt %s: %w", attempt.AttemptID, err)
+				updated, _, err := observeSendAttempt(db, attempt, record)
+				if err != nil {
+					return fmt.Errorf("observe action attempt %s: %w", attempt.AttemptID, err)
 				}
-				usedAttempts[attempt.AttemptID] = struct{}{}
+				attempts[index] = updated
 				break
 			}
 		}

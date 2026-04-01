@@ -52,6 +52,8 @@ Out of scope:
 9. [EVP-009](/Users/tyler/nexus/home/projects/nexus/packages/adapters/eve/docs/workplans/eve-operator-validation-board/completed/EVP-009-sandboxed-runtime-method-routing-through-installed-eve-package.md)
 10. [EVP-010](/Users/tyler/nexus/home/projects/nexus/packages/adapters/eve/docs/workplans/eve-operator-validation-board/completed/EVP-010-sandboxed-cleanroom-method-surface-projection-for-eve.md)
 11. [EVP-011](/Users/tyler/nexus/home/projects/nexus/packages/adapters/eve/docs/workplans/eve-operator-validation-board/completed/EVP-011-no-sweep-startup-window-watcher-proof.md)
+12. [EVP-012](/Users/tyler/nexus/home/projects/nexus/packages/adapters/eve/docs/workplans/eve-operator-validation-board/completed/EVP-012-agent-surface-and-public-manager-imessage-proof.md)
+13. [EVP-013](/Users/tyler/nexus/home/projects/nexus/packages/adapters/eve/docs/workplans/eve-operator-validation-board/completed/EVP-013-live-public-manager-self-text-and-media-reply-proof.md)
 
 ## Status
 
@@ -74,6 +76,8 @@ Completed now:
 - `EVP-009` sandboxed runtime method routing through installed Eve package
 - `EVP-010` sandboxed cleanroom method-surface projection for Eve
 - `EVP-011` no-sweep startup-window watcher proof
+- `EVP-012` agent surface and public manager iMessage proof
+- `EVP-013` live public-manager self-text and media reply proof
 
 Blocked now:
 

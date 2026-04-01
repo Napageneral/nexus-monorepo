@@ -129,6 +129,54 @@ Recorded on 2026-03-31:
    - The only remaining live proof gap for identity validation is a second real
      iMessage-capable identity for multi-connection validation.
    - Inline image and video proof is now complete on the AppleScript lane.
+12. Agent surface and public-manager iMessage proof
+   - `python -m json.tool /Users/tyler/nexus/home/projects/nexus/packages/adapters/eve/adapter.nexus.json >/dev/null`
+   - `pnpm exec vitest run src/support/infra/outbound/channel-adapters.test.ts src/api/internal-jobs/public-broker-wake.test.ts src/commands/agent.ledger-persistence.test.ts`
+   - Confirms the installed Eve package now declares an explicit OpenAPI
+     `methodCatalog`, that adapter-backed outbound delivery routes text and
+     media through `imessage.send`, and that eligible Eve iMessage traffic
+     publishes `runtime.agent.requested` through the public-manager wake path
+     with truthful iMessage reply metadata.
+   - The local `code-mode-exec.test.ts` suite now includes an Eve-specific
+     `imessage.send` assertion as additional coverage, but this host still
+     cannot execute that suite because the local `isolated-vm` native binding
+     is broken.
+13. Live public-manager self-text and media reply proof
+   - Proof posture:
+     live local-runtime proof on the operator workspace, not a cleanroom bundle
+   - Live job definition:
+     `jobdef_0432cf74-5a88-4c00-b467-fbb57905da95`
+   - Live event subscription:
+     `eventsub_343ffebe-734c-4983-a2be-808d8162f921`
+   - Trigger outbound record id:
+     `imessage:F0459C94-83AC-4E24-8614-47CFC8ADE2B1`
+   - Manager session:
+     `session:eve-imessage-public-manager-proof-live-clean`
+   - Worker session:
+     `session:207f4f34-78ce-4add-a78e-1485db712fe6`
+   - `runtime.agent.requested` event id:
+     `41a79c7d-c28a-4833-95ca-16210af48032`
+   - Trigger token:
+     `EVE LIVE MANAGER PROOF 1775058740537`
+   - Reflected inbound wake record id:
+     `imessage:39131BE9-4AD9-4061-A5DE-1623D114D6B8`
+   - Live reply record ids:
+     outbound caption `imessage:6CDAE30E-15FF-4C3B-B923-A58809FFF024`,
+     outbound attachment-bearing image
+     `imessage:AC38E31C-8277-46AF-AC1D-F34AA7ADCEF5`,
+     outbound attachment id
+     `imessage:attachment:F72DF158-957E-4EE8-9217-F267BB31EFB5`,
+     reflected inbound caption
+     `imessage:5D6C6C44-C63C-474A-84A0-2EC6DC79DDF3`
+   - Worker send attempt:
+     `attempt-79ea427bedf2462360d8fcbae7b9d84c`
+   - `agents.sessions.history` proved the live manager prompt used the exact
+     constrained `agents.dispatch` call with `toolAllowlist: []`, the explicit
+     denylist for `local.exec`, PTY tools, and `browser`, and
+     `packageMethodNames: ["imessage.send"]`.
+   - The child completion then proved the worker sent the configured image back
+     to the same thread through `imessage.send` only, with no synthetic record
+     replay and no second outbound path.
 
 ## Level 1: Static Canon Conformance
 
@@ -191,6 +239,9 @@ Current proof note:
   keeping the interval hot sweep disabled by default
 - the remaining live gap for this level is only the second-identity
   multi-connection lane
+- the live public-manager self-text and image-reply journey is now proven
+  against the operator's self-thread with the real Eve job and event
+  subscription
 
 ## Level 6: Remote Client Journey
 
@@ -212,6 +263,13 @@ Current proof note:
   exposes `imessage.send` in both `adapters.methods` and
   `orientation.taxonomy`, and can route that send through the paired edge back
   into canonical cleanroom records
+- the focused runtime proof lane now also covers manager and worker-facing Eve
+  usage above the package surface: outbound text and media delivery map back to
+  `imessage.send`, and eligible public-manager iMessage traffic wakes the same
+  queued manager path used by other deliverable channels
+- a live self-thread run now proves that the queued public-manager wake can
+  dispatch one constrained worker and return a real image reply over the same
+  Eve conversation
 - an actual Android, Linux, or web UI client has not yet been exercised in
   this validation board, so the contract is proven but the client apps
   themselves are downstream
@@ -236,6 +294,12 @@ Current proof note:
   proof host
 - richer executor-backed actions still remain capability-gated until a deeper
   local companion is implemented
+- manager/public-reply runtime coverage now proves that if a manager or worker
+  targets Eve through the truthful outbound path, Nex routes delivery back
+  through `imessage.send` rather than inventing a second iMessage send surface
+- the live manager-worker self-thread proof now confirms that this path also
+  holds under a real `record.ingested` automation wake, not just in focused
+  runtime tests
 
 ## Level 8: Multi-User, Restart, And Recovery
 

@@ -87,14 +87,16 @@ type imessageSendRequest struct {
 }
 
 type imessageMethodResult struct {
-	Success    bool                      `json:"success"`
-	MessageIDs []string                  `json:"message_ids"`
-	ChunksSent int                       `json:"chunks_sent"`
-	TotalChars int                       `json:"total_chars,omitempty"`
-	AttemptID  string                    `json:"attempt_id,omitempty"`
-	Confirmed  bool                      `json:"confirmed"`
-	Executor   string                    `json:"executor,omitempty"`
-	Error      *nexadapter.DeliveryError `json:"error,omitempty"`
+	Success    bool                         `json:"success"`
+	MessageIDs []string                     `json:"message_ids"`
+	ChunksSent int                          `json:"chunks_sent"`
+	TotalChars int                          `json:"total_chars,omitempty"`
+	AttemptID  string                       `json:"attempt_id,omitempty"`
+	Status     string                       `json:"status,omitempty"`
+	Confirmed  bool                         `json:"confirmed"`
+	Executor   string                       `json:"executor,omitempty"`
+	Delivery   *imessageDeliveryObservation `json:"delivery,omitempty"`
+	Error      *nexadapter.DeliveryError    `json:"error,omitempty"`
 }
 
 func boolPtr(value bool) *bool {
