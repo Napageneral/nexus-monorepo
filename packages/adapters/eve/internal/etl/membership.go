@@ -20,6 +20,9 @@ type GroupAction struct {
 	IsFromMe          bool
 	ChatID            int64
 	ChatIdentifier    string
+	ChatDisplayName   sql.NullString
+	ChatServiceName   sql.NullString
+	ChatStyle         sql.NullInt64
 }
 
 // GetGroupActions reads group membership events from chat.db
@@ -37,7 +40,10 @@ func (c *ChatDB) GetGroupActions(sinceRowID int64) ([]GroupAction, error) {
 			m.date,
 			m.is_from_me,
 			cmj.chat_id,
-			c.chat_identifier
+			c.chat_identifier,
+			c.display_name,
+			c.service_name,
+			c.style
 		FROM message m
 		INNER JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
 		INNER JOIN chat c ON c.ROWID = cmj.chat_id
@@ -69,6 +75,9 @@ func (c *ChatDB) GetGroupActions(sinceRowID int64) ([]GroupAction, error) {
 			&a.IsFromMe,
 			&a.ChatID,
 			&a.ChatIdentifier,
+			&a.ChatDisplayName,
+			&a.ChatServiceName,
+			&a.ChatStyle,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan group action: %w", err)
 		}
@@ -80,6 +89,25 @@ func (c *ChatDB) GetGroupActions(sinceRowID int64) ([]GroupAction, error) {
 	}
 
 	return actions, nil
+}
+
+// GetMaxObservedMembershipRowID returns the highest membership-event ROWID
+// currently visible through the joined live delta query.
+func (c *ChatDB) GetMaxObservedMembershipRowID() (int64, error) {
+	query := `
+		SELECT COALESCE(MAX(m.ROWID), 0)
+		FROM message m
+		INNER JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+		INNER JOIN chat c ON c.ROWID = cmj.chat_id
+		WHERE m.group_action_type IS NOT NULL
+		  AND m.group_action_type != 0
+	`
+
+	var maxRowID int64
+	if err := c.db.QueryRow(query).Scan(&maxRowID); err != nil {
+		return 0, fmt.Errorf("failed to query max observed membership ROWID: %w", err)
+	}
+	return maxRowID, nil
 }
 
 // SyncMembershipEvents copies group membership events from chat.db to eve.db
@@ -100,6 +128,9 @@ func SyncMembershipEvents(chatDB *ChatDB, warehouseDB *sql.DB, sinceRowID int64)
 	}
 	defer tx.Rollback()
 
+	if err := ensureChatsForMembership(tx, actions); err != nil {
+		return 0, err
+	}
 	chatMap, err := loadWarehouseChatMap(tx)
 	if err != nil {
 		return 0, err

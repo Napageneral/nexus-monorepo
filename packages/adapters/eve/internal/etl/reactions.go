@@ -19,6 +19,9 @@ type Reaction struct {
 	Text                  sql.NullString
 	ChatID                int64
 	ChatIdentifier        string
+	ChatDisplayName       sql.NullString
+	ChatServiceName       sql.NullString
+	ChatStyle             sql.NullInt64
 }
 
 // GetReactions reads reaction messages from chat.db
@@ -37,7 +40,10 @@ func (c *ChatDB) GetReactions(sinceRowID int64) ([]Reaction, error) {
 			m.type,
 			m.text,
 			cmj.chat_id,
-			c.chat_identifier
+			c.chat_identifier,
+			c.display_name,
+			c.service_name,
+			c.style
 		FROM message m
 		INNER JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
 		INNER JOIN chat c ON c.ROWID = cmj.chat_id
@@ -81,6 +87,9 @@ func (c *ChatDB) GetReactions(sinceRowID int64) ([]Reaction, error) {
 			&r.Text,
 			&r.ChatID,
 			&r.ChatIdentifier,
+			&r.ChatDisplayName,
+			&r.ChatServiceName,
+			&r.ChatStyle,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan reaction: %w", err)
 		}
@@ -92,6 +101,37 @@ func (c *ChatDB) GetReactions(sinceRowID int64) ([]Reaction, error) {
 	}
 
 	return reactions, nil
+}
+
+// GetMaxObservedReactionRowID returns the highest reaction ROWID currently
+// visible through the joined live delta query.
+func (c *ChatDB) GetMaxObservedReactionRowID() (int64, error) {
+	query := `
+		SELECT COALESCE(MAX(m.ROWID), 0)
+		FROM message m
+		INNER JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+		INNER JOIN chat c ON c.ROWID = cmj.chat_id
+		WHERE m.associated_message_guid IS NOT NULL
+		  AND m.associated_message_guid != ''
+		  AND (
+		    (m.type >= 2000 AND m.type <= 2005)
+		    OR
+		    (m.type = 0 AND (
+		      m.text LIKE 'Loved %' OR
+		      m.text LIKE 'Liked %' OR
+		      m.text LIKE 'Disliked %' OR
+		      m.text LIKE 'Laughed at %' OR
+		      m.text LIKE 'Emphasized %' OR
+		      m.text LIKE 'Questioned %'
+		    ))
+		  )
+	`
+
+	var maxRowID int64
+	if err := c.db.QueryRow(query).Scan(&maxRowID); err != nil {
+		return 0, fmt.Errorf("failed to query max observed reaction ROWID: %w", err)
+	}
+	return maxRowID, nil
 }
 
 // SyncReactions copies reactions from chat.db to reactions table in eve.db
@@ -113,14 +153,24 @@ func SyncReactions(chatDB *ChatDB, warehouseDB *sql.DB, sinceRowID int64) (int, 
 	}
 	defer tx.Rollback()
 
+	if err := ensureOriginalMessagesForReactions(tx, chatDB, reactions); err != nil {
+		return 0, err
+	}
+	if err := ensureChatsForReactions(tx, reactions); err != nil {
+		return 0, err
+	}
 	chatMap, err := loadWarehouseChatMap(tx)
+	if err != nil {
+		return 0, err
+	}
+	handleMap, err := loadWarehouseHandleMapForReactions(tx, chatDB, reactions)
 	if err != nil {
 		return 0, err
 	}
 
 	created := 0
 	for _, r := range reactions {
-		if err := insertReaction(tx, chatMap, &r); err != nil {
+		if err := insertReaction(tx, chatMap, handleMap, &r); err != nil {
 			return 0, fmt.Errorf("failed to insert reaction %d: %w", r.ROWID, err)
 		}
 		created++
@@ -133,7 +183,111 @@ func SyncReactions(chatDB *ChatDB, warehouseDB *sql.DB, sinceRowID int64) (int, 
 	return created, nil
 }
 
-func insertReaction(tx *sql.Tx, chatMap map[string]int64, r *Reaction) error {
+func ensureOriginalMessagesForReactions(tx *sql.Tx, chatDB *ChatDB, reactions []Reaction) error {
+	missingGUIDs, err := loadMissingReactionMessageGUIDs(tx, reactions)
+	if err != nil {
+		return err
+	}
+	if len(missingGUIDs) == 0 {
+		return nil
+	}
+
+	messages, err := chatDB.GetMessagesByGUIDs(missingGUIDs)
+	if err != nil {
+		return err
+	}
+	if len(messages) == 0 {
+		return nil
+	}
+	if err := ensureChatsForMessages(tx, messages); err != nil {
+		return err
+	}
+	handleMap, err := loadWarehouseHandleMapForMessages(tx, chatDB, messages)
+	if err != nil {
+		return err
+	}
+	for _, msg := range messages {
+		if err := insertMessage(tx, &msg, handleMap); err != nil {
+			return fmt.Errorf("failed to seed source message %s for reaction replay: %w", msg.GUID, err)
+		}
+	}
+	return nil
+}
+
+func loadMissingReactionMessageGUIDs(tx *sql.Tx, reactions []Reaction) ([]string, error) {
+	guids := uniqueOriginalMessageGUIDs(reactions)
+	if len(guids) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, 0, len(guids))
+	args := make([]any, 0, len(guids))
+	for _, guid := range guids {
+		placeholders = append(placeholders, "?")
+		args = append(args, guid)
+	}
+
+	rows, err := tx.Query(`
+		SELECT guid
+		FROM messages
+		WHERE guid IN (`+joinPlaceholders(placeholders)+`)
+	`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query existing reaction source messages: %w", err)
+	}
+	defer rows.Close()
+
+	existing := make(map[string]struct{}, len(guids))
+	for rows.Next() {
+		var guid string
+		if err := rows.Scan(&guid); err != nil {
+			return nil, fmt.Errorf("failed to scan reaction source message guid: %w", err)
+		}
+		existing[strings.TrimSpace(guid)] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating reaction source messages: %w", err)
+	}
+
+	missing := make([]string, 0, len(guids))
+	for _, guid := range guids {
+		if _, ok := existing[guid]; ok {
+			continue
+		}
+		missing = append(missing, guid)
+	}
+	return missing, nil
+}
+
+func uniqueOriginalMessageGUIDs(reactions []Reaction) []string {
+	seen := make(map[string]struct{}, len(reactions))
+	out := make([]string, 0, len(reactions))
+	for _, reaction := range reactions {
+		guid := normalizeAssociatedMessageGUID(reaction.AssociatedMessageGUID)
+		if guid == "" {
+			continue
+		}
+		if _, ok := seen[guid]; ok {
+			continue
+		}
+		seen[guid] = struct{}{}
+		out = append(out, guid)
+	}
+	return out
+}
+
+func normalizeAssociatedMessageGUID(raw string) string {
+	normalized := strings.TrimSpace(raw)
+	if normalized == "" {
+		return ""
+	}
+	if idx := len(normalized) - 36; idx > 0 && len(normalized) > 36 {
+		normalized = normalized[idx:]
+	}
+	return normalized
+}
+
+func insertReaction(tx *sql.Tx, chatMap map[string]int64, handleMap map[int64]int64, r *Reaction) error {
 	reactionType := r.ReactionType
 	if reactionType < 2000 || reactionType > 2005 {
 		if r.Text.Valid && r.Text.String != "" {
@@ -144,12 +298,9 @@ func insertReaction(tx *sql.Tx, chatMap map[string]int64, r *Reaction) error {
 		return nil
 	}
 
-	originalGUID := strings.TrimSpace(r.AssociatedMessageGUID)
+	originalGUID := normalizeAssociatedMessageGUID(r.AssociatedMessageGUID)
 	if originalGUID == "" {
 		return nil
-	}
-	if idx := len(originalGUID) - 36; idx > 0 && len(originalGUID) > 36 {
-		originalGUID = originalGUID[idx:]
 	}
 
 	warehouseChatID, ok := chatMap[r.ChatIdentifier]
@@ -163,7 +314,9 @@ func insertReaction(tx *sql.Tx, chatMap map[string]int64, r *Reaction) error {
 
 	var senderID *int64
 	if r.HandleID.Valid && r.HandleID.Int64 > 0 {
-		senderID = &r.HandleID.Int64
+		if contactID, ok := handleMap[r.HandleID.Int64]; ok {
+			senderID = &contactID
+		}
 	}
 
 	query := `

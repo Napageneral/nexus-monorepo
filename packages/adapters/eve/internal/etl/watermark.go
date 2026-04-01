@@ -81,3 +81,31 @@ func SetWatermark(db *sql.DB, source, name string, valueInt *int64, valueText *s
 
 	return nil
 }
+
+// GetWatermarkInt returns an integer watermark or zero when absent.
+func GetWatermarkInt(db *sql.DB, source, name string) (int64, error) {
+	wm, err := GetWatermark(db, source, name)
+	if err != nil {
+		return 0, err
+	}
+	if wm == nil || !wm.ValueInt.Valid {
+		return 0, nil
+	}
+	return wm.ValueInt.Int64, nil
+}
+
+// GetOrSeedWatermarkInt returns the persisted integer watermark or seeds it
+// with the provided default when missing.
+func GetOrSeedWatermarkInt(db *sql.DB, source, name string, seed int64) (int64, error) {
+	wm, err := GetWatermark(db, source, name)
+	if err != nil {
+		return 0, err
+	}
+	if wm != nil && wm.ValueInt.Valid {
+		return wm.ValueInt.Int64, nil
+	}
+	if err := SetWatermark(db, source, name, &seed, nil); err != nil {
+		return 0, err
+	}
+	return seed, nil
+}

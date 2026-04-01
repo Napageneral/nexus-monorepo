@@ -18,11 +18,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	nexadapter "github.com/nexus-project/adapter-sdk-go"
@@ -42,10 +44,10 @@ const (
 )
 
 type stagedBackfillChunk struct {
-	Path           string `json:"path"`
-	Records        int    `json:"records"`
-	FirstRecordID  string `json:"first_record_id,omitempty"`
-	LastRecordID   string `json:"last_record_id,omitempty"`
+	Path             string `json:"path"`
+	Records          int    `json:"records"`
+	FirstRecordID    string `json:"first_record_id,omitempty"`
+	LastRecordID     string `json:"last_record_id,omitempty"`
 	FirstTimestampMs *int64 `json:"first_timestamp_ms,omitempty"`
 	LastTimestampMs  *int64 `json:"last_timestamp_ms,omitempty"`
 }
@@ -89,6 +91,9 @@ type imessageMethodResult struct {
 	MessageIDs []string                  `json:"message_ids"`
 	ChunksSent int                       `json:"chunks_sent"`
 	TotalChars int                       `json:"total_chars,omitempty"`
+	AttemptID  string                    `json:"attempt_id,omitempty"`
+	Confirmed  bool                      `json:"confirmed"`
+	Executor   string                    `json:"executor,omitempty"`
 	Error      *nexadapter.DeliveryError `json:"error,omitempty"`
 }
 
@@ -141,6 +146,10 @@ func readMethodSendRequest(req nexadapter.AdapterMethodRequest) (imessageSendReq
 }
 
 func main() {
+	if handled, code := maybeRunEdgeConnectCommand(); handled {
+		os.Exit(code)
+		return
+	}
 	nexadapter.Run(nexadapter.DefineAdapter(adapterConfig()))
 }
 
@@ -150,7 +159,7 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 		Name:              adapterName,
 		Version:           adapterVersion,
 		CredentialService: "eve",
-		MultiAccount:      false,
+		MultiAccount:      true,
 		Auth: &nexadapter.AdapterAuthManifest{
 			Methods: []nexadapter.AdapterAuthMethod{
 				{
@@ -164,22 +173,7 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 			},
 			SetupGuide: "Grant Full Disk Access to Eve so it can read chat.db, then confirm setup.",
 		},
-		Capabilities: nexadapter.ChannelCapabilities{
-			TextLimit:             4000,
-			SupportsMarkdown:      false,
-			SupportsTables:        false,
-			SupportsCodeBlocks:    false,
-			SupportsEmbeds:        false,
-			SupportsThreads:       false,
-			SupportsReactions:     true,
-			SupportsPolls:         false,
-			SupportsButtons:       false,
-			SupportsEdit:          false,
-			SupportsDelete:        false,
-			SupportsMedia:         true,
-			SupportsVoiceNotes:    true,
-			SupportsStreamingEdit: false,
-		},
+		Capabilities: adapterChannelCapabilities(),
 		Connection: nexadapter.ConnectionHandlers[struct{}]{
 			Connections: func(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterConnectionIdentity, error) {
 				return eveConnections(ctx.Context)
@@ -210,89 +204,7 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 				return eveSetupCancel(ctx.Context, req)
 			},
 		},
-		Methods: map[string]nexadapter.DeclaredMethod[struct{}]{
-			"imessage.send": nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
-				Description: "Send an outbound iMessage through the local Messages app.",
-				Action:      "write",
-				Params: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"target":  map[string]any{"type": "object"},
-						"text":    map[string]any{"type": "string"},
-						"media":   map[string]any{"type": "string"},
-						"caption": map[string]any{"type": "string"},
-					},
-					"required": []string{"target"},
-				},
-				Response: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"success":     map[string]any{"type": "boolean"},
-						"message_ids": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-						"chunks_sent": map[string]any{"type": "integer"},
-						"total_chars": map[string]any{"type": "integer"},
-					},
-				},
-				ConnectionRequired: boolPtr(true),
-				MutatesRemote:      boolPtr(true),
-				Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
-					sendReq, err := readMethodSendRequest(req)
-					if err != nil {
-						return nil, err
-					}
-					return eveSend(ctx.Context, sendReq)
-				},
-			}),
-			"records.backfill.stage": nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
-				Description: "Stage historical Eve backfill into canonical JSONL chunk files for Nex bulk import.",
-				Action:      "read",
-				Params: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"since":     map[string]any{"type": "string"},
-						"stage_dir": map[string]any{"type": "string"},
-					},
-					"required": []string{"since", "stage_dir"},
-				},
-				Response: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"version":       map[string]any{"type": "integer"},
-						"format":        map[string]any{"type": "string"},
-						"stage_dir":     map[string]any{"type": "string"},
-						"manifest_path": map[string]any{"type": "string"},
-						"totals": map[string]any{
-							"type": "object",
-							"properties": map[string]any{
-								"records": map[string]any{"type": "integer"},
-							},
-							"required": []string{"records"},
-						},
-						"chunks": map[string]any{
-							"type": "array",
-							"items": map[string]any{
-								"type": "object",
-								"properties": map[string]any{
-									"path":               map[string]any{"type": "string"},
-									"records":            map[string]any{"type": "integer"},
-									"first_record_id":    map[string]any{"type": "string"},
-									"last_record_id":     map[string]any{"type": "string"},
-									"first_timestamp_ms": map[string]any{"type": "integer"},
-									"last_timestamp_ms":  map[string]any{"type": "integer"},
-								},
-								"required": []string{"path", "records"},
-							},
-						},
-					},
-					"required": []string{"version", "format", "stage_dir", "manifest_path", "totals", "chunks"},
-				},
-				ConnectionRequired: boolPtr(true),
-				MutatesRemote:      boolPtr(false),
-				Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
-					return eveStageBackfill(ctx.Context, ctx.ConnectionID, req.Payload)
-				},
-			}),
-		},
+		Methods: declaredAdapterMethods(),
 	}
 }
 
@@ -315,173 +227,123 @@ func eveMonitor(ctx context.Context, connectionID string, emit nexadapter.EmitFu
 
 	meIdentifier := getMeIdentifier(warehouseDB)
 
-	// Start from the current max message ID so we only emit NEW messages.
-	var lastSeenID int64
-	if err := warehouseDB.QueryRow("SELECT COALESCE(MAX(id), 0) FROM messages").Scan(&lastSeenID); err != nil {
-		return fmt.Errorf("failed to get initial cursor: %w", err)
+	cursors, err := loadOrInitMonitorCursors(warehouseDB)
+	if err != nil {
+		return fmt.Errorf("failed to load monitor cursors: %w", err)
 	}
-
-	var lastSeenReactionID int64
-	if err := warehouseDB.QueryRow("SELECT COALESCE(MAX(id), 0) FROM reactions").Scan(&lastSeenReactionID); err != nil {
-		return fmt.Errorf("failed to get initial reaction cursor: %w", err)
-	}
-
-	var lastSeenMembershipID int64
-	if err := warehouseDB.QueryRow("SELECT COALESCE(MAX(id), 0) FROM membership_events").Scan(&lastSeenMembershipID); err != nil {
-		return fmt.Errorf("failed to get initial membership cursor: %w", err)
-	}
-
 	nexadapter.LogInfo(
 		"monitor starting from message=%d reaction=%d membership=%d",
-		lastSeenID,
-		lastSeenReactionID,
-		lastSeenMembershipID,
+		cursors.MessageID,
+		cursors.ReactionID,
+		cursors.MembershipID,
 	)
 
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			nexadapter.LogInfo("monitor shutting down")
-			return nil
-		case <-ticker.C:
-		}
-
-		// Step 1: Run incremental ETL sync (chat.db → eve.db).
-		if chatDB != nil {
-			// Use a lookback window because chat.db writes are not always "atomic":
-			// a message row can appear before its chat_message_join row, and strict
-			// ROWID watermarks can permanently skip messages. Warehouse inserts are
-			// idempotent via guid UNIQUE constraints, so reprocessing is safe.
-			const lookbackRowIDs int64 = 5000
-			sinceRowID := getWatermarkRowID(warehouseDB)
-			syncSinceRowID := sinceRowID
-			if syncSinceRowID > lookbackRowIDs {
-				syncSinceRowID -= lookbackRowIDs
-			} else {
-				syncSinceRowID = 0
-			}
-
-			syncResult, err := etl.FullSync(chatDB, warehouseDB, syncSinceRowID)
-			if err != nil {
-				nexadapter.LogError("sync failed: %v", err)
-			} else if syncResult.MaxMessageRowID > 0 {
-				if err := etl.SetWatermark(warehouseDB, "chatdb", "message_rowid", &syncResult.MaxMessageRowID, nil); err != nil {
-					nexadapter.LogError("failed to update watermark: %v", err)
-				}
-			}
-		}
-
-		// Step 2: Query warehouse for messages newer than our cursor.
-		events, newLastID, err := queryNewMessages(warehouseDB, lastSeenID, meIdentifier)
-		if err != nil {
-			nexadapter.LogError("failed to query new messages: %v", err)
-		} else {
-			for _, event := range events {
-				emit(bindConnection(event, connectionID))
-			}
-			if newLastID > lastSeenID {
-				nexadapter.LogDebug(
-					"emitted %d message events (cursor %d → %d)",
-					len(events),
-					lastSeenID,
-					newLastID,
-				)
-				lastSeenID = newLastID
-			}
-		}
-
-		reactions, newLastReactionID, err := queryNewReactions(warehouseDB, lastSeenReactionID, meIdentifier)
-		if err != nil {
-			nexadapter.LogError("failed to query new reactions: %v", err)
-		} else {
-			for _, event := range reactions {
-				emit(bindConnection(event, connectionID))
-			}
-			if newLastReactionID > lastSeenReactionID {
-				nexadapter.LogDebug(
-					"emitted %d reaction events (cursor %d → %d)",
-					len(reactions),
-					lastSeenReactionID,
-					newLastReactionID,
-				)
-				lastSeenReactionID = newLastReactionID
-			}
-		}
-
-		membership, newLastMembershipID, err := queryNewMembershipEvents(
+	process := func(reason string, detectionLag time.Duration) error {
+		metrics, err := processMonitorBatch(
+			ctx,
 			warehouseDB,
-			lastSeenMembershipID,
+			chatDB,
+			connectionID,
 			meIdentifier,
+			&cursors,
+			func(_ context.Context, records []nexadapter.AdapterInboundRecord) error {
+				for _, record := range records {
+					emit(record)
+				}
+				return nil
+			},
 		)
 		if err != nil {
-			nexadapter.LogError("failed to query new membership events: %v", err)
-		} else {
-			for _, event := range membership {
-				emit(bindConnection(event, connectionID))
-			}
-			if newLastMembershipID > lastSeenMembershipID {
-				nexadapter.LogDebug(
-					"emitted %d membership events (cursor %d → %d)",
-					len(membership),
-					lastSeenMembershipID,
-					newLastMembershipID,
-				)
-				lastSeenMembershipID = newLastMembershipID
-			}
+			nexadapter.LogError("monitor batch failed (%s): %v", reason, err)
+			return nil
 		}
+
+		if metrics.SyncResult != nil {
+			nexadapter.LogDebug(
+				"monitor batch sync (%s): detect_ms=%d sync_ms=%d handles=%d chats=%d participants=%d messages=%d message_updates=%d reactions=%d membership=%d attachments=%d message_rowid=%d reaction_rowid=%d membership_rowid=%d message_update_ns=%d attachment_rowid=%d",
+				reason,
+				detectionLag.Milliseconds(),
+				metrics.SyncDuration.Milliseconds(),
+				metrics.SyncResult.HandlesCount,
+				metrics.SyncResult.ChatsCount,
+				metrics.SyncResult.ChatParticipantsCount,
+				metrics.SyncResult.MessagesCount,
+				metrics.SyncResult.MessageUpdatesCount,
+				metrics.SyncResult.ReactionsCount,
+				metrics.SyncResult.MembershipCount,
+				metrics.SyncResult.AttachmentsCount,
+				metrics.SyncResult.Watermarks.MessageRowID,
+				metrics.SyncResult.Watermarks.ReactionRowID,
+				metrics.SyncResult.Watermarks.MembershipRowID,
+				metrics.SyncResult.Watermarks.MessageUpdateNS,
+				metrics.SyncResult.Watermarks.AttachmentRowID,
+			)
+		}
+
+		if metrics.MessageCount > 0 || metrics.MessageUpdateCount > 0 || metrics.ReactionCount > 0 || metrics.MembershipCount > 0 {
+			nexadapter.LogDebug(
+				"monitor batch emit (%s): detect_ms=%d emit_ms=%d total_ms=%d emitted_messages=%d emitted_message_updates=%d emitted_reactions=%d emitted_membership=%d",
+				reason,
+				detectionLag.Milliseconds(),
+				metrics.EmitDuration.Milliseconds(),
+				metrics.BatchDuration.Milliseconds(),
+				metrics.MessageCount,
+				metrics.MessageUpdateCount,
+				metrics.ReactionCount,
+				metrics.MembershipCount,
+			)
+		}
+
+		return nil
 	}
+
+	processMaintenance := func(reason string) error {
+		metrics, err := processMaintenanceBatch(warehouseDB, chatDB)
+		if err != nil {
+			nexadapter.LogError("maintenance batch failed (%s): %v", reason, err)
+			return nil
+		}
+		if metrics.Result != nil {
+			nexadapter.LogDebug(
+				"maintenance batch (%s): duration_ms=%d handles=%d addressbook=%d chats=%d participants=%d conversations=%d conversation_run_ns=%d",
+				reason,
+				metrics.Duration.Milliseconds(),
+				metrics.Result.HandlesCount,
+				metrics.Result.AddressBookUpdatesCount,
+				metrics.Result.ChatsCount,
+				metrics.Result.ChatParticipantsCount,
+				metrics.Result.ConversationsCount,
+				metrics.Result.Watermarks.ConversationRunNS,
+			)
+		}
+		return nil
+	}
+
+	if chatDB == nil {
+		return runWarehouseOnlyMonitor(ctx, func() error {
+			return process("warehouse-only-poll", 0)
+		})
+	}
+
+	var batchMu sync.Mutex
+	lockedProcess := func(reason string, detectionLag time.Duration) error {
+		batchMu.Lock()
+		defer batchMu.Unlock()
+		return process(reason, detectionLag)
+	}
+	lockedMaintenance := func(reason string) error {
+		batchMu.Lock()
+		defer batchMu.Unlock()
+		return processMaintenance(reason)
+	}
+
+	return runWatcherMonitorWithMaintenance(ctx, etl.GetChatDBPath(), lockedProcess, lockedMaintenance, defaultMaintenanceInterval)
 }
 
 // ---------- Send ----------
 
 func eveSend(ctx context.Context, req imessageSendRequest) (*imessageMethodResult, error) {
-	target := strings.TrimSpace(req.Target.Channel.ContainerID)
-	if target == "" {
-		target = recipientFromThreadID(req.Target.Channel.ThreadID)
-	}
-	if target == "" {
-		return &imessageMethodResult{
-			Success: false,
-			Error: &nexadapter.DeliveryError{
-				Type:    "content_rejected",
-				Message: "--to is required (or provide --thread)",
-				Retry:   false,
-			},
-		}, nil
-	}
-	if strings.TrimSpace(req.Target.ReplyToID) != "" {
-		return &imessageMethodResult{
-			Success: false,
-			Error: &nexadapter.DeliveryError{
-				Type:    "content_rejected",
-				Message: "reply_to_id is not supported by the imessage adapter",
-				Retry:   false,
-			},
-		}, nil
-	}
-
-	body := strings.TrimSpace(req.Text)
-	if body == "" {
-		body = strings.TrimSpace(req.Caption)
-	}
-
-	result := nexadapter.SendWithChunking(body, 4000, func(chunk string) (string, error) {
-		if err := sendAppleScript(ctx, target, chunk, req.Media); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("imessage:sent:%d", time.Now().UnixNano()), nil
-	})
-
-	return &imessageMethodResult{
-		Success:    result.Success,
-		MessageIDs: result.MessageIDs,
-		ChunksSent: result.ChunksSent,
-		TotalChars: result.TotalChars,
-		Error:      result.Error,
-	}, nil
+	return currentActionExecutor().Send(ctx, req)
 }
 
 func recipientFromThreadID(threadID string) string {
@@ -492,29 +354,183 @@ func recipientFromThreadID(threadID string) string {
 	return strings.TrimPrefix(trimmed, "imessage:")
 }
 
-func sendAppleScript(ctx context.Context, recipient, text, media string) error {
-	var script string
-	if media != "" {
-		script = fmt.Sprintf(`tell application "Messages"
-	set targetService to 1st account whose service type = iMessage
-	set targetBuddy to participant "%s" of targetService
-	send "%s" to targetBuddy
-	send POSIX file "%s" to targetBuddy
-end tell`, escapeAppleScript(recipient), escapeAppleScript(text), escapeAppleScript(media))
-	} else {
-		script = fmt.Sprintf(`tell application "Messages"
-	set targetService to 1st account whose service type = iMessage
-	set targetBuddy to participant "%s" of targetService
-	send "%s" to targetBuddy
-end tell`, escapeAppleScript(recipient), escapeAppleScript(text))
-	}
+type appleScriptSendTarget struct {
+	Recipient  string
+	ChatTarget string
+	UseChat    bool
+}
 
+var appleScriptAttachmentRoot = defaultAppleScriptAttachmentRoot
+
+var runAppleScriptCommand = func(ctx context.Context, script string) error {
 	cmd := exec.CommandContext(ctx, "osascript", "-e", script)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("AppleScript failed: %s (output: %s)", err, string(output))
 	}
 	return nil
+}
+
+func sendAppleScript(ctx context.Context, target appleScriptSendTarget, text, media string) error {
+	stagedMedia, err := stageAppleScriptAttachment(media)
+	if err != nil {
+		return err
+	}
+	script := buildAppleScriptSendScript(target, text, stagedMedia)
+	return runAppleScriptCommand(ctx, script)
+}
+
+func buildAppleScriptSendScript(target appleScriptSendTarget, text, media string) string {
+	if target.UseChat {
+		return fmt.Sprintf(`tell application "Messages"
+	set targetChat to chat id "%s"
+	%s
+	%s
+end tell`, escapeAppleScript(target.ChatTarget), appleScriptSendTextClause(text, "targetChat"), appleScriptSendMediaClause(media, "targetChat"))
+	}
+	return fmt.Sprintf(`tell application "Messages"
+	set targetService to 1st account whose service type = iMessage
+	set targetBuddy to participant "%s" of targetService
+	%s
+	%s
+end tell`, escapeAppleScript(target.Recipient), appleScriptSendTextClause(text, "targetBuddy"), appleScriptSendMediaClause(media, "targetBuddy"))
+}
+
+func appleScriptSendTextClause(text, targetRef string) string {
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	return fmt.Sprintf(`if "%s" is not "" then
+		send "%s" to %s
+	end if`, escapeAppleScript(text), escapeAppleScript(text), targetRef)
+}
+
+func appleScriptSendMediaClause(media, targetRef string) string {
+	if strings.TrimSpace(media) == "" {
+		return ""
+	}
+	return fmt.Sprintf(`if "%s" is not "" then
+		set theFile to POSIX file "%s" as alias
+		send theFile to %s
+	end if`, escapeAppleScript(media), escapeAppleScript(media), targetRef)
+}
+
+func resolveAppleScriptSendTarget(containerID, threadID string) (appleScriptSendTarget, error) {
+	raw := strings.TrimSpace(containerID)
+	if raw == "" {
+		raw = recipientFromThreadID(threadID)
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return appleScriptSendTarget{}, fmt.Errorf("--to is required (or provide --thread)")
+	}
+	if strings.HasPrefix(raw, "chat_id:") {
+		return appleScriptSendTarget{}, fmt.Errorf("chat_id thread targets require a chat identifier or handle")
+	}
+	if looksLikeAppleScriptHandle(raw) {
+		return appleScriptSendTarget{Recipient: raw}, nil
+	}
+	return appleScriptSendTarget{ChatTarget: raw, UseChat: true}, nil
+}
+
+func looksLikeAppleScriptHandle(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return false
+	}
+	lower := strings.ToLower(trimmed)
+	if strings.HasPrefix(lower, "imessage:") || strings.HasPrefix(lower, "sms:") || strings.HasPrefix(lower, "auto:") {
+		return true
+	}
+	if strings.Contains(trimmed, "@") {
+		return true
+	}
+	allowed := "+0123456789 ()-"
+	for _, ch := range trimmed {
+		if !strings.ContainsRune(allowed, ch) {
+			return false
+		}
+	}
+	return true
+}
+
+func defaultAppleScriptAttachmentRoot() (string, error) {
+	if override := strings.TrimSpace(os.Getenv("EVE_APPLESCRIPT_ATTACHMENT_ROOT")); override != "" {
+		return filepath.Clean(expandTildePath(override)), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+	return filepath.Join(home, "Library", "Messages", "Attachments", "eve"), nil
+}
+
+func stageAppleScriptAttachment(source string) (string, error) {
+	trimmed := strings.TrimSpace(source)
+	if trimmed == "" {
+		return "", nil
+	}
+	sourcePath := filepath.Clean(expandTildePath(trimmed))
+	info, err := os.Stat(sourcePath)
+	if err != nil {
+		return "", fmt.Errorf("stat media for AppleScript send: %w", err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("media path must be a file: %s", sourcePath)
+	}
+
+	root, err := appleScriptAttachmentRoot()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return "", fmt.Errorf("create AppleScript attachment root: %w", err)
+	}
+	stageDir, err := os.MkdirTemp(root, "stage-")
+	if err != nil {
+		return "", fmt.Errorf("create AppleScript stage dir: %w", err)
+	}
+	destination := filepath.Join(stageDir, filepath.Base(sourcePath))
+	if err := copyFile(sourcePath, destination); err != nil {
+		return "", err
+	}
+	return destination, nil
+}
+
+func copyFile(sourcePath, destination string) error {
+	sourceFile, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("open media for AppleScript send: %w", err)
+	}
+	defer sourceFile.Close()
+
+	destinationFile, err := os.Create(destination)
+	if err != nil {
+		return fmt.Errorf("create staged media for AppleScript send: %w", err)
+	}
+	defer destinationFile.Close()
+
+	if _, err := io.Copy(destinationFile, sourceFile); err != nil {
+		return fmt.Errorf("copy staged media for AppleScript send: %w", err)
+	}
+	return nil
+}
+
+func expandTildePath(path string) string {
+	if path == "~" {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			return home
+		}
+		return path
+	}
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			return filepath.Join(home, strings.TrimPrefix(path, "~/"))
+		}
+	}
+	return path
 }
 
 // ---------- Backfill ----------
@@ -699,7 +715,7 @@ func eveBackfill(ctx context.Context, connectionID string, since time.Time, emit
 	if chatDB != nil {
 		nexadapter.LogInfo("running sync before backfill...")
 		const lookbackRowIDs int64 = 5000
-		sinceRowID := getWatermarkRowID(warehouseDB)
+		sinceRowID := getMessageRowIDWatermark(warehouseDB)
 		syncSinceRowID := sinceRowID
 		if syncSinceRowID > lookbackRowIDs {
 			syncSinceRowID -= lookbackRowIDs
@@ -808,6 +824,39 @@ func eveBackfill(ctx context.Context, connectionID string, since time.Time, emit
 		}
 	}
 
+	// Message updates
+	{
+		var lastID int64
+		for {
+			select {
+			case <-ctx.Done():
+				nexadapter.LogInfo("backfill cancelled after %d events", totalEmitted)
+				return nil
+			default:
+			}
+
+			events, newLastID, err := queryMessageUpdatesSince(
+				warehouseDB,
+				since,
+				lastID,
+				batchSize,
+				meIdentifier,
+			)
+			if err != nil {
+				return fmt.Errorf("backfill message update query failed: %w", err)
+			}
+			if len(events) == 0 {
+				break
+			}
+			for _, event := range events {
+				emit(bindConnection(event, connectionID))
+			}
+			totalEmitted += len(events)
+			lastID = newLastID
+			nexadapter.LogDebug("backfill progress: %d events emitted", totalEmitted)
+		}
+	}
+
 	nexadapter.LogInfo("backfill complete: %d events emitted", totalEmitted)
 	return nil
 }
@@ -815,6 +864,12 @@ func eveBackfill(ctx context.Context, connectionID string, since time.Time, emit
 // ---------- Health ----------
 
 func eveHealth(_ context.Context, connectionID string) (*nexadapter.AdapterHealth, error) {
+	actionCaps := currentActionCapabilities()
+	surface := currentSessionSurface()
+	if strings.TrimSpace(connectionID) == "" {
+		connectionID = defaultConnectionIDFromSurface(surface)
+	}
+
 	// Check chat.db accessibility.
 	chatDBPath := etl.GetChatDBPath()
 	if chatDBPath == "" {
@@ -822,6 +877,7 @@ func eveHealth(_ context.Context, connectionID string) (*nexadapter.AdapterHealt
 			Connected:    false,
 			ConnectionID: connectionID,
 			Error:        "cannot determine chat.db path",
+			Details:      mergeSessionDetails(mergeActionCapabilityFields(map[string]any{}, actionCaps), surface),
 		}, nil
 	}
 
@@ -831,7 +887,9 @@ func eveHealth(_ context.Context, connectionID string) (*nexadapter.AdapterHealt
 			Connected:    false,
 			ConnectionID: connectionID,
 			Error:        fmt.Sprintf("cannot open chat.db: %v", err),
-			Details:      map[string]any{"chat_db_path": chatDBPath},
+			Details: mergeSessionDetails(mergeActionCapabilityFields(map[string]any{
+				"chat_db_path": chatDBPath,
+			}, actionCaps), surface),
 		}, nil
 	}
 	chatDB.Close()
@@ -844,7 +902,10 @@ func eveHealth(_ context.Context, connectionID string) (*nexadapter.AdapterHealt
 			Connected:    false,
 			ConnectionID: connectionID,
 			Error:        fmt.Sprintf("cannot open eve.db: %v", err),
-			Details:      map[string]any{"chat_db_path": chatDBPath, "warehouse_path": cfg.EveDBPath},
+			Details: mergeSessionDetails(mergeActionCapabilityFields(map[string]any{
+				"chat_db_path":   chatDBPath,
+				"warehouse_path": cfg.EveDBPath,
+			}, actionCaps), surface),
 		}, nil
 	}
 	defer warehouseDB.Close()
@@ -859,33 +920,32 @@ func eveHealth(_ context.Context, connectionID string) (*nexadapter.AdapterHealt
 
 	var msgCount int64
 	_ = warehouseDB.QueryRow("SELECT COUNT(*) FROM messages").Scan(&msgCount)
-	account, accountContact := getSelfAccountProjection()
 
 	return &nexadapter.AdapterHealth{
 		Connected:      true,
 		ConnectionID:   connectionID,
-		Account:        account,
-		AccountContact: accountContact,
+		Account:        surface.Account,
+		AccountContact: surface.AccountContact,
 		LastEventAt:    lastEventAt,
-		Details: map[string]any{
+		Details: mergeSessionDetails(mergeActionCapabilityFields(map[string]any{
 			"chat_db_path":     chatDBPath,
 			"warehouse_path":   cfg.EveDBPath,
 			"message_count":    msgCount,
 			"adapter_contacts": getSelfContactSeeds(),
-		},
+		}, actionCaps), surface),
 	}, nil
 }
 
 // ---------- Connections ----------
 
 func eveConnections(_ context.Context) ([]nexadapter.AdapterConnectionIdentity, error) {
-	account, accountContact := getSelfAccountProjection()
+	surface := currentSessionSurface()
 	return []nexadapter.AdapterConnectionIdentity{
 		{
-			ID:             "default",
-			DisplayName:    getFullName(),
-			Account:        account,
-			AccountContact: accountContact,
+			ID:             defaultConnectionIDFromSurface(surface),
+			DisplayName:    defaultDisplayName(),
+			Account:        surface.Account,
+			AccountContact: surface.AccountContact,
 			Status:         "active",
 		},
 	}, nil
@@ -909,7 +969,7 @@ func eveSetupFields() []nexadapter.AdapterAuthField {
 func setupConnectionIDOrDefault(connectionID string) string {
 	trimmed := strings.TrimSpace(connectionID)
 	if trimmed == "" {
-		return "eve-local"
+		return defaultConnectionID()
 	}
 	return trimmed
 }
@@ -1255,7 +1315,7 @@ func convertWarehouseMessage(
 		WithMetadata("is_from_me", row.IsFromMe).
 		WithMetadata("chat_id", row.ChatID).
 		WithMetadata("service", serviceName).
-		WithMetadata("account", "default")
+		WithMetadata("account", currentSessionSurface().Account)
 
 	if row.SenderContactID.Valid {
 		b.WithMetadata("sender_handle_id", row.SenderContactID.Int64)
@@ -1519,7 +1579,7 @@ func convertWarehouseReaction(row warehouseReactionRow, meIdentifier string) nex
 		WithMetadata("reaction_type", row.ReactionType.Int64).
 		WithMetadata("original_guid", row.OriginalMessageGUID).
 		WithMetadata("reply_to", replyTo).
-		WithMetadata("account", "default")
+		WithMetadata("account", currentSessionSurface().Account)
 
 	if row.SenderContactID.Valid {
 		b.WithMetadata("sender_handle_id", row.SenderContactID.Int64)
@@ -1696,7 +1756,7 @@ func convertWarehouseMembership(row warehouseMembershipRow, meIdentifier string)
 		WithMetadata("action", action).
 		WithMetadata("group_action_type", row.ActionType.Int64).
 		WithMetadata("membership_rowid", row.ID).
-		WithMetadata("account", "default")
+		WithMetadata("account", currentSessionSurface().Account)
 
 	if row.ActorID.Valid {
 		b.WithMetadata("actor_handle_id", row.ActorID.Int64)
@@ -1712,6 +1772,181 @@ func convertWarehouseMembership(row warehouseMembershipRow, meIdentifier string)
 	}
 	if row.GroupTitle.Valid && strings.TrimSpace(row.GroupTitle.String) != "" {
 		b.WithMetadata("group_title", strings.TrimSpace(row.GroupTitle.String))
+	}
+
+	return b.Build()
+}
+
+type warehouseMessageUpdateRow struct {
+	ID                  int64
+	GUID                string
+	OriginalMessageGUID string
+	UpdateType          string
+	Content             sql.NullString
+	Timestamp           sql.NullString
+	IsFromMe            bool
+	ChatID              int64
+	SenderContactID     sql.NullInt64
+	SenderName          sql.NullString
+	SenderIdentifier    sql.NullString
+	ChatIdentifier      string
+	IsGroup             bool
+	ChatName            sql.NullString
+}
+
+const warehouseMessageUpdateQuery = `
+SELECT
+	mu.id, mu.guid, mu.original_message_guid, mu.update_type, mu.content, mu.timestamp,
+	mu.is_from_me, mu.chat_id, mu.sender_id,
+	sender.name,
+	(SELECT ci.identifier FROM contact_identifiers ci
+	 WHERE ci.contact_id = mu.sender_id
+	 ORDER BY ci.is_primary DESC LIMIT 1),
+	ch.chat_identifier, ch.is_group, ch.chat_name
+FROM message_updates mu
+LEFT JOIN contacts sender ON mu.sender_id = sender.id
+LEFT JOIN chats ch ON mu.chat_id = ch.id
+`
+
+func scanWarehouseMessageUpdateRow(rows *sql.Rows, row *warehouseMessageUpdateRow) error {
+	return rows.Scan(
+		&row.ID,
+		&row.GUID,
+		&row.OriginalMessageGUID,
+		&row.UpdateType,
+		&row.Content,
+		&row.Timestamp,
+		&row.IsFromMe,
+		&row.ChatID,
+		&row.SenderContactID,
+		&row.SenderName,
+		&row.SenderIdentifier,
+		&row.ChatIdentifier,
+		&row.IsGroup,
+		&row.ChatName,
+	)
+}
+
+func queryNewMessageUpdates(
+	db *sql.DB,
+	sinceID int64,
+	meIdentifier string,
+) ([]nexadapter.AdapterInboundRecord, int64, error) {
+	rows, err := db.Query(warehouseMessageUpdateQuery+"WHERE mu.id > ? ORDER BY mu.id", sinceID)
+	if err != nil {
+		return nil, sinceID, fmt.Errorf("message update query failed: %w", err)
+	}
+	defer rows.Close()
+
+	var events []nexadapter.AdapterInboundRecord
+	lastID := sinceID
+
+	for rows.Next() {
+		var row warehouseMessageUpdateRow
+		if err := scanWarehouseMessageUpdateRow(rows, &row); err != nil {
+			return nil, lastID, err
+		}
+		events = append(events, convertWarehouseMessageUpdate(row, meIdentifier))
+		lastID = row.ID
+	}
+
+	return events, lastID, rows.Err()
+}
+
+func queryMessageUpdatesSince(
+	db *sql.DB,
+	since time.Time,
+	afterID int64,
+	limit int,
+	meIdentifier string,
+) ([]nexadapter.AdapterInboundRecord, int64, error) {
+	sinceStr := since.UTC().Format("2006-01-02 15:04:05+00:00")
+	rows, err := db.Query(
+		warehouseMessageUpdateQuery+"WHERE mu.timestamp >= ? AND mu.id > ? ORDER BY mu.id LIMIT ?",
+		sinceStr,
+		afterID,
+		limit,
+	)
+	if err != nil {
+		return nil, afterID, fmt.Errorf("message update query failed: %w", err)
+	}
+	defer rows.Close()
+
+	var events []nexadapter.AdapterInboundRecord
+	lastID := afterID
+
+	for rows.Next() {
+		var row warehouseMessageUpdateRow
+		if err := scanWarehouseMessageUpdateRow(rows, &row); err != nil {
+			return nil, lastID, err
+		}
+		events = append(events, convertWarehouseMessageUpdate(row, meIdentifier))
+		lastID = row.ID
+	}
+
+	return events, lastID, rows.Err()
+}
+
+func convertWarehouseMessageUpdate(row warehouseMessageUpdateRow, meIdentifier string) nexadapter.AdapterInboundRecord {
+	peerKind := "direct"
+	if row.IsGroup {
+		peerKind = "group"
+	}
+
+	var timestampMs int64
+	if row.Timestamp.Valid {
+		timestampMs = parseTimestampMs(row.Timestamp.String)
+	}
+
+	peerID := strings.TrimSpace(row.ChatIdentifier)
+	if peerID == "" {
+		peerID = fmt.Sprintf("chat_id:%d", row.ChatID)
+	}
+
+	var senderID, senderName string
+	if row.IsFromMe {
+		senderID = meIdentifier
+		if senderID == "" {
+			senderID = preferredSelfIdentifier(getSelfIdentity())
+		}
+		senderName = getFullName()
+	} else {
+		if row.SenderIdentifier.Valid {
+			senderID = row.SenderIdentifier.String
+		}
+		if row.SenderName.Valid {
+			senderName = row.SenderName.String
+		}
+	}
+	if strings.TrimSpace(senderID) == "" {
+		senderID = "unknown"
+	}
+
+	content := ""
+	if row.Content.Valid {
+		content = row.Content.String
+	}
+
+	threadID := deriveThreadID(row.ChatIdentifier, row.ChatID)
+	originalRecordID := "imessage:" + row.OriginalMessageGUID
+
+	b := nexadapter.NewRecord(platformID, "imessage:message_update:"+row.GUID).
+		WithTimestampUnixMs(timestampMs).
+		WithContent(content).
+		WithContentType("message_update").
+		WithSender(senderID, senderName).
+		WithContainer(peerID, peerKind).
+		WithThread(threadID).
+		WithReplyTo(originalRecordID).
+		WithMetadata("is_from_me", row.IsFromMe).
+		WithMetadata("chat_id", row.ChatID).
+		WithMetadata("update_type", row.UpdateType).
+		WithMetadata("original_guid", row.OriginalMessageGUID).
+		WithMetadata("reply_to", originalRecordID).
+		WithMetadata("account", currentSessionSurface().Account)
+
+	if row.SenderContactID.Valid {
+		b.WithMetadata("sender_handle_id", row.SenderContactID.Int64)
 	}
 
 	return b.Build()
@@ -1801,15 +2036,6 @@ func openChatDB() (*etl.ChatDB, error) {
 		return nil, fmt.Errorf("failed to open chat.db: %w", err)
 	}
 	return chatDB, nil
-}
-
-// getWatermarkRowID reads the current chatdb/message_rowid watermark.
-func getWatermarkRowID(db *sql.DB) int64 {
-	wm, err := etl.GetWatermark(db, "chatdb", "message_rowid")
-	if err != nil || wm == nil || !wm.ValueInt.Valid {
-		return 0
-	}
-	return wm.ValueInt.Int64
 }
 
 // =====================================================================

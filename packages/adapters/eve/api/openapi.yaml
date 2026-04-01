@@ -173,18 +173,339 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  chunks_sent:
-                    type: integer
-                  message_ids:
-                    items:
+                $ref: "#/components/schemas/ImessageMethodResultSchema"
+  /operations/imessage.reply:
+    post:
+      operationId: imessage.reply
+      summary: Attempt to send an iMessage reply through the local Eve executor.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  type: object
+                  properties:
+                    target:
+                      type: object
+                    reply_to_id:
                       type: string
-                    type: array
-                  success:
-                    type: boolean
-                  total_chars:
-                    type: integer
-                type: object
+                    text:
+                      type: string
+                    media:
+                      type: string
+                    caption:
+                      type: string
+                  required:
+                    - target
+                    - reply_to_id
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImessageMethodResultSchema"
+  /operations/imessage.reaction.add:
+    post:
+      operationId: imessage.reaction.add
+      summary: Attempt to add an iMessage reaction through the local Eve executor.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  type: object
+                  properties:
+                    target:
+                      type: object
+                    message_id:
+                      type: string
+                    reaction:
+                      type: string
+                  required:
+                    - target
+                    - message_id
+                    - reaction
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImessageMethodResultSchema"
+  /operations/imessage.reaction.remove:
+    post:
+      operationId: imessage.reaction.remove
+      summary: Attempt to remove an iMessage reaction through the local Eve executor.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  type: object
+                  properties:
+                    target:
+                      type: object
+                    message_id:
+                      type: string
+                    reaction:
+                      type: string
+                  required:
+                    - target
+                    - message_id
+                    - reaction
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImessageMethodResultSchema"
+  /operations/imessage.message.edit:
+    post:
+      operationId: imessage.message.edit
+      summary: Attempt to edit an iMessage through the local Eve executor.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  type: object
+                  properties:
+                    target:
+                      type: object
+                    message_id:
+                      type: string
+                    text:
+                      type: string
+                  required:
+                    - target
+                    - message_id
+                    - text
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImessageMethodResultSchema"
+  /operations/imessage.message.unsend:
+    post:
+      operationId: imessage.message.unsend
+      summary: Attempt to unsend an iMessage through the local Eve executor.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  type: object
+                  properties:
+                    target:
+                      type: object
+                    message_id:
+                      type: string
+                  required:
+                    - target
+                    - message_id
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImessageMethodResultSchema"
+  /operations/imessage.thread.create:
+    post:
+      operationId: imessage.thread.create
+      summary: Attempt to create an iMessage thread through the local Eve executor.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  type: object
+                  properties:
+                    participants:
+                      type: array
+                      items:
+                        type: string
+                    text:
+                      type: string
+                    media:
+                      type: string
+                    caption:
+                      type: string
+                    thread_name:
+                      type: string
+                  required:
+                    - participants
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImessageMethodResultSchema"
+  /operations/imessage.thread.rename:
+    post:
+      operationId: imessage.thread.rename
+      summary: Attempt to rename an iMessage thread through the local Eve executor.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  type: object
+                  properties:
+                    target:
+                      type: object
+                    name:
+                      type: string
+                  required:
+                    - target
+                    - name
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImessageMethodResultSchema"
+  /operations/imessage.thread.participants.add:
+    post:
+      operationId: imessage.thread.participants.add
+      summary: Attempt to add iMessage thread participants through the local Eve executor.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  type: object
+                  properties:
+                    target:
+                      type: object
+                    participants:
+                      type: array
+                      items:
+                        type: string
+                  required:
+                    - target
+                    - participants
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImessageMethodResultSchema"
+  /operations/imessage.thread.participants.remove:
+    post:
+      operationId: imessage.thread.participants.remove
+      summary: Attempt to remove iMessage thread participants through the local Eve executor.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  type: object
+                  properties:
+                    target:
+                      type: object
+                    participants:
+                      type: array
+                      items:
+                        type: string
+                  required:
+                    - target
+                    - participants
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImessageMethodResultSchema"
   /operations/records.backfill.stage:
     post:
       operationId: records.backfill.stage
@@ -265,6 +586,28 @@ paths:
                 type: object
 components:
   schemas:
+    ImessageMethodResultSchema:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message_ids:
+          type: array
+          items:
+            type: string
+        chunks_sent:
+          type: integer
+        total_chars:
+          type: integer
+        attempt_id:
+          type: string
+        confirmed:
+          type: boolean
+        executor:
+          type: string
+        error:
+          type: object
+          additionalProperties: true
     AdapterInfoSchema:
       $schema: http://json-schema.org/draft-07/schema#
       type: object

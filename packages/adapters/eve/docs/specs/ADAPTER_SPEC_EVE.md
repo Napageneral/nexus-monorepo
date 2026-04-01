@@ -2,28 +2,35 @@
 
 ## Customer Experience
 
-The Eve adapter gives Nex a first-class local iMessage connection on macOS by
-using Eve's warehouse as the provider integration layer.
+Eve gives Nex a first-class iMessage surface whose durable truth lives in Nex
+even when the actual iMessage access lives on macOS.
 
-For Tyler, the experience should be:
+The operator experience should be:
 
-1. install the shared `eve` adapter package into Nex
-2. create one Eve connection in Nex for the local macOS host
-3. complete a guided custom setup flow that confirms Full Disk Access and Eve
-   warehouse readiness
-4. run historical backfill from Eve's normalized warehouse into canonical Nex
-   records
-5. start monitor so Nex continuously syncs new iMessage data through Eve and
-   emits new canonical records
-6. let Nex read and send iMessages as a real coworker surface without
-   requiring direct `chat.db` hacks in every downstream feature
+1. pair one or more macOS Eve edges with Nex
+2. complete guided setup that proves Full Disk Access, local warehouse
+   readiness, self-identity discovery, and action capability discovery
+3. run historical backfill into canonical Nex records
+4. keep low-latency live sync running from the macOS edge into Nex
+5. let Nex apps and remote clients on Android, Linux, and web read and act on
+   iMessage through Nex without direct Mac access
 
-The customer should not need to know:
+The client experience should be:
 
-- the old direct `eve-adapter` binary path in `home/projects/eve`
-- the old low-level `AdapterOperations` authoring model
-- `chat.db` join timing edge cases or Eve watermark details
-- whether a message came from `chat.db` directly or from Eve's warehouse sync
+1. browse, search, and reply to iMessage threads through Nex
+2. see attachment previews and fetch attachment content from Nex
+3. receive live updates when new iMessages arrive or connection health changes
+4. send native inline photos and videos through Nex when the paired Eve edge
+   advertises provider-native media support
+5. add reactions, send replies, edit messages, unsend messages, and mutate
+   threads when the paired Eve edge advertises support for them
+
+The operator and client should not need to know:
+
+- where `chat.db` lives on disk
+- whether an event first came from WAL-driven sync or warehouse reconciliation
+- whether a rich action used Messages automation or a deeper local companion
+- whether Nex core is running on macOS or Linux
 
 ## Adapter Identity
 
@@ -34,216 +41,332 @@ The customer should not need to know:
 | Platform | `imessage` |
 | Package Root | `packages/adapters/eve/` |
 | Binary | `cmd/eve-adapter` |
-| Provider Scope | Local macOS iMessage access via Eve warehouse |
+| Provider Scope | macOS iMessage edge for Nex |
 
-## Source Of Truth
+## Taxonomy
 
-The source-of-truth behavioral baseline is the latest chronological Eve adapter
-implementation in the separate Eve repo:
+See [EVE_TAXONOMY.md](./EVE_TAXONOMY.md) for the canonical nouns used below.
 
-- repo: `home/projects/eve`
-- file: `cmd/eve-adapter/main.go`
-- latest adapter commit: `0f874b6f4856db8a4ff8b5be9544e98094c1d4a0`
-- commit date: `2026-02-26`
-- commit summary: `feat(eve-adapter): adopt v2 operations and setup flow`
+See [EVE_ACTION_EXECUTION_BOUNDARIES.md](./EVE_ACTION_EXECUTION_BOUNDARIES.md)
+for the canonical action-class boundary between AppleScript-reachable behavior
+and private-API-required behavior.
 
-The new packaged adapter must preserve the real customer-facing behavior of that
-version while cutting over to the current packaged Nex adapter contract.
+## Target-State Rules
 
-## Hard-Cutover Rules
+1. Eve is a host-bound edge adapter for iMessage, so iMessage acquisition and
+   local action execution live on macOS.
+2. `nex-core` is the canonical system of record for Eve records, remote client
+   APIs, search, memory, and app integrations.
+3. `eve-edge` owns local acquisition, warehouse maintenance, attachment
+   discovery, self-identity resolution, and local action execution.
+4. Clients never talk directly to a macOS Eve edge.
+5. Durable history enters Nex only through canonical Eve record ingest.
+6. Command receipts never replace watcher-confirmed durable history.
+7. Fast delta watching is the default ingest posture.
+8. Rich actions are capability-gated and may vary by edge.
+9. One Eve connection maps to one macOS user session identity surface.
+10. Multiple Eve connections may coexist across hosts and user sessions without
+    collapsing into one shared local slot.
 
-1. `packages/adapters/eve` becomes the canonical Eve adapter surface.
-2. The package uses the current shared Go SDK `DefineAdapter(...)` model.
-3. The package does not depend on Nex invoking `home/projects/eve/bin/eve-adapter`
-   or `home/projects/eve/eve-adapter` directly.
-4. Platform identity remains `imessage` because downstream Nex routing, memory,
-   IAM, and UI already rely on that value.
-5. The package preserves the adapter name `eve` because that is the established
-   operator-facing adapter identity.
-6. Inbound data is emitted as canonical `record.ingest`.
-7. Runtime `connection_id` is the durable Nex identity surface.
-8. Provider-specific local paths, row ids, GUIDs, and chat identifiers remain
-   metadata, not canonical Nex connection identity.
+## Deployment Model
 
-## Scope
+Eve is deployed as a macOS edge that pairs with a Nex core runtime.
 
-The Eve adapter package must cover:
+The deployment boundary is:
 
-- local custom setup for Eve/iMessage access
-- connection health
-- account listing
-- historical backfill from Eve warehouse
-- continuous monitor with best-effort warehouse sync before emit
-- `imessage.send` text and attachment delivery through Messages/AppleScript
+- `eve-edge`
+  - runs on macOS
+  - can read `chat.db`, WAL, SHM, AddressBook, and local attachment paths
+  - can drive Messages automation and richer local iMessage integrations when
+    available
+  - opens an authenticated outbound runtime session to `nex-core`
+- `nex-core`
+  - may run on Linux or any other Nex-supported runtime substrate
+  - stores canonical records and live edge state
+  - routes commands to the correct edge
+  - serves clients and Nex apps
 
-The initial packaged cut does not expand scope into separate Eve analytics,
-embeddings, or context-engine product methods. The first goal is a reliable
-shared messaging adapter for Nex.
+No public listener on the macOS host is required for the target architecture.
 
 ## Connection Model
 
-One Nex Eve connection represents one local macOS iMessage identity surface
-served by the current machine.
+One Eve connection represents one logged-in macOS user session with Messages
+access and one discoverable local self identity surface.
 
-The canonical Nex identity is the runtime-owned `connection_id`.
+The durable Nex identity is the runtime-owned `connection_id`.
 
-The adapter remains single-account in this cut:
+Every connection must expose:
 
-- one connection
-- one default local account projection
-- one local Eve warehouse
+- `connection_id`
+- self `account`
+- self `account contact`
+- capability advertisement
+- edge health and lag metadata
 
-Provider-side identifiers such as:
+Multiple Eve connections may exist:
 
-- phone number
-- email
-- `chat.db` row ids
-- Eve warehouse message ids
-- iMessage GUIDs
-- chat identifiers
+- on different Macs
+- on the same physical Mac under different logged-in user sessions
+- under one Nex core runtime
 
-must remain metadata on records and health details, not replace the Nex
-connection identity.
+Provider-side identifiers such as phone numbers, emails, `chat.db` row ids,
+iMessage GUIDs, and chat identifiers remain metadata and lookup keys. They do
+not replace the Nex `connection_id`.
 
-When Eve can identify the local self account precisely, setup or health should
-also expose that identity explicitly as the connection-account linkage using
-the stable logical contact key:
+## Ingest Model
 
-- `platform`
-- `space_id`
-- `contact_id`
+Eve's ingest path is warehouse-first but watcher-driven.
 
-For Eve that normally means a self phone number or self email with empty
-`space_id`, not a local slot label such as `default`.
+The hot path must:
 
-When Eve can authoritatively determine the local self identity, setup and
-health should emit that identity explicitly as the connection-account contact.
-That should normally be the primary local phone or email identity, not the
-operational slot label `default`.
+1. watch `chat.db`, WAL, and SHM for local changes with low latency
+2. keep a persistent local read handle to `chat.db`
+3. track per-domain watermarks for messages, reactions, membership events,
+   attachments, and message updates
+4. run small replay-safe delta ETLs instead of broad full sync passes
+5. apply bounded reconciliation windows so late join rows and attachment links
+   are not permanently skipped
+6. emit canonical records from the normalized warehouse into Nex
 
-## Setup Experience
+The slow path must run separately from the hot loop for:
 
-The adapter uses a `custom_flow` auth/setup method because this is not an OAuth
-provider integration.
+- handle and contact refresh
+- AddressBook name hydration and contact reconciliation
+- chat and participant repair
+- warehouse cleanup and repair
+- conversation repair
 
-The setup flow must guide the operator through:
+Backfill and live sync must use the same canonical transform pipeline.
 
-1. granting Full Disk Access to Eve
-2. granting Full Disk Access to the runtime shell or process that needs to read
-   `chat.db`
-3. verifying that `chat.db` is readable
-4. verifying that Eve's warehouse exists and is readable
+## Warehouse Model
 
-The setup flow must return:
+The warehouse is Eve's normalized local truth for iMessage ingestion.
 
-- `requires_input` when permissions are missing or unconfirmed
-- `completed` only when health proves the local environment is ready
-- useful health metadata when setup is blocked
-- the explicit connection-account contact when Eve can state the local self
-  identity authoritatively
+It must:
 
-## Monitor Behavior
+- preserve replay-safe provider metadata
+- support low-latency delta ingest
+- survive edge restarts without full reimport
+- keep attachment linkage and contact linkage stable
+- provide a single canonical read surface for backfill and monitor
 
-Monitor must preserve the proven Eve behavior:
-
-1. open Eve warehouse
-2. best-effort open `chat.db`
-3. establish message, reaction, and membership cursors from the warehouse
-4. on each poll, run incremental ETL sync from `chat.db` into `eve.db` when
-   possible
-5. use the lookback row-id window so `chat.db` join timing races do not
-   permanently skip messages
-6. query the warehouse for new messages, reactions, and membership events
-7. emit canonical records to Nex
-
-If `chat.db` is unavailable but the warehouse is readable, monitor may continue
-from warehouse-only state rather than fail closed.
-
-## Backfill Behavior
-
-Backfill must preserve the proven Eve behavior:
-
-1. open Eve warehouse
-2. best-effort open `chat.db`
-3. best-effort sync `chat.db` into the warehouse before backfill
-4. backfill messages, reactions, and membership events from the warehouse
-5. paginate so memory stays bounded
-6. emit the same canonical record model as monitor
-
-Backfill and monitor are not allowed to diverge on record shape.
-
-## Delivery Behavior
-
-`imessage.send` must preserve the proven Eve behavior:
-
-- resolve recipient from target or thread identity
-- reject unsupported reply threading behavior
-- chunk text to the iMessage-safe text limit
-- support optional attachment send
-- send through AppleScript / Messages.app on the local macOS host
-
-The package does not need edit/delete/react outbound parity in the first cut.
-
-## Health Behavior
-
-Health must report whether the adapter can actually function on this machine.
-
-At minimum, health must verify:
-
-- `chat.db` path discovery
-- `chat.db` readability
-- Eve warehouse readability
-- latest known event timestamp
-- warehouse message count
-
-Health metadata should include path and warehouse facts that help explain setup
-or runtime failure without exposing unnecessary secrets.
-
-When available, health should also expose the explicit connection-account
-contact for the local self identity.
+Warehouse maintenance may rebuild or repair derived tables, but canonical Nex
+records must not depend on clients reading warehouse internals directly.
 
 ## Record Model
 
-The adapter emits canonical inbound records for:
+Eve emits canonical inbound records for:
 
-- iMessage messages
-- iMessage reactions
-- iMessage membership events
+- messages
+- reactions
+- membership events
+- message updates such as edits and unsends when the provider can observe them
 
 Each record must preserve:
 
 - `connection_id`
 - `platform = "imessage"`
 - stable provider-native identifiers in metadata
-- sender/contact/chat metadata needed by downstream Nex memory and routing
+- sender and participant identity facts needed by Nex routing and memory
+- thread and container metadata needed for conversation continuity
+- attachment references when attachments are present
 
-The packaged adapter must not reintroduce legacy flat event shapes as canonical
-output.
+Backfill and live sync are not allowed to diverge on record shape.
 
-## Package Shape
+## Live State Model
 
-The package should include:
+Eve also emits live state events through Nex for:
 
-- `adapter.nexus.json`
-- `README.md`
-- `go.mod`
-- `cmd/eve-adapter/main.go`
-- package-local helpers/tests as needed
-- `docs/specs/ADAPTER_SPEC_EVE.md`
-- `docs/workplans/EVE_ADAPTER_WORKPLAN.md`
-- `docs/validation/EVE_ADAPTER_VALIDATION.md`
-- `scripts/package-release.sh`
+- typing and other composition state
+- delivery and read observations
+- edge presence and health transitions
+- command progress
+- capability changes
+
+Live state events are not a substitute for durable canonical records.
+
+## Attachment Model
+
+Attachments are discovered locally by `eve-edge` and become remotely usable
+through Nex.
+
+The target behavior is:
+
+1. the edge resolves local attachment metadata and bytes
+2. Nex stores durable attachment objects or durable object references
+3. clients fetch attachments from Nex, not from the macOS filesystem
+4. outbound image and video sends render with provider-native inline media
+   semantics when the edge advertises inline media support, instead of falling
+   back to generic file-tile behavior
+
+Local absolute paths may exist as edge-only metadata, but they are not part of
+the remote client contract.
+
+## Action Execution Boundary
+
+Eve recognizes only two action-execution classes:
+
+1. AppleScript-reachable
+2. private-API-required
+
+UI automation is intentionally out of scope for the canonical Eve plan.
+
+The AppleScript-reachable class currently covers:
+
+- text send
+- generic file attachment send
+- inline photo or video parity only if that behavior is proven live and remains
+  stable enough to advertise truthfully
+
+The private-API-required class currently covers:
+
+- reply threading
+- reaction add and remove
+- edit
+- unsend
+- thread create
+- thread rename
+- participant add and remove
+- other provider-native state mutations such as typing or read state when the
+  provider allows them
+
+If an AppleScript executor cannot prove native inline media send, it must keep
+inline media support disabled and advertise only generic file-attachment
+support.
+
+## Outbound Action Model
+
+Eve supports a baseline local action surface plus richer capability-gated
+actions.
+
+The baseline action surface includes:
+
+- send text
+- send generic file attachments when the provider path requires file semantics
+- send native inline photos and videos only when the paired edge has proved
+  that capability and advertises it truthfully
+
+The richer action surface includes:
+
+- reply
+- add reaction
+- remove reaction
+- edit
+- unsend
+- create thread
+- rename thread
+- add participants
+- remove participants
+- mark read or otherwise reconcile message state when the provider allows it
+
+All remote actions flow:
+
+1. client to `nex-core`
+2. `nex-core` to the correct `eve-edge`
+3. local execution on macOS
+4. durable confirmation through the ingest path
+
+If an action is unsupported on a given edge, Eve must fail clearly and expose
+that capability truthfully through health and info surfaces.
+
+Capability truth must be specific enough that Nex and remote clients can
+distinguish:
+
+- native inline media send support
+- generic file-send support
+- reply support
+- reaction support
+- edit support
+- unsend support
+- thread mutation support
+
+## Setup Experience
+
+Eve uses a custom setup flow because iMessage access is a local macOS provider
+integration, not OAuth.
+
+The setup flow must guide the operator through:
+
+1. granting Full Disk Access for Eve's local edge process
+2. verifying that `chat.db`, WAL, and SHM are readable
+3. verifying that the warehouse is readable and writable
+4. discovering the local self identity
+5. discovering the currently available action capabilities
+6. pairing the edge with `nex-core`
+
+The setup flow must return:
+
+- `requires_input` when permissions or pairing requirements are missing
+- `completed` only when the local edge is genuinely ready
+- explicit account-contact linkage when self identity is known
+- capability truth when rich actions are unavailable
+
+## Health Behavior
+
+Health must report whether the edge can actually function and whether Nex can
+route work through it.
+
+At minimum, health must verify:
+
+- `chat.db` path discovery
+- `chat.db`, WAL, and SHM readability
+- warehouse readability and writeability
+- watcher readiness and lag
+- current capability set
+- self account projection
+- edge pairing status with Nex core
+- latest known event timestamp
+- attachment transfer readiness
+
+Health metadata should include path and warehouse facts that help explain setup
+or runtime failure without exposing unnecessary secrets.
+
+Health and connection metadata should also expose the local session surface
+needed for operator disambiguation, including:
+
+- host identity
+- macOS user identity
+- self account projection
+- stable per-session connection display truth
+
+## Security And Transport
+
+The edge-to-core transport must be edge-initiated, authenticated, encrypted,
+and restart-safe.
+
+The target posture is:
+
+- `eve-edge` opens the connection to `nex-core`
+- `nex-core` never requires a public inbound listener on the Mac
+- edge credentials are scoped to edge registration and command routing
+- attachment transfer uses durable Nex-managed storage or durable object
+  references
+- secrets remain in runtime-managed storage, not docs
+
+## Failure And Recovery
+
+Eve must remain truthful and restart-safe under:
+
+- edge restarts
+- temporary loss of `chat.db` access
+- temporary loss of pairing with Nex core
+- command retries
+- late attachment linkage
+- late join and membership linkage races
+
+If the macOS edge is offline, Nex clients may still read stored history, but
+live state and remote actions for that connection degrade truthfully.
 
 ## Done Definition
 
-The Eve adapter package is done only when:
+Eve is at parity with this spec only when:
 
-1. `packages/adapters/eve` is the canonical shared adapter package
-2. it preserves the latest proven Eve adapter customer behavior
-3. it uses the current Go `DefineAdapter(...)` contract
-4. it emits canonical inbound records for messages, reactions, and membership
-5. it supports setup, health, accounts, backfill, monitor, and send
-6. it is buildable, testable, package-valid, and releasable from the package
-   root
-7. Nex can install and run it without depending on the old direct external
-   binary path
+1. a macOS edge can pair with Nex and keep a low-latency live sync running
+2. backfill and live sync emit the same canonical record model
+3. Nex clients on Android, Linux, and web can read and act on Eve threads only
+   through Nex
+4. rich actions are capability-gated and routed through the correct edge
+5. one Nex core can manage multiple Eve connections across hosts and user
+   sessions
+6. attachment access works remotely through Nex without direct Mac paths
+7. recovery from restart or temporary edge loss is replay-safe and truthful

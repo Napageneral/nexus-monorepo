@@ -3,6 +3,7 @@ package etl
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -21,6 +22,9 @@ type Message struct {
 	ReplyToGUID           sql.NullString
 	ChatID                int64  // Source chat ROWID from chat_message_join
 	ChatIdentifier        string // From chat.chat_identifier (not unique in chat.db)
+	ChatDisplayName       sql.NullString
+	ChatServiceName       sql.NullString
+	ChatStyle             sql.NullInt64
 }
 
 // SyncMessages copies messages from chat.db to messages table in eve.db
@@ -80,7 +84,10 @@ func (c *ChatDB) GetMessages(sinceRowID int64) ([]Message, error) {
 			m.associated_message_guid,
 			m.reply_to_guid,
 			cmj.chat_id,
-			c.chat_identifier
+			c.chat_identifier,
+			c.display_name,
+			c.service_name,
+			c.style
 		FROM message m
 		INNER JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
 		INNER JOIN chat c ON c.ROWID = cmj.chat_id
@@ -129,6 +136,9 @@ func (c *ChatDB) GetMessages(sinceRowID int64) ([]Message, error) {
 			&msg.ReplyToGUID,
 			&msg.ChatID,
 			&msg.ChatIdentifier,
+			&msg.ChatDisplayName,
+			&msg.ChatServiceName,
+			&msg.ChatStyle,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan message: %w", err)
 		}
@@ -137,6 +147,126 @@ func (c *ChatDB) GetMessages(sinceRowID int64) ([]Message, error) {
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating messages: %w", err)
+	}
+
+	return messages, nil
+}
+
+// GetMaxEligibleMessageRowID returns the highest plain-message ROWID that is
+// currently visible through the same joined shape used by the live delta path.
+func (c *ChatDB) GetMaxEligibleMessageRowID() (int64, error) {
+	query := `
+		SELECT COALESCE(MAX(m.ROWID), 0)
+		FROM message m
+		INNER JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+		INNER JOIN chat c ON c.ROWID = cmj.chat_id
+		WHERE (m.type < 2000 OR m.type > 2005 OR m.type IS NULL)
+		  AND NOT (
+		    m.type = 0
+		    AND m.associated_message_guid IS NOT NULL
+		    AND m.associated_message_guid != ''
+		    AND m.text IS NOT NULL
+		    AND m.text != ''
+		    AND (
+		      m.text LIKE 'Loved %' OR
+		      m.text LIKE 'Liked %' OR
+		      m.text LIKE 'Disliked %' OR
+		      m.text LIKE 'Laughed at %' OR
+		      m.text LIKE 'Emphasized %' OR
+		      m.text LIKE 'Questioned %'
+		    )
+		  )
+		  AND (m.group_action_type IS NULL OR m.group_action_type = 0)
+	`
+
+	var maxRowID int64
+	if err := c.db.QueryRow(query).Scan(&maxRowID); err != nil {
+		return 0, fmt.Errorf("failed to query max eligible message ROWID: %w", err)
+	}
+	return maxRowID, nil
+}
+
+// GetMessagesByGUIDs reads an explicit set of messages from chat.db, regardless
+// of the hot-loop ROWID watermark. This is used to backfill older source
+// messages that recent reactions still reference.
+func (c *ChatDB) GetMessagesByGUIDs(guids []string) ([]Message, error) {
+	if len(guids) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, 0, len(guids))
+	args := make([]any, 0, len(guids))
+	for _, guid := range guids {
+		trimmed := strings.TrimSpace(guid)
+		if trimmed == "" {
+			continue
+		}
+		placeholders = append(placeholders, "?")
+		args = append(args, trimmed)
+	}
+	if len(placeholders) == 0 {
+		return nil, nil
+	}
+
+	query := `
+		SELECT
+			m.ROWID,
+			m.guid,
+			m.text,
+			m.attributedBody,
+			m.handle_id,
+			m.date,
+			m.is_from_me,
+			m.type,
+			m.service,
+			m.associated_message_guid,
+			m.reply_to_guid,
+			cmj.chat_id,
+			c.chat_identifier,
+			c.display_name,
+			c.service_name,
+			c.style
+		FROM message m
+		INNER JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+		INNER JOIN chat c ON c.ROWID = cmj.chat_id
+		WHERE m.guid IN (` + joinPlaceholders(placeholders) + `)
+		ORDER BY m.ROWID
+	`
+
+	rows, err := c.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query messages by guid: %w", err)
+	}
+	defer rows.Close()
+
+	var messages []Message
+	for rows.Next() {
+		var msg Message
+		if err := rows.Scan(
+			&msg.ROWID,
+			&msg.GUID,
+			&msg.Text,
+			&msg.AttributedBody,
+			&msg.HandleID,
+			&msg.Date,
+			&msg.IsFromMe,
+			&msg.MessageType,
+			&msg.ServiceName,
+			&msg.AssociatedMessageGUID,
+			&msg.ReplyToGUID,
+			&msg.ChatID,
+			&msg.ChatIdentifier,
+			&msg.ChatDisplayName,
+			&msg.ChatServiceName,
+			&msg.ChatStyle,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan message by guid: %w", err)
+		}
+		messages = append(messages, msg)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating messages by guid: %w", err)
 	}
 
 	return messages, nil

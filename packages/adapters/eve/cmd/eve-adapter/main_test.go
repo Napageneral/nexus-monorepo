@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 
 	nexadapter "github.com/nexus-project/adapter-sdk-go"
@@ -182,5 +183,38 @@ func TestBuildEveSetupResultLeavesAccountContactUnsetWhenUnknown(t *testing.T) {
 	}
 	if result.Status != nexadapter.SetupStatusRequiresInput {
 		t.Fatalf("expected requires_input setup, got %s", result.Status)
+	}
+}
+
+func TestConvertWarehouseMessageUsesSessionAccountMetadata(t *testing.T) {
+	oldIdentity := cachedSelfIdentity
+	oldFullName := cachedFullName
+	defer func() {
+		cachedSelfIdentity = oldIdentity
+		cachedFullName = oldFullName
+	}()
+
+	cachedSelfIdentity = &selfIdentity{
+		Name:   "Tyler Brandt",
+		Emails: []string{"tyler@example.com"},
+	}
+	cachedFullName = "Tyler Brandt"
+
+	record := convertWarehouseMessage(
+		warehouseRow{
+			ID:             1,
+			GUID:           "msg-1",
+			Timestamp:      sql.NullString{String: "2026-03-31 00:00:00+00:00", Valid: true},
+			IsFromMe:       true,
+			ChatID:         1,
+			ChatIdentifier: "chat-1",
+			ServiceName:    sql.NullString{String: "iMessage", Valid: true},
+		},
+		nil,
+		"tyler@example.com",
+	)
+
+	if got := record.Payload.Metadata["account"]; got != "tyler@example.com" {
+		t.Fatalf("expected session account metadata, got %#v", got)
 	}
 }

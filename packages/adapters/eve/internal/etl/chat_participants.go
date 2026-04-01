@@ -20,7 +20,8 @@ type ChatParticipant struct {
 //     but the warehouse schema currently treats chat_identifier as UNIQUE.
 //     So we map participants by chat_identifier -> canonical warehouse chats.id.
 //
-// Note: contacts.id in the warehouse is the chat.db handle ROWID (see SyncHandles).
+// Participant sync resolves handle ROWIDs to the warehouse's canonical contact IDs,
+// which may differ from the raw handle ROWID after identifier dedupe.
 func SyncChatParticipants(chatDB *ChatDB, warehouseDB *sql.DB) (int, error) {
 	participants, err := chatDB.GetChatParticipants()
 	if err != nil {
@@ -36,29 +37,10 @@ func SyncChatParticipants(chatDB *ChatDB, warehouseDB *sql.DB) (int, error) {
 	}
 	defer tx.Rollback()
 
-	// Build chat_identifier -> warehouse chat id mapping
-	chatMap, err := buildChatIdentifierMap(tx)
+	synced, err := syncChatParticipants(tx, chatDB, participants)
 	if err != nil {
-		return 0, fmt.Errorf("failed to build chat map: %w", err)
+		return 0, err
 	}
-
-	synced := 0
-	for _, p := range participants {
-		warehouseChatID, ok := chatMap[p.ChatIdentifier]
-		if !ok {
-			// Chat wasn't loaded; should be rare if SyncChats ran
-			continue
-		}
-		if _, err := tx.Exec(
-			`INSERT OR IGNORE INTO chat_participants (chat_id, contact_id) VALUES (?, ?)`,
-			warehouseChatID,
-			p.HandleID,
-		); err != nil {
-			return 0, fmt.Errorf("failed to insert chat_participant (chat=%d, contact=%d): %w", warehouseChatID, p.HandleID, err)
-		}
-		synced++
-	}
-
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("failed to commit transaction: %w", err)
 	}
@@ -116,4 +98,72 @@ func buildChatIdentifierMap(tx *sql.Tx) (map[string]int64, error) {
 		return nil, fmt.Errorf("error iterating chat map: %w", err)
 	}
 	return m, nil
+}
+
+func syncChatParticipants(tx *sql.Tx, chatDB *ChatDB, participants []ChatParticipant) (int, error) {
+	chatMap, err := buildChatIdentifierMap(tx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to build chat map: %w", err)
+	}
+
+	handleMap, err := loadWarehouseHandleMapForChatParticipants(tx, chatDB, participants)
+	if err != nil {
+		return 0, err
+	}
+
+	synced := 0
+	for _, participant := range participants {
+		warehouseChatID, ok := chatMap[participant.ChatIdentifier]
+		if !ok {
+			continue
+		}
+		warehouseContactID, ok := handleMap[participant.HandleID]
+		if !ok {
+			continue
+		}
+		if _, err := tx.Exec(
+			`INSERT OR IGNORE INTO chat_participants (chat_id, contact_id) VALUES (?, ?)`,
+			warehouseChatID,
+			warehouseContactID,
+		); err != nil {
+			return 0, fmt.Errorf("failed to insert chat_participant (chat=%d, contact=%d): %w", warehouseChatID, warehouseContactID, err)
+		}
+		synced++
+	}
+	return synced, nil
+}
+
+func loadWarehouseHandleMapForChatParticipants(
+	tx *sql.Tx,
+	chatDB *ChatDB,
+	participants []ChatParticipant,
+) (map[int64]int64, error) {
+	rowIDs := uniqueChatParticipantHandleRowIDs(participants)
+	if len(rowIDs) == 0 {
+		return map[int64]int64{}, nil
+	}
+	handles, err := chatDB.GetHandlesByRowIDs(rowIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read participant handles: %w", err)
+	}
+	return buildWarehouseHandleMapForHandles(tx, handles)
+}
+
+func uniqueChatParticipantHandleRowIDs(participants []ChatParticipant) []int64 {
+	if len(participants) == 0 {
+		return nil
+	}
+	rowIDs := make([]int64, 0, len(participants))
+	seen := make(map[int64]struct{}, len(participants))
+	for _, participant := range participants {
+		if participant.HandleID <= 0 {
+			continue
+		}
+		if _, ok := seen[participant.HandleID]; ok {
+			continue
+		}
+		seen[participant.HandleID] = struct{}{}
+		rowIDs = append(rowIDs, participant.HandleID)
+	}
+	return rowIDs
 }

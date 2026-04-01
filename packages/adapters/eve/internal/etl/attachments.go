@@ -19,58 +19,81 @@ type Attachment struct {
 	MessageGUID string // From message_attachment_join + message
 }
 
-// SyncAttachments copies attachments from chat.db to attachments table in eve.db
-// Reads attachments via message_attachment_join and maps to messages by guid
+// SyncAttachments copies attachments from chat.db to attachments table in eve.db.
+// Reads attachments via message_attachment_join and maps to messages by guid.
 // Returns the number of attachments synced
-func SyncAttachments(chatDB *ChatDB, warehouseDB *sql.DB) (int, error) {
-	// Read attachments from chat.db
-	attachments, err := chatDB.GetAttachments()
+func SyncAttachments(chatDB *ChatDB, warehouseDB *sql.DB, sinceRowID int64) (int, error) {
+	result, err := syncAttachmentsDeltaResult(chatDB, warehouseDB, sinceRowID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to read attachments: %w", err)
+		return 0, err
 	}
+	return result.Count, nil
+}
+
+func syncAttachmentsDeltaResult(chatDB *ChatDB, warehouseDB *sql.DB, sinceRowID int64) (hotSyncRowIDResult, error) {
+	// Read attachments from chat.db
+	attachments, err := chatDB.GetAttachmentsSince(sinceRowID)
+	if err != nil {
+		return hotSyncRowIDResult{}, fmt.Errorf("failed to read attachments: %w", err)
+	}
+	result := hotSyncRowIDResult{}
 
 	if len(attachments) == 0 {
-		return 0, nil
+		return result, nil
 	}
 
 	// Begin transaction for atomic writes
 	tx, err := warehouseDB.Begin()
 	if err != nil {
-		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+		return hotSyncRowIDResult{}, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
 	// Build message guid -> message id mapping
 	messageMap, err := buildMessageMap(tx)
 	if err != nil {
-		return 0, fmt.Errorf("failed to build message map: %w", err)
+		return hotSyncRowIDResult{}, fmt.Errorf("failed to build message map: %w", err)
 	}
 
 	// Insert attachments
 	syncedCount := 0
+	frontierBlocked := false
 	for _, att := range attachments {
 		messageID, ok := messageMap[att.MessageGUID]
 		if !ok {
-			// Skip if message not found (message may not have been synced yet)
+			// Do not advance past the first attachment whose message cannot yet be
+			// resolved in the warehouse. Later rows may already be idempotent, but
+			// preserving a contiguous frontier avoids relying on replay to recover
+			// this gap.
+			frontierBlocked = true
 			continue
 		}
 
 		if err := insertAttachment(tx, &att, messageID); err != nil {
-			return 0, fmt.Errorf("failed to insert attachment %d: %w", att.ROWID, err)
+			return hotSyncRowIDResult{}, fmt.Errorf("failed to insert attachment %d: %w", att.ROWID, err)
 		}
 		syncedCount++
+		if !frontierBlocked {
+			result.FrontierID = att.ROWID
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("failed to commit transaction: %w", err)
+		return hotSyncRowIDResult{}, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	return syncedCount, nil
+	result.Count = syncedCount
+	return result, nil
 }
 
-// GetAttachments reads attachments from chat.db via message_attachment_join
-// Joins with message table to get message guid for foreign key mapping
+// GetAttachments reads attachments from chat.db via message_attachment_join.
+// Joins with message table to get message guid for foreign key mapping.
 func (c *ChatDB) GetAttachments() ([]Attachment, error) {
+	return c.GetAttachmentsSince(0)
+}
+
+// GetAttachmentsSince reads attachments from chat.db with an optional ROWID watermark.
+func (c *ChatDB) GetAttachmentsSince(sinceRowID int64) ([]Attachment, error) {
 	query := `
 		SELECT
 			a.ROWID,
@@ -85,10 +108,11 @@ func (c *ChatDB) GetAttachments() ([]Attachment, error) {
 		FROM attachment a
 		INNER JOIN message_attachment_join maj ON a.ROWID = maj.attachment_id
 		INNER JOIN message m ON maj.message_id = m.ROWID
+		WHERE a.ROWID > ?
 		ORDER BY a.ROWID
 	`
 
-	rows, err := c.db.Query(query)
+	rows, err := c.db.Query(query, sinceRowID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query attachments: %w", err)
 	}
@@ -118,6 +142,28 @@ func (c *ChatDB) GetAttachments() ([]Attachment, error) {
 	}
 
 	return attachments, nil
+}
+
+// GetMaxObservedAttachmentRowID returns the highest attachment ROWID currently
+// visible through the joined live delta query.
+func (c *ChatDB) GetMaxObservedAttachmentRowID() (int64, error) {
+	query := `
+		SELECT COALESCE(MAX(a.ROWID), 0)
+		FROM attachment a
+		INNER JOIN message_attachment_join maj ON a.ROWID = maj.attachment_id
+		INNER JOIN message m ON maj.message_id = m.ROWID
+	`
+
+	var maxRowID int64
+	if err := c.db.QueryRow(query).Scan(&maxRowID); err != nil {
+		return 0, fmt.Errorf("failed to query max observed attachment ROWID: %w", err)
+	}
+	return maxRowID, nil
+}
+
+// GetMaxAttachmentRowID returns the maximum ROWID from the attachment table.
+func (c *ChatDB) GetMaxAttachmentRowID() (int64, error) {
+	return c.getMaxRowID("attachment")
 }
 
 // buildMessageMap creates a mapping from message guid to message id

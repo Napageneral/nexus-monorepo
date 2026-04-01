@@ -7,14 +7,16 @@ import (
 
 // SyncResult contains statistics from a full ETL sync operation
 type SyncResult struct {
-	HandlesCount       int
-	ChatsCount         int
-	MessagesCount      int
-	ReactionsCount     int
-	MembershipCount    int
-	AttachmentsCount   int
-	ConversationsCount int
-	MaxMessageRowID    int64
+	HandlesCount          int
+	ChatsCount            int
+	MessagesCount         int
+	MessageUpdatesCount   int
+	ReactionsCount        int
+	ReactionRemovalsCount int
+	MembershipCount       int
+	AttachmentsCount      int
+	ConversationsCount    int
+	MaxMessageRowID       int64
 }
 
 // FullSync runs the complete ETL pipeline:
@@ -58,6 +60,13 @@ func FullSync(chatDB *ChatDB, warehouseDB *sql.DB, sinceRowID int64) (*SyncResul
 	}
 	result.MessagesCount = messagesCount
 
+	// Step 3b: Sync in-place message edits/retractions
+	messageUpdatesCount, err := SyncMessageUpdatesDelta(chatDB, warehouseDB, 0)
+	if err != nil {
+		return nil, fmt.Errorf("message update sync failed: %w", err)
+	}
+	result.MessageUpdatesCount = messageUpdatesCount
+
 	// Step 4: Sync reactions (requires messages to exist first)
 	reactionsCount, err := SyncReactions(chatDB, warehouseDB, sinceRowID)
 	if err != nil {
@@ -65,7 +74,14 @@ func FullSync(chatDB *ChatDB, warehouseDB *sql.DB, sinceRowID int64) (*SyncResul
 	}
 	result.ReactionsCount = reactionsCount
 
-	// Step 4b: Sync membership events (requires messages to exist first)
+	// Step 4b: Sync reaction removals (requires messages and reactions to exist first)
+	reactionRemovalsCount, err := SyncReactionRemovalsDelta(chatDB, warehouseDB, 0)
+	if err != nil {
+		return nil, fmt.Errorf("reaction removal sync failed: %w", err)
+	}
+	result.ReactionRemovalsCount = reactionRemovalsCount
+
+	// Step 4c: Sync membership events (requires messages to exist first)
 	membershipCount, err := SyncMembershipEvents(chatDB, warehouseDB, sinceRowID)
 	if err != nil {
 		return nil, fmt.Errorf("membership sync failed: %w", err)
@@ -73,7 +89,7 @@ func FullSync(chatDB *ChatDB, warehouseDB *sql.DB, sinceRowID int64) (*SyncResul
 	result.MembershipCount = membershipCount
 
 	// Step 5: Sync attachments (requires messages to exist first)
-	attachmentsCount, err := SyncAttachments(chatDB, warehouseDB)
+	attachmentsCount, err := SyncAttachments(chatDB, warehouseDB, 0)
 	if err != nil {
 		return nil, fmt.Errorf("attachment sync failed: %w", err)
 	}

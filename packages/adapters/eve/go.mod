@@ -7,4 +7,6 @@ require (
 	github.com/nexus-project/adapter-sdk-go v0.0.0
 )
 
+require github.com/gorilla/websocket v1.5.3 // indirect
+
 replace github.com/nexus-project/adapter-sdk-go => ../nexus-adapter-sdks/nexus-adapter-sdk-go
