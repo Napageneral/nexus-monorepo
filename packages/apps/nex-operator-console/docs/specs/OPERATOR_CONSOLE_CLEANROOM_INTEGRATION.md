@@ -2,7 +2,7 @@
 
 **Status:** CANONICAL
 **Domain:** Operator Console — Integration Validation
-**Depends on:** sandbox-managed cleanroom execution, Playwright browser automation, shared proof capture, operator console v2 UI
+**Depends on:** sandbox-managed cleanroom execution, Playwright browser automation, shared proof capture, Operator Console UI
 
 ---
 
@@ -11,13 +11,13 @@
 An operator or developer can run a single command that:
 
 1. Creates a disposable Nex-backed proof environment on the Docker sandbox substrate
-2. Boots a fresh runtime under test and serves the operator console v2 UI
+2. Boots a fresh runtime under test and serves the Operator Console UI
 3. Launches a Playwright-driven browser that navigates the full console
 4. Exercises every page, tab, form, and modal against the live runtime
 5. Records the whole session, captures Playwright traces, and takes screenshots at key moments
 6. Produces a durable proof bundle with structured results, video, traces, and screenshots
 
-The proof bundle is the primary evidence that the v2 console works. A reviewer can:
+The proof bundle is the primary evidence that the Console works. A reviewer can:
 - Watch the video to see the full user journey
 - Open the Playwright trace in Trace Viewer for interactive replay with DOM snapshots
 - Review screenshots at key moments (page loads, form submissions, modal states)

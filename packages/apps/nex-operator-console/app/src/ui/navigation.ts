@@ -27,8 +27,15 @@ const TAB_PATHS: Record<Tab, string> = {
 };
 
 const PATH_TO_TAB = new Map(Object.entries(TAB_PATHS).map(([tab, path]) => [path, tab as Tab]));
-const MOUNTED_TAB_PATHS: Partial<Record<Tab, string>> = {
+const MOUNTED_TAB_PATHS: Record<Tab, string> = {
+  home: "/home",
   console: "/chat",
+  identity: "/identity",
+  agents: "/agents",
+  operations: "/operations",
+  memory: "/memory",
+  integrations: "/integrations",
+  system: "/system",
 };
 const MOUNTED_PATH_TO_TAB = new Map(
   Object.entries(MOUNTED_TAB_PATHS).map(([tab, route]) => [route, tab as Tab]),

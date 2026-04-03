@@ -18,6 +18,19 @@ export type AutomationMeeseeksEntry = {
   sampleSessionKey: string;
 };
 
+export type JobQueueEntry = {
+  id: string;
+  job_definition_id: string;
+  job_run_id?: string | null;
+  queue_status: string;
+  available_at?: string | null;
+  lease_expires_at?: string | null;
+  attempt_count?: number | null;
+  last_failure_detail?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 export type ScheduleState = {
   client: RuntimeBrowserClient | null;
   connected: boolean;
@@ -29,6 +42,7 @@ export type ScheduleState = {
   scheduleForm: ScheduleFormState;
   scheduleRunsJobId: string | null;
   scheduleRuns: ScheduleRunLogEntry[];
+  scheduleQueueEntries: JobQueueEntry[];
   scheduleBusy: boolean;
   automationMeeseeksLoading: boolean;
   automationMeeseeksError: string | null;
@@ -86,11 +100,13 @@ export async function loadScheduleJobs(state: ScheduleState) {
   state.scheduleLoading = true;
   state.scheduleError = null;
   try {
-    const [schedulesResponse] = await Promise.all([
+    const [schedulesResponse, , runsResponse, queueResponse] = await Promise.all([
       state.client.request<{
         schedules?: Array<Omit<ScheduleJob, "enabled"> & { enabled: number | boolean }>;
       }>("schedules.list", { limit: 500 }),
       loadJobDefinitions(state),
+      state.client.request<{ runs?: ScheduleRunLogEntry[] }>("jobs.runs.list", { limit: 50 }),
+      state.client.request<{ queue_entries?: JobQueueEntry[] }>("jobs.queue.list", { limit: 50 }),
     ]);
     const schedulesRaw = Array.isArray(schedulesResponse.schedules)
       ? schedulesResponse.schedules
@@ -101,6 +117,11 @@ export async function loadScheduleJobs(state: ScheduleState) {
     })) as ScheduleJob[];
     state.scheduleJobs = joinSchedulesWithJobs(schedules, state.scheduleJobDefinitions);
     state.scheduleStatus = computeScheduleStatus(state.scheduleJobs);
+    state.scheduleRunsJobId = null;
+    state.scheduleRuns = Array.isArray(runsResponse.runs) ? runsResponse.runs : [];
+    state.scheduleQueueEntries = Array.isArray(queueResponse.queue_entries)
+      ? queueResponse.queue_entries
+      : [];
   } catch (err) {
     state.scheduleError = String(err);
   } finally {

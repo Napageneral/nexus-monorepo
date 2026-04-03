@@ -17,19 +17,16 @@ export type RecordsPageProps = {
     channel: string;
     recordId: string;
     type: string;
-    status: string;
     preview: string;
     payload?: unknown;
     timestamp: number;
   }>;
   recordsLoading: boolean;
-  recordsTotal: number;
   recordsOffset: number;
   recordsLimit: number;
+  recordsHasMore: boolean;
   platformFilter: string;
-  statusFilter: string;
   onPlatformFilterChange: (platform: string) => void;
-  onStatusFilterChange: (status: string) => void;
   onRecordsPage: (offset: number) => void;
   expandedRecordId: string | null;
   onRecordExpand: (id: string | null) => void;
@@ -37,10 +34,10 @@ export type RecordsPageProps = {
   channels: Array<{
     id: string;
     platform: string;
-    name: string;
-    recordCount: number;
-    lastActivity: number;
-    status: string;
+    connectionId: string;
+    container: string;
+    thread: string;
+    createdAt: number;
   }>;
   channelsLoading: boolean;
   onChannelSelect: (channelId: string) => void;
@@ -55,7 +52,6 @@ export type RecordsPageProps = {
     type: string;
     preview: string;
     timestamp: number;
-    score?: number;
   }> | null;
   searchLoading: boolean;
   onSearchQueryChange: (query: string) => void;
@@ -84,23 +80,7 @@ function formatTimestamp(ts: number): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-function statusBadge(status: string) {
-  const s = status.toLowerCase();
-  if (s === "ingested") return html`<span class="v2-badge v2-badge--success">ingested</span>`;
-  if (s === "skipped") return html`<span class="v2-badge v2-badge--neutral">skipped</span>`;
-  if (s === "failed") return html`<span class="v2-badge v2-badge--danger">failed</span>`;
-  return html`<span class="v2-badge v2-badge--neutral">${status}</span>`;
-}
-
-function channelStatusBadge(status: string) {
-  const s = status.toLowerCase();
-  if (s === "active") return html`<span class="v2-badge v2-badge--success">active</span>`;
-  return html`<span class="v2-badge v2-badge--neutral">idle</span>`;
-}
-
-const PLATFORMS = ["All", "slack", "gmail", "github", "jira", "notion", "stripe", "salesforce", "hubspot", "asana"];
-const STATUSES = ["All", "ingested", "skipped", "failed"];
-const SEARCH_TYPES = ["All", "Messages", "Emails", "Commits", "Issues"];
+const PLATFORMS = ["All", "imessage", "slack", "gmail", "github", "jira", "dispatch", "git"];
 
 const selectStyle = `
   background: var(--v2-bg-nav-pill, rgba(255,255,255,0.06));
@@ -179,14 +159,6 @@ function renderFilterBar(props: RecordsPageProps) {
         ${PLATFORMS.map((p) => html`<option value=${p === "All" ? "" : p} ?selected=${props.platformFilter === (p === "All" ? "" : p)}>${p === "All" ? "All Platforms" : p}</option>`)}
       </select>
 
-      <select
-        style="${selectStyle}"
-        .value=${props.statusFilter}
-        @change=${(e: Event) => props.onStatusFilterChange((e.target as HTMLSelectElement).value)}
-      >
-        ${STATUSES.map((s) => html`<option value=${s === "All" ? "" : s} ?selected=${props.statusFilter === (s === "All" ? "" : s)}>${s === "All" ? "All Statuses" : s}</option>`)}
-      </select>
-
       <div style="flex: 1;"></div>
 
       <button class="v2-btn v2-btn--secondary" @click=${props.onRefresh}>Refresh</button>
@@ -203,7 +175,7 @@ function renderExpandedPayload(payload: unknown) {
   }
   return html`
     <tr>
-      <td colspan="7" style="padding: 0;">
+      <td colspan="6" style="padding: 0;">
         <div style="padding: var(--v2-space-4); background: var(--v2-bg-nav-pill, rgba(255,255,255,0.03));">
           <div class="v2-section-label" style="margin-bottom: var(--v2-space-2);">Record Payload</div>
           <pre class="v2-code-block" style="margin: 0; max-height: 320px; overflow: auto; font-size: var(--v2-text-xs, 12px);">${formatted}</pre>
@@ -215,14 +187,14 @@ function renderExpandedPayload(payload: unknown) {
 
 function renderPagination(props: RecordsPageProps) {
   const start = props.recordsOffset + 1;
-  const end = Math.min(props.recordsOffset + props.recordsLimit, props.recordsTotal);
+  const end = props.recordsOffset + props.records.length;
   const hasPrev = props.recordsOffset > 0;
-  const hasNext = props.recordsOffset + props.recordsLimit < props.recordsTotal;
+  const hasNext = props.recordsHasMore;
 
   return html`
     <div style="display:flex; justify-content:space-between; align-items:center; padding: var(--v2-space-3) 0;">
       <span class="v2-muted" style="font-size: var(--v2-text-xs);">
-        Showing ${start}\u2013${end} of ${props.recordsTotal.toLocaleString()}
+        Showing ${start}\u2013${end}${props.recordsHasMore ? "+" : ""}
       </span>
       <div style="display:flex; gap:8px;">
         <button
@@ -259,7 +231,6 @@ function renderBrowseTab(props: RecordsPageProps) {
         <td><span class="v2-muted" title="${rec.channel}">${truncate(rec.channel, 24)}</span></td>
         <td><span class="v2-mono" style="font-size: var(--v2-text-xs);" title="${rec.recordId}">${truncate(rec.recordId, 16)}</span></td>
         <td>${rec.type}</td>
-        <td>${statusBadge(rec.status)}</td>
         <td><span class="v2-faint" style="font-size: var(--v2-text-xs);">${truncate(rec.preview, 60)}</span></td>
       </tr>
     `);
@@ -282,7 +253,7 @@ function renderBrowseTab(props: RecordsPageProps) {
 
     <div class="v2-card" style="padding: 0; overflow: hidden;">
       ${renderV2Table({
-        headers: ["Time", "Platform", "Channel", "Record ID", "Type", "Status", "Preview"],
+        headers: ["Time", "Platform", "Channel", "Record ID", "Type", "Preview"],
         rows,
         empty: "No records ingested yet. Records appear here when your connectors observe external data.",
         loading: props.recordsLoading,
@@ -299,16 +270,17 @@ function renderChannelsTab(props: RecordsPageProps) {
   const rows = props.channels.map(
     (ch) => html`
       <tr style="cursor: pointer;" @click=${() => props.onChannelSelect(ch.id)}>
-        <td><span class="v2-strong" title="${ch.name}">${truncate(ch.name, 32)}</span></td>
+        <td><span class="v2-mono">${truncate(ch.id, 16)}</span></td>
         <td>
           <div style="display:flex; align-items:center; gap:6px;">
             ${renderPlatformIcon(ch.platform, 18)}
             <span>${ch.platform}</span>
           </div>
         </td>
-        <td>${ch.recordCount.toLocaleString()}</td>
-        <td><span class="v2-muted" style="font-size: var(--v2-text-xs);">${formatTimestamp(ch.lastActivity)}</span></td>
-        <td>${channelStatusBadge(ch.status)}</td>
+        <td><span class="v2-muted" title="${ch.connectionId}">${truncate(ch.connectionId, 18)}</span></td>
+        <td title="${ch.container}">${truncate(ch.container, 24)}</td>
+        <td title="${ch.thread}">${truncate(ch.thread, 24)}</td>
+        <td><span class="v2-muted" style="font-size: var(--v2-text-xs);">${formatTimestamp(ch.createdAt)}</span></td>
       </tr>
     `,
   );
@@ -326,7 +298,7 @@ function renderChannelsTab(props: RecordsPageProps) {
 
     <div class="v2-card" style="padding: 0; overflow: hidden;">
       ${renderV2Table({
-        headers: ["Channel", "Platform", "Records", "Last Activity", "Status"],
+        headers: ["Channel ID", "Platform", "Connection", "Container", "Thread", "Created"],
         rows,
         empty: "No channels observed yet.",
         loading: props.channelsLoading,
@@ -373,7 +345,7 @@ function renderSearchTab(props: RecordsPageProps) {
         .value=${props.searchType}
         @change=${(e: Event) => props.onSearchTypeChange((e.target as HTMLSelectElement).value)}
       >
-        ${SEARCH_TYPES.map((t) => html`<option value=${t} ?selected=${props.searchType === t}>${t}</option>`)}
+        ${PLATFORMS.map((t) => html`<option value=${t === "All" ? "" : t} ?selected=${props.searchType === (t === "All" ? "" : t)}>${t === "All" ? "All platforms" : t}</option>`)}
       </select>
 
       <button
@@ -406,20 +378,13 @@ function renderSearchTab(props: RecordsPageProps) {
                       <span class="v2-muted" style="font-size: var(--v2-text-xs);">${r.channel}</span>
                       <span class="v2-faint" style="font-size: var(--v2-text-2xs);">\u00b7</span>
                       <span class="v2-faint" style="font-size: var(--v2-text-2xs);">${formatTimestamp(r.timestamp)}</span>
-                      ${r.score != null
-                        ? html`
-                            <span style="margin-left: auto;" class="v2-badge v2-badge--neutral" title="Relevance score">
-                              ${Math.round(r.score * 100)}%
-                            </span>
-                          `
-                        : nothing}
+                      <span style="margin-left: auto;" class="v2-badge v2-badge--neutral">${r.type}</span>
                     </div>
                     <div style="font-size: var(--v2-text-sm); line-height: 1.5; margin-bottom: var(--v2-space-2);">
                       ${r.preview}
                     </div>
                     <div style="display:flex; align-items:center; gap:8px;">
                       <span class="v2-mono v2-faint" style="font-size: var(--v2-text-2xs);">${truncate(r.recordId, 20)}</span>
-                      <span class="v2-badge v2-badge--neutral" style="font-size: var(--v2-text-2xs);">${r.type}</span>
                     </div>
                   </div>
                 `)}

@@ -1083,7 +1083,7 @@ export type MonitorOperation = {
   permission: string;
   callerEntityId: string | null;
   phase: "started" | "completed" | "failed";
-  startedAt: number;
+  startedAt: number | null;
   latencyMs: number | null;
   error: string | null;
 };

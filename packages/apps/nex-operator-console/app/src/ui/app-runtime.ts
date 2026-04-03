@@ -220,7 +220,7 @@ function handleRuntimeEventUnsafe(host: RuntimeHost, evt: RuntimeEventFrame) {
     }
   }
 
-  // ─── New event listeners for v2 UI reactivity ───────────────────────
+  // ─── New event listeners for console UI reactivity ──────────────────
 
   // Agent lifecycle — refresh agents list when agents are created/deleted
   if (evt.event === "agent.created" || evt.event === "agent.deleted") {

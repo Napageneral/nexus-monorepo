@@ -3,10 +3,15 @@ import type { AppViewState } from "../ui/app-view-state.ts";
 import { icons } from "../ui/icons.ts";
 import { loadAgents, createAgent, deriveAgentWorkspaceBindingId } from "../ui/controllers/agents.ts";
 import {
+  clearIdentityEntityDetail,
+  clearIdentityGroupDetail,
+  loadIdentityEntityDetail,
+  loadIdentityGroupDetail,
   loadIdentitySurface,
   resolveIdentityMergeCandidate,
 } from "../ui/controllers/identity.ts";
 import { loadIntegrations } from "../ui/controllers/integrations.ts";
+import { loadRecords, refreshRecordsSurface, searchRecords } from "../ui/controllers/records.ts";
 import {
   loadMemoryEntityDetail,
   loadMemoryEpisodeInspector,
@@ -28,7 +33,15 @@ import { renderJobsPage, type JobsPageProps } from "./pages/jobs.ts";
 import { renderRecordsPage, type RecordsPageProps } from "./pages/records.ts";
 import { renderIdentityPage, type IdentityPageProps } from "./pages/identity.ts";
 import { renderMemoryPage, type MemoryPageProps } from "./pages/memory.ts";
-import { V2_PRIMARY_TABS, V2_SECONDARY_TABS, v2IconForTab, v2TitleForTab, type V2Tab } from "./navigation.ts";
+import { loadScheduleJobs } from "../ui/controllers/schedules.ts";
+import {
+  V2_PRIMARY_TABS,
+  V2_SECONDARY_TABS,
+  v2IconForTab,
+  v2TabFromLegacy,
+  v2TitleForTab,
+  type V2Tab,
+} from "./navigation.ts";
 // User menu and workspace switcher available for future frontdoor integration
 // import { renderUserMenuDropdown, renderWorkspaceSwitcher } from "./components/dropdowns.ts";
 
@@ -138,18 +151,38 @@ function formatUptime(ms: number): string {
   return `${d}d ${h % 24}h`;
 }
 
+function resolveExplicitViewFromLocation(state: AppViewState): V2ActiveView | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const raw = new URL(window.location.href).searchParams.get("view")?.trim();
+  if (!raw) {
+    return null;
+  }
+  const view = raw as V2ActiveView;
+  if (view === "settings" && state.tab === "system") {
+    return view;
+  }
+  if (view === "records" && state.tab === "integrations") {
+    return view;
+  }
+  if (view === "connectors" && state.tab === "integrations") {
+    return view;
+  }
+  if (view === "monitor" && state.tab === "system") {
+    return view;
+  }
+  return null;
+}
+
 function resolveV2Tab(state: AppViewState): V2ActiveView {
   const t = (state as any).v2Tab as V2ActiveView | undefined;
   if (t) return t;
-  switch (state.tab) {
-    case "integrations": return "connectors";
-    case "agents": return "agents";
-    case "operations": return "jobs";
-    case "system": return "monitor";
-    case "identity": return "identity";
-    case "memory": return "memory";
-    default: return "connectors";
+  const explicit = resolveExplicitViewFromLocation(state);
+  if (explicit) {
+    return explicit;
   }
+  return v2TabFromLegacy(state.tab);
 }
 
 function legacyTabFor(tab: V2ActiveView): string {
@@ -166,6 +199,19 @@ function legacyTabFor(tab: V2ActiveView): string {
   }
 }
 
+function syncV2ViewParam(tab: V2ActiveView) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const url = new URL(window.location.href);
+  if (tab === "records" || tab === "connectors" || tab === "monitor" || tab === "settings") {
+    url.searchParams.set("view", tab);
+  } else {
+    url.searchParams.delete("view");
+  }
+  window.history.replaceState({}, "", url.toString());
+}
+
 function setV2Tab(state: AppViewState, tab: V2ActiveView) {
   (state as any).v2Tab = tab;
   const legacyTab = legacyTabFor(tab);
@@ -173,6 +219,7 @@ function setV2Tab(state: AppViewState, tab: V2ActiveView) {
     (state as any).tab = "__v2_force__";
   }
   state.setTab(legacyTab as any);
+  syncV2ViewParam(tab);
 }
 
 // ─── Nav tab button ──────────────────────────────────────────────────
@@ -358,7 +405,7 @@ function renderSettingsPage(state: AppViewState) {
 }
 
 // ─── Main render ─────────────────────────────────────────────────────
-export function renderAppV2(state: AppViewState) {
+export function renderConsoleApp(state: AppViewState) {
   const activeTab = resolveV2Tab(state);
   const basePath = (state as any).basePath ?? "";
   const isSettings = activeTab === "settings";
@@ -405,6 +452,7 @@ export function renderAppV2(state: AppViewState) {
       <main class="v2-main ${isSettings ? "v2-main--settings" : ""} ${isAgentDetail ? "v2-main--agent-detail" : ""}">
         ${activeTab === "connectors" ? renderConnectorsPage({
           loading: state.integrationsLoading,
+          loaded: (state as any).integrationsLoaded ?? false,
           error: state.integrationsError,
           adapters: state.integrationsAdapters,
           onRefresh: () => void loadIntegrations(state as any),
@@ -562,29 +610,42 @@ export function renderAppV2(state: AppViewState) {
         ${activeTab === "jobs" ? renderJobsPage({
           subTab: ((state as any)._v2JobsSubTab as JobsPageProps["subTab"]) ?? "overview",
           onSubTabChange: (tab: string) => { (state as any)._v2JobsSubTab = tab; state.requestUpdate(); },
-          definitions: (state as any).jobDefinitions ?? [],
+          definitions: (state.scheduleJobDefinitions ?? []).map((job) => ({
+            id: job.id,
+            name: job.name,
+            description: job.description ?? "",
+            createdAt: Date.parse(job.created_at),
+          })),
           definitionsLoading: state.scheduleLoading,
-          queueItems: [],
-          queueLoading: false,
+          queueItems: (state.scheduleQueueEntries ?? []).map((entry: any) => ({
+            id: entry.id ?? "",
+            jobId: entry.job_definition_id ?? "",
+            state: entry.queue_status ?? "unknown",
+            priority: entry.attempt_count ?? 0,
+            queuedAt: entry.created_at ? Date.parse(entry.created_at) : Date.now(),
+            leasedUntil: entry.lease_expires_at ? Date.parse(entry.lease_expires_at) : undefined,
+            attempts: entry.attempt_count ?? 0,
+          })),
+          queueLoading: state.scheduleLoading,
           queueFilter: (state as any)._v2JobsQueueFilter ?? "all",
           onQueueFilterChange: (f: string) => { (state as any)._v2JobsQueueFilter = f; state.requestUpdate(); },
           runs: (state.scheduleRuns ?? []).map((r: any) => ({
             id: r.id ?? r.runId ?? "",
-            jobId: r.jobId ?? "",
-            trigger: r.trigger ?? "schedule",
+            jobId: r.job_definition_id ?? r.jobId ?? "",
+            trigger: r.trigger_source ?? r.trigger ?? "schedule",
             status: r.status ?? "unknown",
-            startedAt: r.startedAt ?? r.startedAtMs ?? Date.now(),
-            durationMs: r.durationMs,
+            startedAt: r.started_at ? Date.parse(r.started_at) : (r.startedAt ?? r.startedAtMs ?? Date.now()),
+            durationMs: r.duration_ms ?? r.durationMs,
             output: r.output,
           })),
           runsLoading: state.scheduleLoading,
           schedules: state.scheduleJobs.map((j: any) => ({
             id: j.id ?? "",
-            name: j.name ?? j.id ?? "",
-            jobId: j.jobDefinitionId ?? j.jobId ?? "",
-            cron: j.cron ?? "",
-            nextRunAt: j.nextRunAtMs,
-            lastRunAt: j.lastRunAtMs,
+            name: j.name ?? j.job_name ?? j.id ?? "",
+            jobId: j.job_definition_id ?? j.jobDefinitionId ?? j.jobId ?? "",
+            cron: j.expression ?? j.cron ?? "",
+            nextRunAt: j.next_run_at ? Date.parse(j.next_run_at) : j.nextRunAtMs,
+            lastRunAt: j.last_run_at ? Date.parse(j.last_run_at) : j.lastRunAtMs,
             enabled: Boolean(j.enabled),
           })),
           schedulesLoading: state.scheduleLoading,
@@ -601,35 +662,81 @@ export function renderAppV2(state: AppViewState) {
             if (job) { import("../ui/controllers/schedules.ts").then(m => m.removeScheduleJob(state as any, job)); }
           },
           onNewSchedule: () => { /* TODO: open schedule template modal */ },
-          onRefresh: () => { import("../ui/controllers/schedules.ts").then(m => m.loadScheduleRuns(state as any)); },
+          onRefresh: () => { void loadScheduleJobs(state as any); },
         }) : nothing}
 
         ${activeTab === "records" ? renderRecordsPage({
           subTab: ((state as any)._v2RecordsSubTab as RecordsPageProps["subTab"]) ?? "browse",
-          onSubTabChange: (tab: string) => { (state as any)._v2RecordsSubTab = tab; state.requestUpdate(); },
-          records: [],
-          recordsLoading: false,
-          recordsTotal: 0,
-          recordsOffset: 0,
-          recordsLimit: 50,
-          platformFilter: (state as any)._v2RecordsPlatform ?? "all",
-          statusFilter: (state as any)._v2RecordsStatus ?? "all",
-          onPlatformFilterChange: (p: string) => { (state as any)._v2RecordsPlatform = p; state.requestUpdate(); },
-          onStatusFilterChange: (s: string) => { (state as any)._v2RecordsStatus = s; state.requestUpdate(); },
-          onRecordsPage: () => {},
+          onSubTabChange: (tab: string) => {
+            (state as any)._v2RecordsSubTab = tab;
+            state.requestUpdate();
+            if (tab === "browse" || tab === "channels") {
+              void refreshRecordsSurface(state as any);
+            }
+          },
+          records: (state.recordsItems ?? []).map((record: any) => ({
+            id: record.id ?? "",
+            platform: record.platform ?? "unknown",
+            channel: record.thread_id ?? record.container_id ?? record.sender_contact_id ?? "unknown",
+            recordId: record.record_id ?? record.id ?? "",
+            type: record.content_type ?? "unknown",
+            preview:
+              record.content?.trim() ||
+              record.attachments?.[0]?.filename ||
+              record.metadata?.sender_name ||
+              "Attachment",
+            payload: record,
+            timestamp: record.timestamp ?? record.received_at ?? Date.now(),
+          })),
+          recordsLoading: state.recordsLoading ?? false,
+          recordsOffset: state.recordsOffset ?? 0,
+          recordsLimit: state.recordsLimit ?? 50,
+          recordsHasMore: state.recordsHasMore ?? false,
+          platformFilter: state.recordsPlatformFilter ?? "",
+          onPlatformFilterChange: (platform: string) => {
+            state.recordsPlatformFilter = platform;
+            void refreshRecordsSurface(state as any);
+          },
+          onRecordsPage: (offset: number) => { void loadRecords(state as any, offset); },
           expandedRecordId: (state as any)._v2RecordsExpanded ?? null,
           onRecordExpand: (id: string | null) => { (state as any)._v2RecordsExpanded = id; state.requestUpdate(); },
-          channels: [],
-          channelsLoading: false,
-          onChannelSelect: () => {},
-          searchQuery: (state as any)._v2RecordsSearchQuery ?? "",
-          searchType: (state as any)._v2RecordsSearchType ?? "all",
-          searchResults: null,
-          searchLoading: false,
-          onSearchQueryChange: (q: string) => { (state as any)._v2RecordsSearchQuery = q; state.requestUpdate(); },
-          onSearchTypeChange: (t: string) => { (state as any)._v2RecordsSearchType = t; state.requestUpdate(); },
-          onSearch: () => {},
-          onRefresh: () => {},
+          channels: (state.recordsChannels ?? []).map((channel: any) => ({
+            id: channel.id ?? "",
+            platform: channel.platform ?? "unknown",
+            connectionId: channel.connection_id ?? "",
+            container: channel.container_name ?? channel.container_id ?? "",
+            thread: channel.thread_name ?? channel.thread_id ?? "",
+            createdAt: channel.created_at ?? Date.now(),
+          })),
+          channelsLoading: state.recordsChannelsLoading ?? false,
+          onChannelSelect: (channelId: string) => {
+            const channel = (state.recordsChannels ?? []).find((entry: any) => entry.id === channelId);
+            if (!channel) {
+              return;
+            }
+            state.recordsPlatformFilter = channel.platform ?? "";
+            void loadRecords(state as any, 0);
+          },
+          searchQuery: state.recordsSearchQuery ?? "",
+          searchType: state.recordsSearchPlatform ?? "",
+          searchResults: (state.recordsSearchResults ?? null)?.map((record: any) => ({
+            id: record.id ?? "",
+            platform: record.platform ?? "unknown",
+            channel: record.thread_id ?? record.container_id ?? record.sender_contact_id ?? "unknown",
+            recordId: record.record_id ?? record.id ?? "",
+            type: record.content_type ?? "unknown",
+            preview:
+              record.content?.trim() ||
+              record.attachments?.[0]?.filename ||
+              record.metadata?.sender_name ||
+              "Attachment",
+            timestamp: record.timestamp ?? record.received_at ?? Date.now(),
+          })) ?? null,
+          searchLoading: state.recordsSearchLoading ?? false,
+          onSearchQueryChange: (q: string) => { state.recordsSearchQuery = q; state.requestUpdate(); },
+          onSearchTypeChange: (t: string) => { state.recordsSearchPlatform = t; state.requestUpdate(); },
+          onSearch: () => { void searchRecords(state as any); },
+          onRefresh: () => { void refreshRecordsSurface(state as any); },
         }) : nothing}
 
         ${activeTab === "settings" ? renderSettingsPage(state) : nothing}
@@ -639,11 +746,30 @@ export function renderAppV2(state: AppViewState) {
           onSubTabChange: (sub) => { (state as any)._v2IdentitySubTab = sub; state.tab = "__v2_force__" as any; state.setTab("identity" as any); },
           loading: state.identityLoading ?? false,
           error: state.identityError ?? null,
-          entities: ((state as any).identityEntities ?? []),
-          onEntitySelect: (id) => { (state as any)._v2IdentitySubTab = "entities"; state.tab = "__v2_force__" as any; state.setTab("identity" as any); },
+          entities: (state.identityEntities ?? []),
+          selectedEntityId: state.identitySelectedEntityId ?? null,
+          selectedEntity: state.identitySelectedEntity ?? null,
+          selectedEntityContacts: state.identitySelectedEntityContacts ?? [],
+          entityDetailLoading: state.identityEntityDetailLoading ?? false,
+          onEntitySelect: (id) => {
+            void loadIdentityEntityDetail(state as any, id);
+          },
+          onEntityClear: () => {
+            clearIdentityEntityDetail(state as any);
+          },
           contacts: (state as any).identityContacts ?? [],
           channels: (state as any).identityChannels ?? [],
           groups: (state as any).identityGroups ?? [],
+          selectedGroupId: state.identitySelectedGroupId ?? null,
+          selectedGroup: state.identitySelectedGroup ?? null,
+          groupMembers: state.identityGroupMembers ?? [],
+          groupDetailLoading: state.identityGroupDetailLoading ?? false,
+          onGroupSelect: (id) => {
+            void loadIdentityGroupDetail(state as any, id);
+          },
+          onGroupClear: () => {
+            clearIdentityGroupDetail(state as any);
+          },
           policies: (state as any).identityPolicies ?? [],
           mergeCandidates: state.identityMergeCandidates ?? [],
           mergeBusyId: state.identityMergeBusyId ?? null,
@@ -651,7 +777,15 @@ export function renderAppV2(state: AppViewState) {
             void resolveIdentityMergeCandidate(state, id, status);
           },
           onRefresh: () => {
-            void loadIdentitySurface(state as any);
+            void (async () => {
+              await loadIdentitySurface(state as any);
+              if (state.identitySelectedEntityId) {
+                await loadIdentityEntityDetail(state as any, state.identitySelectedEntityId);
+              }
+              if (state.identitySelectedGroupId) {
+                await loadIdentityGroupDetail(state as any, state.identitySelectedGroupId);
+              }
+            })();
           },
         } as IdentityPageProps) : nothing}
 

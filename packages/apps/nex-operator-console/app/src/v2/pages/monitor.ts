@@ -31,7 +31,10 @@ export type MonitorPageProps = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
-function formatTime(ts: number): string {
+function formatTime(ts: number | null): string {
+  if (ts == null) {
+    return "--";
+  }
   return new Date(ts).toLocaleTimeString();
 }
 

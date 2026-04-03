@@ -5,15 +5,22 @@ import type { AppViewState } from "./app-view-state.ts";
 import type { AclPermissionRequest } from "./controllers/acl-requests.ts";
 import type { InstalledApp, InstalledAppMethod } from "./controllers/apps.ts";
 import type {
+  IdentityEntity,
   IdentityChannel,
   IdentityContact,
   IdentityGroup,
+  IdentityGroupMember,
   IdentityMergeCandidate,
   IdentityPolicy,
 } from "./controllers/identity.ts";
 import type { IngressCredential } from "./controllers/ingress-credentials.ts";
 import type { AdapterAuthField, AdapterConnectionEntry } from "./controllers/integrations.ts";
-import type { AutomationMeeseeksEntry } from "./controllers/schedules.ts";
+import type {
+  RecordsChannelEntry,
+  RecordsEntry,
+  RecordsSearchEntry,
+} from "./controllers/records.ts";
+import type { AutomationMeeseeksEntry, JobQueueEntry } from "./controllers/schedules.ts";
 import type { SkillMessage } from "./controllers/skills.ts";
 import type { Tab } from "./navigation.ts";
 import type { RuntimeBrowserClient, RuntimeHelloOk } from "./runtime.ts";
@@ -77,8 +84,7 @@ import {
   handleFirstUpdated,
   handleUpdated,
 } from "./app-lifecycle.ts";
-import { renderApp } from "./app-render.ts";
-import { renderAppV2 } from "../v2/app-render-v2.ts";
+import { renderConsoleApp } from "../v2/app-render-v2.ts";
 import { connectRuntime as connectRuntimeInternal } from "./app-runtime.ts";
 import {
   exportLogs as exportLogsInternal,
@@ -183,11 +189,20 @@ export class NexusApp extends LitElement {
   @state() identityLoading = false;
   @state() identityError: string | null = null;
   @state() identityMergeBusyId: string | null = null;
+  @state() identityEntities: IdentityEntity[] = [];
   @state() identityContacts: IdentityContact[] = [];
   @state() identityChannels: IdentityChannel[] = [];
   @state() identityGroups: IdentityGroup[] = [];
   @state() identityPolicies: IdentityPolicy[] = [];
   @state() identityMergeCandidates: IdentityMergeCandidate[] = [];
+  @state() identitySelectedEntityId: string | null = null;
+  @state() identitySelectedEntity: IdentityEntity | null = null;
+  @state() identitySelectedEntityContacts: IdentityContact[] = [];
+  @state() identityEntityDetailLoading = false;
+  @state() identitySelectedGroupId: string | null = null;
+  @state() identitySelectedGroup: IdentityGroup | null = null;
+  @state() identityGroupMembers: IdentityGroupMember[] = [];
+  @state() identityGroupDetailLoading = false;
   @state() pendingRuntimeUrl: string | null = null;
 
   @state() configLoading = false;
@@ -227,6 +242,7 @@ export class NexusApp extends LitElement {
   @state() integrationsBusyAction: string | null = null;
   @state() integrationsError: string | null = null;
   @state() integrationsMessage: string | null = null;
+  @state() integrationsLoaded = false;
   @state() integrationsAdapters: AdapterConnectionEntry[] = [];
   @state() integrationsSelectedAdapter = "";
   @state() integrationsSessionId = "";
@@ -373,10 +389,25 @@ export class NexusApp extends LitElement {
   @state() scheduleForm: ScheduleFormState = { ...DEFAULT_SCHEDULE_FORM };
   @state() scheduleRunsJobId: string | null = null;
   @state() scheduleRuns: ScheduleRunLogEntry[] = [];
+  @state() scheduleQueueEntries: JobQueueEntry[] = [];
   @state() scheduleBusy = false;
   @state() automationMeeseeksLoading = false;
   @state() automationMeeseeksError: string | null = null;
   @state() automationMeeseeks: AutomationMeeseeksEntry[] = [];
+
+  @state() recordsLoading = false;
+  @state() recordsError: string | null = null;
+  @state() recordsItems: RecordsEntry[] = [];
+  @state() recordsOffset = 0;
+  @state() recordsLimit = 50;
+  @state() recordsHasMore = false;
+  @state() recordsPlatformFilter = "";
+  @state() recordsChannelsLoading = false;
+  @state() recordsChannels: RecordsChannelEntry[] = [];
+  @state() recordsSearchQuery = "";
+  @state() recordsSearchPlatform = "";
+  @state() recordsSearchLoading = false;
+  @state() recordsSearchResults: RecordsSearchEntry[] | null = null;
 
   @state() skillsLoading = false;
   @state() skillsReport: SkillStatusReport | null = null;
@@ -637,11 +668,6 @@ export class NexusApp extends LitElement {
   }
 
   render() {
-    // v2 UI — set USE_V2=true to enable new design
-    const useV2 = (this as any).__useV2 ?? true;
-    if (useV2) {
-      return renderAppV2(this as unknown as AppViewState);
-    }
-    return renderApp(this as unknown as AppViewState);
+    return renderConsoleApp(this as unknown as AppViewState);
   }
 }

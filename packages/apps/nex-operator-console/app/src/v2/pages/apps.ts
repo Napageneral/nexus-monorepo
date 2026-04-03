@@ -5,6 +5,7 @@ import { renderPlatformIcon } from "../components/platform-icons.ts";
 
 export type AppsPageProps = {
   loading: boolean;
+  loaded: boolean;
   error: string | null;
   adapters: AdapterConnectionEntry[];
   onRefresh: () => void;
@@ -49,11 +50,64 @@ function renderPlatformPicker() {
   `;
 }
 
+function renderConnectorsLoading() {
+  return html`
+    <div class="v2-page-header">
+      <div class="v2-page-header-row">
+        <div>
+          <h1 class="v2-page-title">Connectors</h1>
+          <p class="v2-page-subtitle">Loading your connected platforms from the runtime.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="v2-card" style="padding: var(--v2-space-6);">
+      <div class="v2-muted">Loading connectors…</div>
+    </div>
+  `;
+}
+
+function renderConnectorsError(error: string, props: AppsPageProps) {
+  return html`
+    <div class="v2-page-header">
+      <div class="v2-page-header-row">
+        <div>
+          <h1 class="v2-page-title">Connectors</h1>
+          <p class="v2-page-subtitle">The runtime did not return connector inventory successfully.</p>
+        </div>
+        <button class="v2-btn v2-btn--secondary" @click=${props.onRefresh}>Retry</button>
+      </div>
+    </div>
+
+    <div class="v2-card" style="padding: var(--v2-space-6); border-color: rgba(220, 38, 38, 0.2);">
+      <div class="v2-strong" style="margin-bottom: var(--v2-space-2);">Could not load connectors</div>
+      <div class="v2-muted">${error}</div>
+    </div>
+  `;
+}
+
 // ─── Status badge ────────────────────────────────────────────────────
 function statusBadge(status: string) {
   if (status === "connected") return html`<span class="v2-badge v2-badge--success">Active</span>`;
   if (status === "error") return html`<span class="v2-badge v2-badge--danger">Error</span>`;
   return html`<span class="v2-badge v2-badge--neutral">Disconnected</span>`;
+}
+
+function formatLastUsed(lastSync: number | null | undefined): string {
+  if (typeof lastSync !== "number" || !Number.isFinite(lastSync)) {
+    return "--";
+  }
+  const delta = Date.now() - lastSync;
+  if (delta < 60_000) return "less than a minute ago";
+  if (delta < 3_600_000) {
+    const minutes = Math.max(1, Math.floor(delta / 60_000));
+    return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  }
+  if (delta < 86_400_000) {
+    const hours = Math.floor(delta / 3_600_000);
+    return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  }
+  return new Date(lastSync).toLocaleString();
 }
 
 // ─── Connected table ─────────────────────────────────────────────────
@@ -80,12 +134,12 @@ function renderConnectedTable(adapters: AdapterConnectionEntry[], props: AppsPag
               <td>
                 <div class="v2-table-platform">
                   <div class="v2-table-platform-icon">${icons.plug}</div>
-                  <span class="v2-strong">${adapter.label || adapter.adapter}</span>
+                  <span class="v2-strong">${adapter.name || adapter.adapter}</span>
                 </div>
               </td>
               <td>${statusBadge(adapter.status)}</td>
               <td><span class="v2-faint">--</span></td>
-              <td><span class="v2-muted">${adapter.status === "connected" ? "less than a minute ago" : "--"}</span></td>
+              <td><span class="v2-muted">${formatLastUsed(adapter.lastSync)}</span></td>
             </tr>
           `)}
         </tbody>
@@ -126,8 +180,17 @@ export function renderAppsPage(props: AppsPageProps) {
   const searchIcon = html`<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`;
   const chevron = html`<svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>`;
 
-  // No apps connected → show the platform picker (reference image 01)
-  if (!hasAdapters) {
+  if ((props.loading || !props.loaded) && !hasAdapters && !props.error) {
+    return renderConnectorsLoading();
+  }
+
+  if (props.error && !hasAdapters) {
+    return renderConnectorsError(props.error, props);
+  }
+
+  // No apps connected → show the platform picker only when the runtime has
+  // successfully reported an empty inventory.
+  if (props.loaded && !hasAdapters) {
     return renderPlatformPicker();
   }
 
@@ -151,6 +214,15 @@ export function renderAppsPage(props: AppsPageProps) {
       <button class="v2-filter-pill">Tags ${chevron}</button>
       <button class="v2-filter-pill">Platforms ${chevron}</button>
     </div>
+
+    ${props.error
+      ? html`
+          <div class="v2-card" style="padding: var(--v2-space-4); margin-bottom: var(--v2-space-4); border-color: rgba(220, 38, 38, 0.2);">
+            <div class="v2-strong" style="margin-bottom: var(--v2-space-1);">Connector refresh partially failed</div>
+            <div class="v2-muted">${props.error}</div>
+          </div>
+        `
+      : nothing}
 
     ${renderConnectedTable(props.adapters, props)}
     ${renderGetStarted()}

@@ -5,6 +5,7 @@ import { renderAppsPage, type AppsPageProps } from "./apps.ts";
 function createProps(overrides: Partial<AppsPageProps> = {}): AppsPageProps {
   return {
     loading: false,
+    loaded: true,
     error: null,
     adapters: [],
     onRefresh: vi.fn(),
@@ -27,6 +28,32 @@ describe("apps page", () => {
     const grid = container.querySelector(".v2-platform-grid");
     expect(grid).not.toBeNull();
     expect(grid?.querySelectorAll(".v2-platform-icon").length).toBeGreaterThan(0);
+
+    document.body.removeChild(container);
+  });
+
+  it("renders a loading state before connector inventory resolves", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    render(renderAppsPage(createProps({ loaded: false, adapters: [] })), container);
+
+    expect(container.textContent).toContain("Loading connectors");
+    expect(container.querySelector(".v2-platform-picker")).toBeNull();
+
+    document.body.removeChild(container);
+  });
+
+  it("renders an error state when connector inventory fails", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    render(
+      renderAppsPage(createProps({ loaded: true, error: "runtime timeout", adapters: [] })),
+      container,
+    );
+
+    expect(container.textContent).toContain("Could not load connectors");
+    expect(container.textContent).toContain("runtime timeout");
+    expect(container.querySelector(".v2-platform-picker")).toBeNull();
 
     document.body.removeChild(container);
   });
@@ -60,7 +87,7 @@ describe("apps page", () => {
     expect(badge).not.toBeNull();
     expect(badge?.textContent).toContain("Active");
 
-    expect(container.textContent).toContain("gmail");
+    expect(container.textContent).toContain("Gmail");
 
     document.body.removeChild(container);
   });

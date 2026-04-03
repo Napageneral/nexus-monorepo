@@ -59,6 +59,25 @@ function toNullableNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function toTimestamp(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const numeric = Number(trimmed);
+  if (Number.isFinite(numeric)) {
+    return numeric;
+  }
+  const parsed = Date.parse(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function toOptionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -76,7 +95,7 @@ export function normalizeMonitorOperation(raw: RawMonitorOperation): import("../
     permission: toOptionalString(raw.permission) ?? "",
     callerEntityId: toOptionalString(raw.callerEntityId) ?? toOptionalString(raw.sender_entity_id),
     phase,
-    startedAt: toNumber(raw.startedAt ?? raw.created_at),
+    startedAt: toTimestamp(raw.startedAt ?? raw.created_at),
     latencyMs: toNullableNumber(raw.latencyMs ?? raw.latency_ms),
     error: toOptionalString(raw.error),
   };

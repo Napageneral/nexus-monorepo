@@ -130,6 +130,7 @@ export type IntegrationsState = {
   integrationsBusyAction: string | null;
   integrationsError: string | null;
   integrationsMessage: string | null;
+  integrationsLoaded: boolean;
   integrationsAdapters: AdapterConnectionEntry[];
   integrationsSelectedAdapter: string;
   integrationsSessionId: string;
@@ -343,7 +344,12 @@ export function setIntegrationsPayloadText(state: IntegrationsState, payloadText
 }
 
 export async function loadIntegrations(state: IntegrationsState): Promise<void> {
-  if (!state.client || !state.connected || state.integrationsLoading) {
+  if (state.integrationsLoading) {
+    return;
+  }
+  if (!state.client || !state.connected) {
+    state.integrationsLoaded = true;
+    state.integrationsError = "Runtime not connected.";
     return;
   }
   state.integrationsLoading = true;
@@ -384,6 +390,7 @@ export async function loadIntegrations(state: IntegrationsState): Promise<void> 
   } catch (error) {
     state.integrationsError = String(error);
   } finally {
+    state.integrationsLoaded = true;
     state.integrationsLoading = false;
   }
 }

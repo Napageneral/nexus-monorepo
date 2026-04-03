@@ -51,6 +51,27 @@ describe("monitor controller", () => {
     });
   });
 
+  it("treats missing timestamps as absent instead of epoch time", () => {
+    expect(
+      normalizeMonitorOperation({
+        request_id: "req-2",
+        method: "adapter.connections.list",
+        phase: "started",
+      }),
+    ).toEqual({
+      requestId: "req-2",
+      method: "adapter.connections.list",
+      action: "",
+      resource: "",
+      permission: "",
+      callerEntityId: null,
+      phase: "started",
+      startedAt: null,
+      latencyMs: null,
+      error: null,
+    });
+  });
+
   it("loads and normalizes monitor history", async () => {
     const request = vi.fn().mockResolvedValueOnce({
       operations: [

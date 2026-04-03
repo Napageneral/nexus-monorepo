@@ -21,6 +21,7 @@ function makeState(requestMock: ClientRequestMock): IntegrationsState {
     integrationsBusyAction: null,
     integrationsError: null,
     integrationsMessage: null,
+    integrationsLoaded: false,
     integrationsAdapters: [],
     integrationsSelectedAdapter: "",
     integrationsSessionId: "",
@@ -71,6 +72,7 @@ describe("integrations controller", () => {
     expect(state.integrationsAdapters).toHaveLength(2);
     expect(state.integrationsSelectedAdapter).toBe("github");
     expect(state.integrationsError).toBeNull();
+    expect(state.integrationsLoaded).toBe(true);
     expect(state.integrationsLoading).toBe(false);
   });
 

@@ -3,15 +3,22 @@ import type { CompactionStatus } from "./app-tool-stream.ts";
 import type { AclPermissionRequest } from "./controllers/acl-requests.ts";
 import type { InstalledApp, InstalledAppMethod } from "./controllers/apps.ts";
 import type {
+  IdentityEntity,
   IdentityChannel,
   IdentityContact,
   IdentityGroup,
+  IdentityGroupMember,
   IdentityMergeCandidate,
   IdentityPolicy,
 } from "./controllers/identity.ts";
 import type { IngressCredential } from "./controllers/ingress-credentials.ts";
 import type { AdapterAuthField, AdapterConnectionEntry } from "./controllers/integrations.ts";
-import type { AutomationMeeseeksEntry } from "./controllers/schedules.ts";
+import type {
+  RecordsChannelEntry,
+  RecordsEntry,
+  RecordsSearchEntry,
+} from "./controllers/records.ts";
+import type { AutomationMeeseeksEntry, JobQueueEntry } from "./controllers/schedules.ts";
 import type { SkillMessage } from "./controllers/skills.ts";
 import type { Tab } from "./navigation.ts";
 import type { RuntimeBrowserClient, RuntimeHelloOk } from "./runtime.ts";
@@ -117,11 +124,20 @@ export type AppViewState = {
   identityLoading: boolean;
   identityError: string | null;
   identityMergeBusyId: string | null;
+  identityEntities: IdentityEntity[];
   identityContacts: IdentityContact[];
   identityChannels: IdentityChannel[];
   identityGroups: IdentityGroup[];
   identityPolicies: IdentityPolicy[];
   identityMergeCandidates: IdentityMergeCandidate[];
+  identitySelectedEntityId: string | null;
+  identitySelectedEntity: IdentityEntity | null;
+  identitySelectedEntityContacts: IdentityContact[];
+  identityEntityDetailLoading: boolean;
+  identitySelectedGroupId: string | null;
+  identitySelectedGroup: IdentityGroup | null;
+  identityGroupMembers: IdentityGroupMember[];
+  identityGroupDetailLoading: boolean;
   pendingRuntimeUrl: string | null;
   configLoading: boolean;
   configRaw: string;
@@ -158,6 +174,7 @@ export type AppViewState = {
   integrationsBusyAction: string | null;
   integrationsError: string | null;
   integrationsMessage: string | null;
+  integrationsLoaded: boolean;
   integrationsAdapters: AdapterConnectionEntry[];
   integrationsSelectedAdapter: string;
   integrationsSessionId: string;
@@ -278,10 +295,24 @@ export type AppViewState = {
   scheduleForm: ScheduleFormState;
   scheduleRunsJobId: string | null;
   scheduleRuns: ScheduleRunLogEntry[];
+  scheduleQueueEntries: JobQueueEntry[];
   scheduleBusy: boolean;
   automationMeeseeksLoading: boolean;
   automationMeeseeksError: string | null;
   automationMeeseeks: AutomationMeeseeksEntry[];
+  recordsLoading: boolean;
+  recordsError: string | null;
+  recordsItems: RecordsEntry[];
+  recordsOffset: number;
+  recordsLimit: number;
+  recordsHasMore: boolean;
+  recordsPlatformFilter: string;
+  recordsChannelsLoading: boolean;
+  recordsChannels: RecordsChannelEntry[];
+  recordsSearchQuery: string;
+  recordsSearchPlatform: string;
+  recordsSearchLoading: boolean;
+  recordsSearchResults: RecordsSearchEntry[] | null;
   skillsLoading: boolean;
   skillsReport: SkillStatusReport | null;
   skillsError: string | null;
