@@ -1,25 +1,34 @@
 # Frontdoor Workplans
 
-This folder contains the active Frontdoor workplans.
+This subtree contains the active Frontdoor execution plans.
 
-## Active
+The current Frontdoor workplan model is flat rather than board-based: active
+workplans live directly in this folder, and historical workplans live under the
+archive root.
 
-- [WORKPLAN_FRONTDOOR_RELEASE_DEPENDENCY_METADATA_AND_INSTALL_PLANNING.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/WORKPLAN_FRONTDOOR_RELEASE_DEPENDENCY_METADATA_AND_INSTALL_PLANNING.md)
-- [WORKPLAN_FRONTDOOR_SERVER_ADAPTER_INSTALL_API.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/WORKPLAN_FRONTDOOR_SERVER_ADAPTER_INSTALL_API.md)
-- [WORKPLAN_FRONTDOOR_UI_SERVER_CLASS_AND_INSTALL_POLICY_ALIGNMENT.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/WORKPLAN_FRONTDOOR_UI_SERVER_CLASS_AND_INSTALL_POLICY_ALIGNMENT.md)
+## What Lives Here
 
-## Archive
+The active `workplans/` tree should contain only currently open Frontdoor
+execution plans.
 
-Completed and historical Frontdoor workplans live in:
+Use it for:
 
-- [/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive)
+- active hosted/package/install execution work
+- still-open UI or control-plane alignment work
+- sequencing and gap-closure plans tied to the current Frontdoor canon
 
-Recently archived as complete:
+## Reading Posture
 
-- [/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/WORKPLAN_FRONTDOOR_FINAL_AUDIT_READINESS.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/WORKPLAN_FRONTDOOR_FINAL_AUDIT_READINESS.md)
-- [/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/WORKPLAN_FRONTDOOR_REPO_HARD_CUT_AND_DOC_REALIGNMENT.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/WORKPLAN_FRONTDOOR_REPO_HARD_CUT_AND_DOC_REALIGNMENT.md)
-- [/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/FRONTDOOR_RUNTIME_OPERATOR_PACKAGE_AUTH_WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/FRONTDOOR_RUNTIME_OPERATOR_PACKAGE_AUTH_WORKPLAN.md)
-- [/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/FRONTDOOR_PROD_SIGNUP_AND_RUNTIME_PLATFORM_FAILURES_2026-03-16.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/FRONTDOOR_PROD_SIGNUP_AND_RUNTIME_PLATFORM_FAILURES_2026-03-16.md)
-- [/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/HOSTED_RUNTIME_TRUSTED_TOKEN_BOOTSTRAP_HARD_CUT_2026-03-17.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/HOSTED_RUNTIME_TRUSTED_TOKEN_BOOTSTRAP_HARD_CUT_2026-03-17.md)
-- [/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/WORKPLAN_FRONTDOOR_AWS_HOSTING_AND_PROVIDER_CLASS_CUTOVER.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/WORKPLAN_FRONTDOOR_AWS_HOSTING_AND_PROVIDER_CLASS_CUTOVER.md)
-- [/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/WORKPLAN_FRONTDOOR_AWS_DNS_CUTOVER_AND_HETZNER_RETIREMENT.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive/WORKPLAN_FRONTDOOR_AWS_DNS_CUTOVER_AND_HETZNER_RETIREMENT.md)
+Use this index to understand the folder shape, not to browse a curated list of
+every active or completed workplan.
+
+The filesystem is the source of leaf discovery.
+
+## Archive Boundary
+
+Historical and completed Frontdoor workplans live under:
+
+- [Workplans Archive](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/workplans/_archive)
+
+Use archive for historical context only, not as the default source of current
+execution truth.

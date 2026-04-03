@@ -1,41 +1,38 @@
 # Frontdoor Validation
 
-This subtree contains Frontdoor-specific validation artifacts.
+This subtree contains Frontdoor-specific active proof material.
 
-Use it for:
+Use it for current hosted proof contracts, validation entrypoints, and
+Frontdoor support scripts. Do not use it as a running ledger of every dated
+proof packet.
 
-- Frontdoor ladders
-- Frontdoor signoff drills
-- Frontdoor rollout validation
+## What Lives Here
 
-Cross-repo validation should live under:
+The active `validation/` tree currently includes:
 
-- `/Users/tyler/nexus/home/projects/nexus/docs/validation/`
+- hosted validation entrypoints and reusable proof drivers
+- provider- or compliance-specific active proof docs when they still define the
+  current proof path
+- validation support scripts kept beside the owning proof docs
 
-## Active
+## Reading Posture
 
-Primary hosted cleanroom entrypoints:
+Use this index to orient, then read the active proof doc or support script you
+actually need.
+
+The filesystem is the source of leaf discovery.
+
+Useful anchor entrypoints:
 
 - [FRONTDOOR_HOSTED_VALIDATION_ENTRYPOINT.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_HOSTED_VALIDATION_ENTRYPOINT.md)
 - [FRONTDOOR_HOSTED_PACKAGE_LIVE_TESTING.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_HOSTED_PACKAGE_LIVE_TESTING.md)
 
-Provider-specific or infrastructure-specific signoff remains active separately:
+## Archive Boundary
 
-- [FRONTDOOR_AWS_STANDARD_AND_COMPLIANT_LIVE_PROOF_2026-03-17.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_AWS_STANDARD_AND_COMPLIANT_LIVE_PROOF_2026-03-17.md)
-- [FRONTDOOR_AWS_COMPLIANT_LIVE_PROOF_2026-03-17.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_AWS_COMPLIANT_LIVE_PROOF_2026-03-17.md)
-- [FRONTDOOR_AWS_OPERATOR_ACCESS_BASELINE.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_AWS_OPERATOR_ACCESS_BASELINE.md)
-- [FRONTDOOR_CONFIGURED_TENANT_RUNTIME_AUTH_PROJECTION_VALIDATION.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_CONFIGURED_TENANT_RUNTIME_AUTH_PROJECTION_VALIDATION.md)
-- [FRONTDOOR_AWS_ACCOUNT_EVIDENCE_VALIDATION_2026-03-25.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_AWS_ACCOUNT_EVIDENCE_VALIDATION_2026-03-25.md)
-- [FRONTDOOR_HIPAA_READINESS_VALIDATION_2026-03-19.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_HIPAA_READINESS_VALIDATION_2026-03-19.md)
-- [FRONTDOOR_IAM_REVIEW_VALIDATION_2026-03-25.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_IAM_REVIEW_VALIDATION_2026-03-25.md)
-- [FRONTDOOR_LOG_AUDIT_VALIDATION_2026-03-25.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_LOG_AUDIT_VALIDATION_2026-03-25.md)
-- [FRONTDOOR_RESTORE_DRILL_VALIDATION_2026-03-25.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_RESTORE_DRILL_VALIDATION_2026-03-25.md)
-- [FRONTDOOR_SECRET_TIGHTENING_VALIDATION_2026-03-25.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_SECRET_TIGHTENING_VALIDATION_2026-03-25.md)
-- [FRONTDOOR_SERVER_ADAPTER_INSTALL_VALIDATION.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_SERVER_ADAPTER_INSTALL_VALIDATION.md)
+Frontdoor currently has two archival validation roots:
 
-## Archive
+- [validation/archive](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/archive)
+- [validation/_archive](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/_archive)
 
-Completed and historical Frontdoor validation artifacts live under:
-
-- [archive/](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/archive)
-- [_archive/](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/_archive)
+Treat both as historical context, not active proof posture, until the archive
+layout is normalized.

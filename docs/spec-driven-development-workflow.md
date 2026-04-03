@@ -80,9 +80,20 @@ They do not redefine the product or platform. If a workplan discovers a target-s
 
 ### 3. Validation documents validate the specs
 
-Validation ladders, test plans, smoke checks, and scripts exist to prove that the implementation matches the canonical specs.
+Validation ladders, matrices, support scripts, and proof profiles exist to
+prove that the implementation matches the canonical specs.
 
-Validation documents should reference the intended behavior, not historical behavior.
+Validation documents should reference the intended behavior, not historical
+behavior.
+
+The active validation corpus should stay thin and executable:
+
+- each active validation doc should define the current proof contract rather
+  than narrate every past proof run
+- it should name the canonical proof harness, profile, or script, the pass/fail
+  conditions, the expected review evidence, and any host-native exception
+- it should treat artifact bundles and dated signoff receipts as supporting
+  evidence, not as the active canonical proof surface
 
 The latest validation ladder for a still-supported behavior remains part of the
 active validation corpus even after the original implementation work is done.
@@ -95,6 +106,9 @@ canonical proof lanes:
 - agent-use proof
 
 An adapter is not complete when only one of those lanes is green.
+
+Closure records, dated signoff packets, and one-off proof ledgers belong in
+archive unless they still define the current proof path during a live handoff.
 
 ### 3g. Runbooks document the supported live procedure
 
@@ -134,6 +148,9 @@ The canonical cleanroom model is layered:
   bootstrap, launcher, and substrate proof
 - run most feature and integration validation inside runtime-managed sandboxes
   once that kernel already passes
+
+For supported runtime behavior above bootstrap and substrate, the default active
+proof lane is a fresh runtime-managed sandbox end-to-end run.
 
 This applies especially to work involving:
 
@@ -188,6 +205,10 @@ The primary narrative proof should usually be a cumulative golden journey that:
 - shows the same sequence a human operator would care about
 - proves the new feature integrated into the real product flow
 
+For agentic and operator-facing flows, that journey should usually use the same
+manager, worker, operator, capability-discovery, and adapter seams that the
+real product flow uses instead of a lower-level shortcut.
+
 The smaller coverage suite is still required.
 
 But its debug media is secondary. Successful runs should retain only the
@@ -241,6 +262,10 @@ For ticket-level golden-journey proof:
 - the default proof posture prefers real adapters and real connected accounts
 - fake adapters or synthetic remotes are for lower-level deterministic harnesses
   and regression isolation, not the main review proof
+
+For user-facing and operator-facing behavior, the profile should usually drive a
+manager-to-worker or operator-style journey through the normal runtime seams
+when that is the truthful product flow.
 
 The profile may compile down to one or more reusable job definitions, but the
 stable operator-facing noun is the validation profile, not a raw command list.
@@ -599,32 +624,42 @@ Characteristics:
 
 ### `validation/`
 
-Validation ladders, test matrices, scripts, runbooks, and signoff records that
-prove the system behaves according to the specs.
+Active proof contracts, matrices, and supporting scripts that define the
+current proof path for canonical behavior.
 
 Characteristics:
 
 - maintained as the proof corpus for active canonical behavior
 - updated as specs or proof methods change
-- can include manual and automated checks
-- may remain active after implementation work completes
-- should use a Docker-backed or equivalently containerized cleanroom executor
-  by default when the behavior touches runtime, bootstrap, storage, apps,
-  adapters, or hosted provisioning
-- should explain any non-containerized exception explicitly in the active
-  validation ladder
+- written as thin proof contracts, not narrative proof ledgers
+- may remain active after implementation work completes when they are still the
+  current proof path for a live behavior
+- should name the canonical proof harness, profile, or support script plus
+  explicit pass/fail conditions
+- should default to a Docker-backed or equivalently containerized layered
+  cleanroom, with runtime-managed sandbox end-to-end proof as the default
+  active lane once bootstrap and substrate proof already passes
+- should explain any host-native or otherwise non-containerized exception
+  explicitly in the active validation doc
+- should prefer human-shaped golden journeys over low-level shortcuts for
+  user-facing or operator-facing flows
+- may cite artifact bundles only as supporting evidence, not as the primary
+  canonical index
 
-Validation docs fall into three subtypes:
+Active validation docs fall into two active subtypes:
 
-1. canonical validation ladders
-   - the latest proof path for a still-supported behavior
-   - stays active while the behavior remains canonical
-2. signoff or closure records
-   - dated proof snapshots for a specific completion event
-   - historical by nature, even when linked from the active validation index
-3. campaign or migration validation
-   - narrow one-off rollout proof
-   - archives once superseded or no longer the right proof path
+1. canonical validation ladders and matrices
+   - define the latest proof contract for a still-supported behavior
+   - stay active while the behavior remains canonical
+2. supporting scripts, harness descriptors, or validation profiles
+   - support the active proof contract without replacing it as narrative canon
+
+Historical validation material belongs in archive:
+
+- dated signoff or closure records
+- one-off campaign or migration proof
+- artifact-ledger docs and proof-bundle indexes
+- any validation packet that no longer defines the current proof path
 
 Validation docs for user-facing flows should also distinguish two evidence
 layers:
@@ -681,7 +716,8 @@ Rules:
 2. `docs/workplans/` contains only active execution plans.
 3. board-style workplans may live under `docs/workplans/<board-name>/` when a lane benefits from atomic tickets and folder-based status movement.
 4. `docs/runbooks/` contains only active supported procedures and operator playbooks.
-5. `docs/validation/` contains only active validation ladders and support scripts.
+5. `docs/validation/` contains only active proof contracts, matrices, and
+   support scripts for still-supported behavior.
 6. `docs/archive/` contains anything no longer active.
 7. If exploratory drafts exist, `docs/proposals/` should exist and those drafts belong there, not in `docs/specs/`.
 8. `docs/specs/` must not contain files whose own status is `DRAFT`, `DESIGN`, `seed`, `TODO`, `not started`, or `superseded`.
@@ -779,6 +815,7 @@ Outputs:
 
 - validation ladders
 - supporting scripts
+- thin active proof contracts
 - reusable proof paths when the implemented behavior materially changes
   runtime-facing or provisioning behavior
   - host-level Docker or VM cleanrooms for bootstrap and substrate proof
@@ -799,6 +836,8 @@ Outputs:
 - remaining contradictions resolved
 - workplan hygiene pass completed
 - validation docs classified as active proof corpus, signoff record, or archive
+- active proof lanes aligned to sandbox-e2e-first posture and explicit
+  host-native exceptions
 
 Gate:
 
@@ -835,7 +874,8 @@ Outputs:
 - a complete pass of the active validation ladder for the implemented scope
 - refreshes to any validation ladders whose proof steps changed during
   implementation
-- a dated signoff or closure record when the slice is complete
+- a dated signoff or closure record, archived unless it is still the current
+  handoff proof surface
 
 Gate:
 
@@ -941,13 +981,17 @@ Archive a validation doc when:
 
 1. the behavior it validates is no longer part of canon
 2. a newer validation doc supersedes it for the same behavior
-3. it is a one-off campaign proof and no longer the correct proof path
+3. it is a one-off campaign proof, dated signoff snapshot, or artifact-ledger
+   packet and no longer the correct proof path
+4. it mainly captures historical evidence rather than the current executable
+   proof contract
 
 Do not archive a validation doc merely because:
 
 1. the paired workplan completed
 2. the code landed
-3. a signoff record already exists
+3. a signoff record already exists while the same active proof contract still
+   governs the behavior
 
 ### Active Runbook -> Archive
 
