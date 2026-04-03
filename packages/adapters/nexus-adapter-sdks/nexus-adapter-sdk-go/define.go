@@ -61,6 +61,7 @@ type DefineAdapterConfig[T any] struct {
 	Auth              *AdapterAuthManifest
 	Capabilities      ChannelCapabilities
 	MethodCatalog     *AdapterMethodCatalog
+	Projection        *AdapterProjection
 	Client            ClientFactory[T]
 	Connection        ConnectionHandlers[T]
 	Ingest            IngestHandlers[T]
@@ -318,6 +319,7 @@ func buildAdapterInfo[T any](config DefineAdapterConfig[T], declaredMethods map[
 		CredentialService:    config.CredentialService,
 		MultiAccount:         config.MultiAccount,
 		PlatformCapabilities: config.Capabilities,
+		Projection:           config.Projection,
 		Auth:                 config.Auth,
 	}
 	if len(methodDescriptors) > 0 {

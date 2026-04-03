@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ADAPTERS_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+UMBRELLA_ROOT="$(cd "$ADAPTERS_ROOT/../.." && pwd)"
+NEX_ROOT="$(cd "$UMBRELLA_ROOT/nex" && pwd)"
+
+: "${FORGE_ADAPTER_ID:?FORGE_ADAPTER_ID is required}"
+: "${FORGE_DISPLAY_NAME:?FORGE_DISPLAY_NAME is required}"
+: "${FORGE_AUTH_METHOD_ID:?FORGE_AUTH_METHOD_ID is required}"
+: "${FORGE_HOST:?FORGE_HOST is required}"
+: "${FORGE_TOKEN:?FORGE_TOKEN is required}"
+
+IMAGE_NAME="nexus-${FORGE_ADAPTER_ID}-live-cleanroom-e2e"
+FORGE_EXPECTED_METHODS_JSON="$(
+  printf '%s' "${FORGE_EXPECTED_METHODS:-[]}" | python3 -c 'import json,sys; print(json.dumps(json.loads(sys.stdin.read() or "[]"), separators=(",",":")))'
+)"
+FORGE_PROOF_CALLS_JSON="$(
+  printf '%s' "${FORGE_PROOF_CALLS:-[]}" | python3 -c 'import json,sys; print(json.dumps(json.loads(sys.stdin.read() or "[]"), separators=(",",":")))'
+)"
+FORGE_PREFERRED_REPOSITORIES_JSON="$(
+  printf '%s' "${FORGE_PREFERRED_REPOSITORIES:-[]}" | python3 -c 'import json,sys; print(json.dumps(json.loads(sys.stdin.read() or "[]"), separators=(",",":")))'
+)"
+
+ENV_FILE="$(mktemp)"
+cleanup() {
+  rm -f "$ENV_FILE"
+}
+trap cleanup EXIT
+
+cat >"$ENV_FILE" <<EOF
+FORGE_ADAPTER_ID=$FORGE_ADAPTER_ID
+FORGE_DISPLAY_NAME=$FORGE_DISPLAY_NAME
+FORGE_AUTH_METHOD_ID=$FORGE_AUTH_METHOD_ID
+FORGE_HOST=$FORGE_HOST
+FORGE_TOKEN=$FORGE_TOKEN
+FORGE_USERNAME=${FORGE_USERNAME:-}
+FORGE_SETUP_WORKSPACE=${FORGE_SETUP_WORKSPACE:-}
+FORGE_EXPECTED_METHODS=$FORGE_EXPECTED_METHODS_JSON
+FORGE_PROOF_CALLS=$FORGE_PROOF_CALLS_JSON
+FORGE_PROOF_REPOSITORY_FULL_NAME=${FORGE_PROOF_REPOSITORY_FULL_NAME:-}
+FORGE_PROOF_PULL_REQUEST_REPOSITORY_FULL_NAME=${FORGE_PROOF_PULL_REQUEST_REPOSITORY_FULL_NAME:-}
+FORGE_PREFERRED_REPOSITORIES=$FORGE_PREFERRED_REPOSITORIES_JSON
+FORGE_SETUP_REPOSITORY_SELECTION=${FORGE_SETUP_REPOSITORY_SELECTION:-}
+FORGE_INITIAL_BACKFILL_SINCE=${FORGE_INITIAL_BACKFILL_SINCE:-}
+FORGE_SKIP_BACKFILL_WAIT=${FORGE_SKIP_BACKFILL_WAIT:-}
+FORGE_BACKFILL_WAIT_TIMEOUT_MS=${FORGE_BACKFILL_WAIT_TIMEOUT_MS:-}
+FORGE_BACKFILL_WAIT_POLL_MS=${FORGE_BACKFILL_WAIT_POLL_MS:-}
+FORGE_ENABLE_INGEST_PROOF=${FORGE_ENABLE_INGEST_PROOF:-}
+FORGE_MONITOR_PROOF_REPOSITORY_FULL_NAME=${FORGE_MONITOR_PROOF_REPOSITORY_FULL_NAME:-}
+FORGE_MONITOR_PROOF_PULL_REQUEST_ID=${FORGE_MONITOR_PROOF_PULL_REQUEST_ID:-}
+FORGE_MONITOR_PROOF_COMMENT_BODY_PREFIX=${FORGE_MONITOR_PROOF_COMMENT_BODY_PREFIX:-}
+FORGE_MONITOR_PROOF_TIMEOUT_MS=${FORGE_MONITOR_PROOF_TIMEOUT_MS:-}
+FORGE_MONITOR_PROOF_POLL_MS=${FORGE_MONITOR_PROOF_POLL_MS:-}
+EOF
+
+PROOF_MOUNT_ARGS=()
+if [[ -n "${NEXUS_CLEANROOM_PROOF_BUNDLE_DIR:-}" ]]; then
+  mkdir -p "$NEXUS_CLEANROOM_PROOF_BUNDLE_DIR"
+  PROOF_MOUNT_ARGS=(
+    -v "$NEXUS_CLEANROOM_PROOF_BUNDLE_DIR:/proof-bundle"
+    -e "NEXUS_CLEANROOM_PROOF_BUNDLE_DIR=/proof-bundle"
+  )
+fi
+
+echo "Building Docker image..."
+docker build -t "$IMAGE_NAME" -f "$NEX_ROOT/scripts/e2e/Dockerfile" "$NEX_ROOT"
+
+echo "Running ${FORGE_DISPLAY_NAME} live cleanroom proof..."
+DOCKER_ARGS=(
+  --rm
+  -i
+  --env-file "$ENV_FILE"
+  -v "$UMBRELLA_ROOT:/umbrella:ro"
+  -v "$NEX_ROOT:/app/nex:ro"
+  -v "$UMBRELLA_ROOT/packages/package-kit:/app/packages/package-kit:ro"
+  -v "$UMBRELLA_ROOT/packages/adapters/nexus-adapter-sdks:/umbrella/packages/adapters/nexus-adapter-sdks:ro"
+  -e "FORGE_SOURCE_ROOT=/umbrella"
+)
+if [[ ${#PROOF_MOUNT_ARGS[@]} -gt 0 ]]; then
+  DOCKER_ARGS+=("${PROOF_MOUNT_ARGS[@]}")
+fi
+DOCKER_ARGS+=(
+  "$IMAGE_NAME"
+  node /umbrella/packages/adapters/scripts/e2e/forge-live-cleanroom-proof.mjs
+)
+docker run "${DOCKER_ARGS[@]}"

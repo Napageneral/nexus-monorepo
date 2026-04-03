@@ -19,7 +19,7 @@ EOF
 }
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-NEX_ROOT_DEFAULT="$(cd "${SCRIPT_DIR}/../../../../nex" && pwd)"
+NEX_ROOT_DEFAULT="$(cd "${SCRIPT_DIR}/../../../nex" && pwd)"
 NEX_ROOT="${NEX_ROOT_DEFAULT}"
 OUTPUT="/tmp/nex-runtime-bundle.tgz"
 SKIP_BUILD="false"
@@ -72,7 +72,7 @@ trap cleanup EXIT
 BUNDLE_ROOT="${STAGE_DIR}/runtime"
 mkdir -p "$BUNDLE_ROOT"
 
-for path in package.json pnpm-lock.yaml nexus.mjs dist assets README.md LICENSE; do
+for path in package.json pnpm-lock.yaml nexus.mjs dist assets roles scripts docs patches README.md LICENSE; do
   if [ -e "$path" ]; then
     rsync -a "$path" "$BUNDLE_ROOT/"
   fi

@@ -1,0 +1,5 @@
+import { runAdapter } from "@nexus-project/adapter-sdk-ts";
+import { adapter } from "./adapter.js";
+
+const exitCode = await runAdapter(adapter);
+process.exit(exitCode);

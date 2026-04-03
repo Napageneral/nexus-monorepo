@@ -1,0 +1,9 @@
+{
+  "contract": "packages/adapters/bitbucket/api",
+  "generator": "nex/scripts/contracts/generate-openapi.ts",
+  "sources": [
+    "packages/adapters/bitbucket",
+    "packages/adapters/nexus-adapter-sdks/nexus-adapter-sdk-ts/src/protocol.ts",
+    "packages/adapters/nexus-adapter-sdks/nexus-adapter-sdk-go/define.go"
+  ]
+}

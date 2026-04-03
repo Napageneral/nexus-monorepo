@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { FrontdoorStore } from "./frontdoor-store.js";
 import { publishAdapterRelease } from "./publish-adapter-release.js";
 
-const GIT_ADAPTER_ROOT = "/Users/tyler/nexus/home/projects/nexus/packages/adapters/git";
-const GIT_ADAPTER_MANIFEST_PATH = path.join(GIT_ADAPTER_ROOT, "adapter.nexus.json");
+const BITBUCKET_ADAPTER_ROOT = "/Users/tyler/nexus/home/projects/nexus/packages/adapters/bitbucket";
+const BITBUCKET_ADAPTER_MANIFEST_PATH = path.join(BITBUCKET_ADAPTER_ROOT, "adapter.nexus.json");
 
 describe("publishAdapterRelease", () => {
   const cleanupPaths: string[] = [];
@@ -21,14 +21,14 @@ describe("publishAdapterRelease", () => {
     }
   });
 
-  it("publishes the git adapter into package registry state", async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "frontdoor-publish-git-adapter-"));
+  it("publishes the bitbucket adapter into package registry state", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "frontdoor-publish-bitbucket-adapter-"));
     cleanupPaths.push(tempDir);
     const storePath = path.join(tempDir, "frontdoor.db");
-    const tarballPath = path.join(tempDir, "git-1.0.0.tar.gz");
-    fs.writeFileSync(tarballPath, "git-adapter-test-package\n", "utf8");
+    const tarballPath = path.join(tempDir, "bitbucket-1.0.0.tar.gz");
+    fs.writeFileSync(tarballPath, "bitbucket-adapter-test-package\n", "utf8");
 
-    const manifest = JSON.parse(fs.readFileSync(GIT_ADAPTER_MANIFEST_PATH, "utf8")) as {
+    const manifest = JSON.parse(fs.readFileSync(BITBUCKET_ADAPTER_MANIFEST_PATH, "utf8")) as {
       id?: string;
       version?: string;
     };
@@ -39,7 +39,7 @@ describe("publishAdapterRelease", () => {
     try {
       const result = await publishAdapterRelease({
         store,
-        packageRoot: GIT_ADAPTER_ROOT,
+        packageRoot: BITBUCKET_ADAPTER_ROOT,
         tarballPath,
         targetOs: "linux",
         targetArch: "amd64",

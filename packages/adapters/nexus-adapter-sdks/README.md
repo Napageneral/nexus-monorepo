@@ -36,6 +36,8 @@ Current state:
 
 - the shared TS SDK is on the unified `defineAdapter(...)` model
 - the shared Go SDK is on the unified `DefineAdapter(...)` model
+- both shared SDKs now model provider-surface metadata and projection metadata
+  on the same adapter declaration
 - the active Go adapter fleet in this monorepo now points at the shared Go SDK
   workspace instead of private SDK forks
 

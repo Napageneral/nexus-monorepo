@@ -1,0 +1,39 @@
+# {{DISPLAY_NAME}}
+
+This canonical adapter package was scaffolded by `nexus package init` for an
+adapter target, or by `nexus package init --profile canonical-openapi`.
+
+It is for one final provider package that exposes the full provider-native
+method surface and also declares the Nex projection contract that will own
+ingest, backfill, monitor, and routing behavior.
+
+Primary authored files:
+
+- `adapter.nexus.json` for package metadata and method-catalog wiring
+- `raw/provider.config.json` for OpenAPI selection and rename policy
+- `raw/upstream-openapi.yaml` for the pinned upstream provider contract
+- `scripts/materialize-openapi.mjs` for generating `api/openapi.yaml`
+- `src/adapter.ts` for scaffolded auth, setup, health, method-catalog, and
+  projection behavior
+- `test/adapter.test.ts` for the reusable canonical-adapter validation starter
+
+Primary commands:
+
+- `node ./scripts/materialize-openapi.mjs`
+- `pnpm test`
+- `pnpm build`
+- `nexus package validate .`
+- `nexus package release .`
+
+Do not narrow the provider surface in this package. Add the provider-native
+method catalog and the Nex projection contract together.
+
+By default, canonical provider adapters should also:
+
+- make setup/bootstrap and direct reads resilient to provider rate limits
+- expose large binary/provider artifacts through attachment-backed metadata
+  instead of inline base64 response blobs
+
+The scaffold starts with a placeholder OpenAPI contract that validates with a
+warning, but `nexus package release .` must not succeed until the upstream
+contract is materialized and the package surface is non-empty.

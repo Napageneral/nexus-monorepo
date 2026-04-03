@@ -6,12 +6,14 @@ import {
   renderTemplate,
   type PackageKind,
   type PackageLanguage,
+  type PackageProfile,
   writeFile,
 } from "./shared.js";
 
 type InitOptions = {
   kind: PackageKind;
   language: PackageLanguage;
+  profile?: PackageProfile;
   id: string;
   dir?: string;
 };
@@ -41,15 +43,46 @@ function normalizeLanguage(kind: PackageKind, language: PackageLanguage): Packag
   return language;
 }
 
-function packageTemplateName(kind: PackageKind, language: PackageLanguage): string {
-  return `${kind}-${language}`;
+function resolveProfile(
+  kind: PackageKind,
+  language: PackageLanguage,
+  profile: PackageProfile | undefined,
+): PackageProfile {
+  if (profile) {
+    return profile;
+  }
+  if (kind === "adapter" && language === "ts") {
+    return "canonical-openapi";
+  }
+  return "default";
+}
+
+function packageTemplateNames(
+  kind: PackageKind,
+  language: PackageLanguage,
+  profile: PackageProfile,
+): string[] {
+  const templateNames = [`${kind}-${language}`];
+  if (profile === "canonical-openapi") {
+    if (kind !== "adapter" || language !== "ts") {
+      throw new Error("canonical-openapi scaffold currently supports adapter ts only");
+    }
+    templateNames.push("adapter-ts-canonical-openapi");
+  }
+  return templateNames;
 }
 
 export async function initPackage(opts: InitOptions): Promise<{ targetDir: string }> {
   const language = normalizeLanguage(opts.kind, opts.language);
+  const profile = resolveProfile(opts.kind, language, opts.profile);
   const targetDir = path.resolve(opts.dir ? opts.dir : path.join(process.cwd(), opts.id));
-  const templateDir = path.join(TEMPLATE_ROOT, packageTemplateName(opts.kind, language));
-  await fsp.access(templateDir);
+  const templateDirs = await Promise.all(
+    packageTemplateNames(opts.kind, language, profile).map(async (templateName) => {
+      const templateDir = path.join(TEMPLATE_ROOT, templateName);
+      await fsp.access(templateDir);
+      return templateDir;
+    }),
+  );
 
   const existing = await fsp.readdir(targetDir).catch(() => []);
   if (existing.length > 0) {
@@ -79,11 +112,15 @@ export async function initPackage(opts: InitOptions): Promise<{ targetDir: strin
       }
       const raw = await fsp.readFile(sourcePath, "utf8");
       const rendered = renderTemplate(raw, values);
-      const mode = outputName.endsWith(".sh") || outputName.startsWith("bin/") ? 0o755 : undefined;
+      const relativeTargetPath = path.relative(targetDir, targetPath).replaceAll("\\", "/");
+      const mode =
+        outputName.endsWith(".sh") || relativeTargetPath.startsWith("bin/") ? 0o755 : undefined;
       await writeFile(targetPath, rendered, mode);
     }
   }
 
-  await copyTemplate(templateDir, targetDir);
+  for (const templateDir of templateDirs) {
+    await copyTemplate(templateDir, targetDir);
+  }
   return { targetDir };
 }

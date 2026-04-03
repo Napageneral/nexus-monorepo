@@ -247,7 +247,7 @@ Rules:
 4. outward communication uses truthful platform namespaces such as
    `slack.send`, `imessage.send`, or `discord.send`
 5. provider/work/content methods use truthful provider namespaces such as
-   `jira.issues.create`, `git.pull_requests.merge`, or
+   `jira.issues.create`, `github.pull_requests.merge`, or
    `confluence.pages.update`
 
 ## Helper Set

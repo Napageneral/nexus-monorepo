@@ -142,6 +142,45 @@ export const AdapterMethodCatalogSchema = z.object({
   namespace: z.string().optional(),
 });
 
+export const AdapterProjectionFamilySchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+});
+
+export const AdapterProjectionSyncSchema = z.object({
+  supported: z.boolean(),
+  strategy: z.string().optional(),
+  cursor: z.string().optional(),
+});
+
+export const AdapterProjectionRoutingSchema = z.object({
+  space: z.string().optional(),
+  container: z.string().optional(),
+  thread: z.string().optional(),
+  threads_supported: z.boolean().optional(),
+});
+
+export const AdapterProjectionRecordIdsSchema = z.object({
+  record: z.string(),
+  container: z.string().optional(),
+  thread: z.string().optional(),
+});
+
+export const AdapterProjectionNormalizationSchema = z.object({
+  content: z.string().optional(),
+  attachments: z.boolean().optional(),
+});
+
+export const AdapterProjectionSchema = z.object({
+  platform: z.string().optional(),
+  families: z.array(AdapterProjectionFamilySchema).optional(),
+  backfill: AdapterProjectionSyncSchema.optional(),
+  monitor: AdapterProjectionSyncSchema.optional(),
+  routing: AdapterProjectionRoutingSchema.optional(),
+  record_ids: AdapterProjectionRecordIdsSchema.optional(),
+  normalization: AdapterProjectionNormalizationSchema.optional(),
+});
+
 export const AdapterInfoSchema = z.object({
   platform: z.string(),
   name: z.string(),
@@ -153,11 +192,18 @@ export const AdapterInfoSchema = z.object({
   platform_capabilities: ChannelCapabilitiesSchema,
   auth: AdapterAuthManifestSchema.optional(),
   methodCatalog: AdapterMethodCatalogSchema.optional(),
+  projection: AdapterProjectionSchema.optional(),
 });
 
 export type AdapterInfo = z.infer<typeof AdapterInfoSchema>;
 export type AdapterMethod = z.infer<typeof AdapterMethodSchema>;
 export type AdapterMethodCatalog = z.infer<typeof AdapterMethodCatalogSchema>;
+export type AdapterProjection = z.infer<typeof AdapterProjectionSchema>;
+export type AdapterProjectionFamily = z.infer<typeof AdapterProjectionFamilySchema>;
+export type AdapterProjectionSync = z.infer<typeof AdapterProjectionSyncSchema>;
+export type AdapterProjectionRouting = z.infer<typeof AdapterProjectionRoutingSchema>;
+export type AdapterProjectionRecordIds = z.infer<typeof AdapterProjectionRecordIdsSchema>;
+export type AdapterProjectionNormalization = z.infer<typeof AdapterProjectionNormalizationSchema>;
 export type AdapterMethodContextHintValue = z.infer<typeof AdapterMethodContextHintValueSchema>;
 export type AdapterMethodContextHints = z.infer<typeof AdapterMethodContextHintsSchema>;
 export type AdapterMethodOrigin = z.infer<typeof AdapterMethodOriginSchema>;

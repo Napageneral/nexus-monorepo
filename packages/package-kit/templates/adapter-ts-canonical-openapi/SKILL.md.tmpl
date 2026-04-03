@@ -1,0 +1,22 @@
+# {{DISPLAY_NAME}}
+
+This is a canonical provider adapter scaffold.
+
+Use it to:
+
+- materialize a provider-truth OpenAPI slice
+- expose the provider-native method surface
+- declare the Nex projection contract for ingest, backfill, monitor, and routing
+- prove auth, setup, health, and representative provider behavior
+
+Keep the boundary explicit:
+
+- one package: provider-native methods plus the Nex projection contract
+- optional convenience wrappers may exist, but they do not replace the full
+  provider surface
+
+When you flesh this scaffold out, do not forget the default hardening rules:
+
+- setup/bootstrap and direct reads should be resilient to provider rate limits
+- heavy binary/provider reads should return attachment-backed metadata instead
+  of inline base64 payloads

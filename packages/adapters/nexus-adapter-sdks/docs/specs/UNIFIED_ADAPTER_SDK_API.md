@@ -224,7 +224,7 @@ Rules:
 5. communication methods use truthful platform namespaces such as
    `slack.send`, `imessage.send`, or `discord.send`
 6. provider/work/content methods use truthful provider namespaces such as
-   `jira.issues.create`, `git.pull_requests.merge`, or
+   `jira.issues.create`, `github.pull_requests.merge`, or
    `confluence.pages.update`
 
 ## `method(...)`

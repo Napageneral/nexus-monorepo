@@ -12,6 +12,7 @@ Usage:
     --security-group-id sg-... \
     --key-name nexus-operator \
     --ssh-key /abs/path/to/nexus-operator \
+    [--ssh-proxy ubuntu@frontdoor.nexushub.sh] \
     [--nex-root /abs/path/to/nex] \
     [--base-ami-id ami-...] \
     [--instance-type t4g.medium] \
@@ -34,7 +35,8 @@ SUBNET_ID=""
 SECURITY_GROUP_ID=""
 KEY_NAME=""
 SSH_KEY=""
-NEX_ROOT="$(cd "${SCRIPT_DIR}/../../../../nex" && pwd)"
+SSH_PROXY=""
+NEX_ROOT="$(cd "${SCRIPT_DIR}/../../../nex" && pwd)"
 BASE_AMI_ID=""
 INSTANCE_TYPE="t4g.medium"
 NAME="nex-compliant-runtime-$(date +%Y%m%d%H%M%S)"
@@ -64,6 +66,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --ssh-key)
       SSH_KEY="${2:-}"
+      shift 2
+      ;;
+    --ssh-proxy)
+      SSH_PROXY="${2:-}"
       shift 2
       ;;
     --nex-root)
@@ -124,6 +130,7 @@ fi
 RUNTIME_BUNDLE="$(mktemp -t nex-runtime-bundle).tgz"
 INSTANCE_ID=""
 PUBLIC_IP=""
+PRIVATE_IP=""
 SSH_READY="false"
 
 cleanup() {
@@ -146,14 +153,25 @@ INSTANCE_ID="$("${AWS[@]}" ec2 run-instances \
 
 "${AWS[@]}" ec2 wait instance-running --instance-ids "$INSTANCE_ID"
 PUBLIC_IP="$("${AWS[@]}" ec2 describe-instances --instance-ids "$INSTANCE_ID" --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)"
+PRIVATE_IP="$("${AWS[@]}" ec2 describe-instances --instance-ids "$INSTANCE_ID" --query 'Reservations[0].Instances[0].PrivateIpAddress' --output text)"
 
-if [ -z "$PUBLIC_IP" ] || [ "$PUBLIC_IP" = "None" ]; then
-  echo "builder did not receive a public IP" >&2
+SSH_HOST="$PUBLIC_IP"
+if [ -n "$SSH_PROXY" ]; then
+  SSH_HOST="$PRIVATE_IP"
+fi
+
+if [ -z "$SSH_HOST" ] || [ "$SSH_HOST" = "None" ]; then
+  echo "builder did not receive a usable SSH address" >&2
   exit 1
 fi
 
+SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
+if [ -n "$SSH_PROXY" ]; then
+  SSH_OPTS+=(-J "$SSH_PROXY")
+fi
+
 for _ in $(seq 1 60); do
-  if ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "ubuntu@${PUBLIC_IP}" true >/dev/null 2>&1; then
+  if ssh "${SSH_OPTS[@]}" "ubuntu@${SSH_HOST}" true >/dev/null 2>&1; then
     SSH_READY="true"
     break
   fi
@@ -165,13 +183,12 @@ if [ "$SSH_READY" != "true" ]; then
   exit 1
 fi
 
-scp -i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-  "$RUNTIME_BUNDLE" "$INSTALL_SCRIPT" "ubuntu@${PUBLIC_IP}:/tmp/"
+scp "${SSH_OPTS[@]}" "$RUNTIME_BUNDLE" "$INSTALL_SCRIPT" "ubuntu@${SSH_HOST}:/tmp/"
 
-ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "ubuntu@${PUBLIC_IP}" \
+ssh "${SSH_OPTS[@]}" "ubuntu@${SSH_HOST}" \
   "sudo RUNTIME_BUNDLE_TARBALL=/tmp/$(basename "$RUNTIME_BUNDLE") RUNTIME_BUNDLE_STRIP_COMPONENTS=1 bash /tmp/$(basename "$INSTALL_SCRIPT")"
 
-ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "ubuntu@${PUBLIC_IP}" \
+ssh "${SSH_OPTS[@]}" "ubuntu@${SSH_HOST}" \
   "sudo test -f /opt/nex/runtime/dist/index.js && sudo test -e /opt/nex/runtime/node_modules"
 
 "${AWS[@]}" ec2 stop-instances --instance-ids "$INSTANCE_ID" >/dev/null

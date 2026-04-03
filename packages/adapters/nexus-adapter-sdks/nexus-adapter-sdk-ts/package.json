@@ -22,6 +22,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/node": "^24.10.13",
     "ajv": "^8.17.1",
     "tsdown": "^0.20.3",
     "typescript": "^5.9.3",

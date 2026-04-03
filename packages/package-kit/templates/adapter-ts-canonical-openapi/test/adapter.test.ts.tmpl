@@ -1,0 +1,85 @@
+import { PassThrough } from "node:stream";
+import { describe, expect, it } from "vitest";
+import { runAdapter } from "@nexus-project/adapter-sdk-ts";
+import { adapter } from "../src/adapter.js";
+
+function captureStream() {
+  const stream = new PassThrough();
+  let data = "";
+  stream.on("data", (chunk) => {
+    data += chunk.toString("utf8");
+  });
+  return {
+    stream: stream as unknown as NodeJS.WriteStream,
+    read: () => data,
+  };
+}
+
+function firstJsonLine(raw: string): unknown {
+  const line = raw
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .find(Boolean);
+  return JSON.parse(line ?? "{}") as unknown;
+}
+
+describe("canonical-openapi scaffold adapter", () => {
+  it("reports openapi method catalog metadata, projection metadata, and setup surfaces", async () => {
+    const stdout = captureStream();
+    const stderr = captureStream();
+
+    const code = await runAdapter(adapter, {
+      argv: ["node", "adapter", "adapter.info"],
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      patchConsole: false,
+      installSignalHandlers: false,
+      requireRuntimeContext: false,
+    });
+
+    expect(code).toBe(0);
+    expect(stderr.read()).toBe("");
+    const parsed = firstJsonLine(stdout.read()) as {
+      platform?: string;
+      operations?: string[];
+      methodCatalog?: { source?: string; namespace?: string; document?: string };
+      projection?: { families?: Array<{ name?: string }>; backfill?: { supported?: boolean } };
+    };
+    expect(parsed.platform).toBe("{{PACKAGE_ID}}");
+    expect(parsed.methodCatalog).toMatchObject({
+      source: "openapi",
+      namespace: "{{PACKAGE_ID}}",
+      document: "api/openapi.yaml",
+    });
+    expect(parsed.projection?.families?.map((entry) => entry.name)).toEqual(["provider_primary"]);
+    expect(parsed.projection?.backfill?.supported).toBe(false);
+    expect(parsed.operations).toContain("adapter.health");
+    expect(parsed.operations).toContain("adapter.setup.start");
+    expect(parsed.operations).toContain("adapter.setup.submit");
+  });
+
+  it("starts scaffold setup with placeholder credential fields", async () => {
+    const stdout = captureStream();
+    const stderr = captureStream();
+
+    const code = await runAdapter(adapter, {
+      argv: ["node", "adapter", "adapter.setup.start", "--connection", "default"],
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      patchConsole: false,
+      installSignalHandlers: false,
+      requireRuntimeContext: false,
+    });
+
+    expect(code).toBe(0);
+    expect(stderr.read()).toBe("");
+    const parsed = firstJsonLine(stdout.read()) as {
+      status?: string;
+      service?: string;
+      fields?: Array<{ name?: string }>;
+    };
+    expect(parsed.status).toBe("requires_input");
+    expect(parsed.service).toBe("{{PACKAGE_ID}}");
+    expect(parsed.fields?.map((entry) => entry.name)).toEqual(["base_url", "access_token"]);
+  });
+});

@@ -94,6 +94,7 @@ describe("DockerSandboxProvider", () => {
     expect(script).toContain("RUNTIME_HOST_PORT=19123");
     expect(script).toContain("cp /cleanroom/bootstrap-seed.source.yml /cleanroom/config/bootstrap-seed.yml");
     expect(script).toContain("node nexus.mjs init --workspace \"$ROOT\"");
+    expect(script).toContain("NEXUS_BOOTSTRAP_SEED_FILE=\"$ROOT/config/bootstrap-seed.yml\" node nexus.mjs runtime run");
     expect(script).toContain("node nexus.mjs runtime run --workspace \"$ROOT\" --port \"$RUNTIME_PORT\" --bind lan");
     expect(script).toContain("runtime_port: Number(process.env.RUNTIME_HOST_PORT)");
     expect(script).toContain("authorization: `Bearer ${process.env.PROVISION_TOKEN}`");

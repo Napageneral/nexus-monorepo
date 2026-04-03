@@ -1,0 +1,23 @@
+# Testing
+
+1. `node ./scripts/materialize-openapi.mjs`
+2. `pnpm test`
+3. `pnpm build`
+4. `nexus package validate .`
+5. `nexus package release .`
+
+Validation should prove both the declared provider surface and the declared Nex
+projection contract at the level the scaffold currently implements.
+
+The scaffold starter should prove:
+
+- the generated method catalog is present
+- auth/setup/health/connection surfaces are wired
+- projection metadata is declared explicitly
+- the adapter package warns if the OpenAPI surface is still empty
+- `nexus package release .` does not pass until the materialized upstream
+  contract has a non-empty path/operation set
+- rate-limit resilience is covered directly when the provider is known to
+  throttle setup/bootstrap or direct reads
+- large binary/provider artifacts are validated through attachment-backed
+  response metadata rather than inline payload blobs

@@ -5,7 +5,7 @@ This package is the TypeScript/Node SDK for Nexus external adapter binaries.
 It provides:
 - The adapter CLI protocol types + zod schemas (aligned with the Go SDK + adapter specs)
 - A `runAdapter()` harness for implementing runtime reflection/control operations (`adapter.info`, `adapter.monitor.start`, `records.backfill`, `adapter.setup.*`, and truthful namespaced methods)
-- A declarative `defineAdapter()` authoring API that declares package metadata and capabilities once, then derives runtime reflection and method dispatch from that declaration
+- A declarative `defineAdapter()` authoring API that declares package metadata, provider-surface method reflection, and projection metadata once, then derives runtime reflection and method dispatch from that declaration
 - Serve-session helpers for `adapter.serve.start` (endpoint registry + invoke responder loop)
 - Helpers for reading runtime context injected by Nex via `NEXUS_ADAPTER_CONTEXT_PATH`
 - Helpers for reading the canonical writable state root injected via `NEXUS_ADAPTER_STATE_DIR`
@@ -14,6 +14,16 @@ It provides:
 ## Place In The Flow
 
 This SDK sits between canonical adapter specs and concrete adapter packages.
+
+The intended package model is:
+
+1. one canonical adapter package per provider or provider family
+2. full provider-native methods exposed by default
+3. the same package declares projection metadata for:
+   - record families
+   - backfill and monitor strategy
+   - routing metadata
+   - record-id and normalization behavior
 
 The correct order is:
 
@@ -77,6 +87,14 @@ export const discordAdapter = defineAdapter({
     supports_delete: true,
     supports_media: true,
     supports_voice_notes: false,
+  },
+  projection: {
+    families: [{ name: "message" }],
+    backfill: { supported: true, strategy: "cursor", cursor: "updated_at" },
+    monitor: { supported: true, strategy: "poll" },
+    routing: { container: "channel", thread: "thread_ts", threads_supported: true },
+    record_ids: { record: "message-ts", thread: "thread-ts" },
+    normalization: { content: "mrkdwn", attachments: true },
   },
   client: {
     create: ({ ctx }) => ({

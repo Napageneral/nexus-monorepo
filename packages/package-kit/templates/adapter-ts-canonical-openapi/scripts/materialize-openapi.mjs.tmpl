@@ -1,0 +1,320 @@
+#!/usr/bin/env node
+import { createHash } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import YAML from "yaml";
+
+const rootDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const configPath = path.join(rootDir, "raw", "provider.config.json");
+const LOCAL_COMPONENT_REF = /^#\/components\/([^/]+)\/([^/]+)$/;
+
+function parseDocument(raw, filePath) {
+  if (filePath.endsWith(".json")) {
+    return JSON.parse(raw);
+  }
+  return YAML.parse(raw);
+}
+
+function readConfig() {
+  return JSON.parse(fs.readFileSync(configPath, "utf8"));
+}
+
+function countOperations(paths) {
+  let pathCount = 0;
+  let operationCount = 0;
+  for (const pathItem of Object.values(paths ?? {})) {
+    if (!pathItem || typeof pathItem !== "object" || Array.isArray(pathItem)) {
+      continue;
+    }
+    const operations = Object.entries(pathItem).filter(
+      ([method, value]) => method !== "parameters" && value && typeof value === "object" && !Array.isArray(value),
+    );
+    if (operations.length === 0) {
+      continue;
+    }
+    pathCount += 1;
+    operationCount += operations.length;
+  }
+  return { pathCount, operationCount };
+}
+
+function componentRefKey(section, name) {
+  return `${section}/${name}`;
+}
+
+function parseLocalComponentRef(raw) {
+  if (typeof raw !== "string") {
+    return null;
+  }
+  const match = LOCAL_COMPONENT_REF.exec(raw.trim());
+  if (!match) {
+    return null;
+  }
+  return {
+    section: match[1],
+    name: match[2],
+    key: componentRefKey(match[1], match[2]),
+  };
+}
+
+function scanLocalComponentRefs(node, refs = new Set()) {
+  if (!node || typeof node !== "object") {
+    return refs;
+  }
+  if (Array.isArray(node)) {
+    for (const value of node) {
+      scanLocalComponentRefs(value, refs);
+    }
+    return refs;
+  }
+  const parsed = parseLocalComponentRef(node.$ref);
+  if (parsed) {
+    refs.add(parsed.key);
+  }
+  for (const value of Object.values(node)) {
+    scanLocalComponentRefs(value, refs);
+  }
+  return refs;
+}
+
+function collectRequiredComponentRefs(source, paths) {
+  const required = scanLocalComponentRefs(paths, new Set());
+  const queue = [...required];
+  while (queue.length > 0) {
+    const key = queue.pop();
+    const [section, name] = key.split("/", 2);
+    const component = source.components?.[section]?.[name];
+    if (!component) {
+      continue;
+    }
+    const nestedRefs = scanLocalComponentRefs(component, new Set());
+    for (const nested of nestedRefs) {
+      if (required.has(nested)) {
+        continue;
+      }
+      required.add(nested);
+      queue.push(nested);
+    }
+  }
+  return required;
+}
+
+function findCyclicComponentGroups(source, required) {
+  const graph = new Map();
+  for (const key of required) {
+    const [section, name] = key.split("/", 2);
+    const component = source.components?.[section]?.[name];
+    const refs = component ? [...scanLocalComponentRefs(component, new Set())] : [];
+    graph.set(
+      key,
+      refs.filter((candidate) => required.has(candidate)),
+    );
+  }
+
+  let index = 0;
+  const indexes = new Map();
+  const lowlinks = new Map();
+  const stack = [];
+  const onStack = new Set();
+  const groups = new Map();
+  let groupId = 0;
+
+  function strongConnect(node) {
+    indexes.set(node, index);
+    lowlinks.set(node, index);
+    index += 1;
+    stack.push(node);
+    onStack.add(node);
+
+    for (const neighbor of graph.get(node) ?? []) {
+      if (!indexes.has(neighbor)) {
+        strongConnect(neighbor);
+        lowlinks.set(node, Math.min(lowlinks.get(node), lowlinks.get(neighbor)));
+      } else if (onStack.has(neighbor)) {
+        lowlinks.set(node, Math.min(lowlinks.get(node), indexes.get(neighbor)));
+      }
+    }
+
+    if (lowlinks.get(node) !== indexes.get(node)) {
+      return;
+    }
+
+    const component = [];
+    while (stack.length > 0) {
+      const current = stack.pop();
+      onStack.delete(current);
+      component.push(current);
+      if (current === node) {
+        break;
+      }
+    }
+
+    const selfRecursive = (graph.get(node) ?? []).includes(node);
+    if (component.length > 1 || selfRecursive) {
+      const nextGroup = `cycle-${groupId++}`;
+      for (const member of component) {
+        groups.set(member, nextGroup);
+      }
+    }
+  }
+
+  for (const node of graph.keys()) {
+    if (!indexes.has(node)) {
+      strongConnect(node);
+    }
+  }
+
+  return groups;
+}
+
+function cyclePlaceholder(targetKey) {
+  return {
+    type: "object",
+    additionalProperties: true,
+    description: `Recursive reference to #/components/${targetKey} elided during canonical adapter contract materialization.`,
+  };
+}
+
+function cloneWithCycleBreaks(node, currentComponentKey, cycleGroups) {
+  if (!node || typeof node !== "object") {
+    return node;
+  }
+  if (Array.isArray(node)) {
+    return node.map((value) => cloneWithCycleBreaks(value, currentComponentKey, cycleGroups));
+  }
+
+  const parsed = parseLocalComponentRef(node.$ref);
+  if (parsed && currentComponentKey) {
+    if (parsed.key === currentComponentKey) {
+      return cyclePlaceholder(parsed.key);
+    }
+    const currentGroup = cycleGroups.get(currentComponentKey);
+    const targetGroup = cycleGroups.get(parsed.key);
+    if (currentGroup && targetGroup && currentGroup === targetGroup) {
+      return cyclePlaceholder(parsed.key);
+    }
+  }
+
+  const clone = {};
+  for (const [key, value] of Object.entries(node)) {
+    clone[key] = cloneWithCycleBreaks(value, currentComponentKey, cycleGroups);
+  }
+  return clone;
+}
+
+function buildPrunedComponents(source, required, cycleGroups) {
+  const components = {};
+  for (const key of required) {
+    const [section, name] = key.split("/", 2);
+    const component = source.components?.[section]?.[name];
+    if (!component) {
+      continue;
+    }
+    if (!components[section]) {
+      components[section] = {};
+    }
+    components[section][name] = cloneWithCycleBreaks(component, key, cycleGroups);
+  }
+  return components;
+}
+
+async function readUpstream(config) {
+  const upstreamPath = path.resolve(rootDir, config.upstreamDocument);
+  const refresh = process.argv.includes("--refresh");
+  if (config.upstreamUrl && (refresh || !fs.existsSync(upstreamPath))) {
+    const response = await fetch(config.upstreamUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch upstream OpenAPI: ${response.status} ${response.statusText}`);
+    }
+    const text = await response.text();
+    fs.mkdirSync(path.dirname(upstreamPath), { recursive: true });
+    fs.writeFileSync(upstreamPath, text, "utf8");
+    return { raw: text, document: parseDocument(text, upstreamPath) };
+  }
+  if (!fs.existsSync(upstreamPath)) {
+    throw new Error(`Upstream OpenAPI document not found: ${upstreamPath}`);
+  }
+  const raw = fs.readFileSync(upstreamPath, "utf8");
+  return { raw, document: parseDocument(raw, upstreamPath) };
+}
+
+function materialize(config, source) {
+  const include = new Set(Array.isArray(config.includeOperationIds) ? config.includeOperationIds : []);
+  const exclude = new Set(Array.isArray(config.excludeOperationIds) ? config.excludeOperationIds : []);
+  const rename = typeof config.renameOperationIds === "object" && config.renameOperationIds
+    ? config.renameOperationIds
+    : {};
+  const paths = {};
+
+  for (const [openApiPath, pathItem] of Object.entries(source.paths ?? {})) {
+    if (!pathItem || typeof pathItem !== "object" || Array.isArray(pathItem)) {
+      continue;
+    }
+    const nextPathItem = {};
+    for (const [method, operation] of Object.entries(pathItem)) {
+      if (!operation || typeof operation !== "object" || Array.isArray(operation)) {
+        continue;
+      }
+      if (method === "parameters") {
+        nextPathItem[method] = operation;
+        continue;
+      }
+      const operationId = typeof operation.operationId === "string" ? operation.operationId.trim() : "";
+      if (!operationId) {
+        continue;
+      }
+      if (include.size > 0 && !include.has(operationId)) {
+        continue;
+      }
+      if (exclude.has(operationId)) {
+        continue;
+      }
+      nextPathItem[method] = {
+        ...operation,
+        operationId: typeof rename[operationId] === "string" ? rename[operationId] : operationId,
+      };
+    }
+    if (Object.keys(nextPathItem).length > 0) {
+      paths[openApiPath] = nextPathItem;
+    }
+  }
+
+  const requiredComponentRefs = collectRequiredComponentRefs(source, paths);
+  const cycleGroups = findCyclicComponentGroups(source, requiredComponentRefs);
+  const components = buildPrunedComponents(source, requiredComponentRefs, cycleGroups);
+
+  return {
+    ...source,
+    info: {
+      ...(source.info ?? {}),
+      title: `${config.namespace} Raw Adapter API`,
+    },
+    paths,
+    components,
+  };
+}
+
+async function main() {
+  const config = readConfig();
+  const source = await readUpstream(config);
+  const output = materialize(config, source.document);
+  const outputPath = path.resolve(rootDir, config.outputDocument || "api/openapi.yaml");
+  const lockPath = path.resolve(rootDir, "api/openapi.lock.json");
+  const summary = countOperations(output.paths ?? {});
+  const lock = {
+    contract: "package/api",
+    generator: "canonical-openapi scaffold",
+    sources: [config.namespace],
+    upstreamDocument: config.upstreamDocument,
+    upstreamUrl: config.upstreamUrl || "",
+    sourceHash: createHash("sha256").update(source.raw, "utf8").digest("hex"),
+    pathCount: summary.pathCount,
+    operationCount: summary.operationCount,
+  };
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, YAML.stringify(output), "utf8");
+  fs.writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`, "utf8");
+  process.stdout.write(`${outputPath}\n`);
+}
+
+await main();

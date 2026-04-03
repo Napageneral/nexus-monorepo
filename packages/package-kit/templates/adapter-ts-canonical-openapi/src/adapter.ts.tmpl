@@ -1,0 +1,136 @@
+import { defineAdapter, type AdapterAuthField } from "@nexus-project/adapter-sdk-ts";
+
+const CANONICAL_SCAFFOLD_CAPABILITIES = {
+  supports_markdown: false,
+  supports_threads: false,
+  supports_reactions: false,
+  supports_polls: false,
+  supports_buttons: false,
+  supports_edit: false,
+  supports_delete: false,
+  supports_media: false,
+  supports_voice_notes: false,
+} as const;
+
+const CANONICAL_SCAFFOLD_PROJECTION = {
+  families: [
+    {
+      name: "provider_primary",
+      description:
+        "Replace with the provider record families this adapter normalizes into Nex.",
+    },
+  ],
+  backfill: {
+    supported: false,
+    strategy: "Author a provider-specific historical import strategy.",
+  },
+  monitor: {
+    supported: false,
+    strategy: "Author a provider-specific live sync or polling strategy.",
+  },
+  routing: {
+    space: "Author the provider space mapping.",
+    container: "Author the provider channel or container mapping.",
+    thread: "Author the provider thread mapping.",
+    threads_supported: false,
+  },
+  record_ids: {
+    record: "Author a stable external record id strategy.",
+  },
+  normalization: {
+    content: "Author provider-to-Nex content normalization.",
+    attachments: false,
+  },
+} as const;
+
+const SCAFFOLD_FIELDS = [
+  {
+    name: "base_url",
+    label: "Base URL",
+    type: "text",
+    required: true,
+    placeholder: "https://api.example.com",
+  },
+  {
+    name: "access_token",
+    label: "Access Token",
+    type: "secret",
+    required: true,
+    placeholder: "token",
+  },
+] satisfies AdapterAuthField[];
+
+export const adapter = defineAdapter({
+  platform: "{{PACKAGE_ID}}",
+  name: "nexus-{{PACKAGE_ID}}-adapter",
+  version: "0.1.0",
+  multi_account: true,
+  credential_service: "{{PACKAGE_ID}}",
+  methodCatalog: {
+    source: "openapi",
+    document: "api/openapi.yaml",
+    namespace: "{{PACKAGE_ID}}",
+  },
+  projection: CANONICAL_SCAFFOLD_PROJECTION,
+  auth: {
+    methods: [
+      {
+        id: "{{COMMAND_NAME}}_api_key",
+        type: "api_key",
+        label: "Connect {{DISPLAY_NAME}}",
+        icon: "key",
+        service: "{{PACKAGE_ID}}",
+        fields: SCAFFOLD_FIELDS,
+      },
+    ],
+    setupGuide:
+      "Replace the scaffold credential fields, provider surface selection, projection contract, rate-limit handling, and any artifact-backed read behavior in src/adapter.ts before treating this package as validated.",
+  },
+  capabilities: CANONICAL_SCAFFOLD_CAPABILITIES,
+  connection: {
+    health: async () => ({
+      connected: false,
+      error: "Canonical scaffold health probe not configured",
+      details: {
+        message:
+          "Edit src/adapter.ts to replace the scaffold auth fields and implement a provider-specific health probe.",
+      },
+    }),
+  },
+  setup: {
+    start: async (_ctx, req) => ({
+      status: "requires_input",
+      session_id: req.session_id ?? "{{PACKAGE_ID}}-setup",
+      connection_id: req.connection_id,
+      service: "{{PACKAGE_ID}}",
+      message: "Provide credentials for the canonical adapter scaffold.",
+      instructions:
+        "The generated scaffold uses placeholder credential fields and projection metadata. Replace them in src/adapter.ts once the provider auth contract and Nex projection contract are known.",
+      fields: SCAFFOLD_FIELDS,
+    }),
+    submit: async (_ctx, req) => ({
+      status: "completed",
+      session_id: req.session_id ?? "{{PACKAGE_ID}}-setup",
+      connection_id: req.connection_id,
+      service: "{{PACKAGE_ID}}",
+      message:
+        "Scaffold credential submission acknowledged. Implement provider-specific health plus projection behavior before treating this connection as truthful.",
+    }),
+    status: async (_ctx, req) => ({
+      status: "requires_input",
+      session_id: req.session_id ?? "{{PACKAGE_ID}}-setup",
+      connection_id: req.connection_id,
+      service: "{{PACKAGE_ID}}",
+      message: "Canonical scaffold setup is waiting for provider-specific auth wiring.",
+      fields: SCAFFOLD_FIELDS,
+    }),
+    cancel: async (_ctx, req) => ({
+      status: "cancelled",
+      session_id: req.session_id ?? "{{PACKAGE_ID}}-setup",
+      connection_id: req.connection_id,
+      service: "{{PACKAGE_ID}}",
+      message: "Canonical scaffold setup cancelled.",
+    }),
+  },
+  methods: {},
+});

@@ -1,7 +1,7 @@
 # Spec-Driven Development Workflow
 
 **Status:** CANONICAL
-**Last Updated:** 2026-03-28
+**Last Updated:** 2026-04-02
 
 ---
 
@@ -14,9 +14,12 @@ The goal is simple:
 1. define the ideal target state clearly
 2. identify every gap between that target state and reality
 3. sequence the work to close the gaps
-4. preserve a durable validation corpus for the finished system
+4. preserve a durable validation corpus and truthful operator procedure corpus
+   for the finished system
 
-The active documentation tree must always tell one coherent story. Specs, workplans, validations, and archives are different artifact types and must not be mixed.
+The active documentation tree must always tell one coherent story. Specs,
+workplans, validations, runbooks, and archives are different artifact types and
+must not be mixed.
 
 ---
 
@@ -46,6 +49,20 @@ If a reader took only the active spec set, they should be able to faithfully rei
 
 When a system has overlapping nouns or historically messy vocabulary, the active spec set should include a dedicated taxonomy document early in the cycle. Other specs should reference that taxonomy instead of redefining terms ad hoc.
 
+### 1a. Provider-backed adapters are full-surface by default
+
+For provider-backed adapters, the target-state spec must describe one
+canonical adapter package that:
+
+- exposes the full upstream provider API surface
+- preserves provider-native method names or a stable truthful mapping
+- adds Nex-specific projection behavior for ingest, backfill, monitor, and
+  normalization without hiding provider-native methods
+
+Specs and workplans must not normalize a narrow selected write slice into the
+target-state adapter model when the intended long-term design is full provider
+coverage.
+
 ### 2. Workplans describe gap closure, not the target state
 
 Workplans exist to move the codebase from current reality to the canonical specs.
@@ -69,6 +86,42 @@ Validation documents should reference the intended behavior, not historical beha
 
 The latest validation ladder for a still-supported behavior remains part of the
 active validation corpus even after the original implementation work is done.
+
+For provider-backed adapters, the active validation corpus must cover all three
+canonical proof lanes:
+
+- install and connect proof
+- backfill and monitor proof
+- agent-use proof
+
+An adapter is not complete when only one of those lanes is green.
+
+### 3g. Runbooks document the supported live procedure
+
+Runbooks exist for current operator-facing or human-executed procedures.
+
+They answer questions like:
+
+- how a supported live procedure is performed today
+- what steps an operator follows
+- what preconditions, rollback rules, and safety checks apply
+
+Runbooks may include:
+
+- concrete commands
+- current filesystem paths
+- current service names
+- operator checkpoints and rollback steps
+- links to the canonical spec and validation ladder for the same behavior
+
+Runbooks must not:
+
+- redefine the target-state architecture
+- replace canonical specs as the source of truth for contracts or models
+- serve as the only proof corpus for whether a behavior works
+
+If the procedure is historical, superseded, or campaign-specific rather than
+the supported live path, it belongs in archive.
 
 ### 3a. Cleanroom validation is the default proof posture
 
@@ -170,10 +223,98 @@ When the validation lane is run-backed, the same script should attach to the
 owning run as structured review data so the reviewer does not have to recover
 it from logs after execution.
 
+### 3d. Structured validation profiles own ticket-level proof lanes
+
+Dispatch-run ticket validation must not depend on ad hoc shell command strings
+or environment-variable topology switches as the primary contract.
+
+The canonical model is:
+
+- the policy selects a structured validation profile
+- the profile resolves to a reusable cleanroom-backed execution primitive
+- the profile defines adapter, connection, credential, and evidence needs
+- the review surface shows the intended human proof, not shell glue
+
+For ticket-level golden-journey proof:
+
+- the default executor is a Docker-backed cleanroom
+- the default proof posture prefers real adapters and real connected accounts
+- fake adapters or synthetic remotes are for lower-level deterministic harnesses
+  and regression isolation, not the main review proof
+
+The profile may compile down to one or more reusable job definitions, but the
+stable operator-facing noun is the validation profile, not a raw command list.
+
+### 3e. Candidate artifacts separate implementation from signoff validation
+
+For Dispatch-run ticket execution, the implementation sandbox and the signoff
+validation cleanroom are not the same contract.
+
+The canonical model is:
+
+- the implementation worker may use its own sandbox for fast local checks and
+  iteration
+- the implementation stage emits an explicit candidate artifact
+- the validating stage consumes that candidate artifact in a fresh cleanroom
+- the primary demo artifact comes from the validation cleanroom, not the
+  implementation sandbox
+
+This means:
+
+- signoff validation must not silently fall back to the policy base ref or the
+  operator's ambient checkout
+- the candidate artifact may be a workspace snapshot, patch bundle, installable
+  runtime bundle, or container image, but it must be explicit and reproducible
+- validation profiles and runners own environment projection and candidate
+  materialization
+- ticket-specific validation scripts own the behavior being proven
+
+Implementation-local testing is still useful and expected.
+
+It is just not the same thing as the clean signoff proof a reviewer should
+trust.
+
+### 3f. Warm implementation substrates own startup speed, not validation truth
+
+For Dispatch-run implementation work, the system should distinguish three
+different reusable layers:
+
+- base sandbox image
+- warm implementation substrate
+- fresh per-run implementation sandbox
+
+The canonical rules are:
+
+- base images are toolchain- and profile-oriented and should not be rebuilt per
+  commit by default
+- warm implementation substrates are repo- and dependency-keyed and may be
+  refreshed much more often than images
+- implementation workers should start from a preflighted warm substrate when
+  the repo supports it
+- signoff validation should still happen in a fresh cleanroom against the
+  selected candidate artifact
+
+This means:
+
+- Nex should run substrate preflight before the worker is attached
+- substrate-prep should be a first-class job boundary between `hydrate_repo`
+  and `implementing`
+- workers should not spend critical-path budget on dependency install, command
+  shim repair, or first-time repo smoke checks unless the ticket is explicitly
+  about that substrate work
+
+The canonical image/substrate split is:
+
+- create a new image when the execution platform changes
+- create or refresh a warm substrate when the repo execution state changes
+
+So commit or lockfile changes should normally create a new substrate, not a new
+image.
+
 ### 4. Archive finished or superseded material
 
-Completed workplans, superseded specs, obsolete validation docs, and abandoned
-proposals do not stay in the active tree.
+Completed workplans, superseded specs, obsolete validation docs, superseded
+runbooks, and abandoned proposals do not stay in the active tree.
 
 They move to archive so that:
 
@@ -192,6 +333,12 @@ Do not archive a validation doc merely because:
 - the implementation work landed
 - the paired workplan is archived
 - one dated signoff pass already succeeded
+
+Archive a runbook when:
+
+- the supported live procedure changes and a newer runbook supersedes it
+- the underlying behavior is no longer part of the supported system
+- it was only a one-off operational campaign or rollout packet
 
 ### 5. Customer experience comes before implementation detail
 
@@ -224,6 +371,35 @@ That umbrella spec should:
 Do not implement from a pile of half-authoritative documents.
 Consolidate first, then align the surrounding canon.
 
+### 5b. Provider-backed adapters must specify full provider surface plus projection
+
+When the system being designed is a provider-backed adapter, the target-state
+spec must distinguish two different concerns clearly:
+
+- the full provider-native method surface the adapter exposes
+- the Nex projection contract that governs ingest normalization and runtime
+  semantics
+
+Rules:
+
+- do not narrow the outward provider method surface by default just because a
+  smaller product slice feels easier to describe
+- treat provider-native methods as part of the canonical adapter interface when
+  a trustworthy provider contract exists
+- specify the Nex projection contract explicitly:
+  - canonical record families
+  - stable external ids
+  - channel, container, and thread mapping
+  - backfill strategy
+  - live sync or monitor strategy
+  - normalization and attachment handling
+- keep provider-surface decisions and projection decisions separate so one can
+  expand without destabilizing the other
+
+OpenAPI or equivalent provider contracts can generate broad method coverage,
+but they do not by themselves define Nex ingest, channel semantics, or durable
+runtime truth. Specs must define both layers explicitly.
+
 ### 6. Hard cutover is the default
 
 Canonical specs describe the post-cutover architecture.
@@ -253,6 +429,56 @@ Rules:
 - active workplan indexes must reflect only genuine open execution fronts
 - a broader domain may stay active while a narrower completed workplan for that
   domain archives
+
+### 7b. Corpus hygiene and active-doc governance are explicit policy
+
+Corpus cleanup is not a free-form editorial exercise.
+
+When agents or humans are changing the active documentation tree, the intended
+target shape should be agreed before broad edits begin.
+
+Rules:
+
+1. root and subtree index docs should explain structure, boundaries, and
+   reading posture rather than act as exhaustive registries of every leaf file
+2. fully completed board-style workplans should archive as whole directories
+   rather than remaining at the active root as closure residue
+3. active specs must not contain phase, backport, cutover, deferred-execution,
+   or similar implementation-transition language; that material belongs in
+   workplans or archive
+4. validation indexes should point to durable active validation docs, not live
+   sandbox artifact paths, board residue, or ephemeral proof folders
+5. when one concept spans multiple active docs, the corpus should designate one
+   anchor doc for that concept and supporting docs should defer to it instead of
+   restating the same target-state model repeatedly
+
+The filesystem remains searchable truth for leaf discovery.
+Indexes exist to reduce ambiguity, not to mirror the whole tree forever.
+
+### 7c. Board lifecycle must be truthful
+
+Board-style workplans are active execution surfaces, not permanent closure
+dashboards.
+
+Rules:
+
+1. a board is active only while it still owns real open work
+2. a board may keep many completed tickets visible while the broader lane
+   remains open
+3. once every ticket is complete and no open scope remains, archive the whole
+   board directory
+4. if the only remaining value is proof or closure context, that context should
+   live in validation and archive rather than keeping the board at the active
+   root
+5. empty shell boards should not remain at the active root:
+   - delete them if they never became meaningful execution surfaces
+   - archive them only if they carry real historical context worth preserving
+6. when one board supersedes another, archive the older board and let the
+   successor board or active workplan explain the lineage
+
+Completed boards are historical execution records.
+They should stay searchable, but they should not compete with active work at
+the root.
 
 ### 8. Customer-specific exemplars do not replace generic canon
 
@@ -357,6 +583,20 @@ Additional board rules:
    Dispatch board backed by the same canonical specs, tickets, and validation
    rules rather than a second ad hoc workflow
 
+### `runbooks/`
+
+Live operator procedures and playbooks.
+
+Characteristics:
+
+- current supported procedure, not target-state design
+- may reference concrete commands, hosts, paths, and rollback steps
+- may reference current operational constraints that are not part of the
+  enduring architecture
+- should point back to canonical specs and active validation ladders where
+  relevant
+- should archive when superseded, historical, or campaign-specific
+
 ### `validation/`
 
 Validation ladders, test matrices, scripts, runbooks, and signoff records that
@@ -404,6 +644,7 @@ Characteristics:
 
 - superseded specs
 - completed workplans
+- superseded or historical runbooks
 - obsolete, superseded, or campaign-specific validation docs
 - abandoned proposals
 
@@ -424,11 +665,13 @@ docs/
       not-started/
       in-progress/
       completed/
+  runbooks/
   validation/
   archive/
     proposals/
     specs/
     workplans/
+    runbooks/
     validation/
 ```
 
@@ -437,10 +680,11 @@ Rules:
 1. `docs/specs/` contains only active canonical specs.
 2. `docs/workplans/` contains only active execution plans.
 3. board-style workplans may live under `docs/workplans/<board-name>/` when a lane benefits from atomic tickets and folder-based status movement.
-4. `docs/validation/` contains only active validation ladders and support scripts.
-5. `docs/archive/` contains anything no longer active.
-6. If exploratory drafts exist, `docs/proposals/` should exist and those drafts belong there, not in `docs/specs/`.
-7. `docs/specs/` must not contain files whose own status is `DRAFT`, `DESIGN`, `seed`, `TODO`, `not started`, or `superseded`.
+4. `docs/runbooks/` contains only active supported procedures and operator playbooks.
+5. `docs/validation/` contains only active validation ladders and support scripts.
+6. `docs/archive/` contains anything no longer active.
+7. If exploratory drafts exist, `docs/proposals/` should exist and those drafts belong there, not in `docs/specs/`.
+8. `docs/specs/` must not contain files whose own status is `DRAFT`, `DESIGN`, `seed`, `TODO`, `not started`, or `superseded`.
 
 For board-style workplans:
 
@@ -705,6 +949,14 @@ Do not archive a validation doc merely because:
 2. the code landed
 3. a signoff record already exists
 
+### Active Runbook -> Archive
+
+Archive an active runbook when:
+
+1. a newer supported procedure supersedes it
+2. the procedure becomes historical, campaign-specific, or no longer supported
+3. the underlying behavior leaves the active product or platform surface
+
 ---
 
 ## Non-Negotiable Outcome
@@ -713,7 +965,8 @@ At any point in time, the active documentation tree must answer these questions 
 
 1. What is the intended system?
 2. What work remains to achieve it?
-3. How do we prove it works?
-4. Which older documents are no longer active?
+3. How does an operator perform the supported live procedure?
+4. How do we prove it works?
+5. Which older documents are no longer active?
 
 If the repo cannot answer those questions quickly, the documentation system is out of alignment and must be cleaned up.

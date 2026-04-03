@@ -14,6 +14,7 @@ Templates currently exist for:
 
 - app + TypeScript
 - adapter + TypeScript
+- adapter + TypeScript canonical-openapi profile
 - adapter + Go
 
 The package-kit is intentionally separate from generated Nex and Frontdoor SDKs.

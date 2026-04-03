@@ -8,6 +8,7 @@ import type {
   AdapterMethodCatalog,
   AdapterMethodContextHints,
   AdapterOperation,
+  AdapterProjection,
   AdapterSetupResult,
   ChannelCapabilities,
 } from "./protocol.js";
@@ -49,6 +50,7 @@ export type DefineAdapterConfig<TClient> = {
   auth?: AdapterAuthManifest;
   capabilities: ChannelCapabilities;
   methodCatalog?: AdapterMethodCatalog;
+  projection?: AdapterProjection;
   client?: {
     create?: (args: { ctx: AdapterContext; connectionId?: string }) => MaybePromise<TClient>;
   };
@@ -248,6 +250,7 @@ function buildAdapterInfo<TClient>(
     multi_account: config.multi_account ?? false,
     platform_capabilities: config.capabilities,
     ...(config.auth ? { auth: config.auth } : {}),
+    ...(config.projection ? { projection: config.projection } : {}),
     ...(methodDescriptors.length > 0
       ? {
           methodCatalog: config.methodCatalog ?? {
@@ -270,8 +273,8 @@ function buildMethodDescriptor<TClient>(
     name,
     ...(declaration.description !== undefined ? { description: declaration.description } : {}),
     ...(declaration.action ? { action: declaration.action } : {}),
-    ...(declaration.params ? { params: declaration.params } : {}),
-    ...(declaration.response ? { response: declaration.response } : {}),
+    params: declaration.params ?? null,
+    response: declaration.response ?? null,
     connection_required: declaration.connection_required ?? true,
     mutates_remote:
       typeof declaration.mutates_remote === "boolean"

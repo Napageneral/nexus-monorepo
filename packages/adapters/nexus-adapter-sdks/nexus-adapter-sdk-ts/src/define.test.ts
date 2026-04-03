@@ -35,6 +35,14 @@ describe("defineAdapter", () => {
         supports_media: false,
         supports_voice_notes: false,
       },
+      projection: {
+        families: [{ name: "issue" }],
+        backfill: { supported: true, strategy: "cursor", cursor: "updated_at" },
+        monitor: { supported: true, strategy: "poll" },
+        routing: { container: "project", thread: "issue", threads_supported: true },
+        record_ids: { record: "issue-comment", thread: "issue-key" },
+        normalization: { content: "markdown", attachments: true },
+      },
       methods: {
         "test.echo": method({
           description: "Echo input",
@@ -88,6 +96,11 @@ describe("defineAdapter", () => {
     expect(info.methodCatalog).toMatchObject({
       source: "manifest",
       namespace: "test",
+    });
+    expect(info.projection).toMatchObject({
+      families: [{ name: "issue" }],
+      backfill: { supported: true, cursor: "updated_at" },
+      routing: { container: "project", thread: "issue", threads_supported: true },
     });
   });
 
@@ -143,5 +156,55 @@ describe("defineAdapter", () => {
     expect(code).toBe(0);
     expect(stderr.read()).toBe("");
     expect(JSON.parse(stdout.read().trim())).toEqual({ total: 7 });
+  });
+
+  it("emits null params and response for methods that omit schemas", async () => {
+    const adapter = defineAdapter({
+      platform: "test",
+      name: "test-adapter",
+      version: "1.0.0",
+      capabilities: {
+        supports_markdown: false,
+        supports_tables: false,
+        supports_code_blocks: false,
+        supports_embeds: false,
+        supports_threads: false,
+        supports_reactions: false,
+        supports_polls: false,
+        supports_buttons: false,
+        supports_edit: false,
+        supports_delete: false,
+        supports_media: false,
+        supports_voice_notes: false,
+      },
+      methods: {
+        "test.current": method({
+          description: "Return current identity",
+          action: "read",
+          handler: async () => ({ ok: true }),
+        }),
+      },
+    });
+
+    const stdout = captureStream();
+    const stderr = captureStream();
+    const code = await runAdapter(adapter, {
+      argv: ["node", "adapter", "adapter.info"],
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      patchConsole: false,
+      installSignalHandlers: false,
+      requireRuntimeContext: false,
+    });
+
+    expect(code).toBe(0);
+    expect(stderr.read()).toBe("");
+    const info = JSON.parse(stdout.read().trim());
+    expect(info.methods).toHaveLength(1);
+    expect(info.methods[0]).toMatchObject({
+      name: "test.current",
+      params: null,
+      response: null,
+    });
   });
 });

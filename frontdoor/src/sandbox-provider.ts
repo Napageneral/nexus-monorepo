@@ -130,6 +130,12 @@ function buildSandboxBootstrapScript(params: {
         `chmod 600 ${params.containerRoot}/config/bootstrap-seed.yml`,
       ]
     : [];
+  const runtimeEnvPrefix = [
+    'HOME="$ROOT"',
+    'NEXUS_ROOT="$ROOT"',
+    'NEXUS_STATE_DIR="$ROOT/state"',
+    ...(params.bootstrapSeedFilename ? ['NEXUS_BOOTSTRAP_SEED_FILE="$ROOT/config/bootstrap-seed.yml"'] : []),
+  ].join(" ");
   return [
     "#!/usr/bin/env bash",
     "set -euo pipefail",
@@ -170,7 +176,7 @@ function buildSandboxBootstrapScript(params: {
     "}",
     "fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\\n`, 'utf8');",
     "NODE",
-    "HOME=\"$ROOT\" NEXUS_ROOT=\"$ROOT\" NEXUS_STATE_DIR=\"$ROOT/state\" node nexus.mjs runtime run --workspace \"$ROOT\" --port \"$RUNTIME_PORT\" --bind lan >\"$ROOT/runtime.log\" 2>&1 &",
+    `${runtimeEnvPrefix} node nexus.mjs runtime run --workspace "$ROOT" --port "$RUNTIME_PORT" --bind lan >"$ROOT/runtime.log" 2>&1 &`,
     "RUNTIME_PID=$!",
     "node <<'NODE'",
     "const crypto = require('node:crypto');",

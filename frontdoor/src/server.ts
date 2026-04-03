@@ -298,19 +298,29 @@ function readSession(params: {
       const tokenRecord = params.store.getApiTokenByHash(hash);
       if (tokenRecord && !tokenRecord.revokedAtMs && (!tokenRecord.expiresAtMs || tokenRecord.expiresAtMs > Date.now())) {
         params.store.touchApiToken(tokenRecord.tokenId);
+        const user = params.store.getUserById(tokenRecord.userId);
+        const principal =
+          user
+            ? params.store.toPrincipal({
+                user,
+                server: null,
+                accountId: tokenRecord.accountId,
+                amr: ["api_token"],
+              })
+            : {
+                userId: tokenRecord.userId,
+                tenantId: "",
+                entityId: tokenRecord.userId,
+                roles: ["operator"],
+                scopes: tokenRecord.scopes === "*" ? ["*"] : tokenRecord.scopes.split(","),
+                amr: ["api_token"],
+                accountId: tokenRecord.accountId,
+              };
         // Synthesize a SessionRecord from the API token
         return {
           id: `api-token:${tokenRecord.tokenId}`,
           principal: elevatePrincipalForGlobalOperatorAccess({
-            principal: {
-              userId: tokenRecord.userId,
-              tenantId: "", // API tokens are cross-tenant
-              entityId: tokenRecord.userId,
-              roles: ["operator"],
-              scopes: tokenRecord.scopes === "*" ? ["*"] : tokenRecord.scopes.split(","),
-              amr: ["api_token"],
-              accountId: tokenRecord.accountId,
-            },
+            principal,
             config: params.config,
           }),
           createdAtMs: tokenRecord.createdAtMs,

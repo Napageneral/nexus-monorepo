@@ -5,7 +5,7 @@ import {
   type Server as HttpServer,
 } from "node:http";
 import fs from "node:fs";
-import { createHmac, generateKeyPairSync, randomUUID, sign } from "node:crypto";
+import { createHash, createHmac, generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { AddressInfo } from "node:net";
 import path from "node:path";
 import { tmpdir } from "node:os";
@@ -2546,6 +2546,100 @@ describe("frontdoor scaffold", () => {
       expect(created?.provider).toBe("sandbox");
       expect(created?.privateIp).toBe("127.0.0.1");
     });
+  });
+
+  it("keeps owner bootstrap seed metadata when hosted server creation uses an API token", async () => {
+    const runtime = await listen(
+      createHttpServer((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end('{"ok":true}');
+      }),
+    );
+    const sandboxProvider: CloudProvider = {
+      createServer: vi.fn().mockResolvedValue({
+        providerServerId: "sandbox-api-token-1",
+        publicIp: "",
+        privateIp: "127.0.0.1",
+        backupEnabled: false,
+        deleteProtectionEnabled: false,
+        rebuildProtectionEnabled: false,
+      }),
+      getServerStatus: vi.fn(),
+      archiveServer: vi.fn(),
+      restoreServer: vi.fn(),
+      createRecoveryPoint: vi.fn(),
+      setProtection: vi.fn(),
+      destroyServer: vi.fn(),
+      listPlans: vi.fn(() => [
+        {
+          id: "cax11",
+          name: "Small",
+          monthlyCostCents: 500,
+          vcpus: 2,
+          memoryMb: 4096,
+          diskGb: 40,
+          architecture: "arm64" as const,
+        },
+      ]),
+    };
+    const frontdoor = createFrontdoorServer({
+      config: baseConfig(runtime.origin),
+      namedCloudProviders: { sandbox: sandboxProvider },
+      standardProvisionProviderName: "sandbox",
+    });
+    const frontdoorRunning = await listen(frontdoor.server);
+    const apiToken = "nex_t_owner_bootstrap_seed";
+    withStore(frontdoor.config, (store) => {
+      const account = store.getAccountsForUser("u-owner")[0];
+      if (!account) {
+        throw new Error("missing_owner_account");
+      }
+      store.addCredits({
+        accountId: account.accountId,
+        amountCents: 500,
+        type: "deposit",
+        description: "api token server create credits",
+      });
+      store.createApiToken({
+        tokenId: `tok-${randomUUID()}`,
+        tokenHash: createHash("sha256").update(apiToken).digest("hex"),
+        userId: "u-owner",
+        accountId: account.accountId,
+        displayName: "API Token",
+      });
+    });
+
+    const createResp = await fetch(`${frontdoorRunning.origin}/api/servers/create`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        display_name: "Sandbox Hosted Server API Token",
+        server_class: "standard",
+        deployment_class: "customer_server",
+        plan: "cax11",
+      }),
+    });
+
+    expect(createResp.status).toBe(200);
+    expect(sandboxProvider.createServer).toHaveBeenCalledTimes(1);
+    expect(sandboxProvider.createServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostedBootstrap: expect.objectContaining({
+          bootstrapSeedYaml: expect.stringContaining('name: "Owner"'),
+        }),
+      }),
+    );
+    expect(sandboxProvider.createServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostedBootstrap: expect.objectContaining({
+          bootstrapSeedYaml: expect.stringContaining('"owner@example.com"'),
+        }),
+      }),
+    );
   });
 
   it("uses the aws-backed provider for lifecycle actions on compliant servers", async () => {

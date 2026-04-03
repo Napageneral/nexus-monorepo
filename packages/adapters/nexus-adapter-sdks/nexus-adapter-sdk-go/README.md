@@ -34,6 +34,8 @@ Canonical references:
 Shared behavior such as:
 
 - `DefineAdapter(...)` and single-source method declaration
+- projection metadata on the same package declaration that owns provider-native
+  methods
 - CLI dispatch for adapter operations
 - runtime context parsing
 - canonical adapter state-root discovery via `NEXUS_ADAPTER_STATE_DIR`
@@ -48,6 +50,16 @@ It does not own:
 - provider-specific field mapping
 - provider API behavior
 - one adapter package's workplan or validation ladder
+
+The intended package model is:
+
+1. one canonical adapter package per provider or provider family
+2. full provider-native methods exposed by default
+3. the same package declares projection metadata for:
+   - record families
+   - backfill and monitor strategy
+   - routing metadata
+   - record-id and normalization behavior
 
 ## Validation
 

@@ -22,6 +22,17 @@ func TestDefineAdapterBuildsInfoAndDefaults(t *testing.T) {
 			TextLimit:        32000,
 			SupportsMarkdown: true,
 		},
+		Projection: &AdapterProjection{
+			Families: []AdapterProjectionFamily{{Name: "issue"}},
+			Backfill: &AdapterProjectionSync{Supported: true, Strategy: "cursor", Cursor: "updated_at"},
+			Monitor:  &AdapterProjectionSync{Supported: true, Strategy: "poll"},
+			Routing:  &AdapterProjectionRouting{Container: "project", Thread: "issue", ThreadsSupported: true},
+			RecordIDs: &AdapterProjectionRecordIDs{
+				Record: "issue-comment",
+				Thread: "issue-key",
+			},
+			Normalization: &AdapterProjectionNormalize{Content: "markdown", Attachments: true},
+		},
 		Methods: map[string]DeclaredMethod[struct{}]{
 			"jira.issues.transition": Method(DeclaredMethod[struct{}]{
 				Description:        "Transition an issue",
@@ -65,6 +76,9 @@ func TestDefineAdapterBuildsInfoAndDefaults(t *testing.T) {
 	}
 	if info.MethodCatalog == nil || info.MethodCatalog.Namespace != "jira" {
 		t.Fatalf("methodCatalog = %#v", info.MethodCatalog)
+	}
+	if info.Projection == nil || len(info.Projection.Families) != 1 || info.Projection.Families[0].Name != "issue" {
+		t.Fatalf("projection = %#v", info.Projection)
 	}
 }
 

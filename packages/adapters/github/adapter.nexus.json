@@ -1,0 +1,14 @@
+{
+  "id": "github",
+  "version": "1.0.11",
+  "displayName": "GitHub",
+  "description": "GitHub adapter package for Nex.",
+  "platform": "github",
+  "methodCatalog": {
+    "source": "openapi",
+    "document": "api/openapi.yaml",
+    "namespace": "github"
+  },
+  "command": "./bin/github-adapter",
+  "skill": "./SKILL.md"
+}

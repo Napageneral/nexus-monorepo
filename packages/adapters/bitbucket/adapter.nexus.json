@@ -1,0 +1,14 @@
+{
+  "id": "bitbucket",
+  "version": "1.0.12",
+  "displayName": "Bitbucket",
+  "description": "Bitbucket adapter package for Nex.",
+  "platform": "bitbucket",
+  "methodCatalog": {
+    "source": "openapi",
+    "document": "api/openapi.yaml",
+    "namespace": "bitbucket"
+  },
+  "command": "./bin/bitbucket-adapter",
+  "skill": "./SKILL.md"
+}
