@@ -13,6 +13,9 @@ video-library access through a durable shared connection.
 - `adapter.info`
 - `adapter.connections.list`
 - `adapter.health`
+- `tiktok-display.user.info.get`
+- `tiktok-display.video.list`
 
-Profile sync, video sync, backfill, and monitor land in follow-on package
-tickets.
+Profile sync, video sync, backfill, monitor, and the first-wave public method
+surface are implemented in this package. Use the package manifest and
+cleanroom proof for the authoritative contract state.

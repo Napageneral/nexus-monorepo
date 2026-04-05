@@ -17,6 +17,8 @@ Active package-local docs for the shared `tiktok-display` adapter.
 ## Current State
 
 - auth and profile-health are implemented
+- provider-native profile and video read methods are implemented
+- method catalog and projection metadata are published with the package
 - profile and video snapshot sync are implemented
 - backfill and monitor replay are implemented
-- cleanroom validation remains the last open layer
+- cleanroom validation now asserts the installed public method surface too

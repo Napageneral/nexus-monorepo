@@ -23,7 +23,8 @@ const (
 	tiktokBusinessDateTimeLayout       = "2006-01-02 15:04:05"
 	tiktokBusinessDailyReplayWindow    = 30 * 24 * time.Hour
 	tiktokBusinessHourlyReplayWindow   = 24 * time.Hour
-	tiktokBusinessMonitorInterval      = 6 * time.Hour
+	tiktokBusinessMonitorInterval      = 1 * time.Minute
+	tiktokBusinessMonitorErrorBackoff  = 5 * time.Minute
 	tiktokBusinessMonitorReplayWindow  = 7 * 24 * time.Hour
 	tiktokBusinessDefaultPageSize      = "100"
 	tiktokBusinessDefaultReportType    = "BASIC"
@@ -194,6 +195,7 @@ func monitor(ctx nexadapter.AdapterContext[struct{}], emit nexadapter.EmitFunc) 
 
 	return nexadapter.PollMonitor(nexadapter.PollConfig[nexadapter.AdapterInboundRecord]{
 		Interval:      tiktokBusinessMonitorInterval,
+		ErrorBackoff:  tiktokBusinessMonitorErrorBackoff,
 		InitialCursor: time.Now().UTC(),
 		Fetch: func(ctx context.Context, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 			return fetchTikTokBusinessMonitorCycle(ctx, state, since)

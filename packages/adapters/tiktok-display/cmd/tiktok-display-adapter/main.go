@@ -77,6 +77,32 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 		Version:           adapterVersion,
 		MultiAccount:      false,
 		CredentialService: platformID,
+		MethodCatalog: &nexadapter.AdapterMethodCatalog{
+			Source:    "openapi",
+			Document:  "api/openapi.yaml",
+			Namespace: platformID,
+		},
+		Projection: &nexadapter.AdapterProjection{
+			Platform: platformID,
+			Families: []nexadapter.AdapterProjectionFamily{
+				{Name: tiktokDisplayProfileSnapshotFamily, Description: "Current TikTok Display profile snapshots."},
+				{Name: tiktokDisplayVideoSnapshotFamily, Description: "Current TikTok Display video snapshots."},
+			},
+			Backfill: &nexadapter.AdapterProjectionSync{
+				Supported: true,
+				Strategy:  "poll",
+				Cursor:    "create_time",
+			},
+			Monitor: &nexadapter.AdapterProjectionSync{
+				Supported: true,
+				Strategy:  "poll",
+				Cursor:    "create_time",
+			},
+			Normalization: &nexadapter.AdapterProjectionNormalize{
+				Content:     "provider_native_profile_and_video_snapshots",
+				Attachments: false,
+			},
+		},
 		Connection: nexadapter.ConnectionHandlers[struct{}]{
 			Connections: func(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterConnectionIdentity, error) {
 				return connections(ctx.Context)
@@ -93,7 +119,7 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 				return backfill(ctx.Context, ctx.ConnectionID, since, emit)
 			},
 		},
-		Methods: map[string]nexadapter.DeclaredMethod[struct{}]{},
+		Methods: declaredTikTokDisplayMethods(),
 		Auth: &nexadapter.AdapterAuthManifest{
 			Methods: []nexadapter.AdapterAuthMethod{
 				{

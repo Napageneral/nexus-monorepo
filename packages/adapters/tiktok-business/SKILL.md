@@ -12,6 +12,7 @@ access through a durable shared connection.
 
 - connect TikTok Business once through Nex
 - bind one advertiser to one Nex connection
+- use provider-native read methods for hierarchy and daily/hourly reporting
 - backfill shared TikTok hierarchy and performance rows
 - run monitor for freshness
 
@@ -20,8 +21,17 @@ access through a durable shared connection.
 - `adapter.info`
 - `adapter.connections.list`
 - `adapter.health`
+- `tiktok-business.campaigns.list`
+- `tiktok-business.adgroups.list`
+- `tiktok-business.ads.list`
+- `tiktok-business.reports.campaign_daily.list`
+- `tiktok-business.reports.adgroup_daily.list`
+- `tiktok-business.reports.ad_daily.list`
+- `tiktok-business.reports.advertiser_hourly.list`
 
-Backfill and monitor land in follow-on package tickets.
+Backfill, monitor, and the first-wave public method surface are implemented in
+this package. Use the package manifest and cleanroom proof for the authoritative
+contract state.
 
 ## Related Docs
 

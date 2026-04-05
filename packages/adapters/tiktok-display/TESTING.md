@@ -3,8 +3,8 @@
 This guide covers the package scaffold slice for the shared TikTok Display
 adapter.
 
-Real TikTok Display auth, profile sync, video sync, and MoonSleep validation
-land in follow-on tickets.
+Real TikTok Display auth, profile sync, video sync, provider-native reads, and
+MoonSleep validation are implemented in this package.
 
 ## Build
 
@@ -21,6 +21,8 @@ go build -o ./bin/tiktok-display-adapter ./cmd/tiktok-display-adapter
 ```bash
 ./bin/tiktok-display-adapter adapter.info
 ./bin/tiktok-display-adapter adapter.connections.list
+./bin/tiktok-display-adapter tiktok-display.user.info.get --connection tiktok-display-primary
+./bin/tiktok-display-adapter tiktok-display.video.list --connection tiktok-display-primary --payload-json '{"page_size": 5}'
 ```
 
 ## Build Package Artifact

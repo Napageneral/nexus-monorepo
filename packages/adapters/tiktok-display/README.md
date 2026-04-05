@@ -7,6 +7,8 @@ validated MoonSleep parity.
 
 The package now also includes:
 
+- provider-native `tiktok-display.user.info.get` and `tiktok-display.video.list`
+- method catalog and projection metadata in the package manifest
 - profile and video snapshot ingest
 - backfill and monitor behavior
 - retained cleanroom proof with MoonSleep credentials
@@ -44,6 +46,8 @@ go test ./...
 ./bin/tiktok-display-adapter adapter.info
 ./bin/tiktok-display-adapter adapter.connections.list
 ./bin/tiktok-display-adapter adapter.health --connection tiktok-display-primary
+./bin/tiktok-display-adapter tiktok-display.user.info.get --connection tiktok-display-primary
+./bin/tiktok-display-adapter tiktok-display.video.list --connection tiktok-display-primary --payload-json '{"page_size": 5}'
 ```
 
 ## Active Docs

@@ -2,8 +2,13 @@
   "id": "tiktok-business",
   "version": "0.1.0",
   "displayName": "TikTok Business",
-  "description": "Shared TikTok Business adapter package for Nex.",
+  "description": "Shared TikTok Business adapter package for Nex with provider-native hierarchy/report reads plus additive projection ingest.",
   "platform": "tiktok-business",
+  "methodCatalog": {
+    "source": "openapi",
+    "document": "api/openapi.yaml",
+    "namespace": "tiktok-business"
+  },
   "command": "./bin/tiktok-business-adapter",
   "skill": "./SKILL.md"
 }

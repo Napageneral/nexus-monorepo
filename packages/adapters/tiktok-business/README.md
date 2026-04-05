@@ -7,9 +7,18 @@ validated MoonSleep parity.
 
 Current behavior:
 
-- SDK-wired adapter entrypoint
+- SDK-wired adapter entrypoint with first-wave provider-native read methods
 - `adapter.connections.list`
 - `adapter.health`
+- provider-native reads for:
+  - `tiktok-business.campaigns.list`
+  - `tiktok-business.adgroups.list`
+  - `tiktok-business.ads.list`
+  - `tiktok-business.reports.campaign_daily.list`
+  - `tiktok-business.reports.adgroup_daily.list`
+  - `tiktok-business.reports.ad_daily.list`
+  - `tiktok-business.reports.advertiser_hourly.list`
+- method catalog and projection metadata in the package manifest
 - runtime credential parsing for TikTok Business access tokens and advertiser
   identity
 - provider-row mapping for hierarchy and report rows
@@ -54,6 +63,8 @@ go test ./...
 ./bin/tiktok-business-adapter adapter.info
 ./bin/tiktok-business-adapter adapter.connections.list
 ./bin/tiktok-business-adapter adapter.health --connection tiktok-business-primary
+./bin/tiktok-business-adapter tiktok-business.campaigns.list --connection tiktok-business-primary --payload-json '{}'
+./bin/tiktok-business-adapter tiktok-business.reports.campaign_daily.list --connection tiktok-business-primary --payload-json '{"since":"2026-03-01","until":"2026-03-01"}'
 ```
 
 ## Active Docs

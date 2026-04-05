@@ -54,6 +54,8 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 		Version:           adapterVersion,
 		MultiAccount:      true,
 		CredentialService: "tiktok-business",
+		MethodCatalog:     tiktokBusinessMethodCatalog(),
+		Projection:        tiktokBusinessProjection(),
 		Connection: nexadapter.ConnectionHandlers[struct{}]{
 			Connections: connections,
 			Health:      health,
@@ -66,7 +68,7 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 				return backfill(ctx, since, emit)
 			},
 		},
-		Methods: map[string]nexadapter.DeclaredMethod[struct{}]{},
+		Methods: declaredTikTokBusinessMethods(),
 		Auth: &nexadapter.AdapterAuthManifest{
 			Methods: []nexadapter.AdapterAuthMethod{
 				{

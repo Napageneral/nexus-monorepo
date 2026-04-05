@@ -18,13 +18,13 @@ import (
 )
 
 const (
-	tiktokDisplayVideoFields         = "id,create_time,cover_image_url,share_url,video_description,duration,height,width,title,embed_html,embed_link,like_count,comment_count,share_count,view_count"
-	tiktokDisplayListPageSize        = 20
-	tiktokDisplayVideoPageSize       = tiktokDisplayListPageSize
-	tiktokDisplayMonitorReplayWindow = 7 * 24 * time.Hour
-	tiktokDisplayDefaultSenderName   = "TikTok Display"
-	tiktokDisplayDefaultContainerKind = "group"
-	tiktokDisplayDefaultContentType   = "application/json"
+	tiktokDisplayVideoFields           = "id,create_time,cover_image_url,share_url,video_description,duration,height,width,title,embed_html,embed_link,like_count,comment_count,share_count,view_count"
+	tiktokDisplayListPageSize          = 20
+	tiktokDisplayVideoPageSize         = tiktokDisplayListPageSize
+	tiktokDisplayMonitorReplayWindow   = 7 * 24 * time.Hour
+	tiktokDisplayDefaultSenderName     = "TikTok Display"
+	tiktokDisplayDefaultContainerKind  = "group"
+	tiktokDisplayDefaultContentType    = "application/json"
 	tiktokDisplayProfileSnapshotFamily = "profile_snapshot"
 	tiktokDisplayVideoSnapshotFamily   = "video_snapshot"
 )
@@ -34,39 +34,39 @@ var (
 )
 
 var (
-	fetchTikTokDisplayVideos = fetchTikTokDisplayVideosFromTikTok
+	fetchTikTokDisplayVideos    = fetchTikTokDisplayVideosFromTikTok
 	fetchTikTokDisplayVideoPage = fetchTikTokDisplayVideoPageFromTikTok
 )
 
 type tiktokDisplayVideo struct {
-	CommentCount    int64  `json:"comment_count"`
-	CoverImageURL   string `json:"cover_image_url,omitempty"`
-	CreateTime      int64  `json:"create_time"`
-	Duration        int64  `json:"duration"`
-	EmbedHTML       string `json:"embed_html,omitempty"`
-	EmbedLink       string `json:"embed_link,omitempty"`
-	Height          int64  `json:"height"`
-	ID              string `json:"id,omitempty"`
-	LikeCount       int64  `json:"like_count"`
-	ShareCount      int64  `json:"share_count"`
-	ShareURL        string `json:"share_url,omitempty"`
-	Title           string `json:"title,omitempty"`
-	VideoDescription string `json:"video_description,omitempty"`
-	ViewCount       int64  `json:"view_count"`
-	Width           int64  `json:"width"`
-	Raw             map[string]any `json:"-"`
+	CommentCount     int64          `json:"comment_count"`
+	CoverImageURL    string         `json:"cover_image_url,omitempty"`
+	CreateTime       int64          `json:"create_time"`
+	Duration         int64          `json:"duration"`
+	EmbedHTML        string         `json:"embed_html,omitempty"`
+	EmbedLink        string         `json:"embed_link,omitempty"`
+	Height           int64          `json:"height"`
+	ID               string         `json:"id,omitempty"`
+	LikeCount        int64          `json:"like_count"`
+	ShareCount       int64          `json:"share_count"`
+	ShareURL         string         `json:"share_url,omitempty"`
+	Title            string         `json:"title,omitempty"`
+	VideoDescription string         `json:"video_description,omitempty"`
+	ViewCount        int64          `json:"view_count"`
+	Width            int64          `json:"width"`
+	Raw              map[string]any `json:"-"`
 }
 
 type tiktokDisplayVideoInfo = tiktokDisplayVideo
 
 type tiktokDisplayVideoListResponse struct {
-	Data *tiktokDisplayVideoListData `json:"data,omitempty"`
-	Error *tiktokDisplayAPIError `json:"error,omitempty"`
+	Data  *tiktokDisplayVideoListData `json:"data,omitempty"`
+	Error *tiktokDisplayAPIError      `json:"error,omitempty"`
 }
 
 type tiktokDisplayVideoListData struct {
-	Cursor  int64             `json:"cursor,omitempty"`
-	HasMore bool              `json:"has_more,omitempty"`
+	Cursor  int64                `json:"cursor,omitempty"`
+	HasMore bool                 `json:"has_more,omitempty"`
 	Videos  []tiktokDisplayVideo `json:"videos,omitempty"`
 }
 
@@ -141,7 +141,7 @@ func fetchTikTokDisplayVideosFromTikTok(ctx context.Context, accessToken string,
 	var videos []tiktokDisplayVideoInfo
 
 	for {
-		page, err := fetchTikTokDisplayVideoPage(ctx, accessToken, &cursor)
+		page, err := fetchTikTokDisplayVideoPage(ctx, accessToken, &cursor, tiktokDisplayVideoPageSize)
 		if err != nil {
 			return nil, err
 		}
@@ -375,15 +375,15 @@ func normalizedTikTokDisplayProfileRow(state *tiktokDisplayRuntime, profile *tik
 
 func normalizedTikTokDisplayVideoRow(video tiktokDisplayVideo) map[string]any {
 	normalized := map[string]any{
-		"id":              displayNonBlank(video.ID, "video"),
-		"create_time":     video.CreateTime,
-		"duration":        video.Duration,
-		"height":          video.Height,
-		"width":           video.Width,
-		"like_count":      video.LikeCount,
-		"comment_count":   video.CommentCount,
-		"share_count":     video.ShareCount,
-		"view_count":      video.ViewCount,
+		"id":            displayNonBlank(video.ID, "video"),
+		"create_time":   video.CreateTime,
+		"duration":      video.Duration,
+		"height":        video.Height,
+		"width":         video.Width,
+		"like_count":    video.LikeCount,
+		"comment_count": video.CommentCount,
+		"share_count":   video.ShareCount,
+		"view_count":    video.ViewCount,
 	}
 	if strings.TrimSpace(video.CoverImageURL) != "" {
 		normalized["cover_image_url"] = strings.TrimSpace(video.CoverImageURL)
@@ -429,21 +429,21 @@ func tiktokDisplayProfileRawRow(profile *tiktokDisplayUserInfo) map[string]any {
 
 func tiktokDisplayVideoRawRow(video tiktokDisplayVideo) map[string]any {
 	raw := map[string]any{
-		"id":               displayNonBlank(video.ID, "video"),
-		"create_time":      video.CreateTime,
-		"duration":         video.Duration,
-		"height":           video.Height,
-		"width":            video.Width,
-		"like_count":       video.LikeCount,
-		"comment_count":    video.CommentCount,
-		"share_count":      video.ShareCount,
-		"view_count":       video.ViewCount,
+		"id":                displayNonBlank(video.ID, "video"),
+		"create_time":       video.CreateTime,
+		"duration":          video.Duration,
+		"height":            video.Height,
+		"width":             video.Width,
+		"like_count":        video.LikeCount,
+		"comment_count":     video.CommentCount,
+		"share_count":       video.ShareCount,
+		"view_count":        video.ViewCount,
 		"cover_image_url":   strings.TrimSpace(video.CoverImageURL),
-		"share_url":        strings.TrimSpace(video.ShareURL),
+		"share_url":         strings.TrimSpace(video.ShareURL),
 		"video_description": strings.TrimSpace(video.VideoDescription),
-		"title":            strings.TrimSpace(video.Title),
-		"embed_html":       strings.TrimSpace(video.EmbedHTML),
-		"embed_link":       strings.TrimSpace(video.EmbedLink),
+		"title":             strings.TrimSpace(video.Title),
+		"embed_html":        strings.TrimSpace(video.EmbedHTML),
+		"embed_link":        strings.TrimSpace(video.EmbedLink),
 	}
 	for key, value := range raw {
 		if str, ok := value.(string); ok && strings.TrimSpace(str) == "" {
@@ -453,7 +453,7 @@ func tiktokDisplayVideoRawRow(video tiktokDisplayVideo) map[string]any {
 	return raw
 }
 
-func fetchTikTokDisplayVideoPageFromTikTok(ctx context.Context, accessToken string, cursor *int64) (*tiktokDisplayVideoPage, error) {
+func fetchTikTokDisplayVideoPageFromTikTok(ctx context.Context, accessToken string, cursor *int64, pageSize int) (*tiktokDisplayVideoPage, error) {
 	endpoint, err := url.Parse(tiktokDisplayVideoListURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse TikTok Display video/list URL: %w", err)
@@ -464,6 +464,9 @@ func fetchTikTokDisplayVideoPageFromTikTok(ctx context.Context, accessToken stri
 
 	body := map[string]any{
 		"max_count": tiktokDisplayListPageSize,
+	}
+	if pageSize > 0 {
+		body["max_count"] = pageSize
 	}
 	if cursor != nil && *cursor > 0 {
 		body["cursor"] = *cursor
@@ -556,16 +559,16 @@ func stableTikTokDisplayRevisionPayload(familyID string, normalizedRow map[strin
 
 func stableTikTokDisplayProfileRevisionRow(normalizedRow map[string]any) map[string]any {
 	return filterTikTokDisplayRevisionRow(normalizedRow, map[string]struct{}{
-		"open_id":         {},
-		"union_id":        {},
-		"display_name":    {},
-		"bio_description": {},
+		"open_id":          {},
+		"union_id":         {},
+		"display_name":     {},
+		"bio_description":  {},
 		"profile_web_link": {},
-		"is_verified":     {},
-		"follower_count":  {},
-		"following_count": {},
-		"likes_count":     {},
-		"video_count":     {},
+		"is_verified":      {},
+		"follower_count":   {},
+		"following_count":  {},
+		"likes_count":      {},
+		"video_count":      {},
 	})
 }
 

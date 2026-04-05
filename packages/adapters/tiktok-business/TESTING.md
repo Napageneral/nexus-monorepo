@@ -1,9 +1,7 @@
 # TikTok Business Adapter Testing
 
-This guide covers the package scaffold plus auth/health slice for the shared
-TikTok Business adapter.
-
-Backfill, monitor, and MoonSleep validation land in follow-on tickets.
+This guide covers the current TikTok Business first-wave public read surface,
+auth/health slice, and retained MoonSleep cleanroom validation.
 
 ## Build
 
@@ -21,6 +19,8 @@ go build -o ./bin/tiktok-business-adapter ./cmd/tiktok-business-adapter
 ./bin/tiktok-business-adapter adapter.info
 ./bin/tiktok-business-adapter adapter.connections.list
 ./bin/tiktok-business-adapter adapter.health --connection tiktok-business-primary
+./bin/tiktok-business-adapter tiktok-business.campaigns.list --connection tiktok-business-primary --payload-json '{}'
+./bin/tiktok-business-adapter tiktok-business.reports.campaign_daily.list --connection tiktok-business-primary --payload-json '{"since":"2026-03-01","until":"2026-03-01"}'
 ```
 
 ## Build Package Artifact

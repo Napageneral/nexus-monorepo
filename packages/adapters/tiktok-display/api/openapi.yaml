@@ -3,8 +3,8 @@ info:
   title: tiktok-display-adapter Adapter API
   version: 0.1.0
   description: "Published adapter package contract for tiktok-display. This
-    scaffold currently exposes package metadata and basic connection-health
-    surfaces. Streaming operations are added in later implementation tickets."
+    package exposes package metadata, connection-health surfaces, and a first
+    wave of provider-native read methods for profile and video reads."
 tags:
   - name: Adapter
 paths:
@@ -42,6 +42,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdapterHealthSchema"
+  /operations/tiktok-display.user.info.get:
+    post:
+      operationId: tiktok-display.user.info.get
+      summary: Read the authorized TikTok Display profile
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: read
+      x-nexus-mutates-remote: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TikTokDisplayUserInfoGetRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TikTokDisplayUserInfoGetResponseSchema"
+  /operations/tiktok-display.video.list:
+    post:
+      operationId: tiktok-display.video.list
+      summary: Read a page of TikTok Display videos
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: read
+      x-nexus-mutates-remote: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TikTokDisplayVideoListRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TikTokDisplayVideoListResponseSchema"
   /operations/adapter.info:
     post:
       operationId: adapter.info
@@ -65,6 +109,78 @@ components:
           type: string
       required:
         - connection_id
+      additionalProperties: false
+    TikTokDisplayUserInfoGetRequestSchema:
+      type: object
+      properties:
+        connection_id:
+          type: string
+        payload:
+          type: object
+          additionalProperties: false
+          properties: {}
+      required:
+        - connection_id
+      additionalProperties: false
+    TikTokDisplayUserInfoGetResponseSchema:
+      type: object
+      properties:
+        profile:
+          type: object
+          additionalProperties: true
+        source_request:
+          type: object
+          additionalProperties: true
+      required:
+        - profile
+        - source_request
+      additionalProperties: false
+    TikTokDisplayVideoListRequestSchema:
+      type: object
+      properties:
+        connection_id:
+          type: string
+        payload:
+          type: object
+          additionalProperties: false
+          properties:
+            cursor:
+              anyOf:
+                - type: integer
+                - type: string
+                - type: "null"
+              minimum: 0
+            page_size:
+              anyOf:
+                - type: integer
+                - type: string
+                - type: "null"
+              minimum: 1
+      required:
+        - connection_id
+      additionalProperties: false
+    TikTokDisplayVideoListResponseSchema:
+      type: object
+      properties:
+        cursor:
+          anyOf:
+            - type: integer
+            - type: "null"
+        has_more:
+          type: boolean
+        videos:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        source_request:
+          type: object
+          additionalProperties: true
+      required:
+        - cursor
+        - has_more
+        - videos
+        - source_request
       additionalProperties: false
     AdapterConnectionsListResultSchema:
       type: array

@@ -9,5 +9,7 @@ Current package state:
 
 - installable package scaffold exists
 - real TikTok Display auth and profile health are implemented
+- provider-native profile and video read methods are implemented
+- method catalog and projection metadata are published with the package
 - profile and video snapshot sync are implemented
 - backfill and monitor replay are implemented

@@ -16,10 +16,13 @@ func TestFetchTikTokDisplayVideosStopsAtFloorDate(t *testing.T) {
 	})
 
 	pageCalls := 0
-	fetchTikTokDisplayVideoPage = func(ctx context.Context, accessToken string, cursor *int64) (*tiktokDisplayVideoPage, error) {
+	fetchTikTokDisplayVideoPage = func(ctx context.Context, accessToken string, cursor *int64, pageSize int) (*tiktokDisplayVideoPage, error) {
 		pageCalls++
 		if accessToken != "access-token" {
 			t.Fatalf("expected access token access-token, got %q", accessToken)
+		}
+		if pageSize != tiktokDisplayVideoPageSize {
+			t.Fatalf("expected page size %d, got %d", tiktokDisplayVideoPageSize, pageSize)
 		}
 		if pageCalls == 1 {
 			return &tiktokDisplayVideoPage{

@@ -3,8 +3,8 @@ info:
   title: tiktok-business-adapter Adapter API
   version: 0.1.0
   description: "Published adapter package contract for tiktok-business. This
-    scaffold currently exposes package metadata and basic connection-health
-    surfaces. Streaming operations are added in later implementation tickets."
+    package exposes package metadata, connection-health surfaces, and a first
+    wave of provider-native hierarchy and report reads."
 tags:
   - name: Adapter
 paths:
@@ -42,6 +42,160 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdapterHealthSchema"
+  /operations/tiktok-business.campaigns.list:
+    post:
+      operationId: tiktok-business.campaigns.list
+      summary: List TikTok Business campaigns for the bound advertiser
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: read
+      x-nexus-mutates-remote: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TikTokBusinessCampaignsListRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TikTokBusinessCampaignsListResponseSchema"
+  /operations/tiktok-business.adgroups.list:
+    post:
+      operationId: tiktok-business.adgroups.list
+      summary: List TikTok Business ad groups for the bound advertiser
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: read
+      x-nexus-mutates-remote: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TikTokBusinessAdGroupsListRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TikTokBusinessAdGroupsListResponseSchema"
+  /operations/tiktok-business.ads.list:
+    post:
+      operationId: tiktok-business.ads.list
+      summary: List TikTok Business ads for the bound advertiser
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: read
+      x-nexus-mutates-remote: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TikTokBusinessAdsListRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TikTokBusinessAdsListResponseSchema"
+  /operations/tiktok-business.reports.campaign_daily.list:
+    post:
+      operationId: tiktok-business.reports.campaign_daily.list
+      summary: Read TikTok Business campaign daily report rows
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: read
+      x-nexus-mutates-remote: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TikTokBusinessReportListRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TikTokBusinessReportListResponseSchema"
+  /operations/tiktok-business.reports.adgroup_daily.list:
+    post:
+      operationId: tiktok-business.reports.adgroup_daily.list
+      summary: Read TikTok Business ad group daily report rows
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: read
+      x-nexus-mutates-remote: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TikTokBusinessReportListRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TikTokBusinessReportListResponseSchema"
+  /operations/tiktok-business.reports.ad_daily.list:
+    post:
+      operationId: tiktok-business.reports.ad_daily.list
+      summary: Read TikTok Business ad daily report rows
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: read
+      x-nexus-mutates-remote: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TikTokBusinessReportListRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TikTokBusinessReportListResponseSchema"
+  /operations/tiktok-business.reports.advertiser_hourly.list:
+    post:
+      operationId: tiktok-business.reports.advertiser_hourly.list
+      summary: Read TikTok Business advertiser hourly report rows
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: read
+      x-nexus-mutates-remote: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TikTokBusinessReportListRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TikTokBusinessReportListResponseSchema"
   /operations/adapter.info:
     post:
       operationId: adapter.info
@@ -65,6 +219,135 @@ components:
           type: string
       required:
         - connection_id
+      additionalProperties: false
+    TikTokBusinessCampaignsListRequestSchema:
+      type: object
+      properties:
+        connection_id:
+          type: string
+        payload:
+          type: object
+          additionalProperties: false
+          properties: {}
+      required:
+        - connection_id
+      additionalProperties: false
+    TikTokBusinessCampaignsListResponseSchema:
+      type: object
+      properties:
+        advertiser_id:
+          type: string
+        campaigns:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        count:
+          type: integer
+      required:
+        - campaigns
+        - count
+      additionalProperties: false
+    TikTokBusinessAdGroupsListRequestSchema:
+      type: object
+      properties:
+        connection_id:
+          type: string
+        payload:
+          type: object
+          additionalProperties: false
+          properties: {}
+      required:
+        - connection_id
+      additionalProperties: false
+    TikTokBusinessAdGroupsListResponseSchema:
+      type: object
+      properties:
+        advertiser_id:
+          type: string
+        adgroups:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        count:
+          type: integer
+      required:
+        - adgroups
+        - count
+      additionalProperties: false
+    TikTokBusinessAdsListRequestSchema:
+      type: object
+      properties:
+        connection_id:
+          type: string
+        payload:
+          type: object
+          additionalProperties: false
+          properties: {}
+      required:
+        - connection_id
+      additionalProperties: false
+    TikTokBusinessAdsListResponseSchema:
+      type: object
+      properties:
+        advertiser_id:
+          type: string
+        ads:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        count:
+          type: integer
+      required:
+        - ads
+        - count
+      additionalProperties: false
+    TikTokBusinessReportListRequestSchema:
+      type: object
+      properties:
+        connection_id:
+          type: string
+        payload:
+          type: object
+          additionalProperties: false
+          properties:
+            since:
+              type: string
+            until:
+              type: string
+          required:
+            - since
+            - until
+      required:
+        - connection_id
+        - payload
+      additionalProperties: false
+    TikTokBusinessReportListResponseSchema:
+      type: object
+      properties:
+        advertiser_id:
+          type: string
+        family:
+          type: string
+        since:
+          type: string
+        until:
+          type: string
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        count:
+          type: integer
+      required:
+        - family
+        - since
+        - until
+        - rows
+        - count
       additionalProperties: false
     AdapterConnectionsListResultSchema:
       type: array

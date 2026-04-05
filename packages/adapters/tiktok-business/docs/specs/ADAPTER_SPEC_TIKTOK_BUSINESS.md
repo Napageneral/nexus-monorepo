@@ -9,6 +9,8 @@ Current package state:
 
 - installable package scaffold exists
 - real TikTok Business auth is implemented
+- provider-native hierarchy and report read methods are implemented
+- method catalog and projection metadata are published with the package
 - provider row mapping is implemented
 - backfill and monitor are implemented with replay-safe recent windows
 
