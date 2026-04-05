@@ -1,0 +1,103 @@
+{
+  "id": "shopify",
+  "version": "0.1.0",
+  "displayName": "Shopify",
+  "description": "Canonical Shopify adapter package for Nex with GraphQL-backed provider methods and additive projection.",
+  "platform": "shopify",
+  "command": "./bin/shopify-adapter",
+  "skill": "./SKILL.md",
+  "methods": {
+    "records.backfill.stage": {
+      "description": "Stage historical Shopify backfill into canonical JSONL chunk files for Nex bulk import.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "since": {
+            "type": "string"
+          },
+          "stage_dir": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "since",
+          "stage_dir"
+        ]
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer"
+          },
+          "format": {
+            "type": "string"
+          },
+          "stage_dir": {
+            "type": "string"
+          },
+          "manifest_path": {
+            "type": "string"
+          },
+          "totals": {
+            "type": "object",
+            "properties": {
+              "records": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "records"
+            ]
+          },
+          "chunks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "records": {
+                  "type": "integer"
+                },
+                "first_record_id": {
+                  "type": "string"
+                },
+                "last_record_id": {
+                  "type": "string"
+                },
+                "first_timestamp_ms": {
+                  "type": "integer"
+                },
+                "last_timestamp_ms": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "path",
+                "records"
+              ]
+            }
+          }
+        },
+        "required": [
+          "version",
+          "format",
+          "stage_dir",
+          "manifest_path",
+          "totals",
+          "chunks"
+        ]
+      }
+    }
+  },
+  "methodCatalog": {
+    "source": "graphql",
+    "document": "api/graphql.catalog.json",
+    "namespace": "shopify"
+  }
+}

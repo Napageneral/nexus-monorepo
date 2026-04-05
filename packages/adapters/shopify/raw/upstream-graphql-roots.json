@@ -1,0 +1,144 @@
+{
+  "provider": "shopify-admin-graphql",
+  "apiVersion": "2026-01",
+  "captureScope": "first-wave-root-field-inventory",
+  "queryRoot": {
+    "shop": {
+      "args": [],
+      "domain": "store",
+      "notes": [
+        "Use for shop identity, primary domain, and high-level storefront metadata."
+      ],
+      "defaultSelection": [
+        "id",
+        "name",
+        "myshopifyDomain",
+        "primaryDomain { host url }"
+      ]
+    },
+    "orders": {
+      "args": [
+        "first",
+        "after",
+        "last",
+        "before",
+        "query",
+        "reverse",
+        "sortKey",
+        "savedSearchId"
+      ],
+      "domain": "orders",
+      "notes": [
+        "Prefer sortKey and cursors for repeatable pagination through large order histories.",
+        "Use the query argument for bounded searches instead of pulling the whole order set."
+      ],
+      "defaultSelection": [
+        "edges { cursor node { id name createdAt updatedAt } }",
+        "pageInfo { hasNextPage hasPreviousPage startCursor endCursor }"
+      ]
+    },
+    "order": {
+      "args": [
+        "id"
+      ],
+      "domain": "orders",
+      "notes": [
+        "Use the gid form gid://shopify/Order/<id> when reading one order."
+      ],
+      "defaultSelection": [
+        "id",
+        "name",
+        "createdAt",
+        "updatedAt",
+        "lineItems(first: 25) { edges { cursor node { id name quantity sku } } pageInfo { hasNextPage endCursor } }"
+      ]
+    },
+    "products": {
+      "args": [
+        "first",
+        "after",
+        "last",
+        "before",
+        "query",
+        "reverse",
+        "sortKey",
+        "savedSearchId"
+      ],
+      "domain": "products",
+      "notes": [
+        "Prefer query and cursors for bounded product scans.",
+        "Add inventory or publication fields explicitly when those details matter."
+      ],
+      "defaultSelection": [
+        "edges { cursor node { id title handle updatedAt } }",
+        "pageInfo { hasNextPage hasPreviousPage startCursor endCursor }"
+      ]
+    },
+    "product": {
+      "args": [
+        "id"
+      ],
+      "domain": "products",
+      "notes": [
+        "Use the gid form gid://shopify/Product/<id> when reading one product."
+      ],
+      "defaultSelection": [
+        "id",
+        "title",
+        "handle",
+        "updatedAt",
+        "variants(first: 25) { edges { node { id title sku } } }"
+      ]
+    },
+    "customers": {
+      "args": [
+        "first",
+        "after",
+        "last",
+        "before",
+        "query",
+        "reverse",
+        "sortKey"
+      ],
+      "domain": "customers",
+      "notes": [
+        "Customer queries can be large; prefer first plus cursors and narrow searches."
+      ],
+      "defaultSelection": [
+        "edges { cursor node { id displayName email updatedAt } }",
+        "pageInfo { hasNextPage hasPreviousPage startCursor endCursor }"
+      ]
+    },
+    "customer": {
+      "args": [
+        "id"
+      ],
+      "domain": "customers",
+      "notes": [
+        "Use the gid form gid://shopify/Customer/<id> when reading one customer."
+      ],
+      "defaultSelection": [
+        "id",
+        "displayName",
+        "email",
+        "updatedAt",
+        "numberOfOrders"
+      ]
+    }
+  },
+  "mutationRoot": {
+    "bulkOperationRunQuery": {
+      "args": [
+        "query"
+      ],
+      "domain": "graphql_backbone",
+      "notes": [
+        "This is the current cleanup-safe proof mutation for validating generic mutation execution."
+      ]
+    }
+  },
+  "notes": [
+    "This is the pinned first-wave root contract for Shopify GraphQL materialization.",
+    "It is intentionally smaller than full introspection and should broaden as the package expands."
+  ]
+}
