@@ -160,6 +160,129 @@ func TestHealthUsesShopifyShopEndpoint(t *testing.T) {
 	}
 }
 
+func TestShopifyQueryShopMethod(t *testing.T) {
+	t.Cleanup(resetShopifyGlobals)
+
+	var capturedQuery string
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/admin/oauth/access_token":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"shopify-token"}`))
+		case "/admin/api/2026-01/graphql.json":
+			if got := r.Header.Get("X-Shopify-Access-Token"); got != "shopify-token" {
+				http.Error(w, "missing token", http.StatusUnauthorized)
+				return
+			}
+			var payload struct {
+				Query string `json:"query"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			capturedQuery = payload.Query
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":{"shop":{"id":"gid://shopify/Shop/1","name":"MoonSleep","myshopifyDomain":"moonsleepco.myshopify.com"}},"extensions":{"cost":{"actualQueryCost":1}}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	shopifyHTTPClient = server.Client()
+	method := declaredShopifyMethods()["shopify.query.shop"]
+	result, err := method.Handler(nexadapter.AdapterContext[struct{}]{
+		Context:      context.Background(),
+		ConnectionID: "shopify-primary",
+		Runtime:      shopifyRuntimeContextForServer(server.URL),
+	}, nexadapter.AdapterMethodRequest{
+		ConnectionID: "shopify-primary",
+		Payload:      map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("shop method: %v", err)
+	}
+	if !strings.Contains(capturedQuery, "shop {") {
+		t.Fatalf("captured query = %q", capturedQuery)
+	}
+	response, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected result type %T", result)
+	}
+	if response["data"] == nil {
+		t.Fatalf("expected data in response: %#v", response)
+	}
+}
+
+func TestShopifyQueryOrdersMethod(t *testing.T) {
+	t.Cleanup(resetShopifyGlobals)
+
+	var capturedQuery string
+	var capturedVariables map[string]any
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/admin/oauth/access_token":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"shopify-token"}`))
+		case "/admin/api/2026-01/graphql.json":
+			if got := r.Header.Get("X-Shopify-Access-Token"); got != "shopify-token" {
+				http.Error(w, "missing token", http.StatusUnauthorized)
+				return
+			}
+			var payload struct {
+				Query     string         `json:"query"`
+				Variables map[string]any `json:"variables"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			capturedQuery = payload.Query
+			capturedVariables = payload.Variables
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":{"orders":{"edges":[{"cursor":"abc","node":{"id":"gid://shopify/Order/1","name":"#1001","createdAt":"2026-04-01T00:00:00Z","updatedAt":"2026-04-01T00:10:00Z"}}],"pageInfo":{"hasNextPage":false,"hasPreviousPage":false,"startCursor":"abc","endCursor":"abc"}}},"extensions":{"cost":{"actualQueryCost":4}}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	shopifyHTTPClient = server.Client()
+	method := declaredShopifyMethods()["shopify.query.orders"]
+	result, err := method.Handler(nexadapter.AdapterContext[struct{}]{
+		Context:      context.Background(),
+		ConnectionID: "shopify-primary",
+		Runtime:      shopifyRuntimeContextForServer(server.URL),
+	}, nexadapter.AdapterMethodRequest{
+		ConnectionID: "shopify-primary",
+		Payload: map[string]any{
+			"first":   float64(2),
+			"query":   "updated_at:>=2026-04-01",
+			"reverse": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("orders method: %v", err)
+	}
+	if !strings.Contains(capturedQuery, "orders(") {
+		t.Fatalf("captured query = %q", capturedQuery)
+	}
+	if got, ok := capturedVariables["first"].(float64); !ok || got != 2 {
+		t.Fatalf("variables = %#v", capturedVariables)
+	}
+	if got, ok := capturedVariables["query"].(string); !ok || got != "updated_at:>=2026-04-01" {
+		t.Fatalf("variables = %#v", capturedVariables)
+	}
+	response, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected result type %T", result)
+	}
+	if response["data"] == nil {
+		t.Fatalf("expected data in response: %#v", response)
+	}
+}
+
 func TestLoadShopifyStateFromRuntimeContext(t *testing.T) {
 	t.Cleanup(resetShopifyGlobals)
 
@@ -208,6 +331,23 @@ func TestLoadShopifyStateFromRuntimeContext(t *testing.T) {
 	}
 }
 
+func shopifyRuntimeContextForServer(serverURL string) *nexadapter.RuntimeContext {
+	return &nexadapter.RuntimeContext{
+		Platform:     platformID,
+		ConnectionID: "shopify-primary",
+		Credential: &nexadapter.RuntimeCredential{
+			Value: "placeholder",
+			Fields: map[string]string{
+				"shop_domain":   strings.TrimPrefix(serverURL, "https://"),
+				"client_id":     "client-id",
+				"client_secret": "client-secret",
+				"api_version":   "2026-01",
+			},
+			Ref: "shopify/shopify-primary",
+		},
+	}
+}
+
 func TestStageBackfillWritesManifestAndChunks(t *testing.T) {
 	t.Cleanup(resetShopifyGlobals)
 
@@ -223,6 +363,35 @@ func TestStageBackfillWritesManifestAndChunks(t *testing.T) {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"orders":[{"id":101,"order_number":12,"name":"#101","created_at":"2026-03-31T10:00:00Z","updated_at":"2026-03-31T10:05:00Z","processed_at":"2026-03-31T10:04:00Z","currency":"USD","total_price":"129.00","subtotal_price":"129.00","financial_status":"paid","source_name":"web","line_items":[{"id":501,"product_id":99,"variant_id":199,"title":"Body Pillow","quantity":2,"price":"64.50"}]}]}`))
+		case "/admin/api/2026-01/graphql.json":
+			var payload struct {
+				Query string `json:"query"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			switch {
+			case strings.Contains(payload.Query, "customers("):
+				_, _ = w.Write([]byte(`{"data":{"customers":{"edges":[],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}`))
+			case strings.Contains(payload.Query, "products("):
+				_, _ = w.Write([]byte(`{"data":{"products":{"edges":[],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}`))
+			case strings.Contains(payload.Query, "collections("):
+				_, _ = w.Write([]byte(`{"data":{"collections":{"edges":[],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}`))
+			case strings.Contains(payload.Query, "inventoryItems("):
+				_, _ = w.Write([]byte(`{"data":{"inventoryItems":{"edges":[],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}`))
+			case strings.Contains(payload.Query, "fulfillmentOrders("):
+				_, _ = w.Write([]byte(`{"data":{"fulfillmentOrders":{"edges":[],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}`))
+			case strings.Contains(payload.Query, "codeDiscountNodes("):
+				_, _ = w.Write([]byte(`{"data":{"codeDiscountNodes":{"edges":[],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}`))
+			case strings.Contains(payload.Query, "automaticDiscountNodes("):
+				_, _ = w.Write([]byte(`{"data":{"automaticDiscountNodes":{"edges":[],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}`))
+			case strings.Contains(payload.Query, "marketingActivities("):
+				_, _ = w.Write([]byte(`{"data":{"marketingActivities":{"edges":[],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}`))
+			default:
+				http.NotFound(w, r)
+			}
 		default:
 			http.NotFound(w, r)
 		}

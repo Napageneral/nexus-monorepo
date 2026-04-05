@@ -14,6 +14,9 @@ else
 fi
 
 if [[ -f "${ROOT_DIR}/go.mod" ]]; then
+  if [[ -f "${ROOT_DIR}/scripts/materialize-graphql-catalog.mjs" ]]; then
+    node "${ROOT_DIR}/scripts/materialize-graphql-catalog.mjs"
+  fi
   BUILD_TARGET="."
   if [[ -d "${ROOT_DIR}/cmd/${COMMAND_NAME}" ]]; then
     BUILD_TARGET="./cmd/${COMMAND_NAME}"

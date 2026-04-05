@@ -1,0 +1,17 @@
+{
+  "namespace": "shopify",
+  "provider": "shopify-admin-graphql",
+  "upstreamDocument": "raw/upstream-graphql-roots.json",
+  "outputDocument": "api/graphql.catalog.json",
+  "contractSource": "graphql",
+  "apiVersion": "2026-01",
+  "genericBackbone": {
+    "query": true,
+    "mutation": true
+  },
+  "notes": [
+    "This package is moving from a retained REST Admin implementation to a GraphQL-first provider surface.",
+    "The pinned root inventory captures the first GraphQL read wave and the query/mutation field names it is materialized from.",
+    "The long-term broad provider capability is expected to flow through a generic GraphQL query/mutation backbone plus additive convenience aliases."
+  ]
+}

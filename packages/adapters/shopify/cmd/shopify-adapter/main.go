@@ -21,19 +21,20 @@ import (
 )
 
 const (
-	adapterName            = "shopify-adapter"
-	adapterVersion         = "0.1.0"
-	platformID             = "shopify"
-	defaultAPIVersion      = "2026-01"
-	defaultHTTPTimeout     = 30 * time.Second
-	defaultMonitorInterval = 30 * time.Minute
-	defaultTokenTTL        = 55 * time.Minute
-	orderReplayWindow      = 72 * time.Hour
-	maxOrdersPages         = 200
-	maxResponseBodyBytes   = 8 << 20
-	maxOAuthResponseBytes  = 1 << 20
-	defaultShopifyBaseURL  = "https://%s/admin/api/%s"
-	stageChunkSize         = 1000
+	adapterName                = "shopify-adapter"
+	adapterVersion             = "0.1.0"
+	platformID                 = "shopify"
+	defaultAPIVersion          = "2026-01"
+	defaultHTTPTimeout         = 30 * time.Second
+	defaultMonitorInterval     = 1 * time.Minute
+	defaultMonitorErrorBackoff = 5 * time.Minute
+	defaultTokenTTL            = 55 * time.Minute
+	orderReplayWindow          = 72 * time.Hour
+	maxOrdersPages             = 200
+	maxResponseBodyBytes       = 8 << 20
+	maxOAuthResponseBytes      = 1 << 20
+	defaultShopifyBaseURL      = "https://%s/admin/api/%s"
+	stageChunkSize             = 1000
 )
 
 var (
@@ -180,6 +181,8 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 		Version:           adapterVersion,
 		MultiAccount:      true,
 		CredentialService: platformID,
+		MethodCatalog:     shopifyMethodCatalog(),
+		Projection:        shopifyProjection(),
 		Connection: nexadapter.ConnectionHandlers[struct{}]{
 			Connections: connections,
 			Health:      health,
@@ -192,57 +195,7 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 				return backfill(ctx, since, emit)
 			},
 		},
-		Methods: map[string]nexadapter.DeclaredMethod[struct{}]{
-			"records.backfill.stage": nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
-				Description: "Stage historical Shopify backfill into canonical JSONL chunk files for Nex bulk import.",
-				Action:      "read",
-				Params: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"since":     map[string]any{"type": "string"},
-						"stage_dir": map[string]any{"type": "string"},
-					},
-					"required": []string{"since", "stage_dir"},
-				},
-				Response: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"version":       map[string]any{"type": "integer"},
-						"format":        map[string]any{"type": "string"},
-						"stage_dir":     map[string]any{"type": "string"},
-						"manifest_path": map[string]any{"type": "string"},
-						"totals": map[string]any{
-							"type": "object",
-							"properties": map[string]any{
-								"records": map[string]any{"type": "integer"},
-							},
-							"required": []string{"records"},
-						},
-						"chunks": map[string]any{
-							"type": "array",
-							"items": map[string]any{
-								"type": "object",
-								"properties": map[string]any{
-									"path":               map[string]any{"type": "string"},
-									"records":            map[string]any{"type": "integer"},
-									"first_record_id":    map[string]any{"type": "string"},
-									"last_record_id":     map[string]any{"type": "string"},
-									"first_timestamp_ms": map[string]any{"type": "integer"},
-									"last_timestamp_ms":  map[string]any{"type": "integer"},
-								},
-								"required": []string{"path", "records"},
-							},
-						},
-					},
-					"required": []string{"version", "format", "stage_dir", "manifest_path", "totals", "chunks"},
-				},
-				ConnectionRequired: boolPtr(true),
-				MutatesRemote:      boolPtr(false),
-				Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
-					return stageBackfill(ctx, req.Payload)
-				},
-			}),
-		},
+		Methods: declaredShopifyMethods(),
 		Auth: &nexadapter.AdapterAuthManifest{
 			Methods: []nexadapter.AdapterAuthMethod{
 				{
@@ -428,6 +381,7 @@ func monitor(ctx nexadapter.AdapterContext[struct{}], emit nexadapter.EmitFunc) 
 
 	poll := nexadapter.PollMonitor(nexadapter.PollConfig[nexadapter.AdapterInboundRecord]{
 		Interval:      defaultMonitorInterval,
+		ErrorBackoff:  defaultMonitorErrorBackoff,
 		InitialCursor: time.Now().UTC().Add(-orderReplayWindow),
 		Fetch: func(fetchCtx context.Context, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 			return fetchShopifyRecords(fetchCtx, state, since.UTC(), shopifySyncModeMonitor)
@@ -525,8 +479,36 @@ func fetchShopifyRecords(ctx context.Context, state *shopifyState, since time.Ti
 	if err != nil {
 		return nil, time.Time{}, err
 	}
+	customers, customerSourceRequest, customerLatestUpdatedAt, err := fetchCustomersSince(ctx, state, requestSince, mode)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	products, productSourceRequest, productLatestUpdatedAt, err := fetchProductsSince(ctx, state, requestSince, mode)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	collections, collectionSourceRequest, collectionLatestUpdatedAt, err := fetchCollectionsSince(ctx, state, requestSince, mode)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	inventoryItems, inventorySourceRequest, inventoryLatestUpdatedAt, err := fetchInventoryItemsSince(ctx, state, requestSince, mode)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	fulfillmentOrders, fulfillmentSourceRequest, fulfillmentLatestUpdatedAt, err := fetchFulfillmentOrdersSince(ctx, state, requestSince)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	discounts, discountSourceRequest, discountLatestUpdatedAt, err := fetchDiscountsSince(ctx, state, requestSince)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	marketingActivities, marketingSourceRequest, marketingLatestUpdatedAt, err := fetchMarketingActivitiesSince(ctx, state, requestSince)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
 
-	records := make([]nexadapter.AdapterInboundRecord, 0, len(orders)*2)
+	records := make([]nexadapter.AdapterInboundRecord, 0, len(orders)*2+len(customers)+len(products)+len(collections)+len(fulfillmentOrders)+len(discounts)+len(marketingActivities))
 	for _, order := range orders {
 		orderRecord := buildOrderRecord(state, order, sourceRequest)
 		if orderRecord.Operation != "" {
@@ -539,8 +521,68 @@ func fetchShopifyRecords(ctx context.Context, state *shopifyState, since time.Ti
 			}
 		}
 	}
+	for _, customer := range customers {
+		customerRecord := buildCustomerRecord(state, customer, customerSourceRequest)
+		if customerRecord.Operation != "" {
+			records = append(records, customerRecord)
+		}
+	}
+	for _, product := range products {
+		productRecord := buildProductRecord(state, product, productSourceRequest)
+		if productRecord.Operation != "" {
+			records = append(records, productRecord)
+		}
+	}
+	for _, collection := range collections {
+		collectionRecord := buildCollectionRecord(state, collection, collectionSourceRequest)
+		if collectionRecord.Operation != "" {
+			records = append(records, collectionRecord)
+		}
+	}
+	for _, item := range inventoryItems {
+		records = append(records, buildInventoryRecords(state, item, inventorySourceRequest)...)
+	}
+	for _, fulfillment := range fulfillmentOrders {
+		fulfillmentRecord := buildFulfillmentRecord(state, fulfillment, fulfillmentSourceRequest)
+		if fulfillmentRecord.Operation != "" {
+			records = append(records, fulfillmentRecord)
+		}
+	}
+	for _, discount := range discounts {
+		discountRecord := buildDiscountRecord(state, discount, discountSourceRequest)
+		if discountRecord.Operation != "" {
+			records = append(records, discountRecord)
+		}
+	}
+	for _, activity := range marketingActivities {
+		marketingRecord := buildMarketingRecord(state, activity, marketingSourceRequest)
+		if marketingRecord.Operation != "" {
+			records = append(records, marketingRecord)
+		}
+	}
 
 	newCursor := latestUpdatedAt
+	if customerLatestUpdatedAt.After(newCursor) {
+		newCursor = customerLatestUpdatedAt
+	}
+	if productLatestUpdatedAt.After(newCursor) {
+		newCursor = productLatestUpdatedAt
+	}
+	if collectionLatestUpdatedAt.After(newCursor) {
+		newCursor = collectionLatestUpdatedAt
+	}
+	if inventoryLatestUpdatedAt.After(newCursor) {
+		newCursor = inventoryLatestUpdatedAt
+	}
+	if fulfillmentLatestUpdatedAt.After(newCursor) {
+		newCursor = fulfillmentLatestUpdatedAt
+	}
+	if discountLatestUpdatedAt.After(newCursor) {
+		newCursor = discountLatestUpdatedAt
+	}
+	if marketingLatestUpdatedAt.After(newCursor) {
+		newCursor = marketingLatestUpdatedAt
+	}
 	if newCursor.IsZero() {
 		newCursor = asOf
 	}

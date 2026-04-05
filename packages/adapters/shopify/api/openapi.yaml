@@ -58,6 +58,106 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdapterInfoSchema"
+  /operations/shopify.query.shop:
+    post:
+      operationId: shopify.query.shop
+      summary: Read Shopify shop identity through the Admin GraphQL API
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShopifyGraphqlShopRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopifyGraphqlFieldResultSchema"
+  /operations/shopify.query.orders:
+    post:
+      operationId: shopify.query.orders
+      summary: Read Shopify orders through the Admin GraphQL API
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShopifyGraphqlConnectionRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopifyGraphqlFieldResultSchema"
+  /operations/shopify.query.products:
+    post:
+      operationId: shopify.query.products
+      summary: Read Shopify products through the Admin GraphQL API
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShopifyGraphqlConnectionRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopifyGraphqlFieldResultSchema"
+  /operations/shopify.query.customers:
+    post:
+      operationId: shopify.query.customers
+      summary: Read Shopify customers through the Admin GraphQL API
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShopifyGraphqlConnectionRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopifyGraphqlFieldResultSchema"
+  /operations/records.backfill.stage:
+    post:
+      operationId: records.backfill.stage
+      summary: Stage Shopify backfill records into chunked JSONL files
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShopifyStageBackfillRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopifyStageBackfillResponseSchema"
 components:
   schemas:
     AdapterInfoSchema:
@@ -168,6 +268,7 @@ components:
                     enum:
                       - manifest
                       - openapi
+                      - graphql
                       - builtin
                   declaration_source:
                     type: string
@@ -430,6 +531,7 @@ components:
               enum:
                 - manifest
                 - openapi
+                - graphql
             document:
               type: string
             namespace:
@@ -588,3 +690,101 @@ components:
         payload:
           type: object
           additionalProperties: true
+    ShopifyGraphqlShopRequestSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        selection:
+          type: string
+    ShopifyGraphqlConnectionRequestSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        first:
+          type: integer
+          minimum: 1
+          maximum: 100
+        after:
+          type: string
+        query:
+          type: string
+        reverse:
+          type: boolean
+        sortKey:
+          type: string
+        selection:
+          type: string
+    ShopifyGraphqlFieldResultSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        field:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+        extensions:
+          type: object
+          additionalProperties: true
+      required:
+        - field
+        - data
+    ShopifyStageBackfillRequestSchema:
+      type: object
+      additionalProperties: false
+      required:
+        - since
+        - stage_dir
+      properties:
+        since:
+          type: string
+        stage_dir:
+          type: string
+    ShopifyStageBackfillResponseSchema:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - format
+        - stage_dir
+        - manifest_path
+        - totals
+        - chunks
+      properties:
+        version:
+          type: integer
+        format:
+          type: string
+        stage_dir:
+          type: string
+        manifest_path:
+          type: string
+        totals:
+          type: object
+          additionalProperties: false
+          required:
+            - records
+          properties:
+            records:
+              type: integer
+        chunks:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - path
+              - records
+            properties:
+              path:
+                type: string
+              records:
+                type: integer
+              first_record_id:
+                type: string
+              last_record_id:
+                type: string
+              first_timestamp_ms:
+                type: integer
+              last_timestamp_ms:
+                type: integer
