@@ -76,3 +76,9 @@
 [submodule "packages/adapters/zenoti-emr"]
 	path = packages/adapters/zenoti-emr
 	url = https://github.com/Napageneral/zenoti-emr.git
+[submodule "packages/adapters/tiktok-business"]
+	path = packages/adapters/tiktok-business
+	url = https://github.com/Napageneral/tiktok-business.git
+[submodule "packages/adapters/tiktok-display"]
+	path = packages/adapters/tiktok-display
+	url = https://github.com/Napageneral/tiktok-display.git
