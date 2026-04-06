@@ -13,17 +13,17 @@ test.describe('OCI-002: Shell and Navigation', () => {
     await screenshot(page, 'shell-initial-load');
 
     // Brand logo and text
-    await expect(page.locator('.v2-logo-text')).toBeVisible();
+    await expect(page.locator('.console-logo-text, .v2-logo-text')).toBeVisible();
 
     // Right-side controls: production toggle, settings, notifications
-    await expect(page.locator('.v2-topnav-right')).toBeVisible();
+    await expect(page.locator('.console-topnav-right, .v2-topnav-right')).toBeVisible();
   });
 
   test('all navigation tabs are present', async ({ page }) => {
     const tabs = ['Connectors', 'Agents', 'Monitor', 'Jobs', 'Records', 'Identity', 'Memory'];
 
     for (const tab of tabs) {
-      await expect(page.locator(`.v2-nav-tab:has-text("${tab}")`)).toBeVisible();
+      await expect(page.locator(`.console-nav-tab:has-text("${tab}"), .v2-nav-tab:has-text("${tab}")`)).toBeVisible();
     }
 
     await screenshot(page, 'nav-all-tabs-visible');
@@ -45,7 +45,7 @@ test.describe('OCI-002: Shell and Navigation', () => {
       // Verify page content loaded — different pages have different structures
       await page.waitForTimeout(500);
       // At least something rendered (heading, sub-tabs, or any content)
-      const hasContent = await page.locator('h1, h2, .v2-page-title, .v2-detail-tabs, .v2-platform-grid').first().isVisible().catch(() => true);
+      const hasContent = await page.locator('h1, h2, .console-page-title, .console-detail-tabs, .console-platform-grid, .console-card, .console-table, .console-empty').first().isVisible().catch(() => true);
       expect(hasContent).toBeTruthy();
     }
 
@@ -54,7 +54,7 @@ test.describe('OCI-002: Shell and Navigation', () => {
 
   test('settings page accessible via gear icon', async ({ page }) => {
     // Click settings icon
-    const settingsBtn = page.locator('[title="Settings"], button:has(.v2-icon-settings), .v2-nav-icon-btn').last();
+    const settingsBtn = page.locator('[title="Settings"], .console-icon-btn, .v2-nav-icon-btn').last();
     if (await settingsBtn.isVisible()) {
       await settingsBtn.click();
       await page.waitForTimeout(500);
@@ -83,7 +83,7 @@ test.describe('OCI-002: Settings Page', () => {
     await waitForConsoleReady(page);
 
     // Navigate to settings
-    const settingsBtn = page.locator('[title="Settings"], .v2-nav-icon-btn').last();
+    const settingsBtn = page.locator('[title="Settings"], .console-icon-btn, .v2-nav-icon-btn').last();
     if (await settingsBtn.isVisible()) {
       await settingsBtn.click();
       await page.waitForTimeout(500);
@@ -101,7 +101,7 @@ test.describe('OCI-002: Settings Page', () => {
       await settingsBtn.click();
       await page.waitForTimeout(500);
 
-      const apiKeysTab = page.locator('.v2-settings-nav-item:has-text("API Keys"), button:has-text("API Keys")');
+      const apiKeysTab = page.locator('.console-dropdown-item:has-text("API Keys"), .v2-settings-nav-item:has-text("API Keys"), button:has-text("API Keys")');
       if (await apiKeysTab.isVisible()) {
         await apiKeysTab.click();
         await page.waitForTimeout(300);

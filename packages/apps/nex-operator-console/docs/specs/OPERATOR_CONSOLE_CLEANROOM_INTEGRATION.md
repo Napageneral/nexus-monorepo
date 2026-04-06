@@ -34,6 +34,11 @@ Current execution note:
   `operator-console-browser-proof` path on the shared validation substrate
 - the older host Docker wrapper remains as a useful bootstrap/backstop path,
   not the only execution shape
+- the primary review direction is now one VM-recorded Console onboarding and
+  runtime-backed data journey rather than a broad synthetic page sweep
+- chat and Dispatch may later appear in the same recorded VM session, but the
+  immediate product proof target is adapter setup plus runtime-backed records,
+  contacts, and channels
 
 ---
 
@@ -59,22 +64,19 @@ Each test:
 - Interacts with forms, buttons, modals as a user would
 - Captures screenshots at meaningful moments
 
-### Test Domains
+### Primary Proof Domains
 
 | Domain | What Gets Tested |
 |--------|-----------------|
-| **Shell & Navigation** | Top nav renders all tabs, clicking each tab navigates, brand/logo present, settings gear works |
-| **Connectors** | Platform picker empty state renders, "Browse all connectors" link works, connected list shows data when adapters exist |
-| **Agents — List** | Empty state renders, create button visible |
-| **Agents — Creation Wizard** | 4-step wizard: fill name → select model → set guardrails → review → create. Validate agent appears in list after creation |
-| **Agents — Detail** | Settings tab loads with agent data, sub-tabs (Settings/Skills/Run History) navigate, chat panel renders |
-| **Agents — Detail Modals** | Open and interact with: schedule templates, manage tools, edit guardrails, manage memory, Slack setup |
-| **Monitor** | Live tab renders stat cards and empty table, History tab renders with filters |
-| **Jobs** | Overview shows stat cards, Definitions/Queue/Runs/Schedules sub-tabs render. Create a schedule, verify it appears in list |
-| **Records** | Browse/Channels/Search sub-tabs render, filters work, empty states display correctly |
-| **Identity** | All 6 sub-tabs render (Entities, Contacts, Channels, Groups, Policies, Merge Queue), search works |
-| **Memory** | Library/Search/Quality sub-tabs render, episode inspector shows empty state |
-| **Settings** | Profile shows user identity from runtime, API Keys section renders, Auth section renders |
+| **Fresh Shell** | Console shell renders, runtime connects, current nav contract is usable |
+| **Connector Setup** | Adapter setup runs through real runtime-backed integration actions rather than presentation-only picker seams |
+| **Post-Connect Controls** | Connected adapters expose `Test connection`, `Backfill now`, `Livesync`, and `Disconnect` |
+| **Runtime-Backed Records** | Records surface shows data loaded through the runtime after connect or backfill |
+| **Runtime-Backed Contacts** | Identity contacts surface shows data derived from connected adapters |
+| **Runtime-Backed Channels** | Identity channels surface shows data derived from connected adapters |
+
+The broader page-by-page Playwright suite remains useful as coverage, but it is
+secondary to the primary onboarding and runtime-backed data journey above.
 
 ### Proof Bundle
 

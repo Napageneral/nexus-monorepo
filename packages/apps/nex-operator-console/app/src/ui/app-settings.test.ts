@@ -103,4 +103,24 @@ describe("setTabFromRoute", () => {
     expect(url.searchParams.get("memory_bucket")).toBeNull();
     expect(url.searchParams.get("memory_run")).toBeNull();
   });
+
+  it("preserves nested identity detail routes during hydration sync", () => {
+    const host = createHost("identity");
+    host.basePath = "/app/console";
+    window.history.replaceState({}, "", "/app/console/identity/entity/entity-casey");
+
+    syncUrlWithTab(host, "identity", true, { preserveNestedPath: true });
+
+    expect(window.location.pathname).toBe("/app/console/identity/entity/entity-casey");
+  });
+
+  it("does not preserve arbitrary nested paths outside known identity detail routes", () => {
+    const host = createHost("integrations");
+    host.basePath = "/app/console";
+    window.history.replaceState({}, "", "/app/console/integrations/custom/legacy");
+
+    syncUrlWithTab(host, "integrations", true, { preserveNestedPath: true });
+
+    expect(window.location.pathname).toBe("/app/console/integrations");
+  });
 });

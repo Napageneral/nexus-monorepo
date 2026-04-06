@@ -64,6 +64,7 @@ export type AdapterConnectionIdentity = {
 };
 
 export type AdapterConnectionEntry = {
+  connectionId: string;
   adapter: string;
   name: string;
   status: AdapterConnectionStatus;
@@ -83,6 +84,7 @@ type AdapterConnectionsListResult = {
 type AdapterConnectionsResult = {
   connections?: Array<{
     id?: unknown;
+    connectionId?: unknown;
     display_name?: unknown;
     credential_ref?: unknown;
     status?: unknown;
@@ -116,6 +118,26 @@ type AdapterConnectionsTestResult = {
 
 type AdapterConnectionsDisconnectResult = {
   status: string;
+  account?: string;
+  service?: string;
+};
+
+type AdapterConnectionsBackfillResult = {
+  status: "queued" | "running";
+  connectionId: string;
+  account?: string;
+  service?: string;
+  since: string;
+  job_definition_id?: string;
+  job_run_id?: string;
+  queue_entry_id?: string;
+  existing_run?: boolean;
+};
+
+type AdapterConnectionsLivesyncResult = {
+  connectionId: string;
+  enabled: boolean;
+  status?: string;
   account?: string;
   service?: string;
 };
@@ -163,7 +185,12 @@ function normalizeAdapterConnections(
   }
   return payload.connections
     .map((entry) => {
-      const id = typeof entry?.id === "string" ? entry.id.trim() : "";
+      const id =
+        typeof entry?.connectionId === "string" && entry.connectionId.trim()
+          ? entry.connectionId.trim()
+          : typeof entry?.id === "string"
+            ? entry.id.trim()
+            : "";
       if (!id) {
         return null;
       }
@@ -233,6 +260,7 @@ function summarizeAdapterInventory(entries: AdapterConnectionEntry[]): AdapterCo
         .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
       return {
         ...first,
+        connectionId: chosen.connectionId,
         status: chosen.status,
         account: chosen.account ?? group.find((entry) => trimOrEmpty(entry.account))?.account ?? null,
         lastSync: lastSyncValues.length > 0 ? Math.max(...lastSyncValues) : null,
@@ -248,6 +276,10 @@ function selectedAdapterEntry(state: IntegrationsState): AdapterConnectionEntry 
     return null;
   }
   return state.integrationsAdapters.find((entry) => entry.adapter === selected) ?? null;
+}
+
+function selectedConnectionId(state: IntegrationsState): string {
+  return trimOrEmpty(selectedAdapterEntry(state)?.connectionId);
 }
 
 function syncSelectedAdapter(state: IntegrationsState): void {
@@ -268,6 +300,10 @@ function clearBusy(state: IntegrationsState): void {
   state.integrationsBusyAdapter = null;
   state.integrationsBusyAction = null;
 }
+
+const DEFAULT_BACKFILL_SINCE = "2001-01-01T00:00:00Z";
+const LIVESYNC_ENABLE_METHOD = "adapters.connections.livesync.enable";
+const LIVESYNC_DISABLE_METHOD = "adapters.connections.livesync.disable";
 
 function hasAuthMethod(
   entry: AdapterConnectionEntry | null,
@@ -323,6 +359,42 @@ function consumeCallbackSignal(state: IntegrationsState): void {
   url.searchParams.delete("connected");
   url.searchParams.delete("error");
   window.history.replaceState({}, "", url.toString());
+}
+
+function resolveBackfillSince(entry: AdapterConnectionEntry | null): string {
+  const metadata = entry?.metadata as Record<string, any> | undefined;
+  const sync = metadata?.sync as Record<string, any> | undefined;
+  const config = metadata?.config as Record<string, any> | undefined;
+  const backfillSince =
+    typeof metadata?.backfill_since === "string" && metadata.backfill_since.trim()
+      ? metadata.backfill_since.trim()
+      : typeof sync?.backfill_since === "string" && sync.backfill_since.trim()
+        ? sync.backfill_since.trim()
+        : typeof config?.backfill_since === "string" && config.backfill_since.trim()
+          ? config.backfill_since.trim()
+          : "";
+  return backfillSince || DEFAULT_BACKFILL_SINCE;
+}
+
+export function resolveLivesyncEnabled(entry: AdapterConnectionEntry | null): boolean {
+  const metadata = entry?.metadata as Record<string, any> | undefined;
+  const sync = metadata?.sync as Record<string, any> | undefined;
+  const monitor = metadata?.monitor as Record<string, any> | undefined;
+  const candidates = [
+    metadata?.livesync_enabled,
+    metadata?.livesyncEnabled,
+    metadata?.liveSyncEnabled,
+    sync?.enabled,
+    sync?.live,
+    monitor?.started,
+    monitor?.running,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "boolean") {
+      return candidate;
+    }
+  }
+  return entry?.status === "connected";
 }
 
 export function adapterSupportsOAuth(entry: AdapterConnectionEntry | null): boolean {
@@ -583,20 +655,22 @@ export async function testIntegrationAdapter(
     return;
   }
   const target = trimOrEmpty(adapter);
+  const connectionId = selectedConnectionId(state);
   if (!target) {
     state.integrationsError = "Select an adapter first.";
+    return;
+  }
+  if (!connectionId) {
+    state.integrationsError = "Select a connection first.";
     return;
   }
   setBusy(state, target, "test");
   state.integrationsError = null;
   state.integrationsMessage = null;
   try {
-    const result = await state.client.request<AdapterConnectionsTestResult>(
-      "adapter.connections.test",
-      {
-        adapter: target,
-      },
-    );
+    const result = await state.client.request<AdapterConnectionsTestResult>("adapters.connections.test", {
+      connectionId,
+    });
     state.integrationsMessage = result.ok
       ? `${target}: connection test passed (${Math.max(0, Math.trunc(result.latency))}ms).`
       : `${target}: connection test failed - ${result.error || "unknown error"}`;
@@ -616,8 +690,13 @@ export async function disconnectIntegrationAdapter(
     return;
   }
   const target = trimOrEmpty(adapter);
+  const connectionId = selectedConnectionId(state);
   if (!target) {
     state.integrationsError = "Select an adapter first.";
+    return;
+  }
+  if (!connectionId) {
+    state.integrationsError = "Select a connection first.";
     return;
   }
   setBusy(state, target, "disconnect");
@@ -625,15 +704,96 @@ export async function disconnectIntegrationAdapter(
   state.integrationsMessage = null;
   try {
     const result = await state.client.request<AdapterConnectionsDisconnectResult>(
-      "adapter.connections.disconnect",
+      "adapters.connections.disconnect",
       {
-        adapter: target,
+        connectionId,
       },
     );
     state.integrationsSessionId = "";
     state.integrationsPendingFields = [];
     state.integrationsInstructions = null;
     state.integrationsMessage = `${target}: ${result.status}.`;
+    await loadIntegrations(state);
+  } catch (error) {
+    state.integrationsError = String(error);
+  } finally {
+    clearBusy(state);
+  }
+}
+
+export async function backfillIntegrationAdapter(
+  state: IntegrationsState,
+  adapter: string,
+): Promise<void> {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  const target = trimOrEmpty(adapter);
+  const connectionId = selectedConnectionId(state);
+  if (!target) {
+    state.integrationsError = "Select an adapter first.";
+    return;
+  }
+  if (!connectionId) {
+    state.integrationsError = "Select a connection first.";
+    return;
+  }
+  setBusy(state, target, "backfill");
+  state.integrationsError = null;
+  state.integrationsMessage = null;
+  try {
+    const since = resolveBackfillSince(selectedAdapterEntry(state));
+    const result = await state.client.request<AdapterConnectionsBackfillResult>(
+      "adapters.connections.backfill",
+      {
+        connectionId,
+        since,
+      },
+    );
+    state.integrationsMessage =
+      result.status === "running"
+        ? `${target}: backfill already running since ${result.since}.`
+        : `${target}: backfill queued since ${result.since}.`;
+    await loadIntegrations(state);
+  } catch (error) {
+    state.integrationsError = String(error);
+  } finally {
+    clearBusy(state);
+  }
+}
+
+export async function setIntegrationLivesync(
+  state: IntegrationsState,
+  adapter: string,
+  enabled: boolean,
+): Promise<void> {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  const target = trimOrEmpty(adapter);
+  const connectionId = selectedConnectionId(state);
+  if (!target) {
+    state.integrationsError = "Select an adapter first.";
+    return;
+  }
+  if (!connectionId) {
+    state.integrationsError = "Select a connection first.";
+    return;
+  }
+  const action = enabled ? "livesync_on" : "livesync_off";
+  setBusy(state, target, action);
+  state.integrationsError = null;
+  state.integrationsMessage = null;
+  try {
+    // Provisional connection-level livesync toggle names. The runtime surface
+    // can land these in parallel without the console falling back to legacy
+    // adapter-scoped monitor calls.
+    const method = enabled ? LIVESYNC_ENABLE_METHOD : LIVESYNC_DISABLE_METHOD;
+    const result = await state.client.request<AdapterConnectionsLivesyncResult>(method, {
+      connectionId,
+    });
+    const nextEnabled = typeof result.enabled === "boolean" ? result.enabled : enabled;
+    state.integrationsMessage = `${target}: livesync ${nextEnabled ? "enabled" : "disabled"}.`;
     await loadIntegrations(state);
   } catch (error) {
     state.integrationsError = String(error);

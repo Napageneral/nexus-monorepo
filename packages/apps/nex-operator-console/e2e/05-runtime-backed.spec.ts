@@ -38,7 +38,7 @@ test.describe('Runtime-backed operator console proof', () => {
     await clickSubTab(page, 'History');
     await expect(page.getByText('Loading...')).toBeHidden({ timeout: 15000 });
     await expect
-      .poll(async () => await page.locator('.v2-table tbody tr').count(), {
+      .poll(async () => await page.locator('.console-table tbody tr, .v2-table tbody tr').count(), {
         timeout: 15000,
       })
       .toBeGreaterThan(0);

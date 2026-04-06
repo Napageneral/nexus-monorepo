@@ -17,6 +17,22 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function consoleShellSelector(): string {
+  return '.console-shell, .v2-shell';
+}
+
+function consoleNavTabSelector(): string {
+  return '.console-nav-tab, .v2-nav-tab';
+}
+
+function consoleNavTabActiveSelector(tabName: string): string {
+  return `.console-nav-tab--active:has-text("${tabName}"), .v2-nav-tab--active:has-text("${tabName}")`;
+}
+
+function consoleDetailTabSelector(): string {
+  return '.console-detail-tab, .console-agent-tab, .v2-detail-tab, .v2-agent-tab';
+}
+
 /**
  * Take a named screenshot and save to the proof bundle.
  */
@@ -35,9 +51,13 @@ export async function screenshot(page: Page, name: string): Promise<void> {
  * Navigate to a tab by clicking its nav link and wait for the page title to appear.
  */
 export async function navigateToTab(page: Page, tabName: string): Promise<void> {
-  await page.click(`.v2-nav-tab:has-text("${tabName}")`);
+  await page
+    .locator(consoleNavTabSelector())
+    .filter({ hasText: new RegExp(`^\\s*${escapeRegExp(tabName)}\\s*$`) })
+    .first()
+    .click();
   // Wait for the clicked tab to become active, then let the page settle
-  await page.waitForSelector(`.v2-nav-tab--active:has-text("${tabName}")`, { timeout: 5000 }).catch(() => {});
+  await page.waitForSelector(consoleNavTabActiveSelector(tabName), { timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(300);
 }
 
@@ -47,7 +67,7 @@ export async function navigateToTab(page: Page, tabName: string): Promise<void> 
 export async function clickSubTab(page: Page, tabName: string): Promise<void> {
   const label = new RegExp(`^\\s*${escapeRegExp(tabName)}\\s*$`);
   const button = page
-    .locator('.v2-detail-tab:visible, .v2-agent-tab:visible')
+    .locator(`${consoleDetailTabSelector()}:visible`)
     .filter({ hasText: label })
     .first();
 
@@ -56,6 +76,8 @@ export async function clickSubTab(page: Page, tabName: string): Promise<void> {
     try {
       return await button.evaluate((element) => {
         return (
+          element.classList.contains('console-detail-tab--active') ||
+          element.classList.contains('console-agent-tab--active') ||
           element.classList.contains('v2-detail-tab--active') ||
           element.classList.contains('v2-agent-tab--active')
         );
@@ -109,9 +131,9 @@ export async function waitForConsoleReady(page: Page): Promise<void> {
 
   await page.goto(CONSOLE_ENTRY_PATH);
   // Wait for the shell to render
-  await page.waitForSelector('.v2-shell', { timeout: 10000 });
+  await page.waitForSelector(consoleShellSelector(), { timeout: 10000 });
   // Wait for nav tabs to appear
-  await page.waitForSelector('.v2-nav-tab', { timeout: 5000 });
+  await page.waitForSelector(consoleNavTabSelector(), { timeout: 5000 });
   if (REQUIRE_RUNTIME) {
     await page.waitForFunction(() => {
       const app = document.querySelector('nexus-app') as

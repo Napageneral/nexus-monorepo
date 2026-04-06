@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  backfillIntegrationAdapter,
   disconnectIntegrationAdapter,
   loadIntegrations,
+  setIntegrationLivesync,
   startIntegrationCustomFlow,
   submitIntegrationCustomFlow,
   testIntegrationAdapter,
@@ -130,6 +132,7 @@ describe("integrations controller", () => {
     const state = makeState(request);
     state.integrationsAdapters = [
       {
+        connectionId: "connection-github",
         adapter: "github",
         name: "GitHub",
         status: "disconnected",
@@ -171,6 +174,7 @@ describe("integrations controller", () => {
     const state = makeState(request);
     state.integrationsAdapters = [
       {
+        connectionId: "connection-github",
         adapter: "github",
         name: "GitHub",
         status: "disconnected",
@@ -233,11 +237,12 @@ describe("integrations controller", () => {
       })
       .mockResolvedValueOnce({
         connections: [],
-      })
+      });
 
     const state = makeState(request);
     state.integrationsAdapters = [
       {
+        connectionId: "connection-github",
         adapter: "github",
         name: "GitHub",
         status: "connected",
@@ -245,6 +250,7 @@ describe("integrations controller", () => {
         account: "installation-42",
         lastSync: null,
         error: null,
+        metadata: { monitor: { running: true } },
       },
     ];
     state.integrationsSelectedAdapter = "github";
@@ -264,10 +270,121 @@ describe("integrations controller", () => {
     expect(state.integrationsMessage).toContain("github: disconnected");
 
     expect(request.mock.calls.map(([method]) => method)).toEqual([
-      "adapter.connections.test",
+      "adapters.connections.test",
       "adapters.connections.list",
       "adapter.connections.list",
-      "adapter.connections.disconnect",
+      "adapters.connections.disconnect",
+      "adapters.connections.list",
+      "adapter.connections.list",
+    ]);
+  });
+
+  it("backs fills and toggles livesync on a concrete connection", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: "queued",
+        connectionId: "connection-github",
+        since: "2001-01-01T00:00:00Z",
+      })
+      .mockResolvedValueOnce({
+        connections: [
+          {
+            connectionId: "connection-github",
+            adapter: "github",
+            name: "GitHub",
+            status: "connected",
+            authMethod: "custom_flow",
+            authMethodId: null,
+            account: "installation-42",
+            lastSync: 3,
+            error: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        connections: [{ id: "installation-42", status: "active" }],
+      })
+      .mockResolvedValueOnce({
+        connectionId: "connection-github",
+        enabled: false,
+        status: "disabled",
+      })
+      .mockResolvedValueOnce({
+        connections: [
+          {
+            connectionId: "connection-github",
+            adapter: "github",
+            name: "GitHub",
+            status: "connected",
+            authMethod: "custom_flow",
+            authMethodId: null,
+            account: "installation-42",
+            lastSync: 4,
+            error: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        connections: [{ id: "installation-42", status: "active" }],
+      })
+      .mockResolvedValueOnce({
+        connectionId: "connection-github",
+        enabled: true,
+        status: "enabled",
+      })
+      .mockResolvedValueOnce({
+        connections: [
+          {
+            connectionId: "connection-github",
+            adapter: "github",
+            name: "GitHub",
+            status: "connected",
+            authMethod: "custom_flow",
+            authMethodId: null,
+            account: "installation-42",
+            lastSync: 5,
+            error: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        connections: [{ id: "installation-42", status: "active" }],
+      });
+
+    const state = makeState(request);
+    state.integrationsAdapters = [
+      {
+        connectionId: "connection-github",
+        adapter: "github",
+        name: "GitHub",
+        status: "connected",
+        authMethod: "custom_flow",
+        account: "installation-42",
+        lastSync: null,
+        error: null,
+        metadata: { monitor: { running: true } },
+      },
+    ];
+    state.integrationsSelectedAdapter = "github";
+
+    await backfillIntegrationAdapter(state, "github");
+    expect(state.integrationsMessage).toContain("backfill queued");
+
+    await setIntegrationLivesync(state, "github", false);
+    expect(state.integrationsMessage).toContain("livesync disabled");
+
+    await setIntegrationLivesync(state, "github", true);
+    expect(state.integrationsMessage).toContain("livesync enabled");
+
+    expect(request.mock.calls.map(([method]) => method)).toEqual([
+      "adapters.connections.backfill",
+      "adapters.connections.list",
+      "adapter.connections.list",
+      "adapters.connections.livesync.disable",
+      "adapters.connections.list",
+      "adapter.connections.list",
+      "adapters.connections.livesync.enable",
       "adapters.connections.list",
       "adapter.connections.list",
     ]);

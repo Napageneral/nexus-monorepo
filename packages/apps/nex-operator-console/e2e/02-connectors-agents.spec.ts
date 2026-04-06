@@ -8,20 +8,19 @@ test.describe('OCI-003: Connectors Page', () => {
 
     await screenshot(page, 'connectors-page');
 
-    // Should show either platform picker heading or connected list title
-    const heading = page.locator('h1, .v2-page-title').first();
-    await expect(heading).toBeVisible();
+    // Runtime-backed Connectors should render the integrations selector surface.
+    await expect(page.getByText('Select Adapter')).toBeVisible();
   });
 
   test('connectors shows platform picker or connected list', async ({ page }) => {
     await waitForConsoleReady(page);
     await navigateToTab(page, 'Connectors');
 
-    // Either the platform picker grid or the connected apps table should be visible
-    const platformGrid = page.locator('.v2-platform-grid, .v2-table, [class*="platform"]');
-    const emptyState = page.getByText('connect a platform').or(page.getByText('Browse all connectors'));
+    // Connectors should show either discovered adapters or the runtime-backed empty state.
+    const adapterGrid = page.locator('.connect-adapter-grid, .connect-adapter-card');
+    const emptyState = page.getByText('No adapters registered in this runtime.');
 
-    const hasContent = await platformGrid.count() > 0 || await emptyState.count() > 0;
+    const hasContent = await adapterGrid.count() > 0 || await emptyState.count() > 0;
     expect(hasContent).toBeTruthy();
 
     await screenshot(page, 'connectors-content');
@@ -36,7 +35,7 @@ test.describe('OCI-003: Agents List', () => {
     await screenshot(page, 'agents-list');
 
     // Should show agent cards from seeded data or empty state
-    const agentCards = page.locator('.v2-card--interactive, .v2-agent-card');
+    const agentCards = page.locator('.console-card--interactive, .v2-card--interactive, .v2-agent-card');
     const emptyState = page.getByText('No agents yet').or(page.getByText('Create agent'));
 
     const hasAgents = await agentCards.count() > 0;
@@ -111,14 +110,14 @@ test.describe('OCI-003: Agent Detail', () => {
     await navigateToTab(page, 'Agents');
 
     // Click first agent card
-    const agentCard = page.locator('.v2-card--interactive, .v2-agent-card').first();
+    const agentCard = page.locator('.console-card--interactive, .v2-card--interactive, .v2-agent-card').first();
     if (await agentCard.isVisible()) {
       await agentCard.click();
       await page.waitForTimeout(500);
       await screenshot(page, 'agent-detail-settings');
 
       // Verify detail sub-tabs exist
-      const detailTabs = page.locator('.v2-detail-tab, .v2-agent-tab');
+      const detailTabs = page.locator('.console-detail-tab, .console-agent-tab, .v2-detail-tab, .v2-agent-tab');
       expect(await detailTabs.count()).toBeGreaterThanOrEqual(2);
     }
   });
@@ -127,13 +126,13 @@ test.describe('OCI-003: Agent Detail', () => {
     await waitForConsoleReady(page);
     await navigateToTab(page, 'Agents');
 
-    const agentCard = page.locator('.v2-card--interactive, .v2-agent-card').first();
+    const agentCard = page.locator('.console-card--interactive, .v2-card--interactive, .v2-agent-card').first();
     if (await agentCard.isVisible()) {
       await agentCard.click();
       await page.waitForTimeout(500);
 
       // Click Skills tab
-      const skillsTab = page.locator('.v2-detail-tab:has-text("Skills"), .v2-agent-tab:has-text("Skills")');
+      const skillsTab = page.locator('.console-detail-tab:has-text("Skills"), .console-agent-tab:has-text("Skills"), .v2-detail-tab:has-text("Skills"), .v2-agent-tab:has-text("Skills")');
       if (await skillsTab.isVisible()) {
         await skillsTab.click();
         await page.waitForTimeout(300);
@@ -141,7 +140,7 @@ test.describe('OCI-003: Agent Detail', () => {
       }
 
       // Click Run History tab
-      const historyTab = page.locator('.v2-detail-tab:has-text("Run History"), .v2-detail-tab:has-text("History"), .v2-agent-tab:has-text("Run History"), .v2-agent-tab:has-text("History")');
+      const historyTab = page.locator('.console-detail-tab:has-text("Run History"), .console-detail-tab:has-text("History"), .console-agent-tab:has-text("Run History"), .console-agent-tab:has-text("History"), .v2-detail-tab:has-text("Run History"), .v2-detail-tab:has-text("History"), .v2-agent-tab:has-text("Run History"), .v2-agent-tab:has-text("History")');
       if (await historyTab.isVisible()) {
         await historyTab.click();
         await page.waitForTimeout(300);
@@ -154,7 +153,7 @@ test.describe('OCI-003: Agent Detail', () => {
     await waitForConsoleReady(page);
     await navigateToTab(page, 'Agents');
 
-    const agentCard = page.locator('.v2-card--interactive, .v2-agent-card').first();
+    const agentCard = page.locator('.console-card--interactive, .v2-card--interactive, .v2-agent-card').first();
     if (await agentCard.isVisible()) {
       await agentCard.click();
       await page.waitForTimeout(500);
@@ -166,12 +165,12 @@ test.describe('OCI-003: Agent Detail', () => {
         await page.waitForTimeout(300);
 
         // Verify modal appeared
-        const modal = page.locator('.v2-modal').first();
+        const modal = page.locator('.console-modal, .v2-modal').first();
         if (await modal.isVisible()) {
           await screenshot(page, 'agent-detail-modal-open');
 
           // Close modal
-          const closeBtn = modal.locator('button:has-text("Cancel"), .v2-modal-close').first();
+          const closeBtn = modal.locator('button:has-text("Cancel"), .console-modal-close, .v2-modal-close').first();
           if (await closeBtn.first().isVisible()) {
             await closeBtn.first().click();
             await page.waitForTimeout(300);

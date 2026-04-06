@@ -9,11 +9,11 @@ test.describe('OCI-004: Monitor Page', () => {
     await screenshot(page, 'monitor-live');
 
     // Stat cards should be visible
-    const statCards = page.locator('.v2-card');
+    const statCards = page.locator('.console-card, .v2-card');
     expect(await statCards.count()).toBeGreaterThanOrEqual(3);
 
     // Filter pills should exist
-    const filterPills = page.locator('.v2-filter-pill, button:has-text("All")');
+    const filterPills = page.locator('.console-filter-pill, .v2-filter-pill, button:has-text("All")');
     expect(await filterPills.count()).toBeGreaterThanOrEqual(1);
   });
 
@@ -22,20 +22,20 @@ test.describe('OCI-004: Monitor Page', () => {
     await navigateToTab(page, 'Monitor');
 
     // Click a filter pill
-    const readPill = page.locator('.v2-filter-pill:has-text("Read"), button:has-text("Read")');
+    const readPill = page.locator('.console-filter-pill:has-text("Read"), .v2-filter-pill:has-text("Read"), button:has-text("Read")');
     if (await readPill.isVisible()) {
       await readPill.click();
       await page.waitForTimeout(200);
     }
 
-    const writePill = page.locator('.v2-filter-pill:has-text("Write"), button:has-text("Write")');
+    const writePill = page.locator('.console-filter-pill:has-text("Write"), .v2-filter-pill:has-text("Write"), button:has-text("Write")');
     if (await writePill.isVisible()) {
       await writePill.click();
       await page.waitForTimeout(200);
     }
 
     // Click back to All
-    const allPill = page.locator('.v2-filter-pill:has-text("All"), button:has-text("All")').first();
+    const allPill = page.locator('.console-filter-pill:has-text("All"), .v2-filter-pill:has-text("All"), button:has-text("All")').first();
     if (await allPill.isVisible()) {
       await allPill.click();
     }
@@ -81,7 +81,7 @@ test.describe('OCI-004: Jobs Page', () => {
     await screenshot(page, 'jobs-overview');
 
     // Sub-tabs should exist
-    const subTabs = page.locator('.v2-detail-tab');
+    const subTabs = page.locator('.console-detail-tab, .v2-detail-tab');
     expect(await subTabs.count()).toBeGreaterThanOrEqual(4);
   });
 
@@ -109,8 +109,8 @@ test.describe('OCI-004: Jobs Page', () => {
     await screenshot(page, 'jobs-definitions');
 
     // Should have a table or empty state
-    const table = page.locator('.v2-table');
-    const emptyState = page.locator('.v2-empty').or(page.getByText('No job definitions'));
+    const table = page.locator('.console-table, .v2-table');
+    const emptyState = page.locator('.console-empty, .v2-empty').or(page.getByText('No job definitions'));
     expect(await table.count() > 0 || await emptyState.count() > 0).toBeTruthy();
   });
 });
@@ -123,7 +123,7 @@ test.describe('OCI-004: Records Page', () => {
     await screenshot(page, 'records-browse');
 
     // Sub-tabs
-    const subTabs = page.locator('.v2-detail-tab');
+    const subTabs = page.locator('.console-detail-tab, .v2-detail-tab');
     expect(await subTabs.count()).toBeGreaterThanOrEqual(2);
   });
 
@@ -145,7 +145,7 @@ test.describe('OCI-004: Records Page', () => {
     await navigateToTab(page, 'Records');
     await clickSubTab(page, 'Search');
 
-    const searchInput = page.locator('.v2-search-input, input[placeholder*="Search"]');
+    const searchInput = page.locator('.console-search-input, .v2-search-input, input[placeholder*="Search"]');
     if (await searchInput.isVisible()) {
       await searchInput.fill('test query');
       await page.waitForTimeout(200);

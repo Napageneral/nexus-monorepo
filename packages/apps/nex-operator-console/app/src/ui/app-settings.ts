@@ -79,13 +79,49 @@ function canonicalConsoleTab(tab: Tab, _basePath: string): Tab {
   return tab;
 }
 
-function resolveExplicitViewParam(): string | null {
+function isMountedConsoleBasePath(basePath: string): boolean {
+  return /(?:^|\/)app\/[^/]+$/i.test(normalizeBasePath(basePath));
+}
+
+function resolveConsoleMountedViewFromPath(basePath: string): string | null {
   if (typeof window === "undefined") {
     return null;
   }
-  const raw = new URL(window.location.href).searchParams.get("view");
-  const trimmed = raw?.trim();
-  return trimmed ? trimmed : null;
+  const base = normalizeBasePath(basePath);
+  let pathname = window.location.pathname;
+  if (base && pathname.startsWith(base)) {
+    pathname = pathname.slice(base.length) || "/";
+  }
+  const head = pathname
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => segment.trim().toLowerCase())[0];
+  switch (head) {
+    case "records":
+      return "records";
+    case "settings":
+      return "settings";
+    case "connectors":
+      return "connectors";
+    case "monitor":
+      return "monitor";
+    default:
+      return null;
+  }
+}
+
+function shouldPreserveNestedPath(
+  tab: Tab,
+  currentPath: string,
+  targetPath: string,
+): boolean {
+  if (tab !== "identity") {
+    return false;
+  }
+  return (
+    currentPath.startsWith(`${targetPath}/entity/`) ||
+    currentPath.startsWith(`${targetPath}/groups/`)
+  );
 }
 
 export function applySettings(host: SettingsHost, next: UiSettings) {
@@ -249,9 +285,10 @@ export async function refreshActiveTab(host: SettingsHost) {
     await loadIdentitySurface(host as unknown as Parameters<typeof loadIdentitySurface>[0]);
   }
   if (host.tab === "integrations") {
-    const v2View =
-      (host as unknown as NexusApp & { v2Tab?: string }).v2Tab ?? resolveExplicitViewParam();
-    if (v2View === "records") {
+    const consoleView =
+      (host as unknown as NexusApp & { consoleTab?: string }).consoleTab ??
+      resolveConsoleMountedViewFromPath(host.basePath);
+    if (consoleView === "records") {
       await refreshRecordsSurface(host as unknown as Parameters<typeof refreshRecordsSurface>[0]);
       return;
     }
@@ -370,7 +407,9 @@ export function syncTabWithLocation(host: SettingsHost, replace: boolean) {
   }
   const resolved = tabFromPath(window.location.pathname, host.basePath) ?? "home";
   setTabFromRoute(host, resolved);
-  syncUrlWithTab(host, resolved, replace);
+  if (!isMountedConsoleBasePath(host.basePath)) {
+    syncUrlWithTab(host, resolved, replace, { preserveNestedPath: true });
+  }
 }
 
 export function onPopState(host: SettingsHost) {
@@ -418,7 +457,12 @@ export function setTabFromRoute(host: SettingsHost, next: Tab) {
   }
 }
 
-export function syncUrlWithTab(host: SettingsHost, tab: Tab, replace: boolean) {
+export function syncUrlWithTab(
+  host: SettingsHost,
+  tab: Tab,
+  replace: boolean,
+  opts?: { preserveNestedPath?: boolean },
+) {
   if (typeof window === "undefined") {
     return;
   }
@@ -438,7 +482,10 @@ export function syncUrlWithTab(host: SettingsHost, tab: Tab, replace: boolean) {
     }
   }
 
-  if (currentPath !== targetPath) {
+  const keepCurrentPath =
+    opts?.preserveNestedPath && shouldPreserveNestedPath(tab, currentPath, targetPath);
+
+  if (currentPath !== targetPath && !keepCurrentPath) {
     url.pathname = targetPath;
   }
 

@@ -40,6 +40,16 @@ const MOUNTED_TAB_PATHS: Record<Tab, string> = {
 const MOUNTED_PATH_TO_TAB = new Map(
   Object.entries(MOUNTED_TAB_PATHS).map(([tab, route]) => [route, tab as Tab]),
 );
+const MOUNTED_ROUTE_ALIASES = new Map<string, Tab>([
+  ["/connectors", "integrations"],
+  ["/records", "integrations"],
+  ["/agents", "agents"],
+  ["/monitor", "system"],
+  ["/settings", "system"],
+  ["/jobs", "operations"],
+  ["/identity", "identity"],
+  ["/memory", "memory"],
+]);
 
 // ─── Path utilities ──────────────────────────────────────────────────────
 
@@ -79,7 +89,9 @@ function isMountedAppBasePath(basePath: string): boolean {
 }
 
 function tabPathMapForBasePath(basePath: string): Map<string, Tab> {
-  return isMountedAppBasePath(basePath) ? MOUNTED_PATH_TO_TAB : PATH_TO_TAB;
+  return isMountedAppBasePath(basePath)
+    ? new Map([...MOUNTED_PATH_TO_TAB.entries(), ...MOUNTED_ROUTE_ALIASES.entries()])
+    : PATH_TO_TAB;
 }
 
 function pathForResolvedTab(tab: Tab, basePath = ""): string {

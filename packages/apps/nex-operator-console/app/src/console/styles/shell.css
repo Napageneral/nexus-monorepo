@@ -1,0 +1,486 @@
+/* ─── Console Shell Layout ──────────────────────────────────────────────── */
+
+.console-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--console-bg);
+  color: var(--console-text);
+  font-family: var(--console-font);
+  font-size: var(--console-text-base);
+  line-height: var(--console-leading-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Top Navigation ──────────────────────────────────────────────── */
+/* Reference: ~40px height, very compact, no visible border in dark */
+
+.console-topnav {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  height: 44px;
+  padding: 0 var(--console-space-5);
+  background: var(--console-bg-nav);
+  border-bottom: 1px solid var(--console-border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  flex-shrink: 0;
+}
+
+/* Reference: tabs are LEFT-aligned, flowing after Personal, not centered.
+   Layout: [logo] [Personal] [Apps] [Agents] [Monitor] ---- [Production] [icons] [avatar] */
+
+.console-topnav-left {
+  display: flex;
+  align-items: center;
+  gap: var(--console-space-3);
+}
+
+.console-topnav-center {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: var(--console-space-3);
+}
+
+.console-topnav-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+/* ─── Logo ────────────────────────────────────────────────────────── */
+/* Reference: "one" wordmark ~18px, bold */
+
+.console-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--console-space-2);
+  text-decoration: none;
+  color: var(--console-text-strong);
+}
+
+.console-logo-mark {
+  width: 22px;
+  height: 22px;
+}
+
+.console-logo-mark img {
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+}
+
+.console-logo-text {
+  font-size: var(--console-text-md);
+  font-weight: var(--console-weight-bold);
+  letter-spacing: -0.03em;
+}
+
+/* ─── Workspace Switcher ──────────────────────────────────────────── */
+/* Reference: "Personal" + sparkle icon, compact */
+
+.console-workspace {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: var(--console-radius-sm);
+  cursor: pointer;
+  color: var(--console-text);
+  font-size: var(--console-text-sm);
+  font-weight: var(--console-weight-medium);
+  transition: color var(--console-transition-fast);
+  background: none;
+  border: none;
+  font-family: inherit;
+}
+
+.console-workspace:hover {
+  color: var(--console-text-strong);
+}
+
+.console-workspace svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.5;
+}
+
+/* ─── Nav Tabs (pill-shaped) ──────────────────────────────────────── */
+/* Reference: very compact pills, ~28px height, tiny icons, ~12px text */
+
+.console-nav-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: var(--console-radius-full);
+  font-size: var(--console-text-xs);
+  font-weight: var(--console-weight-medium);
+  color: var(--console-nav-text);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--console-transition-fast);
+  white-space: nowrap;
+  font-family: inherit;
+  text-decoration: none;
+  height: 28px;
+  line-height: 1;
+}
+
+.console-nav-tab:hover {
+  background: var(--console-bg-nav-pill);
+  color: var(--console-nav-text-active);
+}
+
+.console-nav-tab--active {
+  background: var(--console-bg-nav-pill-active);
+  color: var(--console-nav-text-active);
+}
+
+.console-nav-tab svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ─── Nav separator ───────────────────────────────────────────────── */
+
+.console-nav-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--console-border-strong);
+  margin: 0 4px;
+  opacity: 0.5;
+}
+
+/* ─── Utility Icons (right side) ──────────────────────────────────── */
+/* Reference: "Production" is a small text label with a toggle-style look */
+
+/* Reference: "Production" with a toggle switch next to it */
+.console-env-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--console-text-xs);
+  font-weight: var(--console-weight-medium);
+  color: var(--console-text);
+  cursor: default;
+  margin-right: 4px;
+}
+
+.console-env-toggle-switch {
+  width: 34px;
+  height: 18px;
+  border-radius: var(--console-radius-full);
+  background: var(--console-border-strong);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.console-env-toggle-switch::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--console-text-muted);
+  top: 2px;
+  right: 2px;
+}
+
+/* Reference: icons are ~16px, tightly spaced, muted color */
+
+.console-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--console-radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--console-text-muted);
+  cursor: pointer;
+  transition: all var(--console-transition-fast);
+  position: relative;
+  padding: 0;
+}
+
+.console-icon-btn:hover {
+  color: var(--console-text);
+}
+
+.console-icon-btn svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ─── User Avatar ─────────────────────────────────────────────────── */
+/* Reference: ~28px circle with photo, colored border */
+
+.console-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid var(--console-border-strong);
+  transition: border-color var(--console-transition-fast);
+  background: var(--console-bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--console-text-muted);
+  font-size: 10px;
+  font-weight: var(--console-weight-bold);
+  margin-left: 4px;
+}
+
+.console-avatar:hover {
+  border-color: var(--console-gold);
+}
+
+.console-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ─── Vertical divider ────────────────────────────────────────────── */
+
+.console-divider-v {
+  width: 1px;
+  height: 18px;
+  background: var(--console-border);
+  margin: 0 6px;
+}
+
+/* ─── Main Content Area ───────────────────────────────────────────── */
+/* Reference: content hugs top, generous horizontal padding */
+
+.console-main {
+  flex: 1;
+  padding: var(--console-space-6) var(--console-space-8);
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.console-main--wide {
+  max-width: 1440px;
+}
+
+/* ─── Page Header ─────────────────────────────────────────────────── */
+/* Reference: title ~22-24px bold, subtitle ~12px muted, tight spacing */
+
+.console-page-header {
+  margin-bottom: var(--console-space-5);
+}
+
+.console-page-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--console-space-4);
+}
+
+.console-page-title {
+  font-size: var(--console-text-2xl);
+  font-weight: var(--console-weight-bold);
+  color: var(--console-text-strong);
+  letter-spacing: -0.02em;
+  line-height: var(--console-leading-tight);
+  margin: 0;
+}
+
+.console-page-subtitle {
+  font-size: var(--console-text-xs);
+  color: var(--console-text-muted);
+  margin-top: 3px;
+  line-height: var(--console-leading-relaxed);
+}
+
+/* ─── Dropdown Menus ──────────────────────────────────────────────── */
+
+.console-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  background: var(--console-bg-card);
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-lg);
+  box-shadow: var(--console-shadow-lg);
+  padding: var(--console-space-1);
+  min-width: 180px;
+  z-index: 200;
+}
+
+.console-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: var(--console-space-2);
+  padding: 6px 10px;
+  border-radius: var(--console-radius-sm);
+  font-size: var(--console-text-sm);
+  color: var(--console-text);
+  cursor: pointer;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  transition: background var(--console-transition-fast);
+}
+
+.console-dropdown-item:hover {
+  background: var(--console-bg-card-hover);
+}
+
+.console-dropdown-item--active {
+  background: var(--console-bg-nav-pill-active);
+  color: var(--console-text-strong);
+  font-weight: var(--console-weight-medium);
+}
+
+.console-dropdown-item svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  opacity: 0.6;
+}
+
+.console-dropdown-sep {
+  height: 1px;
+  background: var(--console-border);
+  margin: 4px 0;
+}
+
+/* ─── Notifications Slide-Out ─────────────────────────────────────── */
+
+.console-notifications-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 340px;
+  height: 100vh;
+  background: var(--console-bg-raised);
+  border-left: 1px solid var(--console-border);
+  box-shadow: var(--console-shadow-overlay);
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform var(--console-transition-slow);
+}
+
+.console-notifications-panel--open {
+  transform: translateX(0);
+}
+
+.console-notifications-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--console-space-4) var(--console-space-5);
+  border-bottom: 1px solid var(--console-border);
+}
+
+.console-notifications-title {
+  font-size: var(--console-text-md);
+  font-weight: var(--console-weight-semibold);
+}
+
+.console-notifications-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--console-space-8);
+  color: var(--console-text-faint);
+  text-align: center;
+  font-size: var(--console-text-sm);
+}
+
+.console-notifications-body svg {
+  width: 40px;
+  height: 40px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.5;
+  margin-bottom: var(--console-space-3);
+  opacity: 0.4;
+}
+
+/* ─── Settings Page (inline under nav, with sidebar) ──────────────── */
+
+.console-main--settings {
+  max-width: none;
+  padding: 0;
+}
+
+.console-settings-page {
+  display: flex;
+  min-height: calc(100vh - 44px);
+}
+
+.console-settings-sidebar-inline {
+  width: 200px;
+  border-right: 1px solid var(--console-border);
+  padding: var(--console-space-5) var(--console-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--console-space-5);
+  flex-shrink: 0;
+  background: var(--console-bg);
+}
+
+.console-settings-page-content {
+  flex: 1;
+  padding: var(--console-space-6) var(--console-space-8);
+  max-width: 900px;
+}
+
+/* Active icon button (settings gear when on settings page) */
+.console-icon-btn--active {
+  color: var(--console-text-strong);
+  background: var(--console-bg-nav-pill-active);
+}
+
+/* ─── Responsive ──────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .console-topnav {
+    padding: 0 var(--console-space-3);
+  }
+
+  .console-main {
+    padding: var(--console-space-4) var(--console-space-4);
+  }
+
+  .console-topnav-center {
+    display: none;
+  }
+}

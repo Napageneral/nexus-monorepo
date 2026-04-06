@@ -9,15 +9,15 @@ test.describe('Smoke Test', () => {
     await screenshot(page, 'smoke-initial-load');
 
     // Verify the shell rendered
-    await expect(page.locator('.v2-shell')).toBeVisible();
+    await expect(page.locator('.console-shell, .v2-shell')).toBeVisible();
 
     // Verify nav tabs exist
-    const navTabs = page.locator('.v2-nav-tab');
+    const navTabs = page.locator('.console-nav-tab, .v2-nav-tab');
     const tabCount = await navTabs.count();
     expect(tabCount).toBeGreaterThanOrEqual(5);
 
     // Verify brand is present
-    await expect(page.locator('.v2-logo-text')).toContainText('nexus');
+    await expect(page.locator('.console-logo-text, .v2-logo-text')).toContainText('nexus');
 
     // No critical JS errors
     const criticalErrors = errors.filter(e =>

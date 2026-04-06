@@ -9,7 +9,7 @@ test.describe('OCI-005: Identity Page', () => {
     await screenshot(page, 'identity-entities');
 
     // Sub-tabs should exist (6 total)
-    const subTabs = page.locator('.v2-detail-tab');
+    const subTabs = page.locator('.console-detail-tab, .v2-detail-tab');
     expect(await subTabs.count()).toBeGreaterThanOrEqual(5);
   });
 
@@ -38,8 +38,8 @@ test.describe('OCI-005: Identity Page', () => {
     await screenshot(page, 'identity-contacts');
 
     // Should have a table with at least one contact from seeding
-    const table = page.locator('.v2-table');
-    const emptyState = page.locator('.v2-empty').or(page.getByText('No contacts'));
+    const table = page.locator('.console-table, .v2-table');
+    const emptyState = page.locator('.console-empty, .v2-empty').or(page.getByText('No contacts'));
     const hasContent = await table.count() > 0 || await emptyState.count() > 0;
     expect(hasContent).toBeTruthy();
   });
@@ -56,7 +56,7 @@ test.describe('OCI-005: Identity Page', () => {
     await waitForConsoleReady(page);
     await navigateToTab(page, 'Identity');
 
-    const searchInput = page.locator('.v2-search-input, input[placeholder*="Search"]');
+    const searchInput = page.locator('.console-search-input, .v2-search-input, input[placeholder*="Search"]');
     if (await searchInput.isVisible()) {
       await searchInput.fill('echo');
       await page.waitForTimeout(300);
@@ -84,7 +84,7 @@ test.describe('OCI-005: Memory Page', () => {
     await screenshot(page, 'memory-library');
 
     // Sub-tabs should exist
-    const subTabs = page.locator('.v2-detail-tab');
+    const subTabs = page.locator('.console-detail-tab, .v2-detail-tab');
     expect(await subTabs.count()).toBeGreaterThanOrEqual(2);
   });
 
@@ -123,7 +123,7 @@ test.describe('OCI-005: Memory Page', () => {
     await screenshot(page, 'memory-quality');
 
     // Should show quality summary cards or empty state
-    const content = page.locator('.v2-card').or(page.locator('.v2-empty')).or(page.getByText('No quality data'));
+    const content = page.locator('.console-card').or(page.locator('.console-empty')).or(page.locator('.v2-card')).or(page.locator('.v2-empty')).or(page.getByText('No quality data'));
     expect(await content.count()).toBeGreaterThanOrEqual(1);
   });
 

@@ -84,7 +84,7 @@ import {
   handleFirstUpdated,
   handleUpdated,
 } from "./app-lifecycle.ts";
-import { renderConsoleApp } from "../v2/app-render-v2.ts";
+import { renderConsoleApp } from "../console/render-app.ts";
 import { connectRuntime as connectRuntimeInternal } from "./app-runtime.ts";
 import {
   exportLogs as exportLogsInternal,
