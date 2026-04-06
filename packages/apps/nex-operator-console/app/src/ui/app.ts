@@ -5,15 +5,22 @@ import type { AppViewState } from "./app-view-state.ts";
 import type { AclPermissionRequest } from "./controllers/acl-requests.ts";
 import type { InstalledApp, InstalledAppMethod } from "./controllers/apps.ts";
 import type {
+  IdentityEntity,
   IdentityChannel,
   IdentityContact,
   IdentityGroup,
+  IdentityGroupMember,
   IdentityMergeCandidate,
   IdentityPolicy,
 } from "./controllers/identity.ts";
 import type { IngressCredential } from "./controllers/ingress-credentials.ts";
 import type { AdapterAuthField, AdapterConnectionEntry } from "./controllers/integrations.ts";
-import type { AutomationMeeseeksEntry } from "./controllers/schedules.ts";
+import type {
+  RecordsChannelEntry,
+  RecordsEntry,
+  RecordsSearchEntry,
+} from "./controllers/records.ts";
+import type { AutomationMeeseeksEntry, JobQueueEntry } from "./controllers/schedules.ts";
 import type { SkillMessage } from "./controllers/skills.ts";
 import type { Tab } from "./navigation.ts";
 import type { RuntimeBrowserClient, RuntimeHelloOk } from "./runtime.ts";
@@ -21,7 +28,6 @@ import type { ResolvedTheme, ThemeMode } from "./theme.ts";
 import type {
   AgentsListResult,
   AgentsFilesListResult,
-  AgentIdentityResult,
   ConfigSnapshot,
   ConfigUiHints,
   ConversationsListResult,
@@ -29,7 +35,6 @@ import type {
   ScheduleJob,
   ScheduleRunLogEntry,
   ScheduleStatus,
-  HealthSnapshot,
   LogEntry,
   LogLevel,
   PresenceEntry,
@@ -44,6 +49,8 @@ import type {
   MemoryReviewEntityDetail,
   MemoryReviewFactDetail,
   MemoryReviewObservationDetail,
+  MonitorOperation,
+  MonitorOperationsStatsResult,
   MemoryReviewRun,
   MemoryReviewSearchResult,
   MemoryReviewSearchType,
@@ -77,8 +84,7 @@ import {
   handleFirstUpdated,
   handleUpdated,
 } from "./app-lifecycle.ts";
-import { renderApp } from "./app-render.ts";
-import { renderAppV2 } from "../v2/app-render-v2.ts";
+import { renderConsoleApp } from "../console/render-app.ts";
 import { connectRuntime as connectRuntimeInternal } from "./app-runtime.ts";
 import {
   exportLogs as exportLogsInternal,
@@ -101,7 +107,6 @@ import {
   type CompactionStatus,
 } from "./app-tool-stream.ts";
 import { resolveInjectedAssistantIdentity } from "./assistant-identity.ts";
-import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./controllers/assistant-identity.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
 import { type ChatAttachment, type ChatQueueItem, type ScheduleFormState } from "./ui-types.ts";
 
@@ -153,8 +158,6 @@ export class NexusApp extends LitElement {
   @state() chatMessage = "";
   @state() chatMessages: unknown[] = [];
   @state() chatToolMessages: unknown[] = [];
-  @state() chatStream: string | null = null;
-  @state() chatStreamStartedAt: number | null = null;
   @state() chatRunId: string | null = null;
   @state() compactionStatus: CompactionStatus | null = null;
   @state() chatAvatarUrl: string | null = null;
@@ -168,8 +171,6 @@ export class NexusApp extends LitElement {
   @state() sidebarError: string | null = null;
   @state() splitRatio = this.settings.splitRatio;
 
-  @state() nodesLoading = false;
-  @state() nodes: Array<Record<string, unknown>> = [];
   @state() aclRequestsLoading = false;
   @state() aclRequestsError: string | null = null;
   @state() aclRequests: AclPermissionRequest[] = [];
@@ -188,11 +189,20 @@ export class NexusApp extends LitElement {
   @state() identityLoading = false;
   @state() identityError: string | null = null;
   @state() identityMergeBusyId: string | null = null;
+  @state() identityEntities: IdentityEntity[] = [];
   @state() identityContacts: IdentityContact[] = [];
   @state() identityChannels: IdentityChannel[] = [];
   @state() identityGroups: IdentityGroup[] = [];
   @state() identityPolicies: IdentityPolicy[] = [];
   @state() identityMergeCandidates: IdentityMergeCandidate[] = [];
+  @state() identitySelectedEntityId: string | null = null;
+  @state() identitySelectedEntity: IdentityEntity | null = null;
+  @state() identitySelectedEntityContacts: IdentityContact[] = [];
+  @state() identityEntityDetailLoading = false;
+  @state() identitySelectedGroupId: string | null = null;
+  @state() identitySelectedGroup: IdentityGroup | null = null;
+  @state() identityGroupMembers: IdentityGroupMember[] = [];
+  @state() identityGroupDetailLoading = false;
   @state() pendingRuntimeUrl: string | null = null;
 
   @state() configLoading = false;
@@ -232,6 +242,7 @@ export class NexusApp extends LitElement {
   @state() integrationsBusyAction: string | null = null;
   @state() integrationsError: string | null = null;
   @state() integrationsMessage: string | null = null;
+  @state() integrationsLoaded = false;
   @state() integrationsAdapters: AdapterConnectionEntry[] = [];
   @state() integrationsSelectedAdapter = "";
   @state() integrationsSessionId = "";
@@ -255,6 +266,14 @@ export class NexusApp extends LitElement {
   @state() agentsList: AgentsListResult | null = null;
   @state() agentsError: string | null = null;
   @state() agentsSelectedId: string | null = null;
+  @state() monitorPaused = false;
+  @state() monitorLiveOps: MonitorOperation[] = [];
+  @state() monitorHistoryOps: MonitorOperation[] = [];
+  @state() monitorHistoryTotal = 0;
+  @state() monitorHistoryLoading = false;
+  @state() monitorHistoryError: string | null = null;
+  @state() monitorStats: MonitorOperationsStatsResult | null = null;
+  @state() monitorStatsLoading = false;
   @state() agentsPanel: "overview" | "files" | "tools" | "skills" | "accounts" | "automations" =
     "overview";
   @state() agentFilesLoading = false;
@@ -264,9 +283,6 @@ export class NexusApp extends LitElement {
   @state() agentFileDrafts: Record<string, string> = {};
   @state() agentFileActive: string | null = null;
   @state() agentFileSaving = false;
-  @state() agentIdentityLoading = false;
-  @state() agentIdentityError: string | null = null;
-  @state() agentIdentityById: Record<string, AgentIdentityResult> = {};
   @state() agentSkillsLoading = false;
   @state() agentSkillsError: string | null = null;
   @state() agentSkillsReport: SkillStatusReport | null = null;
@@ -373,10 +389,25 @@ export class NexusApp extends LitElement {
   @state() scheduleForm: ScheduleFormState = { ...DEFAULT_SCHEDULE_FORM };
   @state() scheduleRunsJobId: string | null = null;
   @state() scheduleRuns: ScheduleRunLogEntry[] = [];
+  @state() scheduleQueueEntries: JobQueueEntry[] = [];
   @state() scheduleBusy = false;
   @state() automationMeeseeksLoading = false;
   @state() automationMeeseeksError: string | null = null;
   @state() automationMeeseeks: AutomationMeeseeksEntry[] = [];
+
+  @state() recordsLoading = false;
+  @state() recordsError: string | null = null;
+  @state() recordsItems: RecordsEntry[] = [];
+  @state() recordsOffset = 0;
+  @state() recordsLimit = 50;
+  @state() recordsHasMore = false;
+  @state() recordsPlatformFilter = "";
+  @state() recordsChannelsLoading = false;
+  @state() recordsChannels: RecordsChannelEntry[] = [];
+  @state() recordsSearchQuery = "";
+  @state() recordsSearchPlatform = "";
+  @state() recordsSearchLoading = false;
+  @state() recordsSearchResults: RecordsSearchEntry[] | null = null;
 
   @state() skillsLoading = false;
   @state() skillsReport: SkillStatusReport | null = null;
@@ -388,9 +419,7 @@ export class NexusApp extends LitElement {
 
   @state() debugLoading = false;
   @state() debugStatus: StatusSummary | null = null;
-  @state() debugHealth: HealthSnapshot | null = null;
   @state() debugModels: unknown[] = [];
-  @state() debugHeartbeat: unknown = null;
   @state() debugCallMethod = "";
   @state() debugCallParams = "{}";
   @state() debugCallResult: string | null = null;
@@ -428,7 +457,6 @@ export class NexusApp extends LitElement {
   private chatHasAutoScrolled = false;
   private chatUserNearBottom = true;
   @state() chatNewMessagesBelow = false;
-  private nodesPollInterval: number | null = null;
   private logsPollInterval: number | null = null;
   private debugPollInterval: number | null = null;
   private logsScrollFrame: number | null = null;
@@ -501,10 +529,6 @@ export class NexusApp extends LitElement {
       true,
       Boolean(opts?.smooth),
     );
-  }
-
-  async loadAssistantIdentity() {
-    await loadAssistantIdentityInternal(this);
   }
 
   applySettings(next: UiSettings) {
@@ -644,11 +668,6 @@ export class NexusApp extends LitElement {
   }
 
   render() {
-    // v2 UI — set USE_V2=true to enable new design
-    const useV2 = (this as any).__useV2 ?? true;
-    if (useV2) {
-      return renderAppV2(this as unknown as AppViewState);
-    }
-    return renderApp(this as unknown as AppViewState);
+    return renderConsoleApp(this as unknown as AppViewState);
   }
 }

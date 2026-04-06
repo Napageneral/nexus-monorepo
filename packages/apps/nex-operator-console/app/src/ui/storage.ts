@@ -1,4 +1,5 @@
-const KEY = "nexus.control.settings.v1";
+const KEY = "nexus.control.settings";
+const LEGACY_KEY = "nexus.control.settings.v1";
 
 import type { ThemeMode } from "./theme.ts";
 
@@ -35,12 +36,12 @@ export function loadSettings(): UiSettings {
   };
 
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(KEY) ?? localStorage.getItem(LEGACY_KEY);
     if (!raw) {
       return defaults;
     }
     const parsed = JSON.parse(raw) as Partial<UiSettings>;
-    return {
+    const resolved = {
       runtimeUrl:
         typeof parsed.runtimeUrl === "string" && parsed.runtimeUrl.trim()
           ? parsed.runtimeUrl.trim()
@@ -77,6 +78,11 @@ export function loadSettings(): UiSettings {
           ? parsed.navGroupsCollapsed
           : defaults.navGroupsCollapsed,
     };
+    if (!localStorage.getItem(KEY)) {
+      localStorage.setItem(KEY, JSON.stringify(resolved));
+      localStorage.removeItem(LEGACY_KEY);
+    }
+    return resolved;
   } catch {
     return defaults;
   }

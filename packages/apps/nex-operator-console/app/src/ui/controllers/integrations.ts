@@ -64,6 +64,7 @@ export type AdapterConnectionIdentity = {
 };
 
 export type AdapterConnectionEntry = {
+  connectionId: string;
   adapter: string;
   name: string;
   status: AdapterConnectionStatus;
@@ -77,12 +78,13 @@ export type AdapterConnectionEntry = {
 };
 
 type AdapterConnectionsListResult = {
-  adapters: AdapterConnectionEntry[];
+  connections?: AdapterConnectionEntry[];
 };
 
 type AdapterConnectionsResult = {
   connections?: Array<{
     id?: unknown;
+    connectionId?: unknown;
     display_name?: unknown;
     credential_ref?: unknown;
     status?: unknown;
@@ -120,6 +122,26 @@ type AdapterConnectionsDisconnectResult = {
   service?: string;
 };
 
+type AdapterConnectionsBackfillResult = {
+  status: "queued" | "running";
+  connectionId: string;
+  account?: string;
+  service?: string;
+  since: string;
+  job_definition_id?: string;
+  job_run_id?: string;
+  queue_entry_id?: string;
+  existing_run?: boolean;
+};
+
+type AdapterConnectionsLivesyncResult = {
+  connectionId: string;
+  enabled: boolean;
+  status?: string;
+  account?: string;
+  service?: string;
+};
+
 export type IntegrationsState = {
   client: {
     request<T = unknown>(method: string, params?: unknown): Promise<T>;
@@ -130,6 +152,7 @@ export type IntegrationsState = {
   integrationsBusyAction: string | null;
   integrationsError: string | null;
   integrationsMessage: string | null;
+  integrationsLoaded: boolean;
   integrationsAdapters: AdapterConnectionEntry[];
   integrationsSelectedAdapter: string;
   integrationsSessionId: string;
@@ -162,7 +185,12 @@ function normalizeAdapterConnections(
   }
   return payload.connections
     .map((entry) => {
-      const id = typeof entry?.id === "string" ? entry.id.trim() : "";
+      const id =
+        typeof entry?.connectionId === "string" && entry.connectionId.trim()
+          ? entry.connectionId.trim()
+          : typeof entry?.id === "string"
+            ? entry.id.trim()
+            : "";
       if (!id) {
         return null;
       }
@@ -209,12 +237,49 @@ function mergeAdapterConnections(
   return [...merged.values()].toSorted((a, b) => a.id.localeCompare(b.id));
 }
 
+function summarizeAdapterInventory(entries: AdapterConnectionEntry[]): AdapterConnectionEntry[] {
+  const grouped = new Map<string, AdapterConnectionEntry[]>();
+  for (const entry of entries) {
+    const adapter = trimOrEmpty(entry.adapter);
+    if (!adapter) {
+      continue;
+    }
+    const existing = grouped.get(adapter) ?? [];
+    existing.push({ ...entry, adapter });
+    grouped.set(adapter, existing);
+  }
+  return [...grouped.values()]
+    .map((group) => {
+      const first = group[0]!;
+      const connected = group.find((entry) => entry.status === "connected");
+      const error = group.find((entry) => entry.status === "error");
+      const expired = group.find((entry) => entry.status === "expired");
+      const chosen = connected ?? error ?? expired ?? first;
+      const lastSyncValues = group
+        .map((entry) => entry.lastSync)
+        .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+      return {
+        ...first,
+        connectionId: chosen.connectionId,
+        status: chosen.status,
+        account: chosen.account ?? group.find((entry) => trimOrEmpty(entry.account))?.account ?? null,
+        lastSync: lastSyncValues.length > 0 ? Math.max(...lastSyncValues) : null,
+        error: chosen.error ?? group.find((entry) => trimOrEmpty(entry.error))?.error ?? null,
+      };
+    })
+    .toSorted((a, b) => a.name.localeCompare(b.name));
+}
+
 function selectedAdapterEntry(state: IntegrationsState): AdapterConnectionEntry | null {
   const selected = trimOrEmpty(state.integrationsSelectedAdapter);
   if (!selected) {
     return null;
   }
   return state.integrationsAdapters.find((entry) => entry.adapter === selected) ?? null;
+}
+
+function selectedConnectionId(state: IntegrationsState): string {
+  return trimOrEmpty(selectedAdapterEntry(state)?.connectionId);
 }
 
 function syncSelectedAdapter(state: IntegrationsState): void {
@@ -235,6 +300,10 @@ function clearBusy(state: IntegrationsState): void {
   state.integrationsBusyAdapter = null;
   state.integrationsBusyAction = null;
 }
+
+const DEFAULT_BACKFILL_SINCE = "2001-01-01T00:00:00Z";
+const LIVESYNC_ENABLE_METHOD = "adapters.connections.livesync.enable";
+const LIVESYNC_DISABLE_METHOD = "adapters.connections.livesync.disable";
 
 function hasAuthMethod(
   entry: AdapterConnectionEntry | null,
@@ -292,6 +361,42 @@ function consumeCallbackSignal(state: IntegrationsState): void {
   window.history.replaceState({}, "", url.toString());
 }
 
+function resolveBackfillSince(entry: AdapterConnectionEntry | null): string {
+  const metadata = entry?.metadata as Record<string, any> | undefined;
+  const sync = metadata?.sync as Record<string, any> | undefined;
+  const config = metadata?.config as Record<string, any> | undefined;
+  const backfillSince =
+    typeof metadata?.backfill_since === "string" && metadata.backfill_since.trim()
+      ? metadata.backfill_since.trim()
+      : typeof sync?.backfill_since === "string" && sync.backfill_since.trim()
+        ? sync.backfill_since.trim()
+        : typeof config?.backfill_since === "string" && config.backfill_since.trim()
+          ? config.backfill_since.trim()
+          : "";
+  return backfillSince || DEFAULT_BACKFILL_SINCE;
+}
+
+export function resolveLivesyncEnabled(entry: AdapterConnectionEntry | null): boolean {
+  const metadata = entry?.metadata as Record<string, any> | undefined;
+  const sync = metadata?.sync as Record<string, any> | undefined;
+  const monitor = metadata?.monitor as Record<string, any> | undefined;
+  const candidates = [
+    metadata?.livesync_enabled,
+    metadata?.livesyncEnabled,
+    metadata?.liveSyncEnabled,
+    sync?.enabled,
+    sync?.live,
+    monitor?.started,
+    monitor?.running,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "boolean") {
+      return candidate;
+    }
+  }
+  return entry?.status === "connected";
+}
+
 export function adapterSupportsOAuth(entry: AdapterConnectionEntry | null): boolean {
   return hasAuthMethod(entry, "oauth2");
 }
@@ -311,7 +416,12 @@ export function setIntegrationsPayloadText(state: IntegrationsState, payloadText
 }
 
 export async function loadIntegrations(state: IntegrationsState): Promise<void> {
-  if (!state.client || !state.connected || state.integrationsLoading) {
+  if (state.integrationsLoading) {
+    return;
+  }
+  if (!state.client || !state.connected) {
+    state.integrationsLoaded = true;
+    state.integrationsError = "Runtime not connected.";
     return;
   }
   state.integrationsLoading = true;
@@ -320,10 +430,12 @@ export async function loadIntegrations(state: IntegrationsState): Promise<void> 
   try {
     const client = state.client;
     const result = await client.request<AdapterConnectionsListResult>(
-      "adapter.connections.list",
+      "adapters.connections.list",
       {},
     );
-    const baseEntries = Array.isArray(result.adapters) ? result.adapters : [];
+    const baseEntries = summarizeAdapterInventory(
+      Array.isArray(result.connections) ? result.connections : [],
+    );
     state.integrationsAdapters = await Promise.all(
       baseEntries.map(async (entry) => {
         try {
@@ -350,6 +462,7 @@ export async function loadIntegrations(state: IntegrationsState): Promise<void> 
   } catch (error) {
     state.integrationsError = String(error);
   } finally {
+    state.integrationsLoaded = true;
     state.integrationsLoading = false;
   }
 }
@@ -542,20 +655,22 @@ export async function testIntegrationAdapter(
     return;
   }
   const target = trimOrEmpty(adapter);
+  const connectionId = selectedConnectionId(state);
   if (!target) {
     state.integrationsError = "Select an adapter first.";
+    return;
+  }
+  if (!connectionId) {
+    state.integrationsError = "Select a connection first.";
     return;
   }
   setBusy(state, target, "test");
   state.integrationsError = null;
   state.integrationsMessage = null;
   try {
-    const result = await state.client.request<AdapterConnectionsTestResult>(
-      "adapter.connections.test",
-      {
-        adapter: target,
-      },
-    );
+    const result = await state.client.request<AdapterConnectionsTestResult>("adapters.connections.test", {
+      connectionId,
+    });
     state.integrationsMessage = result.ok
       ? `${target}: connection test passed (${Math.max(0, Math.trunc(result.latency))}ms).`
       : `${target}: connection test failed - ${result.error || "unknown error"}`;
@@ -575,8 +690,13 @@ export async function disconnectIntegrationAdapter(
     return;
   }
   const target = trimOrEmpty(adapter);
+  const connectionId = selectedConnectionId(state);
   if (!target) {
     state.integrationsError = "Select an adapter first.";
+    return;
+  }
+  if (!connectionId) {
+    state.integrationsError = "Select a connection first.";
     return;
   }
   setBusy(state, target, "disconnect");
@@ -584,15 +704,96 @@ export async function disconnectIntegrationAdapter(
   state.integrationsMessage = null;
   try {
     const result = await state.client.request<AdapterConnectionsDisconnectResult>(
-      "adapter.connections.disconnect",
+      "adapters.connections.disconnect",
       {
-        adapter: target,
+        connectionId,
       },
     );
     state.integrationsSessionId = "";
     state.integrationsPendingFields = [];
     state.integrationsInstructions = null;
     state.integrationsMessage = `${target}: ${result.status}.`;
+    await loadIntegrations(state);
+  } catch (error) {
+    state.integrationsError = String(error);
+  } finally {
+    clearBusy(state);
+  }
+}
+
+export async function backfillIntegrationAdapter(
+  state: IntegrationsState,
+  adapter: string,
+): Promise<void> {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  const target = trimOrEmpty(adapter);
+  const connectionId = selectedConnectionId(state);
+  if (!target) {
+    state.integrationsError = "Select an adapter first.";
+    return;
+  }
+  if (!connectionId) {
+    state.integrationsError = "Select a connection first.";
+    return;
+  }
+  setBusy(state, target, "backfill");
+  state.integrationsError = null;
+  state.integrationsMessage = null;
+  try {
+    const since = resolveBackfillSince(selectedAdapterEntry(state));
+    const result = await state.client.request<AdapterConnectionsBackfillResult>(
+      "adapters.connections.backfill",
+      {
+        connectionId,
+        since,
+      },
+    );
+    state.integrationsMessage =
+      result.status === "running"
+        ? `${target}: backfill already running since ${result.since}.`
+        : `${target}: backfill queued since ${result.since}.`;
+    await loadIntegrations(state);
+  } catch (error) {
+    state.integrationsError = String(error);
+  } finally {
+    clearBusy(state);
+  }
+}
+
+export async function setIntegrationLivesync(
+  state: IntegrationsState,
+  adapter: string,
+  enabled: boolean,
+): Promise<void> {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  const target = trimOrEmpty(adapter);
+  const connectionId = selectedConnectionId(state);
+  if (!target) {
+    state.integrationsError = "Select an adapter first.";
+    return;
+  }
+  if (!connectionId) {
+    state.integrationsError = "Select a connection first.";
+    return;
+  }
+  const action = enabled ? "livesync_on" : "livesync_off";
+  setBusy(state, target, action);
+  state.integrationsError = null;
+  state.integrationsMessage = null;
+  try {
+    // Provisional connection-level livesync toggle names. The runtime surface
+    // can land these in parallel without the console falling back to legacy
+    // adapter-scoped monitor calls.
+    const method = enabled ? LIVESYNC_ENABLE_METHOD : LIVESYNC_DISABLE_METHOD;
+    const result = await state.client.request<AdapterConnectionsLivesyncResult>(method, {
+      connectionId,
+    });
+    const nextEnabled = typeof result.enabled === "boolean" ? result.enabled : enabled;
+    state.integrationsMessage = `${target}: livesync ${nextEnabled ? "enabled" : "disabled"}.`;
     await loadIntegrations(state);
   } catch (error) {
     state.integrationsError = String(error);

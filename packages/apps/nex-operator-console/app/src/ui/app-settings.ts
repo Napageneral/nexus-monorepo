@@ -9,7 +9,6 @@ import {
 } from "./app-polling.ts";
 import { scheduleChatScroll, scheduleLogsScroll } from "./app-scroll.ts";
 import { loadAclRequests } from "./controllers/acl-requests.ts";
-import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
 import { loadAgents } from "./controllers/agents.ts";
 import { loadInstalledApps } from "./controllers/apps.ts";
@@ -21,8 +20,9 @@ import { loadIdentitySurface } from "./controllers/identity.ts";
 import { loadIngressCredentials } from "./controllers/ingress-credentials.ts";
 import { loadIntegrations } from "./controllers/integrations.ts";
 import { loadLogs } from "./controllers/logs.ts";
-import { loadMemoryRuns, runMemorySearch } from "./controllers/memory-review.ts";
+import { loadMemoryRuns } from "./controllers/memory-review.ts";
 import { loadPresence } from "./controllers/presence.ts";
+import { refreshRecordsSurface } from "./controllers/records.ts";
 import { loadAutomationMeeseeks, loadScheduleJobs } from "./controllers/schedules.ts";
 import { loadSessions } from "./controllers/sessions.ts";
 import { loadSkills } from "./controllers/skills.ts";
@@ -65,6 +65,64 @@ type SettingsHost = {
   themeMediaHandler: ((event: MediaQueryListEvent) => void) | null;
   pendingRuntimeUrl?: string | null;
 };
+
+const MEMORY_SCOPED_QUERY_KEYS = [
+  "memory_run",
+  "memory_episode",
+  "memory_scope",
+  "memory_bucket",
+  "memory_detail_kind",
+  "memory_detail_id",
+] as const;
+
+function canonicalConsoleTab(tab: Tab, _basePath: string): Tab {
+  return tab;
+}
+
+function isMountedConsoleBasePath(basePath: string): boolean {
+  return /(?:^|\/)app\/[^/]+$/i.test(normalizeBasePath(basePath));
+}
+
+function resolveConsoleMountedViewFromPath(basePath: string): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const base = normalizeBasePath(basePath);
+  let pathname = window.location.pathname;
+  if (base && pathname.startsWith(base)) {
+    pathname = pathname.slice(base.length) || "/";
+  }
+  const head = pathname
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => segment.trim().toLowerCase())[0];
+  switch (head) {
+    case "records":
+      return "records";
+    case "settings":
+      return "settings";
+    case "connectors":
+      return "connectors";
+    case "monitor":
+      return "monitor";
+    default:
+      return null;
+  }
+}
+
+function shouldPreserveNestedPath(
+  tab: Tab,
+  currentPath: string,
+  targetPath: string,
+): boolean {
+  if (tab !== "identity") {
+    return false;
+  }
+  return (
+    currentPath.startsWith(`${targetPath}/entity/`) ||
+    currentPath.startsWith(`${targetPath}/groups/`)
+  );
+}
 
 export function applySettings(host: SettingsHost, next: UiSettings) {
   const conversationId = next.conversationId?.trim() || "";
@@ -154,24 +212,25 @@ export function applySettingsFromUrl(host: SettingsHost) {
 }
 
 export function setTab(host: SettingsHost, next: Tab) {
-  if (host.tab !== next) {
-    host.tab = next;
+  const canonical = canonicalConsoleTab(next, host.basePath);
+  if (host.tab !== canonical) {
+    host.tab = canonical;
   }
-  if (next === "console") {
+  if (canonical === "console") {
     host.chatHasAutoScrolled = false;
   }
-  if (next === "system" && (host as unknown as NexusApp).systemSubTab === "logs") {
+  if (canonical === "system" && (host as unknown as NexusApp).systemSubTab === "logs") {
     startLogsPolling(host as unknown as Parameters<typeof startLogsPolling>[0]);
   } else {
     stopLogsPolling(host as unknown as Parameters<typeof stopLogsPolling>[0]);
   }
-  if (next === "system" && (host as unknown as NexusApp).systemSubTab === "debug") {
+  if (canonical === "system" && (host as unknown as NexusApp).systemSubTab === "debug") {
     startDebugPolling(host as unknown as Parameters<typeof startDebugPolling>[0]);
   } else {
     stopDebugPolling(host as unknown as Parameters<typeof stopDebugPolling>[0]);
   }
   void refreshActiveTab(host);
-  syncUrlWithTab(host, next, false);
+  syncUrlWithTab(host, canonical, false);
 }
 
 export function setTheme(host: SettingsHost, next: ThemeMode, context?: ThemeTransitionContext) {
@@ -208,14 +267,9 @@ export async function refreshActiveTab(host: SettingsHost) {
   if (host.tab === "agents") {
     await loadAgents(host as unknown as NexusApp);
     await loadConfig(host as unknown as NexusApp);
-    const agentIds = host.agentsList?.agents?.map((entry) => entry.id) ?? [];
-    if (agentIds.length > 0) {
-      void loadAgentIdentities(host as unknown as NexusApp, agentIds);
-    }
     const agentId =
       host.agentsSelectedId ?? host.agentsList?.defaultId ?? host.agentsList?.agents?.[0]?.id;
     if (agentId) {
-      void loadAgentIdentity(host as unknown as NexusApp, agentId);
       if (host.agentsPanel === "skills") {
         void loadAgentSkills(host as unknown as NexusApp, agentId);
       }
@@ -228,21 +282,16 @@ export async function refreshActiveTab(host: SettingsHost) {
     }
   }
   if (host.tab === "identity") {
-    const identitySubTab = (host as unknown as NexusApp).identitySubTab;
-    if (identitySubTab === "entities") {
-      host.directorySelectedEntityId = null;
-      host.directorySearchQuery = "";
-      host.memorySearchQuery = "";
-      host.memorySearchType = "entities";
-      await runMemorySearch(host as unknown as NexusApp);
-    } else if (identitySubTab === "access") {
-      await loadAclRequests(host as unknown as Parameters<typeof loadAclRequests>[0]);
-      await loadIngressCredentials(host as unknown as Parameters<typeof loadIngressCredentials>[0]);
-    } else {
-      await loadIdentitySurface(host as unknown as Parameters<typeof loadIdentitySurface>[0]);
-    }
+    await loadIdentitySurface(host as unknown as Parameters<typeof loadIdentitySurface>[0]);
   }
   if (host.tab === "integrations") {
+    const consoleView =
+      (host as unknown as NexusApp & { consoleTab?: string }).consoleTab ??
+      resolveConsoleMountedViewFromPath(host.basePath);
+    if (consoleView === "records") {
+      await refreshRecordsSurface(host as unknown as Parameters<typeof refreshRecordsSurface>[0]);
+      return;
+    }
     await loadIntegrations(host as unknown as Parameters<typeof loadIntegrations>[0]);
     await loadIngressCredentials(host as unknown as Parameters<typeof loadIngressCredentials>[0]);
     await loadInstalledApps(host as unknown as Parameters<typeof loadInstalledApps>[0]);
@@ -358,14 +407,17 @@ export function syncTabWithLocation(host: SettingsHost, replace: boolean) {
   }
   const resolved = tabFromPath(window.location.pathname, host.basePath) ?? "home";
   setTabFromRoute(host, resolved);
-  syncUrlWithTab(host, resolved, replace);
+  if (!isMountedConsoleBasePath(host.basePath)) {
+    syncUrlWithTab(host, resolved, replace, { preserveNestedPath: true });
+  }
 }
 
 export function onPopState(host: SettingsHost) {
   if (typeof window === "undefined") {
     return;
   }
-  const resolved = tabFromPath(window.location.pathname, host.basePath);
+  const resolvedRaw = tabFromPath(window.location.pathname, host.basePath);
+  const resolved = resolvedRaw ?? null;
   if (!resolved) {
     return;
   }
@@ -383,18 +435,19 @@ export function onPopState(host: SettingsHost) {
 }
 
 export function setTabFromRoute(host: SettingsHost, next: Tab) {
-  if (host.tab !== next) {
-    host.tab = next;
+  const canonical = next;
+  if (host.tab !== canonical) {
+    host.tab = canonical;
   }
-  if (next === "console") {
+  if (canonical === "console") {
     host.chatHasAutoScrolled = false;
   }
-  if (next === "system" && (host as unknown as NexusApp).systemSubTab === "logs") {
+  if (canonical === "system" && (host as unknown as NexusApp).systemSubTab === "logs") {
     startLogsPolling(host as unknown as Parameters<typeof startLogsPolling>[0]);
   } else {
     stopLogsPolling(host as unknown as Parameters<typeof stopLogsPolling>[0]);
   }
-  if (next === "system" && (host as unknown as NexusApp).systemSubTab === "debug") {
+  if (canonical === "system" && (host as unknown as NexusApp).systemSubTab === "debug") {
     startDebugPolling(host as unknown as Parameters<typeof startDebugPolling>[0]);
   } else {
     stopDebugPolling(host as unknown as Parameters<typeof stopDebugPolling>[0]);
@@ -404,7 +457,12 @@ export function setTabFromRoute(host: SettingsHost, next: Tab) {
   }
 }
 
-export function syncUrlWithTab(host: SettingsHost, tab: Tab, replace: boolean) {
+export function syncUrlWithTab(
+  host: SettingsHost,
+  tab: Tab,
+  replace: boolean,
+  opts?: { preserveNestedPath?: boolean },
+) {
   if (typeof window === "undefined") {
     return;
   }
@@ -418,7 +476,16 @@ export function syncUrlWithTab(host: SettingsHost, tab: Tab, replace: boolean) {
     url.searchParams.delete("conversation");
   }
 
-  if (currentPath !== targetPath) {
+  if (tab !== "memory") {
+    for (const key of MEMORY_SCOPED_QUERY_KEYS) {
+      url.searchParams.delete(key);
+    }
+  }
+
+  const keepCurrentPath =
+    opts?.preserveNestedPath && shouldPreserveNestedPath(tab, currentPath, targetPath);
+
+  if (currentPath !== targetPath && !keepCurrentPath) {
     url.pathname = targetPath;
   }
 
@@ -458,7 +525,6 @@ export async function loadOverview(host: SettingsHost) {
     loadConversations(host as unknown as NexusApp),
     loadSessions(host as unknown as NexusApp),
     loadScheduleJobs(host as unknown as NexusApp),
-    loadDebug(host as unknown as NexusApp),
   ]);
 }
 

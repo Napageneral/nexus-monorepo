@@ -27,6 +27,29 @@ const TAB_PATHS: Record<Tab, string> = {
 };
 
 const PATH_TO_TAB = new Map(Object.entries(TAB_PATHS).map(([tab, path]) => [path, tab as Tab]));
+const MOUNTED_TAB_PATHS: Record<Tab, string> = {
+  home: "/home",
+  console: "/chat",
+  identity: "/identity",
+  agents: "/agents",
+  operations: "/operations",
+  memory: "/memory",
+  integrations: "/integrations",
+  system: "/system",
+};
+const MOUNTED_PATH_TO_TAB = new Map(
+  Object.entries(MOUNTED_TAB_PATHS).map(([tab, route]) => [route, tab as Tab]),
+);
+const MOUNTED_ROUTE_ALIASES = new Map<string, Tab>([
+  ["/connectors", "integrations"],
+  ["/records", "integrations"],
+  ["/agents", "agents"],
+  ["/monitor", "system"],
+  ["/settings", "system"],
+  ["/jobs", "operations"],
+  ["/identity", "identity"],
+  ["/memory", "memory"],
+]);
 
 // ─── Path utilities ──────────────────────────────────────────────────────
 
@@ -61,14 +84,32 @@ export function normalizePath(path: string): string {
   return normalized;
 }
 
+function isMountedAppBasePath(basePath: string): boolean {
+  return /(?:^|\/)app\/[^/]+$/i.test(normalizeBasePath(basePath));
+}
+
+function tabPathMapForBasePath(basePath: string): Map<string, Tab> {
+  return isMountedAppBasePath(basePath)
+    ? new Map([...MOUNTED_PATH_TO_TAB.entries(), ...MOUNTED_ROUTE_ALIASES.entries()])
+    : PATH_TO_TAB;
+}
+
+function pathForResolvedTab(tab: Tab, basePath = ""): string {
+  if (isMountedAppBasePath(basePath)) {
+    return MOUNTED_TAB_PATHS[tab] ?? TAB_PATHS[tab];
+  }
+  return TAB_PATHS[tab];
+}
+
 export function pathForTab(tab: Tab, basePath = ""): string {
   const base = normalizeBasePath(basePath);
-  const path = TAB_PATHS[tab];
+  const path = pathForResolvedTab(tab, base);
   return base ? `${base}${path}` : path;
 }
 
 export function tabFromPath(pathname: string, basePath = ""): Tab | null {
   const base = normalizeBasePath(basePath);
+  const pathToTab = tabPathMapForBasePath(base);
   let path = pathname || "/";
   if (base) {
     if (path === base) {
@@ -86,12 +127,12 @@ export function tabFromPath(pathname: string, basePath = ""): Tab | null {
     return "home";
   }
   // Exact match first
-  const exact = PATH_TO_TAB.get(normalized);
+  const exact = pathToTab.get(normalized);
   if (exact) {
     return exact;
   }
   // Prefix match for nested routes (e.g. /directory/entity-123 → directory)
-  for (const [tabPath, tab] of PATH_TO_TAB.entries()) {
+  for (const [tabPath, tab] of pathToTab.entries()) {
     if (normalized.startsWith(tabPath + "/")) {
       return tab;
     }
@@ -110,6 +151,11 @@ export function inferBasePathFromPathname(pathname: string): string {
   const segments = normalized.split("/").filter(Boolean);
   if (segments.length === 0) {
     return "";
+  }
+  for (let i = 0; i < segments.length - 1; i++) {
+    if (segments[i]?.toLowerCase() === "app" && segments[i + 1]) {
+      return `/${segments.slice(0, i + 2).join("/")}`;
+    }
   }
   // Check if any tail portion of the path matches a known tab path
   for (let i = 0; i < segments.length; i++) {

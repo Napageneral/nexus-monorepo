@@ -1,5 +1,9 @@
 import { html, nothing } from "lit";
-import type { AdapterAuthField, AdapterConnectionEntry } from "../controllers/integrations.ts";
+import {
+  resolveLivesyncEnabled,
+  type AdapterAuthField,
+  type AdapterConnectionEntry,
+} from "../controllers/integrations.ts";
 
 export type IntegrationsProps = {
   connected: boolean;
@@ -23,6 +27,8 @@ export type IntegrationsProps = {
   onCustomStatus: (adapter: string) => void;
   onCustomCancel: (adapter: string) => void;
   onTest: (adapter: string) => void;
+  onBackfill: (adapter: string) => void;
+  onLivesyncToggle: (adapter: string, enabled: boolean) => void;
   onDisconnect: (adapter: string) => void;
 };
 
@@ -90,6 +96,15 @@ function busyLabel(action: string): string {
   }
   if (action === "test") {
     return "Testing…";
+  }
+  if (action === "backfill") {
+    return "Backfilling…";
+  }
+  if (action === "livesync_on") {
+    return "Enabling livesync…";
+  }
+  if (action === "livesync_off") {
+    return "Disabling livesync…";
   }
   if (action === "disconnect") {
     return "Disconnecting…";
@@ -192,6 +207,7 @@ function renderSelectedAdapter(props: IntegrationsProps, selected: AdapterConnec
   const hasCustomFlow = methods.has("custom_flow");
   const isBusy = props.busyAdapter === selected.adapter;
   const currentBusyLabel = isBusy ? busyLabel(props.busyAction ?? "") : null;
+  const livesyncEnabled = resolveLivesyncEnabled(selected);
 
   return html`
     <section class="card" style="margin-top: 12px;">
@@ -213,6 +229,17 @@ function renderSelectedAdapter(props: IntegrationsProps, selected: AdapterConnec
             `
           : nothing
       }
+
+      <div class="form-grid" style="margin-top: 12px;">
+        <label class="field">
+          <span>Connection ID</span>
+          <input .value=${selected.connectionId} readonly />
+        </label>
+        <label class="field">
+          <span>Livesync</span>
+          <input .value=${livesyncEnabled ? "on" : "off"} readonly />
+        </label>
+      </div>
 
       <!-- Instructions from setup flow -->
       ${
@@ -239,6 +266,17 @@ function renderSelectedAdapter(props: IntegrationsProps, selected: AdapterConnec
       <div class="connect-actions" style="margin-top: 14px;">
         <div class="connect-actions__primary">
           ${
+            hasCustomFlow
+              ? html`
+                  <button class="btn primary" ?disabled=${isBusy} @click=${() => props.onCustomStart(selected.adapter)}>
+                    Start Setup
+                  </button>
+                  ${props.sessionId ? html`<button class="btn" ?disabled=${isBusy} @click=${() => props.onCustomSubmit(selected.adapter)}>Submit</button>` : nothing}
+                  ${props.sessionId ? html`<button class="btn" ?disabled=${isBusy} @click=${() => props.onCustomStatus(selected.adapter)}>Check Status</button>` : nothing}
+                `
+              : nothing
+          }
+          ${
             hasOAuth
               ? html`
                   <button class="btn primary" ?disabled=${isBusy} @click=${() => props.onOAuthStart(selected.adapter)}>
@@ -247,31 +285,20 @@ function renderSelectedAdapter(props: IntegrationsProps, selected: AdapterConnec
                 `
               : nothing
           }
-          ${
-            hasCustomFlow
-              ? html`
-                  <button class="btn primary" ?disabled=${isBusy} @click=${() => props.onCustomStart(selected.adapter)}>
-                    Start Setup
-                  </button>
-                  ${
-                    props.sessionId
-                      ? html`
-                          <button class="btn" ?disabled=${isBusy} @click=${() => props.onCustomSubmit(selected.adapter)}>
-                            Submit
-                          </button>
-                          <button class="btn" ?disabled=${isBusy} @click=${() => props.onCustomStatus(selected.adapter)}>
-                            Check Status
-                          </button>
-                        `
-                      : nothing
-                  }
-                `
-              : nothing
-          }
         </div>
         <div class="connect-actions__secondary">
-          <button class="btn btn--sm" ?disabled=${isBusy} @click=${() => props.onTest(selected.adapter)}>
-            Test
+          <button class="btn btn--sm" ?disabled=${isBusy || !selected.connectionId} @click=${() => props.onTest(selected.adapter)}>
+            Test connection
+          </button>
+          <button class="btn btn--sm" ?disabled=${isBusy || !selected.connectionId} @click=${() => props.onBackfill(selected.adapter)}>
+            Backfill now
+          </button>
+          <button
+            class="btn btn--sm"
+            ?disabled=${isBusy || !selected.connectionId}
+            @click=${() => props.onLivesyncToggle(selected.adapter, !livesyncEnabled)}
+          >
+            ${livesyncEnabled ? "Livesync off" : "Livesync on"}
           </button>
           ${
             hasCustomFlow && props.sessionId

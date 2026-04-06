@@ -48,7 +48,7 @@ describe("operator console routing", () => {
     await app.updateComplete;
 
     expect(app.tab).toBe("integrations");
-    expect(window.location.pathname).toBe("/integrations");
+    expect(window.location.pathname).toBe("/connectors");
   });
 
   it("hydrates operations tab from the location", async () => {
@@ -56,7 +56,7 @@ describe("operator console routing", () => {
     await app.updateComplete;
 
     expect(app.tab).toBe("operations");
-    expect(window.location.pathname).toBe("/operations");
+    expect(window.location.pathname).toBe("/jobs");
   });
 
   it("respects /ui base paths", async () => {
@@ -65,7 +65,7 @@ describe("operator console routing", () => {
 
     expect(app.basePath).toBe("/ui");
     expect(app.tab).toBe("operations");
-    expect(window.location.pathname).toBe("/ui/operations");
+    expect(window.location.pathname).toBe("/ui/jobs");
   });
 
   it("infers nested base paths", async () => {
@@ -74,7 +74,7 @@ describe("operator console routing", () => {
 
     expect(app.basePath).toBe("/apps/nexus");
     expect(app.tab).toBe("operations");
-    expect(window.location.pathname).toBe("/apps/nexus/operations");
+    expect(window.location.pathname).toBe("/apps/nexus/jobs");
   });
 
   it("honors explicit base path overrides", async () => {
@@ -88,83 +88,93 @@ describe("operator console routing", () => {
   });
 
   it("updates the URL when clicking nav items", async () => {
-    const app = mountApp("/console");
+    const app = mountApp("/app/console/identity/channels");
     await app.updateComplete;
 
-    const link = app.querySelector<HTMLAnchorElement>('a.nav-item[href="/integrations"]');
-    expect(link).not.toBeNull();
-    link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }));
+    const subTabs = Array.from(
+      app.renderRoot.querySelectorAll<HTMLButtonElement>(".console-detail-tab"),
+    );
+    const groupsButton = subTabs.find((button) =>
+      button.textContent?.toLowerCase().includes("groups"),
+    );
+    expect(groupsButton).not.toBeUndefined();
+    groupsButton?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }),
+    );
 
     await app.updateComplete;
+    expect(app.tab).toBe("identity");
+    expect(window.location.pathname).toBe("/app/console/identity/groups");
+    expect(window.location.search).toBe("");
+  });
+
+  it("loads canonical mounted connectors routes without query state", async () => {
+    const app = mountApp("/app/console/connectors");
+    await app.updateComplete;
+
+    expect(app.basePath).toBe("/app/console");
     expect(app.tab).toBe("integrations");
-    expect(window.location.pathname).toBe("/integrations");
+    expect(window.location.pathname).toBe("/app/console/connectors");
+    expect(window.location.search).toBe("");
   });
 
-  it("keeps chat and nav usable on narrow viewports", async () => {
-    const app = mountApp("/console");
+  it("loads canonical mounted records routes without query state", async () => {
+    const app = mountApp("/app/console/records");
     await app.updateComplete;
 
-    expect(window.matchMedia("(max-width: 768px)").matches).toBe(true);
-
-    const split = app.querySelector(".chat-split-container");
-    expect(split).not.toBeNull();
-    if (split) {
-      expect(getComputedStyle(split).position).not.toBe("fixed");
-    }
-
-    const chatMain = app.querySelector(".chat-main");
-    expect(chatMain).not.toBeNull();
-    if (chatMain) {
-      expect(getComputedStyle(chatMain).display).not.toBe("none");
-    }
-
-    if (split) {
-      split.classList.add("chat-split-container--open");
-      await app.updateComplete;
-      expect(getComputedStyle(split).position).toBe("fixed");
-    }
-    if (chatMain) {
-      expect(getComputedStyle(chatMain).display).toBe("none");
-    }
+    expect(app.basePath).toBe("/app/console");
+    expect(app.tab).toBe("integrations");
+    expect(window.location.pathname).toBe("/app/console/records");
+    expect(window.location.search).toBe("");
+    expect(app.renderRoot.textContent ?? "").toContain("Records");
   });
 
-  it("auto-scrolls chat history to the latest message", async () => {
-    const app = mountApp("/console");
+  it("rewrites legacy console view query URLs to canonical mounted paths", async () => {
+    const app = mountApp("/app/console/integrations?view=records&memory_scope=run");
     await app.updateComplete;
 
-    const initialContainer: HTMLElement | null = app.querySelector(".chat-thread");
-    expect(initialContainer).not.toBeNull();
-    if (!initialContainer) {
-      return;
-    }
-    initialContainer.style.maxHeight = "180px";
-    initialContainer.style.overflow = "auto";
+    expect(app.basePath).toBe("/app/console");
+    expect(app.tab).toBe("integrations");
+    expect(window.location.pathname).toBe("/app/console/records");
+    expect(window.location.search).toBe("");
+  });
 
-    app.chatMessages = Array.from({ length: 60 }, (_, index) => ({
-      role: "assistant",
-      content: `Line ${index} - ${"x".repeat(200)}`,
-      timestamp: Date.now() + index,
-    }));
-
+  it("keeps group detail on a nested identity path without query leakage", async () => {
+    const app = mountApp("/app/console/identity/groups/group-owner");
     await app.updateComplete;
-    for (let i = 0; i < 6; i++) {
-      await nextFrame();
-    }
 
-    const container = app.querySelector(".chat-thread");
-    expect(container).not.toBeNull();
-    if (!container) {
-      return;
-    }
-    const maxScroll = container.scrollHeight - container.clientHeight;
-    expect(maxScroll).toBeGreaterThan(0);
-    for (let i = 0; i < 10; i++) {
-      if (container.scrollTop === maxScroll) {
-        break;
-      }
-      await nextFrame();
-    }
-    expect(container.scrollTop).toBe(maxScroll);
+    expect(app.basePath).toBe("/app/console");
+    expect(app.tab).toBe("identity");
+    expect(window.location.pathname).toBe("/app/console/identity/groups/group-owner");
+    expect(window.location.search).toBe("");
+  });
+
+  it("renders the canonical console shell in shadow DOM on mounted routes", async () => {
+    const app = mountApp("/app/console/identity/channels");
+    await app.updateComplete;
+
+    const topNav = app.shadowRoot?.querySelector(".console-topnav");
+    const channelSearch = app.shadowRoot?.querySelector('input[placeholder="Search channels..."]');
+
+    expect(topNav).not.toBeNull();
+    expect(app.renderRoot.textContent ?? "").toContain("Channels");
+    expect(channelSearch).not.toBeNull();
+  });
+
+  it("keeps mounted channel routes stable after refresh actions", async () => {
+    const app = mountApp("/app/console/identity/channels");
+    await app.updateComplete;
+
+    const refresh = Array.from(
+      app.shadowRoot?.querySelectorAll<HTMLButtonElement>("button") ?? [],
+    ).find((button) => button.textContent?.trim().toLowerCase() === "refresh");
+    expect(refresh).not.toBeNull();
+    refresh?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }));
+    await app.updateComplete;
+    await nextFrame();
+
+    expect(window.location.pathname).toBe("/app/console/identity/channels");
+    expect(window.location.search).toBe("");
   });
 
   it("hydrates token from URL params and strips it", async () => {
@@ -172,7 +182,7 @@ describe("operator console routing", () => {
     await app.updateComplete;
 
     expect(app.settings.token).toBe("abc123");
-    expect(window.location.pathname).toBe("/ui/system");
+    expect(window.location.pathname).toBe("/ui/monitor");
     expect(window.location.search).toBe("");
   });
 
@@ -181,17 +191,17 @@ describe("operator console routing", () => {
     await app.updateComplete;
 
     expect(app.password).toBe("");
-    expect(window.location.pathname).toBe("/ui/system");
+    expect(window.location.pathname).toBe("/ui/monitor");
     expect(window.location.search).toBe("");
   });
 
   it("hydrates token from URL params even when settings already set", async () => {
-    localStorage.setItem("nexus.control.settings.v1", JSON.stringify({ token: "existing-token" }));
+    localStorage.setItem("nexus.control.settings", JSON.stringify({ token: "existing-token" }));
     const app = mountApp("/ui/system?token=abc123");
     await app.updateComplete;
 
     expect(app.settings.token).toBe("abc123");
-    expect(window.location.pathname).toBe("/ui/system");
+    expect(window.location.pathname).toBe("/ui/monitor");
     expect(window.location.search).toBe("");
   });
 
@@ -200,7 +210,7 @@ describe("operator console routing", () => {
     await app.updateComplete;
 
     expect(app.settings.token).toBe("abc123");
-    expect(window.location.pathname).toBe("/ui/system");
+    expect(window.location.pathname).toBe("/ui/monitor");
     expect(window.location.hash).toBe("");
   });
 
@@ -209,7 +219,7 @@ describe("operator console routing", () => {
     await app.updateComplete;
 
     expect(app.tab).toBe("console");
-    expect(window.location.pathname).toBe("/console");
+    expect(window.location.pathname).toBe("/connectors");
   });
 
   it("loads canonical base-path operations routes without redirect", async () => {
@@ -218,6 +228,44 @@ describe("operator console routing", () => {
 
     expect(app.basePath).toBe("/ui");
     expect(app.tab).toBe("operations");
-    expect(window.location.pathname).toBe("/ui/operations");
+    expect(window.location.pathname).toBe("/ui/jobs");
+  });
+
+  it("keeps mounted runtime app entry routes stable", async () => {
+    const app = mountApp("/app/console/chat");
+    await app.updateComplete;
+
+    expect(app.basePath).toBe("/app/console");
+    expect(app.tab).toBe("console");
+    expect(window.location.pathname).toBe("/app/console/connectors");
+  });
+
+  it("keeps nested mounted identity detail routes stable", async () => {
+    const app = mountApp("/app/console/identity/entity/entity-casey");
+    await app.updateComplete;
+
+    expect(app.basePath).toBe("/app/console");
+    expect(app.tab).toBe("identity");
+    expect(window.location.pathname).toBe("/app/console/identity/entity/entity-casey");
+  });
+
+  it("keeps nested mounted group detail routes stable", async () => {
+    const app = mountApp("/app/console/identity/groups/group-owner");
+    await app.updateComplete;
+
+    expect(app.basePath).toBe("/app/console");
+    expect(app.tab).toBe("identity");
+    expect(window.location.pathname).toBe("/app/console/identity/groups/group-owner");
+    expect(window.location.search).toBe("");
+  });
+
+  it("lets canonical identity paths beat stale query params", async () => {
+    const app = mountApp("/app/console/identity/groups/group-owner?view=contacts&group=wrong");
+    await app.updateComplete;
+
+    expect(app.basePath).toBe("/app/console");
+    expect(app.tab).toBe("identity");
+    expect(window.location.pathname).toBe("/app/console/identity/groups/group-owner");
+    expect(window.location.search).toBe("");
   });
 });

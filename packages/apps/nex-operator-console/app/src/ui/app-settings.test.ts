@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Tab } from "./navigation.ts";
-import { setTabFromRoute } from "./app-settings.ts";
+import { setTabFromRoute, syncUrlWithTab } from "./app-settings.ts";
 
 type SettingsHost = Parameters<typeof setTabFromRoute>[0] & {
   logsPollInterval: number | null;
@@ -73,5 +73,54 @@ describe("setTabFromRoute", () => {
 
     setTabFromRoute(host, "console");
     expect(host.debugPollInterval).toBeNull();
+  });
+
+  it("does not coerce mounted console routes into integrations", () => {
+    const host = createHost("home");
+    host.basePath = "/app/console";
+
+    setTabFromRoute(host, "console");
+    expect(host.tab).toBe("console");
+
+    setTabFromRoute(host, "home");
+    expect(host.tab).toBe("home");
+  });
+
+  it("strips memory-scoped query params when leaving memory", () => {
+    const host = createHost("memory");
+    host.basePath = "/app/console";
+    window.history.replaceState(
+      {},
+      "",
+      "/app/console/memory?memory_scope=run&memory_bucket=unconsolidated_facts&memory_run=run-1",
+    );
+
+    syncUrlWithTab(host, "integrations", true);
+
+    const url = new URL(window.location.href);
+    expect(url.pathname).toBe("/app/console/integrations");
+    expect(url.searchParams.get("memory_scope")).toBeNull();
+    expect(url.searchParams.get("memory_bucket")).toBeNull();
+    expect(url.searchParams.get("memory_run")).toBeNull();
+  });
+
+  it("preserves nested identity detail routes during hydration sync", () => {
+    const host = createHost("identity");
+    host.basePath = "/app/console";
+    window.history.replaceState({}, "", "/app/console/identity/entity/entity-casey");
+
+    syncUrlWithTab(host, "identity", true, { preserveNestedPath: true });
+
+    expect(window.location.pathname).toBe("/app/console/identity/entity/entity-casey");
+  });
+
+  it("does not preserve arbitrary nested paths outside known identity detail routes", () => {
+    const host = createHost("integrations");
+    host.basePath = "/app/console";
+    window.history.replaceState({}, "", "/app/console/integrations/custom/legacy");
+
+    syncUrlWithTab(host, "integrations", true, { preserveNestedPath: true });
+
+    expect(window.location.pathname).toBe("/app/console/integrations");
   });
 });
