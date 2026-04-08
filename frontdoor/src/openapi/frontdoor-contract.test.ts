@@ -294,6 +294,13 @@ describe("frontdoor OpenAPI contract conformance", () => {
     expect(catalogResp.status).toBe(200);
     expectSchemaMatch(routeResponseSchema("/api/apps/catalog", "get", 200), await catalogResp.json());
 
+    const adapterCatalogResp = await fetch(`${frontdoorRunning.origin}/api/adapters/catalog`);
+    expect(adapterCatalogResp.status).toBe(200);
+    expectSchemaMatch(
+      routeResponseSchema("/api/adapters/catalog", "get", 200),
+      await adapterCatalogResp.json(),
+    );
+
     const tokenResp = await fetch(`${frontdoorRunning.origin}/api/runtime/token`, {
       method: "POST",
       headers: { cookie },

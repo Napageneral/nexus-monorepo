@@ -55,7 +55,15 @@ describe("HetznerProvider", () => {
     const created = await provider.createServer({
       tenantId: "tenant-durable",
       planId: "cax11",
-      cloudInitScript: "#!/bin/sh\n",
+      hostedBootstrap: {
+        tenantId: "tenant-durable",
+        serverId: "srv-durable",
+        runtimeAuthToken: "rt-durable",
+        provisionToken: "prov-durable",
+        frontdoorUrl: "https://frontdoor.test",
+        runtimeTokenIssuer: "https://frontdoor.test",
+        runtimeTokenSecret: "secret",
+      },
       imageId: "snapshot-recovery-77",
       serverName: "nex-tenant-durable-recover",
     });
@@ -196,17 +204,23 @@ describe("HetznerProvider", () => {
     const script = renderCloudInitScript({
       tenantId: "t-acme",
       serverId: "srv-acme",
-      authToken: "rt-legacy",
+      runtimeAuthToken: "rt-legacy",
       provisionToken: "prov-123",
       frontdoorUrl: "https://frontdoor.test",
+      runtimeBundleUrl: "https://frontdoor-public.test/api/internal/hosted-runtime-bundle",
+      bootstrapProgressUrl: "https://frontdoor-public.test/api/internal/bootstrap-progress",
       runtimeTokenIssuer: "https://frontdoor.test",
       runtimeTokenSecret: "frontdoor-secret-test",
       runtimeTokenActiveKid: "v1",
+      bootstrapSeedYaml: 'owner:\n  name: "Owner"\n  emails:\n    - "owner@example.com"\n',
     });
 
     expect(script).toContain("/opt/nex/bootstrap-frontdoor.sh");
     expect(script).toContain("NEXUS_RUNTIME_TRUSTED_TOKEN_ISSUER=https://frontdoor.test");
     expect(script).toContain("NEXUS_RUNTIME_TRUSTED_TOKEN_SECRET=frontdoor-secret-test");
+    expect(script).toContain("NEXUS_BOOTSTRAP_SEED_FILE=/opt/nex/config/bootstrap-seed.yml");
+    expect(script).toContain('"runtimeBundleUrl": "https://frontdoor-public.test/api/internal/hosted-runtime-bundle"');
+    expect(script).toContain('"bootstrapProgressUrl": "https://frontdoor-public.test/api/internal/bootstrap-progress"');
     expect(script).toContain('runtime.hostedMode = true');
     expect(script).toContain('runtime.auth.mode = "trusted_token"');
     expect(script).toContain("INIT_RETRIES=5");
@@ -215,8 +229,19 @@ describe("HetznerProvider", () => {
     expect(script).toContain('Stopping any pre-started nex-runtime service before workspace initialization...');
     expect(script).toContain("systemctl disable nex-runtime 2>/dev/null || true");
     expect(script).toContain("export BOOTSTRAP_TENANT_ID BOOTSTRAP_RUNTIME_TOKEN_ISSUER BOOTSTRAP_RUNTIME_TOKEN_SECRET BOOTSTRAP_RUNTIME_TOKEN_ACTIVE_KID BOOTSTRAP_RUNTIME_SESSION_ID");
+    expect(script).toContain("cat > /opt/nex/config/bootstrap-seed.yml << 'BOOTSTRAPEOF'");
+    expect(script).toContain('  name: "Owner"');
+    expect(script).toContain('    - "owner@example.com"');
     expect(script).toContain('RUNTIME_JWT=$(sign_runtime_token "$BOOTSTRAP_RUNTIME_SESSION_ID")');
     expect(script).toContain("systemctl enable nex-runtime");
+    expect(script).toContain('curl --connect-timeout 10 --max-time 120 -fsSL -H "Authorization: Bearer ${PROVISION_TOKEN}" "$HOSTED_RUNTIME_BUNDLE_URL" -o "$RUNTIME_BUNDLE_TARBALL"');
+    expect(script).toContain('curl --connect-timeout 10 --max-time 30 -s -o /dev/null -w "%{http_code}" -X POST -H "Authorization: Bearer ${PROVISION_TOKEN}"');
+    expect(script).toContain('if [ -f /opt/nex/runtime/pnpm-lock.yaml ]; then');
+    expect(script).toContain('HOME=/opt/nex pnpm install --prod --frozen-lockfile');
+    expect(script).toContain('progress workspace_init_attempt_start "attempt=${INIT_ATTEMPT}"');
+    expect(script).toContain('progress workspace_init_attempt_timeout "attempt=${INIT_ATTEMPT}"');
+    expect(script).toContain('progress workspace_init_attempt_failed "attempt=${INIT_ATTEMPT} exit=${INIT_EXIT}"');
+    expect(script).toContain('progress workspace_init_complete "attempt=${INIT_ATTEMPT}"');
     expect(script).toContain('die "Runtime health check timed out after ${HEALTH_TIMEOUT}s"');
     expect(script).not.toContain("exec /opt/nex/bootstrap.sh");
   });
@@ -263,7 +288,15 @@ describe("AwsEc2Provider", () => {
     const created = await provider.createServer({
       tenantId: "tenant-compliant",
       planId: "cax11",
-      cloudInitScript: "#!/bin/sh\n",
+      hostedBootstrap: {
+        tenantId: "tenant-compliant",
+        serverId: "srv-compliant",
+        runtimeAuthToken: "rt-compliant",
+        provisionToken: "prov-compliant",
+        frontdoorUrl: "https://frontdoor.test",
+        runtimeTokenIssuer: "https://frontdoor.test",
+        runtimeTokenSecret: "secret",
+      },
       imageId: "ami-recovery-1",
       serverName: "nex-tenant-compliant",
     });

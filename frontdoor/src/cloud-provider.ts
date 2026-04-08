@@ -20,10 +20,26 @@ import {
 // ---------------------------------------------------------------------------
 
 /** Options passed to createServer. */
+export type HostedBootstrapSpec = {
+  tenantId: string;
+  serverId: string;
+  runtimeAuthToken: string;
+  provisionToken: string;
+  frontdoorUrl: string;
+  runtimeBundleUrl?: string;
+  bootstrapProgressUrl?: string;
+  runtimeTokenIssuer: string;
+  runtimeTokenSecret: string;
+  runtimeTokenActiveKid?: string;
+  tailscaleAuthKey?: string;
+  tailscaleHostname?: string;
+  bootstrapSeedYaml?: string;
+};
+
 export type CreateServerOpts = {
   tenantId: string;
   planId: string;
-  cloudInitScript: string;
+  hostedBootstrap: HostedBootstrapSpec;
   imageId?: string;
   serverName?: string;
 };
@@ -335,13 +351,14 @@ export class HetznerProvider implements CloudProvider {
   // -----------------------------------------------------------------------
 
   async createServer(opts: CreateServerOpts): Promise<CreateServerResult> {
-    const cloudInitMode = opts.cloudInitScript.includes("bootstrap-frontdoor.sh")
+    const cloudInitScript = renderCloudInitScript(opts.hostedBootstrap);
+    const cloudInitMode = cloudInitScript.includes("bootstrap-frontdoor.sh")
       ? "trusted_token"
-      : opts.cloudInitScript.includes("exec /opt/nex/bootstrap.sh")
+      : cloudInitScript.includes("exec /opt/nex/bootstrap.sh")
         ? "legacy"
         : "unknown";
     const cloudInitSha = createHash("sha256")
-      .update(opts.cloudInitScript, "utf8")
+      .update(cloudInitScript, "utf8")
       .digest("hex")
       .slice(0, 16);
     console.log(
@@ -356,7 +373,7 @@ export class HetznerProvider implements CloudProvider {
       ssh_keys: this.sshKeyIds.map(Number),
       networks: [Number(this.networkId)],
       firewalls: [{ firewall: Number(this.firewallId) }],
-      user_data: opts.cloudInitScript,
+      user_data: cloudInitScript,
       labels: {
         "managed-by": "nexus-frontdoor",
         "tenant-id": opts.tenantId,
@@ -611,6 +628,7 @@ export class AwsEc2Provider implements CloudProvider {
   }
 
   async createServer(opts: CreateServerOpts): Promise<CreateServerResult> {
+    const cloudInitScript = renderCloudInitScript(opts.hostedBootstrap);
     const instanceType = this.resolveInstanceType(opts.planId);
     const networkInterface = {
       DeviceIndex: 0,
@@ -626,7 +644,7 @@ export class AwsEc2Provider implements CloudProvider {
         InstanceType: instanceType,
         MinCount: 1,
         MaxCount: 1,
-        UserData: Buffer.from(opts.cloudInitScript, "utf8").toString("base64"),
+        UserData: Buffer.from(cloudInitScript, "utf8").toString("base64"),
         KeyName: this.sshKeyName,
         MetadataOptions: {
           HttpTokens: "required",
@@ -802,25 +820,16 @@ export class AwsEc2Provider implements CloudProvider {
 // renderCloudInitScript
 // ---------------------------------------------------------------------------
 
-export function renderCloudInitScript(opts: {
-  tenantId: string;
-  serverId: string;
-  authToken: string;
-  provisionToken: string;
-  frontdoorUrl: string;
-  runtimeTokenIssuer: string;
-  runtimeTokenSecret: string;
-  runtimeTokenActiveKid?: string;
-  tailscaleAuthKey?: string;
-  tailscaleHostname?: string;
-}): string {
+export function renderCloudInitScript(opts: HostedBootstrapSpec): string {
   const configJson = JSON.stringify(
     {
       tenantId: opts.tenantId,
       serverId: opts.serverId,
-      authToken: opts.authToken,
+      authToken: opts.runtimeAuthToken,
       provisionToken: opts.provisionToken,
       frontdoorUrl: opts.frontdoorUrl,
+      runtimeBundleUrl: opts.runtimeBundleUrl,
+      bootstrapProgressUrl: opts.bootstrapProgressUrl,
     },
     null,
     2,
@@ -869,6 +878,16 @@ export function renderCloudInitScript(opts: {
     "process.stdout.write(`${headerPart}.${payloadPart}.${signature}`);",
     "NODE",
     "}",
+    "progress() {",
+    "  local stage=\"$1\"",
+    "  local detail=\"${2:-}\"",
+    "  if [ -n \"${BOOTSTRAP_PROGRESS_URL:-}\" ] && [ \"$BOOTSTRAP_PROGRESS_URL\" != \"null\" ]; then",
+    "    local payload",
+    "    payload=$(jq -n --arg stage \"$stage\" --arg detail \"$detail\" --arg tenant_id \"$TENANT_ID\" --arg server_id \"$SERVER_ID\" '{stage: $stage, detail: $detail, tenant_id: $tenant_id, server_id: $server_id}')",
+    "    curl --connect-timeout 5 --max-time 10 -s -o /dev/null -X POST -H \"Authorization: Bearer ${PROVISION_TOKEN}\" -H \"Content-Type: application/json\" -d \"$payload\" \"$BOOTSTRAP_PROGRESS_URL\" || true",
+    "  fi",
+    "  log \"progress stage=$stage detail=$detail\"",
+    "}",
     "",
     "[ -f \"$CONFIG_FILE\" ] || die \"tenant.json not found at $CONFIG_FILE\"",
     "",
@@ -876,6 +895,8 @@ export function renderCloudInitScript(opts: {
     "SERVER_ID=$(jq -r .serverId \"$CONFIG_FILE\")",
     "PROVISION_TOKEN=$(jq -r .provisionToken \"$CONFIG_FILE\")",
     "FRONTDOOR_URL=$(jq -r .frontdoorUrl \"$CONFIG_FILE\")",
+    "HOSTED_RUNTIME_BUNDLE_URL=$(jq -r '.runtimeBundleUrl // \"\"' \"$CONFIG_FILE\")",
+    "BOOTSTRAP_PROGRESS_URL=$(jq -r '.bootstrapProgressUrl // \"\"' \"$CONFIG_FILE\")",
     "FRONTDOOR_HOST=$(node -e 'try { process.stdout.write(new URL(process.argv[1]).hostname); } catch { process.exit(0); }' \"$FRONTDOOR_URL\" 2>/dev/null || true)",
     "TAILSCALE_AUTH_KEY=\"" + (opts.tailscaleAuthKey?.trim() ?? "") + "\"",
     "TAILSCALE_HOSTNAME=\"" + (opts.tailscaleHostname?.trim() ?? "") + "\"",
@@ -885,6 +906,7 @@ export function renderCloudInitScript(opts: {
     "[ -n \"$FRONTDOOR_URL\" ] && [ \"$FRONTDOOR_URL\" != \"null\" ] || die \"frontdoorUrl missing\"",
     "",
     "log \"Bootstrapping tenant=$TENANT_ID server=$SERVER_ID\"",
+    "progress bootstrap_start \"tenant=$TENANT_ID server=$SERVER_ID\"",
     "",
     "mkdir -p /opt/nex/state /opt/nex/config",
     "chown -R nex:nex /opt/nex/state",
@@ -905,6 +927,42 @@ export function renderCloudInitScript(opts: {
     "systemctl disable nex-runtime 2>/dev/null || true",
     "systemctl reset-failed nex-runtime 2>/dev/null || true",
     "",
+    "if [ -n \"$HOSTED_RUNTIME_BUNDLE_URL\" ] && [ \"$HOSTED_RUNTIME_BUNDLE_URL\" != \"null\" ]; then",
+    "  progress runtime_bundle_download_start \"$HOSTED_RUNTIME_BUNDLE_URL\"",
+    "  log \"Refreshing hosted runtime from Frontdoor bundle...\"",
+    "  mkdir -p /opt/nex/staging",
+    "  RUNTIME_BUNDLE_TARBALL=/opt/nex/staging/hosted-runtime.tgz",
+    "  curl --connect-timeout 10 --max-time 120 -fsSL -H \"Authorization: Bearer ${PROVISION_TOKEN}\" \"$HOSTED_RUNTIME_BUNDLE_URL\" -o \"$RUNTIME_BUNDLE_TARBALL\"",
+    "  RUNTIME_BACKUP=\"\"",
+    "  if [ -d /opt/nex/runtime ]; then",
+    "    RUNTIME_BACKUP=\"/opt/nex/runtime.prev.bootstrap.$(date +%s)\"",
+    "    mv /opt/nex/runtime \"$RUNTIME_BACKUP\"",
+    "  fi",
+    "  mkdir -p /opt/nex/runtime",
+    "  chown -R nex:nex /opt/nex/runtime",
+    "  su -s /bin/bash nex -c \"tar -xzf '${RUNTIME_BUNDLE_TARBALL}' -C /opt/nex/runtime --strip-components=1\"",
+    "  if [ ! -e /opt/nex/runtime/node_modules ]; then",
+    "    if [ -f /opt/nex/runtime/pnpm-lock.yaml ]; then",
+    "      progress runtime_deps_install_start \"pnpm_lock_present\"",
+    "      if ! command -v pnpm >/dev/null 2>&1; then",
+    "        command -v corepack >/dev/null 2>&1 || die \"pnpm unavailable and corepack missing for hosted runtime dependency install\"",
+    "        corepack enable >/dev/null 2>&1 || true",
+    "      fi",
+    "      su -s /bin/bash nex -c \"cd /opt/nex/runtime && HOME=/opt/nex pnpm install --prod --frozen-lockfile\"",
+    "      progress runtime_deps_install_complete \"\"",
+    "    elif [ -n \"$RUNTIME_BACKUP\" ] && [ -e \"$RUNTIME_BACKUP/node_modules\" ]; then",
+    "      progress runtime_deps_reuse_start \"$RUNTIME_BACKUP/node_modules\"",
+    "      ln -s \"$RUNTIME_BACKUP/node_modules\" /opt/nex/runtime/node_modules",
+    "      progress runtime_deps_reuse_complete \"\"",
+    "    else",
+    "      die \"hosted runtime bundle has no node_modules and no previous dependency surface\"",
+    "    fi",
+    "  fi",
+    "  su -s /bin/bash nex -c \"cd /opt/nex/runtime && node --input-type=module -e 'import(\\\"json5\\\").then(()=>process.exit(0)).catch((error)=>{console.error(error);process.exit(1)})'\"",
+    "  progress runtime_bundle_ready \"dependency_preflight_ok\"",
+    "  log \"Hosted runtime refresh complete\"",
+    "fi",
+    "",
     "cat > /opt/nex/config/nex.env << ENVEOF",
     "NEXUS_ROOT=/opt/nex",
     "NEXUS_STATE_DIR=/opt/nex/state",
@@ -916,24 +974,52 @@ export function renderCloudInitScript(opts: {
     ...(opts.runtimeTokenActiveKid?.trim()
       ? [`NEXUS_RUNTIME_TRUSTED_TOKEN_ACTIVE_KID=${opts.runtimeTokenActiveKid.trim()}`]
       : []),
+    ...(opts.bootstrapSeedYaml
+      ? [
+          "NEXUS_BOOTSTRAP_SEED_FILE=/opt/nex/config/bootstrap-seed.yml",
+        ]
+      : []),
     "ENVEOF",
     "",
     "chown nex:nex /opt/nex/config/nex.env",
     "chmod 600 /opt/nex/config/nex.env",
     "",
+    ...(opts.bootstrapSeedYaml
+      ? [
+          "cat > /opt/nex/config/bootstrap-seed.yml << 'BOOTSTRAPEOF'",
+          opts.bootstrapSeedYaml.trimEnd(),
+          "BOOTSTRAPEOF",
+          "chown nex:nex /opt/nex/config/bootstrap-seed.yml",
+          "chmod 600 /opt/nex/config/bootstrap-seed.yml",
+          "",
+        ]
+      : []),
+    "",
     "log \"Initializing nexus workspace...\"",
+    "progress workspace_init_start \"\"",
     "INIT_RETRIES=5",
+    "INIT_COMMAND_TIMEOUT=120",
     "INIT_DELAY=3",
     "INIT_ATTEMPT=1",
     "while [ \"$INIT_ATTEMPT\" -le \"$INIT_RETRIES\" ]; do",
-    "  if su -s /bin/bash nex -c \"cd /opt/nex/runtime && NEXUS_ROOT=/opt/nex NEXUS_STATE_DIR=/opt/nex/state HOME=/opt/nex node dist/index.js init --workspace /opt/nex\" 2>&1; then",
+    "  progress workspace_init_attempt_start \"attempt=${INIT_ATTEMPT}\"",
+    "  if timeout \"$INIT_COMMAND_TIMEOUT\" su -s /bin/bash nex -c \"cd /opt/nex/runtime && NEXUS_ROOT=/opt/nex NEXUS_STATE_DIR=/opt/nex/state HOME=/opt/nex node dist/index.js init --workspace /opt/nex\" 2>&1; then",
     "    if [ -f /opt/nex/state/config.json ]; then",
     "      log \"Workspace initialized on attempt ${INIT_ATTEMPT}\"",
+    "      progress workspace_init_complete \"attempt=${INIT_ATTEMPT}\"",
     "      break",
     "    fi",
     "    log \"Workspace init completed without /opt/nex/state/config.json on attempt ${INIT_ATTEMPT}\"",
+    "    progress workspace_init_attempt_missing_config \"attempt=${INIT_ATTEMPT}\"",
     "  else",
-    "    log \"Workspace init attempt ${INIT_ATTEMPT} failed\"",
+    "    INIT_EXIT=$?",
+    "    if [ \"$INIT_EXIT\" -eq 124 ]; then",
+    "      log \"Workspace init attempt ${INIT_ATTEMPT} timed out after ${INIT_COMMAND_TIMEOUT}s\"",
+    "      progress workspace_init_attempt_timeout \"attempt=${INIT_ATTEMPT}\"",
+    "    else",
+    "      log \"Workspace init attempt ${INIT_ATTEMPT} failed with exit ${INIT_EXIT}\"",
+    "      progress workspace_init_attempt_failed \"attempt=${INIT_ATTEMPT} exit=${INIT_EXIT}\"",
+    "    fi",
     "  fi",
     "  if [ \"$INIT_ATTEMPT\" -eq \"$INIT_RETRIES\" ]; then",
     "    die \"Workspace initialization failed after ${INIT_RETRIES} attempts\"",
@@ -953,6 +1039,7 @@ export function renderCloudInitScript(opts: {
     "fi",
     "",
     "log \"Enabling and starting nex-runtime service...\"",
+    "progress runtime_starting \"\"",
     "systemctl stop nex-runtime 2>/dev/null || true",
     "systemctl daemon-reload",
     "systemctl enable nex-runtime",
@@ -980,12 +1067,14 @@ export function renderCloudInitScript(opts: {
     "done",
     "",
     "if [ \"$ELAPSED\" -ge \"$HEALTH_TIMEOUT\" ]; then",
-    "  journalctl -u nex-runtime -n 80 --no-pager 2>/dev/null || true",
-    "  die \"Runtime health check timed out after ${HEALTH_TIMEOUT}s\"",
+      "  journalctl -u nex-runtime -n 80 --no-pager 2>/dev/null || true",
+      "  die \"Runtime health check timed out after ${HEALTH_TIMEOUT}s\"",
     "fi",
+    "progress runtime_healthy \"\"",
     "",
     "TRANSPORT_HOST=\"\"",
     "if [ -n \"$TAILSCALE_AUTH_KEY\" ]; then",
+    "  progress tailscale_install_start \"\"",
     "  log \"Installing Tailscale for overlay transport...\"",
     "  curl -fsSL https://tailscale.com/install.sh | sh",
     "  systemctl enable --now tailscaled",
@@ -1005,6 +1094,7 @@ export function renderCloudInitScript(opts: {
     "    TS_ELAPSED=$((TS_ELAPSED + 2))",
     "  done",
     "  [ -n \"$TRANSPORT_HOST\" ] || die \"Tailscale transport host unavailable after bootstrap\"",
+    "  progress tailscale_ready \"$TRANSPORT_HOST\"",
     "  log \"Tailscale transport host: $TRANSPORT_HOST\"",
     "fi",
     "",
@@ -1028,8 +1118,9 @@ export function renderCloudInitScript(opts: {
     "CALLBACK_RETRIES=5",
     "CALLBACK_DELAY=5",
     "HTTP_CODE=\"000\"",
+    "progress provision_callback_start \"${TRANSPORT_HOST:-unknown}\"",
     "for i in $(seq 1 $CALLBACK_RETRIES); do",
-    "  HTTP_CODE=$(curl -s -o /dev/null -w \"%{http_code}\" -X POST -H \"Authorization: Bearer ${PROVISION_TOKEN}\" -H \"Content-Type: application/json\" -d \"$CALLBACK_BODY\" \"${FRONTDOOR_URL}/api/internal/provision-callback\" 2>/dev/null || echo \"000\")",
+    "  HTTP_CODE=$(curl --connect-timeout 10 --max-time 30 -s -o /dev/null -w \"%{http_code}\" -X POST -H \"Authorization: Bearer ${PROVISION_TOKEN}\" -H \"Content-Type: application/json\" -d \"$CALLBACK_BODY\" \"${FRONTDOOR_URL}/api/internal/provision-callback\" 2>/dev/null || echo \"000\")",
     "  if [ \"$HTTP_CODE\" = \"200\" ]; then",
     "    log \"Provision callback successful (attempt $i)\"",
     "    break",
@@ -1041,6 +1132,7 @@ export function renderCloudInitScript(opts: {
     "if [ \"$HTTP_CODE\" != \"200\" ]; then",
     "  die \"Provision callback failed after $CALLBACK_RETRIES attempts\"",
     "fi",
+    "progress bootstrap_complete \"\"",
     "log \"Bootstrap complete for tenant=$TENANT_ID\"",
   ].join("\n");
 

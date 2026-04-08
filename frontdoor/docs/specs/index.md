@@ -1,50 +1,48 @@
 # Frontdoor Specs
 
-This subtree contains Frontdoor-specific specs.
+This subtree contains the active Frontdoor canon.
 
-These docs may define:
+Use it to understand Frontdoor-specific target-state behavior, not to browse a
+hand-maintained registry of every leaf file.
 
-- Frontdoor API behavior
-- Frontdoor routing and shell behavior
-- Frontdoor package/publish/install behavior
-- Frontdoor-specific hosted implementation details
+## What Lives Here
 
-They should link to active docs in:
+The active `specs/` tree currently covers:
+
+- hosted shell, routing, and object-model behavior
+- server classes, provisioning, tenancy, and network topology
+- package registry, install planning, adapter install, and runtime-auth
+  projection
+- published adapter catalog discovery and routing
+- billing, pricing, and customer-facing hosted flows
+- a small set of operator procedure docs that are still colocated here until
+  `frontdoor/` gets its own dedicated runbook home
+
+Cross-project canon still lives in:
 
 - `/Users/tyler/nexus/home/projects/nexus/docs/`
 - `/Users/tyler/nexus/home/projects/nexus/nex/docs/`
 
-## Active Core Specs
+## Reading Posture
 
-- [FRONTDOOR_ARCHITECTURE.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_ARCHITECTURE.md)
-- [CRITICAL_CUSTOMER_FLOWS_2026-03-02.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/CRITICAL_CUSTOMER_FLOWS_2026-03-02.md)
-- [BILLING_ARCHITECTURE_ACCOUNT_MODEL_2026-03-02.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/BILLING_ARCHITECTURE_ACCOUNT_MODEL_2026-03-02.md)
-- [FRONTDOOR_OBJECT_TAXONOMY.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_OBJECT_TAXONOMY.md)
-- [FRONTDOOR_HOSTED_ACCESS_AND_ROUTING.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_HOSTED_ACCESS_AND_ROUTING.md)
-- [FRONTDOOR_SHELL_AND_EMBEDDED_APP_MODEL.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_SHELL_AND_EMBEDDED_APP_MODEL.md)
-- [FRONTDOOR_AWS_HOSTING_AND_SERVER_CLASS_MODEL.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_AWS_HOSTING_AND_SERVER_CLASS_MODEL.md)
-- [CLOUD_PROVISIONING_ARCHITECTURE_2026-03-04.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/CLOUD_PROVISIONING_ARCHITECTURE_2026-03-04.md)
-- [TENANT_NETWORKING_AND_ROUTING_2026-03-04.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/TENANT_NETWORKING_AND_ROUTING_2026-03-04.md)
-- [FRONTDOOR_HOSTED_PACKAGE_INSTALL_POLICY_AND_DEPLOYMENT_CLASSES.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_HOSTED_PACKAGE_INSTALL_POLICY_AND_DEPLOYMENT_CLASSES.md)
-- [FRONTDOOR_PACKAGE_REGISTRY_AND_LIFECYCLE.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_PACKAGE_REGISTRY_AND_LIFECYCLE.md)
-- [FRONTDOOR_RELEASE_DEPENDENCY_METADATA_AND_INSTALL_PLANNING.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_RELEASE_DEPENDENCY_METADATA_AND_INSTALL_PLANNING.md)
-- [FRONTDOOR_SERVER_ADAPTER_INSTALL_API.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_SERVER_ADAPTER_INSTALL_API.md)
-- [FRONTDOOR_MANAGED_CONNECTION_PROFILES.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_MANAGED_CONNECTION_PROFILES.md)
-- [FRONTDOOR_RUNTIME_OPERATOR_PACKAGE_AUTH.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_RUNTIME_OPERATOR_PACKAGE_AUTH.md)
-- [FRONTDOOR_CONFIGURED_TENANT_RUNTIME_AUTH_PROJECTION.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_CONFIGURED_TENANT_RUNTIME_AUTH_PROJECTION.md)
-- [FRONTDOOR_UI_SERVER_CLASS_AND_INSTALL_POLICY_SURFACES.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_UI_SERVER_CLASS_AND_INSTALL_POLICY_SURFACES.md)
-- [FRONTDOOR_INTERNAL_CREATOR_BYPASS_AND_CREATE_SERVER_MODAL.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_INTERNAL_CREATOR_BYPASS_AND_CREATE_SERVER_MODAL.md)
-- [FRONTDOOR_SERVER_CLASS_PRICING_AND_CREATE_FLOW.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_SERVER_CLASS_PRICING_AND_CREATE_FLOW.md)
-- [FRONTDOOR_HIPAA_READINESS_HARDENING.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_HIPAA_READINESS_HARDENING.md)
-- [FRONTDOOR_RESTORE_DRILL.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_RESTORE_DRILL.md)
+Use this index to orient, then search the filesystem for the exact leaf you
+need.
 
-## Active Operator Runbooks
+The active file tree is the source of leaf discovery.
+This index intentionally does not mirror the whole subtree.
 
-- [FRONTDOOR_SECRET_ROTATION_RUNBOOK.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_SECRET_ROTATION_RUNBOOK.md)
-- [FRONTDOOR_BACKUP_AND_RESTORE_RUNBOOK.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_BACKUP_AND_RESTORE_RUNBOOK.md)
-- [FRONTDOOR_INCIDENT_RESPONSE_AND_LOG_REVIEW_RUNBOOK.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_INCIDENT_RESPONSE_AND_LOG_REVIEW_RUNBOOK.md)
-- [FRONTDOOR_ACCESS_REVIEW_RUNBOOK.md](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/FRONTDOOR_ACCESS_REVIEW_RUNBOOK.md)
+## Anchor Clusters
 
-## Archived Specs
+Suggested cluster entrypoints:
 
-- [_archive/](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/_archive)
+1. hosted architecture and customer flows
+2. routing, networking, and hosted access control
+3. package registry, install planning, and adapter/server install policy
+4. billing, pricing, and create-server flow
+5. compliance and restore/audit posture
+
+## Archive Boundary
+
+Historical and superseded Frontdoor specs live under:
+
+- [Specs Archive](/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/specs/_archive)
