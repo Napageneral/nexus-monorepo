@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-04-27T16:09:55.734630+00:00",
+  "host": "frontdoor.nexushub.sh",
+  "remote_frontdoor_root": "/opt/nexus/frontdoor",
+  "remote_db": "/var/lib/nexus-frontdoor/frontdoor.db",
+  "target_os": "linux",
+  "target_arch": "arm64",
+  "count": 1,
+  "failures": 0,
+  "results": [
+    {
+      "kind": "adapter",
+      "id": "meta-ads",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/meta-ads",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/meta-ads/dist/meta-ads-0.1.1.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/meta-ads/0.1.1/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/meta-ads/0.1.1/meta-ads-0.1.1.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "meta-ads",
+        "version": "0.1.1",
+        "release_id": "rel-meta-ads-0.1.1",
+        "variant_id": "variant-meta-ads-0.1.1-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/meta-ads/0.1.1/meta-ads-0.1.1.tar.gz",
+        "sha256": "23495e79df283dd2b0469c1d40d0f557f4a6c7af7d296627bacea9df4824dc09",
+        "size_bytes": 13975554,
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"meta-ads\",\n  \"version\": \"0.1.1\",\n  \"release_id\": \"rel-meta-ads-0.1.1\",\n  \"variant_id\": \"variant-meta-ads-0.1.1-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/meta-ads/0.1.1/meta-ads-0.1.1.tar.gz\",\n  \"sha256\": \"23495e79df283dd2b0469c1d40d0f557f4a6c7af7d296627bacea9df4824dc09\",\n  \"size_bytes\": 13975554,\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:292938) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    }
+  ]
+}

@@ -42,3 +42,18 @@ April 27, 2026 hosted evidence:
 - the optional accessible-customers lookup has also previously surfaced Google
   developer quota pressure, so this ticket should avoid optional high-cost
   freshness checks in the hot loop
+
+April 27, 2026 post-Shopify/TikTok/Meta evidence:
+
+- after Shopify `0.1.2`, TikTok Business `0.1.1`, and Meta Ads `0.1.1` were
+  all installed and quiet, Google Ads became the only remaining observed
+  live-sync emitter
+- hosted `adapter_instances.events_received` increased by `53` events over a
+  seventy-five-second sample while Shopify, TikTok Business, and Meta Ads each
+  had delta `0`
+- hosted benchmark after Meta cleanup showed healthy host load at about `2.5%`
+  CPU and about `11.8 KB/s` disk writes, so the remaining Google work is now
+  about correctness and eliminating residual churn rather than fighting a
+  saturated box
+- the next implementation should follow the same adapter-local pattern used by
+  Shopify, TikTok Business, and Meta Ads, not a global cursor abstraction

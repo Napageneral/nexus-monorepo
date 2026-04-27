@@ -1,0 +1,14 @@
+{
+  "id": "meta-ads",
+  "version": "0.1.1",
+  "displayName": "Meta Ads",
+  "description": "Shared Meta Ads adapter package for Nex.",
+  "platform": "meta-ads",
+  "methodCatalog": {
+    "source": "openapi",
+    "document": "api/openapi.yaml",
+    "namespace": "meta-ads"
+  },
+  "command": "./bin/meta-ads-adapter",
+  "skill": "./SKILL.md"
+}

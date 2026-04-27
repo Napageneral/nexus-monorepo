@@ -1,0 +1,42 @@
+{
+  "ok": true,
+  "operation_id": "op-codex-meta-ads-0-1-1-1777306216125",
+  "upload": {
+    "status": 201,
+    "ok": true,
+    "body": {
+      "ok": true,
+      "operation_id": "op-codex-meta-ads-0-1-1-1777306216125",
+      "staged_artifact": {
+        "server_path": "/opt/nex/state/packages/staging/op-codex-meta-ads-0-1-1-1777306216125/meta-ads-0.1.1.tar.gz",
+        "sha256": "23495e79df283dd2b0469c1d40d0f557f4a6c7af7d296627bacea9df4824dc09",
+        "size_bytes": 13975554
+      }
+    }
+  },
+  "upgrade": {
+    "status": 200,
+    "ok": true,
+    "body": {
+      "ok": true,
+      "kind": "adapter",
+      "package_id": "meta-ads",
+      "status": "active",
+      "previous_version": "0.1.0",
+      "active_version": "0.1.1",
+      "active_release_path": "/opt/nex/state/packages/installed/adapter/meta-ads/releases/0.1.1",
+      "adapter": {
+        "name": "meta-ads-adapter",
+        "platform": "meta-ads",
+        "version": "0.1.1",
+        "operations": [
+          "adapter.info",
+          "adapter.connections.list",
+          "adapter.health",
+          "adapter.monitor.start",
+          "records.backfill"
+        ]
+      }
+    }
+  }
+}

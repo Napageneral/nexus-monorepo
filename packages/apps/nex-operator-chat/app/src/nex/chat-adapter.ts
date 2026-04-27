@@ -248,6 +248,29 @@ function mapApprovalToActivity(approval: ChatApproval): OrchestrationThread["act
   };
 }
 
+function chatApprovalFromEvent(event: ChatEvent, laneId: string): ChatApproval | null {
+  const id = typeof event.data.id === "string" ? event.data.id : null;
+  if (!id) {
+    return null;
+  }
+  const status =
+    event.data.status === "approved" ||
+    event.data.status === "denied" ||
+    event.data.status === "expired"
+      ? event.data.status
+      : "pending";
+  return {
+    id,
+    lane_id: typeof event.data.lane_id === "string" ? event.data.lane_id : laneId,
+    request_type: typeof event.data.request_type === "string" ? event.data.request_type : null,
+    status,
+    summary: typeof event.data.summary === "string" ? event.data.summary : null,
+    created_at: typeof event.data.created_at === "number" ? event.data.created_at : event.occurred_at,
+    expires_at: typeof event.data.expires_at === "number" ? event.data.expires_at : null,
+    resolved_at: typeof event.data.resolved_at === "number" ? event.data.resolved_at : null,
+  };
+}
+
 function mapActivityToOrchestrationActivity(
   activity: ChatLaneDetail["activities"][number],
   index: number,
@@ -721,6 +744,28 @@ function mapChatEventToOrchestrationEvents(event: ChatEvent): OrchestrationEvent
     }
 
     return events;
+  }
+
+  if (event.event_name === "approval.upserted" || event.event_name === "approval.resolved") {
+    const approval = chatApprovalFromEvent(event, laneId);
+    if (!approval) {
+      return [];
+    }
+    return [
+      {
+        ...base,
+        type: "thread.activity-appended",
+        payload: {
+          threadId: toThreadId(laneId),
+          activity: {
+            ...mapApprovalToActivity(approval),
+            sequence: event.sequence,
+            createdAt:
+              event.event_name === "approval.resolved" ? occurredAt : isoFromEpoch(approval.created_at),
+          },
+        },
+      } as OrchestrationEvent,
+    ];
   }
 
   return [

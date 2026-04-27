@@ -1,5 +1,7 @@
 # ALSE-004 Meta Ads Backfill And Monitor Efficiency
 
+Status: complete as of April 27, 2026.
+
 ## Goal
 
 Preserve Meta Ads correctness while replacing replay-heavy monitor windows with
@@ -42,3 +44,39 @@ April 27, 2026 hosted evidence:
   boundary every minute instead of the tight incremental tail
 - this ticket should replace that hot-loop replay with a narrow live tail plus
   an explicit slower reconciliation lane for late-arriving ad metrics
+
+## Resolution
+
+Implemented in `meta-ads` `0.1.1`:
+
+- exhaustive backfill still uses the supported campaign snapshot, daily
+  insight, and account-hourly families
+- live monitor no longer uses the old seven-day daily and forty-eight-hour
+  hourly replay windows on the one-minute loop
+- account hourly is the one-minute hot lane with a two-hour lookback
+- campaign, ad set, and ad daily reconciliation runs every thirty minutes with
+  a seventy-two-hour lookback
+- campaign snapshots run every thirty minutes
+- adapter-local monitor state and revision hashes suppress unchanged logical
+  rows before they hit runtime ingest
+
+Hosted deployment and validation:
+
+- packaged and published `meta-ads@0.1.1`
+- installed it on the MoonSleep hosted runtime through direct runtime package
+  upload/upgrade
+- reconciled Frontdoor install status to active `0.1.1`
+- removed the stale orphaned `0.1.0` monitor process, leaving one supervised
+  `0.1.1` live-sync process
+
+Proof:
+
+- pre-change hosted counter sample showed Meta Ads at about `161` events per
+  seventy-five seconds after Shopify and TikTok were quiet
+- post-change hosted sample from `2026-04-27T16:11:05Z` to
+  `2026-04-27T16:12:21Z` showed Meta Ads delta `0`
+- the same post-change sample showed Shopify delta `0`, TikTok Business delta
+  `0`, and Google Ads delta `53`, making Google Ads the remaining observed
+  adapter emitter
+- hosted public benchmark after Meta cleanup:
+  `/Users/tyler/nexus/state/artifacts/validation/moonsleep-hosted-runtime-benchmark/moonsleep-hosted-runtime-benchmark-2026-04-27T16-12-50-964Z.json`

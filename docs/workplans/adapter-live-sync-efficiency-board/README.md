@@ -50,8 +50,6 @@ In progress:
 
 Not started:
 
-- `ALSE-003`
-- `ALSE-004`
 - `ALSE-005`
 - `ALSE-006`
 - `ALSE-007`
@@ -59,6 +57,8 @@ Not started:
 Completed:
 
 - `ALSE-001`
+- `ALSE-003`
+- `ALSE-004`
 
 ## Current Diagnosis
 
@@ -144,6 +144,48 @@ Current proof artifacts:
   `/Users/tyler/nexus/state/artifacts/validation/moonsleep-hosted-runtime-benchmark/moonsleep-hosted-runtime-benchmark-2026-04-27T15-23-33-328Z.json`
 - hosted localhost benchmark after Shopify steady-state seed:
   `/Users/tyler/nexus/state/artifacts/validation/moonsleep-hosted-runtime-benchmark/moonsleep-runtime-localhost-benchmark-2026-04-27T15-27-00Z.json`
+
+April 27, 2026 TikTok Business update:
+
+- TikTok Business `0.1.1` replaced the old seven-day every-minute monitor
+  replay with bounded per-family monitor lanes and adapter-local revision
+  suppression
+- Frontdoor package publication succeeded for `tiktok-business@0.1.1`; the
+  hosted MoonSleep runtime was upgraded through direct runtime package upload
+  because the Frontdoor shared-staging path returned a missing staged tarball
+  error
+- after the package upgrade, stale duplicate TikTok monitor processes from
+  `0.1.0` and an orphaned `0.1.1` process were removed, leaving one supervised
+  `0.1.1` live-sync process
+- hosted counter proof over a seventy-five-second window showed TikTok
+  Business delta `0`; the same window showed Shopify delta `0`, Meta Ads delta
+  `161`, and Google Ads delta `53`
+- hosted public benchmark after TikTok cleanup:
+  `/Users/tyler/nexus/state/artifacts/validation/moonsleep-hosted-runtime-benchmark/moonsleep-hosted-runtime-benchmark-2026-04-27T16-03-02-860Z.json`
+- host metrics in that benchmark were healthy at about `4.5%` CPU and about
+  `1.08 MB/s` disk write bandwidth
+
+Next offender:
+
+- Meta Ads is now complete; Google Ads is the remaining observed steady-state
+  emitter
+
+April 27, 2026 Meta Ads update:
+
+- Meta Ads `0.1.1` replaced the old seven-day daily and forty-eight-hour
+  hourly monitor replay windows with bounded per-family monitor lanes and
+  adapter-local revision suppression
+- Frontdoor package publication succeeded for `meta-ads@0.1.1`; the hosted
+  MoonSleep runtime was upgraded through direct runtime package upload
+- after the package upgrade, the stale orphaned Meta Ads `0.1.0` monitor was
+  removed, leaving one supervised `0.1.1` live-sync process
+- hosted counter proof over a seventy-five-second window showed Meta Ads delta
+  `0`; the same window showed Shopify delta `0`, TikTok Business delta `0`,
+  and Google Ads delta `53`
+- hosted public benchmark after Meta cleanup:
+  `/Users/tyler/nexus/state/artifacts/validation/moonsleep-hosted-runtime-benchmark/moonsleep-hosted-runtime-benchmark-2026-04-27T16-12-50-964Z.json`
+- host metrics in that benchmark were healthy at about `2.5%` CPU and about
+  `11.8 KB/s` disk write bandwidth
 
 Important operational note:
 

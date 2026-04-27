@@ -1,5 +1,7 @@
 # ALSE-003 TikTok Business Backfill And Monitor Efficiency
 
+Status: complete as of April 27, 2026.
+
 ## Goal
 
 Reduce TikTok Business live-sync cost to an incremental production tail instead
@@ -41,3 +43,38 @@ April 27, 2026 hosted evidence:
   cycle
 - this ticket should be next after Shopify because it is now the clearest
   minute-scale duplicate/skipped ingest source on the MoonSleep server
+
+## Resolution
+
+Implemented in `tiktok-business` `0.1.1`:
+
+- exhaustive backfill still uses the supported snapshot and report families
+- live monitor no longer calls broad backfill from a seven-day replay floor
+- advertiser hourly runs as the one-minute hot lane with a two-hour lookback
+- campaign, ad group, and ad daily reconciliation runs every thirty minutes
+  with a seventy-two-hour lookback
+- campaign, ad group, and ad snapshots run every thirty minutes
+- adapter-local monitor state and revision hashes suppress unchanged logical
+  rows before they hit runtime ingest
+
+Hosted deployment and validation:
+
+- packaged and published `tiktok-business@0.1.1`
+- installed it on the MoonSleep hosted runtime through direct runtime package
+  upload/upgrade after Frontdoor's shared-staging upgrade path returned a
+  missing staged tarball error
+- reconciled Frontdoor install status to active `0.1.1`
+- restarted TikTok live sync and removed stale duplicate monitor processes
+  from the old `0.1.0` release
+
+Proof:
+
+- pre-change hosted counter sample showed TikTok Business at about `405`
+  `adapter_instances.events_received` events per minute after Shopify was
+  quiet
+- post-change hosted sample from `2026-04-27T16:01:11Z` to
+  `2026-04-27T16:02:26Z` showed TikTok Business delta `0`
+- the same post-change sample showed Shopify delta `0`, Meta Ads delta `161`,
+  and Google Ads delta `53`, making Meta Ads the next highest offender
+- hosted public benchmark artifact:
+  `/Users/tyler/nexus/state/artifacts/validation/moonsleep-hosted-runtime-benchmark/moonsleep-hosted-runtime-benchmark-2026-04-27T16-03-02-860Z.json`
