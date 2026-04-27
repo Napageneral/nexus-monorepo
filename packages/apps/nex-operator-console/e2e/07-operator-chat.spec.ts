@@ -420,7 +420,9 @@ test.describe("Operator Chat cleanroom proof", () => {
       timeout: 20_000,
     });
     await expect(page.locator('[data-testid="chat-lane-title"]')).toBeVisible();
-    await expect(page.locator('[data-testid="chat-lane-title"]')).toHaveText(/Worker Proof/i);
+    await expect(page.locator('[data-testid="chat-lane-title"]')).toHaveText(
+      /What exactly caused the shipping delay\?/i,
+    );
     const workerPrompt = `Worker proof send ${Date.now()}`;
     const workerReply = `Worker cleanroom reply for ${workerPrompt}`;
     await page.getByTestId("composer-editor").fill(workerPrompt);
