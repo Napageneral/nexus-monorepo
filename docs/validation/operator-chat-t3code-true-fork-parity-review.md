@@ -55,8 +55,8 @@ comm -13 \
 
 Latest source parity result:
 
-- upstream `src` file count: `165`
-- active fork `src` file count: `175`
+- upstream `src` file count: `245`
+- active fork `src` file count: `255`
 - removed upstream `src` files: `0`
 - Nex-only `src` files: `10`
 - modified upstream `src` files: `18`
@@ -88,7 +88,7 @@ Modified upstream files are limited to expected fork seams:
 
 The latest captured cleanroom proof passed at:
 
-- `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T144405Z`
+- `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T161830Z`
 
 That bundle includes:
 
@@ -96,7 +96,11 @@ That bundle includes:
 - `review/full-session-recording.json`
 - `playwright/results.json`
 - screenshots for initial state, lane-action create/invoke, approvals, manager
-  send, worker send, delivery switching, and replay recovery
+  send, large transcript scroll proof, worker send, delivery switching, and
+  replay recovery
+- performance metrics proving `/chat` first ready in `1,280ms`, large transcript
+  reload ready in `894ms`, and transcript-owned wheel scrolling with no
+  page-level browser scroll
 
 The focused host-managed debug bundle that unblocked worker-lane reload is:
 

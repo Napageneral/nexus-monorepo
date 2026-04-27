@@ -61,10 +61,10 @@ Tickets live in exactly one folder:
 1. [OPUX-001](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-001-runtime-snapshot-baseline-and-hot-path-map.md)
 2. [OPUX-002](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-002-chat-projection-sync-cost-reduction.md)
 3. [OPUX-003](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-003-manager-first-sidebar-collapse-and-hover-expand.md)
-4. [OPUX-004](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/in-progress/OPUX-004-transcript-scroll-and-virtualization-proof.md)
-5. [OPUX-005](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/in-progress/OPUX-005-context-sheet-and-viewport-fit-polish.md)
+4. [OPUX-004](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-004-transcript-scroll-and-virtualization-proof.md)
+5. [OPUX-005](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-005-context-sheet-and-viewport-fit-polish.md)
 6. [OPUX-006](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-006-upstream-parity-visual-review-pass.md)
-7. [OPUX-007](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-007-cleanroom-performance-proof-and-closeout.md)
+7. [OPUX-007](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-007-cleanroom-performance-proof-and-closeout.md)
 
 ## Status
 
@@ -75,14 +75,17 @@ Tickets live in exactly one folder:
 
 ## Live Snapshot
 
-- OPUX-001, OPUX-002, and OPUX-003 are complete
+- OPUX-001 through OPUX-005 and OPUX-007 are complete
 - first live probe showed `chat.snapshot` exceeding the default runtime timeout
 - projection synchronization now skips historical message/approval replay
   backfill for unchanged lanes that already have replay events
 - after rebuilding and restarting the runtime, live `chat.snapshot` returned in
   about `0.22s` with `116` lanes, `24` selected-lane messages, and a `154 KB`
   payload
-- OPUX-004 and OPUX-005 are active for scroll and viewport proof
-- focused chat browser tests are blocked locally by a missing Playwright browser
-  executable; use a cleanroom browser proof or install the browser cache before
-  closing them
+- latest cleanroom proof passed at
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T161830Z`
+- cleanroom metrics show `/chat` ready in `1.28s`, manager lane visible in
+  `21ms`, context sheet open in `97ms`, document overflow at `0px`, and
+  large-transcript reload ready in `894ms`
+- OPUX-006 remains open for a dedicated side-by-side upstream visual parity
+  review

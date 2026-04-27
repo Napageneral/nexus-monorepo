@@ -31,8 +31,9 @@ upstream t3code and fit inside the console viewport.
   standalone viewport wrappers
 - stale `lane` query params are cleared when leaving Chat through console tab
   navigation, while direct Chat deep links remain supported
-- the ticket remains open until screenshots prove the sheet opens, scrolls
-  internally, and closes without disturbing the transcript
+- cleanroom proof verifies the context sheet opens with an internal scroll
+  viewport and that the normal chat view has `0px` document overflow after the
+  manager lane opens
 
 ## Exit Criteria
 
@@ -44,3 +45,11 @@ upstream t3code and fit inside the console viewport.
 
 - operator-console Playwright screenshots
 - cleanroom recording review
+- passed cleanroom bundle:
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T161830Z`
+- screenshots:
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T161830Z/screenshots/02-operator-chat-initial-state.png`
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T161830Z/screenshots/05-operator-chat-manager-send-reply.png`
+- metrics:
+  `document_overflow_after_manager_open = 0px`,
+  `context_sheet_open = 97ms`

@@ -64,3 +64,27 @@ Pass when:
   default
 - transcript scrolling remains responsive with large seeded history
 - viewport fit does not require page-level browser scrolling for normal use
+
+## Latest Passing Proof
+
+Latest cleanroom proof:
+
+- bundle:
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T161830Z`
+- result:
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T161830Z/result.json`
+- recording:
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T161830Z/videos/full-session.webm`
+- metrics:
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T161830Z/operator-chat-performance-metrics.json`
+
+Measured values from the passed run:
+
+- `/chat` first ready: `1,280ms`
+- manager lane visible after ready: `21ms`
+- context sheet open: `97ms`
+- document overflow after manager open: `0px`
+- large transcript reload ready: `894ms`
+- transcript scroll height: `20,092px`
+- transcript programmatic scroll exercise: `42.3ms`
+- transcript wheel-scroll delta: `1,060px`

@@ -27,10 +27,12 @@ The selected transcript must remain scrollable with real session history.
 
 - embedded shell height ownership has been fixed so browser-page scrolling
   should no longer fight transcript scrolling
-- focused chat browser tests are currently blocked by a missing local
-  Playwright browser executable
-- the ticket remains open until a browser or cleanroom proof exercises a
-  large-history scroll scenario
+- cleanroom proof now seeds `80` additional manager turns, reloads the lane,
+  and verifies transcript-owned programmatic and wheel scrolling
+- latest passed proof measured `20,092px` transcript scroll height, `641px`
+  transcript viewport height, `42.3ms` programmatic scroll exercise, and
+  `1,060px` wheel-scroll delta
+- page-level browser scroll remained at `0`
 
 ## Exit Criteria
 
@@ -41,3 +43,9 @@ The selected transcript must remain scrollable with real session history.
 
 - chat timeline browser tests
 - performance cleanroom scenario
+- passed cleanroom bundle:
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T161830Z`
+- metrics:
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T161830Z/operator-chat-performance-metrics.json`
+- screenshot:
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T161830Z/screenshots/06-operator-chat-large-transcript-scroll-proof.png`
