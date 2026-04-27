@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	nexadapter "github.com/nexus-project/adapter-sdk-go"
 )
 
 func TestRunTikTokBusinessMonitorCycleUsesBoundedFamilyLanes(t *testing.T) {
@@ -108,6 +110,7 @@ func TestRunTikTokBusinessMonitorCycleSuppressesDuplicateHourlyRevision(t *testi
 					"ctr":                        "0.025",
 					"cpc":                        "0.49",
 					"cpm":                        "12.34",
+					"total_landing_page_view":    "7",
 					"complete_payment":           "2",
 					"complete_payment_roas":      "3.5",
 					"value_per_complete_payment": "21",
@@ -154,6 +157,20 @@ func TestRunTikTokBusinessMonitorCycleSuppressesDuplicateHourlyRevision(t *testi
 	if len(firstEmitted) != 1 {
 		t.Fatalf("first emitted records = %d, want 1", len(firstEmitted))
 	}
+	firstRecord, ok := firstEmitted[0].(nexadapter.AdapterInboundRecord)
+	if !ok {
+		t.Fatalf("first emitted record type = %T, want AdapterInboundRecord", firstEmitted[0])
+	}
+	derived, ok := firstRecord.Payload.Metadata["derived"].(map[string]any)
+	if !ok {
+		t.Fatalf("derived metadata type = %T, want map[string]any", firstRecord.Payload.Metadata["derived"])
+	}
+	if got := derived["landing_page_views"]; got != 7.0 {
+		t.Fatalf("landing_page_views = %#v, want 7", got)
+	}
+	if got := derived["link_clicks"]; got != 25.0 {
+		t.Fatalf("link_clicks = %#v, want 25", got)
+	}
 
 	secondPoll := firstPoll.Add(tiktokBusinessMonitorInterval)
 	var secondEmitted []any
@@ -169,6 +186,54 @@ func TestRunTikTokBusinessMonitorCycleSuppressesDuplicateHourlyRevision(t *testi
 	metrics := monitorState.metrics(tiktokBusinessMonitorFamilyAdvertiserHourly)
 	if metrics.LastAttempted != 1 || metrics.LastSuppressed != 1 || metrics.LastEmitted != 0 {
 		t.Fatalf("unexpected second-cycle metrics: %+v", metrics)
+	}
+}
+
+func TestTikTokBusinessSnapshotRecordsIncludeMoonSleepEntityMetadata(t *testing.T) {
+	state := &tiktokBusinessState{
+		ConnectionID:      "tiktok-business-primary",
+		BoundAdvertiserID: "advertiser-123",
+	}
+	record := buildTikTokBusinessAdSnapshotRecord(state, tiktokBusinessSnapshotFamilies[2], tiktokBusinessAdRow{
+		AdvertiserID:    "advertiser-123",
+		CampaignID:      "cmp-1",
+		CampaignName:    "Moon Campaign",
+		AdgroupID:       "ag-1",
+		AdgroupName:     "Moon Ad Group",
+		AdID:            "ad-1",
+		AdName:          "Moon Ad",
+		OperationStatus: "ENABLE",
+		SecondaryStatus: "AD_STATUS_DELIVERY_OK",
+		AdFormat:        "SINGLE_VIDEO",
+		CreativeID:      "creative-1",
+		LandingPageURL:  "https://www.moonsleep.co/products/mattress",
+		ModifyTime:      "2026-03-02 12:00:00",
+		Raw:             map[string]any{"ad_id": "ad-1"},
+	})
+	if record.Operation == "" {
+		t.Fatal("expected built record")
+	}
+	entity, ok := record.Payload.Metadata["entity"].(map[string]any)
+	if !ok {
+		t.Fatalf("entity metadata type = %T, want map[string]any", record.Payload.Metadata["entity"])
+	}
+	want := map[string]any{
+		"platform":           "tiktok",
+		"entity_type":        "ad",
+		"entity_key":         "tiktok:ad:ad-1",
+		"campaign_key":       "tiktok:campaign:cmp-1",
+		"ad_group_key":       "tiktok:adgroup:ag-1",
+		"ad_key":             "tiktok:ad:ad-1",
+		"creative_key":       "tiktok:ad:ad-1",
+		"creative_id":        "creative-1",
+		"parent_external_id": "ag-1",
+		"status":             "ENABLE",
+		"objective":          "SINGLE_VIDEO",
+	}
+	for key, expected := range want {
+		if got := entity[key]; got != expected {
+			t.Fatalf("entity[%s] = %#v, want %#v", key, got, expected)
+		}
 	}
 }
 

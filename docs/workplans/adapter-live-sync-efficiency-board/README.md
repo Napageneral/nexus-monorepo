@@ -11,6 +11,7 @@ Canonical inputs:
 - `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/adapter-validation-proof-ladder.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/workplans/moonsleep-hosted-attribution-runtime-board/README.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/workplans/attribution-app-parity-board/README.md`
+- `/Users/tyler/nexus/home/projects/moonsleep-v1/infra/ops-analytics/files/bin/ops-analytics-paid-media-sync.py`
 - `/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/cmd/shopify-adapter/main.go`
 - `/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/cmd/shopify-adapter/tier1_projection.go`
 - `/Users/tyler/nexus/home/projects/nexus/packages/adapters/tiktok-business/cmd/tiktok-business-adapter/ingest.go`
@@ -25,6 +26,8 @@ Scope:
   MoonSleep attribution adapters
 - separate exhaustive backfill correctness from cheap incremental live sync
 - reduce unnecessary replay windows, snapshot scans, and revision churn
+- preserve the provider richness captured by the existing MoonSleep workers
+  while moving that collection into smarter Nex backfill and live-monitor lanes
 - measure and harden the tenant runtime latency under active monitor load
 - restore hosted runtime reads to a production-grade latency budget before more
   attribution app product work
@@ -59,6 +62,28 @@ Completed:
 - `ALSE-001`
 - `ALSE-003`
 - `ALSE-004`
+- `ALSE-008`
+- `ALSE-009`
+
+## Richness Parity Rule
+
+Adapter efficiency work must not shrink the attribution data surface.
+
+The MoonSleep paid-media workers are the current parity baseline for provider
+field coverage, derived metrics, and entity relationships. Nex adapters should
+preserve that richness, but they should not copy the old worker cadence where a
+minute-scale timer repeatedly scans multi-day windows and rewrites materialized
+facts.
+
+The target split is:
+
+1. backfill is exhaustive, correctness-first, and able to reconstruct all
+   currently captured MoonSleep provider facts and entity snapshots
+2. live monitor is incremental, lane-specific, and cheap, with hot tails for
+   volatile metrics and slower reconciliation lanes for late-arriving metrics
+   and entity snapshots
+3. unchanged logical rows are suppressed before they become new durable Nex
+   records
 
 ## Current Diagnosis
 
@@ -92,6 +117,11 @@ The original worst offender was Shopify:
 
 TikTok Business, Meta Ads, and Google Ads also still use multi-day replay
 windows on minute-scale live monitors.
+
+Efficiency is not enough by itself. TikTok Business and Meta Ads now have much
+better live-monitor posture, but follow-up parity tickets are required to prove
+that the Nex adapters preserve the same provider richness the existing
+MoonSleep paid-media worker captures.
 
 April 27, 2026 Shopify update:
 
@@ -195,6 +225,63 @@ Important operational note:
   catchup load; those must be restored or replayed deliberately after adapter
   live-sync pressure is under control
 
+April 27, 2026 TikTok Business richness-parity update:
+
+- TikTok Business `0.1.2` preserved the MoonSleep worker richness additions on
+  top of the smarter `0.1.1` monitor posture: landing page views are requested
+  from TikTok reports, derived `landing_page_views` and `link_clicks` are
+  emitted, and campaign/ad group/ad snapshots include canonical relationship
+  and status metadata
+- local live MoonSleep proof passed with a 30-day backfill of `1,637` records
+  from `46` requests and a simulated 10-minute steady-state monitor of `10`
+  requests with `0` emitted records
+- hosted MoonSleep runtime `srv-1c4b077a-1f2` was upgraded through direct
+  runtime package upload from active `tiktok-business@0.1.1` to active
+  `tiktok-business@0.1.2`
+- hosted package health reported healthy, all required TikTok methods were
+  registered, `adapters.connections.test` passed, and bounded real-credential
+  reads returned `4` campaigns, `4` ad groups, `76` ads, and `14` ad daily rows
+  for `2026-04-26`
+- hosted post-upgrade proof artifact:
+  `/Users/tyler/nexus/state/artifacts/validation/tiktok-business-hosted-upgrade/postvalidate-2026-04-27T17-32-05-338Z.json`
+- hosted public benchmark after the upgrade had zero errors and no records in
+  the five-minute adapter-pressure sample:
+  `/Users/tyler/nexus/state/artifacts/validation/moonsleep-hosted-runtime-benchmark/moonsleep-hosted-runtime-benchmark-2026-04-27T17-33-31-979Z.json`
+- next richness-parity target is `ALSE-009` for Meta Ads
+
+April 27, 2026 Meta Ads richness-parity update:
+
+- Meta Ads `0.1.2` adds `adset_snapshot`, `ad_snapshot`, and
+  `creative_snapshot` projection families while preserving the smarter `0.1.1`
+  monitor cadence
+- daily campaign/ad set/ad insight requests now include `inline_link_clicks`,
+  and derived metrics preserve MoonSleep-compatible link click, landing page
+  view, purchase, purchase value, and cost-per-purchase fields
+- provider methods now cover campaigns, ad sets, ads, campaign daily, ad set
+  daily, ad daily, and account hourly reads
+- offline tests, package validation, and Linux arm64 packaging passed; local
+  package artifact:
+  `/Users/tyler/nexus/home/projects/nexus/packages/adapters/meta-ads/dist/meta-ads-0.1.2.tar.gz`
+- live MoonSleep Meta proof passed with `13` backfill requests, `1,437`
+  records, all eight families present, all parity assertions true, and a
+  simulated 10-minute steady-state monitor of `10` requests with `0` emitted
+  records
+- local proof artifact:
+  `/Users/tyler/nexus/state/artifacts/validation/meta-ads-local-benchmark/meta-ads-local-benchmark-2026-04-27T17-49-44Z.json`
+- hosted MoonSleep runtime `srv-1c4b077a-1f2` was upgraded through direct
+  runtime package upload from active `meta-ads@0.1.1` to active
+  `meta-ads@0.1.2`
+- hosted package health reported healthy, all required Meta methods were
+  registered, `adapters.connections.test` passed, and bounded real-credential
+  reads returned `13` campaigns, `16` ad sets, `75` ads, and insight rows at
+  campaign, ad set, ad, and account-hourly levels
+- hosted post-upgrade proof artifact:
+  `/Users/tyler/nexus/state/artifacts/validation/meta-ads-hosted-upgrade/postvalidate-2026-04-27T17-59-24-429Z.json`
+- hosted public benchmark after the upgrade had zero errors and no records in
+  the five-minute adapter-pressure sample:
+  `/Users/tyler/nexus/state/artifacts/validation/moonsleep-hosted-runtime-benchmark/moonsleep-hosted-runtime-benchmark-2026-04-27T18-00-54-841Z.json`
+- next paid-media efficiency/parity target is Google Ads
+
 ## Goal State
 
 The board is only complete when all of the following are true:
@@ -208,7 +295,9 @@ The board is only complete when all of the following are true:
    windows without an explicitly justified slow lane
 4. unchanged logical rows are suppressed before they create unnecessary durable
    record churn
-5. the hosted MoonSleep server passes a meaningful soak with active live sync
+5. each active paid-media adapter preserves the MoonSleep worker's provider
+   metric, entity, and relationship richness for the same source
+6. the hosted MoonSleep server passes a meaningful soak with active live sync
    and acceptable CPU, disk, and latency behavior
 
 ## Execution Order
@@ -218,9 +307,11 @@ The board is only complete when all of the following are true:
 3. narrow TikTok Business monitor behavior
 4. narrow Meta Ads monitor behavior
 5. narrow Google Ads monitor behavior
-6. add runtime-side latency instrumentation and any required ingest-path
+6. close TikTok Business and Meta Ads MoonSleep-worker richness parity gaps
+   introduced or exposed by the efficiency refactor
+7. add runtime-side latency instrumentation and any required ingest-path
    hardening
-7. rerun hosted MoonSleep soak and only then resume attribution app parity work
+8. rerun hosted MoonSleep soak and only then resume attribution app parity work
 
 ## Relationship To Other Boards
 

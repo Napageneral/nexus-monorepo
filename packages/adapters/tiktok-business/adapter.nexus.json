@@ -1,6 +1,6 @@
 {
   "id": "tiktok-business",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "displayName": "TikTok Business",
   "description": "Shared TikTok Business adapter package for Nex with provider-native hierarchy/report reads plus additive projection ingest.",
   "platform": "tiktok-business",

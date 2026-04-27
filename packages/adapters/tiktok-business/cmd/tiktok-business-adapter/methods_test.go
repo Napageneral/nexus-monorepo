@@ -25,13 +25,13 @@ func TestInfoDeclaresTikTokBusinessMethodsAndProjection(t *testing.T) {
 	}
 
 	wantFamilies := map[string]bool{
-		"campaign_snapshot":   false,
-		"adgroup_snapshot":    false,
-		"ad_snapshot":         false,
-		"campaign_daily":      false,
-		"adgroup_daily":       false,
-		"ad_daily":            false,
-		"advertiser_hourly":   false,
+		"campaign_snapshot": false,
+		"adgroup_snapshot":  false,
+		"ad_snapshot":       false,
+		"campaign_daily":    false,
+		"adgroup_daily":     false,
+		"ad_daily":          false,
+		"advertiser_hourly": false,
 	}
 	for _, family := range info.Projection.Families {
 		if _, ok := wantFamilies[family.Name]; ok {
@@ -76,18 +76,18 @@ func TestInfoDeclaresTikTokBusinessMethodsAndProjection(t *testing.T) {
 
 func TestTikTokBusinessResourceListMethodsUseProviderEndpoints(t *testing.T) {
 	tests := []struct {
-		name            string
-		methodName      string
-		path            string
-		responseField   string
-		makeRow         func() map[string]any
-		assertRow       func(t *testing.T, row any)
+		name          string
+		methodName    string
+		path          string
+		responseField string
+		makeRow       func() map[string]any
+		assertRow     func(t *testing.T, row any)
 	}{
 		{
-			name:            "campaigns",
-			methodName:      tiktokBusinessCampaignsListMethodName,
-			path:            "/open_api/v1.3/campaign/get/",
-			responseField:   "campaigns",
+			name:          "campaigns",
+			methodName:    tiktokBusinessCampaignsListMethodName,
+			path:          "/open_api/v1.3/campaign/get/",
+			responseField: "campaigns",
 			makeRow: func() map[string]any {
 				return map[string]any{
 					"advertiser_id":   "advertiser-123",
@@ -109,10 +109,10 @@ func TestTikTokBusinessResourceListMethodsUseProviderEndpoints(t *testing.T) {
 			},
 		},
 		{
-			name:            "adgroups",
-			methodName:      tiktokBusinessAdGroupsListMethodName,
-			path:            "/open_api/v1.3/adgroup/get/",
-			responseField:   "adgroups",
+			name:          "adgroups",
+			methodName:    tiktokBusinessAdGroupsListMethodName,
+			path:          "/open_api/v1.3/adgroup/get/",
+			responseField: "adgroups",
 			makeRow: func() map[string]any {
 				return map[string]any{
 					"advertiser_id":  "advertiser-123",
@@ -135,20 +135,20 @@ func TestTikTokBusinessResourceListMethodsUseProviderEndpoints(t *testing.T) {
 			},
 		},
 		{
-			name:            "ads",
-			methodName:      tiktokBusinessAdsListMethodName,
-			path:            "/open_api/v1.3/ad/get/",
-			responseField:   "ads",
+			name:          "ads",
+			methodName:    tiktokBusinessAdsListMethodName,
+			path:          "/open_api/v1.3/ad/get/",
+			responseField: "ads",
 			makeRow: func() map[string]any {
 				return map[string]any{
-					"advertiser_id":  "advertiser-123",
-					"campaign_id":    "cmp-1",
-					"adgroup_id":     "ag-1",
-					"ad_id":          "ad-1",
-					"ad_name":        "Ad One",
-					"ad_status":      "ENABLE",
-					"create_time":    "2026-03-01 00:00:00",
-					"modify_time":    "2026-03-01 01:00:00",
+					"advertiser_id": "advertiser-123",
+					"campaign_id":   "cmp-1",
+					"adgroup_id":    "ag-1",
+					"ad_id":         "ad-1",
+					"ad_name":       "Ad One",
+					"ad_status":     "ENABLE",
+					"create_time":   "2026-03-01 00:00:00",
+					"modify_time":   "2026-03-01 01:00:00",
 				}
 			},
 			assertRow: func(t *testing.T, row any) {
@@ -246,22 +246,22 @@ func TestTikTokBusinessResourceListMethodsUseProviderEndpoints(t *testing.T) {
 
 func TestTikTokBusinessReportMethodsUseProviderEndpoints(t *testing.T) {
 	tests := []struct {
-		name        string
-		methodName  string
-		path        string
-		dataLevel   string
-		dimensions  string
-		family      string
-		reportRow   map[string]any
-		assertRow   func(t *testing.T, row any)
+		name       string
+		methodName string
+		path       string
+		dataLevel  string
+		dimensions string
+		family     string
+		reportRow  map[string]any
+		assertRow  func(t *testing.T, row any)
 	}{
 		{
 			name:       "campaign_daily",
 			methodName: tiktokBusinessCampaignDailyListMethodName,
 			path:       "/open_api/v1.3/report/integrated/get/",
-			dataLevel:   "AUCTION_CAMPAIGN",
-			dimensions:  `["stat_time_day","campaign_id"]`,
-			family:      "campaign_daily",
+			dataLevel:  "AUCTION_CAMPAIGN",
+			dimensions: `["stat_time_day","campaign_id"]`,
+			family:     "campaign_daily",
 			reportRow: map[string]any{
 				"dimensions": map[string]any{
 					"advertiser_id": "advertiser-123",
@@ -275,6 +275,7 @@ func TestTikTokBusinessReportMethodsUseProviderEndpoints(t *testing.T) {
 					"ctr":                        "0.05",
 					"cpc":                        "2.50",
 					"cpm":                        "125.00",
+					"total_landing_page_view":    "3",
 					"complete_payment":           "1",
 					"complete_payment_roas":      "2.00",
 					"value_per_complete_payment": "25.00",
@@ -294,9 +295,9 @@ func TestTikTokBusinessReportMethodsUseProviderEndpoints(t *testing.T) {
 			name:       "adgroup_daily",
 			methodName: tiktokBusinessAdGroupDailyListMethodName,
 			path:       "/open_api/v1.3/report/integrated/get/",
-			dataLevel:   "AUCTION_ADGROUP",
-			dimensions:  `["stat_time_day","adgroup_id"]`,
-			family:      "adgroup_daily",
+			dataLevel:  "AUCTION_ADGROUP",
+			dimensions: `["stat_time_day","adgroup_id"]`,
+			family:     "adgroup_daily",
 			reportRow: map[string]any{
 				"dimensions": map[string]any{
 					"advertiser_id": "advertiser-123",
@@ -304,7 +305,7 @@ func TestTikTokBusinessReportMethodsUseProviderEndpoints(t *testing.T) {
 					"stat_time_day": "2026-03-01",
 				},
 				"metrics": map[string]any{
-					"spend": "4.00",
+					"spend":  "4.00",
 					"clicks": "2",
 				},
 			},
@@ -322,9 +323,9 @@ func TestTikTokBusinessReportMethodsUseProviderEndpoints(t *testing.T) {
 			name:       "ad_daily",
 			methodName: tiktokBusinessAdDailyListMethodName,
 			path:       "/open_api/v1.3/report/integrated/get/",
-			dataLevel:   "AUCTION_AD",
-			dimensions:  `["stat_time_day","ad_id"]`,
-			family:      "ad_daily",
+			dataLevel:  "AUCTION_AD",
+			dimensions: `["stat_time_day","ad_id"]`,
+			family:     "ad_daily",
 			reportRow: map[string]any{
 				"dimensions": map[string]any{
 					"advertiser_id": "advertiser-123",
@@ -332,7 +333,7 @@ func TestTikTokBusinessReportMethodsUseProviderEndpoints(t *testing.T) {
 					"stat_time_day": "2026-03-01",
 				},
 				"metrics": map[string]any{
-					"spend": "1.00",
+					"spend":  "1.00",
 					"clicks": "1",
 				},
 			},
@@ -350,16 +351,16 @@ func TestTikTokBusinessReportMethodsUseProviderEndpoints(t *testing.T) {
 			name:       "advertiser_hourly",
 			methodName: tiktokBusinessAdvertiserHourlyListMethodName,
 			path:       "/open_api/v1.3/report/integrated/get/",
-			dataLevel:   "AUCTION_ADVERTISER",
-			dimensions:  `["stat_time_hour"]`,
-			family:      "advertiser_hourly",
+			dataLevel:  "AUCTION_ADVERTISER",
+			dimensions: `["stat_time_hour"]`,
+			family:     "advertiser_hourly",
 			reportRow: map[string]any{
 				"dimensions": map[string]any{
 					"advertiser_id":  "advertiser-123",
 					"stat_time_hour": "2026-03-01 10:00:00",
 				},
 				"metrics": map[string]any{
-					"spend": "0.50",
+					"spend":  "0.50",
 					"clicks": "1",
 				},
 			},
@@ -402,6 +403,13 @@ func TestTikTokBusinessReportMethodsUseProviderEndpoints(t *testing.T) {
 				}
 				if got := r.URL.Query().Get("dimensions"); got != tt.dimensions {
 					t.Fatalf("dimensions = %q, want %q", got, tt.dimensions)
+				}
+				var metrics []string
+				if err := json.Unmarshal([]byte(r.URL.Query().Get("metrics")), &metrics); err != nil {
+					t.Fatalf("metrics query is not valid JSON: %v", err)
+				}
+				if !tiktokBusinessTestStringSliceContains(metrics, "total_landing_page_view") {
+					t.Fatalf("metrics = %v, missing total_landing_page_view", metrics)
 				}
 				if got := r.URL.Query().Get("start_date"); got != "2026-03-01" {
 					t.Fatalf("start_date = %q, want 2026-03-01", got)
@@ -460,6 +468,15 @@ func TestTikTokBusinessReportMethodsUseProviderEndpoints(t *testing.T) {
 			}
 		})
 	}
+}
+
+func tiktokBusinessTestStringSliceContains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func tiktokBusinessTestContext() nexadapter.AdapterContext[struct{}] {

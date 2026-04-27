@@ -38,6 +38,7 @@ type tiktokBusinessBenchmarkArtifact struct {
 	CurrentMonitorHotLookbackHours  int                          `json:"current_monitor_hot_lookback_hours"`
 	CurrentMonitorSlowLookbackHours int                          `json:"current_monitor_slow_lookback_hours"`
 	Runs                            []tiktokBusinessBenchmarkRun `json:"runs"`
+	RichnessParity                  map[string]any               `json:"richness_parity,omitempty"`
 	Comparisons                     map[string]any               `json:"comparisons,omitempty"`
 }
 
@@ -53,6 +54,7 @@ type tiktokBusinessBenchmarkRun struct {
 	RequestsByEndpoint  map[string]int                          `json:"requests_by_endpoint"`
 	RequestsByDataLevel map[string]int                          `json:"requests_by_data_level,omitempty"`
 	RequestsByWindow    map[string]int                          `json:"requests_by_window,omitempty"`
+	RequestedMetrics    []string                                `json:"requested_metrics,omitempty"`
 	Monitor             *tiktokBusinessBenchmarkMonitorSummary  `json:"monitor,omitempty"`
 	Cycles              []tiktokBusinessBenchmarkMonitorSummary `json:"cycles,omitempty"`
 }
@@ -76,13 +78,14 @@ type tiktokBusinessMetricSummary struct {
 }
 
 type tiktokBusinessBenchmarkRequest struct {
-	Endpoint  string `json:"endpoint"`
-	DataLevel string `json:"data_level,omitempty"`
-	StartDate string `json:"start_date,omitempty"`
-	EndDate   string `json:"end_date,omitempty"`
-	Page      string `json:"page,omitempty"`
-	Status    int    `json:"status"`
-	ElapsedMS int64  `json:"elapsed_ms"`
+	Endpoint  string   `json:"endpoint"`
+	DataLevel string   `json:"data_level,omitempty"`
+	StartDate string   `json:"start_date,omitempty"`
+	EndDate   string   `json:"end_date,omitempty"`
+	Page      string   `json:"page,omitempty"`
+	Metrics   []string `json:"metrics,omitempty"`
+	Status    int      `json:"status"`
+	ElapsedMS int64    `json:"elapsed_ms"`
 }
 
 type tiktokBusinessBenchmarkTransport struct {
@@ -145,7 +148,7 @@ func TestLiveTikTokBusinessLocalBenchmark(t *testing.T) {
 		BackfillDays:                    days,
 		BackfillSince:                   since.Format(time.RFC3339),
 		BackfillUntil:                   until.Format(time.RFC3339),
-		BackfillImplementationChanged:   false,
+		BackfillImplementationChanged:   true,
 		LegacyMonitorReplayWindowHours:  int(tiktokBusinessLegacyReplayWindow / time.Hour),
 		CurrentMonitorHotLookbackHours:  int(tiktokBusinessHotReportLookback / time.Hour),
 		CurrentMonitorSlowLookbackHours: int(tiktokBusinessDailyReportLookback / time.Hour),
@@ -187,6 +190,10 @@ func TestLiveTikTokBusinessLocalBenchmark(t *testing.T) {
 	}
 	artifact.Runs = append(artifact.Runs, soakRun)
 
+	artifact.RichnessParity = summarizeTikTokBusinessRichnessParity(artifact.Runs)
+	if err := assertTikTokBusinessRichnessParity(artifact.RichnessParity); err != nil {
+		t.Fatalf("richness parity assertions failed: %v", err)
+	}
 	artifact.Comparisons = compareTikTokBusinessBenchmarkRuns(artifact.Runs)
 	outputPath, err := writeTikTokBusinessBenchmarkArtifact(artifact)
 	if err != nil {
@@ -285,6 +292,7 @@ func summarizeTikTokBusinessBenchmarkRun(name string, start time.Time, elapsed t
 		RequestsByEndpoint:  sortedCountMap(countRequestsBy(requests, func(req tiktokBusinessBenchmarkRequest) string { return req.Endpoint })),
 		RequestsByDataLevel: sortedCountMap(countRequestsBy(requests, func(req tiktokBusinessBenchmarkRequest) string { return req.DataLevel })),
 		RequestsByWindow:    sortedCountMap(countRequestsBy(requests, requestWindowKey)),
+		RequestedMetrics:    sortedStringSet(unionRequestMetrics(requests)),
 	}
 }
 
@@ -329,7 +337,7 @@ func compareTikTokBusinessBenchmarkRuns(runs []tiktokBusinessBenchmarkRun) map[s
 	first := byName["current_monitor_first_cycle"]
 	soak := byName["current_monitor_10m_simulated_soak"]
 	comparisons := map[string]any{
-		"backfill_path_note": "Backfill fetch path is intentionally unchanged; optimization is isolated to monitor scheduling and duplicate suppression.",
+		"backfill_path_note": "Backfill remains the exhaustive reconstruction path; 0.1.2 adds MoonSleep metric/entity richness while live-sync optimization stays isolated to monitor scheduling and duplicate suppression.",
 	}
 	if legacy.RequestCount > 0 && first.RequestCount > 0 {
 		comparisons["first_cycle_request_ratio_current_vs_legacy"] = float64(first.RequestCount) / float64(legacy.RequestCount)
@@ -389,9 +397,56 @@ func summarizeTikTokBusinessRequest(u *url.URL, status int, elapsed time.Duratio
 		StartDate: query.Get("start_date"),
 		EndDate:   query.Get("end_date"),
 		Page:      query.Get("page"),
+		Metrics:   parseJSONStringSlice(query.Get("metrics")),
 		Status:    status,
 		ElapsedMS: elapsed.Milliseconds(),
 	}
+}
+
+func summarizeTikTokBusinessRichnessParity(runs []tiktokBusinessBenchmarkRun) map[string]any {
+	byName := map[string]tiktokBusinessBenchmarkRun{}
+	for _, run := range runs {
+		byName[run.Name] = run
+	}
+	backfill := byName["current_backfill"]
+	requiredEndpoints := []string{"campaign/get", "adgroup/get", "ad/get", "report/integrated/get"}
+	requiredDataLevels := []string{"AUCTION_CAMPAIGN", "AUCTION_ADGROUP", "AUCTION_AD", "AUCTION_ADVERTISER"}
+	requiredFamilies := []string{"campaign_snapshot", "adgroup_snapshot", "ad_snapshot", "campaign_daily", "adgroup_daily", "ad_daily", "advertiser_hourly"}
+
+	return map[string]any{
+		"baseline":                           "MoonSleep ops-analytics paid-media TikTok worker",
+		"required_report_metrics":            append([]string{}, tiktokBusinessReportMetricFields...),
+		"requested_report_metrics":           backfill.RequestedMetrics,
+		"required_report_metrics_present":    requiredStringsPresent(backfill.RequestedMetrics, tiktokBusinessReportMetricFields),
+		"required_backfill_endpoints":        requiredEndpoints,
+		"backfill_endpoints_present":         requiredKeysPresent(backfill.RequestsByEndpoint, requiredEndpoints),
+		"required_data_levels":               requiredDataLevels,
+		"backfill_data_levels_present":       requiredKeysPresent(backfill.RequestsByDataLevel, requiredDataLevels),
+		"required_record_families":           requiredFamilies,
+		"record_families_present":            requiredKeysPresent(backfill.RecordsByFamily, requiredFamilies),
+		"landing_page_view_metric_requested": stringSliceContains(backfill.RequestedMetrics, "total_landing_page_view"),
+	}
+}
+
+func assertTikTokBusinessRichnessParity(parity map[string]any) error {
+	if parity == nil {
+		return fmt.Errorf("missing richness parity summary")
+	}
+	if present, _ := parity["landing_page_view_metric_requested"].(bool); !present {
+		return fmt.Errorf("total_landing_page_view was not requested")
+	}
+	for _, field := range []string{"required_report_metrics_present", "backfill_endpoints_present", "backfill_data_levels_present"} {
+		present, ok := parity[field].(map[string]bool)
+		if !ok {
+			return fmt.Errorf("%s has unexpected type %T", field, parity[field])
+		}
+		for key, ok := range present {
+			if !ok {
+				return fmt.Errorf("%s missing %s", field, key)
+			}
+		}
+	}
+	return nil
 }
 
 func writeTikTokBusinessBenchmarkArtifact(artifact tiktokBusinessBenchmarkArtifact) (string, error) {
@@ -488,6 +543,56 @@ func countRequestsBy(requests []tiktokBusinessBenchmarkRequest, key func(tiktokB
 	return counts
 }
 
+func unionRequestMetrics(requests []tiktokBusinessBenchmarkRequest) map[string]struct{} {
+	metrics := map[string]struct{}{}
+	for _, req := range requests {
+		for _, metric := range req.Metrics {
+			metric = strings.TrimSpace(metric)
+			if metric != "" {
+				metrics[metric] = struct{}{}
+			}
+		}
+	}
+	return metrics
+}
+
+func parseJSONStringSlice(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var values []string
+	if err := json.Unmarshal([]byte(raw), &values); err != nil {
+		return nil
+	}
+	return values
+}
+
+func requiredKeysPresent(values map[string]int, required []string) map[string]bool {
+	out := map[string]bool{}
+	for _, key := range required {
+		out[key] = values[key] > 0
+	}
+	return out
+}
+
+func requiredStringsPresent(values []string, required []string) map[string]bool {
+	out := map[string]bool{}
+	for _, key := range required {
+		out[key] = stringSliceContains(values, key)
+	}
+	return out
+}
+
+func stringSliceContains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
 func requestWindowKey(req tiktokBusinessBenchmarkRequest) string {
 	parts := []string{req.Endpoint}
 	if req.DataLevel != "" {
@@ -512,5 +617,17 @@ func sortedCountMap(values map[string]int) map[string]int {
 	for _, key := range keys {
 		out[key] = values[key]
 	}
+	return out
+}
+
+func sortedStringSet(values map[string]struct{}) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for value := range values {
+		out = append(out, value)
+	}
+	sort.Strings(out)
 	return out
 }

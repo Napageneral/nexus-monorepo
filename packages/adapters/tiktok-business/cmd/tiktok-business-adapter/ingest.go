@@ -48,40 +48,49 @@ type tiktokBusinessReportFamily struct {
 }
 
 type tiktokBusinessCampaignRow struct {
-	AdvertiserID    string         `json:"advertiser_id"`
-	CampaignID      string         `json:"campaign_id"`
-	CampaignName    string         `json:"campaign_name"`
-	CampaignStatus  string         `json:"campaign_status"`
-	Objective       string         `json:"objective"`
-	BudgetMode      string         `json:"budget_mode"`
-	Budget          string         `json:"budget"`
-	OperationStatus string         `json:"operation_status"`
-	BuyingType      string         `json:"buying_type"`
-	OptimizeGoal    string         `json:"optimize_goal"`
-	StartDate       string         `json:"start_date"`
-	EndDate         string         `json:"end_date"`
-	CreateTime      string         `json:"create_time"`
-	ModifyTime      string         `json:"modify_time"`
-	Raw             map[string]any `json:"-"`
+	AdvertiserID       string         `json:"advertiser_id"`
+	CampaignID         string         `json:"campaign_id"`
+	CampaignName       string         `json:"campaign_name"`
+	CampaignStatus     string         `json:"campaign_status"`
+	Status             string         `json:"status"`
+	SecondaryStatus    string         `json:"secondary_status"`
+	Objective          string         `json:"objective"`
+	ObjectiveType      string         `json:"objective_type"`
+	MarketingObjective string         `json:"marketing_objective"`
+	BudgetMode         string         `json:"budget_mode"`
+	Budget             string         `json:"budget"`
+	OperationStatus    string         `json:"operation_status"`
+	BuyingType         string         `json:"buying_type"`
+	OptimizeGoal       string         `json:"optimize_goal"`
+	StartDate          string         `json:"start_date"`
+	EndDate            string         `json:"end_date"`
+	CreateTime         string         `json:"create_time"`
+	ModifyTime         string         `json:"modify_time"`
+	Raw                map[string]any `json:"-"`
 }
 
 type tiktokBusinessAdGroupRow struct {
-	AdvertiserID  string         `json:"advertiser_id"`
-	CampaignID    string         `json:"campaign_id"`
-	CampaignName  string         `json:"campaign_name"`
-	AdgroupID     string         `json:"adgroup_id"`
-	AdgroupName   string         `json:"adgroup_name"`
-	AdgroupStatus string         `json:"adgroup_status"`
-	Objective     string         `json:"objective"`
-	BudgetMode    string         `json:"budget_mode"`
-	Budget        string         `json:"budget"`
-	BidType       string         `json:"bid_type"`
-	OptimizeGoal  string         `json:"optimize_goal"`
-	StartTime     string         `json:"start_time"`
-	EndTime       string         `json:"end_time"`
-	CreateTime    string         `json:"create_time"`
-	ModifyTime    string         `json:"modify_time"`
-	Raw           map[string]any `json:"-"`
+	AdvertiserID     string         `json:"advertiser_id"`
+	CampaignID       string         `json:"campaign_id"`
+	CampaignName     string         `json:"campaign_name"`
+	AdgroupID        string         `json:"adgroup_id"`
+	AdgroupName      string         `json:"adgroup_name"`
+	AdgroupStatus    string         `json:"adgroup_status"`
+	OperationStatus  string         `json:"operation_status"`
+	Status           string         `json:"status"`
+	SecondaryStatus  string         `json:"secondary_status"`
+	Objective        string         `json:"objective"`
+	ObjectiveType    string         `json:"objective_type"`
+	BudgetMode       string         `json:"budget_mode"`
+	Budget           string         `json:"budget"`
+	BidType          string         `json:"bid_type"`
+	OptimizeGoal     string         `json:"optimize_goal"`
+	OptimizationGoal string         `json:"optimization_goal"`
+	StartTime        string         `json:"start_time"`
+	EndTime          string         `json:"end_time"`
+	CreateTime       string         `json:"create_time"`
+	ModifyTime       string         `json:"modify_time"`
+	Raw              map[string]any `json:"-"`
 }
 
 type tiktokBusinessAdRow struct {
@@ -94,6 +103,9 @@ type tiktokBusinessAdRow struct {
 	AdName          string         `json:"ad_name"`
 	AdStatus        string         `json:"ad_status"`
 	OperationStatus string         `json:"operation_status"`
+	Status          string         `json:"status"`
+	SecondaryStatus string         `json:"secondary_status"`
+	AdFormat        string         `json:"ad_format"`
 	CreativeID      string         `json:"creative_id"`
 	LandingPageURL  string         `json:"landing_page_url"`
 	CreateTime      string         `json:"create_time"`
@@ -143,7 +155,8 @@ type tiktokBusinessMonitorCycleResult struct {
 }
 
 var (
-	tiktokBusinessSnapshotFamilies = []tiktokBusinessSnapshotFamily{
+	tiktokBusinessReportMetricFields = []string{"spend", "impressions", "clicks", "ctr", "cpc", "cpm", "total_landing_page_view", "complete_payment", "complete_payment_roas", "value_per_complete_payment"}
+	tiktokBusinessSnapshotFamilies   = []tiktokBusinessSnapshotFamily{
 		{ID: "campaign_snapshot", ContainerName: "Campaign Snapshots"},
 		{ID: "adgroup_snapshot", ContainerName: "Ad Group Snapshots"},
 		{ID: "ad_snapshot", ContainerName: "Ad Snapshots"},
@@ -154,7 +167,7 @@ var (
 			ContainerName: "Campaign Daily",
 			DataLevel:     "AUCTION_CAMPAIGN",
 			Dimensions:    []string{"stat_time_day", "campaign_id"},
-			Metrics:       []string{"spend", "impressions", "clicks", "ctr", "cpc", "cpm", "complete_payment", "complete_payment_roas", "value_per_complete_payment"},
+			Metrics:       tiktokBusinessReportMetricFields,
 			WindowDays:    30,
 		},
 		{
@@ -162,7 +175,7 @@ var (
 			ContainerName: "Ad Group Daily",
 			DataLevel:     "AUCTION_ADGROUP",
 			Dimensions:    []string{"stat_time_day", "adgroup_id"},
-			Metrics:       []string{"spend", "impressions", "clicks", "ctr", "cpc", "cpm", "complete_payment", "complete_payment_roas", "value_per_complete_payment"},
+			Metrics:       tiktokBusinessReportMetricFields,
 			WindowDays:    30,
 		},
 		{
@@ -170,7 +183,7 @@ var (
 			ContainerName: "Ad Daily",
 			DataLevel:     "AUCTION_AD",
 			Dimensions:    []string{"stat_time_day", "ad_id"},
-			Metrics:       []string{"spend", "impressions", "clicks", "ctr", "cpc", "cpm", "complete_payment", "complete_payment_roas", "value_per_complete_payment"},
+			Metrics:       tiktokBusinessReportMetricFields,
 			WindowDays:    30,
 		},
 		{
@@ -178,7 +191,7 @@ var (
 			ContainerName: "Advertiser Hourly",
 			DataLevel:     "AUCTION_ADVERTISER",
 			Dimensions:    []string{"stat_time_hour"},
-			Metrics:       []string{"spend", "impressions", "clicks", "ctr", "cpc", "cpm", "complete_payment", "complete_payment_roas", "value_per_complete_payment"},
+			Metrics:       tiktokBusinessReportMetricFields,
 			WindowDays:    1,
 		},
 	}
@@ -621,7 +634,9 @@ func buildTikTokBusinessCampaignSnapshotRecord(state *tiktokBusinessState, famil
 			"advertiser_id": row.AdvertiserID,
 			"campaign_id":   row.CampaignID,
 		},
-		"raw_row": row.Raw,
+		"entity":        tiktokBusinessCampaignEntityMetadata(row),
+		"raw_row":       row.Raw,
+		"source_system": tiktokBusinessDefaultReportSource,
 	})
 }
 
@@ -633,7 +648,9 @@ func buildTikTokBusinessAdGroupSnapshotRecord(state *tiktokBusinessState, family
 			"campaign_id":   row.CampaignID,
 			"adgroup_id":    row.AdgroupID,
 		},
-		"raw_row": row.Raw,
+		"entity":        tiktokBusinessAdGroupEntityMetadata(row),
+		"raw_row":       row.Raw,
+		"source_system": tiktokBusinessDefaultReportSource,
 	})
 }
 
@@ -646,8 +663,64 @@ func buildTikTokBusinessAdSnapshotRecord(state *tiktokBusinessState, family tikt
 			"adgroup_id":    row.AdgroupID,
 			"ad_id":         row.AdID,
 		},
-		"raw_row": row.Raw,
+		"entity":        tiktokBusinessAdEntityMetadata(row),
+		"raw_row":       row.Raw,
+		"source_system": tiktokBusinessDefaultReportSource,
 	})
+}
+
+func tiktokBusinessCampaignEntityMetadata(row tiktokBusinessCampaignRow) map[string]any {
+	entity := map[string]any{
+		"platform":    "tiktok",
+		"entity_type": "campaign",
+	}
+	putIfNotBlank(entity, "entity_key", tiktokBusinessEntityKey("campaign", row.CampaignID))
+	putIfNotBlank(entity, "external_id", row.CampaignID)
+	putIfNotBlank(entity, "campaign_key", tiktokBusinessEntityKey("campaign", row.CampaignID))
+	putIfNotBlank(entity, "name", row.CampaignName)
+	putIfNotBlank(entity, "status", firstNonBlankString(row.OperationStatus, row.Status, row.SecondaryStatus, row.CampaignStatus))
+	putIfNotBlank(entity, "objective", firstNonBlankString(row.ObjectiveType, row.MarketingObjective, row.Objective, row.OptimizeGoal))
+	putIfNotBlank(entity, "budget_mode", row.BudgetMode)
+	putIfNotBlank(entity, "budget", row.Budget)
+	return entity
+}
+
+func tiktokBusinessAdGroupEntityMetadata(row tiktokBusinessAdGroupRow) map[string]any {
+	entity := map[string]any{
+		"platform":    "tiktok",
+		"entity_type": "adset",
+	}
+	putIfNotBlank(entity, "entity_key", tiktokBusinessEntityKey("adgroup", row.AdgroupID))
+	putIfNotBlank(entity, "external_id", row.AdgroupID)
+	putIfNotBlank(entity, "campaign_key", tiktokBusinessEntityKey("campaign", row.CampaignID))
+	putIfNotBlank(entity, "ad_group_key", tiktokBusinessEntityKey("adgroup", row.AdgroupID))
+	putIfNotBlank(entity, "parent_external_id", row.CampaignID)
+	putIfNotBlank(entity, "name", row.AdgroupName)
+	putIfNotBlank(entity, "status", firstNonBlankString(row.OperationStatus, row.Status, row.SecondaryStatus, row.AdgroupStatus))
+	putIfNotBlank(entity, "objective", firstNonBlankString(row.OptimizationGoal, row.OptimizeGoal, row.ObjectiveType, row.Objective))
+	putIfNotBlank(entity, "budget_mode", row.BudgetMode)
+	putIfNotBlank(entity, "budget", row.Budget)
+	return entity
+}
+
+func tiktokBusinessAdEntityMetadata(row tiktokBusinessAdRow) map[string]any {
+	entity := map[string]any{
+		"platform":    "tiktok",
+		"entity_type": "ad",
+	}
+	putIfNotBlank(entity, "entity_key", tiktokBusinessEntityKey("ad", row.AdID))
+	putIfNotBlank(entity, "external_id", row.AdID)
+	putIfNotBlank(entity, "campaign_key", tiktokBusinessEntityKey("campaign", row.CampaignID))
+	putIfNotBlank(entity, "ad_group_key", tiktokBusinessEntityKey("adgroup", row.AdgroupID))
+	putIfNotBlank(entity, "ad_key", tiktokBusinessEntityKey("ad", row.AdID))
+	putIfNotBlank(entity, "creative_key", tiktokBusinessEntityKey("ad", row.AdID))
+	putIfNotBlank(entity, "creative_id", row.CreativeID)
+	putIfNotBlank(entity, "parent_external_id", firstNonBlankString(row.AdgroupID, row.CampaignID))
+	putIfNotBlank(entity, "name", row.AdName)
+	putIfNotBlank(entity, "status", firstNonBlankString(row.OperationStatus, row.Status, row.SecondaryStatus, row.AdStatus))
+	putIfNotBlank(entity, "objective", row.AdFormat)
+	putIfNotBlank(entity, "landing_page_url", row.LandingPageURL)
+	return entity
 }
 
 func buildTikTokBusinessReportRecord(state *tiktokBusinessState, family tiktokBusinessReportFamily, row tiktokBusinessReportRow, window tiktokBusinessReportWindow) nexadapter.AdapterInboundRecord {
@@ -657,11 +730,12 @@ func buildTikTokBusinessReportRecord(state *tiktokBusinessState, family tiktokBu
 	providerIDs := reportProviderIDs(row)
 	providerIDs["advertiser_id"] = state.BoundAdvertiserID
 
-	content := fmt.Sprintf("%s %s spend=%s clicks=%s purchases=%g",
+	content := fmt.Sprintf("%s %s spend=%s clicks=%s lpv=%g purchases=%g",
 		family.ID,
 		reportRowLabel(row, family),
 		valueString(row.Metrics, "spend"),
 		valueString(row.Metrics, "clicks"),
+		derived["landing_page_views"],
 		derived["purchases"],
 	)
 
@@ -691,6 +765,9 @@ func buildTikTokBusinessRecord(state *tiktokBusinessState, family tiktokBusiness
 	revisionPayload := map[string]any{
 		"normalized_row": normalizedRow,
 		"raw_row":        rawRow,
+	}
+	if entity, ok := extraMetadata["entity"]; ok {
+		revisionPayload["entity"] = entity
 	}
 	revisionHash := tiktokBusinessRevisionHash(revisionPayload)
 
@@ -982,7 +1059,11 @@ func normalizedTikTokBusinessCampaignRow(row tiktokBusinessCampaignRow) map[stri
 	putIfNotBlank(normalized, "campaign_id", row.CampaignID)
 	putIfNotBlank(normalized, "campaign_name", row.CampaignName)
 	putIfNotBlank(normalized, "campaign_status", row.CampaignStatus)
+	putIfNotBlank(normalized, "status", row.Status)
+	putIfNotBlank(normalized, "secondary_status", row.SecondaryStatus)
 	putIfNotBlank(normalized, "objective", row.Objective)
+	putIfNotBlank(normalized, "objective_type", row.ObjectiveType)
+	putIfNotBlank(normalized, "marketing_objective", row.MarketingObjective)
 	putIfNotBlank(normalized, "budget_mode", row.BudgetMode)
 	putIfNotBlank(normalized, "budget", row.Budget)
 	putIfNotBlank(normalized, "operation_status", row.OperationStatus)
@@ -1003,11 +1084,16 @@ func normalizedTikTokBusinessAdGroupRow(row tiktokBusinessAdGroupRow) map[string
 	putIfNotBlank(normalized, "adgroup_id", row.AdgroupID)
 	putIfNotBlank(normalized, "adgroup_name", row.AdgroupName)
 	putIfNotBlank(normalized, "adgroup_status", row.AdgroupStatus)
+	putIfNotBlank(normalized, "operation_status", row.OperationStatus)
+	putIfNotBlank(normalized, "status", row.Status)
+	putIfNotBlank(normalized, "secondary_status", row.SecondaryStatus)
 	putIfNotBlank(normalized, "objective", row.Objective)
+	putIfNotBlank(normalized, "objective_type", row.ObjectiveType)
 	putIfNotBlank(normalized, "budget_mode", row.BudgetMode)
 	putIfNotBlank(normalized, "budget", row.Budget)
 	putIfNotBlank(normalized, "bid_type", row.BidType)
 	putIfNotBlank(normalized, "optimize_goal", row.OptimizeGoal)
+	putIfNotBlank(normalized, "optimization_goal", row.OptimizationGoal)
 	putIfNotBlank(normalized, "start_time", row.StartTime)
 	putIfNotBlank(normalized, "end_time", row.EndTime)
 	putIfNotBlank(normalized, "create_time", row.CreateTime)
@@ -1026,6 +1112,9 @@ func normalizedTikTokBusinessAdRow(row tiktokBusinessAdRow) map[string]any {
 	putIfNotBlank(normalized, "ad_name", row.AdName)
 	putIfNotBlank(normalized, "ad_status", row.AdStatus)
 	putIfNotBlank(normalized, "operation_status", row.OperationStatus)
+	putIfNotBlank(normalized, "status", row.Status)
+	putIfNotBlank(normalized, "secondary_status", row.SecondaryStatus)
+	putIfNotBlank(normalized, "ad_format", row.AdFormat)
 	putIfNotBlank(normalized, "creative_id", row.CreativeID)
 	putIfNotBlank(normalized, "landing_page_url", row.LandingPageURL)
 	putIfNotBlank(normalized, "create_time", row.CreateTime)
@@ -1047,6 +1136,7 @@ func normalizedTikTokBusinessReportRow(row tiktokBusinessReportRow) map[string]a
 func derivedTikTokBusinessReportMeasures(row tiktokBusinessReportRow) map[string]any {
 	purchases := valueNumber(row.Metrics, "complete_payment")
 	spend := valueNumber(row.Metrics, "spend")
+	clicks := valueNumber(row.Metrics, "clicks")
 	purchaseValue := valueNumber(row.Metrics, "complete_payment") * valueNumber(row.Metrics, "value_per_complete_payment")
 	if purchaseValue == 0 {
 		purchaseValue = valueNumber(row.Metrics, "complete_payment_roas") * spend
@@ -1057,7 +1147,9 @@ func derivedTikTokBusinessReportMeasures(row tiktokBusinessReportRow) map[string
 	}
 
 	return map[string]any{
-		"clicks":                     valueNumber(row.Metrics, "clicks"),
+		"clicks":                     clicks,
+		"link_clicks":                clicks,
+		"landing_page_views":         valueNumber(row.Metrics, "total_landing_page_view"),
 		"spend":                      spend,
 		"impressions":                valueNumber(row.Metrics, "impressions"),
 		"purchases":                  purchases,
@@ -1224,6 +1316,24 @@ func putIfNotBlank(target map[string]any, key string, value string) {
 	if trimmed := strings.TrimSpace(value); trimmed != "" {
 		target[key] = trimmed
 	}
+}
+
+func tiktokBusinessEntityKey(entityType string, id string) string {
+	entityType = strings.TrimSpace(entityType)
+	id = strings.TrimSpace(id)
+	if entityType == "" || id == "" {
+		return ""
+	}
+	return fmt.Sprintf("tiktok:%s:%s", entityType, id)
+}
+
+func firstNonBlankString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func nonBlank(value string, fallback string) string {

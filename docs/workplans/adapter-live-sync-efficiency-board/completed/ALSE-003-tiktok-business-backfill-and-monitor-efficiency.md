@@ -78,3 +78,29 @@ Proof:
   and Google Ads delta `53`, making Meta Ads the next highest offender
 - hosted public benchmark artifact:
   `/Users/tyler/nexus/state/artifacts/validation/moonsleep-hosted-runtime-benchmark/moonsleep-hosted-runtime-benchmark-2026-04-27T16-03-02-860Z.json`
+
+Local MoonSleep live-API proof on April 27, 2026:
+
+- added a gated live benchmark harness at
+  `/Users/tyler/nexus/home/projects/nexus/packages/adapters/tiktok-business/cmd/tiktok-business-adapter/live_benchmark_test.go`
+  so normal unit tests stay offline while operator-initiated proofs can use
+  the real MoonSleep TikTok credential environment
+- `go test ./...` passes with the live benchmark skipped by default
+- `TIKTOK_BUSINESS_LIVE_BENCHMARK=1` benchmark passed against the real
+  MoonSleep TikTok Business API in `40.96s`
+- current thirty-day backfill covered all supported families and produced
+  `1,636` unique records from `46` API requests:
+  `campaign_snapshot`, `adgroup_snapshot`, `ad_snapshot`, `campaign_daily`,
+  `adgroup_daily`, `ad_daily`, and `advertiser_hourly`
+- legacy monitor emulation of the old seven-day full replay cycle produced
+  `406` records from `15` API requests in one cycle, which projects to `150`
+  requests and `4,060` records over ten one-minute ticks
+- current first monitor cycle touched all seven monitor lanes with `7` API
+  requests and `146` records
+- current simulated ten-minute steady-state monitor used `10` API requests,
+  all to `AUCTION_ADVERTISER`, and emitted `0` records because no changed
+  hourly rows were present in the hot window
+- binary smoke with an injected runtime context returned connected health for
+  `local-moonsleep-tiktok-business`
+- local benchmark artifact:
+  `/Users/tyler/nexus/state/artifacts/validation/tiktok-business-local-benchmark/tiktok-business-local-benchmark-2026-04-27T16-33-32Z.json`
