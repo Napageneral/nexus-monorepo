@@ -302,8 +302,21 @@ April 27, 2026 Google Ads efficiency update:
   steady monitor of exactly `10` provider requests with `0` emitted records
 - local proof artifact:
   `/Users/tyler/nexus/state/artifacts/validation/google-ads-local-benchmark/google-ads-local-benchmark-2026-04-27T18-19-56Z.json`
-- next step is hosted package install/signoff for Google Ads before the final
-  MoonSleep hosted soak and attribution app reorientation
+- hosted MoonSleep runtime `srv-1c4b077a-1f2` was upgraded through direct
+  runtime package upload from active `google-ads@0.1.0` to active
+  `google-ads@0.1.1`
+- hosted package health reported healthy, all required Google Ads methods were
+  registered, `adapters.connections.test` passed, and bounded real-credential
+  reads returned a customer summary plus `1` campaign daily row for
+  `2026-04-26`
+- hosted post-upgrade proof artifact:
+  `/Users/tyler/nexus/state/artifacts/validation/google-ads-hosted-upgrade/postvalidate-2026-04-27T20-36-44-801Z.json`
+- hosted public benchmark after the upgrade had zero operation errors and no
+  Google Ads records in the five-minute adapter-pressure sample; the window
+  saw only `1` Shopify customer record:
+  `/Users/tyler/nexus/state/artifacts/validation/moonsleep-hosted-runtime-benchmark/moonsleep-hosted-runtime-benchmark-2026-04-27T20-37-08-072Z.json`
+- next step is `ALSE-006`/`ALSE-007`: final hosted latency instrumentation,
+  soak/signoff, and attribution app reorientation
 
 ## Goal State
 
