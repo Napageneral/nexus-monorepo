@@ -7,7 +7,7 @@ while separating it from unrelated Google Business Profile behavior.
 Canonical inputs:
 
 - `/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-adapters/google-ads-adapter.md`
-- `/Users/tyler/nexus/home/projects/nexus/packages/adapters/google/docs/specs/ADAPTER_SPEC_GOOGLE.md`
+- `/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-adapters/acquisition-adapter-package-alignment.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/workplans/attribution-intelligence-board/in-progress/AIL-002-moonsleep-parity-matrix-for-core-attribution.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/workplans/attribution-adapter-packages-board/completed/AAP-003-google-ads-acquisition-surface.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/spec-driven-development-workflow.md`

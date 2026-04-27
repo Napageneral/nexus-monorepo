@@ -5,7 +5,7 @@
 **Related:**
 - [/Users/tyler/nexus/home/projects/nexus/docs/spec-driven-development-workflow.md](/Users/tyler/nexus/home/projects/nexus/docs/spec-driven-development-workflow.md)
 - [/Users/tyler/nexus/home/projects/nexus/docs/spec-standards.md](/Users/tyler/nexus/home/projects/nexus/docs/spec-standards.md)
-- [/Users/tyler/nexus/home/projects/nexus/packages/adapters/git/docs/specs/ADAPTER_SPEC_GIT.md](/Users/tyler/nexus/home/projects/nexus/packages/adapters/git/docs/specs/ADAPTER_SPEC_GIT.md)
+- [/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/forge-provider-adapters-local-git-and-app-facing-projection.md](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/forge-provider-adapters-local-git-and-app-facing-projection.md)
 - [/Users/tyler/nexus/home/projects/nexus/packages/adapters/linkedin/docs/specs/ADAPTER_SPEC_LINKEDIN.md](/Users/tyler/nexus/home/projects/nexus/packages/adapters/linkedin/docs/specs/ADAPTER_SPEC_LINKEDIN.md)
 - [/Users/tyler/nexus/home/projects/nexus/packages/adapters/apple-maps/docs/specs/ADAPTER_SPEC_APPLE_MAPS.md](/Users/tyler/nexus/home/projects/nexus/packages/adapters/apple-maps/docs/specs/ADAPTER_SPEC_APPLE_MAPS.md)
 

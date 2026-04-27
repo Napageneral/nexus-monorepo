@@ -119,7 +119,7 @@ export const AdapterMethodOriginSchema = z.object({
   package_kind: z.enum(["runtime", "app", "adapter"]).optional(),
   package_id: z.string().nullable(),
   package_version: z.string().nullable(),
-  declaration_mode: z.enum(["manifest", "openapi", "builtin"]),
+  declaration_mode: z.enum(["manifest", "openapi", "graphql", "builtin"]),
   declaration_source: z.string(),
   namespace: z.string(),
 });
@@ -137,7 +137,7 @@ export const AdapterMethodSchema = z.object({
 });
 
 export const AdapterMethodCatalogSchema = z.object({
-  source: z.enum(["manifest", "openapi"]).optional(),
+  source: z.enum(["manifest", "openapi", "graphql"]).optional(),
   document: z.string().optional(),
   namespace: z.string().optional(),
 });

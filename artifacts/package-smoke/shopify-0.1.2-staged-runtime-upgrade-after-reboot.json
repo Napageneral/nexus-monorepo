@@ -1,0 +1,49 @@
+{
+  "ok": false,
+  "upgrade": {
+    "status": 500,
+    "body": {
+      "ok": false,
+      "error": "database or disk is full"
+    }
+  },
+  "package": {
+    "ok": true,
+    "kind": "adapter",
+    "package_id": "shopify",
+    "status": "active",
+    "desired_release_id": "rel-shopify-0.1.1",
+    "desired_version": "0.1.1",
+    "active_release_id": "rel-shopify-0.1.1",
+    "active_version": "0.1.1",
+    "active_release_path": "/opt/nex/state/packages/installed/adapter/shopify/releases/0.1.1",
+    "last_error": "database or disk is full",
+    "updated_at_ms": 1777301222284,
+    "skill": {
+      "path": "./SKILL.md",
+      "content": "---\nname: shopify\ndescription: Use the Shopify adapter for GraphQL-first Shopify reads plus canonical Nex order, line-item, customer, and product ingest through shared connections, backfill, monitor, and mounted-capability workflows.\n---\n\n# Nexus Shopify Adapter\n\nUse the shared Shopify adapter when Nex should own Shopify store access through\na durable shared connection, expose Shopify GraphQL reads, and emit canonical\norder, line-item, customer, and product records.\n\nThe current declared read slice is GraphQL-first and proofed. It does not claim\nliteral full Shopify Admin API coverage or cleanup-safe write proof.\n\n## When To Use It\n\n- connect Shopify once through the shared Nex connection model\n- use `shopify.graphql.query` and `shopify.graphql.mutate` for broad provider-native Shopify Admin GraphQL access\n- use the convenience `shopify.query.*` methods when a common first-wave read already exists\n- backfill historical Shopify order, line-item, customer, and product facts\n- run monitor to keep Shopify data fresh\n- exercise the mounted capability tree truthfully for representative worker use\n- let apps consume canonical Shopify records through the same runtime\n  connection model as other adapters\n\n## Core Rules\n\n1. inbound data is canonical `record.ingest`\n2. `connection_id` is the canonical runtime identity\n3. Shopify shop ids and order ids are provider metadata, not runtime identity\n4. checkout-surviving bridge evidence stays in provider metadata\n5. backfill and monitor emit the same canonical record model\n\n## Main Surfaces\n\n- `adapter.info`\n- `adapter.health`\n- `adapter.connections.list`\n- `shopify.graphql.query`\n- `shopify.graphql.mutate`\n- `shopify.query.shop`\n- `shopify.query.orders`\n- `shopify.query.order`\n- `shopify.query.products`\n- `shopify.query.product`\n- `shopify.query.customers`\n- `shopify.query.customer`\n- `adapter.monitor.start`\n- `records.backfill`\n\n## Local CLI Examples\n\nRead adapter info:\n\n```bash\n./bin/shopify-adapter adapter.info\n```\n\nCheck connection health:\n\n```bash\n./bin/shopify-adapter adapter.health --connection shopify-primary\n```\n\nRead Shopify shop identity:\n\n```bash\n./bin/shopify-adapter shopify.query.shop --connection shopify-primary\n```\n\nRun a generic Shopify GraphQL query:\n\n```bash\n./bin/shopify-adapter shopify.graphql.query \\\n  --connection shopify-primary \\\n  --payload '{\"document\":\"query ShopIdentity { shop { id name myshopifyDomain primaryDomain { host url } } }\",\"operationName\":\"ShopIdentity\"}'\n```\n\nRead the first two Shopify orders:\n\n```bash\n./bin/shopify-adapter shopify.query.orders \\\n  --connection shopify-primary \\\n  --payload '{\"first\":2}'\n```\n\nRead one Shopify order by gid:\n\n```bash\n./bin/shopify-adapter shopify.query.order \\\n  --connection shopify-primary \\\n  --payload '{\"id\":\"gid://shopify/Order/<order-id>\"}'\n```\n\nRun bounded backfill:\n\n```bash\n./bin/shopify-adapter records.backfill \\\n  --connection shopify-primary \\\n  --since 2026-01-01T00:00:00Z\n```\n\nStart monitor:\n\n```bash\n./bin/shopify-adapter adapter.monitor.start --connection shopify-primary\n```\n\n## Key Data Models\n\n- Nex Shopify connection\n  - one durable Shopify credential binding for one or more shops\n- Shopify Tier-1 commerce facts\n  - canonical inbound records carrying order, line-item, customer, and product\n    metadata\n- `connection_id`\n  - canonical runtime identity for backfill, monitor, and downstream product\n    consumption\n\nImportant boundary:\n\n- the adapter should hide shop-specific credential plumbing\n- consumers should bind to `connection_id`, not to provider shop aliases or\n  `\"default\"`\n\n## End-To-End Example\n\nNormal Shopify flow:\n\n1. create one Shopify connection through Nex\n2. complete the shared Shopify auth flow or bind the required credentials\n   through the canonical connection surface\n3. verify `adapter.health`\n4. prefer `shopify.graphql.query` / `shopify.graphql.mutate` for broad provider-native access\n5. use `shopify.query.*` methods when a first-wave convenience alias already covers the read you need\n6. use the mounted capability tree plus this skill when a worker needs to explore the schema-backed surface safely\n7. run `records.backfill` for historical Tier-1 commerce facts\n8. run `adapter.monitor.start` for freshness\n9. use the mounted capability tree and package skill for representative worker\n   discovery when agent-use proof matters\n10. confirm emitted records use canonical `record.ingest` and include\n   `connection_id`\n11. let downstream consumers use those records without adapter-local identity\n   hacks\n\n## Constraints And Failure Modes\n\n- do not treat `\"default\"` as canonical shop identity\n- do not hardcode a storefront or app-specific credential URL into the shared\n  adapter\n- do not overclaim the current GraphQL slice as literal full Shopify Admin API\n  coverage\n- backfill and monitor should not diverge into different record shapes\n\n## Related Docs\n\n- `adapter.nexus.json`\n- `README.md`\n- `docs/specs/ADAPTER_SPEC_SHOPIFY.md`\n- `docs/validation/SHOPIFY_ADAPTER_VALIDATION.md`\n"
+    }
+  },
+  "package_health": {
+    "ok": true,
+    "kind": "adapter",
+    "package_id": "shopify",
+    "status": "active",
+    "healthy": true,
+    "active_version": "0.1.1",
+    "active_release_path": "/opt/nex/state/packages/installed/adapter/shopify/releases/0.1.1",
+    "last_error": "database or disk is full",
+    "adapter": {
+      "name": "shopify-adapter",
+      "platform": "shopify",
+      "version": "0.1.1",
+      "operations": [
+        "adapter.info",
+        "adapter.connections.list",
+        "adapter.health",
+        "adapter.monitor.start",
+        "records.backfill"
+      ]
+    }
+  }
+}

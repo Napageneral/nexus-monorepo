@@ -12,7 +12,7 @@ export type AttributionScopeRecord = {
 };
 
 export type AttributionBindingRole = "acquisition" | "website" | "backend";
-export type AttributionBindingSourceType = "adapter_connection" | "website_installation";
+export type AttributionBindingSourceType = "adapter_connection";
 
 export type AttributionBindingRecord = {
   bindingId: string;
@@ -21,7 +21,6 @@ export type AttributionBindingRecord = {
   role: AttributionBindingRole;
   sourceType: AttributionBindingSourceType;
   connectionId: string | null;
-  websiteInstallationId: string | null;
   platform: string | null;
   label: string | null;
   metadata: Record<string, unknown> | null;
@@ -77,7 +76,7 @@ export type AttributionWebEventRecord = {
   scopeId: string;
   sourceRecordId: string;
   logicalRowId: string;
-  websiteInstallationId: string;
+  webInstallationId: string;
   eventId: string;
   eventName: string;
   capturedAt: number;
@@ -122,7 +121,7 @@ export type AttributionWebEventRecord = {
 
 export type AttributionSessionSourceFact = {
   scopeId: string;
-  websiteInstallationId: string;
+  webInstallationId: string;
   sessionId: string;
   firstSeenAt: number;
   lastSeenAt: number;
@@ -148,7 +147,7 @@ export type AttributionSessionSourceFact = {
 export type AttributionConversionBridgeRecord = {
   scopeId: string;
   bridgeKey: string;
-  websiteInstallationId: string | null;
+  webInstallationId: string | null;
   sessionId: string | null;
   bridgeSurface: string | null;
   handoffId: string | null;
@@ -240,10 +239,50 @@ export type AttributionDailyFunnelMartRecord = {
   grossRevenue: number;
 };
 
+export type AttributionLedgerFilterRecord = {
+  reviewOnly: boolean;
+  unresolvedOnly: boolean;
+  weakMatchOnly: boolean;
+  paidOnly: boolean;
+  exactPaidIdOnly: boolean;
+  utmOnly: boolean;
+  directOrUnknownOnly: boolean;
+  sourceChannel: string | null;
+  query: string | null;
+};
+
+export type AttributionLedgerRowRecord = AttributionBusinessOutcomeRecord & {
+  attribution: AttributionOutcomeAttributionRecord | null;
+  rowCount: number;
+  needsReview: boolean;
+  unresolved: boolean;
+  weakMatch: boolean;
+  paid: boolean;
+  exactPaidId: boolean;
+  utmOnly: boolean;
+  multiSignal: boolean;
+  directOrUnknown: boolean;
+  displayTitle: string | null;
+  displayStatus: string | null;
+};
+
+export type AttributionLedgerSummaryRecord = {
+  totalPrimaryOutcomes: number;
+  resolvedPrimaryOutcomes: number;
+  unresolvedPrimaryOutcomes: number;
+  reviewPrimaryOutcomes: number;
+  weakMatchPrimaryOutcomes: number;
+  paidPrimaryOutcomes: number;
+  exactPaidIdPrimaryOutcomes: number;
+  utmOnlyPrimaryOutcomes: number;
+  multiSignalPrimaryOutcomes: number;
+  directOrUnknownPrimaryOutcomes: number;
+};
+
 type SqlRow = Record<string, unknown>;
 
 const DB_NAME = "attribution.db";
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS attribution_scopes (
@@ -261,7 +300,6 @@ CREATE TABLE IF NOT EXISTS attribution_bindings (
   role TEXT NOT NULL,
   source_type TEXT NOT NULL,
   connection_id TEXT,
-  website_installation_id TEXT,
   platform TEXT,
   label TEXT,
   metadata_json TEXT,
@@ -271,7 +309,6 @@ CREATE TABLE IF NOT EXISTS attribution_bindings (
 );
 CREATE INDEX IF NOT EXISTS idx_attribution_bindings_scope_role ON attribution_bindings(scope_id, role, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_attribution_bindings_connection ON attribution_bindings(connection_id, role);
-CREATE INDEX IF NOT EXISTS idx_attribution_bindings_installation ON attribution_bindings(website_installation_id, role);
 
 CREATE TABLE IF NOT EXISTS attribution_pipeline_runs (
   run_id TEXT PRIMARY KEY,
@@ -329,7 +366,7 @@ CREATE INDEX IF NOT EXISTS idx_attribution_ad_facts_source_record ON attribution
 
 CREATE TABLE IF NOT EXISTS attribution_web_events (
   scope_id TEXT NOT NULL,
-  website_installation_id TEXT NOT NULL,
+  web_installation_id TEXT NOT NULL,
   logical_row_id TEXT NOT NULL,
   source_record_id TEXT NOT NULL,
   event_id TEXT NOT NULL,
@@ -372,7 +409,7 @@ CREATE TABLE IF NOT EXISTS attribution_web_events (
   lead_external_id TEXT,
   row_json TEXT NOT NULL,
   updated_at INTEGER NOT NULL,
-  PRIMARY KEY (scope_id, website_installation_id, logical_row_id)
+  PRIMARY KEY (scope_id, web_installation_id, logical_row_id)
 );
 CREATE INDEX IF NOT EXISTS idx_attribution_web_events_scope_capture ON attribution_web_events(scope_id, captured_at DESC);
 CREATE INDEX IF NOT EXISTS idx_attribution_web_events_scope_session ON attribution_web_events(scope_id, session_id, captured_at DESC);
@@ -380,7 +417,7 @@ CREATE INDEX IF NOT EXISTS idx_attribution_web_events_scope_handoff ON attributi
 
 CREATE TABLE IF NOT EXISTS attribution_session_source_facts (
   scope_id TEXT NOT NULL,
-  website_installation_id TEXT NOT NULL,
+  web_installation_id TEXT NOT NULL,
   session_id TEXT NOT NULL,
   first_seen_at INTEGER NOT NULL,
   last_seen_at INTEGER NOT NULL,
@@ -401,14 +438,14 @@ CREATE TABLE IF NOT EXISTS attribution_session_source_facts (
   source_confidence TEXT NOT NULL,
   evidence_json TEXT NOT NULL,
   updated_at INTEGER NOT NULL,
-  PRIMARY KEY (scope_id, website_installation_id, session_id)
+  PRIMARY KEY (scope_id, web_installation_id, session_id)
 );
 CREATE INDEX IF NOT EXISTS idx_attribution_session_source_scope_first_seen ON attribution_session_source_facts(scope_id, first_seen_at DESC);
 
 CREATE TABLE IF NOT EXISTS attribution_conversion_bridges (
   scope_id TEXT NOT NULL,
   bridge_key TEXT NOT NULL,
-  website_installation_id TEXT,
+  web_installation_id TEXT,
   session_id TEXT,
   bridge_surface TEXT,
   handoff_id TEXT,
@@ -544,6 +581,16 @@ function asInteger(value: unknown): number {
   return numeric === null ? 0 : Math.trunc(numeric);
 }
 
+function firstNonEmpty(...values: unknown[]): string | null {
+  for (const value of values) {
+    const text = asOptionalString(value);
+    if (text) {
+      return text;
+    }
+  }
+  return null;
+}
+
 function parseJsonRecord(value: unknown): Record<string, unknown> {
   if (typeof value !== "string" || !value.trim()) {
     return {};
@@ -557,6 +604,80 @@ function parseJsonRecord(value: unknown): Record<string, unknown> {
 
 function stringifyJson(value: unknown): string {
   return JSON.stringify(value ?? {});
+}
+
+function hasSignalValue(value: unknown): boolean {
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+  return false;
+}
+
+function hasAnySignal(evidence: Record<string, unknown>, keys: string[]): boolean {
+  return keys.some((key) => hasSignalValue(evidence[key]));
+}
+
+function classifyEvidenceSignals(evidence: Record<string, unknown>): {
+  exactPaidId: boolean;
+  hasUtm: boolean;
+  hasReferrer: boolean;
+  hasSession: boolean;
+  multiSignal: boolean;
+} {
+  const exactPaidId = hasAnySignal(evidence, [
+    "fbclid",
+    "fbc",
+    "gclid",
+    "gbraid",
+    "wbraid",
+    "ttclid",
+    "msclkid",
+  ]);
+  const hasUtm = hasAnySignal(evidence, [
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_content",
+    "utm_term",
+  ]);
+  const hasReferrer = hasAnySignal(evidence, ["referrer", "event_source_url", "page_url"]);
+  const hasSession = hasAnySignal(evidence, ["session_id", "checkout_token", "cart_token", "handoff_id"]);
+  const signalCount = [exactPaidId, hasUtm, hasReferrer, hasSession].filter(Boolean).length;
+  return {
+    exactPaidId,
+    hasUtm,
+    hasReferrer,
+    hasSession,
+    multiSignal: signalCount >= 2,
+  };
+}
+
+function primaryOutcomePredicateSql(alias = "o"): string {
+  return `(
+    COALESCE(${alias}.gross_value, 0) > 0
+    OR COALESCE(${alias}.net_value, 0) > 0
+    OR LOWER(${alias}.outcome_type) IN ('order', 'booking', 'appointment', 'invoice', 'sale', 'lead', 'opportunity')
+  )`;
+}
+
+function primaryOutcomeRankSql(alias = "o"): string {
+  return `CASE LOWER(${alias}.outcome_type)
+    WHEN 'order' THEN 80
+    WHEN 'invoice' THEN 80
+    WHEN 'sale' THEN 80
+    WHEN 'booking' THEN 70
+    WHEN 'appointment' THEN 70
+    WHEN 'consult' THEN 60
+    WHEN 'procedure' THEN 60
+    WHEN 'lead' THEN 50
+    WHEN 'opportunity' THEN 50
+    WHEN 'line_item' THEN 40
+    WHEN 'fulfillment' THEN 30
+    ELSE 10
+  END`;
 }
 
 function ensureDirectory(dataDir: string): void {
@@ -573,19 +694,234 @@ function initializeDb(db: DatabaseSync): void {
   db.exec("PRAGMA busy_timeout = 5000;");
   const versionRow = db.prepare("PRAGMA user_version").get() as SqlRow | undefined;
   const currentVersion = versionRow ? asInteger(versionRow.user_version) : 0;
-  if (currentVersion >= SCHEMA_VERSION) {
-    db.exec(SCHEMA_SQL);
+  if (currentVersion === 0) {
+    db.exec("BEGIN");
+    try {
+      db.exec(SCHEMA_SQL);
+      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
     return;
   }
-  db.exec("BEGIN");
-  try {
-    db.exec(SCHEMA_SQL);
-    db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
+  if (currentVersion < SCHEMA_VERSION) {
+    db.exec("BEGIN");
+    try {
+      migrateSchemaToV2(db, currentVersion);
+      db.exec(SCHEMA_SQL);
+      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+    return;
   }
+  db.exec(SCHEMA_SQL);
+}
+
+function migrateSchemaToV2(db: DatabaseSync, currentVersion: number): void {
+  if (currentVersion >= 2) {
+    return;
+  }
+
+  db.exec(`
+DROP INDEX IF EXISTS idx_attribution_bindings_scope_role;
+DROP INDEX IF EXISTS idx_attribution_bindings_connection;
+DROP INDEX IF EXISTS idx_attribution_web_events_scope_capture;
+DROP INDEX IF EXISTS idx_attribution_web_events_scope_session;
+DROP INDEX IF EXISTS idx_attribution_web_events_scope_handoff;
+DROP INDEX IF EXISTS idx_attribution_session_source_scope_first_seen;
+DROP INDEX IF EXISTS idx_attribution_conversion_bridges_scope_session;
+
+ALTER TABLE attribution_bindings RENAME TO attribution_bindings__old;
+CREATE TABLE attribution_bindings (
+  binding_id TEXT PRIMARY KEY,
+  scope_id TEXT NOT NULL,
+  identity_key TEXT NOT NULL UNIQUE,
+  role TEXT NOT NULL,
+  source_type TEXT NOT NULL,
+  connection_id TEXT,
+  platform TEXT,
+  label TEXT,
+  metadata_json TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY (scope_id) REFERENCES attribution_scopes(scope_id) ON DELETE CASCADE
+);
+CREATE INDEX idx_attribution_bindings_scope_role ON attribution_bindings(scope_id, role, updated_at DESC);
+CREATE INDEX idx_attribution_bindings_connection ON attribution_bindings(connection_id, role);
+INSERT INTO attribution_bindings (
+  binding_id, scope_id, identity_key, role, source_type, connection_id, platform, label, metadata_json, created_at, updated_at
+)
+SELECT
+  binding_id,
+  scope_id,
+  scope_id || ':' || role || ':adapter_connection:' || COALESCE(platform, '') || ':' || COALESCE(connection_id, ''),
+  role,
+  'adapter_connection',
+  connection_id,
+  platform,
+  label,
+  metadata_json,
+  created_at,
+  updated_at
+FROM attribution_bindings__old
+WHERE COALESCE(connection_id, '') <> '';
+DROP TABLE attribution_bindings__old;
+
+ALTER TABLE attribution_web_events RENAME TO attribution_web_events__old;
+CREATE TABLE attribution_web_events (
+  scope_id TEXT NOT NULL,
+  web_installation_id TEXT NOT NULL,
+  logical_row_id TEXT NOT NULL,
+  source_record_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  event_name TEXT NOT NULL,
+  captured_at INTEGER NOT NULL,
+  session_id TEXT,
+  browser_id TEXT,
+  consent_state TEXT,
+  page_url TEXT,
+  page_path TEXT,
+  host TEXT,
+  referrer TEXT,
+  event_source_url TEXT,
+  source_channel TEXT,
+  source_confidence TEXT,
+  utm_source TEXT,
+  utm_medium TEXT,
+  utm_campaign TEXT,
+  utm_content TEXT,
+  utm_term TEXT,
+  fbclid TEXT,
+  fbc TEXT,
+  fbp TEXT,
+  gclid TEXT,
+  gbraid TEXT,
+  wbraid TEXT,
+  ttclid TEXT,
+  ttp TEXT,
+  msclkid TEXT,
+  bridge_surface TEXT,
+  handoff_id TEXT,
+  checkout_token TEXT,
+  checkout_key TEXT,
+  checkout_id TEXT,
+  cart_token TEXT,
+  form_id TEXT,
+  form_submission_id TEXT,
+  booking_id TEXT,
+  booking_slot_id TEXT,
+  lead_external_id TEXT,
+  row_json TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (scope_id, web_installation_id, logical_row_id)
+);
+CREATE INDEX idx_attribution_web_events_scope_capture ON attribution_web_events(scope_id, captured_at DESC);
+CREATE INDEX idx_attribution_web_events_scope_session ON attribution_web_events(scope_id, session_id, captured_at DESC);
+CREATE INDEX idx_attribution_web_events_scope_handoff ON attribution_web_events(scope_id, handoff_id);
+INSERT INTO attribution_web_events (
+  scope_id, web_installation_id, logical_row_id, source_record_id, event_id, event_name,
+  captured_at, session_id, browser_id, consent_state, page_url, page_path, host, referrer,
+  event_source_url, source_channel, source_confidence, utm_source, utm_medium, utm_campaign,
+  utm_content, utm_term, fbclid, fbc, fbp, gclid, gbraid, wbraid, ttclid, ttp, msclkid,
+  bridge_surface, handoff_id, checkout_token, checkout_key, checkout_id, cart_token, form_id,
+  form_submission_id, booking_id, booking_slot_id, lead_external_id, row_json, updated_at
+)
+SELECT
+  scope_id, website_installation_id, logical_row_id, source_record_id, event_id, event_name,
+  captured_at, session_id, browser_id, consent_state, page_url, page_path, host, referrer,
+  event_source_url, source_channel, source_confidence, utm_source, utm_medium, utm_campaign,
+  utm_content, utm_term, fbclid, fbc, fbp, gclid, gbraid, wbraid, ttclid, ttp, msclkid,
+  bridge_surface, handoff_id, checkout_token, checkout_key, checkout_id, cart_token, form_id,
+  form_submission_id, booking_id, booking_slot_id, lead_external_id, row_json, updated_at
+FROM attribution_web_events__old;
+DROP TABLE attribution_web_events__old;
+
+ALTER TABLE attribution_session_source_facts RENAME TO attribution_session_source_facts__old;
+CREATE TABLE attribution_session_source_facts (
+  scope_id TEXT NOT NULL,
+  web_installation_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  first_seen_at INTEGER NOT NULL,
+  last_seen_at INTEGER NOT NULL,
+  event_count INTEGER NOT NULL,
+  page_views INTEGER NOT NULL,
+  content_views INTEGER NOT NULL,
+  cta_clicks INTEGER NOT NULL,
+  handoff_starts INTEGER NOT NULL,
+  handoff_confirmed INTEGER NOT NULL,
+  product_views INTEGER NOT NULL,
+  cart_adds INTEGER NOT NULL,
+  checkout_starts INTEGER NOT NULL,
+  checkout_completes INTEGER NOT NULL,
+  form_starts INTEGER NOT NULL,
+  form_submits INTEGER NOT NULL,
+  bookings_completed INTEGER NOT NULL,
+  source_channel TEXT NOT NULL,
+  source_confidence TEXT NOT NULL,
+  evidence_json TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (scope_id, web_installation_id, session_id)
+);
+CREATE INDEX idx_attribution_session_source_scope_first_seen ON attribution_session_source_facts(scope_id, first_seen_at DESC);
+INSERT INTO attribution_session_source_facts (
+  scope_id, web_installation_id, session_id, first_seen_at, last_seen_at, event_count,
+  page_views, content_views, cta_clicks, handoff_starts, handoff_confirmed, product_views,
+  cart_adds, checkout_starts, checkout_completes, form_starts, form_submits, bookings_completed,
+  source_channel, source_confidence, evidence_json, updated_at
+)
+SELECT
+  scope_id, website_installation_id, session_id, first_seen_at, last_seen_at, event_count,
+  page_views, content_views, cta_clicks, handoff_starts, handoff_confirmed, product_views,
+  cart_adds, checkout_starts, checkout_completes, form_starts, form_submits, bookings_completed,
+  source_channel, source_confidence, evidence_json, updated_at
+FROM attribution_session_source_facts__old;
+DROP TABLE attribution_session_source_facts__old;
+
+ALTER TABLE attribution_conversion_bridges RENAME TO attribution_conversion_bridges__old;
+CREATE TABLE attribution_conversion_bridges (
+  scope_id TEXT NOT NULL,
+  bridge_key TEXT NOT NULL,
+  web_installation_id TEXT,
+  session_id TEXT,
+  bridge_surface TEXT,
+  handoff_id TEXT,
+  checkout_token TEXT,
+  checkout_key TEXT,
+  checkout_id TEXT,
+  cart_token TEXT,
+  form_id TEXT,
+  form_submission_id TEXT,
+  booking_id TEXT,
+  booking_slot_id TEXT,
+  lead_external_id TEXT,
+  event_id TEXT,
+  source_channel TEXT,
+  source_confidence TEXT,
+  evidence_json TEXT NOT NULL,
+  occurred_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (scope_id, bridge_key)
+);
+CREATE INDEX idx_attribution_conversion_bridges_scope_session ON attribution_conversion_bridges(scope_id, session_id);
+INSERT INTO attribution_conversion_bridges (
+  scope_id, bridge_key, web_installation_id, session_id, bridge_surface, handoff_id,
+  checkout_token, checkout_key, checkout_id, cart_token, form_id, form_submission_id, booking_id,
+  booking_slot_id, lead_external_id, event_id, source_channel, source_confidence, evidence_json,
+  occurred_at, updated_at
+)
+SELECT
+  scope_id, bridge_key, website_installation_id, session_id, bridge_surface, handoff_id,
+  checkout_token, checkout_key, checkout_id, cart_token, form_id, form_submission_id, booking_id,
+  booking_slot_id, lead_external_id, event_id, source_channel, source_confidence, evidence_json,
+  occurred_at, updated_at
+FROM attribution_conversion_bridges__old;
+DROP TABLE attribution_conversion_bridges__old;
+`);
 }
 
 export function openAttributionDb(dataDir: string): DatabaseSync {
@@ -609,7 +945,6 @@ export function buildBindingIdentityKey(input: {
   role: AttributionBindingRole;
   sourceType: AttributionBindingSourceType;
   connectionId?: string | null;
-  websiteInstallationId?: string | null;
   platform?: string | null;
 }): string {
   return [
@@ -618,7 +953,6 @@ export function buildBindingIdentityKey(input: {
     input.sourceType,
     asOptionalString(input.platform) ?? "",
     asOptionalString(input.connectionId) ?? "",
-    asOptionalString(input.websiteInstallationId) ?? "",
   ].join(":");
 }
 
@@ -640,7 +974,6 @@ function mapBindingRow(row: SqlRow): AttributionBindingRecord {
     role: asString(row.role) as AttributionBindingRole,
     sourceType: asString(row.source_type) as AttributionBindingSourceType,
     connectionId: asOptionalString(row.connection_id),
-    websiteInstallationId: asOptionalString(row.website_installation_id),
     platform: asOptionalString(row.platform),
     label: asOptionalString(row.label),
     metadata: parseJsonRecord(row.metadata_json),
@@ -701,6 +1034,182 @@ function mapOutcomeRow(row: SqlRow): AttributionBusinessOutcomeRecord & {
           updatedAt: asInteger(row.attribution_updated_at),
         }
       : null,
+  };
+}
+
+function displayTitleForOutcome(outcome: AttributionBusinessOutcomeRecord): string | null {
+  return (
+    firstNonEmpty(
+      asOptionalString(outcome.row.name),
+      asOptionalString(outcome.row.order_number),
+      asOptionalString(outcome.row.order_name),
+      asOptionalString(outcome.row.title),
+      asOptionalString(outcome.row.display_name),
+      outcome.customerEmail,
+      outcome.customerId,
+      outcome.backendEntityId,
+    ) ?? null
+  );
+}
+
+function toLedgerRow(row: SqlRow): AttributionLedgerRowRecord {
+  const outcome = mapOutcomeRow(row);
+  const evidence = outcome.attribution?.evidence ?? {};
+  const signals = classifyEvidenceSignals(evidence);
+  const unresolved = !outcome.attribution || Boolean(outcome.attribution.unresolvedReason);
+  const utmOnly = signals.hasUtm && !signals.exactPaidId;
+  const matchMethod = outcome.attribution?.matchMethod ?? "";
+  const weakMatch =
+    !unresolved &&
+    ((outcome.attribution?.sourceConfidence ?? "unknown") === "low" ||
+      matchMethod === "backend_bridge_attributes" ||
+      matchMethod === "landing_site_params" ||
+      matchMethod === "bridge_checkout_event" ||
+      (matchMethod === "session_match" &&
+        !signals.exactPaidId &&
+        !signals.multiSignal &&
+        !utmOnly));
+  return {
+    ...outcome,
+    rowCount: asInteger(row.entity_row_count),
+    needsReview: unresolved || weakMatch || utmOnly,
+    unresolved,
+    weakMatch,
+    paid:
+      Boolean(outcome.attribution?.paidPlatform) ||
+      Boolean(outcome.attribution?.sourceChannel?.endsWith("_paid")),
+    exactPaidId: signals.exactPaidId,
+    utmOnly,
+    multiSignal: signals.multiSignal,
+    directOrUnknown: (outcome.attribution?.sourceChannel ?? "direct_or_unknown") === "direct_or_unknown",
+    displayTitle: displayTitleForOutcome(outcome),
+    displayStatus: firstNonEmpty(outcome.outcomeStatus, outcome.attribution?.unresolvedReason) ?? null,
+  };
+}
+
+function listPrimaryOutcomeCandidates(db: DatabaseSync, params: {
+  scopeId: string;
+  sinceTs?: number;
+  untilTs?: number;
+  outcomeId?: string | null;
+}): AttributionLedgerRowRecord[] {
+  const predicate = primaryOutcomePredicateSql("o");
+  const rankSql = primaryOutcomeRankSql("o");
+  const clauses = ["o.scope_id = ?"];
+  const queryParams: Array<string | number> = [params.scopeId];
+  if (typeof params.sinceTs === "number") {
+    clauses.push("o.occurred_at >= ?");
+    queryParams.push(params.sinceTs);
+  }
+  if (typeof params.untilTs === "number") {
+    clauses.push("o.occurred_at < ?");
+    queryParams.push(params.untilTs);
+  }
+  const outcomeId = asOptionalString(params.outcomeId);
+  if (outcomeId) {
+    clauses.push("o.backend_entity_id = ?");
+    queryParams.push(outcomeId);
+  }
+  const rows = db
+    .prepare(
+      `WITH ranked AS (
+         SELECT o.scope_id, o.platform, o.logical_row_id, o.source_record_id, o.connection_id,
+                o.backend_entity_id, o.outcome_type, o.outcome_status, o.occurred_at, o.currency,
+                o.gross_value, o.net_value, o.customer_id, o.customer_email, o.session_id,
+                o.checkout_token, o.cart_token, o.bridge_attributes_json, o.row_json, o.updated_at,
+                a.outcome_id, a.source_channel, a.source_confidence, a.match_method, a.paid_platform,
+                a.session_id AS attribution_session_id, a.evidence_json, a.unresolved_reason,
+                a.updated_at AS attribution_updated_at,
+                COUNT(*) OVER (PARTITION BY o.scope_id, o.backend_entity_id) AS entity_row_count,
+                ROW_NUMBER() OVER (
+                  PARTITION BY o.scope_id, o.backend_entity_id
+                  ORDER BY
+                    CASE WHEN COALESCE(o.gross_value, 0) > 0 OR COALESCE(o.net_value, 0) > 0 THEN 1 ELSE 0 END DESC,
+                    ${rankSql} DESC,
+                    o.occurred_at DESC,
+                    o.updated_at DESC,
+                    o.logical_row_id DESC
+                ) AS entity_rank
+           FROM attribution_business_outcomes o
+           LEFT JOIN attribution_outcome_attributions a
+             ON a.scope_id = o.scope_id
+            AND a.outcome_id = o.backend_entity_id
+          WHERE ${clauses.join(" AND ")}
+            AND ${predicate}
+       )
+       SELECT *
+         FROM ranked
+        WHERE entity_rank = 1
+        ORDER BY occurred_at DESC, backend_entity_id DESC`,
+    )
+    .all(...queryParams) as SqlRow[];
+  return rows.map(toLedgerRow);
+}
+
+function applyLedgerFilters(
+  rows: AttributionLedgerRowRecord[],
+  filters: AttributionLedgerFilterRecord,
+): AttributionLedgerRowRecord[] {
+  const sourceChannel = asOptionalString(filters.sourceChannel);
+  const query = asOptionalString(filters.query)?.toLowerCase() ?? null;
+  return rows.filter((row) => {
+    if (filters.reviewOnly && !row.needsReview) {
+      return false;
+    }
+    if (filters.unresolvedOnly && !row.unresolved) {
+      return false;
+    }
+    if (filters.weakMatchOnly && !row.weakMatch) {
+      return false;
+    }
+    if (filters.paidOnly && !row.paid) {
+      return false;
+    }
+    if (filters.exactPaidIdOnly && !row.exactPaidId) {
+      return false;
+    }
+    if (filters.utmOnly && !row.utmOnly) {
+      return false;
+    }
+    if (filters.directOrUnknownOnly && !row.directOrUnknown) {
+      return false;
+    }
+    if (sourceChannel && row.attribution?.sourceChannel !== sourceChannel) {
+      return false;
+    }
+    if (query) {
+      const haystack = [
+        row.backendEntityId,
+        row.displayTitle,
+        row.customerEmail,
+        row.customerId,
+        row.outcomeType,
+        row.outcomeStatus,
+        row.attribution?.sourceChannel,
+      ]
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(query)) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
+function summarizeLedgerRows(rows: AttributionLedgerRowRecord[]): AttributionLedgerSummaryRecord {
+  return {
+    totalPrimaryOutcomes: rows.length,
+    resolvedPrimaryOutcomes: rows.filter((row) => !row.unresolved).length,
+    unresolvedPrimaryOutcomes: rows.filter((row) => row.unresolved).length,
+    reviewPrimaryOutcomes: rows.filter((row) => row.needsReview).length,
+    weakMatchPrimaryOutcomes: rows.filter((row) => row.weakMatch).length,
+    paidPrimaryOutcomes: rows.filter((row) => row.paid).length,
+    exactPaidIdPrimaryOutcomes: rows.filter((row) => row.exactPaidId).length,
+    utmOnlyPrimaryOutcomes: rows.filter((row) => row.utmOnly).length,
+    multiSignalPrimaryOutcomes: rows.filter((row) => row.multiSignal).length,
+    directOrUnknownPrimaryOutcomes: rows.filter((row) => row.directOrUnknown).length,
   };
 }
 
@@ -777,7 +1286,7 @@ export function listBindings(db: DatabaseSync, params?: {
   const rows = db
     .prepare(
       `SELECT binding_id, scope_id, identity_key, role, source_type, connection_id,
-              website_installation_id, platform, label, metadata_json, created_at, updated_at
+              platform, label, metadata_json, created_at, updated_at
          FROM attribution_bindings
          ${conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""}
         ORDER BY updated_at DESC, binding_id ASC`,
@@ -798,7 +1307,7 @@ export function listBindingsForConnection(
   const rows = db
     .prepare(
       `SELECT binding_id, scope_id, identity_key, role, source_type, connection_id,
-              website_installation_id, platform, label, metadata_json, created_at, updated_at
+              platform, label, metadata_json, created_at, updated_at
          FROM attribution_bindings
         WHERE connection_id = ?
           ${role ? "AND role = ?" : ""}
@@ -808,24 +1317,30 @@ export function listBindingsForConnection(
   return rows.map(mapBindingRow);
 }
 
-export function listBindingsForWebsiteInstallation(
+export function deleteBinding(
   db: DatabaseSync,
-  websiteInstallationId: string,
-): AttributionBindingRecord[] {
-  const normalized = asString(websiteInstallationId);
+  bindingId: string,
+): AttributionBindingRecord | null {
+  const normalized = asString(bindingId);
   if (!normalized) {
-    return [];
+    return null;
   }
-  const rows = db
+  const existing = db
     .prepare(
       `SELECT binding_id, scope_id, identity_key, role, source_type, connection_id,
-              website_installation_id, platform, label, metadata_json, created_at, updated_at
+              platform, label, metadata_json, created_at, updated_at
          FROM attribution_bindings
-        WHERE website_installation_id = ?
-        ORDER BY updated_at DESC, binding_id ASC`,
+        WHERE binding_id = ?`,
     )
-    .all(normalized) as SqlRow[];
-  return rows.map(mapBindingRow);
+    .get(normalized) as SqlRow | undefined;
+  if (!existing) {
+    return null;
+  }
+  db.prepare(
+    `DELETE FROM attribution_bindings
+      WHERE binding_id = ?`,
+  ).run(normalized);
+  return mapBindingRow(existing);
 }
 
 export function upsertBinding(db: DatabaseSync, input: {
@@ -834,7 +1349,6 @@ export function upsertBinding(db: DatabaseSync, input: {
   role: AttributionBindingRole;
   sourceType: AttributionBindingSourceType;
   connectionId?: string | null;
-  websiteInstallationId?: string | null;
   platform?: string | null;
   label?: string | null;
   metadata?: Record<string, unknown> | null;
@@ -849,13 +1363,12 @@ export function upsertBinding(db: DatabaseSync, input: {
     role: input.role,
     sourceType: input.sourceType,
     connectionId: input.connectionId,
-    websiteInstallationId: input.websiteInstallationId,
     platform: input.platform,
   });
   const existing = db
     .prepare(
       `SELECT binding_id, scope_id, identity_key, role, source_type, connection_id,
-              website_installation_id, platform, label, metadata_json, created_at, updated_at
+              platform, label, metadata_json, created_at, updated_at
          FROM attribution_bindings
         WHERE identity_key = ?`,
     )
@@ -866,14 +1379,13 @@ export function upsertBinding(db: DatabaseSync, input: {
   db.prepare(
     `INSERT INTO attribution_bindings (
        binding_id, scope_id, identity_key, role, source_type, connection_id,
-       website_installation_id, platform, label, metadata_json, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       platform, label, metadata_json, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(identity_key) DO UPDATE SET
        scope_id = excluded.scope_id,
        role = excluded.role,
        source_type = excluded.source_type,
        connection_id = excluded.connection_id,
-       website_installation_id = excluded.website_installation_id,
        platform = excluded.platform,
        label = excluded.label,
        metadata_json = excluded.metadata_json,
@@ -885,7 +1397,6 @@ export function upsertBinding(db: DatabaseSync, input: {
     input.role,
     input.sourceType,
     asOptionalString(input.connectionId),
-    asOptionalString(input.websiteInstallationId),
     asOptionalString(input.platform),
     asOptionalString(input.label),
     stringifyJson(input.metadata ?? {}),
@@ -896,7 +1407,7 @@ export function upsertBinding(db: DatabaseSync, input: {
   const row = db
     .prepare(
       `SELECT binding_id, scope_id, identity_key, role, source_type, connection_id,
-              website_installation_id, platform, label, metadata_json, created_at, updated_at
+              platform, label, metadata_json, created_at, updated_at
          FROM attribution_bindings
         WHERE identity_key = ?`,
     )
@@ -1073,14 +1584,14 @@ export function upsertAdFact(db: DatabaseSync, fact: AttributionAdFactRecord): v
 export function upsertWebEvent(db: DatabaseSync, event: AttributionWebEventRecord): void {
   db.prepare(
     `INSERT INTO attribution_web_events (
-       scope_id, website_installation_id, logical_row_id, source_record_id, event_id, event_name,
+       scope_id, web_installation_id, logical_row_id, source_record_id, event_id, event_name,
        captured_at, session_id, browser_id, consent_state, page_url, page_path, host, referrer,
        event_source_url, source_channel, source_confidence, utm_source, utm_medium, utm_campaign,
        utm_content, utm_term, fbclid, fbc, fbp, gclid, gbraid, wbraid, ttclid, ttp, msclkid,
        bridge_surface, handoff_id, checkout_token, checkout_key, checkout_id, cart_token, form_id,
        form_submission_id, booking_id, booking_slot_id, lead_external_id, row_json, updated_at
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(scope_id, website_installation_id, logical_row_id) DO UPDATE SET
+     ON CONFLICT(scope_id, web_installation_id, logical_row_id) DO UPDATE SET
        source_record_id = excluded.source_record_id,
        event_id = excluded.event_id,
        event_name = excluded.event_name,
@@ -1124,7 +1635,7 @@ export function upsertWebEvent(db: DatabaseSync, event: AttributionWebEventRecor
        updated_at = excluded.updated_at`,
   ).run(
     event.scopeId,
-    event.websiteInstallationId,
+    event.webInstallationId,
     event.logicalRowId,
     event.sourceRecordId,
     event.eventId,
@@ -1178,16 +1689,36 @@ export function replaceSessionSourceFacts(
   db.prepare(`DELETE FROM attribution_session_source_facts WHERE scope_id = ?`).run(scopeId);
   const statement = db.prepare(
     `INSERT INTO attribution_session_source_facts (
-       scope_id, website_installation_id, session_id, first_seen_at, last_seen_at, event_count,
+       scope_id, web_installation_id, session_id, first_seen_at, last_seen_at, event_count,
        page_views, content_views, cta_clicks, handoff_starts, handoff_confirmed, product_views,
        cart_adds, checkout_starts, checkout_completes, form_starts, form_submits, bookings_completed,
        source_channel, source_confidence, evidence_json, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(scope_id, web_installation_id, session_id) DO UPDATE SET
+       first_seen_at = excluded.first_seen_at,
+       last_seen_at = excluded.last_seen_at,
+       event_count = excluded.event_count,
+       page_views = excluded.page_views,
+       content_views = excluded.content_views,
+       cta_clicks = excluded.cta_clicks,
+       handoff_starts = excluded.handoff_starts,
+       handoff_confirmed = excluded.handoff_confirmed,
+       product_views = excluded.product_views,
+       cart_adds = excluded.cart_adds,
+       checkout_starts = excluded.checkout_starts,
+       checkout_completes = excluded.checkout_completes,
+       form_starts = excluded.form_starts,
+       form_submits = excluded.form_submits,
+       bookings_completed = excluded.bookings_completed,
+       source_channel = excluded.source_channel,
+       source_confidence = excluded.source_confidence,
+       evidence_json = excluded.evidence_json,
+       updated_at = excluded.updated_at`,
   );
   for (const row of rows) {
     statement.run(
       row.scopeId,
-      row.websiteInstallationId,
+      row.webInstallationId,
       row.sessionId,
       row.firstSeenAt,
       row.lastSeenAt,
@@ -1220,17 +1751,37 @@ export function replaceConversionBridges(
   db.prepare(`DELETE FROM attribution_conversion_bridges WHERE scope_id = ?`).run(scopeId);
   const statement = db.prepare(
     `INSERT INTO attribution_conversion_bridges (
-       scope_id, bridge_key, website_installation_id, session_id, bridge_surface, handoff_id,
+       scope_id, bridge_key, web_installation_id, session_id, bridge_surface, handoff_id,
        checkout_token, checkout_key, checkout_id, cart_token, form_id, form_submission_id, booking_id,
        booking_slot_id, lead_external_id, event_id, source_channel, source_confidence, evidence_json,
        occurred_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(scope_id, bridge_key) DO UPDATE SET
+       web_installation_id = excluded.web_installation_id,
+       session_id = excluded.session_id,
+       bridge_surface = excluded.bridge_surface,
+       handoff_id = excluded.handoff_id,
+       checkout_token = excluded.checkout_token,
+       checkout_key = excluded.checkout_key,
+       checkout_id = excluded.checkout_id,
+       cart_token = excluded.cart_token,
+       form_id = excluded.form_id,
+       form_submission_id = excluded.form_submission_id,
+       booking_id = excluded.booking_id,
+       booking_slot_id = excluded.booking_slot_id,
+       lead_external_id = excluded.lead_external_id,
+       event_id = excluded.event_id,
+       source_channel = excluded.source_channel,
+       source_confidence = excluded.source_confidence,
+       evidence_json = excluded.evidence_json,
+       occurred_at = excluded.occurred_at,
+       updated_at = excluded.updated_at`,
   );
   for (const row of rows) {
     statement.run(
       row.scopeId,
       row.bridgeKey,
-      asOptionalString(row.websiteInstallationId),
+      asOptionalString(row.webInstallationId),
       asOptionalString(row.sessionId),
       asOptionalString(row.bridgeSurface),
       asOptionalString(row.handoffId),
@@ -1312,7 +1863,16 @@ export function replaceOutcomeAttributions(
     `INSERT INTO attribution_outcome_attributions (
        scope_id, outcome_id, source_channel, source_confidence, match_method, paid_platform,
        session_id, evidence_json, unresolved_reason, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(scope_id, outcome_id) DO UPDATE SET
+       source_channel = excluded.source_channel,
+       source_confidence = excluded.source_confidence,
+       match_method = excluded.match_method,
+       paid_platform = excluded.paid_platform,
+       session_id = excluded.session_id,
+       evidence_json = excluded.evidence_json,
+       unresolved_reason = excluded.unresolved_reason,
+       updated_at = excluded.updated_at`,
   );
   for (const row of rows) {
     statement.run(
@@ -1340,7 +1900,16 @@ export function replaceDailySourceMarts(
     `INSERT INTO attribution_daily_source_marts (
        scope_id, date, source_channel, spend, impressions, clicks, landing_page_views,
        purchases, purchase_value, outcomes, gross_revenue
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(scope_id, date, source_channel) DO UPDATE SET
+       spend = excluded.spend,
+       impressions = excluded.impressions,
+       clicks = excluded.clicks,
+       landing_page_views = excluded.landing_page_views,
+       purchases = excluded.purchases,
+       purchase_value = excluded.purchase_value,
+       outcomes = excluded.outcomes,
+       gross_revenue = excluded.gross_revenue`,
   );
   for (const row of rows) {
     statement.run(
@@ -1370,7 +1939,23 @@ export function replaceDailyFunnelMarts(
        scope_id, date, source_channel, sessions, page_views, content_views, cta_clicks,
        handoff_starts, handoff_confirmed, product_views, cart_adds, checkout_starts,
        checkout_completes, form_starts, form_submits, bookings_completed, outcomes, gross_revenue
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(scope_id, date, source_channel) DO UPDATE SET
+       sessions = excluded.sessions,
+       page_views = excluded.page_views,
+       content_views = excluded.content_views,
+       cta_clicks = excluded.cta_clicks,
+       handoff_starts = excluded.handoff_starts,
+       handoff_confirmed = excluded.handoff_confirmed,
+       product_views = excluded.product_views,
+       cart_adds = excluded.cart_adds,
+       checkout_starts = excluded.checkout_starts,
+       checkout_completes = excluded.checkout_completes,
+       form_starts = excluded.form_starts,
+       form_submits = excluded.form_submits,
+       bookings_completed = excluded.bookings_completed,
+       outcomes = excluded.outcomes,
+       gross_revenue = excluded.gross_revenue`,
   );
   for (const row of rows) {
     statement.run(
@@ -1399,7 +1984,7 @@ export function replaceDailyFunnelMarts(
 export function listSessionSourceFacts(db: DatabaseSync, scopeId: string): AttributionSessionSourceFact[] {
   const rows = db
     .prepare(
-      `SELECT scope_id, website_installation_id, session_id, first_seen_at, last_seen_at, event_count,
+      `SELECT scope_id, web_installation_id, session_id, first_seen_at, last_seen_at, event_count,
               page_views, content_views, cta_clicks, handoff_starts, handoff_confirmed, product_views,
               cart_adds, checkout_starts, checkout_completes, form_starts, form_submits, bookings_completed,
               source_channel, source_confidence, evidence_json, updated_at
@@ -1410,7 +1995,7 @@ export function listSessionSourceFacts(db: DatabaseSync, scopeId: string): Attri
     .all(scopeId) as SqlRow[];
   return rows.map((row) => ({
     scopeId: asString(row.scope_id),
-    websiteInstallationId: asString(row.website_installation_id),
+    webInstallationId: asString(row.web_installation_id),
     sessionId: asString(row.session_id),
     firstSeenAt: asInteger(row.first_seen_at),
     lastSeenAt: asInteger(row.last_seen_at),
@@ -1480,7 +2065,7 @@ export function listAdFactsForScope(db: DatabaseSync, scopeId: string): Attribut
 export function listWebEventsForScope(db: DatabaseSync, scopeId: string): AttributionWebEventRecord[] {
   const rows = db
     .prepare(
-      `SELECT scope_id, source_record_id, logical_row_id, website_installation_id, event_id, event_name,
+      `SELECT scope_id, source_record_id, logical_row_id, web_installation_id, event_id, event_name,
               captured_at, session_id, browser_id, consent_state, page_url, page_path, host, referrer,
               event_source_url, source_channel, source_confidence, utm_source, utm_medium, utm_campaign,
               utm_content, utm_term, fbclid, fbc, fbp, gclid, gbraid, wbraid, ttclid, ttp, msclkid,
@@ -1495,7 +2080,7 @@ export function listWebEventsForScope(db: DatabaseSync, scopeId: string): Attrib
     scopeId: asString(row.scope_id),
     sourceRecordId: asString(row.source_record_id),
     logicalRowId: asString(row.logical_row_id),
-    websiteInstallationId: asString(row.website_installation_id),
+    webInstallationId: asString(row.web_installation_id),
     eventId: asString(row.event_id),
     eventName: asString(row.event_name),
     capturedAt: asInteger(row.captured_at),
@@ -1569,7 +2154,9 @@ export function listBusinessOutcomes(db: DatabaseSync, params?: {
 export function getBusinessOutcome(
   db: DatabaseSync,
   outcomeId: string,
+  scopeId?: string | null,
 ): (AttributionBusinessOutcomeRecord & { attribution: AttributionOutcomeAttributionRecord | null }) | null {
+  const normalizedScopeId = asOptionalString(scopeId);
   const row = db
     .prepare(
       `SELECT o.scope_id, o.platform, o.logical_row_id, o.source_record_id, o.connection_id,
@@ -1584,16 +2171,157 @@ export function getBusinessOutcome(
            ON a.scope_id = o.scope_id
           AND a.outcome_id = o.backend_entity_id
         WHERE o.backend_entity_id = ?
+          ${normalizedScopeId ? "AND o.scope_id = ?" : ""}
         LIMIT 1`,
     )
-    .get(outcomeId.trim()) as SqlRow | undefined;
+    .get(...(normalizedScopeId ? [outcomeId.trim(), normalizedScopeId] : [outcomeId.trim()])) as SqlRow | undefined;
   return row ? mapOutcomeRow(row) : null;
 }
 
-export function readSummary(db: DatabaseSync, scopeId: string, days = 30): Record<string, unknown> {
-  const since = startOfDayMs(Date.now() - Math.max(1, days) * DAY_MS);
-  const sinceDate = isoDay(since);
-  const sourceRows = db
+export function listLedgerOutcomes(db: DatabaseSync, params: {
+  scopeId: string;
+  days?: number;
+  limit?: number;
+  offset?: number;
+  reviewOnly?: boolean;
+  unresolvedOnly?: boolean;
+  weakMatchOnly?: boolean;
+  paidOnly?: boolean;
+  exactPaidIdOnly?: boolean;
+  utmOnly?: boolean;
+  directOrUnknownOnly?: boolean;
+  sourceChannel?: string | null;
+  query?: string | null;
+}): {
+  rows: AttributionLedgerRowRecord[];
+  summary: AttributionLedgerSummaryRecord;
+  total: number;
+  currentWindow: { since: string; untilExclusive: string };
+} {
+  const days = Math.max(1, Math.trunc(params.days ?? 30));
+  const windows = buildSummaryWindow(days);
+  const rows = applyLedgerFilters(
+    listPrimaryOutcomeCandidates(db, {
+      scopeId: params.scopeId,
+      sinceTs: windows.currentSinceTs,
+      untilTs: windows.currentUntilTs,
+    }),
+    {
+      reviewOnly: Boolean(params.reviewOnly),
+      unresolvedOnly: Boolean(params.unresolvedOnly),
+      weakMatchOnly: Boolean(params.weakMatchOnly),
+      paidOnly: Boolean(params.paidOnly),
+      exactPaidIdOnly: Boolean(params.exactPaidIdOnly),
+      utmOnly: Boolean(params.utmOnly),
+      directOrUnknownOnly: Boolean(params.directOrUnknownOnly),
+      sourceChannel: asOptionalString(params.sourceChannel),
+      query: asOptionalString(params.query),
+    },
+  );
+  const total = rows.length;
+  const limit = Math.max(1, Math.trunc(params.limit ?? 50));
+  const offset = Math.max(0, Math.trunc(params.offset ?? 0));
+  return {
+    rows: rows.slice(offset, offset + limit),
+    summary: summarizeLedgerRows(rows),
+    total,
+    currentWindow: {
+      since: windows.currentSinceDate,
+      untilExclusive: windows.currentUntilDate,
+    },
+  };
+}
+
+export function readLedgerSummary(db: DatabaseSync, params: {
+  scopeId: string;
+  days?: number;
+}): {
+  currentWindow: { since: string; untilExclusive: string };
+  summary: AttributionLedgerSummaryRecord;
+} {
+  const days = Math.max(1, Math.trunc(params.days ?? 30));
+  const windows = buildSummaryWindow(days);
+  const rows = listPrimaryOutcomeCandidates(db, {
+    scopeId: params.scopeId,
+    sinceTs: windows.currentSinceTs,
+    untilTs: windows.currentUntilTs,
+  });
+  return {
+    currentWindow: {
+      since: windows.currentSinceDate,
+      untilExclusive: windows.currentUntilDate,
+    },
+    summary: summarizeLedgerRows(rows),
+  };
+}
+
+export function getLedgerOutcome(db: DatabaseSync, params: {
+  scopeId: string;
+  outcomeId: string;
+}): AttributionLedgerRowRecord | null {
+  const row = listPrimaryOutcomeCandidates(db, {
+    scopeId: params.scopeId,
+    outcomeId: params.outcomeId,
+  })[0];
+  return row ?? null;
+}
+
+function buildSummaryWindow(days: number): {
+  currentSinceTs: number;
+  currentUntilTs: number;
+  compareSinceTs: number;
+  compareUntilTs: number;
+  currentSinceDate: string;
+  currentUntilDate: string;
+  compareSinceDate: string;
+  compareUntilDate: string;
+} {
+  const spanDays = Math.max(1, Math.trunc(days));
+  const currentSinceTs = startOfDayMs(Date.now() - spanDays * DAY_MS);
+  const currentUntilTs = startOfDayMs(Date.now() + DAY_MS);
+  const compareUntilTs = currentSinceTs;
+  const compareSinceTs = compareUntilTs - spanDays * DAY_MS;
+  return {
+    currentSinceTs,
+    currentUntilTs,
+    compareSinceTs,
+    compareUntilTs,
+    currentSinceDate: isoDay(currentSinceTs),
+    currentUntilDate: isoDay(currentUntilTs),
+    compareSinceDate: isoDay(compareSinceTs),
+    compareUntilDate: isoDay(compareUntilTs),
+  };
+}
+
+function ratio(numerator: number, denominator: number): number {
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) {
+    return 0;
+  }
+  return numerator / denominator;
+}
+
+function metricCard(current: number, previous: number, formatter: string): Record<string, unknown> {
+  let delta: number | null = null;
+  if (previous !== 0) {
+    delta = (current - previous) / previous;
+  } else if (current !== 0) {
+    delta = 1;
+  }
+  return {
+    value: current,
+    previous,
+    delta,
+    formatter,
+  };
+}
+
+function readSummaryTotals(
+  db: DatabaseSync,
+  scopeId: string,
+  sinceDate: string,
+  untilDate: string,
+): SqlRow {
+  return db
     .prepare(
       `SELECT COALESCE(SUM(spend), 0) AS spend,
               COALESCE(SUM(impressions), 0) AS impressions,
@@ -1604,31 +2332,416 @@ export function readSummary(db: DatabaseSync, scopeId: string, days = 30): Recor
               COALESCE(SUM(outcomes), 0) AS outcomes,
               COALESCE(SUM(gross_revenue), 0) AS gross_revenue
          FROM attribution_daily_source_marts
-        WHERE scope_id = ? AND date >= ?`,
+        WHERE scope_id = ?
+          AND date >= ?
+          AND date < ?`,
     )
-    .get(scopeId, sinceDate) as SqlRow;
+    .get(scopeId, sinceDate, untilDate) as SqlRow;
+}
+
+function readAttributionStrip(
+  db: DatabaseSync,
+  scopeId: string,
+  sinceTs: number,
+  untilTs: number,
+): Record<string, number> {
+  const summary = summarizeLedgerRows(
+    listPrimaryOutcomeCandidates(db, {
+      scopeId,
+      sinceTs,
+      untilTs,
+    }),
+  );
+  const totalPrimaryOutcomes = summary.totalPrimaryOutcomes;
+  const resolvedPrimaryOutcomes = summary.resolvedPrimaryOutcomes;
+  const unresolvedPrimaryOutcomes = summary.unresolvedPrimaryOutcomes;
+  return {
+    total_primary_outcomes: totalPrimaryOutcomes,
+    resolved_primary_outcomes: resolvedPrimaryOutcomes,
+    unresolved_primary_outcomes: unresolvedPrimaryOutcomes,
+    review_primary_outcomes: summary.reviewPrimaryOutcomes,
+    weak_match_primary_outcomes: summary.weakMatchPrimaryOutcomes,
+    direct_or_unknown_primary_outcomes: summary.directOrUnknownPrimaryOutcomes,
+    paid_primary_outcomes: summary.paidPrimaryOutcomes,
+    exact_paid_id_primary_outcomes: summary.exactPaidIdPrimaryOutcomes,
+    utm_only_primary_outcomes: summary.utmOnlyPrimaryOutcomes,
+    multi_signal_primary_outcomes: summary.multiSignalPrimaryOutcomes,
+    coverage_rate: ratio(resolvedPrimaryOutcomes, totalPrimaryOutcomes),
+    unresolved_rate: ratio(unresolvedPrimaryOutcomes, totalPrimaryOutcomes),
+  };
+}
+
+function readLatestActivity(db: DatabaseSync, scopeId: string): Record<string, unknown> {
+  const row = db
+    .prepare(
+      `SELECT
+          (SELECT MAX(updated_at) FROM attribution_ad_facts WHERE scope_id = ?) AS latest_ad_fact_at,
+          (SELECT MAX(captured_at) FROM attribution_web_events WHERE scope_id = ?) AS latest_web_event_at,
+          (SELECT MAX(captured_at) FROM attribution_web_events WHERE scope_id = ? AND event_name = 'product_view') AS last_product_view_at,
+          (SELECT MAX(captured_at) FROM attribution_web_events WHERE scope_id = ? AND event_name = 'cta_click') AS last_cta_click_at,
+          (SELECT MAX(captured_at) FROM attribution_web_events WHERE scope_id = ? AND event_name = 'handoff_start') AS last_handoff_started_at,
+          (SELECT MAX(captured_at) FROM attribution_web_events WHERE scope_id = ? AND event_name = 'handoff_confirmed') AS last_handoff_confirmed_at,
+          (SELECT MAX(occurred_at) FROM attribution_business_outcomes WHERE scope_id = ?) AS latest_backend_outcome_at`,
+    )
+    .get(scopeId, scopeId, scopeId, scopeId, scopeId, scopeId, scopeId) as SqlRow;
+  return {
+    latest_ad_fact_at: asNumber(row.latest_ad_fact_at),
+    latest_web_event_at: asNumber(row.latest_web_event_at),
+    last_product_view_at: asNumber(row.last_product_view_at),
+    last_cta_click_at: asNumber(row.last_cta_click_at),
+    last_handoff_started_at: asNumber(row.last_handoff_started_at),
+    last_handoff_confirmed_at: asNumber(row.last_handoff_confirmed_at),
+    latest_backend_outcome_at: asNumber(row.latest_backend_outcome_at),
+  };
+}
+
+type SourceMartMetrics = {
+  spend: number;
+  impressions: number;
+  clicks: number;
+  landing_page_views: number;
+  purchases: number;
+  purchase_value: number;
+  outcomes: number;
+  gross_revenue: number;
+};
+
+function emptySourceMartMetrics(): SourceMartMetrics {
+  return {
+    spend: 0,
+    impressions: 0,
+    clicks: 0,
+    landing_page_views: 0,
+    purchases: 0,
+    purchase_value: 0,
+    outcomes: 0,
+    gross_revenue: 0,
+  };
+}
+
+function addSourceMartMetrics(target: SourceMartMetrics, row: SqlRow): void {
+  target.spend += asNumber(row.spend) ?? 0;
+  target.impressions += asNumber(row.impressions) ?? 0;
+  target.clicks += asNumber(row.clicks) ?? 0;
+  target.landing_page_views += asNumber(row.landing_page_views) ?? 0;
+  target.purchases += asNumber(row.purchases) ?? 0;
+  target.purchase_value += asNumber(row.purchase_value) ?? 0;
+  target.outcomes += asNumber(row.outcomes) ?? 0;
+  target.gross_revenue += asNumber(row.gross_revenue) ?? 0;
+}
+
+function sourceMartMetricCards(current: SourceMartMetrics, previous: SourceMartMetrics): Record<string, unknown> {
+  return {
+    spend: metricCard(current.spend, previous.spend, "money"),
+    clicks: metricCard(current.clicks, previous.clicks, "count"),
+    outcomes: metricCard(current.outcomes, previous.outcomes, "count"),
+    gross_revenue: metricCard(current.gross_revenue, previous.gross_revenue, "money"),
+    roas: metricCard(
+      ratio(current.purchase_value, current.spend),
+      ratio(previous.purchase_value, previous.spend),
+      "ratio",
+    ),
+  };
+}
+
+function classifyChannelFamily(sourceChannel: string): string {
+  const normalized = sourceChannel.trim().toLowerCase();
+  if (!normalized || normalized === "direct_or_unknown") {
+    return "direct";
+  }
+  if (
+    normalized.endsWith("_paid") ||
+    normalized.includes("paid_") ||
+    normalized.startsWith("paid_") ||
+    normalized === "search_paid" ||
+    normalized === "meta_paid" ||
+    normalized === "google_paid" ||
+    normalized === "tiktok_paid"
+  ) {
+    return "paid";
+  }
+  if (normalized.includes("referral") || normalized.includes("affiliate") || normalized.includes("partner")) {
+    return "referral";
+  }
+  if (
+    normalized.includes("organic") ||
+    normalized === "shop_app" ||
+    normalized === "email" ||
+    normalized === "sms" ||
+    normalized === "ig" ||
+    normalized === "facebook_organic_social"
+  ) {
+    return "organic";
+  }
+  return "organic";
+}
+
+function sortChannelFamily(value: string): number {
+  switch (value) {
+    case "paid":
+      return 0;
+    case "organic":
+      return 1;
+    case "referral":
+      return 2;
+    case "direct":
+      return 3;
+    default:
+      return 4;
+  }
+}
+
+function readSourceBreakdowns(
+  db: DatabaseSync,
+  scopeId: string,
+  windows: ReturnType<typeof buildSummaryWindow>,
+): {
+  channel_groups: Array<Record<string, unknown>>;
+  source_breakdown: Array<Record<string, unknown>>;
+  channel_trajectory: Array<Record<string, unknown>>;
+  source_trajectory: Array<Record<string, unknown>>;
+} {
+  const rows = db
+    .prepare(
+      `SELECT date, source_channel,
+              COALESCE(SUM(spend), 0) AS spend,
+              COALESCE(SUM(impressions), 0) AS impressions,
+              COALESCE(SUM(clicks), 0) AS clicks,
+              COALESCE(SUM(landing_page_views), 0) AS landing_page_views,
+              COALESCE(SUM(purchases), 0) AS purchases,
+              COALESCE(SUM(purchase_value), 0) AS purchase_value,
+              COALESCE(SUM(outcomes), 0) AS outcomes,
+              COALESCE(SUM(gross_revenue), 0) AS gross_revenue
+         FROM attribution_daily_source_marts
+        WHERE scope_id = ?
+          AND date >= ?
+          AND date < ?
+        GROUP BY date, source_channel
+        ORDER BY date ASC, source_channel ASC`,
+    )
+    .all(scopeId, windows.compareSinceDate, windows.currentUntilDate) as SqlRow[];
+
+  const sourceCurrent = new Map<string, SourceMartMetrics>();
+  const sourceCompare = new Map<string, SourceMartMetrics>();
+  const familyCurrent = new Map<string, SourceMartMetrics>();
+  const familyCompare = new Map<string, SourceMartMetrics>();
+  const channelTrajectory = new Map<string, SourceMartMetrics>();
+
+  for (const row of rows) {
+    const date = asString(row.date);
+    const sourceChannel = asString(row.source_channel);
+    const family = classifyChannelFamily(sourceChannel);
+    const inCurrent = date >= windows.currentSinceDate && date < windows.currentUntilDate;
+    const inCompare = date >= windows.compareSinceDate && date < windows.compareUntilDate;
+
+    if (inCurrent) {
+      const sourceMetrics = sourceCurrent.get(sourceChannel) ?? emptySourceMartMetrics();
+      addSourceMartMetrics(sourceMetrics, row);
+      sourceCurrent.set(sourceChannel, sourceMetrics);
+
+      const familyMetrics = familyCurrent.get(family) ?? emptySourceMartMetrics();
+      addSourceMartMetrics(familyMetrics, row);
+      familyCurrent.set(family, familyMetrics);
+
+      const trajectoryKey = `${date}:${family}`;
+      const trajectoryMetrics = channelTrajectory.get(trajectoryKey) ?? emptySourceMartMetrics();
+      addSourceMartMetrics(trajectoryMetrics, row);
+      channelTrajectory.set(trajectoryKey, trajectoryMetrics);
+    }
+
+    if (inCompare) {
+      const sourceMetrics = sourceCompare.get(sourceChannel) ?? emptySourceMartMetrics();
+      addSourceMartMetrics(sourceMetrics, row);
+      sourceCompare.set(sourceChannel, sourceMetrics);
+
+      const familyMetrics = familyCompare.get(family) ?? emptySourceMartMetrics();
+      addSourceMartMetrics(familyMetrics, row);
+      familyCompare.set(family, familyMetrics);
+    }
+  }
+
+  const sourceBreakdown = Array.from(new Set([...sourceCurrent.keys(), ...sourceCompare.keys()]))
+    .map((sourceChannel) => {
+      const current = sourceCurrent.get(sourceChannel) ?? emptySourceMartMetrics();
+      const previous = sourceCompare.get(sourceChannel) ?? emptySourceMartMetrics();
+      return {
+        source_channel: sourceChannel,
+        channel_family: classifyChannelFamily(sourceChannel),
+        totals: { ...current },
+        compare_totals: { ...previous },
+        kpis: sourceMartMetricCards(current, previous),
+      };
+    })
+    .sort((left, right) => {
+      const leftRevenue = asNumber(asRecord(left.totals).gross_revenue) ?? 0;
+      const rightRevenue = asNumber(asRecord(right.totals).gross_revenue) ?? 0;
+      if (rightRevenue !== leftRevenue) {
+        return rightRevenue - leftRevenue;
+      }
+      const leftSpend = asNumber(asRecord(left.totals).spend) ?? 0;
+      const rightSpend = asNumber(asRecord(right.totals).spend) ?? 0;
+      if (rightSpend !== leftSpend) {
+        return rightSpend - leftSpend;
+      }
+      return asString(left.source_channel).localeCompare(asString(right.source_channel));
+    });
+
+  const topSourceChannels = new Set(
+    sourceBreakdown
+      .slice(0, 6)
+      .map((row) => asString(row.source_channel))
+      .filter(Boolean),
+  );
+
+  const channelGroups = Array.from(new Set([...familyCurrent.keys(), ...familyCompare.keys()]))
+    .map((family) => {
+      const current = familyCurrent.get(family) ?? emptySourceMartMetrics();
+      const previous = familyCompare.get(family) ?? emptySourceMartMetrics();
+      return {
+        channel_family: family,
+        totals: { ...current },
+        compare_totals: { ...previous },
+        kpis: sourceMartMetricCards(current, previous),
+      };
+    })
+    .sort((left, right) => {
+      const familyDelta = sortChannelFamily(asString(left.channel_family)) - sortChannelFamily(asString(right.channel_family));
+      if (familyDelta !== 0) {
+        return familyDelta;
+      }
+      const leftRevenue = asNumber(asRecord(left.totals).gross_revenue) ?? 0;
+      const rightRevenue = asNumber(asRecord(right.totals).gross_revenue) ?? 0;
+      return rightRevenue - leftRevenue;
+    });
+
+  const sourceTrajectory = rows
+    .filter((row) => {
+      const date = asString(row.date);
+      const sourceChannel = asString(row.source_channel);
+      return (
+        date >= windows.currentSinceDate &&
+        date < windows.currentUntilDate &&
+        topSourceChannels.has(sourceChannel)
+      );
+    })
+    .map((row) => ({
+      date: asString(row.date),
+      source_channel: asString(row.source_channel),
+      channel_family: classifyChannelFamily(asString(row.source_channel)),
+      spend: asNumber(row.spend) ?? 0,
+      clicks: asNumber(row.clicks) ?? 0,
+      outcomes: asNumber(row.outcomes) ?? 0,
+      gross_revenue: asNumber(row.gross_revenue) ?? 0,
+    }));
+
+  const familyTrajectoryRows = Array.from(channelTrajectory.entries())
+    .map(([key, metrics]) => {
+      const [date, channelFamily] = key.split(":");
+      return {
+        date,
+        channel_family: channelFamily,
+        spend: metrics.spend,
+        clicks: metrics.clicks,
+        outcomes: metrics.outcomes,
+        gross_revenue: metrics.gross_revenue,
+      };
+    })
+    .sort((left, right) => {
+      const dateDelta = asString(left.date).localeCompare(asString(right.date));
+      if (dateDelta !== 0) {
+        return dateDelta;
+      }
+      return sortChannelFamily(asString(left.channel_family)) - sortChannelFamily(asString(right.channel_family));
+    });
+
+  return {
+    channel_groups: channelGroups,
+    source_breakdown: sourceBreakdown,
+    channel_trajectory: familyTrajectoryRows,
+    source_trajectory: sourceTrajectory,
+  };
+}
+
+export function readSummary(db: DatabaseSync, scopeId: string, days = 30): Record<string, unknown> {
+  const windows = buildSummaryWindow(days);
+  const sourceRows = readSummaryTotals(db, scopeId, windows.currentSinceDate, windows.currentUntilDate);
+  const compareRows = readSummaryTotals(db, scopeId, windows.compareSinceDate, windows.compareUntilDate);
+  const attributionStrip = readAttributionStrip(db, scopeId, windows.currentSinceTs, windows.currentUntilTs);
+  const compareAttributionStrip = readAttributionStrip(db, scopeId, windows.compareSinceTs, windows.compareUntilTs);
+  const sourceBreakdowns = readSourceBreakdowns(db, scopeId, windows);
   const topChannels = db
     .prepare(
-      `SELECT source_channel, spend, clicks, outcomes, gross_revenue
+      `SELECT source_channel,
+              COALESCE(SUM(spend), 0) AS spend,
+              COALESCE(SUM(clicks), 0) AS clicks,
+              COALESCE(SUM(outcomes), 0) AS outcomes,
+              COALESCE(SUM(gross_revenue), 0) AS gross_revenue
          FROM attribution_daily_source_marts
-        WHERE scope_id = ? AND date >= ?
+        WHERE scope_id = ?
+          AND date >= ?
+          AND date < ?
+        GROUP BY source_channel
         ORDER BY gross_revenue DESC, spend DESC
         LIMIT 8`,
     )
-    .all(scopeId, sinceDate) as SqlRow[];
+    .all(scopeId, windows.currentSinceDate, windows.currentUntilDate) as SqlRow[];
+  const totals = {
+    spend: asNumber(sourceRows.spend) ?? 0,
+    impressions: asNumber(sourceRows.impressions) ?? 0,
+    clicks: asNumber(sourceRows.clicks) ?? 0,
+    landing_page_views: asNumber(sourceRows.landing_page_views) ?? 0,
+    purchases: asNumber(sourceRows.purchases) ?? 0,
+    purchase_value: asNumber(sourceRows.purchase_value) ?? 0,
+    outcomes: asNumber(sourceRows.outcomes) ?? 0,
+    gross_revenue: asNumber(sourceRows.gross_revenue) ?? 0,
+  };
+  const compareTotals = {
+    spend: asNumber(compareRows.spend) ?? 0,
+    impressions: asNumber(compareRows.impressions) ?? 0,
+    clicks: asNumber(compareRows.clicks) ?? 0,
+    landing_page_views: asNumber(compareRows.landing_page_views) ?? 0,
+    purchases: asNumber(compareRows.purchases) ?? 0,
+    purchase_value: asNumber(compareRows.purchase_value) ?? 0,
+    outcomes: asNumber(compareRows.outcomes) ?? 0,
+    gross_revenue: asNumber(compareRows.gross_revenue) ?? 0,
+  };
   return {
     scope_id: scopeId,
     window_days: days,
-    totals: {
-      spend: asNumber(sourceRows.spend) ?? 0,
-      impressions: asNumber(sourceRows.impressions) ?? 0,
-      clicks: asNumber(sourceRows.clicks) ?? 0,
-      landing_page_views: asNumber(sourceRows.landing_page_views) ?? 0,
-      purchases: asNumber(sourceRows.purchases) ?? 0,
-      purchase_value: asNumber(sourceRows.purchase_value) ?? 0,
-      outcomes: asNumber(sourceRows.outcomes) ?? 0,
-      gross_revenue: asNumber(sourceRows.gross_revenue) ?? 0,
+    current_window: {
+      since: windows.currentSinceDate,
+      until_exclusive: windows.currentUntilDate,
     },
+    compare_window: {
+      since: windows.compareSinceDate,
+      until_exclusive: windows.compareUntilDate,
+    },
+    totals,
+    compare_totals: compareTotals,
+    kpis: {
+      spend: metricCard(totals.spend, compareTotals.spend, "money"),
+      impressions: metricCard(totals.impressions, compareTotals.impressions, "count"),
+      clicks: metricCard(totals.clicks, compareTotals.clicks, "count"),
+      landing_page_views: metricCard(totals.landing_page_views, compareTotals.landing_page_views, "count"),
+      purchases: metricCard(totals.purchases, compareTotals.purchases, "count"),
+      purchase_value: metricCard(totals.purchase_value, compareTotals.purchase_value, "money"),
+      outcomes: metricCard(totals.outcomes, compareTotals.outcomes, "count"),
+      gross_revenue: metricCard(totals.gross_revenue, compareTotals.gross_revenue, "money"),
+      roas: metricCard(
+        ratio(totals.purchase_value, totals.spend),
+        ratio(compareTotals.purchase_value, compareTotals.spend),
+        "ratio",
+      ),
+      match_rate: metricCard(attributionStrip.coverage_rate, compareAttributionStrip.coverage_rate, "percent"),
+    },
+    attribution_strip: attributionStrip,
+    compare_attribution_strip: compareAttributionStrip,
+    latest_activity: readLatestActivity(db, scopeId),
+    live_funnel: readLiveFunnel(db, scopeId),
+    channel_groups: sourceBreakdowns.channel_groups,
+    source_breakdown: sourceBreakdowns.source_breakdown,
+    channel_trajectory: sourceBreakdowns.channel_trajectory,
+    source_trajectory: sourceBreakdowns.source_trajectory,
     top_channels: topChannels.map((row) => ({
       source_channel: asString(row.source_channel),
       spend: asNumber(row.spend) ?? 0,
@@ -1639,21 +2752,138 @@ export function readSummary(db: DatabaseSync, scopeId: string, days = 30): Recor
   };
 }
 
+function readLiveFunnel(db: DatabaseSync, scopeId: string): Record<string, unknown> {
+  const windows = [
+    { window: "15m", minutes: 15 },
+    { window: "60m", minutes: 60 },
+    { window: "24h", minutes: 24 * 60 },
+  ].map(({ window, minutes }) => {
+    const sinceTs = nowMs() - minutes * 60 * 1000;
+    const events = db
+      .prepare(
+        `SELECT
+           COUNT(CASE WHEN event_name = 'product_view' THEN 1 END) AS product_views,
+           COUNT(CASE WHEN event_name = 'cta_click' THEN 1 END) AS cta_clicks,
+           COUNT(CASE WHEN event_name = 'handoff_start' THEN 1 END) AS handoff_starts,
+           COUNT(CASE WHEN event_name = 'handoff_confirmed' THEN 1 END) AS handoff_confirmed,
+           COUNT(DISTINCT CASE WHEN event_name = 'product_view' THEN session_id END) AS product_view_sessions,
+           COUNT(DISTINCT CASE WHEN event_name = 'cta_click' THEN session_id END) AS cta_click_sessions,
+           COUNT(DISTINCT CASE WHEN event_name = 'handoff_start' THEN session_id END) AS handoff_sessions
+         FROM attribution_web_events
+        WHERE scope_id = ?
+          AND captured_at >= ?`,
+      )
+      .get(scopeId, sinceTs) as SqlRow;
+    const outcomes = db
+      .prepare(
+        `SELECT
+           COUNT(DISTINCT CASE WHEN COALESCE(gross_value, 0) > 0 OR COALESCE(net_value, 0) > 0 THEN backend_entity_id END) AS attributed_outcomes,
+           COALESCE(SUM(CASE WHEN COALESCE(gross_value, 0) > 0 THEN gross_value ELSE 0 END), 0) AS gross_revenue
+         FROM attribution_business_outcomes
+        WHERE scope_id = ?
+          AND occurred_at >= ?`,
+      )
+      .get(scopeId, sinceTs) as SqlRow;
+    const productViews = asInteger(events.product_views);
+    const ctaClicks = asInteger(events.cta_clicks);
+    const handoffStarts = asInteger(events.handoff_starts);
+    const handoffConfirmed = asInteger(events.handoff_confirmed);
+    return {
+      window,
+      minutes,
+      product_views: productViews,
+      cta_clicks: ctaClicks,
+      handoff_starts: handoffStarts,
+      handoff_confirmed: handoffConfirmed,
+      handoff_unconfirmed: Math.max(0, handoffStarts - handoffConfirmed),
+      product_view_sessions: asInteger(events.product_view_sessions),
+      cta_click_sessions: asInteger(events.cta_click_sessions),
+      handoff_sessions: asInteger(events.handoff_sessions),
+      product_view_to_cta_rate: ratio(ctaClicks, productViews),
+      cta_to_handoff_rate: ratio(handoffStarts, ctaClicks),
+      handoff_confirmation_rate: ratio(handoffConfirmed, handoffStarts),
+      outcomes: asInteger(outcomes.attributed_outcomes),
+      gross_revenue: asNumber(outcomes.gross_revenue) ?? 0,
+    };
+  });
+
+  const latest = db
+    .prepare(
+      `SELECT
+         MAX(captured_at) AS last_event_at,
+         MAX(CASE WHEN event_name = 'product_view' THEN captured_at END) AS last_product_view_at,
+         MAX(CASE WHEN event_name = 'cta_click' THEN captured_at END) AS last_cta_click_at,
+         MAX(CASE WHEN event_name = 'handoff_start' THEN captured_at END) AS last_handoff_start_at,
+         MAX(CASE WHEN event_name = 'handoff_confirmed' THEN captured_at END) AS last_handoff_confirmed_at
+       FROM attribution_web_events
+      WHERE scope_id = ?`,
+    )
+    .get(scopeId) as SqlRow;
+  const latestOutcome = db
+    .prepare(
+      `SELECT MAX(occurred_at) AS last_outcome_at
+         FROM attribution_business_outcomes
+        WHERE scope_id = ?`,
+    )
+    .get(scopeId) as SqlRow;
+
+  const alerts: Array<Record<string, string>> = [];
+  const last15 = asRecord(windows[0]);
+  const last60 = asRecord(windows[1]);
+  if (asInteger(last15.cta_clicks) >= 5 && asInteger(last15.handoff_starts) === 0) {
+    alerts.push({
+      level: "critical",
+      title: "Clicks without handoffs",
+      detail: `${asInteger(last15.cta_clicks)} CTA clicks but 0 handoff starts in the last 15 minutes.`,
+    });
+  }
+  if (asInteger(last60.product_views) >= 20 && asInteger(last60.cta_clicks) === 0) {
+    alerts.push({
+      level: "warning",
+      title: "Views without clicks",
+      detail: `${asInteger(last60.product_views)} product views but 0 CTA clicks in the last 60 minutes.`,
+    });
+  }
+  if (alerts.length === 0) {
+    alerts.push({
+      level: "ok",
+      title: "No active funnel alerts",
+      detail: "Recent web-journey funnel steps look healthy.",
+    });
+  }
+
+  return {
+    status: asString(alerts[0]?.level),
+    alerts,
+    windows,
+    latest: {
+      last_event_at: asNumber(latest.last_event_at),
+      last_product_view_at: asNumber(latest.last_product_view_at),
+      last_cta_click_at: asNumber(latest.last_cta_click_at),
+      last_handoff_start_at: asNumber(latest.last_handoff_start_at),
+      last_handoff_confirmed_at: asNumber(latest.last_handoff_confirmed_at),
+      last_outcome_at: asNumber(latestOutcome.last_outcome_at),
+    },
+  };
+}
+
 export function readFunnel(db: DatabaseSync, scopeId: string, days = 30): Record<string, unknown> {
-  const sinceDate = isoDay(startOfDayMs(Date.now() - Math.max(1, days) * DAY_MS));
+  const windows = buildSummaryWindow(days);
   const rows = db
     .prepare(
       `SELECT date, source_channel, sessions, page_views, content_views, cta_clicks,
               handoff_starts, handoff_confirmed, product_views, cart_adds, checkout_starts,
               checkout_completes, form_starts, form_submits, bookings_completed, outcomes, gross_revenue
          FROM attribution_daily_funnel_marts
-        WHERE scope_id = ? AND date >= ?
+        WHERE scope_id = ?
+          AND date >= ?
+          AND date < ?
         ORDER BY date DESC, source_channel ASC`,
     )
-    .all(scopeId, sinceDate) as SqlRow[];
+    .all(scopeId, windows.currentSinceDate, windows.currentUntilDate) as SqlRow[];
   return {
     scope_id: scopeId,
-    window_days: days,
+    window_days: Math.max(1, Math.trunc(days)),
     rows: rows.map((row) => ({
       date: asString(row.date),
       source_channel: asString(row.source_channel),
@@ -1673,20 +2903,40 @@ export function readFunnel(db: DatabaseSync, scopeId: string, days = 30): Record
       outcomes: asInteger(row.outcomes),
       gross_revenue: asNumber(row.gross_revenue) ?? 0,
     })),
+    live_funnel: readLiveFunnel(db, scopeId),
   };
 }
 
 export function readPipelineStatus(db: DatabaseSync, scopeId?: string | null): Record<string, unknown> {
   const latestRun = listPipelineRuns(db, { scopeId: scopeId ?? null, limit: 1 })[0] ?? null;
+  const params = scopeId
+    ? [scopeId, scopeId, scopeId, scopeId, scopeId, scopeId, scopeId, scopeId, scopeId]
+    : [];
   const counts = db
     .prepare(
       `SELECT
          (SELECT COUNT(*) FROM attribution_ad_facts ${scopeId ? "WHERE scope_id = ?" : ""}) AS ad_facts,
          (SELECT COUNT(*) FROM attribution_web_events ${scopeId ? "WHERE scope_id = ?" : ""}) AS web_events,
          (SELECT COUNT(*) FROM attribution_business_outcomes ${scopeId ? "WHERE scope_id = ?" : ""}) AS business_outcomes,
-         (SELECT COUNT(*) FROM attribution_outcome_attributions ${scopeId ? "WHERE scope_id = ?" : ""}) AS outcome_attributions`,
+         (SELECT COUNT(*) FROM attribution_business_outcomes ${scopeId ? "WHERE scope_id = ?" : ""}) AS business_outcome_rows,
+         (SELECT COUNT(DISTINCT backend_entity_id) FROM attribution_business_outcomes ${scopeId ? "WHERE scope_id = ?" : ""}) AS business_outcome_entities,
+         (SELECT COUNT(*) FROM attribution_outcome_attributions ${scopeId ? "WHERE scope_id = ?" : ""}) AS outcome_attributions,
+         (SELECT COUNT(*) FROM attribution_outcome_attributions ${scopeId ? "WHERE scope_id = ?" : ""}) AS outcome_attribution_entities,
+         (SELECT COUNT(*) FROM attribution_outcome_attributions ${scopeId ? "WHERE scope_id = ? AND unresolved_reason IS NULL" : "WHERE unresolved_reason IS NULL"}) AS resolved_outcome_entities,
+         (SELECT COUNT(*) FROM attribution_outcome_attributions ${scopeId ? "WHERE scope_id = ? AND unresolved_reason IS NOT NULL" : "WHERE unresolved_reason IS NOT NULL"}) AS unresolved_outcome_entities`,
     )
-    .get(...(scopeId ? [scopeId, scopeId, scopeId, scopeId] : [])) as SqlRow;
+    .get(...params) as SqlRow;
+  const freshnessParams = scopeId ? [scopeId, scopeId, scopeId, scopeId, scopeId] : [];
+  const freshness = db
+    .prepare(
+      `SELECT
+         (SELECT MAX(updated_at) FROM attribution_ad_facts ${scopeId ? "WHERE scope_id = ?" : ""}) AS latest_ad_fact_at,
+         (SELECT MAX(captured_at) FROM attribution_web_events ${scopeId ? "WHERE scope_id = ?" : ""}) AS latest_web_event_at,
+         (SELECT MAX(occurred_at) FROM attribution_business_outcomes ${scopeId ? "WHERE scope_id = ?" : ""}) AS latest_backend_outcome_at,
+         (SELECT MAX(updated_at) FROM attribution_business_outcomes ${scopeId ? "WHERE scope_id = ?" : ""}) AS latest_backend_write_at,
+         (SELECT MAX(updated_at) FROM attribution_outcome_attributions ${scopeId ? "WHERE scope_id = ?" : ""}) AS latest_attribution_decision_at`,
+    )
+    .get(...freshnessParams) as SqlRow;
   return {
     scope_id: asOptionalString(scopeId),
     latest_run: latestRun,
@@ -1694,7 +2944,19 @@ export function readPipelineStatus(db: DatabaseSync, scopeId?: string | null): R
       ad_facts: asInteger(counts.ad_facts),
       web_events: asInteger(counts.web_events),
       business_outcomes: asInteger(counts.business_outcomes),
+      business_outcome_rows: asInteger(counts.business_outcome_rows),
+      business_outcome_entities: asInteger(counts.business_outcome_entities),
       outcome_attributions: asInteger(counts.outcome_attributions),
+      outcome_attribution_entities: asInteger(counts.outcome_attribution_entities),
+      resolved_outcome_entities: asInteger(counts.resolved_outcome_entities),
+      unresolved_outcome_entities: asInteger(counts.unresolved_outcome_entities),
+    },
+    freshness: {
+      latest_ad_fact_at: asNumber(freshness.latest_ad_fact_at),
+      latest_web_event_at: asNumber(freshness.latest_web_event_at),
+      latest_backend_outcome_at: asNumber(freshness.latest_backend_outcome_at),
+      latest_backend_write_at: asNumber(freshness.latest_backend_write_at),
+      latest_attribution_decision_at: asNumber(freshness.latest_attribution_decision_at),
     },
   };
 }

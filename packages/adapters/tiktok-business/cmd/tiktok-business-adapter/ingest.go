@@ -25,7 +25,6 @@ const (
 	tiktokBusinessHourlyReplayWindow   = 24 * time.Hour
 	tiktokBusinessMonitorInterval      = 1 * time.Minute
 	tiktokBusinessMonitorErrorBackoff  = 5 * time.Minute
-	tiktokBusinessMonitorReplayWindow  = 7 * 24 * time.Hour
 	tiktokBusinessDefaultPageSize      = "100"
 	tiktokBusinessDefaultReportType    = "BASIC"
 	tiktokBusinessDefaultReportSource  = "tiktok_business_api"
@@ -129,6 +128,20 @@ type tiktokBusinessReportWindow struct {
 	RequestUntil string
 }
 
+type tiktokBusinessMonitorFamilyConfig struct {
+	Name     tiktokBusinessMonitorFamily
+	Interval time.Duration
+	Lookback time.Duration
+	Poll     func(context.Context, *tiktokBusinessState, time.Time, time.Time, nexadapter.EmitFunc) (time.Time, error)
+}
+
+type tiktokBusinessMonitorCycleResult struct {
+	DueFamilies        []tiktokBusinessMonitorFamily
+	SuccessfulFamilies []tiktokBusinessMonitorFamily
+	FailedFamilies     []tiktokBusinessMonitorFamily
+	StateChanged       bool
+}
+
 var (
 	tiktokBusinessSnapshotFamilies = []tiktokBusinessSnapshotFamily{
 		{ID: "campaign_snapshot", ContainerName: "Campaign Snapshots"},
@@ -193,25 +206,231 @@ func monitor(ctx nexadapter.AdapterContext[struct{}], emit nexadapter.EmitFunc) 
 		return err
 	}
 
-	return nexadapter.PollMonitor(nexadapter.PollConfig[nexadapter.AdapterInboundRecord]{
-		Interval:      tiktokBusinessMonitorInterval,
-		ErrorBackoff:  tiktokBusinessMonitorErrorBackoff,
-		InitialCursor: time.Now().UTC(),
-		Fetch: func(ctx context.Context, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
-			return fetchTikTokBusinessMonitorCycle(ctx, state, since)
-		},
-		MaxConsecutiveErrors: 5,
-	})(ctx.Context, state.ConnectionID, emit)
+	monitorState, err := loadTikTokBusinessMonitorState(state.ConnectionID)
+	if err != nil {
+		return err
+	}
+	revisionStore, err := loadTikTokBusinessRevisionStore(state.ConnectionID)
+	if err != nil {
+		return err
+	}
+
+	consecutiveErrors := 0
+	for {
+		pollTime := time.Now().UTC()
+		result := runTikTokBusinessMonitorCycle(ctx.Context, state, monitorState, revisionStore, pollTime, emit)
+		if result.StateChanged {
+			if err := saveTikTokBusinessMonitorState(state.ConnectionID, monitorState); err != nil {
+				return err
+			}
+			if err := revisionStore.SaveIfDirty(); err != nil {
+				return err
+			}
+		}
+
+		if len(result.FailedFamilies) > 0 && len(result.SuccessfulFamilies) == 0 {
+			consecutiveErrors++
+			if consecutiveErrors >= 5 {
+				return fmt.Errorf("too many consecutive TikTok Business monitor errors: %v", result.FailedFamilies)
+			}
+		} else {
+			consecutiveErrors = 0
+		}
+
+		wait := tiktokBusinessMonitorInterval
+		if len(result.DueFamilies) > 0 && len(result.SuccessfulFamilies) == 0 && len(result.FailedFamilies) > 0 {
+			wait = tiktokBusinessMonitorErrorBackoff
+		}
+
+		select {
+		case <-ctx.Context.Done():
+			return nil
+		case <-time.After(wait):
+		}
+	}
 }
 
 func fetchTikTokBusinessMonitorCycle(ctx context.Context, state *tiktokBusinessState, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 	asOf := time.Now().UTC()
-	replaySince := since.Add(-tiktokBusinessMonitorReplayWindow)
-	records, err := fetchTikTokBusinessBackfill(ctx, state, replaySince, asOf)
+	records := make([]nexadapter.AdapterInboundRecord, 0)
+	emit := func(record any) {
+		if inbound, ok := record.(nexadapter.AdapterInboundRecord); ok && inbound.Operation != "" {
+			records = append(records, inbound)
+		}
+	}
+	latest, err := pollTikTokBusinessReportFamily(ctx, state, tiktokBusinessReportFamilies[3], asOf.Add(-tiktokBusinessHotReportLookback), asOf, emit)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
-	return records, asOf, nil
+	return records, maxTime(latest, asOf), nil
+}
+
+func runTikTokBusinessMonitorCycle(ctx context.Context, state *tiktokBusinessState, monitorState *tiktokBusinessMonitorState, revisionStore *tiktokBusinessRevisionStore, pollTime time.Time, emit nexadapter.EmitFunc) tiktokBusinessMonitorCycleResult {
+	result := tiktokBusinessMonitorCycleResult{}
+	for _, family := range tiktokBusinessMonitorFamilies() {
+		familyState := monitorState.family(family.Name)
+		if !familyState.due(pollTime, family.Interval) {
+			continue
+		}
+		result.DueFamilies = append(result.DueFamilies, family.Name)
+		metrics := monitorState.metrics(family.Name)
+		metrics.beginCycle(pollTime)
+
+		since := time.Time{}
+		if family.Lookback > 0 {
+			since = pollTime.Add(-family.Lookback).UTC()
+		}
+		emitter := newTikTokBusinessMonitorEmitter(monitorState, revisionStore, pollTime, emit)
+		latest, err := family.Poll(ctx, state, since, pollTime, emitter.Emit)
+		if err == nil {
+			err = emitter.Err()
+		}
+		if err != nil {
+			nexadapter.LogError("tiktok business monitor %s poll failed: %v", family.Name, err)
+			result.FailedFamilies = append(result.FailedFamilies, family.Name)
+			continue
+		}
+
+		familyState.advance(pollTime, latest)
+		result.SuccessfulFamilies = append(result.SuccessfulFamilies, family.Name)
+		result.StateChanged = true
+		if emitter.StateChanged() {
+			result.StateChanged = true
+		}
+	}
+	logTikTokBusinessMonitorMetrics(monitorState, pollTime)
+	return result
+}
+
+func tiktokBusinessMonitorFamilies() []tiktokBusinessMonitorFamilyConfig {
+	return []tiktokBusinessMonitorFamilyConfig{
+		{
+			Name:     tiktokBusinessMonitorFamilyAdvertiserHourly,
+			Interval: tiktokBusinessMonitorInterval,
+			Lookback: tiktokBusinessHotReportLookback,
+			Poll: func(ctx context.Context, state *tiktokBusinessState, since time.Time, pollTime time.Time, emit nexadapter.EmitFunc) (time.Time, error) {
+				return pollTikTokBusinessReportFamily(ctx, state, tiktokBusinessReportFamilies[3], since, pollTime, emit)
+			},
+		},
+		{
+			Name:     tiktokBusinessMonitorFamilyCampaignDaily,
+			Interval: tiktokBusinessDailyReportMonitorInterval,
+			Lookback: tiktokBusinessDailyReportLookback,
+			Poll: func(ctx context.Context, state *tiktokBusinessState, since time.Time, pollTime time.Time, emit nexadapter.EmitFunc) (time.Time, error) {
+				return pollTikTokBusinessReportFamily(ctx, state, tiktokBusinessReportFamilies[0], dateFloorUTC(since), pollTime, emit)
+			},
+		},
+		{
+			Name:     tiktokBusinessMonitorFamilyAdGroupDaily,
+			Interval: tiktokBusinessDailyReportMonitorInterval,
+			Lookback: tiktokBusinessDailyReportLookback,
+			Poll: func(ctx context.Context, state *tiktokBusinessState, since time.Time, pollTime time.Time, emit nexadapter.EmitFunc) (time.Time, error) {
+				return pollTikTokBusinessReportFamily(ctx, state, tiktokBusinessReportFamilies[1], dateFloorUTC(since), pollTime, emit)
+			},
+		},
+		{
+			Name:     tiktokBusinessMonitorFamilyAdDaily,
+			Interval: tiktokBusinessDailyReportMonitorInterval,
+			Lookback: tiktokBusinessDailyReportLookback,
+			Poll: func(ctx context.Context, state *tiktokBusinessState, since time.Time, pollTime time.Time, emit nexadapter.EmitFunc) (time.Time, error) {
+				return pollTikTokBusinessReportFamily(ctx, state, tiktokBusinessReportFamilies[2], dateFloorUTC(since), pollTime, emit)
+			},
+		},
+		{
+			Name:     tiktokBusinessMonitorFamilyCampaignSnapshot,
+			Interval: tiktokBusinessSnapshotMonitorInterval,
+			Poll:     pollTikTokBusinessCampaignSnapshot,
+		},
+		{
+			Name:     tiktokBusinessMonitorFamilyAdGroupSnapshot,
+			Interval: tiktokBusinessSnapshotMonitorInterval,
+			Poll:     pollTikTokBusinessAdGroupSnapshot,
+		},
+		{
+			Name:     tiktokBusinessMonitorFamilyAdSnapshot,
+			Interval: tiktokBusinessSnapshotMonitorInterval,
+			Poll:     pollTikTokBusinessAdSnapshot,
+		},
+	}
+}
+
+func pollTikTokBusinessCampaignSnapshot(ctx context.Context, state *tiktokBusinessState, _ time.Time, _ time.Time, emit nexadapter.EmitFunc) (time.Time, error) {
+	rows, err := fetchTikTokBusinessCampaignRows(ctx, state)
+	if err != nil {
+		return time.Time{}, err
+	}
+	latest := time.Time{}
+	for _, row := range rows {
+		record := buildTikTokBusinessCampaignSnapshotRecord(state, tiktokBusinessSnapshotFamilies[0], row)
+		if record.Operation == "" {
+			continue
+		}
+		latest = maxTime(latest, time.UnixMilli(record.Payload.Timestamp).UTC())
+		emit(record)
+	}
+	return latest, nil
+}
+
+func pollTikTokBusinessAdGroupSnapshot(ctx context.Context, state *tiktokBusinessState, _ time.Time, _ time.Time, emit nexadapter.EmitFunc) (time.Time, error) {
+	rows, err := fetchTikTokBusinessAdGroupRows(ctx, state)
+	if err != nil {
+		return time.Time{}, err
+	}
+	latest := time.Time{}
+	for _, row := range rows {
+		record := buildTikTokBusinessAdGroupSnapshotRecord(state, tiktokBusinessSnapshotFamilies[1], row)
+		if record.Operation == "" {
+			continue
+		}
+		latest = maxTime(latest, time.UnixMilli(record.Payload.Timestamp).UTC())
+		emit(record)
+	}
+	return latest, nil
+}
+
+func pollTikTokBusinessAdSnapshot(ctx context.Context, state *tiktokBusinessState, _ time.Time, _ time.Time, emit nexadapter.EmitFunc) (time.Time, error) {
+	rows, err := fetchTikTokBusinessAdRows(ctx, state)
+	if err != nil {
+		return time.Time{}, err
+	}
+	latest := time.Time{}
+	for _, row := range rows {
+		record := buildTikTokBusinessAdSnapshotRecord(state, tiktokBusinessSnapshotFamilies[2], row)
+		if record.Operation == "" {
+			continue
+		}
+		latest = maxTime(latest, time.UnixMilli(record.Payload.Timestamp).UTC())
+		emit(record)
+	}
+	return latest, nil
+}
+
+func pollTikTokBusinessReportFamily(ctx context.Context, state *tiktokBusinessState, family tiktokBusinessReportFamily, since time.Time, until time.Time, emit nexadapter.EmitFunc) (time.Time, error) {
+	since = since.UTC()
+	until = until.UTC()
+	if since.IsZero() || since.After(until) {
+		since = until
+	}
+	latest := time.Time{}
+	for _, window := range planTikTokBusinessReportWindows(since, until, family) {
+		rows, err := fetchTikTokBusinessReportRows(ctx, state, family, window)
+		if err != nil {
+			return time.Time{}, err
+		}
+		for _, row := range rows {
+			record := buildTikTokBusinessReportRecord(state, family, row, window)
+			if record.Operation == "" {
+				continue
+			}
+			recordTime := time.UnixMilli(record.Payload.Timestamp).UTC()
+			if !since.IsZero() && recordTime.Before(since) {
+				continue
+			}
+			latest = maxTime(latest, recordTime)
+			emit(record)
+		}
+	}
+	return latest, nil
 }
 
 func fetchTikTokBusinessBackfill(ctx context.Context, state *tiktokBusinessState, since time.Time, until time.Time) ([]nexadapter.AdapterInboundRecord, error) {

@@ -2,7 +2,7 @@
 
 **Status:** VALIDATED
 **Last Updated:** 2026-03-31
-**Related:** [Attribution Intelligence Layer](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-layer.md), [Attribution Website Input Package And Install Contract](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-website-input-package-and-install-contract.md), [AIL-007](/Users/tyler/nexus/home/projects/nexus/docs/workplans/attribution-intelligence-board/completed/AIL-007-end-to-end-click-to-outcome-proof-ladder.md)
+**Related:** [Attribution Intelligence Layer](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-layer.md), [Web Signals Control Plane And Web Adapter Family](/Users/tyler/nexus/home/projects/nexus/docs/specs/web-signals-control-plane-and-web-adapter-family.md), [AIL-007](/Users/tyler/nexus/home/projects/nexus/docs/workplans/attribution-intelligence-board/completed/AIL-007-end-to-end-click-to-outcome-proof-ladder.md)
 
 ## Purpose
 
@@ -12,7 +12,7 @@ product family.
 It proves the full business journey:
 
 1. acquisition facts exist
-2. website input is installed and collecting first-party events
+2. web signals and web journey are installed and collecting first-party events
 3. backend outcome truth exists
 4. the attribution app reconciles those inputs into an attributed outcome
 5. the operator can inspect both aggregate and row-level evidence
@@ -21,7 +21,7 @@ It proves the full business journey:
 
 The proof is written to expect these outcomes before it runs:
 
-- one website installation is created successfully
+- one web installation is created successfully
 - three website events are accepted under that installation
 - replaying the same `page_view` event dedupes cleanly
 - one paid acquisition fact is materialized
@@ -48,16 +48,16 @@ parity with real MoonSleep upstreams where applicable.
 
 ### 2. Website Input Contract
 
-The first-party website contract is proven separately by the website-input
-package and install workflow:
+The first-party web contract is proven separately by the web-signals control
+plane and web-journey adapter workflow:
 
-- workflow: [attribution-website-input-install-and-proof-workflow.md](/Users/tyler/nexus/home/projects/nexus/docs/validation/attribution-website-input-install-and-proof-workflow.md)
-- operator lane: [wib-006-operator-proof-and-validation-lane.md](/Users/tyler/nexus/home/projects/nexus/packages/apps/website-input/app/docs/validation/wib-006-operator-proof-and-validation-lane.md)
+- workflow: [web-signals-install-and-proof-workflow.md](/Users/tyler/nexus/home/projects/nexus/docs/validation/web-signals-install-and-proof-workflow.md)
+- package validation docs: [README.md](/Users/tyler/nexus/home/projects/nexus/packages/apps/web-signals/app/docs/validation/README.md), [README.md](/Users/tyler/nexus/home/projects/nexus/packages/adapters/web-journey/docs/validation/README.md)
 
 ### 3. Integrated Click-To-Outcome Cleanroom
 
-The integrated cleanroom proof installs `website-input` and `attribution`
-together, creates a bound website sender token, collects real website-input
+The integrated cleanroom proof installs `web-signals` and `attribution`
+together, creates a bound web installation sender token, collects real web
 events through the app method surface, ingests canonical paid and backend rows,
 then validates the operator reads.
 
@@ -77,8 +77,8 @@ Durable promoted artifacts:
 
 ## What The Passed Proof Demonstrates
 
-- `website-input.installations.create` issues a real bound sender token
-- `website-input.collect` accepts canonical `page_view`, `cta_click`, and
+- `web-signals.installations.create` issues a real bound sender token
+- `web-signals.web-journey.collect` accepts canonical `page_view`, `cta_click`, and
   `handoff_start` events
 - duplicate replay on `event_id` dedupes correctly
 - the attribution app binds acquisition, website, and backend inputs explicitly

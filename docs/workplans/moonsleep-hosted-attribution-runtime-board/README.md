@@ -20,15 +20,15 @@ Canonical inputs:
 - `/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_HOSTED_PACKAGE_LIVE_TESTING.md`
 - `/Users/tyler/nexus/home/projects/nexus/nex/docs/runbooks/platform/prod-runtime-package-deployment-procedure.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-layer.md`
-- `/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-website-input-package-and-install-contract.md`
+- `/Users/tyler/nexus/home/projects/nexus/docs/specs/web-signals-control-plane-and-web-adapter-family.md`
 
 Scope:
 
 - provision one dedicated MoonSleep hosted Nex runtime through Frontdoor on
   Hetzner
 - install the blocking MoonSleep attribution packages there:
-  `meta-ads`, `google-ads`, `tiktok-business`, `shopify`, `website-input`,
-  `attribution`
+  `meta-ads`, `google-ads`, `tiktok-business`, `shopify`, `web-journey`,
+  `web-signals`, `attribution`
 - connect the real MoonSleep upstreams on that hosted runtime
 - complete full backfills and establish freshness baselines there
 - prove safe shadow-site browser and collector flow against that hosted runtime
@@ -79,9 +79,9 @@ Current retained hosted MoonSleep runtime:
 Current installed package set:
 
 - adapters:
-  `meta-ads`, `google-ads`, `tiktok-business`, `shopify`
+  `meta-ads`, `google-ads`, `tiktok-business`, `shopify`, `web-journey`
 - apps:
-  `website-input`, `attribution`
+  `web-signals`, `attribution`
 
 Current hosted proof artifacts:
 
@@ -105,8 +105,12 @@ Current reality:
 - safe hosted browser proof is green
 - real `https://www.moonsleep.co` prod-origin preflight is green
 - hosted attribution baseline now exists after explicit replay
-- hosted soak is the remaining open gating work before the real MoonSleep
+- hosted soak is still the remaining open gating work before the real MoonSleep
   website deploy
+- that soak is currently blocked on
+  `/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-live-sync-efficiency-board/README.md`
+  because the hosted tenant runtime is too slow under current adapter live-sync
+  load
 
 ## Goal State
 
@@ -121,7 +125,7 @@ the following are true:
    real MoonSleep credentials.
 4. Full backfills converge there and the attribution app materializes the same
    core facts the cleanroom lane already proved.
-5. The hosted `website-input` collector accepts a safe MoonSleep shadow-site
+5. The hosted `web-signals` / `web-journey` collector accepts a safe MoonSleep shadow-site
    run and the attribution UI renders the resulting scope correctly.
 6. The hosted runtime survives a meaningful monitor/freshness window before the
    real `https://www.moonsleep.co` site is pointed at it.
@@ -147,3 +151,5 @@ the following are true:
   is now downstream of this board and should not be treated as ready for real
   production website enablement until this hosted board reaches the website and
   soak milestones
+- `/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-live-sync-efficiency-board/README.md`
+  is the active blocking lane for the hosted soak and side-by-side readiness

@@ -61,6 +61,18 @@ function relativeTime(ts: number | null): string {
   return `${Math.floor(diff / 86_400_000)}d ago`;
 }
 
+function connectionSelectionKey(entry: AdapterConnectionEntry): string {
+  const connectionId = (entry.connectionId ?? "").trim();
+  if (connectionId) {
+    return connectionId;
+  }
+  const account = (entry.account ?? "").trim();
+  if (account) {
+    return `${entry.adapter}::${account}`;
+  }
+  return `${entry.adapter}::disconnected`;
+}
+
 function adapterStatusBorder(status: string | null): string {
   if (status === "connected") {
     return "adapter-card--connected";
@@ -279,7 +291,8 @@ export function renderAdaptersView(props: AdaptersViewProps): TemplateResult {
   const connected = adapters.filter((entry) => entry.status === "connected");
   const adapterCredentials = collectAdapterCredentials(adapters);
   const ip = props.integrationsProps;
-  const selected = adapters.find((e) => e.adapter === ip.selectedAdapter) ?? null;
+  const selected =
+    adapters.find((e) => connectionSelectionKey(e) === ip.selectedConnectionKey) ?? null;
 
   return html`
     <div class="adapters-view">
@@ -355,7 +368,7 @@ function renderAdapterCard(
   return html`
     <div
       class="card adapter-card ${borderClass} ${isSelected ? "adapter-card--active" : ""}"
-      @click=${() => ip.onSelectAdapter(entry.adapter)}
+      @click=${() => ip.onSelectConnection(connectionSelectionKey(entry))}
     >
       <div class="adapter-card__header">
         <div class="adapter-card__icon">${icons[icon]}</div>

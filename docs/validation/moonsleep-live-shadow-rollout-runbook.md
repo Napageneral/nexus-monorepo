@@ -1,7 +1,8 @@
 # MoonSleep Live Shadow Rollout Runbook
 
 This runbook covers the low-risk production shadow enablement for the Nex
-`website-input` collector on the real MoonSleep website.
+`web-signals` control plane and `web-journey` collector on the real MoonSleep
+website.
 
 This is a shadow rollout only.
 
@@ -19,6 +20,8 @@ Hosted prerequisite:
 
 - `/Users/tyler/nexus/home/projects/nexus/docs/validation/moonsleep-hosted-attribution-runtime-runbook.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/workplans/moonsleep-hosted-attribution-runtime-board/README.md`
+- `/Users/tyler/nexus/home/projects/nexus/packages/apps/web-signals/app/docs/validation/WEB_SIGNALS_CONTROL_PLANE_VALIDATION.md`
+- `/Users/tyler/nexus/home/projects/nexus/packages/adapters/web-journey/docs/validation/web-journey-source-adapter-validation.md`
 
 ## Prepared Branch
 
@@ -64,10 +67,10 @@ for this rollout.
 Set these on the MoonSleep website deployment target:
 
 - `VITE_MOONSLEEP_BUILD_ID=<git commit or release build id>`
-- `VITE_WEBSITE_INPUT_SHADOW_ENABLED=1`
-- `VITE_WEBSITE_INPUT_SHADOW_COLLECTOR_BASE_URL=<hosted collector base url>`
-- `VITE_WEBSITE_INPUT_SHADOW_INSTALLATION_ID=<website installation id>`
-- `VITE_WEBSITE_INPUT_SHADOW_SENDER_TOKEN=<sender token>`
+- `VITE_WEB_JOURNEY_SHADOW_ENABLED=1`
+- `VITE_WEB_JOURNEY_SHADOW_COLLECTOR_BASE_URL=<hosted collector base url>`
+- `VITE_WEB_JOURNEY_SHADOW_INSTALLATION_ID=<web installation id>`
+- `VITE_WEB_JOURNEY_SHADOW_SENDER_TOKEN=<sender token>`
 
 Do not store the sender token in docs.
 
@@ -83,7 +86,7 @@ will fail in `vite.config.ts`.
 Before enabling the live site, make sure the target runtime is ready with:
 
 - all MoonSleep core adapters installed and connected
-- `website-input` installed
+- `web-signals` installed
 - `attribution` installed
 - one scope bound for the shadow run
 - one website installation bound to the real MoonSleep production origin
@@ -98,7 +101,8 @@ For the MoonSleep production shadow lane, the blocking proof scope is:
 - `google-ads`
 - `tiktok-business`
 - `shopify`
-- `website-input`
+- `web-journey`
+- `web-signals`
 - `attribution`
 
 `tiktok-display` is not required to proceed with the production website shadow
@@ -125,6 +129,7 @@ Latest hosted prod-origin preflight:
 Latest hosted baseline snapshot:
 
 - `/Users/tyler/nexus/state/artifacts/validation/moonsleep-shadow-snapshots/moonsleep-shadow-snapshot-2026-04-06T01-15-44-322Z.json`
+- `/Users/tyler/nexus/state/artifacts/validation/moonsleep-shadow-snapshots/moonsleep-shadow-snapshot-2026-04-06T13-35-55-004Z.json`
 
 If you rerun the cleanroom bootstrap, pass the website origins through:
 
@@ -134,6 +139,10 @@ If you rerun the cleanroom bootstrap, pass the website origins through:
 The cleanroom launcher now supports additive allowed origins in:
 
 - `/Users/tyler/nexus/home/projects/nexus/nex/scripts/e2e/attribution-golden-journey-cleanroom-live.ts`
+
+Latest live prod browser proof on `https://www.moonsleep.co`:
+
+- `/Users/tyler/nexus/state/artifacts/validation/moonsleep-live-prod-shadow-browser/prod-live-shadow-2026-04-06T02-22-32-371Z/browser-proof.json`
 
 ## Production Shadow Deployment Checklist
 
@@ -159,7 +168,7 @@ Current hosted target:
 - server id: `srv-1c4b077a-1f2`
 - runtime base URL: `https://t-e86786c3-537.nexushub.sh`
 - current prod-shadow env pointer:
-  `/Users/tyler/.config/moonsleep/website-input/moonsleep-prod-shadow.env`
+  `/Users/tyler/.config/moonsleep/web-signals/moonsleep-prod-shadow.env`
 
 Do not rotate the prod-shadow sender token casually once the live window
 starts; rotate it deliberately and update the deployment envs in one step.
@@ -170,20 +179,22 @@ Use the hosted collector URL and target the real MoonSleep origin:
 
 ```bash
 INSTALL_JSON=$(curl -sS \
-  -X POST "$MOONSLEEP_SHADOW_RUNTIME_BASE_URL/runtime/operations/website-input.installations.create" \
+  -X POST "$MOONSLEEP_SHADOW_RUNTIME_BASE_URL/runtime/operations/web-signals.installations.create" \
   -H "Authorization: Bearer $MOONSLEEP_SHADOW_RUNTIME_TOKEN" \
   -H "Content-Type: application/json" \
   -d "$(jq -nc \
     --arg label 'MoonSleep Production Shadow' \
     --arg siteOrigin 'https://www.moonsleep.co' \
     --arg collectorBaseUrl "$COLLECTOR_BASE_URL" \
-    '{label:$label,siteOrigin:$siteOrigin,collectorBaseUrl:$collectorBaseUrl,metadata:{proof:"moonsleep-live-shadow",mode:"production-shadow"}}')"
+    '{label:$label,siteOrigin:$siteOrigin,runtime_base_url:$collectorBaseUrl,metadata:{proof:"moonsleep-live-shadow",mode:"production-shadow"}}')"
 )
 
-WEBSITE_INSTALLATION_ID=$(printf '%s' "$INSTALL_JSON" | jq -r '.payload.installation.id')
-WEBSITE_INPUT_SENDER_TOKEN=$(printf '%s' "$INSTALL_JSON" | jq -r '.payload.token')
-export WEBSITE_INSTALLATION_ID
-export WEBSITE_INPUT_SENDER_TOKEN
+WEB_INSTALLATION_ID=$(printf '%s' "$INSTALL_JSON" | jq -r '.payload.installation.web_installation_id')
+WEB_JOURNEY_CONNECTION_ID=$(printf '%s' "$INSTALL_JSON" | jq -r '.payload.installation.web_journey_connection_id')
+WEB_SIGNALS_SENDER_TOKEN=$(printf '%s' "$INSTALL_JSON" | jq -r '.payload.token')
+export WEB_INSTALLATION_ID
+export WEB_JOURNEY_CONNECTION_ID
+export WEB_SIGNALS_SENDER_TOKEN
 ```
 
 Do not copy the sender token into docs.
@@ -240,7 +251,7 @@ curl -sS \
   -X POST "$MOONSLEEP_SHADOW_RUNTIME_BASE_URL/runtime/operations/attribution.bindings.upsert" \
   -H "Authorization: Bearer $MOONSLEEP_SHADOW_RUNTIME_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"scope_id\":\"$SCOPE_ID\",\"role\":\"website\",\"source_type\":\"website_installation\",\"website_installation_id\":\"$WEBSITE_INSTALLATION_ID\",\"platform\":\"website-input\",\"label\":\"MoonSleep Production Website\"}"
+  -d "{\"scope_id\":\"$SCOPE_ID\",\"role\":\"website\",\"source_type\":\"adapter_connection\",\"connection_id\":\"$WEB_JOURNEY_CONNECTION_ID\",\"platform\":\"web-journey\",\"label\":\"MoonSleep Production Website\"}"
 ```
 
 ### 4. Set The Production Website Env Gate
@@ -252,10 +263,10 @@ Deploy only from:
 Required envs on the MoonSleep website deployment target:
 
 ```bash
-VITE_WEBSITE_INPUT_SHADOW_ENABLED=1
-VITE_WEBSITE_INPUT_SHADOW_COLLECTOR_BASE_URL=$COLLECTOR_BASE_URL
-VITE_WEBSITE_INPUT_SHADOW_INSTALLATION_ID=$WEBSITE_INSTALLATION_ID
-VITE_WEBSITE_INPUT_SHADOW_SENDER_TOKEN=$WEBSITE_INPUT_SENDER_TOKEN
+VITE_WEB_JOURNEY_SHADOW_ENABLED=1
+VITE_WEB_JOURNEY_SHADOW_COLLECTOR_BASE_URL=$COLLECTOR_BASE_URL
+VITE_WEB_JOURNEY_SHADOW_INSTALLATION_ID=$WEB_INSTALLATION_ID
+VITE_WEB_JOURNEY_SHADOW_SENDER_TOKEN=$WEB_SIGNALS_SENDER_TOKEN
 ```
 
 ### 5. Immediately Verify Post-Deploy
@@ -277,7 +288,7 @@ cd /Users/tyler/nexus/home/projects/nexus/nex
 MOONSLEEP_SHADOW_RUNTIME_BASE_URL=$MOONSLEEP_SHADOW_RUNTIME_BASE_URL \
 MOONSLEEP_SHADOW_RUNTIME_TOKEN=$MOONSLEEP_SHADOW_RUNTIME_TOKEN \
 MOONSLEEP_SHADOW_SCOPE_ID=$SCOPE_ID \
-MOONSLEEP_SHADOW_WEBSITE_INSTALLATION_ID=$WEBSITE_INSTALLATION_ID \
+MOONSLEEP_SHADOW_WEB_INSTALLATION_ID=$WEB_INSTALLATION_ID \
 MOONSLEEP_SHADOW_MARKER=<unique-marker> \
 node --import tsx scripts/e2e/moonsleep-shadow-snapshot.ts
 ```
@@ -293,7 +304,7 @@ for hour in $(seq 0 11); do
   MOONSLEEP_SHADOW_RUNTIME_BASE_URL=$MOONSLEEP_SHADOW_RUNTIME_BASE_URL \
   MOONSLEEP_SHADOW_RUNTIME_TOKEN=$MOONSLEEP_SHADOW_RUNTIME_TOKEN \
   MOONSLEEP_SHADOW_SCOPE_ID=$SCOPE_ID \
-  MOONSLEEP_SHADOW_WEBSITE_INSTALLATION_ID=$WEBSITE_INSTALLATION_ID \
+  MOONSLEEP_SHADOW_WEB_INSTALLATION_ID=$WEB_INSTALLATION_ID \
   node --import tsx scripts/e2e/moonsleep-shadow-snapshot.ts | tee "/tmp/moonsleep-shadow-snapshot-$ts.json"
   sleep 3600
 done
@@ -334,7 +345,7 @@ or:
 Optional:
 
 - `MOONSLEEP_SHADOW_SCOPE_ID=moonsleep-shadow`
-- `MOONSLEEP_SHADOW_WEBSITE_INSTALLATION_ID=<website installation id>`
+- `MOONSLEEP_SHADOW_WEB_INSTALLATION_ID=<web installation id>`
 - `MOONSLEEP_SHADOW_MARKER=<utm marker>`
 
 Example:
@@ -344,7 +355,7 @@ cd /Users/tyler/nexus/home/projects/nexus/nex
 MOONSLEEP_SHADOW_RUNTIME_BASE_URL=http://127.0.0.1:49934 \
 MOONSLEEP_SHADOW_RUNTIME_TOKEN=fresh-nex-sandbox \
 MOONSLEEP_SHADOW_SCOPE_ID=moonsleep-shadow \
-MOONSLEEP_SHADOW_WEBSITE_INSTALLATION_ID=<installation-id> \
+MOONSLEEP_SHADOW_WEB_INSTALLATION_ID=<installation-id> \
 node --import tsx scripts/e2e/moonsleep-shadow-snapshot.ts
 ```
 
@@ -390,7 +401,7 @@ Existing compare harnesses that can be reused or extended:
 
 If anything looks risky:
 
-1. disable `VITE_WEBSITE_INPUT_SHADOW_ENABLED`
+1. disable `VITE_WEB_JOURNEY_SHADOW_ENABLED`
 2. redeploy the MoonSleep website
 3. leave the hosted runtime and attribution app running for inspection
 4. preserve the failing snapshot artifacts and browser proof

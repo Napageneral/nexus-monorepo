@@ -1,0 +1,141 @@
+{
+  "generated_at_utc": "2026-04-07T13:29:45.393Z",
+  "bundle_dir": "/artifacts/validation/cleanroom/operator-chat-cleanroom/20260407T132922Z",
+  "files": [
+    {
+      "path": "bootstrap.log",
+      "bytes": 157,
+      "modified_at_utc": "2026-04-07T13:29:29.449Z"
+    },
+    {
+      "path": "command.txt",
+      "bytes": 65,
+      "modified_at_utc": "2026-04-07T13:29:22.898Z"
+    },
+    {
+      "path": "console-proxy.log",
+      "bytes": 53,
+      "modified_at_utc": "2026-04-07T13:29:42.231Z"
+    },
+    {
+      "path": "metadata.json",
+      "bytes": 181,
+      "modified_at_utc": "2026-04-07T13:29:22.912Z"
+    },
+    {
+      "path": "operator-chat-proof-summary.json",
+      "bytes": 791,
+      "modified_at_utc": "2026-04-07T13:29:40.556Z"
+    },
+    {
+      "path": "operator-chat-replay-gap-helper.sh",
+      "bytes": 163,
+      "modified_at_utc": "2026-04-07T13:29:40.555Z"
+    },
+    {
+      "path": "operator-chat-runtime.json",
+      "bytes": 445,
+      "modified_at_utc": "2026-04-07T13:29:44.443Z"
+    },
+    {
+      "path": "operator-chat-seed-summary.json",
+      "bytes": 791,
+      "modified_at_utc": "2026-04-07T13:29:40.556Z"
+    },
+    {
+      "path": "operator-console-sync.log",
+      "bytes": 131,
+      "modified_at_utc": "2026-04-07T13:29:39.556Z"
+    },
+    {
+      "path": "playwright/artifacts.json",
+      "bytes": 1226,
+      "modified_at_utc": "2026-04-07T13:29:44.428Z"
+    },
+    {
+      "path": "playwright/output/.last-run.json",
+      "bytes": 96,
+      "modified_at_utc": "2026-04-07T13:29:44.395Z"
+    },
+    {
+      "path": "playwright/output/07-operator-chat-Operator--72869-ed-public-context-from-chat-console-cleanroom/trace.zip",
+      "bytes": 1369,
+      "modified_at_utc": "2026-04-07T13:29:44.375Z"
+    },
+    {
+      "path": "playwright/results.json",
+      "bytes": 7065,
+      "modified_at_utc": "2026-04-07T13:29:44.394Z"
+    },
+    {
+      "path": "playwright/stderr.log",
+      "bytes": 211,
+      "modified_at_utc": "2026-04-07T13:29:44.407Z"
+    },
+    {
+      "path": "playwright/stdout.log",
+      "bytes": 2697,
+      "modified_at_utc": "2026-04-07T13:29:44.394Z"
+    },
+    {
+      "path": "review/full-session-recording.json",
+      "bytes": 518,
+      "modified_at_utc": "2026-04-07T13:29:45.353Z"
+    },
+    {
+      "path": "review/full-session-recording.log",
+      "bytes": 0,
+      "modified_at_utc": "2026-04-07T13:29:24.025Z"
+    },
+    {
+      "path": "review/openbox.log",
+      "bytes": 85,
+      "modified_at_utc": "2026-04-07T13:29:23.079Z"
+    },
+    {
+      "path": "review/visual-terminal-command.sh",
+      "bytes": 580,
+      "modified_at_utc": "2026-04-07T13:29:25.029Z"
+    },
+    {
+      "path": "review/visual-terminal-exit-code.txt",
+      "bytes": 2,
+      "modified_at_utc": "2026-04-07T13:29:44.492Z"
+    },
+    {
+      "path": "review/xvfb.log",
+      "bytes": 0,
+      "modified_at_utc": "2026-04-07T13:29:22.916Z"
+    },
+    {
+      "path": "runtime.log",
+      "bytes": 1368,
+      "modified_at_utc": "2026-04-07T13:29:44.448Z"
+    },
+    {
+      "path": "seed.log",
+      "bytes": 791,
+      "modified_at_utc": "2026-04-07T13:29:40.560Z"
+    },
+    {
+      "path": "stderr.log",
+      "bytes": 211,
+      "modified_at_utc": "2026-04-07T13:29:44.407Z"
+    },
+    {
+      "path": "stdout.log",
+      "bytes": 2949,
+      "modified_at_utc": "2026-04-07T13:29:44.444Z"
+    },
+    {
+      "path": "traces/07-operator-chat-Operator-72869-ed-public-context-from-chat-console-cleanroom-trace.zip",
+      "bytes": 1369,
+      "modified_at_utc": "2026-04-07T13:29:44.427Z"
+    },
+    {
+      "path": "videos/full-session.webm",
+      "bytes": 130308,
+      "modified_at_utc": "2026-04-07T13:29:45.037Z"
+    }
+  ]
+}

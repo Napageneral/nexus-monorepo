@@ -13,7 +13,7 @@ Usage:
 
 Examples:
   publish-package.sh /abs/path/to/packages/apps/spike/app --tarball /abs/path/to/packages/apps/spike/dist/spike-1.0.2-linux-arm64.tar.gz --frontdoor-db /tmp/frontdoor.db --target-os linux --target-arch arm64
-  publish-package.sh /abs/path/to/packages/adapters/git --tarball /abs/path/to/packages/adapters/git/dist/nexus-adapter-git-1.0.11-linux-arm64.tar.gz --frontdoor-db /tmp/frontdoor.db --target-os linux --target-arch arm64
+  publish-package.sh /abs/path/to/packages/adapters/github --tarball /abs/path/to/packages/adapters/github/dist/github-1.0.11.tar.gz --frontdoor-db /tmp/frontdoor.db --target-os linux --target-arch arm64
 EOF
 }
 

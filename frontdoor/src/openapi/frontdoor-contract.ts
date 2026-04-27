@@ -156,6 +156,28 @@ const appsCatalogSchema: OpenApiSchema = {
   },
 };
 
+const adaptersCatalogSchema: OpenApiSchema = {
+  type: "object",
+  required: ["ok", "items"],
+  properties: {
+    ok: { type: "boolean", enum: [true] },
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        required: ["adapter_id", "display_name", "latest_version", "release_id"],
+        properties: {
+          adapter_id: { type: "string" },
+          display_name: { type: "string" },
+          description: { type: ["string", "null"] },
+          latest_version: { type: "string" },
+          release_id: { type: "string" },
+        },
+      },
+    },
+  },
+};
+
 const serverPayloadSchema: OpenApiSchema = {
   type: "object",
   required: [
@@ -379,6 +401,19 @@ export const frontdoorOpenApiRoutes: FrontdoorOpenApiRoute[] = [
       "200": {
         description: "App catalog",
         content: { "application/json": { schema: appsCatalogSchema } },
+      },
+    },
+  },
+  {
+    method: "get",
+    path: "/api/adapters/catalog",
+    operationId: "frontdoor.adapters.catalog",
+    summary: "List published adapters from the frontdoor package registry",
+    tags: ["Adapters"],
+    responses: {
+      "200": {
+        description: "Published adapter catalog",
+        content: { "application/json": { schema: adaptersCatalogSchema } },
       },
     },
   },

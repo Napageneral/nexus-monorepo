@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: tiktok-business-adapter Adapter API
-  version: 0.1.0
+  version: 0.1.1
   description: "Published adapter package contract for tiktok-business. This
     package exposes package metadata, connection-health surfaces, and a first
     wave of provider-native hierarchy and report reads."

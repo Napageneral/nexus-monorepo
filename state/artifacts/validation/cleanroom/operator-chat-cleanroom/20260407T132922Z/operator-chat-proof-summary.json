@@ -1,0 +1,18 @@
+{
+  "manager_lane_id": "lane:agent:entity-assistant",
+  "worker_lane_id": "lane:worker_session:session:operator-chat:worker",
+  "manager_session_id": "session:operator-chat:manager",
+  "worker_session_id": "session:operator-chat:worker",
+  "approval_id": "approval:operator-chat:filesystem-write",
+  "selected_delivery_target_id": "conversation:direct:entity-assistant:entity-casey:email",
+  "replay_gap_helper_path": "/artifacts/validation/cleanroom/operator-chat-cleanroom/20260407T132922Z/operator-chat-replay-gap-helper.sh",
+  "latest_sequence": 0,
+  "snapshot_lane_ids": [
+    "lane:worker_session:session:operator-chat:worker",
+    "lane:agent:entity-assistant",
+    "lane:agent:entity:operator-chat-worker"
+  ],
+  "snapshot": null,
+  "replay": null,
+  "runtime_synchronized": false
+}

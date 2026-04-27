@@ -17,7 +17,7 @@ export type Tab =
 // ─── Path mapping ────────────────────────────────────────────────────────
 const TAB_PATHS: Record<Tab, string> = {
   home: "/home",
-  console: "/console",
+  console: "/chat",
   identity: "/identity",
   agents: "/agents",
   operations: "/operations",
@@ -27,6 +27,9 @@ const TAB_PATHS: Record<Tab, string> = {
 };
 
 const PATH_TO_TAB = new Map(Object.entries(TAB_PATHS).map(([tab, path]) => [path, tab as Tab]));
+const ROOT_ROUTE_ALIASES = new Map<string, Tab>([
+  ["/console", "console"],
+]);
 const MOUNTED_TAB_PATHS: Record<Tab, string> = {
   home: "/home",
   console: "/chat",
@@ -91,7 +94,7 @@ function isMountedAppBasePath(basePath: string): boolean {
 function tabPathMapForBasePath(basePath: string): Map<string, Tab> {
   return isMountedAppBasePath(basePath)
     ? new Map([...MOUNTED_PATH_TO_TAB.entries(), ...MOUNTED_ROUTE_ALIASES.entries()])
-    : PATH_TO_TAB;
+    : new Map([...PATH_TO_TAB.entries(), ...ROOT_ROUTE_ALIASES.entries()]);
 }
 
 function pathForResolvedTab(tab: Tab, basePath = ""): string {
@@ -157,15 +160,16 @@ export function inferBasePathFromPathname(pathname: string): string {
       return `/${segments.slice(0, i + 2).join("/")}`;
     }
   }
+  const rootPaths = [...PATH_TO_TAB.keys(), ...ROOT_ROUTE_ALIASES.keys()];
   // Check if any tail portion of the path matches a known tab path
   for (let i = 0; i < segments.length; i++) {
     const candidate = `/${segments.slice(i).join("/")}`.toLowerCase();
-    if (PATH_TO_TAB.has(candidate)) {
+    if (rootPaths.includes(candidate)) {
       const prefix = segments.slice(0, i);
       return prefix.length ? `/${prefix.join("/")}` : "";
     }
     // Also check for prefix matches (e.g. /system/overview → known)
-    for (const tabPath of PATH_TO_TAB.keys()) {
+    for (const tabPath of rootPaths) {
       if (candidate === tabPath || candidate.startsWith(tabPath + "/")) {
         const prefix = segments.slice(0, i);
         return prefix.length ? `/${prefix.join("/")}` : "";
@@ -186,7 +190,7 @@ export function iconForTab(tab: Tab): IconName {
     case "home":
       return "barChart";
     case "console":
-      return "terminal";
+      return "messageSquare";
     case "identity":
       return "users";
     case "agents":
@@ -209,7 +213,7 @@ export function titleForTab(tab: Tab) {
     case "home":
       return "Home";
     case "console":
-      return "Console";
+      return "Chat";
     case "identity":
       return "Identity";
     case "agents":
@@ -232,7 +236,7 @@ export function subtitleForTab(tab: Tab) {
     case "home":
       return "Operator inbox for issues, merges, failures, and review work.";
     case "console":
-      return "Conversation-first operator workspace with lower-level runtime context.";
+      return "Global operator chat with agent lanes, worker handoff, and runtime replay.";
     case "identity":
       return "Entities, contacts, channels, groups, policies, and merge review.";
     case "agents":

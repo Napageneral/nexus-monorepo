@@ -2,7 +2,7 @@
 
 **Status:** CANONICAL
 **Last Updated:** 2026-03-30
-**Related:** [Attribution Intelligence Layer](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-layer.md), [Spec-Driven Development Workflow](/Users/tyler/nexus/home/projects/nexus/docs/spec-driven-development-workflow.md)
+**Related:** [Attribution Intelligence Layer](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-layer.md), [Web Signals Control Plane And Web Adapter Family](/Users/tyler/nexus/home/projects/nexus/docs/specs/web-signals-control-plane-and-web-adapter-family.md), [Spec-Driven Development Workflow](/Users/tyler/nexus/home/projects/nexus/docs/spec-driven-development-workflow.md)
 
 ---
 
@@ -27,12 +27,12 @@ Examples:
 - Google Ads
 - TikTok Business
 - organic search
-- referral and direct traffic once observed through website inputs
+- referral and direct traffic once observed through `web-journey`
 
-### Website Input
+### Web Journey Input
 
-A website input is first-party interaction data emitted from a customer-owned
-site or landing experience.
+A web journey input is first-party interaction data emitted from a
+customer-owned site or landing experience through the `web-journey` adapter.
 
 Examples:
 
@@ -60,7 +60,7 @@ Examples:
 ### Input Binding
 
 An input binding is the app-owned configuration that declares which adapter
-connection or website stream serves which role for a given business scope.
+connection or web signal stream serves which role for a given business scope.
 
 An input binding answers:
 
@@ -264,14 +264,14 @@ The attribution intelligence app owns:
 - aggregate marts
 - operator UI
 
-### Website Package Responsibility
+### Web Signals Responsibility
 
-The website input package owns:
+The shared web-signals family owns:
 
+- installation and token control plane
 - installable first-party instrumentation
 - session identity contract
-- funnel event contract
-- ingest handoff into Nex
+- journey and web-runtime ingest handoff into Nex
 
 ## Exclusions
 

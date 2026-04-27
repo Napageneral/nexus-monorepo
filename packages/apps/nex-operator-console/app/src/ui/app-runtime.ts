@@ -64,6 +64,7 @@ type RuntimeHost = {
   ingressCredentials: IngressCredential[];
   ingressCredentialCreating: boolean;
   ingressCredentialBusyId: string | null;
+  emitRuntimeEvent?: (event: RuntimeEventFrame) => void;
 };
 
 type SessionDefaultsSnapshot = {
@@ -129,6 +130,11 @@ export function connectRuntime(host: RuntimeHost) {
 }
 
 export function handleRuntimeEvent(host: RuntimeHost, evt: RuntimeEventFrame) {
+  try {
+    host.emitRuntimeEvent?.(evt);
+  } catch (err) {
+    console.error("[runtime] runtime event fanout error:", evt.event, err);
+  }
   try {
     handleRuntimeEventUnsafe(host, evt);
   } catch (err) {

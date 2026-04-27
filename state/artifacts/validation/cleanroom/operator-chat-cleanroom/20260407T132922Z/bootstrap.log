@@ -1,0 +1,2 @@
+Updated runtime.operatorConsole.allowInsecureAuth. Restart the runtime service to apply.
+Updated runtime.ingress.bind. Restart the runtime service to apply.

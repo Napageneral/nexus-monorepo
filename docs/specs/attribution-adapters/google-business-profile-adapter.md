@@ -2,7 +2,7 @@
 
 **Status:** CANONICAL
 **Last Updated:** 2026-03-31
-**Related:** [Adapter Spec: Google](/Users/tyler/nexus/home/projects/nexus/packages/adapters/google/docs/specs/ADAPTER_SPEC_GOOGLE.md)
+**Related:** [Acquisition Adapter Package Alignment](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-adapters/acquisition-adapter-package-alignment.md), [Acquisition Adapter Alignment Board](/Users/tyler/nexus/home/projects/nexus/docs/workplans/acquisition-adapter-alignment-board/README.md)
 
 ---
 

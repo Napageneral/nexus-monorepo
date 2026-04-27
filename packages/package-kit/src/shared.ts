@@ -27,6 +27,8 @@ const EMPTY_OPENAPI_WARNING =
   "adapter openapi contract is empty; materialize the upstream contract before release";
 const NARROW_OPENAPI_WARNING =
   "adapter provider config still narrows the openapi operation set; remove includeOperationIds, excludeOperationIds, and renameOperationIds before release";
+const EMPTY_GRAPHQL_WARNING =
+  "adapter graphql catalog is empty; materialize the upstream schema into a method catalog before release";
 
 export function packageDisplayName(id: string): string {
   return id
@@ -177,6 +179,38 @@ function validateAdapterOpenApiConfig(rootDir: string): { errors: string[]; warn
   }
 }
 
+function validateAdapterGraphqlSurface(
+  rootDir: string,
+  documentPathValue?: string,
+): {
+  errors: string[];
+  warnings: string[];
+} {
+  const documentPath = path.resolve(
+    rootDir,
+    documentPathValue?.trim() || "api/graphql.catalog.json",
+  );
+  if (!fs.existsSync(documentPath)) {
+    return {
+      errors: [`adapter graphql catalog not found: ${path.relative(rootDir, documentPath)}`],
+      warnings: [],
+    };
+  }
+
+  try {
+    const raw = fs.readFileSync(documentPath, "utf8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const methods = Array.isArray(parsed.methods) ? parsed.methods : [];
+    if (methods.length === 0) {
+      return { errors: [], warnings: [EMPTY_GRAPHQL_WARNING] };
+    }
+    return { errors: [], warnings: [] };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { errors: [`adapter graphql catalog is not valid JSON: ${message}`], warnings: [] };
+  }
+}
+
 export function renderTemplate(input: string, values: Record<string, string>): string {
   let result = input;
   for (const [key, value] of Object.entries(values)) {
@@ -231,8 +265,6 @@ export function validatePackageRoot(targetPath: string): {
     "docs/specs",
     "docs/workplans",
     "docs/validation",
-    "api/openapi.yaml",
-    "api/openapi.lock.json",
     "scripts/package-release.sh",
   ]) {
     if (!fs.existsSync(path.join(detected.rootDir, relative))) {
@@ -320,9 +352,22 @@ export function validatePackageRoot(targetPath: string): {
   checkPathExists(manifest.hooks?.onDeactivate, "hooks.onDeactivate");
 
   if (manifest.methodCatalog?.source === "openapi") {
+    for (const relative of ["api/openapi.yaml", "api/openapi.lock.json"]) {
+      if (!fs.existsSync(path.join(detected.rootDir, relative))) {
+        docsErrors.push(`required package artifact missing: ${relative}`);
+      }
+    }
     const openApiValidation = validateAdapterOpenApiSurface(detected.rootDir);
     pathErrors.push(...openApiValidation.errors);
     pathWarnings.push(...openApiValidation.warnings);
+  }
+  if (manifest.methodCatalog?.source === "graphql") {
+    const graphQlValidation = validateAdapterGraphqlSurface(
+      detected.rootDir,
+      manifest.methodCatalog?.document,
+    );
+    pathErrors.push(...graphQlValidation.errors);
+    pathWarnings.push(...graphQlValidation.warnings);
   }
 
   const result = validateAdapterManifest(detected.manifest as any, detected.rootDir);

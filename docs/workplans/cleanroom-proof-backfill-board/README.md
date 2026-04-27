@@ -33,3 +33,36 @@ Status lanes:
 - `not-started/`
 - `in-progress/`
 - `completed/`
+
+## Current Status Snapshot
+
+Completed:
+
+- `CPB-001`
+- `CPB-002`
+
+In Progress:
+
+- `CPB-003`
+
+Not Started:
+
+1. `CPB-004`
+2. `CPB-007`
+3. `CPB-008`
+
+## Execution Order
+
+The current priority order from the active audit lane is:
+
+1. `CPB-004` connection-account identity cleanroom certification
+2. `CPB-007` Dispatch integrated operator cleanroom suite
+3. `CPB-008` recorded cleanroom demo artifacts
+
+## Direction Update
+
+The older hosted fresh-server cleanroom backfill candidates were intentionally
+removed from this board.
+
+Current cleanroom direction prefers sandbox-managed Nex primitives over the
+older hosted fresh-server proof model for this program.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 )
 
 const defaultBitbucketHost = "https://api.bitbucket.org/2.0"
+const pagedRequestRateLimitRetryBudget = 2
 
 type BitbucketProvider struct {
 	HTTPClient         *http.Client
@@ -483,7 +485,9 @@ func (p *BitbucketProvider) GetCommits(ctx context.Context, config core.AccountC
 	branches := append([]string(nil), repo.TrackedBranches...)
 	var err error
 	if len(branches) == 0 {
-		if since.IsZero() {
+		if since.IsZero() && strings.TrimSpace(repo.DefaultBranch) != "" {
+			branches = []string{strings.TrimSpace(repo.DefaultBranch)}
+		} else if since.IsZero() {
 			branches, err = p.ListBranches(ctx, config, repo)
 		} else {
 			branches, err = p.listBranchesUpdatedSince(ctx, config, repo, since)
@@ -558,19 +562,8 @@ func (p *BitbucketProvider) listBranchesUpdatedSince(ctx context.Context, config
 	seen := make(map[string]struct{})
 	nextURL := initialURL
 	for nextURL != "" {
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
+		response, err := p.getPageWithRetry(ctx, config, nextURL)
 		if err != nil {
-			return nil, err
-		}
-		p.authorize(request, config)
-		response, err := p.client().Do(request)
-		if err != nil {
-			return nil, err
-		}
-		p.captureRateLimit(response)
-		if response.StatusCode != http.StatusOK {
-			err = apiErrorFromResponse(response)
-			response.Body.Close()
 			return nil, err
 		}
 		var payload struct {
@@ -1037,19 +1030,8 @@ func (p *BitbucketProvider) GetPullRequestComments(ctx context.Context, config c
 	var comments []core.Comment
 	nextURL := initialURL
 	for nextURL != "" {
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
+		response, err := p.getPageWithRetry(ctx, config, nextURL)
 		if err != nil {
-			return nil, err
-		}
-		p.authorize(request, config)
-		response, err := p.client().Do(request)
-		if err != nil {
-			return nil, err
-		}
-		p.captureRateLimit(response)
-		if response.StatusCode != http.StatusOK {
-			err = apiErrorFromResponse(response)
-			response.Body.Close()
 			return nil, err
 		}
 
@@ -1226,19 +1208,8 @@ func (p *BitbucketProvider) CreateBranch(ctx context.Context, config core.Accoun
 func (p *BitbucketProvider) paginate(ctx context.Context, config core.AccountConfig, initialURL string, handler func(response *http.Response) error) error {
 	nextURL := initialURL
 	for nextURL != "" {
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
+		response, err := p.getPageWithRetry(ctx, config, nextURL)
 		if err != nil {
-			return err
-		}
-		p.authorize(request, config)
-		response, err := p.client().Do(request)
-		if err != nil {
-			return err
-		}
-		p.captureRateLimit(response)
-		if response.StatusCode != http.StatusOK {
-			err = apiErrorFromResponse(response)
-			response.Body.Close()
 			return err
 		}
 		var envelope struct {
@@ -1258,6 +1229,77 @@ func (p *BitbucketProvider) paginate(ctx context.Context, config core.AccountCon
 		nextURL = strings.TrimSpace(envelope.Next)
 	}
 	return nil
+}
+
+func (p *BitbucketProvider) getPageWithRetry(ctx context.Context, config core.AccountConfig, requestURL string) (*http.Response, error) {
+	consecutiveRateLimits := 0
+	for {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		p.authorize(request, config)
+		response, err := p.client().Do(request)
+		if err != nil {
+			return nil, err
+		}
+		p.captureRateLimit(response)
+		if response.StatusCode == http.StatusOK {
+			return response, nil
+		}
+
+		err = apiErrorFromResponse(response)
+		response.Body.Close()
+
+		var apiErr *core.APIError
+		if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusTooManyRequests {
+			return nil, err
+		}
+
+		consecutiveRateLimits++
+		cooldown := pageRateLimitCooldown(apiErr, consecutiveRateLimits)
+		fmt.Fprintf(
+			os.Stderr,
+			"[INFO] paged request rate limited url=%s cooldown_ms=%d retry=%d\n",
+			requestURL,
+			cooldown.Milliseconds(),
+			consecutiveRateLimits,
+		)
+		if consecutiveRateLimits >= pagedRequestRateLimitRetryBudget {
+			return nil, apiErr
+		}
+		if err := waitForPageRateLimitCooldown(ctx, cooldown); err != nil {
+			return nil, err
+		}
+	}
+}
+
+func pageRateLimitCooldown(apiErr *core.APIError, consecutiveRateLimits int) time.Duration {
+	if apiErr != nil && apiErr.RetryAfterMs > 0 {
+		return time.Duration(apiErr.RetryAfterMs) * time.Millisecond
+	}
+	if consecutiveRateLimits < 1 {
+		consecutiveRateLimits = 1
+	}
+	cooldown := time.Duration(consecutiveRateLimits) * time.Minute
+	if cooldown > 10*time.Minute {
+		cooldown = 10 * time.Minute
+	}
+	return cooldown
+}
+
+func waitForPageRateLimitCooldown(ctx context.Context, duration time.Duration) error {
+	if duration <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func (p *BitbucketProvider) ValidationDetails() map[string]any {

@@ -14,7 +14,6 @@ import {
   listAdFactsForScope,
   listBindings,
   listBindingsForConnection,
-  listBindingsForWebsiteInstallation,
   listBusinessOutcomes,
   listSessionSourceFacts,
   listWebEventsForScope,
@@ -52,12 +51,15 @@ type ProcessCanonicalRecordParams = {
   record: RuntimeRow;
   recordId?: string | null;
   skipProcessedCheck?: boolean;
+  recomputeScopes?: boolean;
 };
 
 const ACQUISITION_PLATFORMS = new Set(["meta-ads", "google-ads", "tiktok-business"]);
 const BACKEND_PLATFORMS = new Set(["shopify", "patient-now-emr"]);
-const WEBSITE_PLATFORMS = new Set(["website-input", "website-tracking"]);
+const WEBSITE_PLATFORMS = new Set(["web-journey"]);
 const DEFAULT_REPLAY_LIMIT = 250;
+const REPLAY_YIELD_EVERY_RECORDS = 50;
+const REPLAY_DETAIL_PREVIEW_LIMIT = 50;
 
 function asRecord(value: unknown): RuntimeRow {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as RuntimeRow) : {};
@@ -125,6 +127,16 @@ function firstNonEmpty(...values: unknown[]): string | null {
   return null;
 }
 
+function hasSignalValue(value: unknown): boolean {
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+  return false;
+}
+
 function roleForPlatform(record: RuntimeRecord, row: RuntimeRow): AttributionBindingRecord["role"] | null {
   if (WEBSITE_PLATFORMS.has(record.platform) || asString(row.event_name)) {
     return "website";
@@ -143,7 +155,9 @@ function normalizeRecord(input: RuntimeRow, recordIdHint?: string | null): Runti
     id: firstNonEmpty(input.id, recordIdHint) ?? "",
     record_id: firstNonEmpty(input.record_id, recordIdHint, input.id) ?? "",
     platform: asString(input.platform),
-    receiver_id: asOptionalString(input.receiver_id),
+    receiver_id:
+      asOptionalString(input.receiver_id) ??
+      asOptionalString(input.receiver_contact_id),
     container_id: asOptionalString(input.container_id),
     thread_id: asOptionalString(input.thread_id),
     timestamp: parseTimestamp(input.timestamp),
@@ -161,52 +175,7 @@ function providerIds(metadata: RuntimeRow): RuntimeRow {
 
 function rowOf(metadata: RuntimeRow): RuntimeRow {
   const direct = asRecord(metadata.row);
-  if (Object.keys(direct).length > 0) {
-    return direct;
-  }
-  const websiteEvent = asRecord(metadata.website_event);
-  if (Object.keys(websiteEvent).length === 0) {
-    return {};
-  }
-  return {
-    ...websiteEvent,
-    website_installation_id: firstNonEmpty(
-      websiteEvent.website_installation_id,
-      websiteEvent.websiteInstallationId,
-    ),
-    event_id: firstNonEmpty(websiteEvent.event_id, websiteEvent.eventId),
-    event_name: firstNonEmpty(websiteEvent.event_name, websiteEvent.eventName),
-    captured_at: firstNonEmpty(websiteEvent.captured_at, websiteEvent.capturedAt),
-    received_at: firstNonEmpty(websiteEvent.received_at, websiteEvent.receivedAt),
-    consent_state: firstNonEmpty(websiteEvent.consent_state, websiteEvent.consentState),
-    session_id: firstNonEmpty(websiteEvent.session_id, websiteEvent.sessionId),
-    browser_id: firstNonEmpty(websiteEvent.browser_id, websiteEvent.browserId),
-    page_url: firstNonEmpty(websiteEvent.page_url, websiteEvent.pageUrl),
-    page_path: firstNonEmpty(websiteEvent.page_path, websiteEvent.pagePath),
-    event_source_url: firstNonEmpty(websiteEvent.event_source_url, websiteEvent.eventSourceUrl),
-    utm_source: firstNonEmpty(websiteEvent.utm_source, websiteEvent.utmSource),
-    utm_medium: firstNonEmpty(websiteEvent.utm_medium, websiteEvent.utmMedium),
-    utm_campaign: firstNonEmpty(websiteEvent.utm_campaign, websiteEvent.utmCampaign),
-    utm_content: firstNonEmpty(websiteEvent.utm_content, websiteEvent.utmContent),
-    utm_term: firstNonEmpty(websiteEvent.utm_term, websiteEvent.utmTerm),
-    surface_id: firstNonEmpty(websiteEvent.surface_id, websiteEvent.surfaceId),
-    surface_label: firstNonEmpty(websiteEvent.surface_label, websiteEvent.surfaceLabel),
-    surface_category: firstNonEmpty(websiteEvent.surface_category, websiteEvent.surfaceCategory),
-    target_type: firstNonEmpty(websiteEvent.target_type, websiteEvent.targetType),
-    target_id: firstNonEmpty(websiteEvent.target_id, websiteEvent.targetId),
-    target_label: firstNonEmpty(websiteEvent.target_label, websiteEvent.targetLabel),
-    bridge_surface: firstNonEmpty(websiteEvent.bridge_surface, websiteEvent.bridgeSurface),
-    handoff_id: firstNonEmpty(websiteEvent.handoff_id, websiteEvent.handoffId),
-    checkout_token: firstNonEmpty(websiteEvent.checkout_token, websiteEvent.checkoutToken),
-    checkout_key: firstNonEmpty(websiteEvent.checkout_key, websiteEvent.checkoutKey),
-    checkout_id: firstNonEmpty(websiteEvent.checkout_id, websiteEvent.checkoutId),
-    cart_token: firstNonEmpty(websiteEvent.cart_token, websiteEvent.cartToken),
-    form_id: firstNonEmpty(websiteEvent.form_id, websiteEvent.formId),
-    form_submission_id: firstNonEmpty(websiteEvent.form_submission_id, websiteEvent.formSubmissionId),
-    booking_id: firstNonEmpty(websiteEvent.booking_id, websiteEvent.bookingId),
-    booking_slot_id: firstNonEmpty(websiteEvent.booking_slot_id, websiteEvent.bookingSlotId),
-    lead_external_id: firstNonEmpty(websiteEvent.lead_external_id, websiteEvent.leadExternalId),
-  };
+  return Object.keys(direct).length > 0 ? direct : {};
 }
 
 function derivedOf(metadata: RuntimeRow): RuntimeRow {
@@ -215,6 +184,82 @@ function derivedOf(metadata: RuntimeRow): RuntimeRow {
 
 function bridgeAttributesOf(metadata: RuntimeRow): RuntimeRow {
   return asRecord(metadata.bridge_attributes);
+}
+
+function parseUrlLike(value: unknown): URL | null {
+  const raw = asString(value);
+  if (!raw) {
+    return null;
+  }
+  try {
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) {
+      return new URL(raw);
+    }
+    return new URL(raw, "https://web-signals.invalid");
+  } catch {
+    return null;
+  }
+}
+
+function readUrlAttributionParams(...values: unknown[]): RuntimeRow {
+  const extracted: RuntimeRow = {};
+  for (const value of values) {
+    const url = parseUrlLike(value);
+    if (!url) {
+      continue;
+    }
+    const params = url.searchParams;
+    const assign = (key: string, nextValue: string | null): void => {
+      if (!nextValue) {
+        return;
+      }
+      if (!asString(extracted[key])) {
+        extracted[key] = nextValue;
+      }
+    };
+    assign("utm_source", params.get("utm_source"));
+    assign("utm_medium", params.get("utm_medium"));
+    assign("utm_campaign", params.get("utm_campaign"));
+    assign("utm_content", params.get("utm_content"));
+    assign("utm_term", params.get("utm_term"));
+    assign("utm_id", params.get("utm_id"));
+    assign("fbclid", params.get("fbclid"));
+    assign("gclid", params.get("gclid"));
+    assign("gbraid", params.get("gbraid"));
+    assign("wbraid", params.get("wbraid"));
+    assign("ttclid", params.get("ttclid"));
+    assign("msclkid", params.get("msclkid"));
+    const pathSegments = url.pathname.split("/").filter(Boolean);
+    if (pathSegments[0] === "cart" && pathSegments[1] === "c" && pathSegments[2]) {
+      assign("cart_token", pathSegments[2]);
+    }
+    assign("checkout_key", params.get("key"));
+  }
+  return extracted;
+}
+
+function mergedEvidenceWithUrlParams(base: RuntimeRow, ...sources: unknown[]): RuntimeRow {
+  const next = { ...base };
+  const extracted = readUrlAttributionParams(...sources);
+  for (const [key, value] of Object.entries(extracted)) {
+    if (!hasSignalValue(next[key])) {
+      next[key] = value;
+    }
+  }
+  return next;
+}
+
+function extractShopifyNoteAttributes(row: RuntimeRow): RuntimeRow {
+  const noteAttributes = asRecord(row.note_attributes);
+  const extracted: RuntimeRow = {};
+  for (const [rawKey, rawValue] of Object.entries(noteAttributes)) {
+    const key = rawKey.startsWith("ms_") ? rawKey.slice(3) : rawKey;
+    if (!key || hasSignalValue(extracted[key])) {
+      continue;
+    }
+    extracted[key] = rawValue;
+  }
+  return extracted;
 }
 
 function hasBackendOutcomeSignal(record: RuntimeRecord, row: RuntimeRow): boolean {
@@ -262,11 +307,14 @@ function hasBackendOutcomeSignal(record: RuntimeRecord, row: RuntimeRow): boolea
   return Boolean(firstNonEmpty(row.outcome_type, row.entity_type, row.record_type, row.status, row.stage));
 }
 
-function websiteInstallationIdFromRow(row: RuntimeRow, metadata: RuntimeRow): string | null {
+function webInstallationIdFromRow(row: RuntimeRow, metadata: RuntimeRow): string | null {
   return firstNonEmpty(
-    row.website_installation_id,
-    metadata.website_installation_id,
-    asRecord(metadata.source_request).website_installation_id,
+    row.web_installation_id,
+    row.webInstallationId,
+    metadata.web_installation_id,
+    metadata.webInstallationId,
+    asRecord(metadata.source_request).web_installation_id,
+    asRecord(metadata.source_request).webInstallationId,
   );
 }
 
@@ -275,14 +323,6 @@ function resolveMatchingBindings(db: DatabaseSync, record: RuntimeRecord, row: R
   if (!role) {
     return [];
   }
-  if (role === "website") {
-    const installationId = websiteInstallationIdFromRow(row, record.metadata);
-    if (!installationId) {
-      return [];
-    }
-    return listBindingsForWebsiteInstallation(db, installationId).filter((binding) => binding.role === "website");
-  }
-
   const connectionId = firstNonEmpty(record.metadata.connection_id, record.receiver_id);
   if (!connectionId) {
     return [];
@@ -297,44 +337,73 @@ function classifySourceFromEvidence(evidence: RuntimeRow): {
   sourceConfidence: string;
   paidPlatform: string | null;
 } {
-  if (firstNonEmpty(evidence.fbclid, evidence.fbc, evidence.fbp)) {
+  const enriched = mergedEvidenceWithUrlParams(
+    evidence,
+    evidence.event_source_url,
+    evidence.page_url,
+    evidence.page_path,
+    evidence.landing_path,
+    evidence.landing_site,
+  );
+  const utmSource = lower(enriched.utm_source);
+  const utmMedium = lower(enriched.utm_medium);
+  const utmCampaign = lower(enriched.utm_campaign);
+  const referrer = lower(enriched.referrer);
+
+  const isPaidMedium = /(^|_|\b)(cpc|ppc|paid|paid_social|paid-social|paidsearch|paid_search|display|retargeting|prospecting)(\b|_)/.test(
+    utmMedium,
+  );
+  const isOrganicSocialMedium = /(^|_|\b)(bio|social|organic|organic_social|link_in_bio|profile_link)(\b|_)/.test(
+    utmMedium,
+  ) || utmCampaign === "organic_social";
+  const isMetaSource = /(facebook|instagram|^ig$|meta)/.test(utmSource);
+  const isSearchSource = /(google|adwords|gads|bing|microsoft|msn)/.test(utmSource);
+  const isTikTokSource = /(tiktok)/.test(utmSource);
+
+  if (firstNonEmpty(enriched.fbclid, enriched.fbc)) {
     return { sourceChannel: "meta_paid", sourceConfidence: "high", paidPlatform: "meta-ads" };
   }
-  if (firstNonEmpty(evidence.gclid, evidence.gbraid, evidence.wbraid)) {
-    return { sourceChannel: "google_paid", sourceConfidence: "high", paidPlatform: "google-ads" };
+  if (firstNonEmpty(enriched.gclid, enriched.gbraid, enriched.wbraid, enriched.msclkid)) {
+    return { sourceChannel: "search_paid", sourceConfidence: "high", paidPlatform: "google-ads" };
   }
-  if (firstNonEmpty(evidence.ttclid, evidence.ttp)) {
+  if (firstNonEmpty(enriched.ttclid)) {
     return { sourceChannel: "tiktok_paid", sourceConfidence: "high", paidPlatform: "tiktok-business" };
   }
 
-  const utmSource = lower(evidence.utm_source);
-  const utmMedium = lower(evidence.utm_medium);
   if (utmSource || utmMedium) {
-    if (
-      /cpc|ppc|paid|paid_social|paid-social|display|retargeting/.test(utmMedium) ||
-      /(facebook|instagram|meta)/.test(utmSource)
-    ) {
+    if (isMetaSource && isPaidMedium) {
       return { sourceChannel: "meta_paid", sourceConfidence: "medium", paidPlatform: "meta-ads" };
     }
-    if (/(google|adwords|gads)/.test(utmSource) || /cpc|search|paid_search/.test(utmMedium)) {
-      return { sourceChannel: "google_paid", sourceConfidence: "medium", paidPlatform: "google-ads" };
+    if (isSearchSource && isPaidMedium) {
+      return { sourceChannel: "search_paid", sourceConfidence: "medium", paidPlatform: "google-ads" };
     }
-    if (/(tiktok)/.test(utmSource)) {
+    if (isTikTokSource && isPaidMedium) {
       return { sourceChannel: "tiktok_paid", sourceConfidence: "medium", paidPlatform: "tiktok-business" };
+    }
+    if (utmSource === "shop_app") {
+      return { sourceChannel: "shop_app", sourceConfidence: "medium", paidPlatform: null };
+    }
+    if (isMetaSource && isOrganicSocialMedium) {
+      return { sourceChannel: "instagram_organic_social", sourceConfidence: "medium", paidPlatform: null };
+    }
+    if (isTikTokSource && isOrganicSocialMedium) {
+      return { sourceChannel: "tiktok_organic_social", sourceConfidence: "medium", paidPlatform: null };
     }
     if (/email|newsletter/.test(utmMedium) || /mailchimp|klaviyo/.test(utmSource)) {
       return { sourceChannel: "email", sourceConfidence: "medium", paidPlatform: null };
     }
     return {
-      sourceChannel: firstNonEmpty(utmSource, utmMedium) ?? "other_campaign",
+      sourceChannel: "utm_only",
       sourceConfidence: "medium",
       paidPlatform: null,
     };
   }
 
-  const referrer = lower(evidence.referrer);
   if (/(google\.)/.test(referrer)) {
     return { sourceChannel: "google_organic", sourceConfidence: "low", paidPlatform: null };
+  }
+  if (/(shop\.app)/.test(referrer)) {
+    return { sourceChannel: "shop_app", sourceConfidence: "low", paidPlatform: null };
   }
   if (/(instagram\.com)/.test(referrer)) {
     return { sourceChannel: "instagram_referral", sourceConfidence: "low", paidPlatform: null };
@@ -356,12 +425,64 @@ function channelForAdPlatform(platform: string): string {
     case "meta-ads":
       return "meta_paid";
     case "google-ads":
-      return "google_paid";
+      return "search_paid";
     case "tiktok-business":
       return "tiktok_paid";
     default:
       return platform;
   }
+}
+
+function canonicalAdFactFamilyRank(fact: AttributionAdFactRecord): number {
+  switch (fact.family) {
+    case "campaign_daily":
+      return 500;
+    case "account_daily":
+      return 450;
+    case "adset_daily":
+    case "ad_group_daily":
+      return 300;
+    case "ad_daily":
+      return 200;
+    case "account_hourly":
+    case "campaign_hourly":
+      return 100;
+    case "campaign_snapshot":
+    case "account_access_snapshot":
+      return 10;
+    default:
+      return fact.granularity === "daily" ? 50 : fact.granularity === "hourly" ? 25 : 0;
+  }
+}
+
+function selectCanonicalAdFactsForMarts(
+  adFacts: AttributionAdFactRecord[],
+): AttributionAdFactRecord[] {
+  const bestByPlatformDay = new Map<string, number>();
+  for (const fact of adFacts) {
+    const day = fact.date ?? (fact.hour ? fact.hour.slice(0, 10) : null);
+    if (!day || !fact.sourceChannel) {
+      continue;
+    }
+    const key = `${fact.platform}:${day}`;
+    const rank = canonicalAdFactFamilyRank(fact);
+    const current = bestByPlatformDay.get(key) ?? Number.NEGATIVE_INFINITY;
+    if (rank > current) {
+      bestByPlatformDay.set(key, rank);
+    }
+  }
+
+  return adFacts.filter((fact) => {
+    const day = fact.date ?? (fact.hour ? fact.hour.slice(0, 10) : null);
+    if (!day || !fact.sourceChannel) {
+      return false;
+    }
+    const expectedRank = bestByPlatformDay.get(`${fact.platform}:${day}`);
+    if (typeof expectedRank !== "number") {
+      return false;
+    }
+    return canonicalAdFactFamilyRank(fact) === expectedRank;
+  });
 }
 
 function getDateFromRow(row: RuntimeRow): string | null {
@@ -445,9 +566,9 @@ function parseWebsiteEvent(
 ): AttributionWebEventRecord | null {
   const metadata = record.metadata;
   const row = rowOf(metadata);
-  const websiteInstallationId = binding.websiteInstallationId ?? websiteInstallationIdFromRow(row, metadata);
+  const webInstallationId = webInstallationIdFromRow(row, metadata);
   const eventName = asString(row.event_name);
-  if (!websiteInstallationId || !eventName) {
+  if (!webInstallationId || !eventName) {
     return null;
   }
   const logicalRowId = firstNonEmpty(metadata.logical_row_id, row.event_id, record.record_id, record.id);
@@ -455,51 +576,58 @@ function parseWebsiteEvent(
   if (!logicalRowId || !eventId) {
     return null;
   }
-  const classification = classifySourceFromEvidence(row);
+  const enrichedRow = mergedEvidenceWithUrlParams(
+    row,
+    row.event_source_url,
+    row.page_url,
+    row.page_path,
+    row.landing_path,
+  );
+  const classification = classifySourceFromEvidence(enrichedRow);
   return {
     scopeId,
     sourceRecordId: record.record_id || record.id,
     logicalRowId,
-    websiteInstallationId,
+    webInstallationId,
     eventId,
     eventName,
     capturedAt: parseTimestamp(row.captured_at ?? row.timestamp ?? record.timestamp),
     sessionId: asOptionalString(row.session_id),
     browserId: asOptionalString(row.browser_id),
     consentState: asOptionalString(row.consent_state),
-    pageUrl: asOptionalString(row.page_url),
-    pagePath: asOptionalString(row.page_path),
+    pageUrl: asOptionalString(enrichedRow.page_url),
+    pagePath: asOptionalString(enrichedRow.page_path),
     host: asOptionalString(row.host),
-    referrer: asOptionalString(row.referrer),
-    eventSourceUrl: asOptionalString(row.event_source_url),
+    referrer: asOptionalString(enrichedRow.referrer),
+    eventSourceUrl: asOptionalString(enrichedRow.event_source_url),
     sourceChannel: classification.sourceChannel,
     sourceConfidence: classification.sourceConfidence,
-    utmSource: asOptionalString(row.utm_source),
-    utmMedium: asOptionalString(row.utm_medium),
-    utmCampaign: asOptionalString(row.utm_campaign),
-    utmContent: asOptionalString(row.utm_content),
-    utmTerm: asOptionalString(row.utm_term),
-    fbclid: asOptionalString(row.fbclid),
-    fbc: asOptionalString(row.fbc),
-    fbp: asOptionalString(row.fbp),
-    gclid: asOptionalString(row.gclid),
-    gbraid: asOptionalString(row.gbraid),
-    wbraid: asOptionalString(row.wbraid),
-    ttclid: asOptionalString(row.ttclid),
-    ttp: asOptionalString(row.ttp),
-    msclkid: asOptionalString(row.msclkid),
-    bridgeSurface: asOptionalString(row.bridge_surface),
-    handoffId: asOptionalString(row.handoff_id),
-    checkoutToken: asOptionalString(row.checkout_token),
-    checkoutKey: asOptionalString(row.checkout_key),
-    checkoutId: asOptionalString(row.checkout_id),
-    cartToken: asOptionalString(row.cart_token),
-    formId: asOptionalString(row.form_id),
-    formSubmissionId: asOptionalString(row.form_submission_id),
-    bookingId: asOptionalString(row.booking_id),
-    bookingSlotId: asOptionalString(row.booking_slot_id),
-    leadExternalId: asOptionalString(row.lead_external_id),
-    row,
+    utmSource: asOptionalString(enrichedRow.utm_source),
+    utmMedium: asOptionalString(enrichedRow.utm_medium),
+    utmCampaign: asOptionalString(enrichedRow.utm_campaign),
+    utmContent: asOptionalString(enrichedRow.utm_content),
+    utmTerm: asOptionalString(enrichedRow.utm_term),
+    fbclid: asOptionalString(enrichedRow.fbclid),
+    fbc: asOptionalString(enrichedRow.fbc),
+    fbp: asOptionalString(enrichedRow.fbp),
+    gclid: asOptionalString(enrichedRow.gclid),
+    gbraid: asOptionalString(enrichedRow.gbraid),
+    wbraid: asOptionalString(enrichedRow.wbraid),
+    ttclid: asOptionalString(enrichedRow.ttclid),
+    ttp: asOptionalString(enrichedRow.ttp),
+    msclkid: asOptionalString(enrichedRow.msclkid),
+    bridgeSurface: asOptionalString(enrichedRow.bridge_surface),
+    handoffId: asOptionalString(enrichedRow.handoff_id),
+    checkoutToken: asOptionalString(enrichedRow.checkout_token),
+    checkoutKey: asOptionalString(enrichedRow.checkout_key),
+    checkoutId: asOptionalString(enrichedRow.checkout_id),
+    cartToken: asOptionalString(enrichedRow.cart_token),
+    formId: asOptionalString(enrichedRow.form_id),
+    formSubmissionId: asOptionalString(enrichedRow.form_submission_id),
+    bookingId: asOptionalString(enrichedRow.booking_id),
+    bookingSlotId: asOptionalString(enrichedRow.booking_slot_id),
+    leadExternalId: asOptionalString(enrichedRow.lead_external_id),
+    row: enrichedRow,
     updatedAt: Date.now(),
   };
 }
@@ -515,10 +643,19 @@ function parseBusinessOutcome(
   if (!hasBackendOutcomeSignal(record, row)) {
     return null;
   }
-  const bridgeAttributes = {
-    ...asRecord(row.bridge_attributes),
-    ...bridgeAttributesOf(metadata),
-  } satisfies RuntimeRow;
+  const bridgeAttributes = mergedEvidenceWithUrlParams(
+    {
+      ...extractShopifyNoteAttributes(row),
+      ...asRecord(row.bridge_attributes),
+      ...bridgeAttributesOf(metadata),
+    } satisfies RuntimeRow,
+    row.event_source_url,
+    row.page_url,
+    row.page_path,
+    row.landing_path,
+    row.landing_site,
+    row.referring_site,
+  );
   const outcomeId = firstNonEmpty(
     row.backend_entity_id,
     row.outcome_id,
@@ -690,12 +827,12 @@ function buildSessionFacts(scopeId: string, events: AttributionWebEventRecord[])
     if (!event.sessionId) {
       continue;
     }
-    const key = `${event.websiteInstallationId}:${event.sessionId}`;
+    const key = `${event.webInstallationId}:${event.sessionId}`;
     const existing =
       grouped.get(key) ??
       {
         scopeId,
-        websiteInstallationId: event.websiteInstallationId,
+        webInstallationId: event.webInstallationId,
         sessionId: event.sessionId,
         firstSeenAt: event.capturedAt,
         lastSeenAt: event.capturedAt,
@@ -744,7 +881,7 @@ function buildSessionFacts(scopeId: string, events: AttributionWebEventRecord[])
       event_source_url: event.eventSourceUrl,
     } satisfies RuntimeRow;
     const classification = classifySourceFromEvidence(evidence);
-    if (confidenceRank(classification.sourceConfidence) >= confidenceRank(existing.sourceConfidence)) {
+    if (confidenceRank(classification.sourceConfidence) > confidenceRank(existing.sourceConfidence)) {
       existing.sourceChannel = classification.sourceChannel;
       existing.sourceConfidence = classification.sourceConfidence;
       existing.evidence = evidence;
@@ -767,7 +904,7 @@ function buildConversionBridges(scopeId: string, events: AttributionWebEventReco
         event.formSubmissionId,
         event.bookingId,
         event.leadExternalId,
-      ) ?? `${event.websiteInstallationId}:${event.eventId}`;
+      ) ?? `${event.webInstallationId}:${event.eventId}`;
     const evidence = {
       event_id: event.eventId,
       session_id: event.sessionId,
@@ -783,7 +920,7 @@ function buildConversionBridges(scopeId: string, events: AttributionWebEventReco
     bridges.set(bridgeKey, {
       scopeId,
       bridgeKey,
-      websiteInstallationId: event.websiteInstallationId,
+      webInstallationId: event.webInstallationId,
       sessionId: event.sessionId,
       bridgeSurface: event.bridgeSurface,
       handoffId: event.handoffId,
@@ -832,11 +969,39 @@ function buildOutcomeAttributions(
     }
   }
 
+  function resolveBridgeMatch(outcome: AttributionBusinessOutcomeRecord): {
+    bridge: AttributionConversionBridgeRecord | null;
+    matchMethod: string | null;
+  } {
+    const candidates: Array<[string | null, string]> = [
+      [firstNonEmpty(outcome.cartToken, outcome.bridgeAttributes.cart_token), "bridge_cart_token"],
+      [firstNonEmpty(outcome.checkoutToken, outcome.bridgeAttributes.checkout_token), "bridge_checkout_token"],
+      [firstNonEmpty(outcome.bridgeAttributes.checkout_key), "bridge_checkout_key"],
+      [firstNonEmpty(outcome.bridgeAttributes.checkout_id), "bridge_checkout_id"],
+      [firstNonEmpty(outcome.bridgeAttributes.handoff_id), "bridge_handoff_id"],
+      [firstNonEmpty(outcome.bridgeAttributes.form_submission_id), "bridge_form_submission"],
+      [firstNonEmpty(outcome.bridgeAttributes.booking_id), "bridge_booking"],
+      [firstNonEmpty(outcome.bridgeAttributes.lead_external_id), "bridge_lead_external_id"],
+      [firstNonEmpty(outcome.bridgeAttributes.initiate_checkout_event_id), "bridge_checkout_event"],
+    ];
+    for (const [candidate, matchMethod] of candidates) {
+      if (!candidate) {
+        continue;
+      }
+      const bridge = bridgeByKey.get(candidate);
+      if (bridge) {
+        return { bridge, matchMethod };
+      }
+    }
+    return { bridge: null, matchMethod: null };
+  }
+
   return outcomes.map((outcome) => {
     const backendClassification = classifySourceFromEvidence(outcome.bridgeAttributes);
     const session = outcome.sessionId ? sessions.get(outcome.sessionId) ?? null : null;
+    const bridgeMatch = resolveBridgeMatch(outcome);
     const bridge =
-      bridgeByKey.get(firstNonEmpty(outcome.checkoutToken, outcome.cartToken) ?? "") ??
+      bridgeMatch.bridge ??
       (outcome.sessionId ? Array.from(bridgeByKey.values()).find((entry) => entry.sessionId === outcome.sessionId) ?? null : null);
 
     const primaryEvidence = bridge?.evidence ?? session?.evidence ?? outcome.bridgeAttributes;
@@ -857,12 +1022,19 @@ function buildOutcomeAttributions(
 
     let matchMethod = "unresolved";
     let unresolvedReason: string | null = null;
-    if (bridge) {
+    if (bridge && bridgeMatch.matchMethod) {
+      matchMethod = bridgeMatch.matchMethod;
+    } else if (bridge) {
       matchMethod = "bridge_match";
     } else if (session) {
       matchMethod = "session_match";
     } else if (backendClassification.sourceChannel !== "direct_or_unknown") {
-      matchMethod = "backend_bridge_attributes";
+      matchMethod =
+        hasSignalValue(outcome.bridgeAttributes.landing_site) ||
+        hasSignalValue(outcome.bridgeAttributes.landing_path) ||
+        hasSignalValue(outcome.bridgeAttributes.event_source_url)
+          ? "landing_site_params"
+          : "backend_bridge_attributes";
     } else {
       unresolvedReason = "no_bridge_or_session_evidence";
     }
@@ -913,7 +1085,7 @@ function buildDailySourceMarts(
     return existing;
   };
 
-  for (const fact of adFacts) {
+  for (const fact of selectCanonicalAdFactsForMarts(adFacts)) {
     const row = upsert(fact.date ?? (fact.hour ? fact.hour.slice(0, 10) : null), fact.sourceChannel);
     if (!row) {
       continue;
@@ -1034,78 +1206,93 @@ function recomputeScope(db: DatabaseSync, scopeId: string): Record<string, unkno
   };
 }
 
-export function processCanonicalRecord(params: ProcessCanonicalRecordParams): Record<string, unknown> {
-  return withAttributionDb(params.dataDir, (db) => {
-    const normalized = normalizeRecord(params.record, params.recordId);
-    const row = rowOf(normalized.metadata);
-    const bindings = resolveMatchingBindings(db, normalized, row);
-    if (bindings.length === 0) {
-      return {
-        ok: true,
-        skipped: true,
-        reason: "no_matching_bindings",
+function processCanonicalRecordWithDb(
+  db: DatabaseSync,
+  params: Omit<ProcessCanonicalRecordParams, "dataDir">,
+): Record<string, unknown> {
+  const normalized = normalizeRecord(params.record, params.recordId);
+  const row = rowOf(normalized.metadata);
+  const bindings = resolveMatchingBindings(db, normalized, row);
+  if (bindings.length === 0) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: "no_matching_bindings",
+      platform: normalized.platform,
+      record_id: normalized.record_id || normalized.id,
+    };
+  }
+
+  const perScope: Array<Record<string, unknown>> = [];
+  let processed = 0;
+  let skipped = 0;
+  const recomputeScopes = params.recomputeScopes !== false;
+  for (const binding of bindings) {
+    const recordToken = normalized.record_id || normalized.id;
+    if (!params.skipProcessedCheck && recordToken) {
+      const accepted = markRecordProcessed(db, {
+        scopeId: binding.scopeId,
+        recordId: recordToken,
         platform: normalized.platform,
-        record_id: normalized.record_id || normalized.id,
-      };
-    }
-
-    const perScope: Array<Record<string, unknown>> = [];
-    let processed = 0;
-    let skipped = 0;
-    for (const binding of bindings) {
-      const recordToken = normalized.record_id || normalized.id;
-      if (!params.skipProcessedCheck && recordToken) {
-        const accepted = markRecordProcessed(db, {
-          scopeId: binding.scopeId,
-          recordId: recordToken,
-          platform: normalized.platform,
-          connectionId: binding.connectionId,
-        });
-        if (!accepted) {
-          skipped += 1;
-          continue;
-        }
-      }
-
-      let changed = false;
-      if (binding.role === "acquisition") {
-        const fact = parseAdFact(binding.scopeId, binding, normalized);
-        if (fact) {
-          upsertAdFact(db, fact);
-          changed = true;
-        }
-      } else if (binding.role === "website") {
-        const event = parseWebsiteEvent(binding.scopeId, binding, normalized);
-        if (event) {
-          upsertWebEvent(db, event);
-          changed = true;
-        }
-      } else if (binding.role === "backend") {
-        const outcome = parseBusinessOutcome(binding.scopeId, binding, normalized);
-        if (outcome) {
-          upsertBusinessOutcome(db, outcome);
-          changed = true;
-        }
-      }
-
-      if (!changed) {
+        connectionId: binding.connectionId,
+      });
+      if (!accepted) {
         skipped += 1;
         continue;
       }
-
-      perScope.push(recomputeScope(db, binding.scopeId));
-      processed += 1;
     }
 
-    return {
-      ok: true,
-      platform: normalized.platform,
-      record_id: normalized.record_id || normalized.id,
-      processed_scopes: processed,
-      skipped_scopes: skipped,
-      scopes: perScope,
-    };
-  });
+    let changed = false;
+    if (binding.role === "acquisition") {
+      const fact = parseAdFact(binding.scopeId, binding, normalized);
+      if (fact) {
+        upsertAdFact(db, fact);
+        changed = true;
+      }
+    } else if (binding.role === "website") {
+      const event = parseWebsiteEvent(binding.scopeId, binding, normalized);
+      if (event) {
+        upsertWebEvent(db, event);
+        changed = true;
+      }
+    } else if (binding.role === "backend") {
+      const outcome = parseBusinessOutcome(binding.scopeId, binding, normalized);
+      if (outcome) {
+        upsertBusinessOutcome(db, outcome);
+        changed = true;
+      }
+    }
+
+    if (!changed) {
+      skipped += 1;
+      continue;
+    }
+
+    if (recomputeScopes) {
+      perScope.push(recomputeScope(db, binding.scopeId));
+    }
+    processed += 1;
+  }
+
+  return {
+    ok: true,
+    platform: normalized.platform,
+    record_id: normalized.record_id || normalized.id,
+    processed_scopes: processed,
+    skipped_scopes: skipped,
+    scopes: perScope,
+  };
+}
+
+export function processCanonicalRecord(params: ProcessCanonicalRecordParams): Record<string, unknown> {
+  return withAttributionDb(params.dataDir, (db) =>
+    processCanonicalRecordWithDb(db, {
+      record: params.record,
+      recordId: params.recordId,
+      skipProcessedCheck: params.skipProcessedCheck,
+      recomputeScopes: params.recomputeScopes,
+    }),
+  );
 }
 
 export async function processRecordIngested(
@@ -1120,6 +1307,7 @@ export async function processRecordIngested(
     dataDir,
     record: asRecord(params.record),
     recordId: firstNonEmpty(params.record_id),
+    recomputeScopes: false,
   });
 }
 
@@ -1129,122 +1317,88 @@ export async function replayBoundRecords(params: {
   scopeId?: string | null;
   limitPerPlatform?: number | null;
 }): Promise<Record<string, unknown>> {
-  const bindings = withAttributionDb(params.dataDir, (db) =>
-    listBindings(db, { scopeId: params.scopeId ?? null }),
-  );
-  if (bindings.length === 0) {
-    return { ok: true, processed: 0, skipped: 0, bindings: 0 };
-  }
-
-  const limit = Math.max(1, Math.trunc(params.limitPerPlatform ?? DEFAULT_REPLAY_LIMIT));
-  const acquisitionOrBackendBindings = bindings.filter((binding) => binding.connectionId);
-  const websiteBindings = bindings.filter((binding) => binding.websiteInstallationId);
-
-  const seenRecords = new Set<string>();
-  let processed = 0;
-  let skipped = 0;
-  const details: Array<Record<string, unknown>> = [];
-
-  for (const binding of acquisitionOrBackendBindings) {
-    let offset = 0;
-    while (true) {
-      const payload = unwrapPayload(
-        await params.runtime.records.list({
-          connection_id: binding.connectionId,
-          ...(binding.platform ? { platform: binding.platform } : {}),
-          limit,
-          offset,
-        }),
-      );
-      const rows = Array.isArray(payload.records)
-        ? payload.records.filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry)) as RuntimeRow[]
-        : [];
-      if (rows.length === 0) {
-        break;
-      }
-      for (const row of rows) {
-        const record = normalizeRecord(row);
-        const token = record.record_id || record.id;
-        if (!token || seenRecords.has(token)) {
-          skipped += 1;
-          continue;
-        }
-        seenRecords.add(token);
-        const result = processCanonicalRecord({
-          dataDir: params.dataDir,
-          record: row,
-          recordId: token,
-          skipProcessedCheck: true,
-        });
-        processed += asInteger(result.processed_scopes);
-        skipped += asInteger(result.skipped_scopes);
-        details.push(result);
-      }
-      if (rows.length < limit) {
-        break;
-      }
-      offset += rows.length;
+  const db = openAttributionDb(params.dataDir);
+  try {
+    const bindings = listBindings(db, { scopeId: params.scopeId ?? null });
+    if (bindings.length === 0) {
+      return { ok: true, processed: 0, skipped: 0, bindings: 0 };
     }
-  }
 
-  const websitePlatforms = ["website-input", "website-tracking"];
-  for (const platform of websitePlatforms) {
-    let offset = 0;
-    while (true) {
-      const payload = unwrapPayload(
-        await params.runtime.records.list({
-          platform,
-          limit,
-          offset,
-        }),
-      );
-      const rows = Array.isArray(payload.records)
-        ? payload.records.filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry)) as RuntimeRow[]
-        : [];
-      if (rows.length === 0) {
-        break;
-      }
-      for (const row of rows) {
-        const record = normalizeRecord(row);
-        const token = record.record_id || record.id;
-        if (!token || seenRecords.has(token)) {
-          skipped += 1;
-          continue;
+    const limit = Math.max(1, Math.trunc(params.limitPerPlatform ?? DEFAULT_REPLAY_LIMIT));
+    const connectionBindings = bindings.filter((binding) => binding.connectionId);
+
+    const seenRecords = new Set<string>();
+    let processed = 0;
+    let skipped = 0;
+    let detailCount = 0;
+    let rowsSinceYield = 0;
+    const details: Array<Record<string, unknown>> = [];
+
+    for (const binding of connectionBindings) {
+      let offset = 0;
+      while (true) {
+        const payload = unwrapPayload(
+          await params.runtime.records.list({
+            connection_id: binding.connectionId,
+            ...(binding.platform ? { platform: binding.platform } : {}),
+            limit,
+            offset,
+          }),
+        );
+        const rows = Array.isArray(payload.records)
+          ? payload.records.filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry)) as RuntimeRow[]
+          : [];
+        if (rows.length === 0) {
+          break;
         }
-        const installationId = websiteInstallationIdFromRow(rowOf(record.metadata), record.metadata);
-        if (!installationId || !websiteBindings.some((binding) => binding.websiteInstallationId === installationId)) {
-          skipped += 1;
-          continue;
+        for (const row of rows) {
+          const record = normalizeRecord(row);
+          const token = record.record_id || record.id;
+          if (!token || seenRecords.has(token)) {
+            skipped += 1;
+            continue;
+          }
+          seenRecords.add(token);
+          const result = processCanonicalRecordWithDb(db, {
+            record: row,
+            recordId: token,
+            skipProcessedCheck: true,
+            recomputeScopes: false,
+          });
+          processed += asInteger(result.processed_scopes);
+          skipped += asInteger(result.skipped_scopes);
+          detailCount += 1;
+          if (details.length < REPLAY_DETAIL_PREVIEW_LIMIT) {
+            details.push(result);
+          }
+          rowsSinceYield += 1;
+          if (rowsSinceYield >= REPLAY_YIELD_EVERY_RECORDS) {
+            rowsSinceYield = 0;
+            await new Promise<void>((resolve) => setImmediate(resolve));
+          }
         }
-        seenRecords.add(token);
-        const result = processCanonicalRecord({
-          dataDir: params.dataDir,
-          record: row,
-          recordId: token,
-          skipProcessedCheck: true,
-        });
-        processed += asInteger(result.processed_scopes);
-        skipped += asInteger(result.skipped_scopes);
-        details.push(result);
+        if (rows.length < limit) {
+          break;
+        }
+        offset += rows.length;
       }
-      if (rows.length < limit) {
-        break;
-      }
-      offset += rows.length;
     }
-  }
 
-  const scopeIds = Array.from(new Set(bindings.map((binding) => binding.scopeId)));
-  const recomputed = withAttributionDb(params.dataDir, (db) => scopeIds.map((scopeId) => recomputeScope(db, scopeId)));
-  return {
-    ok: true,
-    bindings: bindings.length,
-    scopes: recomputed,
-    processed,
-    skipped,
-    records_seen: seenRecords.size,
-    details,
-  };
+    const scopeIds = Array.from(new Set(bindings.map((binding) => binding.scopeId)));
+    const recomputed = scopeIds.map((scopeId) => recomputeScope(db, scopeId));
+    return {
+      ok: true,
+      bindings: bindings.length,
+      scopes: recomputed,
+      processed,
+      skipped,
+      records_seen: seenRecords.size,
+      detail_count: detailCount,
+      details,
+    };
+  } finally {
+    db.close();
+  }
 }
 
 export default processRecordIngested;

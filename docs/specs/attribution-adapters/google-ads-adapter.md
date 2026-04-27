@@ -2,7 +2,7 @@
 
 **Status:** CANONICAL
 **Last Updated:** 2026-03-30
-**Related:** [Attribution Intelligence Layer](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-layer.md), [Attribution Intelligence Taxonomy](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-taxonomy.md), [Adapter Spec: Google](/Users/tyler/nexus/home/projects/nexus/packages/adapters/google/docs/specs/ADAPTER_SPEC_GOOGLE.md), [Attribution Adapter Packages Board](/Users/tyler/nexus/home/projects/nexus/docs/workplans/attribution-adapter-packages-board/README.md)
+**Related:** [Attribution Intelligence Layer](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-layer.md), [Attribution Intelligence Taxonomy](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-taxonomy.md), [Acquisition Adapter Package Alignment](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-adapters/acquisition-adapter-package-alignment.md), [Acquisition Adapter Alignment Board](/Users/tyler/nexus/home/projects/nexus/docs/workplans/acquisition-adapter-alignment-board/README.md), [Attribution Adapter Packages Board](/Users/tyler/nexus/home/projects/nexus/docs/workplans/attribution-adapter-packages-board/README.md)
 
 ---
 
@@ -57,11 +57,19 @@ Required preserved identifiers include:
 The adapter must:
 
 1. validate credential health and visible customer-account scope
-2. backfill Google Ads performance rows at the required grains
-3. keep those rows fresh through monitor-based sync
-4. preserve provider-native ids and measures without forcing downstream apps to
+2. expose a provider-native read slice for customer discovery and customer or
+   campaign inspection
+3. backfill Google Ads performance rows at the required grains
+4. keep those rows fresh through monitor-based sync
+5. preserve provider-native ids and measures without forcing downstream apps to
    reconstruct them from exploded metric-only events
-5. keep non-Ads Google surfaces outside the attribution app contract
+6. keep non-Ads Google surfaces outside the attribution app contract
+
+The first public provider-native method slice is:
+
+- `google-ads.customers.accessible.list`
+- `google-ads.customers.get`
+- `google-ads.reporting.campaign_daily.list`
 
 ## Source Families
 

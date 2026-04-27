@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-04-07T13:29:44.441Z",
+  "runtimePort": 35651,
+  "consolePort": 42457,
+  "runtimeUrl": "ws://127.0.0.1:35651",
+  "baseUrl": "http://127.0.0.1:42457",
+  "exitCode": 1,
+  "workspaceRoot": "/tmp/operator-chat-cleanroom-workspace-OrGhla",
+  "homeRoot": "/tmp/operator-chat-cleanroom-home-53dzw6",
+  "seedSummaryPath": "/artifacts/validation/cleanroom/operator-chat-cleanroom/20260407T132922Z/operator-chat-proof-summary.json"
+}

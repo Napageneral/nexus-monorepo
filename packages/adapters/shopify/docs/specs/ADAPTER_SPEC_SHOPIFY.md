@@ -148,6 +148,11 @@ The package `SKILL.md` should teach agents how to:
 The additive Shopify projection contract should remain explicit even after the
 public provider surface broadens.
 
+The canonical target state for Shopify backfill, live monitor, reconcile, and
+family-specific incremental behavior is defined in:
+
+- `/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/docs/specs/SHOPIFY_INCREMENTAL_LIVE_SYNC_AND_RECONCILE_MODEL.md`
+
 The key rule is:
 
 1. outward provider capability should be broad

@@ -14,6 +14,8 @@ export type {
   DefinedAdapterContext,
 } from "./define.js";
 export { defineAdapter, method } from "./define.js";
+export type { OpenApiMethodBuilderConfig } from "./openapi.js";
+export { createOpenApiMethods } from "./openapi.js";
 export type { CredentialLookupOptions } from "./credentials.js";
 export { readCredential, requireCredential } from "./credentials.js";
 export { requireContainerTarget, readReplyToTarget, readThreadTarget } from "./targets.js";

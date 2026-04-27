@@ -1,0 +1,38 @@
+{
+  "name": "nexus-operator-chat",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "preview": "vite preview",
+    "test": "vitest run --passWithNoTests"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.2.0",
+    "@tanstack/react-query": "^5.90.0",
+    "@tanstack/react-router": "^1.160.2",
+    "class-variance-authority": "^0.7.1",
+    "effect": "^3.19.6",
+    "lucide-react": "^0.564.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "tailwind-merge": "^3.4.0",
+    "zustand": "^5.0.11"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^6.0.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.0",
+    "vitest": "4.0.18"
+  }
+}

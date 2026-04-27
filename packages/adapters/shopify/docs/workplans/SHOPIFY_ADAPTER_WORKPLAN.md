@@ -1,6 +1,6 @@
 # Shopify Adapter Workplan
 
-**Status:** COMPLETE FOR CURRENT DECLARED TIER-1 PROOF WAVE
+**Status:** COMPLETE FOR CURRENT DECLARED TIER-1 CORRECTNESS WAVE; LIVE-SYNC EFFICIENCY REOPENED IN PACKAGE-LOCAL BOARD
 **Spec:** `docs/specs/ADAPTER_SPEC_SHOPIFY.md`
 **Validation:** `docs/validation/SHOPIFY_ADAPTER_VALIDATION.md`
 
@@ -40,7 +40,10 @@ Current declared surface:
 
 ## Active Work Surface
 
-There is no active architecture rewrite in scope inside this package.
+The previous correctness and proof wave is complete, but live-sync efficiency
+has reopened as an active package-local workstream:
+
+- `/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/docs/workplans/shopify-live-sync-efficiency-board/README.md`
 
 The current 2026-04-03 proof wave is complete and contract-truthful:
 
@@ -82,6 +85,9 @@ Residual gaps that remain outside this completed wave:
 
 - broader Shopify Admin GraphQL family materialization beyond the current
   declared read slice
+- live monitor family watermarks, family cadence, duplicate revision
+  suppression, and hosted efficiency signoff, which are now tracked in the
+  dedicated live-sync efficiency board
 - projection beyond the current Tier-1 shipped families into later Shopify
   config/content and operational tiers
 - cleanup-safe write-surface proof
@@ -96,6 +102,8 @@ Open a new implementation slice only if one of these becomes true:
 - the declared GraphQL read slice regresses or becomes misleading
 - mounted-capability agent-use proof regresses
 - storefront or app-specific credential URLs reappear
+- hosted Shopify live monitor proves replay-heavy, snapshot-heavy, or otherwise
+  inefficient under real tenant load
 - `connection_id` stops being the operational identity
 - backfill and monitor diverge
 - row shape regresses or drops bridge evidence

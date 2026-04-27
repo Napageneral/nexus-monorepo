@@ -1619,12 +1619,38 @@ function renderHostedOwnerBootstrapSeed(params: {
   return lines.join("\n");
 }
 
+function resolveHostedRuntimeBundlePath(): string | null {
+  const raw = (process.env.FRONTDOOR_HOSTED_RUNTIME_BUNDLE_PATH || "").trim();
+  if (!raw) {
+    return null;
+  }
+  return path.isAbsolute(raw) ? raw : path.resolve(resolveProjectRoot(), raw);
+}
+
+function resolveHostedRuntimeBundleUrl(frontdoorUrl: string): string | undefined {
+  if (!resolveHostedRuntimeBundlePath()) {
+    return undefined;
+  }
+  const trimmed = frontdoorUrl.trim().replace(/\/+$/g, "");
+  if (!trimmed) {
+    return undefined;
+  }
+  return `${trimmed}/api/internal/hosted-runtime-bundle`;
+}
+
+function resolveHostedBootstrapProgressUrl(frontdoorUrl: string): string {
+  const trimmed = frontdoorUrl.trim().replace(/\/+$/g, "");
+  return `${trimmed}/api/internal/bootstrap-progress`;
+}
+
 function buildHostedBootstrapSpec(params: {
   tenantId: string;
   serverId: string;
   runtimeAuthToken: string;
   provisionToken: string;
   frontdoorUrl: string;
+  runtimeBundleBaseUrl?: string;
+  bootstrapProgressBaseUrl?: string;
   runtimeTokenIssuer: string;
   runtimeTokenSecret: string;
   runtimeTokenActiveKid?: string;
@@ -1638,6 +1664,10 @@ function buildHostedBootstrapSpec(params: {
     runtimeAuthToken: params.runtimeAuthToken,
     provisionToken: params.provisionToken,
     frontdoorUrl: params.frontdoorUrl,
+    runtimeBundleUrl: resolveHostedRuntimeBundleUrl(params.runtimeBundleBaseUrl ?? params.frontdoorUrl),
+    bootstrapProgressUrl: resolveHostedBootstrapProgressUrl(
+      params.bootstrapProgressBaseUrl ?? params.runtimeBundleBaseUrl ?? params.frontdoorUrl,
+    ),
     runtimeTokenIssuer: params.runtimeTokenIssuer,
     runtimeTokenSecret: params.runtimeTokenSecret,
     runtimeTokenActiveKid: params.runtimeTokenActiveKid,
@@ -2295,6 +2325,8 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
   }):
     | {
         frontdoorUrl: string;
+        runtimeBundleBaseUrl: string;
+        bootstrapProgressBaseUrl: string;
         tailscaleAuthKey?: string;
         tailscaleHostname?: string;
       }
@@ -2302,11 +2334,15 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     if (params.serverClass === "compliant") {
       return {
         frontdoorUrl: config.internalBaseUrl,
+        runtimeBundleBaseUrl: config.internalBaseUrl,
+        bootstrapProgressBaseUrl: config.internalBaseUrl,
       };
     }
     if (params.providerName !== "hetzner" || !requiresStandardOverlayTransport()) {
       return {
         frontdoorUrl: config.internalBaseUrl,
+        runtimeBundleBaseUrl: config.internalBaseUrl,
+        bootstrapProgressBaseUrl: config.internalBaseUrl,
       };
     }
     if (!frontdoorTailscaleBaseUrl || !standardTailscaleAuthKey) {
@@ -2314,6 +2350,8 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     }
     return {
       frontdoorUrl: frontdoorTailscaleBaseUrl,
+      runtimeBundleBaseUrl: config.baseUrl,
+      bootstrapProgressBaseUrl: config.baseUrl,
       tailscaleAuthKey: standardTailscaleAuthKey,
       tailscaleHostname: `nex-${params.tenantId}`.slice(0, 63),
     };
@@ -2715,6 +2753,8 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
       runtimeAuthToken,
       provisionToken,
       frontdoorUrl: bootstrapTransport.frontdoorUrl,
+      runtimeBundleBaseUrl: bootstrapTransport.runtimeBundleBaseUrl,
+      bootstrapProgressBaseUrl: bootstrapTransport.bootstrapProgressBaseUrl,
       runtimeTokenIssuer: config.runtimeTokenIssuer,
       runtimeTokenSecret: config.runtimeTokenSecret,
       runtimeTokenActiveKid: config.runtimeTokenActiveKid,
@@ -3566,6 +3606,8 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
         runtimeAuthToken,
         provisionToken,
         frontdoorUrl: bootstrapTransport.frontdoorUrl,
+        runtimeBundleBaseUrl: bootstrapTransport.runtimeBundleBaseUrl,
+        bootstrapProgressBaseUrl: bootstrapTransport.bootstrapProgressBaseUrl,
         runtimeTokenIssuer: config.runtimeTokenIssuer,
         runtimeTokenSecret: config.runtimeTokenSecret,
         runtimeTokenActiveKid: config.runtimeTokenActiveKid,
@@ -4248,15 +4290,17 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
 
   function shouldUseDirectRuntimeOperatorApi(server: ServerRecord): boolean {
     const runtimeUrl = resolveServerOperatorRuntimeUrl(server);
-    if (!runtimeUrl) {
+    return Boolean(runtimeUrl);
+  }
+
+  function shouldFallbackToSshAfterDirectFailure(result: {
+    ok: boolean;
+    error?: string;
+  }): boolean {
+    if (result.ok) {
       return false;
     }
-    try {
-      const parsed = new URL(runtimeUrl);
-      return isLoopbackHostname(parsed.hostname);
-    } catch {
-      return false;
-    }
+    return result.error === "runtime_install_unreachable" || result.error === "runtime_upgrade_unreachable";
   }
 
   function resolveDirectRuntimePackageStagingRoots(server: ServerRecord): {
@@ -4721,16 +4765,37 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     }
 
     const result = shouldUseDirectRuntimeInstall(params.server, params.packageStep.variant.tarballPath)
-      ? await installPackageViaRuntimeHttp({
-          runtimeUrl: resolveServerOperatorRuntimeUrl(params.server) ?? "",
-          localTarballPath: params.packageStep.variant.tarballPath,
-          kind: params.packageStep.kind,
-          packageId: params.packageStep.packageId,
-          version: params.packageStep.variant.version,
-          releaseId: params.packageStep.variant.releaseId,
-          runtimeBearerToken: params.runtimeBearerToken,
-          ...resolveDirectRuntimePackageStagingRoots(params.server),
-        })
+      ? await (async () => {
+          const directResult = await installPackageViaRuntimeHttp({
+            runtimeUrl: resolveServerOperatorRuntimeUrl(params.server) ?? "",
+            localTarballPath: params.packageStep.variant.tarballPath,
+            kind: params.packageStep.kind,
+            packageId: params.packageStep.packageId,
+            version: params.packageStep.variant.version,
+            releaseId: params.packageStep.variant.releaseId,
+            runtimeBearerToken: params.runtimeBearerToken,
+            ...resolveDirectRuntimePackageStagingRoots(params.server),
+          });
+          if (!shouldFallbackToSshAfterDirectFailure(directResult)) {
+            return directResult;
+          }
+          const operatorTarget = resolveServerOperatorHost(params.server);
+          if (!operatorTarget) {
+            return directResult;
+          }
+          return await installPackageViaSSH({
+            host: operatorTarget.host,
+            privateKeyPath: config.vpsAccess.sshKeyPath,
+            username: resolveServerOperatorSshUsername(params.server),
+            localTarballPath: params.packageStep.variant.tarballPath,
+            kind: params.packageStep.kind,
+            packageId: params.packageStep.packageId,
+            version: params.packageStep.variant.version,
+            releaseId: params.packageStep.variant.releaseId,
+            runtimePort: operatorTarget.runtimePort,
+            runtimeBearerToken: params.runtimeBearerToken,
+          });
+        })()
       : await (async () => {
           const operatorTarget = resolveServerOperatorHost(params.server);
           if (!operatorTarget) {
@@ -5188,16 +5253,37 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     }
 
     const result = shouldUseDirectRuntimeInstall(server, variant.tarballPath)
-      ? await installPackageViaRuntimeHttp({
-          runtimeUrl: resolveServerOperatorRuntimeUrl(server) ?? "",
-          localTarballPath: variant.tarballPath,
-          kind: "adapter",
-          packageId: params.adapterId,
-          version: variant.version,
-          releaseId: variant.releaseId,
-          runtimeBearerToken,
-          ...resolveDirectRuntimePackageStagingRoots(server),
-        })
+      ? await (async () => {
+          const directResult = await installPackageViaRuntimeHttp({
+            runtimeUrl: resolveServerOperatorRuntimeUrl(server) ?? "",
+            localTarballPath: variant.tarballPath,
+            kind: "adapter",
+            packageId: params.adapterId,
+            version: variant.version,
+            releaseId: variant.releaseId,
+            runtimeBearerToken,
+            ...resolveDirectRuntimePackageStagingRoots(server),
+          });
+          if (!shouldFallbackToSshAfterDirectFailure(directResult)) {
+            return directResult;
+          }
+          const operatorTarget = resolveServerOperatorHost(server);
+          if (!operatorTarget) {
+            return directResult;
+          }
+          return await installPackageViaSSH({
+            host: operatorTarget.host,
+            privateKeyPath: config.vpsAccess.sshKeyPath,
+            username: resolveServerOperatorSshUsername(server),
+            localTarballPath: variant.tarballPath,
+            kind: "adapter",
+            packageId: params.adapterId,
+            version: variant.version,
+            releaseId: variant.releaseId,
+            runtimePort: operatorTarget.runtimePort,
+            runtimeBearerToken,
+          });
+        })()
       : await (async () => {
           const operatorTarget = resolveServerOperatorHost(server);
           if (!operatorTarget) {
@@ -5509,16 +5595,37 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     });
 
     const result = shouldUseDirectRuntimeInstall(server, variant.tarballPath)
-      ? await upgradePackageViaRuntimeHttp({
-          runtimeUrl: resolveServerOperatorRuntimeUrl(server) ?? "",
-          localTarballPath: variant.tarballPath,
-          kind: "app",
-          packageId: params.appId,
-          targetVersion: variant.version,
-          releaseId: variant.releaseId,
-          runtimeBearerToken,
-          ...resolveDirectRuntimePackageStagingRoots(server),
-        })
+      ? await (async () => {
+          const directResult = await upgradePackageViaRuntimeHttp({
+            runtimeUrl: resolveServerOperatorRuntimeUrl(server) ?? "",
+            localTarballPath: variant.tarballPath,
+            kind: "app",
+            packageId: params.appId,
+            targetVersion: variant.version,
+            releaseId: variant.releaseId,
+            runtimeBearerToken,
+            ...resolveDirectRuntimePackageStagingRoots(server),
+          });
+          if (!shouldFallbackToSshAfterDirectFailure(directResult)) {
+            return directResult;
+          }
+          const operatorTarget = resolveServerOperatorHost(server);
+          if (!operatorTarget) {
+            return directResult;
+          }
+          return await upgradePackageViaSSH({
+            host: operatorTarget.host,
+            privateKeyPath: config.vpsAccess.sshKeyPath,
+            username: resolveServerOperatorSshUsername(server),
+            localTarballPath: variant.tarballPath,
+            kind: "app",
+            packageId: params.appId,
+            targetVersion: variant.version,
+            releaseId: variant.releaseId,
+            runtimePort: operatorTarget.runtimePort,
+            runtimeBearerToken,
+          });
+        })()
       : await (async () => {
           const operatorTarget = resolveServerOperatorHost(server);
           if (!operatorTarget) {
@@ -5648,16 +5755,37 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
     });
 
     const result = shouldUseDirectRuntimeInstall(server, variant.tarballPath)
-      ? await upgradePackageViaRuntimeHttp({
-          runtimeUrl: resolveServerOperatorRuntimeUrl(server) ?? "",
-          localTarballPath: variant.tarballPath,
-          kind: "adapter",
-          packageId: params.adapterId,
-          targetVersion: variant.version,
-          releaseId: variant.releaseId,
-          runtimeBearerToken,
-          ...resolveDirectRuntimePackageStagingRoots(server),
-        })
+      ? await (async () => {
+          const directResult = await upgradePackageViaRuntimeHttp({
+            runtimeUrl: resolveServerOperatorRuntimeUrl(server) ?? "",
+            localTarballPath: variant.tarballPath,
+            kind: "adapter",
+            packageId: params.adapterId,
+            targetVersion: variant.version,
+            releaseId: variant.releaseId,
+            runtimeBearerToken,
+            ...resolveDirectRuntimePackageStagingRoots(server),
+          });
+          if (!shouldFallbackToSshAfterDirectFailure(directResult)) {
+            return directResult;
+          }
+          const operatorTarget = resolveServerOperatorHost(server);
+          if (!operatorTarget) {
+            return directResult;
+          }
+          return await upgradePackageViaSSH({
+            host: operatorTarget.host,
+            privateKeyPath: config.vpsAccess.sshKeyPath,
+            username: resolveServerOperatorSshUsername(server),
+            localTarballPath: variant.tarballPath,
+            kind: "adapter",
+            packageId: params.adapterId,
+            targetVersion: variant.version,
+            releaseId: variant.releaseId,
+            runtimePort: operatorTarget.runtimePort,
+            runtimeBearerToken,
+          });
+        })()
       : await (async () => {
           const operatorTarget = resolveServerOperatorHost(server);
           if (!operatorTarget) {
@@ -6511,6 +6639,8 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           runtimeAuthToken,
           provisionToken,
           frontdoorUrl: bootstrapTransport.frontdoorUrl,
+          runtimeBundleBaseUrl: bootstrapTransport.runtimeBundleBaseUrl,
+          bootstrapProgressBaseUrl: bootstrapTransport.bootstrapProgressBaseUrl,
           runtimeTokenIssuer: config.runtimeTokenIssuer,
           runtimeTokenSecret: config.runtimeTokenSecret,
           runtimeTokenActiveKid: config.runtimeTokenActiveKid,
@@ -7231,6 +7361,21 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             latest_version: product.manifestVersion ?? null,
             required_server_class: getTopLevelAppHostingPolicy(product.productId).requiredServerClass,
             installed_on: installsByApp.get(product.productId) ?? [],
+          })),
+        });
+        return;
+      }
+
+      if (method === "GET" && pathname === "/api/adapters/catalog") {
+        const adapters = store.listPublishedAdapterCatalog();
+        sendJson(res, 200, {
+          ok: true,
+          items: adapters.map((adapter) => ({
+            adapter_id: adapter.adapterId,
+            display_name: adapter.displayName,
+            description: adapter.description ?? null,
+            latest_version: adapter.latestVersion,
+            release_id: adapter.releaseId,
           })),
         });
         return;
@@ -9727,6 +9872,8 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           runtimeAuthToken,
           provisionToken,
           frontdoorUrl: bootstrapTransport.frontdoorUrl,
+          runtimeBundleBaseUrl: bootstrapTransport.runtimeBundleBaseUrl,
+          bootstrapProgressBaseUrl: bootstrapTransport.bootstrapProgressBaseUrl,
           runtimeTokenIssuer: config.runtimeTokenIssuer,
           runtimeTokenSecret: config.runtimeTokenSecret,
           runtimeTokenActiveKid: config.runtimeTokenActiveKid,
@@ -9866,6 +10013,74 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
           }
         });
 
+        return;
+      }
+
+      if (method === "GET" && pathname === "/api/internal/hosted-runtime-bundle") {
+        const authHeader = req.headers["authorization"];
+        if (typeof authHeader !== "string" || !authHeader.startsWith("Bearer prov-")) {
+          sendJson(res, 401, { ok: false, error: "invalid_provision_token" });
+          return;
+        }
+        const provisionToken = authHeader.slice(7);
+        const provisionedServer = store.getServerByProvisionToken(provisionToken);
+        if (!provisionedServer) {
+          sendJson(res, 401, { ok: false, error: "invalid_provision_token" });
+          return;
+        }
+        const bundlePath = resolveHostedRuntimeBundlePath();
+        if (!bundlePath) {
+          sendJson(res, 503, { ok: false, error: "hosted_runtime_bundle_unconfigured" });
+          return;
+        }
+        let stats: fs.Stats;
+        try {
+          stats = fs.statSync(bundlePath);
+        } catch {
+          sendJson(res, 404, { ok: false, error: "hosted_runtime_bundle_not_found" });
+          return;
+        }
+        if (!stats.isFile()) {
+          sendJson(res, 404, { ok: false, error: "hosted_runtime_bundle_not_found" });
+          return;
+        }
+        const fileName = path.basename(bundlePath).replace(/"/g, "");
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/gzip");
+        res.setHeader("content-length", String(stats.size));
+        res.setHeader("content-disposition", `attachment; filename="${fileName}"`);
+        res.setHeader("cache-control", "no-store");
+        const stream = fs.createReadStream(bundlePath);
+        stream.on("error", () => {
+          if (!res.headersSent) {
+            sendJson(res, 500, { ok: false, error: "hosted_runtime_bundle_read_failed" });
+            return;
+          }
+          res.destroy();
+        });
+        stream.pipe(res);
+        return;
+      }
+
+      if (method === "POST" && pathname === "/api/internal/bootstrap-progress") {
+        const authHeader = req.headers["authorization"];
+        if (typeof authHeader !== "string" || !authHeader.startsWith("Bearer prov-")) {
+          sendJson(res, 401, { ok: false, error: "invalid_provision_token" });
+          return;
+        }
+        const provisionToken = authHeader.slice(7);
+        const provisionedServer = store.getServerByProvisionToken(provisionToken);
+        if (!provisionedServer) {
+          sendJson(res, 401, { ok: false, error: "invalid_provision_token" });
+          return;
+        }
+        const body = (await readJsonBody<{ stage?: string; detail?: string }>(req)) ?? {};
+        const stage = normalizeText(body.stage) || "unknown";
+        const detail = normalizeText(body.detail);
+        console.log(
+          `[bootstrap-progress] Server ${provisionedServer.serverId} stage=${stage}${detail ? ` detail=${detail}` : ""}`,
+        );
+        sendJson(res, 200, { ok: true });
         return;
       }
 

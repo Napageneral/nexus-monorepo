@@ -30,6 +30,22 @@ export function asOptionalNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null;
 }
 
+export function asOptionalBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") {
+      return true;
+    }
+    if (normalized === "false") {
+      return false;
+    }
+  }
+  return null;
+}
+
 export function getActorId(ctx: NexAppMethodContext): string {
   return asString(ctx.user.userId, "userId");
 }

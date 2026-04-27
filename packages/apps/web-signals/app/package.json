@@ -1,0 +1,6 @@
+{
+  "name": "web-signals-app",
+  "version": "0.1.2",
+  "private": true,
+  "type": "module"
+}

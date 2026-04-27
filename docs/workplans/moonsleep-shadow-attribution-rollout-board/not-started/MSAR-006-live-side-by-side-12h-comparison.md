@@ -58,10 +58,10 @@ Do not reuse the shadow Vercel installation id or sender token.
 Required live-site env vars:
 
 - `VITE_MOONSLEEP_BUILD_ID=<git commit or release build id>`
-- `VITE_WEBSITE_INPUT_SHADOW_ENABLED=true`
-- `VITE_WEBSITE_INPUT_SHADOW_COLLECTOR_BASE_URL=<hosted collector base>`
-- `VITE_WEBSITE_INPUT_SHADOW_INSTALLATION_ID=<live moonsleep.co installation id>`
-- `VITE_WEBSITE_INPUT_SHADOW_SENDER_TOKEN=<fresh rotated sender token for the live installation>`
+- `VITE_WEB_JOURNEY_SHADOW_ENABLED=1`
+- `VITE_WEB_JOURNEY_SHADOW_COLLECTOR_BASE_URL=<hosted collector base>`
+- `VITE_WEB_JOURNEY_SHADOW_INSTALLATION_ID=<live moonsleep.co installation id>`
+- `VITE_WEB_JOURNEY_SHADOW_SENDER_TOKEN=<fresh rotated sender token for the live installation>`
 
 Required cleanroom/runtime allowlist input:
 
@@ -98,7 +98,7 @@ Required cleanroom/runtime allowlist input:
 4. trigger one manual attribution replay if needed:
    - `attribution.pipeline.trigger`
 5. confirm the scope counts increase in:
-   - `website-input.events.list`
+   - `web-signals.events.list`
    - `attribution.pipeline.status`
 6. capture a marked snapshot with:
    - `MOONSLEEP_SHADOW_MARKER=<marker> node --import tsx scripts/e2e/moonsleep-shadow-snapshot.ts`
@@ -133,7 +133,7 @@ Nex comparison categories:
 - `attribution.funnel`
 - `attribution.outcomes.list`
 - `attribution.pipeline.status`
-- `website-input.events.list`
+- `web-signals.events.list`
 
 ## Comparison Expectations
 

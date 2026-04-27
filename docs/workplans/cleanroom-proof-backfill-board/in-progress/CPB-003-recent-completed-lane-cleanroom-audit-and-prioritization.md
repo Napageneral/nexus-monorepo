@@ -21,25 +21,18 @@ highest-value behaviors that still need durable cleanroom proof.
 
 The current priority order is:
 
-1. hosted app fresh-server cleanroom proof
-   - why first: it builds directly on the new fresh-server hosted smoke seam
-     and does not require the same credential complexity as adapters
-   - ticket: `CPB-005`
-2. hosted adapter connection and ingest proof
-   - why second: it carries more credential and environment complexity, but it
-     is the next major missing end-to-end proof lane after app install/runtime
-   - ticket: `CPB-006`
-3. Dispatch integrated operator proof
-   - why third: it depends on the app and adapter hosted lanes being credible
-     first
-   - ticket: `CPB-007`
-4. connection-account identity cleanroom certification
-   - why parallel but narrower: the feature is done, but its cleanroom proof
-     still needs a dedicated owning path
+1. connection-account identity cleanroom certification
+   - why first: it is bounded, already implemented, and fits the current
+     sandbox-managed Nex cleanroom direction without extra hosted substrate
+     work
    - ticket: `CPB-004`
-5. recorded cleanroom demo artifacts
-   - why later: it should attach to stable cleanroom proof paths rather than
-     racing ahead of them
+2. Dispatch integrated operator proof
+   - why second: it remains a product-level validation lane, but should build
+     on sandbox-managed proof rather than the older hosted fresh-server model
+   - ticket: `CPB-007`
+3. recorded cleanroom demo artifacts
+   - why later: it should attach to stable sandbox-managed proof paths rather
+     than racing ahead of them
    - ticket: `CPB-008`
 
 ## Existing Anchor Proof
@@ -50,6 +43,14 @@ Already-backed cleanroom anchors for this program:
 2. owner bootstrap plus first-agent finalization proof
 3. fresh hosted package smoke on a Frontdoor-created server
 4. fresh hosted multi-app harness with shared proof-capture path
+
+## Direction Update
+
+The previous hosted fresh-server backfill candidates were removed from this
+board because they no longer match the preferred cleanroom direction.
+
+For new work on this board, prefer sandbox-managed Nex primitives and reusable
+runtime-managed cleanrooms over the older hosted fresh-server approach.
 
 ## Ownership Notes
 

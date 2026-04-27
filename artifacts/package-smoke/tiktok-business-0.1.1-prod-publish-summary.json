@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-04-27T15:54:21.234034+00:00",
+  "host": "frontdoor.nexushub.sh",
+  "remote_frontdoor_root": "/opt/nexus/frontdoor",
+  "remote_db": "/var/lib/nexus-frontdoor/frontdoor.db",
+  "target_os": "linux",
+  "target_arch": "arm64",
+  "count": 1,
+  "failures": 0,
+  "results": [
+    {
+      "kind": "adapter",
+      "id": "tiktok-business",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/tiktok-business",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/tiktok-business/dist/tiktok-business-0.1.1.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/tiktok-business/0.1.1/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/tiktok-business/0.1.1/tiktok-business-0.1.1.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "tiktok-business",
+        "version": "0.1.1",
+        "release_id": "rel-tiktok-business-0.1.1",
+        "variant_id": "variant-tiktok-business-0.1.1-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/tiktok-business/0.1.1/tiktok-business-0.1.1.tar.gz",
+        "sha256": "7ed0232f9db7c8a23313894ab25a8e8a51ceb75cdb73e41a4f5a34f5e6b1ab6a",
+        "size_bytes": 14039354,
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"tiktok-business\",\n  \"version\": \"0.1.1\",\n  \"release_id\": \"rel-tiktok-business-0.1.1\",\n  \"variant_id\": \"variant-tiktok-business-0.1.1-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/tiktok-business/0.1.1/tiktok-business-0.1.1.tar.gz\",\n  \"sha256\": \"7ed0232f9db7c8a23313894ab25a8e8a51ceb75cdb73e41a4f5a34f5e6b1ab6a\",\n  \"size_bytes\": 14039354,\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:292270) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    }
+  ]
+}

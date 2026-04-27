@@ -2,7 +2,7 @@
 
 ## Goal
 
-Prove that the website-input shadow integration survives the website-to-Shopify
+Prove that the web-journey shadow integration survives the website-to-Shopify
 handoff without regressing the existing flow.
 
 ## Initial Assumption
@@ -20,7 +20,7 @@ Reason:
   `session_id`, `checkout_token`, and normalized backend bridge evidence
 
 If that proves insufficient in comparison, a second pass can add parallel
-`wi_*` checkout attributes additively.
+`wj_*` checkout attributes additively.
 
 ## Acceptance
 
@@ -36,7 +36,7 @@ If that proves insufficient in comparison, a second pass can add parallel
   - `/Users/tyler/nexus/home/projects/moonsleep-live-shadow-prep/apps/website/components/MoonSpoonPage.tsx`
   - `/Users/tyler/nexus/home/projects/moonsleep-live-shadow-prep/apps/website/components/SingleProductSection.tsx`
 - the shadow site reaches real Shopify checkout successfully
-- the shadow website-input collector now persists the full website-to-checkout
+- the shadow web-journey collector now persists the full website-to-checkout
   chain for a marked run:
   - `page_view`
   - `product_view`
@@ -68,7 +68,7 @@ If that proves insufficient in comparison, a second pass can add parallel
   - `https://www.moonsleep.co` CORS preflight
   - fresh production website installation
   - dedicated `moonsleep-prod-shadow` scope
-  - synthetic website-input ingest reflected in:
+  - synthetic web-journey ingest reflected in:
     `/Users/tyler/nexus/state/artifacts/validation/moonsleep-shadow-snapshots/moonsleep-shadow-snapshot-2026-04-05T22-01-57-243Z.json`
 
 ## Remaining Work
@@ -78,5 +78,5 @@ If that proves insufficient in comparison, a second pass can add parallel
 2. prove that the same bridge evidence survives all the way into real Shopify
    outcomes during the hosted side-by-side window
 3. compare outcome linking in the Nex attribution app against the existing
-   MoonSleep ops outputs before deciding whether parallel `wi_*` checkout
+   MoonSleep ops outputs before deciding whether parallel `wj_*` checkout
    attributes are needed

@@ -58,6 +58,72 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdapterInfoSchema"
+  /operations/google-ads.customers.accessible.list:
+    post:
+      operationId: google-ads.customers.accessible.list
+      summary: List Google Ads customer ids visible to the current credential.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: read
+      x-nexus-mutates-remote: false
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoogleAdsAccessibleCustomersListRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoogleAdsAccessibleCustomersListResponseSchema"
+  /operations/google-ads.customers.get:
+    post:
+      operationId: google-ads.customers.get
+      summary: Read a Google Ads customer summary.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: read
+      x-nexus-mutates-remote: false
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoogleAdsCustomerGetRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoogleAdsCustomerGetResponseSchema"
+  /operations/google-ads.reporting.campaign_daily.list:
+    post:
+      operationId: google-ads.reporting.campaign_daily.list
+      summary: List Google Ads campaign daily reporting rows for an explicit date range.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: read
+      x-nexus-mutates-remote: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoogleAdsCampaignDailyListRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoogleAdsCampaignDailyListResponseSchema"
 components:
   schemas:
     AdapterInfoSchema:
@@ -588,3 +654,101 @@ components:
         payload:
           type: object
           additionalProperties: true
+    GoogleAdsAccessibleCustomersListRequestSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        connection_id:
+          type: string
+        payload:
+          type: object
+          additionalProperties: false
+          properties: {}
+    GoogleAdsAccessibleCustomersListResponseSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        customer_ids:
+          type: array
+          items:
+            type: string
+      required:
+        - customer_ids
+    GoogleAdsCustomerGetRequestSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        connection_id:
+          type: string
+        payload:
+          type: object
+          additionalProperties: false
+          properties:
+            customer_id:
+              type: string
+    GoogleAdsCustomerGetResponseSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        customer:
+          type: object
+          additionalProperties: false
+          properties:
+            customer_id:
+              type: string
+            customer_name:
+              type: string
+            currency_code:
+              type: string
+            time_zone:
+              type: string
+        source_request:
+          type: object
+          additionalProperties: true
+      required:
+        - customer
+        - source_request
+    GoogleAdsCampaignDailyListRequestSchema:
+      type: object
+      additionalProperties: false
+      required:
+        - payload
+      properties:
+        connection_id:
+          type: string
+        payload:
+          type: object
+          additionalProperties: false
+          required:
+            - since
+            - until
+          properties:
+            since:
+              type: string
+            until:
+              type: string
+    GoogleAdsCampaignDailyListResponseSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              row:
+                type: object
+                additionalProperties: true
+              derived:
+                type: object
+                additionalProperties: true
+            required:
+              - row
+              - derived
+        source_request:
+          type: object
+          additionalProperties: true
+      required:
+        - rows
+        - source_request

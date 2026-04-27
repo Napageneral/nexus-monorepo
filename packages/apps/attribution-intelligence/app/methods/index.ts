@@ -3,10 +3,14 @@ import { handle as healthcheckHandler } from "./healthcheck.js";
 import { handle as scopesListHandler } from "./scopes-list.js";
 import { handle as scopesUpsertHandler } from "./scopes-upsert.js";
 import { handle as bindingsListHandler } from "./bindings-list.js";
+import { handle as bindingsDeleteHandler } from "./bindings-delete.js";
 import { handle as bindingsUpsertHandler } from "./bindings-upsert.js";
 import { handle as summaryHandler } from "./summary.js";
 import { handle as funnelHandler } from "./funnel.js";
 import { handle as adFactsListHandler } from "./ad-facts-list.js";
+import { handle as ledgerListHandler } from "./ledger-list.js";
+import { handle as ledgerSummaryHandler } from "./ledger-summary.js";
+import { handle as ledgerGetHandler } from "./ledger-get.js";
 import { handle as outcomesListHandler } from "./outcomes-list.js";
 import { handle as outcomesGetHandler } from "./outcomes-get.js";
 import { handle as pipelineStatusHandler } from "./pipeline-status.js";
@@ -17,10 +21,14 @@ const handlers: Record<string, NexAppMethodHandler> = {
   "attribution.scopes.list": scopesListHandler,
   "attribution.scopes.upsert": scopesUpsertHandler,
   "attribution.bindings.list": bindingsListHandler,
+  "attribution.bindings.delete": bindingsDeleteHandler,
   "attribution.bindings.upsert": bindingsUpsertHandler,
   "attribution.summary": summaryHandler,
   "attribution.funnel": funnelHandler,
   "attribution.ad-facts.list": adFactsListHandler,
+  "attribution.ledger.list": ledgerListHandler,
+  "attribution.ledger.summary": ledgerSummaryHandler,
+  "attribution.ledger.get": ledgerGetHandler,
   "attribution.outcomes.list": outcomesListHandler,
   "attribution.outcomes.get": outcomesGetHandler,
   "attribution.pipeline.status": pipelineStatusHandler,

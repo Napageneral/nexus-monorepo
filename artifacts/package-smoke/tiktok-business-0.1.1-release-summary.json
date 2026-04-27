@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-04-27T15:55:00.000Z",
+  "repo_root": "/Users/tyler/nexus/home/projects/nexus",
+  "count": 1,
+  "failures": 0,
+  "results": [
+    {
+      "ok": true,
+      "kind": "adapter",
+      "id": "tiktok-business",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/tiktok-business",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/tiktok-business/dist/tiktok-business-0.1.1.tar.gz"
+    }
+  ]
+}

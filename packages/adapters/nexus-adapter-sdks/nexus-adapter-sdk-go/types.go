@@ -48,7 +48,7 @@ type AdapterMethod struct {
 }
 
 type AdapterMethodCatalog struct {
-	Source    string `json:"source,omitempty"` // "manifest" | "openapi"
+	Source    string `json:"source,omitempty"` // "manifest" | "openapi" | "graphql"
 	Document  string `json:"document,omitempty"`
 	Namespace string `json:"namespace,omitempty"`
 }
@@ -96,7 +96,7 @@ type AdapterMethodOrigin struct {
 	PackageKind       string `json:"package_kind"` // "runtime" | "app" | "adapter"
 	PackageID         string `json:"package_id,omitempty"`
 	PackageVersion    string `json:"package_version,omitempty"`
-	DeclarationMode   string `json:"declaration_mode"`   // "manifest" | "openapi" | "builtin"
+	DeclarationMode   string `json:"declaration_mode"`   // "manifest" | "openapi" | "graphql" | "builtin"
 	DeclarationSource string `json:"declaration_source"` // e.g. "adapter.nexus.json"
 	Namespace         string `json:"namespace"`
 }

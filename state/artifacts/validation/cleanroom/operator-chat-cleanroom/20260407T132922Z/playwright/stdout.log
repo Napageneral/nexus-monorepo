@@ -1,0 +1,27 @@
+
+Running 1 test using 1 worker
+
+[1A[2K[1/1] [console-cleanroom] › 07-operator-chat.spec.ts:118:7 › Operator Chat cleanroom proof › proves manager chat, worker chat, approvals, replay, and linked public context from /chat
+[1A[2K  1) [console-cleanroom] › 07-operator-chat.spec.ts:118:7 › Operator Chat cleanroom proof › proves manager chat, worker chat, approvals, replay, and linked public context from /chat 
+
+    Error: browserType.launch: Executable doesn't exist at /tmp/operator-chat-cleanroom-home-53dzw6/.cache/ms-playwright/chromium-1208/chrome-linux/chrome
+    ╔═════════════════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright Test or Playwright was just installed or updated. ║
+    ║ Please run the following command to download new browsers:              ║
+    ║                                                                         ║
+    ║     npx playwright install                                              ║
+    ║                                                                         ║
+    ║ <3 Playwright Team                                                      ║
+    ╚═════════════════════════════════════════════════════════════════════════╝
+
+    attachment #1: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../artifacts/validation/cleanroom/operator-chat-cleanroom/20260407T132922Z/playwright/output/07-operator-chat-Operator--72869-ed-public-context-from-chat-console-cleanroom/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../artifacts/validation/cleanroom/operator-chat-cleanroom/20260407T132922Z/playwright/output/07-operator-chat-Operator--72869-ed-public-context-from-chat-console-cleanroom/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K  1 failed
+    [console-cleanroom] › 07-operator-chat.spec.ts:118:7 › Operator Chat cleanroom proof › proves manager chat, worker chat, approvals, replay, and linked public context from /chat 

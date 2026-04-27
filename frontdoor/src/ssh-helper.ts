@@ -5,6 +5,7 @@
 import { Client as SshClient } from "ssh2";
 import fs from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
+import path from "node:path";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -150,6 +151,100 @@ async function hashFileSha256(filePath: string): Promise<string> {
   return hash.digest("hex");
 }
 
+function isLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  return normalized === "127.0.0.1" || normalized === "localhost" || normalized === "::1";
+}
+
+function shouldUseSharedFilesystemStaging(params: {
+  runtimeUrl: string;
+  stagingHostRoot?: string;
+  runtimeStagingRoot?: string;
+}): boolean {
+  const hasExplicitSharedRoots =
+    typeof params.stagingHostRoot === "string" && params.stagingHostRoot.trim().length > 0 &&
+    typeof params.runtimeStagingRoot === "string" && params.runtimeStagingRoot.trim().length > 0;
+  if (hasExplicitSharedRoots) {
+    return true;
+  }
+  try {
+    const parsed = new URL(params.runtimeUrl);
+    return isLoopbackHostname(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+async function uploadPackageArtifactViaRuntimeHttp(opts: {
+  runtimeUrl: string;
+  localTarballPath: string;
+  operationId: string;
+  runtimeBearerToken: string;
+}): Promise<
+  | { ok: true; stagedArtifact: { serverPath: string; sha256: string; sizeBytes: number } }
+  | { ok: false; error: string; detail?: string }
+> {
+  try {
+    const fileName = path.basename(opts.localTarballPath);
+    const uploadUrl = new URL(`${opts.runtimeUrl.replace(/\/$/, "")}/api/operator/packages/upload`);
+    uploadUrl.searchParams.set("operation_id", opts.operationId);
+    uploadUrl.searchParams.set("filename", fileName);
+    const payload = fs.readFileSync(opts.localTarballPath);
+    const uploadRes = await fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${opts.runtimeBearerToken}`,
+        "content-type": "application/octet-stream",
+        "content-length": String(payload.byteLength),
+      },
+      body: payload,
+    });
+    const rawBody = await uploadRes.text();
+    if (!uploadRes.ok) {
+      return {
+        ok: false,
+        error: "runtime_upload_failed",
+        detail: rawBody.slice(0, 200),
+      };
+    }
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = rawBody ? JSON.parse(rawBody) as Record<string, unknown> : {};
+    } catch (err) {
+      return {
+        ok: false,
+        error: "runtime_upload_invalid_response",
+        detail: String(err),
+      };
+    }
+    const stagedArtifact = parsed.staged_artifact as Record<string, unknown> | undefined;
+    const serverPath =
+      typeof stagedArtifact?.server_path === "string" ? stagedArtifact.server_path : null;
+    const sha256 = typeof stagedArtifact?.sha256 === "string" ? stagedArtifact.sha256 : null;
+    const sizeBytes =
+      typeof stagedArtifact?.size_bytes === "number" && Number.isFinite(stagedArtifact.size_bytes)
+        ? Math.floor(stagedArtifact.size_bytes)
+        : null;
+    if (!serverPath || !sha256 || sizeBytes == null) {
+      return {
+        ok: false,
+        error: "runtime_upload_invalid_response",
+        detail: rawBody.slice(0, 200),
+      };
+    }
+    return {
+      ok: true,
+      stagedArtifact: {
+        serverPath,
+        sha256,
+        sizeBytes,
+      },
+    };
+  } catch (err) {
+    return { ok: false, error: "runtime_upload_unreachable", detail: String(err) };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // installPackageViaSSH — SCP tarball into staging + call runtime operator API
 // ---------------------------------------------------------------------------
@@ -282,39 +377,62 @@ export async function installPackageViaRuntimeHttp(opts: {
 > {
   try {
     const operationId = `op-${randomUUID()}`;
-    const stagingHostRoot =
-      opts.stagingHostRoot?.trim() ||
-      process.env.NEXUS_PACKAGE_STAGING_DIR?.trim() ||
-      "/opt/nex/state/packages/staging";
-    const runtimeStagingRoot =
-      opts.runtimeStagingRoot?.trim() ||
-      stagingHostRoot;
-    const stagedDir = `${stagingHostRoot.replace(/\/+$/g, "")}/${operationId}`;
-    const stagedPath = `${stagedDir}/${opts.kind}-${opts.packageId}-${opts.version}.tar.gz`;
-    const runtimeStagedDir = `${runtimeStagingRoot.replace(/\/+$/g, "")}/${operationId}`;
-    const runtimeStagedPath =
-      `${runtimeStagedDir}/${opts.kind}-${opts.packageId}-${opts.version}.tar.gz`;
-    fs.mkdirSync(stagedDir, { recursive: true });
-    fs.copyFileSync(opts.localTarballPath, stagedPath);
-
-    const sha256 = await hashFileSha256(opts.localTarballPath);
-    const stats = fs.statSync(opts.localTarballPath);
+    const stagedArtifact = shouldUseSharedFilesystemStaging({
+      runtimeUrl: opts.runtimeUrl,
+      stagingHostRoot: opts.stagingHostRoot,
+      runtimeStagingRoot: opts.runtimeStagingRoot,
+    })
+      ? (() => {
+          const stagingHostRoot =
+            opts.stagingHostRoot?.trim() ||
+            process.env.NEXUS_PACKAGE_STAGING_DIR?.trim() ||
+            "/opt/nex/state/packages/staging";
+          const runtimeStagingRoot =
+            opts.runtimeStagingRoot?.trim() ||
+            stagingHostRoot;
+          const stagedDir = `${stagingHostRoot.replace(/\/+$/g, "")}/${operationId}`;
+          const stagedPath = `${stagedDir}/${opts.kind}-${opts.packageId}-${opts.version}.tar.gz`;
+          const runtimeStagedDir = `${runtimeStagingRoot.replace(/\/+$/g, "")}/${operationId}`;
+          const runtimeStagedPath =
+            `${runtimeStagedDir}/${opts.kind}-${opts.packageId}-${opts.version}.tar.gz`;
+          fs.mkdirSync(stagedDir, { recursive: true });
+          fs.copyFileSync(opts.localTarballPath, stagedPath);
+          const stats = fs.statSync(opts.localTarballPath);
+          return hashFileSha256(opts.localTarballPath).then((sha256) => ({
+            serverPath: runtimeStagedPath,
+            sha256,
+            sizeBytes: stats.size,
+          }));
+        })()
+      : (async () => {
+          const uploaded = await uploadPackageArtifactViaRuntimeHttp({
+            runtimeUrl: opts.runtimeUrl,
+            localTarballPath: opts.localTarballPath,
+            operationId,
+            runtimeBearerToken: opts.runtimeBearerToken,
+          });
+          if (!uploaded.ok) {
+            throw new Error(`${uploaded.error}: ${uploaded.detail ?? ""}`.trim());
+          }
+          return uploaded.stagedArtifact;
+        })();
+    const resolvedStagedArtifact = await stagedArtifact;
     const installRes = await fetch(`${opts.runtimeUrl.replace(/\/$/, "")}/api/operator/packages/install`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${opts.runtimeBearerToken}`,
       },
-      body: JSON.stringify({
+        body: JSON.stringify({
         kind: opts.kind,
         package_id: opts.packageId,
         version: opts.version,
         release_id: opts.releaseId ?? null,
         operation_id: operationId,
         staged_artifact: {
-          server_path: runtimeStagedPath,
-          sha256,
-          size_bytes: stats.size,
+          server_path: resolvedStagedArtifact.serverPath,
+          sha256: resolvedStagedArtifact.sha256,
+          size_bytes: resolvedStagedArtifact.sizeBytes,
         },
       }),
     });
@@ -449,39 +567,62 @@ export async function upgradePackageViaRuntimeHttp(opts: {
 > {
   try {
     const operationId = `op-${randomUUID()}`;
-    const stagingHostRoot =
-      opts.stagingHostRoot?.trim() ||
-      process.env.NEXUS_PACKAGE_STAGING_DIR?.trim() ||
-      "/opt/nex/state/packages/staging";
-    const runtimeStagingRoot =
-      opts.runtimeStagingRoot?.trim() ||
-      stagingHostRoot;
-    const stagedDir = `${stagingHostRoot.replace(/\/+$/g, "")}/${operationId}`;
-    const stagedPath = `${stagedDir}/${opts.kind}-${opts.packageId}-${opts.targetVersion}.tar.gz`;
-    const runtimeStagedDir = `${runtimeStagingRoot.replace(/\/+$/g, "")}/${operationId}`;
-    const runtimeStagedPath =
-      `${runtimeStagedDir}/${opts.kind}-${opts.packageId}-${opts.targetVersion}.tar.gz`;
-    fs.mkdirSync(stagedDir, { recursive: true });
-    fs.copyFileSync(opts.localTarballPath, stagedPath);
-
-    const sha256 = await hashFileSha256(opts.localTarballPath);
-    const stats = fs.statSync(opts.localTarballPath);
+    const stagedArtifact = shouldUseSharedFilesystemStaging({
+      runtimeUrl: opts.runtimeUrl,
+      stagingHostRoot: opts.stagingHostRoot,
+      runtimeStagingRoot: opts.runtimeStagingRoot,
+    })
+      ? (() => {
+          const stagingHostRoot =
+            opts.stagingHostRoot?.trim() ||
+            process.env.NEXUS_PACKAGE_STAGING_DIR?.trim() ||
+            "/opt/nex/state/packages/staging";
+          const runtimeStagingRoot =
+            opts.runtimeStagingRoot?.trim() ||
+            stagingHostRoot;
+          const stagedDir = `${stagingHostRoot.replace(/\/+$/g, "")}/${operationId}`;
+          const stagedPath = `${stagedDir}/${opts.kind}-${opts.packageId}-${opts.targetVersion}.tar.gz`;
+          const runtimeStagedDir = `${runtimeStagingRoot.replace(/\/+$/g, "")}/${operationId}`;
+          const runtimeStagedPath =
+            `${runtimeStagedDir}/${opts.kind}-${opts.packageId}-${opts.targetVersion}.tar.gz`;
+          fs.mkdirSync(stagedDir, { recursive: true });
+          fs.copyFileSync(opts.localTarballPath, stagedPath);
+          const stats = fs.statSync(opts.localTarballPath);
+          return hashFileSha256(opts.localTarballPath).then((sha256) => ({
+            serverPath: runtimeStagedPath,
+            sha256,
+            sizeBytes: stats.size,
+          }));
+        })()
+      : (async () => {
+          const uploaded = await uploadPackageArtifactViaRuntimeHttp({
+            runtimeUrl: opts.runtimeUrl,
+            localTarballPath: opts.localTarballPath,
+            operationId,
+            runtimeBearerToken: opts.runtimeBearerToken,
+          });
+          if (!uploaded.ok) {
+            throw new Error(`${uploaded.error}: ${uploaded.detail ?? ""}`.trim());
+          }
+          return uploaded.stagedArtifact;
+        })();
+    const resolvedStagedArtifact = await stagedArtifact;
     const upgradeRes = await fetch(`${opts.runtimeUrl.replace(/\/$/, "")}/api/operator/packages/upgrade`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${opts.runtimeBearerToken}`,
       },
-      body: JSON.stringify({
+        body: JSON.stringify({
         kind: opts.kind,
         package_id: opts.packageId,
         target_version: opts.targetVersion,
         release_id: opts.releaseId ?? null,
         operation_id: operationId,
         staged_artifact: {
-          server_path: runtimeStagedPath,
-          sha256,
-          size_bytes: stats.size,
+          server_path: resolvedStagedArtifact.serverPath,
+          sha256: resolvedStagedArtifact.sha256,
+          size_bytes: resolvedStagedArtifact.sizeBytes,
         },
       }),
     });

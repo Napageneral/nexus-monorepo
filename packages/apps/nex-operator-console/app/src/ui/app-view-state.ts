@@ -12,7 +12,11 @@ import type {
   IdentityPolicy,
 } from "./controllers/identity.ts";
 import type { IngressCredential } from "./controllers/ingress-credentials.ts";
-import type { AdapterAuthField, AdapterConnectionEntry } from "./controllers/integrations.ts";
+import type {
+  AdapterAuthField,
+  AdapterCatalogEntry,
+  AdapterConnectionEntry,
+} from "./controllers/integrations.ts";
 import type {
   RecordsChannelEntry,
   RecordsEntry,
@@ -21,7 +25,7 @@ import type {
 import type { AutomationMeeseeksEntry, JobQueueEntry } from "./controllers/schedules.ts";
 import type { SkillMessage } from "./controllers/skills.ts";
 import type { Tab } from "./navigation.ts";
-import type { RuntimeBrowserClient, RuntimeHelloOk } from "./runtime.ts";
+import type { RuntimeBrowserClient, RuntimeEventFrame, RuntimeHelloOk } from "./runtime.ts";
 import type { UiSettings } from "./storage.ts";
 import type { ThemeTransitionContext } from "./theme-transition.ts";
 import type { ThemeMode } from "./theme.ts";
@@ -170,13 +174,17 @@ export type AppViewState = {
   nostrProfileFormState: NostrProfileFormState | null;
   nostrProfileAccountId: string | null;
   integrationsLoading: boolean;
+  integrationsCatalogLoading: boolean;
   integrationsBusyAdapter: string | null;
   integrationsBusyAction: string | null;
   integrationsError: string | null;
+  integrationsCatalogError: string | null;
   integrationsMessage: string | null;
   integrationsLoaded: boolean;
   integrationsAdapters: AdapterConnectionEntry[];
-  integrationsSelectedAdapter: string;
+  integrationsCatalog: AdapterCatalogEntry[];
+  integrationsSelectedConnectionKey: string;
+  integrationsSelectedAuthMethodId: string;
   integrationsSessionId: string;
   integrationsPayloadText: string;
   integrationsPendingFields: AdapterAuthField[];
@@ -353,6 +361,7 @@ export type AppViewState = {
   client: RuntimeBrowserClient | null;
   refreshSessionsAfterChat: Set<string>;
   connect: () => void;
+  subscribeRuntimeEvents: (listener: (event: RuntimeEventFrame) => void) => () => void;
   setTab: (tab: Tab) => void;
   setTheme: (theme: ThemeMode, context?: ThemeTransitionContext) => void;
   applySettings: (next: UiSettings) => void;

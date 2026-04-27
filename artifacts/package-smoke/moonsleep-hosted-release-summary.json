@@ -1,0 +1,47 @@
+{
+  "generated_at": "2026-04-05T22:46:53.110207Z",
+  "results": [
+    {
+      "ok": true,
+      "kind": "adapter",
+      "id": "meta-ads",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/meta-ads",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/meta-ads/dist/meta-ads-0.1.0.tar.gz"
+    },
+    {
+      "ok": true,
+      "kind": "adapter",
+      "id": "google-ads",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/google-ads",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/google-ads/dist/google-ads-0.1.0.tar.gz"
+    },
+    {
+      "ok": true,
+      "kind": "adapter",
+      "id": "tiktok-business",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/tiktok-business",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/tiktok-business/dist/tiktok-business-0.1.0.tar.gz"
+    },
+    {
+      "ok": true,
+      "kind": "adapter",
+      "id": "shopify",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/dist/shopify-0.1.0.tar.gz"
+    },
+    {
+      "ok": true,
+      "kind": "app",
+      "id": "website-input",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/apps/website-input/app",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/website-input/app/dist/website-input-0.1.0.tar.gz"
+    },
+    {
+      "ok": true,
+      "kind": "app",
+      "id": "attribution",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/apps/attribution-intelligence/app",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/attribution-intelligence/app/dist/attribution-0.1.0.tar.gz"
+    }
+  ]
+}

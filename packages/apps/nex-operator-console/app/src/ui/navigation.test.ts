@@ -27,10 +27,11 @@ describe("navigation metadata", () => {
     expect(titleForTab("home")).toBe("Home");
     expect(titleForTab("identity")).toBe("Identity");
     expect(titleForTab("operations")).toBe("Operations");
-    expect(titleForTab("console")).toBe("Console");
+    expect(titleForTab("console")).toBe("Chat");
     expect(titleForTab("system")).toBe("System");
     expect(subtitleForTab("identity")).toContain("Entities");
     expect(subtitleForTab("integrations")).toContain("Integrations");
+    expect(subtitleForTab("console")).toContain("agent lanes");
   });
 });
 
@@ -48,7 +49,7 @@ describe("path helpers", () => {
 
   it("builds canonical tab paths", () => {
     expect(pathForTab("home")).toBe("/home");
-    expect(pathForTab("console")).toBe("/console");
+    expect(pathForTab("console")).toBe("/chat");
     expect(pathForTab("operations")).toBe("/operations");
     expect(pathForTab("system", "/ui")).toBe("/ui/system");
     expect(pathForTab("console", "/app/console")).toBe("/app/console/chat");
@@ -57,6 +58,7 @@ describe("path helpers", () => {
 
   it("resolves canonical tabs from paths", () => {
     expect(tabFromPath("/")).toBe("home");
+    expect(tabFromPath("/chat")).toBe("console");
     expect(tabFromPath("/console")).toBe("console");
     expect(tabFromPath("/identity")).toBe("identity");
     expect(tabFromPath("/operations")).toBe("operations");
@@ -77,6 +79,7 @@ describe("path helpers", () => {
 
   it("infers base paths from canonical routes", () => {
     expect(inferBasePathFromPathname("/")).toBe("");
+    expect(inferBasePathFromPathname("/chat")).toBe("");
     expect(inferBasePathFromPathname("/console")).toBe("");
     expect(inferBasePathFromPathname("/ui/system")).toBe("/ui");
     expect(inferBasePathFromPathname("/apps/nexus/integrations")).toBe("/apps/nexus");

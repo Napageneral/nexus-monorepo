@@ -13,6 +13,6 @@ export default async function onInstall(ctx: NexAppHookContext): Promise<void> {
     dataDir: ctx.app.dataDir,
   });
   console.log(
-    `[attribution] install complete (${result.jobDefinitionId}, ${result.subscriptionIds.length} subscriptions)`,
+    `[attribution] install complete (${result.recordIngestedJobDefinitionId}, ${result.manualReplayJobDefinitionId}, ${result.subscriptionIds.length} subscriptions)`,
   );
 }

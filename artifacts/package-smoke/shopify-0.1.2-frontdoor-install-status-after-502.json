@@ -1,0 +1,1 @@
+{"ok":true,"server_id":"srv-1c4b077a-1f2","adapter_id":"shopify","install_status":"failed","desired_version":"0.1.2","active_version":"0.1.1","last_error":"runtime_upgrade_failed: {\"ok\":false,\"error\":\"ENOENT: no such file or directory, stat '/opt/nex/state/packages/staging/op-0c25cc77-d81e-4ba7-8730-fbe60e3c384c/adapter-shopify-0.1.2.tar.gz'\"}"}

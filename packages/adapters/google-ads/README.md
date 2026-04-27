@@ -7,6 +7,8 @@ Business Profile remains a separate lane.
 
 Current target behavior:
 
+- provider-native read methods for visible customers, customer summary, and
+  campaign daily reporting
 - direct Google Ads API auth and health
 - row-shaped provider facts for Google Ads account, campaign, ad-group, ad,
   and hourly reporting
@@ -49,6 +51,12 @@ go test ./...
 ./bin/google-ads-adapter adapter.monitor.start --connection <connection-id>
 ./bin/google-ads-adapter records.backfill --connection <connection-id> --since 2026-01-01T00:00:00Z
 ```
+
+## First Provider-Native Methods
+
+- `google-ads.customers.accessible.list`
+- `google-ads.customers.get`
+- `google-ads.reporting.campaign_daily.list`
 
 ## Active Docs
 

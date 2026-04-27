@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  beginAddIntegrationConnector,
   backfillIntegrationAdapter,
+  connectIntegrationAdapter,
   disconnectIntegrationAdapter,
   loadIntegrations,
+  selectIntegrationCatalogAdapter,
   setIntegrationLivesync,
   startIntegrationCustomFlow,
   submitIntegrationCustomFlow,
@@ -12,6 +15,53 @@ import {
 
 type ClientRequestMock = ReturnType<typeof vi.fn>;
 
+const GITHUB_CUSTOM_AUTH = {
+  methods: [
+    {
+      id: "github_custom",
+      type: "custom_flow" as const,
+      label: "GitHub App",
+      icon: "github",
+      service: "github",
+    },
+  ],
+};
+
+const SLACK_AUTH = {
+  methods: [
+    {
+      id: "slack_user_token",
+      type: "api_key" as const,
+      label: "Slack User Token",
+      icon: "slack",
+      service: "slack",
+      fields: [
+        {
+          name: "user_token",
+          label: "User Token",
+          type: "secret" as const,
+          required: true,
+        },
+      ],
+    },
+    {
+      id: "slack_socket_mode",
+      type: "api_key" as const,
+      label: "Slack Socket Mode",
+      icon: "slack",
+      service: "slack",
+      fields: [
+        {
+          name: "bot_token",
+          label: "Bot Token",
+          type: "secret" as const,
+          required: true,
+        },
+      ],
+    },
+  ],
+};
+
 function makeState(requestMock: ClientRequestMock): IntegrationsState {
   return {
     client: {
@@ -19,13 +69,17 @@ function makeState(requestMock: ClientRequestMock): IntegrationsState {
     },
     connected: true,
     integrationsLoading: false,
+    integrationsCatalogLoading: false,
     integrationsBusyAdapter: null,
     integrationsBusyAction: null,
     integrationsError: null,
+    integrationsCatalogError: null,
     integrationsMessage: null,
     integrationsLoaded: false,
     integrationsAdapters: [],
-    integrationsSelectedAdapter: "",
+    integrationsCatalog: [],
+    integrationsSelectedConnectionKey: "",
+    integrationsSelectedAuthMethodId: "",
     integrationsSessionId: "",
     integrationsPayloadText: "{}",
     integrationsPendingFields: [],
@@ -34,7 +88,102 @@ function makeState(requestMock: ClientRequestMock): IntegrationsState {
 }
 
 describe("integrations controller", () => {
-  it("loads adapters and selects the first adapter by default", async () => {
+  it("selects the first catalog connector when starting add flow", () => {
+    const request = vi.fn();
+    const state = makeState(request);
+    state.integrationsCatalog = [
+      {
+        adapter: "linkedin",
+        name: "LinkedIn",
+        auth: {
+          methods: [
+            {
+              id: "linkedin_oauth",
+              type: "oauth2" as const,
+              label: "Connect with LinkedIn",
+              icon: "oauth",
+              service: "linkedin",
+              scopes: [],
+            },
+          ],
+        },
+      },
+    ];
+
+    beginAddIntegrationConnector(state);
+
+    expect(state.integrationsSelectedConnectionKey).toBe("");
+    expect(state.integrationsMessage).toBeNull();
+  });
+
+  it("selects the catalog adapter directly instead of a durable row", () => {
+    const request = vi.fn();
+    const state = makeState(request);
+    state.integrationsAdapters = [
+      {
+        connectionId: "slack-user",
+        adapter: "slack",
+        name: "Slack",
+        status: "connected",
+        authMethod: "api_key",
+        authMethodId: "slack_user_token",
+        auth: SLACK_AUTH,
+        account: "tyler",
+        lastSync: 123,
+        error: null,
+      },
+      {
+        connectionId: "",
+        adapter: "linkedin",
+        name: "LinkedIn",
+        status: "disconnected",
+        authMethod: null,
+        authMethodId: null,
+        auth: {
+          methods: [
+            {
+              id: "linkedin_oauth",
+              type: "oauth2" as const,
+              label: "Connect with LinkedIn",
+              icon: "oauth",
+              service: "linkedin",
+              scopes: [],
+            },
+          ],
+        },
+        account: null,
+        lastSync: null,
+        error: null,
+      },
+    ] as any;
+    state.integrationsCatalog = [
+      {
+        adapter: "linkedin",
+        name: "LinkedIn",
+        auth: {
+          methods: [
+            {
+              id: "linkedin_oauth",
+              type: "oauth2" as const,
+              label: "Connect with LinkedIn",
+              icon: "oauth",
+              service: "linkedin",
+              scopes: [],
+            },
+          ],
+        },
+      },
+    ];
+
+    selectIntegrationCatalogAdapter(state, "linkedin");
+
+    expect(state.integrationsSelectedConnectionKey).toBe("catalog::linkedin");
+    expect(state.integrationsMessage).toContain("new");
+    expect(state.integrationsMessage).toContain("Existing connections stay unchanged");
+    expect(state.integrationsPayloadText).toBe("{}");
+  });
+
+  it("loads connections and selects the first connection by default", async () => {
     const request = vi.fn(async (method: string, params?: unknown) => {
       if (method === "adapters.connections.list") {
         return {
@@ -46,6 +195,7 @@ describe("integrations controller", () => {
               status: "connected",
               authMethodId: null,
               authMethod: "custom_flow",
+              auth: GITHUB_CUSTOM_AUTH,
               account: null,
               lastSync: null,
               error: null,
@@ -56,10 +206,27 @@ describe("integrations controller", () => {
               name: "Slack",
               status: "disconnected",
               authMethodId: null,
-              authMethod: "oauth2",
+              authMethod: null,
+              auth: SLACK_AUTH,
               account: null,
               lastSync: 123,
               error: null,
+            },
+          ],
+        };
+      }
+      if (method === "adapters.catalog.list") {
+        return {
+          adapters: [
+            {
+              adapter: "github",
+              name: "GitHub",
+              auth: GITHUB_CUSTOM_AUTH,
+            },
+            {
+              adapter: "slack",
+              name: "Slack",
+              auth: SLACK_AUTH,
             },
           ],
         };
@@ -71,8 +238,11 @@ describe("integrations controller", () => {
     await loadIntegrations(state);
 
     expect(request).toHaveBeenNthCalledWith(1, "adapters.connections.list", {});
+    expect(request).toHaveBeenNthCalledWith(2, "adapters.catalog.list", {});
     expect(state.integrationsAdapters).toHaveLength(2);
-    expect(state.integrationsSelectedAdapter).toBe("github");
+    expect(state.integrationsCatalog).toHaveLength(2);
+    expect(state.integrationsSelectedConnectionKey).toBe("connection-github");
+    expect(state.integrationsSelectedAuthMethodId).toBe("github_custom");
     expect(state.integrationsError).toBeNull();
     expect(state.integrationsLoaded).toBe(true);
     expect(state.integrationsLoading).toBe(false);
@@ -96,6 +266,7 @@ describe("integrations controller", () => {
             status: "connected",
             authMethod: "custom_flow",
             authMethodId: null,
+            auth: GITHUB_CUSTOM_AUTH,
             account: "installation-42",
             lastSync: 1,
             error: null,
@@ -103,7 +274,13 @@ describe("integrations controller", () => {
         ],
       })
       .mockResolvedValueOnce({
-        connections: [{ id: "installation-42", status: "ready" }],
+        adapters: [
+          {
+            adapter: "slack",
+            name: "Slack",
+            auth: SLACK_AUTH,
+          },
+        ],
       })
       .mockResolvedValueOnce({
         status: "completed",
@@ -119,6 +296,7 @@ describe("integrations controller", () => {
             status: "connected",
             authMethod: "custom_flow",
             authMethodId: null,
+            auth: GITHUB_CUSTOM_AUTH,
             account: "installation-42",
             lastSync: 999,
             error: null,
@@ -126,7 +304,13 @@ describe("integrations controller", () => {
         ],
       })
       .mockResolvedValueOnce({
-        connections: [{ id: "installation-42", status: "active" }],
+        adapters: [
+          {
+            adapter: "github",
+            name: "GitHub",
+            auth: GITHUB_CUSTOM_AUTH,
+          },
+        ],
       })
 
     const state = makeState(request);
@@ -137,12 +321,14 @@ describe("integrations controller", () => {
         name: "GitHub",
         status: "disconnected",
         authMethod: "custom_flow",
+        auth: GITHUB_CUSTOM_AUTH,
         account: null,
         lastSync: null,
         error: null,
       },
     ];
-    state.integrationsSelectedAdapter = "github";
+    state.integrationsSelectedConnectionKey = "connection-github";
+    state.integrationsSelectedAuthMethodId = "github_custom";
     state.integrationsPayloadText = JSON.stringify({
       app_id: "9001",
       installation_id: "42",
@@ -160,12 +346,12 @@ describe("integrations controller", () => {
     expect(state.integrationsInstructions).toBeNull();
 
     expect(request.mock.calls.map(([method]) => method)).toEqual([
-      "adapter.connections.custom.start",
+      "adapters.connections.custom.start",
       "adapters.connections.list",
-      "adapter.connections.list",
-      "adapter.connections.custom.submit",
+      "adapters.catalog.list",
+      "adapters.connections.custom.submit",
       "adapters.connections.list",
-      "adapter.connections.list",
+      "adapters.catalog.list",
     ]);
   });
 
@@ -179,12 +365,14 @@ describe("integrations controller", () => {
         name: "GitHub",
         status: "disconnected",
         authMethod: "custom_flow",
+        auth: GITHUB_CUSTOM_AUTH,
         account: null,
         lastSync: null,
         error: null,
       },
     ];
-    state.integrationsSelectedAdapter = "github";
+    state.integrationsSelectedConnectionKey = "connection-github";
+    state.integrationsSelectedAuthMethodId = "github_custom";
     state.integrationsPayloadText = "[]";
 
     await startIntegrationCustomFlow(state, "github");
@@ -206,6 +394,7 @@ describe("integrations controller", () => {
             status: "connected",
             authMethod: "custom_flow",
             authMethodId: null,
+            auth: GITHUB_CUSTOM_AUTH,
             account: "installation-42",
             lastSync: 1,
             error: null,
@@ -213,7 +402,13 @@ describe("integrations controller", () => {
         ],
       })
       .mockResolvedValueOnce({
-        connections: [{ id: "installation-42", status: "active" }],
+        adapters: [
+          {
+            adapter: "github",
+            name: "GitHub",
+            auth: GITHUB_CUSTOM_AUTH,
+          },
+        ],
       })
       .mockResolvedValueOnce({
         status: "disconnected",
@@ -229,6 +424,7 @@ describe("integrations controller", () => {
             status: "disconnected",
             authMethod: "custom_flow",
             authMethodId: null,
+            auth: GITHUB_CUSTOM_AUTH,
             account: null,
             lastSync: 2,
             error: null,
@@ -236,8 +432,14 @@ describe("integrations controller", () => {
         ],
       })
       .mockResolvedValueOnce({
-        connections: [],
-      });
+        adapters: [
+          {
+            adapter: "github",
+            name: "GitHub",
+            auth: GITHUB_CUSTOM_AUTH,
+          },
+        ],
+      })
 
     const state = makeState(request);
     state.integrationsAdapters = [
@@ -247,13 +449,15 @@ describe("integrations controller", () => {
         name: "GitHub",
         status: "connected",
         authMethod: "custom_flow",
+        auth: GITHUB_CUSTOM_AUTH,
         account: "installation-42",
         lastSync: null,
         error: null,
         metadata: { monitor: { running: true } },
       },
     ];
-    state.integrationsSelectedAdapter = "github";
+    state.integrationsSelectedConnectionKey = "connection-github";
+    state.integrationsSelectedAuthMethodId = "github_custom";
     state.integrationsSessionId = "setup-123";
     state.integrationsPendingFields = [
       { name: "app_id", label: "App ID", type: "text", required: true },
@@ -272,10 +476,10 @@ describe("integrations controller", () => {
     expect(request.mock.calls.map(([method]) => method)).toEqual([
       "adapters.connections.test",
       "adapters.connections.list",
-      "adapter.connections.list",
+      "adapters.catalog.list",
       "adapters.connections.disconnect",
       "adapters.connections.list",
-      "adapter.connections.list",
+      "adapters.catalog.list",
     ]);
   });
 
@@ -296,6 +500,7 @@ describe("integrations controller", () => {
             status: "connected",
             authMethod: "custom_flow",
             authMethodId: null,
+            auth: GITHUB_CUSTOM_AUTH,
             account: "installation-42",
             lastSync: 3,
             error: null,
@@ -303,7 +508,13 @@ describe("integrations controller", () => {
         ],
       })
       .mockResolvedValueOnce({
-        connections: [{ id: "installation-42", status: "active" }],
+        adapters: [
+          {
+            adapter: "github",
+            name: "GitHub",
+            auth: GITHUB_CUSTOM_AUTH,
+          },
+        ],
       })
       .mockResolvedValueOnce({
         connectionId: "connection-github",
@@ -319,14 +530,12 @@ describe("integrations controller", () => {
             status: "connected",
             authMethod: "custom_flow",
             authMethodId: null,
+            auth: GITHUB_CUSTOM_AUTH,
             account: "installation-42",
             lastSync: 4,
             error: null,
           },
         ],
-      })
-      .mockResolvedValueOnce({
-        connections: [{ id: "installation-42", status: "active" }],
       })
       .mockResolvedValueOnce({
         connectionId: "connection-github",
@@ -342,6 +551,7 @@ describe("integrations controller", () => {
             status: "connected",
             authMethod: "custom_flow",
             authMethodId: null,
+            auth: GITHUB_CUSTOM_AUTH,
             account: "installation-42",
             lastSync: 5,
             error: null,
@@ -349,8 +559,14 @@ describe("integrations controller", () => {
         ],
       })
       .mockResolvedValueOnce({
-        connections: [{ id: "installation-42", status: "active" }],
-      });
+        adapters: [
+          {
+            adapter: "github",
+            name: "GitHub",
+            auth: GITHUB_CUSTOM_AUTH,
+          },
+        ],
+      })
 
     const state = makeState(request);
     state.integrationsAdapters = [
@@ -360,13 +576,15 @@ describe("integrations controller", () => {
         name: "GitHub",
         status: "connected",
         authMethod: "custom_flow",
+        auth: GITHUB_CUSTOM_AUTH,
         account: "installation-42",
         lastSync: null,
         error: null,
         metadata: { monitor: { running: true } },
       },
     ];
-    state.integrationsSelectedAdapter = "github";
+    state.integrationsSelectedConnectionKey = "connection-github";
+    state.integrationsSelectedAuthMethodId = "github_custom";
 
     await backfillIntegrationAdapter(state, "github");
     expect(state.integrationsMessage).toContain("backfill queued");
@@ -380,13 +598,152 @@ describe("integrations controller", () => {
     expect(request.mock.calls.map(([method]) => method)).toEqual([
       "adapters.connections.backfill",
       "adapters.connections.list",
-      "adapter.connections.list",
+      "adapters.catalog.list",
       "adapters.connections.livesync.disable",
       "adapters.connections.list",
-      "adapter.connections.list",
+      "adapters.catalog.list",
       "adapters.connections.livesync.enable",
       "adapters.connections.list",
-      "adapter.connections.list",
+      "adapters.catalog.list",
     ]);
+  });
+
+  it("creates an api-key connection for Slack and refreshes adapters", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        connectionId: "connection-slack",
+        status: "connected",
+        account: "tyler",
+        service: "slack",
+      })
+      .mockResolvedValueOnce({
+        connections: [
+          {
+            connectionId: "connection-slack",
+            adapter: "slack",
+            name: "Slack",
+            status: "connected",
+            authMethod: "api_key",
+            authMethodId: "slack_user_token",
+            auth: SLACK_AUTH,
+            account: "tyler",
+            lastSync: 123,
+            error: null,
+          },
+        ],
+      })
+
+    const state = makeState(request);
+    state.integrationsAdapters = [
+      {
+        connectionId: "",
+        adapter: "slack",
+        name: "Slack",
+        status: "disconnected",
+        authMethod: null,
+        authMethodId: null,
+        auth: SLACK_AUTH,
+        account: null,
+        lastSync: null,
+        error: null,
+      },
+    ];
+    state.integrationsSelectedConnectionKey = "slack::disconnected";
+    state.integrationsSelectedAuthMethodId = "slack_user_token";
+    state.integrationsPayloadText = JSON.stringify({
+      user_token: "xoxp-user-token",
+    });
+
+    await connectIntegrationAdapter(state, "slack");
+
+    expect(request).toHaveBeenNthCalledWith(1, "adapters.connections.create", {
+      adapter: "slack",
+      authMethodId: "slack_user_token",
+      fields: {
+        user_token: "xoxp-user-token",
+      },
+    });
+    expect(state.integrationsMessage).toContain("slack: connected for tyler");
+    expect(state.integrationsAdapters[0]).toMatchObject({
+      connectionId: "connection-slack",
+      account: "tyler",
+      status: "connected",
+    });
+  });
+
+  it("creates a fresh connection from a catalog selection even when durable rows exist", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        connectionId: "connection-slack-fresh",
+        status: "connected",
+        account: "tyler",
+        service: "slack",
+      })
+      .mockResolvedValueOnce({
+        connections: [
+          {
+            connectionId: "connection-slack-existing",
+            adapter: "slack",
+            name: "Slack",
+            status: "connected",
+            authMethod: "api_key",
+            authMethodId: "slack_user_token",
+            auth: SLACK_AUTH,
+            account: "existing",
+            lastSync: 999,
+            error: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        adapters: [
+          {
+            adapter: "slack",
+            name: "Slack",
+            auth: SLACK_AUTH,
+          },
+        ],
+      });
+
+    const state = makeState(request);
+    state.integrationsAdapters = [
+      {
+        connectionId: "connection-slack-existing",
+        adapter: "slack",
+        name: "Slack",
+        status: "connected",
+        authMethod: "api_key",
+        authMethodId: "slack_user_token",
+        auth: SLACK_AUTH,
+        account: "existing",
+        lastSync: 123,
+        error: null,
+      },
+    ] as any;
+    state.integrationsCatalog = [
+      {
+        adapter: "slack",
+        name: "Slack",
+        auth: SLACK_AUTH,
+      },
+    ];
+    state.integrationsSelectedConnectionKey = "catalog::slack";
+    state.integrationsSelectedAuthMethodId = "slack_user_token";
+    state.integrationsPayloadText = JSON.stringify({
+      user_token: "fresh-token",
+    });
+
+    await connectIntegrationAdapter(state, "slack");
+
+    expect(request).toHaveBeenNthCalledWith(1, "adapters.connections.create", {
+      adapter: "slack",
+      authMethodId: "slack_user_token",
+      fields: {
+        user_token: "fresh-token",
+      },
+    });
+    expect(state.integrationsMessage).toContain("slack: connected for tyler");
   });
 });

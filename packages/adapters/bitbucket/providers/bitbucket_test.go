@@ -97,43 +97,43 @@ func TestBitbucketListRepositories_Paginated(t *testing.T) {
 					},
 				},
 			})
-				return
-			case r.URL.Path == "/2.0/user/workspaces/vrtly-workspace/permissions/repositories" && strings.Contains(r.URL.RawQuery, "page=2"):
-				permissionQueries = append(permissionQueries, r.URL.RawQuery)
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"values": []map[string]any{
-						{
-							"repository": map[string]any{
-								"full_name":  "vrtly-workspace/web",
-								"name":       "web",
-								"workspace":  map[string]any{"slug": "vrtly-workspace"},
-								"mainbranch": map[string]any{"name": "develop"},
-							},
+			return
+		case r.URL.Path == "/2.0/user/workspaces/vrtly-workspace/permissions/repositories" && strings.Contains(r.URL.RawQuery, "page=2"):
+			permissionQueries = append(permissionQueries, r.URL.RawQuery)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"values": []map[string]any{
+					{
+						"repository": map[string]any{
+							"full_name":  "vrtly-workspace/web",
+							"name":       "web",
+							"workspace":  map[string]any{"slug": "vrtly-workspace"},
+							"mainbranch": map[string]any{"name": "develop"},
 						},
 					},
-				})
-				return
-			case r.URL.Path == "/2.0/user/workspaces/vrtly-workspace/permissions/repositories":
-				permissionQueries = append(permissionQueries, r.URL.RawQuery)
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"values": []map[string]any{
-						{
-							"repository": map[string]any{
-								"full_name":  "vrtly-workspace/api",
-								"name":       "api",
-								"workspace":  map[string]any{"slug": "vrtly-workspace"},
-								"mainbranch": map[string]any{"name": "main"},
-								"links":      map[string]any{"clone": []map[string]any{{"name": "https", "href": "https://token-user:secret@bitbucket.org/vrtly-workspace/api.git"}}},
-							},
+				},
+			})
+			return
+		case r.URL.Path == "/2.0/user/workspaces/vrtly-workspace/permissions/repositories":
+			permissionQueries = append(permissionQueries, r.URL.RawQuery)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"values": []map[string]any{
+					{
+						"repository": map[string]any{
+							"full_name":  "vrtly-workspace/api",
+							"name":       "api",
+							"workspace":  map[string]any{"slug": "vrtly-workspace"},
+							"mainbranch": map[string]any{"name": "main"},
+							"links":      map[string]any{"clone": []map[string]any{{"name": "https", "href": "https://token-user:secret@bitbucket.org/vrtly-workspace/api.git"}}},
 						},
 					},
-					"next": server.URL + "/2.0/user/workspaces/vrtly-workspace/permissions/repositories?page=2",
-				})
-				return
-			default:
-				http.NotFound(w, r)
-			}
-		}))
+				},
+				"next": server.URL + "/2.0/user/workspaces/vrtly-workspace/permissions/repositories?page=2",
+			})
+			return
+		default:
+			http.NotFound(w, r)
+		}
+	}))
 	defer server.Close()
 
 	provider := &BitbucketProvider{}
@@ -525,5 +525,118 @@ func TestBitbucketGetCommits_UsesFilteredBranchScanWhenSinceProvided(t *testing.
 	}
 	if !strings.Contains(branchQuery, "sort=-target.date") {
 		t.Fatalf("branch query = %q, want descending target.date sort", branchQuery)
+	}
+}
+
+func TestBitbucketGetCommits_UsesDefaultBranchForFullBackfillWhenTrackedBranchesUnset(t *testing.T) {
+	var branchListCalled bool
+	var commitQueries []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/2.0/repositories/vrtly-workspace/api/refs/branches":
+			branchListCalled = true
+			http.Error(w, "branch listing should not be called", http.StatusInternalServerError)
+		case r.URL.Path == "/2.0/repositories/vrtly-workspace/api/commits":
+			commitQueries = append(commitQueries, r.URL.RawQuery)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"values": []map[string]any{
+					{
+						"hash":    "abc123",
+						"message": "default branch commit",
+						"date":    "2026-03-12T16:00:00Z",
+						"author":  map[string]any{"raw": "Alice <alice@example.com>"},
+						"parents": []map[string]any{},
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	provider := &BitbucketProvider{}
+	commits, err := provider.GetCommits(context.Background(), core.AccountConfig{
+		Host:  server.URL,
+		Token: "token",
+	}, core.Repository{FullName: "vrtly-workspace/api", Name: "api", DefaultBranch: "main"}, time.Time{})
+	if err != nil {
+		t.Fatalf("GetCommits returned error: %v", err)
+	}
+	if len(commits) != 1 {
+		t.Fatalf("len(commits) = %d, want 1", len(commits))
+	}
+	if branchListCalled {
+		t.Fatalf("branch listing should not be called for default-branch full backfill")
+	}
+	if len(commitQueries) != 1 || !strings.Contains(commitQueries[0], "include=main") {
+		t.Fatalf("commit queries = %v, want a single include=main query", commitQueries)
+	}
+}
+
+func TestBitbucketGetCommits_RetriesRateLimitedPageInPlace(t *testing.T) {
+	var server *httptest.Server
+	var pageTwoAttempts int
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/2.0/repositories/vrtly-workspace/api/refs/branches":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"values": []map[string]any{
+					{
+						"name": "main",
+					},
+				},
+			})
+		case r.URL.Path == "/2.0/repositories/vrtly-workspace/api/commits" && strings.Contains(r.URL.RawQuery, "page=2"):
+			pageTwoAttempts++
+			if pageTwoAttempts == 1 {
+				w.Header().Set("Retry-After", "1")
+				w.WriteHeader(http.StatusTooManyRequests)
+				_, _ = w.Write([]byte("slow down"))
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"values": []map[string]any{
+					{
+						"hash":    "def456",
+						"message": "second page",
+						"date":    "2026-03-12T16:05:00Z",
+						"author":  map[string]any{"raw": "Bob <bob@example.com>"},
+						"parents": []map[string]any{},
+					},
+				},
+			})
+		case r.URL.Path == "/2.0/repositories/vrtly-workspace/api/commits":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"values": []map[string]any{
+					{
+						"hash":    "abc123",
+						"message": "first page",
+						"date":    "2026-03-12T16:00:00Z",
+						"author":  map[string]any{"raw": "Alice <alice@example.com>"},
+						"parents": []map[string]any{},
+					},
+				},
+				"next": server.URL + "/2.0/repositories/vrtly-workspace/api/commits?page=2",
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	provider := &BitbucketProvider{}
+	commits, err := provider.GetCommits(context.Background(), core.AccountConfig{
+		Host:  server.URL,
+		Token: "token",
+	}, core.Repository{FullName: "vrtly-workspace/api", Name: "api", DefaultBranch: "main"}, time.Time{})
+	if err != nil {
+		t.Fatalf("GetCommits returned error: %v", err)
+	}
+	if len(commits) != 2 {
+		t.Fatalf("len(commits) = %d, want 2", len(commits))
+	}
+	if pageTwoAttempts != 2 {
+		t.Fatalf("page two attempts = %d, want 2", pageTwoAttempts)
 	}
 }

@@ -2,7 +2,7 @@
 
 **Status:** CANONICAL
 **Last Updated:** 2026-03-30
-**Related:** [Attribution Intelligence Taxonomy](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-taxonomy.md), [Spec-Driven Development Workflow](/Users/tyler/nexus/home/projects/nexus/docs/spec-driven-development-workflow.md), [Spec Standards](/Users/tyler/nexus/home/projects/nexus/docs/spec-standards.md)
+**Related:** [Attribution Intelligence Taxonomy](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-taxonomy.md), [Web Signals Control Plane And Web Adapter Family](/Users/tyler/nexus/home/projects/nexus/docs/specs/web-signals-control-plane-and-web-adapter-family.md), [Spec-Driven Development Workflow](/Users/tyler/nexus/home/projects/nexus/docs/spec-driven-development-workflow.md), [Spec Standards](/Users/tyler/nexus/home/projects/nexus/docs/spec-standards.md)
 
 ---
 
@@ -41,7 +41,7 @@ The intended customer experience is:
 ## Product Boundary
 
 The attribution intelligence layer is an app package that depends on reusable
-adapters and website input packages.
+adapters plus the shared web-signals and web-adapter family.
 
 It is not:
 
@@ -61,8 +61,8 @@ The target-state package split is:
 - one shared TikTok Display adapter for profile and video-library provider data
 - shared backend outcome adapters for Shopify, EMRs, CRMs, scheduling systems,
   and payment systems
-- one shared website input package family for first-party session and funnel
-  capture
+- one shared web-signals control plane plus web-adapter family for first-party
+  session, funnel, and browser telemetry capture
 - one attribution intelligence app package that builds product logic on top of
   those inputs
 
@@ -139,15 +139,17 @@ This includes:
 The attribution layer may simplify the operator view, but it does not discard
 the evidence needed for trustworthy joins and debugging.
 
-## Website Input Contract
+## Web Signal Contract
 
-The website input package family must provide:
+The shared web-signals and web-adapter family must provide:
 
 - a stable session identity model
 - first-party capture of page, referrer, and attribution parameters
 - event emission for canonical funnel steps
 - handoff or bridge fields that survive into backend outcomes where possible
 - installation paths suitable for common customer website environments
+- a distinct browser runtime telemetry lane that does not redefine the journey
+  contract
 
 Supported website environments may vary, but the contract must stay canonical.
 

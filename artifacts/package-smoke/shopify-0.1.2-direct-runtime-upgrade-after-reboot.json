@@ -1,0 +1,9 @@
+{
+  "ok": false,
+  "step": "upload",
+  "status": 500,
+  "body": {
+    "ok": false,
+    "error": "ENOSPC: no space left on device, mkdir '/opt/nex/state/packages/staging/op-codex-shopify-0-1-2-1777301153034'"
+  }
+}

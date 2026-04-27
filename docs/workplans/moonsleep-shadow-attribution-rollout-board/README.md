@@ -1,7 +1,8 @@
 # MoonSleep Shadow Attribution Rollout Board
 
-This board tracks the safe side-by-side rollout of the Nex `website-input` and
-`attribution` stack against the real MoonSleep website and business flows.
+This board tracks the safe side-by-side rollout of the Nex `web-signals`,
+`web-journey`, and `attribution` stack against the real MoonSleep website and
+business flows.
 
 This is not the same as the sandbox-only golden journey.
 
@@ -16,18 +17,18 @@ Canonical inputs:
 - `/Users/tyler/nexus/home/projects/nexus/docs/validation/moonsleep-hosted-attribution-runtime-runbook.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/validation/moonsleep-live-shadow-rollout-runbook.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/workplans/moonsleep-hosted-attribution-runtime-board/README.md`
-- `/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-website-input-package-and-install-contract.md`
+- `/Users/tyler/nexus/home/projects/nexus/docs/specs/web-signals-control-plane-and-web-adapter-family.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-layer.md`
 - `/Users/tyler/nexus/home/projects/moonsleep-v1/apps/website/lib/metaTracking.ts`
 - `/Users/tyler/nexus/home/projects/moonsleep-v1/apps/website/lib/shopifyCartCheckout.ts`
 - `/Users/tyler/nexus/home/projects/moonsleep-v1/apps/website/components/MoonSpoonPage.tsx`
 - `/Users/tyler/nexus/home/projects/moonsleep-v1/apps/website/components/SingleProductSection.tsx`
-- `/Users/tyler/nexus/home/projects/nexus/packages/apps/website-input/sdk/bridge/index.mjs`
+- `/Users/tyler/nexus/home/projects/nexus/packages/adapters/web-journey/sdk/bridge/index.mjs`
 
 Scope:
 
 - use a fresh latest MoonSleep website clone rather than the dirty local repo
-- integrate the new website-input SDK in shadow mode alongside existing
+- integrate the new web-journey SDK in shadow mode alongside existing
   MoonSleep attribution/tracking
 - keep checkout latency neutral: no new awaited network step in checkout flow
 - treat the local cleanroom lane as stack-readiness proof, not the final
@@ -88,19 +89,20 @@ Local stack-readiness proof:
   - `google-ads`
   - `tiktok-business`
   - `shopify`
-  - `website-input`
+- `web-journey`
+- `web-signals`
   - `attribution`
 - `tiktok-display` is intentionally not a rollout blocker for this lane
 - prod-origin cleanroom staging also passes:
   - collector preflight for `https://www.moonsleep.co`
-  - fresh `website-input` installation + rotated sender token
+  - fresh `web-signals` installation + rotated sender token
   - dedicated `moonsleep-prod-shadow` scope + bindings
   - synthetic collector ingest with `web_events=3`
   - snapshot artifact:
     `/Users/tyler/nexus/state/artifacts/validation/moonsleep-shadow-snapshots/moonsleep-shadow-snapshot-2026-04-05T22-01-57-243Z.json`
 - the safe shadow Vercel site dry run now also passes after redeploying with:
   - `VITE_MOONSLEEP_BUILD_ID`
-  - `VITE_WEBSITE_INPUT_SHADOW_*`
+  - `VITE_WEB_JOURNEY_SHADOW_*`
   - browser proof artifact:
     `/Users/tyler/nexus/state/artifacts/validation/moonsleep-shadow-site-browser/shadow-site-20260405T170838/browser-proof.json`
 
@@ -136,7 +138,7 @@ Still open after production enablement:
 
 1. lock the rollout constraints and comparison contract
 2. prepare a fresh latest MoonSleep website shadow clone
-3. integrate the website-input SDK in strict shadow mode
+3. integrate the web-journey SDK in strict shadow mode
 4. deploy the cloned site to a separate Vercel project
 5. prove website events, bridge fields, and checkout neutrality in local
    cleanroom

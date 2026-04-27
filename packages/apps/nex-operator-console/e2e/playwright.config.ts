@@ -21,7 +21,7 @@ export default defineConfig({
     screenshot: 'on',
 
     // Browser settings
-    headless: true,
+    headless: process.env.PLAYWRIGHT_HEADLESS === '0' ? false : true,
     locale: 'en-US',
     timezoneId: 'America/Los_Angeles',
   },

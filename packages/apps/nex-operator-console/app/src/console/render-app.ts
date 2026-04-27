@@ -14,10 +14,13 @@ import {
   cancelIntegrationCustomFlow,
   backfillIntegrationAdapter,
   checkIntegrationCustomFlow,
+  connectIntegrationAdapter,
   disconnectIntegrationAdapter,
   loadIntegrations,
+  selectIntegrationCatalogAdapter,
   setIntegrationsPayloadText,
-  setIntegrationsSelectedAdapter,
+  setIntegrationsSelectedConnectionKey,
+  setIntegrationsSelectedAuthMethodId,
   setIntegrationLivesync,
   startIntegrationCustomFlow,
   startIntegrationOAuth,
@@ -39,6 +42,7 @@ import {
 import { renderAgentsPage } from "./pages/agents.ts";
 import { renderAgentCreateWizard, type AgentCreateStep, type AgentCreateForm } from "./pages/agent-create.ts";
 import { renderAgentDetail, type AgentDetailTab, type AgentDetailModal } from "./pages/agent-detail.ts";
+import { renderChatPage } from "./pages/chat.ts";
 import { renderMonitorPage, type MonitorPageProps } from "./pages/monitor.ts";
 import { loadMonitorHistory, loadMonitorStats } from "../ui/controllers/monitor.ts";
 import { renderJobsPage, type JobsPageProps } from "./pages/jobs.ts";
@@ -151,6 +155,38 @@ function closeWizard(state: AppViewState) {
   state.setTab("agents" as any);
 }
 
+function openConnectorCatalog(state: AppViewState) {
+  const s = state as any;
+  if (String(s.integrationsSelectedConnectionKey ?? "").startsWith("catalog::")) {
+    setIntegrationsSelectedConnectionKey(state as any, "");
+  }
+  s._consoleConnectorCatalogOpen = true;
+  s._consoleConnectorCatalogSearch = s._consoleConnectorCatalogSearch ?? "";
+  setConsoleTab(state, "connectors");
+}
+
+function closeConnectorCatalog(state: AppViewState) {
+  const s = state as any;
+  s._consoleConnectorCatalogOpen = false;
+  s._consoleConnectorCatalogSearch = "";
+  if (String(s.integrationsSelectedConnectionKey ?? "").startsWith("catalog::")) {
+    setIntegrationsSelectedConnectionKey(state as any, "");
+  }
+  setConsoleTab(state, "connectors");
+}
+
+function setConnectorCatalogSearch(state: AppViewState, value: string) {
+  (state as any)._consoleConnectorCatalogSearch = value;
+  setConsoleTab(state, "connectors");
+}
+
+function selectConnectorCatalogPlatform(state: AppViewState, adapter: string) {
+  selectIntegrationCatalogAdapter(state as any, adapter);
+  (state as any)._consoleConnectorCatalogOpen = true;
+  (state as any)._consoleConnectorCatalogSearch = "";
+  setConsoleTab(state, "connectors");
+}
+
 // ─── Extended tab type (adds settings) ───────────────────────────────
 type ConsoleActiveView = ConsoleTab | "settings";
 
@@ -219,6 +255,7 @@ function resolveConsoleRouteFromLocation(state: AppViewState): ConsoleActiveView
     case "chat":
     case "home":
     case "console":
+      return "chat";
     case "connectors":
     case "integrations":
       if (legacyView === "records") {
@@ -281,6 +318,10 @@ function ensureConsoleRoute(state: AppViewState, tab: ConsoleActiveView) {
         dirty = true;
       }
     }
+  }
+  if (tab !== "chat" && url.searchParams.has("lane")) {
+    url.searchParams.delete("lane");
+    dirty = true;
   }
   if (dirty) {
     window.history.replaceState({}, "", url.toString());
@@ -422,6 +463,7 @@ function resolveConsoleTab(state: AppViewState): ConsoleActiveView {
 
 function legacyTabFor(tab: ConsoleActiveView): string {
   switch (tab) {
+    case "chat": return "console";
     case "connectors": return "integrations";
     case "agents": return "agents";
     case "monitor": return "system";
@@ -441,6 +483,7 @@ function syncConsoleRoute(state: AppViewState, tab: ConsoleActiveView) {
   const url = new URL(window.location.href);
   url.pathname = pathForConsoleTab(state, tab);
   url.searchParams.delete("view");
+  url.searchParams.delete("lane");
   if (tab !== "identity") {
     url.searchParams.delete("group");
   }
@@ -644,6 +687,7 @@ export function renderConsoleApp(state: AppViewState) {
   const activeTab = resolveConsoleTab(state);
   const basePath = (state as any).basePath ?? "";
   const isSettings = activeTab === "settings";
+  const isChat = activeTab === "chat";
   const isAgentDetail = activeTab === "agents" && !getWizardState(state).active && !!(state as any)._consoleAgentDetailId;
   ensureConsoleRoute(state, activeTab);
   if (activeTab === "identity") {
@@ -651,11 +695,11 @@ export function renderConsoleApp(state: AppViewState) {
   }
 
   return html`
-    <div class="console-shell" data-console-theme="${state.themeResolved === "dark" ? "dark" : "light"}">
+    <div class="console-shell ${isChat ? "console-shell--chat" : ""}" data-console-theme="${state.themeResolved === "dark" ? "dark" : "light"}">
       <!-- ═══ TOP NAV (app-level chrome) ═══ -->
       <nav class="console-topnav">
-        <div class="console-topnav-left">
-          <div class="console-logo" @click=${() => setConsoleTab(state, "connectors")} style="cursor: pointer;">
+          <div class="console-topnav-left">
+          <div class="console-logo" @click=${() => setConsoleTab(state, "chat")} style="cursor: pointer;">
             <div class="console-logo-mark">
               <img src="${basePath ? `${basePath}/favicon.svg` : "/favicon.svg"}" alt="" />
             </div>
@@ -681,30 +725,53 @@ export function renderConsoleApp(state: AppViewState) {
           <button class="console-icon-btn" title="Notifications" @click=${() => {
             (state as any).consoleNotificationsOpen = !(state as any).consoleNotificationsOpen;
             (state as any).tab = "__console_force__";
-            state.setTab(legacyTabFor(activeTab === "settings" ? "connectors" : activeTab as ConsoleTab) as any);
+            state.setTab(legacyTabFor(activeTab === "settings" ? "chat" : activeTab as ConsoleTab) as any);
           }}>${chromeIcons.bell}</button>
           <button class="console-icon-btn ${isSettings ? "console-icon-btn--active" : ""}" title="Settings" @click=${() => setConsoleTab(state, "settings")}>${icons.settings}</button>
         </div>
       </nav>
 
       <!-- ═══ MAIN CONTENT ═══ -->
-      <main class="console-main ${isSettings ? "console-main--settings" : ""} ${isAgentDetail ? "console-main--agent-detail" : ""}">
+      <main class="console-main ${isSettings ? "console-main--settings" : ""} ${isAgentDetail ? "console-main--agent-detail" : ""} ${isChat ? "console-main--chat" : ""}">
+        ${activeTab === "chat"
+          ? renderChatPage({
+              connected: state.connected,
+              runtimeClient: state.client,
+              subscribeRuntimeEvents: (listener) => state.subscribeRuntimeEvents(listener),
+            })
+          : nothing}
+
         ${activeTab === "connectors" ? renderIntegrations({
           connected: state.connected,
           loading: state.integrationsLoading,
+          catalogLoading: state.integrationsCatalogLoading,
           busyAdapter: state.integrationsBusyAdapter,
           busyAction: state.integrationsBusyAction,
           error: state.integrationsError,
+          catalogError: state.integrationsCatalogError,
           message: state.integrationsMessage,
-          adapters: state.integrationsAdapters,
-          selectedAdapter: state.integrationsSelectedAdapter,
+          connections: state.integrationsAdapters,
+          catalogItems: state.integrationsCatalog,
+          selectedConnectionKey: state.integrationsSelectedConnectionKey,
+          selectedAuthMethodId: state.integrationsSelectedAuthMethodId,
           sessionId: state.integrationsSessionId,
           payloadText: state.integrationsPayloadText,
           pendingFields: state.integrationsPendingFields,
           instructions: state.integrationsInstructions,
+          catalogOpen: Boolean((state as any)._consoleConnectorCatalogOpen),
+          catalogSearch: String((state as any)._consoleConnectorCatalogSearch ?? ""),
           onRefresh: () => void loadIntegrations(state as any),
-          onSelectAdapter: (adapter) => setIntegrationsSelectedAdapter(state as any, adapter),
+          onAddConnector: () => openConnectorCatalog(state),
+          onCatalogClose: () => closeConnectorCatalog(state),
+          onCatalogSearchChange: (value) => setConnectorCatalogSearch(state, value),
+          onCatalogSelect: (adapter) => selectConnectorCatalogPlatform(state, adapter),
+          onSelectConnection: (connectionKey) => {
+            setIntegrationsSelectedConnectionKey(state as any, connectionKey);
+            setConsoleTab(state, "connectors");
+          },
+          onSelectAuthMethod: (authMethodId) => setIntegrationsSelectedAuthMethodId(state as any, authMethodId),
           onPayloadChange: (payloadText) => setIntegrationsPayloadText(state as any, payloadText),
+          onConnect: (adapter) => void connectIntegrationAdapter(state as any, adapter),
           onOAuthStart: (adapter) => void startIntegrationOAuth(state as any, adapter),
           onCustomStart: (adapter) => void startIntegrationCustomFlow(state as any, adapter),
           onCustomSubmit: (adapter) => void submitIntegrationCustomFlow(state as any, adapter),
@@ -720,10 +787,18 @@ export function renderConsoleApp(state: AppViewState) {
           ? (() => {
               const wiz = getWizardState(state);
               if (wiz.active) {
+                const adapterCatalog = Object.values(
+                  state.integrationsAdapters.reduce((acc, entry) => {
+                    if (!acc[entry.adapter]) {
+                      acc[entry.adapter] = entry;
+                    }
+                    return acc;
+                  }, {} as Record<string, typeof state.integrationsAdapters[number]>),
+                );
                 return renderAgentCreateWizard({
                   step: wiz.step,
                   form: wiz.form,
-                  adapters: state.integrationsAdapters,
+                  adapters: adapterCatalog,
                   onStepChange: (step) => { (state as any)._consoleWizardStep = step; (state as any).tab = "__console_force__"; state.setTab("agents" as any); },
                   onFormChange: (patch) => { Object.assign(wiz.form, patch); (state as any).tab = "__console_force__"; state.setTab("agents" as any); },
                   onAppToggle: (adapter) => {
@@ -768,6 +843,10 @@ export function renderConsoleApp(state: AppViewState) {
                   conversations: state.conversationsResult,
                   sessions: state.sessionsResult,
                   focusMode: false,
+                  sidebarOpen: state.sidebarOpen,
+                  sidebarContent: state.sidebarContent,
+                  sidebarError: state.sidebarError,
+                  splitRatio: state.splitRatio,
                   assistantName: state.assistantName || "Agent",
                   assistantAvatar: state.assistantAvatar,
                   onRefresh: () => {},
@@ -777,6 +856,9 @@ export function renderConsoleApp(state: AppViewState) {
                   onAbort: () => void state.handleAbortChat(),
                   onQueueRemove: () => {},
                   onNewSession: () => state.handleSendChat("/new", { restoreDraft: true }),
+                  onOpenSidebar: (content: string) => state.handleOpenSidebar(content),
+                  onCloseSidebar: () => state.handleCloseSidebar(),
+                  onSplitRatioChange: (ratio: number) => state.handleSplitRatioChange(ratio),
                   onChatScroll: () => {},
                 } as any : null;
 

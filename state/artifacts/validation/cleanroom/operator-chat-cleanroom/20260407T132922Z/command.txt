@@ -1,0 +1,1 @@
+bash /nex/scripts/e2e/operator-chat-cleanroom-recorded-runner.sh

@@ -1,13 +1,12 @@
 import type { NexusApp } from "./app.ts";
 import type { AgentsListResult } from "./types.ts";
-import { refreshChat } from "./app-chat.ts";
 import {
   startLogsPolling,
   stopLogsPolling,
   startDebugPolling,
   stopDebugPolling,
 } from "./app-polling.ts";
-import { scheduleChatScroll, scheduleLogsScroll } from "./app-scroll.ts";
+import { scheduleLogsScroll } from "./app-scroll.ts";
 import { loadAclRequests } from "./controllers/acl-requests.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
 import { loadAgents } from "./controllers/agents.ts";
@@ -249,13 +248,6 @@ export function setTheme(host: SettingsHost, next: ThemeMode, context?: ThemeTra
 
 export async function refreshActiveTab(host: SettingsHost) {
   // ─── Primary tabs ────────────────────────────────────────────
-  if (host.tab === "console") {
-    await refreshChat(host as unknown as Parameters<typeof refreshChat>[0]);
-    scheduleChatScroll(
-      host as unknown as Parameters<typeof scheduleChatScroll>[0],
-      !host.chatHasAutoScrolled,
-    );
-  }
   if (host.tab === "home") {
     await Promise.all([
       loadOverview(host),
@@ -470,11 +462,7 @@ export function syncUrlWithTab(
   const currentPath = normalizePath(window.location.pathname);
   const url = new URL(window.location.href);
 
-  if (tab === "console" && host.conversationId) {
-    url.searchParams.set("conversation", host.conversationId);
-  } else {
-    url.searchParams.delete("conversation");
-  }
+  url.searchParams.delete("conversation");
 
   if (tab !== "memory") {
     for (const key of MEMORY_SCOPED_QUERY_KEYS) {

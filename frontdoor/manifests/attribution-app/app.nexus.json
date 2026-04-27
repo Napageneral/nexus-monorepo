@@ -1,0 +1,23 @@
+{
+  "id": "attribution",
+  "version": "0.1.4",
+  "displayName": "Attribution Intelligence",
+  "description": "Bind acquisition, website, and backend inputs into app-owned attribution facts, reconciliation, and operator reads.",
+  "hosting": {
+    "required_server_class": "standard",
+    "deployment_class": "customer_server"
+  },
+  "product": {
+    "tagline": "Paid, website, and backend truth in one attribution runtime",
+    "accentColor": "#0f766e",
+    "visibility": "customer",
+    "plans": [
+      {
+        "id": "attribution-standard",
+        "displayName": "Attribution Standard",
+        "priceMonthly": 0,
+        "isDefault": true
+      }
+    ]
+  }
+}

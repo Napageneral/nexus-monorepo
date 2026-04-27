@@ -1,14 +1,14 @@
 # Attribution Intelligence App Board
 
 This board tracks the implementation work for the attribution intelligence app
-package after the website-input contract and shared adapter substrate are
+package after the web-signals / web-journey contract and shared adapter substrate are
 defined.
 
 Canonical inputs:
 
 - `/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-layer.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-taxonomy.md`
-- `/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-website-input-package-and-install-contract.md`
+- `/Users/tyler/nexus/home/projects/nexus/docs/specs/web-signals-control-plane-and-web-adapter-family.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/workplans/attribution-intelligence-board/completed/AIL-006-attribution-intelligence-app-schema-jobs-and-ui.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/spec-driven-development-workflow.md`
 

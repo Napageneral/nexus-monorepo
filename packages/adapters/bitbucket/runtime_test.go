@@ -829,15 +829,22 @@ func TestBackfill_RateLimitWaitCanceledReturnsError(t *testing.T) {
 	}
 }
 
-func TestBackfill_RepeatedRateLimitFailsExplicitly(t *testing.T) {
+func TestBackfill_RepeatedRateLimitSequenceEventuallySucceeds(t *testing.T) {
 	repo := Repository{FullName: "team/repo", Name: "repo", DefaultBranch: "main"}
 	attempts := 0
 	provider := &fakeProvider{
 		id: "bitbucket",
-		getCommits: func(_ context.Context, _ AccountConfig, _ Repository, _ time.Time) ([]Commit, error) {
+		getCommits: func(_ context.Context, _ AccountConfig, repo Repository, _ time.Time) ([]Commit, error) {
 			attempts++
-			return nil, &core.APIError{StatusCode: 429, Status: "429 Too Many Requests", RetryAfterMs: 1}
+			if attempts <= 8 {
+				return nil, &core.APIError{StatusCode: 429, Status: "429 Too Many Requests", RetryAfterMs: 1}
+			}
+			return []Commit{{
+				SHA: "c1", Message: "after cooldowns", AuthorEmail: "a@example.com", AuthorName: "A",
+				Timestamp: 1_000, Refs: []string{"refs/heads/main"}, Repo: repo,
+			}}, nil
 		},
+		commitDiff: map[string][]byte{"c1": []byte("diff")},
 	}
 
 	var events []nexadapter.AdapterInboundRecord
@@ -847,17 +854,66 @@ func TestBackfill_RepeatedRateLimitFailsExplicitly(t *testing.T) {
 	}, time.Time{}, func(record any) {
 		events = append(events, record.(nexadapter.AdapterInboundRecord))
 	})
-	if err == nil {
-		t.Fatalf("runBackfill returned nil error, want explicit sustained rate-limit failure")
+	if err != nil {
+		t.Fatalf("runBackfill returned error after repeated rate limits: %v", err)
 	}
-	if !strings.Contains(err.Error(), "rate limit budget exhausted") {
-		t.Fatalf("runBackfill error = %v, want exhausted rate-limit message", err)
+	if attempts != 9 {
+		t.Fatalf("commit attempts = %d, want 9", attempts)
 	}
-	if attempts != backfillMaxConsecutiveRateLimits+1 {
-		t.Fatalf("commit attempts = %d, want %d", attempts, backfillMaxConsecutiveRateLimits+1)
+	if len(events) != 1 || events[0].Payload.ExternalRecordID != "git:bitbucket:team/repo:c1" {
+		t.Fatalf("unexpected events after sustained rate limits: %#v", events)
 	}
-	if len(events) != 0 {
-		t.Fatalf("len(events) = %d, want 0", len(events))
+}
+
+func TestBackfill_RateLimitedRepoDoesNotStarveRemainingRepos(t *testing.T) {
+	repoOne := Repository{FullName: "team/repo-one", Name: "repo-one", DefaultBranch: "main"}
+	repoTwo := Repository{FullName: "team/repo-two", Name: "repo-two", DefaultBranch: "main"}
+	attempts := map[string]int{}
+	provider := &fakeProvider{
+		id: "bitbucket",
+		getCommits: func(_ context.Context, _ AccountConfig, repo Repository, _ time.Time) ([]Commit, error) {
+			attempts[repo.FullName]++
+			if repo.FullName == repoOne.FullName && attempts[repo.FullName] <= 3 {
+				return nil, &core.APIError{StatusCode: 429, Status: "429 Too Many Requests", RetryAfterMs: 1}
+			}
+			commit := Commit{
+				SHA:         repo.Name + "-c1",
+				Message:     repo.Name,
+				AuthorEmail: "a@example.com",
+				AuthorName:  "A",
+				Timestamp:   1_000,
+				Refs:        []string{"refs/heads/main"},
+				Repo:        repo,
+			}
+			return []Commit{commit}, nil
+		},
+		commitDiff: map[string][]byte{
+			"repo-one-c1": []byte("diff-one"),
+			"repo-two-c1": []byte("diff-two"),
+		},
+	}
+
+	var events []nexadapter.AdapterInboundRecord
+	err := runBackfill(context.Background(), "acct", provider, AccountConfig{
+		PollIntervalSeconds: 1,
+		Repositories:        []Repository{repoOne, repoTwo},
+	}, time.Time{}, func(record any) {
+		events = append(events, record.(nexadapter.AdapterInboundRecord))
+	})
+	if err != nil {
+		t.Fatalf("runBackfill returned error: %v", err)
+	}
+	if attempts[repoOne.FullName] != 4 {
+		t.Fatalf("repoOne attempts = %d, want 4", attempts[repoOne.FullName])
+	}
+	if attempts[repoTwo.FullName] != 1 {
+		t.Fatalf("repoTwo attempts = %d, want 1", attempts[repoTwo.FullName])
+	}
+	if got := strings.Join(provider.commitCalls, ","); got != repoOne.FullName+","+repoOne.FullName+","+repoTwo.FullName+","+repoOne.FullName+","+repoOne.FullName {
+		t.Fatalf("commit calls = %q, want repo-two to progress while repo-one is deferred", got)
+	}
+	if len(events) != 2 {
+		t.Fatalf("len(events) = %d, want 2", len(events))
 	}
 }
 

@@ -358,7 +358,7 @@ func TestFetchShopifyRecordsIncludesTier1Families(t *testing.T) {
 		APIVersion:   "2026-01",
 	}
 
-	records, cursor, err := fetchShopifyRecords(context.Background(), state, mustParseRFC3339(t, "2026-04-01T00:00:00Z"), shopifySyncModeBackfill)
+	records, cursor, err := fetchShopifyRecords(context.Background(), state, mustParseRFC3339(t, "2026-04-01T00:00:00Z"))
 	if err != nil {
 		t.Fatalf("fetchShopifyRecords: %v", err)
 	}
@@ -381,7 +381,7 @@ func TestFetchShopifyRecordsIncludesTier1Families(t *testing.T) {
 	}
 }
 
-func TestFetchShopifyRecordsMonitorIncludesInventoryLevelOnlyChanges(t *testing.T) {
+func TestFetchInventoryItemsSinceUsesIncrementalQuery(t *testing.T) {
 	t.Cleanup(resetShopifyGlobals)
 
 	monitorSince := mustParseRFC3339(t, "2026-04-03T17:25:00Z")
@@ -482,28 +482,26 @@ func TestFetchShopifyRecordsMonitorIncludesInventoryLevelOnlyChanges(t *testing.
 		APIVersion:   "2026-01",
 	}
 
-	records, cursor, err := fetchShopifyRecords(context.Background(), state, monitorSince, shopifySyncModeMonitor)
+	items, _, cursor, err := fetchInventoryItemsSince(context.Background(), state, monitorSince)
 	if err != nil {
-		t.Fatalf("fetchShopifyRecords monitor: %v", err)
+		t.Fatalf("fetchInventoryItemsSince: %v", err)
 	}
-	if inventoryQuery != "" {
-		t.Fatalf("expected inventory monitor query to be blank for snapshot scan, got %q", inventoryQuery)
+	expectedQuery := shopifyUpdatedSinceFilter(monitorSince)
+	if inventoryQuery != expectedQuery {
+		t.Fatalf("expected incremental inventory query %q, got %q", expectedQuery, inventoryQuery)
 	}
 	if cursor.IsZero() || cursor.UTC().Format(time.RFC3339) != "2026-04-03T17:25:46Z" {
 		t.Fatalf("unexpected inventory cursor: %s", cursor.UTC().Format(time.RFC3339))
 	}
-	if len(records) != 1 {
-		t.Fatalf("expected one inventory record, got %d", len(records))
+	if len(items) != 1 {
+		t.Fatalf("expected one inventory item, got %d", len(items))
 	}
-	if got := records[0].Routing.ContainerID; got != "inventory" {
-		t.Fatalf("unexpected container id: %q", got)
-	}
-	if got := records[0].Payload.Timestamp; got != mustParseRFC3339(t, "2026-04-03T17:25:46Z").UnixMilli() {
-		t.Fatalf("unexpected inventory timestamp: %d", got)
+	if got := items[0].ID; got != "gid://shopify/InventoryItem/77" {
+		t.Fatalf("unexpected inventory item id: %q", got)
 	}
 }
 
-func TestFetchShopifyRecordsMonitorIncludesCustomerOnlyChanges(t *testing.T) {
+func TestFetchCustomersSinceUsesIncrementalQuery(t *testing.T) {
 	t.Cleanup(resetShopifyGlobals)
 
 	monitorSince := mustParseRFC3339(t, "2026-04-03T18:49:00Z")
@@ -564,28 +562,26 @@ func TestFetchShopifyRecordsMonitorIncludesCustomerOnlyChanges(t *testing.T) {
 		APIVersion:   "2026-01",
 	}
 
-	records, cursor, err := fetchShopifyRecords(context.Background(), state, monitorSince, shopifySyncModeMonitor)
+	customers, _, cursor, err := fetchCustomersSince(context.Background(), state, monitorSince)
 	if err != nil {
-		t.Fatalf("fetchShopifyRecords monitor: %v", err)
+		t.Fatalf("fetchCustomersSince: %v", err)
 	}
-	if customerQuery != "" {
-		t.Fatalf("expected customer monitor query to be blank for snapshot scan, got %q", customerQuery)
+	expectedQuery := shopifyUpdatedSinceFilter(monitorSince)
+	if customerQuery != expectedQuery {
+		t.Fatalf("expected incremental customer query %q, got %q", expectedQuery, customerQuery)
 	}
 	if cursor.IsZero() || cursor.UTC().Format(time.RFC3339) != "2026-04-03T18:50:06Z" {
 		t.Fatalf("unexpected customer cursor: %s", cursor.UTC().Format(time.RFC3339))
 	}
-	if len(records) != 1 {
-		t.Fatalf("expected one customer record, got %d", len(records))
+	if len(customers) != 1 {
+		t.Fatalf("expected one customer row, got %d", len(customers))
 	}
-	if got := records[0].Routing.ContainerID; got != "customer" {
-		t.Fatalf("unexpected container id: %q", got)
-	}
-	if got := records[0].Payload.Timestamp; got != mustParseRFC3339(t, "2026-04-03T18:50:06Z").UnixMilli() {
-		t.Fatalf("unexpected customer timestamp: %d", got)
+	if got := customers[0].ID; got != "gid://shopify/Customer/44" {
+		t.Fatalf("unexpected customer id: %q", got)
 	}
 }
 
-func TestFetchShopifyRecordsMonitorIncludesCollectionOnlyChanges(t *testing.T) {
+func TestFetchCollectionsSinceUsesIncrementalQuery(t *testing.T) {
 	t.Cleanup(resetShopifyGlobals)
 
 	monitorSince := mustParseRFC3339(t, "2026-04-03T18:00:00Z")
@@ -669,28 +665,26 @@ func TestFetchShopifyRecordsMonitorIncludesCollectionOnlyChanges(t *testing.T) {
 		APIVersion:   "2026-01",
 	}
 
-	records, cursor, err := fetchShopifyRecords(context.Background(), state, monitorSince, shopifySyncModeMonitor)
+	collections, _, cursor, err := fetchCollectionsSince(context.Background(), state, monitorSince)
 	if err != nil {
-		t.Fatalf("fetchShopifyRecords monitor: %v", err)
+		t.Fatalf("fetchCollectionsSince: %v", err)
 	}
-	if collectionQuery != "" {
-		t.Fatalf("expected collection monitor query to be blank for snapshot scan, got %q", collectionQuery)
+	expectedQuery := shopifyUpdatedSinceFilter(monitorSince)
+	if collectionQuery != expectedQuery {
+		t.Fatalf("expected incremental collection query %q, got %q", expectedQuery, collectionQuery)
 	}
 	if cursor.IsZero() || cursor.UTC().Format(time.RFC3339) != "2026-04-03T18:00:13Z" {
 		t.Fatalf("unexpected collection cursor: %s", cursor.UTC().Format(time.RFC3339))
 	}
-	if len(records) != 1 {
-		t.Fatalf("expected one collection record, got %d", len(records))
+	if len(collections) != 1 {
+		t.Fatalf("expected one collection row, got %d", len(collections))
 	}
-	if got := records[0].Routing.ContainerID; got != "collection" {
-		t.Fatalf("unexpected container id: %q", got)
-	}
-	if got := records[0].Payload.Timestamp; got != mustParseRFC3339(t, "2026-04-03T18:00:13Z").UnixMilli() {
-		t.Fatalf("unexpected collection timestamp: %d", got)
+	if got := collections[0].ID; got != "gid://shopify/Collection/202" {
+		t.Fatalf("unexpected collection id: %q", got)
 	}
 }
 
-func TestFetchShopifyRecordsMonitorIncludesProductOnlyChanges(t *testing.T) {
+func TestFetchProductsSinceUsesIncrementalQuery(t *testing.T) {
 	t.Cleanup(resetShopifyGlobals)
 
 	monitorSince := mustParseRFC3339(t, "2026-04-03T18:08:00Z")
@@ -775,24 +769,22 @@ func TestFetchShopifyRecordsMonitorIncludesProductOnlyChanges(t *testing.T) {
 		APIVersion:   "2026-01",
 	}
 
-	records, cursor, err := fetchShopifyRecords(context.Background(), state, monitorSince, shopifySyncModeMonitor)
+	products, _, cursor, err := fetchProductsSince(context.Background(), state, monitorSince)
 	if err != nil {
-		t.Fatalf("fetchShopifyRecords monitor: %v", err)
+		t.Fatalf("fetchProductsSince: %v", err)
 	}
-	if productQuery != "" {
-		t.Fatalf("expected product monitor query to be blank for snapshot scan, got %q", productQuery)
+	expectedQuery := shopifyUpdatedSinceFilter(monitorSince)
+	if productQuery != expectedQuery {
+		t.Fatalf("expected incremental product query %q, got %q", expectedQuery, productQuery)
 	}
 	if cursor.IsZero() || cursor.UTC().Format(time.RFC3339) != "2026-04-03T18:09:16Z" {
 		t.Fatalf("unexpected product cursor: %s", cursor.UTC().Format(time.RFC3339))
 	}
-	if len(records) != 1 {
-		t.Fatalf("expected one product record, got %d", len(records))
+	if len(products) != 1 {
+		t.Fatalf("expected one product row, got %d", len(products))
 	}
-	if got := records[0].Routing.ContainerID; got != "product" {
-		t.Fatalf("unexpected container id: %q", got)
-	}
-	if got := records[0].Payload.Timestamp; got != mustParseRFC3339(t, "2026-04-03T18:09:16Z").UnixMilli() {
-		t.Fatalf("unexpected product timestamp: %d", got)
+	if got := products[0].ID; got != "gid://shopify/Product/303" {
+		t.Fatalf("unexpected product id: %q", got)
 	}
 }
 

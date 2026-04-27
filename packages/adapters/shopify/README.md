@@ -95,5 +95,6 @@ go test ./...
 
 - [docs/README.md](/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/docs/README.md)
 - [ADAPTER_SPEC_SHOPIFY.md](/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/docs/specs/ADAPTER_SPEC_SHOPIFY.md)
+- [SHOPIFY_ADAPTER_PERFORMANCE_BENCHMARK_MODEL.md](/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/docs/specs/SHOPIFY_ADAPTER_PERFORMANCE_BENCHMARK_MODEL.md)
 - [SHOPIFY_ADAPTER_WORKPLAN.md](/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/docs/workplans/SHOPIFY_ADAPTER_WORKPLAN.md)
 - [SHOPIFY_ADAPTER_VALIDATION.md](/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/docs/validation/SHOPIFY_ADAPTER_VALIDATION.md)

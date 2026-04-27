@@ -13,6 +13,7 @@ The active `specs/` tree currently covers:
 - server classes, provisioning, tenancy, and network topology
 - package registry, install planning, adapter install, and runtime-auth
   projection
+- published adapter catalog discovery and routing
 - billing, pricing, and customer-facing hosted flows
 - a small set of operator procedure docs that are still colocated here until
   `frontdoor/` gets its own dedicated runbook home

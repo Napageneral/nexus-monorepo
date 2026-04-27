@@ -37,6 +37,10 @@ Completed:
 - `AIL-006`
 - `AIL-007`
 
+In progress:
+
+- `AIL-008`
+
 ## Execution Order
 
 The default sequence for this board is:
@@ -48,3 +52,5 @@ The default sequence for this board is:
    dedicated Website Input Package Board
 5. land the attribution intelligence app database, jobs, and UI
 6. prove the full click-to-outcome journey in cleanroom validation
+7. port the highest-value MoonSleep attribution product surfaces into the app
+   and validate the shared product on hosted MoonSleep and Devenir

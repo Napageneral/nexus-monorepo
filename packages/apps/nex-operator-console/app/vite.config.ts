@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
+import tailwindcss from "@tailwindcss/vite";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -22,8 +23,14 @@ export default defineConfig(() => {
   const envBase = process.env.NEXUS_CONTROL_UI_BASE_PATH?.trim();
   const base = envBase ? normalizeBase(envBase) : "./";
   return {
+    plugins: [tailwindcss()],
     base,
     publicDir: path.resolve(here, "public"),
+    resolve: {
+      alias: {
+        "~": path.resolve(here, "../../nex-operator-chat/app/src"),
+      },
+    },
     optimizeDeps: {
       include: ["lit/directives/repeat.js"],
     },
@@ -31,6 +38,9 @@ export default defineConfig(() => {
       outDir: path.resolve(here, "dist"),
       emptyOutDir: true,
       sourcemap: true,
+    },
+    worker: {
+      format: "es",
     },
     server: {
       host: true,

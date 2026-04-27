@@ -13,6 +13,18 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+.console-shell--chat {
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@supports (height: 100dvh) {
+  .console-shell--chat {
+    height: 100dvh;
+  }
+}
+
 /* ─── Top Navigation ──────────────────────────────────────────────── */
 /* Reference: ~40px height, very compact, no visible border in dark */
 
@@ -289,6 +301,24 @@
 
 .console-main--wide {
   max-width: 1440px;
+}
+
+.console-main--chat {
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex: 1 1 auto;
+  height: calc(100vh - 44px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+@supports (height: 100dvh) {
+  .console-main--chat {
+    height: calc(100dvh - 44px);
+  }
 }
 
 /* ─── Page Header ─────────────────────────────────────────────────── */

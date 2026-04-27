@@ -1,5 +1,8 @@
 {
-  "version": "0.1.0",
-  "lockedAt": "2026-03-31T00:00:00.000Z",
-  "paths": {}
+  "contract": "packages/apps/attribution-intelligence/app/api",
+  "generator": "nex/scripts/contracts/generate-openapi.ts",
+  "sources": [
+    "packages/apps/attribution-intelligence/app/app.nexus.json",
+    "packages/apps/attribution-intelligence/app/./methods/index.ts"
+  ]
 }

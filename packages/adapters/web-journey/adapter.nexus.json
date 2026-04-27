@@ -1,0 +1,9 @@
+{
+  "id": "web-journey",
+  "version": "0.1.0",
+  "displayName": "Web Journey",
+  "description": "Shared hard-cut web journey adapter package for Nex.",
+  "platform": "web-journey",
+  "command": "./dist/index.js",
+  "skill": "./SKILL.md"
+}

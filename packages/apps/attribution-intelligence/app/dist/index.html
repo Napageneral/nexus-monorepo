@@ -77,6 +77,14 @@
       .toolbar button {
         cursor: pointer;
       }
+      .section-toolbar select {
+        font: inherit;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        padding: 0.55rem 0.9rem;
+        background: rgba(255, 255, 255, 0.82);
+        color: var(--ink);
+      }
       .toolbar button.primary {
         background: var(--accent);
         color: #fff;
@@ -257,6 +265,28 @@
         <div class="grid" id="totalsGrid"></div>
       </section>
 
+      <section class="section split">
+        <article class="card">
+          <div class="section-head">
+            <div>
+              <div class="label">Attribution Coverage</div>
+              <div class="value" style="font-size: 1.1rem;">Resolved, review, and unknown mix</div>
+            </div>
+          </div>
+          <div id="coverageStripPanel" class="stack"></div>
+        </article>
+
+        <article class="card">
+          <div class="section-head">
+            <div>
+              <div class="label">Live Web Funnel</div>
+              <div class="value" style="font-size: 1.1rem;">Recent journey windows and alerts</div>
+            </div>
+          </div>
+          <div id="liveFunnelPanel" class="stack"></div>
+        </article>
+      </section>
+
       <section class="section two-col">
         <article class="card">
           <div class="section-head">
@@ -299,8 +329,8 @@
         <article class="card">
           <div class="section-head">
             <div>
-              <div class="label">Website Funnel</div>
-              <div class="value" style="font-size: 1.1rem;">Sessions, handoffs, outcomes</div>
+              <div class="label">Daily Website Funnel</div>
+              <div class="value" style="font-size: 1.1rem;">Sessions, handoffs, outcomes, revenue</div>
             </div>
           </div>
           <div id="funnelPanel"></div>
@@ -311,8 +341,18 @@
         <article class="card">
           <div class="section-head">
             <div>
-              <div class="label">Backend Outcomes</div>
-              <div class="value" style="font-size: 1.1rem;">Inspectable attribution decisions</div>
+              <div class="label">Orders / Review</div>
+              <div class="value" style="font-size: 1.1rem;">Primary business outcomes and review queue</div>
+            </div>
+            <div class="section-toolbar">
+              <select id="ledgerFilterSelect" aria-label="Ledger filter">
+                <option value="all">All</option>
+                <option value="needs_review">Needs Review</option>
+                <option value="missing_row">Missing Row</option>
+                <option value="weak_match">Weak Match</option>
+                <option value="paid_only">Paid Only</option>
+                <option value="utm_only">UTM Only</option>
+              </select>
             </div>
           </div>
           <div id="outcomesPanel" class="stack"></div>
@@ -321,8 +361,8 @@
         <article class="card">
           <div class="section-head">
             <div>
-              <div class="label">Row Inspector</div>
-              <div class="value" style="font-size: 1.1rem;">Bridge and evidence detail</div>
+              <div class="label">Evidence Inspector</div>
+              <div class="value" style="font-size: 1.1rem;">Winning decision, bridge, and evidence detail</div>
             </div>
           </div>
           <div id="inspectorPanel" class="stack"></div>

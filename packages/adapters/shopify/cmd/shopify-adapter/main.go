@@ -22,14 +22,13 @@ import (
 
 const (
 	adapterName                = "shopify-adapter"
-	adapterVersion             = "0.1.0"
+	adapterVersion             = "0.1.2"
 	platformID                 = "shopify"
 	defaultAPIVersion          = "2026-01"
 	defaultHTTPTimeout         = 30 * time.Second
 	defaultMonitorInterval     = 1 * time.Minute
 	defaultMonitorErrorBackoff = 5 * time.Minute
 	defaultTokenTTL            = 55 * time.Minute
-	orderReplayWindow          = 72 * time.Hour
 	maxOrdersPages             = 200
 	maxResponseBodyBytes       = 8 << 20
 	maxOAuthResponseBytes      = 1 << 20
@@ -132,13 +131,6 @@ type shopifySourceRequest struct {
 	Path       string
 	Request    map[string]any
 }
-
-type shopifySyncMode string
-
-const (
-	shopifySyncModeBackfill shopifySyncMode = "backfill"
-	shopifySyncModeMonitor  shopifySyncMode = "monitor"
-)
 
 type stagedBackfillChunk struct {
 	Path             string `json:"path"`
@@ -363,7 +355,7 @@ func backfill(ctx nexadapter.AdapterContext[struct{}], since time.Time, emit nex
 	if err != nil {
 		return err
 	}
-	records, _, err := fetchShopifyRecords(ctx.Context, state, since.UTC(), shopifySyncModeBackfill)
+	records, _, err := fetchShopifyRecords(ctx.Context, state, since.UTC())
 	if err != nil {
 		return err
 	}
@@ -378,18 +370,7 @@ func monitor(ctx nexadapter.AdapterContext[struct{}], emit nexadapter.EmitFunc) 
 	if err != nil {
 		return err
 	}
-
-	poll := nexadapter.PollMonitor(nexadapter.PollConfig[nexadapter.AdapterInboundRecord]{
-		Interval:      defaultMonitorInterval,
-		ErrorBackoff:  defaultMonitorErrorBackoff,
-		InitialCursor: time.Now().UTC().Add(-orderReplayWindow),
-		Fetch: func(fetchCtx context.Context, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
-			return fetchShopifyRecords(fetchCtx, state, since.UTC(), shopifySyncModeMonitor)
-		},
-		MaxConsecutiveErrors: 5,
-	})
-
-	return poll(ctx.Context, ctx.ConnectionID, emit)
+	return runShopifyMonitor(ctx, state, emit)
 }
 
 func boolPtr(value bool) *bool {
@@ -464,34 +445,29 @@ func loadShopifyState(ctx nexadapter.AdapterContext[struct{}]) (*shopifyState, e
 	return state, nil
 }
 
-func fetchShopifyRecords(ctx context.Context, state *shopifyState, since time.Time, mode shopifySyncMode) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
+func fetchShopifyRecords(ctx context.Context, state *shopifyState, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 	requestSince := since.UTC()
 	if requestSince.IsZero() {
 		requestSince = time.Now().UTC()
 	}
-	asOf := time.Now().UTC()
-	if mode == shopifySyncModeMonitor {
-		requestSince = minTime(requestSince, asOf.Add(-orderReplayWindow))
-	}
 
-	useUpdatedAt := mode == shopifySyncModeMonitor
-	orders, sourceRequest, latestUpdatedAt, err := fetchOrdersSince(ctx, state, requestSince, useUpdatedAt)
+	orders, sourceRequest, latestUpdatedAt, err := fetchOrdersSince(ctx, state, requestSince, false)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
-	customers, customerSourceRequest, customerLatestUpdatedAt, err := fetchCustomersSince(ctx, state, requestSince, mode)
+	customers, customerSourceRequest, customerLatestUpdatedAt, err := fetchCustomersSince(ctx, state, requestSince)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
-	products, productSourceRequest, productLatestUpdatedAt, err := fetchProductsSince(ctx, state, requestSince, mode)
+	products, productSourceRequest, productLatestUpdatedAt, err := fetchProductsSince(ctx, state, requestSince)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
-	collections, collectionSourceRequest, collectionLatestUpdatedAt, err := fetchCollectionsSince(ctx, state, requestSince, mode)
+	collections, collectionSourceRequest, collectionLatestUpdatedAt, err := fetchCollectionsSince(ctx, state, requestSince)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
-	inventoryItems, inventorySourceRequest, inventoryLatestUpdatedAt, err := fetchInventoryItemsSince(ctx, state, requestSince, mode)
+	inventoryItems, inventorySourceRequest, inventoryLatestUpdatedAt, err := fetchInventoryItemsSince(ctx, state, requestSince)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
@@ -584,7 +560,7 @@ func fetchShopifyRecords(ctx context.Context, state *shopifyState, since time.Ti
 		newCursor = marketingLatestUpdatedAt
 	}
 	if newCursor.IsZero() {
-		newCursor = asOf
+		newCursor = time.Now().UTC()
 	}
 	return records, newCursor, nil
 }
@@ -1091,7 +1067,6 @@ func normalizedLineItemRow(shopDomain string, order shopifyOrder, lineItem shopi
 		"shop_domain":        shopDomain,
 		"order_id":           int64String(order.ID),
 		"order_number":       int64String(order.OrderNumber),
-		"order_updated_at":   firstNonBlank(order.UpdatedAt, order.ProcessedAt, order.CreatedAt),
 		"line_item_id":       int64String(lineItem.ID),
 		"product_id":         int64String(lineItem.ProductID),
 		"variant_id":         int64String(lineItem.VariantID),
@@ -1327,19 +1302,6 @@ func parseTime(value string) time.Time {
 		return parsed.UTC()
 	}
 	return time.Time{}
-}
-
-func minTime(left time.Time, right time.Time) time.Time {
-	if left.IsZero() {
-		return right
-	}
-	if right.IsZero() {
-		return left
-	}
-	if left.Before(right) {
-		return left
-	}
-	return right
 }
 
 func int64String(value int64) string {

@@ -14,7 +14,11 @@ import type {
   IdentityPolicy,
 } from "./controllers/identity.ts";
 import type { IngressCredential } from "./controllers/ingress-credentials.ts";
-import type { AdapterAuthField, AdapterConnectionEntry } from "./controllers/integrations.ts";
+import type {
+  AdapterAuthField,
+  AdapterCatalogEntry,
+  AdapterConnectionEntry,
+} from "./controllers/integrations.ts";
 import type {
   RecordsChannelEntry,
   RecordsEntry,
@@ -23,7 +27,7 @@ import type {
 import type { AutomationMeeseeksEntry, JobQueueEntry } from "./controllers/schedules.ts";
 import type { SkillMessage } from "./controllers/skills.ts";
 import type { Tab } from "./navigation.ts";
-import type { RuntimeBrowserClient, RuntimeHelloOk } from "./runtime.ts";
+import type { RuntimeBrowserClient, RuntimeEventFrame, RuntimeHelloOk } from "./runtime.ts";
 import type { ResolvedTheme, ThemeMode } from "./theme.ts";
 import type {
   AgentsListResult,
@@ -238,13 +242,17 @@ export class NexusApp extends LitElement {
   @state() nostrProfileFormState: NostrProfileFormState | null = null;
   @state() nostrProfileAccountId: string | null = null;
   @state() integrationsLoading = false;
+  @state() integrationsCatalogLoading = false;
   @state() integrationsBusyAdapter: string | null = null;
   @state() integrationsBusyAction: string | null = null;
   @state() integrationsError: string | null = null;
+  @state() integrationsCatalogError: string | null = null;
   @state() integrationsMessage: string | null = null;
   @state() integrationsLoaded = false;
   @state() integrationsAdapters: AdapterConnectionEntry[] = [];
-  @state() integrationsSelectedAdapter = "";
+  @state() integrationsCatalog: AdapterCatalogEntry[] = [];
+  @state() integrationsSelectedConnectionKey = "";
+  @state() integrationsSelectedAuthMethodId = "";
   @state() integrationsSessionId = "";
   @state() integrationsPayloadText = "{}";
   @state() integrationsPendingFields: AdapterAuthField[] = [];
@@ -462,6 +470,7 @@ export class NexusApp extends LitElement {
   private logsScrollFrame: number | null = null;
   private toolStreamById = new Map<string, ToolStreamEntry>();
   private toolStreamOrder: string[] = [];
+  private runtimeEventListeners = new Set<(event: RuntimeEventFrame) => void>();
   refreshSessionsAfterChat = new Set<string>();
   basePath = "";
   private popStateHandler = () =>
@@ -494,6 +503,23 @@ export class NexusApp extends LitElement {
 
   connect() {
     connectRuntimeInternal(this as unknown as Parameters<typeof connectRuntimeInternal>[0]);
+  }
+
+  subscribeRuntimeEvents(listener: (event: RuntimeEventFrame) => void) {
+    this.runtimeEventListeners.add(listener);
+    return () => {
+      this.runtimeEventListeners.delete(listener);
+    };
+  }
+
+  emitRuntimeEvent(event: RuntimeEventFrame) {
+    for (const listener of [...this.runtimeEventListeners]) {
+      try {
+        listener(event);
+      } catch (error) {
+        console.error("[runtime] runtime event subscriber error:", error);
+      }
+    }
   }
 
   handleChatScroll(event: Event) {

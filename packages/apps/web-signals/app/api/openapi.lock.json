@@ -1,0 +1,8 @@
+{
+  "contract": "packages/apps/web-signals/app/api",
+  "generator": "nex/scripts/contracts/generate-openapi.ts",
+  "sources": [
+    "packages/apps/web-signals/app/methods/index.ts",
+    "packages/apps/web-signals/app/app.nexus.json"
+  ]
+}

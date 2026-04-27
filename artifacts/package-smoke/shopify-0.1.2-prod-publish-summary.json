@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-04-27T14:37:35.795846+00:00",
+  "host": "frontdoor.nexushub.sh",
+  "remote_frontdoor_root": "/opt/nexus/frontdoor",
+  "remote_db": "/var/lib/nexus-frontdoor/frontdoor.db",
+  "target_os": "linux",
+  "target_arch": "arm64",
+  "count": 1,
+  "failures": 0,
+  "results": [
+    {
+      "kind": "adapter",
+      "id": "shopify",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/dist/shopify-0.1.2.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/shopify/0.1.2/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/shopify/0.1.2/shopify-0.1.2.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "shopify",
+        "version": "0.1.2",
+        "release_id": "rel-shopify-0.1.2",
+        "variant_id": "variant-shopify-0.1.2-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/shopify/0.1.2/shopify-0.1.2.tar.gz",
+        "sha256": "0f5b3fea2fcbb13e5ad165bd75d746963d7f2f4fa5e1a995278768aafeea117f",
+        "size_bytes": 12530568,
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"shopify\",\n  \"version\": \"0.1.2\",\n  \"release_id\": \"rel-shopify-0.1.2\",\n  \"variant_id\": \"variant-shopify-0.1.2-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/shopify/0.1.2/shopify-0.1.2.tar.gz\",\n  \"sha256\": \"0f5b3fea2fcbb13e5ad165bd75d746963d7f2f4fa5e1a995278768aafeea117f\",\n  \"size_bytes\": 12530568,\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:288893) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    }
+  ]
+}

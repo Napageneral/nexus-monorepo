@@ -6,6 +6,19 @@ export type AdapterConnectionAuthMethod =
   | "custom_flow"
   | null;
 
+export type AdapterCatalogEntry = {
+  adapter: string;
+  name: string;
+  description?: string | null;
+  service?: string | null;
+  icon?: string | null;
+  auth?: AdapterAuthManifest;
+  published?: boolean;
+  publishedVersion?: string | null;
+  registered?: boolean;
+  registeredVersion?: string | null;
+};
+
 export type AdapterAuthFieldOption = {
   label: string;
   value: string;
@@ -22,6 +35,7 @@ export type AdapterAuthField = {
 
 export type AdapterAuthMethod =
   | {
+      id: string;
       type: "oauth2";
       label: string;
       icon: string;
@@ -29,6 +43,7 @@ export type AdapterAuthMethod =
       scopes: string[];
     }
   | {
+      id: string;
       type: "api_key";
       label: string;
       icon: string;
@@ -36,6 +51,7 @@ export type AdapterAuthMethod =
       fields: AdapterAuthField[];
     }
   | {
+      id: string;
       type: "file_upload";
       label: string;
       icon: string;
@@ -44,6 +60,7 @@ export type AdapterAuthMethod =
       maxSize?: number;
     }
   | {
+      id: string;
       type: "custom_flow";
       label: string;
       icon: string;
@@ -67,6 +84,8 @@ export type AdapterConnectionEntry = {
   connectionId: string;
   adapter: string;
   name: string;
+  service?: string | null;
+  authMethodId?: string | null;
   status: AdapterConnectionStatus;
   authMethod: AdapterConnectionAuthMethod;
   auth?: AdapterAuthManifest;
@@ -95,6 +114,13 @@ type AdapterConnectionsOAuthStartResult = {
   redirectUrl: string;
   state: string;
   expiresAt: number;
+};
+
+type AdapterConnectionMutationResult = {
+  connectionId: string;
+  status: string;
+  account?: string;
+  service?: string;
 };
 
 export type AdapterConnectionsCustomResult = {
@@ -148,13 +174,17 @@ export type IntegrationsState = {
   } | null;
   connected: boolean;
   integrationsLoading: boolean;
+  integrationsCatalogLoading: boolean;
   integrationsBusyAdapter: string | null;
   integrationsBusyAction: string | null;
   integrationsError: string | null;
+  integrationsCatalogError: string | null;
   integrationsMessage: string | null;
   integrationsLoaded: boolean;
   integrationsAdapters: AdapterConnectionEntry[];
-  integrationsSelectedAdapter: string;
+  integrationsCatalog: AdapterCatalogEntry[];
+  integrationsSelectedConnectionKey: string;
+  integrationsSelectedAuthMethodId: string;
   integrationsSessionId: string;
   integrationsPayloadText: string;
   integrationsPendingFields: AdapterAuthField[];
@@ -164,6 +194,12 @@ export type IntegrationsState = {
 function trimOrEmpty(value: string | null | undefined): string {
   return typeof value === "string" ? value.trim() : "";
 }
+
+function normalizeKey(value: string | null | undefined): string {
+  return trimOrEmpty(value).toLowerCase();
+}
+
+const CATALOG_SELECTION_PREFIX = "catalog::";
 
 function parsePayload(payloadText: string): Record<string, unknown> | undefined {
   const trimmed = payloadText.trim();
@@ -212,6 +248,196 @@ function normalizeAdapterConnections(
     .toSorted((a, b) => a.id.localeCompare(b.id));
 }
 
+type AdapterCatalogMethodShape = {
+  id?: unknown;
+  type?: unknown;
+  label?: unknown;
+  icon?: unknown;
+  service?: unknown;
+  scopes?: unknown;
+  fields?: unknown;
+  accept?: unknown;
+  templateUrl?: unknown;
+  maxSize?: unknown;
+};
+
+type AdapterCatalogListResult = {
+  adapters?: unknown;
+  catalog?: unknown;
+  items?: unknown;
+  connections?: unknown;
+};
+
+function normalizeCatalogMethod(method: AdapterCatalogMethodShape): AdapterAuthMethod | null {
+  const id = trimOrEmpty(typeof method?.id === "string" ? method.id : null);
+  const type = trimOrEmpty(typeof method?.type === "string" ? method.type : null);
+  const label = trimOrEmpty(typeof method?.label === "string" ? method.label : null);
+  const icon = trimOrEmpty(typeof method?.icon === "string" ? method.icon : null);
+  const service = trimOrEmpty(typeof method?.service === "string" ? method.service : null);
+  if (!id || !label) {
+    return null;
+  }
+  if (type === "oauth2") {
+    return {
+      id,
+      type: "oauth2",
+      label,
+      icon: icon || "oauth",
+      service,
+      scopes: Array.isArray(method?.scopes) ? method.scopes.filter((scope): scope is string => typeof scope === "string") : [],
+    };
+  }
+  if (type === "api_key") {
+    return {
+      id,
+      type: "api_key",
+      label,
+      icon: icon || "plug",
+      service,
+      fields: Array.isArray(method?.fields)
+        ? method.fields.filter((field): field is AdapterAuthField => Boolean(field && typeof field === "object"))
+        : [],
+    };
+  }
+  if (type === "file_upload") {
+    return {
+      id,
+      type: "file_upload",
+      label,
+      icon: icon || "upload",
+      accept: Array.isArray(method?.accept) ? method.accept.filter((item): item is string => typeof item === "string") : [],
+      templateUrl: typeof method?.templateUrl === "string" ? method.templateUrl : undefined,
+      maxSize: typeof method?.maxSize === "number" ? method.maxSize : undefined,
+    };
+  }
+  if (type === "custom_flow") {
+    return {
+      id,
+      type: "custom_flow",
+      label,
+      icon: icon || "plug",
+      service,
+      fields: Array.isArray(method?.fields)
+        ? method.fields.filter((field): field is AdapterAuthField => Boolean(field && typeof field === "object"))
+        : undefined,
+    };
+  }
+  return null;
+}
+
+function normalizeCatalogMethods(entry: Record<string, unknown>): AdapterAuthManifest | undefined {
+  const rawMethods =
+    Array.isArray(entry.methods)
+      ? entry.methods
+      : Array.isArray(entry.auth_methods)
+        ? entry.auth_methods
+        : Array.isArray((entry.auth as Record<string, unknown> | undefined)?.methods)
+          ? (entry.auth as Record<string, unknown>).methods
+          : [];
+  const methods = rawMethods
+    .map((method) => (method && typeof method === "object" ? normalizeCatalogMethod(method as AdapterCatalogMethodShape) : null))
+    .filter((method): method is AdapterAuthMethod => Boolean(method));
+  const setupGuide =
+    typeof entry.setupGuide === "string"
+      ? entry.setupGuide
+      : typeof entry.setup_guide === "string"
+        ? entry.setup_guide
+        : typeof (entry.auth as Record<string, unknown> | undefined)?.setupGuide === "string"
+          ? (entry.auth as Record<string, unknown>).setupGuide
+          : typeof (entry.auth as Record<string, unknown> | undefined)?.setup_guide === "string"
+            ? (entry.auth as Record<string, unknown>).setup_guide
+            : undefined;
+  return methods.length > 0 || setupGuide ? { methods, ...(setupGuide ? { setupGuide } : {}) } : undefined;
+}
+
+function normalizeAdapterCatalogEntry(entry: unknown): AdapterCatalogEntry | null {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+  const raw = entry as Record<string, unknown>;
+  const adapter = normalizeKey(
+    typeof raw.adapter === "string"
+      ? raw.adapter
+      : typeof raw.id === "string"
+        ? raw.id
+        : typeof raw.service === "string"
+          ? raw.service
+          : null,
+  );
+  const name = trimOrEmpty(
+    typeof raw.name === "string"
+      ? raw.name
+      : typeof raw.display_name === "string"
+        ? raw.display_name
+        : typeof raw.displayName === "string"
+          ? raw.displayName
+          : adapter,
+  );
+  if (!adapter || !name) {
+    return null;
+  }
+  const service = trimOrEmpty(
+    typeof raw.service === "string"
+      ? raw.service
+      : typeof raw.service_name === "string"
+        ? raw.service_name
+        : null,
+  );
+  const description = trimOrEmpty(
+    typeof raw.description === "string"
+      ? raw.description
+      : typeof raw.summary === "string"
+        ? raw.summary
+        : null,
+  );
+  const icon = trimOrEmpty(typeof raw.icon === "string" ? raw.icon : null);
+  const auth = normalizeCatalogMethods(raw);
+  const published = raw.published === true;
+  const publishedVersion = trimOrEmpty(typeof raw.publishedVersion === "string" ? raw.publishedVersion : null);
+  const registered = raw.registered === true;
+  const registeredVersion = trimOrEmpty(typeof raw.registeredVersion === "string" ? raw.registeredVersion : null);
+  return {
+    adapter,
+    name,
+    description: description || null,
+    service: service || null,
+    icon: icon || null,
+    published,
+    publishedVersion: publishedVersion || null,
+    registered,
+    registeredVersion: registeredVersion || null,
+    ...(auth ? { auth } : {}),
+  };
+}
+
+function normalizeAdapterCatalog(
+  payload: AdapterCatalogListResult | undefined,
+): AdapterCatalogEntry[] {
+  const rawEntries = Array.isArray(payload?.adapters)
+    ? payload.adapters
+    : Array.isArray(payload?.catalog)
+      ? payload.catalog
+      : Array.isArray(payload?.items)
+        ? payload.items
+        : Array.isArray(payload?.connections)
+          ? payload.connections
+          : [];
+  return rawEntries
+    .map((entry) => normalizeAdapterCatalogEntry(entry))
+    .filter((entry): entry is AdapterCatalogEntry => Boolean(entry))
+    .toSorted((left, right) => {
+      const publishedRank = Number(right.published === true) - Number(left.published === true);
+      if (publishedRank !== 0) {
+        return publishedRank;
+      }
+      const registeredRank = Number(right.registered === true) - Number(left.registered === true);
+      if (registeredRank !== 0) {
+        return registeredRank;
+      }
+      return left.name.localeCompare(right.name);
+    });
+}
+
 function mergeAdapterConnections(
   entry: AdapterConnectionEntry,
   discovered: AdapterConnectionIdentity[],
@@ -237,58 +463,164 @@ function mergeAdapterConnections(
   return [...merged.values()].toSorted((a, b) => a.id.localeCompare(b.id));
 }
 
-function summarizeAdapterInventory(entries: AdapterConnectionEntry[]): AdapterConnectionEntry[] {
-  const grouped = new Map<string, AdapterConnectionEntry[]>();
-  for (const entry of entries) {
-    const adapter = trimOrEmpty(entry.adapter);
-    if (!adapter) {
-      continue;
-    }
-    const existing = grouped.get(adapter) ?? [];
-    existing.push({ ...entry, adapter });
-    grouped.set(adapter, existing);
-  }
-  return [...grouped.values()]
-    .map((group) => {
-      const first = group[0]!;
-      const connected = group.find((entry) => entry.status === "connected");
-      const error = group.find((entry) => entry.status === "error");
-      const expired = group.find((entry) => entry.status === "expired");
-      const chosen = connected ?? error ?? expired ?? first;
-      const lastSyncValues = group
-        .map((entry) => entry.lastSync)
-        .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-      return {
-        ...first,
-        connectionId: chosen.connectionId,
-        status: chosen.status,
-        account: chosen.account ?? group.find((entry) => trimOrEmpty(entry.account))?.account ?? null,
-        lastSync: lastSyncValues.length > 0 ? Math.max(...lastSyncValues) : null,
-        error: chosen.error ?? group.find((entry) => trimOrEmpty(entry.error))?.error ?? null,
-      };
-    })
-    .toSorted((a, b) => a.name.localeCompare(b.name));
+function catalogSelectionKey(adapter: string): string {
+  return `${CATALOG_SELECTION_PREFIX}${normalizeKey(adapter)}`;
 }
 
-function selectedAdapterEntry(state: IntegrationsState): AdapterConnectionEntry | null {
-  const selected = trimOrEmpty(state.integrationsSelectedAdapter);
-  if (!selected) {
+function connectionSelectionKey(entry: AdapterConnectionEntry): string {
+  const connectionId = trimOrEmpty(entry.connectionId);
+  if (connectionId) {
+    return connectionId;
+  }
+  const account = trimOrEmpty(entry.account);
+  if (account) {
+    return `${trimOrEmpty(entry.adapter)}::${account}`;
+  }
+  return `${trimOrEmpty(entry.adapter)}::disconnected`;
+}
+
+function sortConnections(entries: AdapterConnectionEntry[]): AdapterConnectionEntry[] {
+  const rank = (status: AdapterConnectionStatus): number => {
+    if (status === "connected") {
+      return 0;
+    }
+    if (status === "error") {
+      return 1;
+    }
+    if (status === "expired") {
+      return 2;
+    }
+    return 3;
+  };
+  return [...entries].sort((left, right) => {
+    const statusRank = rank(left.status) - rank(right.status);
+    if (statusRank !== 0) {
+      return statusRank;
+    }
+    const serviceCompare = trimOrEmpty(left.service ?? left.adapter).localeCompare(
+      trimOrEmpty(right.service ?? right.adapter),
+    );
+    if (serviceCompare !== 0) {
+      return serviceCompare;
+    }
+    const adapterCompare = trimOrEmpty(left.adapter).localeCompare(trimOrEmpty(right.adapter));
+    if (adapterCompare !== 0) {
+      return adapterCompare;
+    }
+    const accountCompare = trimOrEmpty(left.account).localeCompare(trimOrEmpty(right.account));
+    if (accountCompare !== 0) {
+      return accountCompare;
+    }
+    return trimOrEmpty(left.connectionId).localeCompare(trimOrEmpty(right.connectionId));
+  });
+}
+
+function selectedConnectionEntry(state: IntegrationsState): AdapterConnectionEntry | null {
+  const selected = trimOrEmpty(state.integrationsSelectedConnectionKey);
+  if (!selected || selected.startsWith(CATALOG_SELECTION_PREFIX)) {
     return null;
   }
-  return state.integrationsAdapters.find((entry) => entry.adapter === selected) ?? null;
+  return (
+    state.integrationsAdapters.find((entry) => connectionSelectionKey(entry) === selected) ?? null
+  );
+}
+
+function selectedCatalogEntry(state: IntegrationsState): AdapterCatalogEntry | null {
+  const selected = trimOrEmpty(state.integrationsSelectedConnectionKey);
+  const adapter = selected.startsWith(CATALOG_SELECTION_PREFIX)
+    ? normalizeKey(selected.slice(CATALOG_SELECTION_PREFIX.length))
+    : "";
+  if (!adapter) {
+    return null;
+  }
+  return state.integrationsCatalog.find((entry) => normalizeKey(entry.adapter) === adapter) ?? null;
 }
 
 function selectedConnectionId(state: IntegrationsState): string {
-  return trimOrEmpty(selectedAdapterEntry(state)?.connectionId);
+  return trimOrEmpty(selectedConnectionEntry(state)?.connectionId);
 }
 
-function syncSelectedAdapter(state: IntegrationsState): void {
-  const selected = selectedAdapterEntry(state);
-  if (selected) {
-    return;
+function availableAuthMethods(
+  entry: AdapterConnectionEntry | null,
+  catalogEntry: AdapterCatalogEntry | null,
+): AdapterAuthMethod[] {
+  if (Array.isArray(entry?.auth?.methods) && entry.auth.methods.length > 0) {
+    return entry.auth.methods;
   }
-  const first = state.integrationsAdapters[0]?.adapter ?? "";
-  state.integrationsSelectedAdapter = first;
+  return Array.isArray(catalogEntry?.auth?.methods) ? catalogEntry.auth.methods : [];
+}
+
+function selectDefaultAuthMethodId(
+  entry: AdapterConnectionEntry | null,
+  catalogEntry: AdapterCatalogEntry | null,
+): string {
+  const methods = availableAuthMethods(entry, catalogEntry);
+  if (methods.length === 0) {
+    return "";
+  }
+  const active = trimOrEmpty(entry?.authMethodId);
+  if (active && methods.some((method) => method.id === active)) {
+    return active;
+  }
+  return trimOrEmpty(methods[0]?.id);
+}
+
+function selectedAuthMethod(state: IntegrationsState): AdapterAuthMethod | null {
+  const connection = selectedConnectionEntry(state);
+  const catalog = selectedCatalogEntry(state);
+  const methods = availableAuthMethods(connection, catalog);
+  if (methods.length === 0) {
+    return null;
+  }
+  const selectedId = trimOrEmpty(state.integrationsSelectedAuthMethodId);
+  if (selectedId) {
+    const explicit = methods.find((method) => method.id === selectedId);
+    if (explicit) {
+      return explicit;
+    }
+  }
+  const activeId = selectDefaultAuthMethodId(connection, catalog);
+  return methods.find((method) => method.id === activeId) ?? methods[0] ?? null;
+}
+
+function selectedAdapter(state: IntegrationsState): string {
+  const connection = selectedConnectionEntry(state);
+  if (connection) {
+    return trimOrEmpty(connection.adapter);
+  }
+  return trimOrEmpty(selectedCatalogEntry(state)?.adapter);
+}
+
+function selectedAuthMethodId(state: IntegrationsState): string {
+  return trimOrEmpty(selectedAuthMethod(state)?.id);
+}
+
+function syncSelectedAuthMethod(state: IntegrationsState): void {
+  state.integrationsSelectedAuthMethodId = selectDefaultAuthMethodId(
+    selectedConnectionEntry(state),
+    selectedCatalogEntry(state),
+  );
+}
+
+function syncSelectedConnection(state: IntegrationsState): void {
+  const selected = selectedConnectionEntry(state);
+  if (!selected) {
+    const catalog = selectedCatalogEntry(state);
+    if (catalog) {
+      state.integrationsSelectedConnectionKey = catalogSelectionKey(catalog.adapter);
+    } else {
+      const first = state.integrationsAdapters[0];
+      if (first) {
+        state.integrationsSelectedConnectionKey = connectionSelectionKey(first);
+      } else {
+        const firstCatalog = state.integrationsCatalog[0];
+        state.integrationsSelectedConnectionKey = firstCatalog
+          ? catalogSelectionKey(firstCatalog.adapter)
+          : "";
+      }
+    }
+  }
+  syncSelectedAuthMethod(state);
 }
 
 function setBusy(state: IntegrationsState, adapter: string, action: string): void {
@@ -401,18 +733,100 @@ export function adapterSupportsOAuth(entry: AdapterConnectionEntry | null): bool
   return hasAuthMethod(entry, "oauth2");
 }
 
+export function adapterSupportsApiKey(entry: AdapterConnectionEntry | null): boolean {
+  return hasAuthMethod(entry, "api_key");
+}
+
 export function adapterSupportsCustomFlow(entry: AdapterConnectionEntry | null): boolean {
   return hasAuthMethod(entry, "custom_flow");
 }
 
-export function setIntegrationsSelectedAdapter(state: IntegrationsState, adapter: string): void {
-  state.integrationsSelectedAdapter = trimOrEmpty(adapter);
+export function setIntegrationsSelectedConnectionKey(
+  state: IntegrationsState,
+  connectionKey: string,
+): void {
+  state.integrationsSelectedConnectionKey = trimOrEmpty(connectionKey);
+  syncSelectedAuthMethod(state);
+  state.integrationsError = null;
+  state.integrationsMessage = null;
+}
+
+export function setIntegrationsSelectedAuthMethodId(
+  state: IntegrationsState,
+  authMethodId: string,
+): void {
+  state.integrationsSelectedAuthMethodId = trimOrEmpty(authMethodId);
   state.integrationsError = null;
   state.integrationsMessage = null;
 }
 
 export function setIntegrationsPayloadText(state: IntegrationsState, payloadText: string): void {
   state.integrationsPayloadText = payloadText;
+}
+
+export function beginAddIntegrationConnector(state: IntegrationsState): void {
+  state.integrationsError = null;
+  state.integrationsMessage = null;
+}
+
+export function selectIntegrationCatalogAdapter(
+  state: IntegrationsState,
+  adapter: string,
+): void {
+  const target = normalizeKey(adapter);
+  if (!target) {
+    state.integrationsError = "Choose a connector first.";
+    return;
+  }
+
+  const preferred =
+    state.integrationsCatalog.find((entry) => normalizeKey(entry.adapter) === target) ??
+    null;
+
+  if (!preferred) {
+    state.integrationsError = `No connector catalog entry is available yet for ${adapter}.`;
+    state.integrationsMessage = null;
+    return;
+  }
+
+  state.integrationsSelectedConnectionKey = catalogSelectionKey(preferred.adapter);
+  syncSelectedAuthMethod(state);
+  state.integrationsPayloadText = "{}";
+  state.integrationsSessionId = "";
+  state.integrationsPendingFields = [];
+  state.integrationsInstructions = null;
+  state.integrationsError = null;
+  state.integrationsMessage = `Starting setup for a new ${preferred.name || preferred.adapter} connection. Existing connections stay unchanged.`;
+}
+
+function parseApiKeyPayload(payloadText: string): {
+  fields: Record<string, string>;
+  config?: Record<string, unknown>;
+} {
+  const payload = parsePayload(payloadText);
+  if (!payload) {
+    return { fields: {} };
+  }
+  const explicitFields = payload.fields;
+  const rawFields =
+    explicitFields && typeof explicitFields === "object" && !Array.isArray(explicitFields)
+      ? (explicitFields as Record<string, unknown>)
+      : payload;
+  const fields: Record<string, string> = {};
+  for (const [key, value] of Object.entries(rawFields)) {
+    if (key === "fields" || key === "config") {
+      continue;
+    }
+    if (value == null) {
+      continue;
+    }
+    fields[key] = String(value);
+  }
+  const config =
+    payload.config && typeof payload.config === "object" && !Array.isArray(payload.config)
+      ? (payload.config as Record<string, unknown>)
+      : undefined;
+  return Object.keys(config ?? {}).length > 0 ? { fields, config } : { fields };
 }
 
 export async function loadIntegrations(state: IntegrationsState): Promise<void> {
@@ -425,45 +839,40 @@ export async function loadIntegrations(state: IntegrationsState): Promise<void> 
     return;
   }
   state.integrationsLoading = true;
+  state.integrationsCatalogLoading = true;
   state.integrationsError = null;
+  state.integrationsCatalogError = null;
   consumeCallbackSignal(state);
   try {
     const client = state.client;
-    const result = await client.request<AdapterConnectionsListResult>(
-      "adapters.connections.list",
-      {},
-    );
-    const baseEntries = summarizeAdapterInventory(
-      Array.isArray(result.connections) ? result.connections : [],
-    );
-    state.integrationsAdapters = await Promise.all(
-      baseEntries.map(async (entry) => {
-        try {
-          const connectionPayload = await client.request<AdapterConnectionsResult>(
-            "adapter.connections.list",
-            { adapter: entry.adapter },
-          );
-          return {
-            ...entry,
-            connections: mergeAdapterConnections(
-              entry,
-              normalizeAdapterConnections(connectionPayload),
-            ),
-          } satisfies AdapterConnectionEntry;
-        } catch {
-          return {
-            ...entry,
-            connections: mergeAdapterConnections(entry, []),
-          } satisfies AdapterConnectionEntry;
-        }
-      }),
-    );
-    syncSelectedAdapter(state);
+    const [connectionsResult, catalogResult] = await Promise.allSettled([
+      client.request<AdapterConnectionsListResult>("adapters.connections.list", {}),
+      client.request<AdapterCatalogListResult>("adapters.catalog.list", {}),
+    ]);
+    if (connectionsResult.status === "fulfilled") {
+      state.integrationsAdapters = sortConnections(
+        (Array.isArray(connectionsResult.value.connections) ? connectionsResult.value.connections : []).map((entry) => ({
+          ...entry,
+          connections: Array.isArray(entry.connections) ? entry.connections : [],
+        })),
+      );
+      state.integrationsError = null;
+    } else {
+      state.integrationsError = String(connectionsResult.reason);
+    }
+    if (catalogResult.status === "fulfilled") {
+      state.integrationsCatalog = normalizeAdapterCatalog(catalogResult.value);
+      state.integrationsCatalogError = null;
+    } else {
+      state.integrationsCatalogError = String(catalogResult.reason);
+    }
+    syncSelectedConnection(state);
   } catch (error) {
     state.integrationsError = String(error);
   } finally {
     state.integrationsLoaded = true;
     state.integrationsLoading = false;
+    state.integrationsCatalogLoading = false;
   }
 }
 
@@ -479,15 +888,21 @@ export async function startIntegrationOAuth(
     state.integrationsError = "Select an adapter first.";
     return;
   }
+  const authMethodId = selectedAuthMethodId(state);
+  if (!authMethodId) {
+    state.integrationsError = "Select an auth method first.";
+    return;
+  }
   setBusy(state, target, "oauth_start");
   state.integrationsError = null;
   state.integrationsMessage = null;
   try {
     const redirectBaseUrl = `${window.location.origin}`;
     const result = await state.client.request<AdapterConnectionsOAuthStartResult>(
-      "adapter.connections.oauth.start",
+      "adapters.connections.oauth.start",
       {
-        adapter: target,
+        adapter: selectedAdapter(state) || target,
+        authMethodId,
         redirectBaseUrl,
       },
     );
@@ -513,15 +928,21 @@ export async function startIntegrationCustomFlow(
     state.integrationsError = "Select an adapter first.";
     return;
   }
+  const method = selectedAuthMethod(state);
+  if (!method || method.type !== "custom_flow") {
+    state.integrationsError = "Select a custom setup auth method first.";
+    return;
+  }
   setBusy(state, target, "custom_start");
   state.integrationsError = null;
   state.integrationsMessage = null;
   try {
     const payload = parsePayload(state.integrationsPayloadText);
     const result = await state.client.request<AdapterConnectionsCustomResult>(
-      "adapter.connections.custom.start",
+      "adapters.connections.custom.start",
       {
         adapter: target,
+        authMethodId: method.id,
         ...(payload ? { payload } : {}),
       },
     );
@@ -557,7 +978,7 @@ export async function submitIntegrationCustomFlow(
   try {
     const payload = parsePayload(state.integrationsPayloadText);
     const result = await state.client.request<AdapterConnectionsCustomResult>(
-      "adapter.connections.custom.submit",
+      "adapters.connections.custom.submit",
       {
         adapter: target,
         sessionId,
@@ -565,6 +986,54 @@ export async function submitIntegrationCustomFlow(
       },
     );
     applyCustomFlowResult(state, target, result);
+    await loadIntegrations(state);
+  } catch (error) {
+    state.integrationsError = String(error);
+  } finally {
+    clearBusy(state);
+  }
+}
+
+export async function connectIntegrationAdapter(
+  state: IntegrationsState,
+  adapter: string,
+): Promise<void> {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  const target = trimOrEmpty(adapter);
+  if (!target) {
+    state.integrationsError = "Select an adapter first.";
+    return;
+  }
+  const method = selectedAuthMethod(state);
+  if (!method || method.type !== "api_key") {
+    state.integrationsError = "Select an API key auth method first.";
+    return;
+  }
+  setBusy(state, target, "connect");
+  state.integrationsError = null;
+  state.integrationsMessage = null;
+  try {
+    const { fields, config } = parseApiKeyPayload(state.integrationsPayloadText);
+    const connectionId = selectedConnectionId(state);
+    const selectedAdapterName = selectedAdapter(state) || target;
+    const result = connectionId
+      ? await state.client.request<AdapterConnectionMutationResult>("adapters.connections.update", {
+          connectionId,
+          adapter: selectedAdapterName,
+          authMethodId: method.id,
+          fields,
+          ...(config ? { config } : {}),
+        })
+      : await state.client.request<AdapterConnectionMutationResult>("adapters.connections.create", {
+          adapter: selectedAdapterName,
+          authMethodId: method.id,
+          fields,
+          ...(config ? { config } : {}),
+        });
+    const action = connectionId ? "updated" : "connected";
+    state.integrationsMessage = `${target}: ${action}${result.account ? ` for ${result.account}` : ""}.`;
     await loadIntegrations(state);
   } catch (error) {
     state.integrationsError = String(error);
@@ -595,7 +1064,7 @@ export async function checkIntegrationCustomFlow(
   state.integrationsMessage = null;
   try {
     const result = await state.client.request<AdapterConnectionsCustomResult>(
-      "adapter.connections.custom.status",
+      "adapters.connections.custom.status",
       {
         adapter: target,
         sessionId,
@@ -632,7 +1101,7 @@ export async function cancelIntegrationCustomFlow(
   state.integrationsMessage = null;
   try {
     const result = await state.client.request<AdapterConnectionsCustomResult>(
-      "adapter.connections.custom.cancel",
+      "adapters.connections.custom.cancel",
       {
         adapter: target,
         sessionId,
@@ -742,7 +1211,7 @@ export async function backfillIntegrationAdapter(
   state.integrationsError = null;
   state.integrationsMessage = null;
   try {
-    const since = resolveBackfillSince(selectedAdapterEntry(state));
+    const since = resolveBackfillSince(selectedConnectionEntry(state));
     const result = await state.client.request<AdapterConnectionsBackfillResult>(
       "adapters.connections.backfill",
       {

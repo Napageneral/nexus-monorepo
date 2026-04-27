@@ -28,11 +28,13 @@ afterEach(() => {
 });
 
 describe("chat markdown rendering", () => {
-  it("renders markdown inside tool output sidebar", async () => {
-    const app = mountApp("/console");
+  it("renders markdown inside the agent detail chat panel", async () => {
+    const app = mountApp("/agents");
     await app.updateComplete;
 
     const timestamp = Date.now();
+    app.connected = true;
+    (app as unknown as { _consoleAgentDetailId?: string })._consoleAgentDetailId = "agent-test";
     app.chatMessages = [
       {
         role: "assistant",
@@ -43,10 +45,12 @@ describe("chat markdown rendering", () => {
         timestamp,
       },
     ];
+    (app as unknown as { tab?: string }).tab = "__console_force__";
+    app.setTab("agents");
 
     await app.updateComplete;
 
-    const toolCards = Array.from(app.querySelectorAll<HTMLElement>(".chat-tool-card"));
+    const toolCards = Array.from(app.renderRoot.querySelectorAll<HTMLElement>(".chat-tool-card"));
     const toolCard = toolCards.find((card) =>
       card.querySelector(".chat-tool-card__preview, .chat-tool-card__inline"),
     );
@@ -55,7 +59,7 @@ describe("chat markdown rendering", () => {
 
     await app.updateComplete;
 
-    const strong = app.querySelector(".sidebar-markdown strong");
+    const strong = app.renderRoot.querySelector(".sidebar-markdown strong");
     expect(strong?.textContent).toBe("world");
   });
 });

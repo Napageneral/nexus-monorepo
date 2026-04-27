@@ -6,28 +6,22 @@ Completed.
 
 ## Outcome
 
-The shared website input package and install contract is now defined through:
+This historical lane is superseded by the `web-signals` / `web-journey`
+architecture.
 
-- `/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-website-input-package-and-install-contract.md`
-- `/Users/tyler/nexus/home/projects/nexus/docs/validation/attribution-website-input-install-and-proof-workflow.md`
-- `/Users/tyler/nexus/home/projects/nexus/docs/workplans/website-input-package-board/README.md`
+Use these active documents instead:
+
+- `/Users/tyler/nexus/home/projects/nexus/docs/specs/web-signals-control-plane-and-web-adapter-family.md`
+- `/Users/tyler/nexus/home/projects/nexus/docs/validation/web-signals-install-and-proof-workflow.md`
+- `/Users/tyler/nexus/home/projects/nexus/docs/workplans/web-signals-and-web-adapters-board/README.md`
 
 ## Resolution
 
-The target-state website input package family is now locked around:
+The old `website-input` model is now historical context only. The hard cut
+replaced it with:
 
-- `website-input-core`
-- `website-input-collector`
-- `website-input-gtm`
-- `website-input-qa`
-- environment wrappers such as `website-input-wix`
-- backend bridge extensions such as Shopify today and EMR-style bridges later
+- `web-signals` control plane
+- `web-journey` adapter
+- future sibling web adapters such as `web-rum`
 
-The operator workflow is now explicit for:
-
-- custom-code hosted websites
-- Wix installs
-- bridge-capable versus baseline-only installs
-- companion pixel ownership during one-shot website instrumentation
-
-Execution has been decomposed into the dedicated Website Input Package Board.
+Execution now continues on the dedicated Web Signals And Web Adapters Board.

@@ -1,0 +1,204 @@
+{
+  "generated_at": "2026-04-05T22:47:40.354520+00:00",
+  "host": "frontdoor.nexushub.sh",
+  "remote_frontdoor_root": "/opt/nexus/frontdoor",
+  "remote_db": "/var/lib/nexus-frontdoor/frontdoor.db",
+  "target_os": "linux",
+  "target_arch": "arm64",
+  "count": 6,
+  "failures": 0,
+  "results": [
+    {
+      "kind": "adapter",
+      "id": "meta-ads",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/meta-ads",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/meta-ads/dist/meta-ads-0.1.0.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/meta-ads/0.1.0/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/meta-ads/0.1.0/meta-ads-0.1.0.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "meta-ads",
+        "version": "0.1.0",
+        "release_id": "rel-meta-ads-0.1.0",
+        "variant_id": "variant-meta-ads-0.1.0-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/meta-ads/0.1.0/meta-ads-0.1.0.tar.gz",
+        "sha256": "76df59a12b064c2e3242e5946fb2a97994b9298ad24715cc64623ebf331cb56f",
+        "size_bytes": 13939753,
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"meta-ads\",\n  \"version\": \"0.1.0\",\n  \"release_id\": \"rel-meta-ads-0.1.0\",\n  \"variant_id\": \"variant-meta-ads-0.1.0-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/meta-ads/0.1.0/meta-ads-0.1.0.tar.gz\",\n  \"sha256\": \"76df59a12b064c2e3242e5946fb2a97994b9298ad24715cc64623ebf331cb56f\",\n  \"size_bytes\": 13939753,\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:132764) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    },
+    {
+      "kind": "adapter",
+      "id": "google-ads",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/google-ads",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/google-ads/dist/google-ads-0.1.0.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/google-ads/0.1.0/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/google-ads/0.1.0/google-ads-0.1.0.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "google-ads",
+        "version": "0.1.0",
+        "release_id": "rel-google-ads-0.1.0",
+        "variant_id": "variant-google-ads-0.1.0-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/google-ads/0.1.0/google-ads-0.1.0.tar.gz",
+        "sha256": "ce276bb371a2336312f7bbee876961dbea204262b1d5fcb3f68c8445a8b16596",
+        "size_bytes": 9268431,
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"google-ads\",\n  \"version\": \"0.1.0\",\n  \"release_id\": \"rel-google-ads-0.1.0\",\n  \"variant_id\": \"variant-google-ads-0.1.0-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/google-ads/0.1.0/google-ads-0.1.0.tar.gz\",\n  \"sha256\": \"ce276bb371a2336312f7bbee876961dbea204262b1d5fcb3f68c8445a8b16596\",\n  \"size_bytes\": 9268431,\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:132977) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    },
+    {
+      "kind": "adapter",
+      "id": "tiktok-business",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/tiktok-business",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/tiktok-business/dist/tiktok-business-0.1.0.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/tiktok-business/0.1.0/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/tiktok-business/0.1.0/tiktok-business-0.1.0.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "tiktok-business",
+        "version": "0.1.0",
+        "release_id": "rel-tiktok-business-0.1.0",
+        "variant_id": "variant-tiktok-business-0.1.0-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/tiktok-business/0.1.0/tiktok-business-0.1.0.tar.gz",
+        "sha256": "d3d8fb358d990048d21cd086137dbc4e255a458645dfbb8c9de4222ec9cc1d32",
+        "size_bytes": 14005594,
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"tiktok-business\",\n  \"version\": \"0.1.0\",\n  \"release_id\": \"rel-tiktok-business-0.1.0\",\n  \"variant_id\": \"variant-tiktok-business-0.1.0-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/tiktok-business/0.1.0/tiktok-business-0.1.0.tar.gz\",\n  \"sha256\": \"d3d8fb358d990048d21cd086137dbc4e255a458645dfbb8c9de4222ec9cc1d32\",\n  \"size_bytes\": 14005594,\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:133190) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    },
+    {
+      "kind": "adapter",
+      "id": "shopify",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/dist/shopify-0.1.0.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/shopify/0.1.0/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/shopify/0.1.0/shopify-0.1.0.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "shopify",
+        "version": "0.1.0",
+        "release_id": "rel-shopify-0.1.0",
+        "variant_id": "variant-shopify-0.1.0-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/shopify/0.1.0/shopify-0.1.0.tar.gz",
+        "sha256": "d7e22dab827c392bacec0b94e3615846c7591cf18c765446b39d5b3796dc96a3",
+        "size_bytes": 9331433,
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"shopify\",\n  \"version\": \"0.1.0\",\n  \"release_id\": \"rel-shopify-0.1.0\",\n  \"variant_id\": \"variant-shopify-0.1.0-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/shopify/0.1.0/shopify-0.1.0.tar.gz\",\n  \"sha256\": \"d7e22dab827c392bacec0b94e3615846c7591cf18c765446b39d5b3796dc96a3\",\n  \"size_bytes\": 9331433,\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:133403) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    },
+    {
+      "kind": "app",
+      "id": "website-input",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/apps/website-input/app",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/website-input/app/dist/website-input-0.1.0.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/website-input/0.1.0/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/website-input/0.1.0/website-input-0.1.0.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "website-input",
+        "version": "0.1.0",
+        "release_id": "rel-website-input-0.1.0",
+        "variant_id": "variant-website-input-0.1.0-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/website-input/0.1.0/website-input-0.1.0.tar.gz",
+        "sha256": "9dbc660b7c7227927696f19840f4a6c9743d08ffd66f8a1d3f51689a3eba0d1f",
+        "size_bytes": 17316,
+        "product_sync": {
+          "appId": "website-input",
+          "productsUpserted": 0,
+          "plansUpserted": 0,
+          "plansArchived": 0,
+          "changes": [
+            "website-input: no product section in manifest, skipping"
+          ]
+        },
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"website-input\",\n  \"version\": \"0.1.0\",\n  \"release_id\": \"rel-website-input-0.1.0\",\n  \"variant_id\": \"variant-website-input-0.1.0-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/website-input/0.1.0/website-input-0.1.0.tar.gz\",\n  \"sha256\": \"9dbc660b7c7227927696f19840f4a6c9743d08ffd66f8a1d3f51689a3eba0d1f\",\n  \"size_bytes\": 17316,\n  \"product_sync\": {\n    \"appId\": \"website-input\",\n    \"productsUpserted\": 0,\n    \"plansUpserted\": 0,\n    \"plansArchived\": 0,\n    \"changes\": [\n      \"website-input: no product section in manifest, skipping\"\n    ]\n  },\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:133616) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    },
+    {
+      "kind": "app",
+      "id": "attribution",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/apps/attribution-intelligence/app",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/apps/attribution-intelligence/app/dist/attribution-0.1.0.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/attribution/0.1.0/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/attribution/0.1.0/attribution-0.1.0.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "attribution",
+        "version": "0.1.0",
+        "release_id": "rel-attribution-0.1.0",
+        "variant_id": "variant-attribution-0.1.0-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/attribution/0.1.0/attribution-0.1.0.tar.gz",
+        "sha256": "2c04733670f49674d88d372f41267d75c1808d2c99f26f05d5dc53fe28b041bd",
+        "size_bytes": 36395,
+        "product_sync": {
+          "appId": "attribution",
+          "productsUpserted": 0,
+          "plansUpserted": 0,
+          "plansArchived": 0,
+          "changes": [
+            "attribution: no product section in manifest, skipping"
+          ]
+        },
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"attribution\",\n  \"version\": \"0.1.0\",\n  \"release_id\": \"rel-attribution-0.1.0\",\n  \"variant_id\": \"variant-attribution-0.1.0-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/attribution/0.1.0/attribution-0.1.0.tar.gz\",\n  \"sha256\": \"2c04733670f49674d88d372f41267d75c1808d2c99f26f05d5dc53fe28b041bd\",\n  \"size_bytes\": 36395,\n  \"product_sync\": {\n    \"appId\": \"attribution\",\n    \"productsUpserted\": 0,\n    \"plansUpserted\": 0,\n    \"plansArchived\": 0,\n    \"changes\": [\n      \"attribution: no product section in manifest, skipping\"\n    ]\n  },\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:133829) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    }
+  ]
+}

@@ -1,0 +1,308 @@
+{
+  "id": "attribution",
+  "version": "0.1.0",
+  "displayName": "Attribution Intelligence",
+  "description": "Bind acquisition, website, and backend inputs into app-owned attribution facts, reconciliation, and operator reads.",
+  "skill": "./SKILL.md",
+  "handler": "./methods/index.ts",
+  "ui": {
+    "root": "./dist",
+    "entryPath": "/app/attribution/",
+    "spa": true
+  },
+  "hooks": {
+    "onInstall": "./hooks/install.ts",
+    "onActivate": "./hooks/activate.ts",
+    "onDeactivate": "./hooks/deactivate.ts",
+    "onUpgrade": "./hooks/upgrade.ts",
+    "onUninstall": "./hooks/uninstall.ts"
+  },
+  "requires": {
+    "adapters": [
+      {
+        "id": "meta-ads",
+        "version": "^0.1.0"
+      },
+      {
+        "id": "google-ads",
+        "version": "^0.1.0"
+      },
+      {
+        "id": "tiktok-business",
+        "version": "^0.1.0"
+      },
+      {
+        "id": "shopify",
+        "version": "^0.1.0"
+      }
+    ]
+  },
+  "methods": {
+    "attribution.healthcheck": {
+      "action": "read",
+      "access": "authenticated",
+      "description": "Confirm the app is installed and report basic storage and pipeline status.",
+      "params": {
+        "type": "object",
+        "properties": {}
+      },
+      "response": {
+        "type": "object"
+      }
+    },
+    "attribution.scopes.list": {
+      "action": "read",
+      "access": "authenticated",
+      "description": "List configured attribution business scopes.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "number"
+          }
+        }
+      },
+      "response": {
+        "type": "object"
+      }
+    },
+    "attribution.scopes.upsert": {
+      "action": "write",
+      "access": "authenticated",
+      "description": "Create or update an attribution business scope.",
+      "params": {
+        "type": "object",
+        "required": [
+          "scope_id",
+          "label"
+        ],
+        "properties": {
+          "scope_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object"
+      }
+    },
+    "attribution.bindings.list": {
+      "action": "read",
+      "access": "authenticated",
+      "description": "List app-owned input bindings for attribution scopes.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "scope_id": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object"
+      }
+    },
+    "attribution.bindings.upsert": {
+      "action": "write",
+      "access": "authenticated",
+      "description": "Create or update one app-owned input binding.",
+      "params": {
+        "type": "object",
+        "required": [
+          "scope_id",
+          "role",
+          "source_type"
+        ],
+        "properties": {
+          "binding_id": {
+            "type": "string"
+          },
+          "scope_id": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "acquisition",
+              "website",
+              "backend"
+            ]
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "adapter_connection",
+              "website_installation"
+            ]
+          },
+          "connection_id": {
+            "type": "string"
+          },
+          "website_installation_id": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          }
+        }
+      },
+      "response": {
+        "type": "object"
+      }
+    },
+    "attribution.summary": {
+      "action": "read",
+      "access": "authenticated",
+      "description": "Get attribution summary reads for one business scope.",
+      "params": {
+        "type": "object",
+        "required": [
+          "scope_id"
+        ],
+        "properties": {
+          "scope_id": {
+            "type": "string"
+          },
+          "days": {
+            "type": "number"
+          }
+        }
+      },
+      "response": {
+        "type": "object"
+      }
+    },
+    "attribution.funnel": {
+      "action": "read",
+      "access": "authenticated",
+      "description": "Get daily funnel and source reads for one business scope.",
+      "params": {
+        "type": "object",
+        "required": [
+          "scope_id"
+        ],
+        "properties": {
+          "scope_id": {
+            "type": "string"
+          },
+          "days": {
+            "type": "number"
+          }
+        }
+      },
+      "response": {
+        "type": "object"
+      }
+    },
+    "attribution.ad-facts.list": {
+      "action": "read",
+      "access": "authenticated",
+      "description": "List recent app-owned paid fact rows for one business scope.",
+      "params": {
+        "type": "object",
+        "required": [
+          "scope_id"
+        ],
+        "properties": {
+          "scope_id": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "number"
+          }
+        }
+      },
+      "response": {
+        "type": "object"
+      }
+    },
+    "attribution.outcomes.list": {
+      "action": "read",
+      "access": "authenticated",
+      "description": "List backend outcomes and current attribution decisions for one scope.",
+      "params": {
+        "type": "object",
+        "required": [
+          "scope_id"
+        ],
+        "properties": {
+          "scope_id": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "number"
+          }
+        }
+      },
+      "response": {
+        "type": "object"
+      }
+    },
+    "attribution.outcomes.get": {
+      "action": "read",
+      "access": "authenticated",
+      "description": "Get one backend outcome with inspectable bridge and attribution evidence.",
+      "params": {
+        "type": "object",
+        "required": [
+          "outcome_id"
+        ],
+        "properties": {
+          "outcome_id": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object"
+      }
+    },
+    "attribution.pipeline.status": {
+      "action": "read",
+      "access": "authenticated",
+      "description": "Get app pipeline and materialization status.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "scope_id": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object"
+      }
+    },
+    "attribution.pipeline.trigger": {
+      "action": "write",
+      "access": "authenticated",
+      "description": "Trigger a manual replay/materialization pass from canonical records.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "scope_id": {
+            "type": "string"
+          },
+          "limit_per_platform": {
+            "type": "number"
+          }
+        }
+      },
+      "response": {
+        "type": "object"
+      }
+    }
+  }
+}

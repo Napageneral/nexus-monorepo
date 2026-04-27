@@ -8,6 +8,6 @@ export default async function onActivate(ctx: NexAppHookContext): Promise<void> 
     dataDir: ctx.app.dataDir,
   });
   console.log(
-    `[attribution] activate complete (${result.jobDefinitionId}, ${result.subscriptionIds.length} subscriptions)`,
+    `[attribution] activate complete (${result.recordIngestedJobDefinitionId}, ${result.manualReplayJobDefinitionId}, ${result.subscriptionIds.length} subscriptions)`,
   );
 }

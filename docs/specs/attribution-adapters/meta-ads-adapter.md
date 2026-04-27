@@ -2,7 +2,7 @@
 
 **Status:** CANONICAL
 **Last Updated:** 2026-03-30
-**Related:** [Attribution Intelligence Layer](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-layer.md), [Attribution Intelligence Taxonomy](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-taxonomy.md), [Adapter Spec: Meta Ads](/Users/tyler/nexus/home/projects/nexus/packages/adapters/meta-ads/docs/specs/ADAPTER_SPEC_META_ADS.md), [Attribution Adapter Packages Board](/Users/tyler/nexus/home/projects/nexus/docs/workplans/attribution-adapter-packages-board/README.md)
+**Related:** [Attribution Intelligence Layer](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-layer.md), [Attribution Intelligence Taxonomy](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-intelligence-taxonomy.md), [Acquisition Adapter Package Alignment](/Users/tyler/nexus/home/projects/nexus/docs/specs/attribution-adapters/acquisition-adapter-package-alignment.md), [Adapter Spec: Meta Ads](/Users/tyler/nexus/home/projects/nexus/packages/adapters/meta-ads/docs/specs/ADAPTER_SPEC_META_ADS.md), [Acquisition Adapter Alignment Board](/Users/tyler/nexus/home/projects/nexus/docs/workplans/acquisition-adapter-alignment-board/README.md), [Attribution Adapter Packages Board](/Users/tyler/nexus/home/projects/nexus/docs/workplans/attribution-adapter-packages-board/README.md)
 
 ---
 
@@ -65,11 +65,19 @@ Required preserved identifiers include:
 The adapter must:
 
 1. validate Meta connection health and accessible ad-account scope
-2. backfill provider-native Meta Ads hierarchy and performance rows
-3. keep those rows fresh through monitor-based sync
-4. preserve provider-native ids and row fidelity
-5. emit canonical Nex `record.ingest` envelopes that downstream jobs can
+2. expose a provider-native read slice for account, campaign, and campaign
+   daily insight inspection
+3. backfill provider-native Meta Ads hierarchy and performance rows
+4. keep those rows fresh through monitor-based sync
+5. preserve provider-native ids and row fidelity
+6. emit canonical Nex `record.ingest` envelopes that downstream jobs can
    replay without lossy per-metric reconstruction
+
+The first public provider-native method slice is:
+
+- `meta-ads.accounts.get`
+- `meta-ads.campaigns.list`
+- `meta-ads.insights.campaign_daily.list`
 
 ## Source Families
 

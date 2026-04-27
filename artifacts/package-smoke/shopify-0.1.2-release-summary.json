@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-04-27T14:37:06.058Z",
+  "repo_root": "/Users/tyler/nexus/home/projects/nexus",
+  "count": 1,
+  "failures": 0,
+  "results": [
+    {
+      "ok": true,
+      "kind": "adapter",
+      "id": "shopify",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/dist/shopify-0.1.2.tar.gz"
+    }
+  ]
+}

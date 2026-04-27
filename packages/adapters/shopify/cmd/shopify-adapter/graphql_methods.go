@@ -155,12 +155,12 @@ func shopifyProjection() *nexadapter.AdapterProjection {
 		Backfill: &nexadapter.AdapterProjectionSync{
 			Supported: true,
 			Strategy:  "poll",
-			Cursor:    "created_at|updated_at|max(customer.updated_at,product.updated_at,collection.updated_at,inventory.updated_at,fulfillment.updated_at,discount.updated_at,marketing.updated_at)",
+			Cursor:    "family-native historical windows across orders, customers, products, collections, inventory items, fulfillments, discounts, and marketing",
 		},
 		Monitor: &nexadapter.AdapterProjectionSync{
 			Supported: true,
 			Strategy:  "poll",
-			Cursor:    "max(order.updated_at,customer.updated_at,product.updated_at,collection.updated_at,inventory.updated_at,fulfillment.updated_at,discount.updated_at,marketing.updated_at) with replay overlap",
+			Cursor:    "per-family watermarks with bounded overlap; inventory hot lane follows inventory_levels.updated_at by location and hydrates only changed inventory items",
 		},
 		Routing: &nexadapter.AdapterProjectionRouting{
 			Space:            "shop",

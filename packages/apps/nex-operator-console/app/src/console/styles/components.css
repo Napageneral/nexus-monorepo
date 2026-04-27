@@ -321,6 +321,8 @@
 }
 
 .console-modal--lg { max-width: 640px; }
+.console-modal--catalog { max-width: 720px; }
+.console-modal--connector-setup { max-width: 560px; }
 
 .console-modal-header {
   display: flex;
@@ -343,6 +345,150 @@
 
 .console-modal-body {
   padding: var(--console-space-3) var(--console-space-5);
+}
+
+.console-search-wrap--modal {
+  max-width: none;
+  width: 100%;
+  margin-bottom: var(--console-space-4);
+}
+
+.console-app-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--console-space-3);
+}
+
+.console-app-catalog-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--console-space-2);
+  width: 100%;
+  padding: var(--console-space-4);
+  border-radius: var(--console-radius-lg);
+  border: 1px solid var(--console-border);
+  background: var(--console-bg-card);
+  color: var(--console-text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--console-transition-fast),
+    background var(--console-transition-fast),
+    transform var(--console-transition-fast),
+    box-shadow var(--console-transition-fast);
+}
+
+.console-app-catalog-item:hover {
+  border-color: color-mix(in srgb, var(--console-gold) 42%, var(--console-border));
+  background: color-mix(in srgb, var(--console-gold) 7%, var(--console-bg-card));
+  box-shadow: var(--console-shadow-sm);
+  transform: translateY(-1px);
+}
+
+.console-app-catalog-item:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--console-gold) 64%, transparent);
+  outline-offset: 2px;
+}
+
+.console-app-catalog-item__icon {
+  width: 52px;
+  height: 52px;
+  background: var(--console-bg-raised);
+}
+
+.console-app-catalog-item__name {
+  font-size: var(--console-text-sm);
+  font-weight: var(--console-weight-semibold);
+  color: var(--console-text-strong);
+}
+
+.console-app-catalog-item__summary {
+  font-size: var(--console-text-xs);
+  line-height: 1.45;
+  color: var(--console-text-muted);
+}
+
+.connector-setup-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--console-space-3);
+  padding: var(--console-space-3);
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-lg);
+  background: var(--console-bg-raised);
+}
+
+.connector-setup-hero__icon {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+}
+
+.connector-setup-section {
+  margin-top: var(--console-space-4);
+}
+
+.connector-setup-fields {
+  display: grid;
+  gap: var(--console-space-3);
+  margin-top: var(--console-space-3);
+}
+
+.connector-setup-field__requirement {
+  margin-left: 6px;
+  color: var(--console-text-faint);
+  font-size: var(--console-text-2xs);
+  font-weight: var(--console-weight-normal);
+}
+
+.connector-setup-field__meta {
+  color: var(--console-text-faint);
+  font-family: var(--console-font-mono);
+  font-size: var(--console-text-2xs);
+  margin-top: 4px;
+}
+
+.connector-setup-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--console-space-3);
+  margin-top: var(--console-space-5);
+  flex-wrap: wrap;
+}
+
+.connector-setup-advanced {
+  margin-top: var(--console-space-4);
+}
+
+.connector-setup-footer {
+  margin-top: var(--console-space-3);
+  text-align: center;
+  font-size: var(--console-text-2xs);
+}
+
+.connector-success-modal {
+  padding-top: var(--console-space-6);
+  text-align: center;
+}
+
+.connector-success-modal__icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: var(--console-success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto var(--console-space-4);
+}
+
+.connector-success-modal__icon svg {
+  width: 28px;
+  height: 28px;
+  stroke: #fff;
+  fill: none;
+  stroke-width: 2.5;
 }
 
 .console-modal-footer {
@@ -388,6 +534,10 @@
   background: var(--console-bg-card-hover);
 }
 
+.console-table tbody tr.console-table-row--selected td {
+  background: color-mix(in srgb, var(--console-gold) 12%, var(--console-bg-card));
+}
+
 .console-table-platform {
   display: flex;
   align-items: center;
@@ -411,6 +561,13 @@
   stroke: currentColor;
   fill: none;
   stroke-width: 2;
+}
+
+.console-table-platform-icon--asset svg {
+  width: 16px;
+  height: 16px;
+  stroke: none;
+  fill: initial;
 }
 
 /* ─── Filter Bar ──────────────────────────────────────────────────── */
@@ -800,6 +957,10 @@
 
 [data-console-theme="light"] .console-platform-icon-circle {
   border-color: rgba(0,0,0,0.06);
+}
+
+[data-console-theme="light"] .console-app-catalog-item {
+  background: #FFFFFF;
 }
 
 .console-platform-picker-footer {
@@ -1636,6 +1797,22 @@
 
 .console-gold-text:hover {
   opacity: 0.8;
+}
+
+@media (max-width: 860px) {
+  .console-app-catalog-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .console-modal--catalog {
+    max-width: 100%;
+  }
+
+  .console-app-catalog-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ─── Settings sidebar item hover ─────────────────────────────────── */

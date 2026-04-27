@@ -10,6 +10,13 @@ const ATTRIBUTION_RECORD_INGESTED_JOB_DESCRIPTION =
 const ATTRIBUTION_RECORD_INGESTED_JOB_SCRIPT_PATH = fileURLToPath(
   new URL("../jobs/record-ingested.ts", import.meta.url),
 );
+const ATTRIBUTION_PIPELINE_REPLAY_JOB_NAME = "attribution.pipeline_replay";
+const ATTRIBUTION_PIPELINE_REPLAY_JOB_DESCRIPTION =
+  "Replay bound records and materialize attribution facts in the background";
+const ATTRIBUTION_PIPELINE_REPLAY_JOB_SCRIPT_PATH = fileURLToPath(
+  new URL("../jobs/pipeline-replay.ts", import.meta.url),
+);
+const ATTRIBUTION_PIPELINE_REPLAY_TIMEOUT_MS = 1_800_000;
 const ATTRIBUTION_ACQUISITION_PLATFORMS = [
   "meta-ads",
   "google-ads",
@@ -20,8 +27,7 @@ const ATTRIBUTION_BACKEND_PLATFORMS = [
   "patient-now-emr",
 ] as const;
 const ATTRIBUTION_WEBSITE_PLATFORMS = [
-  "website-input",
-  "website-tracking",
+  "web-journey",
 ] as const;
 const ATTRIBUTION_RECORD_INGESTED_PLATFORMS = [
   ...ATTRIBUTION_ACQUISITION_PLATFORMS,
@@ -75,52 +81,77 @@ async function listSubscriptions(runtime: NexClient, jobDefinitionId?: string): 
 }
 
 async function ensureJob(runtime: NexClient, appId: string, dataDir: string): Promise<{ id: string; name: string }> {
+  return ensureNamedJob(runtime, appId, {
+    name: ATTRIBUTION_RECORD_INGESTED_JOB_NAME,
+    description: ATTRIBUTION_RECORD_INGESTED_JOB_DESCRIPTION,
+    scriptPath: ATTRIBUTION_RECORD_INGESTED_JOB_SCRIPT_PATH,
+    configJson: JSON.stringify({ data_dir: dataDir }),
+  });
+}
+
+type JobSpec = {
+  name: string;
+  description: string;
+  scriptPath: string;
+  configJson?: string;
+  timeoutMs?: number;
+  status?: "active" | "inactive";
+};
+
+async function ensureNamedJob(
+  runtime: NexClient,
+  appId: string,
+  spec: JobSpec,
+): Promise<{ id: string; name: string }> {
   const jobs = await listJobs(runtime);
-  const existing = jobs.find((job) => asString(job.name) === ATTRIBUTION_RECORD_INGESTED_JOB_NAME);
-  const configJson = JSON.stringify({ data_dir: dataDir });
+  const existing = jobs.find((job) => asString(job.name) === spec.name);
+  const desiredStatus = spec.status ?? "active";
 
   if (existing) {
     const id = asString(existing.id);
     const needsUpdate =
-      asString(existing.script_path) !== ATTRIBUTION_RECORD_INGESTED_JOB_SCRIPT_PATH ||
-      asString(existing.description) !== ATTRIBUTION_RECORD_INGESTED_JOB_DESCRIPTION ||
-      asString(existing.status) !== "active" ||
-      asString(existing.config_json) !== configJson;
+      asString(existing.script_path) !== spec.scriptPath ||
+      asString(existing.description) !== spec.description ||
+      asString(existing.status) !== desiredStatus ||
+      asString(existing.config_json) !== (spec.configJson ?? "") ||
+      (spec.timeoutMs != null && asInt(existing.timeout_ms) !== spec.timeoutMs);
 
     if (needsUpdate) {
       const updated = unwrapPayload(
         await runtime.jobs.update({
           id,
-          description: ATTRIBUTION_RECORD_INGESTED_JOB_DESCRIPTION,
-          script_path: ATTRIBUTION_RECORD_INGESTED_JOB_SCRIPT_PATH,
-          config_json: configJson,
-          status: "active",
+          description: spec.description,
+          script_path: spec.scriptPath,
+          config_json: spec.configJson,
+          status: desiredStatus,
+          ...(spec.timeoutMs != null ? { timeout_ms: spec.timeoutMs } : {}),
           created_by: appId,
         }),
       );
       return {
         id: asString(asRecord(updated.job).id) || id,
-        name: ATTRIBUTION_RECORD_INGESTED_JOB_NAME,
+        name: spec.name,
       };
     }
 
-    return { id, name: ATTRIBUTION_RECORD_INGESTED_JOB_NAME };
+    return { id, name: spec.name };
   }
 
   try {
     const created = unwrapPayload(
       await runtime.jobs.create({
-        name: ATTRIBUTION_RECORD_INGESTED_JOB_NAME,
-        description: ATTRIBUTION_RECORD_INGESTED_JOB_DESCRIPTION,
-        script_path: ATTRIBUTION_RECORD_INGESTED_JOB_SCRIPT_PATH,
-        config_json: configJson,
-        status: "active",
+        name: spec.name,
+        description: spec.description,
+        script_path: spec.scriptPath,
+        config_json: spec.configJson,
+        status: desiredStatus,
+        ...(spec.timeoutMs != null ? { timeout_ms: spec.timeoutMs } : {}),
         created_by: appId,
       }),
     );
     return {
       id: asString(asRecord(created.job).id),
-      name: ATTRIBUTION_RECORD_INGESTED_JOB_NAME,
+      name: spec.name,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -129,16 +160,30 @@ async function ensureJob(runtime: NexClient, appId: string, dataDir: string): Pr
     }
 
     const afterConflict = await listJobs(runtime);
-    const conflicted = afterConflict.find((job) => asString(job.name) === ATTRIBUTION_RECORD_INGESTED_JOB_NAME);
+    const conflicted = afterConflict.find((job) => asString(job.name) === spec.name);
     if (!conflicted) {
       throw error;
     }
 
     return {
       id: asString(conflicted.id),
-      name: ATTRIBUTION_RECORD_INGESTED_JOB_NAME,
+      name: spec.name,
     };
   }
+}
+
+export async function ensureAttributionManualReplayJob(params: {
+  runtime: NexClient;
+  appId: string;
+  dataDir: string;
+}): Promise<{ id: string; name: string }> {
+  return ensureNamedJob(params.runtime, params.appId, {
+    name: ATTRIBUTION_PIPELINE_REPLAY_JOB_NAME,
+    description: ATTRIBUTION_PIPELINE_REPLAY_JOB_DESCRIPTION,
+    scriptPath: ATTRIBUTION_PIPELINE_REPLAY_JOB_SCRIPT_PATH,
+    configJson: JSON.stringify({ data_dir: params.dataDir }),
+    timeoutMs: ATTRIBUTION_PIPELINE_REPLAY_TIMEOUT_MS,
+  });
 }
 
 async function ensureSubscription(
@@ -191,9 +236,14 @@ export async function ensureAttributionRuntimeWork(params: {
   runtime: NexClient;
   appId: string;
   dataDir: string;
-}): Promise<{ jobDefinitionId: string; subscriptionIds: string[] }> {
-  const job = await ensureJob(params.runtime, params.appId, params.dataDir);
-  const subscriptions = await listSubscriptions(params.runtime, job.id);
+}): Promise<{
+  recordIngestedJobDefinitionId: string;
+  manualReplayJobDefinitionId: string;
+  subscriptionIds: string[];
+}> {
+  const recordJob = await ensureJob(params.runtime, params.appId, params.dataDir);
+  const manualReplayJob = await ensureAttributionManualReplayJob(params);
+  const subscriptions = await listSubscriptions(params.runtime, recordJob.id);
   const desiredMatchJsons = new Set(
     ATTRIBUTION_RECORD_INGESTED_PLATFORMS.map((platform) => desiredMatchJson(platform)),
   );
@@ -209,52 +259,76 @@ export async function ensureAttributionRuntimeWork(params: {
 
   const subscriptionIds: string[] = [];
   for (const platform of ATTRIBUTION_RECORD_INGESTED_PLATFORMS) {
-    const subscription = await ensureSubscription(params.runtime, job.id, platform);
+    const subscription = await ensureSubscription(params.runtime, recordJob.id, platform);
     if (subscription.id) {
       subscriptionIds.push(subscription.id);
     }
   }
 
   return {
-    jobDefinitionId: job.id,
+    recordIngestedJobDefinitionId: recordJob.id,
+    manualReplayJobDefinitionId: manualReplayJob.id,
     subscriptionIds,
   };
 }
 
 export async function disableAttributionRuntimeWork(params: { runtime: NexClient }): Promise<void> {
   const jobs = await listJobs(params.runtime);
-  const job = jobs.find((entry) => asString(entry.name) === ATTRIBUTION_RECORD_INGESTED_JOB_NAME);
-  if (!job) {
-    return;
-  }
+  const recordJob = jobs.find((entry) => asString(entry.name) === ATTRIBUTION_RECORD_INGESTED_JOB_NAME);
+  const manualReplayJob = jobs.find(
+    (entry) => asString(entry.name) === ATTRIBUTION_PIPELINE_REPLAY_JOB_NAME,
+  );
 
-  const subscriptions = await listSubscriptions(params.runtime, asString(job.id));
-  for (const subscription of subscriptions) {
-    if (asInt(subscription.enabled) !== 0) {
-      await params.runtime.events.subscriptions.update({
-        id: asString(subscription.id),
-        enabled: false,
+  if (recordJob) {
+    const subscriptions = await listSubscriptions(params.runtime, asString(recordJob.id));
+    for (const subscription of subscriptions) {
+      if (asInt(subscription.enabled) !== 0) {
+        await params.runtime.events.subscriptions.update({
+          id: asString(subscription.id),
+          enabled: false,
+        });
+      }
+    }
+    if (asString(recordJob.status) !== "inactive") {
+      await params.runtime.jobs.update({
+        id: asString(recordJob.id),
+        status: "inactive",
       });
     }
+  }
+
+  if (manualReplayJob && asString(manualReplayJob.status) !== "inactive") {
+    await params.runtime.jobs.update({
+      id: asString(manualReplayJob.id),
+      status: "inactive",
+    });
   }
 }
 
 export async function removeAttributionRuntimeWork(params: { runtime: NexClient }): Promise<void> {
   const jobs = await listJobs(params.runtime);
-  const job = jobs.find((entry) => asString(entry.name) === ATTRIBUTION_RECORD_INGESTED_JOB_NAME);
-  if (!job) {
-    return;
-  }
+  const recordJob = jobs.find((entry) => asString(entry.name) === ATTRIBUTION_RECORD_INGESTED_JOB_NAME);
+  const manualReplayJob = jobs.find(
+    (entry) => asString(entry.name) === ATTRIBUTION_PIPELINE_REPLAY_JOB_NAME,
+  );
 
-  const jobDefinitionId = asString(job.id);
-  const subscriptions = await listSubscriptions(params.runtime, jobDefinitionId);
-  for (const subscription of subscriptions) {
-    await params.runtime.events.subscriptions.delete({
-      id: asString(subscription.id),
+  if (recordJob) {
+    const jobDefinitionId = asString(recordJob.id);
+    const subscriptions = await listSubscriptions(params.runtime, jobDefinitionId);
+    for (const subscription of subscriptions) {
+      await params.runtime.events.subscriptions.delete({
+        id: asString(subscription.id),
+      });
+    }
+
+    await params.runtime.jobs.delete({
+      id: jobDefinitionId,
     });
   }
 
-  await params.runtime.jobs.delete({
-    id: jobDefinitionId,
-  });
+  if (manualReplayJob) {
+    await params.runtime.jobs.delete({
+      id: asString(manualReplayJob.id),
+    });
+  }
 }

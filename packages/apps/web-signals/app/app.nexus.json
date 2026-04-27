@@ -1,0 +1,153 @@
+{
+  "id": "web-signals",
+  "version": "0.1.2",
+  "displayName": "Web Signals",
+  "description": "Hard-cut web-signals control plane for web_installation_id lifecycle, trust termination, and QA inspection.",
+  "skill": "./SKILL.md",
+  "handler": "methods/index.ts",
+  "hooks": {
+    "onInstall": "hooks/install.ts"
+  },
+  "hosting": {
+    "required_server_class": "standard",
+    "deployment_class": "customer_server"
+  },
+  "product": {
+    "tagline": "Control-plane installs, sender tokens, and QA for web signal adapters",
+    "accentColor": "#0f766e",
+    "visibility": "customer",
+    "plans": [
+      {
+        "id": "web-signals-operator",
+        "displayName": "Web Signals Operator",
+        "priceMonthly": 0,
+        "isDefault": true
+      }
+    ]
+  },
+  "methods": {
+    "web-signals.installations.create": {
+      "description": "Create a web signals installation and issue its sender token.",
+      "action": "write",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "properties": {
+          "label": { "type": "string" },
+          "site_origin": { "type": "string" },
+          "runtime_base_url": { "type": "string" },
+          "expires_at": { "type": "number" },
+          "metadata": { "type": "object" }
+        }
+      }
+    },
+    "web-signals.installations.get": {
+      "description": "Get one web signals installation and its token history.",
+      "action": "read",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "required": ["web_installation_id"],
+        "properties": {
+          "web_installation_id": { "type": "string" }
+        }
+      }
+    },
+    "web-signals.installations.list": {
+      "description": "List web signals installations.",
+      "action": "read",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      }
+    },
+    "web-signals.installations.rotate": {
+      "description": "Rotate the sender token for a web signals installation.",
+      "action": "write",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "required": ["web_installation_id"],
+        "properties": {
+          "web_installation_id": { "type": "string" },
+          "label": { "type": "string" },
+          "runtime_base_url": { "type": "string" },
+          "expires_at": { "type": "number" }
+        }
+      }
+    },
+    "web-signals.installations.delete": {
+      "description": "Delete one web signals installation and revoke its active sender tokens.",
+      "action": "write",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "required": ["web_installation_id"],
+        "properties": {
+          "web_installation_id": { "type": "string" }
+        }
+      }
+    },
+    "web-signals.web-journey.collect": {
+      "description": "Accept one installation-authenticated web-journey event and proxy it into the web-journey adapter without redefining the source contract.",
+      "action": "write",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "required": ["web_installation_id", "event"],
+        "properties": {
+          "web_installation_id": { "type": "string" },
+          "event": { "type": "object" }
+        }
+      }
+    },
+    "web-signals.web-journey.collect.batch": {
+      "description": "Accept a batch of installation-authenticated web-journey events and proxy them into the web-journey adapter without redefining the source contract.",
+      "action": "write",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "required": ["web_installation_id", "events"],
+        "properties": {
+          "web_installation_id": { "type": "string" },
+          "events": {
+            "type": "array",
+            "items": { "type": "object" }
+          }
+        }
+      }
+    },
+    "web-signals.events.list": {
+      "description": "List QA-visible events for a web installation.",
+      "action": "read",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "required": ["web_installation_id"],
+        "properties": {
+          "web_installation_id": { "type": "string" },
+          "session_id": { "type": "string" },
+          "event_name": { "type": "string" },
+          "limit": { "type": "number" }
+        }
+      }
+    },
+    "web-signals.events.get": {
+      "description": "Get one QA-visible event by installation and event id.",
+      "action": "read",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "required": ["web_installation_id", "event_id"],
+        "properties": {
+          "web_installation_id": { "type": "string" },
+          "event_id": { "type": "string" }
+        }
+      }
+    }
+  }
+}

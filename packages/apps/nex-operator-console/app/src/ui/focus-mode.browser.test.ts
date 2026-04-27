@@ -27,37 +27,20 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-describe("chat focus mode", () => {
-  it("collapses header + sidebar on chat tab only", async () => {
+describe("global chat mount", () => {
+  it("mounts the console chat host on the chat tab only", async () => {
     const app = mountApp("/console");
     await app.updateComplete;
 
-    const shell = app.querySelector(".shell");
-    expect(shell).not.toBeNull();
-    expect(shell?.classList.contains("shell--chat-focus")).toBe(false);
-
-    const toggle = app.querySelector<HTMLButtonElement>('button[title^="Toggle focus mode"]');
-    expect(toggle).not.toBeNull();
-    toggle?.click();
-
-    await app.updateComplete;
-    expect(shell?.classList.contains("shell--chat-focus")).toBe(true);
-
-    const link = app.querySelector<HTMLAnchorElement>('a.nav-item[href="/integrations"]');
-    expect(link).not.toBeNull();
-    link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }));
-
-    await app.updateComplete;
-    expect(app.tab).toBe("integrations");
-    expect(shell?.classList.contains("shell--chat-focus")).toBe(false);
-
-    const chatLink = app.querySelector<HTMLAnchorElement>('a.nav-item[href="/console"]');
-    chatLink?.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }),
-    );
-
-    await app.updateComplete;
     expect(app.tab).toBe("console");
-    expect(shell?.classList.contains("shell--chat-focus")).toBe(true);
+    expect(window.location.pathname).toBe("/chat");
+    expect(app.querySelector(".shell")).toBeNull();
+    expect(app.renderRoot.querySelector("nexus-console-chat-host")).not.toBeNull();
+
+    app.setTab("integrations");
+    await app.updateComplete;
+
+    expect(app.tab).toBe("integrations");
+    expect(app.renderRoot.querySelector("nexus-console-chat-host")).toBeNull();
   });
 });

@@ -1,0 +1,6 @@
+{
+  "proof_id": "operator-chat-cleanroom",
+  "timestamp_utc": "20260407T132922Z",
+  "cwd": "/nex",
+  "command": "bash /nex/scripts/e2e/operator-chat-cleanroom-recorded-runner.sh"
+}

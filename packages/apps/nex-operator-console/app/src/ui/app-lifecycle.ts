@@ -6,7 +6,7 @@ import {
   stopDebugPolling,
 } from "./app-polling.ts";
 import { connectRuntime } from "./app-runtime.ts";
-import { observeTopbar, scheduleChatScroll, scheduleLogsScroll } from "./app-scroll.ts";
+import { observeTopbar, scheduleLogsScroll } from "./app-scroll.ts";
 import {
   applySettingsFromUrl,
   attachThemeListener,
@@ -62,25 +62,6 @@ export function handleDisconnected(host: LifecycleHost) {
 }
 
 export function handleUpdated(host: LifecycleHost, changed: Map<PropertyKey, unknown>) {
-  if (host.tab === "console" && host.chatManualRefreshInFlight) {
-    return;
-  }
-  if (
-    host.tab === "console" &&
-    (changed.has("chatMessages") ||
-      changed.has("chatToolMessages") ||
-      changed.has("chatRunId") ||
-      changed.has("chatLoading") ||
-      changed.has("tab"))
-  ) {
-    const forcedByTab = changed.has("tab");
-    const forcedByLoad =
-      changed.has("chatLoading") && changed.get("chatLoading") === true && !host.chatLoading;
-    scheduleChatScroll(
-      host as unknown as Parameters<typeof scheduleChatScroll>[0],
-      forcedByTab || forcedByLoad || !host.chatHasAutoScrolled,
-    );
-  }
   if (
     host.tab === "system" &&
     host.systemSubTab === "logs" &&

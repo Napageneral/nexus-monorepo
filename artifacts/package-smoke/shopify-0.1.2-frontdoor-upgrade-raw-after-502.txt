@@ -1,0 +1,3 @@
+{"ok":false,"error":"not_installed","detail":null,"adapter_id":"shopify","server_id":"srv-1c4b077a-1f2"}
+
+HTTP_STATUS=404

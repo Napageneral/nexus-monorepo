@@ -1,10 +1,34 @@
 import type { NexAppMethodHandler } from "../../../../../nex/src/runtime/domains/apps/context.js";
 import { asOptionalNumber, asOptionalString } from "./_shared.js";
-import { finishPipelineRun, startPipelineRun, withAttributionDb } from "../storage/store.js";
-import { replayBoundRecords } from "../pipeline/processor.js";
+import { finishPipelineRun, readPipelineStatus, startPipelineRun, withAttributionDb } from "../storage/store.js";
+import { ensureAttributionManualReplayJob } from "../hooks/runtime-work.js";
+
+type RuntimeRow = Record<string, unknown>;
+
+function asRecord(value: unknown): RuntimeRow {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as RuntimeRow) : {};
+}
+
+function unwrapPayload(value: unknown): RuntimeRow {
+  const record = asRecord(value);
+  const payload = asRecord(record.payload);
+  return Object.keys(payload).length > 0 ? payload : record;
+}
 
 export const handle: NexAppMethodHandler = async (ctx) => {
   const scopeId = asOptionalString(ctx.params.scope_id);
+  const latestRun = withAttributionDb(ctx.app.dataDir, (db) => readPipelineStatus(db, scopeId).latest_run);
+  if (
+    latestRun &&
+    typeof latestRun === "object" &&
+    !Array.isArray(latestRun) &&
+    asRecord(latestRun).status === "running"
+  ) {
+    return {
+      status: "already_running",
+      run: asRecord(latestRun),
+    };
+  }
   const run = withAttributionDb(ctx.app.dataDir, (db) =>
     startPipelineRun(db, {
       scopeId,
@@ -12,22 +36,29 @@ export const handle: NexAppMethodHandler = async (ctx) => {
     }),
   );
   try {
-    const result = await replayBoundRecords({
+    const job = await ensureAttributionManualReplayJob({
       runtime: ctx.nex,
+      appId: ctx.app.id,
       dataDir: ctx.app.dataDir,
-      scopeId,
-      limitPerPlatform: asOptionalNumber(ctx.params.limit_per_platform),
     });
-    const finished = withAttributionDb(ctx.app.dataDir, (db) =>
-      finishPipelineRun(db, {
-        runId: run.runId,
-        status: asOptionalNumber(result.processed) || asOptionalNumber(result.records_seen) ? "completed" : "completed_empty",
-        stats: result,
+    const invokeResult = unwrapPayload(
+      await ctx.nex.jobs.invoke({
+        job_id: job.id,
+        trigger_source: "manual",
+        input: {
+          pipeline_run_id: run.runId,
+          ...(scopeId ? { scope_id: scopeId } : {}),
+          ...(asOptionalNumber(ctx.params.limit_per_platform) != null
+            ? { limit_per_platform: asOptionalNumber(ctx.params.limit_per_platform) }
+            : {}),
+        },
       }),
     );
     return {
-      run: finished,
-      result,
+      run,
+      job_run: asRecord(invokeResult.run),
+      queue_entry: asRecord(invokeResult.queue_entry),
+      status: "started",
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

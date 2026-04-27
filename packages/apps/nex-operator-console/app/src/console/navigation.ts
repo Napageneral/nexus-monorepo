@@ -3,6 +3,7 @@ import type { IconName } from "../ui/icons.js";
 // ─── Console tab definitions ─────────────────────────────────────────
 
 export type ConsoleTab =
+  | "chat"
   | "connectors"
   | "agents"
   | "monitor"
@@ -17,13 +18,15 @@ export type ConsoleSubRoute =
   | { kind: "agent-create" }
 ;
 
-export const CONSOLE_TABS: ConsoleTab[] = ["connectors", "agents", "monitor", "jobs", "records", "identity", "memory"];
+export const CONSOLE_TABS: ConsoleTab[] = ["chat", "connectors", "agents", "monitor", "jobs", "records", "identity", "memory"];
 
-export const CONSOLE_PRIMARY_TABS: ConsoleTab[] = ["connectors", "agents", "monitor", "jobs", "records"];
+export const CONSOLE_PRIMARY_TABS: ConsoleTab[] = ["chat", "connectors", "agents", "monitor", "jobs", "records"];
 export const CONSOLE_SECONDARY_TABS: ConsoleTab[] = ["identity", "memory"];
 
 export function consoleIconForTab(tab: ConsoleTab): IconName {
   switch (tab) {
+    case "chat":
+      return "messageSquare";
     case "connectors":
       return "plug";
     case "agents":
@@ -45,6 +48,8 @@ export function consoleIconForTab(tab: ConsoleTab): IconName {
 
 export function consoleTitleForTab(tab: ConsoleTab): string {
   switch (tab) {
+    case "chat":
+      return "Chat";
     case "connectors":
       return "Connectors";
     case "agents":
@@ -67,6 +72,8 @@ export function consoleTitleForTab(tab: ConsoleTab): string {
 // Map legacy tabs into the canonical console tabs
 export function consoleTabFromLegacy(legacyTab: string): ConsoleTab {
   switch (legacyTab) {
+    case "console":
+      return "chat";
     case "home":
     case "integrations":
     case "apps":
@@ -76,7 +83,6 @@ export function consoleTabFromLegacy(legacyTab: string): ConsoleTab {
     case "operations":
       return "jobs";
     case "system":
-    case "console":
       return "monitor";
     case "identity":
       return "identity";

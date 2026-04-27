@@ -16,7 +16,7 @@ import (
 
 const (
 	adapterName            = "tiktok-business-adapter"
-	adapterVersion         = "0.1.0"
+	adapterVersion         = "0.1.1"
 	platformID             = "tiktok-business"
 	defaultBusinessAPIBase = "https://business-api.tiktok.com/open_api/v1.3"
 	defaultLookupTimeout   = 15 * time.Second

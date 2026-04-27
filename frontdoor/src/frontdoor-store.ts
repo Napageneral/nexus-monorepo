@@ -471,6 +471,14 @@ export type FrontdoorPackageVariantRecord = {
   createdAtMs: number;
 };
 
+export type FrontdoorAdapterCatalogRecord = {
+  adapterId: string;
+  displayName: string;
+  description?: string;
+  latestVersion: string;
+  releaseId: string;
+};
+
 export type ServerPackageInstallRecord = {
   serverId: string;
   kind: FrontdoorPackageKind;
@@ -4090,6 +4098,57 @@ export class FrontdoorStore {
           createdAtMs: row.created_at_ms,
         }
       : null;
+  }
+
+  listPublishedAdapterCatalog(): FrontdoorAdapterCatalogRecord[] {
+    const rows = this.db.prepare(`
+      WITH ranked_adapter_releases AS (
+        SELECT
+          p.package_id,
+          p.display_name,
+          p.description,
+          pr.release_id,
+          pr.version,
+          pr.published_at_ms,
+          ROW_NUMBER() OVER (
+            PARTITION BY p.package_id
+            ORDER BY pr.published_at_ms DESC, pr.created_at_ms DESC, pr.release_id DESC
+          ) AS row_number
+        FROM frontdoor_packages p
+        JOIN frontdoor_package_releases pr
+          ON pr.package_id = p.package_id
+        WHERE p.kind = 'adapter'
+          AND lower(p.status) = 'active'
+          AND lower(pr.status) = 'published'
+          AND EXISTS (
+            SELECT 1
+            FROM frontdoor_release_variants rv
+            WHERE rv.release_id = pr.release_id
+          )
+      )
+      SELECT
+        package_id,
+        display_name,
+        description,
+        release_id,
+        version
+      FROM ranked_adapter_releases
+      WHERE row_number = 1
+      ORDER BY display_name COLLATE NOCASE ASC, package_id ASC
+    `).all() as Array<{
+      package_id: string;
+      display_name: string;
+      description: string | null;
+      release_id: string;
+      version: string;
+    }>;
+    return rows.map((row) => ({
+      adapterId: row.package_id,
+      displayName: row.display_name,
+      description: row.description ?? undefined,
+      latestVersion: row.version,
+      releaseId: row.release_id,
+    }));
   }
 
   listPackageReleaseVariantsForTarget(

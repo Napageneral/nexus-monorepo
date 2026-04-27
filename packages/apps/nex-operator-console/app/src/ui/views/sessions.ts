@@ -240,9 +240,7 @@ function renderRow(
     row.kind !== "global" &&
     typeof row.conversationId === "string" &&
     row.conversationId.trim().length > 0;
-  const chatUrl = canLink
-    ? `${pathForTab("console", basePath)}?conversation=${encodeURIComponent(row.conversationId!)}`
-    : null;
+  const chatUrl = canLink ? pathForTab("console", basePath) : null;
 
   return html`
     <div class="table-row">

@@ -21,17 +21,18 @@ import (
 )
 
 const (
-	adapterName               = "google-ads-adapter"
-	adapterVersion            = "0.1.0"
-	platformID                = "google-ads"
-	defaultGoogleAdsAPIBase   = "https://googleads.googleapis.com/v22"
-	defaultGoogleOAuthToken   = "https://www.googleapis.com/oauth2/v3/token"
-	dateLayout                = "2006-01-02"
-	dailyReplayWindow         = 7 * 24 * time.Hour
-	hourlyReplayWindow        = 48 * time.Hour
-	defaultMonitorInterval    = 6 * time.Hour
-	defaultHTTPTimeout        = 30 * time.Second
-	defaultAccessibleHTTPVerb = http.MethodGet
+	adapterName                = "google-ads-adapter"
+	adapterVersion             = "0.1.0"
+	platformID                 = "google-ads"
+	defaultGoogleAdsAPIBase    = "https://googleads.googleapis.com/v22"
+	defaultGoogleOAuthToken    = "https://www.googleapis.com/oauth2/v3/token"
+	dateLayout                 = "2006-01-02"
+	dailyReplayWindow          = 7 * 24 * time.Hour
+	hourlyReplayWindow         = 48 * time.Hour
+	defaultMonitorInterval     = 1 * time.Minute
+	defaultMonitorErrorBackoff = 5 * time.Minute
+	defaultHTTPTimeout         = 30 * time.Second
+	defaultAccessibleHTTPVerb  = http.MethodGet
 )
 
 var (
@@ -128,10 +129,10 @@ type googleCustomer struct {
 }
 
 type googleCampaign struct {
-	ID                       jsonScalar `json:"id"`
-	Name                     jsonScalar `json:"name"`
-	Status                   jsonScalar `json:"status"`
-	AdvertisingChannelType   jsonScalar `json:"advertisingChannelType"`
+	ID                        jsonScalar `json:"id"`
+	Name                      jsonScalar `json:"name"`
+	Status                    jsonScalar `json:"status"`
+	AdvertisingChannelType    jsonScalar `json:"advertisingChannelType"`
 	AdvertisingChannelSubType jsonScalar `json:"advertisingChannelSubType"`
 }
 
@@ -183,12 +184,54 @@ func main() {
 }
 
 func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
+	connectionRequired := true
+	mutatesRemote := false
+
 	return nexadapter.DefineAdapterConfig[struct{}]{
 		Platform:          platformID,
 		Name:              adapterName,
 		Version:           adapterVersion,
 		CredentialService: "google-ads",
 		MultiAccount:      true,
+		MethodCatalog: &nexadapter.AdapterMethodCatalog{
+			Source:    "openapi",
+			Document:  "api/openapi.yaml",
+			Namespace: platformID,
+		},
+		Projection: &nexadapter.AdapterProjection{
+			Platform: platformID,
+			Families: []nexadapter.AdapterProjectionFamily{
+				{Name: "account_access_snapshot", Description: "Immutable Google Ads visible-account discovery arrivals."},
+				{Name: "campaign_daily", Description: "Immutable Google Ads campaign daily performance arrivals."},
+				{Name: "ad_group_daily", Description: "Immutable Google Ads ad group daily performance arrivals."},
+				{Name: "ad_daily", Description: "Immutable Google Ads ad daily performance arrivals."},
+				{Name: "campaign_hourly", Description: "Immutable Google Ads campaign hourly performance arrivals."},
+			},
+			Backfill: &nexadapter.AdapterProjectionSync{
+				Supported: true,
+				Strategy:  "poll",
+				Cursor:    "request_window",
+			},
+			Monitor: &nexadapter.AdapterProjectionSync{
+				Supported: true,
+				Strategy:  "poll",
+				Cursor:    "request_window",
+			},
+			Routing: &nexadapter.AdapterProjectionRouting{
+				Container:        "row_family",
+				Thread:           "provider_row",
+				ThreadsSupported: true,
+			},
+			RecordIDs: &nexadapter.AdapterProjectionRecordIDs{
+				Record:    "google-ads:<connection_id>:<family>:<logical-row>:<revision>",
+				Container: "google-ads:<connection_id>:<family>",
+				Thread:    "google-ads:<connection_id>:<provider-row>",
+			},
+			Normalization: &nexadapter.AdapterProjectionNormalize{
+				Content:     "google_ads_row_projection",
+				Attachments: false,
+			},
+		},
 		Connection: nexadapter.ConnectionHandlers[struct{}]{
 			Connections: func(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterConnectionIdentity, error) {
 				return connections(ctx.Context)
@@ -205,7 +248,132 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 				return backfill(ctx.Context, ctx.ConnectionID, since, emit)
 			},
 		},
-		Methods: map[string]nexadapter.DeclaredMethod[struct{}]{},
+		Methods: map[string]nexadapter.DeclaredMethod[struct{}]{
+			"google-ads.customers.accessible.list": nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
+				Description: "List Google Ads customer ids visible to the current credential.",
+				Action:      "read",
+				Params: map[string]any{
+					"type":                 "object",
+					"additionalProperties": false,
+					"properties": map[string]any{
+						"connection_id": map[string]any{"type": "string"},
+						"payload": map[string]any{
+							"type":                 "object",
+							"additionalProperties": false,
+							"properties":           map[string]any{},
+						},
+					},
+				},
+				Response: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"customer_ids": map[string]any{
+							"type":  "array",
+							"items": map[string]any{"type": "string"},
+						},
+					},
+				},
+				ConnectionRequired: &connectionRequired,
+				MutatesRemote:      &mutatesRemote,
+				Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
+					return googleAdsAccessibleCustomersListMethod(ctx, req)
+				},
+			}),
+			"google-ads.customers.get": nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
+				Description: "Read a Google Ads customer summary for the bound credential or an explicitly visible customer id.",
+				Action:      "read",
+				Params: map[string]any{
+					"type":                 "object",
+					"additionalProperties": false,
+					"properties": map[string]any{
+						"connection_id": map[string]any{"type": "string"},
+						"payload": map[string]any{
+							"type":                 "object",
+							"additionalProperties": false,
+							"properties": map[string]any{
+								"customer_id": map[string]any{"type": "string"},
+							},
+						},
+					},
+				},
+				Response: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"customer": map[string]any{
+							"type":                 "object",
+							"additionalProperties": false,
+							"properties": map[string]any{
+								"customer_id":   map[string]any{"type": "string"},
+								"customer_name": map[string]any{"type": "string"},
+								"currency_code": map[string]any{"type": "string"},
+								"time_zone":     map[string]any{"type": "string"},
+							},
+						},
+						"source_request": map[string]any{
+							"type":                 "object",
+							"additionalProperties": true,
+						},
+					},
+				},
+				ConnectionRequired: &connectionRequired,
+				MutatesRemote:      &mutatesRemote,
+				Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
+					return googleAdsCustomerGetMethod(ctx, req)
+				},
+			}),
+			"google-ads.reporting.campaign_daily.list": nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
+				Description: "List Google Ads campaign daily reporting rows for an explicit date range.",
+				Action:      "read",
+				Params: map[string]any{
+					"type":                 "object",
+					"additionalProperties": false,
+					"properties": map[string]any{
+						"connection_id": map[string]any{"type": "string"},
+						"payload": map[string]any{
+							"type":                 "object",
+							"additionalProperties": false,
+							"properties": map[string]any{
+								"since": map[string]any{"type": "string"},
+								"until": map[string]any{"type": "string"},
+							},
+							"required": []string{"since", "until"},
+						},
+					},
+				},
+				Response: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"rows": map[string]any{
+							"type": "array",
+							"items": map[string]any{
+								"type":                 "object",
+								"additionalProperties": false,
+								"properties": map[string]any{
+									"row": map[string]any{
+										"type":                 "object",
+										"additionalProperties": true,
+									},
+									"derived": map[string]any{
+										"type":                 "object",
+										"additionalProperties": true,
+									},
+								},
+								"required": []string{"row", "derived"},
+							},
+						},
+						"source_request": map[string]any{
+							"type":                 "object",
+							"additionalProperties": true,
+						},
+					},
+				},
+				ConnectionRequired: &connectionRequired,
+				MutatesRemote:      &mutatesRemote,
+				Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
+					return googleAdsCampaignDailyListMethod(ctx, req)
+				},
+			}),
+		},
 		Auth: &nexadapter.AdapterAuthManifest{
 			Methods: []nexadapter.AdapterAuthMethod{
 				{
@@ -286,6 +454,69 @@ func info(ctx context.Context) (*nexadapter.AdapterInfo, error) {
 	return adapter.Operations.AdapterInfo(ctx)
 }
 
+func googleAdsAccessibleCustomersListMethod(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
+	creds, err := resolveGoogleAdsMethodCredentials(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	customerIDs, err := fetchAccessibleCustomerIDs(ctx.Context, creds)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"customer_ids": customerIDs,
+	}, nil
+}
+
+func googleAdsCustomerGetMethod(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
+	creds, err := resolveGoogleAdsMethodCredentials(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	customerID := normalizeCustomerID(optionalMethodPayloadString(req, "customer_id"))
+	if customerID == "" {
+		customerID = creds.CustomerID
+	}
+	row, sourceRequest, err := fetchAccountSnapshot(ctx.Context, creds, customerID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"customer":       normalizedAccountSnapshotRow(row, customerID),
+		"source_request": sourceRequest.metadata(),
+	}, nil
+}
+
+func googleAdsCampaignDailyListMethod(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
+	creds, err := resolveGoogleAdsMethodCredentials(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	since, err := requiredMethodPayloadDate(req, "since")
+	if err != nil {
+		return nil, err
+	}
+	until, err := requiredMethodPayloadDate(req, "until")
+	if err != nil {
+		return nil, err
+	}
+	rows, sourceRequest, err := fetchCampaignDailyRows(ctx.Context, creds, since, until)
+	if err != nil {
+		return nil, err
+	}
+	responseRows := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		responseRows = append(responseRows, map[string]any{
+			"row":     normalizedCampaignDailyRow(row, creds.CustomerID),
+			"derived": derivedMeasures(row.Metrics),
+		})
+	}
+	return map[string]any{
+		"rows":           responseRows,
+		"source_request": sourceRequest.metadata(),
+	}, nil
+}
+
 func connections(_ context.Context) ([]nexadapter.AdapterConnectionIdentity, error) {
 	runtimeContext, err := nexadapter.LoadRuntimeContextFromEnv()
 	if err != nil {
@@ -336,28 +567,11 @@ func health(ctx context.Context, account string) (*nexadapter.AdapterHealth, err
 		}, nil
 	}
 
-	summary, err := fetchCustomerSummary(ctx, creds, creds.CustomerID)
-	if err != nil {
-		return &nexadapter.AdapterHealth{
-			Connected:    false,
-			ConnectionID: account,
-			Error:        err.Error(),
-		}, nil
-	}
-
 	details := map[string]any{
 		"customer_id":       creds.CustomerID,
 		"login_customer_id": creds.LoginCustomerID,
-		"account_name":      normalizeScalar(summary.Customer.DescriptiveName),
-		"currency_code":     normalizeScalar(summary.Customer.CurrencyCode),
-		"time_zone":         normalizeScalar(summary.Customer.TimeZone),
 		"credential_ref":    creds.CredentialRef,
-	}
-
-	if accessibleIDs, lookupErr := fetchAccessibleCustomerIDs(ctx, creds); lookupErr != nil {
-		details["accessible_customers_error"] = lookupErr.Error()
-	} else if len(accessibleIDs) > 0 {
-		details["accessible_customer_ids"] = accessibleIDs
+		"health_check_mode": "credential_only",
 	}
 
 	return &nexadapter.AdapterHealth{
@@ -391,7 +605,8 @@ func monitor(ctx context.Context, account string, emit nexadapter.EmitFunc) erro
 		return err
 	}
 	return nexadapter.PollMonitor(nexadapter.PollConfig[nexadapter.AdapterInboundRecord]{
-		Interval: defaultMonitorInterval,
+		Interval:     defaultMonitorInterval,
+		ErrorBackoff: defaultMonitorErrorBackoff,
 		Fetch: func(ctx context.Context, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 			asOf := time.Now().UTC()
 			return fetchGoogleAdsRowsCycle(ctx, account, since.UTC(), asOf, googleSyncModeMonitor)
@@ -1138,17 +1353,20 @@ func derivedMeasures(metrics googleMetrics) map[string]any {
 		costPerConversion = cost / conversions
 	}
 	derived := map[string]any{
-		"impressions":       impressions,
-		"clicks":            clicks,
-		"cost":              roundTo(cost, 6),
-		"conversions":       conversions,
-		"conversions_value": conversionsValue,
-		"ctr":               roundTo(ctr, 6),
-		"average_cpc":       roundTo(averageCPC, 6),
+		"impressions":         impressions,
+		"clicks":              clicks,
+		"cost":                roundTo(cost, 6),
+		"conversions":         conversions,
+		"conversions_value":   conversionsValue,
+		"ctr":                 roundTo(ctr, 6),
+		"average_cpc":         roundTo(averageCPC, 6),
 		"cost_per_conversion": roundTo(costPerConversion, 6),
 	}
 	if landingPageViews := parseNumber(metrics.LandingPageViews); landingPageViews > 0 {
 		derived["landing_page_views"] = landingPageViews
+	} else if clicks > 0 {
+		// MoonSleep ops treats Google LPVs as click-aligned when a separate LPV metric is unavailable.
+		derived["landing_page_views"] = clicks
 	}
 	return derived
 }
@@ -1295,6 +1513,15 @@ func resolveGoogleAdsCredentials(account string) (googleAdsCredentials, error) {
 	}, nil
 }
 
+func resolveGoogleAdsMethodCredentials(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (googleAdsCredentials, error) {
+	connectionID := firstNonBlank(req.ConnectionID, ctx.ConnectionID)
+	connectionID, err := nexadapter.RequireConnection(connectionID)
+	if err != nil {
+		return googleAdsCredentials{}, err
+	}
+	return resolveGoogleAdsCredentials(connectionID)
+}
+
 func (s *googleSourceRequest) metadata() map[string]any {
 	return map[string]any{
 		"api_base_url": s.APIBaseURL,
@@ -1371,6 +1598,32 @@ func firstNonBlank(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func optionalMethodPayloadString(req nexadapter.AdapterMethodRequest, key string) string {
+	if req.Payload == nil {
+		return ""
+	}
+	raw, ok := req.Payload[key]
+	if !ok {
+		return ""
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
+func requiredMethodPayloadDate(req nexadapter.AdapterMethodRequest, key string) (string, error) {
+	value := optionalMethodPayloadString(req, key)
+	if value == "" {
+		return "", fmt.Errorf("missing %s payload field", key)
+	}
+	if _, err := time.Parse(dateLayout, value); err != nil {
+		return "", fmt.Errorf("invalid %s payload field: %w", key, err)
+	}
+	return value, nil
 }
 
 func uniqueStrings(values []string) []string {

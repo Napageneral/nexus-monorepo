@@ -29,7 +29,10 @@ What still matters before the real website shadow goes live is:
 
 - `/Users/tyler/nexus/home/projects/nexus/frontdoor/docs/validation/FRONTDOOR_HOSTED_PACKAGE_LIVE_TESTING.md`
 - `/Users/tyler/nexus/home/projects/nexus/nex/docs/runbooks/platform/prod-runtime-package-deployment-procedure.md`
+- `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/source-adapters-control-plane-and-proof-standard.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/validation/attribution-golden-journey-validation.md`
+- `/Users/tyler/nexus/home/projects/nexus/packages/apps/web-signals/app/docs/validation/WEB_SIGNALS_CONTROL_PLANE_VALIDATION.md`
+- `/Users/tyler/nexus/home/projects/nexus/packages/adapters/web-journey/docs/validation/web-journey-source-adapter-validation.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/workplans/moonsleep-hosted-attribution-runtime-board/README.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/workplans/moonsleep-shadow-attribution-rollout-board/README.md`
 
@@ -39,7 +42,8 @@ What still matters before the real website shadow goes live is:
 - `google-ads`
 - `tiktok-business`
 - `shopify`
-- `website-input`
+- `web-journey`
+- `web-signals`
 - `attribution`
 
 `tiktok-display` is optional for the MoonSleep paid-core rollout and should not
@@ -56,11 +60,11 @@ The currently retained MoonSleep hosted runtime is:
 Package state already proven there:
 
 - adapters:
-  `meta-ads`, `google-ads`, `tiktok-business`, `shopify`
+  `meta-ads`, `google-ads`, `tiktok-business`, `shopify`, `web-journey`
 - apps:
-  `website-input`, `attribution`
+  `web-signals`, `attribution`
 
-Current website-input installations already minted there:
+Current web-signals installations already minted there:
 
 - safe shadow site:
   `c65523a0-5cb9-4564-bdc5-b740abade563`
@@ -71,9 +75,9 @@ Current website-input installations already minted there:
 
 Local env pointers for those hosted installs live at:
 
-- `/Users/tyler/.config/moonsleep/website-input/moonsleep-hosted-safe-shadow.env`
-- `/Users/tyler/.config/moonsleep/website-input/moonsleep-prod-shadow.env`
-- `/Users/tyler/.config/moonsleep/website-input/moonsleep-hosted-demo-shadow.env`
+- `/Users/tyler/.config/moonsleep/web-signals/moonsleep-hosted-safe-shadow.env`
+- `/Users/tyler/.config/moonsleep/web-signals/moonsleep-prod-shadow.env`
+- `/Users/tyler/.config/moonsleep/web-signals/moonsleep-hosted-demo-shadow.env`
 
 Current hosted proof artifacts:
 
@@ -85,12 +89,20 @@ Current hosted proof artifacts:
   `/Users/tyler/nexus/state/artifacts/validation/moonsleep-hosted-runtime/moonsleep-prod-shadow-preflight-2026-04-06T01-09-27-908Z.json`
 - hosted post-replay baseline snapshot:
   `/Users/tyler/nexus/state/artifacts/validation/moonsleep-shadow-snapshots/moonsleep-shadow-snapshot-2026-04-06T01-15-44-322Z.json`
+- hosted soak snapshot:
+  `/Users/tyler/nexus/state/artifacts/validation/moonsleep-shadow-snapshots/moonsleep-shadow-snapshot-2026-04-06T13-35-55-004Z.json`
 
 Hosted collector allowlist now explicitly includes:
 
 - `https://moonsleep-attribution-demo.vercel.app`
 - `https://moonsleep-attribution-shadow.vercel.app`
 - `https://www.moonsleep.co`
+
+The hosted website lane is now interpreted canonically as:
+
+- `web-signals` control plane
+- `web-journey` source adapter
+- `attribution` consuming app
 
 ## Non-Negotiable Rules
 
@@ -125,9 +137,9 @@ Install the blocking package set through Frontdoor-managed package lifecycle
 seams and confirm the hosted runtime reflects:
 
 - installed adapters:
-  `meta-ads`, `google-ads`, `tiktok-business`, `shopify`
+  `meta-ads`, `google-ads`, `tiktok-business`, `shopify`, `web-journey`
 - installed apps:
-  `website-input`, `attribution`
+  `web-signals`, `attribution`
 
 ### 3. Hosted Connections And Backfills
 
@@ -152,7 +164,7 @@ Current state:
 
 ### 4. Hosted Website Installation
 
-Create a fresh `website-input` installation for the MoonSleep shadow program on
+Create a fresh `web-signals` installation for the MoonSleep shadow program on
 the hosted runtime.
 
 Do this twice if needed:

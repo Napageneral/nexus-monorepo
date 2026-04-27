@@ -1,5 +1,1506 @@
 openapi: 3.1.0
 info:
-  title: Attribution Intelligence App
-  version: 0.1.0
-paths: {}
+  title: Attribution Intelligence App API
+  version: 0.1.10
+  description: Bind acquisition, website, and backend inputs into app-owned
+    attribution facts, reconciliation, and operator reads.
+servers:
+  - url: https://{tenantId}.nexushub.sh
+    variables:
+      tenantId:
+        default: t-example
+tags:
+  - name: Attribution Intelligence
+paths:
+  /runtime/operations/attribution.ad-facts.list:
+    post:
+      operationId: attribution.ad-facts.list
+      summary: List recent app-owned paid fact rows for one business scope.
+      tags:
+        - Attribution Intelligence
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - scope_id
+              properties:
+                scope_id:
+                  type: string
+                limit:
+                  type: number
+      responses:
+        "200":
+          description: Successful Attribution Intelligence method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/attribution.bindings.list:
+    post:
+      operationId: attribution.bindings.list
+      summary: List app-owned input bindings for attribution scopes.
+      tags:
+        - Attribution Intelligence
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scope_id:
+                  type: string
+      responses:
+        "200":
+          description: Successful Attribution Intelligence method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/attribution.bindings.delete:
+    post:
+      operationId: attribution.bindings.delete
+      summary: Delete one app-owned input binding by binding id.
+      tags:
+        - Attribution Intelligence
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - binding_id
+              properties:
+                binding_id:
+                  type: string
+      responses:
+        "200":
+          description: Successful Attribution Intelligence method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/attribution.bindings.upsert:
+    post:
+      operationId: attribution.bindings.upsert
+      summary: Create or update one app-owned input binding.
+      tags:
+        - Attribution Intelligence
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - scope_id
+                - role
+                - source_type
+              properties:
+                binding_id:
+                  type: string
+                scope_id:
+                  type: string
+                role:
+                  type: string
+                  enum:
+                    - acquisition
+                    - website
+                    - backend
+                source_type:
+                  type: string
+                  enum:
+                    - adapter_connection
+                connection_id:
+                  type: string
+                platform:
+                  type: string
+                label:
+                  type: string
+                metadata:
+                  type: object
+      responses:
+        "200":
+          description: Successful Attribution Intelligence method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/attribution.funnel:
+    post:
+      operationId: attribution.funnel
+      summary: Get daily funnel and source reads for one business scope.
+      tags:
+        - Attribution Intelligence
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - scope_id
+              properties:
+                scope_id:
+                  type: string
+                days:
+                  type: number
+      responses:
+        "200":
+          description: Successful Attribution Intelligence method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/attribution.healthcheck:
+    post:
+      operationId: attribution.healthcheck
+      summary: Confirm the app is installed and report basic storage and pipeline
+        status.
+      tags:
+        - Attribution Intelligence
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+      responses:
+        "200":
+          description: Successful Attribution Intelligence method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/attribution.outcomes.get:
+    post:
+      operationId: attribution.outcomes.get
+      summary: Get one backend outcome with inspectable bridge and attribution evidence.
+      tags:
+        - Attribution Intelligence
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - outcome_id
+              properties:
+                outcome_id:
+                  type: string
+      responses:
+        "200":
+          description: Successful Attribution Intelligence method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/attribution.outcomes.list:
+    post:
+      operationId: attribution.outcomes.list
+      summary: List backend outcomes and current attribution decisions for one scope.
+      tags:
+        - Attribution Intelligence
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - scope_id
+              properties:
+                scope_id:
+                  type: string
+                limit:
+                  type: number
+      responses:
+        "200":
+          description: Successful Attribution Intelligence method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/attribution.pipeline.status:
+    post:
+      operationId: attribution.pipeline.status
+      summary: Get app pipeline and materialization status.
+      tags:
+        - Attribution Intelligence
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scope_id:
+                  type: string
+      responses:
+        "200":
+          description: Successful Attribution Intelligence method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/attribution.pipeline.trigger:
+    post:
+      operationId: attribution.pipeline.trigger
+      summary: Trigger a manual replay/materialization pass from canonical records.
+      tags:
+        - Attribution Intelligence
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scope_id:
+                  type: string
+                limit_per_platform:
+                  type: number
+      responses:
+        "200":
+          description: Successful Attribution Intelligence method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/attribution.scopes.list:
+    post:
+      operationId: attribution.scopes.list
+      summary: List configured attribution business scopes.
+      tags:
+        - Attribution Intelligence
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                limit:
+                  type: number
+      responses:
+        "200":
+          description: Successful Attribution Intelligence method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/attribution.scopes.upsert:
+    post:
+      operationId: attribution.scopes.upsert
+      summary: Create or update an attribution business scope.
+      tags:
+        - Attribution Intelligence
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - scope_id
+                - label
+              properties:
+                scope_id:
+                  type: string
+                label:
+                  type: string
+                description:
+                  type: string
+      responses:
+        "200":
+          description: Successful Attribution Intelligence method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/attribution.summary:
+    post:
+      operationId: attribution.summary
+      summary: Get attribution summary reads for one business scope.
+      tags:
+        - Attribution Intelligence
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - scope_id
+              properties:
+                scope_id:
+                  type: string
+                days:
+                  type: number
+      responses:
+        "200":
+          description: Successful Attribution Intelligence method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    UnauthorizedError:
+      type: object
+      required:
+        - ok
+        - error
+      properties:
+        ok:
+          type: boolean
+          enum:
+            - false
+        error:
+          type: string
+          enum:
+            - unauthorized
+            - not_authenticated
+    GenericError:
+      type: object
+      required:
+        - ok
+        - error
+      properties:
+        ok:
+          type: boolean
+        error:
+          type: string
+        detail:
+          type:
+            - string
+            - "null"

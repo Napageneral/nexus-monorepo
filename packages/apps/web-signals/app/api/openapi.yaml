@@ -1,0 +1,345 @@
+openapi: 3.1.0
+info:
+  title: Web Signals App API
+  version: 0.1.2
+  description: Hard-cut web-signals control plane for web_installation_id lifecycle, trust termination, proxy routing, and QA inspection.
+servers:
+  - url: https://{tenantId}.nexushub.sh
+    variables:
+      tenantId:
+        default: t-example
+tags:
+  - name: Web Signals
+paths:
+  /runtime/operations/web-signals.installations.create:
+    post:
+      operationId: web-signals.installations.create
+      summary: Create a web signals installation and issue its sender token.
+      tags: [Web Signals]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:
+                  type: string
+                site_origin:
+                  type: string
+                runtime_base_url:
+                  type: string
+                expires_at:
+                  type: number
+                metadata:
+                  type: object
+      responses:
+        "200":
+          $ref: "#/components/responses/MethodOk"
+        "400":
+          $ref: "#/components/responses/MethodBadRequest"
+        "401":
+          $ref: "#/components/responses/MethodUnauthorized"
+  /runtime/operations/web-signals.installations.get:
+    post:
+      operationId: web-signals.installations.get
+      summary: Get one web signals installation and its token history.
+      tags: [Web Signals]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [web_installation_id]
+              properties:
+                web_installation_id:
+                  type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/MethodOk"
+        "400":
+          $ref: "#/components/responses/MethodBadRequest"
+        "401":
+          $ref: "#/components/responses/MethodUnauthorized"
+  /runtime/operations/web-signals.installations.list:
+    post:
+      operationId: web-signals.installations.list
+      summary: List web signals installations.
+      tags: [Web Signals]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                limit:
+                  type: number
+      responses:
+        "200":
+          $ref: "#/components/responses/MethodOk"
+        "400":
+          $ref: "#/components/responses/MethodBadRequest"
+        "401":
+          $ref: "#/components/responses/MethodUnauthorized"
+  /runtime/operations/web-signals.installations.rotate:
+    post:
+      operationId: web-signals.installations.rotate
+      summary: Rotate the sender token for a web signals installation.
+      tags: [Web Signals]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [web_installation_id]
+              properties:
+                web_installation_id:
+                  type: string
+                label:
+                  type: string
+                runtime_base_url:
+                  type: string
+                expires_at:
+                  type: number
+      responses:
+        "200":
+          $ref: "#/components/responses/MethodOk"
+        "400":
+          $ref: "#/components/responses/MethodBadRequest"
+        "401":
+          $ref: "#/components/responses/MethodUnauthorized"
+  /runtime/operations/web-signals.installations.delete:
+    post:
+      operationId: web-signals.installations.delete
+      summary: Delete one web signals installation and revoke its active sender tokens.
+      tags: [Web Signals]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [web_installation_id]
+              properties:
+                web_installation_id:
+                  type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/MethodOk"
+        "400":
+          $ref: "#/components/responses/MethodBadRequest"
+        "401":
+          $ref: "#/components/responses/MethodUnauthorized"
+  /runtime/operations/web-signals.web-journey.collect:
+    post:
+      operationId: web-signals.web-journey.collect
+      summary: Accept one web journey event for a bound installation and route it into the web-journey adapter.
+      tags: [Web Signals]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [web_installation_id, event]
+              properties:
+                web_installation_id:
+                  type: string
+                event:
+                  type: object
+      responses:
+        "200":
+          $ref: "#/components/responses/MethodOk"
+        "400":
+          $ref: "#/components/responses/MethodBadRequest"
+        "401":
+          $ref: "#/components/responses/MethodUnauthorized"
+  /runtime/operations/web-signals.web-journey.collect.batch:
+    post:
+      operationId: web-signals.web-journey.collect.batch
+      summary: Accept a batch of web journey events for a bound installation and route them into the web-journey adapter.
+      tags: [Web Signals]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [web_installation_id, events]
+              properties:
+                web_installation_id:
+                  type: string
+                events:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        "200":
+          $ref: "#/components/responses/MethodOk"
+        "400":
+          $ref: "#/components/responses/MethodBadRequest"
+        "401":
+          $ref: "#/components/responses/MethodUnauthorized"
+  /runtime/operations/web-signals.events.list:
+    post:
+      operationId: web-signals.events.list
+      summary: List QA-visible events for a web installation.
+      tags: [Web Signals]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [web_installation_id]
+              properties:
+                web_installation_id:
+                  type: string
+                session_id:
+                  type: string
+                event_name:
+                  type: string
+                limit:
+                  type: number
+      responses:
+        "200":
+          $ref: "#/components/responses/MethodOk"
+        "400":
+          $ref: "#/components/responses/MethodBadRequest"
+        "401":
+          $ref: "#/components/responses/MethodUnauthorized"
+  /runtime/operations/web-signals.events.get:
+    post:
+      operationId: web-signals.events.get
+      summary: Get one QA-visible event by installation and event id.
+      tags: [Web Signals]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [web_installation_id, event_id]
+              properties:
+                web_installation_id:
+                  type: string
+                event_id:
+                  type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/MethodOk"
+        "400":
+          $ref: "#/components/responses/MethodBadRequest"
+        "401":
+          $ref: "#/components/responses/MethodUnauthorized"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    MethodOk:
+      description: Successful Web Signals method response
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ok]
+            properties:
+              ok:
+                type: boolean
+                enum: [true]
+              payload:
+                type: object
+                additionalProperties: true
+              meta:
+                anyOf:
+                  - type: object
+                    additionalProperties: true
+                  - type: "null"
+    MethodBadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ok, error]
+            properties:
+              ok:
+                type: boolean
+                enum: [false]
+              error:
+                type: object
+                required: [message]
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  details:
+                    anyOf:
+                      - type: array
+                        items:
+                          type: string
+                      - type: "null"
+                additionalProperties: true
+              meta:
+                anyOf:
+                  - type: object
+                    additionalProperties: true
+                  - type: "null"
+    MethodUnauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ok, error]
+            properties:
+              ok:
+                type: boolean
+                enum: [false]
+              error:
+                type: object
+                required: [message]
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  details:
+                    anyOf:
+                      - type: array
+                        items:
+                          type: string
+                      - type: "null"
+                additionalProperties: true
+              meta:
+                anyOf:
+                  - type: object
+                    additionalProperties: true
+                  - type: "null"

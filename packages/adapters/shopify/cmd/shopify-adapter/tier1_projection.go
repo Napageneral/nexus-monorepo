@@ -240,7 +240,7 @@ type shopifyGraphQLMarketingActivity struct {
 	Tactic           string `json:"tactic"`
 }
 
-func fetchCustomersSince(ctx context.Context, state *shopifyState, since time.Time, mode shopifySyncMode) ([]shopifyGraphQLCustomer, shopifySourceRequest, time.Time, error) {
+func fetchCustomersSince(ctx context.Context, state *shopifyState, since time.Time) ([]shopifyGraphQLCustomer, shopifySourceRequest, time.Time, error) {
 	document := `query Tier1Customers($first: Int!, $after: String, $query: String!, $reverse: Boolean!, $sortKey: CustomerSortKeys!) {
   customers(first: $first, after: $after, query: $query, reverse: $reverse, sortKey: $sortKey) {
     edges {
@@ -261,26 +261,18 @@ func fetchCustomersSince(ctx context.Context, state *shopifyState, since time.Ti
   }
 }`
 	query := shopifyUpdatedSinceFilter(since)
-	localFilterSince := time.Time{}
-	if mode == shopifySyncModeMonitor {
-		// Shopify customer updated_at search did not reliably surface tag churn during live monitor proof.
-		// Snapshot the current customer window and apply the updatedAt cursor locally instead.
-		query = ""
-		localFilterSince = since.UTC()
-	}
 	sourceRequest := shopifySourceRequest{
 		APIBaseURL: fmt.Sprintf(defaultShopifyBaseURL, state.ShopDomain, state.APIVersion),
 		Path:       shopifyGraphQLProjectionPath,
 		Request: map[string]any{
-			"operation":           "Tier1Customers",
-			"document":            document,
-			"query":               emptyToNil(query),
-			"sortKey":             "UPDATED_AT",
-			"reverse":             false,
-			"page_size":           shopifyGraphQLPageSize,
-			"api_version":         state.APIVersion,
-			"cursor_since":        since.UTC().Format(time.RFC3339),
-			"local_snapshot_scan": mode == shopifySyncModeMonitor,
+			"operation":    "Tier1Customers",
+			"document":     document,
+			"query":        emptyToNil(query),
+			"sortKey":      "UPDATED_AT",
+			"reverse":      false,
+			"page_size":    shopifyGraphQLPageSize,
+			"api_version":  state.APIVersion,
+			"cursor_since": since.UTC().Format(time.RFC3339),
 		},
 	}
 
@@ -309,18 +301,12 @@ func fetchCustomersSince(ctx context.Context, state *shopifyState, since time.Ti
 			if strings.TrimSpace(customer.ID) == "" {
 				continue
 			}
-			includeCustomer := localFilterSince.IsZero()
 			if parsed := parseShopifyUpdatedAt(customer.UpdatedAt); !parsed.IsZero() {
 				if parsed.After(latestUpdatedAt) {
 					latestUpdatedAt = parsed
 				}
-				if !localFilterSince.IsZero() && parsed.After(localFilterSince) {
-					includeCustomer = true
-				}
 			}
-			if includeCustomer {
-				customers = append(customers, customer)
-			}
+			customers = append(customers, customer)
 		}
 		if !connection.PageInfo.HasNextPage || strings.TrimSpace(connection.PageInfo.EndCursor) == "" {
 			break
@@ -331,7 +317,7 @@ func fetchCustomersSince(ctx context.Context, state *shopifyState, since time.Ti
 	return customers, sourceRequest, latestUpdatedAt, nil
 }
 
-func fetchProductsSince(ctx context.Context, state *shopifyState, since time.Time, mode shopifySyncMode) ([]shopifyGraphQLProduct, shopifySourceRequest, time.Time, error) {
+func fetchProductsSince(ctx context.Context, state *shopifyState, since time.Time) ([]shopifyGraphQLProduct, shopifySourceRequest, time.Time, error) {
 	document := `query Tier1Products($first: Int!, $after: String, $query: String!, $reverse: Boolean!, $sortKey: ProductSortKeys!, $savedSearchId: ID) {
   products(first: $first, after: $after, query: $query, reverse: $reverse, sortKey: $sortKey, savedSearchId: $savedSearchId) {
     edges {
@@ -354,26 +340,18 @@ func fetchProductsSince(ctx context.Context, state *shopifyState, since time.Tim
   }
 }`
 	query := shopifyUpdatedSinceFilter(since)
-	localFilterSince := time.Time{}
-	if mode == shopifySyncModeMonitor {
-		// Shopify product updated_at search did not reliably surface tag churn during live monitor proof.
-		// Snapshot the current product window and apply updatedAt locally instead.
-		query = ""
-		localFilterSince = since.UTC()
-	}
 	sourceRequest := shopifySourceRequest{
 		APIBaseURL: fmt.Sprintf(defaultShopifyBaseURL, state.ShopDomain, state.APIVersion),
 		Path:       shopifyGraphQLProjectionPath,
 		Request: map[string]any{
-			"operation":           "Tier1Products",
-			"document":            document,
-			"query":               emptyToNil(query),
-			"sortKey":             "UPDATED_AT",
-			"reverse":             false,
-			"page_size":           shopifyGraphQLPageSize,
-			"api_version":         state.APIVersion,
-			"cursor_since":        since.UTC().Format(time.RFC3339),
-			"local_snapshot_scan": mode == shopifySyncModeMonitor,
+			"operation":    "Tier1Products",
+			"document":     document,
+			"query":        emptyToNil(query),
+			"sortKey":      "UPDATED_AT",
+			"reverse":      false,
+			"page_size":    shopifyGraphQLPageSize,
+			"api_version":  state.APIVersion,
+			"cursor_since": since.UTC().Format(time.RFC3339),
 		},
 	}
 
@@ -403,18 +381,10 @@ func fetchProductsSince(ctx context.Context, state *shopifyState, since time.Tim
 			if strings.TrimSpace(product.ID) == "" {
 				continue
 			}
-			includeProduct := localFilterSince.IsZero()
 			if parsed := parseShopifyUpdatedAt(product.UpdatedAt); !parsed.IsZero() && parsed.After(latestUpdatedAt) {
 				latestUpdatedAt = parsed
 			}
-			if !localFilterSince.IsZero() {
-				if parsed := parseShopifyUpdatedAt(product.UpdatedAt); !parsed.IsZero() && parsed.After(localFilterSince) {
-					includeProduct = true
-				}
-			}
-			if includeProduct {
-				products = append(products, product)
-			}
+			products = append(products, product)
 		}
 		if !connection.PageInfo.HasNextPage || strings.TrimSpace(connection.PageInfo.EndCursor) == "" {
 			break
@@ -425,7 +395,7 @@ func fetchProductsSince(ctx context.Context, state *shopifyState, since time.Tim
 	return products, sourceRequest, latestUpdatedAt, nil
 }
 
-func fetchCollectionsSince(ctx context.Context, state *shopifyState, since time.Time, mode shopifySyncMode) ([]shopifyGraphQLCollection, shopifySourceRequest, time.Time, error) {
+func fetchCollectionsSince(ctx context.Context, state *shopifyState, since time.Time) ([]shopifyGraphQLCollection, shopifySourceRequest, time.Time, error) {
 	document := `query Tier1Collections($first: Int!, $after: String, $query: String!, $reverse: Boolean!, $sortKey: CollectionSortKeys!) {
   collections(first: $first, after: $after, query: $query, reverse: $reverse, sortKey: $sortKey) {
     edges {
@@ -456,26 +426,18 @@ func fetchCollectionsSince(ctx context.Context, state *shopifyState, since time.
   }
 }`
 	query := shopifyUpdatedSinceFilter(since)
-	localFilterSince := time.Time{}
-	if mode == shopifySyncModeMonitor {
-		// Shopify collection updated_at search did not reliably surface title changes during live monitor proof.
-		// Snapshot the current collections window and apply the updatedAt cursor locally instead.
-		query = ""
-		localFilterSince = since.UTC()
-	}
 	sourceRequest := shopifySourceRequest{
 		APIBaseURL: fmt.Sprintf(defaultShopifyBaseURL, state.ShopDomain, state.APIVersion),
 		Path:       shopifyGraphQLProjectionPath,
 		Request: map[string]any{
-			"operation":           "Tier1Collections",
-			"document":            document,
-			"query":               emptyToNil(query),
-			"sortKey":             "UPDATED_AT",
-			"reverse":             false,
-			"page_size":           shopifyGraphQLPageSize,
-			"api_version":         state.APIVersion,
-			"cursor_since":        since.UTC().Format(time.RFC3339),
-			"local_snapshot_scan": mode == shopifySyncModeMonitor,
+			"operation":    "Tier1Collections",
+			"document":     document,
+			"query":        emptyToNil(query),
+			"sortKey":      "UPDATED_AT",
+			"reverse":      false,
+			"page_size":    shopifyGraphQLPageSize,
+			"api_version":  state.APIVersion,
+			"cursor_since": since.UTC().Format(time.RFC3339),
 		},
 	}
 
@@ -504,18 +466,10 @@ func fetchCollectionsSince(ctx context.Context, state *shopifyState, since time.
 			if strings.TrimSpace(collection.ID) == "" {
 				continue
 			}
-			includeCollection := localFilterSince.IsZero()
 			if parsed := parseShopifyUpdatedAt(collection.UpdatedAt); !parsed.IsZero() && parsed.After(latestUpdatedAt) {
 				latestUpdatedAt = parsed
 			}
-			if !localFilterSince.IsZero() {
-				if parsed := parseShopifyUpdatedAt(collection.UpdatedAt); !parsed.IsZero() && parsed.After(localFilterSince) {
-					includeCollection = true
-				}
-			}
-			if includeCollection {
-				collections = append(collections, collection)
-			}
+			collections = append(collections, collection)
 		}
 		if !connection.PageInfo.HasNextPage || strings.TrimSpace(connection.PageInfo.EndCursor) == "" {
 			break
@@ -526,7 +480,7 @@ func fetchCollectionsSince(ctx context.Context, state *shopifyState, since time.
 	return collections, sourceRequest, latestUpdatedAt, nil
 }
 
-func fetchInventoryItemsSince(ctx context.Context, state *shopifyState, since time.Time, mode shopifySyncMode) ([]shopifyGraphQLInventoryItem, shopifySourceRequest, time.Time, error) {
+func fetchInventoryItemsSince(ctx context.Context, state *shopifyState, since time.Time) ([]shopifyGraphQLInventoryItem, shopifySourceRequest, time.Time, error) {
 	document := `query Tier1Inventory($first: Int!, $after: String, $query: String!, $reverse: Boolean!) {
   inventoryItems(first: $first, after: $after, query: $query, reverse: $reverse) {
     edges {
@@ -561,26 +515,17 @@ func fetchInventoryItemsSince(ctx context.Context, state *shopifyState, since ti
   }
 }`
 	query := shopifyUpdatedSinceFilter(since)
-	localFilterSince := time.Time{}
-	if mode == shopifySyncModeMonitor {
-		// Shopify does not surface inventory level freshness through inventoryItems.updated_at
-		// reliably enough for monitor use. Scan the current inventory snapshot and apply
-		// the cursor locally against both item.updatedAt and inventoryLevel.updatedAt.
-		query = ""
-		localFilterSince = since.UTC()
-	}
 	sourceRequest := shopifySourceRequest{
 		APIBaseURL: fmt.Sprintf(defaultShopifyBaseURL, state.ShopDomain, state.APIVersion),
 		Path:       shopifyGraphQLProjectionPath,
 		Request: map[string]any{
-			"operation":           "Tier1Inventory",
-			"document":            document,
-			"query":               emptyToNil(query),
-			"reverse":             false,
-			"page_size":           shopifyGraphQLPageSize,
-			"api_version":         state.APIVersion,
-			"cursor_since":        since.UTC().Format(time.RFC3339),
-			"local_snapshot_scan": mode == shopifySyncModeMonitor,
+			"operation":    "Tier1Inventory",
+			"document":     document,
+			"query":        emptyToNil(query),
+			"reverse":      false,
+			"page_size":    shopifyGraphQLPageSize,
+			"api_version":  state.APIVersion,
+			"cursor_since": since.UTC().Format(time.RFC3339),
 		},
 	}
 
@@ -608,28 +553,15 @@ func fetchInventoryItemsSince(ctx context.Context, state *shopifyState, since ti
 			if strings.TrimSpace(item.ID) == "" {
 				continue
 			}
-			includeItem := localFilterSince.IsZero()
 			if parsed := parseShopifyUpdatedAt(item.UpdatedAt); !parsed.IsZero() && parsed.After(latestUpdatedAt) {
 				latestUpdatedAt = parsed
-			}
-			if !localFilterSince.IsZero() {
-				if parsed := parseShopifyUpdatedAt(item.UpdatedAt); !parsed.IsZero() && parsed.After(localFilterSince) {
-					includeItem = true
-				}
 			}
 			for _, levelEdge := range item.InventoryLevels.Edges {
 				if parsed := parseShopifyUpdatedAt(levelEdge.Node.UpdatedAt); !parsed.IsZero() && parsed.After(latestUpdatedAt) {
 					latestUpdatedAt = parsed
 				}
-				if !localFilterSince.IsZero() {
-					if parsed := parseShopifyUpdatedAt(levelEdge.Node.UpdatedAt); !parsed.IsZero() && parsed.After(localFilterSince) {
-						includeItem = true
-					}
-				}
 			}
-			if includeItem {
-				items = append(items, item)
-			}
+			items = append(items, item)
 		}
 		if !connection.PageInfo.HasNextPage || strings.TrimSpace(connection.PageInfo.EndCursor) == "" {
 			break
@@ -1198,82 +1130,87 @@ func buildCollectionRecord(state *shopifyState, collection shopifyGraphQLCollect
 }
 
 func buildInventoryRecords(state *shopifyState, item shopifyGraphQLInventoryItem, sourceRequest shopifySourceRequest) []nexadapter.AdapterInboundRecord {
+	records := make([]nexadapter.AdapterInboundRecord, 0, len(item.InventoryLevels.Edges))
+	for _, levelEdge := range item.InventoryLevels.Edges {
+		record := buildInventoryRecord(state, item, levelEdge.Node, sourceRequest)
+		if record.Operation != "" {
+			records = append(records, record)
+		}
+	}
+	return records
+}
+
+func buildInventoryRecord(state *shopifyState, item shopifyGraphQLInventoryItem, level shopifyGraphQLInventoryLevel, sourceRequest shopifySourceRequest) nexadapter.AdapterInboundRecord {
 	connectionID, err := nexadapter.RequireConnection(state.ConnectionID)
 	if err != nil {
 		nexadapter.LogError("shopify inventory build: %v", err)
-		return nil
+		return nexadapter.AdapterInboundRecord{}
 	}
 
 	itemGID := strings.TrimSpace(item.ID)
 	if itemGID == "" {
-		return nil
+		return nexadapter.AdapterInboundRecord{}
 	}
 	itemID := shopifyGIDIdentityToken(itemGID)
 	threadID := fmt.Sprintf("%s:inventory:%s", state.ShopDomain, itemID)
 	threadName := firstNonBlank(item.SKU, itemID)
-	records := make([]nexadapter.AdapterInboundRecord, 0, len(item.InventoryLevels.Edges))
-	for _, levelEdge := range item.InventoryLevels.Edges {
-		level := levelEdge.Node
-		levelGID := strings.TrimSpace(level.ID)
-		if levelGID == "" {
-			continue
-		}
-		row := normalizedInventoryRow(state.ShopDomain, item, level)
-		revision := revisionHash(row)
-		logicalRowID := fmt.Sprintf("%s:%s:%s", state.ShopDomain, itemGID, levelGID)
-		providerIDs := map[string]any{
-			"shop_domain":         state.ShopDomain,
-			"inventory_item_gid":  itemGID,
-			"inventory_item_id":   emptyToNil(shopifyNumericGID(itemGID)),
-			"inventory_level_gid": levelGID,
-			"location_gid":        emptyToNil(level.Location.ID),
-			"location_id":         emptyToNil(shopifyNumericGID(level.Location.ID)),
-		}
-		record := nexadapter.AdapterInboundRecord{
-			Operation: "record.ingest",
-			Routing: nexadapter.AdapterInboundRouting{
-				Adapter:       adapterName,
-				Platform:      platformID,
-				ConnectionID:  connectionID,
-				SenderID:      state.ShopDomain,
-				SenderName:    "Shopify",
-				ReceiverID:    connectionID,
-				SpaceID:       state.ShopDomain,
-				SpaceName:     state.ShopDomain,
-				ContainerKind: "group",
-				ContainerID:   "inventory",
-				ContainerName: "Inventory",
-				ThreadID:      threadID,
-				ThreadName:    threadName,
-				Metadata: map[string]any{
-					"family":      "inventory",
-					"grain":       "inventory_item+inventory_level",
-					"shop_domain": state.ShopDomain,
-					"api_path":    sourceRequest.Path,
-				},
-			},
-			Payload: nexadapter.AdapterInboundPayload{
-				ExternalRecordID: fmt.Sprintf("%s:%s:inventory:%s:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), itemID, nexadapter.SafeIDToken(levelGID), revision),
-				Timestamp:        shopifyUpdatedAtOrNow(firstNonBlank(level.UpdatedAt, item.UpdatedAt)).UnixMilli(),
-				Content:          fmt.Sprintf("inventory item=%s location=%s available=%d tracked=%t", threadName, firstNonBlank(level.Location.Name, "unknown"), inventoryQuantity(level, "available"), item.Tracked),
-				ContentType:      "text",
-				Metadata: map[string]any{
-					"connection_id":        connectionID,
-					"adapter_id":           platformID,
-					"family":               "inventory",
-					"logical_row_id":       logicalRowID,
-					"revision_hash":        revision,
-					"provider_ids":         providerIDs,
-					"row":                  row,
-					"bridge_attributes":    map[string]any{},
-					"raw_provider_payload": mustJSONObject(map[string]any{"item": item, "level": level}),
-					"source_request":       sourceRequest.metadata(),
-				},
-			},
-		}
-		records = append(records, record)
+	levelGID := strings.TrimSpace(level.ID)
+	if levelGID == "" {
+		return nexadapter.AdapterInboundRecord{}
 	}
-	return records
+	row := normalizedInventoryRow(state.ShopDomain, item, level)
+	revision := revisionHash(row)
+	logicalRowID := fmt.Sprintf("%s:%s:%s", state.ShopDomain, itemGID, levelGID)
+	providerIDs := map[string]any{
+		"shop_domain":         state.ShopDomain,
+		"inventory_item_gid":  itemGID,
+		"inventory_item_id":   emptyToNil(shopifyNumericGID(itemGID)),
+		"inventory_level_gid": levelGID,
+		"location_gid":        emptyToNil(level.Location.ID),
+		"location_id":         emptyToNil(shopifyNumericGID(level.Location.ID)),
+	}
+	return nexadapter.AdapterInboundRecord{
+		Operation: "record.ingest",
+		Routing: nexadapter.AdapterInboundRouting{
+			Adapter:       adapterName,
+			Platform:      platformID,
+			ConnectionID:  connectionID,
+			SenderID:      state.ShopDomain,
+			SenderName:    "Shopify",
+			ReceiverID:    connectionID,
+			SpaceID:       state.ShopDomain,
+			SpaceName:     state.ShopDomain,
+			ContainerKind: "group",
+			ContainerID:   "inventory",
+			ContainerName: "Inventory",
+			ThreadID:      threadID,
+			ThreadName:    threadName,
+			Metadata: map[string]any{
+				"family":      "inventory",
+				"grain":       "inventory_item+inventory_level",
+				"shop_domain": state.ShopDomain,
+				"api_path":    sourceRequest.Path,
+			},
+		},
+		Payload: nexadapter.AdapterInboundPayload{
+			ExternalRecordID: fmt.Sprintf("%s:%s:inventory:%s:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), itemID, nexadapter.SafeIDToken(levelGID), revision),
+			Timestamp:        shopifyUpdatedAtOrNow(firstNonBlank(level.UpdatedAt, item.UpdatedAt)).UnixMilli(),
+			Content:          fmt.Sprintf("inventory item=%s location=%s available=%d tracked=%t", threadName, firstNonBlank(level.Location.Name, "unknown"), inventoryQuantity(level, "available"), item.Tracked),
+			ContentType:      "text",
+			Metadata: map[string]any{
+				"connection_id":        connectionID,
+				"adapter_id":           platformID,
+				"family":               "inventory",
+				"logical_row_id":       logicalRowID,
+				"revision_hash":        revision,
+				"provider_ids":         providerIDs,
+				"row":                  row,
+				"bridge_attributes":    map[string]any{},
+				"raw_provider_payload": mustJSONObject(map[string]any{"item": item, "level": level}),
+				"source_request":       sourceRequest.metadata(),
+			},
+		},
+	}
 }
 
 func buildFulfillmentRecord(state *shopifyState, fulfillment shopifyGraphQLFulfillmentOrder, sourceRequest shopifySourceRequest) nexadapter.AdapterInboundRecord {

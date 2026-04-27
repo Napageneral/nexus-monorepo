@@ -17,7 +17,7 @@ const (
 	adapterName                        = "Bitbucket Adapter"
 	adapterVersion                     = "1.0.11"
 	platformID                         = "bitbucket"
-	backfillMaxConsecutiveRateLimits   = 5
+	backfillRateLimitRetryBudget       = 2
 	directReadMaxConsecutiveRateLimits = 11
 	directReadBaseCooldown             = 1500 * time.Millisecond
 	directReadMaxCooldown              = 20 * time.Second
@@ -723,100 +723,145 @@ func selectRepositories(available []Repository, selection string) ([]Repository,
 }
 
 func runBackfill(ctx context.Context, accountID string, provider Provider, config AccountConfig, since time.Time, emit nexadapter.EmitFunc) error {
+	type deferredBackfillRepo struct {
+		repo     Repository
+		cooldown time.Duration
+	}
+
+	pending := append([]Repository(nil), config.Repositories...)
+	for len(pending) > 0 {
+		delayed := make([]deferredBackfillRepo, 0)
+		for _, repo := range pending {
+			err := runBackfillRepo(ctx, accountID, provider, config, since, repo, emit)
+			if err == nil {
+				continue
+			}
+
+			var rateLimitErr *backfillRateLimitError
+			if errors.As(err, &rateLimitErr) {
+				nexadapter.LogInfo(
+					"deferring rate-limited backfill repo=%s operation=%s cooldown_ms=%d",
+					repo.FullName,
+					rateLimitErr.Operation,
+					rateLimitErr.Cooldown.Milliseconds(),
+				)
+				delayed = append(delayed, deferredBackfillRepo{repo: repo, cooldown: rateLimitErr.Cooldown})
+				continue
+			}
+			if shouldAbortBackfill(err) {
+				return err
+			}
+			nexadapter.LogError("backfill failed for %s: %v", repo.FullName, err)
+		}
+
+		if len(delayed) == 0 {
+			return nil
+		}
+
+		cooldown := delayed[0].cooldown
+		for _, delayedRepo := range delayed[1:] {
+			if delayedRepo.cooldown < cooldown {
+				cooldown = delayedRepo.cooldown
+			}
+		}
+		if err := waitForMonitorCooldown(ctx, cooldown); err != nil {
+			return err
+		}
+
+		pending = pending[:0]
+		for _, delayedRepo := range delayed {
+			pending = append(pending, delayedRepo.repo)
+		}
+	}
+	return nil
+}
+
+func runBackfillRepo(ctx context.Context, accountID string, provider Provider, config AccountConfig, since time.Time, repo Repository, emit nexadapter.EmitFunc) error {
 	diffLimitApplies := !since.IsZero() && time.Since(since) > 90*24*time.Hour
 
-	for _, repo := range config.Repositories {
-		commits, err := retryBackfillRead(ctx, accountID, provider, config, repo, "commits", func() ([]Commit, error) {
-			return provider.GetCommits(ctx, config, repo, since)
-		})
-		if err != nil {
-			if shouldAbortBackfill(err) {
-				return err
-			}
-			nexadapter.LogError("backfill commits failed for %s: %v", repo.FullName, err)
-			continue
-		}
-		sort.Slice(commits, func(i, j int) bool { return commits[i].Timestamp < commits[j].Timestamp })
-		diffStart := 0
-		if diffLimitApplies && len(commits) > 500 {
-			diffStart = len(commits) - 500
-		}
-		for i, commit := range commits {
-			var diff []byte
-			if !diffLimitApplies || i >= diffStart {
-				diff, err = retryBackfillRead(ctx, accountID, provider, config, repo, "commit_diff", func() ([]byte, error) {
-					return provider.GetCommitDiff(ctx, config, repo, commit.SHA)
-				})
-				if err != nil {
-					return err
-				}
-			}
-			event := buildCommitEvent(accountID, provider, repo, commit, diff)
-			if diffLimitApplies && i < diffStart {
-				if event.Payload.Metadata == nil {
-					event.Payload.Metadata = map[string]any{}
-				}
-				event.Payload.Metadata["diff_available"] = false
-			}
-			emit(event)
-		}
-
-		prs, err := retryBackfillRead(ctx, accountID, provider, config, repo, "pull_requests", func() ([]PullRequest, error) {
-			return provider.GetPullRequests(ctx, config, repo, since)
-		})
-		if err != nil {
-			if shouldAbortBackfill(err) {
-				return err
-			}
-			nexadapter.LogError("backfill prs failed for %s: %v", repo.FullName, err)
-			continue
-		}
-		sort.Slice(prs, func(i, j int) bool { return prs[i].UpdatedAt < prs[j].UpdatedAt })
-		for _, pr := range prs {
-			diff, err := retryBackfillRead(ctx, accountID, provider, config, repo, "pull_request_diff", func() ([]byte, error) {
-				return provider.GetPullRequestDiff(ctx, config, repo, pr.ID)
+	commits, err := retryBackfillRead(ctx, accountID, provider, config, repo, "commits", func() ([]Commit, error) {
+		return provider.GetCommits(ctx, config, repo, since)
+	})
+	if err != nil {
+		return err
+	}
+	sort.Slice(commits, func(i, j int) bool { return commits[i].Timestamp < commits[j].Timestamp })
+	diffStart := 0
+	if diffLimitApplies && len(commits) > 500 {
+		diffStart = len(commits) - 500
+	}
+	for i, commit := range commits {
+		var diff []byte
+		if !diffLimitApplies || i >= diffStart {
+			diff, err = retryBackfillRead(ctx, accountID, provider, config, repo, "commit_diff", func() ([]byte, error) {
+				return provider.GetCommitDiff(ctx, config, repo, commit.SHA)
 			})
 			if err != nil {
 				return err
 			}
-			sourceArchive, err := retryBackfillRead(ctx, accountID, provider, config, repo, "pull_request_source_archive", func() (*SourceArchive, error) {
-				return provider.GetPullRequestSourceArchive(ctx, config, repo, pr)
-			})
-			if err != nil {
-				return err
-			}
-			archiveAttachment, err := persistPullRequestSourceArchive(adapterStateDir(), provider, repo, pr, sourceArchive)
-			if err != nil {
-				return err
-			}
-			emit(buildPullRequestEvent(accountID, provider, repo, pr, diff, archiveAttachment))
 		}
+		event := buildCommitEvent(accountID, provider, repo, commit, diff)
+		if diffLimitApplies && i < diffStart {
+			if event.Payload.Metadata == nil {
+				event.Payload.Metadata = map[string]any{}
+			}
+			event.Payload.Metadata["diff_available"] = false
+		}
+		emit(event)
+	}
 
-		commentPRs, err := retryBackfillRead(ctx, accountID, provider, config, repo, "pull_request_comment_scan_set", func() ([]PullRequest, error) {
-			return provider.GetPullRequests(ctx, config, repo, since)
+	prs, err := retryBackfillRead(ctx, accountID, provider, config, repo, "pull_requests", func() ([]PullRequest, error) {
+		return provider.GetPullRequests(ctx, config, repo, since)
+	})
+	if err != nil {
+		return err
+	}
+	sort.Slice(prs, func(i, j int) bool { return prs[i].UpdatedAt < prs[j].UpdatedAt })
+	for _, pr := range prs {
+		diff, err := retryBackfillRead(ctx, accountID, provider, config, repo, "pull_request_diff", func() ([]byte, error) {
+			return provider.GetPullRequestDiff(ctx, config, repo, pr.ID)
 		})
 		if err != nil {
 			return err
 		}
-		sort.Slice(commentPRs, func(i, j int) bool {
-			if commentPRs[i].UpdatedAt == commentPRs[j].UpdatedAt {
-				return commentPRs[i].ID < commentPRs[j].ID
-			}
-			return commentPRs[i].UpdatedAt < commentPRs[j].UpdatedAt
+		sourceArchive, err := retryBackfillRead(ctx, accountID, provider, config, repo, "pull_request_source_archive", func() (*SourceArchive, error) {
+			return provider.GetPullRequestSourceArchive(ctx, config, repo, pr)
 		})
-		for _, pr := range commentPRs {
-			comments, err := retryBackfillRead(ctx, accountID, provider, config, repo, "pull_request_comments", func() ([]Comment, error) {
-				return provider.GetPullRequestComments(ctx, config, repo, pr.ID, since)
-			})
-			if err != nil {
-				return err
-			}
-			sort.Slice(comments, func(i, j int) bool { return comments[i].CreatedAt < comments[j].CreatedAt })
-			for _, comment := range comments {
-				emit(buildCommentEvent(accountID, provider, repo, pr, comment))
-			}
+		if err != nil {
+			return err
+		}
+		archiveAttachment, err := persistPullRequestSourceArchive(adapterStateDir(), provider, repo, pr, sourceArchive)
+		if err != nil {
+			return err
+		}
+		emit(buildPullRequestEvent(accountID, provider, repo, pr, diff, archiveAttachment))
+	}
+
+	commentPRs, err := retryBackfillRead(ctx, accountID, provider, config, repo, "pull_request_comment_scan_set", func() ([]PullRequest, error) {
+		return provider.GetPullRequests(ctx, config, repo, since)
+	})
+	if err != nil {
+		return err
+	}
+	sort.Slice(commentPRs, func(i, j int) bool {
+		if commentPRs[i].UpdatedAt == commentPRs[j].UpdatedAt {
+			return commentPRs[i].ID < commentPRs[j].ID
+		}
+		return commentPRs[i].UpdatedAt < commentPRs[j].UpdatedAt
+	})
+	for _, pr := range commentPRs {
+		comments, err := retryBackfillRead(ctx, accountID, provider, config, repo, "pull_request_comments", func() ([]Comment, error) {
+			return provider.GetPullRequestComments(ctx, config, repo, pr.ID, since)
+		})
+		if err != nil {
+			return err
+		}
+		sort.Slice(comments, func(i, j int) bool { return comments[i].CreatedAt < comments[j].CreatedAt })
+		for _, comment := range comments {
+			emit(buildCommentEvent(accountID, provider, repo, pr, comment))
 		}
 	}
+
 	return nil
 }
 
@@ -831,6 +876,30 @@ func shouldAbortBackfill(err error) bool {
 	return errors.As(err, &apiErr) && apiErr.StatusCode == 429
 }
 
+type backfillRateLimitError struct {
+	RepoFullName string
+	Operation    string
+	Cooldown     time.Duration
+	Cause        error
+}
+
+func (e *backfillRateLimitError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Cause != nil {
+		return fmt.Sprintf("backfill rate limit for repo=%s operation=%s: %v", e.RepoFullName, e.Operation, e.Cause)
+	}
+	return fmt.Sprintf("backfill rate limit for repo=%s operation=%s", e.RepoFullName, e.Operation)
+}
+
+func (e *backfillRateLimitError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
 func retryBackfillRead[T any](ctx context.Context, accountID string, provider Provider, config AccountConfig, repo Repository, operation string, read func() (T, error)) (T, error) {
 	var zero T
 	consecutiveRateLimits := 0
@@ -839,6 +908,9 @@ func retryBackfillRead[T any](ctx context.Context, accountID string, provider Pr
 		if err == nil {
 			return value, nil
 		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return zero, err
+		}
 
 		var apiErr *core.APIError
 		if !errors.As(err, &apiErr) || apiErr.StatusCode != 429 {
@@ -846,32 +918,23 @@ func retryBackfillRead[T any](ctx context.Context, accountID string, provider Pr
 		}
 
 		consecutiveRateLimits++
-		if consecutiveRateLimits > backfillMaxConsecutiveRateLimits {
-			nexadapter.LogError(
-				"backfill rate limit budget exhausted for account=%s provider=%s repo=%s operation=%s retries=%d",
-				accountID,
-				provider.ID(),
-				repo.FullName,
-				operation,
-				consecutiveRateLimits-1,
-			)
-			return zero, fmt.Errorf(
-				"backfill rate limit budget exhausted for repo=%s operation=%s after %d retries: %w",
-				repo.FullName,
-				operation,
-				consecutiveRateLimits-1,
-				apiErr,
-			)
-		}
-
 		cooldown := rateLimitCooldownDuration(config, apiErr)
+		if consecutiveRateLimits >= backfillRateLimitRetryBudget {
+			return zero, &backfillRateLimitError{
+				RepoFullName: repo.FullName,
+				Operation:    operation,
+				Cooldown:     cooldown,
+				Cause:        apiErr,
+			}
+		}
 		nexadapter.LogInfo(
-			"backfill rate limited for account=%s provider=%s repo=%s operation=%s cooldown_ms=%d",
+			"backfill rate limited for account=%s provider=%s repo=%s operation=%s cooldown_ms=%d retry=%d",
 			accountID,
 			provider.ID(),
 			repo.FullName,
 			operation,
 			cooldown.Milliseconds(),
+			consecutiveRateLimits,
 		)
 		if err := waitForMonitorCooldown(ctx, cooldown); err != nil {
 			return zero, fmt.Errorf("backfill rate limit wait interrupted for repo=%s operation=%s: %w", repo.FullName, operation, err)

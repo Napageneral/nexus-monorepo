@@ -1,10 +1,27 @@
 {
   "id": "attribution",
-  "version": "0.1.0",
+  "version": "0.1.10",
   "displayName": "Attribution Intelligence",
   "description": "Bind acquisition, website, and backend inputs into app-owned attribution facts, reconciliation, and operator reads.",
   "skill": "./SKILL.md",
   "handler": "./methods/index.ts",
+  "hosting": {
+    "required_server_class": "standard",
+    "deployment_class": "customer_server"
+  },
+  "product": {
+    "tagline": "Paid, website, and backend truth in one attribution runtime",
+    "accentColor": "#0f766e",
+    "visibility": "customer",
+    "plans": [
+      {
+        "id": "attribution-standard",
+        "displayName": "Attribution Standard",
+        "priceMonthly": 0,
+        "isDefault": true
+      }
+    ]
+  },
   "ui": {
     "root": "./dist",
     "entryPath": "/app/attribution/",
@@ -108,6 +125,25 @@
         "type": "object"
       }
     },
+    "attribution.bindings.delete": {
+      "action": "write",
+      "access": "authenticated",
+      "description": "Delete one app-owned input binding by binding id.",
+      "params": {
+        "type": "object",
+        "required": [
+          "binding_id"
+        ],
+        "properties": {
+          "binding_id": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object"
+      }
+    },
     "attribution.bindings.upsert": {
       "action": "write",
       "access": "authenticated",
@@ -137,14 +173,10 @@
           "source_type": {
             "type": "string",
             "enum": [
-              "adapter_connection",
-              "website_installation"
+              "adapter_connection"
             ]
           },
           "connection_id": {
-            "type": "string"
-          },
-          "website_installation_id": {
             "type": "string"
           },
           "platform": {
@@ -228,6 +260,106 @@
         "type": "object"
       }
     },
+    "attribution.ledger.list": {
+      "action": "read",
+      "access": "authenticated",
+      "description": "List primary business outcomes as a filtered attribution review queue.",
+      "params": {
+        "type": "object",
+        "required": [
+          "scope_id"
+        ],
+        "properties": {
+          "scope_id": {
+            "type": "string"
+          },
+          "days": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "offset": {
+            "type": "number"
+          },
+          "review_only": {
+            "type": "boolean"
+          },
+          "unresolved_only": {
+            "type": "boolean"
+          },
+          "weak_match_only": {
+            "type": "boolean"
+          },
+          "paid_only": {
+            "type": "boolean"
+          },
+          "exact_paid_id_only": {
+            "type": "boolean"
+          },
+          "utm_only": {
+            "type": "boolean"
+          },
+          "direct_or_unknown_only": {
+            "type": "boolean"
+          },
+          "source_channel": {
+            "type": "string"
+          },
+          "q": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object"
+      }
+    },
+    "attribution.ledger.summary": {
+      "action": "read",
+      "access": "authenticated",
+      "description": "Summarize the current attribution review queue for one business scope.",
+      "params": {
+        "type": "object",
+        "required": [
+          "scope_id"
+        ],
+        "properties": {
+          "scope_id": {
+            "type": "string"
+          },
+          "days": {
+            "type": "number"
+          }
+        }
+      },
+      "response": {
+        "type": "object"
+      }
+    },
+    "attribution.ledger.get": {
+      "action": "read",
+      "access": "authenticated",
+      "description": "Get one primary business outcome from the attribution review queue.",
+      "params": {
+        "type": "object",
+        "required": [
+          "scope_id",
+          "outcome_id"
+        ],
+        "properties": {
+          "scope_id": {
+            "type": "string"
+          },
+          "outcome_id": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object"
+      }
+    },
     "attribution.outcomes.list": {
       "action": "read",
       "access": "authenticated",
@@ -260,6 +392,9 @@
           "outcome_id"
         ],
         "properties": {
+          "scope_id": {
+            "type": "string"
+          },
           "outcome_id": {
             "type": "string"
           }

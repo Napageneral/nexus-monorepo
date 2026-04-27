@@ -2,6 +2,12 @@
 
 This package owns the Google Ads acquisition ingest surface for Nex.
 
+It now also exposes an initial provider-native read slice through:
+
+- `google-ads.customers.accessible.list`
+- `google-ads.customers.get`
+- `google-ads.reporting.campaign_daily.list`
+
 The target contract is row-shaped and preserves provider-native Google Ads ids
 and measures for downstream attribution products.
 

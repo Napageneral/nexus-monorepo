@@ -31,6 +31,77 @@ The current 2026-04-03 proof wave is green across all three ladder steps:
 3. mounted-capability worker discovery plus representative successful
    `shopify.graphql.query` read
 
+Those retained proofs still stand for correctness, installability, and the
+declared Tier-1 family set.
+
+They do not yet close the new live-sync efficiency proof lane that is now
+active in:
+
+- `/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/docs/workplans/shopify-live-sync-efficiency-board/README.md`
+- `/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/docs/workplans/shopify-adapter-performance-benchmark-board/README.md`
+
+The active hosted-efficiency evidence reopening this lane is:
+
+- `/Users/tyler/nexus/state/artifacts/validation/moonsleep-hosted-runtime-benchmark/moonsleep-hosted-runtime-benchmark-2026-04-07T18-55-21-334Z.json`
+- `/Users/tyler/nexus/state/artifacts/validation/moonsleep-hosted-runtime-benchmark/shopify-recent-churn-2026-04-07T21-36-06-716Z.json`
+- `/Users/tyler/nexus/state/artifacts/validation/moonsleep-hosted-runtime-benchmark/moonsleep-hosted-runtime-benchmark-2026-04-08T02-29-53-696Z.json`
+- `/Users/tyler/nexus/state/artifacts/validation/moonsleep-hosted-runtime-benchmark/shopify-recent-churn-2026-04-08T02-31-23-239Z.json`
+
+The 2026-04-08 hosted refresh proves that shipping `shopify@0.1.1` materially
+improved the live MoonSleep tenant baseline:
+
+- `apps.list` improved from roughly `2010ms` p50 / `13823ms` p95 to
+  `286ms` p50 / `542ms` p95
+- host CPU average fell from the earlier saturated range to roughly `46.7%`
+- disk write bandwidth average fell to roughly `10.1 MB/s`
+- repeated `line_item` logical rows in the sampled churn window fell from `5`
+  groups to `2`, and repeated `order` groups fell from `3` to `1`
+
+That does not fully close the hosted efficiency lane yet. The adapter is no
+longer obviously melting the tenant, but `attribution.summary` and some
+long-tail hosted reads are still above the board target and keep the broader
+runtime/app efficiency lane open.
+
+The active package now also owns an adapter-only benchmark lane. The canonical
+harness is:
+
+- `/Users/tyler/nexus/home/projects/nexus/nex/scripts/e2e/shopify-adapter-benchmark-live.ts`
+- `/Users/tyler/nexus/home/projects/nexus/nex/scripts/e2e/shopify-adapter-benchmark-proof.ts`
+
+That lane exists to answer the adapter-specific questions the hosted benchmark
+cannot isolate:
+
+1. how long Shopify backfill takes in a fresh cleanroom
+2. what record families and volumes backfill emits
+3. what a bounded live monitor soak emits and suppresses
+4. what the adapter-owned persisted monitor-state metrics look like after the
+   soak
+
+The latest adapter-only cleanroom proof is:
+
+- `/Users/tyler/nexus/state/sandboxes/6bab0655-3bc7-4513-bee8-44615bdc4360/artifacts/validation/shopify-adapter-benchmark/20260427T140738Z/shopify-adapter-benchmark.json`
+- `/Users/tyler/nexus/state/sandboxes/6bab0655-3bc7-4513-bee8-44615bdc4360/artifacts/validation/shopify-adapter-benchmark/20260427T140738Z/shopify-adapter-benchmark.md`
+- `/Users/tyler/nexus/state/sandboxes/6bab0655-3bc7-4513-bee8-44615bdc4360/artifacts/validation/shopify-adapter-benchmark/20260427T140738Z/shopify-adapter-monitor-state.json`
+
+That April 27, 2026 proof installed only the packaged Shopify adapter into a
+fresh runtime-managed sandbox and used the MoonSleep Shopify connection
+credentials mounted from the operator-owned secrets root. It captured:
+
+- `8577` records from a 30-day backfill window
+- `34749ms` backfill elapsed time
+- `246.83` records per second
+- `600s` live monitor soak
+- `10` monitor snapshots
+- `0` total record delta during the soak
+- `0` family-level churn across `order`, `line_item`, `fulfillment`,
+  `inventory`, `customer`, `product`, `collection`, `discount`, and
+  `marketing`
+
+The same work also tightened the no-change watermark behavior: when a family
+has no provider row yet to advance `cursor_at`, monitor `since` now falls back
+to `last_poll_at - overlap` rather than `now - overlap`. That preserves the
+cheap no-change path while making restart-after-downtime behavior safer.
+
 The current live cleanroom also proves all declared Tier-1 projected families:
 
 1. `order`
@@ -80,6 +151,8 @@ go build -o ./bin/shopify-adapter ./cmd/shopify-adapter
    skill, then completes a representative provider-native read successfully
 7. retained 2026-04-03 cleanroom bundles plus historical parity artifacts are
    available for audit
+8. adapter-only benchmark harness proves backfill and bounded live monitor soak
+   behavior separately from hosted tenant latency
 
 ## Pass Criteria
 
@@ -99,6 +172,14 @@ go build -o ./bin/shopify-adapter ./cmd/shopify-adapter
   up bounded upstream proof-order, proof-customer, proof-product,
   proof-collection, proof-inventory, proof-fulfillment, proof-discount, and
   proof-marketing updates incrementally
+- the live monitor also proves the package-local incremental-efficiency target
+  state from
+  `/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/docs/specs/SHOPIFY_INCREMENTAL_LIVE_SYNC_AND_RECONCILE_MODEL.md`
+  through the active live-sync efficiency board
+- the active adapter-only benchmark lane from
+  `/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/docs/specs/SHOPIFY_ADAPTER_PERFORMANCE_BENCHMARK_MODEL.md`
+  is available and truthfully captures isolated backfill timing plus bounded
+  live-monitor soak metrics
 - a mounted-capability worker reads the projected Shopify docs or skill, picks a
   correct provider-native method, and succeeds through the generic backbone
 - package install and restart do not lose the connection identity

@@ -153,8 +153,8 @@ describe("operator console routing", () => {
     const app = mountApp("/app/console/identity/channels");
     await app.updateComplete;
 
-    const topNav = app.shadowRoot?.querySelector(".console-topnav");
-    const channelSearch = app.shadowRoot?.querySelector('input[placeholder="Search channels..."]');
+    const topNav = app.renderRoot.querySelector(".console-topnav");
+    const channelSearch = app.renderRoot.querySelector('input[placeholder="Search channels..."]');
 
     expect(topNav).not.toBeNull();
     expect(app.renderRoot.textContent ?? "").toContain("Channels");
@@ -166,7 +166,7 @@ describe("operator console routing", () => {
     await app.updateComplete;
 
     const refresh = Array.from(
-      app.shadowRoot?.querySelectorAll<HTMLButtonElement>("button") ?? [],
+      app.renderRoot.querySelectorAll<HTMLButtonElement>("button"),
     ).find((button) => button.textContent?.trim().toLowerCase() === "refresh");
     expect(refresh).not.toBeNull();
     refresh?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }));
@@ -219,7 +219,7 @@ describe("operator console routing", () => {
     await app.updateComplete;
 
     expect(app.tab).toBe("console");
-    expect(window.location.pathname).toBe("/connectors");
+    expect(window.location.pathname).toBe("/chat");
   });
 
   it("loads canonical base-path operations routes without redirect", async () => {
@@ -237,7 +237,28 @@ describe("operator console routing", () => {
 
     expect(app.basePath).toBe("/app/console");
     expect(app.tab).toBe("console");
+    expect(window.location.pathname).toBe("/app/console/chat");
+    expect(app.renderRoot.querySelector("nexus-console-chat-host")).not.toBeNull();
+  });
+
+  it("clears stale chat lane params when navigating with console tabs", async () => {
+    const app = mountApp("/app/console/connectors?lane=lane%3Aagent%3Aentity-assistant");
+    await app.updateComplete;
+
     expect(window.location.pathname).toBe("/app/console/connectors");
+    expect(window.location.search).toBe("");
+
+    const chatButton = Array.from(
+      app.renderRoot.querySelectorAll<HTMLButtonElement>(".console-nav-tab"),
+    ).find((button) => button.textContent?.trim().includes("Chat"));
+    expect(chatButton).not.toBeUndefined();
+    chatButton?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }),
+    );
+    await app.updateComplete;
+
+    expect(window.location.pathname).toBe("/app/console/chat");
+    expect(window.location.search).toBe("");
   });
 
   it("keeps nested mounted identity detail routes stable", async () => {

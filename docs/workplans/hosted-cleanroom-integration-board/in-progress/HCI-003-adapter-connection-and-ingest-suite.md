@@ -112,7 +112,7 @@ This ticket is therefore no longer blocked on uncertainty about the local
 runtime behavior. It now owns the remaining real hosted adapter/account seam.
 The immediate runtime-facing cleanroom blocker previously lived on:
 
-- [CLRPF-003 Manager-Worker And Code-Mode Cleanroom Proof Backfill](/Users/tyler/nexus/home/projects/nexus/nex/docs/workplans/cleanroom-proof-capture-backfill-board/completed/CLRPF-003-manager-worker-and-code-mode-cleanroom-proof-backfill.md)
+- [CLRPF-003 Manager-Worker And Code-Mode Cleanroom Proof Backfill](/Users/tyler/nexus/home/projects/nexus/nex/docs/workplans/archive/cleanroom-proof-capture-backfill-board/completed/CLRPF-003-manager-worker-and-code-mode-cleanroom-proof-backfill.md)
 
 Now that the standalone runtime proof is green again, the Slack hosted slice
 here is the truthful place to prove the real adapter/account seam on

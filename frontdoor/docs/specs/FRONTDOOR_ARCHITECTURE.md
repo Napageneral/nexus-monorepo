@@ -65,6 +65,7 @@ Managed provider connection routing and platform-managed profiles are specified
 in:
 
 - `FRONTDOOR_MANAGED_CONNECTION_PROFILES.md`
+- `FRONTDOOR_ADAPTER_CATALOG_API.md`
 
 App-branded managed provider secrets belong to product control planes, not to
 frontdoor.

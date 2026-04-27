@@ -37,10 +37,14 @@ Completed:
 - `AAP-002`
 - `AAP-003`
 - `AAP-004`
+- `AAP-005`
 
-Not Started:
+Next review posture:
 
-1. `AAP-005`
+- the adapter-set signoff is now closed through the broader
+  [Attribution Golden Journey Board](/Users/tyler/nexus/home/projects/nexus/docs/workplans/attribution-golden-journey-board/README.md)
+- canonical proof corpus:
+  `/Users/tyler/nexus/home/projects/nexus/docs/validation/attribution-golden-journey-validation.md`
 
 ## Execution Order
 
@@ -52,4 +56,5 @@ The default sequence for this board is:
    and burn down the dedicated Google row-parity board
 4. land the shared Shopify backend outcome package and burn down the dedicated
    Shopify row-parity board
-5. prove the adapter set in cleanroom validation
+5. prove the adapter set in cleanroom validation and close it through the full
+   attribution golden journey
