@@ -1,0 +1,42 @@
+{
+  "ok": true,
+  "operation_id": "op-codex-tiktok-business-0-1-1-1777305502062",
+  "upload": {
+    "status": 201,
+    "ok": true,
+    "body": {
+      "ok": true,
+      "operation_id": "op-codex-tiktok-business-0-1-1-1777305502062",
+      "staged_artifact": {
+        "server_path": "/opt/nex/state/packages/staging/op-codex-tiktok-business-0-1-1-1777305502062/tiktok-business-0.1.1.tar.gz",
+        "sha256": "7ed0232f9db7c8a23313894ab25a8e8a51ceb75cdb73e41a4f5a34f5e6b1ab6a",
+        "size_bytes": 14039354
+      }
+    }
+  },
+  "upgrade": {
+    "status": 200,
+    "ok": true,
+    "body": {
+      "ok": true,
+      "kind": "adapter",
+      "package_id": "tiktok-business",
+      "status": "active",
+      "previous_version": null,
+      "active_version": "0.1.1",
+      "active_release_path": "/opt/nex/state/packages/installed/adapter/tiktok-business/releases/0.1.1",
+      "adapter": {
+        "name": "tiktok-business-adapter",
+        "platform": "tiktok-business",
+        "version": "0.1.1",
+        "operations": [
+          "adapter.info",
+          "adapter.connections.list",
+          "adapter.health",
+          "adapter.monitor.start",
+          "records.backfill"
+        ]
+      }
+    }
+  }
+}
