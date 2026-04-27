@@ -53,7 +53,6 @@ In progress:
 
 Not started:
 
-- `ALSE-005`
 - `ALSE-006`
 - `ALSE-007`
 
@@ -62,6 +61,7 @@ Completed:
 - `ALSE-001`
 - `ALSE-003`
 - `ALSE-004`
+- `ALSE-005`
 - `ALSE-008`
 - `ALSE-009`
 
@@ -281,6 +281,29 @@ April 27, 2026 Meta Ads richness-parity update:
   the five-minute adapter-pressure sample:
   `/Users/tyler/nexus/state/artifacts/validation/moonsleep-hosted-runtime-benchmark/moonsleep-hosted-runtime-benchmark-2026-04-27T18-00-54-841Z.json`
 - next paid-media efficiency/parity target is Google Ads
+
+April 27, 2026 Google Ads efficiency update:
+
+- Google Ads `0.1.1` replaces the old generic one-minute monitor replay with
+  adapter-local monitor lanes and revision suppression
+- campaign hourly remains the only one-minute lane, bounded to a two-hour
+  hot tail
+- campaign/ad-group/ad daily reports now reconcile every thirty minutes with a
+  bounded three-day tail instead of replaying broad windows every minute
+- account/access snapshots now run daily, so the optional
+  `customers:listAccessibleCustomers` lookup is no longer hot-loop work under
+  developer-token quota pressure
+- the adapter now remembers when a credential only works without the
+  `login-customer-id` header after Google returns `USER_PERMISSION_DENIED`,
+  avoiding repeated two-request retry cycles on every poll
+- live MoonSleep Google proof passed with `8` backfill provider requests,
+  `186` records, all five families present, a first monitor cycle of `7`
+  provider requests and `14` emitted records, and a simulated 10-minute
+  steady monitor of exactly `10` provider requests with `0` emitted records
+- local proof artifact:
+  `/Users/tyler/nexus/state/artifacts/validation/google-ads-local-benchmark/google-ads-local-benchmark-2026-04-27T18-19-56Z.json`
+- next step is hosted package install/signoff for Google Ads before the final
+  MoonSleep hosted soak and attribution app reorientation
 
 ## Goal State
 

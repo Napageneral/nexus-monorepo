@@ -3,8 +3,7 @@
 This guide covers the package-contract and package/install slice for the shared
 Google Ads adapter.
 
-Live Google Ads provider validation remains the next rung after package and
-hosted lifecycle parity are green.
+Live Google Ads provider validation is available behind an explicit gated test.
 
 ## Validate Package Contract
 
@@ -34,7 +33,7 @@ nexus package validate .
 
 ```bash
 ./scripts/package-release.sh
-tar -tzf ./dist/google-ads-0.1.0.tar.gz
+tar -tzf ./dist/google-ads-0.1.1.tar.gz
 ```
 
 Pass criteria:
@@ -43,6 +42,20 @@ Pass criteria:
 - archive contains `adapter.nexus.json`
 - archive contains `bin/google-ads-adapter`
 - `adapter.info` lists the three public `google-ads.*` methods above
+
+## Live MoonSleep Benchmark
+
+```bash
+source ~/.config/moonsleep/load.sh
+GOOGLE_ADS_LIVE_BENCHMARK=1 go test ./cmd/google-ads-adapter -run TestLiveGoogleAdsLocalBenchmark -count=1 -timeout=15m -v
+```
+
+Pass criteria:
+
+- 30-day backfill returns all five Google Ads projection families
+- first monitor cycle succeeds across hourly, daily, and account snapshot lanes
+- simulated 10-minute steady monitor makes one provider request per minute and
+  emits `0` unchanged records
 
 ## Next Validation Layer
 

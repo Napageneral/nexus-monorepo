@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -337,8 +338,146 @@ func TestPlanGoogleFamilyWindows(t *testing.T) {
 	if backfillDaily.RequestSince != since.Format(dateLayout) {
 		t.Fatalf("unexpected backfill daily requestSince: %q", backfillDaily.RequestSince)
 	}
-	if !monitorHourly.FilterStart.Equal(since) {
-		t.Fatalf("unexpected monitor hourly start: got %s want %s", monitorHourly.FilterStart, since)
+	wantMonitorHourlyStart := asOf.Add(-googleHotReportLookback)
+	if !monitorHourly.FilterStart.Equal(wantMonitorHourlyStart) {
+		t.Fatalf("unexpected monitor hourly start: got %s want %s", monitorHourly.FilterStart, wantMonitorHourlyStart)
+	}
+}
+
+func TestRunGoogleMonitorCycleUsesFamilyCadenceAndRevisionSuppression(t *testing.T) {
+	t.Cleanup(resetGoogleAdsGlobals)
+
+	var accessibleRequests int32
+	var customerSummaryRequests int32
+	var campaignDailyRequests int32
+	var adGroupDailyRequests int32
+	var adDailyRequests int32
+	var hourlyRequests int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"access-token","expires_in":3600}`))
+		case "/v22/customers:listAccessibleCustomers":
+			atomic.AddInt32(&accessibleRequests, 1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"resourceNames":["customers/1234567890"]}`))
+		case "/v22/customers/1234567890/googleAds:searchStream":
+			var payload struct {
+				Query string `json:"query"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode search stream request: %v", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			switch {
+			case strings.Contains(payload.Query, "FROM customer"):
+				atomic.AddInt32(&customerSummaryRequests, 1)
+				_, _ = w.Write([]byte(`[
+					{"results":[{"customer":{"id":"1234567890","descriptiveName":"MoonSleep","currencyCode":"USD","timeZone":"America/Chicago"}}]}
+				]`))
+			case strings.Contains(payload.Query, "FROM ad_group_ad"):
+				atomic.AddInt32(&adDailyRequests, 1)
+				_, _ = w.Write([]byte(`[
+					{"results":[{"campaign":{"id":"cmp-1","name":"Brand Search","status":"ENABLED","advertisingChannelType":"SEARCH"},"adGroup":{"id":"ag-1","name":"Brand Group","status":"ENABLED"},"adGroupAd":{"status":"ENABLED","ad":{"id":"ad-1","name":"Brand Ad","type":"RESPONSIVE_SEARCH_AD"}},"metrics":{"impressions":"10","clicks":"2","costMicros":"100000","conversions":"1","conversionsValue":"50"},"segments":{"date":"2026-04-26"}}]}
+				]`))
+			case strings.Contains(payload.Query, "FROM ad_group"):
+				atomic.AddInt32(&adGroupDailyRequests, 1)
+				_, _ = w.Write([]byte(`[
+					{"results":[{"campaign":{"id":"cmp-1","name":"Brand Search","status":"ENABLED","advertisingChannelType":"SEARCH"},"adGroup":{"id":"ag-1","name":"Brand Group","status":"ENABLED"},"metrics":{"impressions":"20","clicks":"3","costMicros":"200000","conversions":"1","conversionsValue":"50"},"segments":{"date":"2026-04-26"}}]}
+				]`))
+			case strings.Contains(payload.Query, "segments.hour"):
+				atomic.AddInt32(&hourlyRequests, 1)
+				_, _ = w.Write([]byte(`[
+					{"results":[{"campaign":{"id":"cmp-1","name":"Brand Search","status":"ENABLED","advertisingChannelType":"SEARCH"},"metrics":{"impressions":"30","clicks":"4","costMicros":"300000","conversions":"1","conversionsValue":"50"},"segments":{"date":"2026-04-27","hour":"11"}}]}
+				]`))
+			default:
+				atomic.AddInt32(&campaignDailyRequests, 1)
+				_, _ = w.Write([]byte(`[
+					{"results":[{"campaign":{"id":"cmp-1","name":"Brand Search","status":"ENABLED","advertisingChannelType":"SEARCH"},"metrics":{"impressions":"40","clicks":"5","costMicros":"400000","conversions":"2","conversionsValue":"80"},"segments":{"date":"2026-04-26"}}]}
+				]`))
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	googleAdsHTTPClient = server.Client()
+	googleOAuthTokenURL = server.URL + "/token"
+	t.Setenv(googleAdapterStateDirEnv, t.TempDir())
+
+	creds := googleAdsCredentials{
+		ConnectionID:    "google-ads-primary",
+		DeveloperToken:  "developer-token",
+		CustomerID:      "1234567890",
+		LoginCustomerID: "9998887776",
+		ClientID:        "client-id",
+		ClientSecret:    "client-secret",
+		RefreshToken:    "refresh-token",
+		APIBaseURL:      server.URL + "/v22",
+	}
+	monitorState := defaultGoogleMonitorState()
+	revisionStore, err := loadGoogleRevisionStore(creds.ConnectionID)
+	if err != nil {
+		t.Fatalf("loadGoogleRevisionStore: %v", err)
+	}
+
+	pollTime := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
+	var firstRecords []nexadapter.AdapterInboundRecord
+	first := runGoogleMonitorCycle(context.Background(), creds, monitorState, revisionStore, pollTime, func(record any) {
+		inbound, ok := record.(nexadapter.AdapterInboundRecord)
+		if !ok {
+			t.Fatalf("unexpected record type: %#v", record)
+		}
+		firstRecords = append(firstRecords, inbound)
+	})
+	if len(first.FailedFamilies) != 0 {
+		t.Fatalf("unexpected first-cycle failures: %#v", first.FailedFamilies)
+	}
+	if len(first.SuccessfulFamilies) != 5 {
+		t.Fatalf("expected all families on first cycle, got %#v", first.SuccessfulFamilies)
+	}
+	if len(firstRecords) != 5 {
+		t.Fatalf("expected five first-cycle records, got %d", len(firstRecords))
+	}
+
+	var secondRecords []nexadapter.AdapterInboundRecord
+	second := runGoogleMonitorCycle(context.Background(), creds, monitorState, revisionStore, pollTime.Add(defaultMonitorInterval), func(record any) {
+		inbound, ok := record.(nexadapter.AdapterInboundRecord)
+		if !ok {
+			t.Fatalf("unexpected record type: %#v", record)
+		}
+		secondRecords = append(secondRecords, inbound)
+	})
+	if len(second.FailedFamilies) != 0 {
+		t.Fatalf("unexpected second-cycle failures: %#v", second.FailedFamilies)
+	}
+	if len(second.SuccessfulFamilies) != 1 || second.SuccessfulFamilies[0] != googleMonitorFamilyCampaignHourly {
+		t.Fatalf("expected only hourly second-cycle success, got %#v", second.SuccessfulFamilies)
+	}
+	if len(secondRecords) != 0 {
+		t.Fatalf("expected duplicate hourly row to be suppressed, got %d records", len(secondRecords))
+	}
+	if got := atomic.LoadInt32(&accessibleRequests); got != 1 {
+		t.Fatalf("expected one accessible-customer lookup, got %d", got)
+	}
+	if got := atomic.LoadInt32(&campaignDailyRequests); got != 1 {
+		t.Fatalf("expected one campaign daily request, got %d", got)
+	}
+	if got := atomic.LoadInt32(&adGroupDailyRequests); got != 1 {
+		t.Fatalf("expected one ad group daily request, got %d", got)
+	}
+	if got := atomic.LoadInt32(&adDailyRequests); got != 1 {
+		t.Fatalf("expected one ad daily request, got %d", got)
+	}
+	if got := atomic.LoadInt32(&hourlyRequests); got != 2 {
+		t.Fatalf("expected two hourly requests, got %d", got)
+	}
+	hourlyMetrics := monitorState.metrics(googleMonitorFamilyCampaignHourly)
+	if hourlyMetrics.LastSuppressed != 1 {
+		t.Fatalf("expected one suppressed hourly duplicate, got %#v", hourlyMetrics)
 	}
 }
 
@@ -389,6 +528,56 @@ func TestFetchAccessibleCustomerIDs_RetriesWithoutLoginHeader(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&requestCount); got != 2 {
 		t.Fatalf("expected 2 requests due to retry, got %d", got)
+	}
+}
+
+func TestGoogleAdsRequestsCacheLoginHeaderFallback(t *testing.T) {
+	t.Cleanup(resetGoogleAdsGlobals)
+
+	var searchRequests int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"access-token","expires_in":3600}`))
+		case "/v22/customers/1234567890/googleAds:searchStream":
+			count := atomic.AddInt32(&searchRequests, 1)
+			if r.Header.Get("login-customer-id") != "" {
+				http.Error(w, `{"error":{"message":"USER_PERMISSION_DENIED"}}`, http.StatusForbidden)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[
+				{"results":[{"campaign":{"id":"cmp-1","name":"Brand Search","status":"ENABLED","advertisingChannelType":"SEARCH"},"metrics":{"impressions":"1000","clicks":"80","costMicros":"1500000","conversions":"5","conversionsValue":"1000"},"segments":{"date":"2026-03-29"}}]}
+			]`))
+			_ = count
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	googleAdsHTTPClient = server.Client()
+	googleOAuthTokenURL = server.URL + "/token"
+	creds := googleAdsCredentials{
+		ConnectionID:    "google-ads-primary",
+		DeveloperToken:  "developer-token",
+		CustomerID:      "1234567890",
+		LoginCustomerID: "9998887776",
+		ClientID:        "client-id",
+		ClientSecret:    "client-secret",
+		RefreshToken:    "refresh-token",
+		APIBaseURL:      server.URL + "/v22",
+	}
+
+	if _, _, err := fetchCampaignDailyRows(context.Background(), creds, "2026-03-29", "2026-03-29"); err != nil {
+		t.Fatalf("first fetchCampaignDailyRows: %v", err)
+	}
+	if _, _, err := fetchCampaignDailyRows(context.Background(), creds, "2026-03-29", "2026-03-29"); err != nil {
+		t.Fatalf("second fetchCampaignDailyRows: %v", err)
+	}
+	if got := atomic.LoadInt32(&searchRequests); got != 3 {
+		t.Fatalf("expected first call to retry and second call to use cached no-login-header posture, got %d search requests", got)
 	}
 }
 
@@ -501,6 +690,7 @@ func resetGoogleAdsGlobals() {
 	googleOAuthTokenURL = defaultGoogleOAuthToken
 	googleAdsHTTPClient = &http.Client{Timeout: defaultHTTPTimeout}
 	googleAccessTokenCached = nil
+	googleLoginHeaderCached = nil
 }
 
 func setGoogleRuntimeContext(t *testing.T, payload nexadapter.RuntimeContext) {

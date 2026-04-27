@@ -1,6 +1,6 @@
 {
   "id": "google-ads",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "displayName": "Google Ads",
   "description": "Shared Google Ads adapter package for Nex.",
   "platform": "google-ads",

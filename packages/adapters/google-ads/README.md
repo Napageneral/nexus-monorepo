@@ -12,7 +12,8 @@ Current target behavior:
 - direct Google Ads API auth and health
 - row-shaped provider facts for Google Ads account, campaign, ad-group, ad,
   and hourly reporting
-- replay-safe backfill and monitor behavior
+- replay-safe backfill plus adapter-local live monitor lanes with duplicate
+  revision suppression
 - retained cleanroom proof against MoonSleep Google Ads credentials
 - stable provider parity spot-checks against sampled upstream Google Ads rows
 

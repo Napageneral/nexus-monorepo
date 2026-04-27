@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	nexadapter "github.com/nexus-project/adapter-sdk-go"
@@ -22,12 +23,11 @@ import (
 
 const (
 	adapterName                = "google-ads-adapter"
-	adapterVersion             = "0.1.0"
+	adapterVersion             = "0.1.1"
 	platformID                 = "google-ads"
 	defaultGoogleAdsAPIBase    = "https://googleads.googleapis.com/v22"
 	defaultGoogleOAuthToken    = "https://www.googleapis.com/oauth2/v3/token"
 	dateLayout                 = "2006-01-02"
-	dailyReplayWindow          = 7 * 24 * time.Hour
 	hourlyReplayWindow         = 48 * time.Hour
 	defaultMonitorInterval     = 1 * time.Minute
 	defaultMonitorErrorBackoff = 5 * time.Minute
@@ -40,6 +40,8 @@ var (
 	googleOAuthTokenURL     = defaultGoogleOAuthToken
 	googleAdsHTTPClient     = &http.Client{Timeout: defaultHTTPTimeout}
 	googleAccessTokenCached *googleAccessTokenCache
+	googleLoginHeaderMu     sync.Mutex
+	googleLoginHeaderCached *googleLoginHeaderCache
 )
 
 type googleAccessTokenCache struct {
@@ -48,6 +50,14 @@ type googleAccessTokenCache struct {
 	ClientID     string
 	ClientSecret string
 	RefreshToken string
+}
+
+type googleLoginHeaderCache struct {
+	CustomerID       string
+	LoginCustomerID  string
+	ClientID         string
+	RefreshToken     string
+	DisableForSearch bool
 }
 
 type googleAdsCredentials struct {
@@ -86,6 +96,20 @@ type googleSourceRequest struct {
 	APIBaseURL string
 	Path       string
 	Request    map[string]any
+}
+
+type googleMonitorFamilyConfig struct {
+	Name     googleMonitorFamily
+	Interval time.Duration
+	Lookback time.Duration
+	Poll     func(context.Context, googleAdsCredentials, time.Time, time.Time, nexadapter.EmitFunc) (time.Time, error)
+}
+
+type googleMonitorCycleResult struct {
+	DueFamilies        []googleMonitorFamily
+	SuccessfulFamilies []googleMonitorFamily
+	FailedFamilies     []googleMonitorFamily
+	StateChanged       bool
 }
 
 type googleAccessibleCustomersResponse struct {
@@ -604,15 +628,165 @@ func monitor(ctx context.Context, account string, emit nexadapter.EmitFunc) erro
 	if err != nil {
 		return err
 	}
-	return nexadapter.PollMonitor(nexadapter.PollConfig[nexadapter.AdapterInboundRecord]{
-		Interval:     defaultMonitorInterval,
-		ErrorBackoff: defaultMonitorErrorBackoff,
-		Fetch: func(ctx context.Context, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
-			asOf := time.Now().UTC()
-			return fetchGoogleAdsRowsCycle(ctx, account, since.UTC(), asOf, googleSyncModeMonitor)
+	creds, err := resolveGoogleAdsCredentials(account)
+	if err != nil {
+		return err
+	}
+	monitorState, err := loadGoogleMonitorState(account)
+	if err != nil {
+		return err
+	}
+	revisionStore, err := loadGoogleRevisionStore(account)
+	if err != nil {
+		return err
+	}
+
+	consecutiveErrors := 0
+	for {
+		pollTime := time.Now().UTC()
+		result := runGoogleMonitorCycle(ctx, creds, monitorState, revisionStore, pollTime, emit)
+		if result.StateChanged {
+			if err := saveGoogleMonitorState(account, monitorState); err != nil {
+				return err
+			}
+			if err := revisionStore.SaveIfDirty(); err != nil {
+				return err
+			}
+		}
+
+		if len(result.FailedFamilies) > 0 && len(result.SuccessfulFamilies) == 0 {
+			consecutiveErrors++
+			if consecutiveErrors >= 5 {
+				return fmt.Errorf("too many consecutive Google Ads monitor errors: %v", result.FailedFamilies)
+			}
+		} else {
+			consecutiveErrors = 0
+		}
+
+		wait := defaultMonitorInterval
+		if len(result.DueFamilies) > 0 && len(result.SuccessfulFamilies) == 0 && len(result.FailedFamilies) > 0 {
+			wait = defaultMonitorErrorBackoff
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(wait):
+		}
+	}
+}
+
+func runGoogleMonitorCycle(ctx context.Context, creds googleAdsCredentials, monitorState *googleMonitorState, revisionStore *googleRevisionStore, pollTime time.Time, emit nexadapter.EmitFunc) googleMonitorCycleResult {
+	result := googleMonitorCycleResult{}
+	for _, family := range googleMonitorFamilies() {
+		familyState := monitorState.family(family.Name)
+		if !familyState.due(pollTime, family.Interval) {
+			continue
+		}
+		result.DueFamilies = append(result.DueFamilies, family.Name)
+		metrics := monitorState.metrics(family.Name)
+		metrics.beginCycle(pollTime)
+
+		since := time.Time{}
+		if family.Lookback > 0 {
+			since = pollTime.Add(-family.Lookback).UTC()
+		}
+		emitter := newGoogleMonitorEmitter(monitorState, revisionStore, emit)
+		latest, err := family.Poll(ctx, creds, since, pollTime, emitter.Emit)
+		if err != nil {
+			nexadapter.LogError("google ads monitor %s poll failed: %v", family.Name, err)
+			result.FailedFamilies = append(result.FailedFamilies, family.Name)
+			continue
+		}
+
+		familyState.advance(pollTime, latest)
+		result.SuccessfulFamilies = append(result.SuccessfulFamilies, family.Name)
+		result.StateChanged = true
+		if emitter.StateChanged() {
+			result.StateChanged = true
+		}
+	}
+	logGoogleMonitorMetrics(monitorState, pollTime)
+	return result
+}
+
+func googleMonitorFamilies() []googleMonitorFamilyConfig {
+	return []googleMonitorFamilyConfig{
+		{
+			Name:     googleMonitorFamilyCampaignHourly,
+			Interval: defaultMonitorInterval,
+			Lookback: googleHotReportLookback,
+			Poll: func(ctx context.Context, creds googleAdsCredentials, since time.Time, pollTime time.Time, emit nexadapter.EmitFunc) (time.Time, error) {
+				return pollGoogleReportFamily(ctx, creds, familyByGoogleMonitorName(googleMonitorFamilyCampaignHourly), since, pollTime, emit)
+			},
 		},
-		MaxConsecutiveErrors: 5,
-	})(ctx, account, emit)
+		{
+			Name:     googleMonitorFamilyCampaignDaily,
+			Interval: googleDailyReportMonitorInterval,
+			Lookback: googleDailyReportLookback,
+			Poll: func(ctx context.Context, creds googleAdsCredentials, since time.Time, pollTime time.Time, emit nexadapter.EmitFunc) (time.Time, error) {
+				return pollGoogleReportFamily(ctx, creds, familyByGoogleMonitorName(googleMonitorFamilyCampaignDaily), dateFloorGoogleUTC(since), pollTime, emit)
+			},
+		},
+		{
+			Name:     googleMonitorFamilyAdGroupDaily,
+			Interval: googleDailyReportMonitorInterval,
+			Lookback: googleDailyReportLookback,
+			Poll: func(ctx context.Context, creds googleAdsCredentials, since time.Time, pollTime time.Time, emit nexadapter.EmitFunc) (time.Time, error) {
+				return pollGoogleReportFamily(ctx, creds, familyByGoogleMonitorName(googleMonitorFamilyAdGroupDaily), dateFloorGoogleUTC(since), pollTime, emit)
+			},
+		},
+		{
+			Name:     googleMonitorFamilyAdDaily,
+			Interval: googleDailyReportMonitorInterval,
+			Lookback: googleDailyReportLookback,
+			Poll: func(ctx context.Context, creds googleAdsCredentials, since time.Time, pollTime time.Time, emit nexadapter.EmitFunc) (time.Time, error) {
+				return pollGoogleReportFamily(ctx, creds, familyByGoogleMonitorName(googleMonitorFamilyAdDaily), dateFloorGoogleUTC(since), pollTime, emit)
+			},
+		},
+		{
+			Name:     googleMonitorFamilyAccountAccessSnapshot,
+			Interval: googleAccountSnapshotMonitorInterval,
+			Poll:     pollGoogleAccountAccessSnapshot,
+		},
+	}
+}
+
+func pollGoogleAccountAccessSnapshot(ctx context.Context, creds googleAdsCredentials, _ time.Time, pollTime time.Time, emit nexadapter.EmitFunc) (time.Time, error) {
+	records, err := fetchGoogleFamilyRecords(ctx, creds, googleFamilyWindow{
+		Family: familyByGoogleMonitorName(googleMonitorFamilyAccountAccessSnapshot),
+	})
+	if err != nil {
+		return time.Time{}, err
+	}
+	for _, record := range records {
+		if record.Operation != "" {
+			emit(record)
+		}
+	}
+	return pollTime.UTC(), nil
+}
+
+func pollGoogleReportFamily(ctx context.Context, creds googleAdsCredentials, family googleRowFamily, since time.Time, pollTime time.Time, emit nexadapter.EmitFunc) (time.Time, error) {
+	plan := googleFamilyWindow{
+		Family:       family,
+		RequestSince: since.UTC().Format(dateLayout),
+		RequestUntil: pollTime.UTC().Format(dateLayout),
+	}
+	if family.ID == "campaign_hourly" {
+		plan.FilterStart = since.UTC()
+		plan.FilterEnd = pollTime.UTC()
+	}
+	records, err := fetchGoogleFamilyRecords(ctx, creds, plan)
+	if err != nil {
+		return time.Time{}, err
+	}
+	for _, record := range filterGoogleFamilyRecords([]googleFamilyWindow{plan}, records) {
+		if record.Operation != "" {
+			emit(record)
+		}
+	}
+	return pollTime.UTC(), nil
 }
 
 func fetchGoogleAdsRowsCycle(ctx context.Context, account string, since time.Time, asOf time.Time, mode googleSyncMode) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
@@ -625,71 +799,81 @@ func fetchGoogleAdsRowsCycle(ctx context.Context, account string, since time.Tim
 	records := make([]nexadapter.AdapterInboundRecord, 0, len(plans)*8)
 
 	for _, plan := range plans {
-		switch plan.Family.ID {
-		case "account_access_snapshot":
-			customerIDs, err := fetchAccessibleCustomerIDs(ctx, creds)
-			if err != nil || len(customerIDs) == 0 {
-				customerIDs = []string{creds.CustomerID}
-			}
-			customerIDs = uniqueStrings(customerIDs)
-			for _, customerID := range customerIDs {
-				row, sourceRequest, err := fetchAccountSnapshot(ctx, creds, customerID)
-				if err != nil {
-					return nil, time.Time{}, err
-				}
-				record := buildGoogleAccountSnapshotRecord(creds, plan.Family, row, sourceRequest)
-				if record.Operation != "" {
-					records = append(records, record)
-				}
-			}
-		case "campaign_daily":
-			rows, sourceRequest, err := fetchCampaignDailyRows(ctx, creds, plan.RequestSince, plan.RequestUntil)
-			if err != nil {
-				return nil, time.Time{}, err
-			}
-			for _, row := range rows {
-				record := buildGoogleCampaignDailyRecord(creds, plan.Family, row, sourceRequest)
-				if record.Operation != "" {
-					records = append(records, record)
-				}
-			}
-		case "ad_group_daily":
-			rows, sourceRequest, err := fetchAdGroupDailyRows(ctx, creds, plan.RequestSince, plan.RequestUntil)
-			if err != nil {
-				return nil, time.Time{}, err
-			}
-			for _, row := range rows {
-				record := buildGoogleAdGroupDailyRecord(creds, plan.Family, row, sourceRequest)
-				if record.Operation != "" {
-					records = append(records, record)
-				}
-			}
-		case "ad_daily":
-			rows, sourceRequest, err := fetchAdDailyRows(ctx, creds, plan.RequestSince, plan.RequestUntil)
-			if err != nil {
-				return nil, time.Time{}, err
-			}
-			for _, row := range rows {
-				record := buildGoogleAdDailyRecord(creds, plan.Family, row, sourceRequest)
-				if record.Operation != "" {
-					records = append(records, record)
-				}
-			}
-		case "campaign_hourly":
-			rows, sourceRequest, err := fetchCampaignHourlyRows(ctx, creds, plan.RequestSince, plan.RequestUntil)
-			if err != nil {
-				return nil, time.Time{}, err
-			}
-			for _, row := range rows {
-				record := buildGoogleCampaignHourlyRecord(creds, plan.Family, row, sourceRequest)
-				if record.Operation != "" {
-					records = append(records, record)
-				}
-			}
+		planRecords, err := fetchGoogleFamilyRecords(ctx, creds, plan)
+		if err != nil {
+			return nil, time.Time{}, err
 		}
+		records = append(records, planRecords...)
 	}
 
 	return filterGoogleFamilyRecords(plans, records), asOf, nil
+}
+
+func fetchGoogleFamilyRecords(ctx context.Context, creds googleAdsCredentials, plan googleFamilyWindow) ([]nexadapter.AdapterInboundRecord, error) {
+	records := []nexadapter.AdapterInboundRecord{}
+	switch plan.Family.ID {
+	case "account_access_snapshot":
+		customerIDs, err := fetchAccessibleCustomerIDs(ctx, creds)
+		if err != nil || len(customerIDs) == 0 {
+			customerIDs = []string{creds.CustomerID}
+		}
+		customerIDs = uniqueStrings(customerIDs)
+		for _, customerID := range customerIDs {
+			row, sourceRequest, err := fetchAccountSnapshot(ctx, creds, customerID)
+			if err != nil {
+				return nil, err
+			}
+			record := buildGoogleAccountSnapshotRecord(creds, plan.Family, row, sourceRequest)
+			if record.Operation != "" {
+				records = append(records, record)
+			}
+		}
+	case "campaign_daily":
+		rows, sourceRequest, err := fetchCampaignDailyRows(ctx, creds, plan.RequestSince, plan.RequestUntil)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			record := buildGoogleCampaignDailyRecord(creds, plan.Family, row, sourceRequest)
+			if record.Operation != "" {
+				records = append(records, record)
+			}
+		}
+	case "ad_group_daily":
+		rows, sourceRequest, err := fetchAdGroupDailyRows(ctx, creds, plan.RequestSince, plan.RequestUntil)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			record := buildGoogleAdGroupDailyRecord(creds, plan.Family, row, sourceRequest)
+			if record.Operation != "" {
+				records = append(records, record)
+			}
+		}
+	case "ad_daily":
+		rows, sourceRequest, err := fetchAdDailyRows(ctx, creds, plan.RequestSince, plan.RequestUntil)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			record := buildGoogleAdDailyRecord(creds, plan.Family, row, sourceRequest)
+			if record.Operation != "" {
+				records = append(records, record)
+			}
+		}
+	case "campaign_hourly":
+		rows, sourceRequest, err := fetchCampaignHourlyRows(ctx, creds, plan.RequestSince, plan.RequestUntil)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			record := buildGoogleCampaignHourlyRecord(creds, plan.Family, row, sourceRequest)
+			if record.Operation != "" {
+				records = append(records, record)
+			}
+		}
+	}
+	return records, nil
 }
 
 func fetchAccessibleCustomerIDs(ctx context.Context, creds googleAdsCredentials) ([]string, error) {
@@ -867,9 +1051,13 @@ func googleAdsJSONRequest(ctx context.Context, creds googleAdsCredentials, metho
 		return err
 	}
 
-	responseBody, err := executeGoogleAdsRequest(ctx, creds, method, path, bodyBytes, true)
-	if err != nil && creds.LoginCustomerID != "" && strings.Contains(err.Error(), "USER_PERMISSION_DENIED") {
+	includeLoginCustomerID := shouldIncludeGoogleLoginCustomerID(creds)
+	responseBody, err := executeGoogleAdsRequest(ctx, creds, method, path, bodyBytes, includeLoginCustomerID)
+	if err != nil && includeLoginCustomerID && creds.LoginCustomerID != "" && strings.Contains(err.Error(), "USER_PERMISSION_DENIED") {
 		responseBody, err = executeGoogleAdsRequest(ctx, creds, method, path, bodyBytes, false)
+		if err == nil {
+			rememberGoogleLoginCustomerHeaderDisabled(creds)
+		}
 	}
 	if err != nil {
 		return err
@@ -881,6 +1069,37 @@ func googleAdsJSONRequest(ctx context.Context, creds googleAdsCredentials, metho
 		return fmt.Errorf("parse google ads response: %w", err)
 	}
 	return nil
+}
+
+func shouldIncludeGoogleLoginCustomerID(creds googleAdsCredentials) bool {
+	if strings.TrimSpace(creds.LoginCustomerID) == "" {
+		return false
+	}
+	googleLoginHeaderMu.Lock()
+	defer googleLoginHeaderMu.Unlock()
+	if googleLoginHeaderCached == nil {
+		return true
+	}
+	if googleLoginHeaderCached.CustomerID == creds.CustomerID &&
+		googleLoginHeaderCached.LoginCustomerID == creds.LoginCustomerID &&
+		googleLoginHeaderCached.ClientID == creds.ClientID &&
+		googleLoginHeaderCached.RefreshToken == creds.RefreshToken &&
+		googleLoginHeaderCached.DisableForSearch {
+		return false
+	}
+	return true
+}
+
+func rememberGoogleLoginCustomerHeaderDisabled(creds googleAdsCredentials) {
+	googleLoginHeaderMu.Lock()
+	defer googleLoginHeaderMu.Unlock()
+	googleLoginHeaderCached = &googleLoginHeaderCache{
+		CustomerID:       creds.CustomerID,
+		LoginCustomerID:  creds.LoginCustomerID,
+		ClientID:         creds.ClientID,
+		RefreshToken:     creds.RefreshToken,
+		DisableForSearch: true,
+	}
 }
 
 func executeGoogleAdsRequest(ctx context.Context, creds googleAdsCredentials, method string, path string, body []byte, includeLoginCustomerID bool) (string, error) {
@@ -1227,7 +1446,7 @@ func planGoogleFamilyWindows(since time.Time, asOf time.Time, mode googleSyncMod
 			plans = append(plans, plan)
 		case "campaign_hourly":
 			if mode == googleSyncModeMonitor {
-				plan.FilterStart = minTime(since, asOf.Add(-hourlyReplayWindow))
+				plan.FilterStart = maxTime(since, asOf.Add(-googleHotReportLookback))
 			} else {
 				plan.FilterStart = maxTime(since, asOf.Add(-hourlyReplayWindow))
 			}
@@ -1238,7 +1457,7 @@ func planGoogleFamilyWindows(since time.Time, asOf time.Time, mode googleSyncMod
 		default:
 			effectiveSince := since
 			if mode == googleSyncModeMonitor {
-				effectiveSince = minTime(since, asOf.Add(-dailyReplayWindow))
+				effectiveSince = dateFloorGoogleUTC(maxTime(since, asOf.Add(-googleDailyReportLookback)))
 			}
 			plan.RequestSince = effectiveSince.Format(dateLayout)
 			plan.RequestUntil = asOf.Format(dateLayout)
@@ -1394,6 +1613,23 @@ func familyGrain(familyID string) string {
 	default:
 		return "row"
 	}
+}
+
+func googleRowFamilyByID(id string) (googleRowFamily, error) {
+	for _, family := range googleRowFamilies {
+		if family.ID == id {
+			return family, nil
+		}
+	}
+	return googleRowFamily{}, fmt.Errorf("google ads row family not found: %s", id)
+}
+
+func familyByGoogleMonitorName(name googleMonitorFamily) googleRowFamily {
+	family, err := googleRowFamilyByID(string(name))
+	if err != nil {
+		panic(err)
+	}
+	return family
 }
 
 func revisionHash(row map[string]any) string {
@@ -1695,16 +1931,17 @@ func maxInt64(a int64, b int64) int64 {
 	return b
 }
 
-func minTime(a time.Time, b time.Time) time.Time {
-	if a.Before(b) {
-		return a
-	}
-	return b
-}
-
 func maxTime(a time.Time, b time.Time) time.Time {
 	if a.After(b) {
 		return a
 	}
 	return b
+}
+
+func dateFloorGoogleUTC(value time.Time) time.Time {
+	if value.IsZero() {
+		return value
+	}
+	year, month, day := value.UTC().Date()
+	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 }
