@@ -50,6 +50,7 @@ export type ChatMessage = {
   session_id: string | null;
   turn_id: string | null;
   record_id: string | null;
+  client_message_id?: string;
   role: ChatMessageRole;
   text: string;
   created_at: number;

@@ -17,7 +17,7 @@ import (
 
 const (
 	adapterName    = "tiktok-display-adapter"
-	adapterVersion = "0.1.0"
+	adapterVersion = "0.1.3"
 	platformID     = "tiktok-display"
 
 	tiktokDisplayUserInfoURL = "https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,bio_description,profile_deep_link,profile_web_link,is_verified,follower_count,following_count,likes_count,video_count"
@@ -31,13 +31,23 @@ var (
 )
 
 type tiktokDisplayRuntime struct {
-	ConnectionID      string
-	CredentialRef     string
-	CredentialService string
-	AccessToken       string
-	OpenID            string
-	DisplayName       string
-	ProfileWebLink    string
+	ConnectionID           string
+	CredentialRef          string
+	CredentialService      string
+	AccessToken            string
+	RefreshToken           string
+	ClientKey              string
+	ClientSecret           string
+	AccessTokenExpiresAt   time.Time
+	RefreshTokenExpiresAt  time.Time
+	OpenID                 string
+	DisplayName            string
+	ProfileWebLink         string
+	RefreshBuffer          time.Duration
+	ReauthWarning          time.Duration
+	OAuthStateLoaded       bool
+	OAuthLastRefreshAt     time.Time
+	OAuthLastRefreshSource string
 }
 
 type tiktokDisplayUserInfo struct {
@@ -152,11 +162,46 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 							Placeholder: "act...",
 						},
 						{
+							Name:        "refresh_token",
+							Label:       "TikTok Display Refresh Token",
+							Type:        "secret",
+							Required:    false,
+							Placeholder: "rft...",
+						},
+						{
 							Name:        "open_id",
 							Label:       "TikTok Display Open ID",
 							Type:        "text",
 							Required:    true,
 							Placeholder: "open_123",
+						},
+						{
+							Name:        "access_token_expires_at",
+							Label:       "Access Token Expires At",
+							Type:        "text",
+							Required:    false,
+							Placeholder: "2026-04-28T00:00:00Z",
+						},
+						{
+							Name:        "refresh_token_expires_at",
+							Label:       "Refresh Token Expires At",
+							Type:        "text",
+							Required:    false,
+							Placeholder: "2027-04-28T00:00:00Z",
+						},
+						{
+							Name:        "client_key",
+							Label:       "TikTok OAuth Client Key",
+							Type:        "secret",
+							Required:    false,
+							Placeholder: "client key",
+						},
+						{
+							Name:        "client_secret",
+							Label:       "TikTok OAuth Client Secret",
+							Type:        "secret",
+							Required:    false,
+							Placeholder: "client secret",
 						},
 						{
 							Name:        "display_name",
@@ -175,7 +220,7 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 					},
 				},
 			},
-			SetupGuide: "Connect a TikTok Display account through Nex OAuth or import an existing authorized access token. The adapter reads the runtime access token and validates the authorized profile with TikTok user/info.",
+			SetupGuide: "Connect a TikTok Display account through Nex OAuth or import an existing authorized token bundle. When refresh token and OAuth client credentials are present, the adapter renews TikTok Display access tokens before provider calls and stores renewed tokens in adapter state.",
 		},
 		Capabilities: nexadapter.ChannelCapabilities{
 			TextLimit:          20000,
@@ -256,22 +301,26 @@ func health(ctx context.Context, connectionID string) (*nexadapter.AdapterHealth
 		}, nil
 	}
 
-	tokenDetails := tiktokDisplayTokenDetails(runtimeInfo.AccessToken)
-	profile, err := fetchTikTokDisplayProfile(ctx, runtimeInfo.AccessToken)
+	accessToken, err := runtimeInfo.accessTokenForRequest(ctx)
 	if err != nil {
 		return &nexadapter.AdapterHealth{
 			Connected:    false,
 			ConnectionID: connectionID,
 			Account:      runtimeInfo.OpenID,
 			Error:        err.Error(),
-			Details: map[string]any{
-				"credential_ref":       runtimeInfo.CredentialRef,
-				"credential_service":   runtimeInfo.CredentialService,
-				"runtime_open_id":      runtimeInfo.OpenID,
-				"runtime_display_name": runtimeInfo.DisplayName,
-				"access_token_length":  tokenDetails.Length,
-				"access_token_sha256":  tokenDetails.SHA256,
-			},
+			Details:      runtimeInfo.healthAuthDetails(nil),
+		}, nil
+	}
+
+	tokenDetails := tiktokDisplayTokenDetails(accessToken)
+	profile, err := fetchTikTokDisplayProfile(ctx, accessToken)
+	if err != nil {
+		return &nexadapter.AdapterHealth{
+			Connected:    false,
+			ConnectionID: connectionID,
+			Account:      runtimeInfo.OpenID,
+			Error:        err.Error(),
+			Details:      runtimeInfo.healthAuthDetails(&tokenDetails),
 		}, nil
 	}
 
@@ -319,23 +368,7 @@ func health(ctx context.Context, connectionID string) (*nexadapter.AdapterHealth
 		ConnectionID: connectionID,
 		Account:      profile.OpenID,
 		LastEventAt:  time.Now().UnixMilli(),
-		Details: map[string]any{
-			"credential_ref":          runtimeInfo.CredentialRef,
-			"credential_service":      runtimeInfo.CredentialService,
-			"runtime_open_id":         runtimeInfo.OpenID,
-			"runtime_display_name":    runtimeInfo.DisplayName,
-			"profile_open_id":         profile.OpenID,
-			"profile_display_name":    profile.DisplayName,
-			"profile_web_link":        profile.ProfileWebLink,
-			"profile_deep_link":       profile.ProfileDeepLink,
-			"profile_verified":        profile.IsVerified,
-			"profile_follower_count":  profile.FollowerCount,
-			"profile_following_count": profile.FollowingCount,
-			"profile_likes_count":     profile.LikesCount,
-			"profile_video_count":     profile.VideoCount,
-			"access_token_length":     tokenDetails.Length,
-			"access_token_sha256":     tokenDetails.SHA256,
-		},
+		Details:      runtimeInfo.healthAuthDetailsWithProfile(&tokenDetails, profile),
 	}, nil
 }
 
@@ -373,6 +406,7 @@ func loadTikTokDisplayRuntime() (*tiktokDisplayRuntime, error) {
 		ConnectionID: runtimeCtx.ConnectionID,
 	}, nexadapter.CredentialLookupOptions{
 		Fields:     []string{"access_token"},
+		Env:        []string{"TIKTOK_DISPLAY_ACCESS_TOKEN"},
 		AllowValue: true,
 		Label:      "TikTok Display access token",
 	})
@@ -380,10 +414,33 @@ func loadTikTokDisplayRuntime() (*tiktokDisplayRuntime, error) {
 		return nil, errors.New("missing TikTok Display access token in runtime credential")
 	}
 
+	runtimeAdapterCtx := nexadapter.AdapterRuntimeContext{
+		Context:      context.Background(),
+		Runtime:      runtimeCtx,
+		ConnectionID: runtimeCtx.ConnectionID,
+	}
+	refreshToken := nexadapter.ReadCredential(runtimeAdapterCtx, nexadapter.CredentialLookupOptions{
+		Fields: []string{"refresh_token"},
+		Env:    []string{"TIKTOK_DISPLAY_REFRESH_TOKEN"},
+		Label:  "TikTok Display refresh token",
+	})
+	clientKey := nexadapter.ReadCredential(runtimeAdapterCtx, nexadapter.CredentialLookupOptions{
+		Fields: []string{"client_key", "client_id"},
+		Env:    []string{"TIKTOK_DISPLAY_CLIENT_KEY", "TIKTOK_DISPLAY_CLIENT_ID"},
+		Label:  "TikTok Display OAuth client key",
+	})
+	clientSecret := nexadapter.ReadCredential(runtimeAdapterCtx, nexadapter.CredentialLookupOptions{
+		Fields: []string{"client_secret"},
+		Env:    []string{"TIKTOK_DISPLAY_CLIENT_SECRET"},
+		Label:  "TikTok Display OAuth client secret",
+	})
+
 	openID := strings.TrimSpace(nexadapter.FirstNonBlank(
 		nexadapter.FieldValue(runtimeCtx.Credential.Fields, "open_id"),
 		runtimeCtx.Credential.Account,
 	))
+	accessTokenExpiresAt := parseTikTokDisplayOptionalTime(nexadapter.FieldValue(runtimeCtx.Credential.Fields, "access_token_expires_at"))
+	refreshTokenExpiresAt := parseTikTokDisplayOptionalTime(nexadapter.FieldValue(runtimeCtx.Credential.Fields, "refresh_token_expires_at"))
 	displayName := strings.TrimSpace(nexadapter.FirstNonBlank(
 		nexadapter.FieldValue(runtimeCtx.Credential.Fields, "display_name"),
 		nexadapter.FieldValue(runtimeCtx.Credential.Fields, "profile_display_name"),
@@ -397,15 +454,24 @@ func loadTikTokDisplayRuntime() (*tiktokDisplayRuntime, error) {
 		credentialRef = platformID + "/" + runtimeCtx.ConnectionID
 	}
 
-	return &tiktokDisplayRuntime{
-		ConnectionID:      runtimeCtx.ConnectionID,
-		CredentialRef:     credentialRef,
-		CredentialService: platformID,
-		AccessToken:       accessToken,
-		OpenID:            openID,
-		DisplayName:       displayName,
-		ProfileWebLink:    profileWebLink,
-	}, nil
+	state := &tiktokDisplayRuntime{
+		ConnectionID:          runtimeCtx.ConnectionID,
+		CredentialRef:         credentialRef,
+		CredentialService:     platformID,
+		AccessToken:           accessToken,
+		RefreshToken:          refreshToken,
+		ClientKey:             clientKey,
+		ClientSecret:          clientSecret,
+		AccessTokenExpiresAt:  accessTokenExpiresAt,
+		RefreshTokenExpiresAt: refreshTokenExpiresAt,
+		OpenID:                openID,
+		DisplayName:           displayName,
+		ProfileWebLink:        profileWebLink,
+		RefreshBuffer:         tiktokDisplayOAuthRefreshBuffer(),
+		ReauthWarning:         tiktokDisplayOAuthReauthWarning(),
+	}
+	state.overlayCachedOAuthState()
+	return state, nil
 }
 
 func fetchTikTokDisplayProfileFromTikTok(ctx context.Context, accessToken string) (*tiktokDisplayUserInfo, error) {

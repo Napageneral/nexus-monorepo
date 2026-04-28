@@ -13,4 +13,7 @@ Current execution slice:
 
 Current status:
 
-- steps 1 through 4 are complete
+- steps 1 through 4 are complete for the original package parity target
+- the target-state smart polling follow-up has local implementation and
+  copied-package cleanroom proof; hosted MoonSleep soak proof remains tracked by
+  [AFEA-015 TikTok Display Smart Polling And Snapshot Ledger](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/completed/AFEA-015-tiktok-display-smart-polling-and-snapshot-ledger.md)

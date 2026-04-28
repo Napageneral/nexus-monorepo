@@ -121,7 +121,11 @@ func tiktokDisplayUserInfoGetMethod(ctx nexadapter.AdapterContext[struct{}], req
 		return nil, err
 	}
 
-	profile, err := fetchTikTokDisplayProfile(ctx.Context, state.AccessToken)
+	accessToken, err := state.accessTokenForRequest(ctx.Context)
+	if err != nil {
+		return nil, err
+	}
+	profile, err := fetchTikTokDisplayProfile(ctx.Context, accessToken)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +153,11 @@ func tiktokDisplayVideoListMethod(ctx nexadapter.AdapterContext[struct{}], req n
 	if pageSize <= 0 {
 		pageSize = tiktokDisplayVideoPageSize
 	}
-	page, err := fetchTikTokDisplayVideoPage(ctx.Context, state.AccessToken, cursor, pageSize)
+	accessToken, err := state.accessTokenForRequest(ctx.Context)
+	if err != nil {
+		return nil, err
+	}
+	page, err := fetchTikTokDisplayVideoPage(ctx.Context, accessToken, cursor, pageSize)
 	if err != nil {
 		return nil, err
 	}

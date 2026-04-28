@@ -429,6 +429,49 @@
   margin-top: var(--console-space-4);
 }
 
+.connector-setup-method-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--console-space-3);
+  margin-top: var(--console-space-3);
+}
+
+.connector-setup-method-card {
+  display: flex;
+  align-items: center;
+  gap: var(--console-space-3);
+  width: 100%;
+  padding: var(--console-space-3);
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-lg);
+  background: var(--console-bg-raised);
+  color: var(--console-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.connector-setup-method-card:hover {
+  border-color: var(--console-gold);
+  box-shadow: var(--console-shadow-sm);
+}
+
+.connector-setup-method-card__icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+}
+
+.connector-setup-method-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--console-space-3);
+  padding: var(--console-space-3);
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-lg);
+  background: var(--console-bg-raised);
+}
+
 .connector-setup-fields {
   display: grid;
   gap: var(--console-space-3);

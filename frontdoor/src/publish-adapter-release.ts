@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { normalizeAdapterCatalogSetupDescriptor } from "./adapter-setup-descriptor.js";
 import { FrontdoorStore } from "./frontdoor-store.js";
 
 export type PublishAdapterReleaseParams = {
@@ -60,6 +61,34 @@ function validateHostingPolicy(
   }
 }
 
+function readSetupDescriptorJson(params: {
+  packageRoot: string;
+  packageId: string;
+  version: string;
+}): string {
+  const candidates = [
+    path.join(params.packageRoot, "dist", `${params.packageId}-${params.version}.adapter.catalog.json`),
+    path.join(params.packageRoot, "adapter.catalog.json"),
+  ];
+  const descriptorPath = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!descriptorPath) {
+    throw new Error(
+      `missing adapter catalog setup descriptor: expected ${candidates.map((candidate) => path.relative(params.packageRoot, candidate)).join(" or ")}`,
+    );
+  }
+  const parsed = normalizeAdapterCatalogSetupDescriptor(
+    JSON.parse(fs.readFileSync(descriptorPath, "utf8")) as unknown,
+    descriptorPath,
+  );
+  if (parsed.adapterId !== params.packageId) {
+    throw new Error(`adapter catalog setup descriptor adapterId does not match ${params.packageId}`);
+  }
+  if (parsed.version && parsed.version !== params.version) {
+    throw new Error(`adapter catalog setup descriptor version does not match ${params.version}`);
+  }
+  return JSON.stringify(parsed);
+}
+
 export async function publishAdapterRelease(
   params: PublishAdapterReleaseParams,
 ): Promise<PublishAdapterReleaseResult> {
@@ -93,6 +122,11 @@ export async function publishAdapterRelease(
     throw new Error(`invalid adapter manifest in ${manifestPath}`);
   }
   validateHostingPolicy(manifest.hosting, manifestPath);
+  const setupDescriptorJson = readSetupDescriptorJson({
+    packageRoot,
+    packageId,
+    version,
+  });
 
   const targetOs = params.targetOs?.trim() || process.platform;
   const targetArch = params.targetArch?.trim() || process.arch;
@@ -112,6 +146,7 @@ export async function publishAdapterRelease(
     packageId,
     version,
     manifestJson: fs.readFileSync(manifestPath, "utf8"),
+    setupDescriptorJson,
     channel: params.channel || "stable",
     status: "published",
     publishedAtMs: params.publishedAtMs,

@@ -4,22 +4,16 @@ import "../components/chat-microfrontend-host.ts";
 
 export type ChatPageProps = {
   connected: boolean;
+  runtimeConnecting: boolean;
   runtimeClient: RuntimeBrowserClient | null;
   subscribeRuntimeEvents: (listener: (event: RuntimeEventFrame) => void) => () => void;
 };
-
-function resolveInitialLaneId(): string {
-  if (typeof window === "undefined") {
-    return "";
-  }
-  return new URL(window.location.href).searchParams.get("lane")?.trim() ?? "";
-}
 
 export function renderChatPage(props: ChatPageProps) {
   return html`
     <nexus-console-chat-host
       .connected=${props.connected}
-      .initialLaneId=${resolveInitialLaneId()}
+      .runtimeConnecting=${props.runtimeConnecting}
       .runtimeClient=${props.runtimeClient}
       .subscribeRuntimeEvents=${props.subscribeRuntimeEvents}
     ></nexus-console-chat-host>

@@ -82,6 +82,7 @@ export type AppViewState = {
   onboarding: boolean;
   basePath: string;
   connected: boolean;
+  runtimeConnecting: boolean;
   theme: ThemeMode;
   themeResolved: "light" | "dark";
   hello: RuntimeHelloOk | null;

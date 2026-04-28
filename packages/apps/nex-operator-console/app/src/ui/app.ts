@@ -142,6 +142,7 @@ export class NexusApp extends LitElement {
   @state() tab: Tab = "home";
   @state() onboarding = resolveOnboardingMode();
   @state() connected = false;
+  @state() runtimeConnecting = true;
   @state() theme: ThemeMode = this.settings.theme ?? "system";
   @state() themeResolved: ResolvedTheme = "dark";
   @state() hello: RuntimeHelloOk | null = null;

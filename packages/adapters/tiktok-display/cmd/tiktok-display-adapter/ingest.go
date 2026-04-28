@@ -21,6 +21,8 @@ const (
 	tiktokDisplayVideoFields           = "id,create_time,cover_image_url,share_url,video_description,duration,height,width,title,embed_html,embed_link,like_count,comment_count,share_count,view_count"
 	tiktokDisplayListPageSize          = 20
 	tiktokDisplayVideoPageSize         = tiktokDisplayListPageSize
+	tiktokDisplayMonitorInterval       = 1 * time.Minute
+	tiktokDisplayMonitorErrorBackoff   = 5 * time.Minute
 	tiktokDisplayMonitorReplayWindow   = 7 * 24 * time.Hour
 	tiktokDisplayDefaultSenderName     = "TikTok Display"
 	tiktokDisplayDefaultContainerKind  = "group"
@@ -96,7 +98,22 @@ func backfill(ctx context.Context, connectionID string, since time.Time, emit ne
 		return fmt.Errorf("runtime connection %q does not match requested connection %q", state.ConnectionID, requestedConnectionID)
 	}
 
-	profile, err := fetchTikTokDisplayProfile(ctx, state.AccessToken)
+	pollTime := time.Now().UTC()
+	monitorState, durableState, err := loadOptionalTikTokDisplayMonitorState(state.ConnectionID)
+	if err != nil {
+		return err
+	}
+	emitter := newTikTokDisplayRecordEmitter(monitorState, tiktokDisplayMonitorLaneBackfill, pollTime, emit)
+	if durableState {
+		monitorState.metrics(tiktokDisplayMonitorLaneBackfill).beginCycle(pollTime)
+	}
+
+	accessToken, err := state.accessTokenForRequest(ctx)
+	if err != nil {
+		return err
+	}
+
+	profile, err := fetchTikTokDisplayProfile(ctx, accessToken)
 	if err != nil {
 		return err
 	}
@@ -104,22 +121,82 @@ func backfill(ctx context.Context, connectionID string, since time.Time, emit ne
 		return errors.New("TikTok Display user/info returned no profile")
 	}
 
-	emit(buildTikTokDisplayProfileSnapshotRecord(state, profile))
+	emitter.Emit(buildTikTokDisplayProfileSnapshotRecord(state, profile))
 
-	videos, err := fetchTikTokDisplayVideos(ctx, state.AccessToken, since.UTC(), time.Now().UTC())
+	videos, err := fetchTikTokDisplayVideos(ctx, accessToken, since.UTC(), pollTime)
 	if err != nil {
 		return err
 	}
 	for _, video := range videos {
-		emit(buildTikTokDisplayVideoSnapshotRecord(state, profile, video))
+		emitter.Emit(buildTikTokDisplayVideoSnapshotRecord(state, profile, video))
+	}
+
+	if durableState {
+		monitorState.updateDiscovery(videos, pollTime)
+		monitorState.Backfill.LastPollAt = pollTime
+		monitorState.Backfill.LastSince = since.UTC()
+		monitorState.Backfill.LastObserved = len(videos) + 1
+		if monitorState.Reconcile.LastPollAt.IsZero() {
+			monitorState.Reconcile.LastPollAt = pollTime
+		}
+		if err := saveTikTokDisplayMonitorState(state.ConnectionID, monitorState); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
 func monitor(ctx context.Context, connectionID string, emit nexadapter.EmitFunc) error {
-	since := time.Now().UTC().Add(-tiktokDisplayMonitorReplayWindow)
-	return backfill(ctx, connectionID, since, emit)
+	state, err := loadTikTokDisplayRuntime()
+	if err != nil {
+		return err
+	}
+
+	requestedConnectionID, err := nexadapter.RequireConnection(connectionID)
+	if err != nil {
+		return err
+	}
+	if state.ConnectionID != "" && state.ConnectionID != requestedConnectionID {
+		return fmt.Errorf("runtime connection %q does not match requested connection %q", state.ConnectionID, requestedConnectionID)
+	}
+
+	monitorState, err := loadTikTokDisplayMonitorState(state.ConnectionID)
+	if err != nil {
+		return err
+	}
+
+	consecutiveErrors := 0
+	for {
+		pollTime := time.Now().UTC()
+		result := runTikTokDisplayMonitorCycle(ctx, state, monitorState, pollTime, emit)
+		if result.StateChanged {
+			if err := saveTikTokDisplayMonitorState(state.ConnectionID, monitorState); err != nil {
+				return err
+			}
+		}
+
+		if len(result.FailedLanes) > 0 && len(result.SuccessfulLanes) == 0 {
+			consecutiveErrors++
+			if consecutiveErrors >= 5 {
+				return fmt.Errorf("too many consecutive TikTok Display monitor errors: %v", result.FailedLanes)
+			}
+		} else {
+			consecutiveErrors = 0
+		}
+
+		wait := tiktokDisplayMonitorInterval
+		if len(result.DueLanes) > 0 && len(result.SuccessfulLanes) == 0 && len(result.FailedLanes) > 0 {
+			wait = tiktokDisplayMonitorErrorBackoff
+		}
+
+		select {
+		case <-ctx.Done():
+			nexadapter.LogInfo("tiktok display monitor shutting down")
+			return nil
+		case <-time.After(wait):
+		}
+	}
 }
 
 func fetchTikTokDisplayVideosFromTikTok(ctx context.Context, accessToken string, floor time.Time, ceiling time.Time) ([]tiktokDisplayVideoInfo, error) {
@@ -176,6 +253,7 @@ func buildTikTokDisplayProfileSnapshotRecord(state *tiktokDisplayRuntime, profil
 	openID := displayOpenID(state, profile)
 	displayName := displayDisplayName(state, profile)
 	profileWebLink := displayProfileWebLink(state, profile)
+	logicalRowID := fmt.Sprintf("profile:%s", openID)
 
 	normalizedRow := normalizedTikTokDisplayProfileRow(state, profile)
 	providerRow := tiktokDisplayProfileRawRow(profile)
@@ -202,8 +280,8 @@ func buildTikTokDisplayProfileSnapshotRecord(state *tiktokDisplayRuntime, profil
 		openID,
 		displayName,
 		openID,
-		openID,
-		openID,
+		logicalRowID,
+		logicalRowID,
 		displayName,
 		time.Now().UnixMilli(),
 		normalizedRow,
@@ -212,6 +290,9 @@ func buildTikTokDisplayProfileSnapshotRecord(state *tiktokDisplayRuntime, profil
 		content,
 		map[string]any{
 			"profile_web_link": profileWebLink,
+			"source_request": map[string]any{
+				"endpoint": "user/info",
+			},
 		},
 	)
 }
@@ -220,7 +301,7 @@ func buildTikTokDisplayVideoSnapshotRecord(state *tiktokDisplayRuntime, profile 
 	openID := displayOpenID(state, profile)
 	displayName := displayDisplayName(state, profile)
 	videoID := displayNonBlank(video.ID, "video")
-	logicalRowID := fmt.Sprintf("%s:%s", openID, videoID)
+	logicalRowID := fmt.Sprintf("video:%s", videoID)
 	threadName := displayNonBlank(video.Title, videoID)
 	timestamp := tiktokDisplayVideoTimestampMillis(video)
 	if timestamp <= 0 {
@@ -260,7 +341,11 @@ func buildTikTokDisplayVideoSnapshotRecord(state *tiktokDisplayRuntime, profile 
 		providerRow,
 		providerIDs,
 		content,
-		nil,
+		map[string]any{
+			"source_request": map[string]any{
+				"endpoint": "video/list",
+			},
+		},
 	)
 }
 

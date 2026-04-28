@@ -1,0 +1,14 @@
+{
+  "id": "tiktok-display",
+  "version": "0.1.2",
+  "displayName": "TikTok Display",
+  "description": "Shared TikTok Display adapter package for Nex with provider-native profile and video reads plus projection ingest.",
+  "platform": "tiktok-display",
+  "methodCatalog": {
+    "source": "openapi",
+    "document": "api/openapi.yaml",
+    "namespace": "tiktok-display"
+  },
+  "command": "./bin/tiktok-display-adapter",
+  "skill": "./SKILL.md"
+}

@@ -7,6 +7,7 @@ import {
 } from "../shared/client-info.ts";
 import { clearDeviceAuthToken, loadDeviceAuthToken, storeDeviceAuthToken } from "./device-auth.ts";
 import { loadOrCreateDeviceIdentity, signDevicePayload } from "./device-identity.ts";
+import { finishConsoleLatency, startConsoleLatency } from "./latency-metrics.ts";
 import { generateUUID } from "./uuid.ts";
 
 export type RuntimeEventFrame = {
@@ -55,6 +56,7 @@ export type RuntimeBrowserClientOptions = {
   instanceId?: string;
   onHello?: (hello: RuntimeHelloOk) => void;
   onEvent?: (evt: RuntimeEventFrame) => void;
+  onConnecting?: () => void;
   onClose?: (info: { code: number; reason: string }) => void;
   onGap?: (info: { expected: number; received: number }) => void;
 };
@@ -71,6 +73,7 @@ export class RuntimeBrowserClient {
   private connectSent = false;
   private connectTimer: number | null = null;
   private backoffMs = 800;
+  private websocketOpenTimer: ReturnType<typeof startConsoleLatency> | null = null;
 
   constructor(private opts: RuntimeBrowserClientOptions) {}
 
@@ -94,11 +97,28 @@ export class RuntimeBrowserClient {
     if (this.closed) {
       return;
     }
+    this.opts.onConnecting?.();
+    this.websocketOpenTimer = startConsoleLatency("runtime.websocket.open", {
+      url: this.opts.url,
+    });
     this.ws = new WebSocket(this.opts.url);
-    this.ws.addEventListener("open", () => this.queueConnect());
+    this.ws.addEventListener("open", () => {
+      if (this.websocketOpenTimer) {
+        finishConsoleLatency(this.websocketOpenTimer, "ok");
+        this.websocketOpenTimer = null;
+      }
+      this.queueConnect();
+    });
     this.ws.addEventListener("message", (ev) => this.handleMessage(String(ev.data ?? "")));
     this.ws.addEventListener("close", (ev) => {
       const reason = String(ev.reason ?? "");
+      if (this.websocketOpenTimer) {
+        finishConsoleLatency(this.websocketOpenTimer, "error", {
+          code: ev.code,
+          reason,
+        });
+        this.websocketOpenTimer = null;
+      }
       this.ws = null;
       this.flushPending(new Error(`runtime closed (${ev.code}): ${reason}`));
       this.opts.onClose?.({ code: ev.code, reason });
@@ -227,11 +247,12 @@ export class RuntimeBrowserClient {
         this.backoffMs = 800;
         this.opts.onHello?.(hello);
       })
-      .catch(() => {
+      .catch((err) => {
         if (canFallbackToShared && deviceIdentity) {
           clearDeviceAuthToken({ deviceId: deviceIdentity.deviceId, role });
         }
-        this.ws?.close(CONNECT_FAILED_CLOSE_CODE, "connect failed");
+        const message = err instanceof Error ? err.message : String(err);
+        this.ws?.close(CONNECT_FAILED_CLOSE_CODE, message.slice(0, 120) || "connect failed");
       });
   }
 
@@ -288,15 +309,29 @@ export class RuntimeBrowserClient {
 
   request<T = unknown>(method: string, params?: unknown): Promise<T> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      const token = startConsoleLatency(`runtime.request.${method}`, { method });
+      finishConsoleLatency(token, "error", { error: "runtime not connected" });
       return Promise.reject(new Error("runtime not connected"));
     }
     const id = generateUUID();
     const frame = { type: "req", id, method, params };
+    const token = startConsoleLatency(`runtime.request.${method}`, { method });
     const p = new Promise<T>((resolve, reject) => {
       this.pending.set(id, { resolve: (v) => resolve(v as T), reject });
     });
     this.ws.send(JSON.stringify(frame));
-    return p;
+    return p.then(
+      (value) => {
+        finishConsoleLatency(token, "ok");
+        return value;
+      },
+      (error) => {
+        finishConsoleLatency(token, "error", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      },
+    );
   }
 
   private queueConnect() {

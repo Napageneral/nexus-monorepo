@@ -10,6 +10,7 @@ import {
   startIntegrationCustomFlow,
   submitIntegrationCustomFlow,
   testIntegrationAdapter,
+  uploadIntegrationAdapter,
   type IntegrationsState,
 } from "./integrations.ts";
 
@@ -58,6 +59,18 @@ const SLACK_AUTH = {
           required: true,
         },
       ],
+    },
+  ],
+};
+
+const WHATSAPP_UPLOAD_AUTH = {
+  methods: [
+    {
+      id: "whatsapp_session_upload",
+      type: "file_upload" as const,
+      label: "Upload WhatsApp Session",
+      icon: "whatsapp",
+      accept: [".zip"],
     },
   ],
 };
@@ -181,6 +194,65 @@ describe("integrations controller", () => {
     expect(state.integrationsMessage).toContain("new");
     expect(state.integrationsMessage).toContain("Existing connections stay unchanged");
     expect(state.integrationsPayloadText).toBe("{}");
+  });
+
+  it("does not preselect an auth method when a catalog adapter has multiple setup options", () => {
+    const request = vi.fn();
+    const state = makeState(request);
+    state.integrationsCatalog = [
+      {
+        adapter: "slack",
+        name: "Slack",
+        auth: SLACK_AUTH,
+      },
+    ];
+
+    selectIntegrationCatalogAdapter(state, "slack");
+
+    expect(state.integrationsSelectedConnectionKey).toBe("catalog::slack");
+    expect(state.integrationsSelectedAuthMethodId).toBe("");
+  });
+
+  it("merges duplicate catalog rows and prefers published setup metadata", async () => {
+    const request = vi.fn(async (method: string) => {
+      if (method === "adapters.connections.list") {
+        return { connections: [] };
+      }
+      if (method === "adapters.catalog.list") {
+        return {
+          adapters: [
+            {
+              adapter: "slack",
+              name: "Slack",
+              registered: true,
+            },
+            {
+              adapter: "slack",
+              name: "Slack",
+              published: true,
+              publishedVersion: "0.1.0",
+              auth: SLACK_AUTH,
+            },
+          ],
+        };
+      }
+      throw new Error(`unexpected method: ${method}`);
+    });
+    const state = makeState(request);
+
+    await loadIntegrations(state);
+    selectIntegrationCatalogAdapter(state, "slack");
+
+    expect(state.integrationsCatalog).toHaveLength(1);
+    expect(state.integrationsCatalog[0]).toMatchObject({
+      adapter: "slack",
+      published: true,
+      registered: true,
+      publishedVersion: "0.1.0",
+    });
+    expect(state.integrationsCatalog[0]?.auth?.methods).toHaveLength(2);
+    expect(state.integrationsSelectedConnectionKey).toBe("catalog::slack");
+    expect(state.integrationsSelectedAuthMethodId).toBe("");
   });
 
   it("loads connections and selects the first connection by default", async () => {
@@ -670,6 +742,51 @@ describe("integrations controller", () => {
       account: "tyler",
       status: "connected",
     });
+  });
+
+  it("uploads a file through the selected file-upload setup method", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: "imported",
+        preview: { rows: 7 },
+      })
+      .mockResolvedValueOnce({ connections: [] })
+      .mockResolvedValueOnce({
+        adapters: [
+          {
+            adapter: "whatsapp",
+            name: "WhatsApp",
+            auth: WHATSAPP_UPLOAD_AUTH,
+          },
+        ],
+      });
+
+    const state = makeState(request);
+    state.integrationsCatalog = [
+      {
+        adapter: "whatsapp",
+        name: "WhatsApp",
+        auth: WHATSAPP_UPLOAD_AUTH,
+      },
+    ];
+    state.integrationsSelectedConnectionKey = "catalog::whatsapp";
+    state.integrationsSelectedAuthMethodId = "whatsapp_session_upload";
+    state.integrationsPayloadText = JSON.stringify({
+      fields: {
+        filePath: "/Users/tyler/export.zip",
+      },
+    });
+
+    await uploadIntegrationAdapter(state, "whatsapp");
+
+    expect(request).toHaveBeenNthCalledWith(1, "adapters.connections.upload", {
+      adapter: "whatsapp",
+      authMethodId: "whatsapp_session_upload",
+      filePath: "/Users/tyler/export.zip",
+      fileName: "export.zip",
+    });
+    expect(state.integrationsMessage).toContain("whatsapp: upload imported (7 rows)");
   });
 
   it("creates a fresh connection from a catalog selection even when durable rows exist", async () => {

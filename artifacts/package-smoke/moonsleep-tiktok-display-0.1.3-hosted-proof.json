@@ -1,0 +1,199 @@
+{
+  "generated_at": "2026-04-28T01:06:45.133Z",
+  "server_id": "srv-1c4b077a-1f2",
+  "adapter": "tiktok-display",
+  "target_version": "0.1.3",
+  "runtime_base": "https://t-e86786c3-537.nexushub.sh/runtime",
+  "credential": {
+    "access_token_expires_at": "2026-04-28T22:29:09.127Z",
+    "refresh_token_expires_at": "2027-04-03T17:58:24.127Z",
+    "open_id": "-00041...E9n4",
+    "refresh_fields_installed": true
+  },
+  "steps": {
+    "frontdoor_install_status": {
+      "http_status": 200,
+      "ok": true,
+      "install_status": "installed",
+      "desired_version": "0.1.3",
+      "active_version": "0.1.3",
+      "last_error": null
+    },
+    "adapter_info": {
+      "http_status": 200,
+      "ok": true,
+      "version": "0.1.3",
+      "operations": [
+        "adapter.info",
+        "adapter.connections.list",
+        "adapter.health",
+        "adapter.monitor.start",
+        "records.backfill"
+      ]
+    },
+    "methods": {
+      "http_status": 200,
+      "ok": true,
+      "method_names": [
+        "tiktok-display.user.info.get",
+        "tiktok-display.video.list"
+      ]
+    },
+    "connection_update": {
+      "http_status": 200,
+      "latency_ms": 979,
+      "ok": true,
+      "status": "connected",
+      "connection_id": "d3f7dfd2-ef3c-4844-be4d-e0dca82e2093",
+      "account": "-00041...e9n4",
+      "service": "tiktok-display",
+      "error": null
+    },
+    "connection_status": {
+      "http_status": 200,
+      "ok": true,
+      "connection_id": "d3f7dfd2-ef3c-4844-be4d-e0dca82e2093",
+      "adapter": "tiktok-display",
+      "service": "tiktok-display",
+      "status": "connected",
+      "account": "-00041...E9n4",
+      "field_names": [
+        "access_token",
+        "refresh_token",
+        "open_id",
+        "access_token_expires_at",
+        "refresh_token_expires_at",
+        "client_key",
+        "client_secret",
+        "display_name",
+        "profile_web_link"
+      ],
+      "oauth_refresh_configured": true,
+      "access_token_expires_at": "2026-04-28T22:29:09Z",
+      "refresh_token_expires_at": "2027-04-03T17:58:24Z",
+      "oauth_state_loaded": false,
+      "error": null
+    },
+    "adapter_health": {
+      "http_status": 200,
+      "latency_ms": 745,
+      "ok": true,
+      "connected": true,
+      "connection_id": "d3f7dfd2-ef3c-4844-be4d-e0dca82e2093",
+      "account": "-00041...E9n4",
+      "error": null,
+      "profile_display_name": "MoonSleep",
+      "profile_follower_count": 12990,
+      "profile_video_count": 84,
+      "oauth_refresh_configured": true,
+      "access_token_expires_at": "2026-04-28T22:29:09Z",
+      "refresh_token_expires_at": "2027-04-03T17:58:24Z",
+      "oauth_state_loaded": false
+    },
+    "connection_test": {
+      "http_status": 200,
+      "latency_ms": 598,
+      "ok": true,
+      "connected": true,
+      "error": null
+    },
+    "user_info": {
+      "http_status": 200,
+      "latency_ms": 762,
+      "ok": true,
+      "has_profile": true,
+      "open_id": "-00041...E9n4",
+      "display_name": "MoonSleep",
+      "follower_count": 12990,
+      "video_count": 84,
+      "likes_count": 686466,
+      "error": null
+    },
+    "video_list": {
+      "http_status": 200,
+      "latency_ms": 5981,
+      "ok": true,
+      "video_count": 5,
+      "has_more": true,
+      "cursor": 1777078307000,
+      "sample_ids": [
+        "763359...9006",
+        "763273...6206",
+        "763249...9486"
+      ],
+      "error": null
+    },
+    "records_before": {
+      "http_status": 200,
+      "ok": true,
+      "count_returned": 5,
+      "sample_record_ids": [
+        "tiktok...c5ad",
+        "tiktok...ddc6",
+        "tiktok...308f",
+        "tiktok...426b",
+        "tiktok...5a79"
+      ]
+    },
+    "backfill_queue": {
+      "http_status": 200,
+      "ok": true,
+      "status": "queued",
+      "since": "2026-04-01T00:00:00Z",
+      "job_run_id": "jobrun_70cc276d-8c91-4967-a868-a5c02715e0c9",
+      "existing_run": false,
+      "error": null
+    },
+    "backfill_run": {
+      "http_status": 200,
+      "ok": true,
+      "id": "jobrun_70cc276d-8c91-4967-a868-a5c02715e0c9",
+      "status": "completed",
+      "error": null
+    },
+    "monitor_start": {
+      "http_status": 200,
+      "ok": true,
+      "started": true,
+      "error": null
+    },
+    "livesync_status": {
+      "http_status": 200,
+      "ok": true,
+      "adapter": "tiktok-display",
+      "connection_id": "d3f7dfd2-ef3c-4844-be4d-e0dca82e2093",
+      "enabled": true,
+      "error": null
+    },
+    "records_after": {
+      "http_status": 200,
+      "ok": true,
+      "count_returned": 5,
+      "sample_record_ids": [
+        "tiktok...84e0",
+        "tiktok...c5ad",
+        "tiktok...ddc6",
+        "tiktok...308f",
+        "tiktok...426b"
+      ]
+    },
+    "runtime_health_after": {
+      "http_status": 200,
+      "ok": true,
+      "status": "healthy",
+      "adapter_total": 5,
+      "adapter_running": 5,
+      "adapter_errored": 0,
+      "tiktok_display": {
+        "adapter": "tiktok-display",
+        "account": "d3f7dfd2-ef3c-4844-be4d-e0dca82e2093",
+        "status": "running",
+        "health": "healthy",
+        "last_event_age_ms": null,
+        "last_health_check_age_ms": 11516
+      }
+    }
+  },
+  "ok": true,
+  "failures": []
+}

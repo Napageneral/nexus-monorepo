@@ -232,6 +232,33 @@ function stageFakePackage(
       packageId,
       version,
       manifestJson: JSON.stringify(manifestOverride ?? { id: packageId, version }),
+      setupDescriptorJson: kind === "adapter"
+        ? JSON.stringify({
+            schemaVersion: "adapter-catalog-setup.v1",
+            adapterId: packageId,
+            displayName: packageId,
+            version,
+            auth: {
+              methods: [
+                {
+                  id: `${packageId}_api_key`,
+                  type: "api_key",
+                  label: "API key",
+                  icon: packageId,
+                  service: packageId,
+                  fields: [
+                    {
+                      name: "api_key",
+                      label: "API key",
+                      type: "secret",
+                      required: true,
+                    },
+                  ],
+                },
+              ],
+            },
+          })
+        : undefined,
     });
     store.upsertPackageReleaseVariant({
       variantId: `variant-${packageId}-${version}-${targetPlatform?.os ?? process.platform}-${targetPlatform?.arch ?? process.arch}`,
@@ -4912,6 +4939,8 @@ describe("frontdoor scaffold", () => {
         description: string | null;
         latest_version: string;
         release_id: string;
+        auth: { methods?: Array<{ id?: string }> } | null;
+        setup_descriptor: Record<string, unknown> | null;
       }>;
     };
     expect(body.ok).toBe(true);
@@ -4921,6 +4950,11 @@ describe("frontdoor scaffold", () => {
         display_name: "confluence",
         latest_version: "0.1.0",
         release_id: "rel-confluence-0.1.0",
+        auth: expect.objectContaining({
+          methods: expect.arrayContaining([
+            expect.objectContaining({ id: "confluence_api_key" }),
+          ]),
+        }),
       }),
       expect.objectContaining({
         adapter_id: "slack",

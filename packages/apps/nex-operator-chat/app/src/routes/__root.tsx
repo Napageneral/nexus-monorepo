@@ -565,11 +565,6 @@ function EventRouter() {
     };
     const unsubDomainEvent = api.orchestration.onDomainEvent(
       (event) => {
-        if (nexEmbedded) {
-          flushPendingDomainEvents();
-          void fallbackToSnapshotRecovery();
-          return;
-        }
         const action = recovery.classifyDomainEvent(event.sequence);
         if (action === "apply") {
           pendingDomainEvents.push(event);
@@ -584,11 +579,6 @@ function EventRouter() {
       {
         onResubscribe: () => {
           if (disposed) {
-            return;
-          }
-          if (nexEmbedded) {
-            flushPendingDomainEvents();
-            void fallbackToSnapshotRecovery();
             return;
           }
           flushPendingDomainEvents();

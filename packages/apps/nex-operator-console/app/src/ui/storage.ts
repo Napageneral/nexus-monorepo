@@ -16,11 +16,27 @@ export type UiSettings = {
   navGroupsCollapsed: Record<string, boolean>; // Which nav groups are collapsed
 };
 
+function defaultRuntimeUrl(): string {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  return `${proto}://${location.host}`;
+}
+
+function isRuntimeServedConsole(): boolean {
+  return location.pathname === "/app/console" || location.pathname.startsWith("/app/console/");
+}
+
+function resolveRuntimeUrl(stored: unknown, fallback: string): string {
+  const parsed = typeof stored === "string" && stored.trim() ? stored.trim() : fallback;
+  // A console loaded from the runtime itself should not be stranded by an old
+  // dev-server or remote runtime URL persisted in localStorage.
+  if (isRuntimeServedConsole()) {
+    return fallback;
+  }
+  return parsed;
+}
+
 export function loadSettings(): UiSettings {
-  const defaultUrl = (() => {
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    return `${proto}://${location.host}`;
-  })();
+  const defaultUrl = defaultRuntimeUrl();
 
   const defaults: UiSettings = {
     runtimeUrl: defaultUrl,
@@ -42,10 +58,7 @@ export function loadSettings(): UiSettings {
     }
     const parsed = JSON.parse(raw) as Partial<UiSettings>;
     const resolved = {
-      runtimeUrl:
-        typeof parsed.runtimeUrl === "string" && parsed.runtimeUrl.trim()
-          ? parsed.runtimeUrl.trim()
-          : defaults.runtimeUrl,
+      runtimeUrl: resolveRuntimeUrl(parsed.runtimeUrl, defaults.runtimeUrl),
       token: typeof parsed.token === "string" ? parsed.token : defaults.token,
       conversationId:
         typeof parsed.conversationId === "string" && parsed.conversationId.trim()

@@ -58,12 +58,16 @@ def build_minimal_stage(package_root: Path, kind: str, package_id: str, version:
     shutil.copy2(manifest_src, manifest_dst)
 
     if kind == "app":
-      manifest = json.loads(manifest_src.read_text(encoding="utf-8"))
-      copy_if_exists(package_root, manifest.get("icon"), stage_root)
-      product = manifest.get("product") or {}
-      if isinstance(product, dict):
-          copy_if_exists(package_root, product.get("logoSvg"), stage_root)
-          copy_if_exists(package_root, product.get("icon"), stage_root)
+        manifest = json.loads(manifest_src.read_text(encoding="utf-8"))
+        copy_if_exists(package_root, manifest.get("icon"), stage_root)
+        product = manifest.get("product") or {}
+        if isinstance(product, dict):
+            copy_if_exists(package_root, product.get("logoSvg"), stage_root)
+            copy_if_exists(package_root, product.get("icon"), stage_root)
+    else:
+        catalog_src = package_root / "dist" / f"{package_id}-{version}.adapter.catalog.json"
+        if catalog_src.exists() and catalog_src.is_file():
+            shutil.copy2(catalog_src, stage_root / "adapter.catalog.json")
 
     return stage_root
 

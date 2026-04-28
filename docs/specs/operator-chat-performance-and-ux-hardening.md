@@ -23,6 +23,19 @@ The target state is not a custom redesign. The target state is:
 
 The Chat tab must not block first paint on full historical projection work.
 
+The Chat tab must expose enough first-party timing data to distinguish:
+
+- console shell first paint
+- runtime WebSocket connection
+- chat microfrontend bundle load
+- first `chat.snapshot` response
+- first lane list paint
+- selected transcript paint
+- transcript scroll readiness
+
+Performance debugging must be evidence-backed. A slow page load is not
+actionable until the runtime, network, bundle, and render costs are separated.
+
 The default `/chat` load should fetch:
 
 - lane summaries
@@ -37,6 +50,17 @@ The default `/chat` load should not fetch or regenerate:
 - linked public records for every lane
 - full replay event history when a fresh snapshot is sufficient
 
+The t3code fork bundle should preserve upstream visual behavior, but it should
+not ship code surfaces that are not part of Nex Chat. Terminal, worktree, diff,
+checkpoint, IDE, pull-request, and provider-runtime controls are not part of
+the Nex Chat tab. Their assets and imports should not sit on the default Chat
+critical path.
+
+Runtime-served Console pages must use the current runtime origin as their
+default WebSocket endpoint. Persisted development or remote runtime URLs must
+not strand `/app/console/*` pages that are already served by a live Nex
+runtime.
+
 ## Sidebar Rules
 
 The left rail keeps upstream project/thread grammar, but Nex remaps the nouns:
@@ -50,6 +74,11 @@ The left rail keeps upstream project/thread grammar, but Nex remaps the nouns:
 Most operators should see a manager/agent list first. Reaching worker lanes
 should require an explicit expansion or deep link.
 
+The sidebar should not require the initial snapshot to carry all worker detail.
+Agent rows should be sufficient for first paint. Worker rows should be fetched
+or expanded only when the operator opens an agent, deep-links to a worker, or
+searches/filter-navigates into worker scope.
+
 ## Transcript Rules
 
 The selected transcript must stay scrollable and responsive with large session
@@ -62,6 +91,27 @@ The UI should:
 - avoid re-rendering unchanged markdown rows during lane metadata updates
 - avoid forced layout loops while scrolling
 - preserve upstream auto-scroll and jump-to-bottom behavior
+
+The transcript source of truth is the Nex agent session ledger for the selected
+lane. The UI may receive live chat events, but those events must dedupe against
+stable ledger message ids so optimistic sends, replayed events, and refreshed
+snapshots do not produce duplicate bubbles.
+
+The default selected transcript should load a bounded recent window. Older
+history should be cursor-paginated or virtualized behind scroll-up behavior
+instead of rendered as one unbounded DOM tree.
+
+Lane runtime state must be projected by Nex, not inferred by the browser from
+old messages. Stale active-run indicators should age out according to the
+runtime projection rules so old sessions do not appear to be working forever.
+
+Chat URL state should be explicit and reversible:
+
+- entering the Chat tab without an explicit lane shows the neutral lane picker
+- selecting a lane writes the lane parameter
+- stale or invalid lane parameters clear to the neutral picker
+- leaving and returning through top-level Console navigation must not preserve
+  an invalid lane selection accidentally
 
 ## Context Rules
 

@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-04-27T22:29:49.675974+00:00",
+  "host": "ubuntu@frontdoor.nexushub.sh",
+  "remote_frontdoor_root": "/opt/nexus/frontdoor",
+  "remote_db": "/var/lib/nexus-frontdoor/frontdoor.db",
+  "target_os": "linux",
+  "target_arch": "arm64",
+  "count": 1,
+  "failures": 0,
+  "results": [
+    {
+      "kind": "adapter",
+      "id": "tiktok-display",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/tiktok-display",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/tiktok-display/dist/tiktok-display-0.1.2.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/tiktok-display/0.1.2/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/tiktok-display/0.1.2/tiktok-display-0.1.2.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "tiktok-display",
+        "version": "0.1.2",
+        "release_id": "rel-tiktok-display-0.1.2",
+        "variant_id": "variant-tiktok-display-0.1.2-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/tiktok-display/0.1.2/tiktok-display-0.1.2.tar.gz",
+        "sha256": "c91ddc4a7b289b0df8fa96450721559e51dc5cd0d649b100109c837d51e56c85",
+        "size_bytes": 4554388,
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"tiktok-display\",\n  \"version\": \"0.1.2\",\n  \"release_id\": \"rel-tiktok-display-0.1.2\",\n  \"variant_id\": \"variant-tiktok-display-0.1.2-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/tiktok-display/0.1.2/tiktok-display-0.1.2.tar.gz\",\n  \"sha256\": \"c91ddc4a7b289b0df8fa96450721559e51dc5cd0d649b100109c837d51e56c85\",\n  \"size_bytes\": 4554388,\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:296232) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    }
+  ]
+}

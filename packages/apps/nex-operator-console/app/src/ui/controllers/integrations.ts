@@ -1,3 +1,5 @@
+import { finishConsoleLatency, startConsoleLatency } from "../latency-metrics.ts";
+
 export type AdapterConnectionStatus = "connected" | "disconnected" | "error" | "expired";
 export type AdapterConnectionAuthMethod =
   | "oauth2"
@@ -121,6 +123,13 @@ type AdapterConnectionMutationResult = {
   status: string;
   account?: string;
   service?: string;
+};
+
+type AdapterConnectionsUploadResult = {
+  status: string;
+  preview?: {
+    rows?: number;
+  };
 };
 
 export type AdapterConnectionsCustomResult = {
@@ -284,7 +293,9 @@ function normalizeCatalogMethod(method: AdapterCatalogMethodShape): AdapterAuthM
       label,
       icon: icon || "oauth",
       service,
-      scopes: Array.isArray(method?.scopes) ? method.scopes.filter((scope): scope is string => typeof scope === "string") : [],
+      scopes: Array.isArray(method?.scopes)
+        ? method.scopes.filter((scope): scope is string => typeof scope === "string")
+        : [],
     };
   }
   if (type === "api_key") {
@@ -295,7 +306,9 @@ function normalizeCatalogMethod(method: AdapterCatalogMethodShape): AdapterAuthM
       icon: icon || "plug",
       service,
       fields: Array.isArray(method?.fields)
-        ? method.fields.filter((field): field is AdapterAuthField => Boolean(field && typeof field === "object"))
+        ? method.fields.filter((field): field is AdapterAuthField =>
+            Boolean(field && typeof field === "object"),
+          )
         : [],
     };
   }
@@ -305,7 +318,9 @@ function normalizeCatalogMethod(method: AdapterCatalogMethodShape): AdapterAuthM
       type: "file_upload",
       label,
       icon: icon || "upload",
-      accept: Array.isArray(method?.accept) ? method.accept.filter((item): item is string => typeof item === "string") : [],
+      accept: Array.isArray(method?.accept)
+        ? method.accept.filter((item): item is string => typeof item === "string")
+        : [],
       templateUrl: typeof method?.templateUrl === "string" ? method.templateUrl : undefined,
       maxSize: typeof method?.maxSize === "number" ? method.maxSize : undefined,
     };
@@ -318,7 +333,9 @@ function normalizeCatalogMethod(method: AdapterCatalogMethodShape): AdapterAuthM
       icon: icon || "plug",
       service,
       fields: Array.isArray(method?.fields)
-        ? method.fields.filter((field): field is AdapterAuthField => Boolean(field && typeof field === "object"))
+        ? method.fields.filter((field): field is AdapterAuthField =>
+            Boolean(field && typeof field === "object"),
+          )
         : undefined,
     };
   }
@@ -326,28 +343,49 @@ function normalizeCatalogMethod(method: AdapterCatalogMethodShape): AdapterAuthM
 }
 
 function normalizeCatalogMethods(entry: Record<string, unknown>): AdapterAuthManifest | undefined {
-  const rawMethods =
-    Array.isArray(entry.methods)
-      ? entry.methods
-      : Array.isArray(entry.auth_methods)
-        ? entry.auth_methods
-        : Array.isArray((entry.auth as Record<string, unknown> | undefined)?.methods)
-          ? (entry.auth as Record<string, unknown>).methods
+  const setupDescriptor =
+    entry.setup_descriptor && typeof entry.setup_descriptor === "object"
+      ? (entry.setup_descriptor as Record<string, unknown>)
+      : null;
+  const descriptorAuth =
+    setupDescriptor?.auth && typeof setupDescriptor.auth === "object"
+      ? (setupDescriptor.auth as Record<string, unknown>)
+      : null;
+  const rawAuth =
+    entry.auth && typeof entry.auth === "object" ? (entry.auth as Record<string, unknown>) : null;
+  const rawMethods = Array.isArray(entry.methods)
+    ? entry.methods
+    : Array.isArray(entry.auth_methods)
+      ? entry.auth_methods
+      : Array.isArray(rawAuth?.methods)
+        ? rawAuth.methods
+        : Array.isArray(descriptorAuth?.methods)
+          ? descriptorAuth.methods
           : [];
   const methods = rawMethods
-    .map((method) => (method && typeof method === "object" ? normalizeCatalogMethod(method as AdapterCatalogMethodShape) : null))
+    .map((method) =>
+      method && typeof method === "object"
+        ? normalizeCatalogMethod(method as AdapterCatalogMethodShape)
+        : null,
+    )
     .filter((method): method is AdapterAuthMethod => Boolean(method));
   const setupGuide =
     typeof entry.setupGuide === "string"
       ? entry.setupGuide
       : typeof entry.setup_guide === "string"
         ? entry.setup_guide
-        : typeof (entry.auth as Record<string, unknown> | undefined)?.setupGuide === "string"
-          ? (entry.auth as Record<string, unknown>).setupGuide
-          : typeof (entry.auth as Record<string, unknown> | undefined)?.setup_guide === "string"
-            ? (entry.auth as Record<string, unknown>).setup_guide
-            : undefined;
-  return methods.length > 0 || setupGuide ? { methods, ...(setupGuide ? { setupGuide } : {}) } : undefined;
+        : typeof rawAuth?.setupGuide === "string"
+          ? rawAuth.setupGuide
+          : typeof rawAuth?.setup_guide === "string"
+            ? rawAuth.setup_guide
+            : typeof descriptorAuth?.setupGuide === "string"
+              ? descriptorAuth.setupGuide
+              : typeof descriptorAuth?.setup_guide === "string"
+                ? descriptorAuth.setup_guide
+                : undefined;
+  return methods.length > 0 || setupGuide
+    ? { methods, ...(setupGuide ? { setupGuide } : {}) }
+    : undefined;
 }
 
 function normalizeAdapterCatalogEntry(entry: unknown): AdapterCatalogEntry | null {
@@ -358,11 +396,13 @@ function normalizeAdapterCatalogEntry(entry: unknown): AdapterCatalogEntry | nul
   const adapter = normalizeKey(
     typeof raw.adapter === "string"
       ? raw.adapter
-      : typeof raw.id === "string"
-        ? raw.id
-        : typeof raw.service === "string"
-          ? raw.service
-          : null,
+      : typeof raw.adapter_id === "string"
+        ? raw.adapter_id
+        : typeof raw.id === "string"
+          ? raw.id
+          : typeof raw.service === "string"
+            ? raw.service
+            : null,
   );
   const name = trimOrEmpty(
     typeof raw.name === "string"
@@ -381,7 +421,9 @@ function normalizeAdapterCatalogEntry(entry: unknown): AdapterCatalogEntry | nul
       ? raw.service
       : typeof raw.service_name === "string"
         ? raw.service_name
-        : null,
+        : typeof raw.platform === "string"
+          ? raw.platform
+          : null,
   );
   const description = trimOrEmpty(
     typeof raw.description === "string"
@@ -392,10 +434,24 @@ function normalizeAdapterCatalogEntry(entry: unknown): AdapterCatalogEntry | nul
   );
   const icon = trimOrEmpty(typeof raw.icon === "string" ? raw.icon : null);
   const auth = normalizeCatalogMethods(raw);
-  const published = raw.published === true;
-  const publishedVersion = trimOrEmpty(typeof raw.publishedVersion === "string" ? raw.publishedVersion : null);
+  const published = raw.published === true || typeof raw.publishedReleaseId === "string";
+  const publishedVersion = trimOrEmpty(
+    typeof raw.publishedVersion === "string"
+      ? raw.publishedVersion
+      : typeof raw.latest_version === "string"
+        ? raw.latest_version
+        : published && typeof raw.version === "string"
+          ? raw.version
+          : null,
+  );
   const registered = raw.registered === true;
-  const registeredVersion = trimOrEmpty(typeof raw.registeredVersion === "string" ? raw.registeredVersion : null);
+  const registeredVersion = trimOrEmpty(
+    typeof raw.registeredVersion === "string"
+      ? raw.registeredVersion
+      : registered && typeof raw.version === "string"
+        ? raw.version
+        : null,
+  );
   return {
     adapter,
     name,
@@ -406,6 +462,65 @@ function normalizeAdapterCatalogEntry(entry: unknown): AdapterCatalogEntry | nul
     publishedVersion: publishedVersion || null,
     registered,
     registeredVersion: registeredVersion || null,
+    ...(auth ? { auth } : {}),
+  };
+}
+
+function authMethodCount(manifest: AdapterAuthManifest | undefined): number {
+  return Array.isArray(manifest?.methods) ? manifest.methods.length : 0;
+}
+
+function catalogEntryScore(entry: AdapterCatalogEntry): number {
+  let score = 0;
+  const methods = authMethodCount(entry.auth);
+  if (methods > 0 || entry.auth?.setupGuide) {
+    score += 100;
+  }
+  if (entry.published) {
+    score += 50;
+  }
+  if (entry.registered) {
+    score += 25;
+  }
+  return score + methods;
+}
+
+function mergeAuthManifest(
+  left: AdapterAuthManifest | undefined,
+  right: AdapterAuthManifest | undefined,
+): AdapterAuthManifest | undefined {
+  if (!left) {
+    return right;
+  }
+  if (!right) {
+    return left;
+  }
+  const preferredMethods =
+    authMethodCount(right) > authMethodCount(left) ? right.methods : left.methods;
+  const setupGuide = left.setupGuide || right.setupGuide;
+  return {
+    methods: preferredMethods,
+    ...(setupGuide ? { setupGuide } : {}),
+  };
+}
+
+function mergeCatalogEntries(
+  left: AdapterCatalogEntry,
+  right: AdapterCatalogEntry,
+): AdapterCatalogEntry {
+  const primary = catalogEntryScore(right) > catalogEntryScore(left) ? right : left;
+  const secondary = primary === right ? left : right;
+  const auth = mergeAuthManifest(primary.auth, secondary.auth);
+  return {
+    adapter: primary.adapter || secondary.adapter,
+    name: primary.name || secondary.name,
+    description: primary.description || secondary.description || null,
+    service: primary.service || secondary.service || null,
+    icon: primary.icon || secondary.icon || null,
+    published: Boolean(left.published || right.published),
+    publishedVersion: left.publishedVersion || right.publishedVersion || null,
+    registered: Boolean(left.registered || right.registered),
+    registeredVersion: left.registeredVersion || right.registeredVersion || null,
     ...(auth ? { auth } : {}),
   };
 }
@@ -422,20 +537,26 @@ function normalizeAdapterCatalog(
         : Array.isArray(payload?.connections)
           ? payload.connections
           : [];
-  return rawEntries
+  const entries = rawEntries
     .map((entry) => normalizeAdapterCatalogEntry(entry))
-    .filter((entry): entry is AdapterCatalogEntry => Boolean(entry))
-    .toSorted((left, right) => {
-      const publishedRank = Number(right.published === true) - Number(left.published === true);
-      if (publishedRank !== 0) {
-        return publishedRank;
-      }
-      const registeredRank = Number(right.registered === true) - Number(left.registered === true);
-      if (registeredRank !== 0) {
-        return registeredRank;
-      }
-      return left.name.localeCompare(right.name);
-    });
+    .filter((entry): entry is AdapterCatalogEntry => Boolean(entry));
+  const merged = new Map<string, AdapterCatalogEntry>();
+  for (const entry of entries) {
+    const key = normalizeKey(entry.adapter);
+    const existing = merged.get(key);
+    merged.set(key, existing ? mergeCatalogEntries(existing, entry) : entry);
+  }
+  return [...merged.values()].toSorted((left, right) => {
+    const publishedRank = Number(right.published === true) - Number(left.published === true);
+    if (publishedRank !== 0) {
+      return publishedRank;
+    }
+    const registeredRank = Number(right.registered === true) - Number(left.registered === true);
+    if (registeredRank !== 0) {
+      return registeredRank;
+    }
+    return left.name.localeCompare(right.name);
+  });
 }
 
 function mergeAdapterConnections(
@@ -565,6 +686,13 @@ function selectDefaultAuthMethodId(
   return trimOrEmpty(methods[0]?.id);
 }
 
+function catalogSelectionRequiresAuthMethodChoice(
+  entry: AdapterConnectionEntry | null,
+  catalogEntry: AdapterCatalogEntry | null,
+): boolean {
+  return !entry && availableAuthMethods(entry, catalogEntry).length > 1;
+}
+
 function selectedAuthMethod(state: IntegrationsState): AdapterAuthMethod | null {
   const connection = selectedConnectionEntry(state);
   const catalog = selectedCatalogEntry(state);
@@ -578,6 +706,9 @@ function selectedAuthMethod(state: IntegrationsState): AdapterAuthMethod | null 
     if (explicit) {
       return explicit;
     }
+  }
+  if (catalogSelectionRequiresAuthMethodChoice(connection, catalog)) {
+    return null;
   }
   const activeId = selectDefaultAuthMethodId(connection, catalog);
   return methods.find((method) => method.id === activeId) ?? methods[0] ?? null;
@@ -596,10 +727,14 @@ function selectedAuthMethodId(state: IntegrationsState): string {
 }
 
 function syncSelectedAuthMethod(state: IntegrationsState): void {
-  state.integrationsSelectedAuthMethodId = selectDefaultAuthMethodId(
-    selectedConnectionEntry(state),
-    selectedCatalogEntry(state),
-  );
+  const connection = selectedConnectionEntry(state);
+  const catalog = selectedCatalogEntry(state);
+  state.integrationsSelectedAuthMethodId = catalogSelectionRequiresAuthMethodChoice(
+    connection,
+    catalog,
+  )
+    ? ""
+    : selectDefaultAuthMethodId(connection, catalog);
 }
 
 function syncSelectedConnection(state: IntegrationsState): void {
@@ -769,10 +904,7 @@ export function beginAddIntegrationConnector(state: IntegrationsState): void {
   state.integrationsMessage = null;
 }
 
-export function selectIntegrationCatalogAdapter(
-  state: IntegrationsState,
-  adapter: string,
-): void {
+export function selectIntegrationCatalogAdapter(state: IntegrationsState, adapter: string): void {
   const target = normalizeKey(adapter);
   if (!target) {
     state.integrationsError = "Choose a connector first.";
@@ -780,8 +912,7 @@ export function selectIntegrationCatalogAdapter(
   }
 
   const preferred =
-    state.integrationsCatalog.find((entry) => normalizeKey(entry.adapter) === target) ??
-    null;
+    state.integrationsCatalog.find((entry) => normalizeKey(entry.adapter) === target) ?? null;
 
   if (!preferred) {
     state.integrationsError = `No connector catalog entry is available yet for ${adapter}.`;
@@ -829,13 +960,53 @@ function parseApiKeyPayload(payloadText: string): {
   return Object.keys(config ?? {}).length > 0 ? { fields, config } : { fields };
 }
 
+function parseFileUploadPayload(payloadText: string): {
+  filePath: string;
+  fileName: string;
+} {
+  const payload = parsePayload(payloadText);
+  if (!payload) {
+    throw new Error("File upload setup requires filePath.");
+  }
+  const explicitFields = payload.fields;
+  const rawFields =
+    explicitFields && typeof explicitFields === "object" && !Array.isArray(explicitFields)
+      ? (explicitFields as Record<string, unknown>)
+      : payload;
+  const filePath = trimOrEmpty(
+    typeof rawFields.filePath === "string"
+      ? rawFields.filePath
+      : typeof rawFields.file_path === "string"
+        ? rawFields.file_path
+        : null,
+  );
+  if (!filePath) {
+    throw new Error("File upload setup requires filePath.");
+  }
+  const explicitFileName = trimOrEmpty(
+    typeof rawFields.fileName === "string"
+      ? rawFields.fileName
+      : typeof rawFields.file_name === "string"
+        ? rawFields.file_name
+        : null,
+  );
+  const inferredFileName = filePath.split(/[\\/]/u).pop() ?? "";
+  return {
+    filePath,
+    fileName: explicitFileName || inferredFileName || "upload",
+  };
+}
+
 export async function loadIntegrations(state: IntegrationsState): Promise<void> {
+  const totalTimer = startConsoleLatency("integrations.connectors.load.total");
   if (state.integrationsLoading) {
+    finishConsoleLatency(totalTimer, "ok", { skipped: true, reason: "already loading" });
     return;
   }
   if (!state.client || !state.connected) {
     state.integrationsLoaded = true;
     state.integrationsError = "Runtime not connected.";
+    finishConsoleLatency(totalTimer, "error", { reason: "runtime not connected" });
     return;
   }
   state.integrationsLoading = true;
@@ -845,13 +1016,30 @@ export async function loadIntegrations(state: IntegrationsState): Promise<void> 
   consumeCallbackSignal(state);
   try {
     const client = state.client;
+    const requestTimer = startConsoleLatency("integrations.connectors.requests.parallel");
     const [connectionsResult, catalogResult] = await Promise.allSettled([
       client.request<AdapterConnectionsListResult>("adapters.connections.list", {}),
       client.request<AdapterCatalogListResult>("adapters.catalog.list", {}),
     ]);
+    finishConsoleLatency(
+      requestTimer,
+      connectionsResult.status === "fulfilled" || catalogResult.status === "fulfilled"
+        ? "ok"
+        : "error",
+      {
+        connections: connectionsResult.status,
+        catalog: catalogResult.status,
+      },
+    );
+    const connectionsNormalizeTimer = startConsoleLatency(
+      "integrations.connectors.normalize.connections",
+    );
     if (connectionsResult.status === "fulfilled") {
       state.integrationsAdapters = sortConnections(
-        (Array.isArray(connectionsResult.value.connections) ? connectionsResult.value.connections : []).map((entry) => ({
+        (Array.isArray(connectionsResult.value.connections)
+          ? connectionsResult.value.connections
+          : []
+        ).map((entry) => ({
           ...entry,
           connections: Array.isArray(entry.connections) ? entry.connections : [],
         })),
@@ -860,20 +1048,53 @@ export async function loadIntegrations(state: IntegrationsState): Promise<void> 
     } else {
       state.integrationsError = String(connectionsResult.reason);
     }
+    finishConsoleLatency(
+      connectionsNormalizeTimer,
+      connectionsResult.status === "fulfilled" ? "ok" : "error",
+      {
+        status: connectionsResult.status,
+        count: state.integrationsAdapters.length,
+      },
+    );
+    const catalogNormalizeTimer = startConsoleLatency("integrations.connectors.normalize.catalog");
     if (catalogResult.status === "fulfilled") {
       state.integrationsCatalog = normalizeAdapterCatalog(catalogResult.value);
       state.integrationsCatalogError = null;
     } else {
       state.integrationsCatalogError = String(catalogResult.reason);
     }
+    finishConsoleLatency(
+      catalogNormalizeTimer,
+      catalogResult.status === "fulfilled" ? "ok" : "error",
+      {
+        status: catalogResult.status,
+        count: state.integrationsCatalog.length,
+      },
+    );
+    const selectionTimer = startConsoleLatency("integrations.connectors.sync-selection");
     syncSelectedConnection(state);
+    finishConsoleLatency(selectionTimer, "ok", {
+      selected: state.integrationsSelectedConnectionKey || null,
+    });
   } catch (error) {
     state.integrationsError = String(error);
+    finishConsoleLatency(totalTimer, "error", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return;
   } finally {
     state.integrationsLoaded = true;
     state.integrationsLoading = false;
     state.integrationsCatalogLoading = false;
   }
+  finishConsoleLatency(
+    totalTimer,
+    state.integrationsError || state.integrationsCatalogError ? "error" : "ok",
+    {
+      connections: state.integrationsAdapters.length,
+      catalog: state.integrationsCatalog.length,
+    },
+  );
 }
 
 export async function startIntegrationOAuth(
@@ -1042,6 +1263,47 @@ export async function connectIntegrationAdapter(
   }
 }
 
+export async function uploadIntegrationAdapter(
+  state: IntegrationsState,
+  adapter: string,
+): Promise<void> {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  const target = trimOrEmpty(adapter);
+  if (!target) {
+    state.integrationsError = "Select an adapter first.";
+    return;
+  }
+  const method = selectedAuthMethod(state);
+  if (!method || method.type !== "file_upload") {
+    state.integrationsError = "Select a file upload auth method first.";
+    return;
+  }
+  setBusy(state, target, "upload");
+  state.integrationsError = null;
+  state.integrationsMessage = null;
+  try {
+    const { filePath, fileName } = parseFileUploadPayload(state.integrationsPayloadText);
+    const result = await state.client.request<AdapterConnectionsUploadResult>(
+      "adapters.connections.upload",
+      {
+        adapter: selectedAdapter(state) || target,
+        authMethodId: method.id,
+        filePath,
+        fileName,
+      },
+    );
+    const rows = typeof result.preview?.rows === "number" ? ` (${result.preview.rows} rows)` : "";
+    state.integrationsMessage = `${target}: upload ${result.status}${rows}.`;
+    await loadIntegrations(state);
+  } catch (error) {
+    state.integrationsError = String(error);
+  } finally {
+    clearBusy(state);
+  }
+}
+
 export async function checkIntegrationCustomFlow(
   state: IntegrationsState,
   adapter: string,
@@ -1137,9 +1399,12 @@ export async function testIntegrationAdapter(
   state.integrationsError = null;
   state.integrationsMessage = null;
   try {
-    const result = await state.client.request<AdapterConnectionsTestResult>("adapters.connections.test", {
-      connectionId,
-    });
+    const result = await state.client.request<AdapterConnectionsTestResult>(
+      "adapters.connections.test",
+      {
+        connectionId,
+      },
+    );
     state.integrationsMessage = result.ok
       ? `${target}: connection test passed (${Math.max(0, Math.trunc(result.latency))}ms).`
       : `${target}: connection test failed - ${result.error || "unknown error"}`;

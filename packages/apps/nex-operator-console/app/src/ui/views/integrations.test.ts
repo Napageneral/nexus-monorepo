@@ -36,6 +36,7 @@ function createProps(overrides: Partial<IntegrationsProps> = {}): IntegrationsPr
     onCustomSubmit: vi.fn(),
     onCustomStatus: vi.fn(),
     onCustomCancel: vi.fn(),
+    onUpload: vi.fn(),
     onTest: vi.fn(),
     onBackfill: vi.fn(),
     onLivesyncToggle: vi.fn(),
@@ -345,6 +346,123 @@ describe("integrations view", () => {
         token: "xoxp-test",
       },
     });
+
+    document.body.removeChild(container);
+  });
+
+  it("shows a method choice step before setup questions when a connector has multiple auth methods", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const onSelectAuthMethod = vi.fn();
+    render(
+      renderIntegrations(
+        createProps({
+          catalogOpen: true,
+          selectedConnectionKey: "catalog::slack",
+          selectedAuthMethodId: "",
+          onSelectAuthMethod,
+          catalogItems: [
+            {
+              adapter: "slack",
+              name: "Slack",
+              service: "slack",
+              auth: {
+                methods: [
+                  {
+                    id: "slack_user_token",
+                    type: "api_key" as const,
+                    label: "Slack User Token",
+                    icon: "slack",
+                    service: "slack",
+                    fields: [
+                      {
+                        name: "token",
+                        label: "User token",
+                        type: "secret" as const,
+                        required: true,
+                      },
+                    ],
+                  },
+                  {
+                    id: "slack_socket_mode",
+                    type: "api_key" as const,
+                    label: "Slack Socket Mode",
+                    icon: "slack",
+                    service: "slack",
+                    fields: [
+                      {
+                        name: "bot_token",
+                        label: "Bot token",
+                        type: "secret" as const,
+                        required: true,
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+      container,
+    );
+
+    const setupModal = container.querySelector(".console-modal--connector-setup");
+    expect(setupModal?.textContent).toContain("Choose setup method");
+    expect(setupModal?.textContent).toContain("Slack User Token");
+    expect(setupModal?.textContent).toContain("Slack Socket Mode");
+    expect(setupModal?.textContent).not.toContain("Setup questions");
+    const methodCard = container.querySelector(".connector-setup-method-card") as HTMLButtonElement | null;
+    methodCard?.click();
+    expect(onSelectAuthMethod).toHaveBeenCalledWith("slack_user_token");
+
+    document.body.removeChild(container);
+  });
+
+  it("renders file upload setup fields and action inside the modal", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const onUpload = vi.fn();
+    render(
+      renderIntegrations(
+        createProps({
+          catalogOpen: true,
+          selectedConnectionKey: "catalog::whatsapp",
+          selectedAuthMethodId: "whatsapp_session_upload",
+          onUpload,
+          catalogItems: [
+            {
+              adapter: "whatsapp",
+              name: "WhatsApp",
+              service: "whatsapp",
+              auth: {
+                methods: [
+                  {
+                    id: "whatsapp_session_upload",
+                    type: "file_upload" as const,
+                    label: "Upload WhatsApp Session",
+                    icon: "whatsapp",
+                    accept: [".zip"],
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+      container,
+    );
+
+    const setupModal = container.querySelector(".console-modal--connector-setup");
+    expect(setupModal?.textContent).toContain("Upload WhatsApp Session");
+    expect(setupModal?.textContent).toContain("Local file path");
+    expect(setupModal?.textContent).toContain("File name");
+    const button = Array.from(container.querySelectorAll("button")).find((node) =>
+      node.textContent?.includes("Upload File"),
+    );
+    expect(button).toBeTruthy();
+    button?.click();
+    expect(onUpload).toHaveBeenCalledWith("whatsapp");
 
     document.body.removeChild(container);
   });

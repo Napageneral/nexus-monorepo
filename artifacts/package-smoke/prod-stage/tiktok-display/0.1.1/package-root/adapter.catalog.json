@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "adapter-catalog-setup.v1",
+  "adapterId": "tiktok-display",
+  "displayName": "TikTok Display",
+  "auth": {
+    "methods": [
+      {
+        "id": "tiktok_display_oauth",
+        "type": "oauth2",
+        "label": "Connect TikTok Display",
+        "icon": "oauth",
+        "service": "tiktok-display",
+        "scopes": [
+          "user.info.basic",
+          "user.info.profile",
+          "user.info.stats",
+          "video.list"
+        ],
+        "platformCredentials": true
+      },
+      {
+        "id": "tiktok_display_access_token",
+        "type": "api_key",
+        "label": "Use Existing TikTok Display Access Token",
+        "icon": "key",
+        "service": "tiktok-display",
+        "fields": [
+          {
+            "name": "access_token",
+            "label": "TikTok Display Access Token",
+            "type": "secret",
+            "required": true,
+            "placeholder": "act..."
+          },
+          {
+            "name": "open_id",
+            "label": "TikTok Display Open ID",
+            "type": "text",
+            "required": true,
+            "placeholder": "open_123"
+          },
+          {
+            "name": "display_name",
+            "label": "Display Name",
+            "type": "text",
+            "required": false,
+            "placeholder": "Moon Sleep"
+          },
+          {
+            "name": "profile_web_link",
+            "label": "Profile Web Link",
+            "type": "text",
+            "required": false,
+            "placeholder": "https://www.tiktok.com/@moonsleep"
+          }
+        ]
+      }
+    ],
+    "setupGuide": "Connect a TikTok Display account through Nex OAuth or import an existing authorized access token. The adapter reads the runtime access token and validates the authorized profile with TikTok user/info."
+  },
+  "description": "Shared TikTok Display adapter package for Nex with provider-native profile and video reads plus projection ingest.",
+  "version": "0.1.1",
+  "platform": "tiktok-display",
+  "name": "tiktok-display-adapter",
+  "credentialService": "tiktok-display"
+}

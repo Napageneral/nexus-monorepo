@@ -4,8 +4,7 @@ import {
   type ResolvedKeybindingsConfig,
   type ThreadId,
 } from "@t3tools/contracts";
-import { memo } from "react";
-import GitActionsControl from "../GitActionsControl";
+import { lazy, memo, Suspense } from "react";
 import { DiffIcon, PanelRightCloseIcon, PanelRightIcon, TerminalSquareIcon } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -14,7 +13,11 @@ import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScr
 import { Toggle } from "../ui/toggle";
 import { SidebarTrigger } from "../ui/sidebar";
 import { isNexFeatureEnabled } from "../../nex/feature-policy";
-import { OpenInPicker } from "./OpenInPicker";
+
+const LazyGitActionsControl = lazy(() => import("../GitActionsControl"));
+const LazyOpenInPicker = lazy(() =>
+  import("./OpenInPicker").then((module) => ({ default: module.OpenInPicker })),
+);
 
 interface ChatHeaderProps {
   activeThreadId: ThreadId;
@@ -128,14 +131,18 @@ export const ChatHeader = memo(function ChatHeader({
           />
         )}
         {openInEditorEnabled && activeProjectName && (
-          <OpenInPicker
-            keybindings={keybindings}
-            availableEditors={availableEditors}
-            openInCwd={openInCwd}
-          />
+          <Suspense fallback={null}>
+            <LazyOpenInPicker
+              keybindings={keybindings}
+              availableEditors={availableEditors}
+              openInCwd={openInCwd}
+            />
+          </Suspense>
         )}
         {gitEnabled && activeProjectName && (
-          <GitActionsControl gitCwd={gitCwd} activeThreadId={activeThreadId} />
+          <Suspense fallback={null}>
+            <LazyGitActionsControl gitCwd={gitCwd} activeThreadId={activeThreadId} />
+          </Suspense>
         )}
         {terminalEnabled && (
           <Tooltip>

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { randomToken, tokenHash, verifyPasswordHash } from "./crypto.js";
 import type { FrontdoorConfig, Principal, TenantConfig } from "./types.js";
+import type { AdapterCatalogSetupDescriptor } from "./adapter-setup-descriptor.js";
 
 // ── Utility Functions ───────────────────────────────────────────────
 
@@ -444,6 +445,7 @@ export type FrontdoorPackageReleaseRecord = {
   packageId: string;
   version: string;
   manifestJson: string;
+  setupDescriptorJson?: string;
   channel: string;
   status: string;
   publishedAtMs: number;
@@ -477,6 +479,7 @@ export type FrontdoorAdapterCatalogRecord = {
   description?: string;
   latestVersion: string;
   releaseId: string;
+  setupDescriptor?: AdapterCatalogSetupDescriptor;
 };
 
 export type ServerPackageInstallRecord = {
@@ -799,6 +802,7 @@ export class FrontdoorStore {
         package_id TEXT NOT NULL REFERENCES frontdoor_packages(package_id),
         version TEXT NOT NULL,
         manifest_json TEXT NOT NULL,
+        setup_descriptor_json TEXT,
         channel TEXT NOT NULL DEFAULT 'stable',
         status TEXT NOT NULL DEFAULT 'published',
         published_at_ms INTEGER NOT NULL,
@@ -1093,6 +1097,11 @@ export class FrontdoorStore {
     }
     try {
       this.db.exec("ALTER TABLE frontdoor_users ADD COLUMN entity_id TEXT");
+    } catch {
+      // Already exists.
+    }
+    try {
+      this.db.exec("ALTER TABLE frontdoor_package_releases ADD COLUMN setup_descriptor_json TEXT");
     } catch {
       // Already exists.
     }
@@ -3668,6 +3677,7 @@ export class FrontdoorStore {
     packageId: string;
     version: string;
     manifestJson: string;
+    setupDescriptorJson?: string;
     channel?: string;
     status?: string;
     publishedAtMs?: number;
@@ -3679,15 +3689,17 @@ export class FrontdoorStore {
         package_id,
         version,
         manifest_json,
+        setup_descriptor_json,
         channel,
         status,
         published_at_ms,
         created_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(release_id) DO UPDATE SET
         package_id = excluded.package_id,
         version = excluded.version,
         manifest_json = excluded.manifest_json,
+        setup_descriptor_json = excluded.setup_descriptor_json,
         channel = excluded.channel,
         status = excluded.status,
         published_at_ms = excluded.published_at_ms
@@ -3696,6 +3708,7 @@ export class FrontdoorStore {
       normalizeIdentifier(params.packageId),
       params.version.trim(),
       params.manifestJson,
+      params.setupDescriptorJson?.trim() || null,
       params.channel?.trim() || "stable",
       params.status?.trim() || "published",
       params.publishedAtMs ?? createdAt,
@@ -3710,6 +3723,7 @@ export class FrontdoorStore {
         package_id,
         version,
         manifest_json,
+        setup_descriptor_json,
         channel,
         status,
         published_at_ms,
@@ -3723,6 +3737,7 @@ export class FrontdoorStore {
           package_id: string;
           version: string;
           manifest_json: string;
+          setup_descriptor_json: string | null;
           channel: string;
           status: string;
           published_at_ms: number;
@@ -3737,6 +3752,7 @@ export class FrontdoorStore {
       packageId: row.package_id,
       version: row.version,
       manifestJson: row.manifest_json,
+      setupDescriptorJson: row.setup_descriptor_json ?? undefined,
       channel: row.channel,
       status: row.status,
       publishedAtMs: row.published_at_ms,
@@ -4109,6 +4125,7 @@ export class FrontdoorStore {
           p.description,
           pr.release_id,
           pr.version,
+          pr.setup_descriptor_json,
           pr.published_at_ms,
           ROW_NUMBER() OVER (
             PARTITION BY p.package_id
@@ -4131,7 +4148,8 @@ export class FrontdoorStore {
         display_name,
         description,
         release_id,
-        version
+        version,
+        setup_descriptor_json
       FROM ranked_adapter_releases
       WHERE row_number = 1
       ORDER BY display_name COLLATE NOCASE ASC, package_id ASC
@@ -4141,14 +4159,26 @@ export class FrontdoorStore {
       description: string | null;
       release_id: string;
       version: string;
+      setup_descriptor_json: string | null;
     }>;
-    return rows.map((row) => ({
-      adapterId: row.package_id,
-      displayName: row.display_name,
-      description: row.description ?? undefined,
-      latestVersion: row.version,
-      releaseId: row.release_id,
-    }));
+    return rows.map((row) => {
+      let setupDescriptor: AdapterCatalogSetupDescriptor | undefined;
+      if (row.setup_descriptor_json) {
+        try {
+          setupDescriptor = JSON.parse(row.setup_descriptor_json) as AdapterCatalogSetupDescriptor;
+        } catch {
+          setupDescriptor = undefined;
+        }
+      }
+      return {
+        adapterId: row.package_id,
+        displayName: row.display_name,
+        description: row.description ?? undefined,
+        latestVersion: row.version,
+        releaseId: row.release_id,
+        ...(setupDescriptor ? { setupDescriptor } : {}),
+      };
+    });
   }
 
   listPackageReleaseVariantsForTarget(

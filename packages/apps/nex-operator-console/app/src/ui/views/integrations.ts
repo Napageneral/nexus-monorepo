@@ -7,9 +7,11 @@ import {
   type AdapterConnectionEntry,
 } from "../controllers/integrations.ts";
 import { renderPlatformIcon } from "../../console/components/platform-icons.ts";
+import { consoleLatencyEnabled, latestConsoleLatencyEntries } from "../latency-metrics.ts";
 
 export type IntegrationsProps = {
   connected: boolean;
+  runtimeConnecting?: boolean;
   loading: boolean;
   busyAdapter: string | null;
   busyAction: string | null;
@@ -41,6 +43,7 @@ export type IntegrationsProps = {
   onCustomSubmit: (adapter: string) => void;
   onCustomStatus: (adapter: string) => void;
   onCustomCancel: (adapter: string) => void;
+  onUpload: (adapter: string) => void;
   onTest: (adapter: string) => void;
   onBackfill: (adapter: string) => void;
   onLivesyncToggle: (adapter: string, enabled: boolean) => void;
@@ -85,7 +88,9 @@ function selectedCatalogAdapter(key: string): string {
   return normalizeKey(key.slice(CATALOG_SELECTION_PREFIX.length));
 }
 
-function authMethodTypesFromManifest(manifest: AdapterAuthManifest | null | undefined): Set<AdapterAuthMethodType> {
+function authMethodTypesFromManifest(
+  manifest: AdapterAuthManifest | null | undefined,
+): Set<AdapterAuthMethodType> {
   const methods = manifest?.methods;
   if (!Array.isArray(methods)) {
     return new Set();
@@ -104,7 +109,10 @@ function authMethodTypesFromManifest(manifest: AdapterAuthManifest | null | unde
   return out;
 }
 
-function authMethodTypes(entry: AdapterConnectionEntry | null, catalogEntry: AdapterCatalogEntry | null): Set<AdapterAuthMethodType> {
+function authMethodTypes(
+  entry: AdapterConnectionEntry | null,
+  catalogEntry: AdapterCatalogEntry | null,
+): Set<AdapterAuthMethodType> {
   const methods = authMethodTypesFromManifest(entry?.auth);
   if (methods.size > 0) {
     return methods;
@@ -137,6 +145,9 @@ function busyLabel(action: string): string {
   }
   if (action === "connect") {
     return "Connecting…";
+  }
+  if (action === "upload") {
+    return "Uploading…";
   }
   if (action === "custom_start") {
     return "Starting setup…";
@@ -250,19 +261,22 @@ function renderSetupQuestionField(field: AdapterAuthField, props: IntegrationsPr
         ${field.label}
         <span class="connector-setup-field__requirement">${optional}</span>
       </span>
-      ${field.type === "select"
-        ? html`
+      ${
+        field.type === "select"
+          ? html`
             <select
               .value=${value}
               @change=${(event: Event) => update((event.target as HTMLSelectElement).value)}
             >
               <option value="">Select ${field.label}</option>
-              ${(field.options ?? []).map((option) => html`
+              ${(field.options ?? []).map(
+                (option) => html`
                 <option value=${option.value}>${option.label}</option>
-              `)}
+              `,
+              )}
             </select>
           `
-        : html`
+          : html`
             <input
               type=${field.type === "secret" ? "password" : "text"}
               autocomplete="off"
@@ -270,10 +284,30 @@ function renderSetupQuestionField(field: AdapterAuthField, props: IntegrationsPr
               .value=${value}
               @input=${(event: InputEvent) => update((event.target as HTMLInputElement).value)}
             />
-          `}
+          `
+      }
       <span class="connector-setup-field__meta">${field.name} · ${field.type}</span>
     </label>
   `;
+}
+
+function fileUploadFields(): AdapterAuthField[] {
+  return [
+    {
+      name: "filePath",
+      label: "Local file path",
+      type: "text",
+      required: true,
+      placeholder: "/Users/tyler/path/to/export.csv",
+    },
+    {
+      name: "fileName",
+      label: "File name",
+      type: "text",
+      required: false,
+      placeholder: "Optional; inferred from path when blank",
+    },
+  ];
 }
 
 function isConnectionSuccessMessage(message: string | null): boolean {
@@ -327,20 +361,30 @@ function catalogIconKey(entry: AdapterCatalogEntry): string {
   if (adapter === "gog") {
     return "google";
   }
-  return trimOrEmpty(entry.icon) || trimOrEmpty(entry.service) || trimOrEmpty(entry.adapter) || "plug";
+  return (
+    trimOrEmpty(entry.icon) || trimOrEmpty(entry.service) || trimOrEmpty(entry.adapter) || "plug"
+  );
 }
 
 function statusBadge(status: AdapterConnectionEntry["status"]) {
   if (status === "connected") {
-    return html`<span class="console-badge console-badge--success">Connected</span>`;
+    return html`
+      <span class="console-badge console-badge--success">Connected</span>
+    `;
   }
   if (status === "error") {
-    return html`<span class="console-badge console-badge--danger">Error</span>`;
+    return html`
+      <span class="console-badge console-badge--danger">Error</span>
+    `;
   }
   if (status === "expired") {
-    return html`<span class="console-badge console-badge--warning">Expired</span>`;
+    return html`
+      <span class="console-badge console-badge--warning">Expired</span>
+    `;
   }
-  return html`<span class="console-badge">Disconnected</span>`;
+  return html`
+    <span class="console-badge">Disconnected</span>
+  `;
 }
 
 function formatLastSync(lastSync: number | null): string {
@@ -410,7 +454,9 @@ function catalogMetaSummary(entry: AdapterCatalogEntry): string {
     notes.push(entry.publishedVersion ? `Published ${entry.publishedVersion}` : "Published");
   }
   if (entry.registered) {
-    notes.push(entry.registeredVersion ? `Installed ${entry.registeredVersion}` : "Installed locally");
+    notes.push(
+      entry.registeredVersion ? `Installed ${entry.registeredVersion}` : "Installed locally",
+    );
   }
   if (!entry.published && !entry.registered) {
     notes.push("Workspace adapter");
@@ -433,7 +479,8 @@ function renderCatalogSection(
         <div class="console-muted" style="font-size: var(--console-text-2xs);">${items.length}</div>
       </div>
       <div class="console-app-catalog-grid">
-        ${items.map((item) => html`
+        ${items.map(
+          (item) => html`
           <button
             class="console-app-catalog-item"
             @click=${() => props.onCatalogSelect(item.adapter)}
@@ -445,11 +492,45 @@ function renderCatalogSection(
             <div class="console-app-catalog-item__name">${primaryCatalogLabel(item)}</div>
             <div class="console-app-catalog-item__summary">${catalogSummary(item)}</div>
             <div class="console-muted" style="font-size: var(--console-text-2xs);">${catalogMetaSummary(item)}</div>
-            ${item.description
-              ? html`<div class="console-muted" style="font-size: var(--console-text-2xs); line-height:1.4;">${item.description}</div>`
-              : nothing}
+            ${
+              item.description
+                ? html`<div class="console-muted" style="font-size: var(--console-text-2xs); line-height:1.4;">${item.description}</div>`
+                : nothing
+            }
           </button>
-        `)}
+        `,
+        )}
+      </div>
+    </div>
+  `;
+}
+
+function renderAuthMethodPicker(methods: AdapterAuthManifest["methods"], props: IntegrationsProps) {
+  return html`
+    <div class="connector-setup-section">
+      <div class="console-card-title" style="font-size: 13px;">Choose setup method</div>
+      <div class="connector-setup-method-grid">
+        ${methods.map(
+          (method) => html`
+          <button
+            class="connector-setup-method-card"
+            @click=${() => props.onSelectAuthMethod(method.id)}
+          >
+            <div class="console-platform-icon-circle connector-setup-method-card__icon">
+              ${renderPlatformIcon(method.icon || method.type, 22)}
+            </div>
+            <div>
+              <div class="console-strong">${method.label}</div>
+              <div class="console-muted">${methodChipLabel(method.type)}</div>
+              ${
+                method.service
+                  ? html`<div class="console-faint" style="font-size: var(--console-text-2xs);">${method.service}</div>`
+                  : nothing
+              }
+            </div>
+          </button>
+        `,
+        )}
       </div>
     </div>
   `;
@@ -464,14 +545,19 @@ function secondaryAccountLabel(entry: AdapterConnectionEntry): string | null {
     notes.push(connectionId);
   }
   const configuredAccounts =
-    typeof metadata.configured_accounts === "number" && Number.isFinite(metadata.configured_accounts)
+    typeof metadata.configured_accounts === "number" &&
+    Number.isFinite(metadata.configured_accounts)
       ? metadata.configured_accounts
       : null;
   if (configuredAccounts && configuredAccounts > 1) {
     notes.push(`${configuredAccounts} upstream accounts detected`);
   }
   const site = trimOrEmpty(
-    typeof metadata.site === "string" ? metadata.site : typeof metadata.host === "string" ? metadata.host : null,
+    typeof metadata.site === "string"
+      ? metadata.site
+      : typeof metadata.host === "string"
+        ? metadata.host
+        : null,
   );
   if (site) {
     notes.push(site);
@@ -490,7 +576,7 @@ function authMethodSummary(entry: AdapterConnectionEntry): string {
 function renderTable(props: IntegrationsProps) {
   if (props.connections.length === 0) {
     return html`
-      <div class="console-card" style="padding: var(--console-space-6);">
+      <div class="console-card" style="padding: var(--console-space-6)">
         <div class="console-muted">No connectors registered in this runtime.</div>
       </div>
     `;
@@ -530,9 +616,11 @@ function renderTable(props: IntegrationsProps) {
                   <div style="display:flex; flex-direction:column; gap:2px;">
                     <span class="console-strong">${primaryAccountLabel(entry)}</span>
                     <span class="console-muted">${secondary ?? authMethodSummary(entry)}</span>
-                    ${entry.error
-                      ? html`<span style="color: var(--console-danger); font-size: var(--console-text-2xs);">${entry.error}</span>`
-                      : nothing}
+                    ${
+                      entry.error
+                        ? html`<span style="color: var(--console-danger); font-size: var(--console-text-2xs);">${entry.error}</span>`
+                        : nothing
+                    }
                   </div>
                 </td>
                 <td>${statusBadge(entry.status)}</td>
@@ -546,6 +634,62 @@ function renderTable(props: IntegrationsProps) {
   `;
 }
 
+function renderLatencyPanel() {
+  if (!consoleLatencyEnabled()) {
+    return nothing;
+  }
+  const entries = latestConsoleLatencyEntries(18).filter(
+    (entry) =>
+      entry.label.startsWith("app.") ||
+      entry.label.startsWith("runtime.websocket") ||
+      entry.label.startsWith("runtime.request.adapters.") ||
+      entry.label.startsWith("integrations.connectors."),
+  );
+
+  return html`
+    <section class="console-card" style="margin-bottom: 12px; padding: 12px 14px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap: 12px; margin-bottom: 8px;">
+        <div>
+          <div class="console-card-title" style="font-size: var(--console-text-sm);">Connector Load Timings</div>
+          <div class="console-muted" style="font-size: var(--console-text-2xs);">
+            Enabled by <code>?perf=1</code>. Full buffer is available at <code>window.__nexusConsoleTimings</code>.
+          </div>
+        </div>
+      </div>
+      ${
+        entries.length === 0
+          ? html`
+              <div class="console-muted">No connector timing samples captured yet.</div>
+            `
+          : html`
+            <table class="console-table">
+              <thead>
+                <tr>
+                  <th>Span</th>
+                  <th>Duration</th>
+                  <th>Outcome</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${entries.map(
+                  (entry) => html`
+                  <tr>
+                    <td><span class="console-strong">${entry.label}</span></td>
+                    <td>${entry.durationMs.toFixed(1)}ms</td>
+                    <td>${entry.outcome}</td>
+                    <td><span class="console-muted">${entry.details ? JSON.stringify(entry.details) : "--"}</span></td>
+                  </tr>
+                `,
+                )}
+              </tbody>
+            </table>
+          `
+      }
+    </section>
+  `;
+}
+
 function renderCatalogModal(props: IntegrationsProps) {
   if (!props.catalogOpen) {
     return nothing;
@@ -555,13 +699,16 @@ function renderCatalogModal(props: IntegrationsProps) {
     return renderCatalogSetupModal(props, selectedCatalog);
   }
   const query = trimOrEmpty(props.catalogSearch).toLowerCase();
-  const items = props.catalogItems.filter((item) =>
-    !query ||
-    item.name.toLowerCase().includes(query) ||
-    item.adapter.toLowerCase().includes(query),
+  const items = props.catalogItems.filter(
+    (item) =>
+      !query ||
+      item.name.toLowerCase().includes(query) ||
+      item.adapter.toLowerCase().includes(query),
   );
   const publishedCount = props.catalogItems.filter((item) => item.published).length;
-  const connectableCount = props.catalogItems.filter((item) => isConnectableCatalogEntry(item)).length;
+  const connectableCount = props.catalogItems.filter((item) =>
+    isConnectableCatalogEntry(item),
+  ).length;
   const publishedItems = items.filter((item) => item.published);
   const installedItems = items.filter((item) => !item.published && item.registered);
   const workspaceItems = items.filter((item) => !item.published && !item.registered);
@@ -588,18 +735,32 @@ function renderCatalogModal(props: IntegrationsProps) {
                 props.onCatalogSearchChange((event.target as HTMLInputElement).value)}
             />
           </div>
-          ${props.catalogLoading
-            ? html`<div class="console-muted" style="text-align:center; padding: 16px 0;">Loading connector catalog…</div>`
-            : nothing}
-          ${props.catalogError
-            ? html`<div class="callout danger" style="margin: 12px 0;">${props.catalogError}</div>`
-            : nothing}
+          ${
+            props.catalogLoading
+              ? html`
+                  <div class="console-muted" style="text-align: center; padding: 16px 0">
+                    Loading connector catalog…
+                  </div>
+                `
+              : nothing
+          }
+          ${
+            props.catalogError
+              ? html`<div class="callout danger" style="margin: 12px 0;">${props.catalogError}</div>`
+              : nothing
+          }
           ${renderCatalogSection("Published catalog", publishedItems, props)}
           ${renderCatalogSection("Installed locally", installedItems, props)}
           ${renderCatalogSection("Workspace adapters", workspaceItems, props)}
-          ${items.length === 0
-            ? html`<div class="console-muted" style="text-align:center; padding: 16px 0;">No connectors match that search.</div>`
-            : nothing}
+          ${
+            items.length === 0
+              ? html`
+                  <div class="console-muted" style="text-align: center; padding: 16px 0">
+                    No connectors match that search.
+                  </div>
+                `
+              : nothing
+          }
         </div>
       </div>
     </div>
@@ -617,29 +778,36 @@ function renderCatalogSetupModal(props: IntegrationsProps, catalog: AdapterCatal
       : Array.isArray(catalog.auth?.methods)
         ? catalog.auth.methods
         : [];
-  const selectedMethod =
-    methods.find((method) => method.id === props.selectedAuthMethodId) ?? methods[0] ?? null;
+  const needsMethodChoice = methods.length > 1 && !trimOrEmpty(props.selectedAuthMethodId);
+  const selectedMethod = needsMethodChoice
+    ? null
+    : (methods.find((method) => method.id === props.selectedAuthMethodId) ??
+      (methods.length === 1 ? methods[0] : null));
   const methodTypes = authMethodTypes(selectedConnectionEntry(props), catalog);
   const hasOAuth = selectedMethod?.type === "oauth2";
   const hasApiKey = selectedMethod?.type === "api_key";
+  const hasFileUpload = selectedMethod?.type === "file_upload";
   const hasCustomFlow = selectedMethod?.type === "custom_flow";
   const isBusy = props.busyAdapter === selected.adapter;
   const currentBusyLabel = isBusy ? busyLabel(props.busyAction ?? "") : null;
   const visibleFields =
     props.pendingFields.length > 0
       ? props.pendingFields
-      : selectedMethod?.type === "api_key"
-        ? selectedMethod.fields
-        : selectedMethod?.type === "custom_flow" && Array.isArray(selectedMethod.fields)
+      : hasFileUpload
+        ? fileUploadFields()
+        : selectedMethod?.type === "api_key"
           ? selectedMethod.fields
-          : [];
+          : selectedMethod?.type === "custom_flow" && Array.isArray(selectedMethod.fields)
+            ? selectedMethod.fields
+            : [];
   const showSuccess = isConnectionSuccessMessage(props.message) && !props.error && !isBusy;
 
   return html`
     <div class="console-modal-backdrop" @click=${props.onCatalogClose}>
       <div class="console-modal console-modal--connector-setup" @click=${(event: Event) => event.stopPropagation()}>
-        ${showSuccess
-          ? html`
+        ${
+          showSuccess
+            ? html`
               <div class="console-modal-body connector-success-modal">
                 <div class="connector-success-modal__icon">
                   <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
@@ -652,7 +820,7 @@ function renderCatalogSetupModal(props: IntegrationsProps, catalog: AdapterCatal
                 <div class="console-faint connector-setup-footer">Secured by nexus</div>
               </div>
             `
-          : html`
+            : html`
               <div class="console-modal-header">
                 <div>
                   <div class="console-modal-title">Add ${displayCatalogName(catalog)}</div>
@@ -668,81 +836,116 @@ function renderCatalogSetupModal(props: IntegrationsProps, catalog: AdapterCatal
                   <div>
                     <div class="console-strong">${displayCatalogName(catalog)}</div>
                     <div class="console-muted">${catalogSummary(catalog)}</div>
-                    ${catalogMetaSummary(catalog)
-                      ? html`<div class="console-muted" style="font-size: var(--console-text-2xs);">${catalogMetaSummary(catalog)}</div>`
-                      : nothing}
+                    ${
+                      catalogMetaSummary(catalog)
+                        ? html`<div class="console-muted" style="font-size: var(--console-text-2xs);">${catalogMetaSummary(catalog)}</div>`
+                        : nothing
+                    }
                   </div>
                   ${currentBusyLabel ? html`<span class="console-badge">${currentBusyLabel}</span>` : nothing}
                 </div>
 
                 ${props.message ? html`<div class="callout" style="margin-top: 12px;">${props.message}</div>` : nothing}
                 ${props.error ? html`<div class="callout danger" style="margin-top: 12px;">${props.error}</div>` : nothing}
-                ${selected.auth?.setupGuide
-                  ? html`<div class="callout" style="margin-top: 12px;">${selected.auth.setupGuide}</div>`
-                  : nothing}
-                ${props.instructions
-                  ? html`<div class="callout" style="margin-top: 12px; border-color: var(--accent);">${props.instructions}</div>`
-                  : nothing}
-                ${!isConnectableCatalogEntry(catalog)
-                  ? html`<div class="callout" style="margin-top: 12px;">${catalog.name} is in the adapter catalog, but this runtime does not yet advertise a local connection flow for it.</div>`
-                  : nothing}
+                ${
+                  selected.auth?.setupGuide
+                    ? html`<div class="callout" style="margin-top: 12px;">${selected.auth.setupGuide}</div>`
+                    : nothing
+                }
+                ${
+                  props.instructions
+                    ? html`<div class="callout" style="margin-top: 12px; border-color: var(--accent);">${props.instructions}</div>`
+                    : nothing
+                }
+                ${
+                  !isConnectableCatalogEntry(catalog)
+                    ? html`<div class="callout" style="margin-top: 12px;">${catalog.name} is in the adapter catalog, but this runtime does not yet advertise a local connection flow for it.</div>`
+                    : nothing
+                }
 
-                ${methods.length > 0
-                  ? html`
-                      <label class="field" style="margin-top: 14px;">
-                        <span>Auth Method</span>
-                        <select
-                          .value=${selectedMethod?.id ?? ""}
-                          @change=${(event: Event) =>
-                            props.onSelectAuthMethod((event.target as HTMLSelectElement).value)}
-                        >
-                          ${methods.map((method) => html`<option value=${method.id}>${method.label}</option>`)}
-                        </select>
-                      </label>
-                      <div class="chip-row" style="margin-top: 8px;">
-                        ${Array.from(methodTypes).map((type) => html`<span class="chip">${methodChipLabel(type)}</span>`)}
-                      </div>
-                    `
-                  : nothing}
-
-                <div class="connector-setup-section">
-                  <div class="console-card-title" style="font-size: 13px;">Setup questions</div>
-                  ${visibleFields.length > 0
-                    ? html`
-                        <div class="connector-setup-fields">
-                          ${visibleFields.map((field) => renderSetupQuestionField(field, props))}
+                ${
+                  needsMethodChoice
+                    ? renderAuthMethodPicker(methods, props)
+                    : methods.length > 0
+                      ? html`
+                        <div class="connector-setup-section connector-setup-method-summary">
+                          <div>
+                            <div class="console-card-title" style="font-size: 13px;">Setup method</div>
+                            <div class="console-muted" style="margin-top: 4px;">
+                              ${selectedMethod?.label ?? "No method selected"}
+                            </div>
+                          </div>
+                          ${
+                            methods.length > 1
+                              ? html`
+                                <button class="console-btn console-btn--ghost" ?disabled=${isBusy} @click=${() => props.onSelectAuthMethod("")}>
+                                  Change
+                                </button>
+                              `
+                              : nothing
+                          }
+                        </div>
+                        <div class="chip-row" style="margin-top: 8px;">
+                          ${Array.from(methodTypes).map((type) => html`<span class="chip">${methodChipLabel(type)}</span>`)}
                         </div>
                       `
+                      : nothing
+                }
+
+                ${
+                  needsMethodChoice
+                    ? nothing
                     : html`
-                        <div class="console-muted" style="margin-top: 8px;">
-                          ${hasOAuth
-                            ? "No local fields are required. Start OAuth to continue in the provider."
-                            : hasCustomFlow
-                              ? "Start setup to let the adapter ask for the next required input."
-                              : "No setup questions are advertised for this auth method."}
-                        </div>
-                      `}
-                </div>
+                      <div class="connector-setup-section">
+                        <div class="console-card-title" style="font-size: 13px;">Setup questions</div>
+                        ${
+                          visibleFields.length > 0
+                            ? html`
+                              <div class="connector-setup-fields">
+                                ${visibleFields.map((field) => renderSetupQuestionField(field, props))}
+                              </div>
+                            `
+                            : html`
+                              <div class="console-muted" style="margin-top: 8px;">
+                                ${
+                                  hasOAuth
+                                    ? "No local fields are required. Start OAuth to continue in the provider."
+                                    : hasFileUpload
+                                      ? "Provide a local file path for the runtime to import."
+                                      : hasCustomFlow
+                                        ? "Start setup to let the adapter ask for the next required input."
+                                        : "No setup questions are advertised for this auth method."
+                                }
+                              </div>
+                            `
+                        }
+                      </div>
+                    `
+                }
 
                 <div class="connector-setup-actions">
                   <button class="console-btn console-btn--ghost" ?disabled=${isBusy} @click=${() => props.onSelectConnection("")}>
                     Back to catalog
                   </button>
                   <div style="display:flex; gap: 8px; flex-wrap: wrap;">
-                    ${hasApiKey
-                      ? html`
+                    ${
+                      !needsMethodChoice && hasApiKey
+                        ? html`
                           <button class="console-btn console-btn--primary" ?disabled=${isBusy} @click=${() => props.onConnect(selected.adapter)}>
                             Connect
                           </button>
                         `
-                      : nothing}
-                    ${hasCustomFlow
-                      ? html`
+                        : nothing
+                    }
+                    ${
+                      !needsMethodChoice && hasCustomFlow
+                        ? html`
                           <button class="console-btn console-btn--primary" ?disabled=${isBusy} @click=${() => props.onCustomStart(selected.adapter)}>
                             Start Setup
                           </button>
-                          ${props.sessionId
-                            ? html`
+                          ${
+                            props.sessionId
+                              ? html`
                                 <button class="console-btn console-btn--secondary" ?disabled=${isBusy} @click=${() => props.onCustomSubmit(selected.adapter)}>
                                   Submit
                                 </button>
@@ -753,30 +956,45 @@ function renderCatalogSetupModal(props: IntegrationsProps, catalog: AdapterCatal
                                   Cancel Setup
                                 </button>
                               `
-                            : nothing}
+                              : nothing
+                          }
                         `
-                      : nothing}
-                    ${hasOAuth
-                      ? html`
+                        : nothing
+                    }
+                    ${
+                      !needsMethodChoice && hasFileUpload
+                        ? html`
+                          <button class="console-btn console-btn--primary" ?disabled=${isBusy} @click=${() => props.onUpload(selected.adapter)}>
+                            Upload File
+                          </button>
+                        `
+                        : nothing
+                    }
+                    ${
+                      !needsMethodChoice && hasOAuth
+                        ? html`
                           <button class="console-btn console-btn--primary" ?disabled=${isBusy} @click=${() => props.onOAuthStart(selected.adapter)}>
                             Start OAuth
                           </button>
                         `
-                      : nothing}
+                        : nothing
+                    }
                   </div>
                 </div>
 
                 <details class="connect-advanced connector-setup-advanced">
                   <summary class="connect-advanced__toggle">Advanced</summary>
                   <div class="connect-advanced__content">
-                    ${props.sessionId
-                      ? html`
+                    ${
+                      props.sessionId
+                        ? html`
                           <label class="field" style="margin-top: 10px;">
                             <span>Setup Session ID</span>
                             <input .value=${props.sessionId} readonly />
                           </label>
                         `
-                      : nothing}
+                        : nothing
+                    }
                     <label class="field" style="margin-top: 10px;">
                       <span>Setup Payload (JSON)</span>
                       <textarea
@@ -789,7 +1007,8 @@ function renderCatalogSetupModal(props: IntegrationsProps, catalog: AdapterCatal
                 </details>
                 <div class="console-faint connector-setup-footer">Secured by nexus</div>
               </div>
-            `}
+            `
+        }
       </div>
     </div>
   `;
@@ -811,9 +1030,7 @@ function selectedCatalogEntry(props: IntegrationsProps): AdapterCatalogEntry | n
   return props.catalogItems.find((entry) => normalizeKey(entry.adapter) === adapter) ?? null;
 }
 
-function selectedConnectionViewEntry(
-  props: IntegrationsProps,
-): AdapterConnectionEntry | null {
+function selectedConnectionViewEntry(props: IntegrationsProps): AdapterConnectionEntry | null {
   const connection = selectedConnectionEntry(props);
   if (connection) {
     return connection;
@@ -860,11 +1077,20 @@ export function renderIntegrations(props: IntegrationsProps) {
       </div>
     </div>
 
-    ${!props.connected
-      ? html`<div class="callout danger" style="margin-bottom: 12px;">Runtime is disconnected.</div>`
-      : nothing}
+    ${
+      !props.connected && props.runtimeConnecting
+        ? html`
+            <div class="callout" style="margin-bottom: 12px">Connecting to the Nex runtime…</div>
+          `
+        : !props.connected
+          ? html`
+              <div class="callout danger" style="margin-bottom: 12px">Runtime is disconnected.</div>
+            `
+          : nothing
+    }
     ${props.error ? html`<div class="callout danger" style="margin-bottom: 12px;">${props.error}</div>` : nothing}
     ${props.message ? html`<div class="callout" style="margin-bottom: 12px;">${props.message}</div>` : nothing}
+    ${renderLatencyPanel()}
 
     ${renderTable(props)}
     ${selected ? renderSelectedConnection(props, selected) : nothing}
@@ -885,6 +1111,7 @@ function renderSelectedConnection(props: IntegrationsProps, selected: AdapterCon
   const methodTypes = authMethodTypes(selectedConnectionEntry(props), catalog);
   const hasOAuth = selectedMethod?.type === "oauth2";
   const hasApiKey = selectedMethod?.type === "api_key";
+  const hasFileUpload = selectedMethod?.type === "file_upload";
   const hasCustomFlow = selectedMethod?.type === "custom_flow";
   const isBusy = props.busyAdapter === selected.adapter;
   const currentBusyLabel = isBusy ? busyLabel(props.busyAction ?? "") : null;
@@ -892,20 +1119,24 @@ function renderSelectedConnection(props: IntegrationsProps, selected: AdapterCon
   const visibleFields =
     props.pendingFields.length > 0
       ? props.pendingFields
-      : selectedMethod?.type === "api_key"
-        ? selectedMethod.fields
-        : selectedMethod?.type === "custom_flow" && Array.isArray(selectedMethod.fields)
+      : hasFileUpload
+        ? fileUploadFields()
+        : selectedMethod?.type === "api_key"
           ? selectedMethod.fields
-          : [];
+          : selectedMethod?.type === "custom_flow" && Array.isArray(selectedMethod.fields)
+            ? selectedMethod.fields
+            : [];
 
   return html`
     <section class="console-card" style="margin-top: 12px;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap: 16px;">
         <div>
           <div class="console-card-title">
-            ${selected.connectionId
-              ? displayPlatformName(selected)
-              : catalog?.name ?? selected.name ?? selected.adapter}
+            ${
+              selected.connectionId
+                ? displayPlatformName(selected)
+                : (catalog?.name ?? selected.name ?? selected.adapter)
+            }
           </div>
           <div class="console-card-sub">${primaryAccountLabel(selected)} · ${selected.adapter}</div>
         </div>
@@ -923,21 +1154,30 @@ function renderSelectedConnection(props: IntegrationsProps, selected: AdapterCon
         </label>
       </div>
 
-      ${selected.auth?.setupGuide
-        ? html`<div class="callout" style="margin-top: 12px;">${selected.auth.setupGuide}</div>`
-        : nothing}
-      ${props.instructions
-        ? html`<div class="callout" style="margin-top: 12px; border-color: var(--accent);">${props.instructions}</div>`
-        : nothing}
-      ${!selected.connectionId
-        ? html`<div class="callout" style="margin-top: 12px;">This draft will create a new ${catalog?.name ?? selected.name ?? selected.adapter} connection. Existing connections remain available below.</div>`
-        : nothing}
-      ${!selected.connectionId && catalog && !isConnectableCatalogEntry(catalog)
-        ? html`<div class="callout" style="margin-top: 12px;">${catalog.name} is in the adapter catalog, but this runtime does not yet advertise a local connection flow for it.</div>`
-        : nothing}
+      ${
+        selected.auth?.setupGuide
+          ? html`<div class="callout" style="margin-top: 12px;">${selected.auth.setupGuide}</div>`
+          : nothing
+      }
+      ${
+        props.instructions
+          ? html`<div class="callout" style="margin-top: 12px; border-color: var(--accent);">${props.instructions}</div>`
+          : nothing
+      }
+      ${
+        !selected.connectionId
+          ? html`<div class="callout" style="margin-top: 12px;">This draft will create a new ${catalog?.name ?? selected.name ?? selected.adapter} connection. Existing connections remain available below.</div>`
+          : nothing
+      }
+      ${
+        !selected.connectionId && catalog && !isConnectableCatalogEntry(catalog)
+          ? html`<div class="callout" style="margin-top: 12px;">${catalog.name} is in the adapter catalog, but this runtime does not yet advertise a local connection flow for it.</div>`
+          : nothing
+      }
 
-      ${visibleFields.length > 0
-        ? html`
+      ${
+        visibleFields.length > 0
+          ? html`
             <div style="margin-top: 12px;">
               <div class="console-card-title" style="font-size: 13px;">
                 ${props.pendingFields.length > 0 ? "Required Fields" : "Connection Fields"}
@@ -947,10 +1187,12 @@ function renderSelectedConnection(props: IntegrationsProps, selected: AdapterCon
               </div>
             </div>
           `
-        : nothing}
+          : nothing
+      }
 
-      ${methods.length > 0
-        ? html`
+      ${
+        methods.length > 0
+          ? html`
             <label class="field" style="margin-top: 12px;">
               <span>Auth Method</span>
               <select
@@ -965,24 +1207,29 @@ function renderSelectedConnection(props: IntegrationsProps, selected: AdapterCon
               ${Array.from(methodTypes).map((type) => html`<span class="chip">${methodChipLabel(type)}</span>`)}
             </div>
           `
-        : nothing}
+          : nothing
+      }
 
       <div style="display:flex; justify-content:space-between; gap: 12px; margin-top: 16px; flex-wrap: wrap;">
         <div style="display:flex; gap: 8px; flex-wrap: wrap;">
-          ${hasApiKey
-            ? html`
+          ${
+            hasApiKey
+              ? html`
                 <button class="console-btn console-btn--primary" ?disabled=${isBusy} @click=${() => props.onConnect(selected.adapter)}>
                   ${selected.connectionId ? "Update Connection" : "Connect"}
                 </button>
               `
-            : nothing}
-          ${hasCustomFlow
-            ? html`
+              : nothing
+          }
+          ${
+            hasCustomFlow
+              ? html`
                 <button class="console-btn console-btn--primary" ?disabled=${isBusy} @click=${() => props.onCustomStart(selected.adapter)}>
                   Start Setup
                 </button>
-                ${props.sessionId
-                  ? html`
+                ${
+                  props.sessionId
+                    ? html`
                       <button class="console-btn console-btn--secondary" ?disabled=${isBusy} @click=${() => props.onCustomSubmit(selected.adapter)}>
                         Submit
                       </button>
@@ -990,16 +1237,29 @@ function renderSelectedConnection(props: IntegrationsProps, selected: AdapterCon
                         Check Status
                       </button>
                     `
-                  : nothing}
+                    : nothing
+                }
               `
-            : nothing}
-          ${hasOAuth
-            ? html`
+              : nothing
+          }
+          ${
+            hasFileUpload
+              ? html`
+                <button class="console-btn console-btn--primary" ?disabled=${isBusy} @click=${() => props.onUpload(selected.adapter)}>
+                  Upload File
+                </button>
+              `
+              : nothing
+          }
+          ${
+            hasOAuth
+              ? html`
                 <button class="console-btn console-btn--primary" ?disabled=${isBusy} @click=${() => props.onOAuthStart(selected.adapter)}>
                   Start OAuth
                 </button>
               `
-            : nothing}
+              : nothing
+          }
         </div>
 
         <div style="display:flex; gap: 8px; flex-wrap: wrap;">
@@ -1016,13 +1276,15 @@ function renderSelectedConnection(props: IntegrationsProps, selected: AdapterCon
           >
             ${livesyncEnabled ? "Livesync off" : "Livesync on"}
           </button>
-          ${hasCustomFlow && props.sessionId
-            ? html`
+          ${
+            hasCustomFlow && props.sessionId
+              ? html`
                 <button class="console-btn console-btn--secondary" ?disabled=${isBusy} @click=${() => props.onCustomCancel(selected.adapter)}>
                   Cancel Setup
                 </button>
               `
-            : nothing}
+              : nothing
+          }
           <button class="console-btn console-btn--secondary" ?disabled=${isBusy || !selected.connectionId} @click=${() => props.onDisconnect(selected.adapter)}>
             Disconnect
           </button>
@@ -1032,8 +1294,9 @@ function renderSelectedConnection(props: IntegrationsProps, selected: AdapterCon
       <details class="connect-advanced" style="margin-top: 14px;">
         <summary class="connect-advanced__toggle">Advanced</summary>
         <div class="connect-advanced__content">
-          ${props.sessionId
-            ? html`
+          ${
+            props.sessionId
+              ? html`
                 <div class="form-grid" style="margin-top: 10px;">
                   <label class="field">
                     <span>Setup Session ID</span>
@@ -1041,7 +1304,8 @@ function renderSelectedConnection(props: IntegrationsProps, selected: AdapterCon
                   </label>
                 </div>
               `
-            : nothing}
+              : nothing
+          }
           <label class="field" style="margin-top: 10px;">
             <span>Setup Payload (JSON)</span>
             <textarea

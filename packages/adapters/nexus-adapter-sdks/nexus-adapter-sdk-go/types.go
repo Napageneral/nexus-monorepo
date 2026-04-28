@@ -54,7 +54,7 @@ type AdapterMethodCatalog struct {
 }
 
 type AdapterProjection struct {
-	Platform      string                     `json:"platform,omitempty"`
+	Platform      string                      `json:"platform,omitempty"`
 	Families      []AdapterProjectionFamily   `json:"families,omitempty"`
 	Backfill      *AdapterProjectionSync      `json:"backfill,omitempty"`
 	Monitor       *AdapterProjectionSync      `json:"monitor,omitempty"`
@@ -188,15 +188,16 @@ type ChannelCapabilities struct {
 	SupportsCodeBlocks bool   `json:"supports_code_blocks"`
 
 	// Features
-	SupportsEmbeds     bool `json:"supports_embeds"`
-	SupportsThreads    bool `json:"supports_threads"`
-	SupportsReactions  bool `json:"supports_reactions"`
-	SupportsPolls      bool `json:"supports_polls"`
-	SupportsButtons    bool `json:"supports_buttons"`
-	SupportsEdit       bool `json:"supports_edit"`
-	SupportsDelete     bool `json:"supports_delete"`
-	SupportsMedia      bool `json:"supports_media"`
-	SupportsVoiceNotes bool `json:"supports_voice_notes"`
+	SupportsEmbeds        bool `json:"supports_embeds"`
+	SupportsThreads       bool `json:"supports_threads"`
+	SupportsReactions     bool `json:"supports_reactions"`
+	SupportsPolls         bool `json:"supports_polls"`
+	SupportsButtons       bool `json:"supports_buttons"`
+	SupportsEdit          bool `json:"supports_edit"`
+	SupportsStreamingEdit bool `json:"supports_streaming_edit"`
+	SupportsDelete        bool `json:"supports_delete"`
+	SupportsMedia         bool `json:"supports_media"`
+	SupportsVoiceNotes    bool `json:"supports_voice_notes"`
 }
 
 // --- Canonical Inbound Records ---
@@ -280,25 +281,25 @@ type ConnectionAccountContact struct {
 
 // AdapterHealth is the structured output of a `health` command.
 type AdapterHealth struct {
-	Connected     bool                      `json:"connected"`
-	ConnectionID  string                    `json:"connection_id"`
-	Account       string                    `json:"account,omitempty"`
+	Connected      bool                      `json:"connected"`
+	ConnectionID   string                    `json:"connection_id"`
+	Account        string                    `json:"account,omitempty"`
 	AccountContact *ConnectionAccountContact `json:"account_contact,omitempty"`
-	LastEventAt   int64                     `json:"last_event_at,omitempty"` // Unix ms
-	Error         string                    `json:"error,omitempty"`
-	Details       map[string]any            `json:"details,omitempty"`
+	LastEventAt    int64                     `json:"last_event_at,omitempty"` // Unix ms
+	Error          string                    `json:"error,omitempty"`
+	Details        map[string]any            `json:"details,omitempty"`
 }
 
 // --- Accounts ---
 
 // AdapterConnectionIdentity represents a configured account within the adapter.
 type AdapterConnectionIdentity struct {
-	ID            string                    `json:"id"`
-	DisplayName   string                    `json:"display_name,omitempty"`
-	Account       string                    `json:"account,omitempty"`
+	ID             string                    `json:"id"`
+	DisplayName    string                    `json:"display_name,omitempty"`
+	Account        string                    `json:"account,omitempty"`
 	AccountContact *ConnectionAccountContact `json:"account_contact,omitempty"`
-	CredentialRef string                    `json:"credential_ref,omitempty"` // "google/tnapathy@gmail.com"
-	Status        string                    `json:"status"`                   // "ready", "active", "error"
+	CredentialRef  string                    `json:"credential_ref,omitempty"` // "google/tnapathy@gmail.com"
+	Status         string                    `json:"status"`                   // "ready", "active", "error"
 }
 
 // --- Adapter Control Session Protocol ---
@@ -383,15 +384,15 @@ type AdapterSetupRequest struct {
 
 // AdapterSetupResult is the generic output for adapter.setup.* operations.
 type AdapterSetupResult struct {
-	Status        AdapterSetupStatus         `json:"status"`
-	SessionID     string                     `json:"session_id,omitempty"`
-	ConnectionID  string                     `json:"connection_id,omitempty"`
-	Service       string                     `json:"service,omitempty"`
-	Account       string                     `json:"account,omitempty"`
+	Status         AdapterSetupStatus        `json:"status"`
+	SessionID      string                    `json:"session_id,omitempty"`
+	ConnectionID   string                    `json:"connection_id,omitempty"`
+	Service        string                    `json:"service,omitempty"`
+	Account        string                    `json:"account,omitempty"`
 	AccountContact *ConnectionAccountContact `json:"account_contact,omitempty"`
-	Message       string                     `json:"message,omitempty"`
-	Instructions  string                     `json:"instructions,omitempty"`
-	Fields        []AdapterAuthField         `json:"fields,omitempty"`
-	SecretFields  map[string]string          `json:"secret_fields,omitempty"`
-	Metadata      map[string]any             `json:"metadata,omitempty"`
+	Message        string                    `json:"message,omitempty"`
+	Instructions   string                    `json:"instructions,omitempty"`
+	Fields         []AdapterAuthField        `json:"fields,omitempty"`
+	SecretFields   map[string]string         `json:"secret_fields,omitempty"`
+	Metadata       map[string]any            `json:"metadata,omitempty"`
 }

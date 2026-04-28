@@ -15,6 +15,7 @@ import {
   syncTabWithLocation,
   syncThemeWithSettings,
 } from "./app-settings.ts";
+import { finishConsoleLatency, startConsoleLatency } from "./latency-metrics.ts";
 
 type LifecycleHost = {
   basePath: string;
@@ -33,6 +34,7 @@ type LifecycleHost = {
 };
 
 export function handleConnected(host: LifecycleHost) {
+  const token = startConsoleLatency("app.connected.setup", { tab: host.tab });
   host.basePath = inferBasePath();
   applySettingsFromUrl(host as unknown as Parameters<typeof applySettingsFromUrl>[0]);
   syncTabWithLocation(host as unknown as Parameters<typeof syncTabWithLocation>[0], true);
@@ -46,10 +48,13 @@ export function handleConnected(host: LifecycleHost) {
   if (host.tab === "system" && host.systemSubTab === "debug") {
     startDebugPolling(host as unknown as Parameters<typeof startDebugPolling>[0]);
   }
+  finishConsoleLatency(token, "ok", { tab: host.tab });
 }
 
 export function handleFirstUpdated(host: LifecycleHost) {
+  const token = startConsoleLatency("app.first-render", { tab: host.tab });
   observeTopbar(host as unknown as Parameters<typeof observeTopbar>[0]);
+  finishConsoleLatency(token, "ok", { tab: host.tab });
 }
 
 export function handleDisconnected(host: LifecycleHost) {

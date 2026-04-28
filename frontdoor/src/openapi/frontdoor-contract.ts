@@ -172,6 +172,8 @@ const adaptersCatalogSchema: OpenApiSchema = {
           description: { type: ["string", "null"] },
           latest_version: { type: "string" },
           release_id: { type: "string" },
+          auth: { type: ["object", "null"], additionalProperties: true },
+          setup_descriptor: { type: ["object", "null"], additionalProperties: true },
         },
       },
     },

@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-04-27T22:21:59.410Z",
+  "repo_root": "/Users/tyler/nexus/home/projects/nexus",
+  "count": 1,
+  "failures": 0,
+  "results": [
+    {
+      "ok": true,
+      "kind": "adapter",
+      "id": "tiktok-display",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/tiktok-display",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/tiktok-display/dist/tiktok-display-0.1.1.tar.gz"
+    }
+  ]
+}

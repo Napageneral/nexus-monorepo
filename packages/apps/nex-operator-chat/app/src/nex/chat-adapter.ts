@@ -34,6 +34,7 @@ import { requireNexChatEmbedConfig } from "./embed-config";
 import type {
   ChatActionInvocationMode,
   ChatApproval,
+  ChatMessage,
   ChatEvent,
   ChatLaneAction,
   ChatLaneDetail,
@@ -72,6 +73,7 @@ const STATIC_PROVIDER_CATALOG: ReadonlyArray<ServerProvider> = [
     auth: { status: "authenticated" },
     checkedAt: new Date(0).toISOString(),
     models: [
+      { slug: "gpt-5.5", name: "GPT-5.5", isCustom: false, capabilities: null },
       { slug: "gpt-5.4", name: "GPT-5.4", isCustom: false, capabilities: null },
       { slug: "gpt-5.4-mini", name: "GPT-5.4 Mini", isCustom: false, capabilities: null },
       { slug: "gpt-5.3-codex", name: "GPT-5.3 Codex", isCustom: false, capabilities: null },
@@ -129,6 +131,33 @@ function isoFromEpoch(value: number | null | undefined): string {
   return new Date(0).toISOString();
 }
 
+function truncateActivityDetail(value: string, maxLength = 1200): string {
+  const trimmed = value.trim();
+  if (trimmed.length <= maxLength) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function parseToolMessagePayload(text: string): Record<string, unknown> | null {
+  const candidate = text.split(/\n\nEstimated tokens:/u)[0]?.trim() ?? text.trim();
+  if (!candidate) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(candidate) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractArtifactPath(text: string): string | undefined {
+  return /Artifact path:\s*"([^"]+)"/u.exec(text)?.[1];
+}
+
 function providerFromLane(providerId: string | null | undefined, modelId: string | null | undefined): ProviderKind {
   const provider = providerId?.trim().toLowerCase() ?? "";
   const model = modelId?.trim().toLowerCase() ?? "";
@@ -136,6 +165,21 @@ function providerFromLane(providerId: string | null | undefined, modelId: string
     return "claudeAgent";
   }
   return "codex";
+}
+
+function nexProviderIdFromSelection(provider: ProviderKind | null | undefined): string | undefined {
+  switch (provider) {
+    case "codex":
+      return "openai";
+    case "claudeAgent":
+      return "anthropic";
+    default:
+      return undefined;
+  }
+}
+
+function reasoningEffortFromSelection(selection: ModelSelection | null | undefined): string | undefined {
+  return selection?.provider === "codex" ? selection.options?.reasoningEffort : undefined;
 }
 
 function modelSelectionFromLane(
@@ -308,14 +352,79 @@ function mapActivityToOrchestrationActivity(
   };
 }
 
+function mapToolMessageToOrchestrationActivity(
+  message: ChatLaneDetail["messages"][number],
+  sequence?: number,
+): OrchestrationThread["activities"][number] {
+  const parsed = parseToolMessagePayload(message.text);
+  const status = typeof parsed?.status === "string" ? parsed.status : undefined;
+  const reason = typeof parsed?.reason === "string" ? parsed.reason : undefined;
+  const taskText = typeof parsed?.text === "string" ? parsed.text : undefined;
+  const sessionId = typeof parsed?.session_id === "string" ? parsed.session_id : undefined;
+  const runId = typeof parsed?.run_id === "string" ? parsed.run_id : undefined;
+  const silentCompletion = parsed?.silent_completion === true;
+  const artifactPath = extractArtifactPath(message.text);
+
+  const summary = silentCompletion
+    ? "Waiting for worker findings"
+    : sessionId
+      ? "Worker dispatched"
+      : status === "error" || status === "failed"
+        ? "Tool failed"
+        : status
+          ? `Tool ${status}`
+          : "Tool activity";
+  const detail =
+    reason ??
+    taskText ??
+    (parsed ? JSON.stringify(parsed, null, 2) : undefined) ??
+    message.text;
+
+  return {
+    id: EventId.makeUnsafe(`activity:${message.id}`),
+    tone: status === "error" || status === "failed" ? "error" : silentCompletion ? "info" : "tool",
+    kind: silentCompletion ? "chat.waiting" : "tool.completed",
+    summary,
+    payload: {
+      detail: truncateActivityDetail(detail),
+      rawText: truncateActivityDetail(message.text),
+      status,
+      sessionId,
+      runId,
+      artifactPath,
+      toolTitle: sessionId ? "agents.dispatch" : "tool",
+    },
+    turnId: toTurnId(message.turn_id),
+    sequence,
+    createdAt: isoFromEpoch(message.created_at),
+  };
+}
+
+function isRenderableChatMessage(
+  message: ChatLaneDetail["messages"][number],
+): message is ChatLaneDetail["messages"][number] & { role: "user" | "assistant" | "system" } {
+  if (message.role === "user" && !message.record_id && !message.client_message_id) {
+    return false;
+  }
+  return message.role === "user" || message.role === "assistant" || message.role === "system";
+}
+
 function buildLatestTurn(detail: ChatLaneDetail | undefined) {
   const messages = detail?.messages ?? [];
-  const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
-  const latestUser = [...messages].reverse().find((message) => message.role === "user");
-  const basis = latestAssistant ?? latestUser;
+  const basis = [...messages]
+    .filter(
+      (message) =>
+        (message.role === "user" || message.role === "assistant" || message.role === "tool") &&
+        Boolean(message.turn_id),
+    )
+    .toSorted((left, right) => left.created_at - right.created_at)
+    .at(-1);
   if (!basis?.turn_id) {
     return null;
   }
+  const latestAssistantForTurn = [...messages]
+    .reverse()
+    .find((message) => message.role === "assistant" && message.turn_id === basis.turn_id);
 
   const runState = detail?.lane.run_state ?? "idle";
   const latestTurnState: "error" | "running" | "completed" =
@@ -332,7 +441,9 @@ function buildLatestTurn(detail: ChatLaneDetail | undefined) {
     startedAt: createdAt,
     completedAt: latestTurnState === "completed" ? createdAt : null,
     assistantMessageId:
-      latestAssistant?.turn_id === basis.turn_id ? toMessageId(latestAssistant.id) : null,
+      latestAssistantForTurn?.turn_id === basis.turn_id
+        ? toMessageId(latestAssistantForTurn.id)
+        : null,
   };
 }
 
@@ -342,16 +453,24 @@ function mapThread(
   detail: ChatLaneDetail | undefined,
 ): OrchestrationThread {
   const modelSelection = modelSelectionFromLane(detail?.provider_id, detail?.model_id);
-  const messages = (detail?.messages ?? []).map((message) => ({
-    id: MessageId.makeUnsafe(message.id),
-    role: message.role === "tool" ? "system" : message.role,
-    text: message.text,
-    turnId: toTurnId(message.turn_id),
-    streaming: false,
-    createdAt: isoFromEpoch(message.created_at),
-    updatedAt: isoFromEpoch(message.created_at),
-  }));
+  const rawMessages = detail?.messages ?? [];
+  const messages = rawMessages
+    .filter(isRenderableChatMessage)
+    .map((message) => ({
+      id: MessageId.makeUnsafe(
+        message.role === "user" && message.client_message_id ? message.client_message_id : message.id,
+      ),
+      role: message.role,
+      text: message.text,
+      turnId: toTurnId(message.turn_id),
+      streaming: false,
+      createdAt: isoFromEpoch(message.created_at),
+      updatedAt: isoFromEpoch(message.created_at),
+    }));
   const activities = [
+    ...rawMessages
+      .filter((message) => message.role === "tool")
+      .map((message, index) => mapToolMessageToOrchestrationActivity(message, index)),
     ...(detail?.activities ?? []).map(mapActivityToOrchestrationActivity),
     ...(detail?.approvals ?? []).map(mapApprovalToActivity),
   ].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
@@ -478,7 +597,7 @@ export async function requestChatSnapshot(
   const requestedApprovalLimit =
     typeof options?.approval_limit === "number" ? Math.max(1, Math.trunc(options.approval_limit)) : undefined;
   const snapshot = await bridge().request<ChatSnapshotResult>("chat.snapshot", {
-    message_limit: 200,
+    message_limit: 500,
     approval_limit: 50,
     ...(laneId ? { lane_id: laneId } : {}),
     ...(options?.include_conversation_context ? { include_conversation_context: true } : {}),
@@ -619,7 +738,7 @@ export async function requestOrchestrationReplay(
     return [];
   }
   lastKnownSequence = Math.max(lastKnownSequence, replay.latest_sequence);
-  return replay.events.map(mapChatEventToOrchestrationEvent);
+  return replay.events.flatMap(mapChatEventToOrchestrationEvents);
 }
 
 export function subscribeToOrchestrationEvents(
@@ -660,10 +779,29 @@ function mapChatMessageRole(role: unknown): "user" | "assistant" | "system" {
   if (role === "user" || role === "assistant" || role === "system") {
     return role;
   }
-  if (role === "tool") {
-    return "system";
-  }
   return "assistant";
+}
+
+function chatMessageFromEvent(event: ChatEvent, laneId: string): ChatMessage {
+  const clientMessageId =
+    typeof event.data.client_message_id === "string" ? event.data.client_message_id : undefined;
+  return {
+    id: typeof event.data.id === "string" ? event.data.id : `message:${event.sequence}`,
+    lane_id: typeof event.data.lane_id === "string" ? event.data.lane_id : laneId,
+    session_id: typeof event.data.session_id === "string" ? event.data.session_id : null,
+    turn_id: typeof event.data.turn_id === "string" ? event.data.turn_id : null,
+    record_id: typeof event.data.record_id === "string" ? event.data.record_id : null,
+    ...(clientMessageId ? { client_message_id: clientMessageId } : {}),
+    role:
+      event.data.role === "user" ||
+      event.data.role === "assistant" ||
+      event.data.role === "system" ||
+      event.data.role === "tool"
+        ? event.data.role
+        : "assistant",
+    text: typeof event.data.text === "string" ? event.data.text : "",
+    created_at: typeof event.data.created_at === "number" ? event.data.created_at : event.occurred_at,
+  };
 }
 
 function buildOrchestrationEventBase(event: ChatEvent, laneId: string) {
@@ -687,6 +825,25 @@ function mapChatEventToOrchestrationEvents(event: ChatEvent): OrchestrationEvent
   const base = buildOrchestrationEventBase(event, laneId);
 
   if (event.event_name === "message.appended" || event.event_name === "message.updated") {
+    if (event.data.role === "tool") {
+      return [
+        {
+          ...base,
+          type: "thread.activity-appended",
+          payload: {
+            threadId: toThreadId(laneId),
+            activity: mapToolMessageToOrchestrationActivity(
+              chatMessageFromEvent(event, laneId),
+              event.sequence,
+            ),
+          },
+        } as OrchestrationEvent,
+      ];
+    }
+    const message = chatMessageFromEvent(event, laneId);
+    if (message.role === "user" && !message.record_id && !message.client_message_id) {
+      return [];
+    }
     const createdAt = isoFromEpoch(
       typeof event.data.created_at === "number" ? event.data.created_at : event.occurred_at,
     );
@@ -697,11 +854,11 @@ function mapChatEventToOrchestrationEvents(event: ChatEvent): OrchestrationEvent
         payload: {
           threadId: toThreadId(laneId),
           messageId: MessageId.makeUnsafe(
-            typeof event.data.id === "string" ? event.data.id : `message:${event.sequence}`,
+            message.role === "user" && message.client_message_id ? message.client_message_id : message.id,
           ),
-          role: mapChatMessageRole(event.data.role),
-          text: typeof event.data.text === "string" ? event.data.text : "",
-          turnId: typeof event.data.turn_id === "string" ? TurnId.makeUnsafe(event.data.turn_id) : null,
+          role: mapChatMessageRole(message.role),
+          text: message.text,
+          turnId: message.turn_id ? TurnId.makeUnsafe(message.turn_id) : null,
           streaming: false,
           createdAt,
           updatedAt: occurredAt,
@@ -781,10 +938,6 @@ function mapChatEventToOrchestrationEvents(event: ChatEvent): OrchestrationEvent
   ];
 }
 
-function mapChatEventToOrchestrationEvent(event: ChatEvent): OrchestrationEvent {
-  return mapChatEventToOrchestrationEvents(event)[0]!;
-}
-
 async function syncLaneActionsForProject(
   projectId: string,
   nextScripts: ReadonlyArray<ProjectScript>,
@@ -860,10 +1013,17 @@ export async function dispatchNexOrchestrationCommand(
 ): Promise<{ sequence: number }> {
   switch (command.type) {
     case "thread.turn.start": {
+      const selectedModel = command.modelSelection?.model?.trim();
+      const selectedProvider = nexProviderIdFromSelection(command.modelSelection?.provider);
+      const thinking = reasoningEffortFromSelection(command.modelSelection);
       const result = await bridge().request<{ request_id?: string }>("chat.send", {
         lane_id: command.threadId,
         message: command.message.text,
         idempotency_key: command.commandId,
+        client_message_id: command.message.messageId,
+        ...(selectedModel ? { model_id: selectedModel } : {}),
+        ...(selectedProvider ? { provider_id: selectedProvider } : {}),
+        ...(thinking ? { thinking } : {}),
       });
       return {
         sequence: lastKnownSequence,

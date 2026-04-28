@@ -71,6 +71,50 @@ type OpenApiSummary = {
   operationCount: number;
 };
 
+type AdapterSetupFieldOption = {
+  label: string;
+  value: string;
+};
+
+type AdapterSetupField = {
+  name: string;
+  label: string;
+  type: string;
+  required: boolean;
+  placeholder?: string;
+  options?: AdapterSetupFieldOption[];
+};
+
+type AdapterSetupMethod = {
+  id?: string;
+  type: string;
+  label: string;
+  icon: string;
+  service?: string;
+  scopes?: string[];
+  platformCredentials?: boolean;
+  platformCredentialUrl?: string;
+  fields?: AdapterSetupField[];
+  accept?: string[];
+  templateUrl?: string;
+  maxSize?: number;
+};
+
+type AdapterSetupDescriptor = {
+  schemaVersion: "adapter-catalog-setup.v1";
+  adapterId: string;
+  displayName: string;
+  auth: {
+    methods: AdapterSetupMethod[];
+    setupGuide?: string;
+  };
+  description?: string;
+  version?: string;
+  platform?: string;
+  name?: string;
+  credentialService?: string;
+};
+
 function summarizeOpenApiDocument(raw: string): OpenApiSummary | null {
   const normalized = raw.replaceAll("\r\n", "\n");
   const pathMatches = normalized.match(/^  \/[^:\n]+:\s*$/gm) ?? [];
@@ -334,6 +378,13 @@ export function validatePackageRoot(targetPath: string): {
     if (!relativePath) {
       return;
     }
+    if (label === "command" && !relativePath.startsWith(".") && !path.isAbsolute(relativePath)) {
+      const lookup = spawnSync("which", [relativePath], { encoding: "utf8" });
+      if (lookup.status !== 0) {
+        pathErrors.push(`${label} not found on PATH: ${relativePath}`);
+      }
+      return;
+    }
     const resolved = path.resolve(detected.rootDir, relativePath);
     if (!fs.existsSync(resolved)) {
       pathErrors.push(`${label} does not exist: ${relativePath}`);
@@ -407,6 +458,9 @@ function shouldExcludeFromArchive(rootDir: string, absolutePath: string): boolea
     if (last.endsWith(".tar.gz") || last.endsWith(".sha256")) {
       return true;
     }
+    if (last.endsWith(".adapter.catalog.json")) {
+      return true;
+    }
   }
 
   const base = path.basename(relative);
@@ -417,6 +471,220 @@ function shouldExcludeFromArchive(rootDir: string, absolutePath: string): boolea
     base.endsWith(".spec.js") ||
     base.endsWith(".test.go")
   );
+}
+
+function optionalCatalogString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function requiredCatalogString(value: unknown, label: string): string {
+  const trimmed = optionalCatalogString(value);
+  if (!trimmed) {
+    throw new Error(`${label} is required`);
+  }
+  return trimmed;
+}
+
+function catalogStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const values = value
+    .map((entry) => optionalCatalogString(entry))
+    .filter((entry): entry is string => Boolean(entry));
+  return values.length > 0 ? values : undefined;
+}
+
+function catalogRecord(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function parseFirstJsonObject(raw: string, label: string): Record<string, unknown> {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new Error(`${label} produced no JSON output`);
+  }
+  try {
+    return catalogRecord(JSON.parse(trimmed), label);
+  } catch {
+    const line = trimmed.split(/\r?\n/u).find((entry) => entry.trim().startsWith("{"));
+    if (!line) {
+      throw new Error(`${label} produced no JSON object`);
+    }
+    return catalogRecord(JSON.parse(line), label);
+  }
+}
+
+function normalizeAdapterSetupFields(value: unknown, label: string): AdapterSetupField[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const fields = value.map((entry, index) => {
+    const record = catalogRecord(entry, `${label}.fields[${index}]`);
+    const fieldType = requiredCatalogString(record.type, `${label}.fields[${index}].type`);
+    if (fieldType !== "secret" && fieldType !== "text" && fieldType !== "select") {
+      throw new Error(`${label}.fields[${index}].type is unsupported`);
+    }
+    const field: AdapterSetupField = {
+      name: requiredCatalogString(record.name, `${label}.fields[${index}].name`),
+      label: requiredCatalogString(record.label, `${label}.fields[${index}].label`),
+      type: fieldType,
+      required: Boolean(record.required),
+    };
+    const placeholder = optionalCatalogString(record.placeholder);
+    if (placeholder) {
+      field.placeholder = placeholder;
+    }
+    if (Array.isArray(record.options)) {
+      field.options = record.options.map((option, optionIndex) => {
+        const optionRecord = catalogRecord(option, `${label}.fields[${index}].options[${optionIndex}]`);
+        return {
+          label: requiredCatalogString(optionRecord.label, `${label}.fields[${index}].options[${optionIndex}].label`),
+          value: requiredCatalogString(optionRecord.value, `${label}.fields[${index}].options[${optionIndex}].value`),
+        };
+      });
+    }
+    return field;
+  });
+  return fields.length > 0 ? fields : undefined;
+}
+
+function normalizeAdapterSetupMethod(value: unknown, label: string): AdapterSetupMethod {
+  const record = catalogRecord(value, label);
+  const methodType = requiredCatalogString(record.type, `${label}.type`);
+  if (
+    methodType !== "oauth2" &&
+    methodType !== "api_key" &&
+    methodType !== "file_upload" &&
+    methodType !== "custom_flow"
+  ) {
+    throw new Error(`${label}.type is unsupported`);
+  }
+  const method: AdapterSetupMethod = {
+    type: methodType,
+    label: requiredCatalogString(record.label, `${label}.label`),
+    icon: requiredCatalogString(record.icon, `${label}.icon`),
+  };
+  const id = optionalCatalogString(record.id);
+  const service = optionalCatalogString(record.service);
+  const scopes = catalogStringArray(record.scopes);
+  const platformCredentialUrl = optionalCatalogString(record.platformCredentialUrl);
+  const fields = normalizeAdapterSetupFields(record.fields, label);
+  const accept = catalogStringArray(record.accept);
+  const templateUrl = optionalCatalogString(record.templateUrl);
+  if (id) {
+    method.id = id;
+  }
+  if (service) {
+    method.service = service;
+  }
+  if (scopes) {
+    method.scopes = scopes;
+  }
+  if (typeof record.platformCredentials === "boolean") {
+    method.platformCredentials = record.platformCredentials;
+  }
+  if (platformCredentialUrl) {
+    method.platformCredentialUrl = platformCredentialUrl;
+  }
+  if (fields) {
+    method.fields = fields;
+  }
+  if (accept) {
+    method.accept = accept;
+  }
+  if (templateUrl) {
+    method.templateUrl = templateUrl;
+  }
+  if (typeof record.maxSize === "number" && Number.isInteger(record.maxSize) && record.maxSize > 0) {
+    method.maxSize = record.maxSize;
+  }
+  return method;
+}
+
+function runAdapterInfo(detected: DetectedPackage): Record<string, unknown> {
+  const manifest = detected.manifest as { command?: string; args?: unknown };
+  const command = requiredCatalogString(manifest.command, "adapter manifest command");
+  const commandPath = command.startsWith(".") ? path.resolve(detected.rootDir, command) : command;
+  const commandArgs = Array.isArray(manifest.args)
+    ? manifest.args.filter((arg): arg is string => typeof arg === "string")
+    : [];
+  const result = spawnSync(commandPath, [...commandArgs, "adapter.info"], {
+    cwd: detected.rootDir,
+    encoding: "utf8",
+    maxBuffer: 8 * 1024 * 1024,
+    env: {
+      ...process.env,
+      NO_COLOR: "1",
+    },
+  });
+  if (result.error) {
+    throw new Error(`adapter.info failed for ${detected.id}: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      `adapter.info failed for ${detected.id}: ${result.stderr?.trim() || result.stdout?.trim() || "adapter exited non-zero"}`,
+    );
+  }
+  return parseFirstJsonObject(result.stdout, `${detected.id} adapter.info`);
+}
+
+function buildAdapterSetupDescriptor(detected: DetectedPackage): AdapterSetupDescriptor {
+  const manifest = detected.manifest;
+  const info = runAdapterInfo(detected);
+  const auth = catalogRecord(info.auth, `${detected.id} adapter.info auth`);
+  if (!Array.isArray(auth.methods) || auth.methods.length === 0) {
+    if (process.env.ADAPTER_PACKAGE_ALLOW_MISSING_SETUP_DESCRIPTOR === "1") {
+      auth.methods = [];
+    } else {
+      throw new Error(`${detected.id} adapter.info auth.methods must contain at least one setup method`);
+    }
+  }
+  const descriptor: AdapterSetupDescriptor = {
+    schemaVersion: "adapter-catalog-setup.v1",
+    adapterId: detected.id,
+    displayName: requiredCatalogString(
+      manifest.displayName ?? manifest.name ?? info.name ?? detected.id,
+      `${detected.id} displayName`,
+    ),
+    auth: {
+      methods: auth.methods.map((method, index) =>
+        normalizeAdapterSetupMethod(method, `${detected.id} adapter.info auth.methods[${index}]`),
+      ),
+    },
+  };
+  const setupGuide = optionalCatalogString(auth.setupGuide);
+  const description = optionalCatalogString(manifest.description);
+  const version = optionalCatalogString(manifest.version ?? info.version);
+  const platform = optionalCatalogString(info.platform ?? manifest.platform);
+  const name = optionalCatalogString(info.name);
+  const credentialService = optionalCatalogString(info.credential_service);
+  if (setupGuide) {
+    descriptor.auth.setupGuide = setupGuide;
+  }
+  if (description) {
+    descriptor.description = description;
+  }
+  if (version) {
+    descriptor.version = version;
+  }
+  if (platform) {
+    descriptor.platform = platform;
+  }
+  if (name) {
+    descriptor.name = name;
+  }
+  if (credentialService) {
+    descriptor.credentialService = credentialService;
+  }
+  return descriptor;
 }
 
 async function copyPackageTree(sourceDir: string, stageDir: string): Promise<void> {
@@ -494,10 +762,23 @@ export async function createPackageArchive(targetPath: string): Promise<{
   const distDir = path.join(detected.rootDir, "dist");
   const archivePath = path.join(distDir, `${detected.id}-${detected.version}.tar.gz`);
   const sha256Path = `${archivePath}.sha256`;
+  const adapterCatalogJson = detected.kind === "adapter"
+    ? `${JSON.stringify(buildAdapterSetupDescriptor(detected), null, 2)}\n`
+    : null;
 
   await ensureDir(distDir);
+  if (adapterCatalogJson) {
+    await fsp.writeFile(
+      path.join(distDir, `${detected.id}-${detected.version}.adapter.catalog.json`),
+      adapterCatalogJson,
+      "utf8",
+    );
+  }
   try {
     await copyPackageTree(detected.rootDir, stageDir);
+    if (adapterCatalogJson) {
+      await fsp.writeFile(path.join(stageDir, "adapter.catalog.json"), adapterCatalogJson, "utf8");
+    }
     createTarArchive(stageDir, archivePath);
     const sha256 = await sha256File(archivePath);
     await fsp.writeFile(sha256Path, `${sha256}  ${path.basename(archivePath)}\n`, "utf8");

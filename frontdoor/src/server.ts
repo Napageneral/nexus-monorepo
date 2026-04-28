@@ -7376,6 +7376,8 @@ export function createFrontdoorServer(options: CreateServerOptions = {}): {
             description: adapter.description ?? null,
             latest_version: adapter.latestVersion,
             release_id: adapter.releaseId,
+            auth: adapter.setupDescriptor?.auth ?? null,
+            setup_descriptor: adapter.setupDescriptor ?? null,
           })),
         });
         return;

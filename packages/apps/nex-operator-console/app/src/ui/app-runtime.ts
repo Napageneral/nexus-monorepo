@@ -26,6 +26,7 @@ import { loadChatHistory } from "./controllers/chat.ts";
 import { handleChatEvent, type ChatEventPayload } from "./controllers/chat.ts";
 import { normalizeMonitorOperation } from "./controllers/monitor.ts";
 import { loadSessions } from "./controllers/sessions.ts";
+import { finishConsoleLatency, startConsoleLatency } from "./latency-metrics.ts";
 import { sessionBelongsToConversation } from "./conversation-session.ts";
 import { RuntimeBrowserClient } from "./runtime.ts";
 
@@ -34,6 +35,7 @@ type RuntimeHost = {
   password: string;
   client: RuntimeBrowserClient | null;
   connected: boolean;
+  runtimeConnecting: boolean;
   hello: RuntimeHelloOk | null;
   lastError: string | null;
   onboarding?: boolean;
@@ -84,9 +86,25 @@ function applySessionDefaults(host: RuntimeHost, defaults?: SessionDefaultsSnaps
 }
 
 export function connectRuntime(host: RuntimeHost) {
+  const connectToken = startConsoleLatency("runtime.websocket.connect", {
+    url: host.settings.runtimeUrl,
+  });
+  let connectSettled = false;
+  const finishConnect = (
+    outcome: Parameters<typeof finishConsoleLatency>[1],
+    details?: Parameters<typeof finishConsoleLatency>[2],
+  ) => {
+    if (connectSettled) {
+      return;
+    }
+    connectSettled = true;
+    finishConsoleLatency(connectToken, outcome, details);
+  };
+
   host.lastError = null;
   host.hello = null;
   host.connected = false;
+  host.runtimeConnecting = true;
   host.aclRequests = [];
   host.aclRequestsError = null;
   host.aclRequestsResolvingId = null;
@@ -102,8 +120,15 @@ export function connectRuntime(host: RuntimeHost) {
     password: host.password.trim() ? host.password : undefined,
     clientName: "nexus-operator-console",
     mode: "webchat",
+    onConnecting: () => {
+      host.runtimeConnecting = true;
+    },
     onHello: (hello) => {
+      finishConnect("ok", {
+        protocol: hello.protocol,
+      });
       host.connected = true;
+      host.runtimeConnecting = false;
       host.lastError = null;
       host.hello = hello;
       applySnapshot(host, hello);
@@ -115,7 +140,12 @@ export function connectRuntime(host: RuntimeHost) {
       void refreshActiveTab(host as unknown as Parameters<typeof refreshActiveTab>[0]);
     },
     onClose: ({ code, reason }) => {
+      finishConnect("error", {
+        code,
+        reason: reason || "no reason",
+      });
       host.connected = false;
+      host.runtimeConnecting = true;
       // Code 1012 = Service Restart (expected during config saves, don't show as error)
       if (code !== 1012) {
         host.lastError = `disconnected (${code}): ${reason || "no reason"}`;

@@ -29,18 +29,31 @@ The runtime probe must measure:
 - `chat.snapshot` with a manager lane
 - `chat.snapshot` with a worker lane
 - `chat.replay` after a recent sequence
+- selected-lane older-history fetch
+- lane runtime state freshness for active, idle, failed, and stale sessions
 
 The probe should capture lane count, selected message count, payload byte size,
-and wall-clock duration.
+cursor/window metadata, replay event count, and wall-clock duration.
 
 ## Browser Probe
 
 The browser probe must measure:
 
+- console shell first paint
+- runtime WebSocket connected
+- chat microfrontend bundle loaded
+- first `chat.snapshot` response
 - time to first visible sidebar lane
 - time to selected transcript visible
+- time to Echo send/reply reconciliation
 - time to context sheet open
 - scroll operation responsiveness over a seeded large transcript
+- transferred JavaScript and font asset sizes
+
+The browser probe must include a stale-storage scenario where
+`localStorage.nexus.control.settings.runtimeUrl` points at an unreachable
+runtime while the page is loaded from `/app/console/*`. The expected result is
+that the Console still connects to the current runtime origin.
 
 ## Cleanroom Proof
 
@@ -60,8 +73,14 @@ Pass when:
 - default `chat.snapshot` returns inside the runtime API timeout
 - explicit selected-lane snapshots return within a bounded budget
 - `/chat` first usable state is measurable and stable in cleanroom
+- the Chat bundle and font assets have an explicit budget or justified module
+  inventory
 - the left rail shows manager/agent rows first with worker lanes collapsed by
   default
+- selected-lane history is ledger-backed, cursor-friendly, and deduped against
+  live events
+- Echo send/reply produces exactly one user row and one assistant row
+- stale old sessions do not display indefinite active work state
 - transcript scrolling remains responsive with large seeded history
 - viewport fit does not require page-level browser scrolling for normal use
 

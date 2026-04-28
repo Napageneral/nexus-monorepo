@@ -261,6 +261,16 @@ describe("operator console routing", () => {
     expect(window.location.search).toBe("");
   });
 
+  it("clears stale chat lane params on the mounted chat entry route", async () => {
+    const app = mountApp("/app/console/chat?lane=lane%3Aagent%3Aentity-assistant");
+    await app.updateComplete;
+
+    expect(app.basePath).toBe("/app/console");
+    expect(app.tab).toBe("console");
+    expect(window.location.pathname).toBe("/app/console/chat");
+    expect(window.location.search).toBe("");
+  });
+
   it("keeps nested mounted identity detail routes stable", async () => {
     const app = mountApp("/app/console/identity/entity/entity-casey");
     await app.updateComplete;

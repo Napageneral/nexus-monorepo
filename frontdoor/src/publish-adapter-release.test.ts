@@ -28,18 +28,54 @@ describe("publishAdapterRelease", () => {
     const tarballPath = path.join(tempDir, "bitbucket-1.0.0.tar.gz");
     fs.writeFileSync(tarballPath, "bitbucket-adapter-test-package\n", "utf8");
 
-    const manifest = JSON.parse(fs.readFileSync(BITBUCKET_ADAPTER_MANIFEST_PATH, "utf8")) as {
+    const manifestRaw = fs.readFileSync(BITBUCKET_ADAPTER_MANIFEST_PATH, "utf8");
+    const manifest = JSON.parse(manifestRaw) as {
       id?: string;
       version?: string;
+      displayName?: string;
+      name?: string;
     };
     const expectedId = String(manifest.id ?? "");
     const expectedVersion = String(manifest.version ?? "");
+    const packageRoot = path.join(tempDir, "package");
+    fs.mkdirSync(path.join(packageRoot, "dist"), { recursive: true });
+    fs.writeFileSync(path.join(packageRoot, "adapter.nexus.json"), manifestRaw, "utf8");
+    fs.writeFileSync(
+      path.join(packageRoot, "dist", `${expectedId}-${expectedVersion}.adapter.catalog.json`),
+      JSON.stringify({
+        schemaVersion: "adapter-catalog-setup.v1",
+        adapterId: expectedId,
+        displayName: manifest.displayName ?? manifest.name ?? expectedId,
+        version: expectedVersion,
+        platform: "bitbucket",
+        auth: {
+          methods: [
+            {
+              id: "bitbucket_api_token",
+              type: "api_key",
+              label: "API token",
+              icon: "bitbucket",
+              service: "bitbucket",
+              fields: [
+                {
+                  name: "api_token",
+                  label: "API token",
+                  type: "secret",
+                  required: true,
+                },
+              ],
+            },
+          ],
+        },
+      }),
+      "utf8",
+    );
 
     const store = new FrontdoorStore(storePath);
     try {
       const result = await publishAdapterRelease({
         store,
-        packageRoot: BITBUCKET_ADAPTER_ROOT,
+        packageRoot,
         tarballPath,
         targetOs: "linux",
         targetArch: "amd64",
@@ -54,6 +90,8 @@ describe("publishAdapterRelease", () => {
       expect(variant?.targetOs).toBe("linux");
       expect(variant?.targetArch).toBe("amd64");
       expect(variant?.tarballPath).toBe(tarballPath);
+      const release = store.getPackageRelease(result.release_id);
+      expect(release?.setupDescriptorJson).toContain("bitbucket_api_token");
     } finally {
       store.close();
     }

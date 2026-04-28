@@ -1,5 +1,10 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import {
+  finishConsoleLatency,
+  measureConsoleLatency,
+  startConsoleLatency,
+} from "../../ui/latency-metrics.ts";
 import type { RuntimeBrowserClient, RuntimeEventFrame } from "../../ui/runtime.ts";
 
 type NexChatBridgeProps = {
@@ -88,6 +93,7 @@ export class NexusConsoleChatHost extends LitElement {
     | ((listener: (event: RuntimeEventFrame) => void) => () => void)
     | null = null;
   @property({ type: Boolean }) connected = false;
+  @property({ type: Boolean }) runtimeConnecting = false;
   @property() initialLaneId = "";
 
   @state() private bootError: string | null = null;
@@ -110,7 +116,13 @@ export class NexusConsoleChatHost extends LitElement {
       if (!client || !client.connected) {
         return Promise.reject(new Error("runtime not connected"));
       }
-      return client.request<T>(method, params);
+      return measureConsoleLatency(
+        `chat.bridge.request.${method}`,
+        () => client.request<T>(method, params),
+        {
+          method,
+        },
+      );
     },
     subscribe: (listener: (event: { event: "chat"; payload: unknown }) => void) => {
       const subscribe = this.resolveRuntimeEventSubscription();
@@ -166,7 +178,11 @@ export class NexusConsoleChatHost extends LitElement {
         ${this.bootError
           ? html`<div class="nex-chat-host__notice nex-chat-host__notice--error">${this.bootError}</div>`
           : !this.connected && !this.chatMount
-            ? html`<div class="nex-chat-host__notice">Waiting for the Nex runtime connection.</div>`
+            ? html`<div class="nex-chat-host__notice">
+                ${this.runtimeConnecting
+                  ? "Connecting to the Nex runtime."
+                  : "Waiting for the Nex runtime connection."}
+              </div>`
             : this.loading && !this.chatMount
               ? html`<div class="nex-chat-host__notice">Loading the operator chat surface.</div>`
               : nothing}
@@ -227,10 +243,32 @@ export class NexusConsoleChatHost extends LitElement {
 
     this.loading = true;
     this.bootError = null;
+    const loadToken = startConsoleLatency("chat.microfrontend.load", {
+      initial_lane_id: this.initialLaneId.trim() || null,
+    });
+    let loadSettled = false;
+    const finishLoad = (
+      outcome: Parameters<typeof finishConsoleLatency>[1],
+      details?: Parameters<typeof finishConsoleLatency>[2],
+    ) => {
+      if (loadSettled) {
+        return;
+      }
+      loadSettled = true;
+      finishConsoleLatency(loadToken, outcome, details);
+    };
     try {
       const module = await loadNexChatModule();
+      finishLoad("ok");
+      const mountToken = startConsoleLatency("chat.microfrontend.mount", {
+        initial_lane_id: this.initialLaneId.trim() || null,
+      });
       this.chatMount = module.mountNexChatApp(mountTarget, this.buildProps());
+      finishConsoleLatency(mountToken, "ok");
     } catch (error) {
+      finishLoad("error", {
+        error: error instanceof Error ? error.message : String(error),
+      });
       this.bootError = error instanceof Error ? error.message : String(error);
     } finally {
       this.loading = false;

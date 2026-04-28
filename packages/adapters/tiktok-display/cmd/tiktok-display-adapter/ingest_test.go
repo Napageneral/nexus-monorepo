@@ -163,7 +163,7 @@ func TestBackfillEmitsProfileAndVideoSnapshotRecords(t *testing.T) {
 	}
 }
 
-func TestMonitorUsesRecentReplayWindow(t *testing.T) {
+func TestMonitorPollsWithRecentReplayWindowUntilCancelled(t *testing.T) {
 	path := writeTikTokDisplayRuntimeContext(t, map[string]any{
 		"version":       1,
 		"platform":      platformID,
@@ -181,6 +181,7 @@ func TestMonitorUsesRecentReplayWindow(t *testing.T) {
 		},
 	})
 	t.Setenv("NEXUS_ADAPTER_CONTEXT_PATH", path)
+	t.Setenv(tiktokDisplayAdapterStateDirEnv, t.TempDir())
 
 	originalFetchProfile := fetchTikTokDisplayProfile
 	originalFetchVideos := fetchTikTokDisplayVideos
@@ -195,14 +196,16 @@ func TestMonitorUsesRecentReplayWindow(t *testing.T) {
 
 	var capturedFloor time.Time
 	var capturedCeiling time.Time
+	ctx, cancel := context.WithCancel(context.Background())
 	fetchTikTokDisplayVideos = func(ctx context.Context, accessToken string, floor time.Time, ceiling time.Time) ([]tiktokDisplayVideoInfo, error) {
 		capturedFloor = floor
 		capturedCeiling = ceiling
+		cancel()
 		return nil, nil
 	}
 
 	startedAt := time.Now().UTC()
-	err := monitor(context.Background(), "display-primary", func(record any) {})
+	err := monitor(ctx, "display-primary", func(record any) {})
 	finishedAt := time.Now().UTC()
 	if err != nil {
 		t.Fatalf("monitor returned error: %v", err)
@@ -218,6 +221,260 @@ func TestMonitorUsesRecentReplayWindow(t *testing.T) {
 	}
 	if capturedCeiling.Before(startedAt.Add(-2*time.Second)) || capturedCeiling.After(finishedAt.Add(2*time.Second)) {
 		t.Fatalf("capturedCeiling = %s, want near now between %s and %s", capturedCeiling, startedAt.Add(-2*time.Second), finishedAt.Add(2*time.Second))
+	}
+}
+
+func TestRunTikTokDisplayMonitorCycleSuppressesQuietRevisions(t *testing.T) {
+	originalFetchProfile := fetchTikTokDisplayProfile
+	originalFetchVideos := fetchTikTokDisplayVideos
+	t.Cleanup(func() {
+		fetchTikTokDisplayProfile = originalFetchProfile
+		fetchTikTokDisplayVideos = originalFetchVideos
+	})
+
+	profile := &tiktokDisplayUserInfo{
+		OpenID:         "open_123",
+		DisplayName:    "Moon Sleep",
+		ProfileWebLink: "https://www.tiktok.com/@moonsleep",
+		FollowerCount:  321,
+		FollowingCount: 45,
+		LikesCount:     789,
+		VideoCount:     12,
+	}
+	videos := []tiktokDisplayVideoInfo{
+		{
+			ID:               "video_123",
+			Title:            "Moon Sleep Clip",
+			CreateTime:       time.Date(2026, time.April, 27, 14, 0, 0, 0, time.UTC).Unix(),
+			ViewCount:        111,
+			LikeCount:        22,
+			CommentCount:     3,
+			ShareCount:       4,
+			VideoDescription: "clip",
+		},
+	}
+	fetchTikTokDisplayProfile = func(ctx context.Context, accessToken string) (*tiktokDisplayUserInfo, error) {
+		return profile, nil
+	}
+	fetchTikTokDisplayVideos = func(ctx context.Context, accessToken string, floor time.Time, ceiling time.Time) ([]tiktokDisplayVideoInfo, error) {
+		return videos, nil
+	}
+
+	state := &tiktokDisplayRuntime{
+		ConnectionID:   "display-primary",
+		AccessToken:    "access-token",
+		OpenID:         "open_123",
+		DisplayName:    "Moon Sleep",
+		ProfileWebLink: "https://www.tiktok.com/@moonsleep",
+	}
+	monitorState := defaultTikTokDisplayMonitorState()
+	firstPoll := time.Date(2026, time.April, 27, 15, 0, 0, 0, time.UTC)
+
+	var firstRecords []nexadapter.AdapterInboundRecord
+	first := runTikTokDisplayMonitorCycle(context.Background(), state, monitorState, firstPoll, collectTikTokDisplayRecords(&firstRecords))
+	if len(first.FailedLanes) != 0 {
+		t.Fatalf("first failed lanes = %v", first.FailedLanes)
+	}
+	if len(firstRecords) != 2 {
+		t.Fatalf("first records = %d, want profile + video", len(firstRecords))
+	}
+
+	var secondRecords []nexadapter.AdapterInboundRecord
+	second := runTikTokDisplayMonitorCycle(context.Background(), state, monitorState, firstPoll.Add(tiktokDisplayDiscoveryPollInterval), collectTikTokDisplayRecords(&secondRecords))
+	if len(second.FailedLanes) != 0 {
+		t.Fatalf("second failed lanes = %v", second.FailedLanes)
+	}
+	if len(secondRecords) != 0 {
+		t.Fatalf("second records = %d, want quiet-cycle suppression", len(secondRecords))
+	}
+	profileMetrics := monitorState.metrics(tiktokDisplayMonitorLaneProfile)
+	if profileMetrics.LastAttempted != 1 || profileMetrics.LastSuppressed != 1 || profileMetrics.LastEmitted != 0 {
+		t.Fatalf("profile quiet metrics = %+v, want one suppressed profile", profileMetrics)
+	}
+	discoveryMetrics := monitorState.metrics(tiktokDisplayMonitorLaneDiscovery)
+	if discoveryMetrics.LastAttempted != 1 || discoveryMetrics.LastSuppressed != 1 || discoveryMetrics.LastEmitted != 0 {
+		t.Fatalf("discovery quiet metrics = %+v, want one suppressed video", discoveryMetrics)
+	}
+}
+
+func TestRunTikTokDisplayMonitorCycleUsesPublishOverlapForDiscovery(t *testing.T) {
+	originalFetchProfile := fetchTikTokDisplayProfile
+	originalFetchVideos := fetchTikTokDisplayVideos
+	t.Cleanup(func() {
+		fetchTikTokDisplayProfile = originalFetchProfile
+		fetchTikTokDisplayVideos = originalFetchVideos
+	})
+
+	fetchTikTokDisplayProfile = func(ctx context.Context, accessToken string) (*tiktokDisplayUserInfo, error) {
+		return &tiktokDisplayUserInfo{OpenID: "open_123", DisplayName: "Moon Sleep"}, nil
+	}
+
+	publishedAt := time.Date(2026, time.April, 27, 14, 0, 0, 0, time.UTC)
+	firstVideos := []tiktokDisplayVideoInfo{
+		{ID: "video_123", Title: "Original", CreateTime: publishedAt.Unix(), ViewCount: 111},
+	}
+	secondVideos := []tiktokDisplayVideoInfo{
+		{ID: "video_456", Title: "New", CreateTime: publishedAt.Add(30 * time.Minute).Unix(), ViewCount: 10},
+		{ID: "video_123", Title: "Original", CreateTime: publishedAt.Unix(), ViewCount: 111},
+	}
+	call := 0
+	var floors []time.Time
+	fetchTikTokDisplayVideos = func(ctx context.Context, accessToken string, floor time.Time, ceiling time.Time) ([]tiktokDisplayVideoInfo, error) {
+		call++
+		floors = append(floors, floor)
+		if call == 1 {
+			return firstVideos, nil
+		}
+		return secondVideos, nil
+	}
+
+	state := &tiktokDisplayRuntime{ConnectionID: "display-primary", AccessToken: "access-token", OpenID: "open_123", DisplayName: "Moon Sleep"}
+	monitorState := defaultTikTokDisplayMonitorState()
+	firstPoll := time.Date(2026, time.April, 27, 15, 0, 0, 0, time.UTC)
+	runTikTokDisplayMonitorCycle(context.Background(), state, monitorState, firstPoll, func(record any) {})
+
+	var secondRecords []nexadapter.AdapterInboundRecord
+	second := runTikTokDisplayMonitorCycle(context.Background(), state, monitorState, firstPoll.Add(tiktokDisplayDiscoveryPollInterval), collectTikTokDisplayRecords(&secondRecords))
+	if len(second.FailedLanes) != 0 {
+		t.Fatalf("second failed lanes = %v", second.FailedLanes)
+	}
+	if len(secondRecords) != 1 {
+		t.Fatalf("second records = %d, want only new video", len(secondRecords))
+	}
+	if got := secondRecords[0].Payload.Metadata["logical_row_id"]; got != "video:video_456" {
+		t.Fatalf("emitted logical row = %#v, want new video row", got)
+	}
+	if len(floors) != 2 {
+		t.Fatalf("floors = %d, want two discovery calls", len(floors))
+	}
+	wantSecondFloor := publishedAt.Add(-tiktokDisplayDiscoveryOverlap)
+	if !floors[1].Equal(wantSecondFloor) {
+		t.Fatalf("second floor = %s, want publish overlap floor %s", floors[1], wantSecondFloor)
+	}
+}
+
+func TestTikTokDisplayMonitorStatePersistsAcrossRestart(t *testing.T) {
+	t.Setenv(tiktokDisplayAdapterStateDirEnv, t.TempDir())
+
+	originalFetchProfile := fetchTikTokDisplayProfile
+	originalFetchVideos := fetchTikTokDisplayVideos
+	t.Cleanup(func() {
+		fetchTikTokDisplayProfile = originalFetchProfile
+		fetchTikTokDisplayVideos = originalFetchVideos
+	})
+
+	fetchTikTokDisplayProfile = func(ctx context.Context, accessToken string) (*tiktokDisplayUserInfo, error) {
+		return &tiktokDisplayUserInfo{OpenID: "open_123", DisplayName: "Moon Sleep", FollowerCount: 321}, nil
+	}
+	fetchTikTokDisplayVideos = func(ctx context.Context, accessToken string, floor time.Time, ceiling time.Time) ([]tiktokDisplayVideoInfo, error) {
+		return []tiktokDisplayVideoInfo{
+			{ID: "video_123", Title: "Original", CreateTime: time.Date(2026, time.April, 27, 14, 0, 0, 0, time.UTC).Unix(), ViewCount: 111},
+		}, nil
+	}
+
+	state := &tiktokDisplayRuntime{ConnectionID: "display-primary", AccessToken: "access-token", OpenID: "open_123", DisplayName: "Moon Sleep"}
+	monitorState := defaultTikTokDisplayMonitorState()
+	firstPoll := time.Date(2026, time.April, 27, 15, 0, 0, 0, time.UTC)
+	runTikTokDisplayMonitorCycle(context.Background(), state, monitorState, firstPoll, func(record any) {})
+	if err := saveTikTokDisplayMonitorState(state.ConnectionID, monitorState); err != nil {
+		t.Fatalf("save monitor state: %v", err)
+	}
+
+	reloaded, err := loadTikTokDisplayMonitorState(state.ConnectionID)
+	if err != nil {
+		t.Fatalf("load monitor state: %v", err)
+	}
+	var records []nexadapter.AdapterInboundRecord
+	result := runTikTokDisplayMonitorCycle(context.Background(), state, reloaded, firstPoll.Add(tiktokDisplayDiscoveryPollInterval), collectTikTokDisplayRecords(&records))
+	if len(result.FailedLanes) != 0 {
+		t.Fatalf("failed lanes = %v", result.FailedLanes)
+	}
+	if len(records) != 0 {
+		t.Fatalf("records after restart = %d, want unchanged suppression from persisted state", len(records))
+	}
+}
+
+func TestRunTikTokDisplayActiveRefreshEmitsMetricChange(t *testing.T) {
+	originalFetchProfile := fetchTikTokDisplayProfile
+	originalFetchVideos := fetchTikTokDisplayVideos
+	t.Cleanup(func() {
+		fetchTikTokDisplayProfile = originalFetchProfile
+		fetchTikTokDisplayVideos = originalFetchVideos
+	})
+
+	fetchTikTokDisplayProfile = func(ctx context.Context, accessToken string) (*tiktokDisplayUserInfo, error) {
+		return &tiktokDisplayUserInfo{OpenID: "open_123", DisplayName: "Moon Sleep"}, nil
+	}
+
+	publishedAt := time.Date(2026, time.April, 27, 14, 0, 0, 0, time.UTC)
+	state := &tiktokDisplayRuntime{ConnectionID: "display-primary", AccessToken: "access-token", OpenID: "open_123", DisplayName: "Moon Sleep"}
+	monitorState := defaultTikTokDisplayMonitorState()
+	firstPoll := time.Date(2026, time.April, 27, 15, 0, 0, 0, time.UTC)
+	fetchTikTokDisplayVideos = func(ctx context.Context, accessToken string, floor time.Time, ceiling time.Time) ([]tiktokDisplayVideoInfo, error) {
+		return []tiktokDisplayVideoInfo{{ID: "video_123", Title: "Original", CreateTime: publishedAt.Unix(), ViewCount: 111}}, nil
+	}
+	runTikTokDisplayMonitorCycle(context.Background(), state, monitorState, firstPoll, func(record any) {})
+
+	activePoll := firstPoll.Add(tiktokDisplayHotRefreshInterval)
+	monitorState.Profile.LastPollAt = activePoll
+	monitorState.Discovery.LastPollAt = activePoll
+	fetchTikTokDisplayVideos = func(ctx context.Context, accessToken string, floor time.Time, ceiling time.Time) ([]tiktokDisplayVideoInfo, error) {
+		return []tiktokDisplayVideoInfo{{ID: "video_123", Title: "Original", CreateTime: publishedAt.Unix(), ViewCount: 222}}, nil
+	}
+
+	var records []nexadapter.AdapterInboundRecord
+	result := runTikTokDisplayMonitorCycle(context.Background(), state, monitorState, activePoll, collectTikTokDisplayRecords(&records))
+	if len(result.FailedLanes) != 0 {
+		t.Fatalf("failed lanes = %v", result.FailedLanes)
+	}
+	if len(records) != 1 {
+		t.Fatalf("active refresh records = %d, want changed video revision", len(records))
+	}
+	if !containsTikTokDisplayLane(result.SuccessfulLanes, tiktokDisplayMonitorLaneActiveRefresh) {
+		t.Fatalf("successful lanes = %v, want active refresh", result.SuccessfulLanes)
+	}
+}
+
+func TestRunTikTokDisplaySlowReconcileEmitsOlderMetricChange(t *testing.T) {
+	originalFetchProfile := fetchTikTokDisplayProfile
+	originalFetchVideos := fetchTikTokDisplayVideos
+	t.Cleanup(func() {
+		fetchTikTokDisplayProfile = originalFetchProfile
+		fetchTikTokDisplayVideos = originalFetchVideos
+	})
+
+	fetchTikTokDisplayProfile = func(ctx context.Context, accessToken string) (*tiktokDisplayUserInfo, error) {
+		return &tiktokDisplayUserInfo{OpenID: "open_123", DisplayName: "Moon Sleep"}, nil
+	}
+
+	oldPublishedAt := time.Date(2026, time.March, 1, 14, 0, 0, 0, time.UTC)
+	state := &tiktokDisplayRuntime{ConnectionID: "display-primary", AccessToken: "access-token", OpenID: "open_123", DisplayName: "Moon Sleep"}
+	monitorState := defaultTikTokDisplayMonitorState()
+	videoState := monitorState.video("video_old")
+	videoState.PublishedAt = oldPublishedAt
+	videoState.LastRevisionHash = "old-revision"
+	videoState.LastSuccessfulRefreshAt = time.Date(2026, time.April, 27, 15, 0, 0, 0, time.UTC)
+	videoState.RefreshTier = tiktokDisplayVideoRefreshTierCold
+	pollTime := time.Date(2026, time.April, 27, 15, 0, 0, 0, time.UTC)
+	monitorState.Profile.LastPollAt = pollTime
+	monitorState.Discovery.LastPollAt = pollTime
+	monitorState.Active.LastPollAt = pollTime
+	monitorState.Reconcile.LastPollAt = pollTime.Add(-tiktokDisplaySlowReconcileInterval)
+
+	fetchTikTokDisplayVideos = func(ctx context.Context, accessToken string, floor time.Time, ceiling time.Time) ([]tiktokDisplayVideoInfo, error) {
+		return []tiktokDisplayVideoInfo{{ID: "video_old", Title: "Old", CreateTime: oldPublishedAt.Unix(), ViewCount: 333}}, nil
+	}
+
+	var records []nexadapter.AdapterInboundRecord
+	result := runTikTokDisplayMonitorCycle(context.Background(), state, monitorState, pollTime, collectTikTokDisplayRecords(&records))
+	if len(result.FailedLanes) != 0 {
+		t.Fatalf("failed lanes = %v", result.FailedLanes)
+	}
+	if !containsTikTokDisplayLane(result.SuccessfulLanes, tiktokDisplayMonitorLaneReconcile) {
+		t.Fatalf("successful lanes = %v, want slow reconcile", result.SuccessfulLanes)
+	}
+	if len(records) != 1 {
+		t.Fatalf("reconcile records = %d, want one changed old video", len(records))
 	}
 }
 
@@ -346,4 +603,26 @@ func TestVideoSnapshotRevisionHashChangesWhenMetricsChange(t *testing.T) {
 	if first.Payload.Metadata["revision_hash"] == second.Payload.Metadata["revision_hash"] {
 		t.Fatalf("video revision hash should change when stable metrics change: %#v", first.Payload.Metadata["revision_hash"])
 	}
+}
+
+func collectTikTokDisplayRecords(records *[]nexadapter.AdapterInboundRecord) nexadapter.EmitFunc {
+	return func(record any) {
+		inbound, ok := record.(nexadapter.AdapterInboundRecord)
+		if !ok {
+			return
+		}
+		if inbound.Operation == "" {
+			return
+		}
+		*records = append(*records, inbound)
+	}
+}
+
+func containsTikTokDisplayLane(values []tiktokDisplayMonitorLane, want tiktokDisplayMonitorLane) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

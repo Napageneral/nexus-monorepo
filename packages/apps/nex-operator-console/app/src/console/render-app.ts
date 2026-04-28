@@ -26,6 +26,7 @@ import {
   startIntegrationOAuth,
   submitIntegrationCustomFlow,
   testIntegrationAdapter,
+  uploadIntegrationAdapter,
 } from "../ui/controllers/integrations.ts";
 import { loadRecords, refreshRecordsSurface, searchRecords } from "../ui/controllers/records.ts";
 import {
@@ -319,7 +320,7 @@ function ensureConsoleRoute(state: AppViewState, tab: ConsoleActiveView) {
       }
     }
   }
-  if (tab !== "chat" && url.searchParams.has("lane")) {
+  if (url.searchParams.has("lane")) {
     url.searchParams.delete("lane");
     dirty = true;
   }
@@ -736,6 +737,7 @@ export function renderConsoleApp(state: AppViewState) {
         ${activeTab === "chat"
           ? renderChatPage({
               connected: state.connected,
+              runtimeConnecting: state.runtimeConnecting,
               runtimeClient: state.client,
               subscribeRuntimeEvents: (listener) => state.subscribeRuntimeEvents(listener),
             })
@@ -743,6 +745,7 @@ export function renderConsoleApp(state: AppViewState) {
 
         ${activeTab === "connectors" ? renderIntegrations({
           connected: state.connected,
+          runtimeConnecting: state.runtimeConnecting,
           loading: state.integrationsLoading,
           catalogLoading: state.integrationsCatalogLoading,
           busyAdapter: state.integrationsBusyAdapter,
@@ -777,6 +780,7 @@ export function renderConsoleApp(state: AppViewState) {
           onCustomSubmit: (adapter) => void submitIntegrationCustomFlow(state as any, adapter),
           onCustomStatus: (adapter) => void checkIntegrationCustomFlow(state as any, adapter),
           onCustomCancel: (adapter) => void cancelIntegrationCustomFlow(state as any, adapter),
+          onUpload: (adapter) => void uploadIntegrationAdapter(state as any, adapter),
           onTest: (adapter) => void testIntegrationAdapter(state as any, adapter),
           onBackfill: (adapter) => void backfillIntegrationAdapter(state as any, adapter),
           onLivesyncToggle: (adapter, enabled) => void setIntegrationLivesync(state as any, adapter, enabled),
