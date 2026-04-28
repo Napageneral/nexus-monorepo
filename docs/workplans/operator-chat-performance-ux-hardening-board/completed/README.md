@@ -7,3 +7,4 @@
 - [OPUX-005 - Context Sheet And Viewport Fit Polish](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-005-context-sheet-and-viewport-fit-polish.md)
 - [OPUX-007 - Cleanroom Performance Proof And Closeout](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-007-cleanroom-performance-proof-and-closeout.md)
 - [OPUX-008 - Perf Instrumentation And Browser Probe](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-008-perf-instrumentation-and-browser-probe.md)
+- [OPUX-009 - Chat Bundle And Asset Budget](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-009-chat-bundle-and-asset-budget.md)
