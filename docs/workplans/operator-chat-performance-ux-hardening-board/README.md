@@ -82,8 +82,8 @@ Tickets live in exactly one folder:
 6. [OPUX-006](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-006-upstream-parity-visual-review-pass.md)
 7. [OPUX-007](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-007-cleanroom-performance-proof-and-closeout.md)
 8. [OPUX-008](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-008-perf-instrumentation-and-browser-probe.md)
-9. [OPUX-009](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/in-progress/OPUX-009-chat-bundle-and-asset-budget.md)
-10. [OPUX-010](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-010-shallow-snapshot-and-lazy-lane-detail.md)
+9. [OPUX-009](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-009-chat-bundle-and-asset-budget.md)
+10. [OPUX-010](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/in-progress/OPUX-010-shallow-snapshot-and-lazy-lane-detail.md)
 11. [OPUX-011](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-011-ledger-backed-history-and-live-event-dedupe.md)
 12. [OPUX-012](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-012-runtime-state-and-stale-working-cutoff.md)
 13. [OPUX-013](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-013-manager-first-sidebar-parity-pass.md)
@@ -101,8 +101,8 @@ Tickets live in exactly one folder:
 ## Live Snapshot
 
 - OPUX-001 through OPUX-005 and OPUX-007 are complete
-- OPUX-008 is complete
-- OPUX-009 through OPUX-016 define the remaining next pass prompted by live dogfood
+- OPUX-008 and OPUX-009 are complete
+- OPUX-010 through OPUX-016 define the remaining next pass prompted by live dogfood
   issues found after the previous cleanroom closeout
 - first live probe showed `chat.snapshot` exceeding the default runtime timeout
 - projection synchronization now skips historical message/approval replay
@@ -122,5 +122,9 @@ Tickets live in exactly one folder:
   `chat.snapshot`, first-paint assets, and stale-runtime-url behavior; first
   measured findings are a `2.72 MB` chat script, remote font CSS on first
   paint, and live `chat.snapshot` variance from about `0.7s` to `4.0s`
+- OPUX-009 removed remote font CSS from the default runtime-served Chat path
+  and split disabled code/worktree surfaces out of the default embedded bundle;
+  the embedded chat script dropped to about `2.06 MB`, and the clean browser
+  probe reached a connected sidebar in `932ms`
 - OPUX-006 remains open for a dedicated side-by-side upstream visual parity
   review and now feeds OPUX-013

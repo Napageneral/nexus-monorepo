@@ -1,7 +1,6 @@
 # Not Started
 
 - [OPUX-006 - Upstream Parity Visual Review Pass](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-006-upstream-parity-visual-review-pass.md)
-- [OPUX-010 - Shallow Snapshot And Lazy Lane Detail](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-010-shallow-snapshot-and-lazy-lane-detail.md)
 - [OPUX-011 - Ledger-Backed History And Live Event Dedupe](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-011-ledger-backed-history-and-live-event-dedupe.md)
 - [OPUX-012 - Runtime State And Stale Working Cutoff](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-012-runtime-state-and-stale-working-cutoff.md)
 - [OPUX-013 - Manager-First Sidebar Parity Pass](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-013-manager-first-sidebar-parity-pass.md)
