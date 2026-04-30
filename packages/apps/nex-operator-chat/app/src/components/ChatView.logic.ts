@@ -294,13 +294,20 @@ export function hasServerAcknowledgedLocalDispatch(input: {
 
   const latestTurn = input.latestTurn ?? null;
   const session = input.session ?? null;
+  const orchestrationStatus = session?.orchestrationStatus ?? null;
+
+  if (
+    orchestrationStatus === "error" ||
+    orchestrationStatus === "interrupted" ||
+    orchestrationStatus === "stopped"
+  ) {
+    return true;
+  }
 
   return (
     input.localDispatch.latestTurnTurnId !== (latestTurn?.turnId ?? null) ||
     input.localDispatch.latestTurnRequestedAt !== (latestTurn?.requestedAt ?? null) ||
     input.localDispatch.latestTurnStartedAt !== (latestTurn?.startedAt ?? null) ||
-    input.localDispatch.latestTurnCompletedAt !== (latestTurn?.completedAt ?? null) ||
-    input.localDispatch.sessionOrchestrationStatus !== (session?.orchestrationStatus ?? null) ||
-    input.localDispatch.sessionUpdatedAt !== (session?.updatedAt ?? null)
+    input.localDispatch.latestTurnCompletedAt !== (latestTurn?.completedAt ?? null)
   );
 }

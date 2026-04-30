@@ -151,6 +151,16 @@ export function deriveActiveWorkStartedAt(
   return sendStartedAt;
 }
 
+export function deriveActiveTurnInProgress(input: {
+  isWorking: boolean;
+  latestTurn: LatestTurnTiming | null;
+  session: SessionActivityState | null;
+}): boolean {
+  if (input.isWorking) return true;
+  if (!input.latestTurn) return false;
+  return !isLatestTurnSettled(input.latestTurn, input.session);
+}
+
 function requestKindFromRequestType(requestType: unknown): PendingApproval["requestKind"] | null {
   switch (requestType) {
     case "command_execution_approval":

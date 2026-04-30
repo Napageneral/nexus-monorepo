@@ -55,6 +55,7 @@ import {
   derivePendingUserInputs,
   derivePhase,
   deriveTimelineEntries,
+  deriveActiveTurnInProgress,
   deriveActiveWorkStartedAt,
   deriveActivePlanState,
   findSidebarProposedPlan,
@@ -1162,6 +1163,11 @@ export default function ChatView({ threadId }: ChatViewProps) {
     activeThread?.session ?? null,
     localDispatchStartedAt,
   );
+  const activeTurnInProgress = deriveActiveTurnInProgress({
+    isWorking,
+    latestTurn: activeLatestTurn,
+    session: activeThread?.session ?? null,
+  });
   const isComposerApprovalState = activePendingApproval !== null;
   const hasComposerHeader =
     isComposerApprovalState ||
@@ -2629,14 +2635,15 @@ export default function ChatView({ threadId }: ChatViewProps) {
   }, [activeThreadId, storeClearTerminalLaunchContext, terminalState.terminalOpen]);
 
   useEffect(() => {
-    if (phase !== "running") return;
+    if (!activeTurnInProgress || !activeWorkStartedAt) return;
+    setNowTick(Date.now());
     const timer = window.setInterval(() => {
       setNowTick(Date.now());
     }, 1000);
     return () => {
       window.clearInterval(timer);
     };
-  }, [phase]);
+  }, [activeTurnInProgress, activeWorkStartedAt]);
 
   useEffect(() => {
     if (!activeThreadId) return;
@@ -4108,8 +4115,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
               <MessagesTimeline
                 key={activeThread.id}
                 hasMessages={timelineEntries.length > 0}
-                isWorking={isWorking}
-                activeTurnInProgress={isWorking || !latestTurnSettled}
+                isWorking={activeTurnInProgress}
+                activeTurnInProgress={activeTurnInProgress}
                 activeTurnStartedAt={activeWorkStartedAt}
                 scrollContainer={messagesScrollElement}
                 timelineEntries={timelineEntries}

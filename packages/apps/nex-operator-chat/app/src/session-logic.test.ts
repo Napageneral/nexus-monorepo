@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   deriveCompletionDividerBeforeEntryId,
+  deriveActiveTurnInProgress,
   deriveActiveWorkStartedAt,
   deriveActivePlanState,
   PROVIDER_OPTIONS,
@@ -1252,6 +1253,66 @@ describe("deriveActiveWorkStartedAt", () => {
         "2026-02-27T21:11:00.000Z",
       ),
     ).toBe("2026-02-27T21:11:00.000Z");
+  });
+});
+
+describe("deriveActiveTurnInProgress", () => {
+  const unsettledTurn = {
+    turnId: TurnId.makeUnsafe("turn-1"),
+    startedAt: "2026-02-27T21:10:00.000Z",
+    completedAt: null,
+  } as const;
+
+  const settledTurn = {
+    turnId: TurnId.makeUnsafe("turn-1"),
+    startedAt: "2026-02-27T21:10:00.000Z",
+    completedAt: "2026-02-27T21:10:06.000Z",
+  } as const;
+
+  it("does not treat an idle empty thread as active work", () => {
+    expect(
+      deriveActiveTurnInProgress({
+        isWorking: false,
+        latestTurn: null,
+        session: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps the turn active when local send work is still pending", () => {
+    expect(
+      deriveActiveTurnInProgress({
+        isWorking: true,
+        latestTurn: null,
+        session: null,
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps the turn active when the latest turn has not settled", () => {
+    expect(
+      deriveActiveTurnInProgress({
+        isWorking: false,
+        latestTurn: unsettledTurn,
+        session: {
+          orchestrationStatus: "ready",
+          activeTurnId: TurnId.makeUnsafe("turn-1"),
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it("clears active work once the latest turn is settled", () => {
+    expect(
+      deriveActiveTurnInProgress({
+        isWorking: false,
+        latestTurn: settledTurn,
+        session: {
+          orchestrationStatus: "ready",
+          activeTurnId: undefined,
+        },
+      }),
+    ).toBe(false);
   });
 });
 
