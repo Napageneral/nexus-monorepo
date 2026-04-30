@@ -220,6 +220,36 @@ Jira-specific setup quirk:
 - do not use `adapters.connections.custom.status` as the readiness gate for
   this proof
 
+For GOG/Gmail hosted install and restart durability, the reusable proof
+command is:
+
+```bash
+pnpm smoke:proof:gog-hosted-install-restart
+```
+
+It expects the fresh-server wrapper env vars, or an explicit
+`FRONTDOOR_SMOKE_SERVER_ID` plus Frontdoor API token. It verifies:
+
+1. `gog` adapter install status
+2. runtime health before and after archive/restore
+3. the 13 Gmail package methods through `adapters.methods`
+4. required adapter operations through `adapter.info`
+5. Gmail-root public connection count preservation across restore
+
+The current hosted GOG proof does not import a Gmail OAuth credential into the
+hosted runtime. Live Gmail backfill, monitor soak, and agent-use are covered by
+the adapter package cleanroom proof.
+
+Latest MoonSleep GOG proof:
+
+- proof artifacts:
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-hosted-moonsleep-install-restart/20260429T202232Z`
+- hosted Linux arm64 archive sha256:
+  `4b3d99bd01e0daedc80783b40e0d86f56771d4a7675030129e720d9850c0c68e`
+- result: `gog@0.1.0` remained installed across archive/restore, runtime
+  health stayed healthy, all 13 Gmail methods stayed registered, and
+  Gmail-root connection count stayed `1`
+
 The adapter suite is intentionally reusable before it is fully automated:
 
 1. adapter install plus runtime-token-authenticated runtime access are proven

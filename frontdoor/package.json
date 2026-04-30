@@ -18,6 +18,7 @@
     "smoke:provisioner": "node ./scripts/provisioner-smoke.mjs",
     "smoke:launch": "node ./scripts/frontdoor-launch-smoke.mjs",
     "smoke:runtime-rpc": "node ./scripts/frontdoor-runtime-rpc.mjs",
+    "smoke:proof:gog-hosted-install-restart": "node ./scripts/frontdoor-gog-hosted-install-restart-proof.mjs",
     "smoke:proof:jira-adapter": "node ./scripts/frontdoor-jira-adapter-proof.mjs",
     "smoke:proof:slack-adapter": "node ./scripts/frontdoor-slack-adapter-proof.mjs",
     "smoke:proof:runtime-health": "node ./scripts/frontdoor-fresh-server-runtime-health-proof.mjs",
