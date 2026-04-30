@@ -35,8 +35,8 @@ Current execution order:
 1. `zenoti-emr` sanity pass complete
 2. `tiktok-display` sanity fix complete
 3. `tiktok-display` smart polling hosted proof complete
-4. `slack`
-5. `gog`
+4. `gog` Gmail history polling proof complete
+5. `slack`
 6. `github`, `gitlab`, and `bitbucket`
 7. `jira`
 8. `confluence`
@@ -72,8 +72,6 @@ Highest-priority gaps:
 - `google`: legacy compatibility adapter still preserves split-brain ownership
   for Google domains now owned by canonical packages
 - `slack`: user-token monitor can sweep all readable conversations every poll
-- `gog`: Gmail fallback poll can miss high-volume bursts and repeats broad
-  recent-window searches
 - `jira`: monitor watermarks are process-local
 - `qase`: monitor scans all project families and overlap dedupe can re-emit
   unchanged rows
@@ -100,8 +98,8 @@ Secondary gaps:
 1. [AFEA-002 Zenoti Durable Live Monitor](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/completed/AFEA-002-zenoti-durable-live-monitor.md)
 2. [AFEA-003 TikTok Display Live Monitor](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/completed/AFEA-003-tiktok-display-live-monitor.md)
 3. [AFEA-015 TikTok Display Smart Polling And Snapshot Ledger](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/completed/AFEA-015-tiktok-display-smart-polling-and-snapshot-ledger.md)
-4. [AFEA-005 Slack User Token Monitor Efficiency](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/not-started/AFEA-005-slack-user-token-monitor-efficiency.md)
-5. [AFEA-006 GOG Gmail Monitor Efficiency](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/not-started/AFEA-006-gog-gmail-monitor-efficiency.md)
+4. [AFEA-006 GOG Gmail Monitor Efficiency](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/completed/AFEA-006-gog-gmail-monitor-efficiency.md)
+5. [AFEA-005 Slack User Token Monitor Efficiency](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/not-started/AFEA-005-slack-user-token-monitor-efficiency.md)
 6. [AFEA-007 Forge Adapter Monitor And Backfill Efficiency](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/not-started/AFEA-007-forge-adapter-monitor-and-backfill-efficiency.md)
 7. [AFEA-008 Jira Durable Monitor Watermarks](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/not-started/AFEA-008-jira-durable-monitor-watermarks.md)
 8. [AFEA-014 Confluence Backfill And Monitor Efficiency](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/not-started/AFEA-014-confluence-backfill-and-monitor-efficiency.md)
