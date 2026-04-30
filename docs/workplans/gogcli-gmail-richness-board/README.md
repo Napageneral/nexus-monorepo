@@ -26,10 +26,14 @@ Make Gmail a first-class rich Nex adapter:
 
 ## Status Snapshot
 
-GGR-001 through GGR-009 are implemented and validated. The adapter now
+GGR-001 through GGR-010 are implemented and validated. The adapter now
 bundles upstream `gogcli v0.14.0`, preserves rich Gmail message/thread/header
 and attachment metadata, exposes rich send/forward/draft and guarded native
 Gmail methods, and has safer incremental monitor and fallback polling behavior.
+GGR-010 adds the long-term live-sync seam: Gmail history remains the durable
+cursor, Pub/Sub notifications can wake `gmail.pubsub.sync`, watch state is
+started/renewed when a topic is configured, and fallback polling remains the
+degraded path.
 
 GGR-009 has green package cleanroom, full live Gmail cleanroom, and hosted
 MoonSleep install/restart proofs. The live proof backfilled `98,243` unique
@@ -52,6 +56,7 @@ preservation.
 7. [GGR-007 Fallback Polling Loss Safety And Benchmarks](/Users/tyler/nexus/home/projects/nexus/docs/workplans/gogcli-gmail-richness-board/completed/GGR-007-fallback-polling-loss-safety-and-benchmarks.md)
 8. [GGR-008 Gmail Native Method Catalog And Guardrails](/Users/tyler/nexus/home/projects/nexus/docs/workplans/gogcli-gmail-richness-board/completed/GGR-008-gmail-native-method-catalog-and-guardrails.md)
 9. [GGR-009 Cleanroom And Hosted Validation Signoff](/Users/tyler/nexus/home/projects/nexus/docs/workplans/gogcli-gmail-richness-board/completed/GGR-009-cleanroom-and-hosted-validation-signoff.md)
+10. [GGR-010 Gmail Pub/Sub History Live Sync](/Users/tyler/nexus/home/projects/nexus/docs/workplans/gogcli-gmail-richness-board/completed/GGR-010-gmail-pubsub-history-live-sync.md)
 
 ## Status
 
