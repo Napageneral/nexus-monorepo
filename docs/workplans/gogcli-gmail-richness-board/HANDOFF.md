@@ -1,6 +1,6 @@
 # GOG Gmail Richness Handoff
 
-Date: 2026-04-29
+Date: 2026-04-30
 
 ## Larger Goal
 
@@ -36,7 +36,7 @@ Important local upstream assets:
 - Upstream checkout: `/tmp/nexus-gogcli-v014`
 - Upstream binary used for live dry-runs: `/tmp/nexus-gog-v014`
 - Current package cleanroom proof:
-  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-package-cleanroom/20260430T182104Z`
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-package-cleanroom/20260430T212001Z`
 - Current live Gmail cleanroom proof:
   `/Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-gmail-live/20260430T152911Z`
 - Latest live monitor self-send proof:
@@ -55,10 +55,12 @@ Important operator constraints:
 
 ## What Was Done
 
-The GOG board now has `GGR-001` through `GGR-010` completed. `GGR-009` has
+The GOG board now has `GGR-001` through `GGR-011` completed. `GGR-009` has
 green package cleanroom, live Gmail cleanroom, and hosted MoonSleep
 install/restart proofs. `GGR-010` adds the adapter-side Pub/Sub/history
-live-sync seam.
+live-sync seam. `GGR-011` makes the near-term path polling-first by deriving
+the durable Gmail history cursor from backfill, so Pub/Sub setup is optional
+rather than required.
 
 Completed work:
 
@@ -91,6 +93,9 @@ Completed work:
 - `GGR-010`: Pub/Sub live sync now has a spec, watch start/renew support,
   backfill watch priming, richer monitor state, and `gmail.pubsub.sync` for
   hosted webhook workers to process Gmail notifications through history.
+- `GGR-011`: backfill now stores a Gmail `history_id` cursor without Pub/Sub,
+  monitor startup uses persisted history cursors without touching watch APIs,
+  and package cleanroom proves polling-only cursor persistence.
 
 ## Validation Status
 
@@ -108,21 +113,22 @@ Passing local validation:
 - Hosted Linux arm64 archive SHA:
   `4b3d99bd01e0daedc80783b40e0d86f56771d4a7675030129e720d9850c0c68e`
 - Latest package archive SHA:
-  `2306db5b757ca4696702e32c5f6c9c6149561116b7820a29355e2f8b7651c6e1`
+  `f0a2dc0d6d3173c84ff263f3b64666533082dd1e1e561c460ded4e6e1bc4454b`
 - Archive includes both `bin/gog` and `bin/gog-adapter`.
 - Extracted package cleanroom verifies bundled `bin/gog` reports
   `v0.14.0 (469f4b4 2026-04-29T17:45:00Z)`.
 - Host-native package cleanroom smoke passed:
   `./scripts/package-cleanroom-smoke.sh dist/gog-0.1.0.tar.gz`
 - Package cleanroom proof artifacts:
-  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-package-cleanroom/20260430T182104Z`
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-package-cleanroom/20260430T212001Z`
 - The cleanroom proof validates the source package with clean `HOME`, extracts
   the release archive into fresh state, runs the bundled `bin/gog` and
   `bin/gog-adapter` with Homebrew `gog` excluded from adapter execution `PATH`,
   verifies 14 Gmail methods including `gmail.pubsub.sync`, verifies structured
   disconnected health, verifies guarded no-send `gmail.native.write` behavior,
-  and verifies Pub/Sub notification fast-forward behavior without private
-  provider contents.
+  verifies Pub/Sub notification fast-forward behavior, and verifies
+  polling-only `records.backfill` stores a Gmail history cursor without a
+  `gmail watch` call.
 - Live Gmail cleanroom proof passed:
   `/Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-gmail-live/20260430T152911Z`
 - Live proof covered clean setup, health, full `tnapathy@gmail.com` backfill
@@ -165,6 +171,10 @@ Live read/dry-run proofs already performed:
   can start/renew watch state, and `gmail.pubsub.sync` can process Pub/Sub
   notifications through Gmail history without advancing the cursor before
   complete processing.
+- GGR-011 adds the polling-first live-sync path: `records.backfill` stores the
+  highest fetched Gmail `history_id`, `adapter.monitor.start` uses a persisted
+  cursor without calling watch APIs, and package cleanroom proves the path with
+  a fake Gmail CLI.
 
 ## Known Limitations
 
@@ -180,10 +190,12 @@ Live read/dry-run proofs already performed:
   connection count but not a stable public connection id for that row, so
   hosted restart proof records count preservation rather than id hash
   preservation.
-- The latest live monitor proof used fallback polling because no Gmail watch
-  state was present in the cleanroom. The latest performance run did not force
-  another live self-send; the 2026-04-29 cleanroom proof still emitted the
-  forced self-send as a rich `record.ingest` event with body and headers.
+- The latest live monitor proof predates GGR-011 and used degraded search
+  polling because no Gmail watch/history cursor was present in the cleanroom.
+  New backfills now create the history cursor needed for tight history polling.
+  The latest performance run did not force another live self-send; the
+  2026-04-29 cleanroom proof still emitted the forced self-send as a rich
+  `record.ingest` event with body and headers.
 - The adapter side of Pub/Sub live sync is implemented and package-tested. The
   remaining runtime piece is a public hosted webhook route that verifies Google
   delivery, maps the Gmail email address to the connection, calls
@@ -200,17 +212,15 @@ Live read/dry-run proofs already performed:
 
 ## Next Recommended Steps
 
-1. Review and commit the GOG adapter changes separately from unrelated umbrella
-   repo changes.
-2. Expose a stable public connection id for the legacy Gmail-root row if future
+1. Expose a stable public connection id for the legacy Gmail-root row if future
    hosted restart proofs need id hash preservation instead of count
    preservation.
-3. Add the hosted Pub/Sub webhook route that calls `gmail.pubsub.sync` and
+2. Add the hosted Pub/Sub webhook route that calls `gmail.pubsub.sync` and
    ingests returned records.
-4. Decide whether to extend upstream `gogcli gmail history --json` to expose
+3. Decide whether to extend upstream `gogcli gmail history --json` to expose
    full Gmail history event families, or implement a lower-level adapter path
    for Gmail history events.
-5. Return to the broader adapter fleet audit now that GOG signoff is complete.
+4. Return to the broader adapter fleet audit now that GOG signoff is complete.
 
 ## New Agent Prompt
 
@@ -228,19 +238,21 @@ Start by reading:
 - /Users/tyler/nexus/home/projects/nexus/docs/workplans/gogcli-gmail-richness-board/README.md
 - /Users/tyler/nexus/home/projects/nexus/docs/workplans/gogcli-gmail-richness-board/completed/GGR-009-cleanroom-and-hosted-validation-signoff.md
 - /Users/tyler/nexus/home/projects/nexus/docs/workplans/gogcli-gmail-richness-board/completed/GGR-010-gmail-pubsub-history-live-sync.md
+- /Users/tyler/nexus/home/projects/nexus/docs/workplans/gogcli-gmail-richness-board/completed/GGR-011-gmail-polling-first-history-live-sync.md
 - /Users/tyler/nexus/home/projects/nexus/packages/adapters/gog/docs/specs/ADAPTER_SPEC_GOG.md
 - /Users/tyler/nexus/home/projects/nexus/packages/adapters/gog/docs/validation/GOG_ADAPTER_VALIDATION.md
 - /Users/tyler/nexus/home/projects/nexus/docs/spec-driven-development-workflow.md
 
 State to inherit:
-- GGR-001 through GGR-010 are implemented and validated.
+- GGR-001 through GGR-011 are implemented and validated.
 - Release archive is /Users/tyler/nexus/home/projects/nexus/packages/adapters/gog/dist/gog-0.1.0.tar.gz.
-- Release SHA is 2306db5b757ca4696702e32c5f6c9c6149561116b7820a29355e2f8b7651c6e1.
+- Release SHA is f0a2dc0d6d3173c84ff263f3b64666533082dd1e1e561c460ded4e6e1bc4454b.
 - Hosted Linux arm64 SHA is 4b3d99bd01e0daedc80783b40e0d86f56771d4a7675030129e720d9850c0c68e.
 - The package bundles upstream gogcli v0.14.0 as bin/gog.
 - Local validation passed: `go test ./...`, `go build -o ./bin/gog-adapter ./cmd/gog-adapter`, and `GOGCLI_SOURCE_DIR=/tmp/nexus-gogcli-v014 ./scripts/package-release.sh`.
 - Package cleanroom smoke passed: `./scripts/package-cleanroom-smoke.sh dist/gog-0.1.0.tar.gz`.
-- Package cleanroom proof artifacts are in /Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-package-cleanroom/20260430T182104Z.
+- Package cleanroom proof artifacts are in /Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-package-cleanroom/20260430T212001Z.
+- GGR-011 package cleanroom proof verifies `records.backfill` stores a Gmail history cursor without a configured Pub/Sub topic or `gmail watch` call.
 - Live Gmail cleanroom proof artifacts are in /Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-gmail-live/20260430T152911Z.
 - Live Gmail cleanroom backfilled 98,268 unique `tnapathy@gmail.com` records in 78m49s with zero skipped message fetches.
 - Forced self-send monitor proof artifacts are in /Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-gmail-live/20260429T201934Z.

@@ -26,19 +26,23 @@ Make Gmail a first-class rich Nex adapter:
 
 ## Status Snapshot
 
-GGR-001 through GGR-010 are implemented and validated. The adapter now
+GGR-001 through GGR-011 are implemented and validated. The adapter now
 bundles upstream `gogcli v0.14.0`, preserves rich Gmail message/thread/header
 and attachment metadata, exposes rich send/forward/draft and guarded native
 Gmail methods, and has safer incremental monitor and fallback polling behavior.
 GGR-010 adds the long-term live-sync seam: Gmail history remains the durable
 cursor, Pub/Sub notifications can wake `gmail.pubsub.sync`, watch state is
-started/renewed when a topic is configured, and fallback polling remains the
-degraded path.
+started/renewed when a topic is configured, and search-window polling remains
+the degraded path. GGR-011 makes the near-term default polling-first:
+`records.backfill` stores a Gmail `history_id`, `adapter.monitor.start` polls
+`gmail history` from that cursor, and Pub/Sub setup is no longer required for a
+tight incremental sync path.
 
 GGR-009 has green package cleanroom, full live Gmail cleanroom, and hosted
-MoonSleep install/restart proofs. The live proof backfilled `98,243` unique
-`tnapathy@gmail.com` records and forced a self-send that the monitor emitted as
-one rich record. A local live dogfood proof also sent from a `moonsleep.co`
+MoonSleep install/restart proofs. The latest live proof backfilled `98,268`
+unique `tnapathy@gmail.com` records and forced a self-send that the monitor
+emitted as one rich record. A local live dogfood proof also sent from a
+`moonsleep.co`
 Gmail account into `tnapathy@gmail.com` and verified the running Nex Gmail
 monitor ingested the message. The hosted runtime currently exposes the legacy
 Gmail-root connection count but not a stable public connection id for that row,
@@ -57,6 +61,7 @@ preservation.
 8. [GGR-008 Gmail Native Method Catalog And Guardrails](/Users/tyler/nexus/home/projects/nexus/docs/workplans/gogcli-gmail-richness-board/completed/GGR-008-gmail-native-method-catalog-and-guardrails.md)
 9. [GGR-009 Cleanroom And Hosted Validation Signoff](/Users/tyler/nexus/home/projects/nexus/docs/workplans/gogcli-gmail-richness-board/completed/GGR-009-cleanroom-and-hosted-validation-signoff.md)
 10. [GGR-010 Gmail Pub/Sub History Live Sync](/Users/tyler/nexus/home/projects/nexus/docs/workplans/gogcli-gmail-richness-board/completed/GGR-010-gmail-pubsub-history-live-sync.md)
+11. [GGR-011 Gmail Polling-First History Live Sync](/Users/tyler/nexus/home/projects/nexus/docs/workplans/gogcli-gmail-richness-board/completed/GGR-011-gmail-polling-first-history-live-sync.md)
 
 ## Status
 

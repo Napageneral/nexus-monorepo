@@ -10,3 +10,4 @@
 - [GGR-008 Gmail Native Method Catalog And Guardrails](/Users/tyler/nexus/home/projects/nexus/docs/workplans/gogcli-gmail-richness-board/completed/GGR-008-gmail-native-method-catalog-and-guardrails.md)
 - [GGR-009 Cleanroom And Hosted Validation Signoff](/Users/tyler/nexus/home/projects/nexus/docs/workplans/gogcli-gmail-richness-board/completed/GGR-009-cleanroom-and-hosted-validation-signoff.md)
 - [GGR-010 Gmail Pub/Sub History Live Sync](/Users/tyler/nexus/home/projects/nexus/docs/workplans/gogcli-gmail-richness-board/completed/GGR-010-gmail-pubsub-history-live-sync.md)
+- [GGR-011 Gmail Polling-First History Live Sync](/Users/tyler/nexus/home/projects/nexus/docs/workplans/gogcli-gmail-richness-board/completed/GGR-011-gmail-polling-first-history-live-sync.md)
