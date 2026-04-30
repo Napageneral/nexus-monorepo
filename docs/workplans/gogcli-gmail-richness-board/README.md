@@ -36,7 +36,9 @@ started/renewed when a topic is configured, and search-window polling remains
 the degraded path. GGR-011 makes the near-term default polling-first:
 `records.backfill` stores a Gmail `history_id`, `adapter.monitor.start` polls
 `gmail history` from that cursor, and Pub/Sub setup is no longer required for a
-tight incremental sync path.
+tight incremental sync path. A live cleanroom proof against `tnapathy@gmail.com`
+verified a seed backfill, monitor self-send, and redacted command trace showing
+history polling with no Gmail watch or search fallback.
 
 GGR-009 has green package cleanroom, full live Gmail cleanroom, and hosted
 MoonSleep install/restart proofs. The latest live proof backfilled `98,268`

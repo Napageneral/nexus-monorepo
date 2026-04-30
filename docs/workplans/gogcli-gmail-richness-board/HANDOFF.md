@@ -39,6 +39,8 @@ Important local upstream assets:
   `/Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-package-cleanroom/20260430T212001Z`
 - Current live Gmail cleanroom proof:
   `/Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-gmail-live/20260430T152911Z`
+- Current polling-first live sync proof:
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-gmail-live/20260430T213445Z`
 - Latest live monitor self-send proof:
   `/Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-gmail-live/20260429T201934Z`
 - Current hosted MoonSleep install/restart proof:
@@ -175,6 +177,10 @@ Live read/dry-run proofs already performed:
   highest fetched Gmail `history_id`, `adapter.monitor.start` uses a persisted
   cursor without calling watch APIs, and package cleanroom proves the path with
   a fake Gmail CLI.
+- A live GGR-011 proof also sent a seed email, backfilled it to create a recent
+  history cursor, started the monitor, sent a second self-addressed email, and
+  asserted via redacted command trace that monitor used `gmail history` with no
+  `gmail watch` or `gmail messages search` fallback.
 
 ## Known Limitations
 
@@ -190,12 +196,10 @@ Live read/dry-run proofs already performed:
   connection count but not a stable public connection id for that row, so
   hosted restart proof records count preservation rather than id hash
   preservation.
-- The latest live monitor proof predates GGR-011 and used degraded search
-  polling because no Gmail watch/history cursor was present in the cleanroom.
-  New backfills now create the history cursor needed for tight history polling.
-  The latest performance run did not force another live self-send; the
-  2026-04-29 cleanroom proof still emitted the forced self-send as a rich
-  `record.ingest` event with body and headers.
+- The latest mailbox-scale performance run did not force another live
+  self-send, but the separate GGR-011 proof did validate a fresh self-send
+  through history polling. The older 2026-04-29 cleanroom proof also emitted a
+  forced self-send as a rich `record.ingest` event with body and headers.
 - The adapter side of Pub/Sub live sync is implemented and package-tested. The
   remaining runtime piece is a public hosted webhook route that verifies Google
   delivery, maps the Gmail email address to the connection, calls
@@ -252,7 +256,12 @@ State to inherit:
 - Local validation passed: `go test ./...`, `go build -o ./bin/gog-adapter ./cmd/gog-adapter`, and `GOGCLI_SOURCE_DIR=/tmp/nexus-gogcli-v014 ./scripts/package-release.sh`.
 - Package cleanroom smoke passed: `./scripts/package-cleanroom-smoke.sh dist/gog-0.1.0.tar.gz`.
 - Package cleanroom proof artifacts are in /Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-package-cleanroom/20260430T212001Z.
-- GGR-011 package cleanroom proof verifies `records.backfill` stores a Gmail history cursor without a configured Pub/Sub topic or `gmail watch` call.
+- GGR-011 package cleanroom proof verifies `records.backfill` stores a Gmail
+  history cursor without a configured Pub/Sub topic or `gmail watch` call.
+- GGR-011 live polling proof artifacts are in /Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-gmail-live/20260430T213445Z.
+- The live polling proof used a seed email, bounded backfill, monitor
+  self-send, and redacted command trace to verify monitor used `gmail history`
+  with no `gmail watch` or `gmail messages search` fallback.
 - Live Gmail cleanroom proof artifacts are in /Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-gmail-live/20260430T152911Z.
 - Live Gmail cleanroom backfilled 98,268 unique `tnapathy@gmail.com` records in 78m49s with zero skipped message fetches.
 - Forced self-send monitor proof artifacts are in /Users/tyler/nexus/state/artifacts/validation/cleanroom/gog-gmail-live/20260429T201934Z.
