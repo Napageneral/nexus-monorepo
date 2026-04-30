@@ -9,6 +9,13 @@ export type ChatPageProps = {
   subscribeRuntimeEvents: (listener: (event: RuntimeEventFrame) => void) => () => void;
 };
 
+function currentLaneParam(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  return new URL(window.location.href).searchParams.get("lane")?.trim() ?? "";
+}
+
 export function renderChatPage(props: ChatPageProps) {
   return html`
     <nexus-console-chat-host
@@ -16,6 +23,7 @@ export function renderChatPage(props: ChatPageProps) {
       .runtimeConnecting=${props.runtimeConnecting}
       .runtimeClient=${props.runtimeClient}
       .subscribeRuntimeEvents=${props.subscribeRuntimeEvents}
+      .initialLaneId=${currentLaneParam()}
     ></nexus-console-chat-host>
   `;
 }

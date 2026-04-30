@@ -47,6 +47,25 @@ the source of truth.
 - Chat package typecheck/build.
 - OPUX-008 browser probe showing first-lane paint before worker detail load.
 
+## Completion Evidence
+
+- Focused chat projection tests passed: `15` tests across
+  `src/api/chat-projection.test.ts`,
+  `src/api/server-methods/chat.test.ts`, and
+  `src/storage/agents.chat-projection.test.ts`.
+- Rebuilt `/Users/tyler/nexus/home/projects/nexus/nex` so the installed
+  runtime served the latest `dist` output, then restarted
+  `gui/501/ai.nexus.runtime`.
+- Live no-lane `chat.snapshot` returned in `0.122s` with `3` root agent lanes,
+  `0` worker lanes, no expanded lane, and sequence `6847`.
+- Live explicit manager-lane snapshot for `lane:agent:entity-assistant`
+  returned bounded selected detail with `5` messages and an
+  `older_messages_cursor`; that explicit expansion still loads that manager's
+  `131` worker lanes and remains a follow-up optimization target.
+- OPUX-008 browser probe passed for `/app/console/chat`: `316ms` elapsed,
+  runtime connected, no console errors, `chat.microfrontend.load` `126.5ms`,
+  and `chat.snapshot` `17.9ms`.
+
 ## Dependencies
 
 - OPUX-008 for payload and timing baseline.

@@ -81,6 +81,8 @@ Pass when:
   live events
 - Echo send/reply produces exactly one user row and one assistant row
 - stale old sessions do not display indefinite active work state
+- stale old sessions older than the two-hour runtime projection cutoff return
+  as idle, non-abortable lanes with the stale diagnostic subtitle
 - transcript scrolling remains responsive with large seeded history
 - viewport fit does not require page-level browser scrolling for normal use
 
@@ -89,21 +91,31 @@ Pass when:
 Latest cleanroom proof:
 
 - bundle:
-  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T161830Z`
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260429T174053Z`
 - result:
-  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T161830Z/result.json`
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260429T174053Z/result.json`
 - recording:
-  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T161830Z/videos/full-session.webm`
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260429T174053Z/videos/full-session.webm`
 - metrics:
-  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T161830Z/operator-chat-performance-metrics.json`
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260429T174053Z/operator-chat-performance-metrics.json`
 
 Measured values from the passed run:
 
-- `/chat` first ready: `1,280ms`
-- manager lane visible after ready: `21ms`
-- context sheet open: `97ms`
+- `/app/console/chat` first ready: `820ms`
+- manager lane visible after ready: `13ms`
+- context sheet open: `67ms`
 - document overflow after manager open: `0px`
-- large transcript reload ready: `894ms`
-- transcript scroll height: `20,092px`
-- transcript programmatic scroll exercise: `42.3ms`
-- transcript wheel-scroll delta: `1,060px`
+- large transcript reload ready: `610ms`
+- transcript scroll height: `12,158px`
+- transcript programmatic scroll exercise: `52.3ms`
+- transcript wheel-scroll delta: `968px`
+
+## Execution Command
+
+Run the Docker-backed cleanroom proof with:
+
+```bash
+bash /Users/tyler/nexus/home/projects/nexus/nex/scripts/e2e/operator-chat-cleanroom-capture.sh
+```
+
+If Docker is stopped, start the daemon before rerunning the proof.

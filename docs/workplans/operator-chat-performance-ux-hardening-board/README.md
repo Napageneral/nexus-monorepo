@@ -83,13 +83,17 @@ Tickets live in exactly one folder:
 7. [OPUX-007](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-007-cleanroom-performance-proof-and-closeout.md)
 8. [OPUX-008](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-008-perf-instrumentation-and-browser-probe.md)
 9. [OPUX-009](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-009-chat-bundle-and-asset-budget.md)
-10. [OPUX-010](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/in-progress/OPUX-010-shallow-snapshot-and-lazy-lane-detail.md)
-11. [OPUX-011](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-011-ledger-backed-history-and-live-event-dedupe.md)
-12. [OPUX-012](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-012-runtime-state-and-stale-working-cutoff.md)
+10. [OPUX-010](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-010-shallow-snapshot-and-lazy-lane-detail.md)
+11. [OPUX-011](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-011-ledger-backed-history-and-live-event-dedupe.md)
+12. [OPUX-012](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-012-runtime-state-and-stale-working-cutoff.md)
 13. [OPUX-013](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-013-manager-first-sidebar-parity-pass.md)
-14. [OPUX-014](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-014-chat-url-selection-state.md)
-15. [OPUX-015](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-015-transcript-virtualization-and-scroll-robustness.md)
-16. [OPUX-016](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/not-started/OPUX-016-cleanroom-performance-regression-proof.md)
+14. [OPUX-014](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-014-chat-url-selection-state.md)
+15. [OPUX-018](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-018-sparse-monotonic-replay-semantics.md)
+16. [OPUX-019](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-019-selected-snapshot-payload-reduction.md)
+17. [OPUX-020](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-020-lane-global-history-timeline.md)
+18. [OPUX-015](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-015-transcript-virtualization-and-scroll-robustness.md)
+19. [OPUX-016](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-016-cleanroom-performance-regression-proof.md)
+20. [OPUX-017](/Users/tyler/nexus/home/projects/nexus/docs/workplans/operator-chat-performance-ux-hardening-board/completed/OPUX-017-forensic-handoff-and-new-agent-prompt.md)
 
 ## Status
 
@@ -101,9 +105,9 @@ Tickets live in exactly one folder:
 ## Live Snapshot
 
 - OPUX-001 through OPUX-005 and OPUX-007 are complete
-- OPUX-008 and OPUX-009 are complete
-- OPUX-010 through OPUX-016 define the remaining next pass prompted by live dogfood
-  issues found after the previous cleanroom closeout
+- OPUX-008 through OPUX-010 are complete
+- OPUX-011, OPUX-012, and OPUX-014 through OPUX-020 are complete; OPUX-013
+  remains open
 - first live probe showed `chat.snapshot` exceeding the default runtime timeout
 - projection synchronization now skips historical message/approval replay
   backfill for unchanged lanes that already have replay events
@@ -111,10 +115,10 @@ Tickets live in exactly one folder:
   about `0.22s` with `116` lanes, `24` selected-lane messages, and a `154 KB`
   payload
 - latest cleanroom proof passed at
-  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260427T161830Z`
-- cleanroom metrics show `/chat` ready in `1.28s`, manager lane visible in
-  `21ms`, context sheet open in `97ms`, document overflow at `0px`, and
-  large-transcript reload ready in `894ms`
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260429T174053Z`
+- cleanroom metrics show `/app/console/chat` ready in `820ms`, manager lane
+  visible in `13ms`, context sheet open in `67ms`, document overflow at
+  `0px`, and large-transcript reload ready in `610ms`
 - live dogfood after that closeout still showed delayed entry, confusing URL
   lane state, partial history, duplicate sends, missing replies, stale
   `Working...` state, and scroll/fit concerns
@@ -126,5 +130,38 @@ Tickets live in exactly one folder:
   and split disabled code/worktree surfaces out of the default embedded bundle;
   the embedded chat script dropped to about `2.06 MB`, and the clean browser
   probe reached a connected sidebar in `932ms`
+- OPUX-010 made default `chat.snapshot` shallow: the no-lane API path now
+  returns only `3` root agent lanes in `0.122s`, and the browser probe reaches a
+  connected default Chat tab in `316ms` with `chat.snapshot` at `17.9ms`
+- OPUX-011 made selected-lane transcript history ledger-backed with stable
+  dedupe ids and cursor paging; Echo browser proof now shows the UI-send smoke
+  as exactly one user row plus one assistant row, while the selected lane
+  snapshot still takes about `1.65s` because expanded lane detail includes the
+  full child-lane summary set
+- OPUX-012 added a two-hour server-side runtime projection cutoff; stale active
+  proof-worker lanes now project as idle, non-abortable, and annotated with
+  `Stale active state aged out`, while the selected Echo browser probe shows no
+  stale `Working...` indicator
+- OPUX-014 verified, rebuilt, synced, and restarted the runtime-served Console
+  package so `/app/console/chat?lane=...` now serves the current bundle with
+  `initialLaneId`, embedded `onLaneSelectionChange`, and Chat-preserving lane
+  URL behavior
+- OPUX-018 changed replay recovery to accept sparse monotonic event sequences;
+  `chat.replay` now reserves reset for actual retained-window loss instead of
+  sequence gaps
+- OPUX-019 reduced selected Echo snapshots to root lanes plus selected context:
+  the live selected read is now about `11.7 KB` with `3` lanes and no worker
+  summaries, while explicit child expansion still returns the `112` worker
+  lanes
+- OPUX-020 added explicit lane-global history reads for agent lanes while
+  preserving active-session reads as the send and continuation target
 - OPUX-006 remains open for a dedicated side-by-side upstream visual parity
   review and now feeds OPUX-013
+- OPUX-017 is completed as the forensic handoff record that spawned OPUX-014
+  and OPUX-018 through OPUX-020
+- OPUX-015 and OPUX-016 passed in the 2026-04-29 Docker cleanroom proof at
+  `/Users/tyler/nexus/state/artifacts/validation/cleanroom/operator-chat-cleanroom/20260429T174053Z`;
+  the run measured `/app/console/chat` ready in `820ms`, manager lane visible
+  in `13ms`, context sheet open in `67ms`, document overflow at `0px`, large
+  transcript reload ready in `610ms`, programmatic transcript scroll in
+  `52.3ms`, and wheel-scroll delta at `968px`

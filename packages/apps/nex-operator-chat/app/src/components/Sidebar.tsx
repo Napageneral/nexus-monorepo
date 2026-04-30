@@ -114,6 +114,7 @@ import {
   resolveAdjacentThreadId,
   isContextMenuPointerDown,
   resolveProjectStatusIndicator,
+  resolveNexProjectWorkerLaneExpansionClick,
   resolveSidebarNewThreadSeedContext,
   resolveSidebarNewThreadEnvMode,
   resolveThreadRowClassName,
@@ -132,6 +133,7 @@ import { useSidebarThreadSummaryById } from "../storeSelectors";
 import type { Project } from "../types";
 import { isNexEmbedded } from "../nex/embed-config";
 import { isNexFeatureEnabled } from "../nex/feature-policy";
+import { requestOrchestrationReadModelForLane } from "../nex/chat-adapter";
 const THREAD_PREVIEW_LIMIT = 6;
 const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
   updated_at: "Last user message",
@@ -689,6 +691,7 @@ export default function Sidebar() {
   const projects = useStore((store) => store.projects);
   const sidebarThreadsById = useStore((store) => store.sidebarThreadsById);
   const threadIdsByProjectId = useStore((store) => store.threadIdsByProjectId);
+  const syncServerReadModel = useStore((store) => store.syncServerReadModel);
   const { projectExpandedById, projectOrder, threadLastVisitedAtById } = useUiStateStore(
     useShallow((store) => ({
       projectExpandedById: store.projectExpandedById,
@@ -733,6 +736,9 @@ export default function Sidebar() {
   const [expandedThreadListsByProject, setExpandedThreadListsByProject] = useState<
     ReadonlySet<ProjectId>
   >(() => new Set());
+  const [hydratingProjectIds, setHydratingProjectIds] = useState<ReadonlySet<ProjectId>>(
+    () => new Set(),
+  );
   const { showThreadJumpHints, updateThreadJumpHintsVisibility } = useThreadJumpHintVisibility();
   const projectRenamingCommittedRef = useRef(false);
   const projectRenamingInputRef = useRef<HTMLInputElement | null>(null);
@@ -1506,6 +1512,7 @@ export default function Sidebar() {
         const renderedThreadIds = pinnedCollapsedThread
           ? [pinnedCollapsedThread.id]
           : visibleProjectThreads.map((thread) => thread.id);
+        const nestedProjectThreadCount = nestedProjectThreads.length;
         const showEmptyThreadState =
           project.expanded && nestedProjectThreads.length === 0 && !nexEmbedded;
         const isProjectLaneActive =
@@ -1513,13 +1520,14 @@ export default function Sidebar() {
 
         return {
           hasHiddenThreads,
-          hasNestedThreads: nestedProjectThreads.length > 0,
           hiddenThreadStatus,
           isProjectLaneActive,
+          nestedProjectThreadCount,
           orderedProjectThreadIds,
           project,
           projectStatus,
           renderedThreadIds,
+          rootLaneId,
           showEmptyThreadState,
           shouldShowThreadPanel,
           isThreadListExpanded,
@@ -1661,13 +1669,14 @@ export default function Sidebar() {
   ) {
     const {
       hasHiddenThreads,
-      hasNestedThreads,
       hiddenThreadStatus,
       isProjectLaneActive,
+      nestedProjectThreadCount,
       orderedProjectThreadIds,
       project,
       projectStatus,
       renderedThreadIds,
+      rootLaneId,
       showEmptyThreadState,
       shouldShowThreadPanel,
       isThreadListExpanded,
@@ -1832,7 +1841,7 @@ export default function Sidebar() {
                 {newThreadShortcutLabel ? `New thread (${newThreadShortcutLabel})` : "New thread"}
               </TooltipPopup>
             </Tooltip>
-          ) : nexEmbedded && hasNestedThreads ? (
+          ) : nexEmbedded && rootLaneId !== null ? (
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -1854,7 +1863,16 @@ export default function Sidebar() {
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
-                      toggleProject(project.id);
+                      const expansionAction = resolveNexProjectWorkerLaneExpansionClick({
+                        expanded: project.expanded,
+                        nestedProjectThreadCount,
+                      });
+                      if (expansionAction.shouldHydrate) {
+                        hydrateNexProjectLanes(project.id);
+                      }
+                      if (expansionAction.shouldToggle) {
+                        toggleProject(project.id);
+                      }
                     }}
                   >
                     <ChevronRightIcon
@@ -1956,6 +1974,32 @@ export default function Sidebar() {
       </>
     );
   }
+
+  const hydrateNexProjectLanes = useCallback(
+    (projectId: ProjectId) => {
+      if (!nexEmbedded || hydratingProjectIds.has(projectId)) {
+        return;
+      }
+      const rootLaneId = rootLaneIdFromProjectId(projectId);
+      if (!rootLaneId) {
+        return;
+      }
+      setHydratingProjectIds((current) => new Set(current).add(projectId));
+      void requestOrchestrationReadModelForLane(rootLaneId, { include_child_lanes: true })
+        .then((readModel) => {
+          syncServerReadModel(readModel);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          setHydratingProjectIds((current) => {
+            const next = new Set(current);
+            next.delete(projectId);
+            return next;
+          });
+        });
+    },
+    [hydratingProjectIds, nexEmbedded, syncServerReadModel],
+  );
 
   const handleProjectTitleClick = useCallback(
     (event: MouseEvent<HTMLButtonElement>, projectId: ProjectId) => {

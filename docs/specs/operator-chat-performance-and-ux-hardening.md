@@ -104,6 +104,9 @@ instead of rendered as one unbounded DOM tree.
 Lane runtime state must be projected by Nex, not inferred by the browser from
 old messages. Stale active-run indicators should age out according to the
 runtime projection rules so old sessions do not appear to be working forever.
+The current runtime projection cutoff is two hours: queued, running, or
+approval-waiting state older than that is projected as idle, non-abortable, and
+annotated with the stale diagnostic subtitle.
 
 Chat URL state should be explicit and reversible:
 

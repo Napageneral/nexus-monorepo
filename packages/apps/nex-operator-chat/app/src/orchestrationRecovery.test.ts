@@ -68,6 +68,30 @@ describe("createOrchestrationRecoveryCoordinator", () => {
     });
   });
 
+  it("accepts sparse replay batches as progress", () => {
+    const coordinator = createOrchestrationRecoveryCoordinator();
+
+    coordinator.beginSnapshotRecovery("bootstrap");
+    coordinator.completeSnapshotRecovery(3);
+    expect(coordinator.classifyDomainEvent(9)).toBe("recover");
+    expect(coordinator.beginReplayRecovery("sequence-gap")).toBe(true);
+    expect(coordinator.markEventBatchApplied([{ sequence: 5 }, { sequence: 9 }])).toEqual([
+      { sequence: 5 },
+      { sequence: 9 },
+    ]);
+
+    expect(coordinator.completeReplayRecovery()).toEqual({
+      replayMadeProgress: true,
+      shouldReplay: false,
+    });
+    expect(coordinator.getState()).toMatchObject({
+      latestSequence: 9,
+      highestObservedSequence: 9,
+      bootstrapped: true,
+      inFlight: null,
+    });
+  });
+
   it("retries replay when no progress was made but higher live sequences were observed", () => {
     const coordinator = createOrchestrationRecoveryCoordinator();
 

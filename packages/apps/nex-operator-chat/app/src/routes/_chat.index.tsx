@@ -1,11 +1,58 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useRef } from "react";
+import { useNavigate } from "@tanstack/react-router";
 
 import { isElectron } from "../env";
-import { isNexEmbedded } from "../nex/embed-config";
+import { isNexEmbedded, readNexChatEmbedConfig } from "../nex/embed-config";
+import { requestOrchestrationBootstrapReadModel } from "../nex/chat-adapter";
+import { useStore } from "../store";
 import { SidebarTrigger } from "../components/ui/sidebar";
 
 function ChatIndexRouteView() {
   const nexEmbedded = isNexEmbedded();
+  const navigate = useNavigate();
+  const syncServerReadModel = useStore((store) => store.syncServerReadModel);
+  const firstThreadId = useStore((store) => store.threads[0]?.id ?? null);
+  const attemptedEmbeddedSelectionRef = useRef(false);
+
+  useEffect(() => {
+    if (!nexEmbedded) {
+      return;
+    }
+    if (firstThreadId) {
+      void navigate({
+        to: "/$threadId",
+        params: { threadId: firstThreadId },
+        replace: true,
+      });
+      return;
+    }
+    if (attemptedEmbeddedSelectionRef.current) {
+      return;
+    }
+    attemptedEmbeddedSelectionRef.current = true;
+    let disposed = false;
+    void requestOrchestrationBootstrapReadModel(readNexChatEmbedConfig()?.initialLaneId)
+      .then((result) => {
+        if (disposed) {
+          return;
+        }
+        syncServerReadModel(result.readModel);
+        const selectedLaneId = result.selectedLaneId ?? result.readModel.threads[0]?.id ?? null;
+        if (!selectedLaneId) {
+          return;
+        }
+        void navigate({
+          to: "/$threadId",
+          params: { threadId: selectedLaneId },
+          replace: true,
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+    };
+  }, [firstThreadId, navigate, nexEmbedded, syncServerReadModel]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-muted-foreground/40">

@@ -27,7 +27,8 @@ export interface ThreadStatusPill {
     | "Completed"
     | "Pending Approval"
     | "Awaiting Input"
-    | "Plan Ready";
+    | "Plan Ready"
+    | "Stale";
   colorClass: string;
   dotClass: string;
   pulse: boolean;
@@ -40,6 +41,7 @@ const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
   Connecting: 3,
   "Plan Ready": 2,
   Completed: 1,
+  Stale: 1,
 };
 
 type ThreadStatusInput = Pick<
@@ -57,6 +59,19 @@ type ThreadStatusInput = Pick<
 export interface ThreadJumpHintVisibilityController {
   sync: (shouldShow: boolean) => void;
   dispose: () => void;
+}
+
+export function resolveNexProjectWorkerLaneExpansionClick(input: {
+  expanded: boolean;
+  nestedProjectThreadCount: number;
+}): { shouldHydrate: boolean; shouldToggle: boolean } {
+  if (!input.expanded) {
+    return { shouldHydrate: true, shouldToggle: true };
+  }
+  if (input.nestedProjectThreadCount === 0) {
+    return { shouldHydrate: true, shouldToggle: false };
+  }
+  return { shouldHydrate: false, shouldToggle: true };
 }
 
 export function createThreadJumpHintVisibilityController(input: {
@@ -346,6 +361,15 @@ export function resolveThreadStatusPill(input: {
       colorClass: "text-sky-600 dark:text-sky-300/80",
       dotClass: "bg-sky-500 dark:bg-sky-300/80",
       pulse: true,
+    };
+  }
+
+  if (thread.session?.lastError === "Stale active state aged out") {
+    return {
+      label: "Stale",
+      colorClass: "text-stone-500 dark:text-stone-300/80",
+      dotClass: "bg-stone-400 dark:bg-stone-300/80",
+      pulse: false,
     };
   }
 

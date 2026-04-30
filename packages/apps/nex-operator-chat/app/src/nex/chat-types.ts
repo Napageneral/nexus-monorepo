@@ -117,6 +117,7 @@ export type ChatLaneAction = {
 export type ChatLaneDetail = {
   lane: ChatLaneSummary;
   messages: ChatMessage[];
+  older_messages_cursor?: string | null;
   activities: ChatActivity[];
   approvals: ChatApproval[];
   actions: ChatLaneAction[];

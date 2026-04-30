@@ -42,3 +42,28 @@ Owned surfaces:
 ## Dependencies
 
 - OPUX-008 for entry-state probe coverage.
+
+## Closeout
+
+Source already carried the hard-cutover URL lane selection path: the Console
+Chat page passes the lane query parameter into the embedded t3code fork, the
+host updates the URL when the embedded route changes, and Console navigation
+only clears stale `lane` parameters when leaving Chat.
+
+The runtime-served Console package was stale. It still served a bundle without
+`initialLaneId`, `onLaneSelectionChange`, or Chat-preserving lane navigation.
+The Console and Chat microfrontend apps were rebuilt, the Console package was
+synced into the runtime package store, and the runtime was restarted.
+
+Verification:
+
+- `pnpm --dir packages/apps/nex-operator-console/app test -- --run src/ui/navigation.browser.test.ts`
+- `pnpm --dir packages/apps/nex-operator-chat/app test -- --run src/nex/chat-adapter.test.ts src/store.test.ts`
+- `pnpm --dir packages/apps/nex-operator-chat/app build`
+- `pnpm --dir packages/apps/nex-operator-console/app build`
+- `NEXUS_OPERATOR_CONSOLE_REUSE_PREBUILT=1 pnpm --dir nex exec tsx scripts/sync-operator-console-package.ts`
+- `nexus runtime restart`
+- runtime-served `/app/console/chat?lane=lane%3Aagent%3Aentity-assistant`
+  now serves `assets/index-DCbXsNz0.js`
+- runtime-served bundles contain `initialLaneId`, `onLaneSelectionChange`, lane
+  query writes, lane query clears, and `chat.microfrontend.load`

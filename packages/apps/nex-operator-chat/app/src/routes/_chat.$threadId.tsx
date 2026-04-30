@@ -10,7 +10,7 @@ import {
   stripDiffSearchParams,
 } from "../diffRouteSearch";
 import { useMediaQuery } from "../hooks/useMediaQuery";
-import { isNexEmbedded } from "../nex/embed-config";
+import { isNexEmbedded, readNexChatEmbedConfig } from "../nex/embed-config";
 import { isNexFeatureEnabled } from "../nex/feature-policy";
 import { requestOrchestrationReadModelForLane } from "../nex/chat-adapter";
 import { useStore } from "../store";
@@ -194,6 +194,12 @@ function ChatThreadRouteView() {
       },
     });
   }, [navigate, threadId]);
+
+  useEffect(() => {
+    if (nexEmbedded) {
+      readNexChatEmbedConfig()?.onLaneSelectionChange?.(threadId);
+    }
+  }, [nexEmbedded, threadId]);
 
   useEffect(() => {
     if (diffOpen) {

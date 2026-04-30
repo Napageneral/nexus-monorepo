@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyOrchestrationEvent,
   applyOrchestrationEvents,
+  prependThreadMessages,
   syncServerReadModel,
   type AppState,
 } from "./store";
@@ -176,6 +177,139 @@ describe("store read model sync", () => {
     const next = syncServerReadModel(initialState, makeReadModel(makeReadModelThread({})));
 
     expect(next.bootstrapComplete).toBe(true);
+  });
+
+  it("preserves hydrated messages when a shallow snapshot omits thread detail", () => {
+    const threadId = ThreadId.makeUnsafe("thread-1");
+    const initialState = makeState(
+      makeThread({
+        id: threadId,
+        session: {
+          provider: "codex",
+          status: "ready",
+          activeTurnId: undefined,
+          createdAt: "2026-02-27T00:00:00.000Z",
+          updatedAt: "2026-02-27T00:00:00.000Z",
+          orchestrationStatus: "ready",
+        },
+        messages: [
+          {
+            id: MessageId.makeUnsafe("message:client-1"),
+            role: "user",
+            text: "already hydrated",
+            createdAt: "2026-02-27T00:00:00.000Z",
+            streaming: false,
+          },
+        ],
+      }),
+    );
+    const shallowThread = makeReadModelThread({
+      id: threadId,
+      messages: [],
+      session: {
+        threadId,
+        status: "ready",
+        providerName: "codex",
+        runtimeMode: "full-access",
+        activeTurnId: null,
+        lastError: null,
+        updatedAt: "2026-02-27T00:01:00.000Z",
+      },
+    });
+
+    const next = syncServerReadModel(initialState, makeReadModel(shallowThread));
+
+    expect(next.threads[0]?.messages.map((message) => message.text)).toEqual([
+      "already hydrated",
+    ]);
+    expect(next.threads[0]?.olderMessagesCursor).toBeNull();
+  });
+
+  it("preserves the older history cursor across shallow snapshot refreshes", () => {
+    const threadId = ThreadId.makeUnsafe("thread-1");
+    const initialState = makeState(
+      makeThread({
+        id: threadId,
+        olderMessagesCursor: "cursor:older",
+        session: {
+          provider: "codex",
+          status: "ready",
+          activeTurnId: undefined,
+          createdAt: "2026-02-27T00:00:00.000Z",
+          updatedAt: "2026-02-27T00:00:00.000Z",
+          orchestrationStatus: "ready",
+        },
+      }),
+    );
+    const shallowThread = makeReadModelThread({
+      id: threadId,
+      messages: [],
+      session: {
+        threadId,
+        status: "ready",
+        providerName: "codex",
+        runtimeMode: "full-access",
+        activeTurnId: null,
+        lastError: null,
+        updatedAt: "2026-02-27T00:01:00.000Z",
+      },
+    });
+
+    const next = syncServerReadModel(initialState, makeReadModel(shallowThread));
+
+    expect(next.threads[0]?.olderMessagesCursor).toBe("cursor:older");
+  });
+
+  it("prepends older messages without duplicating existing rows", () => {
+    const threadId = ThreadId.makeUnsafe("thread-1");
+    const initialState = makeState(
+      makeThread({
+        id: threadId,
+        olderMessagesCursor: "cursor:older",
+        messages: [
+          {
+            id: MessageId.makeUnsafe("message:newer"),
+            role: "assistant",
+            text: "newer",
+            createdAt: "2026-02-27T00:02:00.000Z",
+            completedAt: "2026-02-27T00:02:00.000Z",
+            streaming: false,
+          },
+        ],
+      }),
+    );
+
+    const next = prependThreadMessages(
+      initialState,
+      threadId,
+      [
+        {
+          id: MessageId.makeUnsafe("message:older"),
+          role: "user",
+          text: "older",
+          turnId: null,
+          streaming: false,
+          createdAt: "2026-02-27T00:01:00.000Z",
+          updatedAt: "2026-02-27T00:01:00.000Z",
+        },
+        {
+          id: MessageId.makeUnsafe("message:newer"),
+          role: "assistant",
+          text: "newer duplicate",
+          turnId: null,
+          streaming: false,
+          createdAt: "2026-02-27T00:02:00.000Z",
+          updatedAt: "2026-02-27T00:02:00.000Z",
+        },
+      ],
+      null,
+    );
+
+    expect(next.threads[0]?.messages.map((message) => message.text)).toEqual([
+      "older",
+      "newer",
+    ]);
+    expect(next.threads[0]?.olderMessagesCursor).toBeNull();
   });
 
   it("preserves claude model slugs without an active session", () => {

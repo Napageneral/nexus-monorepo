@@ -14,6 +14,7 @@ type NexChatBridgeProps = {
   };
   basepath?: string;
   initialLaneId?: string;
+  onLaneSelectionChange?: (laneId: string | null) => void;
 };
 
 type NexChatMount = {
@@ -31,6 +32,40 @@ type RuntimeHostApp = {
 };
 
 let nexChatModulePromise: Promise<NexChatModule> | null = null;
+const LAST_SELECTED_LANE_STORAGE_KEY = "nexus.console.chat.lastSelectedLaneId";
+
+function currentLaneParam(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  return new URL(window.location.href).searchParams.get("lane")?.trim() ?? "";
+}
+
+function readStoredLaneId(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  try {
+    return window.localStorage.getItem(LAST_SELECTED_LANE_STORAGE_KEY)?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function rememberSelectedLaneId(laneId: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const normalized = laneId.trim();
+  if (!normalized) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(LAST_SELECTED_LANE_STORAGE_KEY, normalized);
+  } catch {
+    // Ignore storage failures; URL state still preserves the current selection.
+  }
+}
 
 async function loadNexChatModule(): Promise<NexChatModule> {
   if (!nexChatModulePromise) {
@@ -191,11 +226,37 @@ export class NexusConsoleChatHost extends LitElement {
   }
 
   private buildProps(): NexChatBridgeProps {
+    const initialLaneId = currentLaneParam() || this.initialLaneId.trim() || readStoredLaneId();
     return {
       bridge: this.bridge,
       basepath: "/app/console/chat",
-      ...(this.initialLaneId.trim() ? { initialLaneId: this.initialLaneId.trim() } : {}),
+      ...(initialLaneId ? { initialLaneId } : {}),
+      onLaneSelectionChange: (laneId) => this.writeLaneParam(laneId),
     };
+  }
+
+  private writeLaneParam(laneId: string | null): void {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const url = new URL(window.location.href);
+    const normalizedLaneId = laneId?.trim() ?? "";
+    const currentUrlLaneId = url.searchParams.get("lane")?.trim() ?? "";
+    if (!normalizedLaneId && currentUrlLaneId && !this.initialLaneId.trim()) {
+      this.initialLaneId = currentUrlLaneId;
+      this.chatMount?.update(this.buildProps());
+      return;
+    }
+    if (normalizedLaneId) {
+      rememberSelectedLaneId(normalizedLaneId);
+      url.searchParams.set("lane", normalizedLaneId);
+    } else {
+      url.searchParams.delete("lane");
+    }
+    window.history.replaceState({}, "", url.toString());
+    if (this.initialLaneId !== normalizedLaneId) {
+      this.initialLaneId = normalizedLaneId;
+    }
   }
 
   private getMountTarget(): HTMLDivElement | null {

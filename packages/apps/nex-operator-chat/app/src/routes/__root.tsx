@@ -45,8 +45,11 @@ import { migrateLocalSettingsToServer } from "../hooks/useSettings";
 import { providerQueryKeys } from "../lib/providerReactQuery";
 import { projectQueryKeys } from "../lib/projectReactQuery";
 import { collectActiveTerminalThreadIds } from "../lib/terminalStateCleanup";
-import { requestOrchestrationReadModelForLane } from "../nex/chat-adapter";
-import { isNexEmbedded } from "../nex/embed-config";
+import {
+  requestOrchestrationBootstrapReadModel,
+  requestOrchestrationReadModelForLane,
+} from "../nex/chat-adapter";
+import { isNexEmbedded, readNexChatEmbedConfig } from "../nex/embed-config";
 import { deriveOrchestrationBatchEffects } from "../orchestrationEventEffects";
 import { createOrchestrationRecoveryCoordinator } from "../orchestrationRecovery";
 import { deriveReplayRetryDecision } from "../orchestrationRecovery";
@@ -251,6 +254,16 @@ function EventRouter() {
   const serverConfig = useServerConfig();
   const bootstrapRouteSelectionEnabled = isNexFeatureEnabled("bootstrapRouteSelection");
   const nexEmbedded = isNexEmbedded();
+
+  useEffect(() => {
+    if (!nexEmbedded) {
+      return;
+    }
+    const selectedLaneId = routeThreadIdFromPathname(pathname);
+    if (selectedLaneId) {
+      readNexChatEmbedConfig()?.onLaneSelectionChange?.(selectedLaneId);
+    }
+  }, [nexEmbedded, pathname]);
 
   const handleWelcome = useEffectEvent((payload: ServerLifecycleWelcomePayload | null) => {
     if (!payload) return;
@@ -539,12 +552,24 @@ function EventRouter() {
 
       try {
         const routedThreadId = nexEmbedded ? routeThreadIdFromPathname(readPathname()) : null;
-        const snapshot = routedThreadId
-          ? await requestOrchestrationReadModelForLane(routedThreadId)
-          : await api.orchestration.getSnapshot();
+        const bootstrapSnapshot = nexEmbedded
+          ? await requestOrchestrationBootstrapReadModel(routedThreadId)
+          : null;
+        const snapshot = bootstrapSnapshot
+          ? bootstrapSnapshot.readModel
+          : routedThreadId
+            ? await requestOrchestrationReadModelForLane(routedThreadId)
+            : await api.orchestration.getSnapshot();
         if (!disposed) {
           syncServerReadModel(snapshot);
           reconcileSnapshotDerivedState();
+          if (bootstrapSnapshot?.selectedLaneId && bootstrapSnapshot.selectedLaneId !== routedThreadId) {
+            await navigate({
+              to: "/$threadId",
+              params: { threadId: bootstrapSnapshot.selectedLaneId },
+              replace: true,
+            });
+          }
           if (recovery.completeSnapshotRecovery(snapshot.snapshotSequence)) {
             void runReplayRecovery("sequence-gap");
           }

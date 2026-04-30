@@ -179,6 +179,7 @@ import { ProviderStatusBanner } from "./chat/ProviderStatusBanner";
 import { ThreadErrorBanner } from "./chat/ThreadErrorBanner";
 import { isNexEmbedded } from "../nex/embed-config";
 import { isNexFeatureEnabled } from "../nex/feature-policy";
+import { requestOlderThreadMessages } from "../nex/chat-adapter";
 import { NexContextSheet } from "./NexContextSheet";
 import {
   MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
@@ -597,6 +598,7 @@ function PersistentThreadTerminalDrawer({
 export default function ChatView({ threadId }: ChatViewProps) {
   const serverThread = useThreadById(threadId);
   const setStoreThreadError = useStore((store) => store.setError);
+  const prependOlderThreadMessages = useStore((store) => store.prependThreadMessages);
   const markThreadVisited = useUiStateStore((store) => store.markThreadVisited);
   const activeThreadLastVisitedAt = useUiStateStore(
     (store) => store.threadLastVisitedAtById[threadId],
@@ -698,6 +700,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const [contextSheetOpen, setContextSheetOpen] = useState(false);
   const [isComposerFooterCompact, setIsComposerFooterCompact] = useState(false);
   const [isComposerPrimaryActionsCompact, setIsComposerPrimaryActionsCompact] = useState(false);
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   // Tracks whether the user explicitly dismissed the sidebar for the active turn.
   const planSidebarDismissedForTurnRef = useRef<string | null>(null);
   // When set, the thread-change reset effect will open the sidebar instead of closing it.
@@ -3944,6 +3947,42 @@ export default function ChatView({ threadId }: ChatViewProps) {
     }
     void onRevertToTurnCount(targetTurnCount);
   };
+  const olderMessagesCursor = activeThread?.olderMessagesCursor ?? null;
+  const handleLoadOlderMessages = useCallback(async () => {
+    if (!activeThread?.id || !olderMessagesCursor || isLoadingOlderMessages) {
+      return;
+    }
+
+    const scrollElement = messagesScrollRef.current;
+    const previousScrollTop = scrollElement?.scrollTop ?? 0;
+    const previousScrollHeight = scrollElement?.scrollHeight ?? 0;
+    setIsLoadingOlderMessages(true);
+    try {
+      const page = await requestOlderThreadMessages(activeThread.id, olderMessagesCursor);
+      prependOlderThreadMessages(page.threadId, page.messages, page.olderMessagesCursor);
+      window.requestAnimationFrame(() => {
+        const nextScrollElement = messagesScrollRef.current;
+        if (!nextScrollElement) {
+          return;
+        }
+        const heightDelta = nextScrollElement.scrollHeight - previousScrollHeight;
+        nextScrollElement.scrollTop = previousScrollTop + Math.max(heightDelta, 0);
+      });
+    } catch (error) {
+      toastManager.add({
+        type: "error",
+        title: "Could not load older messages",
+        description: error instanceof Error ? error.message : "An unexpected error occurred.",
+      });
+    } finally {
+      setIsLoadingOlderMessages(false);
+    }
+  }, [
+    activeThread?.id,
+    isLoadingOlderMessages,
+    olderMessagesCursor,
+    prependOlderThreadMessages,
+  ]);
 
   // Empty state: no active thread
   if (!activeThread) {
@@ -4052,6 +4091,20 @@ export default function ChatView({ threadId }: ChatViewProps) {
               onTouchEnd={onMessagesTouchEnd}
               onTouchCancel={onMessagesTouchEnd}
             >
+              {nexEmbedded && olderMessagesCursor ? (
+                <div className="flex justify-center pb-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    data-testid="chat-load-older-messages"
+                    disabled={isLoadingOlderMessages}
+                    onClick={() => void handleLoadOlderMessages()}
+                  >
+                    {isLoadingOlderMessages ? "Loading older messages..." : "Load older messages"}
+                  </Button>
+                </div>
+              ) : null}
               <MessagesTimeline
                 key={activeThread.id}
                 hasMessages={timelineEntries.length > 0}

@@ -45,6 +45,13 @@ const MAX_THREAD_PROPOSED_PLANS = 200;
 const MAX_THREAD_ACTIVITIES = 500;
 const EMPTY_THREAD_IDS: ThreadId[] = [];
 
+function readThreadOlderMessagesCursor(thread: OrchestrationThread): string | null | undefined {
+  const value = (thread as OrchestrationThread & { olderMessagesCursor?: unknown })
+    .olderMessagesCursor;
+  if (value === null) return null;
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
 // ── Pure helpers ──────────────────────────────────────────────────────
 
 function updateThread(
@@ -154,7 +161,19 @@ function mapTurnDiffSummary(
   };
 }
 
-function mapThread(thread: OrchestrationThread): Thread {
+function mapThread(thread: OrchestrationThread, existing?: Thread): Thread {
+  const nextSession = thread.session ? mapSession(thread.session) : null;
+  const incomingOlderMessagesCursor = readThreadOlderMessagesCursor(thread);
+  const messages =
+    thread.messages.length === 0 && existing?.session && nextSession
+      ? existing.messages
+      : thread.messages.map(mapMessage);
+  const olderMessagesCursor =
+    incomingOlderMessagesCursor !== undefined
+      ? incomingOlderMessagesCursor
+      : thread.messages.length === 0
+        ? (existing?.olderMessagesCursor ?? null)
+        : null;
   return {
     id: thread.id,
     codexThreadId: null,
@@ -163,8 +182,9 @@ function mapThread(thread: OrchestrationThread): Thread {
     modelSelection: normalizeModelSelection(thread.modelSelection),
     runtimeMode: thread.runtimeMode,
     interactionMode: thread.interactionMode,
-    session: thread.session ? mapSession(thread.session) : null,
-    messages: thread.messages.map(mapMessage),
+    session: nextSession,
+    messages,
+    olderMessagesCursor,
     proposedPlans: thread.proposedPlans.map(mapProposedPlan),
     error: sanitizeThreadErrorMessage(thread.session?.lastError),
     createdAt: thread.createdAt,
@@ -575,10 +595,13 @@ function updateThreadState(
 // ── Pure state transition functions ────────────────────────────────────
 
 export function syncServerReadModel(state: AppState, readModel: OrchestrationReadModel): AppState {
+  const existingThreadsById = new Map(state.threads.map((thread) => [thread.id, thread] as const));
   const projects = readModel.projects
     .filter((project) => project.deletedAt === null)
     .map(mapProject);
-  const threads = readModel.threads.filter((thread) => thread.deletedAt === null).map(mapThread);
+  const threads = readModel.threads
+    .filter((thread) => thread.deletedAt === null)
+    .map((thread) => mapThread(thread, existingThreadsById.get(thread.id)));
   const sidebarThreadsById = buildSidebarThreadsById(threads);
   const threadIdsByProjectId = buildThreadIdsByProjectId(threads);
   return {
@@ -589,6 +612,36 @@ export function syncServerReadModel(state: AppState, readModel: OrchestrationRea
     threadIdsByProjectId,
     bootstrapComplete: true,
   };
+}
+
+export function prependThreadMessages(
+  state: AppState,
+  threadId: ThreadId,
+  messages: ReadonlyArray<OrchestrationMessage>,
+  olderMessagesCursor: string | null,
+): AppState {
+  return updateThreadState(state, threadId, (thread) => {
+    const messagesById = new Map<string, ChatMessage>();
+    for (const message of thread.messages) {
+      const messageId = String(message.id);
+      messagesById.set(messageId, message);
+    }
+    for (const message of messages.map(mapMessage)) {
+      const messageId = String(message.id);
+      if (!messagesById.has(messageId)) {
+        messagesById.set(messageId, message);
+      }
+    }
+    const nextMessages = Array.from(messagesById.values()).toSorted(
+      (left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+    );
+
+    return {
+      ...thread,
+      messages: nextMessages.slice(-MAX_THREAD_MESSAGES),
+      olderMessagesCursor,
+    };
+  });
 }
 
 export function applyOrchestrationEvent(state: AppState, event: OrchestrationEvent): AppState {
@@ -1144,6 +1197,11 @@ export function setThreadBranch(
 
 interface AppStore extends AppState {
   syncServerReadModel: (readModel: OrchestrationReadModel) => void;
+  prependThreadMessages: (
+    threadId: ThreadId,
+    messages: ReadonlyArray<OrchestrationMessage>,
+    olderMessagesCursor: string | null,
+  ) => void;
   applyOrchestrationEvent: (event: OrchestrationEvent) => void;
   applyOrchestrationEvents: (events: ReadonlyArray<OrchestrationEvent>) => void;
   setError: (threadId: ThreadId, error: string | null) => void;
@@ -1153,6 +1211,8 @@ interface AppStore extends AppState {
 export const useStore = create<AppStore>((set) => ({
   ...initialState,
   syncServerReadModel: (readModel) => set((state) => syncServerReadModel(state, readModel)),
+  prependThreadMessages: (threadId, messages, olderMessagesCursor) =>
+    set((state) => prependThreadMessages(state, threadId, messages, olderMessagesCursor)),
   applyOrchestrationEvent: (event) => set((state) => applyOrchestrationEvent(state, event)),
   applyOrchestrationEvents: (events) => set((state) => applyOrchestrationEvents(state, events)),
   setError: (threadId, error) => set((state) => setError(state, threadId, error)),

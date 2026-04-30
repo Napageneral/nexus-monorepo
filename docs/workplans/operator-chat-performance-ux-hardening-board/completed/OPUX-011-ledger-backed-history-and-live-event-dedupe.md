@@ -54,3 +54,38 @@ utterances. Streaming progress stays in chat events.
 ## Dependencies
 
 - OPUX-010 for bounded transcript windows.
+
+## Active Notes
+
+- Started after OPUX-010 closed with shallow default snapshots and bounded
+  selected-lane message windows.
+
+## Closeout
+
+- Completed on 2026-04-28.
+- Selected-lane transcript now reads from the agents session ledger only;
+  canonical record rows remain available through linked conversation context,
+  not as duplicate transcript messages.
+- `chat.snapshot` supports `before_message_cursor` for older ledger pages, and
+  the fork can prepend older message pages without replacing the visible latest
+  window.
+- User messages use stable client ids when present so optimistic sends,
+  snapshots, and replayed events dedupe to one visible bubble.
+- Browser proof selected Echo, hydrated the ledger transcript, verified no
+  `record:` transcript rows, and confirmed the OPUX-011 smoke pair rendered as
+  exactly one user row plus one assistant row.
+- Browser send proof sent
+  `operator chat ui send smoke 2026-04-28T19:59:17.955Z`; a refreshed Echo
+  lane showed exactly one user row and one assistant row:
+  `Smoke test received: 2026-04-28T19:59:17.955Z`.
+
+## Verification
+
+- `pnpm vitest run src/api/server-methods/chat.test.ts`
+- `pnpm vitest run src/nex/chat-adapter.test.ts src/store.test.ts`
+- `pnpm build` in `/Users/tyler/nexus/home/projects/nexus/nex`
+- `pnpm build` in `/Users/tyler/nexus/home/projects/nexus/packages/apps/nex-operator-chat/app`
+- `pnpm build` in `/Users/tyler/nexus/home/projects/nexus/packages/apps/nex-operator-console/app`
+- `pnpm exec tsx scripts/sync-operator-console-package.ts`
+- `nexus runtime restart`
+- `node scripts/operator-chat-perf-probe.mjs`

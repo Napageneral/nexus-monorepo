@@ -4,6 +4,7 @@ export type NexChatEmbedConfig = {
   bridge: NexChatRuntimeBridge;
   basepath?: string | null;
   initialLaneId?: string | null;
+  onLaneSelectionChange?: (laneId: string | null) => void;
 };
 
 const EMBED_CONFIG_KEY = "__NEX_CHAT_EMBED_CONFIG__";

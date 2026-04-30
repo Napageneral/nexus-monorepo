@@ -43,6 +43,36 @@ Owned surfaces:
 - Browser probe confirms no stale multi-hour working indicator on seeded old
   sessions.
 
+## Closeout
+
+Completed 2026-04-28.
+
+Implemented the runtime projection cutoff in Nex rather than the browser:
+
+- active, queued, or approval-waiting lane state older than two hours is
+  projected as `idle`
+- stale projected activity clears `active_request_id`
+- stale projected activity sets `can_abort` to `false`
+- stale projected activity gets the diagnostic subtitle `Stale active state
+  aged out`
+- fresh active session work remains active and abortable
+- old failed lanes remain failed but not abortable
+- the t3code fork maps the stale diagnostic subtitle into a non-pulsing
+  `Stale` sidebar badge instead of `Working...`
+
+Verification run:
+
+- `pnpm vitest run src/api/chat-projection.test.ts src/api/server-methods/chat.test.ts`
+- `pnpm vitest run src/nex/chat-adapter.test.ts src/store.test.ts src/components/Sidebar.logic.test.ts`
+- `pnpm build` in `/Users/tyler/nexus/home/projects/nexus/nex`
+- `pnpm build` in `/Users/tyler/nexus/home/projects/nexus/packages/apps/nex-operator-chat/app`
+- `pnpm build` in `/Users/tyler/nexus/home/projects/nexus/packages/apps/nex-operator-console/app`
+- `pnpm exec tsx scripts/sync-operator-console-package.ts`
+- `nexus runtime restart`
+- live `chat.snapshot` for Echo returned stale proof-worker lanes as idle,
+  non-abortable, and annotated with the stale subtitle
+- browser probe selected Echo with zero `Working...`/`Working for` text present
+
 ## Dependencies
 
 - OPUX-008 for measurement hooks.

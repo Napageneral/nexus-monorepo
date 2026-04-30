@@ -11,6 +11,7 @@ import {
   isContextMenuPointerDown,
   orderItemsByPreferredIds,
   resolveProjectStatusIndicator,
+  resolveNexProjectWorkerLaneExpansionClick,
   resolveSidebarNewThreadSeedContext,
   resolveSidebarNewThreadEnvMode,
   resolveThreadRowClassName,
@@ -27,6 +28,35 @@ import {
   type Project,
   type Thread,
 } from "../types";
+
+describe("resolveNexProjectWorkerLaneExpansionClick", () => {
+  it("hydrates and expands collapsed Nex project lanes", () => {
+    expect(
+      resolveNexProjectWorkerLaneExpansionClick({
+        expanded: false,
+        nestedProjectThreadCount: 0,
+      }),
+    ).toEqual({ shouldHydrate: true, shouldToggle: true });
+  });
+
+  it("rehydrates already-expanded empty Nex project lanes without collapsing them", () => {
+    expect(
+      resolveNexProjectWorkerLaneExpansionClick({
+        expanded: true,
+        nestedProjectThreadCount: 0,
+      }),
+    ).toEqual({ shouldHydrate: true, shouldToggle: false });
+  });
+
+  it("collapses already-expanded hydrated Nex project lanes", () => {
+    expect(
+      resolveNexProjectWorkerLaneExpansionClick({
+        expanded: true,
+        nestedProjectThreadCount: 2,
+      }),
+    ).toEqual({ shouldHydrate: false, shouldToggle: true });
+  });
+});
 
 function makeLatestTurn(overrides?: {
   completedAt?: string | null;
@@ -440,6 +470,22 @@ describe("resolveThreadStatusPill", () => {
         thread: baseThread,
       }),
     ).toMatchObject({ label: "Working", pulse: true });
+  });
+
+  it("shows stale projected activity without pulsing like live work", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          session: {
+            ...baseThread.session,
+            status: "ready",
+            orchestrationStatus: "ready",
+            lastError: "Stale active state aged out",
+          },
+        },
+      }),
+    ).toMatchObject({ label: "Stale", pulse: false });
   });
 
   it("shows plan ready when a settled plan turn has a proposed plan ready for follow-up", () => {

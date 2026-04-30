@@ -98,6 +98,7 @@ export interface Thread {
   interactionMode: ProviderInteractionMode;
   session: ThreadSession | null;
   messages: ChatMessage[];
+  olderMessagesCursor?: string | null;
   proposedPlans: ProposedPlan[];
   error: string | null;
   createdAt: string;

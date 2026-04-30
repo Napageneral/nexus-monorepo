@@ -320,7 +320,7 @@ function ensureConsoleRoute(state: AppViewState, tab: ConsoleActiveView) {
       }
     }
   }
-  if (url.searchParams.has("lane")) {
+  if (tab !== "chat" && url.searchParams.has("lane")) {
     url.searchParams.delete("lane");
     dirty = true;
   }

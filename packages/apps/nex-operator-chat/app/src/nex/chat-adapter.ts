@@ -12,6 +12,7 @@ import {
   type ModelSelection,
   type NativeApi,
   type OrchestrationEvent,
+  type OrchestrationMessage,
   type OrchestrationReadModel,
   type OrchestrationThread,
   type ProjectScript,
@@ -48,6 +49,10 @@ type LaneGroup = {
   projectId: ReturnType<typeof ProjectId.makeUnsafe>;
   rootLane: ChatLaneSummary;
   lanes: ChatLaneSummary[];
+};
+
+type NexOrchestrationThread = OrchestrationThread & {
+  olderMessagesCursor?: string | null;
 };
 
 const EMPTY_GIT_STATUS: GitStatusResult = {
@@ -205,6 +210,10 @@ function toThreadId(laneId: string) {
   return ThreadId.makeUnsafe(laneId);
 }
 
+function defaultMessageHistoryScopeForLane(laneId: string): "lane" | undefined {
+  return laneId.startsWith("lane:agent:") ? "lane" : undefined;
+}
+
 function toTurnId(value: string | null | undefined) {
   return value ? TurnId.makeUnsafe(value) : null;
 }
@@ -265,6 +274,66 @@ function buildProjectedLaneActionEntries(
       },
     };
   });
+}
+
+function isChatLaneActionIcon(value: unknown): value is ChatLaneAction["icon"] {
+  return (
+    value === "play" ||
+    value === "test" ||
+    value === "lint" ||
+    value === "configure" ||
+    value === "build" ||
+    value === "debug"
+  );
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function chatLaneActionFromUnknown(value: unknown): ChatLaneAction | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const actionId = typeof record.action_id === "string" && record.action_id.trim() ? record.action_id : null;
+  const label = typeof record.label === "string" && record.label.trim() ? record.label : null;
+  if (!actionId || !label) {
+    return null;
+  }
+  const invocationMode: ChatActionInvocationMode =
+    record.invocation_mode === "invoke" ? "invoke" : "prefill";
+  const requiresInput =
+    typeof record.requires_input === "boolean"
+      ? record.requires_input
+      : typeof record.requires_input === "number"
+        ? record.requires_input !== 0
+        : true;
+
+  return {
+    action_id: actionId,
+    agent_id: nullableString(record.agent_id),
+    label,
+    description: nullableString(record.description),
+    icon: isChatLaneActionIcon(record.icon) ? record.icon : "play",
+    shortcut: nullableString(record.shortcut),
+    invocation_mode: invocationMode,
+    requires_input: requiresInput,
+    default_prompt: nullableString(record.default_prompt),
+    display_order: typeof record.display_order === "number" ? record.display_order : 0,
+  };
+}
+
+function chatLaneActionsFromEvent(event: ChatEvent): ChatLaneAction[] | null {
+  const actions = event.data.actions;
+  if (Array.isArray(actions)) {
+    return actions
+      .map(chatLaneActionFromUnknown)
+      .filter((action): action is ChatLaneAction => action !== null)
+      .toSorted((left, right) => left.display_order - right.display_order || left.action_id.localeCompare(right.action_id));
+  }
+  const action = chatLaneActionFromUnknown(event.data);
+  return action ? [action] : null;
 }
 
 function mapApprovalToActivity(approval: ChatApproval): OrchestrationThread["activities"][number] {
@@ -400,10 +469,31 @@ function mapToolMessageToOrchestrationActivity(
   };
 }
 
+function stripInternalAssistantMarkers(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => {
+      const trimmed = line.trim();
+      return (
+        !/^\[reasoning:[^\]]+\]$/i.test(trimmed) &&
+        !/^\[tool_call:[^\]]+\]$/i.test(trimmed)
+      );
+    })
+    .join("\n")
+    .trim();
+}
+
+function visibleChatMessageText(message: ChatLaneDetail["messages"][number]): string {
+  return message.role === "assistant" ? stripInternalAssistantMarkers(message.text) : message.text;
+}
+
 function isRenderableChatMessage(
   message: ChatLaneDetail["messages"][number],
 ): message is ChatLaneDetail["messages"][number] & { role: "user" | "assistant" | "system" } {
   if (message.role === "user" && !message.record_id && !message.client_message_id) {
+    return false;
+  }
+  if (message.role === "assistant" && visibleChatMessageText(message).length === 0) {
     return false;
   }
   return message.role === "user" || message.role === "assistant" || message.role === "system";
@@ -447,26 +537,22 @@ function buildLatestTurn(detail: ChatLaneDetail | undefined) {
   };
 }
 
+const STALE_ACTIVE_SUBTITLE = "Stale active state aged out";
+
+function isStaleActiveLane(lane: ChatLaneSummary): boolean {
+  return lane.run_state === "idle" && lane.subtitle === STALE_ACTIVE_SUBTITLE;
+}
+
 function mapThread(
   lane: ChatLaneSummary,
   projectId: ReturnType<typeof ProjectId.makeUnsafe>,
   detail: ChatLaneDetail | undefined,
-): OrchestrationThread {
+): NexOrchestrationThread {
   const modelSelection = modelSelectionFromLane(detail?.provider_id, detail?.model_id);
   const rawMessages = detail?.messages ?? [];
   const messages = rawMessages
     .filter(isRenderableChatMessage)
-    .map((message) => ({
-      id: MessageId.makeUnsafe(
-        message.role === "user" && message.client_message_id ? message.client_message_id : message.id,
-      ),
-      role: message.role,
-      text: message.text,
-      turnId: toTurnId(message.turn_id),
-      streaming: false,
-      createdAt: isoFromEpoch(message.created_at),
-      updatedAt: isoFromEpoch(message.created_at),
-    }));
+    .map(mapChatMessageToOrchestrationMessage);
   const activities = [
     ...rawMessages
       .filter((message) => message.role === "tool")
@@ -475,7 +561,7 @@ function mapThread(
     ...(detail?.approvals ?? []).map(mapApprovalToActivity),
   ].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 
-  return {
+  const thread: NexOrchestrationThread = {
     id: toThreadId(lane.lane_id),
     projectId,
     title: lane.title,
@@ -507,10 +593,30 @@ function mapThread(
           providerName: modelSelection.provider,
           runtimeMode: "full-access",
           activeTurnId: buildLatestTurn(detail)?.turnId ?? null,
-          lastError: lane.run_state === "error" ? lane.subtitle : null,
+          lastError: lane.run_state === "error" || isStaleActiveLane(lane) ? lane.subtitle : null,
           updatedAt: isoFromEpoch(lane.updated_at),
         }
       : null,
+  };
+  if (detail) {
+    thread.olderMessagesCursor = detail.older_messages_cursor ?? null;
+  }
+  return thread;
+}
+
+function mapChatMessageToOrchestrationMessage(
+  message: ChatLaneDetail["messages"][number] & { role: "user" | "assistant" | "system" },
+): OrchestrationMessage {
+  return {
+    id: MessageId.makeUnsafe(
+      message.role === "user" && message.client_message_id ? message.client_message_id : message.id,
+    ),
+    role: message.role,
+    text: visibleChatMessageText(message),
+    turnId: toTurnId(message.turn_id),
+    streaming: false,
+    createdAt: isoFromEpoch(message.created_at),
+    updatedAt: isoFromEpoch(message.created_at),
   };
 }
 
@@ -554,6 +660,30 @@ function mapSnapshotToReadModel(snapshot: ChatSnapshotResult): OrchestrationRead
   };
 }
 
+export function resolveChatSnapshotSelectedLaneId(
+  snapshot: ChatSnapshotResult,
+  requestedLaneId?: string | null,
+): string | null {
+  const laneIds = new Set(snapshot.lanes.map((lane) => lane.lane_id));
+  const requested = requestedLaneId?.trim() ?? "";
+  if (requested && laneIds.has(requested)) {
+    return requested;
+  }
+  const expandedLaneId = snapshot.expanded_lane?.lane.lane_id;
+  if (expandedLaneId && laneIds.has(expandedLaneId)) {
+    return expandedLaneId;
+  }
+  const defaultLaneId = snapshot.default_lane_id?.trim() ?? "";
+  if (defaultLaneId && laneIds.has(defaultLaneId)) {
+    return defaultLaneId;
+  }
+  return (
+    snapshot.lanes.find((lane) => lane.lane_mode === "agent" && !lane.parent_lane_id)?.lane_id ??
+    snapshot.lanes[0]?.lane_id ??
+    null
+  );
+}
+
 function buildServerProvidersFromSelection(
   providerId: string | null | undefined,
   modelId: string | null | undefined,
@@ -586,7 +716,10 @@ export async function requestChatSnapshot(
   explicitLaneId?: string | null,
   options?: Partial<{
     include_conversation_context: boolean;
+    include_child_lanes: boolean;
+    message_history_scope: "session" | "lane";
     message_limit: number;
+    before_message_cursor: string;
     approval_limit: number;
     record_limit: number;
   }>,
@@ -597,11 +730,12 @@ export async function requestChatSnapshot(
   const requestedApprovalLimit =
     typeof options?.approval_limit === "number" ? Math.max(1, Math.trunc(options.approval_limit)) : undefined;
   const snapshot = await bridge().request<ChatSnapshotResult>("chat.snapshot", {
-    message_limit: 500,
-    approval_limit: 50,
     ...(laneId ? { lane_id: laneId } : {}),
     ...(options?.include_conversation_context ? { include_conversation_context: true } : {}),
+    ...(options?.include_child_lanes ? { include_child_lanes: true } : {}),
+    ...(options?.message_history_scope ? { message_history_scope: options.message_history_scope } : {}),
     ...(typeof requestedMessageLimit === "number" ? { message_limit: requestedMessageLimit } : {}),
+    ...(options?.before_message_cursor ? { before_message_cursor: options.before_message_cursor } : {}),
     ...(typeof requestedApprovalLimit === "number" ? { approval_limit: requestedApprovalLimit } : {}),
     ...(typeof options?.record_limit === "number" ? { record_limit: options.record_limit } : {}),
   });
@@ -615,7 +749,10 @@ export async function requestLaneContextDetail(
   laneId: string,
   options?: Partial<{
     include_conversation_context: boolean;
+    include_child_lanes: boolean;
+    message_history_scope: "session" | "lane";
     message_limit: number;
+    before_message_cursor: string;
     approval_limit: number;
     record_limit: number;
   }>,
@@ -722,10 +859,65 @@ export async function requestOrchestrationReadModel(): Promise<OrchestrationRead
   return mapSnapshotToReadModel(await requestChatSnapshot());
 }
 
+export async function requestOrchestrationBootstrapReadModel(
+  requestedLaneId?: string | null,
+): Promise<{ readModel: OrchestrationReadModel; selectedLaneId: string | null }> {
+  const laneId = requestedLaneId?.trim() ?? "";
+  const messageHistoryScope = laneId ? defaultMessageHistoryScopeForLane(laneId) : undefined;
+  const snapshot = await requestChatSnapshot(laneId || null, {
+    ...(messageHistoryScope ? { message_history_scope: messageHistoryScope } : {}),
+  });
+  return {
+    readModel: mapSnapshotToReadModel(snapshot),
+    selectedLaneId: resolveChatSnapshotSelectedLaneId(snapshot, laneId),
+  };
+}
+
 export async function requestOrchestrationReadModelForLane(
   laneId: string,
+  options?: Partial<{
+    include_child_lanes: boolean;
+    message_history_scope: "session" | "lane";
+  }>,
 ): Promise<OrchestrationReadModel> {
-  return mapSnapshotToReadModel(await requestChatSnapshot(laneId));
+  const messageHistoryScope =
+    options?.message_history_scope ?? defaultMessageHistoryScopeForLane(laneId);
+  return mapSnapshotToReadModel(
+    await requestChatSnapshot(laneId, {
+      ...options,
+      ...(messageHistoryScope ? { message_history_scope: messageHistoryScope } : {}),
+    }),
+  );
+}
+
+export async function requestOlderThreadMessages(
+  laneId: string,
+  beforeMessageCursor: string,
+  options?: {
+    message_limit?: number;
+  },
+): Promise<{
+  sequence: number;
+  threadId: ThreadId;
+  messages: OrchestrationMessage[];
+  olderMessagesCursor: string | null;
+}> {
+  const messageHistoryScope = defaultMessageHistoryScopeForLane(laneId);
+  const snapshot = await requestChatSnapshot(laneId, {
+    message_limit: options?.message_limit ?? 25,
+    before_message_cursor: beforeMessageCursor,
+    ...(messageHistoryScope ? { message_history_scope: messageHistoryScope } : {}),
+  });
+  const detail = snapshot.expanded_lane;
+  if (!detail || detail.lane.lane_id !== laneId) {
+    throw new Error("Nex chat did not return the requested lane history page.");
+  }
+  return {
+    sequence: snapshot.sequence,
+    threadId: toThreadId(laneId),
+    messages: detail.messages.filter(isRenderableChatMessage).map(mapChatMessageToOrchestrationMessage),
+    olderMessagesCursor: detail.older_messages_cursor ?? null,
+  };
 }
 
 export async function requestOrchestrationReplay(
@@ -841,7 +1033,7 @@ function mapChatEventToOrchestrationEvents(event: ChatEvent): OrchestrationEvent
       ];
     }
     const message = chatMessageFromEvent(event, laneId);
-    if (message.role === "user" && !message.record_id && !message.client_message_id) {
+    if (!isRenderableChatMessage(message)) {
       return [];
     }
     const createdAt = isoFromEpoch(
@@ -857,7 +1049,7 @@ function mapChatEventToOrchestrationEvents(event: ChatEvent): OrchestrationEvent
             message.role === "user" && message.client_message_id ? message.client_message_id : message.id,
           ),
           role: mapChatMessageRole(message.role),
-          text: message.text,
+          text: visibleChatMessageText(message),
           turnId: message.turn_id ? TurnId.makeUnsafe(message.turn_id) : null,
           streaming: false,
           createdAt,
@@ -901,6 +1093,28 @@ function mapChatEventToOrchestrationEvents(event: ChatEvent): OrchestrationEvent
     }
 
     return events;
+  }
+
+  if (event.event_name === "action.upserted" || event.event_name === "action.removed") {
+    const actions = chatLaneActionsFromEvent(event);
+    if (!actions) {
+      return [];
+    }
+    const rootLaneId = typeof event.data.root_lane_id === "string" ? event.data.root_lane_id : laneId;
+    const projectId = toProjectId(rootLaneId);
+    return [
+      {
+        ...base,
+        aggregateKind: "project",
+        aggregateId: projectId,
+        type: "project.meta-updated",
+        payload: {
+          projectId,
+          scripts: buildProjectedLaneActionEntries(actions).map((entry) => entry.script),
+          updatedAt: occurredAt,
+        },
+      } as OrchestrationEvent,
+    ];
   }
 
   if (event.event_name === "approval.upserted" || event.event_name === "approval.resolved") {

@@ -15,6 +15,7 @@ export type NexChatBridgeProps = {
   bridge: NexChatEmbedConfig["bridge"];
   basepath?: string;
   initialLaneId?: string;
+  onLaneSelectionChange?: (laneId: string | null) => void;
 };
 
 export type NexChatMount = {
@@ -43,7 +44,16 @@ export function mountNexChatApp(
       bridge: nextProps.bridge,
       basepath: nextEmbedded ? null : nextProps.basepath?.trim() || null,
       initialLaneId: nextProps.initialLaneId?.trim() || null,
+      ...(nextProps.onLaneSelectionChange
+        ? { onLaneSelectionChange: nextProps.onLaneSelectionChange }
+        : {}),
     });
+    if (nextEmbedded) {
+      const nextEntry = buildEmbeddedInitialEntry(nextProps.initialLaneId);
+      if (history.location.pathname !== nextEntry) {
+        history.replace(nextEntry);
+      }
+    }
     resetNexEmbeddedWsRpcClient();
     resetNexEmbeddedNativeApi();
     window.nativeApi = createNexEmbeddedNativeApi();
