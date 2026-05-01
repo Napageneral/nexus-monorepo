@@ -84,16 +84,13 @@ elif [[ "${PACKAGE_RUNTIME}" == "node" ]]; then
     exit 1
   fi
 
-  cat > "${STAGE_DIR}/bin/${BIN_NAME}" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-ROOT_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"
-exec node "\${ROOT_DIR}/${NODE_ENTRY}" "\$@"
-EOF
-  chmod +x "${STAGE_DIR}/bin/${BIN_NAME}"
-
   cp "${ROOT_DIR}/package.json" "${STAGE_DIR}/package.json"
   cp -R "${ROOT_DIR}/dist" "${STAGE_DIR}/dist"
+  find "${STAGE_DIR}/dist" -type f \( \
+    -name "*.tar.gz" -o \
+    -name "*.tar.gz.sha256" -o \
+    -name "*.adapter.catalog.json" \
+  \) -delete
   for asset_dir in raw api schemas openapi; do
     if [[ -d "${ROOT_DIR}/${asset_dir}" ]]; then
       cp -R "${ROOT_DIR}/${asset_dir}" "${STAGE_DIR}/${asset_dir}"
@@ -104,7 +101,26 @@ EOF
   else
     echo "node_modules not present; packaging bundled node adapter without dependency tree" >&2
   fi
-  INFO_COMMAND=("${STAGE_DIR}/bin/${BIN_NAME}")
+
+  COMMAND_RELATIVE="${COMMAND_PATH#./}"
+  if [[ "${COMMAND_RELATIVE}" = /* || "${COMMAND_RELATIVE}" == ..* ]]; then
+    echo "unsupported adapter command path for node adapter packaging: ${COMMAND_PATH}" >&2
+    exit 1
+  fi
+  COMMAND_STAGE_PATH="${STAGE_DIR}/${COMMAND_RELATIVE}"
+  mkdir -p "$(dirname "${COMMAND_STAGE_PATH}")"
+  if [[ -f "${ROOT_DIR}/${COMMAND_RELATIVE}" ]]; then
+    cp "${ROOT_DIR}/${COMMAND_RELATIVE}" "${COMMAND_STAGE_PATH}"
+  elif [[ ! -f "${COMMAND_STAGE_PATH}" ]]; then
+    cat > "${COMMAND_STAGE_PATH}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"
+exec node "\${ROOT_DIR}/${NODE_ENTRY}" "\$@"
+EOF
+  fi
+  chmod +x "${COMMAND_STAGE_PATH}"
+  INFO_COMMAND=("${COMMAND_STAGE_PATH}")
 fi
 
 for asset_dir in raw api schemas openapi; do
