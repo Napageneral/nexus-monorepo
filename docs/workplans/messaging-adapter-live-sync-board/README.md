@@ -42,8 +42,9 @@ Current implementation state:
 - Slack native interactions are implemented and package-validated in the Slack
   adapter, with live agent-use proof still pending.
 - Discord native components, modal handling, lifecycle enforcement, and package
-  artifacts are implemented and package-validated in the Discord adapter, with
-  the cumulative live cleanroom proof tracked by Discord DIR-009.
+  artifacts are implemented, package-validated, published as `discord@0.1.3`,
+  installed on the hosted MoonSleep runtime, and proved through local and
+  hosted restart paths.
 
 ## Ticket Order
 
@@ -51,7 +52,7 @@ Current implementation state:
 2. [MAL-002 Slack Live Edit And Delete Revisions](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/completed/MAL-002-slack-live-edit-and-delete-revisions.md)
 3. [MAL-003 Slack Native Interactions](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/in-progress/MAL-003-slack-native-interactions.md)
 4. [MAL-004 Discord Gateway Supervision](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/completed/MAL-004-discord-gateway-supervision.md)
-5. [MAL-005 Discord Components And Modals](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/in-progress/MAL-005-discord-components-and-modals.md)
+5. [MAL-005 Discord Components And Modals](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/completed/MAL-005-discord-components-and-modals.md)
 6. [MAL-006 Messaging Adapter Validation Ladder](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/completed/MAL-006-messaging-adapter-validation-ladder.md)
 
 ## Status

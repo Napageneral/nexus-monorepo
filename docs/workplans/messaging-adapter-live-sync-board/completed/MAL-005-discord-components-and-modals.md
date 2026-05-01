@@ -1,5 +1,7 @@
 # MAL-005 Discord Components And Modals
 
+Status: completed on 2026-05-01.
+
 ## Goal
 
 Finish Discord-native components, modals, approvals, and command fallback
@@ -61,11 +63,15 @@ Validation completed:
 
 Closeout notes:
 
-- Adapter commit: `8f54323`
+- Adapter closeout commit: `4aad96a`
+- Adapter release commit: `8f54323`
 - Umbrella/package-helper commit: `0ac7ab6c`
+- Umbrella validation commit: `0139259d`
 - Artifact:
   `/Users/tyler/nexus/home/projects/nexus/packages/adapters/discord/dist/discord-0.1.3.tar.gz`
 - SHA-256:
   `fca3448fcf51c1f70fcefb26725c4783ad532b58de1186d1a1ec730ae8ad641c`
 - The production package path now preserves manifest entrypoints and excludes
   generated release tarballs from staged `dist/`.
+- Frontdoor install ledger reports hosted server `srv-1c4b077a-1f2` installed
+  at active version `0.1.3`.
