@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-05-01T19:25:45.151632+00:00",
+  "host": "frontdoor.nexushub.sh",
+  "remote_frontdoor_root": "/opt/nexus/frontdoor",
+  "remote_db": "/var/lib/nexus-frontdoor/frontdoor.db",
+  "target_os": "linux",
+  "target_arch": "arm64",
+  "count": 1,
+  "failures": 0,
+  "results": [
+    {
+      "kind": "adapter",
+      "id": "slack",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/slack",
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/slack/dist/slack-0.1.0.tar.gz",
+      "remote_package_root": "/opt/nexus/frontdoor/packages/slack/0.1.0/package-root",
+      "remote_tarball_path": "/opt/nexus/frontdoor/packages/slack/0.1.0/slack-0.1.0.tar.gz",
+      "ok": true,
+      "returncode": 0,
+      "publish_result": {
+        "ok": true,
+        "package_id": "slack",
+        "version": "0.1.0",
+        "release_id": "rel-slack-0.1.0",
+        "variant_id": "variant-slack-0.1.0-linux-arm64",
+        "target_os": "linux",
+        "target_arch": "arm64",
+        "tarball_path": "/opt/nexus/frontdoor/packages/slack/0.1.0/slack-0.1.0.tar.gz",
+        "sha256": "c982f917f4c7e26d506ec95b282d66747b29da2f36dc339d4941d5cd7a754531",
+        "size_bytes": 4995548,
+        "verification": {
+          "package_count": 1,
+          "release_count": 1,
+          "variant_count": 1
+        }
+      },
+      "stdout": "{\n  \"ok\": true,\n  \"package_id\": \"slack\",\n  \"version\": \"0.1.0\",\n  \"release_id\": \"rel-slack-0.1.0\",\n  \"variant_id\": \"variant-slack-0.1.0-linux-arm64\",\n  \"target_os\": \"linux\",\n  \"target_arch\": \"arm64\",\n  \"tarball_path\": \"/opt/nexus/frontdoor/packages/slack/0.1.0/slack-0.1.0.tar.gz\",\n  \"sha256\": \"c982f917f4c7e26d506ec95b282d66747b29da2f36dc339d4941d5cd7a754531\",\n  \"size_bytes\": 4995548,\n  \"verification\": {\n    \"package_count\": 1,\n    \"release_count\": 1,\n    \"variant_count\": 1\n  }\n}\n",
+      "stderr": "(node:317139) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    }
+  ]
+}

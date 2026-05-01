@@ -1,0 +1,14 @@
+{
+  "id": "slack",
+  "version": "0.1.0",
+  "displayName": "Slack",
+  "description": "Shared Slack adapter package for Nex.",
+  "platform": "slack",
+  "methodCatalog": {
+    "source": "openapi",
+    "document": "api/openapi.yaml",
+    "namespace": "slack"
+  },
+  "command": "./bin/slack-adapter",
+  "skill": "./SKILL.md"
+}

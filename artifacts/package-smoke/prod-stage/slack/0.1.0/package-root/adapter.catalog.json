@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "adapter-catalog-setup.v1",
+  "adapterId": "slack",
+  "displayName": "Slack",
+  "auth": {
+    "methods": [
+      {
+        "type": "api_key",
+        "label": "Slack Bot (Socket Mode)",
+        "icon": "slack",
+        "id": "slack_socket_mode",
+        "service": "slack",
+        "fields": [
+          {
+            "name": "bot_token",
+            "label": "Bot User OAuth Token",
+            "type": "secret",
+            "required": true,
+            "placeholder": "xoxb-..."
+          },
+          {
+            "name": "app_token",
+            "label": "App-Level Token",
+            "type": "secret",
+            "required": true,
+            "placeholder": "xapp-..."
+          }
+        ]
+      },
+      {
+        "type": "api_key",
+        "label": "Slack User Token",
+        "icon": "slack",
+        "id": "slack_user_token",
+        "service": "slack",
+        "fields": [
+          {
+            "name": "user_token",
+            "label": "User OAuth Token",
+            "type": "secret",
+            "required": true,
+            "placeholder": "xoxp-..."
+          }
+        ]
+      }
+    ],
+    "setupGuide": "Create a Slack app at api.slack.com/apps. Use the bot method for Socket Mode monitoring and outbound Spike behavior with xoxb/xapp tokens. Use the user-token method for read-only discovery, history, backfill, and poll-based live sync with an xoxp token."
+  },
+  "description": "Shared Slack adapter package for Nex.",
+  "version": "0.1.0",
+  "platform": "slack",
+  "name": "Slack Adapter",
+  "credentialService": "slack"
+}

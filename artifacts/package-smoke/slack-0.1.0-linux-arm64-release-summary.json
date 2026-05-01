@@ -1,0 +1,34 @@
+{
+  "generated_at": "2026-05-01T19:25:40.876Z",
+  "repo_root": "/Users/tyler/nexus/home/projects/nexus",
+  "count": 1,
+  "failures": 0,
+  "results": [
+    {
+      "kind": "adapter",
+      "id": "slack",
+      "package_root": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/slack",
+      "script_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/slack/scripts/package-release.sh",
+      "ok": true,
+      "returncode": 0,
+      "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/slack/dist/slack-0.1.0.tar.gz",
+      "validation_result": {
+        "ok": true,
+        "kind": "adapter",
+        "package_id": "slack",
+        "version": "0.1.0",
+        "errors": [],
+        "warnings": []
+      },
+      "release_result": {
+        "ok": true,
+        "kind": "adapter",
+        "package_id": "slack",
+        "version": "0.1.0",
+        "archive_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/slack/dist/slack-0.1.0.tar.gz",
+        "sha256_path": "/Users/tyler/nexus/home/projects/nexus/packages/adapters/slack/dist/slack-0.1.0.tar.gz.sha256",
+        "sha256": "c982f917f4c7e26d506ec95b282d66747b29da2f36dc339d4941d5cd7a754531"
+      }
+    }
+  ]
+}
