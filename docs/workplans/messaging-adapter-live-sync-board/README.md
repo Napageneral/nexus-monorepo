@@ -1,5 +1,7 @@
 # Messaging Adapter Live Sync Board
 
+Status: closed on 2026-05-01.
+
 This board tracks the OpenClaw-informed hardening pass for Slack and Discord
 inside Nex.
 
@@ -42,8 +44,8 @@ Current implementation state:
 
 - Slack native interactions, OpenClaw-inspired choice authoring, approval
   metadata, accepted-control feedback, richer input parsing, and the
-  event-first/user-token scheduler split are implemented and validated in the
-  Slack adapter.
+  event-first/user-token scheduler split are implemented, validated, and
+  published through production Frontdoor as `slack@0.1.0`.
 - Discord native components, modal handling, lifecycle enforcement, and package
   artifacts are implemented, package-validated, published as `discord@0.1.3`,
   installed on the hosted MoonSleep runtime, and proved through local and
