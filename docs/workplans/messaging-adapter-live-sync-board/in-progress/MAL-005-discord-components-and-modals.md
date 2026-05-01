@@ -49,8 +49,23 @@ Validation completed:
 - `PATH="/Users/tyler/.nvm/versions/node/v22.22.0/bin:$PATH" ./scripts/package-release.sh`
 - runtime `adapter.health` for local Discord connection
   `02a725fd-910c-494d-a32f-809094b6a6aa`
+- live Discord UI proof in Brandtty `#general` with button, select, modal
+  trigger, and modal submission records linked to source message
+  `1499812941581783232`
+- Frontdoor catalog publication of `discord@0.1.3`
+- hosted MoonSleep runtime install of `discord@0.1.3` with package health
+  `active` and `healthy: true`
+- hosted archive/restore restart proof with `discord@0.1.3` rehydrated
+- local durable live-sync proof using `adapters.connections.livesync.enable`
+  followed by runtime restart and Discord monitor auto-start
 
-Remaining gate:
+Closeout notes:
 
-- Discord DIR-009 live cleanroom golden journey with an actual component send,
-  monitor ingest, click/select, modal submission, and restart proof
+- Adapter commit: `8f54323`
+- Umbrella/package-helper commit: `0ac7ab6c`
+- Artifact:
+  `/Users/tyler/nexus/home/projects/nexus/packages/adapters/discord/dist/discord-0.1.3.tar.gz`
+- SHA-256:
+  `fca3448fcf51c1f70fcefb26725c4783ad532b58de1186d1a1ec730ae8ad641c`
+- The production package path now preserves manifest entrypoints and excludes
+  generated release tarballs from staged `dist/`.

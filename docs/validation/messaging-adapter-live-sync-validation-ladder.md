@@ -154,6 +154,44 @@ The proof passes when:
 - the worker chooses the correct provider-native method
 - the method succeeds against the hosted installed adapter
 
+### Discord Evidence: 2026-05-01
+
+Discord cleared the native interaction, hosted install, hosted restart, and
+durable monitor-start portions of this ladder.
+
+- Adapter commit: `8f54323`
+- Umbrella/package-helper commit: `0ac7ab6c`
+- Artifact:
+  `/Users/tyler/nexus/home/projects/nexus/packages/adapters/discord/dist/discord-0.1.3.tar.gz`
+- SHA-256:
+  `fca3448fcf51c1f70fcefb26725c4783ad532b58de1186d1a1ec730ae8ad641c`
+- Test: `pnpm test` passed 10 files / 45 tests.
+- Extracted artifact smoke: `./discord-adapter.js adapter.info` returned
+  Discord adapter version `0.1.3`, five adapter operations, and 17 methods.
+- Live UI target: Brandtty `#general`, connection
+  `02a725fd-910c-494d-a32f-809094b6a6aa`.
+- Live UI proof stamp: `20260501T164109Z`; button, select, modal trigger, and
+  modal submission records were ingested and linked to source message
+  `1499812941581783232`.
+- Hosted catalog latest: `discord@0.1.3`,
+  `rel-discord-0.1.3`,
+  `variant-discord-0.1.3-linux-arm64`.
+- Hosted MoonSleep runtime install reported package health `active`,
+  `healthy: true`, `active_version: "0.1.3"`.
+- Hosted Frontdoor archive/restore restart completed for server
+  `srv-1c4b077a-1f2`; after startup, package health again reported
+  `active_version: "0.1.3"` and adapter version `0.1.3`.
+- Local durable monitor proof used
+  `adapters.connections.livesync.enable` for the Discord connection; after
+  local runtime restart, startup logs reported 10 persisted connections
+  rehydrated and three monitors restarted, including Discord.
+
+Operational lesson:
+
+- `adapter.monitor.start` is a low-level process start and does not persist
+  restart intent. Use `adapters.connections.livesync.enable` for durable
+  live-sync monitor startup.
+
 ## Slack Validation Script
 
 Before running live Slack proof, paste the exact script into the ticket or run
