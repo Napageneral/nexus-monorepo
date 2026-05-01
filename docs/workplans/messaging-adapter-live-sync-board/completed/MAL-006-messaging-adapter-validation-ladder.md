@@ -28,3 +28,18 @@ hosted install/restart, and agent-use proof.
 3. cleanroom proof is the default lane
 4. live dogfood is documented as secondary confirmation
 5. validation docs link back to the canonical spec and this board
+
+## Completed
+
+- Added
+  `/Users/tyler/nexus/home/projects/nexus/docs/validation/messaging-adapter-live-sync-validation-ladder.md`.
+- Defined provider-neutral proof stages for package install, backfill, monitor
+  catch-up, live richness, interactions, rate limits, hosted restart, and
+  agent-use.
+- Added Slack and Discord human-shaped validation scripts with exact proof
+  messages.
+- Linked the ladder from the board canonical inputs.
+
+Validation run:
+
+- `git diff --check`

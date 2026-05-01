@@ -7,6 +7,7 @@ Canonical inputs:
 
 - `/Users/tyler/nexus/home/projects/nexus/docs/spec-driven-development-workflow.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/specs/platform/messaging-adapter-live-sync-and-interactions.md`
+- `/Users/tyler/nexus/home/projects/nexus/docs/validation/messaging-adapter-live-sync-validation-ladder.md`
 - `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/adapter-full-surface-compliance-standard.md`
 - `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/adapter-validation-proof-ladder.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/README.md`
@@ -43,7 +44,7 @@ The target state is captured in:
 3. [MAL-003 Slack Native Interactions](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/not-started/MAL-003-slack-native-interactions.md)
 4. [MAL-004 Discord Gateway Supervision](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/completed/MAL-004-discord-gateway-supervision.md)
 5. [MAL-005 Discord Components And Modals](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/not-started/MAL-005-discord-components-and-modals.md)
-6. [MAL-006 Messaging Adapter Validation Ladder](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/not-started/MAL-006-messaging-adapter-validation-ladder.md)
+6. [MAL-006 Messaging Adapter Validation Ladder](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/completed/MAL-006-messaging-adapter-validation-ladder.md)
 
 ## Status
 
