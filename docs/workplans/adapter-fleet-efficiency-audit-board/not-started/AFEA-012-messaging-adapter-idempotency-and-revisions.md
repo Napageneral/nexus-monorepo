@@ -11,6 +11,11 @@ Telegram offsets are process-local. Discord live ingest handles message
 creation but not edits/deletes as revisions. WhatsApp avoids full-history live
 sync, but its media capability is overstated relative to send behavior.
 
+The Slack and Discord portion of the messaging pass is now tracked in the
+dedicated OpenClaw-informed board:
+
+- `/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/README.md`
+
 Primary files:
 
 - `/Users/tyler/nexus/home/projects/nexus/packages/adapters/telegram/src/adapter.ts`
@@ -32,4 +37,3 @@ Primary files:
    out of scope
 3. WhatsApp capability metadata matches implemented behavior
 4. validation docs cover restart, duplicate, and media/attachment behavior
-
