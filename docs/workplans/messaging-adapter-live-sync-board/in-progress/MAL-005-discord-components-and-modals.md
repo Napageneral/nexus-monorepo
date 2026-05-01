@@ -29,3 +29,28 @@ validation-backed pass.
 3. approval prompts fail closed when expired or unauthorized
 4. component state survives restart where required by the interaction contract
 5. cleanroom agent-use proof demonstrates the native Discord interaction path
+
+## Progress
+
+The Discord adapter implementation has landed in
+`/Users/tyler/nexus/home/projects/nexus/packages/adapters/discord` with:
+
+- buttons and all supported select families on `discord.send`
+- adapter-owned durable interaction store
+- allowed-user, expiry, consumed, and reusable lifecycle enforcement
+- modal trigger rendering through Discord's modal response path
+- modal submission parsing into structured submitted values
+- accepted/denied canonical inbound interaction records
+- package rebuild and release artifact refresh
+
+Validation completed:
+
+- `pnpm test`
+- `PATH="/Users/tyler/.nvm/versions/node/v22.22.0/bin:$PATH" ./scripts/package-release.sh`
+- runtime `adapter.health` for local Discord connection
+  `02a725fd-910c-494d-a32f-809094b6a6aa`
+
+Remaining gate:
+
+- Discord DIR-009 live cleanroom golden journey with an actual component send,
+  monitor ingest, click/select, modal submission, and restart proof

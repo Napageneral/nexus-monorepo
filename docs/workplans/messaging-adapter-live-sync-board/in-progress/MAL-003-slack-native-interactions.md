@@ -30,3 +30,26 @@ and does not expose comparable native interaction controls.
 3. approval prompts can be accepted or rejected from Slack
 4. expired or unauthorized interactions fail closed
 5. validation demonstrates an agent-use path through native Slack controls
+
+## Progress
+
+The Slack adapter implementation has landed in
+`/Users/tyler/nexus/home/projects/nexus/packages/adapters/slack` with:
+
+- component payload support on `slack.send`
+- adapter-owned interaction registrations
+- Socket Mode interactive payload ingest
+- button/select accepted and denied records
+- modal open/submission/closed records
+- package rebuild and method catalog projection
+
+Validation completed:
+
+- `go test ./...`
+- `./scripts/package-release.sh`
+- `nexus adapters packages methods slack --json` confirmed the published method
+  catalog includes `payload.components`
+
+Remaining gate:
+
+- live cleanroom or agent-use proof for one native Slack control flow
