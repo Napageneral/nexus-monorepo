@@ -41,7 +41,7 @@ The target state is captured in:
 1. [MAL-001 Canonical Spec And OpenClaw Parity Map](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/completed/MAL-001-canonical-spec-and-openclaw-parity-map.md)
 2. [MAL-002 Slack Live Edit And Delete Revisions](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/completed/MAL-002-slack-live-edit-and-delete-revisions.md)
 3. [MAL-003 Slack Native Interactions](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/not-started/MAL-003-slack-native-interactions.md)
-4. [MAL-004 Discord Gateway Supervision](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/not-started/MAL-004-discord-gateway-supervision.md)
+4. [MAL-004 Discord Gateway Supervision](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/completed/MAL-004-discord-gateway-supervision.md)
 5. [MAL-005 Discord Components And Modals](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/not-started/MAL-005-discord-components-and-modals.md)
 6. [MAL-006 Messaging Adapter Validation Ladder](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/not-started/MAL-006-messaging-adapter-validation-ladder.md)
 

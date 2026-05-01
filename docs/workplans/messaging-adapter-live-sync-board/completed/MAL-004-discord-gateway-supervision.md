@@ -29,3 +29,21 @@ configuration failures.
 3. fatal auth/config failures stop with explicit operator-facing errors
 4. reconnect event replay does not duplicate records
 5. tests cover ready, recoverable failure, fatal failure, and teardown
+
+## Completed
+
+- Added a bounded Discord gateway ready watchdog with configurable
+  `monitor.gateway_ready_timeout_ms`.
+- Added explicit fatal monitor stop propagation for disallowed intents and
+  fatal gateway errors.
+- Added transport state logging for ready, reconnecting, degraded, stopped, and
+  fatal states.
+- Added in-process replay suppression for live message create, edit, and delete
+  records.
+- Added lifecycle tests for ready timeout, disallowed intents, recoverable
+  disconnect, and replayed message suppression.
+
+Validation run:
+
+- `pnpm test` in
+  `/Users/tyler/nexus/home/projects/nexus/packages/adapters/discord`
