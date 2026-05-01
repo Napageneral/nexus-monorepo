@@ -7,6 +7,7 @@ Canonical inputs:
 
 - `/Users/tyler/nexus/home/projects/nexus/docs/spec-driven-development-workflow.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/specs/platform/messaging-adapter-live-sync-and-interactions.md`
+- `/Users/tyler/nexus/home/projects/nexus/docs/specs/platform/slack-openclaw-interaction-and-efficient-sync.md`
 - `/Users/tyler/nexus/home/projects/nexus/docs/validation/messaging-adapter-live-sync-validation-ladder.md`
 - `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/adapter-full-surface-compliance-standard.md`
 - `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/platform/adapter-validation-proof-ladder.md`
@@ -39,8 +40,10 @@ The target state is captured in:
 
 Current implementation state:
 
-- Slack native interactions are implemented and package-validated in the Slack
-  adapter, with live agent-use proof still pending.
+- Slack native interactions, OpenClaw-inspired choice authoring, approval
+  metadata, accepted-control feedback, richer input parsing, and the
+  event-first/user-token scheduler split are implemented and validated in the
+  Slack adapter.
 - Discord native components, modal handling, lifecycle enforcement, and package
   artifacts are implemented, package-validated, published as `discord@0.1.3`,
   installed on the hosted MoonSleep runtime, and proved through local and
@@ -50,10 +53,11 @@ Current implementation state:
 
 1. [MAL-001 Canonical Spec And OpenClaw Parity Map](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/completed/MAL-001-canonical-spec-and-openclaw-parity-map.md)
 2. [MAL-002 Slack Live Edit And Delete Revisions](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/completed/MAL-002-slack-live-edit-and-delete-revisions.md)
-3. [MAL-003 Slack Native Interactions](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/in-progress/MAL-003-slack-native-interactions.md)
+3. [MAL-003 Slack Native Interactions](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/completed/MAL-003-slack-native-interactions.md)
 4. [MAL-004 Discord Gateway Supervision](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/completed/MAL-004-discord-gateway-supervision.md)
 5. [MAL-005 Discord Components And Modals](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/completed/MAL-005-discord-components-and-modals.md)
 6. [MAL-006 Messaging Adapter Validation Ladder](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/completed/MAL-006-messaging-adapter-validation-ladder.md)
+7. [MAL-007 Slack Event-First Discovery And User-Token Scheduler](/Users/tyler/nexus/home/projects/nexus/docs/workplans/messaging-adapter-live-sync-board/completed/MAL-007-slack-event-first-discovery-and-user-token-scheduler.md)
 
 ## Status
 
