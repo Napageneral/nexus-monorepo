@@ -58,13 +58,9 @@ Retained proof references:
 
 ## Follow-Up
 
-Do not do a durable family-cursor refactor in this first fleet pass unless
-hosted Devenir volume proves the hourly 72-hour reread is materially expensive.
+The narrow Devenir follow-up is now complete in:
 
-If Zenoti becomes noisy in production, the next narrow improvement is to keep
-the 72-hour reconcile behavior but separate it from the hot monitor cycle:
+- [AFEA-016 Zenoti Devenir Hot Monitor And Reconcile Lanes](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/completed/AFEA-016-zenoti-devenir-hot-monitor-and-reconcile-lanes.md)
 
-- hot lane reads a shorter recent window
-- reconcile lane runs the 72-hour replay less frequently
-- invoice detail enrichment is suppressed for invoices already seen unchanged
-
+That pass kept the 72-hour reconcile behavior but separated it from the hot
+monitor cycle.
