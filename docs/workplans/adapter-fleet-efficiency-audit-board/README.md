@@ -33,7 +33,7 @@ review or hardening before we trust them in real client runtimes.
 Current narrowed execution order:
 
 1. `zenoti-emr` Devenir hot-monitor/reconcile and hosted rollout proof complete
-2. `github`, `gitlab`, and `bitbucket`
+2. `github`, `gitlab`, and `bitbucket` forge monitor/backfill efficiency complete
 3. `web-journey` and `web-rum`, if Devenir/MoonSleep web volume makes the
    web-signals lane materially important
 
@@ -85,8 +85,8 @@ Highest-priority gaps:
 - `jira`: monitor watermarks are process-local
 - `qase`: monitor scans all project families and overlap dedupe can re-emit
   unchanged rows
-- `github`, `gitlab`, `bitbucket`: forge monitors still do broad PR comment
-  scans; GitLab and Bitbucket historical backfills over-fetch PR artifacts
+- `github`, `gitlab`, `bitbucket`: forge monitor and backfill efficiency pass is
+  complete as `github@1.0.12`, `gitlab@1.0.12`, and `bitbucket@1.0.12`
 
 Secondary gaps:
 
@@ -112,7 +112,7 @@ Secondary gaps:
 5. [AFEA-015 TikTok Display Smart Polling And Snapshot Ledger](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/completed/AFEA-015-tiktok-display-smart-polling-and-snapshot-ledger.md)
 6. [AFEA-006 GOG Gmail Monitor Efficiency](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/completed/AFEA-006-gog-gmail-monitor-efficiency.md)
 7. [AFEA-005 Slack User Token Monitor Efficiency](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/completed/AFEA-005-slack-user-token-monitor-efficiency.md)
-8. [AFEA-007 Forge Adapter Monitor And Backfill Efficiency](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/not-started/AFEA-007-forge-adapter-monitor-and-backfill-efficiency.md)
+8. [AFEA-007 Forge Adapter Monitor And Backfill Efficiency](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/completed/AFEA-007-forge-adapter-monitor-and-backfill-efficiency.md)
 9. [AFEA-010 Web Signals Ingestion Efficiency](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/not-started/AFEA-010-web-signals-ingestion-efficiency.md)
 10. [AFEA-008 Jira Durable Monitor Watermarks](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/not-started/AFEA-008-jira-durable-monitor-watermarks.md)
 11. [AFEA-014 Confluence Backfill And Monitor Efficiency](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/not-started/AFEA-014-confluence-backfill-and-monitor-efficiency.md)

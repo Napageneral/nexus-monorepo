@@ -1,10 +1,6 @@
 package main
 
-import (
-	"time"
-
-	nexadapter "github.com/nexus-project/adapter-sdk-go"
-)
+import nexadapter "github.com/nexus-project/adapter-sdk-go"
 
 func main() {
 	adapter := newGitAdapter()
@@ -34,20 +30,20 @@ func adapterConfig(adapter *GitAdapter) nexadapter.DefineAdapterConfig[struct{}]
 			},
 		},
 		Capabilities: nexadapter.ChannelCapabilities{
-			TextLimit:             0,
-			SupportsMarkdown:      true,
-			MarkdownFlavor:        "standard",
-			SupportsThreads:       true,
-			SupportsCodeBlocks:    true,
-			SupportsTables:        false,
-			SupportsEmbeds:        false,
-			SupportsReactions:     false,
-			SupportsPolls:         false,
-			SupportsButtons:       false,
-			SupportsEdit:          false,
-			SupportsDelete:        false,
-			SupportsMedia:         false,
-			SupportsVoiceNotes:    false,
+			TextLimit:          0,
+			SupportsMarkdown:   true,
+			MarkdownFlavor:     "standard",
+			SupportsThreads:    true,
+			SupportsCodeBlocks: true,
+			SupportsTables:     false,
+			SupportsEmbeds:     false,
+			SupportsReactions:  false,
+			SupportsPolls:      false,
+			SupportsButtons:    false,
+			SupportsEdit:       false,
+			SupportsDelete:     false,
+			SupportsMedia:      false,
+			SupportsVoiceNotes: false,
 		},
 		Projection: &nexadapter.AdapterProjection{
 			Platform: "git",
@@ -93,8 +89,8 @@ func adapterConfig(adapter *GitAdapter) nexadapter.DefineAdapterConfig[struct{}]
 			Monitor: func(ctx nexadapter.AdapterContext[struct{}], emit nexadapter.EmitFunc) error {
 				return adapter.Monitor(ctx.Context, ctx.ConnectionID, emit)
 			},
-			Backfill: func(ctx nexadapter.AdapterContext[struct{}], since time.Time, emit nexadapter.EmitFunc) error {
-				return adapter.Backfill(ctx.Context, ctx.ConnectionID, since, emit)
+			Backfill: func(ctx nexadapter.AdapterContext[struct{}], window nexadapter.BackfillWindow, emit nexadapter.EmitFunc) error {
+				return adapter.BackfillWindow(ctx.Context, ctx.ConnectionID, window, emit)
 			},
 		},
 		Setup: nexadapter.SetupHandlers[struct{}]{

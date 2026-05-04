@@ -1,6 +1,6 @@
 {
   "id": "gitlab",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "displayName": "GitLab",
   "description": "GitLab adapter package for Nex.",
   "platform": "gitlab",

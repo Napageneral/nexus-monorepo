@@ -1,6 +1,6 @@
 {
   "id": "github",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "displayName": "GitHub",
   "description": "GitHub adapter package for Nex.",
   "platform": "github",

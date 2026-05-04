@@ -17,36 +17,40 @@ import (
 )
 
 type fakeProvider struct {
-	id            string
-	validate      func(context.Context, AccountConfig) error
-	currentUser   func(context.Context, AccountConfig) (string, error)
-	details       map[string]any
-	repos         []Repository
-	listRepos     func(context.Context, AccountConfig) ([]Repository, error)
-	discoverRepos func(context.Context, AccountConfig) ([]Repository, error)
-	getRepo       func(context.Context, AccountConfig, Repository) (*Repository, error)
-	branches      map[string][]string
-	listBranches  func(context.Context, AccountConfig, Repository) ([]string, error)
-	commits       map[string][]Commit
-	getCommits    func(context.Context, AccountConfig, Repository, time.Time) ([]Commit, error)
-	commitErr     map[string]error
-	commitDiff    map[string][]byte
-	prs           map[string][]PullRequest
-	getPRs        func(context.Context, AccountConfig, Repository, time.Time) ([]PullRequest, error)
-	prErr         map[string]error
-	prDiff        map[string][]byte
-	getPRDiff     func(context.Context, AccountConfig, Repository, string) ([]byte, error)
-	prArchive     map[string]*SourceArchive
-	comments      map[string][]Comment
-	getComments   func(context.Context, AccountConfig, Repository, string, time.Time) ([]Comment, error)
-	commentErr    map[string]error
-	commitCalls   []string
-	prFiles       map[string][]PullRequestFile
-	prReviews     map[string][]PullRequestReview
-	createPR      func(context.Context, AccountConfig, Repository, CreatePRRequest) (*PullRequest, error)
-	comment       func(context.Context, AccountConfig, Repository, string, string) (*Comment, error)
-	merge         func(context.Context, AccountConfig, Repository, string, MergeStrategy) error
-	branch        func(context.Context, AccountConfig, Repository, string, string) error
+	id             string
+	validate       func(context.Context, AccountConfig) error
+	currentUser    func(context.Context, AccountConfig) (string, error)
+	details        map[string]any
+	repos          []Repository
+	listRepos      func(context.Context, AccountConfig) ([]Repository, error)
+	discoverRepos  func(context.Context, AccountConfig) ([]Repository, error)
+	getRepo        func(context.Context, AccountConfig, Repository) (*Repository, error)
+	branches       map[string][]string
+	listBranches   func(context.Context, AccountConfig, Repository) ([]string, error)
+	commits        map[string][]Commit
+	getCommits     func(context.Context, AccountConfig, Repository, time.Time) ([]Commit, error)
+	commitErr      map[string]error
+	commitDiff     map[string][]byte
+	prs            map[string][]PullRequest
+	getPRs         func(context.Context, AccountConfig, Repository, time.Time) ([]PullRequest, error)
+	openPRs        map[string][]PullRequest
+	getOpenPRs     func(context.Context, AccountConfig, Repository) ([]PullRequest, error)
+	prErr          map[string]error
+	prDiff         map[string][]byte
+	getPRDiff      func(context.Context, AccountConfig, Repository, string) ([]byte, error)
+	prDiffCalls    []string
+	prArchive      map[string]*SourceArchive
+	prArchiveCalls []string
+	comments       map[string][]Comment
+	getComments    func(context.Context, AccountConfig, Repository, string, time.Time) ([]Comment, error)
+	commentErr     map[string]error
+	commitCalls    []string
+	prFiles        map[string][]PullRequestFile
+	prReviews      map[string][]PullRequestReview
+	createPR       func(context.Context, AccountConfig, Repository, CreatePRRequest) (*PullRequest, error)
+	comment        func(context.Context, AccountConfig, Repository, string, string) (*Comment, error)
+	merge          func(context.Context, AccountConfig, Repository, string, MergeStrategy) error
+	branch         func(context.Context, AccountConfig, Repository, string, string) error
 }
 
 func (f *fakeProvider) ID() string          { return f.id }
@@ -141,7 +145,25 @@ func (f *fakeProvider) GetPullRequests(ctx context.Context, config AccountConfig
 	return out, nil
 }
 
+func (f *fakeProvider) GetOpenPullRequests(ctx context.Context, config AccountConfig, repo Repository) ([]PullRequest, error) {
+	if f.getOpenPRs != nil {
+		return f.getOpenPRs(ctx, config, repo)
+	}
+	source := f.openPRs[repo.FullName]
+	if source == nil {
+		source = f.prs[repo.FullName]
+	}
+	out := make([]PullRequest, 0, len(source))
+	for _, pr := range source {
+		if pr.State == "open" {
+			out = append(out, pr)
+		}
+	}
+	return out, nil
+}
+
 func (f *fakeProvider) GetPullRequestDiff(_ context.Context, _ AccountConfig, _ Repository, prID string) ([]byte, error) {
+	f.prDiffCalls = append(f.prDiffCalls, prID)
 	if f.getPRDiff != nil {
 		return f.getPRDiff(context.Background(), AccountConfig{}, Repository{}, prID)
 	}
@@ -182,6 +204,7 @@ func (f *fakeProvider) GetPullRequestCommits(_ context.Context, _ AccountConfig,
 }
 
 func (f *fakeProvider) GetPullRequestSourceArchive(_ context.Context, _ AccountConfig, _ Repository, pr PullRequest) (*SourceArchive, error) {
+	f.prArchiveCalls = append(f.prArchiveCalls, pr.ID)
 	if f.prArchive == nil {
 		return nil, nil
 	}
@@ -563,6 +586,59 @@ func TestMonitor_EmitsCommentsForOlderOpenPRs(t *testing.T) {
 	}
 }
 
+func TestMonitor_UsesOpenOnlyPRDiscoveryForCommentSync(t *testing.T) {
+	stateDir := t.TempDir()
+	store, err := OpenWatermarkStore(stateDir)
+	if err != nil {
+		t.Fatalf("OpenWatermarkStore returned error: %v", err)
+	}
+	defer store.Close()
+
+	repo := Repository{FullName: "team/repo", Name: "repo", DefaultBranch: "main"}
+	var prSinceCalls []time.Time
+	openCalls := 0
+	provider := &fakeProvider{
+		id: "github",
+		getPRs: func(_ context.Context, _ AccountConfig, _ Repository, since time.Time) ([]PullRequest, error) {
+			if since.IsZero() {
+				t.Fatalf("monitor should not use zero-since all-PR scan for comment sync")
+			}
+			prSinceCalls = append(prSinceCalls, since)
+			return nil, nil
+		},
+		getOpenPRs: func(_ context.Context, _ AccountConfig, _ Repository) ([]PullRequest, error) {
+			openCalls++
+			return []PullRequest{{
+				ID: "115", Title: "Older PR", State: "open", AuthorEmail: "a@example.com", AuthorName: "A", UpdatedAt: 1_000, Repo: repo,
+			}}, nil
+		},
+		comments: map[string][]Comment{
+			"115": {{
+				ID: "9001", Body: "fresh comment", AuthorEmail: "a@example.com", AuthorName: "A", CreatedAt: 5_000, PRID: "115", Repo: repo,
+			}},
+		},
+	}
+	if err := store.Set("acct", repo.FullName+":pull_requests", 4_000, ""); err != nil {
+		t.Fatalf("store.Set returned error: %v", err)
+	}
+
+	var events []nexadapter.AdapterInboundRecord
+	emit := func(record any) { events = append(events, record.(nexadapter.AdapterInboundRecord)) }
+	if _, err := runMonitorCycle(context.Background(), "acct", provider, AccountConfig{Repositories: []Repository{repo}}, store, emit); err != nil {
+		t.Fatalf("runMonitorCycle returned error: %v", err)
+	}
+
+	if openCalls != 1 {
+		t.Fatalf("openCalls = %d, want 1", openCalls)
+	}
+	if len(prSinceCalls) != 1 || prSinceCalls[0].IsZero() {
+		t.Fatalf("prSinceCalls = %#v, want one non-zero updated-since call", prSinceCalls)
+	}
+	if len(events) != 1 || events[0].Payload.ExternalRecordID != "git:github:team/repo:pr/115:comment/9001" {
+		t.Fatalf("unexpected events: %#v", events)
+	}
+}
+
 func TestRunMonitorCycle_ReturnsCooldownOnRateLimit(t *testing.T) {
 	stateDir := t.TempDir()
 	store, err := OpenWatermarkStore(stateDir)
@@ -723,7 +799,7 @@ func TestSetupSubmit_ContinuesWhenAuthValidationIsRateLimitedButWorkspaceDiscove
 func TestSetupSubmit_UsesProviderCurrentUserForPrincipalWhenUsernameIsBlank(t *testing.T) {
 	t.Setenv("NEXUS_ADAPTER_STATE_DIR", t.TempDir())
 	fp := &fakeProvider{
-		id: "github",
+		id:       "github",
 		validate: func(context.Context, AccountConfig) error { return nil },
 		currentUser: func(context.Context, AccountConfig) (string, error) {
 			return "Napageneral", nil
@@ -1242,6 +1318,62 @@ func TestBackfill_OldDiffsSkipped(t *testing.T) {
 	}
 	if _, ok := events[599].Payload.Metadata["diff_available"]; ok {
 		t.Fatalf("newest commit should not have diff_available=false")
+	}
+}
+
+func TestBackfill_FullHistoricalBackfillCapsPullRequestArtifacts(t *testing.T) {
+	t.Setenv("NEXUS_ADAPTER_STATE_DIR", t.TempDir())
+
+	repo := Repository{FullName: "team/repo", Name: "repo", DefaultBranch: "main"}
+	prs := make([]PullRequest, 0, 60)
+	prDiffs := map[string][]byte{}
+	prArchives := map[string]*SourceArchive{}
+	for i := 0; i < 60; i++ {
+		id := fmt.Sprintf("%03d", i)
+		prs = append(prs, PullRequest{
+			ID:            id,
+			Title:         "PR " + id,
+			State:         "closed",
+			AuthorEmail:   "a@example.com",
+			AuthorName:    "A",
+			HeadCommitSHA: "sha-" + id,
+			UpdatedAt:     int64(i + 1),
+			Repo:          repo,
+		})
+		prDiffs[id] = []byte("diff")
+		prArchives[id] = &SourceArchive{Filename: "pr-" + id + ".tar.gz", ArchiveFormat: "tar.gz", Data: []byte("archive")}
+	}
+	provider := &fakeProvider{
+		id:        "github",
+		prs:       map[string][]PullRequest{repo.FullName: prs},
+		prDiff:    prDiffs,
+		prArchive: prArchives,
+	}
+
+	var events []nexadapter.AdapterInboundRecord
+	err := runBackfill(context.Background(), "acct", provider, AccountConfig{Repositories: []Repository{repo}}, time.Time{}, func(record any) {
+		events = append(events, record.(nexadapter.AdapterInboundRecord))
+	})
+	if err != nil {
+		t.Fatalf("runBackfill returned error: %v", err)
+	}
+	if len(provider.prDiffCalls) != backfillHistoricalPRArtifactLimit {
+		t.Fatalf("len(prDiffCalls) = %d, want %d", len(provider.prDiffCalls), backfillHistoricalPRArtifactLimit)
+	}
+	if len(provider.prArchiveCalls) != backfillHistoricalPRArtifactLimit {
+		t.Fatalf("len(prArchiveCalls) = %d, want %d", len(provider.prArchiveCalls), backfillHistoricalPRArtifactLimit)
+	}
+	if got := events[0].Payload.Metadata["diff_available"]; got != false {
+		t.Fatalf("oldest PR diff_available = %#v, want false", got)
+	}
+	if got := events[0].Payload.Metadata["source_archive_available"]; got != false {
+		t.Fatalf("oldest PR source_archive_available = %#v, want false", got)
+	}
+	if _, ok := events[len(events)-1].Payload.Metadata["diff_available"]; ok {
+		t.Fatalf("newest PR should not mark diff unavailable: %#v", events[len(events)-1].Payload.Metadata)
+	}
+	if _, ok := events[len(events)-1].Payload.Metadata["source_archive_available"]; ok {
+		t.Fatalf("newest PR should not mark source archive unavailable: %#v", events[len(events)-1].Payload.Metadata)
 	}
 }
 

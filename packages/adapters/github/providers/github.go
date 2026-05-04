@@ -495,8 +495,16 @@ func (p *GitHubProvider) GetCommitDiff(ctx context.Context, config core.AccountC
 }
 
 func (p *GitHubProvider) GetPullRequests(ctx context.Context, config core.AccountConfig, repo core.Repository, since time.Time) ([]core.PullRequest, error) {
+	return p.getPullRequests(ctx, config, repo, "all", since)
+}
+
+func (p *GitHubProvider) GetOpenPullRequests(ctx context.Context, config core.AccountConfig, repo core.Repository) ([]core.PullRequest, error) {
+	return p.getPullRequests(ctx, config, repo, "open", time.Time{})
+}
+
+func (p *GitHubProvider) getPullRequests(ctx context.Context, config core.AccountConfig, repo core.Repository, state string, since time.Time) ([]core.PullRequest, error) {
 	owner, name := splitRepoFullName(repo.FullName)
-	nextURL := p.apiURL(config, fmt.Sprintf("/repos/%s/%s/pulls?state=all&sort=updated&direction=desc&per_page=100", url.PathEscape(owner), url.PathEscape(name)))
+	nextURL := p.apiURL(config, fmt.Sprintf("/repos/%s/%s/pulls?state=%s&sort=updated&direction=desc&per_page=100", url.PathEscape(owner), url.PathEscape(name), url.QueryEscape(state)))
 	var prs []core.PullRequest
 	for nextURL != "" {
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)

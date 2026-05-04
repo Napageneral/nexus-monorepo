@@ -15,9 +15,11 @@ import (
 
 const (
 	adapterName                        = "Bitbucket Adapter"
-	adapterVersion                     = "1.0.11"
+	adapterVersion                     = "1.0.12"
 	platformID                         = "bitbucket"
 	backfillRateLimitRetryBudget       = 2
+	backfillHistoricalCommitDiffLimit  = 50
+	backfillHistoricalPRArtifactLimit  = 50
 	directReadMaxConsecutiveRateLimits = 11
 	directReadBaseCooldown             = 1500 * time.Millisecond
 	directReadMaxCooldown              = 20 * time.Second
@@ -318,6 +320,14 @@ func (a *GitAdapter) Monitor(ctx context.Context, account string, emit nexadapte
 }
 
 func (a *GitAdapter) Backfill(ctx context.Context, account string, since time.Time, emit nexadapter.EmitFunc) error {
+	return a.backfill(ctx, account, since, nil, emit)
+}
+
+func (a *GitAdapter) BackfillWindow(ctx context.Context, account string, window nexadapter.BackfillWindow, emit nexadapter.EmitFunc) error {
+	return a.backfill(ctx, account, window.Since, window.To, emit)
+}
+
+func (a *GitAdapter) backfill(ctx context.Context, account string, since time.Time, to *time.Time, emit nexadapter.EmitFunc) error {
 	accountID, err := nexadapter.RequireConnection(account)
 	if err != nil {
 		return err
@@ -326,7 +336,7 @@ func (a *GitAdapter) Backfill(ctx context.Context, account string, since time.Ti
 	if err != nil {
 		return err
 	}
-	return runBackfill(ctx, accountID, provider, config, since, emit)
+	return runBackfillWindow(ctx, accountID, provider, config, since, to, emit)
 }
 
 func (a *GitAdapter) CreateBranchMethod(ctx context.Context, req nexadapter.AdapterMethodRequest) (*gitMethodResult, error) {
@@ -723,6 +733,10 @@ func selectRepositories(available []Repository, selection string) ([]Repository,
 }
 
 func runBackfill(ctx context.Context, accountID string, provider Provider, config AccountConfig, since time.Time, emit nexadapter.EmitFunc) error {
+	return runBackfillWindow(ctx, accountID, provider, config, since, nil, emit)
+}
+
+func runBackfillWindow(ctx context.Context, accountID string, provider Provider, config AccountConfig, since time.Time, to *time.Time, emit nexadapter.EmitFunc) error {
 	type deferredBackfillRepo struct {
 		repo     Repository
 		cooldown time.Duration
@@ -732,7 +746,7 @@ func runBackfill(ctx context.Context, accountID string, provider Provider, confi
 	for len(pending) > 0 {
 		delayed := make([]deferredBackfillRepo, 0)
 		for _, repo := range pending {
-			err := runBackfillRepo(ctx, accountID, provider, config, since, repo, emit)
+			err := runBackfillRepo(ctx, accountID, provider, config, since, to, repo, emit)
 			if err == nil {
 				continue
 			}
@@ -776,8 +790,8 @@ func runBackfill(ctx context.Context, accountID string, provider Provider, confi
 	return nil
 }
 
-func runBackfillRepo(ctx context.Context, accountID string, provider Provider, config AccountConfig, since time.Time, repo Repository, emit nexadapter.EmitFunc) error {
-	diffLimitApplies := !since.IsZero() && time.Since(since) > 90*24*time.Hour
+func runBackfillRepo(ctx context.Context, accountID string, provider Provider, config AccountConfig, since time.Time, to *time.Time, repo Repository, emit nexadapter.EmitFunc) error {
+	diffLimitApplies := since.IsZero() || time.Since(since) > 90*24*time.Hour
 
 	commits, err := retryBackfillRead(ctx, accountID, provider, config, repo, "commits", func() ([]Commit, error) {
 		return provider.GetCommits(ctx, config, repo, since)
@@ -787,10 +801,13 @@ func runBackfillRepo(ctx context.Context, accountID string, provider Provider, c
 	}
 	sort.Slice(commits, func(i, j int) bool { return commits[i].Timestamp < commits[j].Timestamp })
 	diffStart := 0
-	if diffLimitApplies && len(commits) > 500 {
-		diffStart = len(commits) - 500
+	if diffLimitApplies && len(commits) > backfillHistoricalCommitDiffLimit {
+		diffStart = len(commits) - backfillHistoricalCommitDiffLimit
 	}
 	for i, commit := range commits {
+		if backfillTimestampAfter(commit.Timestamp, to) {
+			continue
+		}
 		var diff []byte
 		if !diffLimitApplies || i >= diffStart {
 			diff, err = retryBackfillRead(ctx, accountID, provider, config, repo, "commit_diff", func() ([]byte, error) {
@@ -817,32 +834,51 @@ func runBackfillRepo(ctx context.Context, accountID string, provider Provider, c
 		return err
 	}
 	sort.Slice(prs, func(i, j int) bool { return prs[i].UpdatedAt < prs[j].UpdatedAt })
-	for _, pr := range prs {
-		diff, err := retryBackfillRead(ctx, accountID, provider, config, repo, "pull_request_diff", func() ([]byte, error) {
-			return provider.GetPullRequestDiff(ctx, config, repo, pr.ID)
-		})
-		if err != nil {
-			return err
+	prArtifactStart := 0
+	if diffLimitApplies && len(prs) > backfillHistoricalPRArtifactLimit {
+		prArtifactStart = len(prs) - backfillHistoricalPRArtifactLimit
+	}
+	for prIndex, pr := range prs {
+		if backfillTimestampAfter(pr.UpdatedAt, to) {
+			continue
 		}
-		sourceArchive, err := retryBackfillRead(ctx, accountID, provider, config, repo, "pull_request_source_archive", func() (*SourceArchive, error) {
-			return provider.GetPullRequestSourceArchive(ctx, config, repo, pr)
-		})
-		if err != nil {
-			return err
+		var diff []byte
+		diffAvailable := false
+		var archiveAttachment *nexadapter.Attachment
+		prArtifactEligible := !diffLimitApplies || len(prs) <= backfillHistoricalPRArtifactLimit || prIndex >= prArtifactStart
+		if prArtifactEligible {
+			diff, err = retryBackfillRead(ctx, accountID, provider, config, repo, "pull_request_diff", func() ([]byte, error) {
+				return provider.GetPullRequestDiff(ctx, config, repo, pr.ID)
+			})
+			if err != nil {
+				return err
+			}
+			diffAvailable = len(diff) > 0
+			sourceArchive, err := retryBackfillRead(ctx, accountID, provider, config, repo, "pull_request_source_archive", func() (*SourceArchive, error) {
+				return provider.GetPullRequestSourceArchive(ctx, config, repo, pr)
+			})
+			if err != nil {
+				return err
+			}
+			archiveAttachment, err = persistPullRequestSourceArchive(adapterStateDir(), provider, repo, pr, sourceArchive)
+			if err != nil {
+				return err
+			}
 		}
-		archiveAttachment, err := persistPullRequestSourceArchive(adapterStateDir(), provider, repo, pr, sourceArchive)
-		if err != nil {
-			return err
+		event := buildPullRequestEvent(accountID, provider, repo, pr, diff, archiveAttachment)
+		if event.Payload.Metadata == nil {
+			event.Payload.Metadata = map[string]any{}
 		}
-		emit(buildPullRequestEvent(accountID, provider, repo, pr, diff, archiveAttachment))
+		if !diffAvailable {
+			event.Payload.Metadata["diff_available"] = false
+		}
+		if archiveAttachment == nil {
+			event.Payload.Metadata["source_archive_available"] = false
+		}
+		emit(event)
 	}
 
-	commentPRs, err := retryBackfillRead(ctx, accountID, provider, config, repo, "pull_request_comment_scan_set", func() ([]PullRequest, error) {
-		return provider.GetPullRequests(ctx, config, repo, since)
-	})
-	if err != nil {
-		return err
-	}
+	commentPRs := append([]PullRequest(nil), prs...)
 	sort.Slice(commentPRs, func(i, j int) bool {
 		if commentPRs[i].UpdatedAt == commentPRs[j].UpdatedAt {
 			return commentPRs[i].ID < commentPRs[j].ID
@@ -850,6 +886,9 @@ func runBackfillRepo(ctx context.Context, accountID string, provider Provider, c
 		return commentPRs[i].UpdatedAt < commentPRs[j].UpdatedAt
 	})
 	for _, pr := range commentPRs {
+		if backfillTimestampAfter(pr.UpdatedAt, to) {
+			continue
+		}
 		comments, err := retryBackfillRead(ctx, accountID, provider, config, repo, "pull_request_comments", func() ([]Comment, error) {
 			return provider.GetPullRequestComments(ctx, config, repo, pr.ID, since)
 		})
@@ -858,11 +897,21 @@ func runBackfillRepo(ctx context.Context, accountID string, provider Provider, c
 		}
 		sort.Slice(comments, func(i, j int) bool { return comments[i].CreatedAt < comments[j].CreatedAt })
 		for _, comment := range comments {
+			if backfillTimestampAfter(comment.CreatedAt, to) {
+				continue
+			}
 			emit(buildCommentEvent(accountID, provider, repo, pr, comment))
 		}
 	}
 
 	return nil
+}
+
+func backfillTimestampAfter(timestamp int64, to *time.Time) bool {
+	if to == nil || timestamp <= 0 {
+		return false
+	}
+	return timestamp > to.UTC().UnixMilli()
 }
 
 func shouldAbortBackfill(err error) bool {

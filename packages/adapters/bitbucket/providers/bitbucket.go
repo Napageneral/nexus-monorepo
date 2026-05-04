@@ -708,6 +708,27 @@ func (p *BitbucketProvider) GetPullRequests(ctx context.Context, config core.Acc
 	return prs, err
 }
 
+func (p *BitbucketProvider) GetOpenPullRequests(ctx context.Context, config core.AccountConfig, repo core.Repository) ([]core.PullRequest, error) {
+	prs := make([]core.PullRequest, 0)
+	for page := 1; ; page++ {
+		result, err := p.ListPullRequestsPage(ctx, config, repo, core.PullRequestListOptions{
+			States:  []string{"OPEN"},
+			PageLen: 50,
+			Page:    page,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if result == nil {
+			return prs, nil
+		}
+		prs = append(prs, result.PullRequests...)
+		if strings.TrimSpace(result.Next) == "" {
+			return prs, nil
+		}
+	}
+}
+
 func (p *BitbucketProvider) GetPullRequest(ctx context.Context, config core.AccountConfig, repo core.Repository, prID string) (*core.PullRequest, error) {
 	workspace, name := splitRepoFullName(repo.FullName)
 	request, err := http.NewRequestWithContext(

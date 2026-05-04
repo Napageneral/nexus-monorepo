@@ -16,7 +16,7 @@ import (
 
 const (
 	adapterName                        = "GitHub Adapter"
-	adapterVersion                     = "1.0.11"
+	adapterVersion                     = "1.0.12"
 	platformID                         = "github"
 	backfillMaxConsecutiveRateLimits   = 5
 	backfillMaxConsecutiveTransientErr = 4
@@ -32,8 +32,8 @@ const (
 )
 
 type backfillRetryBudget struct {
-	maxRateLimitRetries   int
-	maxTransientRetries   int
+	maxRateLimitRetries int
+	maxTransientRetries int
 }
 
 var (
@@ -398,6 +398,14 @@ func (a *GitAdapter) Monitor(ctx context.Context, account string, emit nexadapte
 }
 
 func (a *GitAdapter) Backfill(ctx context.Context, account string, since time.Time, emit nexadapter.EmitFunc) error {
+	return a.backfill(ctx, account, since, nil, emit)
+}
+
+func (a *GitAdapter) BackfillWindow(ctx context.Context, account string, window nexadapter.BackfillWindow, emit nexadapter.EmitFunc) error {
+	return a.backfill(ctx, account, window.Since, window.To, emit)
+}
+
+func (a *GitAdapter) backfill(ctx context.Context, account string, since time.Time, to *time.Time, emit nexadapter.EmitFunc) error {
 	accountID, err := nexadapter.RequireConnection(account)
 	if err != nil {
 		return err
@@ -406,7 +414,7 @@ func (a *GitAdapter) Backfill(ctx context.Context, account string, since time.Ti
 	if err != nil {
 		return err
 	}
-	return runBackfill(ctx, accountID, provider, config, since, emit)
+	return runBackfillWindow(ctx, accountID, provider, config, since, to, emit)
 }
 
 func (a *GitAdapter) CreateBranchMethod(ctx context.Context, req nexadapter.AdapterMethodRequest) (*gitMethodResult, error) {
@@ -846,7 +854,11 @@ func ingestCommitScopeRepository(repo Repository) Repository {
 }
 
 func runBackfill(ctx context.Context, accountID string, provider Provider, config AccountConfig, since time.Time, emit nexadapter.EmitFunc) error {
-	diffLimitApplies := !since.IsZero() && time.Since(since) > 90*24*time.Hour
+	return runBackfillWindow(ctx, accountID, provider, config, since, nil, emit)
+}
+
+func runBackfillWindow(ctx context.Context, accountID string, provider Provider, config AccountConfig, since time.Time, to *time.Time, emit nexadapter.EmitFunc) error {
+	diffLimitApplies := since.IsZero() || time.Since(since) > 90*24*time.Hour
 	sinceMillis := since.UnixMilli()
 	repositories := append([]Repository(nil), config.Repositories...)
 	sort.SliceStable(repositories, func(i, j int) bool {
@@ -902,6 +914,9 @@ func runBackfill(ctx context.Context, accountID string, provider Provider, confi
 			diffStart = len(commits) - backfillHistoricalCommitDiffLimit
 		}
 		for i, commit := range commits {
+			if backfillTimestampAfter(commit.Timestamp, to) {
+				continue
+			}
 			var diff []byte
 			diffAvailable := false
 			if !diffLimitApplies || i >= diffStart {
@@ -950,6 +965,9 @@ func runBackfill(ctx context.Context, accountID string, provider Provider, confi
 			prArtifactStart = len(prs) - backfillHistoricalPRArtifactLimit
 		}
 		for prIndex, pr := range prs {
+			if backfillTimestampAfter(pr.UpdatedAt, to) {
+				continue
+			}
 			var diff []byte
 			diffAvailable := false
 			var archiveAttachment *nexadapter.Attachment
@@ -1009,6 +1027,9 @@ func runBackfill(ctx context.Context, accountID string, provider Provider, confi
 			return commentPRs[i].UpdatedAt < commentPRs[j].UpdatedAt
 		})
 		for _, pr := range commentPRs {
+			if backfillTimestampAfter(pr.UpdatedAt, to) {
+				continue
+			}
 			comments, err := retryBackfillRead(ctx, accountID, provider, config, repo, "pull_request_comments", backfillPrimaryRetryBudget, func() ([]Comment, error) {
 				return provider.GetPullRequestComments(ctx, config, repo, pr.ID, since)
 			})
@@ -1028,6 +1049,9 @@ func runBackfill(ctx context.Context, accountID string, provider Provider, confi
 			)
 			sort.Slice(comments, func(i, j int) bool { return comments[i].CreatedAt < comments[j].CreatedAt })
 			for _, comment := range comments {
+				if backfillTimestampAfter(comment.CreatedAt, to) {
+					continue
+				}
 				emit(buildCommentEvent(accountID, provider, repo, pr, comment))
 			}
 		}
@@ -1040,6 +1064,13 @@ func runBackfill(ctx context.Context, accountID string, provider Provider, confi
 		)
 	}
 	return nil
+}
+
+func backfillTimestampAfter(timestamp int64, to *time.Time) bool {
+	if to == nil || timestamp <= 0 {
+		return false
+	}
+	return timestamp > to.UTC().UnixMilli()
 }
 
 func shouldAbortBackfill(err error) bool {

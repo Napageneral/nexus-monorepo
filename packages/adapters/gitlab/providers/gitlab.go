@@ -250,7 +250,29 @@ func (p *GitLabProvider) GetCommitDiff(ctx context.Context, config core.AccountC
 }
 
 func (p *GitLabProvider) GetPullRequests(ctx context.Context, config core.AccountConfig, repo core.Repository, since time.Time) ([]core.PullRequest, error) {
-	nextURL := p.apiURL(config, fmt.Sprintf("/projects/%s/merge_requests?state=all&order_by=updated_at&sort=desc&per_page=100", url.PathEscape(repo.ID)))
+	return p.getPullRequests(ctx, config, repo, "all", since)
+}
+
+func (p *GitLabProvider) GetOpenPullRequests(ctx context.Context, config core.AccountConfig, repo core.Repository) ([]core.PullRequest, error) {
+	return p.getPullRequests(ctx, config, repo, "opened", time.Time{})
+}
+
+func (p *GitLabProvider) getPullRequests(ctx context.Context, config core.AccountConfig, repo core.Repository, state string, since time.Time) ([]core.PullRequest, error) {
+	mergeRequestsURL := func(page string) string {
+		query := url.Values{}
+		query.Set("state", state)
+		query.Set("order_by", "updated_at")
+		query.Set("sort", "desc")
+		query.Set("per_page", "100")
+		if !since.IsZero() {
+			query.Set("updated_after", since.UTC().Format(time.RFC3339))
+		}
+		if strings.TrimSpace(page) != "" {
+			query.Set("page", page)
+		}
+		return p.apiURL(config, fmt.Sprintf("/projects/%s/merge_requests?%s", url.PathEscape(repo.ID), query.Encode()))
+	}
+	nextURL := mergeRequestsURL("")
 	var prs []core.PullRequest
 	for nextURL != "" {
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
@@ -290,10 +312,12 @@ func (p *GitLabProvider) GetPullRequests(ctx context.Context, config core.Accoun
 			response.Body.Close()
 			return nil, err
 		}
+		stopPagination := false
 		for _, item := range payload {
 			updatedAt := parseMillis(item.UpdatedAt)
 			if !since.IsZero() && updatedAt < since.UnixMilli() {
-				continue
+				stopPagination = true
+				break
 			}
 			reviewers := make([]string, 0, len(item.Reviewers))
 			for _, reviewer := range item.Reviewers {
@@ -303,7 +327,7 @@ func (p *GitLabProvider) GetPullRequests(ctx context.Context, config core.Accoun
 				ID:            strconv.Itoa(item.IID),
 				Title:         item.Title,
 				Description:   item.Description,
-				State:         strings.ToLower(item.State),
+				State:         normalizeGitLabPRState(item.State),
 				AuthorEmail:   item.Author.Username,
 				AuthorName:    firstNonBlank(item.Author.Name, item.Author.Username),
 				HeadCommitSHA: item.SHA,
@@ -317,13 +341,22 @@ func (p *GitLabProvider) GetPullRequests(ctx context.Context, config core.Accoun
 		}
 		nextPage := strings.TrimSpace(response.Header.Get("X-Next-Page"))
 		response.Body.Close()
-		if nextPage == "" {
+		if stopPagination || nextPage == "" {
 			nextURL = ""
 		} else {
-			nextURL = p.apiURL(config, fmt.Sprintf("/projects/%s/merge_requests?state=all&order_by=updated_at&sort=desc&per_page=100&page=%s", url.PathEscape(repo.ID), url.QueryEscape(nextPage)))
+			nextURL = mergeRequestsURL(nextPage)
 		}
 	}
 	return prs, nil
+}
+
+func normalizeGitLabPRState(state string) string {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "opened", "open":
+		return "open"
+	default:
+		return strings.ToLower(strings.TrimSpace(state))
+	}
 }
 
 func (p *GitLabProvider) GetPullRequestDiff(ctx context.Context, config core.AccountConfig, repo core.Repository, prID string) ([]byte, error) {

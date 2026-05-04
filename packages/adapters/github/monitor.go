@@ -16,6 +16,10 @@ type monitorCycleResult struct {
 	RateLimitedRepo  string
 }
 
+type openPullRequestLister interface {
+	GetOpenPullRequests(ctx context.Context, config AccountConfig, repo Repository) ([]PullRequest, error)
+}
+
 func runMonitorCycle(ctx context.Context, accountID string, provider Provider, config AccountConfig, store WatermarkStore, emit nexadapter.EmitFunc) (monitorCycleResult, error) {
 	for _, repo := range config.Repositories {
 		if err := syncRepository(ctx, accountID, provider, config, repo, store, emit); err != nil {
@@ -97,11 +101,10 @@ func syncRepository(ctx context.Context, accountID string, provider Provider, co
 		}
 	}
 
-	openPRs, err := provider.GetPullRequests(ctx, config, repo, time.Time{})
+	commentPRs, err := pullRequestsForCommentSync(ctx, provider, config, repo, prs)
 	if err != nil {
 		return err
 	}
-	commentPRs := mergePullRequests(prs, filterOpenPullRequests(openPRs))
 	sort.Slice(commentPRs, func(i, j int) bool {
 		if commentPRs[i].UpdatedAt == commentPRs[j].UpdatedAt {
 			return commentPRs[i].ID < commentPRs[j].ID
@@ -133,6 +136,18 @@ func syncRepository(ctx context.Context, accountID string, provider Provider, co
 		}
 	}
 	return nil
+}
+
+func pullRequestsForCommentSync(ctx context.Context, provider Provider, config AccountConfig, repo Repository, changedPRs []PullRequest) ([]PullRequest, error) {
+	openPRs := filterOpenPullRequests(changedPRs)
+	if lister, ok := provider.(openPullRequestLister); ok {
+		listed, err := lister.GetOpenPullRequests(ctx, config, repo)
+		if err != nil {
+			return nil, err
+		}
+		openPRs = mergePullRequests(openPRs, filterOpenPullRequests(listed))
+	}
+	return mergePullRequests(changedPRs, openPRs), nil
 }
 
 func filterOpenPullRequests(prs []PullRequest) []PullRequest {

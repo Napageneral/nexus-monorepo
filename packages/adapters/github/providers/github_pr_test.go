@@ -45,6 +45,42 @@ func TestGitHubGetPullRequests_MapsHeadCommitSHA(t *testing.T) {
 	}
 }
 
+func TestGitHubGetOpenPullRequests_UsesOpenOnlyListing(t *testing.T) {
+	var requestedState string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedState = r.URL.Query().Get("state")
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"number":     42,
+				"title":      "Ship it",
+				"body":       "desc",
+				"state":      "open",
+				"created_at": "2026-03-09T10:00:00Z",
+				"updated_at": "2026-03-09T11:00:00Z",
+				"user":       map[string]any{"login": "alice"},
+				"head":       map[string]any{"ref": "feature", "sha": "6c71262370e3ebd290c4f2cf10cdee4531f03937"},
+				"base":       map[string]any{"ref": "main"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &GitHubProvider{}
+	prs, err := provider.GetOpenPullRequests(context.Background(), core.AccountConfig{
+		Host:  server.URL,
+		Token: "token",
+	}, core.Repository{FullName: "acme-org/api-server", Name: "api-server"})
+	if err != nil {
+		t.Fatalf("GetOpenPullRequests returned error: %v", err)
+	}
+	if requestedState != "open" {
+		t.Fatalf("state query = %q, want open", requestedState)
+	}
+	if len(prs) != 1 || prs[0].ID != "42" {
+		t.Fatalf("prs = %#v", prs)
+	}
+}
+
 func TestGitHubGetPullRequestSourceArchive_UsesHeadCommitSHA(t *testing.T) {
 	var requestedPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

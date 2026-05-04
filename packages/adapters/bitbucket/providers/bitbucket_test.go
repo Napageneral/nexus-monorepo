@@ -367,6 +367,65 @@ func TestBitbucketListPullRequestsPage_DoesNotExpandAbbreviatedHeadCommitSHA(t *
 	}
 }
 
+func TestBitbucketGetOpenPullRequests_UsesOpenOnlyPages(t *testing.T) {
+	requestedStates := make([]string, 0)
+	requestedPages := make([]string, 0)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/2.0/repositories/vrtly-workspace/api/pullrequests" {
+			http.NotFound(w, r)
+			return
+		}
+		requestedStates = append(requestedStates, r.URL.Query()["state"]...)
+		requestedPages = append(requestedPages, r.URL.Query().Get("page"))
+		page := r.URL.Query().Get("page")
+		if page == "1" {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"page":    1,
+				"pagelen": 50,
+				"next":    "page-2",
+				"values": []map[string]any{{
+					"id":         113,
+					"title":      "Ship stale PR",
+					"state":      "OPEN",
+					"created_on": "2026-03-09T10:00:00Z",
+					"updated_on": "2026-03-09T11:00:00Z",
+					"author":     map[string]any{"display_name": "Alice"},
+					"source": map[string]any{
+						"branch": map[string]any{"name": "feature/stale"},
+						"commit": map[string]any{"hash": "347d1f6299d1"},
+					},
+					"destination": map[string]any{"branch": map[string]any{"name": "main"}},
+				}},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"page":    2,
+			"pagelen": 50,
+			"values":  []map[string]any{},
+		})
+	}))
+	defer server.Close()
+
+	provider := &BitbucketProvider{}
+	prs, err := provider.GetOpenPullRequests(context.Background(), core.AccountConfig{
+		Host:  server.URL,
+		Token: "token",
+	}, core.Repository{FullName: "vrtly-workspace/api", Name: "api"})
+	if err != nil {
+		t.Fatalf("GetOpenPullRequests returned error: %v", err)
+	}
+	if strings.Join(requestedStates, ",") != "OPEN,OPEN" {
+		t.Fatalf("requested states = %#v, want OPEN on each page", requestedStates)
+	}
+	if strings.Join(requestedPages, ",") != "1,2" {
+		t.Fatalf("requested pages = %#v, want pages 1 and 2", requestedPages)
+	}
+	if len(prs) != 1 || prs[0].ID != "113" || prs[0].State != "open" {
+		t.Fatalf("prs = %#v", prs)
+	}
+}
+
 func TestBitbucketGetPullRequestSourceArchive_UsesRepositoryHost(t *testing.T) {
 	var requestedPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
