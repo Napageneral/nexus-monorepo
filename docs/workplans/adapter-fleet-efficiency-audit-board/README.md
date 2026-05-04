@@ -109,7 +109,7 @@ Secondary gaps:
 
 1. [AFEA-002 Zenoti Durable Live Monitor](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/completed/AFEA-002-zenoti-durable-live-monitor.md)
 2. [AFEA-016 Zenoti Devenir Hot Monitor And Reconcile Lanes](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/completed/AFEA-016-zenoti-devenir-hot-monitor-and-reconcile-lanes.md)
-3. [AFEA-017 Hosted Runtime Backfill Upper Bound Rollout](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/not-started/AFEA-017-hosted-runtime-backfill-upper-bound-rollout.md)
+3. [AFEA-017 Hosted Runtime Backfill Upper Bound Rollout](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/completed/AFEA-017-hosted-runtime-backfill-upper-bound-rollout.md)
 4. [AFEA-003 TikTok Display Live Monitor](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/completed/AFEA-003-tiktok-display-live-monitor.md)
 5. [AFEA-015 TikTok Display Smart Polling And Snapshot Ledger](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/completed/AFEA-015-tiktok-display-smart-polling-and-snapshot-ledger.md)
 6. [AFEA-006 GOG Gmail Monitor Efficiency](/Users/tyler/nexus/home/projects/nexus/docs/workplans/adapter-fleet-efficiency-audit-board/completed/AFEA-006-gog-gmail-monitor-efficiency.md)
