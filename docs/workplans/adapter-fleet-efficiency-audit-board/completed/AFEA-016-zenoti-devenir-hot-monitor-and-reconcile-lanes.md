@@ -122,3 +122,30 @@ persist the requested `to` upper bound in job input. The adapter package and
 cleanroom proof both honor bounded `to` / staged `until`; the hosted runtime
 API path needs a core-runtime rollout before hosted manual backfills can prove
 that upper bound through `adapters.connections.backfill`.
+
+May 4 hosted restart follow-up:
+
+- A second hosted restart pass exposed that `zenoti-emr@0.1.4` health did not
+  emit explicit `account_contact`, so startup rehydration could not
+  authoritatively ground the Devenir local receiver after service restart.
+- `zenoti-emr@0.1.5` fixes that adapter-side gap by returning:
+  - `account = 1fc18e47-2958-4eb9-ae67-4c5b98017010`
+  - `account_contact.platform = zenoti-emr`
+  - `account_contact.space_id = 433ee0e5-16e3-425d-bfaf-f192b7b5f9c4`
+  - `account_contact.contact_id = 1fc18e47-2958-4eb9-ae67-4c5b98017010`
+- Frontdoor catalog now also publishes `zenoti-emr@0.1.5`:
+  - `release_id = rel-zenoti-emr-0.1.5`
+  - `variant_id = variant-zenoti-emr-0.1.5-linux-arm64`
+  - sha256 `a2003039ed12577a019c4cc30f574d92813a01a1cdefc76adbc0263db971c11c`
+- Devenir hosted server `srv-57f32449-320` was upgraded from `0.1.4` to
+  `0.1.5`, then `nex-runtime.service` was restarted.
+- Post-restart proof:
+  - runtime PID changed from `642628` to `643704`
+  - `adapter.info` reports `zenoti-emr@0.1.5`
+  - `adapters.connections.status` reports `connected` with no error
+  - `adapter.health` reports `connected = true` with the explicit
+    `account_contact`
+  - `adapters.connections.livesync.status` reports `enabled = true`
+  - runtime health reports one running, healthy `zenoti-emr` monitor
+- proof bundle:
+  `/Users/tyler/nexus/state/artifacts/validation/hosted-zenoti-0.1.5-restart-proof/20260504T185431Z`

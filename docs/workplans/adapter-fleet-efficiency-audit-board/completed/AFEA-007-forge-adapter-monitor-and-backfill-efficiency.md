@@ -100,6 +100,40 @@ nexus package release /Users/tyler/nexus/home/projects/nexus/packages/adapters/b
 The generated tarballs were checked to confirm ignored local `state/` files are
 not included.
 
+Hosted Linux arm64 variants were built from the validated `1.0.12` package
+archives and published to production Frontdoor on May 4, 2026:
+
+- `github@1.0.12`
+  - `release_id = rel-github-1.0.12`
+  - `variant_id = variant-github-1.0.12-linux-arm64`
+  - sha256 `54ce998020224cc9d25b72f3935293d59dd2846c618136bef7dbe56a43599460`
+- `gitlab@1.0.12`
+  - `release_id = rel-gitlab-1.0.12`
+  - `variant_id = variant-gitlab-1.0.12-linux-arm64`
+  - sha256 `0e974d915d628e18fbe25f224b31762d01dda4b4cea98c1ffe111f1cdcfacab0`
+- `bitbucket@1.0.12`
+  - `release_id = rel-bitbucket-1.0.12`
+  - `variant_id = variant-bitbucket-1.0.12-linux-arm64`
+  - sha256 `1fb199ee241a8370ca975a25d0a5318595eb49cb5d5942e1310169c873e470a4`
+
+Hosted Devenir install/restart proof:
+
+- Frontdoor server `srv-57f32449-320`, tenant `t-673f3131-f16`
+- all three adapters were installed through the public Frontdoor adapter
+  lifecycle path and report `active_version = 1.0.12`
+- `nex-runtime.service` was restarted; runtime PID changed from `640641` to
+  `642362`, and later from `642628` to `643704` during the Zenoti restart proof
+- post-restart `adapter.info` reflected:
+  - `github@1.0.12`, `18` methods
+  - `gitlab@1.0.12`, `4` methods
+  - `bitbucket@1.0.12`, `14` methods
+- the hosted tenant currently has no configured GitHub/GitLab/Bitbucket
+  connections, so this proof covers package publication, installation,
+  restart-safe reflection, and disconnected setup surfaces rather than provider
+  read/backfill execution
+- proof bundle:
+  `/Users/tyler/nexus/state/artifacts/validation/hosted-forge-package-pass/20260504T184601Z`
+
 ## Acceptance
 
 1. No-change monitor cycles no longer page old closed PRs.

@@ -7,7 +7,7 @@ upper bounds through `adapters.connections.backfill` on hosted runtimes.
 
 ## Why
 
-The `zenoti-emr@0.1.4` package and cleanroom proof both honor bounded
+The `zenoti-emr@0.1.5` package and retained cleanroom proof both honor bounded
 backfill:
 
 - `records.backfill` receives `BackfillWindow.To`
@@ -29,7 +29,7 @@ public RPC path, even though the adapter package supports it.
 3. A hosted Devenir bounded force replay records both `since` and `to` in job
    input, output, and metrics.
 4. The proof does not mutate Zenoti and does not require an all-time replay.
-5. Runtime restart still rehydrates the installed `zenoti-emr@0.1.4` package
+5. Runtime restart still rehydrates the installed `zenoti-emr@0.1.5` package
    and the Devenir connection.
 
 ## Current Evidence
@@ -37,12 +37,15 @@ public RPC path, even though the adapter package supports it.
 - hosted server: `srv-57f32449-320`
 - tenant: `t-673f3131-f16`
 - connection: `1fc18e47-2958-4eb9-ae67-4c5b98017010`
-- installed package: `zenoti-emr@0.1.4`
+- installed package: `zenoti-emr@0.1.5`
 - May 4 hosted bounded force replay from `2026-05-02T00:00:00Z` processed
   `21` records in about `8s`, but the job input omitted the requested `to`
   value
 - hosted package reflection reports `records.backfill.stage.until` as a
   string
+- hosted restart/live-monitor proof after the `0.1.5` upgrade reports
+  `adapters.connections.status = connected`, live sync enabled, and one
+  running healthy `zenoti-emr` monitor
 
 ## Notes
 

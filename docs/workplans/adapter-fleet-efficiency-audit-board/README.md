@@ -73,9 +73,11 @@ Adapters already close to the desired model:
 Highest-priority gaps:
 
 - `zenoti-emr`: Devenir-critical outcome adapter now separates hot polling from
-  full reconcile replay, is published as `0.1.4`, and has hosted Devenir
-  install/restart proof; the remaining upper-bound gap is in the deployed
-  core-runtime `adapters.connections.backfill` RPC path, not the package
+  full reconcile replay, is published as `0.1.5`, emits explicit
+  `account_contact` for hosted restart grounding, and has hosted Devenir
+  install/restart/live-monitor proof; the remaining upper-bound gap is in the
+  deployed core-runtime `adapters.connections.backfill` RPC path, not the
+  package
 - `tiktok-display`: smart polling implementation, copied-package cleanroom
   proof, and hosted MoonSleep runtime proof are complete
 - `google-business-profile`: monitor lacks durable family lanes and revision
