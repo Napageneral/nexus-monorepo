@@ -854,6 +854,51 @@ export type MemoryReviewAttachment = {
   local_path: string | null;
   url: string | null;
   metadata: Record<string, unknown> | null;
+  interpretation_text?: string | null;
+  interpretation_status?: string | null;
+  interpretation_model?: string | null;
+  interpretation_updated_at?: number | null;
+  interpretation_updated_at_iso?: string | null;
+};
+
+export type MemoryReviewLink = {
+  id: string;
+  raw_url: string;
+  normalized_url: string;
+  source_field: string;
+  text_start: number;
+  text_end: number | null;
+  preview_attachment_ids: unknown[];
+  extraction_confidence: number | null;
+  extraction_notes: string | null;
+  enrichment_status: string | null;
+  enrichment_title: string | null;
+  enrichment_description: string | null;
+  enrichment_summary_text: string | null;
+  enrichment_extracted_text: string | null;
+  enrichment_final_url: string | null;
+  enrichment_canonical_url: string | null;
+  enrichment_site_name: string | null;
+  enrichment_content_type: string | null;
+  enrichment_http_status: number | null;
+  enrichment_access_status: string | null;
+  enrichment_evidence_basis: Record<string, unknown> | null;
+  enrichment_model: string | null;
+  enrichment_updated_at: number | null;
+  enrichment_updated_at_iso: string | null;
+};
+
+export type MemoryReviewTimelineParticipant = {
+  role: "sender" | "receiver" | "thread";
+  label: string;
+  entity_id: string | null;
+  entity_name: string | null;
+  entity_type: string | null;
+  is_user: boolean;
+  contact_id: string | null;
+  contact_name: string | null;
+  contact_platform: string | null;
+  raw_id: string | null;
 };
 
 export type MemoryReviewTimelineEvent = {
@@ -862,11 +907,20 @@ export type MemoryReviewTimelineEvent = {
   thread_id: string | null;
   reply_to_event_id: string | null;
   sender_id: string;
+  sender_entity_id?: string | null;
+  receiver_entity_id?: string | null;
+  sender_contact_id?: string | null;
+  receiver_contact_id?: string | null;
+  sender?: MemoryReviewTimelineParticipant | null;
+  receiver?: MemoryReviewTimelineParticipant | null;
+  thread_contact?: MemoryReviewTimelineParticipant | null;
+  participants?: MemoryReviewTimelineParticipant[];
   timestamp: number;
   timestamp_iso: string | null;
   content_type: string;
   content: string;
   attachments: MemoryReviewAttachment[];
+  links?: MemoryReviewLink[];
 };
 
 export type MemoryReviewEpisodeDetail = {
@@ -928,11 +982,35 @@ export type MemoryReviewCausalLink = {
   created_at_iso: string | null;
 };
 
+export type MemoryReviewJobOutput = {
+  job_id: string;
+  type_id: string;
+  status: string;
+  model: string | null;
+  output_status: string | null;
+  error_message: string | null;
+  blocked_reason: string | null;
+  created_at: number;
+  created_at_iso: string | null;
+  started_at: number | null;
+  started_at_iso: string | null;
+  completed_at: number | null;
+  completed_at_iso: string | null;
+  facts_written: number | null;
+  entities_created: number | null;
+  entity_links_written: number | null;
+  merge_proposals_written: number | null;
+  review_gaps: string[];
+  matched_existing_facts: string[];
+  raw_output_excerpt: string | null;
+};
+
 export type MemoryReviewEpisodeOutputs = {
   episode_id: string;
   facts: MemoryReviewFact[];
   entities: MemoryReviewEntity[];
   fact_entities: Array<{ fact_id: string; entity_id: string }>;
+  unresolved_fact_entities?: Array<{ fact_id: string; entity_id: string }>;
   observations: MemoryReviewObservation[];
   observation_facts: Array<{
     analysis_run_id: string;
@@ -941,6 +1019,9 @@ export type MemoryReviewEpisodeOutputs = {
     linked_at_iso: string | null;
   }>;
   causal_links: MemoryReviewCausalLink[];
+  job_outputs?: MemoryReviewJobOutput[];
+  review_gaps?: Array<{ job_id: string; type_id: string; message: string }>;
+  matched_existing_facts?: Array<{ job_id: string; type_id: string; text: string }>;
 };
 
 export type MemoryReviewQualityBucket =
@@ -1053,6 +1134,7 @@ export type MemoryReviewFactDetail = {
   source_event: MemoryReviewTimelineEvent | null;
   entities: MemoryReviewEntity[];
   fact_links: Array<{ fact_id: string; entity_id: string }>;
+  unresolved_fact_links?: Array<{ fact_id: string; entity_id: string }>;
   observations: MemoryReviewObservation[];
   observation_facts: Array<{
     analysis_run_id: string;
@@ -1070,6 +1152,7 @@ export type MemoryReviewObservationDetail = {
   version_chain: MemoryReviewObservation[];
   supporting_facts: MemoryReviewFact[];
   supporting_entities: MemoryReviewEntity[];
+  source_events?: MemoryReviewTimelineEvent[];
   source_episode: MemoryReviewEpisodeSummary | null;
 };
 

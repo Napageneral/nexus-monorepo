@@ -162,7 +162,7 @@ function normalizeEpisodes(response: RunEpisodesResponse | undefined): MemoryRev
   return Array.isArray(response?.episodes) ? response.episodes : [];
 }
 
-function clearMemoryDetail(state: MemoryReviewState) {
+export function clearMemoryDetail(state: MemoryReviewState) {
   state.memoryDetailKind = null;
   state.memoryDetailEntity = null;
   state.memoryDetailFact = null;
@@ -216,7 +216,9 @@ export async function loadMemoryRuns(
       clearMemoryDetail(state);
     }
     writeMemoryUrlPatch({ runId: nextRunId });
-    await loadMemoryQualitySummary(state, { loadItems: true });
+    if (state.memorySearchType !== "facts" && state.memorySearchType !== "observations") {
+      state.memorySearchType = "observations";
+    }
     await runMemorySearch(state);
 
     if (urlState.detailKind && urlState.detailId) {
@@ -416,6 +418,18 @@ export async function runMemorySearch(state: MemoryReviewState) {
   state.memoryError = null;
   try {
     const query = state.memorySearchQuery.trim();
+    if (!query && state.memorySearchType !== "facts" && state.memorySearchType !== "observations") {
+      state.memorySearchResult = {
+        query: "",
+        type: state.memorySearchType,
+        limit: 50,
+        items: [],
+        facts: [],
+        entities: [],
+        observations: [],
+      };
+      return;
+    }
     const response = await state.client.request<MemoryReviewSearchResult>("memory.review.search", {
       query,
       type: state.memorySearchType,
