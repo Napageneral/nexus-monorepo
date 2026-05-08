@@ -105,6 +105,7 @@ export type MemoryPageProps = {
   onEntitySelect: (id: string) => void;
   onFactSelect: (id: string) => void;
   onObservationSelect: (id: string) => void;
+  onOpenNativeRecord: (recordId: string) => void;
 
   onRefresh: () => void;
 };
@@ -133,6 +134,30 @@ function compactId(value: string | null | undefined): string {
   const text = (value ?? "").trim();
   if (text.length <= 18) return text || "—";
   return `${text.slice(0, 10)}…${text.slice(-6)}`;
+}
+
+function normalizeSourceEpisodeId(value: string | null | undefined): string | null {
+  const text = (value ?? "").trim();
+  if (!text) return null;
+  if (text.startsWith("consolidation:")) {
+    const source = text.slice("consolidation:".length);
+    return source || text;
+  }
+  return text;
+}
+
+function renderFullId(value: string | null | undefined, max = 72) {
+  const text = (value ?? "").trim();
+  if (!text) return html`<span class="console-faint">—</span>`;
+  return html`
+    <span
+      class="console-faint"
+      title=${text}
+      style="display: inline-block; max-width: ${max}ch; font-size: var(--console-text-xs); line-height: 1.35; overflow-wrap: anywhere;"
+    >
+      ${text}
+    </span>
+  `;
 }
 
 function plural(count: number, noun: string): string {
@@ -164,6 +189,10 @@ function renderParticipantChip(
       ${participant.label}${contact && contact !== participant.label ? ` · ${contact}` : ""}
     </span>
   `;
+}
+
+function canOpenNativeTimelineEvent(event: MemoryReviewTimelineEvent): boolean {
+  return event.platform === "imessage" && Boolean(event.event_id);
 }
 
 function confidenceBadge(confidence: number | undefined) {
@@ -497,7 +526,7 @@ function renderObservationsTab(props: MemoryPageProps) {
               <div class="console-empty-icon">${icons.brain}</div>
               <div class="console-empty-title">No observations found</div>
               <div class="console-empty-description">
-                Run retain and consolidate, or search for another observation.
+                Search for another observation.
               </div>
             </div>
           </div>
@@ -528,7 +557,7 @@ function renderObservationsTab(props: MemoryPageProps) {
                       </td>
                       <td>${statusBadge(obs.status)}</td>
                       <td>
-                        <span class="console-faint" style="font-size: var(--console-text-xs);">${compactId(obs.episode_id)}</span>
+                        ${renderFullId(normalizeSourceEpisodeId(obs.episode_id), 34)}
                       </td>
                       <td>
                         <span class="console-faint" style="font-size: var(--console-text-xs);">${fmtDate(obs.completed_at ?? obs.created_at)}</span>
@@ -559,7 +588,7 @@ function renderFactsTab(props: MemoryPageProps) {
               <div class="console-empty-icon">${icons.fileText}</div>
               <div class="console-empty-title">No facts found</div>
               <div class="console-empty-description">
-                Run retain, or search for another retained fact.
+                Search for another retained fact.
               </div>
             </div>
           </div>
@@ -596,8 +625,8 @@ function renderFactsTab(props: MemoryPageProps) {
                           : nothing}
                       </td>
                       <td>${fact.is_consolidated ? renderTextChip("consolidated", "success") : renderTextChip("retained", "neutral")}</td>
-                      <td><span class="console-faint" style="font-size: var(--console-text-xs);">${compactId(fact.source_episode_id)}</span></td>
-                      <td><span class="console-faint" style="font-size: var(--console-text-xs);">${compactId(fact.source_event_id)}</span></td>
+                      <td>${renderFullId(normalizeSourceEpisodeId(fact.source_episode_id), 34)}</td>
+                      <td>${renderFullId(fact.source_event_id, 26)}</td>
                       <td><span class="console-faint" style="font-size: var(--console-text-xs);">${fmtDate(fact.as_of)}</span></td>
                     </tr>
                   `,
@@ -630,7 +659,7 @@ function renderEpisodesTab(props: MemoryPageProps) {
               <div class="console-empty-icon">${icons.fileText}</div>
               <div class="console-empty-title">No episodes found</div>
               <div class="console-empty-description">
-                Select another run or search for a different thread or episode.
+                Search for a different thread or episode.
               </div>
             </div>
           </div>
@@ -659,8 +688,8 @@ function renderEpisodesTab(props: MemoryPageProps) {
                         <span class="console-strong" style="display: block; font-size: var(--console-text-sm);">
                           ${shortText(episode.thread_id || episode.id, 120)}
                         </span>
-                        <span class="console-faint" style="display: block; margin-top: var(--console-space-1); font-size: var(--console-text-xs);">
-                          ${compactId(episode.id)}
+                        <span class="console-faint" style="display: block; margin-top: var(--console-space-1);">
+                          ${renderFullId(episode.id, 64)}
                         </span>
                       </td>
                       <td>${renderTextChip(episode.platform || "memory", "neutral")}</td>
@@ -677,20 +706,8 @@ function renderEpisodesTab(props: MemoryPageProps) {
         `;
 
   return html`
-    <div style="display: flex; align-items: end; justify-content: space-between; gap: var(--console-space-3); flex-wrap: wrap; margin-bottom: var(--console-space-4);">
+    <div style="display: flex; align-items: end; gap: var(--console-space-3); flex-wrap: wrap; margin-bottom: var(--console-space-4);">
       ${renderReviewSearchBar(props, "Search episodes...")}
-      <label class="console-field" style="min-width: 260px; max-width: 360px;">
-        <span class="console-label">Run</span>
-        <select
-          class="console-select"
-          .value=${props.selectedRunId ?? ""}
-          @change=${(event: Event) => props.onRunSelect((event.target as HTMLSelectElement).value)}
-        >
-          ${props.runs.map(
-            (run) => html`<option value=${run.id}>${run.platform || "memory"} · ${fmtTs(run.started_at ?? run.created_at)}</option>`,
-          )}
-        </select>
-      </label>
     </div>
     ${renderReviewSplit(list, renderEpisodeInspector(props))}
   `;
@@ -812,7 +829,10 @@ function renderFactCard(
   `;
 }
 
-function renderTimelineEvent(event: MemoryReviewTimelineEvent) {
+function renderTimelineEvent(
+  event: MemoryReviewTimelineEvent,
+  onOpenNativeRecord?: (recordId: string) => void,
+) {
   const senderLabel = event.sender?.label ?? event.sender_id;
   const senderContact = event.sender?.contact_id;
   const threadContact = event.thread_contact;
@@ -844,7 +864,25 @@ function renderTimelineEvent(event: MemoryReviewTimelineEvent) {
               `
             : nothing}
         </div>
-        <div class="console-faint" style="font-size: var(--console-text-2xs);">${fmtTs(event.timestamp)}</div>
+        <div style="display: flex; align-items: center; gap: var(--console-space-2);">
+          ${canOpenNativeTimelineEvent(event) && onOpenNativeRecord
+            ? html`
+                <button
+                  class="console-btn console-btn--secondary"
+                  style="padding: 5px 8px; font-size: var(--console-text-2xs);"
+                  title="Open this source record in Messages"
+                  @click=${(clickEvent: Event) => {
+                    clickEvent.stopPropagation();
+                    onOpenNativeRecord(event.event_id);
+                  }}
+                >
+                  ${icons.messageSquare}
+                  Open in Messages
+                </button>
+              `
+            : nothing}
+          <div class="console-faint" style="font-size: var(--console-text-2xs);">${fmtTs(event.timestamp)}</div>
+        </div>
       </div>
       <div class="console-muted" style="font-size: var(--console-text-sm); line-height: 1.45;">
         ${hasText ? shortText(event.content, 520) : "Attachment-only record"}
@@ -1070,7 +1108,7 @@ function renderEpisodeInspector(props: MemoryPageProps) {
       ${timeline.length === 0
         ? html`<div class="console-muted" style="font-size: var(--console-text-xs); padding: var(--console-space-3);">No episode records found.</div>`
         : html`
-            ${timeline.map(renderTimelineEvent)}
+            ${timeline.map((event) => renderTimelineEvent(event, props.onOpenNativeRecord))}
           `}
 
       <div class="console-section-label" style="margin-bottom: var(--console-space-2);">
@@ -1628,7 +1666,7 @@ function renderFactDetail(
       ${fact.source_event
         ? html`
             <div class="console-section-label" style="margin-bottom: var(--console-space-2);">Source Record</div>
-            ${renderTimelineEvent(fact.source_event)}
+            ${renderTimelineEvent(fact.source_event, props.onOpenNativeRecord)}
           `
         : nothing}
 
@@ -1670,14 +1708,14 @@ function renderObservationDetail(
     ).values(),
   );
   const sourceEpisodeId =
-    obs.supporting_facts.find((fact) => fact.source_episode_id)?.source_episode_id ??
-    obs.source_episode?.id ??
-    record.episode_id;
+    normalizeSourceEpisodeId(obs.supporting_facts.find((fact) => fact.source_episode_id)?.source_episode_id) ??
+    normalizeSourceEpisodeId(obs.source_episode?.id) ??
+    normalizeSourceEpisodeId(record.episode_id);
   const sourceEpisodeIds = new Set(
     [
-      ...obs.supporting_facts.map((fact) => fact.source_episode_id).filter(Boolean),
-      obs.source_episode?.id,
-      record.episode_id,
+      ...obs.supporting_facts.map((fact) => normalizeSourceEpisodeId(fact.source_episode_id)).filter(Boolean),
+      normalizeSourceEpisodeId(obs.source_episode?.id),
+      normalizeSourceEpisodeId(record.episode_id),
     ].filter(Boolean) as string[],
   );
   const openSourceEpisode = () => {
@@ -1707,7 +1745,7 @@ function renderObservationDetail(
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--console-space-3); margin-bottom: var(--console-space-4);">
         ${renderMetric("Facts", obs.supporting_facts.length)}
-        ${renderMetric("Episodes", sourceEpisodeIds.size)}
+        ${renderMetric("Source Episodes", sourceEpisodeIds.size)}
         ${renderMetric("Supporting Entities", obs.supporting_entities.length)}
       </div>
 
@@ -1746,7 +1784,7 @@ function renderObservationDetail(
       ${sourceEvents.length > 0
         ? html`
             <div class="console-section-label" style="margin-top: var(--console-space-4); margin-bottom: var(--console-space-2);">Source Records</div>
-            ${sourceEvents.map(renderTimelineEvent)}
+            ${sourceEvents.map((event) => renderTimelineEvent(event, props.onOpenNativeRecord))}
           `
         : nothing}
 

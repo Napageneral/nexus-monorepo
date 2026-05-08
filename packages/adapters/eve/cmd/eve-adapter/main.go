@@ -188,8 +188,8 @@ func adapterConfig() nexadapter.DefineAdapterConfig[struct{}] {
 			Monitor: func(ctx nexadapter.AdapterContext[struct{}], emit nexadapter.EmitFunc) error {
 				return eveMonitor(ctx.Context, ctx.ConnectionID, emit)
 			},
-			Backfill: func(ctx nexadapter.AdapterContext[struct{}], since time.Time, emit nexadapter.EmitFunc) error {
-				return eveBackfill(ctx.Context, ctx.ConnectionID, since, emit)
+			Backfill: func(ctx nexadapter.AdapterContext[struct{}], window nexadapter.BackfillWindow, emit nexadapter.EmitFunc) error {
+				return eveBackfill(ctx.Context, ctx.ConnectionID, window.Since, window.To, emit)
 			},
 		},
 		Setup: nexadapter.SetupHandlers[struct{}]{
@@ -649,6 +649,20 @@ func resolveStagedBackfillSince(payload map[string]any) (time.Time, error) {
 	return parsed, nil
 }
 
+func resolveStagedBackfillUntil(payload map[string]any) (*time.Time, error) {
+	raw, _ := payload["until"].(string)
+	until := strings.TrimSpace(raw)
+	if until == "" {
+		return nil, nil
+	}
+	parsed, err := time.Parse(time.RFC3339, until)
+	if err != nil {
+		return nil, fmt.Errorf("invalid staged backfill until %q: %w", until, err)
+	}
+	parsed = parsed.UTC()
+	return &parsed, nil
+}
+
 func resolveStageDir(payload map[string]any) (string, error) {
 	if payload != nil {
 		if raw, ok := payload["stage_dir"].(string); ok && strings.TrimSpace(raw) != "" {
@@ -667,6 +681,10 @@ func eveStageBackfill(ctx context.Context, connectionID string, payload map[stri
 	if err != nil {
 		return nil, err
 	}
+	until, err := resolveStagedBackfillUntil(payload)
+	if err != nil {
+		return nil, err
+	}
 	stageDir, err := resolveStageDir(payload)
 	if err != nil {
 		return nil, err
@@ -674,7 +692,7 @@ func eveStageBackfill(ctx context.Context, connectionID string, payload map[stri
 
 	writer := newStagedChunkWriter(stageDir)
 	var stageErr error
-	err = eveBackfill(ctx, connectionID, since, func(record any) {
+	err = eveBackfill(ctx, connectionID, since, until, func(record any) {
 		if stageErr != nil {
 			return
 		}
@@ -696,7 +714,7 @@ func eveStageBackfill(ctx context.Context, connectionID string, payload map[stri
 	return writer.finish()
 }
 
-func eveBackfill(ctx context.Context, connectionID string, since time.Time, emit nexadapter.EmitFunc) error {
+func eveBackfill(ctx context.Context, connectionID string, since time.Time, until *time.Time, emit nexadapter.EmitFunc) error {
 	warehouseDB, err := openWarehouse()
 	if err != nil {
 		return err
@@ -733,7 +751,11 @@ func eveBackfill(ctx context.Context, connectionID string, since time.Time, emit
 		}
 	}
 
-	nexadapter.LogInfo("sync complete, starting backfill from %s", since.Format(time.RFC3339))
+	if until != nil {
+		nexadapter.LogInfo("sync complete, starting backfill from %s to %s", since.Format(time.RFC3339), until.UTC().Format(time.RFC3339))
+	} else {
+		nexadapter.LogInfo("sync complete, starting backfill from %s", since.Format(time.RFC3339))
+	}
 
 	// Paginated query — process in batches of 5000 to keep memory bounded.
 	const batchSize = 5000
@@ -750,7 +772,7 @@ func eveBackfill(ctx context.Context, connectionID string, since time.Time, emit
 			default:
 			}
 
-			events, newLastID, err := queryMessagesSince(warehouseDB, since, lastID, batchSize, meIdentifier)
+			events, newLastID, err := queryMessagesSince(warehouseDB, since, until, lastID, batchSize, meIdentifier)
 			if err != nil {
 				return fmt.Errorf("backfill message query failed: %w", err)
 			}
@@ -777,7 +799,7 @@ func eveBackfill(ctx context.Context, connectionID string, since time.Time, emit
 			default:
 			}
 
-			events, newLastID, err := queryReactionsSince(warehouseDB, since, lastID, batchSize, meIdentifier)
+			events, newLastID, err := queryReactionsSince(warehouseDB, since, until, lastID, batchSize, meIdentifier)
 			if err != nil {
 				return fmt.Errorf("backfill reaction query failed: %w", err)
 			}
@@ -807,6 +829,7 @@ func eveBackfill(ctx context.Context, connectionID string, since time.Time, emit
 			events, newLastID, err := queryMembershipEventsSince(
 				warehouseDB,
 				since,
+				until,
 				lastID,
 				batchSize,
 				meIdentifier,
@@ -840,6 +863,7 @@ func eveBackfill(ctx context.Context, connectionID string, since time.Time, emit
 			events, newLastID, err := queryMessageUpdatesSince(
 				warehouseDB,
 				since,
+				until,
 				lastID,
 				batchSize,
 				meIdentifier,
@@ -1189,6 +1213,7 @@ func queryNewMessages(
 func queryMessagesSince(
 	db *sql.DB,
 	since time.Time,
+	until *time.Time,
 	afterID int64,
 	limit int,
 	meIdentifier string,
@@ -1196,8 +1221,15 @@ func queryMessagesSince(
 	// Format since in the same style go-sqlite3 uses for storage ("2006-01-02 15:04:05+00:00").
 	sinceStr := since.UTC().Format("2006-01-02 15:04:05+00:00")
 
-	q := warehouseMessageQuery + "WHERE m.timestamp >= ? AND m.id > ? ORDER BY m.id LIMIT ?"
-	rows, err := db.Query(q, sinceStr, afterID, limit)
+	q := warehouseMessageQuery + "WHERE m.timestamp >= ? AND m.id > ?"
+	args := []any{sinceStr, afterID}
+	if until != nil {
+		q += " AND m.timestamp <= ?"
+		args = append(args, until.UTC().Format("2006-01-02 15:04:05+00:00"))
+	}
+	q += " ORDER BY m.id LIMIT ?"
+	args = append(args, limit)
+	rows, err := db.Query(q, args...)
 	if err != nil {
 		return nil, afterID, fmt.Errorf("query failed: %w", err)
 	}
@@ -1315,6 +1347,7 @@ func convertWarehouseMessage(
 		WithContainer(row.ChatIdentifier, peerKind).
 		WithThread(threadID).
 		WithMetadata("is_from_me", row.IsFromMe).
+		WithMetadata("message_guid", row.GUID).
 		WithMetadata("chat_id", row.ChatID).
 		WithMetadata("service", serviceName).
 		WithMetadata("account", currentSessionSurface().Account)
@@ -1496,17 +1529,21 @@ func queryNewReactions(db *sql.DB, sinceID int64, meIdentifier string) ([]nexada
 func queryReactionsSince(
 	db *sql.DB,
 	since time.Time,
+	until *time.Time,
 	afterID int64,
 	limit int,
 	meIdentifier string,
 ) ([]nexadapter.AdapterInboundRecord, int64, error) {
 	sinceStr := since.UTC().Format("2006-01-02 15:04:05+00:00")
-	rows, err := db.Query(
-		warehouseReactionQuery+"WHERE r.timestamp >= ? AND r.id > ? ORDER BY r.id LIMIT ?",
-		sinceStr,
-		afterID,
-		limit,
-	)
+	q := warehouseReactionQuery + "WHERE r.timestamp >= ? AND r.id > ?"
+	args := []any{sinceStr, afterID}
+	if until != nil {
+		q += " AND r.timestamp <= ?"
+		args = append(args, until.UTC().Format("2006-01-02 15:04:05+00:00"))
+	}
+	q += " ORDER BY r.id LIMIT ?"
+	args = append(args, limit)
+	rows, err := db.Query(q, args...)
 	if err != nil {
 		return nil, afterID, fmt.Errorf("reaction query failed: %w", err)
 	}
@@ -1674,17 +1711,21 @@ func queryNewMembershipEvents(
 func queryMembershipEventsSince(
 	db *sql.DB,
 	since time.Time,
+	until *time.Time,
 	afterID int64,
 	limit int,
 	meIdentifier string,
 ) ([]nexadapter.AdapterInboundRecord, int64, error) {
 	sinceStr := since.UTC().Format("2006-01-02 15:04:05+00:00")
-	rows, err := db.Query(
-		warehouseMembershipQuery+"WHERE me.timestamp >= ? AND me.id > ? ORDER BY me.id LIMIT ?",
-		sinceStr,
-		afterID,
-		limit,
-	)
+	q := warehouseMembershipQuery + "WHERE me.timestamp >= ? AND me.id > ?"
+	args := []any{sinceStr, afterID}
+	if until != nil {
+		q += " AND me.timestamp <= ?"
+		args = append(args, until.UTC().Format("2006-01-02 15:04:05+00:00"))
+	}
+	q += " ORDER BY me.id LIMIT ?"
+	args = append(args, limit)
+	rows, err := db.Query(q, args...)
 	if err != nil {
 		return nil, afterID, fmt.Errorf("membership query failed: %w", err)
 	}
@@ -1858,17 +1899,21 @@ func queryNewMessageUpdates(
 func queryMessageUpdatesSince(
 	db *sql.DB,
 	since time.Time,
+	until *time.Time,
 	afterID int64,
 	limit int,
 	meIdentifier string,
 ) ([]nexadapter.AdapterInboundRecord, int64, error) {
 	sinceStr := since.UTC().Format("2006-01-02 15:04:05+00:00")
-	rows, err := db.Query(
-		warehouseMessageUpdateQuery+"WHERE mu.timestamp >= ? AND mu.id > ? ORDER BY mu.id LIMIT ?",
-		sinceStr,
-		afterID,
-		limit,
-	)
+	q := warehouseMessageUpdateQuery + "WHERE mu.timestamp >= ? AND mu.id > ?"
+	args := []any{sinceStr, afterID}
+	if until != nil {
+		q += " AND mu.timestamp <= ?"
+		args = append(args, until.UTC().Format("2006-01-02 15:04:05+00:00"))
+	}
+	q += " ORDER BY mu.id LIMIT ?"
+	args = append(args, limit)
+	rows, err := db.Query(q, args...)
 	if err != nil {
 		return nil, afterID, fmt.Errorf("message update query failed: %w", err)
 	}

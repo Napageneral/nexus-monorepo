@@ -113,6 +113,10 @@ Provider-side identifiers such as phone numbers, emails, `chat.db` row ids,
 iMessage GUIDs, and chat identifiers remain metadata and lookup keys. They do
 not replace the Nex `connection_id`.
 
+Message records must preserve the source `chat.db` GUID as
+`metadata.message_guid` so Nex review surfaces can open the exact native
+message in macOS Messages when the runtime host supports it.
+
 ## Ingest Model
 
 Eve's ingest path is warehouse-first but watcher-driven.
@@ -201,6 +205,12 @@ The target behavior is:
 
 Local absolute paths may exist as edge-only metadata, but they are not part of
 the remote client contract.
+
+Inbound iMessage attachments feed the canonical
+[Attachment Interpretation Pipeline](/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/memory/attachment-interpretation-pipeline.md)
+after they have been represented as canonical record attachments. The edge
+preserves attachment access and provenance; memory retain consumes derived
+interpretations, not direct Mac filesystem paths.
 
 ## Action Execution Boundary
 

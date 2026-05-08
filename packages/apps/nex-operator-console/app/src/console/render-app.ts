@@ -7,7 +7,7 @@ import {
   clearIdentityGroupDetail,
   loadIdentityEntityDetail,
   loadIdentityGroupDetail,
-  loadIdentitySurface,
+  loadIdentityRouteSurface,
   resolveIdentityMergeCandidate,
 } from "../ui/controllers/identity.ts";
 import {
@@ -21,7 +21,7 @@ import {
   setIntegrationsPayloadText,
   setIntegrationsSelectedConnectionKey,
   setIntegrationsSelectedAuthMethodId,
-  setIntegrationLivesync,
+  setIntegrationLiveSync,
   startIntegrationCustomFlow,
   startIntegrationOAuth,
   submitIntegrationCustomFlow,
@@ -30,6 +30,7 @@ import {
 } from "../ui/controllers/integrations.ts";
 import { loadRecords, refreshRecordsSurface, searchRecords } from "../ui/controllers/records.ts";
 import {
+  clearMemoryDetail,
   loadMemoryEntityDetail,
   loadMemoryEpisodeInspector,
   loadMemoryFactDetail,
@@ -96,18 +97,78 @@ function flattenMemorySearchResult(result: AppViewState["memorySearchResult"]) {
     ...(result.facts ?? []).map((fact) => ({
       id: fact.id,
       kind: "fact",
-      text: [fact.subject, fact.predicate, fact.object].filter(Boolean).join(" -> ") || fact.id,
+      text: fact.text || (fact as any).content || fact.id,
       score: fact.score,
       entity_id: undefined,
     })),
     ...(result.observations ?? []).map((observation) => ({
       id: observation.id,
       kind: "observation",
-      text: observation.text,
+      text: observation.output_text || (observation as any).content || (observation as any).text || observation.id,
       score: observation.score,
       entity_id: observation.entity_id,
     })),
   ];
+}
+
+function resolveMemorySubTab(state: AppViewState): MemoryPageProps["subTab"] {
+  const explicit = (state as any)._consoleMemorySubTab;
+  if (explicit === "observations" || explicit === "facts" || explicit === "episodes") {
+    return explicit;
+  }
+  if (typeof window !== "undefined") {
+    const url = new URL(window.location.href);
+    const detailKind = url.searchParams.get("memory_detail_kind");
+    if (detailKind === "fact") {
+      return "facts";
+    }
+    if (detailKind === "observation") {
+      return "observations";
+    }
+    if (url.searchParams.get("memory_episode")) {
+      return "episodes";
+    }
+  }
+  const detailKind = (state as any).memoryDetailKind;
+  if (detailKind === "fact") {
+    return "facts";
+  }
+  if ((state as any).memorySelectedEpisodeId && !detailKind) {
+    return "episodes";
+  }
+  return "observations";
+}
+
+function ensureMemoryConsoleDataLoaded(state: AppViewState) {
+  if (!(state as any).connected || (state as any).memoryLoading) {
+    return;
+  }
+  const hasRuns = Array.isArray((state as any).memoryRuns) && (state as any).memoryRuns.length > 0;
+  const hasSearch = Boolean((state as any).memorySearchResult);
+  const hasEpisode = Boolean((state as any).memorySelectedEpisodeId);
+  if (!hasRuns && !hasSearch && !hasEpisode) {
+    void loadMemoryRuns(state as any);
+  }
+}
+
+function openNativeRecord(state: AppViewState, recordId: string, surface: "memory" | "records") {
+  const trimmed = recordId.trim();
+  if (!trimmed || !state.client) {
+    return;
+  }
+  void (async () => {
+    try {
+      await state.client?.request("records.open_native_source", { id: trimmed });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (surface === "memory") {
+        (state as any).memoryError = message;
+      } else {
+        (state as any).recordsError = message;
+      }
+      state.requestUpdate();
+    }
+  })();
 }
 
 // ─── Agent wizard state helpers ──────────────────────────────────────
@@ -690,9 +751,13 @@ export function renderConsoleApp(state: AppViewState) {
   const isSettings = activeTab === "settings";
   const isChat = activeTab === "chat";
   const isAgentDetail = activeTab === "agents" && !getWizardState(state).active && !!(state as any)._consoleAgentDetailId;
+  const identityRoute = activeTab === "identity" ? resolveIdentityRouteFromLocation(state) : null;
   ensureConsoleRoute(state, activeTab);
   if (activeTab === "identity") {
     ensureIdentityDetailFromLocation(state);
+  }
+  if (activeTab === "memory") {
+    ensureMemoryConsoleDataLoaded(state);
   }
 
   return html`
@@ -783,7 +848,7 @@ export function renderConsoleApp(state: AppViewState) {
           onUpload: (adapter) => void uploadIntegrationAdapter(state as any, adapter),
           onTest: (adapter) => void testIntegrationAdapter(state as any, adapter),
           onBackfill: (adapter) => void backfillIntegrationAdapter(state as any, adapter),
-          onLivesyncToggle: (adapter, enabled) => void setIntegrationLivesync(state as any, adapter, enabled),
+          onLiveSyncToggle: (adapter, enabled) => void setIntegrationLiveSync(state as any, adapter, enabled),
           onDisconnect: (adapter) => void disconnectIntegrationAdapter(state as any, adapter),
         }) : nothing}
 
@@ -1042,6 +1107,7 @@ export function renderConsoleApp(state: AppViewState) {
           onRecordsPage: (offset: number) => { void loadRecords(state as any, offset); },
           expandedRecordId: (state as any)._consoleRecordsExpanded ?? null,
           onRecordExpand: (id: string | null) => { (state as any)._consoleRecordsExpanded = id; state.requestUpdate(); },
+          onOpenNativeRecord: (recordId: string) => openNativeRecord(state, recordId, "records"),
           channels: (state.recordsChannels ?? []).map((channel: any) => ({
             id: channel.id ?? "",
             platform: channel.platform ?? "unknown",
@@ -1083,8 +1149,11 @@ export function renderConsoleApp(state: AppViewState) {
 
         ${activeTab === "settings" ? renderSettingsPage(state) : nothing}
 
-        ${activeTab === "identity" ? renderIdentityPage({
-          subTab: resolveIdentityRouteFromLocation(state).subTab,
+        ${activeTab === "identity" && identityRoute ? renderIdentityPage({
+          subTab: identityRoute.subTab,
+          loaded: identityRoute.subTab === "merges"
+            ? state.identityMergeLoaded ?? false
+            : Boolean(state.identityLoadedTabs?.[identityRoute.subTab] ?? state.identityLoaded),
           onSubTabChange: (sub) => {
             (state as any)._consoleIdentitySubTab = sub;
             if (sub !== "entities") {
@@ -1094,15 +1163,20 @@ export function renderConsoleApp(state: AppViewState) {
               clearIdentityGroupDetail(state as any);
             }
             syncIdentityRouteState(state, sub, {
-              entityId: sub === "entities" ? state.identitySelectedEntityId ?? null : null,
+              entityId: null,
               groupId: sub === "groups" ? state.identitySelectedGroupId ?? null : null,
             });
+            void loadIdentityRouteSurface(state as any, sub);
             state.requestUpdate();
           },
-          loading: state.identityLoading ?? false,
-          error: state.identityError ?? null,
-          entityRouteMode: !!resolveIdentityRouteFromLocation(state).entityId,
-          groupRouteMode: !!resolveIdentityRouteFromLocation(state).groupId,
+          loading: identityRoute.subTab === "merges"
+            ? state.identityMergeLoading ?? false
+            : Boolean(state.identityLoadingTabs?.[identityRoute.subTab]),
+          error: identityRoute.subTab === "merges"
+            ? state.identityMergeError ?? state.identityError ?? null
+            : state.identityError ?? null,
+          entityRouteMode: !!identityRoute.entityId,
+          groupRouteMode: !!identityRoute.groupId,
           onBackToEntities: () => {
             syncIdentityRouteState(state, "entities", { entityId: null, groupId: null });
             clearIdentityEntityDetail(state as any);
@@ -1118,7 +1192,11 @@ export function renderConsoleApp(state: AppViewState) {
           entityDetailLoading: state.identityEntityDetailLoading ?? false,
           onEntitySelect: (id) => {
             (state as any)._consoleIdentitySubTab = "entities";
-            syncIdentityRouteState(state, "entities", { entityId: id, groupId: null });
+            syncIdentityRouteState(state, "entities", { entityId: null, groupId: null });
+            if (state.identitySelectedEntityId === id && !resolveIdentityRouteFromLocation(state).entityId) {
+              clearIdentityEntityDetail(state as any);
+              return;
+            }
             void loadIdentityEntityDetail(state as any, id);
           },
           onEntityClear: () => {
@@ -1144,12 +1222,31 @@ export function renderConsoleApp(state: AppViewState) {
           policies: (state as any).identityPolicies ?? [],
           mergeCandidates: state.identityMergeCandidates ?? [],
           mergeBusyId: state.identityMergeBusyId ?? null,
+          mergeBusyIds: state.identityMergeBusyIds ?? [],
+          mergeCompletionStatus: state.identityMergeCompletionStatus ?? {},
+          mergeCanonicalTargetOverrides: state.identityMergeCanonicalTargetOverrides ?? {},
           onResolveMerge: (id, status) => {
-            void resolveIdentityMergeCandidate(state, id, status);
+            const targetEntityId = state.identityMergeCanonicalTargetOverrides?.[id] ?? null;
+            void resolveIdentityMergeCandidate(state, id, status, targetEntityId);
+          },
+          onFlipMergeCanonicalTarget: (id) => {
+            const candidate = (state.identityMergeCandidates ?? []).find((entry) => entry.id === id);
+            const sourceId = candidate?.source_entity_id ?? candidate?.entity_a_id ?? null;
+            const targetId = candidate?.target_entity_id ?? candidate?.entity_b_id ?? null;
+            if (!sourceId || !targetId || sourceId === targetId) {
+              return;
+            }
+            const currentTargetId = state.identityMergeCanonicalTargetOverrides?.[id] ?? targetId;
+            state.identityMergeCanonicalTargetOverrides = {
+              ...(state.identityMergeCanonicalTargetOverrides ?? {}),
+              [id]: currentTargetId === targetId ? sourceId : targetId,
+            };
+            state.requestUpdate();
           },
           onRefresh: () => {
             void (async () => {
-              await loadIdentitySurface(state as any);
+              const route = resolveIdentityRouteFromLocation(state);
+              await loadIdentityRouteSurface(state as any, route.subTab);
               if (state.identitySelectedEntityId) {
                 await loadIdentityEntityDetail(state as any, state.identitySelectedEntityId);
               }
@@ -1161,19 +1258,16 @@ export function renderConsoleApp(state: AppViewState) {
         } as IdentityPageProps) : nothing}
 
         ${activeTab === "memory" ? renderMemoryPage({
-          subTab: (state as any)._consoleMemorySubTab ?? "library",
+          subTab: resolveMemorySubTab(state),
           onSubTabChange: (sub) => {
             (state as any)._consoleMemorySubTab = sub;
-            if (sub === "quality") {
-              void loadMemoryQualitySummary(state as any, { loadItems: true });
-            } else if (
-              sub === "search" &&
-              !(state as any).memorySearchLoading &&
-              !(state as any).memorySearchResult
-            ) {
+            (state as any).memorySubTab = sub;
+            if (sub === "observations" || sub === "facts") {
+              (state as any).memorySearchType = sub;
+              (state as any).memorySearchResult = null;
               void runMemorySearch(state as any);
             } else if (
-              sub === "library" &&
+              sub === "episodes" &&
               !(state as any).memoryLoading &&
               (!Array.isArray((state as any).memoryRuns) || (state as any).memoryRuns.length === 0)
             ) {
@@ -1193,18 +1287,42 @@ export function renderConsoleApp(state: AppViewState) {
           episodesLoading: (state as any).memoryEpisodesLoading ?? false,
           selectedEpisodeId: (state as any).memorySelectedEpisodeId ?? null,
           onEpisodeSelect: (episodeId) => {
+            (state as any)._consoleMemorySubTab = "episodes";
+            (state as any).memorySubTab = "episodes";
             (state as any).memorySelectedEpisodeId = episodeId;
-            void loadMemoryEpisodeInspector(state as any, episodeId);
+            clearMemoryDetail(state as any);
+            const currentEpisodes = (state as any).memoryEpisodes ?? [];
+            const episodeIsInCurrentRun = currentEpisodes.some((episode: { id?: string }) => episode.id === episodeId);
+            const runForEpisode = ((state as any).memoryRuns ?? []).find((run: { id?: string }) => run.id === episodeId)?.id;
+            if (!episodeIsInCurrentRun && runForEpisode) {
+              void loadMemoryRunEpisodes(state as any, runForEpisode, {
+                keepEpisodeSelection: true,
+                episodeId,
+              });
+            } else {
+              void loadMemoryEpisodeInspector(state as any, episodeId);
+            }
           },
           inspectorLoading: (state as any).memoryInspectorLoading ?? false,
           episodeDetail: (state as any).memoryEpisodeDetail ?? null,
+          episodeOutputs: (state as any).memoryEpisodeOutputs ?? null,
           searchQuery: (state as any).memorySearchQuery ?? "",
           searchType: (state as any).memorySearchType ?? "all",
           searchLoading: (state as any).memorySearchLoading ?? false,
+          observations: (state as any).memorySearchType === "observations"
+            ? ((state as any).memorySearchResult?.observations ?? [])
+            : [],
+          facts: (state as any).memorySearchType === "facts"
+            ? ((state as any).memorySearchResult?.facts ?? [])
+            : [],
           searchResults: flattenMemorySearchResult((state as any).memorySearchResult ?? null),
           onSearchQueryChange: (q) => { (state as any).memorySearchQuery = q; },
           onSearchTypeChange: (t) => { (state as any).memorySearchType = t; },
           onSearch: () => {
+            const subTab = (state as any)._consoleMemorySubTab ?? "observations";
+            if (subTab === "observations" || subTab === "facts") {
+              (state as any).memorySearchType = subTab;
+            }
             void runMemorySearch(state as any);
           },
           qualityScope: (state as any).memoryQualityScope ?? "run",
@@ -1234,15 +1352,38 @@ export function renderConsoleApp(state: AppViewState) {
           detailEntity: (state as any).memoryDetailEntity ?? null,
           detailFact: (state as any).memoryDetailFact ?? null,
           detailObservation: (state as any).memoryDetailObservation ?? null,
+          onDetailClear: () => {
+            (state as any).memoryDetailKind = null;
+            (state as any).memoryDetailEntity = null;
+            (state as any).memoryDetailFact = null;
+            (state as any).memoryDetailObservation = null;
+            state.requestUpdate();
+          },
           onEntitySelect: (id) => {
             void loadMemoryEntityDetail(state as any, id);
           },
           onFactSelect: (id) => {
-            void loadMemoryFactDetail(state as any, id);
+            (state as any)._consoleMemorySubTab = "facts";
+            (state as any).memorySubTab = "facts";
+            (state as any).memorySearchType = "facts";
+            void (async () => {
+              await Promise.all([loadMemoryFactDetail(state as any, id), runMemorySearch(state as any)]);
+              state.requestUpdate();
+            })();
           },
           onObservationSelect: (id) => {
-            void loadMemoryObservationDetail(state as any, id);
+            (state as any)._consoleMemorySubTab = "observations";
+            (state as any).memorySubTab = "observations";
+            (state as any).memorySearchType = "observations";
+            void (async () => {
+              await Promise.all([
+                loadMemoryObservationDetail(state as any, id),
+                runMemorySearch(state as any),
+              ]);
+              state.requestUpdate();
+            })();
           },
+          onOpenNativeRecord: (recordId) => openNativeRecord(state, recordId, "memory"),
           onRefresh: () => {
             void loadMemoryRuns(state as any);
           },

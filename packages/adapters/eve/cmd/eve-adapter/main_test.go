@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
 
 	nexadapter "github.com/nexus-project/adapter-sdk-go"
 )
@@ -216,5 +217,49 @@ func TestConvertWarehouseMessageUsesSessionAccountMetadata(t *testing.T) {
 
 	if got := record.Payload.Metadata["account"]; got != "tyler@example.com" {
 		t.Fatalf("expected session account metadata, got %#v", got)
+	}
+}
+
+func TestConvertWarehouseMessagePreservesMessageGUIDMetadata(t *testing.T) {
+	record := convertWarehouseMessage(
+		warehouseRow{
+			ID:             1,
+			GUID:           "6F08EF97-6BBF-4414-8622-42B938F083C1",
+			Timestamp:      sql.NullString{String: "2026-03-31 00:00:00+00:00", Valid: true},
+			IsFromMe:       false,
+			ChatID:         1,
+			ChatIdentifier: "+16319056994",
+			ServiceName:    sql.NullString{String: "iMessage", Valid: true},
+		},
+		nil,
+		"tyler@example.com",
+	)
+
+	if got := record.Payload.Metadata["message_guid"]; got != "6F08EF97-6BBF-4414-8622-42B938F083C1" {
+		t.Fatalf("expected message guid metadata, got %#v", got)
+	}
+}
+
+func TestQueryMessagesSinceHonorsUntil(t *testing.T) {
+	db := openFixtureWarehouseDB(t)
+	mustExecFixture(t, db, `INSERT INTO chats (id, chat_identifier, chat_name, is_group) VALUES (?, ?, ?, ?)`, 1, "chat-1", "Chat", false)
+	mustExecFixture(t, db, `INSERT INTO messages (id, chat_id, content, timestamp, is_from_me, guid) VALUES (?, ?, ?, ?, ?, ?)`, 1, 1, "before", "2026-04-01 10:00:00+00:00", false, "msg-before")
+	mustExecFixture(t, db, `INSERT INTO messages (id, chat_id, content, timestamp, is_from_me, guid) VALUES (?, ?, ?, ?, ?, ?)`, 2, 1, "inside", "2026-04-02 10:00:00+00:00", false, "msg-inside")
+	mustExecFixture(t, db, `INSERT INTO messages (id, chat_id, content, timestamp, is_from_me, guid) VALUES (?, ?, ?, ?, ?, ?)`, 3, 1, "after", "2026-04-03 10:00:00+00:00", false, "msg-after")
+
+	since := time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC)
+	until := time.Date(2026, 4, 2, 23, 59, 59, 0, time.UTC)
+	events, lastID, err := queryMessagesSince(db, since, &until, 0, 10, "")
+	if err != nil {
+		t.Fatalf("queryMessagesSince returned error: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events count = %d, want 1", len(events))
+	}
+	if events[0].Payload.ExternalRecordID != "imessage:msg-inside" {
+		t.Fatalf("record id = %q, want imessage:msg-inside", events[0].Payload.ExternalRecordID)
+	}
+	if lastID != 2 {
+		t.Fatalf("lastID = %d, want 2", lastID)
 	}
 }

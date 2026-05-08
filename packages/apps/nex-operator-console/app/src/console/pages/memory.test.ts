@@ -45,6 +45,7 @@ function createProps(overrides: Partial<MemoryPageProps> = {}): MemoryPageProps 
     onEntitySelect: vi.fn(),
     onFactSelect: vi.fn(),
     onObservationSelect: vi.fn(),
+    onOpenNativeRecord: vi.fn(),
     onRefresh: vi.fn(),
     ...overrides,
   };
@@ -276,6 +277,8 @@ describe("renderMemoryPage", () => {
     expect(text).toContain("Tyler and Casey planned to go back east for pillows.");
     expect(text).toContain("Episode");
     expect(text).toContain("Record");
+    expect(text).toContain("live-imessage-top-direct:episode:002");
+    expect(text).toContain("imessage:F47B5BE9-2B9C-4BB1-8596-00AB626ADE9C");
     expect(text).not.toContain("fact-uuid-123");
   });
 
@@ -314,5 +317,97 @@ describe("renderMemoryPage", () => {
     const text = container.textContent ?? "";
     expect(text).toContain("Select a row");
     expect(text).not.toContain("This observation belongs on the observations tab.");
+  });
+
+  it("keeps processing-run selection out of the primary episode review surface", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    render(
+      renderMemoryPage(
+        createProps({
+          subTab: "episodes",
+          selectedRunId: "consolidation:live-imessage-top-direct:episode:001",
+          runs: [
+            {
+              id: "consolidation:live-imessage-top-direct:episode:001",
+              platform: "memory",
+              status: "completed",
+              total_episodes: 1,
+              facts_created: 0,
+              started_at: 1_778_214_599,
+            },
+          ],
+          episodes: [
+            {
+              id: "live-imessage-top-direct:episode:001",
+              run_id: "consolidation:live-imessage-top-direct:episode:001",
+              platform: "memory",
+              thread_id: null,
+              event_count: 12,
+              status: "completed",
+              started_at: 1_778_214_599,
+            },
+          ],
+        }),
+      ),
+      container,
+    );
+
+    expect(container.querySelector("select.console-select")).toBeNull();
+    expect(container.textContent ?? "").toContain("live-imessage-top-direct:episode:001");
+  });
+
+  it("counts observation provenance by source episode rather than consolidation run", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    render(
+      renderMemoryPage(
+        createProps({
+          subTab: "observations",
+          detailKind: "observation",
+          detailObservation: {
+            observation: {
+              id: "obs-1",
+              episode_id: "consolidation:live-imessage-top-direct:episode:001",
+              parent_id: null,
+              status: "completed",
+              output_text: "Tyler and Casey exchanged ZIP files.",
+              created_at: 1_778_214_614,
+              created_at_iso: "2026-05-08T04:30:14.000Z",
+              started_at: 1_778_214_599,
+              started_at_iso: "2026-05-08T04:29:59.000Z",
+              completed_at: 1_778_214_614,
+              completed_at_iso: "2026-05-08T04:30:14.000Z",
+              is_stale: false,
+            },
+            head_observation_id: "obs-1",
+            version_chain: [],
+            supporting_facts: [
+              {
+                id: "fact-1",
+                text: "Tyler sent Casey a ZIP file.",
+                context: null,
+                as_of: 1_778_214_000,
+                as_of_iso: "2026-05-08T04:20:00.000Z",
+                ingested_at: 1_778_214_514,
+                ingested_at_iso: "2026-05-08T04:28:34.000Z",
+                source_episode_id: "live-imessage-top-direct:episode:001",
+                source_event_id: "record-1",
+                is_consolidated: true,
+              },
+            ],
+            supporting_entities: [],
+            source_events: [],
+            source_episode: null,
+          },
+        }),
+      ),
+      container,
+    );
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("Source Episodes");
+    expect(text).not.toContain("consolidation:live-imessage-top-direct:episode:001");
+    expect(text).toContain("Source episode");
   });
 });

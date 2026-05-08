@@ -30,6 +30,7 @@ export type RecordsPageProps = {
   onRecordsPage: (offset: number) => void;
   expandedRecordId: string | null;
   onRecordExpand: (id: string | null) => void;
+  onOpenNativeRecord: (recordId: string) => void;
   // Channels
   channels: Array<{
     id: string;
@@ -78,6 +79,10 @@ function formatTimestamp(ts: number): string {
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
   const d = new Date(ts);
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function canOpenNativeRecord(record: { id: string; platform: string }): boolean {
+  return record.platform === "imessage" && Boolean(record.id);
 }
 
 const PLATFORMS = ["All", "imessage", "slack", "gmail", "github", "jira", "dispatch", "git"];
@@ -175,7 +180,7 @@ function renderExpandedPayload(payload: unknown) {
   }
   return html`
     <tr>
-      <td colspan="6" style="padding: 0;">
+      <td colspan="7" style="padding: 0;">
         <div style="padding: var(--console-space-4); background: var(--console-bg-nav-pill, rgba(255,255,255,0.03));">
           <div class="console-section-label" style="margin-bottom: var(--console-space-2);">Record Payload</div>
           <pre class="console-code-block" style="margin: 0; max-height: 320px; overflow: auto; font-size: var(--console-text-xs, 12px);">${formatted}</pre>
@@ -232,6 +237,24 @@ function renderBrowseTab(props: RecordsPageProps) {
         <td><span class="console-mono" style="font-size: var(--console-text-xs);" title="${rec.recordId}">${truncate(rec.recordId, 16)}</span></td>
         <td>${rec.type}</td>
         <td><span class="console-faint" style="font-size: var(--console-text-xs);">${truncate(rec.preview, 60)}</span></td>
+        <td>
+          ${canOpenNativeRecord(rec)
+            ? html`
+                <button
+                  class="console-btn console-btn--secondary"
+                  style="padding: 5px 8px; font-size: var(--console-text-2xs);"
+                  title="Open this source record in Messages"
+                  @click=${(event: Event) => {
+                    event.stopPropagation();
+                    props.onOpenNativeRecord(rec.id);
+                  }}
+                >
+                  ${icons.messageSquare}
+                  Messages
+                </button>
+              `
+            : nothing}
+        </td>
       </tr>
     `);
     if (isExpanded && rec.payload != null) {
@@ -253,7 +276,7 @@ function renderBrowseTab(props: RecordsPageProps) {
 
     <div class="console-card" style="padding: 0; overflow: hidden;">
       ${renderConsoleTable({
-        headers: ["Time", "Platform", "Channel", "Record ID", "Type", "Preview"],
+        headers: ["Time", "Platform", "Channel", "Record ID", "Type", "Preview", ""],
         rows,
         empty: "No records ingested yet. Records appear here when your connectors observe external data.",
         loading: props.recordsLoading,
@@ -379,6 +402,22 @@ function renderSearchTab(props: RecordsPageProps) {
                       <span class="console-faint" style="font-size: var(--console-text-2xs);">\u00b7</span>
                       <span class="console-faint" style="font-size: var(--console-text-2xs);">${formatTimestamp(r.timestamp)}</span>
                       <span style="margin-left: auto;" class="console-badge console-badge--neutral">${r.type}</span>
+                      ${canOpenNativeRecord(r)
+                        ? html`
+                            <button
+                              class="console-btn console-btn--secondary"
+                              style="padding: 5px 8px; font-size: var(--console-text-2xs);"
+                              title="Open this source record in Messages"
+                              @click=${(event: Event) => {
+                                event.stopPropagation();
+                                props.onOpenNativeRecord(r.id);
+                              }}
+                            >
+                              ${icons.messageSquare}
+                              Messages
+                            </button>
+                          `
+                        : nothing}
                     </div>
                     <div style="font-size: var(--console-text-sm); line-height: 1.5; margin-bottom: var(--console-space-2);">
                       ${r.preview}
