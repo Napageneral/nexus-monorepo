@@ -1,0 +1,9 @@
+{
+  "id": "alibaba",
+  "version": "0.1.0",
+  "displayName": "Alibaba Messenger",
+  "description": "Read-only Alibaba Messenger evidence adapter for Nex.",
+  "platform": "alibaba",
+  "command": "./dist/index.js",
+  "skill": "./SKILL.md"
+}
