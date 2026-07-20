@@ -6,6 +6,12 @@
 - Confirm zero records, contacts, entities, tags, observations, jobs, and runs.
 - Install MoonSleep Commerce and prove exactly one inactive Shopify subscription
   and one inactive customer projector job.
+- Invoke `moonsleep-commerce.shopify-source.seed-identities` twice with the
+  exact production shop domain and connection ID. Require the same contract
+  hash, two stable canonical entity IDs, and zero new entities/contacts on the
+  second run.
+- Prove the Shopify store routing contact uses the shop-domain space and the
+  integration routing contact uses the exact adapter connection anchor.
 - Prove activation remains dormant until the governed PostgreSQL event-to-work
   handoff is installed and independently validated.
 - Ingest one customer revision and prove one entity, one contact, two tags, and

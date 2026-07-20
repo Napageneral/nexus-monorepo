@@ -5,6 +5,12 @@ identity and typed commerce surfaces.
 
 ## Current operation
 
+Before importing records, call
+`moonsleep-commerce.shopify-source.seed-identities` with the exact shop domain
+and adapter connection ID. Repeat it once and require zero new identities. This
+binds the store sender and integration receiver through public Nex identity
+operations without matching on email, phone, or name.
+
 The installed app registers one job for Shopify `record.ingested` events. The
 job ignores non-customer records. For a customer record it:
 
@@ -23,3 +29,5 @@ job ignores non-customer records. For a customer record it:
 - Do not replace Dispatch fulfillment ownership.
 - Do not enable a production backfill until PostgreSQL runtime, restart, and
   replay gates pass.
+- Do not ingest Shopify records before both source routing contacts resolve to
+  their expected canonical entities and required tags.

@@ -1,10 +1,126 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildShopifySourceIdentityObservations,
   projectShopifyCustomerBackfill,
   projectShopifyCustomerCohort,
+  seedShopifySourceIdentities,
   shopifyCustomerRecordSetSha256,
 } from "./index.js";
+
+describe("Shopify source identity seed", () => {
+  function sourceIdentityContext() {
+    const seen = new Set<string>();
+    const observe = vi.fn(async (input: Record<string, unknown>) => {
+      const observationId = String(input.source_observation_id);
+      const role = String(input.entity_type);
+      const replayed = seen.has(observationId);
+      seen.add(observationId);
+      return {
+        contact: {
+          platform: input.platform,
+          space_id: input.space_id,
+          contact_id: input.contact_id,
+        },
+        entity: { id: `entity-${role}` },
+        canonical_entity_id: `entity-${role}`,
+        created_entity: !replayed,
+        created_contact: !replayed,
+        replayed,
+      };
+    });
+    const resolve = vi.fn(async ({ entity_id }: { entity_id: string }) => ({
+      canonical_id: entity_id,
+    }));
+    const list = vi.fn(async ({ entity_id }: { entity_id: string }) => ({
+      tags:
+        entity_id === "entity-store"
+          ? ["Store", "Shopify", "MoonSleep", "Reviewed"]
+          : ["Shopify", "Integration", "MoonSleep"],
+    }));
+    return {
+      params: {
+        shop_domain: "moonsleepco.myshopify.com",
+        connection_id: "shopify-primary",
+      },
+      nex: { contacts: { observe }, entities: { resolve, tags: { list } } },
+      observe,
+    };
+  }
+
+  it("creates exact store and integration anchors and replays without duplicate identities", async () => {
+    const ctx = sourceIdentityContext();
+    const first = await seedShopifySourceIdentities(ctx as never);
+    expect(first).toMatchObject({
+      state: "succeeded",
+      identities_observed: 2,
+      created_entities: 2,
+      created_contacts: 2,
+      replayed: 0,
+      provider_write_authority: false,
+    });
+    const second = await seedShopifySourceIdentities(ctx as never);
+    expect(second).toMatchObject({
+      state: "succeeded",
+      source_identity_contract_sha256: first.source_identity_contract_sha256,
+      identities_observed: 2,
+      created_entities: 0,
+      created_contacts: 0,
+      replayed: 2,
+      provider_write_authority: false,
+    });
+    expect(ctx.observe).toHaveBeenCalledTimes(4);
+    expect(ctx.observe.mock.calls[0]?.[0]).toMatchObject({
+      platform: "shopify",
+      space_id: "moonsleepco.myshopify.com",
+      contact_id: "moonsleepco.myshopify.com",
+      entity_type: "store",
+    });
+    expect(ctx.observe.mock.calls[1]?.[0]).toMatchObject({
+      platform: "shopify",
+      space_id: "",
+      contact_id: "shopify-primary",
+      entity_type: "integration",
+    });
+  });
+
+  it("rejects malformed anchors before the first identity observation", async () => {
+    const ctx = sourceIdentityContext();
+    for (const params of [
+      { shop_domain: "MoonSleepCo.myshopify.com", connection_id: "shopify-primary" },
+      { shop_domain: "moonsleep.co", connection_id: "shopify-primary" },
+      { shop_domain: "moonsleepco.myshopify.com", connection_id: " shopify-primary" },
+      { shop_domain: "moonsleepco.myshopify.com", connection_id: "shopify/primary" },
+    ]) {
+      await expect(seedShopifySourceIdentities({ ...ctx, params } as never)).rejects.toThrow();
+    }
+    expect(ctx.observe).not.toHaveBeenCalled();
+  });
+
+  it("keeps the source identity observation contract deterministic", () => {
+    expect(
+      buildShopifySourceIdentityObservations({
+        shop_domain: "moonsleepco.myshopify.com",
+        connection_id: "shopify-primary",
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        role: "store",
+        source_observation_id:
+          "moonsleep-commerce:shopify-source:store:v1:moonsleepco.myshopify.com",
+        observed_at: Date.UTC(2026, 6, 20),
+        tags: ["MoonSleep", "Shopify", "Store"],
+      }),
+      expect.objectContaining({
+        role: "integration",
+        source_observation_id:
+          "moonsleep-commerce:shopify-source:integration:v1:shopify-primary",
+        observed_at: Date.UTC(2026, 6, 20),
+        tags: ["Integration", "MoonSleep", "Shopify"],
+      }),
+    ]);
+  });
+});
 
 function customerRecord(recordId: string, customerId: string) {
   const providerObjectJson = JSON.stringify({ id: customerId, displayName: `Customer ${customerId}` });

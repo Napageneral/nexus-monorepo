@@ -42,6 +42,31 @@
         "type": "object"
       }
     },
+    "moonsleep-commerce.shopify-source.seed-identities": {
+      "description": "Replay-safely seed the Shopify store and integration routing identities through public Nex identity operations.",
+      "action": "write",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "properties": {
+          "shop_domain": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.myshopify\\.com$",
+            "maxLength": 255
+          },
+          "connection_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$",
+            "maxLength": 128
+          }
+        },
+        "required": ["shop_domain", "connection_id"],
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object"
+      }
+    },
     "moonsleep-commerce.shopify-customers.project-cohort": {
       "description": "Project an explicit bounded cohort of committed Shopify customer records into Nex identity using replay-safe public operations.",
       "action": "write",

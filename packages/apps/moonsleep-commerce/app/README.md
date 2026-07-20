@@ -9,6 +9,8 @@ stable Shopify contact, resolves the canonical Nex entity, and verifies the
 
 Current scope:
 
+- replay-safe Shopify store and integration routing identities through
+  `contacts.observe`, `entities.resolve`, and `entities.tags.list`
 - Shopify customer identity projection
 - bounded explicit customer cohort projection for pre-activation production proof
 - explicit deterministic full-customer backfill with replay counters and hashes
@@ -29,6 +31,12 @@ observation, projects through the same public operations, and returns a
 deterministic result hash plus created/replayed counters. Running the same set a
 second time must report zero new entities and contacts and every observation as
 replayed.
+
+Before ingest, `moonsleep-commerce.shopify-source.seed-identities` must run
+twice for the exact shop domain and connection ID. The first run creates the
+store and integration entity/contact anchors. The second must report zero new
+entities and contacts and two replayed observations. These are routing
+identities; customers remain separately observed subject entities.
 
 Not yet implemented:
 
