@@ -61,6 +61,7 @@ type DefineAdapterConfig[T any] struct {
 	Auth              *AdapterAuthManifest
 	Capabilities      ChannelCapabilities
 	MethodCatalog     *AdapterMethodCatalog
+	Projection        *AdapterProjection
 	Client            ClientFactory[T]
 	Connection        ConnectionHandlers[T]
 	Ingest            IngestHandlers[T]
@@ -78,8 +79,13 @@ func DefineAdapter[T any](config DefineAdapterConfig[T]) Adapter {
 	if methods == nil {
 		methods = map[string]DeclaredMethod[T]{}
 	}
+	declaredMethods := make(map[string]AdapterMethod, len(methods))
+	for name, declaration := range methods {
+		declaredMethods[name] = buildMethodDescriptor(config, name, declaration)
+	}
 
 	return Adapter{
+		DeclaredMethods: declaredMethods,
 		Operations: AdapterOperations{
 			AdapterInfo: func(ctx context.Context) (*AdapterInfo, error) {
 				info := buildAdapterInfo(config, methods)
@@ -175,8 +181,8 @@ func DefineAdapter[T any](config DefineAdapterConfig[T]) Adapter {
 				}
 				return config.Setup.Cancel(adapterCtx, req)
 			},
-			ServeStart:     config.ServeStart,
-			Methods:        buildMethodHandlers(config, methods),
+			ServeStart: config.ServeStart,
+			Methods:    buildMethodHandlers(config, methods),
 		},
 	}
 }
@@ -305,6 +311,7 @@ func buildAdapterInfo[T any](config DefineAdapterConfig[T], methods map[string]D
 		CredentialService:    config.CredentialService,
 		MultiAccount:         config.MultiAccount,
 		PlatformCapabilities: config.Capabilities,
+		Projection:           config.Projection,
 		Auth:                 config.Auth,
 	}
 	if len(methodDescriptors) > 0 {

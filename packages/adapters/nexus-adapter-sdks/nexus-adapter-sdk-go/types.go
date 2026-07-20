@@ -19,6 +19,10 @@ type AdapterInfo struct {
 	// Optional declaration metadata for the package-native method catalog.
 	MethodCatalog *AdapterMethodCatalog `json:"methodCatalog,omitempty"`
 
+	// Optional projection metadata describing the Nex ingest contract this
+	// provider package owns.
+	Projection *AdapterProjection `json:"projection,omitempty"`
+
 	// Credential linking
 	CredentialService string `json:"credential_service,omitempty"` // Links to credential store service
 	MultiAccount      bool   `json:"multi_account"`
@@ -44,9 +48,48 @@ type AdapterMethod struct {
 }
 
 type AdapterMethodCatalog struct {
-	Source    string `json:"source,omitempty"` // "manifest" | "openapi"
+	Source    string `json:"source,omitempty"` // "manifest" | "openapi" | "graphql"
 	Document  string `json:"document,omitempty"`
 	Namespace string `json:"namespace,omitempty"`
+}
+
+type AdapterProjection struct {
+	Platform      string                      `json:"platform,omitempty"`
+	Families      []AdapterProjectionFamily   `json:"families,omitempty"`
+	Backfill      *AdapterProjectionSync      `json:"backfill,omitempty"`
+	Monitor       *AdapterProjectionSync      `json:"monitor,omitempty"`
+	Routing       *AdapterProjectionRouting   `json:"routing,omitempty"`
+	RecordIDs     *AdapterProjectionRecordIDs `json:"record_ids,omitempty"`
+	Normalization *AdapterProjectionNormalize `json:"normalization,omitempty"`
+}
+
+type AdapterProjectionFamily struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
+type AdapterProjectionSync struct {
+	Supported bool   `json:"supported"`
+	Strategy  string `json:"strategy,omitempty"`
+	Cursor    string `json:"cursor,omitempty"`
+}
+
+type AdapterProjectionRouting struct {
+	Space            string `json:"space,omitempty"`
+	Container        string `json:"container,omitempty"`
+	Thread           string `json:"thread,omitempty"`
+	ThreadsSupported bool   `json:"threads_supported,omitempty"`
+}
+
+type AdapterProjectionRecordIDs struct {
+	Record    string `json:"record"`
+	Container string `json:"container,omitempty"`
+	Thread    string `json:"thread,omitempty"`
+}
+
+type AdapterProjectionNormalize struct {
+	Content     string `json:"content,omitempty"`
+	Attachments bool   `json:"attachments,omitempty"`
 }
 
 type AdapterMethodOrigin struct {
@@ -235,6 +278,7 @@ type DeliveryError struct {
 type AdapterHealth struct {
 	Connected    bool           `json:"connected"`
 	ConnectionID string         `json:"connection_id"`
+	Account      string         `json:"account,omitempty"`
 	LastEventAt  int64          `json:"last_event_at,omitempty"` // Unix ms
 	Error        string         `json:"error,omitempty"`
 	Details      map[string]any `json:"details,omitempty"`
@@ -246,6 +290,7 @@ type AdapterHealth struct {
 type AdapterConnectionIdentity struct {
 	ID            string `json:"id"`
 	DisplayName   string `json:"display_name,omitempty"`
+	Account       string `json:"account,omitempty"`
 	CredentialRef string `json:"credential_ref,omitempty"` // "google/tnapathy@gmail.com"
 	Status        string `json:"status"`                   // "ready", "active", "error"
 }

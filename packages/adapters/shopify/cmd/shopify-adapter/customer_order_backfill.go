@@ -312,7 +312,8 @@ func inspectCustomerOrderPage(path string, family string, pageIndex int, since s
 		return customerOrderBackfillPageReceipt{}, fmt.Errorf("Shopify order page source/record count mismatch: %s", path)
 	}
 	for _, record := range page.Records {
-		recordFamily := metadataString(record.Payload.Metadata, "family")
+		recordFamily, _ := record.Payload.Metadata["family"].(string)
+		recordFamily = strings.TrimSpace(recordFamily)
 		if (family == "customers" && recordFamily != "customer") || (family == "orders" && recordFamily != "order" && recordFamily != "line_item") {
 			return customerOrderBackfillPageReceipt{}, fmt.Errorf("Shopify backfill page contains a foreign record family: %s", path)
 		}
