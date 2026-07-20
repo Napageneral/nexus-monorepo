@@ -23,7 +23,13 @@
 ## Historical backfill
 
 - Bind the exact staged Shopify manifest and all page hashes.
-- Run the complete customer backfill twice.
+- Invoke `moonsleep-commerce.shopify-customers.project-backfill` with the exact
+  sorted committed customer record IDs and the SHA-256 of their compact JSON
+  array.
+- Run the complete customer backfill twice with byte-identical parameters.
+- Require both runs to return the same record-set and projection-result hashes.
+- Require the second run to report zero created entities, zero created contacts,
+  and `replayed == records_projected`.
 - Reconcile source unique customer GIDs to active Shopify contacts.
 - Require zero duplicate contact anchors and zero automatic merge proposals.
 - Sample customers with names, missing names, multiple addresses, no address,

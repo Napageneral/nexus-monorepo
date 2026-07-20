@@ -17,4 +17,6 @@ nexus package validate .
 
 Before production backfill, the validation ladder in
 `docs/validation/shopify-customer-identity.md` must pass against a fresh
-MoonSleep PostgreSQL runtime.
+MoonSleep PostgreSQL runtime. The exact same sorted record set must then be
+projected twice; the second receipt must report zero created entities/contacts
+and `replayed == records_projected`.
