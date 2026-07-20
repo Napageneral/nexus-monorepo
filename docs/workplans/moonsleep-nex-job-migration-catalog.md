@@ -15,8 +15,9 @@ Inventory base: `/Users/tyler/nexus/home/projects/moonsleep-v1`.
 
 Discovered surfaces:
 
-- 60 systemd timers;
-- 2 continuous systemd workers;
+- 60 repository-cataloged systemd timers plus 5 live-host additions found during the production re-audit;
+- 63 timer unit files currently present on the Ops VPS, of which 58 are active and 57 are enabled;
+- 5 active continuous systemd service instances across Meta CAPI, creative embedding, and three read-only Gmail sources;
 - 4 Cloudflare ops-refresh crons that seed 43 typed jobs across six queues plus dead-letter handling;
 - 1 Cloudflare ops-internal review-publication cron;
 - Shopify, ShipEngine, and TikTok webhook lanes;
@@ -26,6 +27,8 @@ Discovered surfaces:
 - Nex memory jobs and other personal-runtime maintenance, which are explicitly excluded.
 
 The catalog is an implementation map, not evidence that every repository-declared timer is currently installed. Exact host activation must be read back at each cutover.
+
+Production Nex baseline on 2026-07-20: `moonsleep-nex.service` is enabled, active, loopback-only, and healthy at release `00371fcbe76b1fe2c93b319a06dc75f37f241bbe`. Its PostgreSQL work plane has seven canonical lanes and zero definitions, subscriptions, schedules, runs, queue rows, idempotency rows, or dispatch receipts. The host timers below remain authoritative; the empty Nex deployment activated no replacement trigger or executor.
 
 ## Common Nex job contract
 
@@ -75,7 +78,7 @@ All timer definitions are under `infra/ops-analytics/files/systemd/`.
 | 18 | `creator-payout-run-draft` | Monday 08:00 CT; creates closed-week draft | Draft only; no payment | Scheduled T with draft-only grant |
 | 19 | `dashboard-publication-monitor` | Daily 23:55; checks committed publication coverage | Read-only monitor/alert | Scheduled R |
 | 20 | `dispatch-route-retry` | Every minute at second 15; retries route estimates | Internal route state; provider rate lookups | Retry-requested subscription plus backstop; T/A as applicable |
-| 21 | `finance-source-poll` | Boot +5m; 15m after completion; Mercury and disabled Plaid evidence | Zero QBO/journal/payment/filing authority; local untracked candidate | Register dormant scheduled R; preserve hash chain and accounting boundary |
+| 21 | `finance-source-poll` | Boot +5m; 15m after completion; Mercury and disabled Plaid evidence | Host-installed, enabled, and active; zero QBO/journal/payment/filing authority; source ownership still requires exact repository binding | Register dormant scheduled R; preserve hash chain and accounting boundary |
 | 22 | `fulfillment-daily-digest` | Daily 08:15 CT; Dispatch/tracking/inventory digest | Gmail send | Scheduled A with exact recipients/template and message receipt |
 | 23 | `fulfillment-tracking-sync` | Boot +3m; 10m after completion; ShipEngine tracking | Typed tracking/cost writes; gated Shopify fulfillment/tracking actions | Adapter poll plus projector; provider action separate A |
 | 24 | `health-collector` | Boot +2m; every 2m; host/DB/Redis/backup health | Infrastructure read and alert | I; retain systemd authority, ingest receipts only |
@@ -116,7 +119,17 @@ All timer definitions are under `infra/ops-analytics/files/systemd/`.
 | 59 | `tiktok-order-ingest` | Boot +7m; every 5m; orders to commerce-channel tables | Dry-run/import; no Dispatch projection | Adapter/projector T |
 | 60 | `tiktok-tracking-feedback` | Boot +13m; every 15m; movement readback | Confirmed feedback records; no broad submit in current unit | Scheduled/event T; any future provider submission gets separate A |
 
-Three timer definitions are untracked local candidates and must not be described as shipped: `finance-source-poll`, `inventory-eta-publish`, and `texas-franchise-tax-counter`.
+### Live-host additions found after the 60-row repository inventory
+
+| # | Timer | Current trigger and function | Current state or authority | Nex disposition |
+|---:|---|---|---|---|
+| 61 | `ais-sync` | Disabled host timer; reviewed-vessel AIS evidence sync | Provider/source evidence only; no inventory or routing authority | Scheduled R adapter intake; immutable observation/source receipt |
+| 62 | `backup-alert-unsnooze` | One-shot transient timer that removes the temporary backup-alert snooze and re-runs health collection | Infrastructure control only | I; keep as explicit incident/runbook receipt rather than a durable business schedule |
+| 63 | `creative-organic-source-backfill` | Every four hours; TikTok and Instagram source recovery through yt-dlp/Graph fallbacks | Provider reads and creative-source writes | Scheduled repair T; preserve per-source provenance and fallback identity |
+| 64 | `inbound-transport-sync` | Disabled host timer; inbound transport evidence sync | Transport evidence/read-model writes only | Scheduled R/T after transport adapter admission; no receipt/inventory authority |
+| 65 | `supply-email-ingest` | Roughly every 30 minutes; captures reviewed supply Gmail evidence | Approved-mailbox read and bounded supply evidence writes | Gmail-record subscription/projector with mailbox, participant, attachment, and thread provenance |
+
+The production re-audit found `finance-source-poll` installed, enabled, and active. `inventory-eta-publish` and `texas-franchise-tax-counter` remain absent from the live host and must not be described as shipped. The five additions above are live-host facts; their exact source/release ownership must be rebound before any migration or cutover.
 
 ## Continuous systemd workers
 
@@ -124,6 +137,7 @@ Three timer definitions are untracked local candidates and must not be described
 |---|---|---|
 | `ops-analytics-meta-capi-ingest.service` | Loopback bridge from worker/webhook payloads into PostgreSQL; restart-always | Keep as adapter transport initially; accepted payloads become durable Nex records/events |
 | `ops-analytics-creative-gemini-embedding-worker.service` | Polls embedding queue every 10s, batch 4, maximum 6 attempts | Replace polling only after Nex lease/retry/queue parity; executor can remain unchanged |
+| `ops-analytics-helpdesk-readonly-v1-gmail-source@{casey,historic-tyler,tyler}.service` | Three enabled, active read-only Gmail source instances with separate mailbox custody | Keep as source executors; emit exact message/thread/attachment records and receipts through the Gmail adapter before replacing any source loop |
 
 The ops API and cloudflared services are runtimes, not catalog jobs.
 

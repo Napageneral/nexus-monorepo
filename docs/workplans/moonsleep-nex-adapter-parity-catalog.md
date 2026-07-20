@@ -22,6 +22,8 @@ The architecture is:
 
 The initial inventory was produced from the local MoonSleep and Nex source trees. The MoonSleep checkout was at `abee5de6` with unrelated dirty work and the Nex umbrella checkout was at `ad66a961`; therefore exact deployment status must be rebound to a clean release commit inside each adapter lane.
 
+Production bedrock readback on 2026-07-20: the fresh MoonSleep Nex service is enabled and healthy on the Ops VPS at release `00371fcbe76b1fe2c93b319a06dc75f37f241bbe`. It contains exactly the fresh entities `Casey`, `MoonSleep Ops`, and `Tyler`, zero contacts, zero personal-state markers, zero adapters, zero business records/events/search documents, and zero job definitions/subscriptions/schedules/runs/queue rows. PostgreSQL migrations `records_events_work_initial` and `record_search_projection` are applied. Verifier hardening subsequently merged to Nex main at `3dcfbd0b33b0f4720525cca93203a9994376fb02` and passed the full disposable VPS cleanroom; it changes the offline quiesced-state verifier, not the active runtime behavior. No adapter lane may treat this empty deployment as provider admission or cutover authority.
+
 ## Universal completion contract
 
 An adapter is not complete because it can authenticate or return a sample page. Every lane must pass all nine gates:
@@ -170,6 +172,13 @@ Each lane must also prove bounded credentials, rate-limit behavior, retries, dea
 - **Nex starting point:** `packages/adapters/web-journey` and `packages/adapters/web-rum` scaffolds.
 - **Provider families:** funnel, session, checkout, attribution, consent, and storefront performance events.
 - **Completion:** real browser installation, stable event IDs, batching/retry behavior, and field-by-field parity with current event contracts.
+
+### 19. Maritime AIS and inbound transport evidence
+
+- **Current seams:** `ops-analytics-ais-sync.py`, `ops-analytics-inbound-transport-sync.py`, Supply Globe read models, and the `supply_transport_*` / `supply_vessel_*` tables.
+- **Nex starting point:** new bounded transport-evidence adapter lane; do not fold it into commerce fulfillment.
+- **Provider families:** reviewed vessel identities, AIS observations, voyage/leg evidence, source captures, transport milestones, and explicit source confidence.
+- **Completion:** bind each observation to the reviewed vessel/source identity, preserve provider and observation clocks, retain exact source evidence and confidence, distinguish observed from projected vessel state, and reconcile the existing Supply Globe without creating inventory receipt, routing, payment, or supplier-communication authority.
 
 ## Later or bounded lanes
 
