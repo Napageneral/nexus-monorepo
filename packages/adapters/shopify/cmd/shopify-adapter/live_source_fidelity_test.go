@@ -47,7 +47,7 @@ func TestLiveShopifyCustomerAndOrderSourceFidelity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fetch live orders: %v", err)
 	}
-	customers, customerSource, _, err := fetchCustomersSince(ctx, state, since)
+	customers, customerSource, _, err := fetchCustomersSince(ctx, state, since, shopifySyncModeBackfill)
 	if err != nil {
 		t.Fatalf("fetch live customers: %v", err)
 	}
