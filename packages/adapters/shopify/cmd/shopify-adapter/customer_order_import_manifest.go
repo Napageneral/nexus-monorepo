@@ -8,9 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	nexadapter "github.com/nexus-project/adapter-sdk-go"
 )
@@ -43,6 +45,7 @@ type customerOrderImportManifest struct {
 	Format               string                     `json:"format"`
 	StageDir             string                     `json:"stage_dir"`
 	ManifestPath         string                     `json:"manifest_path"`
+	ManifestFileSHA256   string                     `json:"manifest_file_sha256,omitempty"`
 	ConnectionID         string                     `json:"connection_id"`
 	ShopDomain           string                     `json:"shop_domain"`
 	Since                string                     `json:"since"`
@@ -51,6 +54,23 @@ type customerOrderImportManifest struct {
 	SourceManifestSHA256 string                     `json:"source_manifest_sha256"`
 	Chunks               []customerOrderImportChunk `json:"chunks"`
 	Totals               customerOrderImportTotals  `json:"totals"`
+}
+
+func stageAndExportCustomerOrderBackfill(ctx nexadapter.AdapterContext[struct{}], payload map[string]any) (any, error) {
+	stagePayload := make(map[string]any, len(payload))
+	for key, value := range payload {
+		stagePayload[key] = value
+	}
+	through, ok := stagePayload["to"]
+	if !ok {
+		return nil, errors.New("Shopify staged backfill requires an exact to boundary")
+	}
+	delete(stagePayload, "to")
+	stagePayload["through"] = through
+	if _, err := stageCustomerOrderBackfill(ctx, stagePayload); err != nil {
+		return nil, err
+	}
+	return exportCustomerOrderBackfill(ctx, stagePayload)
 }
 
 func exportCustomerOrderBackfill(ctx nexadapter.AdapterContext[struct{}], payload map[string]any) (any, error) {
@@ -81,7 +101,7 @@ func exportCustomerOrderBackfill(ctx nexadapter.AdapterContext[struct{}], payloa
 }
 
 func buildCustomerOrderImportManifest(source *customerOrderBackfillManifest) (*customerOrderImportManifest, error) {
-	sourceRaw, err := os.ReadFile(source.ManifestPath)
+	sourceRaw, err := readPrivateImmutableCustomerOrderArtifact(source.ManifestPath, customerOrderBackfillMaxPageBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +155,7 @@ func buildCustomerOrderImportManifest(source *customerOrderBackfillManifest) (*c
 	} else if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 || info.Size() > customerOrderBackfillMaxPageBytes {
 		return nil, errors.New("unsafe customer/order import manifest metadata")
 	}
-	raw, err := os.ReadFile(manifestPath)
+	raw, err := readPrivateImmutableCustomerOrderArtifact(manifestPath, customerOrderBackfillMaxPageBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -148,11 +168,13 @@ func buildCustomerOrderImportManifest(source *customerOrderBackfillManifest) (*c
 	if !bytes.Equal(gotRaw, wantRaw) {
 		return nil, errors.New("customer/order import manifest binding mismatch")
 	}
+	manifestDigest := sha256.Sum256(raw)
+	want.ManifestFileSHA256 = hex.EncodeToString(manifestDigest[:])
 	return want, nil
 }
 
 func buildCustomerOrderImportChunk(stageDir string, index int, receipt customerOrderBackfillPageReceipt) (*customerOrderImportChunk, []byte, error) {
-	pageRaw, err := os.ReadFile(receipt.Path)
+	pageRaw, err := readPrivateImmutableCustomerOrderArtifact(receipt.Path, customerOrderBackfillMaxPageBytes)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -221,22 +243,61 @@ func buildCustomerOrderImportChunk(stageDir string, index int, receipt customerO
 }
 
 func verifyCustomerOrderImportChunk(chunk customerOrderImportChunk) error {
-	info, err := os.Lstat(chunk.Path)
+	raw, err := readPrivateImmutableCustomerOrderArtifact(chunk.Path, customerOrderBackfillMaxPageBytes)
 	if err != nil {
 		return err
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 || info.Size() != chunk.ByteCount || info.Size() > customerOrderBackfillMaxPageBytes {
-		return fmt.Errorf("unsafe customer/order import chunk metadata: %s", chunk.Path)
-	}
-	raw, err := os.ReadFile(chunk.Path)
-	if err != nil {
-		return err
+	if int64(len(raw)) != chunk.ByteCount {
+		return fmt.Errorf("customer/order import chunk byte count mismatch: %s", chunk.Path)
 	}
 	digest := sha256.Sum256(raw)
 	if hex.EncodeToString(digest[:]) != chunk.SHA256 {
 		return fmt.Errorf("customer/order import chunk digest mismatch: %s", chunk.Path)
 	}
 	return nil
+}
+
+func readPrivateImmutableCustomerOrderArtifact(path string, maximumBytes int64) ([]byte, error) {
+	beforePath, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	beforeStat, ok := beforePath.Sys().(*syscall.Stat_t)
+	if !ok || !beforePath.Mode().IsRegular() || beforePath.Mode().Perm()&0o077 != 0 || beforeStat.Nlink != 1 || beforePath.Size() < 1 || beforePath.Size() > maximumBytes {
+		return nil, fmt.Errorf("unsafe customer/order artifact metadata: %s", path)
+	}
+
+	descriptor, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, err
+	}
+	file := os.NewFile(uintptr(descriptor), path)
+	if file == nil {
+		_ = syscall.Close(descriptor)
+		return nil, fmt.Errorf("open customer/order artifact: %s", path)
+	}
+	defer file.Close()
+
+	beforeOpen, err := file.Stat()
+	if err != nil || !os.SameFile(beforePath, beforeOpen) {
+		return nil, fmt.Errorf("customer/order artifact changed before read: %s", path)
+	}
+	raw, err := io.ReadAll(io.LimitReader(file, maximumBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(raw)) > maximumBytes || int64(len(raw)) != beforeOpen.Size() {
+		return nil, fmt.Errorf("customer/order artifact size changed while reading: %s", path)
+	}
+	afterOpen, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	afterPath, err := os.Lstat(path)
+	if err != nil || !os.SameFile(beforeOpen, afterOpen) || !os.SameFile(beforeOpen, afterPath) || afterOpen.Size() != beforeOpen.Size() || !afterOpen.ModTime().Equal(beforeOpen.ModTime()) {
+		return nil, fmt.Errorf("customer/order artifact changed while reading: %s", path)
+	}
+	return raw, nil
 }
 
 func rejectForeignCustomerOrderImportChunks(stageDir string, expected int) error {

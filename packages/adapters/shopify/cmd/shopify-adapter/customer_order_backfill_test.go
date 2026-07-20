@@ -120,6 +120,17 @@ func TestCustomerOrderBackfillResumesFromImmutablePageReceipt(t *testing.T) {
 	if importManifest.Version != 2 || importManifest.Format != "jsonl_files_sha256" || len(importManifest.Chunks) != 3 || importManifest.Totals.Records != 4 {
 		t.Fatalf("unexpected hash-bound import manifest: %#v", importManifest)
 	}
+	manifestRaw, err := os.ReadFile(importManifest.ManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifestDigest := sha256.Sum256(manifestRaw)
+	if importManifest.ManifestFileSHA256 != hex.EncodeToString(manifestDigest[:]) {
+		t.Fatalf("manifest file receipt does not bind exact persisted bytes: %#v", importManifest)
+	}
+	if bytes.Contains(manifestRaw, []byte("manifest_file_sha256")) {
+		t.Fatal("persisted import manifest contains a circular self digest")
+	}
 	for _, chunk := range importManifest.Chunks {
 		raw, err := os.ReadFile(chunk.Path)
 		if err != nil {
@@ -141,6 +152,28 @@ func TestCustomerOrderBackfillResumesFromImmutablePageReceipt(t *testing.T) {
 	replayedExport, _ := json.Marshal(replayed)
 	if !bytes.Equal(firstExport, replayedExport) {
 		t.Fatal("replayed customer/order import export changed its receipt")
+	}
+
+	genericPayload := map[string]any{
+		"since":     payload["since"],
+		"to":        payload["through"],
+		"stage_dir": stageDir,
+	}
+	genericResult, err := stageAndExportCustomerOrderBackfill(adapterContext, genericPayload)
+	if err != nil {
+		t.Fatalf("generic Nex staged backfill bridge: %v", err)
+	}
+	genericRaw, _ := json.Marshal(genericResult)
+	if !bytes.Equal(firstExport, genericRaw) {
+		t.Fatal("generic Nex staged backfill bridge changed the exact import manifest")
+	}
+	if got := orderFirstCalls + orderSecondCalls + customerCalls; got != beforeCalls {
+		t.Fatalf("generic replay contacted Shopify: before=%d after=%d", beforeCalls, got)
+	}
+	if _, err := stageAndExportCustomerOrderBackfill(adapterContext, map[string]any{
+		"since": payload["since"], "stage_dir": stageDir,
+	}); err == nil || !strings.Contains(err.Error(), "exact to boundary") {
+		t.Fatalf("generic staged backfill accepted a missing fixed upper boundary: %v", err)
 	}
 
 	tamperedChunk := importManifest.Chunks[0]
@@ -212,6 +245,36 @@ func TestCustomerOrderBackfillRequiresPrivateStageDirectory(t *testing.T) {
 	}
 	if _, err := resolvePrivateCustomerOrderStageDir(map[string]any{"stage_dir": stageDir}); err == nil {
 		t.Fatal("expected group/world-readable stage directory rejection")
+	}
+}
+
+func TestPrivateImmutableCustomerOrderArtifactRejectsLinks(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Chmod(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	original := filepath.Join(root, "source.json")
+	if err := os.WriteFile(original, []byte("{\"ok\":true}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := readPrivateImmutableCustomerOrderArtifact(original, 1024); err != nil || string(raw) != "{\"ok\":true}\n" {
+		t.Fatalf("read private immutable file: raw=%q err=%v", raw, err)
+	}
+
+	symlink := filepath.Join(root, "source-symlink.json")
+	if err := os.Symlink(original, symlink); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readPrivateImmutableCustomerOrderArtifact(symlink, 1024); err == nil {
+		t.Fatal("accepted symlinked customer/order artifact")
+	}
+
+	hardlink := filepath.Join(root, "source-hardlink.json")
+	if err := os.Link(original, hardlink); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readPrivateImmutableCustomerOrderArtifact(original, 1024); err == nil {
+		t.Fatal("accepted multiply-linked customer/order artifact")
 	}
 }
 
@@ -324,6 +387,7 @@ func TestCustomerOrderBackfillReceiptHashesExactRecordsJSON(t *testing.T) {
 
 func TestCustomerOrderBackfillMethodIsReadOnly(t *testing.T) {
 	for _, methodName := range []string{
+		"records.backfill.stage",
 		"records.backfill.customer_orders.stage",
 		"records.backfill.customer_orders.export",
 	} {

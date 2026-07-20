@@ -65,6 +65,7 @@ go build -o ./bin/shopify-adapter ./cmd/shopify-adapter
 ./bin/shopify-adapter records.backfill --connection shopify-primary --since 2026-01-01T00:00:00Z
 ./bin/shopify-adapter records.backfill.customer_orders.stage --connection shopify-primary --payload '{"since":"2020-01-01T00:00:00Z","through":"<captured-before-first-read RFC3339>","stage_dir":"<private absolute directory>"}'
 ./bin/shopify-adapter records.backfill.customer_orders.export --connection shopify-primary --payload '{"since":"2020-01-01T00:00:00Z","through":"<same captured RFC3339>","stage_dir":"<same private absolute directory>"}'
+./bin/shopify-adapter records.backfill.stage --connection shopify-primary --payload '{"since":"2020-01-01T00:00:00Z","to":"<same captured RFC3339>","stage_dir":"<Nex-owned private absolute directory>"}'
 ./bin/shopify-adapter adapter.monitor.start --connection shopify-primary
 ```
 
@@ -101,6 +102,10 @@ go build -o ./bin/shopify-adapter ./cmd/shopify-adapter
   private JSONL chunks whose exact bytes, SHA-256, record count, record-ID
   boundaries, and timestamp boundaries are required by Nex before the first
   historical ingest write
+- the generic `records.backfill.stage` method maps Nex's exact `to` boundary to
+  the same Shopify `through` boundary and returns the V2 manifest, allowing the
+  existing Nex staged-backfill worker to consume the Shopify snapshot without
+  a provider-specific execution path
 - orders, line items, customers, products, collections, inventory,
   fulfillments, discounts, and marketing activities remain canonical and
   row-shaped with exact provider JSON preserved in the record payload and Nex
