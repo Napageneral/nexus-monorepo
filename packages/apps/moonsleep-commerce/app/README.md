@@ -32,6 +32,13 @@ deterministic result hash plus created/replayed counters. Running the same set a
 second time must report zero new entities and contacts and every observation as
 replayed.
 
+For production-size sets, `shopify-customers.inspect-backfill` discovers the
+complete committed customer record set through paginated public `records.list`
+calls and returns only its count, boundaries, and SHA-256. The companion
+`project-complete-backfill` re-reads that public surface and proceeds only when
+the exact count and hash still match. This avoids direct SQL and multi-megabyte
+operator parameter files without weakening the explicit snapshot gate.
+
 Before ingest, `moonsleep-commerce.shopify-source.seed-identities` must run
 twice for the exact shop domain and connection ID. The first run creates the
 store and integration entity/contact anchors. The second must report zero new

@@ -29,6 +29,11 @@
 ## Historical backfill
 
 - Bind the exact staged Shopify manifest and all page hashes.
+- Call `moonsleep-commerce.shopify-customers.inspect-backfill` for the exact
+  shop and connection. Retain the returned record count, boundaries, and
+  SHA-256 as the public-runtime snapshot identity.
+- Call `project-complete-backfill` with that count and SHA-256; require its
+  internal re-scan to match before the first identity write.
 - Invoke `moonsleep-commerce.shopify-customers.project-backfill` with the exact
   sorted committed customer record IDs and the SHA-256 of their compact JSON
   array.

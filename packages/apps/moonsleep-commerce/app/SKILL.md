@@ -21,6 +21,12 @@ job ignores non-customer records. For a customer record it:
 5. Calls `entities.tags.list` and requires `Customer` and `Shopify`.
 6. Returns exact projection identifiers for the durable job receipt.
 
+For a full customer run, call `shopify-customers.inspect-backfill`, retain its
+count and record-set SHA-256, then pass both to
+`shopify-customers.project-complete-backfill`. Run the projection twice with
+the same inspected identity and require the second result to create nothing
+and replay every record.
+
 ## Boundaries
 
 - Do not query Nex or MoonSleep databases directly.

@@ -9,6 +9,8 @@ type RuntimeRow = Record<string, unknown>;
 
 const MAX_COHORT_RECORDS = 50;
 const MAX_BACKFILL_RECORDS = 20_000;
+const RECORD_SCAN_PAGE_SIZE = 1_000;
+const MAX_RECORDS_SCANNED = 100_000;
 const SHOPIFY_SOURCE_IDENTITY_OBSERVED_AT = Date.UTC(2026, 6, 20);
 
 type ShopifySourceIdentityObservation = {
@@ -109,6 +111,147 @@ function requireConnectionId(value: unknown): string {
   }
   return connectionId;
 }
+
+function requireExpectedRecordCount(value: unknown): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isSafeInteger(value) ||
+    value < 1 ||
+    value > MAX_BACKFILL_RECORDS
+  ) {
+    throw new Error(`expected_record_count must be an integer from 1 to ${MAX_BACKFILL_RECORDS}`);
+  }
+  return value;
+}
+
+function requireExpectedRecordSetSha256(value: unknown): string {
+  const digest = asString(value);
+  if (!/^[0-9a-f]{64}$/.test(digest) || value !== digest) {
+    throw new Error("expected_record_set_sha256 must be a lowercase SHA-256 digest");
+  }
+  return digest;
+}
+
+async function discoverShopifyCustomerRecordIds(params: {
+  nex: unknown;
+  shopDomain: string;
+  connectionId: string;
+}): Promise<string[]> {
+  const recordsClient = (params.nex as {
+    records: {
+      list: (input: {
+        platform: "shopify";
+        connection_id: string;
+        limit: number;
+        offset: number;
+      }) => Promise<unknown>;
+    };
+  }).records;
+  const customerIds: string[] = [];
+  let scanned = 0;
+
+  for (let offset = 0; offset < MAX_RECORDS_SCANNED; offset += RECORD_SCAN_PAGE_SIZE) {
+    const response = unwrapPayload(
+      await recordsClient.list({
+        platform: "shopify",
+        connection_id: params.connectionId,
+        limit: RECORD_SCAN_PAGE_SIZE,
+        offset,
+      }),
+    );
+    if (!Array.isArray(response.records)) {
+      throw new Error("records.list did not return a records array");
+    }
+    const rows = response.records.map(asRecord);
+    scanned += rows.length;
+    if (scanned > MAX_RECORDS_SCANNED) {
+      throw new Error(`Shopify record scan exceeds ${MAX_RECORDS_SCANNED} rows`);
+    }
+    for (const record of rows) {
+      const metadata = asRecord(record.metadata);
+      if (asString(metadata.family) !== "customer") {
+        continue;
+      }
+      if (asString(record.platform) !== "shopify") {
+        throw new Error("Shopify customer scan returned a foreign platform record");
+      }
+      if (asString(record.space_id) !== params.shopDomain) {
+        throw new Error("Shopify customer scan returned a foreign shop record");
+      }
+      buildShopifyCustomerObservation(record);
+      const id = asString(record.id);
+      if (!id || Buffer.byteLength(id, "utf8") > 512) {
+        throw new Error("Shopify customer scan returned an invalid record id");
+      }
+      customerIds.push(id);
+    }
+    if (rows.length < RECORD_SCAN_PAGE_SIZE) {
+      break;
+    }
+    if (offset + RECORD_SCAN_PAGE_SIZE >= MAX_RECORDS_SCANNED) {
+      throw new Error(`Shopify record scan reached the ${MAX_RECORDS_SCANNED}-row guard`);
+    }
+  }
+
+  customerIds.sort((left, right) => left.localeCompare(right));
+  if (customerIds.length < 1 || customerIds.length > MAX_BACKFILL_RECORDS) {
+    throw new Error(
+      `Shopify customer record set must contain between 1 and ${MAX_BACKFILL_RECORDS} records`,
+    );
+  }
+  if (new Set(customerIds).size !== customerIds.length) {
+    throw new Error("Shopify customer record scan returned duplicate record ids");
+  }
+  return customerIds;
+}
+
+export const inspectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) => {
+  const shopDomain = requireShopDomain(ctx.params.shop_domain);
+  const connectionId = requireConnectionId(ctx.params.connection_id);
+  const recordIds = await discoverShopifyCustomerRecordIds({
+    nex: ctx.nex,
+    shopDomain,
+    connectionId,
+  });
+  return {
+    state: "ready",
+    shop_domain: shopDomain,
+    connection_id: connectionId,
+    record_count: recordIds.length,
+    record_set_sha256: shopifyCustomerRecordSetSha256(recordIds),
+    first_record_id: recordIds[0],
+    last_record_id: recordIds.at(-1),
+    provider_write_authority: false,
+  };
+};
+
+export const projectCompleteShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) => {
+  const shopDomain = requireShopDomain(ctx.params.shop_domain);
+  const connectionId = requireConnectionId(ctx.params.connection_id);
+  const expectedRecordCount = requireExpectedRecordCount(ctx.params.expected_record_count);
+  const expectedRecordSetSha256 = requireExpectedRecordSetSha256(
+    ctx.params.expected_record_set_sha256,
+  );
+  const recordIds = await discoverShopifyCustomerRecordIds({
+    nex: ctx.nex,
+    shopDomain,
+    connectionId,
+  });
+  const recordSetSha256 = shopifyCustomerRecordSetSha256(recordIds);
+  if (
+    recordIds.length !== expectedRecordCount ||
+    recordSetSha256 !== expectedRecordSetSha256
+  ) {
+    throw new Error("Shopify customer record set no longer matches the inspected snapshot");
+  }
+  return projectShopifyCustomerBackfill({
+    ...ctx,
+    params: {
+      record_ids: recordIds,
+      record_set_sha256: recordSetSha256,
+    },
+  });
+};
 
 export function buildShopifySourceIdentityObservations(
   params: RuntimeRow,
@@ -227,6 +370,7 @@ const healthcheck: NexAppMethodHandler = async (ctx) => ({
     shopify_customer_identity: "dormant_pending_event_handoff",
     shopify_customer_cohort: "available_bounded_manual_replay",
     shopify_customer_backfill: "available_explicit_manual_replay",
+    shopify_customer_complete_backfill: "available_hash_bound_public_scan",
     shopify_order_commerce: "not_implemented",
   },
   provider_write_authority: false,
@@ -318,6 +462,9 @@ export const projectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) =
 export default {
   "moonsleep-commerce.healthcheck": healthcheck,
   "moonsleep-commerce.shopify-source.seed-identities": seedShopifySourceIdentities,
+  "moonsleep-commerce.shopify-customers.inspect-backfill": inspectShopifyCustomerBackfill,
+  "moonsleep-commerce.shopify-customers.project-complete-backfill":
+    projectCompleteShopifyCustomerBackfill,
   "moonsleep-commerce.shopify-customers.project-cohort": projectShopifyCustomerCohort,
   "moonsleep-commerce.shopify-customers.project-backfill": projectShopifyCustomerBackfill,
 };
