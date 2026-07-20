@@ -401,6 +401,59 @@ func TestCustomerOrderBackfillMethodIsReadOnly(t *testing.T) {
 	}
 }
 
+func TestCustomerOrderBackfillPublishedDiscoveryMatchesExecutableV2Contract(t *testing.T) {
+	raw, err := os.ReadFile("../../adapter.nexus.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var descriptor struct {
+		Methods map[string]struct {
+			Description        string         `json:"description"`
+			Action             string         `json:"action"`
+			ConnectionRequired bool           `json:"connection_required"`
+			MutatesRemote      bool           `json:"mutates_remote"`
+			Params             map[string]any `json:"params"`
+			Response           map[string]any `json:"response"`
+		} `json:"methods"`
+	}
+	if err := json.Unmarshal(raw, &descriptor); err != nil {
+		t.Fatal(err)
+	}
+	published, ok := descriptor.Methods["records.backfill.stage"]
+	if !ok {
+		t.Fatal("adapter.nexus.json does not publish records.backfill.stage")
+	}
+	executable, ok := declaredShopifyMethods()["records.backfill.stage"]
+	if !ok {
+		t.Fatal("executable adapter does not declare records.backfill.stage")
+	}
+	if executable.ConnectionRequired == nil || executable.MutatesRemote == nil {
+		t.Fatal("executable records.backfill.stage authority flags are incomplete")
+	}
+	if published.Description != executable.Description ||
+		published.Action != executable.Action ||
+		published.ConnectionRequired != *executable.ConnectionRequired ||
+		published.MutatesRemote != *executable.MutatesRemote {
+		t.Fatal("published records.backfill.stage metadata differs from executable declaration")
+	}
+	for label, pair := range map[string][2]any{
+		"params":   {published.Params, executable.Params},
+		"response": {published.Response, executable.Response},
+	} {
+		publishedJSON, err := json.Marshal(pair[0])
+		if err != nil {
+			t.Fatalf("marshal published %s: %v", label, err)
+		}
+		executableJSON, err := json.Marshal(pair[1])
+		if err != nil {
+			t.Fatalf("marshal executable %s: %v", label, err)
+		}
+		if !bytes.Equal(publishedJSON, executableJSON) {
+			t.Fatalf("published records.backfill.stage %s differs from executable declaration\npublished: %s\nexecutable: %s", label, publishedJSON, executableJSON)
+		}
+	}
+}
+
 func TestShopifyOrderPageRejectsCrossOriginCursorBeforeRequest(t *testing.T) {
 	state := &shopifyState{ShopDomain: "moonsleepco.myshopify.com", APIVersion: "2026-01"}
 	for _, candidate := range []string{

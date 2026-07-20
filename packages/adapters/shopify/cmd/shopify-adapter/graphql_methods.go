@@ -214,55 +214,6 @@ func declaredShopifyMethods() map[string]nexadapter.DeclaredMethod[struct{}] {
 	for name, method := range graphQLQueryMethods() {
 		methods[name] = method
 	}
-	methods["records.backfill.stage"] = nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
-		Description: "Stage historical Shopify backfill into canonical JSONL chunk files for Nex bulk import.",
-		Action:      "read",
-		Params: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"since":     map[string]any{"type": "string"},
-				"stage_dir": map[string]any{"type": "string"},
-			},
-			"required": []string{"since", "stage_dir"},
-		},
-		Response: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"version":       map[string]any{"type": "integer"},
-				"format":        map[string]any{"type": "string"},
-				"stage_dir":     map[string]any{"type": "string"},
-				"manifest_path": map[string]any{"type": "string"},
-				"totals": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"records": map[string]any{"type": "integer"},
-					},
-					"required": []string{"records"},
-				},
-				"chunks": map[string]any{
-					"type": "array",
-					"items": map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"path":               map[string]any{"type": "string"},
-							"records":            map[string]any{"type": "integer"},
-							"first_record_id":    map[string]any{"type": "string"},
-							"last_record_id":     map[string]any{"type": "string"},
-							"first_timestamp_ms": map[string]any{"type": "integer"},
-							"last_timestamp_ms":  map[string]any{"type": "integer"},
-						},
-						"required": []string{"path", "records"},
-					},
-				},
-			},
-			"required": []string{"version", "format", "stage_dir", "manifest_path", "totals", "chunks"},
-		},
-		ConnectionRequired: boolPtr(true),
-		MutatesRemote:      boolPtr(false),
-		Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
-			return stageBackfill(ctx, req.Payload)
-		},
-	})
 	methods["records.backfill.customer_orders.stage"] = nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
 		Description: "Stage resumable Shopify customer and order history as immutable, cursor-bound page receipts.",
 		Action:      "read",
