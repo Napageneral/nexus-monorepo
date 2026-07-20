@@ -1,0 +1,46 @@
+{
+  "id": "moonsleep-commerce",
+  "version": "0.1.0",
+  "displayName": "MoonSleep Commerce",
+  "description": "Project exact Shopify records into MoonSleep identity and typed commerce state through public Nex operations.",
+  "skill": "./SKILL.md",
+  "handler": "./methods/index.ts",
+  "hooks": {
+    "onInstall": "./hooks/install.ts",
+    "onActivate": "./hooks/activate.ts",
+    "onDeactivate": "./hooks/deactivate.ts",
+    "onUpgrade": "./hooks/upgrade.ts",
+    "onUninstall": "./hooks/uninstall.ts"
+  },
+  "hosting": {
+    "required_server_class": "standard",
+    "deployment_class": "customer_server"
+  },
+  "product": {
+    "tagline": "Exact provider evidence into durable customer and commerce state",
+    "accentColor": "#0f766e",
+    "visibility": "customer",
+    "plans": [
+      {
+        "id": "moonsleep-commerce-internal",
+        "displayName": "MoonSleep Commerce Internal",
+        "priceMonthly": 0,
+        "isDefault": true
+      }
+    ]
+  },
+  "methods": {
+    "moonsleep-commerce.healthcheck": {
+      "description": "Report the installed MoonSleep commerce projector contract.",
+      "action": "read",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "properties": {}
+      },
+      "response": {
+        "type": "object"
+      }
+    }
+  }
+}
