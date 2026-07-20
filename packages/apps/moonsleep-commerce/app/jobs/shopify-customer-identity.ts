@@ -85,13 +85,6 @@ function exactSourceObject(payload: RuntimeRow): RuntimeRow {
   if (Object.keys(sourceObject).length === 0) {
     throw new Error("Shopify customer provider_object_json must contain an object");
   }
-  const decodedObject = asRecord(payload.provider_object);
-  if (Object.keys(decodedObject).length === 0) {
-    throw new Error("Shopify customer provider_object must contain an object");
-  }
-  if (asString(decodedObject.id) !== asString(sourceObject.id)) {
-    throw new Error("Shopify customer decoded provider object disagrees with exact JSON identity");
-  }
   return sourceObject;
 }
 

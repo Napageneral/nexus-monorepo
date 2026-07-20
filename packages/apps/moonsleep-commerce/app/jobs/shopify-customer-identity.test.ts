@@ -8,7 +8,6 @@ import shopifyCustomerIdentityJob, {
 function sourceEnvelope(source: Record<string, unknown>) {
   const providerObjectJson = JSON.stringify(source);
   return {
-    provider_object: source,
     provider_object_json: providerObjectJson,
     provider_object_sha256: createHash("sha256").update(providerObjectJson).digest("hex"),
   };
@@ -163,12 +162,20 @@ describe("Shopify customer identity projection", () => {
     expect(() => buildShopifyCustomerObservation(record)).toThrow(/hash does not match/);
   });
 
-  it("fails closed when the decoded provider object identity disagrees with exact JSON", () => {
+  it("keeps the exact JSON string authoritative across the JavaScript number boundary", () => {
     const record = customerRecord();
-    (record.payload as Record<string, unknown>).provider_object = {
-      id: "gid://shopify/Customer/999",
+    const source = {
+      id: "gid://shopify/Customer/7123456789",
+      displayName: "Rina Alvarez",
+      provider_large_integer: 9_007_199_254_740_993n.toString(),
     };
-    expect(() => buildShopifyCustomerObservation(record)).toThrow(/decoded provider object disagrees/);
+    const raw = `{"id":"${source.id}","displayName":"${source.displayName}","provider_large_integer":9007199254740993123456789}`;
+    record.payload = {
+      provider_object_json: raw,
+      provider_object_sha256: createHash("sha256").update(raw).digest("hex"),
+    };
+    expect(buildShopifyCustomerObservation(record).contact_id).toBe(source.id);
+    expect(record.payload).not.toHaveProperty("provider_object");
   });
 
   it("fails closed when source, normalized and provider identity anchors disagree", () => {

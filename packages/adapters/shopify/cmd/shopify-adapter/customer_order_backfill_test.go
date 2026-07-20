@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -190,7 +191,8 @@ func TestCustomerOrderBackfillReceiptHashesExactRecordsJSON(t *testing.T) {
 			Content:          "customer proof",
 			ContentType:      "text",
 			Payload: map[string]any{
-				"provider_object": map[string]any{"provider_large_integer": json.Number("9007199254740993123456789")},
+				"provider_object_json":   `{"provider_large_integer":9007199254740993123456789}`,
+				"provider_object_sha256": "bb0d42371de05353a6aaff910297909eac6b1aa81d38f3ba1dff998f2c6c6f27",
 			},
 			Metadata: map[string]any{"family": "customer"},
 		},
@@ -203,6 +205,13 @@ func TestCustomerOrderBackfillReceiptHashesExactRecordsJSON(t *testing.T) {
 		t.Fatalf("reload exact-number page receipt: %v", err)
 	} else if !complete {
 		t.Fatal("expected exact-number page to remain complete")
+	}
+	raw, err := os.ReadFile(filepath.Join(stageDir, "customers-page-000000.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(raw, []byte(`9007199254740993123456789`)) {
+		t.Fatalf("exact provider number lexeme was not preserved in its source JSON string: %s", raw)
 	}
 }
 

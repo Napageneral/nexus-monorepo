@@ -223,7 +223,6 @@ func providerPayloadEnvelope(providerJSON json.RawMessage, providerObject map[st
 	}
 	digest := sha256.Sum256(raw)
 	return map[string]any{
-		"provider_object":        object,
 		"provider_object_json":   string(raw),
 		"provider_object_sha256": hex.EncodeToString(digest[:]),
 	}

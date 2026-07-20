@@ -26,7 +26,11 @@ The projector requires all of the following:
 
 - `payload.provider_object_json`
 - `payload.provider_object_sha256`
-- `payload.provider_object`
+
+The exact JSON string and digest are authoritative. A decoded provider object is
+intentionally not transported through JavaScript because unknown provider
+numbers can exceed JavaScript's safe integer range. Projectors read only the
+bounded fields they require from the exact JSON and never rewrite that evidence.
 - `metadata.family=customer`
 - `metadata.row.shop_domain`
 - `metadata.row.customer_gid`

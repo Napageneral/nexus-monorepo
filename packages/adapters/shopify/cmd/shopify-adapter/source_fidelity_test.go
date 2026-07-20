@@ -78,7 +78,7 @@ func TestShopifyOrderPreservesExactSourceObjectBeforeTypedProjection(t *testing.
 		t.Fatalf("unexpected shipping country: %#v", got)
 	}
 	record := buildOrderRecord(&shopifyState{ConnectionID: "shopify-primary", ShopDomain: "moonsleepco.myshopify.com"}, order, shopifySourceRequest{})
-	assertProviderPayloadEnvelope(t, record.Payload.Payload, input, order.rawProviderPayload)
+	assertProviderPayloadEnvelope(t, record.Payload.Payload, input)
 	if _, leaked := record.Payload.Metadata["raw_provider_payload"]; leaked {
 		t.Fatal("provider order object leaked into Nex metadata")
 	}
@@ -161,13 +161,13 @@ func TestShopifyCustomerPreservesIdentityFieldsAndExactSourceObject(t *testing.T
 		t.Fatalf("unexpected address country: %#v", got)
 	}
 	record := buildCustomerRecord(&shopifyState{ConnectionID: "shopify-primary", ShopDomain: "moonsleepco.myshopify.com"}, customer, shopifySourceRequest{})
-	assertProviderPayloadEnvelope(t, record.Payload.Payload, input, customer.rawProviderPayload)
+	assertProviderPayloadEnvelope(t, record.Payload.Payload, input)
 	if _, leaked := record.Payload.Metadata["raw_provider_payload"]; leaked {
 		t.Fatal("provider customer object leaked into Nex metadata")
 	}
 }
 
-func assertProviderPayloadEnvelope(t *testing.T, envelope map[string]any, sourceJSON []byte, sourceObject map[string]any) {
+func assertProviderPayloadEnvelope(t *testing.T, envelope map[string]any, sourceJSON []byte) {
 	t.Helper()
 	if envelope == nil {
 		t.Fatal("expected provider payload envelope")
@@ -179,20 +179,8 @@ func assertProviderPayloadEnvelope(t *testing.T, envelope map[string]any, source
 	if got := envelope["provider_object_sha256"]; got != hex.EncodeToString(digest[:]) {
 		t.Fatalf("unexpected provider payload digest: %#v", got)
 	}
-	providerObject, ok := envelope["provider_object"].(map[string]any)
-	if !ok {
-		t.Fatalf("unexpected provider payload object: %#v", envelope["provider_object"])
-	}
-	want, err := json.Marshal(sourceObject)
-	if err != nil {
-		t.Fatalf("marshal expected provider object: %v", err)
-	}
-	got, err := json.Marshal(providerObject)
-	if err != nil {
-		t.Fatalf("marshal actual provider object: %v", err)
-	}
-	if !bytes.Equal(got, want) {
-		t.Fatalf("provider object changed: got %s want %s", got, want)
+	if _, present := envelope["provider_object"]; present {
+		t.Fatal("decoded provider object must not cross the JavaScript JSON boundary")
 	}
 }
 
