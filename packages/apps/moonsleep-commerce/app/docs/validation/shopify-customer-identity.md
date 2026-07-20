@@ -4,7 +4,10 @@
 
 - Install a fresh MoonSleep-only Nex runtime using PostgreSQL.
 - Confirm zero records, contacts, entities, tags, observations, jobs, and runs.
-- Install MoonSleep Commerce and prove exactly one active Shopify subscription.
+- Install MoonSleep Commerce and prove exactly one inactive Shopify subscription
+  and one inactive customer projector job.
+- Prove activation remains dormant until the governed PostgreSQL event-to-work
+  handoff is installed and independently validated.
 - Ingest one customer revision and prove one entity, one contact, two tags, and
   one observation.
 - Replay the same revision and prove no count growth.
@@ -25,6 +28,8 @@
 
 ## Continuous sync
 
+- First prove each PostgreSQL `record.ingested` event reaches SQLite-owned work
+  through the governed receipt-bound handoff with crash/replay idempotency.
 - Create a new Shopify test customer through an approved provider path.
 - Observe a new immutable record, event, job, contact, entity, and tags.
 - Update the customer and prove a new observation with the same entity binding.

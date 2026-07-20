@@ -7,6 +7,7 @@ const EVENT_TYPE = "record.ingested";
 const JOB_NAME = "moonsleep-commerce.shopify-customer-identity";
 const JOB_DESCRIPTION =
   "Observe Shopify customer contacts and verify canonical MoonSleep customer entities";
+const DORMANT_JOB_STATUS = "inactive";
 const JOB_SCRIPT_PATH = fileURLToPath(
   new URL("../jobs/shopify-customer-identity.ts", import.meta.url),
 );
@@ -61,7 +62,7 @@ async function ensureJob(runtime: NexClient, appId: string): Promise<string> {
     const needsUpdate =
       asString(existing.description) !== JOB_DESCRIPTION ||
       asString(existing.script_path) !== JOB_SCRIPT_PATH ||
-      asString(existing.status) !== "active";
+      asString(existing.status) !== DORMANT_JOB_STATUS;
     if (!needsUpdate) {
       return id;
     }
@@ -70,7 +71,7 @@ async function ensureJob(runtime: NexClient, appId: string): Promise<string> {
         id,
         description: JOB_DESCRIPTION,
         script_path: JOB_SCRIPT_PATH,
-        status: "active",
+        status: DORMANT_JOB_STATUS,
         created_by: appId,
       }),
     );
@@ -82,7 +83,7 @@ async function ensureJob(runtime: NexClient, appId: string): Promise<string> {
       name: JOB_NAME,
       description: JOB_DESCRIPTION,
       script_path: JOB_SCRIPT_PATH,
-      status: "active",
+      status: DORMANT_JOB_STATUS,
       created_by: appId,
     }),
   );
@@ -108,12 +109,12 @@ async function ensureSubscription(runtime: NexClient, jobDefinitionId: string): 
   );
   if (existing) {
     const id = asString(existing.id);
-    if (asInteger(existing.enabled) !== 1) {
+    if (asInteger(existing.enabled) !== 0) {
       const updated = unwrapPayload(
         await runtime.events.subscriptions.update({
           id,
           match: SHOPIFY_MATCH,
-          enabled: true,
+          enabled: false,
         }),
       );
       return asString(asRecord(updated.subscription).id) || id;
@@ -125,7 +126,7 @@ async function ensureSubscription(runtime: NexClient, jobDefinitionId: string): 
       job_definition_id: jobDefinitionId,
       event_type: EVENT_TYPE,
       match: SHOPIFY_MATCH,
-      enabled: true,
+      enabled: false,
     }),
   );
   const id = asString(asRecord(created.subscription).id);

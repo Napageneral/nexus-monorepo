@@ -7,7 +7,7 @@ const healthcheck: NexAppMethodHandler = async (ctx) => ({
     version: ctx.app.version,
   },
   projectors: {
-    shopify_customer_identity: "registered",
+    shopify_customer_identity: "dormant_pending_event_handoff",
     shopify_order_commerce: "not_implemented",
   },
   provider_write_authority: false,

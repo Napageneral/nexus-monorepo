@@ -34,7 +34,7 @@ function runtimeFixture(initial: {
             id: "subscription-1",
             match_json: JSON.stringify(params.match),
             ...params,
-            enabled: 1,
+            enabled: params.enabled === true ? 1 : 0,
           };
           subscriptions.push(subscription);
           return { payload: { subscription } };
@@ -50,7 +50,7 @@ function runtimeFixture(initial: {
 }
 
 describe("MoonSleep commerce runtime work", () => {
-  it("creates one active Shopify record subscription for the customer projector", async () => {
+  it("installs the Shopify customer projector dormant pending the event handoff", async () => {
     const fixture = runtimeFixture();
     await expect(
       ensureMoonSleepCommerceRuntimeWork({ runtime: fixture.runtime, appId: "moonsleep-commerce" }),
@@ -60,11 +60,11 @@ describe("MoonSleep commerce runtime work", () => {
       job_definition_id: "job-1",
       event_type: "record.ingested",
       match: { platform: "shopify" },
-      enabled: true,
+      enabled: false,
     });
   });
 
-  it("is idempotent when the exact active job and subscription already exist", async () => {
+  it("is idempotent when the exact dormant job and subscription already exist", async () => {
     const expectedScript = new URL("../jobs/shopify-customer-identity.ts", import.meta.url).pathname;
     const fixture = runtimeFixture({
       jobs: [{
@@ -72,14 +72,14 @@ describe("MoonSleep commerce runtime work", () => {
         name: "moonsleep-commerce.shopify-customer-identity",
         description: "Observe Shopify customer contacts and verify canonical MoonSleep customer entities",
         script_path: expectedScript,
-        status: "active",
+        status: "inactive",
       }],
       subscriptions: [{
         id: "subscription-1",
         job_definition_id: "job-1",
         event_type: "record.ingested",
         match_json: JSON.stringify({ platform: "shopify" }),
-        enabled: 1,
+        enabled: 0,
       }],
     });
     await ensureMoonSleepCommerceRuntimeWork({ runtime: fixture.runtime, appId: "moonsleep-commerce" });
@@ -95,7 +95,7 @@ describe("MoonSleep commerce runtime work", () => {
         name: "moonsleep-commerce.shopify-customer-identity",
         description: "Observe Shopify customer contacts and verify canonical MoonSleep customer entities",
         script_path: new URL("../jobs/shopify-customer-identity.ts", import.meta.url).pathname,
-        status: "active",
+        status: "inactive",
       }],
       subscriptions: [{
         id: "foreign",

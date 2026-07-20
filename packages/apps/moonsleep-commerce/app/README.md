@@ -10,7 +10,8 @@ stable Shopify contact, resolves the canonical Nex entity, and verifies the
 Current scope:
 
 - Shopify customer identity projection
-- replay-safe `record.ingested` job registration
+- dormant `record.ingested` job registration pending the governed PostgreSQL
+  event-to-work handoff
 - deterministic shop-domain and customer-GID contact anchors
 - exact provider JSON hash verification
 - conservative identity behavior with no email, phone, or name merge
@@ -20,4 +21,5 @@ Not yet implemented:
 - typed order and line-item projection
 - historical production backfill execution
 - continuous production monitor activation
+- event subscription activation before the crash-safe event handoff lands
 - Shopify, Dispatch, payment, refund, or fulfillment writes
