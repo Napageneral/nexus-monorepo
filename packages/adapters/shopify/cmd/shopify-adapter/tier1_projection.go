@@ -31,12 +31,54 @@ type shopifyCustomerConnection struct {
 }
 
 type shopifyGraphQLCustomer struct {
-	ID          string   `json:"id"`
-	DisplayName string   `json:"displayName"`
-	Email       string   `json:"email"`
-	UpdatedAt   string   `json:"updatedAt"`
-	Tags        []string `json:"tags"`
-	State       string   `json:"state"`
+	ID                 string                          `json:"id"`
+	DisplayName        string                          `json:"displayName"`
+	FirstName          string                          `json:"firstName"`
+	LastName           string                          `json:"lastName"`
+	Email              string                          `json:"email"`
+	Phone              string                          `json:"phone"`
+	CreatedAt          string                          `json:"createdAt"`
+	UpdatedAt          string                          `json:"updatedAt"`
+	Tags               []string                        `json:"tags"`
+	State              string                          `json:"state"`
+	VerifiedEmail      bool                            `json:"verifiedEmail"`
+	DefaultAddress     *shopifyGraphQLCustomerAddress  `json:"defaultAddress"`
+	Addresses          []shopifyGraphQLCustomerAddress `json:"addresses"`
+	rawProviderJSON    json.RawMessage
+	rawProviderPayload map[string]any
+}
+
+type shopifyGraphQLCustomerAddress struct {
+	ID            string `json:"id"`
+	FirstName     string `json:"firstName"`
+	LastName      string `json:"lastName"`
+	Name          string `json:"name"`
+	Company       string `json:"company"`
+	Address1      string `json:"address1"`
+	Address2      string `json:"address2"`
+	City          string `json:"city"`
+	Province      string `json:"province"`
+	ProvinceCode  string `json:"provinceCode"`
+	Country       string `json:"country"`
+	CountryCodeV2 string `json:"countryCodeV2"`
+	Zip           string `json:"zip"`
+	Phone         string `json:"phone"`
+}
+
+func (customer *shopifyGraphQLCustomer) UnmarshalJSON(data []byte) error {
+	type decodedShopifyGraphQLCustomer shopifyGraphQLCustomer
+	var decoded decodedShopifyGraphQLCustomer
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	raw, err := decodeProviderJSONObject(data)
+	if err != nil {
+		return err
+	}
+	*customer = shopifyGraphQLCustomer(decoded)
+	customer.rawProviderJSON = append(json.RawMessage(nil), data...)
+	customer.rawProviderPayload = raw
+	return nil
 }
 
 type shopifyProductEdge struct {
@@ -248,10 +290,47 @@ func fetchCustomersSince(ctx context.Context, state *shopifyState, since time.Ti
       node {
         id
         displayName
+        firstName
+        lastName
         email
+        phone
+        createdAt
         updatedAt
         tags
         state
+        verifiedEmail
+        defaultAddress {
+          id
+          firstName
+          lastName
+          name
+          company
+          address1
+          address2
+          city
+          province
+          provinceCode
+          country
+          countryCodeV2
+          zip
+          phone
+        }
+        addresses {
+          id
+          firstName
+          lastName
+          name
+          company
+          address1
+          address2
+          city
+          province
+          provinceCode
+          country
+          countryCodeV2
+          zip
+          phone
+        }
       }
     }
     pageInfo {
@@ -1007,7 +1086,7 @@ func buildCustomerRecord(state *shopifyState, customer shopifyGraphQLCustomer, s
 	}
 	customerID := shopifyGIDIdentityToken(customerGID)
 	row := normalizedCustomerRow(state.ShopDomain, customer)
-	revision := revisionHash(row)
+	revision := revisionHash(providerRevisionInput(customer.rawProviderPayload, row))
 	logicalRowID := fmt.Sprintf("%s:%s", state.ShopDomain, customerGID)
 	threadID := fmt.Sprintf("%s:customer:%s", state.ShopDomain, customerID)
 	threadName := firstNonBlank(customer.DisplayName, customer.Email, customerID)
@@ -1045,17 +1124,17 @@ func buildCustomerRecord(state *shopifyState, customer shopifyGraphQLCustomer, s
 			Timestamp:        shopifyUpdatedAtOrNow(customer.UpdatedAt).UnixMilli(),
 			Content:          fmt.Sprintf("customer %s email=%s state=%s", threadName, firstNonBlank(customer.Email, "unknown"), firstNonBlank(customer.State, "unknown")),
 			ContentType:      "text",
+			Payload:          providerPayloadEnvelope(customer.rawProviderJSON, customer.rawProviderPayload, customer),
 			Metadata: map[string]any{
-				"connection_id":        connectionID,
-				"adapter_id":           platformID,
-				"family":               "customer",
-				"logical_row_id":       logicalRowID,
-				"revision_hash":        revision,
-				"provider_ids":         providerIDs,
-				"row":                  row,
-				"bridge_attributes":    map[string]any{},
-				"raw_provider_payload": mustJSONObject(customer),
-				"source_request":       sourceRequest.metadata(),
+				"connection_id":     connectionID,
+				"adapter_id":        platformID,
+				"family":            "customer",
+				"logical_row_id":    logicalRowID,
+				"revision_hash":     revision,
+				"provider_ids":      providerIDs,
+				"row":               row,
+				"bridge_attributes": map[string]any{},
+				"source_request":    sourceRequest.metadata(),
 			},
 		},
 	}
@@ -1482,17 +1561,55 @@ func buildMarketingRecord(state *shopifyState, activity shopifyGraphQLMarketingA
 }
 
 func normalizedCustomerRow(shopDomain string, customer shopifyGraphQLCustomer) map[string]any {
+	addresses := make([]map[string]any, 0, len(customer.Addresses))
+	for _, address := range customer.Addresses {
+		addresses = append(addresses, normalizedGraphQLCustomerAddress(address))
+	}
 	row := map[string]any{
-		"shop_domain":  shopDomain,
-		"customer_gid": customer.ID,
-		"customer_id":  shopifyNumericGID(customer.ID),
-		"display_name": customer.DisplayName,
-		"email":        customer.Email,
-		"updated_at":   customer.UpdatedAt,
-		"state":        customer.State,
-		"tags":         customer.Tags,
+		"shop_domain":        shopDomain,
+		"customer_gid":       customer.ID,
+		"customer_id":        shopifyNumericGID(customer.ID),
+		"display_name":       customer.DisplayName,
+		"first_name":         customer.FirstName,
+		"last_name":          customer.LastName,
+		"email":              customer.Email,
+		"phone":              customer.Phone,
+		"created_at":         customer.CreatedAt,
+		"updated_at":         customer.UpdatedAt,
+		"state":              customer.State,
+		"verified_email":     customer.VerifiedEmail,
+		"tags":               customer.Tags,
+		"default_address":    normalizedOptionalGraphQLCustomerAddress(customer.DefaultAddress),
+		"addresses":          addresses,
+		"addresses_complete": true,
 	}
 	return compactMap(row)
+}
+
+func normalizedOptionalGraphQLCustomerAddress(address *shopifyGraphQLCustomerAddress) any {
+	if address == nil {
+		return nil
+	}
+	return normalizedGraphQLCustomerAddress(*address)
+}
+
+func normalizedGraphQLCustomerAddress(address shopifyGraphQLCustomerAddress) map[string]any {
+	return compactMap(map[string]any{
+		"address_gid":   address.ID,
+		"first_name":    address.FirstName,
+		"last_name":     address.LastName,
+		"name":          address.Name,
+		"company":       address.Company,
+		"address1":      address.Address1,
+		"address2":      address.Address2,
+		"city":          address.City,
+		"province":      address.Province,
+		"province_code": address.ProvinceCode,
+		"country":       address.Country,
+		"country_code":  address.CountryCodeV2,
+		"zip":           address.Zip,
+		"phone":         address.Phone,
+	})
 }
 
 func normalizedProductRow(shopDomain string, product shopifyGraphQLProduct) map[string]any {
@@ -1609,6 +1726,13 @@ func normalizedMarketingRow(shopDomain string, activity shopifyGraphQLMarketingA
 }
 
 func decodeGraphQLField[T any](response *shopifyGraphQLResponse, field string) (*T, error) {
+	if raw, ok := response.rawData[field]; ok {
+		var parsed T
+		if err := json.Unmarshal(raw, &parsed); err != nil {
+			return nil, fmt.Errorf("decode Shopify graphql %s field: %w", field, err)
+		}
+		return &parsed, nil
+	}
 	raw, ok := response.Data[field]
 	if !ok {
 		return nil, fmt.Errorf("Shopify graphql response missing field %q", field)

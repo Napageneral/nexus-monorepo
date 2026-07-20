@@ -122,6 +122,35 @@ type shopifyGraphQLResponse struct {
 	Data       map[string]any            `json:"data"`
 	Extensions map[string]any            `json:"extensions"`
 	Errors     []shopifyGraphQLErrorItem `json:"errors"`
+	rawData    map[string]json.RawMessage
+}
+
+func (response *shopifyGraphQLResponse) UnmarshalJSON(data []byte) error {
+	var envelope struct {
+		Data       map[string]json.RawMessage `json:"data"`
+		Extensions map[string]any             `json:"extensions"`
+		Errors     []shopifyGraphQLErrorItem  `json:"errors"`
+	}
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return err
+	}
+
+	decodedData := make(map[string]any, len(envelope.Data))
+	rawData := make(map[string]json.RawMessage, len(envelope.Data))
+	for field, raw := range envelope.Data {
+		var decoded any
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			return fmt.Errorf("decode Shopify graphql data field %q: %w", field, err)
+		}
+		decodedData[field] = decoded
+		rawData[field] = append(json.RawMessage(nil), raw...)
+	}
+
+	response.Data = decodedData
+	response.Extensions = envelope.Extensions
+	response.Errors = envelope.Errors
+	response.rawData = rawData
+	return nil
 }
 
 type shopifyGraphQLErrorItem struct {

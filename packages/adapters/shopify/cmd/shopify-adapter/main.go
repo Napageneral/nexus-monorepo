@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -80,32 +81,54 @@ type shopifyOrdersResponse struct {
 }
 
 type shopifyOrder struct {
-	ID                int64                  `json:"id"`
-	OrderNumber       int64                  `json:"order_number"`
-	Name              string                 `json:"name"`
-	CreatedAt         string                 `json:"created_at"`
-	UpdatedAt         string                 `json:"updated_at"`
-	ProcessedAt       string                 `json:"processed_at"`
-	Currency          string                 `json:"currency"`
-	TotalPrice        string                 `json:"total_price"`
-	SubtotalPrice     string                 `json:"subtotal_price"`
-	FinancialStatus   string                 `json:"financial_status"`
-	FulfillmentStatus string                 `json:"fulfillment_status"`
-	CancelledAt       string                 `json:"cancelled_at"`
-	CartToken         string                 `json:"cart_token"`
-	CheckoutToken     string                 `json:"checkout_token"`
-	SourceName        string                 `json:"source_name"`
-	ReferringSite     string                 `json:"referring_site"`
-	LandingSite       string                 `json:"landing_site"`
-	Email             string                 `json:"email"`
-	Tags              string                 `json:"tags"`
-	NoteAttributes    []shopifyNoteAttribute `json:"note_attributes"`
-	Customer          *shopifyCustomer       `json:"customer"`
-	LineItems         []shopifyLineItem      `json:"line_items"`
+	ID                 int64                  `json:"id"`
+	OrderNumber        int64                  `json:"order_number"`
+	Name               string                 `json:"name"`
+	CreatedAt          string                 `json:"created_at"`
+	UpdatedAt          string                 `json:"updated_at"`
+	ProcessedAt        string                 `json:"processed_at"`
+	Currency           string                 `json:"currency"`
+	TotalPrice         string                 `json:"total_price"`
+	SubtotalPrice      string                 `json:"subtotal_price"`
+	FinancialStatus    string                 `json:"financial_status"`
+	FulfillmentStatus  string                 `json:"fulfillment_status"`
+	CancelledAt        string                 `json:"cancelled_at"`
+	CartToken          string                 `json:"cart_token"`
+	CheckoutToken      string                 `json:"checkout_token"`
+	SourceName         string                 `json:"source_name"`
+	ReferringSite      string                 `json:"referring_site"`
+	LandingSite        string                 `json:"landing_site"`
+	Email              string                 `json:"email"`
+	Phone              string                 `json:"phone"`
+	Tags               string                 `json:"tags"`
+	NoteAttributes     []shopifyNoteAttribute `json:"note_attributes"`
+	Customer           *shopifyCustomer       `json:"customer"`
+	BillingAddress     *shopifyAddress        `json:"billing_address"`
+	ShippingAddress    *shopifyAddress        `json:"shipping_address"`
+	LineItems          []shopifyLineItem      `json:"line_items"`
+	rawProviderJSON    json.RawMessage
+	rawProviderPayload map[string]any
 }
 
 type shopifyCustomer struct {
 	ID int64 `json:"id"`
+}
+
+type shopifyAddress struct {
+	ID           int64  `json:"id"`
+	FirstName    string `json:"first_name"`
+	LastName     string `json:"last_name"`
+	Name         string `json:"name"`
+	Company      string `json:"company"`
+	Address1     string `json:"address1"`
+	Address2     string `json:"address2"`
+	City         string `json:"city"`
+	Province     string `json:"province"`
+	ProvinceCode string `json:"province_code"`
+	Country      string `json:"country"`
+	CountryCode  string `json:"country_code"`
+	Zip          string `json:"zip"`
+	Phone        string `json:"phone"`
 }
 
 type shopifyNoteAttribute struct {
@@ -115,16 +138,88 @@ type shopifyNoteAttribute struct {
 }
 
 type shopifyLineItem struct {
-	ID                int64  `json:"id"`
-	ProductID         int64  `json:"product_id"`
-	VariantID         int64  `json:"variant_id"`
-	Title             string `json:"title"`
-	VariantTitle      string `json:"variant_title"`
-	SKU               string `json:"sku"`
-	Vendor            string `json:"vendor"`
-	Quantity          int    `json:"quantity"`
-	Price             string `json:"price"`
-	FulfillmentStatus string `json:"fulfillment_status"`
+	ID                 int64  `json:"id"`
+	ProductID          int64  `json:"product_id"`
+	VariantID          int64  `json:"variant_id"`
+	Title              string `json:"title"`
+	VariantTitle       string `json:"variant_title"`
+	SKU                string `json:"sku"`
+	Vendor             string `json:"vendor"`
+	Quantity           int    `json:"quantity"`
+	Price              string `json:"price"`
+	FulfillmentStatus  string `json:"fulfillment_status"`
+	rawProviderJSON    json.RawMessage
+	rawProviderPayload map[string]any
+}
+
+func (order *shopifyOrder) UnmarshalJSON(data []byte) error {
+	type decodedShopifyOrder shopifyOrder
+	var decoded decodedShopifyOrder
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	raw, err := decodeProviderJSONObject(data)
+	if err != nil {
+		return err
+	}
+	*order = shopifyOrder(decoded)
+	order.rawProviderJSON = append(json.RawMessage(nil), data...)
+	order.rawProviderPayload = raw
+	return nil
+}
+
+func (lineItem *shopifyLineItem) UnmarshalJSON(data []byte) error {
+	type decodedShopifyLineItem shopifyLineItem
+	var decoded decodedShopifyLineItem
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	raw, err := decodeProviderJSONObject(data)
+	if err != nil {
+		return err
+	}
+	*lineItem = shopifyLineItem(decoded)
+	lineItem.rawProviderJSON = append(json.RawMessage(nil), data...)
+	lineItem.rawProviderPayload = raw
+	return nil
+}
+
+func decodeProviderJSONObject(data []byte) (map[string]any, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var raw map[string]any
+	if err := decoder.Decode(&raw); err != nil {
+		return nil, err
+	}
+	if raw == nil {
+		return nil, errors.New("Shopify provider object must be a JSON object")
+	}
+	return raw, nil
+}
+
+func providerRevisionInput(providerObject map[string]any, typedFallback any) any {
+	if providerObject != nil {
+		return providerObject
+	}
+	return typedFallback
+}
+
+func providerPayloadEnvelope(providerJSON json.RawMessage, providerObject map[string]any, typedFallback any) map[string]any {
+	object := providerRevisionInput(providerObject, mustJSONObject(typedFallback))
+	raw := append(json.RawMessage(nil), providerJSON...)
+	if len(raw) == 0 {
+		encoded, err := json.Marshal(object)
+		if err != nil {
+			encoded = []byte("{}")
+		}
+		raw = encoded
+	}
+	digest := sha256.Sum256(raw)
+	return map[string]any{
+		"provider_object":        object,
+		"provider_object_json":   string(raw),
+		"provider_object_sha256": hex.EncodeToString(digest[:]),
+	}
 }
 
 type shopifySourceRequest struct {
@@ -930,10 +1025,11 @@ func buildOrderRecord(state *shopifyState, order shopifyOrder, sourceRequest sho
 	row := normalizedOrderRow(state.ShopDomain, order)
 	bridgeAttributes := extractBridgeAttributes(order)
 	logicalRowID := fmt.Sprintf("%s:%s", state.ShopDomain, orderID)
-	revision := revisionHash(map[string]any{
+	typedRevisionInput := map[string]any{
 		"row":               row,
 		"bridge_attributes": bridgeAttributes,
-	})
+	}
+	revision := revisionHash(providerRevisionInput(order.rawProviderPayload, typedRevisionInput))
 	threadID := fmt.Sprintf("%s:order:%s", state.ShopDomain, orderID)
 	threadName := firstNonBlank(order.Name, orderID)
 	providerIDs := map[string]any{
@@ -972,17 +1068,17 @@ func buildOrderRecord(state *shopifyState, order shopifyOrder, sourceRequest sho
 			Timestamp:        orderTimestamp(order).UnixMilli(),
 			Content:          fmt.Sprintf("order %s total=%s financial_status=%s fulfillment_status=%s", threadName, firstNonBlank(order.TotalPrice, "0"), firstNonBlank(order.FinancialStatus, "unknown"), firstNonBlank(order.FulfillmentStatus, "unknown")),
 			ContentType:      "text",
+			Payload:          providerPayloadEnvelope(order.rawProviderJSON, order.rawProviderPayload, order),
 			Metadata: map[string]any{
-				"connection_id":        connectionID,
-				"adapter_id":           platformID,
-				"family":               "order",
-				"logical_row_id":       logicalRowID,
-				"revision_hash":        revision,
-				"provider_ids":         providerIDs,
-				"row":                  row,
-				"bridge_attributes":    bridgeAttributes,
-				"raw_provider_payload": mustJSONObject(order),
-				"source_request":       sourceRequest.metadata(),
+				"connection_id":     connectionID,
+				"adapter_id":        platformID,
+				"family":            "order",
+				"logical_row_id":    logicalRowID,
+				"revision_hash":     revision,
+				"provider_ids":      providerIDs,
+				"row":               row,
+				"bridge_attributes": bridgeAttributes,
+				"source_request":    sourceRequest.metadata(),
 			},
 		},
 	}
@@ -1002,7 +1098,7 @@ func buildLineItemRecord(state *shopifyState, order shopifyOrder, lineItem shopi
 	}
 
 	row := normalizedLineItemRow(state.ShopDomain, order, lineItem)
-	revision := revisionHash(row)
+	revision := revisionHash(providerRevisionInput(lineItem.rawProviderPayload, row))
 	logicalRowID := fmt.Sprintf("%s:%s:%s", state.ShopDomain, orderID, lineItemID)
 	threadID := fmt.Sprintf("%s:order:%s", state.ShopDomain, orderID)
 	providerIDs := map[string]any{
@@ -1041,17 +1137,17 @@ func buildLineItemRecord(state *shopifyState, order shopifyOrder, lineItem shopi
 			Timestamp:        lineItemTimestamp(order).UnixMilli(),
 			Content:          fmt.Sprintf("line_item order=%s line_item=%s quantity=%d price=%s", firstNonBlank(order.Name, orderID), lineItemID, lineItem.Quantity, firstNonBlank(lineItem.Price, "0")),
 			ContentType:      "text",
+			Payload:          providerPayloadEnvelope(lineItem.rawProviderJSON, lineItem.rawProviderPayload, lineItem),
 			Metadata: map[string]any{
-				"connection_id":        connectionID,
-				"adapter_id":           platformID,
-				"family":               "line_item",
-				"logical_row_id":       logicalRowID,
-				"revision_hash":        revision,
-				"provider_ids":         providerIDs,
-				"row":                  row,
-				"bridge_attributes":    map[string]any{},
-				"raw_provider_payload": mustJSONObject(lineItem),
-				"source_request":       sourceRequest.metadata(),
+				"connection_id":     connectionID,
+				"adapter_id":        platformID,
+				"family":            "line_item",
+				"logical_row_id":    logicalRowID,
+				"revision_hash":     revision,
+				"provider_ids":      providerIDs,
+				"row":               row,
+				"bridge_attributes": map[string]any{},
+				"source_request":    sourceRequest.metadata(),
 			},
 		},
 	}
@@ -1080,10 +1176,35 @@ func normalizedOrderRow(shopDomain string, order shopifyOrder) map[string]any {
 		"landing_site":       order.LandingSite,
 		"customer_id":        int64String(pointerCustomerID(order.Customer)),
 		"customer_email":     order.Email,
+		"customer_phone":     order.Phone,
+		"billing_address":    normalizedAddressSnapshot(order.BillingAddress),
+		"shipping_address":   normalizedAddressSnapshot(order.ShippingAddress),
 		"tags":               order.Tags,
 		"note_attributes":    noteAttributes,
 	}
 	return compactMap(row)
+}
+
+func normalizedAddressSnapshot(address *shopifyAddress) any {
+	if address == nil {
+		return nil
+	}
+	return compactMap(map[string]any{
+		"address_id":    int64String(address.ID),
+		"first_name":    address.FirstName,
+		"last_name":     address.LastName,
+		"name":          address.Name,
+		"company":       address.Company,
+		"address1":      address.Address1,
+		"address2":      address.Address2,
+		"city":          address.City,
+		"province":      address.Province,
+		"province_code": address.ProvinceCode,
+		"country":       address.Country,
+		"country_code":  address.CountryCode,
+		"zip":           address.Zip,
+		"phone":         address.Phone,
+	})
 }
 
 func normalizedLineItemRow(shopDomain string, order shopifyOrder, lineItem shopifyLineItem) map[string]any {

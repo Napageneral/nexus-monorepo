@@ -191,6 +191,7 @@ type AdapterInboundPayload struct {
 	Timestamp        int64          `json:"timestamp"`
 	Content          string         `json:"content"`
 	ContentType      string         `json:"content_type"`
+	Payload          map[string]any `json:"payload,omitempty"`
 	Attachments      []Attachment   `json:"attachments,omitempty"`
 	Recipients       []string       `json:"recipients,omitempty"`
 	Metadata         map[string]any `json:"metadata,omitempty"`
