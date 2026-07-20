@@ -10,6 +10,9 @@
   handoff is installed and independently validated.
 - Ingest one customer revision and prove one entity, one contact, two tags, and
   one observation.
+- Invoke `moonsleep-commerce.shopify-customers.project-cohort` with that exact
+  committed record ID; require one projected result and zero provider-write
+  authority.
 - Replay the same revision and prove no count growth.
 - Ingest a newer revision and prove the same entity/contact binding plus one new
   observation.

@@ -5,7 +5,8 @@ Run the focused tests with the Nex workspace toolchain:
 ```bash
 /Users/tyler/nexus/home/projects/nexus/nex/node_modules/.bin/vitest run \
   jobs/shopify-customer-identity.test.ts \
-  hooks/runtime-work.test.ts
+  hooks/runtime-work.test.ts \
+  methods/index.test.ts
 ```
 
 Validate the package:
