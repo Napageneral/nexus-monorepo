@@ -7,10 +7,12 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	nexadapter "github.com/nexus-project/adapter-sdk-go"
 )
@@ -59,7 +61,7 @@ func TestCustomerOrderBackfillResumesFromImmutablePageReceipt(t *testing.T) {
 		ConnectionID: "shopify-primary",
 		Runtime:      shopifyRuntimeContextForServer(server.URL),
 	}
-	payload := map[string]any{"since": "2026-01-01T00:00:00Z", "stage_dir": stageDir}
+	payload := map[string]any{"since": "2026-01-01T00:00:00Z", "through": "2026-07-20T12:00:00Z", "stage_dir": stageDir}
 
 	if _, err := stageCustomerOrderBackfill(adapterContext, payload); err == nil || !strings.Contains(err.Error(), "503") {
 		t.Fatalf("expected the injected second-page failure, got %v", err)
@@ -127,7 +129,7 @@ func TestCustomerOrderBackfillRejectsTamperedCompletedReceipt(t *testing.T) {
 		t.Fatal(err)
 	}
 	adapterContext := nexadapter.AdapterContext[struct{}]{Context: context.Background(), ConnectionID: "shopify-primary", Runtime: shopifyRuntimeContextForServer(server.URL)}
-	payload := map[string]any{"since": "2026-01-01T00:00:00Z", "stage_dir": stageDir}
+	payload := map[string]any{"since": "2026-01-01T00:00:00Z", "through": "2026-07-20T12:00:00Z", "stage_dir": stageDir}
 	if _, err := stageCustomerOrderBackfill(adapterContext, payload); err != nil {
 		t.Fatalf("initial customer/order backfill: %v", err)
 	}
@@ -167,13 +169,65 @@ func TestCustomerOrderBackfillBindingRejectsAnotherStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	since := mustParseRFC3339(t, "2026-01-01T00:00:00Z")
+	through := mustParseRFC3339(t, "2026-07-20T12:00:00Z")
 	first := &shopifyState{ConnectionID: "shopify-primary", ShopDomain: "moonsleepco.myshopify.com"}
-	if err := ensureCustomerOrderBackfillBinding(stageDir, first, since); err != nil {
+	if err := ensureCustomerOrderBackfillBinding(stageDir, first, since, through); err != nil {
 		t.Fatalf("create stage binding: %v", err)
 	}
 	other := &shopifyState{ConnectionID: "shopify-primary", ShopDomain: "another-store.myshopify.com"}
-	if err := ensureCustomerOrderBackfillBinding(stageDir, other, since); err == nil || !strings.Contains(err.Error(), "binding mismatch") {
+	if err := ensureCustomerOrderBackfillBinding(stageDir, other, since, through); err == nil || !strings.Contains(err.Error(), "binding mismatch") {
 		t.Fatalf("expected cross-store binding rejection, got %v", err)
+	}
+	if err := ensureCustomerOrderBackfillBinding(stageDir, first, since, through.Add(-1)); err == nil || !strings.Contains(err.Error(), "binding mismatch") {
+		t.Fatalf("expected changed upper-bound rejection, got %v", err)
+	}
+}
+
+func TestCustomerOrderBackfillUsesExactFixedUpdatedWindow(t *testing.T) {
+	through := time.Now().UTC().Truncate(time.Second)
+	since := through.Add(-24 * time.Hour)
+	resolvedSince, resolvedThrough, err := resolveCustomerOrderBackfillWindow(map[string]any{
+		"since":   since.Format(time.RFC3339),
+		"through": through.Format(time.RFC3339),
+	})
+	if err != nil {
+		t.Fatalf("resolve fixed backfill window: %v", err)
+	}
+	if !resolvedSince.Equal(since) || !resolvedThrough.Equal(through) {
+		t.Fatalf("window changed during parsing: since=%s through=%s", resolvedSince, resolvedThrough)
+	}
+	for name, payload := range map[string]map[string]any{
+		"missing through": {"since": since.Format(time.RFC3339)},
+		"reversed":        {"since": since.Format(time.RFC3339), "through": since.Format(time.RFC3339)},
+		"future":          {"since": since.Format(time.RFC3339), "through": time.Now().UTC().Add(time.Hour).Format(time.RFC3339)},
+	} {
+		if _, _, err := resolveCustomerOrderBackfillWindow(payload); err == nil {
+			t.Fatalf("%s window was accepted", name)
+		}
+	}
+
+	state := &shopifyState{ShopDomain: "moonsleepco.myshopify.com", APIVersion: "2026-01"}
+	orderSource, requestURL := shopifyOrdersWindowRequest(state, since, true, &through)
+	parsedURL, err := url.Parse(requestURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := parsedURL.Query().Get("updated_at_min"); got != since.Format(time.RFC3339) {
+		t.Fatalf("wrong order lower bound: %q", got)
+	}
+	if got := parsedURL.Query().Get("updated_at_max"); got != through.Format(time.RFC3339) {
+		t.Fatalf("wrong order upper bound: %q", got)
+	}
+	if got := parsedURL.Query().Get("order"); got != "updated_at asc" {
+		t.Fatalf("wrong order window sort: %q", got)
+	}
+	if orderSource.Request["updated_at_min"] != since.Format(time.RFC3339) || orderSource.Request["updated_at_max"] != through.Format(time.RFC3339) {
+		t.Fatalf("order source receipt lost its fixed window: %#v", orderSource.Request)
+	}
+	customerSource := shopifyCustomerSourceRequest(state, since, through)
+	wantQuery := shopifyUpdatedWindowFilter(since, through)
+	if customerSource.Request["query"] != wantQuery || customerSource.Request["cursor_since"] != since.Format(time.RFC3339) || customerSource.Request["cursor_through"] != through.Format(time.RFC3339) {
+		t.Fatalf("customer source receipt lost its fixed window: %#v", customerSource.Request)
 	}
 }
 
@@ -183,6 +237,7 @@ func TestCustomerOrderBackfillReceiptHashesExactRecordsJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	since := mustParseRFC3339(t, "2026-01-01T00:00:00Z")
+	through := mustParseRFC3339(t, "2026-07-20T12:00:00Z")
 	record := nexadapter.AdapterInboundRecord{
 		Operation: "record.ingest",
 		Payload: nexadapter.AdapterInboundPayload{
@@ -197,11 +252,11 @@ func TestCustomerOrderBackfillReceiptHashesExactRecordsJSON(t *testing.T) {
 			Metadata: map[string]any{"family": "customer"},
 		},
 	}
-	page := newCustomerOrderBackfillPage("customers", 0, since, "", "", true, 1, []nexadapter.AdapterInboundRecord{record})
+	page := newCustomerOrderBackfillPage("customers", 0, since, through, "", "", true, 1, []nexadapter.AdapterInboundRecord{record})
 	if _, err := persistCustomerOrderPage(stageDir, page); err != nil {
 		t.Fatalf("exact-number page receipt rejected: %v", err)
 	}
-	if _, _, complete, err := loadCustomerOrderPageChain(stageDir, "customers", since, ""); err != nil {
+	if _, _, complete, err := loadCustomerOrderPageChain(stageDir, "customers", since, through, ""); err != nil {
 		t.Fatalf("reload exact-number page receipt: %v", err)
 	} else if !complete {
 		t.Fatal("expected exact-number page to remain complete")

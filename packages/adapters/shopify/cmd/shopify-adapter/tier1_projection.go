@@ -1782,6 +1782,14 @@ func shopifyUpdatedSinceFilter(since time.Time) string {
 	return fmt.Sprintf("updated_at:>='%s'", since.UTC().Format(time.RFC3339))
 }
 
+func shopifyUpdatedWindowFilter(since time.Time, through time.Time) string {
+	return fmt.Sprintf(
+		"updated_at:>='%s' updated_at:<='%s'",
+		since.UTC().Format(time.RFC3339),
+		through.UTC().Format(time.RFC3339),
+	)
+}
+
 func shopifyUpdatedAtOrNow(value string) time.Time {
 	if parsed := parseShopifyUpdatedAt(value); !parsed.IsZero() {
 		return parsed

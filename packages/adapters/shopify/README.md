@@ -20,6 +20,8 @@ Current validated behavior:
 - row-shaped provider facts for orders, line items, customers, and products
   through additive Nex projection
 - connection activation backfill and incremental monitor behavior
+- resumable customer/order history staging over an immutable `[since, through]`
+  updated-time window, with cursor-bound page receipts and a hash-bound manifest
 - mounted-capability agent-use proof for representative `shopify.graphql.query`
   use in cleanroom
 - cleanroom proof against MoonSleep Shopify credentials
@@ -89,6 +91,7 @@ go test ./...
 ./bin/shopify-adapter shopify.query.customer --connection <connection-id> --payload '{"id":"gid://shopify/Customer/<customer-id>"}'
 ./bin/shopify-adapter adapter.monitor.start --connection <connection-id>
 ./bin/shopify-adapter records.backfill --connection <connection-id> --since 2026-01-01T00:00:00Z
+./bin/shopify-adapter records.backfill.customer_orders.stage --connection <connection-id> --payload '{"since":"2020-01-01T00:00:00Z","through":"2026-07-20T18:00:00Z","stage_dir":"/private/operator-owned/shopify-customer-orders"}'
 ```
 
 ## Active Docs

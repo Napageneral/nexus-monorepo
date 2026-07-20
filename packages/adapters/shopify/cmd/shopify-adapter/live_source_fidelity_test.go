@@ -119,12 +119,14 @@ func TestLiveShopifyCustomerOrderPageStaging(t *testing.T) {
 		},
 	}
 	tokenCache = nil
+	through := time.Now().UTC()
 	result, err := stageCustomerOrderBackfill(nexadapter.AdapterContext[struct{}]{
 		Context:      context.Background(),
 		ConnectionID: runtimeContext.ConnectionID,
 		Runtime:      runtimeContext,
 	}, map[string]any{
 		"since":     since.Format(time.RFC3339),
+		"through":   through.Format(time.RFC3339),
 		"stage_dir": stageDir,
 	})
 	if err != nil {
@@ -137,8 +139,8 @@ func TestLiveShopifyCustomerOrderPageStaging(t *testing.T) {
 	if manifest.Totals.OrderSourceRows == 0 || manifest.Totals.CustomerSourceRows == 0 || manifest.Totals.Records == 0 {
 		t.Fatalf("unexpected empty live page-staging totals: %#v", manifest.Totals)
 	}
-	t.Logf("live resumable page staging PASS since=%s pages=%d order_source_rows=%d customer_source_rows=%d records=%d",
-		since.Format(time.RFC3339), len(manifest.Pages), manifest.Totals.OrderSourceRows, manifest.Totals.CustomerSourceRows, manifest.Totals.Records)
+	t.Logf("live resumable page staging PASS since=%s through=%s pages=%d order_source_rows=%d customer_source_rows=%d records=%d",
+		since.Format(time.RFC3339), through.Format(time.RFC3339), len(manifest.Pages), manifest.Totals.OrderSourceRows, manifest.Totals.CustomerSourceRows, manifest.Totals.Records)
 }
 
 func assertMinimumLiveRows(t *testing.T, family string, actual int, rawMinimum string) {

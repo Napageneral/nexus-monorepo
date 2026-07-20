@@ -29,6 +29,7 @@ type customerOrderBackfillBinding struct {
 	ConnectionID string `json:"connection_id"`
 	ShopDomain   string `json:"shop_domain"`
 	Since        string `json:"since"`
+	Through      string `json:"through"`
 }
 
 type customerOrderBackfillPage struct {
@@ -36,6 +37,7 @@ type customerOrderBackfillPage struct {
 	Family        string                            `json:"family"`
 	PageIndex     int                               `json:"page_index"`
 	Since         string                            `json:"since"`
+	Through       string                            `json:"through"`
 	RequestCursor string                            `json:"request_cursor"`
 	NextCursor    string                            `json:"next_cursor,omitempty"`
 	Complete      bool                              `json:"complete"`
@@ -69,6 +71,7 @@ type customerOrderBackfillManifest struct {
 	ConnectionID string                             `json:"connection_id"`
 	ShopDomain   string                             `json:"shop_domain"`
 	Since        string                             `json:"since"`
+	Through      string                             `json:"through"`
 	StageDir     string                             `json:"stage_dir"`
 	ManifestPath string                             `json:"manifest_path"`
 	Pages        []customerOrderBackfillPageReceipt `json:"pages"`
@@ -76,7 +79,7 @@ type customerOrderBackfillManifest struct {
 }
 
 func stageCustomerOrderBackfill(ctx nexadapter.AdapterContext[struct{}], payload map[string]any) (any, error) {
-	since, err := resolveStagedBackfillSince(payload)
+	since, through, err := resolveCustomerOrderBackfillWindow(payload)
 	if err != nil {
 		return nil, err
 	}
@@ -88,22 +91,22 @@ func stageCustomerOrderBackfill(ctx nexadapter.AdapterContext[struct{}], payload
 	if err != nil {
 		return nil, err
 	}
-	if err := ensureCustomerOrderBackfillBinding(stageDir, state, since); err != nil {
+	if err := ensureCustomerOrderBackfillBinding(stageDir, state, since, through); err != nil {
 		return nil, err
 	}
 	manifestPath := filepath.Join(stageDir, customerOrderBackfillManifestName)
-	if manifest, err := loadCompletedCustomerOrderManifest(manifestPath, state, since, stageDir); err != nil {
+	if manifest, err := loadCompletedCustomerOrderManifest(manifestPath, state, since, through, stageDir); err != nil {
 		return nil, err
 	} else if manifest != nil {
 		return manifest, nil
 	}
 
-	orderSource, initialOrderCursor := shopifyOrdersRequest(state, since, false)
-	orderReceipts, orderCursor, ordersComplete, err := loadCustomerOrderPageChain(stageDir, "orders", since, initialOrderCursor)
+	orderSource, initialOrderCursor := shopifyOrdersWindowRequest(state, since, true, &through)
+	orderReceipts, orderCursor, ordersComplete, err := loadCustomerOrderPageChain(stageDir, "orders", since, through, initialOrderCursor)
 	if err != nil {
 		return nil, err
 	}
-	customerReceipts, customerCursor, customersComplete, err := loadCustomerOrderPageChain(stageDir, "customers", since, "")
+	customerReceipts, customerCursor, customersComplete, err := loadCustomerOrderPageChain(stageDir, "customers", since, through, "")
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +135,7 @@ func stageCustomerOrderBackfill(ctx nexadapter.AdapterContext[struct{}], payload
 					}
 				}
 			}
-			artifact := newCustomerOrderBackfillPage("orders", pageIndex, since, page.RequestCursor, page.NextCursor, page.Complete, len(page.Orders), records)
+			artifact := newCustomerOrderBackfillPage("orders", pageIndex, since, through, page.RequestCursor, page.NextCursor, page.Complete, len(page.Orders), records)
 			receipt, err := persistCustomerOrderPage(stageDir, artifact)
 			if err != nil {
 				return nil, err
@@ -149,7 +152,7 @@ func stageCustomerOrderBackfill(ctx nexadapter.AdapterContext[struct{}], payload
 		}
 	}
 
-	customerQuery := shopifyUpdatedSinceFilter(since)
+	customerQuery := shopifyUpdatedWindowFilter(since, through)
 	if !customersComplete {
 		for pageIndex := len(customerReceipts); pageIndex < customerOrderBackfillMaxCustomers; pageIndex++ {
 			page, err := fetchCustomerPage(customerOrderBackfillContext(ctx), state, customerQuery, customerCursor)
@@ -158,11 +161,11 @@ func stageCustomerOrderBackfill(ctx nexadapter.AdapterContext[struct{}], payload
 			}
 			records := make([]nexadapter.AdapterInboundRecord, 0, len(page.Customers))
 			for _, customer := range page.Customers {
-				if record := buildCustomerRecord(state, customer, shopifyCustomerSourceRequest(state, since)); record.Operation != "" {
+				if record := buildCustomerRecord(state, customer, shopifyCustomerSourceRequest(state, since, through)); record.Operation != "" {
 					records = append(records, record)
 				}
 			}
-			artifact := newCustomerOrderBackfillPage("customers", pageIndex, since, page.RequestCursor, page.NextCursor, page.Complete, len(page.Customers), records)
+			artifact := newCustomerOrderBackfillPage("customers", pageIndex, since, through, page.RequestCursor, page.NextCursor, page.Complete, len(page.Customers), records)
 			receipt, err := persistCustomerOrderPage(stageDir, artifact)
 			if err != nil {
 				return nil, err
@@ -185,6 +188,7 @@ func stageCustomerOrderBackfill(ctx nexadapter.AdapterContext[struct{}], payload
 		ConnectionID: state.ConnectionID,
 		ShopDomain:   state.ShopDomain,
 		Since:        since.UTC().Format(time.RFC3339),
+		Through:      through.UTC().Format(time.RFC3339),
 		StageDir:     stageDir,
 		ManifestPath: manifestPath,
 		Pages:        append(orderReceipts, customerReceipts...),
@@ -196,25 +200,56 @@ func stageCustomerOrderBackfill(ctx nexadapter.AdapterContext[struct{}], payload
 	return manifest, nil
 }
 
-func shopifyCustomerSourceRequest(state *shopifyState, since time.Time) shopifySourceRequest {
-	query := shopifyUpdatedSinceFilter(since)
+func resolveCustomerOrderBackfillWindow(payload map[string]any) (time.Time, time.Time, error) {
+	if payload == nil {
+		return time.Time{}, time.Time{}, errors.New("customer/order backfill requires since and through")
+	}
+	rawSince, sinceOK := payload["since"].(string)
+	rawThrough, throughOK := payload["through"].(string)
+	sinceText := strings.TrimSpace(rawSince)
+	throughText := strings.TrimSpace(rawThrough)
+	if !sinceOK || !throughOK || sinceText == "" || throughText == "" {
+		return time.Time{}, time.Time{}, errors.New("customer/order backfill requires RFC3339 since and through")
+	}
+	since, err := time.Parse(time.RFC3339, sinceText)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("invalid customer/order backfill since %q: %w", sinceText, err)
+	}
+	through, err := time.Parse(time.RFC3339, throughText)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("invalid customer/order backfill through %q: %w", throughText, err)
+	}
+	since = since.UTC()
+	through = through.UTC()
+	if !through.After(since) {
+		return time.Time{}, time.Time{}, errors.New("customer/order backfill through must be after since")
+	}
+	if through.After(time.Now().UTC()) {
+		return time.Time{}, time.Time{}, errors.New("customer/order backfill through must not be in the future")
+	}
+	return since, through, nil
+}
+
+func shopifyCustomerSourceRequest(state *shopifyState, since time.Time, through time.Time) shopifySourceRequest {
+	query := shopifyUpdatedWindowFilter(since, through)
 	return shopifySourceRequest{
 		APIBaseURL: fmt.Sprintf(defaultShopifyBaseURL, state.ShopDomain, state.APIVersion),
 		Path:       shopifyGraphQLProjectionPath,
 		Request: map[string]any{
-			"operation":    "Tier1Customers",
-			"document":     tier1CustomersDocument,
-			"query":        emptyToNil(query),
-			"sortKey":      "UPDATED_AT",
-			"reverse":      false,
-			"page_size":    shopifyGraphQLPageSize,
-			"api_version":  state.APIVersion,
-			"cursor_since": since.UTC().Format(time.RFC3339),
+			"operation":      "Tier1Customers",
+			"document":       tier1CustomersDocument,
+			"query":          emptyToNil(query),
+			"sortKey":        "UPDATED_AT",
+			"reverse":        false,
+			"page_size":      shopifyGraphQLPageSize,
+			"api_version":    state.APIVersion,
+			"cursor_since":   since.UTC().Format(time.RFC3339),
+			"cursor_through": through.UTC().Format(time.RFC3339),
 		},
 	}
 }
 
-func newCustomerOrderBackfillPage(family string, pageIndex int, since time.Time, requestCursor string, nextCursor string, complete bool, sourceRows int, records []nexadapter.AdapterInboundRecord) customerOrderBackfillPage {
+func newCustomerOrderBackfillPage(family string, pageIndex int, since time.Time, through time.Time, requestCursor string, nextCursor string, complete bool, sourceRows int, records []nexadapter.AdapterInboundRecord) customerOrderBackfillPage {
 	recordBytes, _ := json.Marshal(records)
 	digest := sha256.Sum256(recordBytes)
 	return customerOrderBackfillPage{
@@ -222,6 +257,7 @@ func newCustomerOrderBackfillPage(family string, pageIndex int, since time.Time,
 		Family:        family,
 		PageIndex:     pageIndex,
 		Since:         since.UTC().Format(time.RFC3339),
+		Through:       through.UTC().Format(time.RFC3339),
 		RequestCursor: requestCursor,
 		NextCursor:    nextCursor,
 		Complete:      complete,
@@ -239,10 +275,10 @@ func persistCustomerOrderPage(stageDir string, page customerOrderBackfillPage) (
 	if err := persistImmutableJSON(path, page); err != nil {
 		return customerOrderBackfillPageReceipt{}, err
 	}
-	return inspectCustomerOrderPage(path, page.Family, page.PageIndex, page.Since, page.RequestCursor)
+	return inspectCustomerOrderPage(path, page.Family, page.PageIndex, page.Since, page.Through, page.RequestCursor)
 }
 
-func loadCustomerOrderPageChain(stageDir string, family string, since time.Time, initialCursor string) ([]customerOrderBackfillPageReceipt, string, bool, error) {
+func loadCustomerOrderPageChain(stageDir string, family string, since time.Time, through time.Time, initialCursor string) ([]customerOrderBackfillPageReceipt, string, bool, error) {
 	receipts := make([]customerOrderBackfillPageReceipt, 0)
 	expectedCursor := initialCursor
 	complete := false
@@ -253,7 +289,7 @@ func loadCustomerOrderPageChain(stageDir string, family string, since time.Time,
 		} else if err != nil {
 			return nil, "", false, err
 		}
-		receipt, err := inspectCustomerOrderPage(path, family, pageIndex, since.UTC().Format(time.RFC3339), expectedCursor)
+		receipt, err := inspectCustomerOrderPage(path, family, pageIndex, since.UTC().Format(time.RFC3339), through.UTC().Format(time.RFC3339), expectedCursor)
 		if err != nil {
 			return nil, "", false, err
 		}
@@ -270,7 +306,7 @@ func loadCustomerOrderPageChain(stageDir string, family string, since time.Time,
 	return receipts, expectedCursor, complete, nil
 }
 
-func inspectCustomerOrderPage(path string, family string, pageIndex int, since string, expectedCursor string) (customerOrderBackfillPageReceipt, error) {
+func inspectCustomerOrderPage(path string, family string, pageIndex int, since string, through string, expectedCursor string) (customerOrderBackfillPageReceipt, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return customerOrderBackfillPageReceipt{}, err
@@ -286,7 +322,7 @@ func inspectCustomerOrderPage(path string, family string, pageIndex int, since s
 	if err := json.Unmarshal(raw, &page); err != nil {
 		return customerOrderBackfillPageReceipt{}, fmt.Errorf("decode Shopify backfill page %s: %w", path, err)
 	}
-	if page.Version != customerOrderBackfillVersion || page.Family != family || page.PageIndex != pageIndex || page.Since != since || page.RequestCursor != expectedCursor {
+	if page.Version != customerOrderBackfillVersion || page.Family != family || page.PageIndex != pageIndex || page.Since != since || page.Through != through || page.RequestCursor != expectedCursor {
 		return customerOrderBackfillPageReceipt{}, fmt.Errorf("Shopify backfill page binding mismatch: %s", path)
 	}
 	if page.Complete == (strings.TrimSpace(page.NextCursor) != "") {
@@ -333,13 +369,14 @@ func inspectCustomerOrderPage(path string, family string, pageIndex int, since s
 	}, nil
 }
 
-func ensureCustomerOrderBackfillBinding(stageDir string, state *shopifyState, since time.Time) error {
+func ensureCustomerOrderBackfillBinding(stageDir string, state *shopifyState, since time.Time, through time.Time) error {
 	path := filepath.Join(stageDir, customerOrderBackfillBindingName)
 	want := customerOrderBackfillBinding{
 		Version:      customerOrderBackfillVersion,
 		ConnectionID: state.ConnectionID,
 		ShopDomain:   state.ShopDomain,
 		Since:        since.UTC().Format(time.RFC3339),
+		Through:      through.UTC().Format(time.RFC3339),
 	}
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -458,7 +495,7 @@ func persistImmutableJSON(path string, value any) error {
 	return directory.Sync()
 }
 
-func loadCompletedCustomerOrderManifest(path string, state *shopifyState, since time.Time, stageDir string) (*customerOrderBackfillManifest, error) {
+func loadCompletedCustomerOrderManifest(path string, state *shopifyState, since time.Time, through time.Time, stageDir string) (*customerOrderBackfillManifest, error) {
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -477,15 +514,15 @@ func loadCompletedCustomerOrderManifest(path string, state *shopifyState, since 
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		return nil, err
 	}
-	if manifest.Version != customerOrderBackfillVersion || manifest.State != "succeeded" || manifest.ConnectionID != state.ConnectionID || manifest.ShopDomain != state.ShopDomain || manifest.Since != since.UTC().Format(time.RFC3339) || manifest.StageDir != stageDir || manifest.ManifestPath != path {
+	if manifest.Version != customerOrderBackfillVersion || manifest.State != "succeeded" || manifest.ConnectionID != state.ConnectionID || manifest.ShopDomain != state.ShopDomain || manifest.Since != since.UTC().Format(time.RFC3339) || manifest.Through != through.UTC().Format(time.RFC3339) || manifest.StageDir != stageDir || manifest.ManifestPath != path {
 		return nil, errors.New("customer/order backfill manifest binding mismatch")
 	}
-	_, initialOrderCursor := shopifyOrdersRequest(state, since, false)
-	orderReceipts, _, ordersComplete, err := loadCustomerOrderPageChain(stageDir, "orders", since, initialOrderCursor)
+	_, initialOrderCursor := shopifyOrdersWindowRequest(state, since, true, &through)
+	orderReceipts, _, ordersComplete, err := loadCustomerOrderPageChain(stageDir, "orders", since, through, initialOrderCursor)
 	if err != nil {
 		return nil, err
 	}
-	customerReceipts, _, customersComplete, err := loadCustomerOrderPageChain(stageDir, "customers", since, "")
+	customerReceipts, _, customersComplete, err := loadCustomerOrderPageChain(stageDir, "customers", since, through, "")
 	if err != nil {
 		return nil, err
 	}

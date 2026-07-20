@@ -63,6 +63,7 @@ go build -o ./bin/shopify-adapter ./cmd/shopify-adapter
 ./bin/shopify-adapter adapter.info
 ./bin/shopify-adapter adapter.health --connection shopify-primary
 ./bin/shopify-adapter records.backfill --connection shopify-primary --since 2026-01-01T00:00:00Z
+./bin/shopify-adapter records.backfill.customer_orders.stage --connection shopify-primary --payload '{"since":"2020-01-01T00:00:00Z","through":"<captured-before-first-read RFC3339>","stage_dir":"<private absolute directory>"}'
 ./bin/shopify-adapter adapter.monitor.start --connection shopify-primary
 ```
 
@@ -91,10 +92,15 @@ go build -o ./bin/shopify-adapter ./cmd/shopify-adapter
 - installed cleanroom reads succeed for representative
   `shopify.graphql.*` and `shopify.query.*` methods
 - connection activation backfill completes and emits canonical `record.ingest`
+- customer/order historical staging binds every order and customer page, source
+  request, replay, and final manifest to one captured updated-time
+  `[since, through]` window; new changes after `through` belong to the
+  overlapping reconciliation monitor rather than changing the historical run
 - orders, line items, customers, products, collections, inventory,
   fulfillments, discounts, and marketing activities remain canonical and
-  row-shaped with raw payload preserved in metadata, while blank fulfillment
-  values are normalized consistently
+  row-shaped with exact provider JSON preserved in the record payload and Nex
+  provenance kept in metadata, while blank fulfillment values are normalized
+  consistently
 - the live monitor emits the same canonical record model as backfill and picks
   up bounded upstream proof-order, proof-customer, proof-product,
   proof-collection, proof-inventory, proof-fulfillment, proof-discount, and

@@ -883,10 +883,16 @@ func fetchOrdersSince(ctx context.Context, state *shopifyState, since time.Time,
 }
 
 func shopifyOrdersRequest(state *shopifyState, since time.Time, useUpdatedAt bool) (shopifySourceRequest, string) {
+	return shopifyOrdersWindowRequest(state, since, useUpdatedAt, nil)
+}
+
+func shopifyOrdersWindowRequest(state *shopifyState, since time.Time, useUpdatedAt bool, through *time.Time) (shopifySourceRequest, string) {
 	windowField := "created_at_min"
+	windowMaximumField := "created_at_max"
 	orderField := "created_at"
 	if useUpdatedAt {
 		windowField = "updated_at_min"
+		windowMaximumField = "updated_at_max"
 		orderField = "updated_at"
 	}
 
@@ -897,17 +903,24 @@ func shopifyOrdersRequest(state *shopifyState, since time.Time, useUpdatedAt boo
 	params.Set("limit", "250")
 	params.Set("order", orderField+" asc")
 	params.Set(windowField, since.Format(time.RFC3339))
+	if through != nil {
+		params.Set(windowMaximumField, through.UTC().Format(time.RFC3339))
+	}
+	request := map[string]any{
+		"status":         "any",
+		"limit":          250,
+		"order":          orderField + " asc",
+		windowField:      since.Format(time.RFC3339),
+		"api_version":    state.APIVersion,
+		"use_updated_at": useUpdatedAt,
+	}
+	if through != nil {
+		request[windowMaximumField] = through.UTC().Format(time.RFC3339)
+	}
 	sourceRequest := shopifySourceRequest{
 		APIBaseURL: baseURL,
 		Path:       path,
-		Request: map[string]any{
-			"status":         "any",
-			"limit":          250,
-			"order":          orderField + " asc",
-			windowField:      since.Format(time.RFC3339),
-			"api_version":    state.APIVersion,
-			"use_updated_at": useUpdatedAt,
-		},
+		Request:    request,
 	}
 	return sourceRequest, baseURL + path + "?" + params.Encode()
 }
