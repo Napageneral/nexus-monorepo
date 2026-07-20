@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -105,6 +107,56 @@ func TestCustomerOrderBackfillResumesFromImmutablePageReceipt(t *testing.T) {
 	afterCalls := orderFirstCalls + orderSecondCalls + customerCalls
 	if afterCalls != beforeCalls {
 		t.Fatalf("completed replay contacted Shopify: before=%d after=%d", beforeCalls, afterCalls)
+	}
+
+	exported, err := exportCustomerOrderBackfill(adapterContext, payload)
+	if err != nil {
+		t.Fatalf("export exact customer/order import manifest: %v", err)
+	}
+	importManifest, ok := exported.(*customerOrderImportManifest)
+	if !ok {
+		t.Fatalf("unexpected import manifest type: %T", exported)
+	}
+	if importManifest.Version != 2 || importManifest.Format != "jsonl_files_sha256" || len(importManifest.Chunks) != 3 || importManifest.Totals.Records != 4 {
+		t.Fatalf("unexpected hash-bound import manifest: %#v", importManifest)
+	}
+	for _, chunk := range importManifest.Chunks {
+		raw, err := os.ReadFile(chunk.Path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		digest := sha256.Sum256(raw)
+		if int64(len(raw)) != chunk.ByteCount || hex.EncodeToString(digest[:]) != chunk.SHA256 {
+			t.Fatalf("import chunk receipt does not bind exact bytes: %#v", chunk)
+		}
+		if info, err := os.Lstat(chunk.Path); err != nil || info.Mode().Perm() != 0o600 {
+			t.Fatalf("unexpected import chunk metadata: info=%v err=%v", info, err)
+		}
+	}
+	firstExport, _ := json.Marshal(importManifest)
+	replayed, err := exportCustomerOrderBackfill(adapterContext, payload)
+	if err != nil {
+		t.Fatalf("replay exact customer/order import export: %v", err)
+	}
+	replayedExport, _ := json.Marshal(replayed)
+	if !bytes.Equal(firstExport, replayedExport) {
+		t.Fatal("replayed customer/order import export changed its receipt")
+	}
+
+	tamperedChunk := importManifest.Chunks[0]
+	raw, err := os.ReadFile(tamperedChunk.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(raw) == 0 {
+		t.Fatal("expected non-empty import chunk")
+	}
+	raw[0] ^= 1
+	if err := os.WriteFile(tamperedChunk.Path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := exportCustomerOrderBackfill(adapterContext, payload); err == nil || !strings.Contains(err.Error(), "digest mismatch") {
+		t.Fatalf("expected tampered import chunk rejection, got %v", err)
 	}
 }
 
@@ -271,12 +323,17 @@ func TestCustomerOrderBackfillReceiptHashesExactRecordsJSON(t *testing.T) {
 }
 
 func TestCustomerOrderBackfillMethodIsReadOnly(t *testing.T) {
-	method, ok := declaredShopifyMethods()["records.backfill.customer_orders.stage"]
-	if !ok {
-		t.Fatal("customer/order staging method is not declared")
-	}
-	if method.MutatesRemote == nil || *method.MutatesRemote {
-		t.Fatal("customer/order staging method must be provider read-only")
+	for _, methodName := range []string{
+		"records.backfill.customer_orders.stage",
+		"records.backfill.customer_orders.export",
+	} {
+		method, ok := declaredShopifyMethods()[methodName]
+		if !ok {
+			t.Fatalf("%s is not declared", methodName)
+		}
+		if method.MutatesRemote == nil || *method.MutatesRemote {
+			t.Fatalf("%s must be provider read-only", methodName)
+		}
 	}
 }
 

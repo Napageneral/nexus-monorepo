@@ -92,6 +92,7 @@ go test ./...
 ./bin/shopify-adapter adapter.monitor.start --connection <connection-id>
 ./bin/shopify-adapter records.backfill --connection <connection-id> --since 2026-01-01T00:00:00Z
 ./bin/shopify-adapter records.backfill.customer_orders.stage --connection <connection-id> --payload '{"since":"2020-01-01T00:00:00Z","through":"2026-07-20T18:00:00Z","stage_dir":"/private/operator-owned/shopify-customer-orders"}'
+./bin/shopify-adapter records.backfill.customer_orders.export --connection <connection-id> --payload '{"since":"2020-01-01T00:00:00Z","through":"2026-07-20T18:00:00Z","stage_dir":"/private/operator-owned/shopify-customer-orders"}'
 ```
 
 ## Active Docs

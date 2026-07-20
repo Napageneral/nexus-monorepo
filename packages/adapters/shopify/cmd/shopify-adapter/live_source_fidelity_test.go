@@ -139,8 +139,29 @@ func TestLiveShopifyCustomerOrderPageStaging(t *testing.T) {
 	if manifest.Totals.OrderSourceRows == 0 || manifest.Totals.CustomerSourceRows == 0 || manifest.Totals.Records == 0 {
 		t.Fatalf("unexpected empty live page-staging totals: %#v", manifest.Totals)
 	}
-	t.Logf("live resumable page staging PASS since=%s through=%s pages=%d order_source_rows=%d customer_source_rows=%d records=%d",
-		since.Format(time.RFC3339), through.Format(time.RFC3339), len(manifest.Pages), manifest.Totals.OrderSourceRows, manifest.Totals.CustomerSourceRows, manifest.Totals.Records)
+	exported, err := exportCustomerOrderBackfill(nexadapter.AdapterContext[struct{}]{
+		Context:      context.Background(),
+		ConnectionID: runtimeContext.ConnectionID,
+		Runtime:      runtimeContext,
+	}, map[string]any{
+		"since":     since.Format(time.RFC3339),
+		"through":   through.Format(time.RFC3339),
+		"stage_dir": stageDir,
+	})
+	if err != nil {
+		t.Fatalf("live customer/order hash-bound export: %v", err)
+	}
+	importManifest, ok := exported.(*customerOrderImportManifest)
+	if !ok || importManifest.Version != 2 || len(importManifest.Chunks) == 0 || importManifest.Totals.Records != manifest.Totals.Records {
+		t.Fatalf("unexpected live hash-bound import manifest: %#v", exported)
+	}
+	importRaw, err := os.ReadFile(importManifest.ManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	importDigest := sha256.Sum256(importRaw)
+	t.Logf("live resumable page staging PASS since=%s through=%s pages=%d order_source_rows=%d customer_source_rows=%d records=%d import_chunks=%d import_manifest_sha256=%s",
+		since.Format(time.RFC3339), through.Format(time.RFC3339), len(manifest.Pages), manifest.Totals.OrderSourceRows, manifest.Totals.CustomerSourceRows, manifest.Totals.Records, len(importManifest.Chunks), hex.EncodeToString(importDigest[:]))
 }
 
 func assertMinimumLiveRows(t *testing.T, family string, actual int, rawMinimum string) {

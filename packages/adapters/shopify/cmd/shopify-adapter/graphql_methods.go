@@ -298,6 +298,41 @@ func declaredShopifyMethods() map[string]nexadapter.DeclaredMethod[struct{}] {
 			return stageCustomerOrderBackfill(ctx, req.Payload)
 		},
 	})
+	methods["records.backfill.customer_orders.export"] = nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
+		Description: "Export a completed customer/order stage as a byte- and SHA-bound Nex historical import manifest.",
+		Action:      "read",
+		Params: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"since":     map[string]any{"type": "string"},
+				"through":   map[string]any{"type": "string"},
+				"stage_dir": map[string]any{"type": "string"},
+			},
+			"required":             []string{"since", "through", "stage_dir"},
+			"additionalProperties": false,
+		},
+		Response: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"version":       map[string]any{"type": "integer", "enum": []int{2}},
+				"format":        map[string]any{"type": "string", "enum": []string{"jsonl_files_sha256"}},
+				"stage_dir":     map[string]any{"type": "string"},
+				"manifest_path": map[string]any{"type": "string"},
+				"connection_id": map[string]any{"type": "string"},
+				"shop_domain":   map[string]any{"type": "string"},
+				"since":         map[string]any{"type": "string"},
+				"through":       map[string]any{"type": "string"},
+				"chunks":        map[string]any{"type": "array"},
+				"totals":        map[string]any{"type": "object"},
+			},
+			"required": []string{"version", "format", "stage_dir", "manifest_path", "connection_id", "shop_domain", "since", "through", "chunks", "totals"},
+		},
+		ConnectionRequired: boolPtr(true),
+		MutatesRemote:      boolPtr(false),
+		Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
+			return exportCustomerOrderBackfill(ctx, req.Payload)
+		},
+	})
 	return methods
 }
 

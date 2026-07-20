@@ -64,6 +64,7 @@ go build -o ./bin/shopify-adapter ./cmd/shopify-adapter
 ./bin/shopify-adapter adapter.health --connection shopify-primary
 ./bin/shopify-adapter records.backfill --connection shopify-primary --since 2026-01-01T00:00:00Z
 ./bin/shopify-adapter records.backfill.customer_orders.stage --connection shopify-primary --payload '{"since":"2020-01-01T00:00:00Z","through":"<captured-before-first-read RFC3339>","stage_dir":"<private absolute directory>"}'
+./bin/shopify-adapter records.backfill.customer_orders.export --connection shopify-primary --payload '{"since":"2020-01-01T00:00:00Z","through":"<same captured RFC3339>","stage_dir":"<same private absolute directory>"}'
 ./bin/shopify-adapter adapter.monitor.start --connection shopify-primary
 ```
 
@@ -96,6 +97,10 @@ go build -o ./bin/shopify-adapter ./cmd/shopify-adapter
   request, replay, and final manifest to one captured updated-time
   `[since, through]` window; new changes after `through` belong to the
   overlapping reconciliation monitor rather than changing the historical run
+- the offline customer/order export revalidates that completed stage and emits
+  private JSONL chunks whose exact bytes, SHA-256, record count, record-ID
+  boundaries, and timestamp boundaries are required by Nex before the first
+  historical ingest write
 - orders, line items, customers, products, collections, inventory,
   fulfillments, discounts, and marketing activities remain canonical and
   row-shaped with exact provider JSON preserved in the record payload and Nex
