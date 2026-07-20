@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	nexadapter "github.com/nexus-project/adapter-sdk-go"
 )
 
 func TestLiveShopifyCustomerAndOrderSourceFidelity(t *testing.T) {
@@ -82,6 +84,61 @@ func TestLiveShopifyCustomerAndOrderSourceFidelity(t *testing.T) {
 		len(orders), hex.EncodeToString(orderHash.Sum(nil)),
 		len(customers), hex.EncodeToString(customerHash.Sum(nil)),
 	)
+}
+
+func TestLiveShopifyCustomerOrderPageStaging(t *testing.T) {
+	shopDomain := os.Getenv("SHOPIFY_SHOP_DOMAIN")
+	clientID := os.Getenv("SHOPIFY_CLIENT_ID")
+	clientSecret := os.Getenv("SHOPIFY_CLIENT_SECRET")
+	if shopDomain == "" || clientID == "" || clientSecret == "" {
+		t.Skip("MoonSleep Shopify read credentials are not configured")
+	}
+	since := time.Now().UTC().Add(-24 * time.Hour)
+	if raw := os.Getenv("SHOPIFY_LIVE_SINCE"); raw != "" {
+		parsed, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			t.Fatalf("parse SHOPIFY_LIVE_SINCE: %v", err)
+		}
+		since = parsed.UTC()
+	}
+	stageDir := t.TempDir()
+	if err := os.Chmod(stageDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runtimeContext := &nexadapter.RuntimeContext{
+		Platform:     platformID,
+		ConnectionID: "shopify-live-page-staging",
+		Credential: &nexadapter.RuntimeCredential{
+			Value: "runtime-fields",
+			Fields: map[string]string{
+				"shop_domain":   shopDomain,
+				"client_id":     clientID,
+				"client_secret": clientSecret,
+				"api_version":   defaultAPIVersion,
+			},
+		},
+	}
+	tokenCache = nil
+	result, err := stageCustomerOrderBackfill(nexadapter.AdapterContext[struct{}]{
+		Context:      context.Background(),
+		ConnectionID: runtimeContext.ConnectionID,
+		Runtime:      runtimeContext,
+	}, map[string]any{
+		"since":     since.Format(time.RFC3339),
+		"stage_dir": stageDir,
+	})
+	if err != nil {
+		t.Fatalf("live customer/order page staging: %v", err)
+	}
+	manifest, ok := result.(*customerOrderBackfillManifest)
+	if !ok || manifest.State != "succeeded" || len(manifest.Pages) < 2 {
+		t.Fatalf("unexpected live page-staging manifest: %#v", result)
+	}
+	if manifest.Totals.OrderSourceRows == 0 || manifest.Totals.CustomerSourceRows == 0 || manifest.Totals.Records == 0 {
+		t.Fatalf("unexpected empty live page-staging totals: %#v", manifest.Totals)
+	}
+	t.Logf("live resumable page staging PASS since=%s pages=%d order_source_rows=%d customer_source_rows=%d records=%d",
+		since.Format(time.RFC3339), len(manifest.Pages), manifest.Totals.OrderSourceRows, manifest.Totals.CustomerSourceRows, manifest.Totals.Records)
 }
 
 func assertMinimumLiveRows(t *testing.T, family string, actual int, rawMinimum string) {

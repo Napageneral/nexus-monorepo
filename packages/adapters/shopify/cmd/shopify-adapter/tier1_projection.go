@@ -282,8 +282,14 @@ type shopifyGraphQLMarketingActivity struct {
 	Tactic           string `json:"tactic"`
 }
 
-func fetchCustomersSince(ctx context.Context, state *shopifyState, since time.Time, mode shopifySyncMode) ([]shopifyGraphQLCustomer, shopifySourceRequest, time.Time, error) {
-	document := `query Tier1Customers($first: Int!, $after: String, $query: String!, $reverse: Boolean!, $sortKey: CustomerSortKeys!) {
+type shopifyCustomerPage struct {
+	Customers     []shopifyGraphQLCustomer
+	RequestCursor string
+	NextCursor    string
+	Complete      bool
+}
+
+const tier1CustomersDocument = `query Tier1Customers($first: Int!, $after: String, $query: String!, $reverse: Boolean!, $sortKey: CustomerSortKeys!) {
   customers(first: $first, after: $after, query: $query, reverse: $reverse, sortKey: $sortKey) {
     edges {
       cursor
@@ -339,6 +345,9 @@ func fetchCustomersSince(ctx context.Context, state *shopifyState, since time.Ti
     }
   }
 }`
+
+func fetchCustomersSince(ctx context.Context, state *shopifyState, since time.Time, mode shopifySyncMode) ([]shopifyGraphQLCustomer, shopifySourceRequest, time.Time, error) {
+	document := tier1CustomersDocument
 	query := shopifyUpdatedSinceFilter(since)
 	localFilterSince := time.Time{}
 	if mode == shopifySyncModeMonitor {
@@ -368,26 +377,11 @@ func fetchCustomersSince(ctx context.Context, state *shopifyState, since time.Ti
 	after := ""
 
 	for {
-		variables := map[string]any{
-			"first":   shopifyGraphQLPageSize,
-			"after":   emptyToNil(after),
-			"query":   query,
-			"reverse": false,
-			"sortKey": "UPDATED_AT",
-		}
-		response, err := executeShopifyGraphQL(ctx, state, document, variables, "Tier1Customers")
+		page, err := fetchCustomerPage(ctx, state, query, after)
 		if err != nil {
 			return nil, sourceRequest, time.Time{}, err
 		}
-		connection, err := decodeGraphQLField[shopifyCustomerConnection](response, "customers")
-		if err != nil {
-			return nil, sourceRequest, time.Time{}, err
-		}
-		for _, edge := range connection.Edges {
-			customer := edge.Node
-			if strings.TrimSpace(customer.ID) == "" {
-				continue
-			}
+		for _, customer := range page.Customers {
 			includeCustomer := localFilterSince.IsZero()
 			if parsed := parseShopifyUpdatedAt(customer.UpdatedAt); !parsed.IsZero() {
 				if parsed.After(latestUpdatedAt) {
@@ -401,13 +395,49 @@ func fetchCustomersSince(ctx context.Context, state *shopifyState, since time.Ti
 				customers = append(customers, customer)
 			}
 		}
-		if !connection.PageInfo.HasNextPage || strings.TrimSpace(connection.PageInfo.EndCursor) == "" {
+		if page.Complete {
 			break
 		}
-		after = connection.PageInfo.EndCursor
+		after = page.NextCursor
 	}
 
 	return customers, sourceRequest, latestUpdatedAt, nil
+}
+
+func fetchCustomerPage(ctx context.Context, state *shopifyState, query string, after string) (shopifyCustomerPage, error) {
+	variables := map[string]any{
+		"first":   shopifyGraphQLPageSize,
+		"after":   emptyToNil(after),
+		"query":   query,
+		"reverse": false,
+		"sortKey": "UPDATED_AT",
+	}
+	response, err := executeShopifyGraphQL(ctx, state, tier1CustomersDocument, variables, "Tier1Customers")
+	if err != nil {
+		return shopifyCustomerPage{}, err
+	}
+	connection, err := decodeGraphQLField[shopifyCustomerConnection](response, "customers")
+	if err != nil {
+		return shopifyCustomerPage{}, err
+	}
+	customers := make([]shopifyGraphQLCustomer, 0, len(connection.Edges))
+	for _, edge := range connection.Edges {
+		if strings.TrimSpace(edge.Node.ID) == "" {
+			continue
+		}
+		customers = append(customers, edge.Node)
+	}
+	nextCursor := strings.TrimSpace(connection.PageInfo.EndCursor)
+	complete := !connection.PageInfo.HasNextPage || nextCursor == ""
+	if complete {
+		nextCursor = ""
+	}
+	return shopifyCustomerPage{
+		Customers:     customers,
+		RequestCursor: strings.TrimSpace(after),
+		NextCursor:    nextCursor,
+		Complete:      complete,
+	}, nil
 }
 
 func fetchProductsSince(ctx context.Context, state *shopifyState, since time.Time, mode shopifySyncMode) ([]shopifyGraphQLProduct, shopifySourceRequest, time.Time, error) {

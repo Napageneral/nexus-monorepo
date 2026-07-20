@@ -263,6 +263,39 @@ func declaredShopifyMethods() map[string]nexadapter.DeclaredMethod[struct{}] {
 			return stageBackfill(ctx, req.Payload)
 		},
 	})
+	methods["records.backfill.customer_orders.stage"] = nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
+		Description: "Stage resumable Shopify customer and order history as immutable, cursor-bound page receipts.",
+		Action:      "read",
+		Params: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"since":     map[string]any{"type": "string"},
+				"stage_dir": map[string]any{"type": "string"},
+			},
+			"required":             []string{"since", "stage_dir"},
+			"additionalProperties": false,
+		},
+		Response: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"version":       map[string]any{"type": "integer"},
+				"state":         map[string]any{"type": "string", "enum": []string{"succeeded"}},
+				"connection_id": map[string]any{"type": "string"},
+				"shop_domain":   map[string]any{"type": "string"},
+				"since":         map[string]any{"type": "string"},
+				"stage_dir":     map[string]any{"type": "string"},
+				"manifest_path": map[string]any{"type": "string"},
+				"pages":         map[string]any{"type": "array"},
+				"totals":        map[string]any{"type": "object"},
+			},
+			"required": []string{"version", "state", "connection_id", "shop_domain", "since", "stage_dir", "manifest_path", "pages", "totals"},
+		},
+		ConnectionRequired: boolPtr(true),
+		MutatesRemote:      boolPtr(false),
+		Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
+			return stageCustomerOrderBackfill(ctx, req.Payload)
+		},
+	})
 	return methods
 }
 

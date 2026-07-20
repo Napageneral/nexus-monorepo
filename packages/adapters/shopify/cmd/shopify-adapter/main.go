@@ -80,6 +80,13 @@ type shopifyOrdersResponse struct {
 	Orders []shopifyOrder `json:"orders"`
 }
 
+type shopifyOrderPage struct {
+	Orders        []shopifyOrder
+	RequestCursor string
+	NextCursor    string
+	Complete      bool
+}
+
 type shopifyOrder struct {
 	ID                 int64                  `json:"id"`
 	OrderNumber        int64                  `json:"order_number"`
@@ -847,6 +854,36 @@ func fetchOrdersSince(ctx context.Context, state *shopifyState, since time.Time,
 		return nil, shopifySourceRequest{}, time.Time{}, err
 	}
 
+	sourceRequest, nextURL := shopifyOrdersRequest(state, since, useUpdatedAt)
+	orders := make([]shopifyOrder, 0, 256)
+	latestUpdatedAt := time.Time{}
+	pageCount := 0
+
+	for nextURL != "" {
+		if pageCount >= maxOrdersPages {
+			return nil, sourceRequest, time.Time{}, fmt.Errorf("exceeded Shopify pagination guard (%d pages)", maxOrdersPages)
+		}
+		pageCount++
+
+		page, err := fetchOrderPage(ctx, state, accessToken, nextURL)
+		if err != nil {
+			return nil, sourceRequest, time.Time{}, err
+		}
+
+		for _, order := range page.Orders {
+			orders = append(orders, order)
+			if parsed := parseOrderUpdatedAt(order); !parsed.IsZero() && parsed.After(latestUpdatedAt) {
+				latestUpdatedAt = parsed
+			}
+		}
+
+		nextURL = page.NextCursor
+	}
+
+	return orders, sourceRequest, latestUpdatedAt, nil
+}
+
+func shopifyOrdersRequest(state *shopifyState, since time.Time, useUpdatedAt bool) (shopifySourceRequest, string) {
 	windowField := "created_at_min"
 	orderField := "created_at"
 	if useUpdatedAt {
@@ -861,7 +898,6 @@ func fetchOrdersSince(ctx context.Context, state *shopifyState, since time.Time,
 	params.Set("limit", "250")
 	params.Set("order", orderField+" asc")
 	params.Set(windowField, since.Format(time.RFC3339))
-
 	sourceRequest := shopifySourceRequest{
 		APIBaseURL: baseURL,
 		Path:       path,
@@ -874,55 +910,62 @@ func fetchOrdersSince(ctx context.Context, state *shopifyState, since time.Time,
 			"use_updated_at": useUpdatedAt,
 		},
 	}
+	return sourceRequest, baseURL + path + "?" + params.Encode()
+}
 
-	nextURL := baseURL + path + "?" + params.Encode()
-	orders := make([]shopifyOrder, 0, 256)
-	latestUpdatedAt := time.Time{}
-	pageCount := 0
+func fetchOrderPage(ctx context.Context, state *shopifyState, accessToken string, requestURL string) (shopifyOrderPage, error) {
+	if err := validateShopifyOrderPageURL(state, requestURL); err != nil {
+		return shopifyOrderPage{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return shopifyOrderPage{}, fmt.Errorf("build Shopify orders request: %w", err)
+	}
+	req.Header.Set("X-Shopify-Access-Token", accessToken)
 
-	for nextURL != "" {
-		if pageCount >= maxOrdersPages {
-			return nil, sourceRequest, time.Time{}, fmt.Errorf("exceeded Shopify pagination guard (%d pages)", maxOrdersPages)
-		}
-		pageCount++
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
-		if err != nil {
-			return nil, sourceRequest, time.Time{}, fmt.Errorf("build Shopify orders request: %w", err)
-		}
-		req.Header.Set("X-Shopify-Access-Token", accessToken)
-
-		res, err := shopifyHTTPClient.Do(req)
-		if err != nil {
-			return nil, sourceRequest, time.Time{}, fmt.Errorf("Shopify orders request failed: %w", err)
-		}
-
-		bodyBytes, readErr := io.ReadAll(io.LimitReader(res.Body, maxResponseBodyBytes))
-		_ = res.Body.Close()
-		if readErr != nil {
-			return nil, sourceRequest, time.Time{}, fmt.Errorf("read Shopify orders response: %w", readErr)
-		}
-		bodyText := strings.TrimSpace(string(bodyBytes))
-		if res.StatusCode >= 400 {
-			return nil, sourceRequest, time.Time{}, fmt.Errorf("Shopify orders request failed (%d): %s", res.StatusCode, bodyText)
-		}
-
-		var payload shopifyOrdersResponse
-		if err := json.Unmarshal(bodyBytes, &payload); err != nil {
-			return nil, sourceRequest, time.Time{}, fmt.Errorf("parse Shopify orders response: %w", err)
-		}
-
-		for _, order := range payload.Orders {
-			orders = append(orders, order)
-			if parsed := parseOrderUpdatedAt(order); !parsed.IsZero() && parsed.After(latestUpdatedAt) {
-				latestUpdatedAt = parsed
-			}
-		}
-
-		nextURL = parseLinkHeader(res.Header.Get("Link"))["next"]
+	res, err := shopifyHTTPClient.Do(req)
+	if err != nil {
+		return shopifyOrderPage{}, fmt.Errorf("Shopify orders request failed: %w", err)
+	}
+	bodyBytes, readErr := io.ReadAll(io.LimitReader(res.Body, maxResponseBodyBytes))
+	_ = res.Body.Close()
+	if readErr != nil {
+		return shopifyOrderPage{}, fmt.Errorf("read Shopify orders response: %w", readErr)
+	}
+	bodyText := strings.TrimSpace(string(bodyBytes))
+	if res.StatusCode >= 400 {
+		return shopifyOrderPage{}, fmt.Errorf("Shopify orders request failed (%d): %s", res.StatusCode, bodyText)
 	}
 
-	return orders, sourceRequest, latestUpdatedAt, nil
+	var payload shopifyOrdersResponse
+	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+		return shopifyOrderPage{}, fmt.Errorf("parse Shopify orders response: %w", err)
+	}
+	nextCursor := parseLinkHeader(res.Header.Get("Link"))["next"]
+	return shopifyOrderPage{
+		Orders:        payload.Orders,
+		RequestCursor: requestURL,
+		NextCursor:    nextCursor,
+		Complete:      nextCursor == "",
+	}, nil
+}
+
+func validateShopifyOrderPageURL(state *shopifyState, requestURL string) error {
+	if state == nil {
+		return errors.New("missing Shopify state for orders page")
+	}
+	candidate, err := url.Parse(requestURL)
+	if err != nil {
+		return fmt.Errorf("parse Shopify orders page URL: %w", err)
+	}
+	expected, err := url.Parse(fmt.Sprintf(defaultShopifyBaseURL, state.ShopDomain, state.APIVersion) + "/orders.json")
+	if err != nil {
+		return fmt.Errorf("parse configured Shopify orders URL: %w", err)
+	}
+	if candidate.Scheme != "https" || candidate.Scheme != expected.Scheme || !strings.EqualFold(candidate.Host, expected.Host) || candidate.Path != expected.Path || candidate.User != nil || candidate.Fragment != "" {
+		return errors.New("Shopify orders page URL escaped the configured store boundary")
+	}
+	return nil
 }
 
 func fetchShopInfo(ctx context.Context, state *shopifyState) (*shopifyShop, error) {
