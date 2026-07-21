@@ -50,7 +50,7 @@ function runtimeFixture(initial: {
 }
 
 describe("MoonSleep commerce runtime work", () => {
-  it("installs the Shopify customer projector dormant pending the event handoff", async () => {
+  it("installs the Shopify customer projector dormant pending production activation gates", async () => {
     const fixture = runtimeFixture();
     await expect(
       ensureMoonSleepCommerceRuntimeWork({ runtime: fixture.runtime, appId: "moonsleep-commerce" }),

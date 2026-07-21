@@ -367,7 +367,7 @@ const healthcheck: NexAppMethodHandler = async (ctx) => ({
   },
   projectors: {
     shopify_source_identity: "available_replay_safe_public_operation",
-    shopify_customer_identity: "dormant_pending_event_handoff",
+    shopify_customer_identity: "dormant_ready_full_postgres_activation_gates",
     shopify_customer_cohort: "available_bounded_manual_replay",
     shopify_customer_backfill: "available_explicit_manual_replay",
     shopify_customer_complete_backfill: "available_hash_bound_public_scan",

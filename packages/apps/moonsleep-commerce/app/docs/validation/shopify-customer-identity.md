@@ -12,8 +12,9 @@
   second run.
 - Prove the Shopify store routing contact uses the shop-domain space and the
   integration routing contact uses the exact adapter connection anchor.
-- Prove activation remains dormant until the governed PostgreSQL event-to-work
-  handoff is installed and independently validated.
+- Prove the full PostgreSQL profile atomically dispatches committed
+  `record.ingested` events into PostgreSQL work with durable dispatch and
+  idempotency receipts, while this production subscription remains dormant.
 - Ingest one customer revision and prove one entity, one contact, two tags, and
   one observation.
 - Invoke `moonsleep-commerce.shopify-customers.project-cohort` with that exact
@@ -48,8 +49,11 @@
 
 ## Continuous sync
 
-- First prove each PostgreSQL `record.ingested` event reaches SQLite-owned work
-  through the governed receipt-bound handoff with crash/replay idempotency.
+- First prove each committed PostgreSQL `record.ingested` event atomically
+  reaches PostgreSQL-owned work with one dispatch receipt, one idempotency key,
+  and crash/replay-safe lease recovery. SQLite work must remain empty.
+- Enable the customer projector only after the bounded cohort, complete
+  two-pass backfill, restart, replay, and rollback gates pass.
 - Create a new Shopify test customer through an approved provider path.
 - Observe a new immutable record, event, job, contact, entity, and tags.
 - Update the customer and prove a new observation with the same entity binding.

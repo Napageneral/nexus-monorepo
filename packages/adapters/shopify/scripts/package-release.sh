@@ -5,9 +5,24 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MANIFEST_PATH="${ROOT_DIR}/adapter.nexus.json"
 COMMAND_NAME="$(node -e 'const fs=require("node:fs"); const path=require("node:path"); const manifest=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(path.basename(manifest.command));' "${MANIFEST_PATH}")"
 PACKAGE_TARGET_OS="${PACKAGE_TARGET_OS:-linux}"
-PACKAGE_TARGET_ARCH="${PACKAGE_TARGET_ARCH:-arm64}"
+PACKAGE_TARGET_ARCH="${PACKAGE_TARGET_ARCH:-amd64}"
+HOST_OS="$(go env GOHOSTOS)"
+HOST_ARCH="$(go env GOHOSTARCH)"
 
-if command -v nexus >/dev/null 2>&1; then
+if [[ "${HOST_OS}/${HOST_ARCH}" != "${PACKAGE_TARGET_OS}/${PACKAGE_TARGET_ARCH}" ]]; then
+  printf '%s\n' \
+    "package release target ${PACKAGE_TARGET_OS}/${PACKAGE_TARGET_ARCH} must run on a matching host; current host is ${HOST_OS}/${HOST_ARCH}" \
+    >&2
+  exit 2
+fi
+
+if [[ -n "${PACKAGE_NEXUS_ENTRY:-}" ]]; then
+  [[ "${PACKAGE_NEXUS_ENTRY}" = /* && -f "${PACKAGE_NEXUS_ENTRY}" ]] || {
+    echo "PACKAGE_NEXUS_ENTRY must name an existing absolute file" >&2
+    exit 2
+  }
+  PACKAGE_CLI=(node "${PACKAGE_NEXUS_ENTRY}" package)
+elif command -v nexus >/dev/null 2>&1; then
   PACKAGE_CLI=(nexus package)
 else
   PACKAGE_CLI=(node "${ROOT_DIR}/../../../nex/dist/entry.js" package)

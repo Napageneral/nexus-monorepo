@@ -14,8 +14,8 @@ Current scope:
 - Shopify customer identity projection
 - bounded explicit customer cohort projection for pre-activation production proof
 - explicit deterministic full-customer backfill with replay counters and hashes
-- dormant `record.ingested` job registration pending the governed PostgreSQL
-  event-to-work handoff
+- dormant `record.ingested` job registration on the full PostgreSQL work plane,
+  held until cohort, double-backfill, restart, and replay gates pass
 - deterministic shop-domain and customer-GID contact anchors
 - exact provider JSON hash verification
 - conservative identity behavior with no email, phone, or name merge
@@ -50,5 +50,6 @@ Not yet implemented:
 - typed order and line-item projection
 - historical production backfill execution against the MoonSleep-only runtime
 - continuous production monitor activation
-- event subscription activation before the crash-safe event handoff lands
+- event subscription activation before the production cohort, double-backfill,
+  restart, and replay gates pass
 - Shopify, Dispatch, payment, refund, or fulfillment writes

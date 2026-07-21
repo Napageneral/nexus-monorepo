@@ -386,17 +386,25 @@ func TestCustomerOrderBackfillReceiptHashesExactRecordsJSON(t *testing.T) {
 }
 
 func TestCustomerOrderBackfillMethodIsReadOnly(t *testing.T) {
-	for _, methodName := range []string{
-		"records.backfill.stage",
-		"records.backfill.customer_orders.stage",
-		"records.backfill.customer_orders.export",
-	} {
+	for _, methodName := range []string{"records.backfill.stage"} {
 		method, ok := declaredShopifyMethods()[methodName]
 		if !ok {
 			t.Fatalf("%s is not declared", methodName)
 		}
 		if method.MutatesRemote == nil || *method.MutatesRemote {
 			t.Fatalf("%s must be provider read-only", methodName)
+		}
+	}
+}
+
+func TestCustomerOrderBackfillHasNoStaleExecutableAliases(t *testing.T) {
+	methods := declaredShopifyMethods()
+	for _, stale := range []string{
+		"records.backfill.customer_orders.stage",
+		"records.backfill.customer_orders.export",
+	} {
+		if _, ok := methods[stale]; ok {
+			t.Fatalf("stale executable method is still declared: %s", stale)
 		}
 	}
 }
