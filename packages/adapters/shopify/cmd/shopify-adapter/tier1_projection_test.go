@@ -34,6 +34,9 @@ func TestBuildCustomerRecord(t *testing.T) {
 	if record.Routing.ContainerID != "customer" {
 		t.Fatalf("unexpected container id: %q", record.Routing.ContainerID)
 	}
+	if record.Routing.Adapter != platformID {
+		t.Fatalf("unexpected adapter id: %q", record.Routing.Adapter)
+	}
 	if record.Routing.ThreadID != "moonsleepco.myshopify.com:customer:44" {
 		t.Fatalf("unexpected thread id: %q", record.Routing.ThreadID)
 	}
