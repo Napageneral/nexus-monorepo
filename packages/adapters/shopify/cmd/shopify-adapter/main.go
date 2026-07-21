@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -79,33 +80,62 @@ type shopifyOrdersResponse struct {
 	Orders []shopifyOrder `json:"orders"`
 }
 
+type shopifyOrderPage struct {
+	Orders        []shopifyOrder
+	RequestCursor string
+	NextCursor    string
+	Complete      bool
+}
+
 type shopifyOrder struct {
-	ID                int64                  `json:"id"`
-	OrderNumber       int64                  `json:"order_number"`
-	Name              string                 `json:"name"`
-	CreatedAt         string                 `json:"created_at"`
-	UpdatedAt         string                 `json:"updated_at"`
-	ProcessedAt       string                 `json:"processed_at"`
-	Currency          string                 `json:"currency"`
-	TotalPrice        string                 `json:"total_price"`
-	SubtotalPrice     string                 `json:"subtotal_price"`
-	FinancialStatus   string                 `json:"financial_status"`
-	FulfillmentStatus string                 `json:"fulfillment_status"`
-	CancelledAt       string                 `json:"cancelled_at"`
-	CartToken         string                 `json:"cart_token"`
-	CheckoutToken     string                 `json:"checkout_token"`
-	SourceName        string                 `json:"source_name"`
-	ReferringSite     string                 `json:"referring_site"`
-	LandingSite       string                 `json:"landing_site"`
-	Email             string                 `json:"email"`
-	Tags              string                 `json:"tags"`
-	NoteAttributes    []shopifyNoteAttribute `json:"note_attributes"`
-	Customer          *shopifyCustomer       `json:"customer"`
-	LineItems         []shopifyLineItem      `json:"line_items"`
+	ID                 int64                  `json:"id"`
+	OrderNumber        int64                  `json:"order_number"`
+	Name               string                 `json:"name"`
+	CreatedAt          string                 `json:"created_at"`
+	UpdatedAt          string                 `json:"updated_at"`
+	ProcessedAt        string                 `json:"processed_at"`
+	Currency           string                 `json:"currency"`
+	TotalPrice         string                 `json:"total_price"`
+	SubtotalPrice      string                 `json:"subtotal_price"`
+	FinancialStatus    string                 `json:"financial_status"`
+	FulfillmentStatus  string                 `json:"fulfillment_status"`
+	CancelledAt        string                 `json:"cancelled_at"`
+	CartToken          string                 `json:"cart_token"`
+	CheckoutToken      string                 `json:"checkout_token"`
+	SourceName         string                 `json:"source_name"`
+	ReferringSite      string                 `json:"referring_site"`
+	LandingSite        string                 `json:"landing_site"`
+	Email              string                 `json:"email"`
+	Phone              string                 `json:"phone"`
+	Tags               string                 `json:"tags"`
+	NoteAttributes     []shopifyNoteAttribute `json:"note_attributes"`
+	Customer           *shopifyCustomer       `json:"customer"`
+	BillingAddress     *shopifyAddress        `json:"billing_address"`
+	ShippingAddress    *shopifyAddress        `json:"shipping_address"`
+	LineItems          []shopifyLineItem      `json:"line_items"`
+	rawProviderJSON    json.RawMessage
+	rawProviderPayload map[string]any
 }
 
 type shopifyCustomer struct {
 	ID int64 `json:"id"`
+}
+
+type shopifyAddress struct {
+	ID           int64  `json:"id"`
+	FirstName    string `json:"first_name"`
+	LastName     string `json:"last_name"`
+	Name         string `json:"name"`
+	Company      string `json:"company"`
+	Address1     string `json:"address1"`
+	Address2     string `json:"address2"`
+	City         string `json:"city"`
+	Province     string `json:"province"`
+	ProvinceCode string `json:"province_code"`
+	Country      string `json:"country"`
+	CountryCode  string `json:"country_code"`
+	Zip          string `json:"zip"`
+	Phone        string `json:"phone"`
 }
 
 type shopifyNoteAttribute struct {
@@ -115,16 +145,87 @@ type shopifyNoteAttribute struct {
 }
 
 type shopifyLineItem struct {
-	ID                int64  `json:"id"`
-	ProductID         int64  `json:"product_id"`
-	VariantID         int64  `json:"variant_id"`
-	Title             string `json:"title"`
-	VariantTitle      string `json:"variant_title"`
-	SKU               string `json:"sku"`
-	Vendor            string `json:"vendor"`
-	Quantity          int    `json:"quantity"`
-	Price             string `json:"price"`
-	FulfillmentStatus string `json:"fulfillment_status"`
+	ID                 int64  `json:"id"`
+	ProductID          int64  `json:"product_id"`
+	VariantID          int64  `json:"variant_id"`
+	Title              string `json:"title"`
+	VariantTitle       string `json:"variant_title"`
+	SKU                string `json:"sku"`
+	Vendor             string `json:"vendor"`
+	Quantity           int    `json:"quantity"`
+	Price              string `json:"price"`
+	FulfillmentStatus  string `json:"fulfillment_status"`
+	rawProviderJSON    json.RawMessage
+	rawProviderPayload map[string]any
+}
+
+func (order *shopifyOrder) UnmarshalJSON(data []byte) error {
+	type decodedShopifyOrder shopifyOrder
+	var decoded decodedShopifyOrder
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	raw, err := decodeProviderJSONObject(data)
+	if err != nil {
+		return err
+	}
+	*order = shopifyOrder(decoded)
+	order.rawProviderJSON = append(json.RawMessage(nil), data...)
+	order.rawProviderPayload = raw
+	return nil
+}
+
+func (lineItem *shopifyLineItem) UnmarshalJSON(data []byte) error {
+	type decodedShopifyLineItem shopifyLineItem
+	var decoded decodedShopifyLineItem
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	raw, err := decodeProviderJSONObject(data)
+	if err != nil {
+		return err
+	}
+	*lineItem = shopifyLineItem(decoded)
+	lineItem.rawProviderJSON = append(json.RawMessage(nil), data...)
+	lineItem.rawProviderPayload = raw
+	return nil
+}
+
+func decodeProviderJSONObject(data []byte) (map[string]any, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var raw map[string]any
+	if err := decoder.Decode(&raw); err != nil {
+		return nil, err
+	}
+	if raw == nil {
+		return nil, errors.New("Shopify provider object must be a JSON object")
+	}
+	return raw, nil
+}
+
+func providerRevisionInput(providerObject map[string]any, typedFallback any) any {
+	if providerObject != nil {
+		return providerObject
+	}
+	return typedFallback
+}
+
+func providerPayloadEnvelope(providerJSON json.RawMessage, providerObject map[string]any, typedFallback any) map[string]any {
+	object := providerRevisionInput(providerObject, mustJSONObject(typedFallback))
+	raw := append(json.RawMessage(nil), providerJSON...)
+	if len(raw) == 0 {
+		encoded, err := json.Marshal(object)
+		if err != nil {
+			encoded = []byte("{}")
+		}
+		raw = encoded
+	}
+	digest := sha256.Sum256(raw)
+	return map[string]any{
+		"provider_object_json":   string(raw),
+		"provider_object_sha256": hex.EncodeToString(digest[:]),
+	}
 }
 
 type shopifySourceRequest struct {
@@ -752,35 +853,7 @@ func fetchOrdersSince(ctx context.Context, state *shopifyState, since time.Time,
 		return nil, shopifySourceRequest{}, time.Time{}, err
 	}
 
-	windowField := "created_at_min"
-	orderField := "created_at"
-	if useUpdatedAt {
-		windowField = "updated_at_min"
-		orderField = "updated_at"
-	}
-
-	baseURL := fmt.Sprintf(defaultShopifyBaseURL, state.ShopDomain, state.APIVersion)
-	path := "/orders.json"
-	params := url.Values{}
-	params.Set("status", "any")
-	params.Set("limit", "250")
-	params.Set("order", orderField+" asc")
-	params.Set(windowField, since.Format(time.RFC3339))
-
-	sourceRequest := shopifySourceRequest{
-		APIBaseURL: baseURL,
-		Path:       path,
-		Request: map[string]any{
-			"status":         "any",
-			"limit":          250,
-			"order":          orderField + " asc",
-			windowField:      since.Format(time.RFC3339),
-			"api_version":    state.APIVersion,
-			"use_updated_at": useUpdatedAt,
-		},
-	}
-
-	nextURL := baseURL + path + "?" + params.Encode()
+	sourceRequest, nextURL := shopifyOrdersRequest(state, since, useUpdatedAt)
 	orders := make([]shopifyOrder, 0, 256)
 	latestUpdatedAt := time.Time{}
 	pageCount := 0
@@ -791,43 +864,120 @@ func fetchOrdersSince(ctx context.Context, state *shopifyState, since time.Time,
 		}
 		pageCount++
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
+		page, err := fetchOrderPage(ctx, state, accessToken, nextURL)
 		if err != nil {
-			return nil, sourceRequest, time.Time{}, fmt.Errorf("build Shopify orders request: %w", err)
-		}
-		req.Header.Set("X-Shopify-Access-Token", accessToken)
-
-		res, err := shopifyHTTPClient.Do(req)
-		if err != nil {
-			return nil, sourceRequest, time.Time{}, fmt.Errorf("Shopify orders request failed: %w", err)
+			return nil, sourceRequest, time.Time{}, err
 		}
 
-		bodyBytes, readErr := io.ReadAll(io.LimitReader(res.Body, maxResponseBodyBytes))
-		_ = res.Body.Close()
-		if readErr != nil {
-			return nil, sourceRequest, time.Time{}, fmt.Errorf("read Shopify orders response: %w", readErr)
-		}
-		bodyText := strings.TrimSpace(string(bodyBytes))
-		if res.StatusCode >= 400 {
-			return nil, sourceRequest, time.Time{}, fmt.Errorf("Shopify orders request failed (%d): %s", res.StatusCode, bodyText)
-		}
-
-		var payload shopifyOrdersResponse
-		if err := json.Unmarshal(bodyBytes, &payload); err != nil {
-			return nil, sourceRequest, time.Time{}, fmt.Errorf("parse Shopify orders response: %w", err)
-		}
-
-		for _, order := range payload.Orders {
+		for _, order := range page.Orders {
 			orders = append(orders, order)
 			if parsed := parseOrderUpdatedAt(order); !parsed.IsZero() && parsed.After(latestUpdatedAt) {
 				latestUpdatedAt = parsed
 			}
 		}
 
-		nextURL = parseLinkHeader(res.Header.Get("Link"))["next"]
+		nextURL = page.NextCursor
 	}
 
 	return orders, sourceRequest, latestUpdatedAt, nil
+}
+
+func shopifyOrdersRequest(state *shopifyState, since time.Time, useUpdatedAt bool) (shopifySourceRequest, string) {
+	return shopifyOrdersWindowRequest(state, since, useUpdatedAt, nil)
+}
+
+func shopifyOrdersWindowRequest(state *shopifyState, since time.Time, useUpdatedAt bool, through *time.Time) (shopifySourceRequest, string) {
+	windowField := "created_at_min"
+	windowMaximumField := "created_at_max"
+	orderField := "created_at"
+	if useUpdatedAt {
+		windowField = "updated_at_min"
+		windowMaximumField = "updated_at_max"
+		orderField = "updated_at"
+	}
+
+	baseURL := fmt.Sprintf(defaultShopifyBaseURL, state.ShopDomain, state.APIVersion)
+	path := "/orders.json"
+	params := url.Values{}
+	params.Set("status", "any")
+	params.Set("limit", "250")
+	params.Set("order", orderField+" asc")
+	params.Set(windowField, since.Format(time.RFC3339))
+	if through != nil {
+		params.Set(windowMaximumField, through.UTC().Format(time.RFC3339))
+	}
+	request := map[string]any{
+		"status":         "any",
+		"limit":          250,
+		"order":          orderField + " asc",
+		windowField:      since.Format(time.RFC3339),
+		"api_version":    state.APIVersion,
+		"use_updated_at": useUpdatedAt,
+	}
+	if through != nil {
+		request[windowMaximumField] = through.UTC().Format(time.RFC3339)
+	}
+	sourceRequest := shopifySourceRequest{
+		APIBaseURL: baseURL,
+		Path:       path,
+		Request:    request,
+	}
+	return sourceRequest, baseURL + path + "?" + params.Encode()
+}
+
+func fetchOrderPage(ctx context.Context, state *shopifyState, accessToken string, requestURL string) (shopifyOrderPage, error) {
+	if err := validateShopifyOrderPageURL(state, requestURL); err != nil {
+		return shopifyOrderPage{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return shopifyOrderPage{}, fmt.Errorf("build Shopify orders request: %w", err)
+	}
+	req.Header.Set("X-Shopify-Access-Token", accessToken)
+
+	res, err := shopifyHTTPClient.Do(req)
+	if err != nil {
+		return shopifyOrderPage{}, fmt.Errorf("Shopify orders request failed: %w", err)
+	}
+	bodyBytes, readErr := io.ReadAll(io.LimitReader(res.Body, maxResponseBodyBytes))
+	_ = res.Body.Close()
+	if readErr != nil {
+		return shopifyOrderPage{}, fmt.Errorf("read Shopify orders response: %w", readErr)
+	}
+	bodyText := strings.TrimSpace(string(bodyBytes))
+	if res.StatusCode >= 400 {
+		return shopifyOrderPage{}, fmt.Errorf("Shopify orders request failed (%d): %s", res.StatusCode, bodyText)
+	}
+
+	var payload shopifyOrdersResponse
+	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+		return shopifyOrderPage{}, fmt.Errorf("parse Shopify orders response: %w", err)
+	}
+	nextCursor := parseLinkHeader(res.Header.Get("Link"))["next"]
+	return shopifyOrderPage{
+		Orders:        payload.Orders,
+		RequestCursor: requestURL,
+		NextCursor:    nextCursor,
+		Complete:      nextCursor == "",
+	}, nil
+}
+
+func validateShopifyOrderPageURL(state *shopifyState, requestURL string) error {
+	if state == nil {
+		return errors.New("missing Shopify state for orders page")
+	}
+	candidate, err := url.Parse(requestURL)
+	if err != nil {
+		return fmt.Errorf("parse Shopify orders page URL: %w", err)
+	}
+	expected, err := url.Parse(fmt.Sprintf(defaultShopifyBaseURL, state.ShopDomain, state.APIVersion) + "/orders.json")
+	if err != nil {
+		return fmt.Errorf("parse configured Shopify orders URL: %w", err)
+	}
+	if candidate.Scheme != "https" || candidate.Scheme != expected.Scheme || !strings.EqualFold(candidate.Host, expected.Host) || candidate.Path != expected.Path || candidate.User != nil || candidate.Fragment != "" {
+		return errors.New("Shopify orders page URL escaped the configured store boundary")
+	}
+	return nil
 }
 
 func fetchShopInfo(ctx context.Context, state *shopifyState) (*shopifyShop, error) {
@@ -930,10 +1080,11 @@ func buildOrderRecord(state *shopifyState, order shopifyOrder, sourceRequest sho
 	row := normalizedOrderRow(state.ShopDomain, order)
 	bridgeAttributes := extractBridgeAttributes(order)
 	logicalRowID := fmt.Sprintf("%s:%s", state.ShopDomain, orderID)
-	revision := revisionHash(map[string]any{
+	typedRevisionInput := map[string]any{
 		"row":               row,
 		"bridge_attributes": bridgeAttributes,
-	})
+	}
+	revision := revisionHash(providerRevisionInput(order.rawProviderPayload, typedRevisionInput))
 	threadID := fmt.Sprintf("%s:order:%s", state.ShopDomain, orderID)
 	threadName := firstNonBlank(order.Name, orderID)
 	providerIDs := map[string]any{
@@ -972,17 +1123,17 @@ func buildOrderRecord(state *shopifyState, order shopifyOrder, sourceRequest sho
 			Timestamp:        orderTimestamp(order).UnixMilli(),
 			Content:          fmt.Sprintf("order %s total=%s financial_status=%s fulfillment_status=%s", threadName, firstNonBlank(order.TotalPrice, "0"), firstNonBlank(order.FinancialStatus, "unknown"), firstNonBlank(order.FulfillmentStatus, "unknown")),
 			ContentType:      "text",
+			Payload:          providerPayloadEnvelope(order.rawProviderJSON, order.rawProviderPayload, order),
 			Metadata: map[string]any{
-				"connection_id":        connectionID,
-				"adapter_id":           platformID,
-				"family":               "order",
-				"logical_row_id":       logicalRowID,
-				"revision_hash":        revision,
-				"provider_ids":         providerIDs,
-				"row":                  row,
-				"bridge_attributes":    bridgeAttributes,
-				"raw_provider_payload": mustJSONObject(order),
-				"source_request":       sourceRequest.metadata(),
+				"connection_id":     connectionID,
+				"adapter_id":        platformID,
+				"family":            "order",
+				"logical_row_id":    logicalRowID,
+				"revision_hash":     revision,
+				"provider_ids":      providerIDs,
+				"row":               row,
+				"bridge_attributes": bridgeAttributes,
+				"source_request":    sourceRequest.metadata(),
 			},
 		},
 	}
@@ -1002,7 +1153,7 @@ func buildLineItemRecord(state *shopifyState, order shopifyOrder, lineItem shopi
 	}
 
 	row := normalizedLineItemRow(state.ShopDomain, order, lineItem)
-	revision := revisionHash(row)
+	revision := revisionHash(providerRevisionInput(lineItem.rawProviderPayload, row))
 	logicalRowID := fmt.Sprintf("%s:%s:%s", state.ShopDomain, orderID, lineItemID)
 	threadID := fmt.Sprintf("%s:order:%s", state.ShopDomain, orderID)
 	providerIDs := map[string]any{
@@ -1041,17 +1192,17 @@ func buildLineItemRecord(state *shopifyState, order shopifyOrder, lineItem shopi
 			Timestamp:        lineItemTimestamp(order).UnixMilli(),
 			Content:          fmt.Sprintf("line_item order=%s line_item=%s quantity=%d price=%s", firstNonBlank(order.Name, orderID), lineItemID, lineItem.Quantity, firstNonBlank(lineItem.Price, "0")),
 			ContentType:      "text",
+			Payload:          providerPayloadEnvelope(lineItem.rawProviderJSON, lineItem.rawProviderPayload, lineItem),
 			Metadata: map[string]any{
-				"connection_id":        connectionID,
-				"adapter_id":           platformID,
-				"family":               "line_item",
-				"logical_row_id":       logicalRowID,
-				"revision_hash":        revision,
-				"provider_ids":         providerIDs,
-				"row":                  row,
-				"bridge_attributes":    map[string]any{},
-				"raw_provider_payload": mustJSONObject(lineItem),
-				"source_request":       sourceRequest.metadata(),
+				"connection_id":     connectionID,
+				"adapter_id":        platformID,
+				"family":            "line_item",
+				"logical_row_id":    logicalRowID,
+				"revision_hash":     revision,
+				"provider_ids":      providerIDs,
+				"row":               row,
+				"bridge_attributes": map[string]any{},
+				"source_request":    sourceRequest.metadata(),
 			},
 		},
 	}
@@ -1080,10 +1231,35 @@ func normalizedOrderRow(shopDomain string, order shopifyOrder) map[string]any {
 		"landing_site":       order.LandingSite,
 		"customer_id":        int64String(pointerCustomerID(order.Customer)),
 		"customer_email":     order.Email,
+		"customer_phone":     order.Phone,
+		"billing_address":    normalizedAddressSnapshot(order.BillingAddress),
+		"shipping_address":   normalizedAddressSnapshot(order.ShippingAddress),
 		"tags":               order.Tags,
 		"note_attributes":    noteAttributes,
 	}
 	return compactMap(row)
+}
+
+func normalizedAddressSnapshot(address *shopifyAddress) any {
+	if address == nil {
+		return nil
+	}
+	return compactMap(map[string]any{
+		"address_id":    int64String(address.ID),
+		"first_name":    address.FirstName,
+		"last_name":     address.LastName,
+		"name":          address.Name,
+		"company":       address.Company,
+		"address1":      address.Address1,
+		"address2":      address.Address2,
+		"city":          address.City,
+		"province":      address.Province,
+		"province_code": address.ProvinceCode,
+		"country":       address.Country,
+		"country_code":  address.CountryCode,
+		"zip":           address.Zip,
+		"phone":         address.Phone,
+	})
 }
 
 func normalizedLineItemRow(shopDomain string, order shopifyOrder, lineItem shopifyLineItem) map[string]any {

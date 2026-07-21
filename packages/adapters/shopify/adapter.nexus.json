@@ -8,7 +8,7 @@
   "skill": "./SKILL.md",
   "methods": {
     "records.backfill.stage": {
-      "description": "Stage historical Shopify backfill into canonical JSONL chunk files for Nex bulk import.",
+      "description": "Stage and export an exact fixed-window Shopify customer/order snapshot for Nex historical import.",
       "action": "read",
       "connection_required": true,
       "mutates_remote": false,
@@ -18,29 +18,63 @@
           "since": {
             "type": "string"
           },
+          "to": {
+            "type": "string"
+          },
           "stage_dir": {
             "type": "string"
           }
         },
         "required": [
           "since",
+          "to",
           "stage_dir"
-        ]
+        ],
+        "additionalProperties": false
       },
       "response": {
         "type": "object",
         "properties": {
           "version": {
-            "type": "integer"
+            "type": "integer",
+            "enum": [
+              2
+            ]
           },
           "format": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "jsonl_files_sha256"
+            ]
           },
           "stage_dir": {
             "type": "string"
           },
           "manifest_path": {
             "type": "string"
+          },
+          "manifest_file_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "connection_id": {
+            "type": "string"
+          },
+          "shop_domain": {
+            "type": "string"
+          },
+          "since": {
+            "type": "string"
+          },
+          "through": {
+            "type": "string"
+          },
+          "source_manifest_path": {
+            "type": "string"
+          },
+          "source_manifest_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
           },
           "totals": {
             "type": "object",
@@ -51,7 +85,8 @@
             },
             "required": [
               "records"
-            ]
+            ],
+            "additionalProperties": false
           },
           "chunks": {
             "type": "array",
@@ -75,12 +110,35 @@
                 },
                 "last_timestamp_ms": {
                   "type": "integer"
+                },
+                "byte_count": {
+                  "type": "integer"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "source_page_path": {
+                  "type": "string"
+                },
+                "source_page_sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
                 }
               },
               "required": [
                 "path",
-                "records"
-              ]
+                "records",
+                "first_record_id",
+                "last_record_id",
+                "first_timestamp_ms",
+                "last_timestamp_ms",
+                "byte_count",
+                "sha256",
+                "source_page_path",
+                "source_page_sha256"
+              ],
+              "additionalProperties": false
             }
           }
         },
@@ -89,9 +147,17 @@
           "format",
           "stage_dir",
           "manifest_path",
-          "totals",
-          "chunks"
-        ]
+          "manifest_file_sha256",
+          "connection_id",
+          "shop_domain",
+          "since",
+          "through",
+          "source_manifest_path",
+          "source_manifest_sha256",
+          "chunks",
+          "totals"
+        ],
+        "additionalProperties": false
       }
     }
   },

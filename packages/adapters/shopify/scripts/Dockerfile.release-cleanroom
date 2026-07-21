@@ -1,0 +1,6 @@
+ARG NEX_IMAGE=node:22-bookworm
+FROM golang:1.23-bookworm AS go_toolchain
+
+FROM ${NEX_IMAGE}
+COPY --from=go_toolchain /usr/local/go /usr/local/go
+ENV PATH="/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"

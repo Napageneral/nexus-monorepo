@@ -83,7 +83,8 @@ type AdapterMethodRequest struct {
 
 // Adapter defines the operation handlers for a Nexus adapter.
 type Adapter struct {
-	Operations AdapterOperations
+	Operations      AdapterOperations
+	DeclaredMethods map[string]AdapterMethod
 }
 
 // Run is the main entry point for an adapter binary.

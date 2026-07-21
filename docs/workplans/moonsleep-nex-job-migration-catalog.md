@@ -229,44 +229,28 @@ Exclude all memory reader/writer, retention, consolidation, memory-link enrichme
 9. Centralize provider mutation authority as principals and grants rather than scattered environment flags.
 10. Preserve exact `OnUnitActiveSec` versus `OnUnitInactiveSec` behavior instead of normalizing schedules blindly.
 
-## Transitional PostgreSQL-event to SQLite-work handoff
+## Full PostgreSQL event-to-work contract
 
-The first production storage profile keeps immutable records/events in PostgreSQL and the complete current job executor in SQLite. Shopify subscriptions must remain inactive until a receipt-bound handoff is implemented.
+The production `moonsleep-postgres-v1` profile supersedes the transitional split-plane design. PostgreSQL owns immutable records, ingest receipts, durable events, identity observations, job definitions, event subscriptions, dispatch receipts, idempotency, runs, queues, leases, retries, and dead letters. SQLite work and identity planes remain empty for this profile.
 
-A plain poller plus the existing active-run idempotency is insufficient: if SQLite commits a run and the process crashes before PostgreSQL acknowledgment, replay after the job becomes terminal can create a second run.
+The atomic dispatch contract is:
 
-The bridge contract is:
+1. PostgreSQL commits a new immutable provider revision and its ingest receipt.
+2. The same transaction commits the durable `record.ingested` event.
+3. Every enabled matching subscription is snapshotted and receives one durable dispatch receipt, one idempotency identity, one run, and one queue row.
+4. Exact replay of the provider revision creates no record, event, dispatch receipt, run, queue row, identity observation, or counter growth.
+5. Workers lease with server time and `FOR UPDATE SKIP LOCKED`; ownership-bound renew, completion, retry, expiry recovery, and dead-letter transitions stay in PostgreSQL.
+6. Generic `events.publish` cannot forge the reserved `record.ingested` type.
 
-1. PostgreSQL atomically commits the record, search document, ingest receipt, durable event, and pending handoff.
-2. A single-dispatch bridge leases pending handoffs with server time and `FOR UPDATE SKIP LOCKED`.
-3. The bridge receives only allowlisted event references and receipt digests; it cannot read or forward provider payload, content, metadata, attachments, or recipients.
-4. Inside one SQLite `BEGIN IMMEDIATE`, it validates every eligible subscription/definition, snapshots the complete considered set, creates runs/queue rows for matches, writes target receipts, and commits one durable handoff header.
-5. PostgreSQL is acknowledged only after the SQLite header and target set are durable; acknowledgment marks the event dispatched.
-6. Replay after any crash reads the SQLite header and never creates a second run.
+Subscription filters remain top-level bounded objects over the reviewed safe property allowlist. Scalar, array, nested, malformed, oversized, or raw-provider-data filters fail closed. Production activation remains a separate governed gate: install the job and subscription inactive, prove the bounded cohort and complete two-pass backfill, restart and replay, then atomically enable the exact job/subscription pair. Pre-activation records are handled only by explicit cohort/backfill methods and are not silently reinterpreted.
 
-Required PostgreSQL handoff state includes event/receipt IDs, pending/leased/retry/completed/dead-letter status, lease owner/expiry, attempts, allowlisted outcome, completion time, SQLite receipt SHA, and target count. Attempt history is append-only.
-
-Required SQLite state includes one durable event header and one target receipt per event/subscription, binding subscription revision, job revision and script hash, run/queue IDs, idempotency key, request fingerprint, candidate snapshot SHA, and target-set SHA.
-
-Single-plane enforcement is mandatory:
-
-- PostgreSQL-native subscription dispatch stays disabled;
-- PostgreSQL work tables remain empty except canonical lanes;
-- the PostgreSQL profile suppresses in-memory `record.ingested` publication and the SQLite scheduler ignores it defensively;
-- generic `events.publish` cannot forge the reserved `record.ingested` type;
-- no event is delivered through both the bus and the receipt-bound bridge.
-
-Bridge modes are `disabled`, `observe`, and `active`; default is `disabled`. Observe mode validates events, receipts, filters, definitions, executable hashes, and candidate counts but creates no SQLite work.
-
-Subscription filters must be top-level bounded objects over a fixed safe property allowlist. Scalar, array, nested, malformed, oversized, or raw-data filters fail closed. Job/subscription activation is one atomic SQLite transaction that verifies the executable hash, activates the job, enables the subscription, and records a shared activation timestamp. Pre-activation events stay available to explicit cohort/backfill methods and are not silently reinterpreted.
-
-Bridge acceptance covers migration apply/reapply, rollback failpoints, forged events, payload exclusion, strict filters, zero/one/multiple targets, crashes at every boundary, terminal-run replay, concurrent bridge processes, lease recovery, poison/dead-letter behavior, kill switch, activation-time classification, unchanged SQLite execution retries, empty PostgreSQL work tables, and zero residue.
+Acceptance covers migration apply/reapply, exact dispatch receipt binding, strict filters, zero/one/multiple targets, concurrent lease exclusion, crash recovery, poisoned work, retries/dead letters, kill switch, restart, replay, empty SQLite business planes, and zero residue.
 
 ## Prioritized migration sequence
 
 1. Register the catalog, existing executors, principals, grants, sources, outputs, and external receipt pointers; activate nothing.
 2. Shadow a read-only cohort: production drift, publication monitor, allocation parity, inventory invariants, paid tripwire, finance source poll, Texas counter, and digest preview.
-3. Complete the Shopify adapter, event handoff, customer/order/address projectors, replay, and reconciliation while the current timer remains authoritative.
+3. Complete the Shopify adapter, customer/order/address projectors, PostgreSQL-native event activation, replay, and reconciliation while the current timer remains authoritative.
 4. Split Shopify webhook fan-out into attribution, tags, creator refresh, route retry, and provider conversion subscriptions.
 5. Move paid and organic source ingestion adapter-by-adapter while retaining history/enrichment projectors.
 6. Move ShipEngine and TikTok to webhook-primary plus poll-reconciliation.

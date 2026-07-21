@@ -1,0 +1,8 @@
+{
+  "contract": "packages/apps/moonsleep-commerce/app/api",
+  "generator": "nex/scripts/contracts/generate-openapi.ts",
+  "sources": [
+    "packages/apps/moonsleep-commerce/app/app.nexus.json",
+    "packages/apps/moonsleep-commerce/app/./methods/index.ts"
+  ]
+}

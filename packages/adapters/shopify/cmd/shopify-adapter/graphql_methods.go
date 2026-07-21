@@ -122,6 +122,35 @@ type shopifyGraphQLResponse struct {
 	Data       map[string]any            `json:"data"`
 	Extensions map[string]any            `json:"extensions"`
 	Errors     []shopifyGraphQLErrorItem `json:"errors"`
+	rawData    map[string]json.RawMessage
+}
+
+func (response *shopifyGraphQLResponse) UnmarshalJSON(data []byte) error {
+	var envelope struct {
+		Data       map[string]json.RawMessage `json:"data"`
+		Extensions map[string]any             `json:"extensions"`
+		Errors     []shopifyGraphQLErrorItem  `json:"errors"`
+	}
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return err
+	}
+
+	decodedData := make(map[string]any, len(envelope.Data))
+	rawData := make(map[string]json.RawMessage, len(envelope.Data))
+	for field, raw := range envelope.Data {
+		var decoded any
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			return fmt.Errorf("decode Shopify graphql data field %q: %w", field, err)
+		}
+		decodedData[field] = decoded
+		rawData[field] = append(json.RawMessage(nil), raw...)
+	}
+
+	response.Data = decodedData
+	response.Extensions = envelope.Extensions
+	response.Errors = envelope.Errors
+	response.rawData = rawData
+	return nil
 }
 
 type shopifyGraphQLErrorItem struct {
@@ -186,30 +215,32 @@ func declaredShopifyMethods() map[string]nexadapter.DeclaredMethod[struct{}] {
 		methods[name] = method
 	}
 	methods["records.backfill.stage"] = nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
-		Description: "Stage historical Shopify backfill into canonical JSONL chunk files for Nex bulk import.",
+		Description: "Stage and export an exact fixed-window Shopify customer/order snapshot for Nex historical import.",
 		Action:      "read",
 		Params: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"since":     map[string]any{"type": "string"},
+				"to":        map[string]any{"type": "string"},
 				"stage_dir": map[string]any{"type": "string"},
 			},
-			"required": []string{"since", "stage_dir"},
+			"required":             []string{"since", "to", "stage_dir"},
+			"additionalProperties": false,
 		},
 		Response: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"version":       map[string]any{"type": "integer"},
-				"format":        map[string]any{"type": "string"},
-				"stage_dir":     map[string]any{"type": "string"},
-				"manifest_path": map[string]any{"type": "string"},
-				"totals": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"records": map[string]any{"type": "integer"},
-					},
-					"required": []string{"records"},
-				},
+				"version":                map[string]any{"type": "integer", "enum": []int{2}},
+				"format":                 map[string]any{"type": "string", "enum": []string{"jsonl_files_sha256"}},
+				"stage_dir":              map[string]any{"type": "string"},
+				"manifest_path":          map[string]any{"type": "string"},
+				"manifest_file_sha256":   map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+				"connection_id":          map[string]any{"type": "string"},
+				"shop_domain":            map[string]any{"type": "string"},
+				"since":                  map[string]any{"type": "string"},
+				"through":                map[string]any{"type": "string"},
+				"source_manifest_path":   map[string]any{"type": "string"},
+				"source_manifest_sha256": map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
 				"chunks": map[string]any{
 					"type": "array",
 					"items": map[string]any{
@@ -221,17 +252,29 @@ func declaredShopifyMethods() map[string]nexadapter.DeclaredMethod[struct{}] {
 							"last_record_id":     map[string]any{"type": "string"},
 							"first_timestamp_ms": map[string]any{"type": "integer"},
 							"last_timestamp_ms":  map[string]any{"type": "integer"},
+							"byte_count":         map[string]any{"type": "integer"},
+							"sha256":             map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+							"source_page_path":   map[string]any{"type": "string"},
+							"source_page_sha256": map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
 						},
-						"required": []string{"path", "records"},
+						"required":             []string{"path", "records", "first_record_id", "last_record_id", "first_timestamp_ms", "last_timestamp_ms", "byte_count", "sha256", "source_page_path", "source_page_sha256"},
+						"additionalProperties": false,
 					},
 				},
+				"totals": map[string]any{
+					"type":                 "object",
+					"properties":           map[string]any{"records": map[string]any{"type": "integer"}},
+					"required":             []string{"records"},
+					"additionalProperties": false,
+				},
 			},
-			"required": []string{"version", "format", "stage_dir", "manifest_path", "totals", "chunks"},
+			"required":             []string{"version", "format", "stage_dir", "manifest_path", "manifest_file_sha256", "connection_id", "shop_domain", "since", "through", "source_manifest_path", "source_manifest_sha256", "chunks", "totals"},
+			"additionalProperties": false,
 		},
 		ConnectionRequired: boolPtr(true),
 		MutatesRemote:      boolPtr(false),
 		Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
-			return stageBackfill(ctx, req.Payload)
+			return stageAndExportCustomerOrderBackfill(ctx, req.Payload)
 		},
 	})
 	return methods
