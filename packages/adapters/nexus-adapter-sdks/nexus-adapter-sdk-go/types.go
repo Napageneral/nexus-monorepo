@@ -50,6 +50,7 @@ type AdapterMethodCatalog struct {
 }
 
 type AdapterMethodOrigin struct {
+	PackageKind       string `json:"package_kind,omitempty"`
 	PackageID         string `json:"package_id,omitempty"`
 	PackageVersion    string `json:"package_version,omitempty"`
 	DeclarationMode   string `json:"declaration_mode"`   // "manifest" | "openapi" | "builtin"
