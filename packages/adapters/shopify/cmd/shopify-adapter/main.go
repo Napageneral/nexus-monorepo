@@ -1098,7 +1098,7 @@ func buildOrderRecord(state *shopifyState, order shopifyOrder, sourceRequest sho
 	return nexadapter.AdapterInboundRecord{
 		Operation: "record.ingest",
 		Routing: nexadapter.AdapterInboundRouting{
-			Adapter:       adapterName,
+			Adapter:       platformID,
 			Platform:      platformID,
 			ConnectionID:  connectionID,
 			SenderID:      state.ShopDomain,
@@ -1167,7 +1167,7 @@ func buildLineItemRecord(state *shopifyState, order shopifyOrder, lineItem shopi
 	return nexadapter.AdapterInboundRecord{
 		Operation: "record.ingest",
 		Routing: nexadapter.AdapterInboundRouting{
-			Adapter:       adapterName,
+			Adapter:       platformID,
 			Platform:      platformID,
 			ConnectionID:  connectionID,
 			SenderID:      state.ShopDomain,

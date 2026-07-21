@@ -50,6 +50,9 @@ func TestBuildOrderRecordPreservesBridgeAttributes(t *testing.T) {
 	if record.Routing.Platform != platformID {
 		t.Fatalf("unexpected platform: %q", record.Routing.Platform)
 	}
+	if record.Routing.Adapter != platformID {
+		t.Fatalf("unexpected adapter id: %q", record.Routing.Adapter)
+	}
 	if record.Routing.ContainerID != "order" {
 		t.Fatalf("unexpected container id: %q", record.Routing.ContainerID)
 	}
@@ -102,6 +105,9 @@ func TestBuildLineItemRecord(t *testing.T) {
 
 	if record.Routing.ContainerID != "line_item" {
 		t.Fatalf("unexpected container id: %q", record.Routing.ContainerID)
+	}
+	if record.Routing.Adapter != platformID {
+		t.Fatalf("unexpected adapter id: %q", record.Routing.Adapter)
 	}
 	if !strings.Contains(record.Payload.ExternalRecordID, ":line_item:101:501:") {
 		t.Fatalf("unexpected external record id: %q", record.Payload.ExternalRecordID)

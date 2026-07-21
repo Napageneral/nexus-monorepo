@@ -1129,7 +1129,7 @@ func buildCustomerRecord(state *shopifyState, customer shopifyGraphQLCustomer, s
 	return nexadapter.AdapterInboundRecord{
 		Operation: "record.ingest",
 		Routing: nexadapter.AdapterInboundRouting{
-			Adapter:       adapterName,
+			Adapter:       platformID,
 			Platform:      platformID,
 			ConnectionID:  connectionID,
 			SenderID:      state.ShopDomain,
@@ -1197,7 +1197,7 @@ func buildProductRecord(state *shopifyState, product shopifyGraphQLProduct, sour
 	return nexadapter.AdapterInboundRecord{
 		Operation: "record.ingest",
 		Routing: nexadapter.AdapterInboundRouting{
-			Adapter:       adapterName,
+			Adapter:       platformID,
 			Platform:      platformID,
 			ConnectionID:  connectionID,
 			SenderID:      state.ShopDomain,
@@ -1265,7 +1265,7 @@ func buildCollectionRecord(state *shopifyState, collection shopifyGraphQLCollect
 	return nexadapter.AdapterInboundRecord{
 		Operation: "record.ingest",
 		Routing: nexadapter.AdapterInboundRouting{
-			Adapter:       adapterName,
+			Adapter:       platformID,
 			Platform:      platformID,
 			ConnectionID:  connectionID,
 			SenderID:      state.ShopDomain,
@@ -1341,7 +1341,7 @@ func buildInventoryRecords(state *shopifyState, item shopifyGraphQLInventoryItem
 		record := nexadapter.AdapterInboundRecord{
 			Operation: "record.ingest",
 			Routing: nexadapter.AdapterInboundRouting{
-				Adapter:       adapterName,
+				Adapter:       platformID,
 				Platform:      platformID,
 				ConnectionID:  connectionID,
 				SenderID:      state.ShopDomain,
@@ -1413,7 +1413,7 @@ func buildFulfillmentRecord(state *shopifyState, fulfillment shopifyGraphQLFulfi
 	return nexadapter.AdapterInboundRecord{
 		Operation: "record.ingest",
 		Routing: nexadapter.AdapterInboundRouting{
-			Adapter:       adapterName,
+			Adapter:       platformID,
 			Platform:      platformID,
 			ConnectionID:  connectionID,
 			SenderID:      state.ShopDomain,
@@ -1481,7 +1481,7 @@ func buildDiscountRecord(state *shopifyState, discount shopifyGraphQLDiscountRec
 	return nexadapter.AdapterInboundRecord{
 		Operation: "record.ingest",
 		Routing: nexadapter.AdapterInboundRouting{
-			Adapter:       adapterName,
+			Adapter:       platformID,
 			Platform:      platformID,
 			ConnectionID:  connectionID,
 			SenderID:      state.ShopDomain,
@@ -1549,7 +1549,7 @@ func buildMarketingRecord(state *shopifyState, activity shopifyGraphQLMarketingA
 	return nexadapter.AdapterInboundRecord{
 		Operation: "record.ingest",
 		Routing: nexadapter.AdapterInboundRouting{
-			Adapter:       adapterName,
+			Adapter:       platformID,
 			Platform:      platformID,
 			ConnectionID:  connectionID,
 			SenderID:      state.ShopDomain,
