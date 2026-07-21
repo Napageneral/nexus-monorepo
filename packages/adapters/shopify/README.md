@@ -43,7 +43,8 @@ go build -o ./bin/shopify-adapter ./cmd/shopify-adapter
 ## Package
 
 ```bash
-./scripts/package-release.sh
+NEX_RELEASE_IMAGE=moonsleep-nex-empty:<exact-linux-amd64-release> \
+  ./scripts/test-package-release-linux-amd64.sh
 ```
 
 ## Validation
@@ -91,8 +92,6 @@ go test ./...
 ./bin/shopify-adapter shopify.query.customer --connection <connection-id> --payload '{"id":"gid://shopify/Customer/<customer-id>"}'
 ./bin/shopify-adapter adapter.monitor.start --connection <connection-id>
 ./bin/shopify-adapter records.backfill --connection <connection-id> --since 2026-01-01T00:00:00Z
-./bin/shopify-adapter records.backfill.customer_orders.stage --connection <connection-id> --payload '{"since":"2020-01-01T00:00:00Z","through":"2026-07-20T18:00:00Z","stage_dir":"/private/operator-owned/shopify-customer-orders"}'
-./bin/shopify-adapter records.backfill.customer_orders.export --connection <connection-id> --payload '{"since":"2020-01-01T00:00:00Z","through":"2026-07-20T18:00:00Z","stage_dir":"/private/operator-owned/shopify-customer-orders"}'
 ./bin/shopify-adapter records.backfill.stage --connection <connection-id> --payload '{"since":"2020-01-01T00:00:00Z","to":"2026-07-20T18:00:00Z","stage_dir":"/private/nex-owned/shopify-customer-orders"}'
 ```
 
