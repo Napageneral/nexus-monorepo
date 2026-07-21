@@ -10,6 +10,7 @@
   },
   "scripts": {
     "build": "rm -rf dist && npx -y --package esbuild@0.27.3 esbuild src/index.ts --bundle --platform=node --format=esm --target=node22 --alias:@nexus-project/adapter-sdk-ts=../nexus-adapter-sdks/nexus-adapter-sdk-ts/dist/index.js --outfile=dist/index.js --banner:js='#!/usr/bin/env node' && chmod +x dist/index.js",
+    "check:open-platform": "node --experimental-strip-types scripts/check-open-platform-eligibility.ts",
     "lint": "npx -y --package typescript@5.9.2 tsc -p tsconfig.json --noEmit",
     "test": "node --test --experimental-strip-types src/*.test.ts"
   },

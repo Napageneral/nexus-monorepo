@@ -20,6 +20,21 @@ The browser collector is owned by MoonSleep because the authenticated browser pr
 
 The monitor intentionally re-emits a rolling overlap window. Nex owns canonical deduplication by `(platform, external_record_id)`, so this provides at-least-once restart behavior without trusting an adapter-local cursor that could advance before durable persistence.
 
+## Official API eligibility
+
+Alibaba documents signed read operations for Messenger conversation and message
+history. Their public documentation does not prove that MoonSleep's buyer
+account is eligible for the seller-oriented account identifiers those methods
+require. Run the zero-call assessment before considering a live read probe:
+
+```bash
+npm run check:open-platform
+```
+
+See `docs/validation/alibaba-open-platform-eligibility.md`. Browser cookies,
+profiles, tokens, passwords, and session material are never inputs to this
+probe.
+
 ## Development
 
 ```bash
