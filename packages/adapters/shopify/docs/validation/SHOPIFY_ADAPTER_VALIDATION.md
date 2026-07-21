@@ -63,11 +63,16 @@ go build -o ./bin/shopify-adapter ./cmd/shopify-adapter
 ./bin/shopify-adapter adapter.info
 ./bin/shopify-adapter adapter.health --connection shopify-primary
 ./bin/shopify-adapter records.backfill --connection shopify-primary --since 2026-01-01T00:00:00Z
-./bin/shopify-adapter records.backfill.customer_orders.stage --connection shopify-primary --payload '{"since":"2020-01-01T00:00:00Z","through":"<captured-before-first-read RFC3339>","stage_dir":"<private absolute directory>"}'
-./bin/shopify-adapter records.backfill.customer_orders.export --connection shopify-primary --payload '{"since":"2020-01-01T00:00:00Z","through":"<same captured RFC3339>","stage_dir":"<same private absolute directory>"}'
-./bin/shopify-adapter records.backfill.stage --connection shopify-primary --payload '{"since":"2020-01-01T00:00:00Z","to":"<same captured RFC3339>","stage_dir":"<Nex-owned private absolute directory>"}'
+./bin/shopify-adapter records.backfill.stage --connection shopify-primary --payload '{"since":"2020-01-01T00:00:00Z","to":"<captured-before-first-read RFC3339>","stage_dir":"<Nex-owned private absolute directory>"}'
 ./bin/shopify-adapter adapter.monitor.start --connection shopify-primary
 ```
+
+`records.backfill.stage` is the sole customer/order V2 staging declaration.
+The removed `records.backfill.customer_orders.stage` and
+`records.backfill.customer_orders.export` aliases are not part of the installed
+package contract. The V2 response itself binds the source manifest, every
+sorted chunk, every source-page receipt, exact byte counts, and SHA-256
+digests; Nex consumes that complete closure before the first ingest write.
 
 ## Validation Ladder
 
