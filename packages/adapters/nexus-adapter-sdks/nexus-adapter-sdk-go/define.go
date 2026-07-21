@@ -344,6 +344,7 @@ func buildMethodDescriptor[T any](config DefineAdapterConfig[T], name string, de
 	origin := declaration.Origin
 	if origin == nil {
 		origin = &AdapterMethodOrigin{
+			PackageKind:       "adapter",
 			PackageID:         config.Platform,
 			PackageVersion:    config.Version,
 			DeclarationMode:   "builtin",
@@ -351,6 +352,7 @@ func buildMethodDescriptor[T any](config DefineAdapterConfig[T], name string, de
 			Namespace:         config.Platform,
 		}
 	}
+	origin.PackageKind = "adapter"
 
 	contextHints := declaration.ContextHints
 	if contextHints.Params == nil {

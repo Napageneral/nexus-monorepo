@@ -48,6 +48,9 @@ func TestDefineAdapterBuildsInfoAndDefaults(t *testing.T) {
 	if info.Methods[0].Name != "jira.issues.transition" {
 		t.Fatalf("method name = %q", info.Methods[0].Name)
 	}
+	if info.Methods[0].Origin.PackageKind != "adapter" {
+		t.Fatalf("origin.package_kind = %q", info.Methods[0].Origin.PackageKind)
+	}
 	if !info.Methods[0].ConnectionRequired {
 		t.Fatalf("connection_required should default from declaration")
 	}
