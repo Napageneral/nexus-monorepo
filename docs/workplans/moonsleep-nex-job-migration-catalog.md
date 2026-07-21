@@ -28,7 +28,7 @@ Discovered surfaces:
 
 The catalog is an implementation map, not evidence that every repository-declared timer is currently installed. Exact host activation must be read back at each cutover.
 
-Production Nex baseline on 2026-07-20: `moonsleep-nex.service` is enabled, active, loopback-only, and healthy at release `00371fcbe76b1fe2c93b319a06dc75f37f241bbe`. Its PostgreSQL work plane has seven canonical lanes and zero definitions, subscriptions, schedules, runs, queue rows, idempotency rows, or dispatch receipts. The host timers below remain authoritative; the empty Nex deployment activated no replacement trigger or executor.
+Production Nex baseline on 2026-07-21: `moonsleep-nex.service` is enabled, active, and healthy at release `c43eeb790b79e2aca0044d9c499223a7a057e80b`; its runtime stays loopback-bound while the reviewed Tailscale operator path provides private access. PostgreSQL owns the seven canonical work lanes and currently has zero definitions, subscriptions, schedules, runs, queue rows, idempotency rows, or dispatch receipts; the corresponding SQLite business planes remain empty. The host timers below remain authoritative, and the empty Nex deployment activated no replacement trigger or executor.
 
 ## Common Nex job contract
 
