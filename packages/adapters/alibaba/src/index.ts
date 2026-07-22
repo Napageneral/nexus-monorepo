@@ -3,4 +3,4 @@ import { alibabaAdapter } from "./adapter.js";
 
 const exitCode = await runAdapter(alibabaAdapter);
 
-process.exit(exitCode);
+process.exitCode = exitCode;
