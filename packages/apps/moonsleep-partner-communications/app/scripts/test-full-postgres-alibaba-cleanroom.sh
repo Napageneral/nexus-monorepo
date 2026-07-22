@@ -19,12 +19,15 @@ CONNECTION_ID='moonsleep-alibaba'
 BACKFILL_SINCE="${BACKFILL_SINCE:-2024-01-01T00:00:00.000Z}"
 BACKFILL_TO="${BACKFILL_TO:-2026-07-18T00:00:00.000Z}"
 EXPECTED_RECORD_COUNT="${EXPECTED_RECORD_COUNT:-6325}"
+EXPECTED_CORPUS_MESSAGE_COUNT="${EXPECTED_CORPUS_MESSAGE_COUNT:-6132}"
+EXPECTED_CORPUS_ORPHAN_COUNT="${EXPECTED_CORPUS_ORPHAN_COUNT:-193}"
+EXPECTED_CORPUS_UNIQUE_ATTACHMENT_COUNT="${EXPECTED_CORPUS_UNIQUE_ATTACHMENT_COUNT:-1148}"
 EXPECTED_NATIVE_RECORD_COUNT="${EXPECTED_NATIVE_RECORD_COUNT:-6325}"
 EXPECTED_NATIVE_MESSAGE_COUNT="${EXPECTED_NATIVE_MESSAGE_COUNT:-6132}"
 EXPECTED_NATIVE_ORPHAN_COUNT="${EXPECTED_NATIVE_ORPHAN_COUNT:-193}"
 EXPECTED_NATIVE_ATTACHMENT_COUNT="${EXPECTED_NATIVE_ATTACHMENT_COUNT:-1148}"
 
-for numeric_value in "${EXPECTED_RECORD_COUNT}" "${EXPECTED_NATIVE_RECORD_COUNT}" "${EXPECTED_NATIVE_MESSAGE_COUNT}" "${EXPECTED_NATIVE_ORPHAN_COUNT}" "${EXPECTED_NATIVE_ATTACHMENT_COUNT}"; do
+for numeric_value in "${EXPECTED_RECORD_COUNT}" "${EXPECTED_CORPUS_MESSAGE_COUNT}" "${EXPECTED_CORPUS_ORPHAN_COUNT}" "${EXPECTED_CORPUS_UNIQUE_ATTACHMENT_COUNT}" "${EXPECTED_NATIVE_RECORD_COUNT}" "${EXPECTED_NATIVE_MESSAGE_COUNT}" "${EXPECTED_NATIVE_ORPHAN_COUNT}" "${EXPECTED_NATIVE_ATTACHMENT_COUNT}"; do
   [[ "${numeric_value}" =~ ^[0-9]+$ ]] || { echo "expected counts must be non-negative integers" >&2; exit 1; }
 done
 
@@ -191,6 +194,12 @@ done
 cmp "${runner_temp}/records-1.jsonl" "${runner_temp}/records-2.jsonl"
 record_count="$(LC_ALL=C grep -c '^{' "${runner_temp}/records-1.jsonl")"
 [[ "${record_count}" = "${EXPECTED_RECORD_COUNT}" ]] || { echo "unexpected Alibaba record count: ${record_count}" >&2; exit 1; }
+corpus_message_count="$(jq -s '[.[]|select(.payload.metadata.family=="message")]|length' "${runner_temp}/records-1.jsonl")"
+corpus_orphan_count="$(jq -s '[.[]|select(.payload.metadata.family=="orphan_attachment")]|length' "${runner_temp}/records-1.jsonl")"
+corpus_unique_attachment_count="$(jq -s '[.[] | if .payload.metadata.family=="message" then .payload.payload.source_attachments[]?.provider_object_sha256 elif .payload.metadata.family=="orphan_attachment" then .payload.payload.provider_attachment_sha256 else empty end] | unique | length' "${runner_temp}/records-1.jsonl")"
+[[ "${corpus_message_count}" = "${EXPECTED_CORPUS_MESSAGE_COUNT}" ]] || { echo "unexpected Alibaba corpus message count: ${corpus_message_count}" >&2; exit 1; }
+[[ "${corpus_orphan_count}" = "${EXPECTED_CORPUS_ORPHAN_COUNT}" ]] || { echo "unexpected Alibaba corpus orphan count: ${corpus_orphan_count}" >&2; exit 1; }
+[[ "${corpus_unique_attachment_count}" = "${EXPECTED_CORPUS_UNIQUE_ATTACHMENT_COUNT}" ]] || { echo "unexpected Alibaba corpus unique attachment count: ${corpus_unique_attachment_count}" >&2; exit 1; }
 record_output_sha256="$(shasum -a 256 "${runner_temp}/records-1.jsonl" | awk '{print $1}')"
 
 echo "[partner-cleanroom] create isolated PostgreSQL 17 and Nex runtime"
@@ -302,7 +311,7 @@ surewal_entity_id="$(jq -r '.canonical_entity_id' <<<"${seed_first}")"
 surewal_contact_id="$(jq -r '.contact.id' <<<"${seed_first}")"
 seed_counts="$(runtime_counts)"
 
-echo "[partner-cleanroom] ingest the complete Surewal conversation twice"
+echo "[partner-cleanroom] ingest the complete adapter corpus twice"
 ingest_first="$(docker exec "${runtime_container}" sh -c '
   token=$(cat /run/moonsleep-load-credentials/runtime-token)
   exec node /proof/ingest-jsonl-cleanroom.mjs /evidence/records-1.jsonl "$token"
@@ -328,7 +337,7 @@ printf '%s\n' "${conversation_inspection}" >&2
 jq -e --argjson records "${EXPECTED_NATIVE_RECORD_COUNT}" --argjson messages "${EXPECTED_NATIVE_MESSAGE_COUNT}" --argjson orphans "${EXPECTED_NATIVE_ORPHAN_COUNT}" --argjson attachments "${EXPECTED_NATIVE_ATTACHMENT_COUNT}" '.record_count==$records and .message_record_count==$messages and .orphan_attachment_record_count==$orphans and .attachment_row_count==$attachments and .provider_content_returned==false and .provider_write_authority==false' <<<"${conversation_inspection}" >/dev/null
 echo "[partner-cleanroom] native conversation exact; project reviewed open-loop cohort"
 
-sample_ids="$(docker exec -u postgres "${postgres_container}" psql -X -d moonsleep_nex -Atqc "SELECT id FROM nex_runtime.records WHERE metadata->>'family'='message' ORDER BY timestamp,id LIMIT 2")"
+sample_ids="$(docker exec -u postgres "${postgres_container}" psql -X -d moonsleep_nex -Atqc "SELECT id FROM nex_runtime.records WHERE platform='alibaba' AND thread_id='${NATIVE_THREAD_ID}' AND metadata->>'family'='message' ORDER BY timestamp,id LIMIT 2")"
 sample_first="$(printf '%s\n' "${sample_ids}" | sed -n '1p')"
 sample_second="$(printf '%s\n' "${sample_ids}" | sed -n '2p')"
 [[ -n "${sample_first}" && -n "${sample_second}" && "${sample_first}" != "${sample_second}" ]]
@@ -400,10 +409,11 @@ jq -n --arg finished_at "${finished_at}" --arg source_revision "${source_revisio
   --arg postgres_version "${postgres_version}" --arg adapter_sha256 "${adapter_sha256}" --arg app_sha256 "${app_sha256}" \
   --arg record_output_sha256 "${record_output_sha256}" --arg account_entity_id "${account_entity_id}" --arg surewal_entity_id "${surewal_entity_id}" --arg surewal_contact_id "${surewal_contact_id}" \
   --arg review_revision "${review_revision}" \
-  --argjson record_count "${EXPECTED_RECORD_COUNT}" \
+  --argjson record_count "${EXPECTED_RECORD_COUNT}" --argjson corpus_message_count "${EXPECTED_CORPUS_MESSAGE_COUNT}" \
+  --argjson corpus_orphan_count "${EXPECTED_CORPUS_ORPHAN_COUNT}" --argjson corpus_unique_attachment_count "${EXPECTED_CORPUS_UNIQUE_ATTACHMENT_COUNT}" \
   --argjson initial_counts "${initial_counts}" --argjson seed_counts "${seed_counts}" --argjson terminal_counts "${counts_after_restart}" \
   --argjson directory_counts "${directory_after_restart}" --argjson conversation "${conversation_inspection}" \
-  '{ok:true,finished_at:$finished_at,source:{revision:$source_revision,tree:$source_tree,clean:true},nex:{revision:$nex_revision,image_id:$nex_image_id,platform:"linux/amd64",storage_profile:"moonsleep-postgres-v1"},postgres:{image_id:$postgres_image_id,version:$postgres_version,platform:"linux/amd64"},packages:{alibaba_sha256:$adapter_sha256,partner_desk_sha256:$app_sha256,active_after_restart:true,ui_mount_served:true},connection:{connection_id:"moonsleep-alibaba",custom_setup_complete:true,automatic_activation:false,monitor_started:false,backfill_queued:false,provider_credentials_received:false},adapter:{output_sha256:$record_output_sha256,records:$record_count,first_and_second_output_identical:true,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},identity:{account_entity_id:$account_entity_id,account_binding_preserved_after_setup:true,account_binding_preserved_after_restart:true,entity_id:$surewal_entity_id,contact_row_id:$surewal_contact_id,account_seed_first_created_entity:1,account_seed_replay_created_entity:0,first_created_entity:1,first_created_contact:1,second_created_entity:0,second_created_contact:0},conversation:$conversation,projection:{native_threads:1,reviewed_open_loops:2,review_queue:0},review_store:{revision_sha256:$review_revision,first_created:true,replay_created:false,current_after_restart:true,divergent_heads_auto_selected:false},work_boundary:{job_status:"inactive",subscription_count:2,subscription_enabled:false,queue_rows:0,dispatch_receipts:0,reply_authority:false},replay:{second_ingest_skipped:$record_count,restart_ingest_skipped:$record_count,postgres_counts_unchanged:true,directory_counts_unchanged:true},initial_counts:$initial_counts,seed_counts:$seed_counts,terminal_counts:$terminal_counts,directory_counts:$directory_counts,zero_residue:true}' > "${RECEIPT_PATH}"
+  '{ok:true,finished_at:$finished_at,source:{revision:$source_revision,tree:$source_tree,clean:true},nex:{revision:$nex_revision,image_id:$nex_image_id,platform:"linux/amd64",storage_profile:"moonsleep-postgres-v1"},postgres:{image_id:$postgres_image_id,version:$postgres_version,platform:"linux/amd64"},packages:{alibaba_sha256:$adapter_sha256,partner_desk_sha256:$app_sha256,active_after_restart:true,ui_mount_served:true},connection:{connection_id:"moonsleep-alibaba",custom_setup_complete:true,automatic_activation:false,monitor_started:false,backfill_queued:false,provider_credentials_received:false},adapter:{output_sha256:$record_output_sha256,records:$record_count,message_records:$corpus_message_count,orphan_attachment_records:$corpus_orphan_count,unique_attachments:$corpus_unique_attachment_count,first_and_second_output_identical:true,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},identity:{account_entity_id:$account_entity_id,account_binding_preserved_after_setup:true,account_binding_preserved_after_restart:true,entity_id:$surewal_entity_id,contact_row_id:$surewal_contact_id,account_seed_first_created_entity:1,account_seed_replay_created_entity:0,first_created_entity:1,first_created_contact:1,second_created_entity:0,second_created_contact:0},conversation:$conversation,projection:{native_threads:1,reviewed_open_loops:2,review_queue:0},review_store:{revision_sha256:$review_revision,first_created:true,replay_created:false,current_after_restart:true,divergent_heads_auto_selected:false},work_boundary:{job_status:"inactive",subscription_count:2,subscription_enabled:false,queue_rows:0,dispatch_receipts:0,reply_authority:false},replay:{second_ingest_skipped:$record_count,restart_ingest_skipped:$record_count,postgres_counts_unchanged:true,directory_counts_unchanged:true},initial_counts:$initial_counts,seed_counts:$seed_counts,terminal_counts:$terminal_counts,directory_counts:$directory_counts,zero_residue:true}' > "${RECEIPT_PATH}"
 chmod 0600 "${RECEIPT_PATH}"
 trap - EXIT
 rm -rf -- "${runner_temp}"
