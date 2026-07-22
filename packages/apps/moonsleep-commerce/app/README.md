@@ -24,6 +24,8 @@ Current scope:
   runner defaults to one 25-record batch per invocation, a one-second inter-batch
   delay, and an I/O-pressure ceiling before every batch
 - dormant `record.ingested` job registration on the full PostgreSQL work plane,
+  with exact customer, order, and line-item subscriptions so each new revision
+  schedules one projector rather than fanning out to both jobs; activation is
   held until cohort, double-backfill, restart, and replay gates pass
 - deterministic shop-domain and customer-GID contact anchors
 - exact provider JSON hash verification

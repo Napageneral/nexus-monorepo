@@ -486,7 +486,7 @@
         </div>
         <div class="phase">
           <div class="phase-id">SHOP A</div>
-          <div><h3>Dormant Shopify packages</h3><p>The Shopify adapter and MoonSleep Commerce app are installed with their continuous customer job and event subscription inactive. Store/integration routing identities are seeded replay-safely. No Shopify write authority exists.</p></div>
+          <div><h3>Dormant Shopify packages</h3><p>The Shopify adapter and MoonSleep Commerce app are installed with continuous jobs and subscriptions inactive. The source successor narrows delivery to exact customer, order and line-item event families so each new revision schedules exactly one projector. Store/integration routing identities are seeded replay-safely. No Shopify write authority exists.</p></div>
           <div class="state done">Installed dormant</div>
         </div>
         <div class="phase">
@@ -531,7 +531,7 @@
         </div>
         <div class="phase">
           <div class="phase-id">P6</div>
-          <div><h3>Enable bounded continuous synchronization</h3><p>Use small reconciliation windows as the source of completeness and Shopify webhooks as an acceleration signal. Stage one bounded page at a time on the workloads volume; ingest and project through capped single-worker microbatches; enforce connection, transaction, queue and I/O ceilings; and prove cursor advancement, out-of-order delivery, missed-webhook recovery, restart, replay, retry and rollback.</p></div>
+          <div><h3>Enable bounded continuous synchronization</h3><p>Use small reconciliation windows as the source of completeness and Shopify webhooks as an acceleration signal. Exact customer, order and line-item subscriptions route each committed revision to one projector only. Stage one bounded page at a time on the workloads volume; ingest and project through capped single-worker microbatches; enforce connection, transaction, queue and I/O ceilings; and prove cursor advancement, out-of-order delivery, missed-webhook recovery, restart, replay, retry and rollback.</p></div>
           <div class="state later">After backfill</div>
         </div>
         <div class="phase">
@@ -626,7 +626,7 @@
             <tr><td>Bounded customer projector candidate</td><td>a6148647f1d006080591b725ed634ee270aecdea<br>PR #14</td><td>Checkpointed projection from existing Nex records with no provider call. Defaults to one 25-record batch per invocation at the strict resource ceiling; the 17,090-record shape is executable in 69 hard-ceiling batches. Hosted validation currently stops before tests on an unrelated dependency-cache path.</td></tr>
             <tr><td>Bounded order and line-item candidate</td><td>0311fb0794ce222272639444f77ecb6dba7a9e80<br>tree 957f0a82cd6ea9df461b5b874c95dbbadb9edde7<br>PR #16</td><td>Exact Linux/AMD64 + PostgreSQL 17.10 install over the safe customer base, dependency-ordered commerce manifest, synthetic customer/order/line ingest, canonical customer link, immutable address hashes, restart and zero-duplicate replay. Receipt SHA-256 4b39fec82e44d55c806d91ed36675099d6675b3e2241d377ed494bb7a9577cd2.</td></tr>
             <tr><td>Shopify adapter artifact</td><td>0.1.1<br>SHA-256 bd55f4ecaa83d6e15dc09ca7c804da893746aaba10ddfc570f3bde7d33da5f1d</td><td>Generated and validated by the exact Linux/AMD64 Nex release CLI in the final dependency-ordered cleanroom.</td></tr>
-            <tr><td>MoonSleep commerce app artifact</td><td>0.2.0<br>SHA-256 7fa8775ba8153b266c1b65863ee957dff4d69ae4f9b58c1fe1eef7e19a21beda</td><td>Installed and rehydrated after restart with two inactive jobs, two disabled subscriptions, bounded manual projection methods and zero provider credentials/calls.</td></tr>
+            <tr><td>MoonSleep commerce app artifact</td><td>0.2.0<br>SHA-256 7fa8775ba8153b266c1b65863ee957dff4d69ae4f9b58c1fe1eef7e19a21beda</td><td>The earlier exact cleanroom installed and rehydrated two inactive jobs and two disabled broad subscriptions with zero provider credentials/calls. The current source successor replaces those broad subscriptions with three exact record-family subscriptions and requires a fresh Linux/PG17 proof before merge.</td></tr>
           </tbody>
         </table>
         <div class="rule"></div>

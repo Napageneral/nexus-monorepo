@@ -34,6 +34,11 @@ snapshot hashes. No proof run may call Shopify.
 The service-shaped cleanroom also invokes the bounded runner through the public
 HTTP operation surface and proves its first-pass and replay checkpoints against
 PostgreSQL 17 while the continuous job and subscription remain inactive.
+It also proves the dormant live topology is exactly two jobs and three
+record-family subscriptions: customer revisions schedule only the identity
+projector, while order and line-item revisions schedule only the commerce
+projector. Disabled legacy broad subscriptions are migrated; active or foreign
+subscriptions fail closed.
 
 The runner unit suite additionally models the exact 17,090-record production
 customer shape. It proves 69 batches at the hard 250-record ceiling, but the

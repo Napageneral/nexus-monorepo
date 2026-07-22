@@ -22,15 +22,19 @@ const JOB_SPECS = Object.freeze([
     name: CUSTOMER_JOB_NAME,
     description: CUSTOMER_JOB_DESCRIPTION,
     scriptPath: CUSTOMER_JOB_SCRIPT_PATH,
+    matches: [{ platform: "shopify", container_id: "customer" }],
   },
   {
     name: COMMERCE_JOB_NAME,
     description: COMMERCE_JOB_DESCRIPTION,
     scriptPath: COMMERCE_JOB_SCRIPT_PATH,
+    matches: [
+      { platform: "shopify", container_id: "order" },
+      { platform: "shopify", container_id: "line_item" },
+    ],
   },
 ]);
-const SHOPIFY_MATCH = Object.freeze({ platform: "shopify" });
-const SHOPIFY_MATCH_JSON = JSON.stringify(SHOPIFY_MATCH);
+const LEGACY_SHOPIFY_MATCH_JSON = JSON.stringify({ platform: "shopify" });
 
 function asRecord(value: unknown): RuntimeRow {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -116,46 +120,63 @@ async function ensureJob(
   return id;
 }
 
-async function ensureSubscription(runtime: NexClient, jobDefinitionId: string): Promise<string> {
+async function ensureSubscriptions(
+  runtime: NexClient,
+  jobDefinitionId: string,
+  matches: ReadonlyArray<Readonly<Record<string, string>>>,
+): Promise<string[]> {
   const subscriptions = await listSubscriptions(runtime, jobDefinitionId);
+  const expectedJson = matches.map((match) => JSON.stringify(match));
   for (const row of subscriptions) {
-    if (asString(row.match_json) !== SHOPIFY_MATCH_JSON) {
+    const matchJson = asString(row.match_json);
+    if (!expectedJson.includes(matchJson)) {
+      if (matchJson === LEGACY_SHOPIFY_MATCH_JSON && asInteger(row.enabled) === 0) {
+        await runtime.events.subscriptions.delete({ id: asString(row.id) });
+        continue;
+      }
       throw new Error("MoonSleep commerce job has an unexpected event subscription");
     }
   }
-  const existing = subscriptions.find(
-    (row) =>
-      asString(row.event_type) === EVENT_TYPE &&
-      asString(row.job_definition_id) === jobDefinitionId &&
-      asString(row.match_json) === SHOPIFY_MATCH_JSON,
-  );
-  if (existing) {
-    const id = asString(existing.id);
-    if (asInteger(existing.enabled) !== 0) {
-      const updated = unwrapPayload(
-        await runtime.events.subscriptions.update({
-          id,
-          match: SHOPIFY_MATCH,
-          enabled: false,
-        }),
-      );
-      return asString(asRecord(updated.subscription).id) || id;
+
+  const ids: string[] = [];
+  for (const [index, match] of matches.entries()) {
+    const matchesForContract = subscriptions.filter(
+      (row) =>
+        asString(row.event_type) === EVENT_TYPE &&
+        asString(row.job_definition_id) === jobDefinitionId &&
+        asString(row.match_json) === expectedJson[index],
+    );
+    if (matchesForContract.length > 1) {
+      throw new Error("MoonSleep commerce job has duplicate event subscriptions");
     }
-    return id;
+    const existing = matchesForContract[0];
+    if (existing) {
+      const id = asString(existing.id);
+      if (asInteger(existing.enabled) !== 0) {
+        const updated = unwrapPayload(
+          await runtime.events.subscriptions.update({ id, match, enabled: false }),
+        );
+        ids.push(asString(asRecord(updated.subscription).id) || id);
+      } else {
+        ids.push(id);
+      }
+      continue;
+    }
+    const created = unwrapPayload(
+      await runtime.events.subscriptions.create({
+        job_definition_id: jobDefinitionId,
+        event_type: EVENT_TYPE,
+        match,
+        enabled: false,
+      }),
+    );
+    const id = asString(asRecord(created.subscription).id);
+    if (!id) {
+      throw new Error("MoonSleep commerce subscription creation did not return an id");
+    }
+    ids.push(id);
   }
-  const created = unwrapPayload(
-    await runtime.events.subscriptions.create({
-      job_definition_id: jobDefinitionId,
-      event_type: EVENT_TYPE,
-      match: SHOPIFY_MATCH,
-      enabled: false,
-    }),
-  );
-  const id = asString(asRecord(created.subscription).id);
-  if (!id) {
-    throw new Error("MoonSleep commerce subscription creation did not return an id");
-  }
-  return id;
+  return ids;
 }
 
 export async function ensureMoonSleepCommerceRuntimeWork(params: {
@@ -163,22 +184,27 @@ export async function ensureMoonSleepCommerceRuntimeWork(params: {
   appId: string;
 }): Promise<{
   jobDefinitionId: string;
-  subscriptionId: string;
+  subscriptionIds: string[];
   commerceJobDefinitionId: string;
-  commerceSubscriptionId: string;
+  commerceSubscriptionIds: string[];
 }> {
   const jobDefinitionId = await ensureJob(params.runtime, params.appId, JOB_SPECS[0]!);
-  const subscriptionId = await ensureSubscription(params.runtime, jobDefinitionId);
+  const subscriptionIds = await ensureSubscriptions(
+    params.runtime,
+    jobDefinitionId,
+    JOB_SPECS[0]!.matches,
+  );
   const commerceJobDefinitionId = await ensureJob(params.runtime, params.appId, JOB_SPECS[1]!);
-  const commerceSubscriptionId = await ensureSubscription(
+  const commerceSubscriptionIds = await ensureSubscriptions(
     params.runtime,
     commerceJobDefinitionId,
+    JOB_SPECS[1]!.matches,
   );
   return {
     jobDefinitionId,
-    subscriptionId,
+    subscriptionIds,
     commerceJobDefinitionId,
-    commerceSubscriptionId,
+    commerceSubscriptionIds,
   };
 }
 
