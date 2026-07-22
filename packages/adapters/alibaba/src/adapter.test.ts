@@ -241,6 +241,8 @@ test("record preserves exact sanitized source JSON and excludes raw credentials"
   );
   assert.match(record.payload.external_record_id, /^alibaba:conn-alibaba:message:m-1:[a-f0-9]{64}$/);
   assert.equal(record.routing.container_id, "surewal-thread");
+  assert.equal(record.routing.receiver_id, "conn-alibaba");
+  assert.equal(record.payload.recipients, undefined);
   assert.equal(record.payload.metadata?.source_connection_id, "conn-alibaba");
   assert.match(record.payload.content, /Vessel booking and ETA/);
   assert.equal(record.payload.attachments?.[0]?.local_path, attachmentPath);
@@ -273,7 +275,8 @@ test("bounded projection keeps temporal window, directionality, and replay ident
   const message = rows.find((row) => row.payload.metadata?.family === "message");
   const orphan = rows.find((row) => row.payload.metadata?.family === "orphan_attachment");
   assert.equal(message?.routing.sender_id, "moonsleep-alibaba");
-  assert.equal(message?.routing.receiver_id, "supplier-ali");
+  assert.equal(message?.routing.receiver_id, "conn-alibaba");
+  assert.deepEqual(message?.payload.recipients, ["supplier-ali"]);
   assert.equal(orphan?.payload.payload?.source_coverage_disposition, "orphan_attachment_evidence");
   assert.deepEqual(
     replay.map((row) => row.payload.external_record_id),

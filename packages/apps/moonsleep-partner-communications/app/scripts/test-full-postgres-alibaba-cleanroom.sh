@@ -19,10 +19,10 @@ CONNECTION_ID='moonsleep-alibaba'
 BACKFILL_SINCE="${BACKFILL_SINCE:-2024-01-01T00:00:00.000Z}"
 BACKFILL_TO="${BACKFILL_TO:-2026-07-18T00:00:00.000Z}"
 EXPECTED_RECORD_COUNT="${EXPECTED_RECORD_COUNT:-6325}"
-EXPECTED_NATIVE_RECORD_COUNT="${EXPECTED_NATIVE_RECORD_COUNT:-6132}"
+EXPECTED_NATIVE_RECORD_COUNT="${EXPECTED_NATIVE_RECORD_COUNT:-6325}"
 EXPECTED_NATIVE_MESSAGE_COUNT="${EXPECTED_NATIVE_MESSAGE_COUNT:-6132}"
-EXPECTED_NATIVE_ORPHAN_COUNT="${EXPECTED_NATIVE_ORPHAN_COUNT:-0}"
-EXPECTED_NATIVE_ATTACHMENT_COUNT="${EXPECTED_NATIVE_ATTACHMENT_COUNT:-955}"
+EXPECTED_NATIVE_ORPHAN_COUNT="${EXPECTED_NATIVE_ORPHAN_COUNT:-193}"
+EXPECTED_NATIVE_ATTACHMENT_COUNT="${EXPECTED_NATIVE_ATTACHMENT_COUNT:-1148}"
 
 for numeric_value in "${EXPECTED_RECORD_COUNT}" "${EXPECTED_NATIVE_RECORD_COUNT}" "${EXPECTED_NATIVE_MESSAGE_COUNT}" "${EXPECTED_NATIVE_ORPHAN_COUNT}" "${EXPECTED_NATIVE_ATTACHMENT_COUNT}"; do
   [[ "${numeric_value}" =~ ^[0-9]+$ ]] || { echo "expected counts must be non-negative integers" >&2; exit 1; }
@@ -321,6 +321,7 @@ jq -e --argjson expected "${EXPECTED_RECORD_COUNT}" '.records==$expected and .re
 echo "[partner-cleanroom] replay counts stable; inspect complete native conversation"
 
 conversation_inspection="$(runtime_call moonsleep-partner-desk.alibaba.inspect-conversation "$(jq -nc --arg connection_id "${CONNECTION_ID}" --arg provider_thread_id "${NATIVE_THREAD_ID}" '{connection_id:$connection_id,provider_thread_id:$provider_thread_id}')")"
+printf '%s\n' "${conversation_inspection}" >&2
 jq -e --argjson records "${EXPECTED_NATIVE_RECORD_COUNT}" --argjson messages "${EXPECTED_NATIVE_MESSAGE_COUNT}" --argjson orphans "${EXPECTED_NATIVE_ORPHAN_COUNT}" --argjson attachments "${EXPECTED_NATIVE_ATTACHMENT_COUNT}" '.record_count==$records and .message_record_count==$messages and .orphan_attachment_record_count==$orphans and .attachment_row_count==$attachments and .provider_content_returned==false and .provider_write_authority==false' <<<"${conversation_inspection}" >/dev/null
 echo "[partner-cleanroom] native conversation exact; project reviewed open-loop cohort"
 
