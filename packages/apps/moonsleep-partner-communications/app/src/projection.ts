@@ -133,6 +133,7 @@ export type PartnerWorkspaceProjection = {
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9:._@/+\-$]{0,511}$/;
+const OPAQUE_PROVIDER_ID = /^[^\u0000-\u001f\u007f]+$/u;
 const LABEL = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
 function requireText(value: string, field: string, maxBytes: number): string {
@@ -156,6 +157,12 @@ function requireIdentifier(value: string, field: string, maxBytes = 512): string
   return value;
 }
 
+function requireOpaqueProviderId(value: string, field: string, maxBytes = 512): string {
+  requireText(value, field, maxBytes);
+  if (!OPAQUE_PROVIDER_ID.test(value)) throw new Error(`${field} contains control characters`);
+  return value;
+}
+
 function unique(values: string[], field: string): string[] {
   const result = [...new Set(values)];
   if (result.length !== values.length) throw new Error(`${field} contains duplicates`);
@@ -169,8 +176,8 @@ function validateRecord(record: CommunicationRecord): void {
   }
   requireText(record.provider, "provider", 64);
   requireIdentifier(record.connection_id, "connection_id", 256);
-  requireIdentifier(record.provider_thread_id, "provider_thread_id");
-  requireIdentifier(record.provider_message_id, "provider_message_id");
+  requireOpaqueProviderId(record.provider_thread_id, "provider_thread_id");
+  requireOpaqueProviderId(record.provider_message_id, "provider_message_id");
   requireText(record.summary, "summary", 16_384);
   timestamp(record.observed_at);
   if (!Number.isSafeInteger(record.attachment_count) || record.attachment_count < 0) {

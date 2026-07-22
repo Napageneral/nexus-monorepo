@@ -12,7 +12,7 @@ function fixture(id: string, timestamp: number, content: string) {
     id,
     platform: "alibaba",
     receiver_contact_id: "moonsleep-alibaba",
-    thread_id: "surewal-thread",
+    thread_id: "2215891521413-2216843498932#11011@icbu",
     timestamp,
     content,
     attachments: [],
@@ -30,7 +30,7 @@ function fixture(id: string, timestamp: number, content: string) {
 test("inspects a complete native conversation without returning source content", async () => {
   const records = [fixture("source-1", 1_785_000_000_000, "MOQ question"), fixture("source-2", 1_785_000_001_000, "ETA reply")];
   const result = await inspectAlibabaConversation({
-    params: { connection_id: "alibaba-primary", provider_thread_id: "surewal-thread" },
+    params: { connection_id: "alibaba-primary", provider_thread_id: "2215891521413-2216843498932#11011@icbu" },
     nex: { records: { list: async () => ({ payload: { records } }) } },
   } as never) as Record<string, unknown>;
   assert.equal(result.record_count, 2);
@@ -44,7 +44,7 @@ test("rejects a record outside the requested Alibaba source connection", async (
   const foreign = { ...original, metadata: { ...original.metadata, source_connection_id: "alibaba-other" } };
   await assert.rejects(
     inspectAlibabaConversation({
-      params: { connection_id: "alibaba-primary", provider_thread_id: "surewal-thread" },
+      params: { connection_id: "alibaba-primary", provider_thread_id: "2215891521413-2216843498932#11011@icbu" },
       nex: { records: { list: async () => ({ payload: { records: [foreign] } }) } },
     } as never),
     /foreign connection/,
