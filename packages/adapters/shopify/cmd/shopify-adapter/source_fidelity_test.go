@@ -102,6 +102,15 @@ func TestUnknownShopifyProviderFieldChangesImmutableRevision(t *testing.T) {
 	if firstRevision == secondRevision {
 		t.Fatalf("provider-only change was suppressed under one revision: %#v", firstRevision)
 	}
+	for label, revision := range map[string]any{"first": firstRevision, "second": secondRevision} {
+		text, ok := revision.(string)
+		if !ok || len(text) != sha256.Size*2 {
+			t.Fatalf("%s revision is not a full SHA-256: %#v", label, revision)
+		}
+		if _, err := hex.DecodeString(text); err != nil {
+			t.Fatalf("%s revision is not lowercase hex: %#v", label, revision)
+		}
+	}
 }
 
 func TestShopifyCustomerPreservesIdentityFieldsAndExactSourceObject(t *testing.T) {

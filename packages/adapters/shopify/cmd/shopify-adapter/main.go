@@ -23,7 +23,7 @@ import (
 
 const (
 	adapterName                = "shopify-adapter"
-	adapterVersion             = "0.1.1"
+	adapterVersion             = "0.1.2"
 	platformID                 = "shopify"
 	defaultAPIVersion          = "2026-01"
 	defaultHTTPTimeout         = 30 * time.Second
@@ -1395,7 +1395,7 @@ func revisionHash(value any) string {
 		return "unhashable"
 	}
 	sum := sha256.Sum256(body)
-	return hex.EncodeToString(sum[:8])
+	return hex.EncodeToString(sum[:])
 }
 
 func mustJSONObject(value any) map[string]any {
