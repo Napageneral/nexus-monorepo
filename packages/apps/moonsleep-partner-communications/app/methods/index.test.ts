@@ -1,10 +1,30 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "vitest";
-import { inspectAlibabaConversation, projectReviewedCohort } from "./index.ts";
+import { inspectAlibabaConversation, inspectGmailConversation, projectReviewedCohort } from "./index.ts";
 
 function source(json: string) {
   return { provider_object_json: json, provider_object_sha256: createHash("sha256").update(json).digest("hex") };
+}
+
+function gmailFixture(id: string, timestamp: number, content: string) {
+  return {
+    id,
+    platform: "gmail",
+    receiver_contact_id: "moonsleep-ops",
+    thread_id: "gmail-thread-1",
+    timestamp,
+    content,
+    attachments: [{ id: "gmail-attachment-1" }],
+    payload: { provider_message_ref: id },
+    metadata: {
+      family: "message",
+      source_connection_id: "gmail-tyler",
+      message_id: id,
+      revision_hash: createHash("sha256").update(content).digest("hex"),
+      direction: "outbound",
+    },
+  };
 }
 
 function fixture(id: string, timestamp: number, content: string) {
@@ -49,6 +69,19 @@ test("rejects a record outside the requested Alibaba source connection", async (
     } as never),
     /foreign connection/,
   );
+});
+
+test("inspects committed Gmail evidence through the shared native conversation boundary", async () => {
+  const records = [gmailFixture("gmail-1", 1_785_000_000_000, "Supplier follow-up")];
+  const result = await inspectGmailConversation({
+    params: { connection_id: "gmail-tyler", provider_thread_id: "gmail-thread-1" },
+    nex: { records: { list: async () => ({ payload: { records } }) } },
+  } as never) as Record<string, unknown>;
+  assert.equal(result.provider, "gmail");
+  assert.equal(result.record_count, 1);
+  assert.equal(result.attachment_row_count, 1);
+  assert.equal(result.provider_content_returned, false);
+  assert.equal(JSON.stringify(result).includes("Supplier follow-up"), false);
 });
 
 test("projects multiple independent reviewed loops over the same native conversation", async () => {

@@ -131,6 +131,125 @@ paths:
                       - type: object
                         additionalProperties: true
                       - type: "null"
+  /runtime/operations/moonsleep-partner-desk.gmail.inspect-conversation:
+    post:
+      operationId: moonsleep-partner-desk.gmail.inspect-conversation
+      summary: Inspect and hash one complete committed Gmail native conversation
+        without returning message content.
+      tags:
+        - MoonSleep Partner Desk
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                connection_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                provider_thread_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 512
+              required:
+                - connection_id
+                - provider_thread_id
+              additionalProperties: false
+      responses:
+        "200":
+          description: Successful MoonSleep Partner Desk method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
   /runtime/operations/moonsleep-partner-desk.healthcheck:
     post:
       operationId: moonsleep-partner-desk.healthcheck

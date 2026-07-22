@@ -264,8 +264,8 @@ health_before="$(runtime_call moonsleep-partner-desk.healthcheck '{}')"
 jq -e '.status == "ok" and .continuous_projection == "dormant_pending_backfill_parity_and_activation_receipt" and .provider_write_authority == false and .reply_authority == false' <<<"${health_before}" >/dev/null
 jobs_before="$(runtime_call jobs.list '{}')"
 subscriptions_before="$(runtime_call events.subscriptions.list '{}')"
-jq -e '(.jobs|length)==1 and .jobs[0].name=="moonsleep-partner-desk.alibaba-open-loop-projection" and .jobs[0].status=="inactive"' <<<"${jobs_before}" >/dev/null
-jq -e '(.subscriptions|length)==1 and .subscriptions[0].event_type=="record.ingested" and .subscriptions[0].match_json=="{\"platform\":\"alibaba\"}" and .subscriptions[0].enabled==0' <<<"${subscriptions_before}" >/dev/null
+jq -e '(.jobs|length)==1 and .jobs[0].name=="moonsleep-partner-desk.reviewed-open-loop-projection" and .jobs[0].status=="inactive"' <<<"${jobs_before}" >/dev/null
+jq -e '(.subscriptions|length)==2 and all(.subscriptions[]; .event_type=="record.ingested" and .enabled==0) and ([.subscriptions[].match_json]|sort)==["{\"platform\":\"alibaba\"}","{\"platform\":\"gmail\"}"]' <<<"${subscriptions_before}" >/dev/null
 
 initial_counts="$(runtime_counts)"
 jq -e '.records==0 and .receipts==0 and .events==0 and .entities==3 and .contacts==0 and .observations==0 and .queue==0 and .dispatch_receipts==0 and .adapter_instances==0' <<<"${initial_counts}" >/dev/null
@@ -318,7 +318,7 @@ docker restart "${runtime_container}" >/dev/null
 wait_for_runtime
 jq -e '.status=="ok" and .provider_write_authority==false' <<<"$(runtime_call moonsleep-partner-desk.healthcheck '{}')" >/dev/null
 jq -e '(.jobs|length)==1 and .jobs[0].status=="inactive"' <<<"$(runtime_call jobs.list '{}')" >/dev/null
-jq -e '(.subscriptions|length)==1 and .subscriptions[0].enabled==0' <<<"$(runtime_call events.subscriptions.list '{}')" >/dev/null
+jq -e '(.subscriptions|length)==2 and all(.subscriptions[]; .enabled==0)' <<<"$(runtime_call events.subscriptions.list '{}')" >/dev/null
 ingest_after_restart="$(docker exec "${runtime_container}" sh -c '
   token=$(cat /run/moonsleep-load-credentials/runtime-token)
   exec node /proof/ingest-jsonl-cleanroom.mjs /evidence/records-1.jsonl "$token"
@@ -345,7 +345,7 @@ jq -n --arg finished_at "${finished_at}" --arg source_revision "${source_revisio
   --argjson record_count "${EXPECTED_RECORD_COUNT}" \
   --argjson initial_counts "${initial_counts}" --argjson seed_counts "${seed_counts}" --argjson terminal_counts "${counts_after_restart}" \
   --argjson directory_counts "${directory_after_restart}" --argjson conversation "${conversation_inspection}" \
-  '{ok:true,finished_at:$finished_at,source:{revision:$source_revision,tree:$source_tree,clean:true},nex:{revision:$nex_revision,image_id:$nex_image_id,platform:"linux/amd64",storage_profile:"moonsleep-postgres-v1"},postgres:{image_id:$postgres_image_id,version:$postgres_version,platform:"linux/amd64"},packages:{alibaba_sha256:$adapter_sha256,partner_desk_sha256:$app_sha256,active_after_restart:true},adapter:{output_sha256:$record_output_sha256,records:$record_count,first_and_second_output_identical:true,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},identity:{entity_id:$surewal_entity_id,contact_row_id:$surewal_contact_id,first_created_entity:1,first_created_contact:1,second_created_entity:0,second_created_contact:0},conversation:$conversation,projection:{native_threads:1,reviewed_open_loops:2,review_queue:0},work_boundary:{job_status:"inactive",subscription_enabled:false,queue_rows:0,dispatch_receipts:0,reply_authority:false},replay:{second_ingest_skipped:$record_count,restart_ingest_skipped:$record_count,postgres_counts_unchanged:true,directory_counts_unchanged:true},initial_counts:$initial_counts,seed_counts:$seed_counts,terminal_counts:$terminal_counts,directory_counts:$directory_counts,zero_residue:true}' > "${RECEIPT_PATH}"
+  '{ok:true,finished_at:$finished_at,source:{revision:$source_revision,tree:$source_tree,clean:true},nex:{revision:$nex_revision,image_id:$nex_image_id,platform:"linux/amd64",storage_profile:"moonsleep-postgres-v1"},postgres:{image_id:$postgres_image_id,version:$postgres_version,platform:"linux/amd64"},packages:{alibaba_sha256:$adapter_sha256,partner_desk_sha256:$app_sha256,active_after_restart:true},adapter:{output_sha256:$record_output_sha256,records:$record_count,first_and_second_output_identical:true,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},identity:{entity_id:$surewal_entity_id,contact_row_id:$surewal_contact_id,first_created_entity:1,first_created_contact:1,second_created_entity:0,second_created_contact:0},conversation:$conversation,projection:{native_threads:1,reviewed_open_loops:2,review_queue:0},work_boundary:{job_status:"inactive",subscription_count:2,subscription_enabled:false,queue_rows:0,dispatch_receipts:0,reply_authority:false},replay:{second_ingest_skipped:$record_count,restart_ingest_skipped:$record_count,postgres_counts_unchanged:true,directory_counts_unchanged:true},initial_counts:$initial_counts,seed_counts:$seed_counts,terminal_counts:$terminal_counts,directory_counts:$directory_counts,zero_residue:true}' > "${RECEIPT_PATH}"
 chmod 0600 "${RECEIPT_PATH}"
 trap - EXIT
 rm -rf -- "${runner_temp}"

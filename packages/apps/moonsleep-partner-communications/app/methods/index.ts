@@ -84,30 +84,36 @@ function validateProviderDigest(record: Row): void {
 }
 
 function toCommunicationRecord(record: Row): CommunicationRecord {
-  if (text(record.platform) !== "alibaba") throw new Error("record is not Alibaba evidence");
-  validateProviderDigest(record);
   const metadata = row(record.metadata);
+  const provider = text(record.platform);
+  if (provider !== "alibaba" && provider !== "gmail") {
+    throw new Error("record is not supported partner communication evidence");
+  }
+  if (provider === "alibaba") validateProviderDigest(record);
+  const sourceRevision = requireText(metadata.revision_hash, "metadata.revision_hash", 64);
+  if (!SHA256.test(sourceRevision)) throw new Error("metadata.revision_hash is invalid");
   const timestampValue = record.timestamp;
   if (typeof timestampValue !== "number" || !Number.isSafeInteger(timestampValue) || timestampValue < 0) {
-    throw new Error("Alibaba record timestamp is invalid");
+    throw new Error(`${provider} record timestamp is invalid`);
   }
   const content = typeof record.content === "string" ? record.content : "";
   return {
     source_record_id: requireText(record.id, "record.id", 512),
-    source_revision_sha256: requireText(metadata.revision_hash, "metadata.revision_hash", 64),
-    provider: "alibaba",
+    source_revision_sha256: sourceRevision,
+    provider,
     connection_id: requireText(metadata.source_connection_id, "metadata.source_connection_id", 256),
     provider_thread_id: requireText(record.thread_id, "record.thread_id", 512),
     provider_message_id: text(metadata.message_id) || requireText(record.id, "record.id", 512),
     observed_at: new Date(timestampValue).toISOString(),
-    direction: text(metadata.direction) === "outgoing" ? "outbound" : "inbound",
-    summary: content.slice(0, 16_384) || "[Alibaba evidence without text]",
+    direction: ["outgoing", "outbound"].includes(text(metadata.direction)) ? "outbound" : "inbound",
+    summary: content.slice(0, 16_384) || `[${provider} evidence without text]`,
     attachment_count: attachmentCount(record),
   };
 }
 
 async function listConversationRecords(params: {
   nex: unknown;
+  provider: "alibaba" | "gmail";
   connectionId: string;
   providerThreadId: string;
 }): Promise<Row[]> {
@@ -118,7 +124,7 @@ async function listConversationRecords(params: {
   let scanned = 0;
   for (let offset = 0; offset < MAX_SCAN; offset += PAGE_SIZE) {
     const response = unwrap(await recordsClient.list({
-      platform: "alibaba",
+      platform: params.provider,
       thread_id: params.providerThreadId,
       limit: PAGE_SIZE,
       offset,
@@ -126,11 +132,11 @@ async function listConversationRecords(params: {
     if (!Array.isArray(response.records)) throw new Error("records.list did not return records");
     const page = response.records.map(row);
     scanned += page.length;
-    if (scanned > MAX_SCAN) throw new Error(`Alibaba scan exceeds ${MAX_SCAN} rows`);
+    if (scanned > MAX_SCAN) throw new Error(`${params.provider} scan exceeds ${MAX_SCAN} rows`);
     for (const record of page) {
-      if (text(record.platform) !== "alibaba") throw new Error("Alibaba scan returned a foreign platform");
+      if (text(record.platform) !== params.provider) throw new Error(`${params.provider} scan returned a foreign platform`);
       if (text(row(record.metadata).source_connection_id) !== params.connectionId) {
-        throw new Error("Alibaba scan returned a foreign connection");
+        throw new Error(`${params.provider} scan returned a foreign connection`);
       }
       if (text(record.thread_id) === params.providerThreadId) result.push(record);
     }
@@ -158,7 +164,7 @@ const healthcheck: NexAppMethodHandler = async (ctx) => ({
 export const inspectAlibabaConversation: NexAppMethodHandler = async (ctx) => {
   const connectionId = requireText(ctx.params.connection_id, "connection_id", 128);
   const providerThreadId = requireText(ctx.params.provider_thread_id, "provider_thread_id", 512);
-  const records = await listConversationRecords({ nex: ctx.nex, connectionId, providerThreadId });
+  const records = await listConversationRecords({ nex: ctx.nex, provider: "alibaba", connectionId, providerThreadId });
   if (records.length === 0) throw new Error("Alibaba conversation has no committed records");
   let messageRecords = 0;
   let orphanAttachmentRecords = 0;
@@ -194,6 +200,38 @@ export const inspectAlibabaConversation: NexAppMethodHandler = async (ctx) => {
   };
 };
 
+export const inspectGmailConversation: NexAppMethodHandler = async (ctx) => {
+  const connectionId = requireText(ctx.params.connection_id, "connection_id", 128);
+  const providerThreadId = requireText(ctx.params.provider_thread_id, "provider_thread_id", 512);
+  const records = await listConversationRecords({ nex: ctx.nex, provider: "gmail", connectionId, providerThreadId });
+  if (records.length === 0) throw new Error("Gmail conversation has no committed records");
+  let attachmentRows = 0;
+  let firstObservedAt = Number.POSITIVE_INFINITY;
+  let lastObservedAt = 0;
+  const recordHash = createHash("sha256");
+  for (const record of records) {
+    toCommunicationRecord(record);
+    attachmentRows += attachmentCount(record);
+    const observedAt = Number(record.timestamp);
+    firstObservedAt = Math.min(firstObservedAt, observedAt);
+    lastObservedAt = Math.max(lastObservedAt, observedAt);
+    recordHash.update(`${text(record.id)}\n`, "utf8");
+  }
+  return {
+    state: "committed_complete_native_conversation",
+    provider: "gmail",
+    connection_id: connectionId,
+    provider_thread_id: providerThreadId,
+    record_count: records.length,
+    attachment_row_count: attachmentRows,
+    record_id_set_sha256: recordHash.digest("hex"),
+    first_observed_at: new Date(firstObservedAt).toISOString(),
+    last_observed_at: new Date(lastObservedAt).toISOString(),
+    provider_content_returned: false,
+    provider_write_authority: false,
+  };
+};
+
 export const projectReviewedCohort: NexAppMethodHandler = async (ctx) => {
   const ids = requireRecordIds(ctx.params.record_ids);
   const records: CommunicationRecord[] = [];
@@ -217,5 +255,6 @@ export const projectReviewedCohort: NexAppMethodHandler = async (ctx) => {
 export default {
   "moonsleep-partner-desk.healthcheck": healthcheck,
   "moonsleep-partner-desk.alibaba.inspect-conversation": inspectAlibabaConversation,
+  "moonsleep-partner-desk.gmail.inspect-conversation": inspectGmailConversation,
   "moonsleep-partner-desk.project-reviewed-cohort": projectReviewedCohort,
 };

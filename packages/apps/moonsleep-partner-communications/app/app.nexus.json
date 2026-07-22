@@ -52,6 +52,21 @@
       },
       "response": {"type": "object"}
     },
+    "moonsleep-partner-desk.gmail.inspect-conversation": {
+      "description": "Inspect and hash one complete committed Gmail native conversation without returning message content.",
+      "action": "read",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string", "minLength": 1, "maxLength": 128},
+          "provider_thread_id": {"type": "string", "minLength": 1, "maxLength": 512}
+        },
+        "required": ["connection_id", "provider_thread_id"],
+        "additionalProperties": false
+      },
+      "response": {"type": "object"}
+    },
     "moonsleep-partner-desk.project-reviewed-cohort": {
       "description": "Project a bounded reviewed cohort into native threads, independent open loops, and attention queues.",
       "action": "read",

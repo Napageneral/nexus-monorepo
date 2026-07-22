@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { ensurePartnerDeskRuntimeWork } from "./runtime-work.ts";
 
-test("installs exactly one inactive Alibaba job and disabled subscription", async () => {
+test("installs one inactive provider-neutral job and disabled Alibaba and Gmail subscriptions", async () => {
   const jobs: Array<Record<string, unknown>> = [];
   const subscriptions: Array<Record<string, unknown>> = [];
   const runtime = {
@@ -18,7 +18,7 @@ test("installs exactly one inactive Alibaba job and disabled subscription", asyn
     events: { subscriptions: {
       list: async () => ({ payload: { subscriptions } }),
       create: async (params: Record<string, unknown>) => {
-        const subscription = { id: "sub-1", ...params, match_json: JSON.stringify(params.match), enabled: 0 };
+        const subscription = { id: `sub-${subscriptions.length + 1}`, ...params, match_json: JSON.stringify(params.match), enabled: 0 };
         subscriptions.push(subscription);
         return { payload: { subscription } };
       },
@@ -27,9 +27,10 @@ test("installs exactly one inactive Alibaba job and disabled subscription", asyn
   };
   assert.deepEqual(
     await ensurePartnerDeskRuntimeWork({ runtime: runtime as never, appId: "moonsleep-partner-desk" }),
-    { jobDefinitionId: "job-1", subscriptionId: "sub-1" },
+    { jobDefinitionId: "job-1", subscriptionIds: ["sub-1", "sub-2"] },
   );
   assert.equal(jobs[0]?.status, "inactive");
   assert.deepEqual(subscriptions[0]?.match, { platform: "alibaba" });
-  assert.equal(subscriptions[0]?.enabled, 0);
+  assert.deepEqual(subscriptions[1]?.match, { platform: "gmail" });
+  assert.ok(subscriptions.every((subscription) => subscription.enabled === 0));
 });
