@@ -160,9 +160,10 @@ function fixture(): { root: string; snapshotPath: string; attachmentPath: string
   return { root, snapshotPath, attachmentPath };
 }
 
-function config(root: string) {
+function config(root: string, objectRoot?: string) {
   return {
     snapshot_root: root,
+    ...(objectRoot ? { object_root: objectRoot } : {}),
     account_label: "MoonSleep Alibaba",
     account_id: "moonsleep-alibaba",
     poll_interval_ms: 1000,
@@ -170,6 +171,51 @@ function config(root: string) {
     attachment_text_limit: 30000,
   };
 }
+
+test("relocated snapshots resolve attachments by sealed object digest", () => {
+  const { root, snapshotPath, attachmentPath } = fixture();
+  const objectRoot = mkdtempSync(join(tmpdir(), "nexus-alibaba-objects-"));
+  const contentHash = sha256(attachmentPath);
+  const objectPath = join(objectRoot, "sha256", contentHash.slice(0, 2), contentHash);
+  mkdirSync(join(objectRoot, "sha256", contentHash.slice(0, 2)), { recursive: true });
+  writeFileSync(objectPath, readFileSync(attachmentPath));
+
+  const attachmentsPath = join(snapshotPath, "adapter", "attachments.jsonl");
+  const attachments = readFileSync(attachmentsPath, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  attachments[0]!.objectPath = "/retired-capture-root/objects/original";
+  attachments[0]!.localPath = "/retired-capture-root/attachments/original";
+  writeJsonl(attachmentsPath, attachments);
+
+  const attachmentTextPath = join(snapshotPath, "adapter", "attachment-text.jsonl");
+  const attachmentText = readFileSync(attachmentTextPath, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  attachmentText[0]!.textPath =
+    "/retired-capture-root/local-index/attachment-text/shipping-schedule.pdf.txt";
+  const relocatedTextDir = join(snapshotPath, "local-index", "attachment-text");
+  mkdirSync(relocatedTextDir, { recursive: true });
+  writeFileSync(
+    join(relocatedTextDir, "shipping-schedule.pdf.txt"),
+    "Vessel booking and ETA are still pending.",
+  );
+  writeJsonl(attachmentTextPath, attachmentText);
+  writeCompletionReceipt(snapshotPath);
+
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const record = __test__.buildRecord(
+    snapshot.messages[0]!,
+    snapshot,
+    config(root, objectRoot),
+    "conn-alibaba",
+  );
+  assert.equal(record.payload.attachments?.[0]?.local_path, objectPath);
+  assert.equal(record.payload.attachments?.[0]?.content_hash, contentHash);
+  assert.match(record.payload.content, /Vessel booking and ETA/);
+});
 
 test("latestSnapshot selects only a complete hash-bound sanitized snapshot", () => {
   const { root, snapshotPath } = fixture();

@@ -1,6 +1,6 @@
 {
   "id": "alibaba",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "displayName": "Alibaba Messenger",
   "description": "Read-only Alibaba Messenger evidence adapter for Nex.",
   "platform": "alibaba",
