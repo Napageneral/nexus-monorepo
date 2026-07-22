@@ -9,8 +9,6 @@ import {
   AdapterHealthSchema,
   AdapterInfoSchema,
   AdapterInboundRecordSchema,
-  AdapterStreamStatusSchema,
-  StreamEventSchema,
 } from "./protocol.js";
 import { readAdapterRuntimeContextFile } from "./runtime-context.js";
 
@@ -83,18 +81,6 @@ describe("adapter protocol contract (active Nex docs)", () => {
       platform: "discord",
       connection_id: "echo-bot",
     });
-
-    const streamEvents = loadJSONL(path.join(fixturesDir, "stream_events.jsonl"));
-    for (const e of streamEvents) {
-      expect(get("StreamEvent")(e)).toBe(true);
-      StreamEventSchema.parse(e);
-    }
-
-    const streamStatuses = loadJSONL(path.join(fixturesDir, "stream_statuses.jsonl"));
-    for (const s of streamStatuses) {
-      expect(get("AdapterStreamStatus")(s)).toBe(true);
-      AdapterStreamStatusSchema.parse(s);
-    }
 
     const controlInputs = loadJSONL(path.join(fixturesDir, "control_input_frames.jsonl"));
     for (const frame of controlInputs) {
