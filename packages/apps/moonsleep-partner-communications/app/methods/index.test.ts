@@ -11,7 +11,7 @@ function fixture(id: string, timestamp: number, content: string) {
   return {
     id,
     platform: "alibaba",
-    receiver_contact_id: "alibaba-primary",
+    receiver_contact_id: "moonsleep-alibaba",
     thread_id: "surewal-thread",
     timestamp,
     content,
@@ -19,6 +19,7 @@ function fixture(id: string, timestamp: number, content: string) {
     payload: source(JSON.stringify({ id })),
     metadata: {
       family: "message",
+      source_connection_id: "alibaba-primary",
       message_id: id,
       revision_hash: createHash("sha256").update(content).digest("hex"),
       direction: "incoming",
@@ -38,8 +39,9 @@ test("inspects a complete native conversation without returning source content",
   assert.equal(JSON.stringify(result).includes("MOQ question"), false);
 });
 
-test("rejects a record outside the requested Alibaba connection", async () => {
-  const foreign = { ...fixture("source-foreign", 1_785_000_000_000, "foreign"), receiver_contact_id: "alibaba-other" };
+test("rejects a record outside the requested Alibaba source connection", async () => {
+  const original = fixture("source-foreign", 1_785_000_000_000, "foreign");
+  const foreign = { ...original, metadata: { ...original.metadata, source_connection_id: "alibaba-other" } };
   await assert.rejects(
     inspectAlibabaConversation({
       params: { connection_id: "alibaba-primary", provider_thread_id: "surewal-thread" },

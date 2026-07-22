@@ -637,6 +637,7 @@ function buildRecord(
       ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
       metadata: {
         source_system: "alibaba_messenger",
+        source_connection_id: connectionId,
         family: "message",
         logical_record_id: logicalMessageId,
         revision_hash: revisionHash,
@@ -724,6 +725,7 @@ function buildOrphanAttachmentRecord(
       attachments: [normalized],
       metadata: {
         source_system: "alibaba_messenger",
+        source_connection_id: connectionId,
         family: "orphan_attachment",
         logical_record_id: `orphan-attachment:${attachment.provider_object_sha256}`,
         revision_hash: revisionHash,

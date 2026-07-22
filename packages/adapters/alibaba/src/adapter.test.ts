@@ -195,6 +195,7 @@ test("record preserves exact sanitized source JSON and excludes raw credentials"
   );
   assert.match(record.payload.external_record_id, /^alibaba:conn-alibaba:message:m-1:[a-f0-9]{64}$/);
   assert.equal(record.routing.container_id, "surewal-thread");
+  assert.equal(record.payload.metadata?.source_connection_id, "conn-alibaba");
   assert.match(record.payload.content, /Vessel booking and ETA/);
   assert.equal(record.payload.attachments?.[0]?.local_path, attachmentPath);
   assert.match(record.payload.attachments?.[0]?.content_hash ?? "", /^[a-f0-9]{64}$/);
@@ -245,6 +246,7 @@ test("provider attachment rows without a captured parent message remain explicit
   assert.match(orphan.payload.external_record_id, /^alibaba:conn-alibaba:attachment-orphan:/);
   assert.match(orphan.payload.content, /Unlinked sample evidence/);
   assert.equal(orphan.routing.metadata?.source_attribution, "unresolved_attachment_evidence");
+  assert.equal(orphan.payload.metadata?.source_connection_id, "conn-alibaba");
   const exact = String(orphan.payload.payload?.provider_attachment_json ?? "");
   assert.equal(
     createHash("sha256").update(exact).digest("hex"),

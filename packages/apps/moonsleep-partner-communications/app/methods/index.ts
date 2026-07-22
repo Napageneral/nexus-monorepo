@@ -96,7 +96,7 @@ function toCommunicationRecord(record: Row): CommunicationRecord {
     source_record_id: requireText(record.id, "record.id", 512),
     source_revision_sha256: requireText(metadata.revision_hash, "metadata.revision_hash", 64),
     provider: "alibaba",
-    connection_id: requireText(record.receiver_contact_id, "record.receiver_contact_id", 256),
+    connection_id: requireText(metadata.source_connection_id, "metadata.source_connection_id", 256),
     provider_thread_id: requireText(record.thread_id, "record.thread_id", 512),
     provider_message_id: text(metadata.message_id) || requireText(record.id, "record.id", 512),
     observed_at: new Date(timestampValue).toISOString(),
@@ -119,7 +119,7 @@ async function listConversationRecords(params: {
   for (let offset = 0; offset < MAX_SCAN; offset += PAGE_SIZE) {
     const response = unwrap(await recordsClient.list({
       platform: "alibaba",
-      connection_id: params.connectionId,
+      thread_id: params.providerThreadId,
       limit: PAGE_SIZE,
       offset,
     }));
@@ -129,7 +129,7 @@ async function listConversationRecords(params: {
     if (scanned > MAX_SCAN) throw new Error(`Alibaba scan exceeds ${MAX_SCAN} rows`);
     for (const record of page) {
       if (text(record.platform) !== "alibaba") throw new Error("Alibaba scan returned a foreign platform");
-      if (text(record.receiver_contact_id) !== params.connectionId) {
+      if (text(row(record.metadata).source_connection_id) !== params.connectionId) {
         throw new Error("Alibaba scan returned a foreign connection");
       }
       if (text(record.thread_id) === params.providerThreadId) result.push(record);
