@@ -1,0 +1,24 @@
+{
+  "name": "@nexus-project/alibaba",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-only Alibaba Messenger evidence adapter for Nex",
+  "main": "dist/index.js",
+  "bin": {
+    "alibaba-adapter": "dist/index.js"
+  },
+  "scripts": {
+    "build": "rm -rf dist && esbuild src/index.ts --bundle --platform=node --format=esm --target=node22 --alias:@nexus-project/adapter-sdk-ts=../nexus-adapter-sdks/nexus-adapter-sdk-ts/dist/index.js --outfile=dist/index.js --banner:js='#!/usr/bin/env node' && chmod +x dist/index.js",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --experimental-strip-types src/*.test.ts"
+  },
+  "dependencies": {
+    "@nexus-project/adapter-sdk-ts": "file:../nexus-adapter-sdks/nexus-adapter-sdk-ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "esbuild": "0.27.3",
+    "typescript": "^5.9.2"
+  }
+}

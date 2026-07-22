@@ -1,0 +1,166 @@
+{
+  "id": "moonsleep-partner-desk",
+  "version": "0.1.0",
+  "displayName": "MoonSleep Partner Desk",
+  "description": "Track reviewed supplier and partner open loops over immutable provider-native communications.",
+  "skill": "./SKILL.md",
+  "handler": "./methods/index.ts",
+  "ui": {
+    "root": "./ui/dist",
+    "entryPath": "/app/moonsleep-partner-desk/",
+    "spa": true
+  },
+  "hooks": {
+    "onInstall": "./hooks/install.ts",
+    "onActivate": "./hooks/activate.ts",
+    "onDeactivate": "./hooks/deactivate.ts",
+    "onUpgrade": "./hooks/upgrade.ts",
+    "onUninstall": "./hooks/uninstall.ts"
+  },
+  "hosting": {
+    "required_server_class": "standard",
+    "deployment_class": "customer_server"
+  },
+  "product": {
+    "tagline": "Every supplier question tracked to evidence-backed closure",
+    "accentColor": "#8a5a31",
+    "visibility": "customer",
+    "plans": [
+      {
+        "id": "moonsleep-partner-desk-internal",
+        "displayName": "MoonSleep Partner Desk Internal",
+        "priceMonthly": 0,
+        "isDefault": true
+      }
+    ]
+  },
+  "methods": {
+    "moonsleep-partner-desk.healthcheck": {
+      "description": "Report the installed Partner Desk projection and dormant work contract.",
+      "action": "read",
+      "access": "authenticated",
+      "params": {"type": "object", "properties": {}, "additionalProperties": false},
+      "response": {"type": "object"}
+    },
+    "moonsleep-partner-desk.alibaba.inspect-conversation": {
+      "description": "Inspect and hash one complete committed Alibaba native conversation without returning message content.",
+      "action": "read",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string", "minLength": 1, "maxLength": 128},
+          "provider_thread_id": {"type": "string", "minLength": 1, "maxLength": 512}
+        },
+        "required": ["connection_id", "provider_thread_id"],
+        "additionalProperties": false
+      },
+      "response": {"type": "object"}
+    },
+    "moonsleep-partner-desk.gmail.inspect-conversation": {
+      "description": "Inspect and hash one complete committed Gmail native conversation without returning message content.",
+      "action": "read",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string", "minLength": 1, "maxLength": 128},
+          "provider_thread_id": {"type": "string", "minLength": 1, "maxLength": 512}
+        },
+        "required": ["connection_id", "provider_thread_id"],
+        "additionalProperties": false
+      },
+      "response": {"type": "object"}
+    },
+    "moonsleep-partner-desk.project-reviewed-cohort": {
+      "description": "Project a bounded reviewed cohort into native threads, independent open loops, and attention queues.",
+      "action": "read",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "properties": {
+          "record_ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1, "maxLength": 512}
+          },
+          "identity_resolutions": {"type": "array", "maxItems": 50, "items": {"type": "object"}},
+          "workspace_assertions": {"type": "array", "maxItems": 50, "items": {"type": "object"}},
+          "open_loop_assertions": {"type": "array", "maxItems": 100, "items": {"type": "object"}},
+          "source_coverage_assertions": {"type": "array", "maxItems": 50, "items": {"type": "object"}}
+        },
+        "required": [
+          "record_ids",
+          "identity_resolutions",
+          "workspace_assertions",
+          "open_loop_assertions",
+          "source_coverage_assertions"
+        ],
+        "additionalProperties": false
+      },
+      "response": {"type": "object"}
+    },
+    "moonsleep-partner-desk.review.current": {
+      "description": "Read the unique current immutable review head for one Partner Desk workspace.",
+      "action": "read",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "properties": {
+          "workspace_key": {"type": "string", "minLength": 1, "maxLength": 128}
+        },
+        "required": ["workspace_key"],
+        "additionalProperties": false
+      },
+      "response": {"type": "object"}
+    },
+    "moonsleep-partner-desk.review.workspaces": {
+      "description": "List the immutable current review heads available to the Partner Desk UI.",
+      "action": "read",
+      "access": "authenticated",
+      "params": {"type": "object", "properties": {}, "additionalProperties": false},
+      "response": {"type": "object"}
+    },
+    "moonsleep-partner-desk.review.commit": {
+      "description": "Commit one replay-safe immutable operator review revision through canonical Nex record ingress.",
+      "action": "write",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "properties": {
+          "workspace_key": {"type": "string", "minLength": 1, "maxLength": 128},
+          "canonical_entity_id": {"type": "string", "minLength": 1, "maxLength": 256},
+          "record_ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1, "maxLength": 512}
+          },
+          "identity_resolutions": {"type": "array", "maxItems": 50, "items": {"type": "object"}},
+          "workspace_assertions": {"type": "array", "maxItems": 50, "items": {"type": "object"}},
+          "open_loop_assertions": {"type": "array", "maxItems": 100, "items": {"type": "object"}},
+          "source_coverage_assertions": {"type": "array", "maxItems": 50, "items": {"type": "object"}},
+          "review_note": {"type": "string", "minLength": 1, "maxLength": 2048},
+          "review_idempotency_key": {"type": "string", "minLength": 16, "maxLength": 128},
+          "previous_revision_sha256": {"type": ["string", "null"], "minLength": 64, "maxLength": 64}
+        },
+        "required": [
+          "workspace_key",
+          "canonical_entity_id",
+          "record_ids",
+          "identity_resolutions",
+          "workspace_assertions",
+          "open_loop_assertions",
+          "source_coverage_assertions",
+          "review_idempotency_key",
+          "previous_revision_sha256"
+        ],
+        "additionalProperties": false
+      },
+      "response": {"type": "object"}
+    }
+  }
+}
