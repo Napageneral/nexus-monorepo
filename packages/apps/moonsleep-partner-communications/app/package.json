@@ -1,9 +1,14 @@
 {
-  "name": "moonsleep-partner-communications-contract",
+  "name": "moonsleep-partner-desk-app",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test --experimental-strip-types src/*.test.ts"
+    "test": "node --test --experimental-strip-types src/*.test.ts && vitest run methods/*.test.ts hooks/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "3.2.4"
   }
 }
