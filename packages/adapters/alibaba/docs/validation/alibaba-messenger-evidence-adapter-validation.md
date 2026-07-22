@@ -1,7 +1,7 @@
 # Alibaba Messenger Evidence Adapter Validation
 
 **Status:** VALIDATION
-**Last Updated:** 2026-07-17
+**Last Updated:** 2026-07-22
 **Related:** [Alibaba Messenger Evidence Adapter](../specs/alibaba-messenger-evidence-adapter.md)
 
 ---
@@ -18,15 +18,15 @@ Pass when a disposable Nex runtime installs the package, binds a read-only conne
 
 ### Backfill and monitor proof
 
-Pass when bounded backfill emits only records inside the requested window, monitor replays a rolling overlap, repeated external record ids remain stable, and an incomplete snapshot is ignored.
+Pass when bounded backfill emits only records inside the requested `since`/`to` window, monitor replays a rolling overlap, repeated external record ids remain stable, and an incomplete snapshot is ignored.
 
 ### Evidence safety proof
 
-Pass when message text and extracted document text are searchable, attachments carry local paths and SHA-256 values, and emitted records contain no raw objects, chat tokens, encrypted session identifiers, or signed provider URLs.
+Pass when message text and extracted document text are searchable, attachments carry verified SHA-256 values, exact sanitized provider JSON plus its digest survives in opaque payload, and emitted records contain no raw capture objects, chat tokens, encrypted session identifiers, cookies, or signed provider URLs.
 
 ### Failure proof
 
-Pass when missing snapshots, invalid timestamps, expired browser authentication, attachment extraction failures, and unavailable interpretation models are surfaced explicitly. Capture and canonical raw-record ingest must not depend on successful interpretation.
+Pass when missing snapshots, disagreeing completion receipts, digest/count drift, unsafe file metadata, invalid timestamps, expired browser authentication, and attachment extraction failures are surfaced explicitly. Capture and canonical raw-record ingest must not depend on successful interpretation.
 
 ### Agent-use proof
 
@@ -39,8 +39,8 @@ Pass when a cleanroom job can search a known supplier statement, retrieve the su
 3. Search for `Vessel booking and ETA` and inspect the exact supplier message and attachment SHA-256.
 4. Add a newer snapshot containing one new message and one repeated message.
 5. Run monitor once and verify stable external ids allow Nex to persist only the new canonical record.
-6. Stop interpretation, add another supplier message, and verify capture plus Nex ingest continue.
-7. Restore interpretation and verify the backlog produces proposed claims without any business mutation.
+6. Stop Partner Desk projection, add another supplier message, and verify capture plus Nex ingest continue.
+7. Restore projection and verify the backlog produces reviewed open-loop proposals with complete source coverage and no business mutation.
 
 The primary proof artifact should retain the cleanroom command transcript, package identity, record search output, duplicate readback, and the proposed claim with its evidence links.
 
@@ -60,4 +60,4 @@ Not yet claimed:
 - ingestion into the live Nex record store, live search readback, or live monitor registration
 - VPS capture/authentication proof or production timer activation
 
-Those remaining lanes require a committed production source revision and the one-time Alibaba and dedicated ChatGPT authentication ceremony. They do not authorize supplier, payment, routing, inventory, or promise mutations.
+Those remaining lanes require a committed production source revision and the one-time Alibaba browser authentication ceremony. They do not authorize supplier, payment, routing, inventory, or promise mutations.

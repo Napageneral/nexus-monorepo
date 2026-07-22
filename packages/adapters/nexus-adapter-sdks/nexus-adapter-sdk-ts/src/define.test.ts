@@ -80,6 +80,11 @@ describe("defineAdapter", () => {
       name: "test.echo",
       action: "read",
       connection_required: false,
+      origin: {
+        package_kind: "adapter",
+        package_id: "test",
+        package_version: "1.2.3",
+      },
     });
     expect(info.methodCatalog).toMatchObject({
       source: "manifest",

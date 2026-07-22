@@ -17,6 +17,7 @@ import type {
   AdapterMethodInvokeRequest,
   AdapterOperations,
   AdapterSetupRequest,
+  AdapterBackfillWindow,
 } from "./run.js";
 
 type MaybePromise<T> = T | Promise<T>;
@@ -63,7 +64,7 @@ export type DefineAdapterConfig<TClient> = {
     ) => MaybePromise<void>;
     backfill?: (
       ctx: DefinedAdapterContext<TClient>,
-      args: { since: Date },
+      args: Omit<AdapterBackfillWindow, "connection_id">,
       emit: (record: AdapterInboundRecord) => void,
     ) => MaybePromise<void>;
   };
@@ -136,7 +137,10 @@ export function defineAdapter<TClient = unknown>(
   if (config.ingest?.backfill) {
     operations["records.backfill"] = async (ctx, args, emit) => {
       const definedCtx = await createDefinedContext(config, ctx, args.connection_id);
-      await config.ingest!.backfill!(definedCtx, { since: args.since }, emit);
+      await config.ingest!.backfill!(definedCtx, {
+        since: args.since,
+        ...(args.to ? { to: args.to } : {}),
+      }, emit);
     };
   }
 
@@ -279,6 +283,7 @@ function buildMethodDescriptor<TClient>(
         : declaration.action === "write",
     context_hints: declaration.context_hints ?? { params: {} },
     origin: {
+      package_kind: "adapter",
       package_id: config.platform,
       package_version: config.version,
       declaration_mode: "manifest",

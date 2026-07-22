@@ -22,6 +22,7 @@ export { parseRetryAfterMs, sleepWithSignal, withRetry } from "./retry.js";
 
 export type {
   AdapterContext,
+  AdapterBackfillWindow,
   AdapterDefinition,
   AdapterMethodInvokeRequest,
   AdapterOperations,

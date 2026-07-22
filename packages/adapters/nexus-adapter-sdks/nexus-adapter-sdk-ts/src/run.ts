@@ -38,6 +38,12 @@ export type AdapterMethodInvokeRequest = {
   payload?: Record<string, unknown>;
 };
 
+export type AdapterBackfillWindow = {
+  connection_id: string;
+  since: Date;
+  to?: Date;
+};
+
 export type AdapterOperations = {
   "adapter.info"?: (ctx: AdapterContext) => AdapterInfo | Promise<AdapterInfo>;
   "adapter.monitor.start"?: (
@@ -47,7 +53,7 @@ export type AdapterOperations = {
   ) => void | Promise<void>;
   "records.backfill"?: (
     ctx: AdapterContext,
-    args: { connection_id: string; since: Date },
+    args: AdapterBackfillWindow,
     emit: (record: AdapterInboundRecord) => void,
   ) => void | Promise<void>;
   "adapter.health"?: (
@@ -193,6 +199,11 @@ export async function runAdapter(adapter: AdapterDefinition, opts: RunAdapterOpt
         const connectionID = requireFlag(filteredArgs, "--connection");
         const sinceRaw = requireFlag(filteredArgs, "--since");
         const since = parseDate(sinceRaw);
+        const toRaw = readFlag(filteredArgs, "--to");
+        const to = toRaw ? parseDate(toRaw) : undefined;
+        if (to && to.getTime() < since.getTime()) {
+          throw new Error("--to must be greater than or equal to --since");
+        }
         const emit = (record: AdapterInboundRecord) => {
           const payload = validateOutput ? AdapterInboundRecordSchema.parse(record) : record;
           writeJSONLine(stdout, payload);
@@ -202,7 +213,7 @@ export async function runAdapter(adapter: AdapterDefinition, opts: RunAdapterOpt
           JSON.stringify(connectionID),
           since.toISOString(),
         );
-        await handler(ctx, { connection_id: connectionID, since }, emit);
+        await handler(ctx, { connection_id: connectionID, since, ...(to ? { to } : {}) }, emit);
         ctx.log.info("backfill completed");
         return 0;
       }
@@ -321,7 +332,7 @@ function printUsage(name: string, stderr: NodeJS.WriteStream): void {
   stderr.write("Operations:\n");
   stderr.write("  adapter.info\n");
   stderr.write("  adapter.monitor.start --connection <id>\n");
-  stderr.write("  records.backfill --connection <id> --since <date>\n");
+  stderr.write("  records.backfill --connection <id> --since <date> [--to <date>]\n");
   stderr.write("  adapter.health --connection <id>\n");
   stderr.write("  adapter.connections.list\n");
   stderr.write("  adapter.setup.start [--connection <id>] [--session-id <id>] [--payload-json <json>]\n");

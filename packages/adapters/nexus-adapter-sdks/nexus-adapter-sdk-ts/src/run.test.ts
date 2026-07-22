@@ -85,6 +85,7 @@ describe("runAdapter", () => {
                 mutates_remote: true,
                 context_hints: { params: {} },
                 origin: {
+                  package_kind: "adapter",
                   package_id: "test",
                   package_version: "0.0.0",
                   declaration_mode: "manifest",
@@ -154,6 +155,59 @@ describe("runAdapter", () => {
         },
         text: "hi",
       },
+    });
+  });
+
+  it("records.backfill passes an exact optional upper bound to the adapter", async () => {
+    const stdout = captureStream();
+    const stderr = captureStream();
+    let received: { connection_id: string; since: Date; to?: Date } | undefined;
+
+    const code = await runAdapter(
+      {
+        operations: {
+          "adapter.info": () => ({
+            platform: "test",
+            name: "test-adapter",
+            version: "0.0.0",
+            operations: ["adapter.info", "records.backfill"],
+            methods: [],
+            multi_account: false,
+            platform_capabilities: {},
+          }),
+          "records.backfill": async (_ctx, args) => {
+            received = args;
+          },
+        },
+      },
+      {
+        argv: [
+          "node",
+          "adapter",
+          "records.backfill",
+          "--connection",
+          "acct-1",
+          "--since",
+          "2026-07-01T00:00:00.000Z",
+          "--to",
+          "2026-07-17T23:59:59.000Z",
+        ],
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+        requireRuntimeContext: false,
+        validateOutput: false,
+        patchConsole: false,
+        installSignalHandlers: false,
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(stderr.read()).toContain("backfill completed");
+    expect(stdout.read()).toBe("");
+    expect(received).toEqual({
+      connection_id: "acct-1",
+      since: new Date("2026-07-01T00:00:00.000Z"),
+      to: new Date("2026-07-17T23:59:59.000Z"),
     });
   });
 

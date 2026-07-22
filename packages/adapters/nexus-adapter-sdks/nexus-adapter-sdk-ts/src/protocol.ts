@@ -118,6 +118,7 @@ export const AdapterMethodContextHintsSchema = z.object({
 });
 
 export const AdapterMethodOriginSchema = z.object({
+  package_kind: z.literal("adapter"),
   package_id: z.string().nullable(),
   package_version: z.string().nullable(),
   declaration_mode: z.enum(["manifest", "openapi", "builtin"]),
@@ -224,6 +225,7 @@ export const AdapterInboundPayloadSchema = z.object({
   timestamp: z.number().int(),
   content: z.string(),
   content_type: ContentTypeSchema,
+  payload: z.record(z.string(), z.unknown()).optional(),
   reply_to_id: z.string().optional(),
   attachments: z.array(AttachmentSchema).optional(),
   recipients: z.array(z.string()).optional(),

@@ -144,3 +144,34 @@ describe("adapter protocol contract (active Nex docs)", () => {
     roundTrip("AdapterConnectionIdentity", "adapter_connection_identity.json", (value) => AdapterConnectionIdentitySchema.parse(value));
   });
 });
+
+describe("opaque record payload", () => {
+  it("preserves the exact adapter-defined payload object", () => {
+    const parsed = AdapterInboundRecordSchema.parse({
+      operation: "record.ingest",
+      routing: {
+        platform: "alibaba",
+        connection_id: "moonsleep-alibaba",
+        sender_id: "supplier",
+        receiver_id: "moonsleep",
+        container_kind: "direct",
+        container_id: "conversation-1",
+      },
+      payload: {
+        external_record_id: "alibaba:message:1:revision",
+        timestamp: 1784710800000,
+        content: "sanitized supplier message",
+        content_type: "text",
+        payload: {
+          provider_object_json: "{\"messageId\":\"1\"}",
+          provider_object_sha256: "a".repeat(64),
+        },
+      },
+    });
+
+    expect(parsed.payload.payload).toEqual({
+      provider_object_json: "{\"messageId\":\"1\"}",
+      provider_object_sha256: "a".repeat(64),
+    });
+  });
+});

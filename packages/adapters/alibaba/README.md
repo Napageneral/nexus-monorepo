@@ -1,15 +1,15 @@
 # Nexus Alibaba Messenger Adapter
 
-This package projects authenticated Alibaba Messenger exports into canonical Nex records. It is deliberately read-only: it has no supplier-message, order, payment, routing, or inventory mutation methods.
+This package projects MoonSleep's authenticated Alibaba Messenger browser captures into canonical Nex records. It is deliberately read-only: it has no supplier-message, order, payment, routing, or inventory mutation methods.
 
-The browser collector is owned by MoonSleep because the authenticated browser profile and supplier evidence are MoonSleep operational data. The adapter consumes only completed snapshot directories and removes raw encrypted account fields, chat tokens, signed attachment URLs, and other session material before emitting records.
+The browser collector is owned by MoonSleep because the authenticated browser profile and supplier evidence are MoonSleep operational data. The adapter consumes only the sanitized `adapter/` projection of a completed snapshot. Matching root and adapter completion receipts bind every projection file's digest and count. Raw encrypted account fields, chat tokens, signed attachment URLs, cookies, and other session material are never adapter input.
 
 ## Runtime configuration
 
 ```json
 {
   "snapshot_root": "/var/lib/moonsleep/alibaba/snapshots",
-  "repo_root": "/srv/moonsleep-v1",
+  "object_root": "/var/lib/moonsleep/alibaba/objects",
   "account_label": "MoonSleep Alibaba",
   "account_id": "moonsleep-alibaba",
   "poll_interval_ms": 900000,
@@ -18,22 +18,13 @@ The browser collector is owned by MoonSleep because the authenticated browser pr
 }
 ```
 
-The monitor intentionally re-emits a rolling overlap window. Nex owns canonical deduplication by `(platform, external_record_id)`, so this provides at-least-once restart behavior without trusting an adapter-local cursor that could advance before durable persistence.
+The monitor intentionally re-emits a rolling overlap window. Nex owns canonical deduplication by `(platform, external_record_id)`, so this provides at-least-once restart behavior without trusting an adapter-local cursor that could advance before durable persistence. Historical backfill accepts exact `--since` and optional `--to` bounds.
 
-## Official API eligibility
+## Source boundary
 
-Alibaba documents signed read operations for Messenger conversation and message
-history. Their public documentation does not prove that MoonSleep's buyer
-account is eligible for the seller-oriented account identifiers those methods
-require. Run the zero-call assessment before considering a live read probe:
+Alibaba's Open Platform is not part of this release. The known-complete source is the existing authenticated browser capture. Capture produces immutable raw evidence and a separate sanitized projection; only the projection crosses into Nex.
 
-```bash
-npm run check:open-platform
-```
-
-See `docs/validation/alibaba-open-platform-eligibility.md`. Browser cookies,
-profiles, tokens, passwords, and session material are never inputs to this
-probe.
+Each emitted record preserves the exact sanitized provider JSON line plus its SHA-256 inside the adapter-defined payload. Nex metadata contains only provenance and revision fields. Attachment bytes are read only from the sealed snapshot/object roots and must match their recorded digest.
 
 ## Development
 
