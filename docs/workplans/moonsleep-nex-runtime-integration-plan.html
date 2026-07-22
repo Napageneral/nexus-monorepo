@@ -468,7 +468,7 @@
 
       <section id="status">
         <h2>What exists now</h2>
-        <p class="lead">The full PostgreSQL core and the dormant Shopify integration now pass an exact Linux/AMD64 PostgreSQL 17 cleanroom. Production moved to the recovery VPS during the July 21 infrastructure incident; the old host is isolated, and the recovery host needs a fresh MoonSleep-only Nex database and runtime activation before Shopify admission.</p>
+        <p class="lead">The full PostgreSQL Nex bedrock, private Tailscale operator path and dormant Shopify integration are live on the recovery VPS. The first exact Shopify source backfill committed 50,889 immutable customer, order and line-item revisions. Two attempted full production replays were stopped after they created unsafe host I/O pressure; replay is therefore redesigned as bounded, checkpointed projection from the already-committed source corpus rather than another provider fetch or whole-corpus ingest.</p>
         <div class="phase">
           <div class="phase-id">HOST A</div>
           <div><h3>Recovery production architecture</h3><p>Production runs on <code>5.78.134.249</code>. Root is reserved for the OS and releases; PostgreSQL uses its dedicated 1-TB volume; Docker, Nex, cleanrooms and restore scratch use <code>/var/lib/moonsleep-workloads</code> on the dedicated 2-TB volume. PgBouncer, resource guards, encrypted R2 backup/WAL archiving and Tailscale are live. The original host remains isolated. The capped physical restore rehearsal remains an off-hours production-safety item outside this Shopify program.</p></div>
@@ -481,20 +481,20 @@
         </div>
         <div class="phase">
           <div class="phase-id">LIVE B</div>
-          <div><h3>Fresh recovery-host Nex activation</h3><p>The recovery host has no <code>moonsleep_nex</code> database to preserve. Provision a fresh database and least-privilege roles, run migrations directly against PostgreSQL, route bounded runtime traffic through PgBouncer where compatible, restore the three MoonSleep seed entities, and keep Nex loopback-only behind Tailscale SSH.</p></div>
-          <div class="state next">Do next</div>
+          <div><h3>Fresh recovery-host Nex activation</h3><p>The MoonSleep-only PostgreSQL database, least-privilege roles, loopback-only runtime, three seed entities and private Tailscale SSH operator path are active on the recovery host. Tyler's personal Nex state was never imported.</p></div>
+          <div class="state done">Live</div>
         </div>
         <div class="phase">
           <div class="phase-id">SHOP A</div>
-          <div><h3>Dormant Shopify packages</h3><p>Exact provider JSON, page/manifest closure, source identities, customer projector, immutable order/line-item observations, inactive PostgreSQL work and cohort/backfill tools pass the service-shaped cleanroom. No provider credentials or calls were present; restart and replay created zero duplicates.</p></div>
-          <div class="state ready">Ready after Nex activation</div>
+          <div><h3>Dormant Shopify packages</h3><p>The Shopify adapter and MoonSleep Commerce app are installed with their continuous customer job and event subscription inactive. Store/integration routing identities are seeded replay-safely. No Shopify write authority exists.</p></div>
+          <div class="state done">Installed dormant</div>
         </div>
         <div class="phase">
           <div class="phase-id">SHOP B</div>
-          <div><h3>Read-only Shopify proof</h3><p>Complete history: 11,293 orders and 16,686 customers in 459.31 seconds, exact source JSON and aggregate hashes, zero provider writes. A 24-hour staged run also passed with 203 orders, 298 customers and 930 total records over four pages.</p></div>
-          <div class="state done">Historical proof</div>
+          <div><h3>Committed Shopify source corpus</h3><p>The accepted fixed window produced 50,889 exact PostgreSQL records: 17,090 customer revisions, 11,548 order revisions and 22,251 line-item revisions. Record, receipt, durable-event, search and payload-pair counts matched. This corpus is the source for projection; it must not be downloaded or ingested again.</p></div>
+          <div class="state done">Production evidence</div>
         </div>
-        <div class="callout"><strong>Current boundary:</strong> no Shopify data has been admitted to production Nex. The next production mutation is the fresh recovery-host Nex bootstrap; the Shopify adapter and commerce app install immediately afterward with their job and subscription still inactive.</div>
+        <div class="callout red"><strong>Current boundary:</strong> an incident-owner production hold is active while noncritical services recover. No Nex deploy, replay, backfill or host/database mutation proceeds until explicit release. Source-only work now replaces the unbounded projection operation with batches capped at 250 records, durable checkpoints, health/pause checks and an I/O-pressure ceiling.</div>
       </section>
 
       <section id="roadmap">
@@ -507,7 +507,7 @@
         <div class="phase">
           <div class="phase-id">P1</div>
           <div><h3>Bootstrap the recovery-host production bedrock</h3><p>Provision the fresh database and roles on the recovery VPS, deploy the exact Linux/AMD64 image from the workloads volume, preserve the disk-placement and resource-guard contract, seed Casey + MoonSleep Ops + Tyler, and prove no MoonSleep-active SQLite writes.</p></div>
-          <div class="state next">Do next</div>
+          <div class="state done">Live</div>
         </div>
         <div class="phase">
           <div class="phase-id">P2</div>
@@ -517,21 +517,21 @@
         <div class="phase">
           <div class="phase-id">P3</div>
           <div><h3>Rebase and install Shopify dormant</h3><p>Rebase the audited source-fidelity, V2 manifest, customer/order projector, dormant handoff and cohort slices onto exact core. Re-run package/reflection, source receipt, replay and no-write tests. Install without enabling subscriptions or ingestion.</p></div>
-          <div class="state ready">After P1</div>
+          <div class="state done">Installed dormant</div>
         </div>
         <div class="phase">
           <div class="phase-id">P4</div>
-          <div><h3>Run a bounded production cohort</h3><p>Admit 1–50 explicitly selected customer/order revisions only after validate-all-before-write. Inspect actual records, payloads, receipts, entities, contacts, tags, orders, line items, address snapshots and job receipts. Replay the cohort with zero duplicates.</p></div>
-          <div class="state ready">After P3</div>
+          <div><h3>Project a bounded customer cohort</h3><p>Use 1–50 already-committed customer revisions only after validate-all-before-write. Inspect actual records, payloads, receipts, entities, contacts and tags. Replay the cohort with zero duplicate identities. Do not refetch Shopify.</p></div>
+          <div class="state ready">After incident release</div>
         </div>
         <div class="phase">
           <div class="phase-id">P5</div>
-          <div><h3>Backfill all customers, orders and line items twice</h3><p>Run complete historical staging and import. Reconcile counts, hashes, representative records, entity links and immutable address snapshots. Run the identical backfill again and require zero new records, entities, contacts, observations, orders, lines or jobs.</p></div>
-          <div class="state later">After cohort</div>
+          <div><h3>Drain the committed corpus in safe batches</h3><p>Project customers, then orders and line items, from the existing 50,889 PostgreSQL records. Each batch contains at most 250 IDs, advances one durable checkpoint only after an exact success receipt, and yields whenever API health, pause markers or job-local I/O pressure are unsafe. Lost responses replay only the uncheckpointed batch. The second pass uses a fresh checkpoint and must create zero duplicate state.</p></div>
+          <div class="state next">Source implementation now</div>
         </div>
         <div class="phase">
           <div class="phase-id">P6</div>
-          <div><h3>Enable continuous synchronization</h3><p>Use reconciliation pulls as the source of completeness and Shopify webhooks as an acceleration signal. Prove cursor advancement, out-of-order delivery, missed webhook recovery, restart, replay, retry and rollback.</p></div>
+          <div><h3>Enable bounded continuous synchronization</h3><p>Use small reconciliation windows as the source of completeness and Shopify webhooks as an acceleration signal. Stage one bounded page at a time on the workloads volume; ingest and project through capped single-worker microbatches; enforce connection, transaction, queue and I/O ceilings; and prove cursor advancement, out-of-order delivery, missed-webhook recovery, restart, replay, retry and rollback.</p></div>
           <div class="state later">After backfill</div>
         </div>
         <div class="phase">
@@ -575,7 +575,8 @@
             <h3>Shopify vertical</h3>
             <ul class="checklist">
               <li>Each customer GID maps to at most one active Shopify contact anchor.</li>
-              <li>Backfill twice produces no duplicate records, entities, orders or jobs.</li>
+              <li>Checkpointed projection twice produces no duplicate records, entities, contacts, observations, orders or jobs.</li>
+              <li>Every production batch is capped, single-worker, health-gated and pauses before the global resource guard must shed critical work.</li>
               <li>Customer updates create a record revision while preserving entity binding.</li>
               <li>Orders and line items link to the correct entity and preserve immutable billing/shipping snapshots.</li>
               <li>Counts, hashes and typed totals reconcile with source/current MoonSleep.</li>

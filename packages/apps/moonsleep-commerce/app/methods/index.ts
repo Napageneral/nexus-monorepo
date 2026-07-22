@@ -8,7 +8,8 @@ import {
 type RuntimeRow = Record<string, unknown>;
 
 const MAX_COHORT_RECORDS = 50;
-const MAX_BACKFILL_RECORDS = 20_000;
+const MAX_BACKFILL_BATCH_RECORDS = 250;
+const MAX_INSPECTED_CUSTOMER_RECORDS = 20_000;
 const RECORD_SCAN_PAGE_SIZE = 1_000;
 const MAX_RECORDS_SCANNED = 100_000;
 const SHOPIFY_SOURCE_IDENTITY_OBSERVED_AT = Date.UTC(2026, 6, 20);
@@ -78,7 +79,7 @@ export function shopifyCustomerRecordSetSha256(recordIds: readonly string[]): st
 }
 
 function requireBackfillRecordIds(params: RuntimeRow): string[] {
-  const ids = requireRecordIds(params, MAX_BACKFILL_RECORDS, true);
+  const ids = requireRecordIds(params, MAX_BACKFILL_BATCH_RECORDS, true);
   const expectedSha256 = asString(params.record_set_sha256);
   if (!/^[0-9a-f]{64}$/.test(expectedSha256)) {
     throw new Error("record_set_sha256 must be a lowercase SHA-256 digest");
@@ -110,26 +111,6 @@ function requireConnectionId(value: unknown): string {
     throw new Error("connection_id must be an exact lowercase Nex connection identifier");
   }
   return connectionId;
-}
-
-function requireExpectedRecordCount(value: unknown): number {
-  if (
-    typeof value !== "number" ||
-    !Number.isSafeInteger(value) ||
-    value < 1 ||
-    value > MAX_BACKFILL_RECORDS
-  ) {
-    throw new Error(`expected_record_count must be an integer from 1 to ${MAX_BACKFILL_RECORDS}`);
-  }
-  return value;
-}
-
-function requireExpectedRecordSetSha256(value: unknown): string {
-  const digest = asString(value);
-  if (!/^[0-9a-f]{64}$/.test(digest) || value !== digest) {
-    throw new Error("expected_record_set_sha256 must be a lowercase SHA-256 digest");
-  }
-  return digest;
 }
 
 async function discoverShopifyCustomerRecordIds(params: {
@@ -194,9 +175,9 @@ async function discoverShopifyCustomerRecordIds(params: {
   }
 
   customerIds.sort((left, right) => left.localeCompare(right));
-  if (customerIds.length < 1 || customerIds.length > MAX_BACKFILL_RECORDS) {
+  if (customerIds.length < 1 || customerIds.length > MAX_INSPECTED_CUSTOMER_RECORDS) {
     throw new Error(
-      `Shopify customer record set must contain between 1 and ${MAX_BACKFILL_RECORDS} records`,
+      `Shopify customer record set must contain between 1 and ${MAX_INSPECTED_CUSTOMER_RECORDS} records`,
     );
   }
   if (new Set(customerIds).size !== customerIds.length) {
@@ -218,39 +199,12 @@ export const inspectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) =
     shop_domain: shopDomain,
     connection_id: connectionId,
     record_count: recordIds.length,
+    record_ids: recordIds,
     record_set_sha256: shopifyCustomerRecordSetSha256(recordIds),
     first_record_id: recordIds[0],
     last_record_id: recordIds.at(-1),
     provider_write_authority: false,
   };
-};
-
-export const projectCompleteShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) => {
-  const shopDomain = requireShopDomain(ctx.params.shop_domain);
-  const connectionId = requireConnectionId(ctx.params.connection_id);
-  const expectedRecordCount = requireExpectedRecordCount(ctx.params.expected_record_count);
-  const expectedRecordSetSha256 = requireExpectedRecordSetSha256(
-    ctx.params.expected_record_set_sha256,
-  );
-  const recordIds = await discoverShopifyCustomerRecordIds({
-    nex: ctx.nex,
-    shopDomain,
-    connectionId,
-  });
-  const recordSetSha256 = shopifyCustomerRecordSetSha256(recordIds);
-  if (
-    recordIds.length !== expectedRecordCount ||
-    recordSetSha256 !== expectedRecordSetSha256
-  ) {
-    throw new Error("Shopify customer record set no longer matches the inspected snapshot");
-  }
-  return projectShopifyCustomerBackfill({
-    ...ctx,
-    params: {
-      record_ids: recordIds,
-      record_set_sha256: recordSetSha256,
-    },
-  });
 };
 
 export function buildShopifySourceIdentityObservations(
@@ -369,8 +323,8 @@ const healthcheck: NexAppMethodHandler = async (ctx) => ({
     shopify_source_identity: "available_replay_safe_public_operation",
     shopify_customer_identity: "dormant_ready_full_postgres_activation_gates",
     shopify_customer_cohort: "available_bounded_manual_replay",
-    shopify_customer_backfill: "available_explicit_manual_replay",
-    shopify_customer_complete_backfill: "available_hash_bound_public_scan",
+    shopify_customer_backfill: "available_bounded_checkpointed_batches",
+    shopify_customer_complete_backfill: "removed_unbounded_operation",
     shopify_order_commerce: "not_implemented",
   },
   provider_write_authority: false,
@@ -412,9 +366,10 @@ export const projectShopifyCustomerCohort: NexAppMethodHandler = async (ctx) => 
 export const projectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) => {
   const recordIds = requireBackfillRecordIds(ctx.params);
 
-  // The complete explicit record set is fetched and validated before the first
-  // identity observation. A mid-apply retry is safe because contacts.observe is
-  // bound to the immutable Shopify source observation ID.
+  // Each explicit batch is fetched and validated before its first identity
+  // observation. Production runners persist a checkpoint after every successful
+  // batch. A retry is safe because contacts.observe is bound to the immutable
+  // Shopify source observation ID.
   const records: Array<{ id: string; record: RuntimeRow }> = [];
   for (const id of recordIds) {
     const response = unwrapPayload(await ctx.nex.records.get({ id }));
@@ -463,8 +418,6 @@ export default {
   "moonsleep-commerce.healthcheck": healthcheck,
   "moonsleep-commerce.shopify-source.seed-identities": seedShopifySourceIdentities,
   "moonsleep-commerce.shopify-customers.inspect-backfill": inspectShopifyCustomerBackfill,
-  "moonsleep-commerce.shopify-customers.project-complete-backfill":
-    projectCompleteShopifyCustomerBackfill,
   "moonsleep-commerce.shopify-customers.project-cohort": projectShopifyCustomerCohort,
   "moonsleep-commerce.shopify-customers.project-backfill": projectShopifyCustomerBackfill,
 };

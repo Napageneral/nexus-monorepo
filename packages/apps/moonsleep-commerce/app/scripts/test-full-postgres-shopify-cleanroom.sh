@@ -348,6 +348,7 @@ docker run -d \
   --mount "type=volume,src=${credential_volume},dst=/run/moonsleep-load-credentials,readonly" \
   --mount "type=bind,src=$(dirname "${adapter_artifact}"),dst=/artifacts/adapter,readonly" \
   --mount "type=bind,src=$(dirname "${app_artifact}"),dst=/artifacts/app,readonly" \
+  --mount "type=bind,src=${ROOT_DIR}/scripts,dst=/proof-scripts,readonly" \
   --tmpfs /tmp:rw,nosuid,nodev,mode=1777 \
   --tmpfs /run/nex-credentials:rw,nosuid,nodev,noexec,mode=0700 \
   "${NEX_IMAGE}" >/dev/null
@@ -413,10 +414,65 @@ jq -e '.ok == true and .status == "completed"' <<<"${customer_ingest_first}" >/d
 jq -e '.ok == true and .status == "completed"' <<<"${order_ingest_first}" >/dev/null
 jq -e '.ok == true and .status == "completed"' <<<"${line_ingest_first}" >/dev/null
 
+echo "[cleanroom] run the bounded checkpointed projector twice through public HTTP"
+docker exec --user 20042:20042 "${runtime_container}" sh -c '
+  set -eu
+  umask 077
+  mkdir -p /var/lib/nex/state/projection-proof
+  chmod 0700 /var/lib/nex/state/projection-proof
+  printf "%s\n" "$1" > /var/lib/nex/state/projection-proof/runtime-token
+  printf "%s\n" \
+    "some avg10=0.00 avg60=0.00 avg300=0.00 total=0" \
+    "full avg10=0.00 avg60=0.00 avg300=0.00 total=0" \
+    > /var/lib/nex/state/projection-proof/io-pressure
+  chmod 0600 /var/lib/nex/state/projection-proof/runtime-token \
+    /var/lib/nex/state/projection-proof/io-pressure
+' sh "${runtime_token}"
+
+projection_manifest_result="$(docker exec --user 20042:20042 "${runtime_container}" \
+  python3 /proof-scripts/shopify_customer_projection_runner.py \
+  --runtime-url "http://127.0.0.1:18789" \
+  --runtime-token-file /var/lib/nex/state/projection-proof/runtime-token \
+  --build-manifest \
+  --shop-domain "${SHOP_DOMAIN}" \
+  --connection-id "${CONNECTION_ID}" \
+  --manifest /var/lib/nex/state/projection-proof/manifest.json \
+  --io-pressure-file /var/lib/nex/state/projection-proof/io-pressure)"
+jq -e --arg id "${CUSTOMER_SOURCE_ID}" '
+  .ok == true and .record_count == 1 and
+  .first_record_id == $id and .last_record_id == $id and
+  (.manifest_sha256 | test("^[0-9a-f]{64}$")) and
+  .provider_write_authority == false
+' <<<"${projection_manifest_result}" >/dev/null
+projection_manifest_sha256="$(jq -r '.manifest_sha256' <<<"${projection_manifest_result}")"
+
+projection_first="$(docker exec --user 20042:20042 "${runtime_container}" \
+  python3 /proof-scripts/shopify_customer_projection_runner.py \
+  --runtime-url "http://127.0.0.1:18789" \
+  --runtime-token-file /var/lib/nex/state/projection-proof/runtime-token \
+  --manifest /var/lib/nex/state/projection-proof/manifest.json \
+  --manifest-sha256 "${projection_manifest_sha256}" \
+  --checkpoint /var/lib/nex/state/projection-proof/first.json \
+  --batch-size 1 \
+  --sleep-ms 0 \
+  --io-pressure-file /var/lib/nex/state/projection-proof/io-pressure)"
+projection_second="$(docker exec --user 20042:20042 "${runtime_container}" \
+  python3 /proof-scripts/shopify_customer_projection_runner.py \
+  --runtime-url "http://127.0.0.1:18789" \
+  --runtime-token-file /var/lib/nex/state/projection-proof/runtime-token \
+  --manifest /var/lib/nex/state/projection-proof/manifest.json \
+  --manifest-sha256 "${projection_manifest_sha256}" \
+  --checkpoint /var/lib/nex/state/projection-proof/second.json \
+  --batch-size 1 \
+  --sleep-ms 0 \
+  --io-pressure-file /var/lib/nex/state/projection-proof/io-pressure)"
+jq -e '.ok == true and .completed == true and .batch_count == 1 and .totals.created_entities == 1 and .totals.created_contacts == 1 and .totals.replayed == 0' <<<"${projection_first}" >/dev/null
+jq -e '.ok == true and .completed == true and .batch_count == 1 and .totals.created_entities == 0 and .totals.created_contacts == 0 and .totals.replayed == 1' <<<"${projection_second}" >/dev/null
+
 cohort_params="$(jq -nc --arg id "${CUSTOMER_SOURCE_ID}" '{record_ids:[$id]}')"
 cohort_first="$(runtime_call moonsleep-commerce.shopify-customers.project-cohort "${cohort_params}")"
 cohort_second="$(runtime_call moonsleep-commerce.shopify-customers.project-cohort "${cohort_params}")"
-jq -e '.state == "succeeded" and .records_projected == 1 and .created_entities == 1 and .created_contacts == 1 and .replayed == 0 and .provider_write_authority == false' <<<"${cohort_first}" >/dev/null
+jq -e '.state == "succeeded" and .records_projected == 1 and .created_entities == 0 and .created_contacts == 0 and .replayed == 1 and .provider_write_authority == false' <<<"${cohort_first}" >/dev/null
 jq -e '.state == "succeeded" and .records_projected == 1 and .created_entities == 0 and .created_contacts == 0 and .replayed == 1 and .provider_write_authority == false' <<<"${cohort_second}" >/dev/null
 
 customer_ingest_second="$(runtime_call record.ingest "${customer_params}")"
@@ -534,7 +590,7 @@ jq -n \
     packages:{shopify_adapter_sha256:$adapter_sha256,moonsleep_commerce_sha256:$app_sha256,active_after_restart:true},
     source_identity:{contract_sha256:$seed_contract_sha256,first_create_count:2,second_create_count:0,second_replay_count:2},
     synthetic_ingest:{families:["customer","line_item","order"],exact_payload_sha256_verified:true,first_commit_count:3,replay_status:"skipped",event_contract:$event_contract},
-    customer_projection:{first_created_entities:1,first_created_contacts:1,replay_created_entities:0,replay_created_contacts:0,replay_observations:1},
+    customer_projection:{runner:"bounded_checkpointed_http",batch_limit:250,first_created_entities:1,first_created_contacts:1,replay_created_entities:0,replay_created_contacts:0,replay_observations:1},
     work_boundary:{job_status:"inactive",subscription_enabled:false,queue_rows:0,dispatch_receipts:0,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},
     restart:{app_rehydrated:true,adapter_active:true,record_replay_idempotent:true,identity_replay_idempotent:true},
     initial_counts:$initial_counts,

@@ -31,17 +31,22 @@
 
 - Bind the exact staged Shopify manifest and all page hashes.
 - Call `moonsleep-commerce.shopify-customers.inspect-backfill` for the exact
-  shop and connection. Retain the returned record count, boundaries, and
-  SHA-256 as the public-runtime snapshot identity.
-- Call `project-complete-backfill` with that count and SHA-256; require its
-  internal re-scan to match before the first identity write.
-- Invoke `moonsleep-commerce.shopify-customers.project-backfill` with the exact
-  sorted committed customer record IDs and the SHA-256 of their compact JSON
-  array.
+  shop and connection through the runner's `--build-manifest` mode. Require the
+  returned sorted IDs, record count, boundaries, and SHA-256 to agree before the
+  runner atomically creates one new private mode-0600 manifest. Do not assemble
+  the production ID set manually or through SQL.
+- Invoke `moonsleep-commerce.shopify-customers.project-backfill` only through
+  batches of at most 250 exact IDs. Require a durable checkpoint after every
+  successful batch and no checkpoint advancement on a lost response.
+- Before every production batch require API/Nex health, no production pause
+  marker, and I/O full `avg60` below the job-local ceiling. Exit retryably before
+  a write when any resource gate is red.
 - Run the complete customer backfill twice with byte-identical parameters.
 - Require both runs to return the same record-set and projection-result hashes.
 - Require the second run to report zero created entities, zero created contacts,
   and `replayed == records_projected`.
+- Prove cancellation and restart resume at the first uncheckpointed batch; do
+  not refetch or re-ingest the immutable Shopify source corpus.
 - Reconcile source unique customer GIDs to active Shopify contacts.
 - Require zero duplicate contact anchors and zero automatic merge proposals.
 - Sample customers with names, missing names, multiple addresses, no address,

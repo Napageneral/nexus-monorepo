@@ -1,6 +1,6 @@
 {
   "id": "moonsleep-commerce",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "displayName": "MoonSleep Commerce",
   "description": "Project exact Shopify records into MoonSleep identity and typed commerce state through public Nex operations.",
   "skill": "./SKILL.md",
@@ -94,7 +94,7 @@
       }
     },
     "moonsleep-commerce.shopify-customers.project-backfill": {
-      "description": "Project an explicit complete set of committed Shopify customer records into Nex identity and return deterministic replay counters and hashes.",
+      "description": "Project one explicit bounded batch of committed Shopify customer records into Nex identity and return deterministic replay counters and hashes.",
       "action": "write",
       "access": "authenticated",
       "params": {
@@ -103,7 +103,7 @@
           "record_ids": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 20000,
+            "maxItems": 250,
             "uniqueItems": true,
             "items": {
               "type": "string",
@@ -124,7 +124,7 @@
       }
     },
     "moonsleep-commerce.shopify-customers.inspect-backfill": {
-      "description": "Read and hash the complete committed Shopify customer record set through public records.list without projecting identities.",
+      "description": "Read, validate, and return the exact sorted committed Shopify customer record IDs and their hash through public records.list without projecting identities.",
       "action": "read",
       "access": "authenticated",
       "params": {
@@ -142,45 +142,6 @@
           }
         },
         "required": ["shop_domain", "connection_id"],
-        "additionalProperties": false
-      },
-      "response": {
-        "type": "object"
-      }
-    },
-    "moonsleep-commerce.shopify-customers.project-complete-backfill": {
-      "description": "Re-read and project the complete Shopify customer record set only when its count and SHA-256 match a prior public inspection.",
-      "action": "write",
-      "access": "authenticated",
-      "params": {
-        "type": "object",
-        "properties": {
-          "shop_domain": {
-            "type": "string",
-            "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.myshopify\\.com$",
-            "maxLength": 255
-          },
-          "connection_id": {
-            "type": "string",
-            "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$",
-            "maxLength": 128
-          },
-          "expected_record_count": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 20000
-          },
-          "expected_record_set_sha256": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
-          }
-        },
-        "required": [
-          "shop_domain",
-          "connection_id",
-          "expected_record_count",
-          "expected_record_set_sha256"
-        ],
         "additionalProperties": false
       },
       "response": {
