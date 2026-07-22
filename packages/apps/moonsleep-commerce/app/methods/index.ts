@@ -225,7 +225,8 @@ async function discoverShopifyCommerceRecordIds(params: {
       }) => Promise<unknown>;
     };
   }).records;
-  const recordIds: string[] = [];
+  const orderRecordIds: string[] = [];
+  const lineItemRecordIds: string[] = [];
   let scanned = 0;
 
   for (let offset = 0; offset < MAX_RECORDS_SCANNED; offset += RECORD_SCAN_PAGE_SIZE) {
@@ -265,7 +266,11 @@ async function discoverShopifyCommerceRecordIds(params: {
       if (!id || Buffer.byteLength(id, "utf8") > 512) {
         throw new Error("Shopify commerce scan returned an invalid record id");
       }
-      recordIds.push(id);
+      if (family === "order") {
+        orderRecordIds.push(id);
+      } else {
+        lineItemRecordIds.push(id);
+      }
     }
     if (rows.length < RECORD_SCAN_PAGE_SIZE) {
       break;
@@ -275,7 +280,12 @@ async function discoverShopifyCommerceRecordIds(params: {
     }
   }
 
-  recordIds.sort((left, right) => left.localeCompare(right));
+  // This order is part of the manifest contract. Sorting one combined set can
+  // put line-item batches ahead of their parent-order batches. Keep each family
+  // deterministic, but place every order revision before every line item.
+  orderRecordIds.sort((left, right) => left.localeCompare(right));
+  lineItemRecordIds.sort((left, right) => left.localeCompare(right));
+  const recordIds = [...orderRecordIds, ...lineItemRecordIds];
   if (recordIds.length < 1 || recordIds.length > MAX_INSPECTED_COMMERCE_RECORDS) {
     throw new Error(
       `Shopify commerce record set must contain between 1 and ${MAX_INSPECTED_COMMERCE_RECORDS} records`,

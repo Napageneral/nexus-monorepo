@@ -126,11 +126,11 @@ class CommerceRunnerTest(unittest.TestCase):
 
     def manifest(self) -> tuple[Path, str]:
         ids = [
-            "record-000-order",
+            "record-100-order",
+            "record-101-order",
+            "record-000-line",
             "record-001-line",
             "record-002-line",
-            "record-003-order",
-            "record-004-line",
         ]
         value = {
             "receipt_type": runner.MANIFEST_RECEIPT,

@@ -94,8 +94,8 @@ def _validate_record_ids(value: Any, label: str) -> list[str]:
         if len(item.encode()) > 512:
             raise ProjectionError(f"{label}[{index}] exceeds 512 bytes")
         normalized.append(item)
-    if normalized != sorted(normalized) or len(set(normalized)) != len(normalized):
-        raise ProjectionError(f"{label} must be strictly sorted and unique")
+    if len(set(normalized)) != len(normalized):
+        raise ProjectionError(f"{label} must contain unique record IDs")
     return normalized
 
 

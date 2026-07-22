@@ -585,10 +585,32 @@ describe("Shopify order and line-item bounded backfill", () => {
     expect(inspected).toMatchObject({
       state: "ready",
       record_count: 2,
-      record_ids: ["record-a-line", "record-z-order"],
+      record_ids: ["record-z-order", "record-a-line"],
       provider_read_authority: false,
       provider_write_authority: false,
     });
+  });
+
+  it("orders the full inspection manifest by dependency before batch slicing", async () => {
+    const records = [
+      commerceRecord("record-a-line", "line_item"),
+      commerceRecord("record-z-order", "order"),
+      commerceRecord("record-b-line", "line_item"),
+      commerceRecord("record-y-order", "order"),
+    ];
+    const inspected = await inspectShopifyCommerceBackfill({
+      params: {
+        shop_domain: "moonsleepco.myshopify.com",
+        connection_id: "shopify-primary",
+      },
+      nex: { records: { list: vi.fn(async () => ({ records })) } },
+    } as never);
+    expect(inspected.record_ids).toEqual([
+      "record-y-order",
+      "record-z-order",
+      "record-a-line",
+      "record-b-line",
+    ]);
   });
 
   it("rejects oversized batches and altered set hashes before reads", async () => {
