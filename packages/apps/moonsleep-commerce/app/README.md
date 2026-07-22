@@ -3,22 +3,34 @@
 Installable Nex app for MoonSleep customer identity and typed commerce
 projection from exact provider records.
 
-The first vertical consumes committed Shopify customer records. It observes a
+The first vertical consumes committed Shopify customer, order, and line-item records. It observes a
 stable Shopify contact, resolves the canonical Nex entity, and verifies the
-`Customer` and `Shopify` tags. It uses public Nex operations only.
+`Customer` and `Shopify` tags, then binds immutable order revisions to that
+canonical customer and line-item revisions to their stable parent order. It
+uses public Nex operations only.
 
 Current scope:
 
 - replay-safe Shopify store and integration routing identities through
   `contacts.observe`, `entities.resolve`, and `entities.tags.list`
 - Shopify customer identity projection
+- typed, revisioned Shopify order and line-item projection
+- canonical customer links on orders, with no fuzzy matching
+- immutable billing and shipping snapshots with deterministic SHA-256 binding
 - bounded explicit customer cohort projection for pre-activation production proof
 - explicit deterministic customer projection batches capped at 250 records,
   with a resource-aware checkpoint runner and replay counters/hashes
+- deterministic order/line-item batches capped at 50 records; the production
+  runner defaults to one 25-record batch per invocation, a one-second inter-batch
+  delay, and an I/O-pressure ceiling before every batch
 - dormant `record.ingested` job registration on the full PostgreSQL work plane,
+  with exact customer, order, and line-item subscriptions so each new revision
+  schedules one projector rather than fanning out to both jobs; activation is
   held until cohort, double-backfill, restart, and replay gates pass
 - deterministic shop-domain and customer-GID contact anchors
 - exact provider JSON hash verification
+- zero Shopify calls during projection: backfill drains immutable records that
+  are already committed to the MoonSleep Nex database
 - conservative identity behavior with no email, phone, or name merge
 
 The cohort method accepts 1-50 exact committed record IDs. It validates the
@@ -46,15 +58,22 @@ observations prevent duplicate identities. Safe invocation defaults are one
 fresh invocation must re-read and validate the durable checkpoint before it can
 continue.
 
+Order and line-item backfill follows the same pattern through
+`shopify-commerce.inspect-backfill` and `shopify-commerce.project-backfill`.
+Every explicit batch is fetched and validated before the first commerce write;
+orders are projected before line items. The runner stores a hash-bound manifest
+and fsynced checkpoint. Its safe defaults make each scheduled invocation do at
+most 25 records and then exit, allowing the host resource guard to pause or
+resume the drain without a full replay or new Shopify fetch.
+
 Before ingest, `moonsleep-commerce.shopify-source.seed-identities` must run
 twice for the exact shop domain and connection ID. The first run creates the
 store and integration entity/contact anchors. The second must report zero new
 entities and contacts and two replayed observations. These are routing
 identities; customers remain separately observed subject entities.
 
-Not yet implemented:
+Still held from production activation:
 
-- typed order and line-item projection
 - historical production backfill execution against the MoonSleep-only runtime
 - continuous production monitor activation
 - event subscription activation before the production cohort, double-backfill,

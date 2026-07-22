@@ -190,7 +190,11 @@ runtime_counts() {
       'tags', (SELECT COUNT(*) FROM nex_runtime.entity_tags),
       'queue', (SELECT COUNT(*) FROM nex_runtime.job_queue),
       'dispatch_receipts', (SELECT COUNT(*) FROM nex_runtime.event_dispatch_receipts),
-      'adapter_instances', (SELECT COUNT(*) FROM nex_runtime.adapter_instances)
+      'adapter_instances', (SELECT COUNT(*) FROM nex_runtime.adapter_instances),
+      'commerce_orders', (SELECT COUNT(*) FROM nex_runtime.commerce_orders),
+      'commerce_order_revisions', (SELECT COUNT(*) FROM nex_runtime.commerce_order_revisions),
+      'commerce_line_items', (SELECT COUNT(*) FROM nex_runtime.commerce_line_items),
+      'commerce_line_item_revisions', (SELECT COUNT(*) FROM nex_runtime.commerce_line_item_revisions)
     )"
 }
 
@@ -205,17 +209,21 @@ build_record_params() {
       }'
       ;;
     order)
-      local provider='{"id":"gid://shopify/Order/900719925474099312346","name":"#SYNTH-1","updatedAt":"2026-07-21T14:00:00Z","customer":{"id":"gid://shopify/Customer/900719925474099312345"},"billingAddress":{"address1":"1 Synthetic Way","city":"Austin","provinceCode":"TX","zip":"78701","countryCodeV2":"US"},"shippingAddress":{"address1":"2 Replay Road","city":"Austin","provinceCode":"TX","zip":"78702","countryCodeV2":"US"},"lineItems":[{"id":"gid://shopify/LineItem/900719925474099312347","quantity":1,"sku":"SYNTHETIC-SKU"}]}'
-      jq -nc --arg provider "${provider}" '{
+      local provider='{"id":900719925474099312346,"name":"#SYNTH-1","customer":{"id":900719925474099312345},"billing_address":{"address1":"1 Synthetic Way","city":"Austin","zip":"78701"},"shipping_address":{"address1":"2 Replay Road","city":"Austin","zip":"78702"},"total_price":"199.00"}'
+      local provider_sha256
+      provider_sha256="$(printf '%s' "${provider}" | shasum -a 256 | awk '{print $1}')"
+      jq -nc --arg provider "${provider}" --arg provider_sha256 "${provider_sha256}" '{
         routing:{adapter:"shopify",platform:"shopify",connection_id:"shopify-primary",sender_id:"moonsleepco.myshopify.com",sender_name:"Shopify",receiver_id:"shopify-primary",space_id:"moonsleepco.myshopify.com",container_kind:"group",container_id:"order",thread_id:"moonsleepco.myshopify.com:order:900719925474099312346"},
-        payload:{external_record_id:"shopify:shopify-primary:order:900719925474099312346:synthetic-revision-1",timestamp:1784640001000,content:"order #SYNTH-1 total=199.00",content_type:"text",payload:{provider_object_json:$provider,provider_object_sha256:"172e584bd295a897d630947af2b955ee224352d391eeee00010c44d6c4c48406"},metadata:{connection_id:"shopify-primary",adapter_id:"shopify",family:"order",logical_row_id:"moonsleepco.myshopify.com:shopify:shopify-primary:order:900719925474099312346:synthetic-revision-1",revision_hash:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",provider_ids:{order_id:"900719925474099312346",order_gid:"gid://shopify/Order/900719925474099312346",customer_gid:"gid://shopify/Customer/900719925474099312345"},row:{name:"#SYNTH-1",currency:"USD",order_id:"900719925474099312346",order_gid:"gid://shopify/Order/900719925474099312346",shop_domain:"moonsleepco.myshopify.com",total_price:"199.00",customer_gid:"gid://shopify/Customer/900719925474099312345",billing_address:{zip:"78701",city:"Austin",address1:"1 Synthetic Way",provinceCode:"TX",countryCodeV2:"US"},shipping_address:{zip:"78702",city:"Austin",address1:"2 Replay Road",provinceCode:"TX",countryCodeV2:"US"}},source_request:{path:"/admin/api/2026-01/orders.json",method:"GET"}}}
+        payload:{external_record_id:"shopify:shopify-primary:order:900719925474099312346:synthetic-revision-1",timestamp:1784640001000,content:"order #SYNTH-1 total=199.00",content_type:"text",payload:{provider_object_json:$provider,provider_object_sha256:$provider_sha256},metadata:{connection_id:"shopify-primary",adapter_id:"shopify",family:"order",logical_row_id:"moonsleepco.myshopify.com:900719925474099312346",revision_hash:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",provider_ids:{shop_domain:"moonsleepco.myshopify.com",order_id:"900719925474099312346",customer_id:"900719925474099312345"},row:{name:"#SYNTH-1",currency:"USD",order_id:"900719925474099312346",shop_domain:"moonsleepco.myshopify.com",subtotal_price:"199.00",total_price:"199.00",financial_status:"paid",fulfillment_status:"unfulfilled",customer_id:"900719925474099312345",billing_address:{zip:"78701",city:"Austin",address1:"1 Synthetic Way"},shipping_address:{zip:"78702",city:"Austin",address1:"2 Replay Road"}},source_request:{path:"/admin/api/2026-01/orders.json",method:"GET"}}}
       }'
       ;;
     line_item)
-      local provider='{"id":"gid://shopify/LineItem/900719925474099312347","orderId":"gid://shopify/Order/900719925474099312346","quantity":1,"sku":"SYNTHETIC-SKU","title":"Synthetic Product","price":"199.00"}'
-      jq -nc --arg provider "${provider}" '{
+      local provider='{"id":900719925474099312347,"product_id":900719925474099312348,"variant_id":900719925474099312349,"quantity":1,"sku":"SYNTHETIC-SKU","title":"Synthetic Product","price":"199.00"}'
+      local provider_sha256
+      provider_sha256="$(printf '%s' "${provider}" | shasum -a 256 | awk '{print $1}')"
+      jq -nc --arg provider "${provider}" --arg provider_sha256 "${provider_sha256}" '{
         routing:{adapter:"shopify",platform:"shopify",connection_id:"shopify-primary",sender_id:"moonsleepco.myshopify.com",sender_name:"Shopify",receiver_id:"shopify-primary",space_id:"moonsleepco.myshopify.com",container_kind:"group",container_id:"line_item",thread_id:"moonsleepco.myshopify.com:order:900719925474099312346"},
-        payload:{external_record_id:"shopify:shopify-primary:line_item:900719925474099312346:900719925474099312347:synthetic-revision-1",timestamp:1784640002000,content:"line_item order=#SYNTH-1 quantity=1 price=199.00",content_type:"text",payload:{provider_object_json:$provider,provider_object_sha256:"bfc7892b390d8c1573bd977f9376c1b9b3fc69882acd4ca8405db5db27868fd1"},metadata:{connection_id:"shopify-primary",adapter_id:"shopify",family:"line_item",logical_row_id:"moonsleepco.myshopify.com:shopify:shopify-primary:line_item:900719925474099312346:900719925474099312347:synthetic-revision-1",revision_hash:"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",provider_ids:{order_id:"900719925474099312346",order_gid:"gid://shopify/Order/900719925474099312346",line_item_id:"900719925474099312347",line_item_gid:"gid://shopify/LineItem/900719925474099312347"},row:{sku:"SYNTHETIC-SKU",price:"199.00",title:"Synthetic Product",order_id:"900719925474099312346",quantity:1,order_gid:"gid://shopify/Order/900719925474099312346",shop_domain:"moonsleepco.myshopify.com",line_item_id:"900719925474099312347",line_item_gid:"gid://shopify/LineItem/900719925474099312347"},source_request:{path:"/admin/api/2026-01/orders.json",method:"GET"}}}
+        payload:{external_record_id:"shopify:shopify-primary:line_item:900719925474099312346:900719925474099312347:synthetic-revision-1",timestamp:1784640002000,content:"line_item order=#SYNTH-1 quantity=1 price=199.00",content_type:"text",payload:{provider_object_json:$provider,provider_object_sha256:$provider_sha256},metadata:{connection_id:"shopify-primary",adapter_id:"shopify",family:"line_item",logical_row_id:"moonsleepco.myshopify.com:900719925474099312346:900719925474099312347",revision_hash:"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",provider_ids:{shop_domain:"moonsleepco.myshopify.com",order_id:"900719925474099312346",line_item_id:"900719925474099312347",product_id:"900719925474099312348",variant_id:"900719925474099312349"},row:{sku:"SYNTHETIC-SKU",price:"199.00",title:"Synthetic Product",order_id:"900719925474099312346",quantity:1,shop_domain:"moonsleepco.myshopify.com",line_item_id:"900719925474099312347",product_id:"900719925474099312348",variant_id:"900719925474099312349"},source_request:{path:"/admin/api/2026-01/orders.json",method:"GET"}}}
       }'
       ;;
     *)
@@ -369,29 +377,34 @@ health_before="$(runtime_call moonsleep-commerce.healthcheck '{}')"
 jq -e '
   .status == "ok" and
   .projectors.shopify_customer_identity == "dormant_ready_full_postgres_activation_gates" and
-  .projectors.shopify_order_commerce == "not_implemented" and
+  .projectors.shopify_order_commerce == "dormant_bounded_checkpointed_batches" and
   .provider_write_authority == false
 ' <<<"${health_before}" >/dev/null
 
 jobs_before="$(runtime_call jobs.list '{}')"
 subscriptions_before="$(runtime_call events.subscriptions.list '{}')"
 jq -e '
-  (.jobs | length) == 1 and
-  .jobs[0].name == "moonsleep-commerce.shopify-customer-identity" and
-  .jobs[0].status == "inactive"
+  (.jobs | length) == 2 and
+  ([.jobs[].name] | sort) == ["moonsleep-commerce.shopify-customer-identity","moonsleep-commerce.shopify-order-commerce"] and
+  all(.jobs[]; .status == "inactive")
 ' <<<"${jobs_before}" >/dev/null
 jq -e '
-  (.subscriptions | length) == 1 and
-  .subscriptions[0].event_type == "record.ingested" and
-  .subscriptions[0].match_json == "{\"platform\":\"shopify\"}" and
-  .subscriptions[0].enabled == 0
+  (.subscriptions | length) == 3 and
+  ([.subscriptions[].match_json] | sort) == [
+    "{\"platform\":\"shopify\",\"container_id\":\"customer\"}",
+    "{\"platform\":\"shopify\",\"container_id\":\"line_item\"}",
+    "{\"platform\":\"shopify\",\"container_id\":\"order\"}"
+  ] and
+  all(.subscriptions[]; .event_type == "record.ingested" and .enabled == 0)
 ' <<<"${subscriptions_before}" >/dev/null
 
 initial_counts="$(runtime_counts)"
 jq -e '
   .records == 0 and .receipts == 0 and .events == 0 and
   .entities == 3 and .contacts == 0 and .observations == 0 and
-  .queue == 0 and .dispatch_receipts == 0 and .adapter_instances == 0
+  .queue == 0 and .dispatch_receipts == 0 and .adapter_instances == 0 and
+  .commerce_orders == 0 and .commerce_order_revisions == 0 and
+  .commerce_line_items == 0 and .commerce_line_item_revisions == 0
 ' <<<"${initial_counts}" >/dev/null
 
 seed_params="$(jq -nc --arg shop_domain "${SHOP_DOMAIN}" --arg connection_id "${CONNECTION_ID}" '{shop_domain:$shop_domain,connection_id:$connection_id}')"
@@ -469,6 +482,70 @@ projection_second="$(docker exec --user 20042:20042 "${runtime_container}" \
 jq -e '.ok == true and .completed == true and .batch_count == 1 and .totals.created_entities == 1 and .totals.created_contacts == 1 and .totals.replayed == 0' <<<"${projection_first}" >/dev/null
 jq -e '.ok == true and .completed == true and .batch_count == 1 and .totals.created_entities == 0 and .totals.created_contacts == 0 and .totals.replayed == 1' <<<"${projection_second}" >/dev/null
 
+commerce_manifest_result="$(docker exec --user 20042:20042 "${runtime_container}" \
+  python3 /proof-scripts/shopify_commerce_projection_runner.py \
+  --runtime-url "http://127.0.0.1:18789" \
+  --runtime-token-file /var/lib/nex/state/projection-proof/runtime-token \
+  --build-manifest \
+  --shop-domain "${SHOP_DOMAIN}" \
+  --connection-id "${CONNECTION_ID}" \
+  --manifest /var/lib/nex/state/projection-proof/commerce-manifest.json \
+  --io-pressure-file /var/lib/nex/state/projection-proof/io-pressure)"
+jq -e '
+  .ok == true and .record_count == 2 and
+  (.manifest_sha256 | test("^[0-9a-f]{64}$")) and
+  .provider_read_authority == false and .provider_write_authority == false
+' <<<"${commerce_manifest_result}" >/dev/null
+commerce_manifest_sha256="$(jq -r '.manifest_sha256' <<<"${commerce_manifest_result}")"
+
+commerce_first="$(docker exec --user 20042:20042 "${runtime_container}" \
+  python3 /proof-scripts/shopify_commerce_projection_runner.py \
+  --runtime-url "http://127.0.0.1:18789" \
+  --runtime-token-file /var/lib/nex/state/projection-proof/runtime-token \
+  --manifest /var/lib/nex/state/projection-proof/commerce-manifest.json \
+  --manifest-sha256 "${commerce_manifest_sha256}" \
+  --checkpoint /var/lib/nex/state/projection-proof/commerce-first.json \
+  --batch-size 2 --max-batches 1 --sleep-ms 0 \
+  --io-pressure-file /var/lib/nex/state/projection-proof/io-pressure)"
+commerce_second="$(docker exec --user 20042:20042 "${runtime_container}" \
+  python3 /proof-scripts/shopify_commerce_projection_runner.py \
+  --runtime-url "http://127.0.0.1:18789" \
+  --runtime-token-file /var/lib/nex/state/projection-proof/runtime-token \
+  --manifest /var/lib/nex/state/projection-proof/commerce-manifest.json \
+  --manifest-sha256 "${commerce_manifest_sha256}" \
+  --checkpoint /var/lib/nex/state/projection-proof/commerce-second.json \
+  --batch-size 2 --max-batches 1 --sleep-ms 0 \
+  --io-pressure-file /var/lib/nex/state/projection-proof/io-pressure)"
+jq -e '
+  .ok == true and .completed == true and .batch_count == 1 and
+  .totals.records_projected == 2 and .totals.orders_projected == 1 and
+  .totals.line_items_projected == 1 and .totals.created == 2 and .totals.replayed == 0
+' <<<"${commerce_first}" >/dev/null
+jq -e '
+  .ok == true and .completed == true and .batch_count == 1 and
+  .totals.records_projected == 2 and .totals.created == 0 and .totals.replayed == 2
+' <<<"${commerce_second}" >/dev/null
+
+order_gid="gid://shopify/Order/900719925474099312346"
+billing_sha256="$(printf '%s' '{"address1":"1 Synthetic Way","city":"Austin","zip":"78701"}' | shasum -a 256 | awk '{print $1}')"
+shipping_sha256="$(printf '%s' '{"address1":"2 Replay Road","city":"Austin","zip":"78702"}' | shasum -a 256 | awk '{print $1}')"
+commerce_order_read="$(runtime_call commerce.orders.get "$(jq -nc --arg shop "${SHOP_DOMAIN}" --arg order "${order_gid}" '{platform:"shopify",space_id:$shop,order_id:$order}')")"
+jq -e \
+  --arg order "${order_gid}" \
+  --arg billing_sha256 "${billing_sha256}" \
+  --arg shipping_sha256 "${shipping_sha256}" '
+  .found == true and .order.order_id == $order and
+  .revision.customer_contact_id != null and .revision.customer_entity_id != null and
+  .revision.currency == "USD" and .revision.total_price == "199.00" and
+  .revision.billing_address_sha256 == $billing_sha256 and
+  .revision.shipping_address_sha256 == $shipping_sha256 and
+  (.line_items | length) == 1 and
+  .line_items[0].line_item.line_item_id == "gid://shopify/LineItem/900719925474099312347" and
+  .line_items[0].revision.sku == "SYNTHETIC-SKU" and
+  .line_items[0].revision.price == "199.00" and
+  .line_items[0].revision.currency == "USD"
+' <<<"${commerce_order_read}" >/dev/null
+
 cohort_params="$(jq -nc --arg id "${CUSTOMER_SOURCE_ID}" '{record_ids:[$id]}')"
 cohort_first="$(runtime_call moonsleep-commerce.shopify-customers.project-cohort "${cohort_params}")"
 cohort_second="$(runtime_call moonsleep-commerce.shopify-customers.project-cohort "${cohort_params}")"
@@ -486,7 +563,9 @@ counts_before_restart="$(runtime_counts)"
 jq -e '
   .records == 3 and .receipts == 3 and .events == 3 and
   .entities == 6 and .contacts == 3 and .observations == 3 and .tags == 11 and
-  .queue == 0 and .dispatch_receipts == 0 and .adapter_instances == 0
+  .queue == 0 and .dispatch_receipts == 0 and .adapter_instances == 0 and
+  .commerce_orders == 1 and .commerce_order_revisions == 1 and
+  .commerce_line_items == 1 and .commerce_line_item_revisions == 1
 ' <<<"${counts_before_restart}" >/dev/null
 
 event_contract="$(postgres_json "
@@ -537,17 +616,35 @@ subscriptions_after="$(runtime_call events.subscriptions.list '{}')"
 jq -e --arg version "${ADAPTER_VERSION}" '.status == "active" and .active_version == $version' <<<"${adapter_state_after}" >/dev/null
 jq -e --arg version "${APP_VERSION}" '.status == "active" and .active_version == $version' <<<"${app_state_after}" >/dev/null
 jq -e '.status == "ok" and .provider_write_authority == false' <<<"${health_after}" >/dev/null
-jq -e '(.jobs | length) == 1 and .jobs[0].status == "inactive"' <<<"${jobs_after}" >/dev/null
-jq -e '(.subscriptions | length) == 1 and .subscriptions[0].enabled == 0' <<<"${subscriptions_after}" >/dev/null
+jq -e '(.jobs | length) == 2 and all(.jobs[]; .status == "inactive")' <<<"${jobs_after}" >/dev/null
+jq -e '
+  (.subscriptions | length) == 3 and
+  ([.subscriptions[].match_json] | sort) == [
+    "{\"platform\":\"shopify\",\"container_id\":\"customer\"}",
+    "{\"platform\":\"shopify\",\"container_id\":\"line_item\"}",
+    "{\"platform\":\"shopify\",\"container_id\":\"order\"}"
+  ] and
+  all(.subscriptions[]; .enabled == 0)
+' <<<"${subscriptions_after}" >/dev/null
 
 customer_ingest_after_restart="$(runtime_call record.ingest "${customer_params}")"
 order_ingest_after_restart="$(runtime_call record.ingest "${order_params}")"
 line_ingest_after_restart="$(runtime_call record.ingest "${line_params}")"
 cohort_after_restart="$(runtime_call moonsleep-commerce.shopify-customers.project-cohort "${cohort_params}")"
+commerce_replay_after_restart="$(docker exec --user 20042:20042 "${runtime_container}" \
+  python3 /proof-scripts/shopify_commerce_projection_runner.py \
+  --runtime-url "http://127.0.0.1:18789" \
+  --runtime-token-file /var/lib/nex/state/projection-proof/runtime-token \
+  --manifest /var/lib/nex/state/projection-proof/commerce-manifest.json \
+  --manifest-sha256 "${commerce_manifest_sha256}" \
+  --checkpoint /var/lib/nex/state/projection-proof/commerce-restart-replay.json \
+  --batch-size 2 --max-batches 1 --sleep-ms 0 \
+  --io-pressure-file /var/lib/nex/state/projection-proof/io-pressure)"
 jq -e '.ok == true and .status == "skipped"' <<<"${customer_ingest_after_restart}" >/dev/null
 jq -e '.ok == true and .status == "skipped"' <<<"${order_ingest_after_restart}" >/dev/null
 jq -e '.ok == true and .status == "skipped"' <<<"${line_ingest_after_restart}" >/dev/null
 jq -e '.state == "succeeded" and .created_entities == 0 and .created_contacts == 0 and .replayed == 1' <<<"${cohort_after_restart}" >/dev/null
+jq -e '.ok == true and .completed == true and .totals.created == 0 and .totals.replayed == 2' <<<"${commerce_replay_after_restart}" >/dev/null
 
 counts_after_restart="$(runtime_counts)"
 [[ "$(jq -S -c . <<<"${counts_before_restart}")" == "$(jq -S -c . <<<"${counts_after_restart}")" ]]
@@ -591,8 +688,9 @@ jq -n \
     source_identity:{contract_sha256:$seed_contract_sha256,first_create_count:2,second_create_count:0,second_replay_count:2},
     synthetic_ingest:{families:["customer","line_item","order"],exact_payload_sha256_verified:true,first_commit_count:3,replay_status:"skipped",event_contract:$event_contract},
     customer_projection:{runner:"bounded_checkpointed_http",batch_limit:250,first_created_entities:1,first_created_contacts:1,replay_created_entities:0,replay_created_contacts:0,replay_observations:1},
-    work_boundary:{job_status:"inactive",subscription_enabled:false,queue_rows:0,dispatch_receipts:0,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},
-    restart:{app_rehydrated:true,adapter_active:true,record_replay_idempotent:true,identity_replay_idempotent:true},
+    commerce_projection:{runner:"bounded_checkpointed_http",batch_limit:50,default_batch_size:25,default_batches_per_invocation:1,orders:1,line_items:1,first_created:2,replay_created:0,replay_observations:2,canonical_customer_link:true,address_snapshots_sha256_bound:true},
+    work_boundary:{job_count:2,job_status:"inactive",subscription_count:3,subscription_scope:"exact_record_family",subscription_enabled:false,queue_rows:0,dispatch_receipts:0,provider_credentials_mounted:false,provider_calls:0,provider_read_authority:false,provider_write_authority:false},
+    restart:{app_rehydrated:true,adapter_active:true,record_replay_idempotent:true,identity_replay_idempotent:true,commerce_replay_idempotent:true},
     initial_counts:$initial_counts,
     terminal_counts:$terminal_counts,
     zero_residue:true

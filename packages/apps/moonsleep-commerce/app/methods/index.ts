@@ -4,12 +4,22 @@ import {
   buildShopifyCustomerObservation,
   projectShopifyCustomerIdentity,
 } from "../jobs/shopify-customer-identity.js";
+import {
+  parseShopifyLineItemRecord,
+  parseShopifyOrderRecord,
+  projectParsedShopifyLineItem,
+  projectParsedShopifyOrder,
+  type ParsedShopifyCommerceRecord,
+  type ShopifyCommerceClient,
+} from "../jobs/shopify-order-commerce.js";
 
 type RuntimeRow = Record<string, unknown>;
 
 const MAX_COHORT_RECORDS = 50;
 const MAX_BACKFILL_BATCH_RECORDS = 250;
+const MAX_COMMERCE_BATCH_RECORDS = 50;
 const MAX_INSPECTED_CUSTOMER_RECORDS = 20_000;
+const MAX_INSPECTED_COMMERCE_RECORDS = 40_000;
 const RECORD_SCAN_PAGE_SIZE = 1_000;
 const MAX_RECORDS_SCANNED = 100_000;
 const SHOPIFY_SOURCE_IDENTITY_OBSERVED_AT = Date.UTC(2026, 6, 20);
@@ -78,6 +88,8 @@ export function shopifyCustomerRecordSetSha256(recordIds: readonly string[]): st
   return createHash("sha256").update(JSON.stringify(recordIds), "utf8").digest("hex");
 }
 
+export const shopifyCommerceRecordSetSha256 = shopifyCustomerRecordSetSha256;
+
 function requireBackfillRecordIds(params: RuntimeRow): string[] {
   const ids = requireRecordIds(params, MAX_BACKFILL_BATCH_RECORDS, true);
   const expectedSha256 = asString(params.record_set_sha256);
@@ -85,6 +97,21 @@ function requireBackfillRecordIds(params: RuntimeRow): string[] {
     throw new Error("record_set_sha256 must be a lowercase SHA-256 digest");
   }
   if (shopifyCustomerRecordSetSha256(ids) !== expectedSha256) {
+    throw new Error("record_set_sha256 does not match the exact ordered record_ids");
+  }
+  return ids;
+}
+
+function requireCommerceRecordIds(params: RuntimeRow): string[] {
+  // Commerce manifests are dependency-ordered, not globally lexical: every
+  // order revision precedes line-item revisions. The exact ordered set remains
+  // hash-bound and unique.
+  const ids = requireRecordIds(params, MAX_COMMERCE_BATCH_RECORDS, false);
+  const expectedSha256 = asString(params.record_set_sha256);
+  if (!/^[0-9a-f]{64}$/.test(expectedSha256)) {
+    throw new Error("record_set_sha256 must be a lowercase SHA-256 digest");
+  }
+  if (shopifyCommerceRecordSetSha256(ids) !== expectedSha256) {
     throw new Error("record_set_sha256 does not match the exact ordered record_ids");
   }
   return ids;
@@ -186,6 +213,93 @@ async function discoverShopifyCustomerRecordIds(params: {
   return customerIds;
 }
 
+async function discoverShopifyCommerceRecordIds(params: {
+  nex: unknown;
+  shopDomain: string;
+  connectionId: string;
+}): Promise<string[]> {
+  const recordsClient = (params.nex as {
+    records: {
+      list: (input: {
+        platform: "shopify";
+        connection_id: string;
+        limit: number;
+        offset: number;
+      }) => Promise<unknown>;
+    };
+  }).records;
+  const orderRecordIds: string[] = [];
+  const lineItemRecordIds: string[] = [];
+  let scanned = 0;
+
+  for (let offset = 0; offset < MAX_RECORDS_SCANNED; offset += RECORD_SCAN_PAGE_SIZE) {
+    const response = unwrapPayload(
+      await recordsClient.list({
+        platform: "shopify",
+        connection_id: params.connectionId,
+        limit: RECORD_SCAN_PAGE_SIZE,
+        offset,
+      }),
+    );
+    if (!Array.isArray(response.records)) {
+      throw new Error("records.list did not return a records array");
+    }
+    const rows = response.records.map(asRecord);
+    scanned += rows.length;
+    if (scanned > MAX_RECORDS_SCANNED) {
+      throw new Error(`Shopify record scan exceeds ${MAX_RECORDS_SCANNED} rows`);
+    }
+    for (const record of rows) {
+      const family = asString(asRecord(record.metadata).family);
+      if (family !== "order" && family !== "line_item") {
+        continue;
+      }
+      if (asString(record.platform) !== "shopify") {
+        throw new Error("Shopify commerce scan returned a foreign platform record");
+      }
+      if (asString(record.space_id) !== params.shopDomain) {
+        throw new Error("Shopify commerce scan returned a foreign shop record");
+      }
+      if (family === "order") {
+        parseShopifyOrderRecord(record);
+      } else {
+        parseShopifyLineItemRecord(record);
+      }
+      const id = asString(record.id);
+      if (!id || Buffer.byteLength(id, "utf8") > 512) {
+        throw new Error("Shopify commerce scan returned an invalid record id");
+      }
+      if (family === "order") {
+        orderRecordIds.push(id);
+      } else {
+        lineItemRecordIds.push(id);
+      }
+    }
+    if (rows.length < RECORD_SCAN_PAGE_SIZE) {
+      break;
+    }
+    if (offset + RECORD_SCAN_PAGE_SIZE >= MAX_RECORDS_SCANNED) {
+      throw new Error(`Shopify record scan reached the ${MAX_RECORDS_SCANNED}-row guard`);
+    }
+  }
+
+  // This order is part of the manifest contract. Sorting one combined set can
+  // put line-item batches ahead of their parent-order batches. Keep each family
+  // deterministic, but place every order revision before every line item.
+  orderRecordIds.sort((left, right) => left.localeCompare(right));
+  lineItemRecordIds.sort((left, right) => left.localeCompare(right));
+  const recordIds = [...orderRecordIds, ...lineItemRecordIds];
+  if (recordIds.length < 1 || recordIds.length > MAX_INSPECTED_COMMERCE_RECORDS) {
+    throw new Error(
+      `Shopify commerce record set must contain between 1 and ${MAX_INSPECTED_COMMERCE_RECORDS} records`,
+    );
+  }
+  if (new Set(recordIds).size !== recordIds.length) {
+    throw new Error("Shopify commerce record scan returned duplicate record ids");
+  }
+  return recordIds;
+}
+
 export const inspectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) => {
   const shopDomain = requireShopDomain(ctx.params.shop_domain);
   const connectionId = requireConnectionId(ctx.params.connection_id);
@@ -203,6 +317,28 @@ export const inspectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) =
     record_set_sha256: shopifyCustomerRecordSetSha256(recordIds),
     first_record_id: recordIds[0],
     last_record_id: recordIds.at(-1),
+    provider_write_authority: false,
+  };
+};
+
+export const inspectShopifyCommerceBackfill: NexAppMethodHandler = async (ctx) => {
+  const shopDomain = requireShopDomain(ctx.params.shop_domain);
+  const connectionId = requireConnectionId(ctx.params.connection_id);
+  const recordIds = await discoverShopifyCommerceRecordIds({
+    nex: ctx.nex,
+    shopDomain,
+    connectionId,
+  });
+  return {
+    state: "ready",
+    shop_domain: shopDomain,
+    connection_id: connectionId,
+    record_count: recordIds.length,
+    record_ids: recordIds,
+    record_set_sha256: shopifyCommerceRecordSetSha256(recordIds),
+    first_record_id: recordIds[0],
+    last_record_id: recordIds.at(-1),
+    provider_read_authority: false,
     provider_write_authority: false,
   };
 };
@@ -325,7 +461,7 @@ const healthcheck: NexAppMethodHandler = async (ctx) => ({
     shopify_customer_cohort: "available_bounded_manual_replay",
     shopify_customer_backfill: "available_bounded_checkpointed_batches",
     shopify_customer_complete_backfill: "removed_unbounded_operation",
-    shopify_order_commerce: "not_implemented",
+    shopify_order_commerce: "dormant_bounded_checkpointed_batches",
   },
   provider_write_authority: false,
 });
@@ -414,10 +550,95 @@ export const projectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) =
   };
 };
 
+export const projectShopifyCommerceBackfill: NexAppMethodHandler = async (ctx) => {
+  const recordIds = requireCommerceRecordIds(ctx.params);
+
+  // Fetch and validate every immutable record in the explicit batch before the
+  // first commerce write. Orders are then committed before line items so a
+  // line-item revision can only bind to an existing stable parent order.
+  const parsed: ParsedShopifyCommerceRecord[] = [];
+  for (const id of recordIds) {
+    const response = unwrapPayload(await ctx.nex.records.get({ id }));
+    const record = asRecord(response.record);
+    const family = asString(asRecord(record.metadata).family);
+    const entry =
+      family === "order"
+        ? parseShopifyOrderRecord(record)
+        : family === "line_item"
+          ? parseShopifyLineItemRecord(record)
+          : null;
+    if (!entry) {
+      throw new Error(`Shopify commerce batch contains unsupported record family: ${family}`);
+    }
+    if (entry.sourceRecordId !== id) {
+      throw new Error("records.get returned a different internal record id");
+    }
+    parsed.push(entry);
+  }
+
+  const client = ctx.nex as unknown as ShopifyCommerceClient;
+  const resultHash = createHash("sha256");
+  let created = 0;
+  let replayed = 0;
+  let becameCurrent = 0;
+  let ordersProjected = 0;
+  let lineItemsProjected = 0;
+
+  for (const entry of parsed.filter(
+    (row): row is Extract<ParsedShopifyCommerceRecord, { family: "order" }> =>
+      row.family === "order",
+  )) {
+    const result = await projectParsedShopifyOrder(client, entry);
+    created += result.created === true ? 1 : 0;
+    replayed += result.replayed === true ? 1 : 0;
+    becameCurrent += result.became_current === true ? 1 : 0;
+    ordersProjected += 1;
+    resultHash.update(
+      [entry.sourceRecordId, asString(result.revision_id), asString(result.projection_payload_sha256)]
+        .join("\u0000") + "\n",
+      "utf8",
+    );
+  }
+  for (const entry of parsed.filter(
+    (row): row is Extract<ParsedShopifyCommerceRecord, { family: "line_item" }> =>
+      row.family === "line_item",
+  )) {
+    const result = await projectParsedShopifyLineItem(client, entry);
+    created += result.created === true ? 1 : 0;
+    replayed += result.replayed === true ? 1 : 0;
+    becameCurrent += result.became_current === true ? 1 : 0;
+    lineItemsProjected += 1;
+    resultHash.update(
+      [entry.sourceRecordId, asString(result.revision_id), asString(result.projection_payload_sha256)]
+        .join("\u0000") + "\n",
+      "utf8",
+    );
+  }
+
+  return {
+    state: "succeeded",
+    records_requested: recordIds.length,
+    records_projected: parsed.length,
+    orders_projected: ordersProjected,
+    line_items_projected: lineItemsProjected,
+    record_set_sha256: shopifyCommerceRecordSetSha256(recordIds),
+    projection_result_sha256: resultHash.digest("hex"),
+    first_record_id: recordIds[0],
+    last_record_id: recordIds.at(-1),
+    created,
+    replayed,
+    became_current: becameCurrent,
+    provider_read_authority: false,
+    provider_write_authority: false,
+  };
+};
+
 export default {
   "moonsleep-commerce.healthcheck": healthcheck,
   "moonsleep-commerce.shopify-source.seed-identities": seedShopifySourceIdentities,
   "moonsleep-commerce.shopify-customers.inspect-backfill": inspectShopifyCustomerBackfill,
   "moonsleep-commerce.shopify-customers.project-cohort": projectShopifyCustomerCohort,
   "moonsleep-commerce.shopify-customers.project-backfill": projectShopifyCustomerBackfill,
+  "moonsleep-commerce.shopify-commerce.inspect-backfill": inspectShopifyCommerceBackfill,
+  "moonsleep-commerce.shopify-commerce.project-backfill": projectShopifyCommerceBackfill,
 };

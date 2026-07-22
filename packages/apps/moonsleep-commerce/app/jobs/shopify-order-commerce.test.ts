@@ -1,0 +1,245 @@
+import { createHash } from "node:crypto";
+import { describe, expect, it, vi } from "vitest";
+import {
+  parseShopifyLineItemRecord,
+  parseShopifyOrderRecord,
+  projectParsedShopifyLineItem,
+  projectParsedShopifyOrder,
+  type ShopifyCommerceClient,
+} from "./shopify-order-commerce.js";
+import shopifyOrderCommerceJob from "./shopify-order-commerce.js";
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function orderRecord(overrides: Record<string, unknown> = {}) {
+  const raw =
+    '{"id":900719925474099312346,"name":"#SYNTH-1","customer":{"id":900719925474099312345},"total_price":"199.00"}';
+  return {
+    id: "record-order-revision-1",
+    record_id: "shopify:shopify-primary:order:900719925474099312346:revision-1",
+    timestamp: 1_784_640_001_000,
+    platform: "shopify",
+    space_id: "moonsleepco.myshopify.com",
+    payload: { provider_object_json: raw, provider_object_sha256: sha256(raw) },
+    metadata: {
+      family: "order",
+      revision_hash: "b".repeat(64),
+      provider_ids: {
+        order_id: "900719925474099312346",
+        customer_id: "900719925474099312345",
+      },
+      row: {
+        shop_domain: "moonsleepco.myshopify.com",
+        order_id: "900719925474099312346",
+        customer_id: "900719925474099312345",
+        name: "#SYNTH-1",
+        currency: "USD",
+        subtotal_price: "199.00",
+        total_price: "199.00",
+        financial_status: "paid",
+        fulfillment_status: "unfulfilled",
+        billing_address: { zip: "78701", city: "Austin", address1: "1 Synthetic Way" },
+        shipping_address: { address1: "2 Replay Road", city: "Austin", zip: "78702" },
+      },
+    },
+    ...overrides,
+  };
+}
+
+function lineItemRecord(overrides: Record<string, unknown> = {}) {
+  const raw =
+    '{"id":900719925474099312347,"product_id":900719925474099312348,"quantity":1,"price":"199.00"}';
+  return {
+    id: "record-line-revision-1",
+    record_id:
+      "shopify:shopify-primary:line_item:900719925474099312346:900719925474099312347:revision-1",
+    timestamp: 1_784_640_002_000,
+    platform: "shopify",
+    space_id: "moonsleepco.myshopify.com",
+    payload: { provider_object_json: raw, provider_object_sha256: sha256(raw) },
+    metadata: {
+      family: "line_item",
+      revision_hash: "c".repeat(64),
+      provider_ids: {
+        order_id: "900719925474099312346",
+        line_item_id: "900719925474099312347",
+      },
+      row: {
+        shop_domain: "moonsleepco.myshopify.com",
+        order_id: "900719925474099312346",
+        line_item_id: "900719925474099312347",
+        product_id: "900719925474099312348",
+        variant_id: "900719925474099312349",
+        sku: "SYNTHETIC-SKU",
+        title: "Synthetic Product",
+        quantity: 1,
+        price: "199.00",
+      },
+    },
+    ...overrides,
+  };
+}
+
+function receipt(sourceRecordId: string) {
+  return {
+    created: true,
+    replayed: false,
+    became_current: true,
+    row_id: "commerce-row",
+    revision_id: "commerce-revision",
+    source_record_id: sourceRecordId,
+    source_revision_sha256: "d".repeat(64),
+    projection_payload_sha256: "e".repeat(64),
+  };
+}
+
+describe("Shopify order and line-item commerce projection", () => {
+  it("preserves lossless source binding, customer anchor, and immutable address snapshots", () => {
+    const parsed = parseShopifyOrderRecord(orderRecord());
+    expect(parsed).toMatchObject({
+      family: "order",
+      sourceRecordId: "record-order-revision-1",
+      input: {
+        order_id: "gid://shopify/Order/900719925474099312346",
+        customer_shopify_gid: "gid://shopify/Customer/900719925474099312345",
+        source_payload_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+        source_revision_sha256: "b".repeat(64),
+        currency: "USD",
+        total_price: "199.00",
+      },
+    });
+    if (parsed.family !== "order") throw new Error("expected order");
+    expect(parsed.input.billing_address_sha256).toBe(
+      sha256('{"address1":"1 Synthetic Way","city":"Austin","zip":"78701"}'),
+    );
+    expect(parsed.input.shipping_address_sha256).toBe(
+      sha256('{"address1":"2 Replay Road","city":"Austin","zip":"78702"}'),
+    );
+  });
+
+  it("resolves the exact Shopify customer contact before observing the order", async () => {
+    const parsed = parseShopifyOrderRecord(orderRecord());
+    if (parsed.family !== "order") throw new Error("expected order");
+    const observe = vi.fn(async (input: Record<string, unknown>) => {
+      expect(input).toMatchObject({
+        customer_contact_id: "contact-shopify-customer",
+        customer_entity_id: "entity-canonical-customer",
+      });
+      expect(input).not.toHaveProperty("customer_shopify_gid");
+      return receipt("record-order-revision-1");
+    });
+    const client = {
+      contacts: {
+        resolve: vi.fn(async () => ({
+          found: true,
+          contact: {
+            id: "contact-shopify-customer",
+            canonical_entity_id: "entity-canonical-customer",
+          },
+        })),
+      },
+      commerce: {
+        orders: { observe, get: vi.fn() },
+        "line-items": { observe: vi.fn() },
+      },
+    } as unknown as ShopifyCommerceClient;
+    const result = await projectParsedShopifyOrder(client, parsed);
+    expect(result).toMatchObject({ created: true, source_record_id: "record-order-revision-1" });
+    expect(client.contacts.resolve).toHaveBeenCalledWith({
+      platform: "shopify",
+      space_id: "moonsleepco.myshopify.com",
+      contact_id: "gid://shopify/Customer/900719925474099312345",
+    });
+  });
+
+  it("fails before commerce mutation when a referenced customer is not projected", async () => {
+    const parsed = parseShopifyOrderRecord(orderRecord());
+    if (parsed.family !== "order") throw new Error("expected order");
+    const observe = vi.fn();
+    const client = {
+      contacts: { resolve: vi.fn(async () => ({ found: false, contact: null })) },
+      commerce: {
+        orders: { observe, get: vi.fn() },
+        "line-items": { observe: vi.fn() },
+      },
+    } as unknown as ShopifyCommerceClient;
+    await expect(projectParsedShopifyOrder(client, parsed)).rejects.toThrow(
+      "customer contact is not projected",
+    );
+    expect(observe).not.toHaveBeenCalled();
+  });
+
+  it("uses the committed parent order currency for line-item observation", async () => {
+    const parsed = parseShopifyLineItemRecord(lineItemRecord());
+    if (parsed.family !== "line_item") throw new Error("expected line item");
+    const observe = vi.fn(async (input: Record<string, unknown>) => {
+      expect(input).toMatchObject({
+        order_id: "gid://shopify/Order/900719925474099312346",
+        line_item_id: "gid://shopify/LineItem/900719925474099312347",
+        product_id: "900719925474099312348",
+        variant_id: "900719925474099312349",
+        currency: "USD",
+      });
+      return receipt("record-line-revision-1");
+    });
+    const client = {
+      contacts: { resolve: vi.fn() },
+      commerce: {
+        orders: {
+          observe: vi.fn(),
+          get: vi.fn(async () => ({ found: true, revision: { currency: "USD" } })),
+        },
+        "line-items": { observe },
+      },
+    } as unknown as ShopifyCommerceClient;
+    await expect(projectParsedShopifyLineItem(client, parsed)).resolves.toMatchObject({
+      source_record_id: "record-line-revision-1",
+    });
+  });
+
+  it("rejects hash drift, anchor drift, unsafe quantities, and missing parents", async () => {
+    expect(() =>
+      parseShopifyOrderRecord(
+        orderRecord({ payload: { provider_object_json: "{}", provider_object_sha256: "0".repeat(64) } }),
+      ),
+    ).toThrow("hash does not match");
+    const anchorDrift = orderRecord();
+    (anchorDrift.metadata as Record<string, unknown>).provider_ids = {
+      order_id: "123",
+      customer_id: "900719925474099312345",
+    };
+    expect(() => parseShopifyOrderRecord(anchorDrift)).toThrow("order anchors disagree");
+    const unsafe = lineItemRecord();
+    ((unsafe.metadata as Record<string, unknown>).row as Record<string, unknown>).quantity =
+      Number.MAX_SAFE_INTEGER + 1;
+    expect(() => parseShopifyLineItemRecord(unsafe)).toThrow("safe integer");
+
+    const parsed = parseShopifyLineItemRecord(lineItemRecord());
+    if (parsed.family !== "line_item") throw new Error("expected line item");
+    const lineObserve = vi.fn();
+    const client = {
+      contacts: { resolve: vi.fn() },
+      commerce: {
+        orders: { observe: vi.fn(), get: vi.fn(async () => ({ found: false })) },
+        "line-items": { observe: lineObserve },
+      },
+    } as unknown as ShopifyCommerceClient;
+    await expect(projectParsedShopifyLineItem(client, parsed)).rejects.toThrow(
+      "parent order is not projected",
+    );
+    expect(lineObserve).not.toHaveBeenCalled();
+  });
+
+  it("keeps unrelated durable events out of the dormant commerce job", async () => {
+    const recordsGet = vi.fn();
+    await expect(
+      shopifyOrderCommerceJob({
+        input: { event: { type: "other.event", properties: { platform: "shopify" } } },
+        nex: { records: { get: recordsGet } } as never,
+      }),
+    ).resolves.toEqual({ projected: false, reason: "not_record_ingested" });
+    expect(recordsGet).not.toHaveBeenCalled();
+  });
+});
