@@ -273,9 +273,17 @@ export const ChannelRefSchema = z.object({
 
 export type ChannelRef = z.infer<typeof ChannelRefSchema>;
 
+export const ConnectionAccountContactSchema = z.object({
+  platform: z.string(),
+  space_id: z.string(),
+  contact_id: z.string(),
+});
+
 export const AdapterHealthSchema = z.object({
   connected: z.boolean(),
   connection_id: z.string(),
+  account: z.string().optional(),
+  account_contact: ConnectionAccountContactSchema.optional(),
   last_event_at: z.number().int().optional(),
   error: z.string().optional(),
   details: z.record(z.string(), z.unknown()).optional(),
@@ -286,6 +294,8 @@ export type AdapterHealth = z.infer<typeof AdapterHealthSchema>;
 export const AdapterConnectionIdentitySchema = z.object({
   id: z.string(),
   display_name: z.string().optional(),
+  account: z.string().optional(),
+  account_contact: ConnectionAccountContactSchema.optional(),
   credential_ref: z.string().optional(),
   status: z.enum(["ready", "active", "error"]),
 });
@@ -452,6 +462,8 @@ export const AdapterSetupResultSchema = z
     session_id: z.string().optional(),
     connection_id: z.string().optional(),
     service: z.string().optional(),
+    account: z.string().optional(),
+    account_contact: ConnectionAccountContactSchema.optional(),
     message: z.string().optional(),
     instructions: z.string().optional(),
     fields: z.array(AdapterAuthFieldSchema).optional(),

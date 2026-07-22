@@ -146,6 +146,8 @@ const MAX_ATTACHMENTS_BYTES = 256 * 1024 * 1024;
 const MAX_ATTACHMENT_TEXT_INDEX_BYTES = 256 * 1024 * 1024;
 const MAX_ATTACHMENT_EVIDENCE_BYTES = 256 * 1024 * 1024;
 const MAX_ATTACHMENT_TEXT_BYTES = 16 * 1024 * 1024;
+const SETUP_CONFIRMATION = "ATTACH_SANITIZED_ALIBABA_CAPTURE";
+const CONNECTION_ID = /^[a-z0-9][a-z0-9._-]{0,127}$/;
 
 function asRecord(value: unknown): UnknownRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
@@ -161,6 +163,109 @@ function textValue(value: unknown): string | undefined {
 function positiveNumber(value: unknown, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function requireSetupText(
+  payload: UnknownRecord,
+  name: string,
+  options: { maxLength?: number } = {},
+): string {
+  const value = textValue(payload[name]);
+  const maxLength = options.maxLength ?? 4096;
+  if (!value || value.length > maxLength) {
+    throw new Error(`Alibaba browser snapshot setup requires ${name}`);
+  }
+  return value;
+}
+
+function requireSafeSetupDirectory(path: string, name: string): string {
+  if (!isAbsolute(path)) {
+    throw new Error(`Alibaba browser snapshot ${name} must be an absolute path`);
+  }
+  const resolved = resolve(path);
+  const metadata = lstatSync(resolved);
+  if (!metadata.isDirectory()) {
+    throw new Error(`Alibaba browser snapshot ${name} is not a safe directory`);
+  }
+  return resolved;
+}
+
+function setupFields() {
+  return [
+    {
+      name: "snapshot_root",
+      label: "Sanitized snapshot root",
+      type: "text" as const,
+      required: true,
+    },
+    {
+      name: "object_root",
+      label: "Hash-addressed attachment object root",
+      type: "text" as const,
+      required: true,
+    },
+    {
+      name: "account_id",
+      label: "Stable MoonSleep Alibaba account id",
+      type: "text" as const,
+      required: true,
+    },
+    {
+      name: "account_label",
+      label: "Account label",
+      type: "text" as const,
+      required: true,
+    },
+    {
+      name: "confirm_read_only_capture",
+      label: "Confirm sanitized read-only capture",
+      type: "select" as const,
+      required: true,
+      options: [{ label: "Attach capture", value: SETUP_CONFIRMATION }],
+    },
+  ];
+}
+
+function setupConfig(payloadValue: unknown): {
+  config: AlibabaRuntimeConfig;
+  snapshot: SnapshotRef;
+} {
+  const payload = asRecord(payloadValue);
+  const allowed = new Set([
+    "snapshot_root",
+    "object_root",
+    "account_id",
+    "account_label",
+    "confirm_read_only_capture",
+  ]);
+  const unexpected = Object.keys(payload).filter((name) => !allowed.has(name));
+  if (unexpected.length > 0) {
+    throw new Error(`Alibaba browser snapshot setup contains unexpected fields: ${unexpected.join(",")}`);
+  }
+  if (payload.confirm_read_only_capture !== SETUP_CONFIRMATION) {
+    throw new Error("Alibaba browser snapshot setup confirmation is invalid");
+  }
+  const accountId = requireSetupText(payload, "account_id", { maxLength: 128 }).toLowerCase();
+  if (!CONNECTION_ID.test(accountId)) {
+    throw new Error("Alibaba browser snapshot account_id is invalid");
+  }
+  const config: AlibabaRuntimeConfig = {
+    snapshot_root: requireSafeSetupDirectory(
+      requireSetupText(payload, "snapshot_root"),
+      "snapshot_root",
+    ),
+    object_root: requireSafeSetupDirectory(
+      requireSetupText(payload, "object_root"),
+      "object_root",
+    ),
+    account_id: accountId,
+    account_label: requireSetupText(payload, "account_label", { maxLength: 200 }),
+    poll_interval_ms: DEFAULT_POLL_INTERVAL_MS,
+    monitor_overlap_ms: DEFAULT_MONITOR_OVERLAP_MS,
+    attachment_text_limit: DEFAULT_ATTACHMENT_TEXT_LIMIT,
+  };
+  const snapshot = loadSnapshot(latestSnapshot(config.snapshot_root)).ref;
+  return { config, snapshot };
 }
 
 function readRuntimeConfig(ctx: RuntimeContextLike): AlibabaRuntimeConfig {
@@ -882,7 +987,7 @@ export const __test__ = {
 export const alibabaAdapter = defineAdapter({
   platform: PLATFORM,
   name: "alibaba-messenger-adapter",
-  version: "0.2.0",
+  version: "0.2.1",
   multi_account: true,
   auth: {
     methods: [
@@ -924,6 +1029,44 @@ export const alibabaAdapter = defineAdapter({
       ];
     },
     health: async (ctx) => health(readRuntimeConfig(ctx)),
+  },
+  setup: {
+    start: async (_ctx, req) => ({
+      status: "requires_input",
+      ...(req.session_id ? { session_id: req.session_id } : {}),
+      ...(req.connection_id ? { connection_id: req.connection_id } : {}),
+      service: "alibaba",
+      message: "Attach a completed sanitized Alibaba browser capture.",
+      instructions:
+        "Provide only root-owned sanitized capture paths and the explicit read-only confirmation. No Alibaba login credential belongs in this flow.",
+      fields: setupFields(),
+    }),
+    submit: async (_ctx, req) => {
+      const { config, snapshot } = setupConfig(req.payload);
+      return {
+        status: "completed",
+        ...(req.session_id ? { session_id: req.session_id } : {}),
+        connection_id: config.account_id,
+        service: "alibaba",
+        account: config.account_id,
+        account_contact: {
+          platform: PLATFORM,
+          space_id: config.account_id,
+          contact_id: config.account_id,
+        },
+        message: "Sanitized Alibaba browser capture attached read-only.",
+        metadata: {
+          adapter_config: config,
+          capture: {
+            snapshot_id: snapshot.id,
+            complete_sha256: snapshot.complete_sha256,
+            captured_at: snapshot.captured_at,
+          },
+          provider_credentials_received: false,
+          provider_write_authority: false,
+        },
+      };
+    },
   },
   ingest: {
     backfill,
