@@ -38,8 +38,8 @@ function writeCompletionReceipt(snapshotPath: string): void {
     captureGeneratedAt: "2026-07-17T16:00:00.000Z",
     messageCount: 2,
     conversationCount: 1,
-    attachmentCount: 1,
-    attachmentTextCount: 1,
+    attachmentCount: 2,
+    attachmentTextCount: 2,
     adapterProjection: {
       messagesSha256: sha256(messages),
       conversationsSha256: sha256(conversations),
@@ -69,8 +69,12 @@ function fixture(): { root: string; snapshotPath: string; attachmentPath: string
   mkdirSync(attachmentTextDir, { recursive: true });
   const attachmentPath = join(attachmentDir, "shipping-schedule.pdf");
   const attachmentTextPath = join(attachmentTextDir, "shipping-schedule.pdf.txt");
+  const orphanAttachmentPath = join(attachmentDir, "orphan-sample.png");
+  const orphanAttachmentTextPath = join(attachmentTextDir, "orphan-sample.png.txt");
   writeFileSync(attachmentPath, "immutable pdf bytes");
   writeFileSync(attachmentTextPath, "Vessel booking and ETA are still pending.");
+  writeFileSync(orphanAttachmentPath, "immutable image bytes");
+  writeFileSync(orphanAttachmentTextPath, "Unlinked sample evidence.");
   writeJson(join(snapshotPath, "summary.json"), {
     generatedAt: "2026-07-17T16:00:00.000Z",
     messageCount: 2,
@@ -121,6 +125,20 @@ function fixture(): { root: string; snapshotPath: string; attachmentPath: string
       localPath: attachmentPath,
       status: "downloaded",
     },
+    {
+      fileName: "orphan-sample.png",
+      category: "image",
+      bytes: 21,
+      contentType: "image/png",
+      contentHash: sha256(orphanAttachmentPath),
+      messageId: "provider-message-not-in-export",
+      cid: "surewal-thread",
+      sentAt: "2026-07-17T15:00:00.000Z",
+      speaker: "Rebecca Liu",
+      messageText: "Here is the updated sample.",
+      localPath: orphanAttachmentPath,
+      status: "downloaded",
+    },
   ]);
   writeJsonl(join(adapterDir, "attachment-text.jsonl"), [
     {
@@ -129,6 +147,13 @@ function fixture(): { root: string; snapshotPath: string; attachmentPath: string
       extractor: "pdftotext",
       textPath: attachmentTextPath,
       textLength: 41,
+    },
+    {
+      fileName: "orphan-sample.png",
+      status: "extracted",
+      extractor: "ocr",
+      textPath: orphanAttachmentTextPath,
+      textLength: 25,
     },
   ]);
   writeCompletionReceipt(snapshotPath);
@@ -178,6 +203,15 @@ test("record preserves exact sanitized source JSON and excludes raw credentials"
     record.payload.payload?.provider_object_sha256,
     createHash("sha256").update(sourceLine).digest("hex"),
   );
+  const sourceAttachments = record.payload.payload?.source_attachments as Array<{
+    provider_object_json: string;
+    provider_object_sha256: string;
+  }>;
+  assert.equal(sourceAttachments.length, 1);
+  assert.equal(
+    createHash("sha256").update(sourceAttachments[0]!.provider_object_json).digest("hex"),
+    sourceAttachments[0]!.provider_object_sha256,
+  );
   assert.equal(AdapterInboundRecordSchema.parse(record).payload.payload?.provider_object_json, sourceLine);
   assert.doesNotMatch(JSON.stringify(record), /must-not-leak|chatToken|encryptedAccount/);
   assert.doesNotMatch(JSON.stringify(record), /clouddisk\.alibaba\.com/);
@@ -188,11 +222,34 @@ test("bounded projection keeps temporal window, directionality, and replay ident
   const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
   const rows = __test__.recordsForWindow(snapshot, config(root), "conn-alibaba", 1784300200000);
   const replay = __test__.recordsForWindow(snapshot, config(root), "conn-alibaba", 1784300200000);
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0]?.routing.sender_id, "moonsleep-alibaba");
-  assert.equal(rows[0]?.routing.receiver_id, "supplier-ali");
-  assert.equal(replay[0]?.payload.external_record_id, rows[0]?.payload.external_record_id);
-  assert.deepEqual(replay[0]?.payload.payload, rows[0]?.payload.payload);
+  assert.equal(rows.length, 2);
+  const message = rows.find((row) => row.payload.metadata?.family === "message");
+  const orphan = rows.find((row) => row.payload.metadata?.family === "orphan_attachment");
+  assert.equal(message?.routing.sender_id, "moonsleep-alibaba");
+  assert.equal(message?.routing.receiver_id, "supplier-ali");
+  assert.equal(orphan?.payload.payload?.source_coverage_disposition, "orphan_attachment_evidence");
+  assert.deepEqual(
+    replay.map((row) => row.payload.external_record_id),
+    rows.map((row) => row.payload.external_record_id),
+  );
+  assert.deepEqual(replay.map((row) => row.payload.payload), rows.map((row) => row.payload.payload));
+});
+
+test("provider attachment rows without a captured parent message remain explicit evidence", () => {
+  const { root } = fixture();
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  assert.equal(snapshot.orphanAttachments.length, 1);
+  const rows = __test__.recordsForWindow(snapshot, config(root), "conn-alibaba", 0);
+  const orphan = rows.find((row) => row.payload.metadata?.family === "orphan_attachment");
+  assert.ok(orphan);
+  assert.match(orphan.payload.external_record_id, /^alibaba:conn-alibaba:attachment-orphan:/);
+  assert.match(orphan.payload.content, /Unlinked sample evidence/);
+  assert.equal(orphan.routing.metadata?.source_attribution, "unresolved_attachment_evidence");
+  const exact = String(orphan.payload.payload?.provider_attachment_json ?? "");
+  assert.equal(
+    createHash("sha256").update(exact).digest("hex"),
+    orphan.payload.payload?.provider_attachment_sha256,
+  );
 });
 
 test("tampered projection bytes fail before any record is emitted", () => {
@@ -224,6 +281,8 @@ test("attachment paths outside the sealed snapshot boundary are not read", () =>
     cid: "surewal-thread",
     localPath: "/etc/hosts",
     status: "downloaded",
+    provider_object_json: "{}",
+    provider_object_sha256: createHash("sha256").update("{}").digest("hex"),
   }]);
   assert.throws(
     () => __test__.buildRecord(snapshot.messages[0]!, snapshot, config(root), "conn-alibaba"),

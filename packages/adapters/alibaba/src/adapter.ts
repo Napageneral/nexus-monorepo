@@ -101,10 +101,15 @@ type AlibabaAttachment = {
   contentType?: string | null;
   messageId?: string | null;
   cid?: string | null;
+  sentAt?: string | null;
+  speaker?: string | null;
+  messageText?: string | null;
   localPath?: string | null;
   objectPath?: string | null;
   contentHash?: string | null;
   status?: string | null;
+  provider_object_json: string;
+  provider_object_sha256: string;
 };
 
 type AttachmentText = {
@@ -120,6 +125,7 @@ type LoadedSnapshot = {
   conversations: Map<string, AlibabaConversation>;
   messages: AlibabaMessage[];
   attachmentsByMessage: Map<string, AlibabaAttachment[]>;
+  orphanAttachments: AlibabaAttachment[];
   textByFile: Map<string, AttachmentText>;
 };
 
@@ -230,6 +236,21 @@ function parseMessageJsonl(bytes: Buffer): AlibabaMessage[] {
     .filter(Boolean)
     .map((line) => ({
       ...(JSON.parse(line) as Omit<AlibabaMessage, "provider_object_json" | "provider_object_sha256">),
+      provider_object_json: line,
+      provider_object_sha256: sha256Bytes(Buffer.from(line, "utf8")),
+    }));
+}
+
+function parseAttachmentJsonl(bytes: Buffer): AlibabaAttachment[] {
+  return bytes
+    .toString("utf8")
+    .split(/\n+/)
+    .filter(Boolean)
+    .map((line) => ({
+      ...(JSON.parse(line) as Omit<
+        AlibabaAttachment,
+        "provider_object_json" | "provider_object_sha256"
+      >),
       provider_object_json: line,
       provider_object_sha256: sha256Bytes(Buffer.from(line, "utf8")),
     }));
@@ -380,10 +401,15 @@ function loadSnapshot(ref: SnapshotRef): LoadedSnapshot {
     .filter((row) => textValue(row.messageId) && textValue(row.cid))
     .sort((left, right) => messageTimestamp(left) - messageTimestamp(right));
   const attachmentsByMessage = new Map<string, AlibabaAttachment[]>();
-  const attachments = parseJsonl<AlibabaAttachment>(attachmentBytes);
+  const attachments = parseAttachmentJsonl(attachmentBytes);
+  const messageIds = new Set(messages.map((message) => message.messageId));
+  const orphanAttachments: AlibabaAttachment[] = [];
   for (const attachment of attachments) {
     const messageId = textValue(attachment.messageId);
-    if (!messageId) continue;
+    if (!messageId || !messageIds.has(messageId)) {
+      orphanAttachments.push(attachment);
+      continue;
+    }
     const rows = attachmentsByMessage.get(messageId) ?? [];
     rows.push(attachment);
     attachmentsByMessage.set(messageId, rows);
@@ -403,7 +429,7 @@ function loadSnapshot(ref: SnapshotRef): LoadedSnapshot {
   ) {
     throw new Error(`Alibaba snapshot receipt counts do not match projection: ${ref.id}`);
   }
-  return { ref, conversations, messages, attachmentsByMessage, textByFile };
+  return { ref, conversations, messages, attachmentsByMessage, orphanAttachments, textByFile };
 }
 
 function messageTimestamp(message: AlibabaMessage): number {
@@ -468,6 +494,42 @@ function readAttachmentText(
   return readBoundFile(textPath, MAX_ATTACHMENT_TEXT_BYTES).toString("utf8").trim();
 }
 
+function normalizeAttachment(
+  attachment: AlibabaAttachment,
+  index: number,
+  snapshot: LoadedSnapshot,
+  config: AlibabaRuntimeConfig,
+) {
+  const localPath = resolveEvidencePath(
+    attachment.objectPath ?? attachment.localPath,
+    config,
+    snapshot.ref,
+  );
+  const fileName = textValue(attachment.fileName) ?? `attachment-${index + 1}`;
+  const contentHash = sha256File(localPath, MAX_ATTACHMENT_EVIDENCE_BYTES);
+  const sealedContentHash = textValue(attachment.contentHash);
+  if (sealedContentHash && (!SHA256.test(sealedContentHash) || sealedContentHash !== contentHash)) {
+    throw new Error(`Alibaba attachment digest mismatch: ${fileName}`);
+  }
+  return {
+    id: `alibaba:${textValue(attachment.messageId) ?? "unlinked"}:${index + 1}`,
+    filename: fileName,
+    mime_type: mimeType(attachment),
+    ...(textValue(attachment.category) ? { media_type: String(attachment.category) } : {}),
+    ...(Number.isFinite(Number(attachment.bytes)) && Number(attachment.bytes) >= 0
+      ? { size: Math.floor(Number(attachment.bytes)) }
+      : {}),
+    ...(localPath && existsSync(localPath) ? { local_path: localPath } : {}),
+    ...(contentHash ? { content_hash: contentHash } : {}),
+    metadata: {
+      evidence_status: textValue(attachment.status) ?? "unknown",
+      snapshot_id: snapshot.ref.id,
+      snapshot_receipt_sha256: snapshot.ref.complete_sha256,
+      provider_object_sha256: attachment.provider_object_sha256,
+    },
+  };
+}
+
 function buildContent(
   message: AlibabaMessage,
   attachments: AlibabaAttachment[],
@@ -511,35 +573,9 @@ function buildRecord(
   const timestamp = messageTimestamp(message);
   if (!timestamp) throw new Error(`Alibaba message ${message.messageId} has no timestamp`);
 
-  const normalizedAttachments = attachments.map((attachment, index) => {
-    const localPath = resolveEvidencePath(
-      attachment.objectPath ?? attachment.localPath,
-      config,
-      snapshot.ref,
-    );
-    const fileName = textValue(attachment.fileName) ?? `attachment-${index + 1}`;
-    const contentHash = sha256File(localPath, MAX_ATTACHMENT_EVIDENCE_BYTES);
-    const sealedContentHash = textValue(attachment.contentHash);
-    if (sealedContentHash && (!SHA256.test(sealedContentHash) || sealedContentHash !== contentHash)) {
-      throw new Error(`Alibaba attachment digest mismatch: ${fileName}`);
-    }
-    return {
-      id: `alibaba:${message.messageId}:${index + 1}`,
-      filename: fileName,
-      mime_type: mimeType(attachment),
-      ...(textValue(attachment.category) ? { media_type: String(attachment.category) } : {}),
-      ...(Number.isFinite(Number(attachment.bytes)) && Number(attachment.bytes) >= 0
-        ? { size: Math.floor(Number(attachment.bytes)) }
-        : {}),
-      ...(localPath && existsSync(localPath) ? { local_path: localPath } : {}),
-      ...(contentHash ? { content_hash: contentHash } : {}),
-      metadata: {
-        evidence_status: textValue(attachment.status) ?? "unknown",
-        snapshot_id: snapshot.ref.id,
-        snapshot_receipt_sha256: snapshot.ref.complete_sha256,
-      },
-    };
-  });
+  const normalizedAttachments = attachments.map((attachment, index) =>
+    normalizeAttachment(attachment, index, snapshot, config)
+  );
 
   const content = buildContent(message, attachments, snapshot, config);
   const revisionHash = sha256Bytes(Buffer.from(stableJson({
@@ -591,6 +627,10 @@ function buildRecord(
         source_snapshot_id: snapshot.ref.id,
         source_snapshot_receipt_sha256: snapshot.ref.complete_sha256,
         source_projection_messages_sha256: snapshot.ref.complete.adapterProjection!.messagesSha256!,
+        source_attachments: attachments.map((attachment) => ({
+          provider_object_json: attachment.provider_object_json,
+          provider_object_sha256: attachment.provider_object_sha256,
+        })),
         source_message_id: message.messageId,
         source_conversation_id: message.cid,
       },
@@ -608,6 +648,91 @@ function buildRecord(
         snapshot_receipt_sha256: snapshot.ref.complete_sha256,
         snapshot_captured_at: snapshot.ref.captured_at,
         evidence_boundary: "sanitized_normalized_export",
+      },
+    },
+  };
+}
+
+function buildOrphanAttachmentRecord(
+  attachment: AlibabaAttachment,
+  snapshot: LoadedSnapshot,
+  config: AlibabaRuntimeConfig,
+  connectionId: string,
+): AdapterInboundRecord {
+  const conversationId = textValue(attachment.cid) ?? "unresolved-conversation";
+  const conversation = snapshot.conversations.get(conversationId);
+  const supplierName =
+    textValue(conversation?.name) ??
+    textValue(conversation?.companyName) ??
+    "Alibaba supplier";
+  const normalized = normalizeAttachment(attachment, 0, snapshot, config);
+  const extracted = readAttachmentText(attachment, snapshot, config);
+  const fileName = normalized.filename;
+  const body = textValue(attachment.messageText);
+  const content = [
+    `[Unlinked Alibaba attachment evidence: ${fileName}]`,
+    ...(body ? [body] : []),
+    ...(extracted ? [extracted] : []),
+  ].join("\n\n");
+  const timestamp = parseTimestamp(attachment.sentAt) || snapshot.ref.captured_at;
+  const revisionHash = sha256Bytes(Buffer.from(stableJson({
+    provider_object_sha256: attachment.provider_object_sha256,
+    content_hash: normalized.content_hash ?? null,
+    content,
+  }), "utf8"));
+  const sourceIdentity = textValue(attachment.messageId) ?? attachment.provider_object_sha256;
+
+  return {
+    operation: "record.ingest",
+    routing: {
+      adapter: PLATFORM,
+      platform: PLATFORM,
+      connection_id: connectionId,
+      sender_id: `${config.account_id}:evidence-capture`,
+      sender_name: `${config.account_label} evidence capture`,
+      receiver_id: config.account_id,
+      receiver_name: config.account_label,
+      space_id: config.account_id,
+      space_name: config.account_label,
+      container_kind: "direct",
+      container_id: conversationId,
+      container_name: supplierName,
+      thread_id: conversationId,
+      thread_name: supplierName,
+      metadata: {
+        source_system: "alibaba_messenger",
+        source_attribution: "unresolved_attachment_evidence",
+        supplier_ali_id: textValue(conversation?.aliId) ?? null,
+        supplier_account_id: textValue(conversation?.accountId) ?? null,
+      },
+    },
+    payload: {
+      external_record_id: `alibaba:${safeIdToken(connectionId)}:attachment-orphan:${safeIdToken(sourceIdentity)}:${revisionHash}`,
+      timestamp,
+      content,
+      content_type: "text",
+      payload: {
+        provider_attachment_json: attachment.provider_object_json,
+        provider_attachment_sha256: attachment.provider_object_sha256,
+        source_snapshot_id: snapshot.ref.id,
+        source_snapshot_receipt_sha256: snapshot.ref.complete_sha256,
+        source_projection_attachments_sha256: snapshot.ref.complete.adapterProjection!.attachmentsSha256!,
+        source_message_id: textValue(attachment.messageId) ?? null,
+        source_conversation_id: textValue(attachment.cid) ?? null,
+        source_coverage_disposition: "orphan_attachment_evidence",
+      },
+      attachments: [normalized],
+      metadata: {
+        source_system: "alibaba_messenger",
+        family: "orphan_attachment",
+        logical_record_id: `orphan-attachment:${attachment.provider_object_sha256}`,
+        revision_hash: revisionHash,
+        snapshot_id: snapshot.ref.id,
+        snapshot_receipt_sha256: snapshot.ref.complete_sha256,
+        snapshot_captured_at: snapshot.ref.captured_at,
+        evidence_boundary: "sanitized_normalized_export",
+        source_attribution: "unresolved_attachment_evidence",
+        timestamp_basis: parseTimestamp(attachment.sentAt) ? "provider_attachment_sent_at" : "snapshot_capture_time",
       },
     },
   };
@@ -647,10 +772,22 @@ function recordsForWindow(
   sinceMs: number,
   toMs?: number,
 ): AdapterInboundRecord[] {
-  return snapshot.messages
+  const messageRecords = snapshot.messages
     .filter((message) => messageTimestamp(message) >= sinceMs)
     .filter((message) => toMs === undefined || messageTimestamp(message) <= toMs)
     .map((message) => buildRecord(message, snapshot, config, connectionId));
+  const orphanRecords = snapshot.orphanAttachments
+    .filter((attachment) => {
+      const timestamp = parseTimestamp(attachment.sentAt) || snapshot.ref.captured_at;
+      return timestamp >= sinceMs && (toMs === undefined || timestamp <= toMs);
+    })
+    .map((attachment) =>
+      buildOrphanAttachmentRecord(attachment, snapshot, config, connectionId)
+    );
+  return [...messageRecords, ...orphanRecords].sort(
+    (left, right) => left.payload.timestamp - right.payload.timestamp
+      || left.payload.external_record_id.localeCompare(right.payload.external_record_id),
+  );
 }
 
 function connectionId(ctx: RuntimeContextLike): string {

@@ -39,6 +39,8 @@ One Alibaba Messenger message maps to one canonical Nex record.
 
 The normalized record must not contain raw capture objects, chat tokens, signed attachment URLs, cookies, or encrypted session identifiers. The sanitized provider JSON line is authoritative source evidence and is not merged into Nex metadata.
 
+If the provider attachment index references a message absent from the normalized message export, the adapter emits a separate `orphan_attachment` evidence record in the same native conversation. It preserves the exact sanitized attachment row, digest, bytes, extracted text, unresolved attribution, and an explicit `orphan_attachment_evidence` coverage disposition. It must never silently drop the row or guess its sender.
+
 ## Delivery and deduplication
 
 Historical capture uses exact lower and optional upper time bounds. Ongoing monitoring replays a rolling time overlap from the latest completed snapshot. Nex deduplicates by platform and external record id.

@@ -24,6 +24,8 @@ Pass when bounded backfill emits only records inside the requested `since`/`to` 
 
 Pass when message text and extracted document text are searchable, attachments carry verified SHA-256 values, exact sanitized provider JSON plus its digest survives in opaque payload, and emitted records contain no raw capture objects, chat tokens, encrypted session identifiers, cookies, or signed provider URLs.
 
+Every sealed attachment row must have one exact disposition: linked to its captured parent message, or emitted as explicit unresolved orphan evidence. The sum of linked and orphan attachment records must equal the sealed receipt count.
+
 ### Failure proof
 
 Pass when missing snapshots, disagreeing completion receipts, digest/count drift, unsafe file metadata, invalid timestamps, expired browser authentication, and attachment extraction failures are surfaced explicitly. Capture and canonical raw-record ingest must not depend on successful interpretation.
