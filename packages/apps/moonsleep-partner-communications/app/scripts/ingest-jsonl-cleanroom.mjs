@@ -18,10 +18,31 @@ async function ingest(line, lineNumber) {
   if (value?.operation !== "record.ingest" || !value.routing || !value.payload) {
     throw new Error(`line ${lineNumber} is not an exact record.ingest envelope`);
   }
+  const payload = {
+    ...value.payload,
+    ...(Array.isArray(value.payload.attachments)
+      ? {
+          attachments: value.payload.attachments.map((attachment) => ({
+            id: attachment.id,
+            ...(attachment.filename ? { filename: attachment.filename } : {}),
+            content_type: attachment.mime_type,
+            ...(attachment.size !== undefined ? { size_bytes: attachment.size } : {}),
+            ...(attachment.url ? { url: attachment.url } : {}),
+            ...(attachment.local_path ? { path: attachment.local_path } : {}),
+            metadata: {
+              ...(attachment.metadata ?? {}),
+              ...(attachment.content_hash
+                ? { expected_content_sha256: attachment.content_hash }
+                : {}),
+            },
+          })),
+        }
+      : {}),
+  };
   const response = await fetch("http://127.0.0.1:18789/runtime/operations/record.ingest", {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify({ routing: value.routing, payload: value.payload }),
+    body: JSON.stringify({ routing: value.routing, payload }),
   });
   const result = await response.json().catch(() => null);
   if (!response.ok || result?.ok !== true) {
