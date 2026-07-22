@@ -4,13 +4,31 @@ import type { NexClient } from "../../../../../nex/src/runtime/internal-runtime-
 type RuntimeRow = Record<string, unknown>;
 
 const EVENT_TYPE = "record.ingested";
-const JOB_NAME = "moonsleep-commerce.shopify-customer-identity";
-const JOB_DESCRIPTION =
+const CUSTOMER_JOB_NAME = "moonsleep-commerce.shopify-customer-identity";
+const CUSTOMER_JOB_DESCRIPTION =
   "Observe Shopify customer contacts and verify canonical MoonSleep customer entities";
 const DORMANT_JOB_STATUS = "inactive";
-const JOB_SCRIPT_PATH = fileURLToPath(
+const CUSTOMER_JOB_SCRIPT_PATH = fileURLToPath(
   new URL("../jobs/shopify-customer-identity.ts", import.meta.url),
 );
+const COMMERCE_JOB_NAME = "moonsleep-commerce.shopify-order-commerce";
+const COMMERCE_JOB_DESCRIPTION =
+  "Project committed Shopify order and line-item revisions into typed commerce state";
+const COMMERCE_JOB_SCRIPT_PATH = fileURLToPath(
+  new URL("../jobs/shopify-order-commerce.ts", import.meta.url),
+);
+const JOB_SPECS = Object.freeze([
+  {
+    name: CUSTOMER_JOB_NAME,
+    description: CUSTOMER_JOB_DESCRIPTION,
+    scriptPath: CUSTOMER_JOB_SCRIPT_PATH,
+  },
+  {
+    name: COMMERCE_JOB_NAME,
+    description: COMMERCE_JOB_DESCRIPTION,
+    scriptPath: COMMERCE_JOB_SCRIPT_PATH,
+  },
+]);
 const SHOPIFY_MATCH = Object.freeze({ platform: "shopify" });
 const SHOPIFY_MATCH_JSON = JSON.stringify(SHOPIFY_MATCH);
 
@@ -55,13 +73,17 @@ async function listSubscriptions(runtime: NexClient, jobDefinitionId: string): P
   );
 }
 
-async function ensureJob(runtime: NexClient, appId: string): Promise<string> {
-  const existing = (await listJobs(runtime)).find((row) => asString(row.name) === JOB_NAME);
+async function ensureJob(
+  runtime: NexClient,
+  appId: string,
+  spec: (typeof JOB_SPECS)[number],
+): Promise<string> {
+  const existing = (await listJobs(runtime)).find((row) => asString(row.name) === spec.name);
   if (existing) {
     const id = asString(existing.id);
     const needsUpdate =
-      asString(existing.description) !== JOB_DESCRIPTION ||
-      asString(existing.script_path) !== JOB_SCRIPT_PATH ||
+      asString(existing.description) !== spec.description ||
+      asString(existing.script_path) !== spec.scriptPath ||
       asString(existing.status) !== DORMANT_JOB_STATUS;
     if (!needsUpdate) {
       return id;
@@ -69,8 +91,8 @@ async function ensureJob(runtime: NexClient, appId: string): Promise<string> {
     const updated = unwrapPayload(
       await runtime.jobs.update({
         id,
-        description: JOB_DESCRIPTION,
-        script_path: JOB_SCRIPT_PATH,
+        description: spec.description,
+        script_path: spec.scriptPath,
         status: DORMANT_JOB_STATUS,
         created_by: appId,
       }),
@@ -80,9 +102,9 @@ async function ensureJob(runtime: NexClient, appId: string): Promise<string> {
 
   const created = unwrapPayload(
     await runtime.jobs.create({
-      name: JOB_NAME,
-      description: JOB_DESCRIPTION,
-      script_path: JOB_SCRIPT_PATH,
+      name: spec.name,
+      description: spec.description,
+      script_path: spec.scriptPath,
       status: DORMANT_JOB_STATUS,
       created_by: appId,
     }),
@@ -139,39 +161,60 @@ async function ensureSubscription(runtime: NexClient, jobDefinitionId: string): 
 export async function ensureMoonSleepCommerceRuntimeWork(params: {
   runtime: NexClient;
   appId: string;
-}): Promise<{ jobDefinitionId: string; subscriptionId: string }> {
-  const jobDefinitionId = await ensureJob(params.runtime, params.appId);
+}): Promise<{
+  jobDefinitionId: string;
+  subscriptionId: string;
+  commerceJobDefinitionId: string;
+  commerceSubscriptionId: string;
+}> {
+  const jobDefinitionId = await ensureJob(params.runtime, params.appId, JOB_SPECS[0]!);
   const subscriptionId = await ensureSubscription(params.runtime, jobDefinitionId);
-  return { jobDefinitionId, subscriptionId };
+  const commerceJobDefinitionId = await ensureJob(params.runtime, params.appId, JOB_SPECS[1]!);
+  const commerceSubscriptionId = await ensureSubscription(
+    params.runtime,
+    commerceJobDefinitionId,
+  );
+  return {
+    jobDefinitionId,
+    subscriptionId,
+    commerceJobDefinitionId,
+    commerceSubscriptionId,
+  };
 }
 
 export async function disableMoonSleepCommerceRuntimeWork(runtime: NexClient): Promise<void> {
-  const job = (await listJobs(runtime)).find((row) => asString(row.name) === JOB_NAME);
-  if (!job) {
-    return;
-  }
-  const jobId = asString(job.id);
-  for (const subscription of await listSubscriptions(runtime, jobId)) {
-    if (asInteger(subscription.enabled) !== 0) {
-      await runtime.events.subscriptions.update({
-        id: asString(subscription.id),
-        enabled: false,
-      });
+  const jobs = await listJobs(runtime);
+  for (const spec of JOB_SPECS) {
+    const job = jobs.find((row) => asString(row.name) === spec.name);
+    if (!job) {
+      continue;
     }
-  }
-  if (asString(job.status) !== "inactive") {
-    await runtime.jobs.update({ id: jobId, status: "inactive" });
+    const jobId = asString(job.id);
+    for (const subscription of await listSubscriptions(runtime, jobId)) {
+      if (asInteger(subscription.enabled) !== 0) {
+        await runtime.events.subscriptions.update({
+          id: asString(subscription.id),
+          enabled: false,
+        });
+      }
+    }
+    if (asString(job.status) !== "inactive") {
+      await runtime.jobs.update({ id: jobId, status: "inactive" });
+    }
   }
 }
 
 export async function removeMoonSleepCommerceRuntimeWork(runtime: NexClient): Promise<void> {
-  const job = (await listJobs(runtime)).find((row) => asString(row.name) === JOB_NAME);
-  if (!job) {
-    return;
+  const jobs = await listJobs(runtime);
+  for (const spec of JOB_SPECS) {
+    const job = jobs.find((row) => asString(row.name) === spec.name);
+    if (!job) {
+      continue;
+    }
+    const jobId = asString(job.id);
+    for (const subscription of await listSubscriptions(runtime, jobId)) {
+      await runtime.events.subscriptions.delete({ id: asString(subscription.id) });
+    }
+    await runtime.jobs.delete({ id: jobId });
   }
-  const jobId = asString(job.id);
-  for (const subscription of await listSubscriptions(runtime, jobId)) {
-    await runtime.events.subscriptions.delete({ id: asString(subscription.id) });
-  }
-  await runtime.jobs.delete({ id: jobId });
 }

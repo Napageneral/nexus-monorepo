@@ -3,10 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildShopifySourceIdentityObservations,
   inspectShopifyCustomerBackfill,
+  inspectShopifyCommerceBackfill,
+  projectShopifyCommerceBackfill,
   projectShopifyCustomerBackfill,
   projectShopifyCustomerCohort,
   seedShopifySourceIdentities,
   shopifyCustomerRecordSetSha256,
+  shopifyCommerceRecordSetSha256,
 } from "./index.js";
 
 describe("Shopify source identity seed", () => {
@@ -409,5 +412,200 @@ describe("Shopify customer full backfill projector", () => {
     }
     expect(ctx.recordsGet).not.toHaveBeenCalled();
     expect(ctx.observe).not.toHaveBeenCalled();
+  });
+});
+
+function commerceRecord(
+  id: string,
+  family: "order" | "line_item",
+  options: { invalidHash?: boolean } = {},
+) {
+  const orderId = "900719925474099312346";
+  const lineItemId = "900719925474099312347";
+  const raw =
+    family === "order"
+      ? `{"id":${orderId},"customer":{"id":900719925474099312345},"total_price":"199.00"}`
+      : `{"id":${lineItemId},"quantity":1,"price":"199.00"}`;
+  return {
+    id,
+    record_id: `shopify:shopify-primary:${family}:${id}:revision-1`,
+    platform: "shopify",
+    space_id: "moonsleepco.myshopify.com",
+    timestamp: 1_784_640_000_000 + (family === "order" ? 1 : 2),
+    payload: {
+      provider_object_json: raw,
+      provider_object_sha256: options.invalidHash ? "0".repeat(64) : createHash("sha256").update(raw).digest("hex"),
+    },
+    metadata: {
+      family,
+      revision_hash: (family === "order" ? "b" : "c").repeat(64),
+      provider_ids:
+        family === "order"
+          ? { order_id: orderId, customer_id: "900719925474099312345" }
+          : { order_id: orderId, line_item_id: lineItemId },
+      row:
+        family === "order"
+          ? {
+              shop_domain: "moonsleepco.myshopify.com",
+              order_id: orderId,
+              customer_id: "900719925474099312345",
+              name: "#SYNTH-1",
+              currency: "USD",
+              subtotal_price: "199.00",
+              total_price: "199.00",
+              billing_address: { address1: "1 Synthetic Way", city: "Austin", zip: "78701" },
+              shipping_address: { address1: "2 Replay Road", city: "Austin", zip: "78702" },
+            }
+          : {
+              shop_domain: "moonsleepco.myshopify.com",
+              order_id: orderId,
+              line_item_id: lineItemId,
+              product_id: "900719925474099312348",
+              variant_id: "900719925474099312349",
+              sku: "SYNTHETIC-SKU",
+              title: "Synthetic Product",
+              quantity: 1,
+              price: "199.00",
+            },
+    },
+  };
+}
+
+describe("Shopify order and line-item bounded backfill", () => {
+  function commerceContext(records: Record<string, ReturnType<typeof commerceRecord>>) {
+    const ids = Object.keys(records).sort();
+    const committed = new Set<string>();
+    const recordsGet = vi.fn(async ({ id }: { id: string }) => ({ record: records[id] }));
+    const orderObserve = vi.fn(async (input: Record<string, unknown>) => {
+      const sourceRecordId = String(input.source_record_id);
+      const replayed = committed.has(sourceRecordId);
+      committed.add(sourceRecordId);
+      return {
+        created: !replayed,
+        replayed,
+        became_current: true,
+        row_id: "order-row",
+        revision_id: `revision-${sourceRecordId}`,
+        source_record_id: sourceRecordId,
+        source_revision_sha256: input.source_revision_sha256,
+        projection_payload_sha256: "d".repeat(64),
+      };
+    });
+    const lineObserve = vi.fn(async (input: Record<string, unknown>) => {
+      expect(orderObserve).toHaveBeenCalled();
+      const sourceRecordId = String(input.source_record_id);
+      const replayed = committed.has(sourceRecordId);
+      committed.add(sourceRecordId);
+      return {
+        created: !replayed,
+        replayed,
+        became_current: true,
+        row_id: "line-row",
+        revision_id: `revision-${sourceRecordId}`,
+        source_record_id: sourceRecordId,
+        source_revision_sha256: input.source_revision_sha256,
+        projection_payload_sha256: "e".repeat(64),
+      };
+    });
+    return {
+      params: { record_ids: ids, record_set_sha256: shopifyCommerceRecordSetSha256(ids) },
+      nex: {
+        records: { get: recordsGet },
+        contacts: {
+          resolve: vi.fn(async () => ({
+            found: true,
+            contact: { id: "customer-contact", canonical_entity_id: "customer-entity" },
+          })),
+        },
+        commerce: {
+          orders: {
+            observe: orderObserve,
+            get: vi.fn(async () => ({ found: true, revision: { currency: "USD" } })),
+          },
+          "line-items": { observe: lineObserve },
+        },
+      },
+      recordsGet,
+      orderObserve,
+      lineObserve,
+    };
+  }
+
+  it("projects orders before line items and replays the same exact set without duplicates", async () => {
+    const ctx = commerceContext({
+      "record-a-line": commerceRecord("record-a-line", "line_item"),
+      "record-z-order": commerceRecord("record-z-order", "order"),
+    });
+    const first = await projectShopifyCommerceBackfill(ctx as never);
+    expect(first).toMatchObject({
+      state: "succeeded",
+      records_requested: 2,
+      records_projected: 2,
+      orders_projected: 1,
+      line_items_projected: 1,
+      created: 2,
+      replayed: 0,
+      provider_read_authority: false,
+      provider_write_authority: false,
+    });
+    const second = await projectShopifyCommerceBackfill(ctx as never);
+    expect(second).toMatchObject({
+      record_set_sha256: first.record_set_sha256,
+      projection_result_sha256: first.projection_result_sha256,
+      created: 0,
+      replayed: 2,
+    });
+  });
+
+  it("validates every source record before the first commerce write", async () => {
+    const ctx = commerceContext({
+      "record-a-order": commerceRecord("record-a-order", "order"),
+      "record-b-line": commerceRecord("record-b-line", "line_item", { invalidHash: true }),
+    });
+    await expect(projectShopifyCommerceBackfill(ctx as never)).rejects.toThrow(
+      "hash does not match",
+    );
+    expect(ctx.recordsGet).toHaveBeenCalledTimes(2);
+    expect(ctx.orderObserve).not.toHaveBeenCalled();
+    expect(ctx.lineObserve).not.toHaveBeenCalled();
+  });
+
+  it("discovers only committed order and line-item records with no provider call", async () => {
+    const order = commerceRecord("record-z-order", "order");
+    const line = commerceRecord("record-a-line", "line_item");
+    const customer = customerRecord("record-customer", "gid://shopify/Customer/1");
+    const list = vi.fn(async () => ({ records: [order, customer, line] }));
+    const inspected = await inspectShopifyCommerceBackfill({
+      params: {
+        shop_domain: "moonsleepco.myshopify.com",
+        connection_id: "shopify-primary",
+      },
+      nex: { records: { list } },
+    } as never);
+    expect(inspected).toMatchObject({
+      state: "ready",
+      record_count: 2,
+      record_ids: ["record-a-line", "record-z-order"],
+      provider_read_authority: false,
+      provider_write_authority: false,
+    });
+  });
+
+  it("rejects oversized batches and altered set hashes before reads", async () => {
+    const ctx = commerceContext({ "record-order": commerceRecord("record-order", "order") });
+    await expect(
+      projectShopifyCommerceBackfill({
+        ...ctx,
+        params: { ...ctx.params, record_set_sha256: "0".repeat(64) },
+      } as never),
+    ).rejects.toThrow("does not match");
+    const tooMany = Array.from({ length: 51 }, (_, index) => `record-${index}`);
+    await expect(
+      projectShopifyCommerceBackfill({
+        ...ctx,
+        params: { record_ids: tooMany, record_set_sha256: shopifyCommerceRecordSetSha256(tooMany) },
+      } as never),
+    ).rejects.toThrow("between 1 and 50");
+    expect(ctx.recordsGet).not.toHaveBeenCalled();
   });
 });
