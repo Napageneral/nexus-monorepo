@@ -21,17 +21,25 @@ job ignores non-customer records. For a customer record it:
 5. Calls `entities.tags.list` and requires `Customer` and `Shopify`.
 6. Returns exact projection identifiers for the durable job receipt.
 
-For a full customer run, call `shopify-customers.inspect-backfill`, retain its
-count and record-set SHA-256, then pass both to
-`shopify-customers.project-complete-backfill`. Run the projection twice with
-the same inspected identity and require the second result to create nothing
-and replay every record.
+For a full customer run, invoke
+`scripts/shopify_customer_projection_runner.py --build-manifest`. The runner
+calls `shopify-customers.inspect-backfill` and atomically writes its exact
+validated sorted ID set to a new private SHA-256-bound manifest without direct
+SQL. Then run the same script in projection mode; it calls
+`shopify-customers.project-backfill` in batches of at most 250, checkpoints
+after every exact success receipt, and checks health, pause markers and I/O
+pressure before the next batch. Run a second pass with a fresh checkpoint and
+require it to create nothing and replay every exact source observation.
 
 ## Boundaries
 
 - Do not query Nex or MoonSleep databases directly.
 - Do not merge identities by email, phone, name, or address.
 - Do not mutate Shopify or another provider.
+- Do not refetch or re-ingest an already committed historical source corpus to
+  prove projection replay.
+- Do not call an unbounded whole-corpus projection operation.
+- Do not hand-assemble the production record-ID manifest.
 - Do not replace Dispatch fulfillment ownership.
 - Do not enable a production backfill until PostgreSQL runtime, restart, and
   replay gates pass.

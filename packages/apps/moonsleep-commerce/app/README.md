@@ -13,7 +13,8 @@ Current scope:
   `contacts.observe`, `entities.resolve`, and `entities.tags.list`
 - Shopify customer identity projection
 - bounded explicit customer cohort projection for pre-activation production proof
-- explicit deterministic full-customer backfill with replay counters and hashes
+- explicit deterministic customer projection batches capped at 250 records,
+  with a resource-aware checkpoint runner and replay counters/hashes
 - dormant `record.ingested` job registration on the full PostgreSQL work plane,
   held until cohort, double-backfill, restart, and replay gates pass
 - deterministic shop-domain and customer-GID contact anchors
@@ -25,19 +26,25 @@ entire cohort before the first identity observation, then uses the same
 replay-safe public operations as the dormant event job. It exists only to prove
 real records and identity bindings before bulk event delivery is activated.
 
-The backfill method accepts a strictly sorted, unique, explicit record set and
-its SHA-256 identity. It validates every record before the first identity
-observation, projects through the same public operations, and returns a
-deterministic result hash plus created/replayed counters. Running the same set a
-second time must report zero new entities and contacts and every observation as
-replayed.
+The backfill method accepts one strictly sorted, unique batch of at most 250
+record IDs and its SHA-256 identity. It validates that complete batch before the
+first identity observation, projects through the same public operations, and
+returns a deterministic result hash plus created/replayed counters.
 
 For production-size sets, `shopify-customers.inspect-backfill` discovers the
 complete committed customer record set through paginated public `records.list`
-calls and returns only its count, boundaries, and SHA-256. The companion
-`project-complete-backfill` re-reads that public surface and proceeds only when
-the exact count and hash still match. This avoids direct SQL and multi-megabyte
-operator parameter files without weakening the explicit snapshot gate.
+calls and returns its validated sorted IDs, count, boundaries, and SHA-256.
+`shopify_customer_projection_runner.py --build-manifest` calls that read-only
+operation and atomically creates a new private manifest without direct SQL.
+Projection mode then drains that exact manifest in independently receipted
+batches, checks health, pause markers and Linux I/O pressure before every batch,
+and advances its durable checkpoint only after an exact Nex success receipt. A
+lost response retries only the uncheckpointed batch; replay-safe source
+observations prevent duplicate identities. Safe invocation defaults are one
+25-record batch, a one-second inter-batch delay, and an I/O full-pressure
+`avg60` ceiling of 1.0. An explicit invocation can run at most ten batches; a
+fresh invocation must re-read and validate the durable checkpoint before it can
+continue.
 
 Before ingest, `moonsleep-commerce.shopify-source.seed-identities` must run
 twice for the exact shop domain and connection ID. The first run creates the

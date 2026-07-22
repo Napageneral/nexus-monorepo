@@ -5,7 +5,6 @@ import {
   inspectShopifyCustomerBackfill,
   projectShopifyCustomerBackfill,
   projectShopifyCustomerCohort,
-  projectCompleteShopifyCustomerBackfill,
   seedShopifySourceIdentities,
   shopifyCustomerRecordSetSha256,
 } from "./index.js";
@@ -260,7 +259,7 @@ describe("Complete Shopify customer record-set discovery", () => {
     };
   }
 
-  it("inspects then projects the exact complete hash-bound set twice", async () => {
+  it("inspects the exact complete hash-bound set without projecting it", async () => {
     const ctx = completeContext({
       "record-2": customerRecord("record-2", "gid://shopify/Customer/2"),
       "record-1": customerRecord("record-1", "gid://shopify/Customer/1"),
@@ -270,6 +269,7 @@ describe("Complete Shopify customer record-set discovery", () => {
     expect(inspected).toMatchObject({
       state: "ready",
       record_count: 3,
+      record_ids: ["record-1", "record-2", "record-3"],
       record_set_sha256: shopifyCustomerRecordSetSha256([
         "record-1",
         "record-2",
@@ -280,52 +280,14 @@ describe("Complete Shopify customer record-set discovery", () => {
       provider_write_authority: false,
     });
 
-    const params = {
-      ...ctx.params,
-      expected_record_count: inspected.record_count,
-      expected_record_set_sha256: inspected.record_set_sha256,
-    };
-    const first = await projectCompleteShopifyCustomerBackfill({ ...ctx, params } as never);
-    const second = await projectCompleteShopifyCustomerBackfill({ ...ctx, params } as never);
-    expect(first).toMatchObject({
-      records_projected: 3,
-      created_entities: 3,
-      created_contacts: 3,
-      replayed: 0,
-    });
-    expect(second).toMatchObject({
-      records_projected: 3,
-      created_entities: 0,
-      created_contacts: 0,
-      replayed: 3,
-      record_set_sha256: inspected.record_set_sha256,
-      projection_result_sha256: first.projection_result_sha256,
-    });
+    expect(ctx.observe).not.toHaveBeenCalled();
+    expect(ctx.recordsGet).not.toHaveBeenCalled();
     expect(ctx.list).toHaveBeenCalledWith({
       platform: "shopify",
       connection_id: "shopify-primary",
       limit: 1000,
       offset: 0,
     });
-  });
-
-  it("rejects snapshot drift before the first identity write", async () => {
-    const ctx = completeContext({
-      "record-1": customerRecord("record-1", "gid://shopify/Customer/1"),
-      "record-2": customerRecord("record-2", "gid://shopify/Customer/2"),
-    });
-    await expect(
-      projectCompleteShopifyCustomerBackfill({
-        ...ctx,
-        params: {
-          ...ctx.params,
-          expected_record_count: 2,
-          expected_record_set_sha256: "0".repeat(64),
-        },
-      } as never),
-    ).rejects.toThrow("no longer matches");
-    expect(ctx.observe).not.toHaveBeenCalled();
-    expect(ctx.recordsGet).not.toHaveBeenCalled();
   });
 
   it("paginates the public record surface and rejects duplicate IDs", async () => {
@@ -402,7 +364,7 @@ describe("Shopify customer full backfill projector", () => {
     expect(ctx.observe).toHaveBeenCalledTimes(6);
   });
 
-  it("validates the complete record set before the first identity write", async () => {
+  it("validates the complete batch before the first identity write", async () => {
     const invalid = {
       ...customerRecord("record-3", "gid://shopify/Customer/3"),
       space_id: "wrong.myshopify.com",
@@ -432,6 +394,12 @@ describe("Shopify customer full backfill projector", () => {
         record_set_sha256: shopifyCustomerRecordSetSha256(["record-2", "record-1"]),
       },
       { record_ids: ["record-1", "record-2"], record_set_sha256: "INVALID" },
+      {
+        record_ids: Array.from({ length: 251 }, (_, index) =>
+          `record-${String(index).padStart(4, "0")}`,
+        ),
+        record_set_sha256: "0".repeat(64),
+      },
     ];
 
     for (const params of cases) {
