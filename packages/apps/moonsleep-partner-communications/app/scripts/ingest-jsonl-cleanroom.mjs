@@ -25,7 +25,12 @@ async function ingest(line, lineNumber) {
   });
   const result = await response.json().catch(() => null);
   if (!response.ok || result?.ok !== true) {
-    throw new Error(`record.ingest failed at line ${lineNumber} with HTTP ${response.status}`);
+    const error = result?.error && typeof result.error === "object" ? result.error : {};
+    const code = typeof error.code === "string" ? error.code.slice(0, 128) : "unknown";
+    const message = typeof error.message === "string" ? error.message.slice(0, 512) : "unavailable";
+    throw new Error(
+      `record.ingest failed at line ${lineNumber} with HTTP ${response.status}: ${code}: ${message}`,
+    );
   }
   const status = result.status ?? result.payload?.status;
   if (status === "completed") counts.completed += 1;
