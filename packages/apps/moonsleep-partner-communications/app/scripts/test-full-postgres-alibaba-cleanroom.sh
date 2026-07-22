@@ -79,7 +79,7 @@ runtime_call() {
     token=$(cat /run/moonsleep-load-credentials/runtime-token)
     exec /opt/nex/nexus.mjs runtime call "$1" --params "$2" --json \
       --url ws://127.0.0.1:18789 --token "$token"
-  ' sh "${method}" "${params}" 2>/dev/null
+  ' sh "${method}" "${params}"
 }
 
 package_get() {
@@ -287,9 +287,11 @@ directory_after_second="$(sqlite_directory_counts)"
 [[ "$(jq -S -c . <<<"${counts_after_first}")" = "$(jq -S -c . <<<"${counts_after_second}")" ]]
 [[ "$(jq -S -c . <<<"${directory_after_first}")" = "$(jq -S -c . <<<"${directory_after_second}")" ]]
 jq -e '.records==6325 and .receipts==6325 and .events==6325 and .queue==0 and .dispatch_receipts==0 and .adapter_instances==0' <<<"${counts_after_second}" >/dev/null
+echo "[partner-cleanroom] replay counts stable; inspect complete native conversation"
 
 conversation_inspection="$(runtime_call moonsleep-partner-desk.alibaba.inspect-conversation "$(jq -nc --arg connection_id "${CONNECTION_ID}" --arg provider_thread_id "${NATIVE_THREAD_ID}" '{connection_id:$connection_id,provider_thread_id:$provider_thread_id}')")"
 jq -e '.record_count==6325 and .message_record_count==6132 and .orphan_attachment_record_count==193 and .attachment_row_count==1148 and .provider_content_returned==false and .provider_write_authority==false' <<<"${conversation_inspection}" >/dev/null
+echo "[partner-cleanroom] native conversation exact; project reviewed open-loop cohort"
 
 sample_ids="$(docker exec -u postgres "${postgres_container}" psql -X -d moonsleep_nex -Atqc "SELECT id FROM nex_runtime.records WHERE metadata->>'family'='message' ORDER BY timestamp,id LIMIT 2")"
 sample_first="$(printf '%s\n' "${sample_ids}" | sed -n '1p')"
@@ -298,6 +300,7 @@ sample_second="$(printf '%s\n' "${sample_ids}" | sed -n '2p')"
 projection_params="$(jq -nc --arg first "${sample_first}" --arg second "${sample_second}" --arg entity "${surewal_entity_id}" --arg contact "${surewal_contact_id}" '{record_ids:[$first,$second],identity_resolutions:[{source_record_id:$first,status:"confirmed",decision_origin:"operator_review",canonical_entity_id:$entity,contact_id:$contact},{source_record_id:$second,status:"confirmed",decision_origin:"operator_review",canonical_entity_id:$entity,contact_id:$contact}],workspace_assertions:[{source_record_id:$first,category:"vendor",status:"confirmed",assertion_origin:"operator_review"},{source_record_id:$second,category:"vendor",status:"confirmed",assertion_origin:"operator_review"}],open_loop_assertions:[{open_loop_id:"surewal-commercial-review",canonical_entity_id:$entity,primary_source_record_id:$first,evidence_source_record_ids:[$first],closure_source_record_ids:[],title:"Review commercial question",summary:"Reviewed commercial open loop",labels:["commercial"],lifecycle:"waiting_on_partner",review_state:"confirmed",assertion_origin:"operator_review"},{open_loop_id:"surewal-production-review",canonical_entity_id:$entity,primary_source_record_id:$second,evidence_source_record_ids:[$second],closure_source_record_ids:[],title:"Review production question",summary:"Reviewed production open loop",labels:["production"],lifecycle:"waiting_on_moonsleep",review_state:"confirmed",assertion_origin:"operator_review"}],source_coverage_assertions:[{source_record_id:$first,disposition:"open_loop_evidence",open_loop_ids:["surewal-commercial-review"],assertion_origin:"operator_review"},{source_record_id:$second,disposition:"open_loop_evidence",open_loop_ids:["surewal-production-review"],assertion_origin:"operator_review"}]}')"
 projection="$(runtime_call moonsleep-partner-desk.project-reviewed-cohort "${projection_params}")"
 jq -e '.state=="reviewed_projection" and (.native_threads|length)==1 and (.open_loops|length)==2 and (.attention_queue|length)==2 and (.review_queue|length)==0 and .provider_write_authority==false' <<<"${projection}" >/dev/null
+echo "[partner-cleanroom] reviewed projection exact"
 
 echo "[partner-cleanroom] restart and prove package and replay durability"
 docker restart "${runtime_container}" >/dev/null

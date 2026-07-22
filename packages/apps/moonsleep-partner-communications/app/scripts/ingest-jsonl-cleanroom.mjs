@@ -58,6 +58,9 @@ async function ingest(line, lineNumber) {
   else if (status === "skipped") counts.skipped += 1;
   else counts.other += 1;
   counts.total += 1;
+  if (counts.total % 1_000 === 0) {
+    process.stderr.write(`[partner-cleanroom] processed ${counts.total} records\n`);
+  }
 }
 
 const input = createInterface({ input: createReadStream(sourcePath, { encoding: "utf8" }), crlfDelay: Infinity });
