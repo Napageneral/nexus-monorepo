@@ -744,8 +744,14 @@ function buildRecord(
       connection_id: connectionId,
       sender_id: incoming ? supplierId : config.account_id,
       sender_name: incoming ? textValue(message.speaker) ?? supplierName : config.account_label,
-      receiver_id: incoming ? config.account_id : supplierId,
-      receiver_name: incoming ? config.account_label : supplierName,
+      // Nex reserves the canonical receiver for the configured adapter account so
+      // inbound integrity can bind every emitted record to this exact connection.
+      // For outbound provider messages the supplier remains the actual recipient
+      // in payload.recipients; this matches the Gmail adapter's mailbox/recipient
+      // split and preserves the supplier identity without impersonating another
+      // adapter connection.
+      receiver_id: connectionId,
+      receiver_name: config.account_label,
       space_id: config.account_id,
       space_name: config.account_label,
       container_kind: "direct",
@@ -766,6 +772,7 @@ function buildRecord(
       timestamp,
       content,
       content_type: "text",
+      ...(!incoming ? { recipients: [supplierId] } : {}),
       payload: {
         provider_object_json: message.provider_object_json,
         provider_object_sha256: message.provider_object_sha256,
@@ -1027,7 +1034,7 @@ export const __test__ = {
 export const alibabaAdapter = defineAdapter({
   platform: PLATFORM,
   name: "alibaba-messenger-adapter",
-  version: "0.2.2",
+  version: "0.2.3",
   multi_account: true,
   auth: {
     methods: [
