@@ -14,11 +14,18 @@ export type ShopifyCommerceClient = {
     get(params: { id: string }): Promise<unknown>;
   };
   contacts: {
+    observe(params: ShopifyOrderCustomerObservation): Promise<unknown>;
     resolve(params: {
       platform: "shopify";
       space_id: string;
       contact_id: string;
     }): Promise<unknown>;
+  };
+  entities: {
+    resolve(params: { entity_id: string }): Promise<unknown>;
+    tags: {
+      list(params: { entity_id: string }): Promise<unknown>;
+    };
   };
   commerce: {
     orders: {
@@ -37,13 +44,29 @@ export type ShopifyCommerceJobContext = {
 };
 
 export type ParsedShopifyCommerceRecord =
-  | { family: "order"; sourceRecordId: string; input: RuntimeRow }
+  | {
+      family: "order";
+      sourceRecordId: string;
+      input: RuntimeRow;
+      customerObservation: ShopifyOrderCustomerObservation | null;
+    }
   | {
       family: "line_item";
       sourceRecordId: string;
       orderId: string;
       inputWithoutCurrency: RuntimeRow;
     };
+
+type ShopifyOrderCustomerObservation = {
+  platform: "shopify";
+  space_id: string;
+  contact_id: string;
+  source_observation_id: string;
+  observed_at: number;
+  contact_name: string;
+  entity_name: string;
+  tags: ["Customer", "Shopify"];
+};
 
 function asRecord(value: unknown): RuntimeRow {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -144,7 +167,10 @@ function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
-function exactProviderEnvelope(payload: RuntimeRow): { payloadSha256: string } {
+function exactProviderEnvelope(payload: RuntimeRow): {
+  payloadSha256: string;
+  sourceObject: RuntimeRow;
+} {
   const sourceJson = requireString(payload, "provider_object_json");
   const payloadSha256 = requireSha256(payload, "provider_object_sha256");
   if (sha256(sourceJson) !== payloadSha256) {
@@ -156,13 +182,28 @@ function exactProviderEnvelope(payload: RuntimeRow): { payloadSha256: string } {
   } catch {
     throw new Error("Shopify commerce provider_object_json is invalid JSON");
   }
-  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) {
+  const sourceObject = asRecord(decoded);
+  if (Object.keys(sourceObject).length === 0) {
     throw new Error("Shopify commerce provider_object_json must contain an object");
   }
   // Provider IDs are deliberately not read from the decoded object: Shopify's
   // integer IDs exceed JavaScript's safe range. The exact JSON remains the
   // immutable evidence; lossless string anchors come from the adapter metadata.
-  return { payloadSha256 };
+  return { payloadSha256, sourceObject };
+}
+
+function orderCustomerName(sourceObject: RuntimeRow, customerGid: string): string {
+  const customer = asRecord(sourceObject.customer);
+  if (Object.keys(customer).length === 0) {
+    throw new Error("Shopify order with a customer anchor requires an embedded customer object");
+  }
+  const combined = [
+    asString(customer.first_name) || asString(customer.firstName),
+    asString(customer.last_name) || asString(customer.lastName),
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return combined || `Shopify customer ${customerGid.replace(/^gid:\/\/shopify\/Customer\//, "")}`;
 }
 
 function exactAddress(value: unknown, field: string): {
@@ -199,7 +240,7 @@ function commonRecord(record: RuntimeRow, expectedFamily: "order" | "line_item")
   }
   const sourceRecordId = requireString(record, "id");
   const sourceRevisionSha256 = sourceRevisionDigest(metadata);
-  const { payloadSha256 } = exactProviderEnvelope(asRecord(record.payload));
+  const { payloadSha256, sourceObject } = exactProviderEnvelope(asRecord(record.payload));
   const observedAt = record.timestamp;
   if (typeof observedAt !== "number" || !Number.isSafeInteger(observedAt) || observedAt < 0) {
     throw new Error("Shopify commerce record timestamp must be a non-negative safe integer");
@@ -212,6 +253,7 @@ function commonRecord(record: RuntimeRow, expectedFamily: "order" | "line_item")
     sourceRecordId,
     sourceRevisionSha256,
     payloadSha256,
+    sourceObject,
     observedAt,
   };
 }
@@ -258,7 +300,25 @@ export function parseShopifyOrderRecord(recordValue: unknown): ParsedShopifyComm
     shipping_address: shipping.address,
     shipping_address_sha256: shipping.digest,
   };
-  return { family: "order", sourceRecordId: common.sourceRecordId, input };
+  const customerGid = asOptionalString(input.customer_shopify_gid);
+  const customerObservation: ShopifyOrderCustomerObservation | null = customerGid
+    ? {
+        platform: "shopify",
+        space_id: common.shopDomain,
+        contact_id: customerGid,
+        source_observation_id: `moonsleep-commerce:shopify-order-customer:v1:${common.sourceRecordId}`,
+        observed_at: common.observedAt,
+        contact_name: orderCustomerName(common.sourceObject, customerGid),
+        entity_name: orderCustomerName(common.sourceObject, customerGid),
+        tags: ["Customer", "Shopify"],
+      }
+    : null;
+  return {
+    family: "order",
+    sourceRecordId: common.sourceRecordId,
+    input,
+    customerObservation,
+  };
 }
 
 export function parseShopifyLineItemRecord(recordValue: unknown): ParsedShopifyCommerceRecord {
@@ -327,13 +387,55 @@ export async function projectParsedShopifyOrder(
   const customerGid = asOptionalString(input.customer_shopify_gid);
   delete input.customer_shopify_gid;
   if (customerGid) {
-    const resolved = unwrapPayload(
+    let resolved = unwrapPayload(
       await nex.contacts.resolve({
         platform: "shopify",
         space_id: asString(input.space_id),
         contact_id: customerGid,
       }),
     );
+    if (resolved.found !== true) {
+      const observation = parsed.customerObservation;
+      if (!observation || observation.contact_id !== customerGid) {
+        throw new Error(`Shopify order customer contact is not projected: ${customerGid}`);
+      }
+      const observed = unwrapPayload(await nex.contacts.observe(observation));
+      const observedContact = asRecord(observed.contact);
+      const committedObservation = asRecord(observed.observation);
+      const observedEntity = asRecord(observed.entity);
+      const observedEntityId = asString(observedEntity.id);
+      const canonicalEntityId = asString(observed.canonical_entity_id);
+      if (
+        asString(observedContact.platform) !== observation.platform ||
+        asString(observedContact.space_id) !== observation.space_id ||
+        asString(observedContact.contact_id) !== observation.contact_id ||
+        asString(committedObservation.source_observation_id) !== observation.source_observation_id ||
+        !observedEntityId ||
+        !canonicalEntityId
+      ) {
+        throw new Error("Nex committed a different Shopify order-customer observation");
+      }
+      const entityResolution = unwrapPayload(
+        await nex.entities.resolve({ entity_id: observedEntityId }),
+      );
+      if (asString(entityResolution.canonical_id) !== canonicalEntityId) {
+        throw new Error("Nex canonical entity resolution disagrees with order-customer observation");
+      }
+      const listed = unwrapPayload(await nex.entities.tags.list({ entity_id: canonicalEntityId }));
+      const tags = Array.isArray(listed.tags) ? listed.tags.map(asString).filter(Boolean) : [];
+      for (const requiredTag of observation.tags) {
+        if (!tags.includes(requiredTag)) {
+          throw new Error(`Nex canonical customer entity is missing ${requiredTag} tag`);
+        }
+      }
+      resolved = unwrapPayload(
+        await nex.contacts.resolve({
+          platform: "shopify",
+          space_id: asString(input.space_id),
+          contact_id: customerGid,
+        }),
+      );
+    }
     const contact = asRecord(resolved.contact);
     if (resolved.found !== true || !asString(contact.id) || !asString(contact.canonical_entity_id)) {
       throw new Error(`Shopify order customer contact is not projected: ${customerGid}`);

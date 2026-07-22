@@ -146,7 +146,7 @@ class CommerceRunnerTest(unittest.TestCase):
         return path, hashlib.sha256(path.read_bytes()).hexdigest()
 
     def production_shape_manifest(self) -> tuple[Path, str]:
-        ids = [f"source-order-{index:05d}" for index in range(11_548)]
+        ids = [f"source-order-{index:05d}" for index in range(11_549)]
         ids.extend(f"source-line-{index:05d}" for index in range(22_251))
         value = {
             "receipt_type": runner.MANIFEST_RECEIPT,
@@ -234,10 +234,10 @@ class CommerceRunnerTest(unittest.TestCase):
                 break
         self.assertEqual(invocations, 68)
         self.assertEqual(len(first["batches"]), 676)
-        self.assertEqual(first["totals"]["records_projected"], 33_799)
-        self.assertEqual(first["totals"]["orders_projected"], 11_548)
+        self.assertEqual(first["totals"]["records_projected"], 33_800)
+        self.assertEqual(first["totals"]["orders_projected"], 11_549)
         self.assertEqual(first["totals"]["line_items_projected"], 22_251)
-        self.assertEqual(first["totals"]["created"], 33_799)
+        self.assertEqual(first["totals"]["created"], 33_800)
 
         replay_args = self.args(manifest, digest, "production-replay.json")
         replay_args.batch_size = 50
@@ -251,7 +251,7 @@ class CommerceRunnerTest(unittest.TestCase):
         self.assertEqual(replay_invocations, 68)
         self.assertEqual(len(replay["batches"]), 676)
         self.assertEqual(replay["totals"]["created"], 0)
-        self.assertEqual(replay["totals"]["replayed"], 33_799)
+        self.assertEqual(replay["totals"]["replayed"], 33_800)
 
     def test_lost_response_retries_only_the_uncheckpointed_batch(self) -> None:
         manifest, digest = self.manifest()
