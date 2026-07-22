@@ -27,22 +27,37 @@ function canonicalDigest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(normalize(value))).digest("hex");
 }
 
-function gmailFixture(id: string, timestamp: number, content: string) {
+function gmailFixture(
+  id: string,
+  timestamp: number,
+  content: string,
+  options: { direction?: "inbound" | "outbound"; account?: string; threadId?: string } = {},
+) {
+  const direction = options.direction ?? "inbound";
+  const account = options.account ?? "tyler@intent-systems.com";
   return {
     id,
+    record_id: `gmail:${id}`,
     platform: "gmail",
-    receiver_contact_id: "moonsleep-ops",
-    thread_id: "gmail-thread-1",
+    sender_entity_id: direction === "outbound" ? "entity-moonsleep" : "entity-partner",
+    receiver_entity_id: direction === "outbound" ? "entity-partner" : "entity-moonsleep",
+    sender_contact_id: direction === "outbound" ? account : "partner@example.com",
+    receiver_contact_id: direction === "outbound" ? "partner@example.com" : account,
+    thread_id: options.threadId ?? "gmail-thread-1",
     timestamp,
     content,
+    content_type: "text/markdown",
+    received_at: timestamp + 10_000,
+    request_id: "jobrun-original:bulk:0",
     attachments: [{ id: "gmail-attachment-1" }],
-    payload: { provider_message_ref: id },
+    payload: null,
     metadata: {
-      family: "message",
-      source_connection_id: "gmail-tyler",
       message_id: id,
-      revision_hash: createHash("sha256").update(content).digest("hex"),
-      direction: "outbound",
+      thread_id: options.threadId ?? "gmail-thread-1",
+      direction,
+      body_text: content,
+      subject: "Supplier follow-up",
+      _daemon: { received_at_ms: timestamp + 20_000 },
     },
   };
 }
@@ -94,7 +109,7 @@ test("rejects a record outside the requested Alibaba source connection", async (
 test("inspects committed Gmail evidence through the shared native conversation boundary", async () => {
   const records = [gmailFixture("gmail-1", 1_785_000_000_000, "Supplier follow-up")];
   const result = await inspectGmailConversation({
-    params: { connection_id: "gmail-tyler", provider_thread_id: "gmail-thread-1" },
+    params: { connection_id: "tyler@intent-systems.com", provider_thread_id: "gmail-thread-1" },
     nex: { records: { list: async () => ({ payload: { records } }) } },
   } as never) as Record<string, unknown>;
   assert.equal(result.provider, "gmail");
@@ -102,6 +117,67 @@ test("inspects committed Gmail evidence through the shared native conversation b
   assert.equal(result.attachment_row_count, 1);
   assert.equal(result.provider_content_returned, false);
   assert.equal(JSON.stringify(result).includes("Supplier follow-up"), false);
+});
+
+test("filters a shared Gmail thread to the exact observed mailbox connection", async () => {
+  const records = [
+    gmailFixture("gmail-tyler", 1_785_000_000_000, "Tyler copy"),
+    gmailFixture("gmail-casey", 1_785_000_001_000, "Casey copy", { account: "casey@moonsleep.co" }),
+  ];
+  const result = await inspectGmailConversation({
+    params: { connection_id: "tyler@intent-systems.com", provider_thread_id: "gmail-thread-1" },
+    nex: { records: { list: async () => ({ payload: { records } }) } },
+  } as never) as Record<string, unknown>;
+  assert.equal(result.record_count, 1);
+});
+
+test("derives outbound Gmail connection ownership from the observed sender mailbox", async () => {
+  const records = [gmailFixture("gmail-outbound", 1_785_000_000_000, "Outbound supplier note", { direction: "outbound" })];
+  const result = await inspectGmailConversation({
+    params: { connection_id: "tyler@intent-systems.com", provider_thread_id: "gmail-thread-1" },
+    nex: { records: { list: async () => ({ payload: { records } }) } },
+  } as never) as Record<string, unknown>;
+  assert.equal(result.record_count, 1);
+});
+
+test("hashes the immutable Gmail source observation while ignoring only ingest-daemon provenance", async () => {
+  const original = gmailFixture("gmail-revision", 1_785_000_000_000, "Supplier follow-up");
+  const replay = structuredClone(original);
+  replay.received_at += 99_000;
+  replay.request_id = "jobrun-replay:bulk:4";
+  replay.metadata._daemon.received_at_ms += 99_000;
+  const changed = structuredClone(original);
+  changed.content = "Supplier follow-up changed";
+  changed.metadata.body_text = changed.content;
+
+  async function revision(record: ReturnType<typeof gmailFixture>) {
+    const result = await projectReviewedCohort({
+      params: {
+        record_ids: [record.id],
+        identity_resolutions: [{ source_record_id: record.id, status: "confirmed", decision_origin: "operator_review", canonical_entity_id: "entity-borden", contact_id: "contact-borden" }],
+        workspace_assertions: [{ source_record_id: record.id, category: "vendor", status: "confirmed", assertion_origin: "operator_review" }],
+        open_loop_assertions: [{ open_loop_id: "loop-borden", canonical_entity_id: "entity-borden", primary_source_record_id: record.id, evidence_source_record_ids: [record.id], closure_source_record_ids: [], title: "Confirm schedule", summary: "Need the schedule", labels: ["schedule"], lifecycle: "waiting_on_partner", review_state: "confirmed", assertion_origin: "operator_review" }],
+        source_coverage_assertions: [{ source_record_id: record.id, disposition: "open_loop_evidence", open_loop_ids: ["loop-borden"], assertion_origin: "operator_review" }],
+      },
+      nex: { records: { get: async () => ({ payload: { record } }) } },
+    } as never) as Record<string, unknown>;
+    return (((result.native_threads as Array<Record<string, unknown>>)[0]?.messages as Array<Record<string, unknown>>)[0]?.source_revision_sha256);
+  }
+
+  assert.equal(await revision(original), await revision(replay));
+  assert.notEqual(await revision(original), await revision(changed));
+});
+
+test("fails closed when a Gmail record cannot prove its observed mailbox", async () => {
+  const record = gmailFixture("gmail-bad-direction", 1_785_000_000_000, "Supplier follow-up");
+  record.metadata.direction = "unknown" as never;
+  await assert.rejects(
+    inspectGmailConversation({
+      params: { connection_id: "tyler@intent-systems.com", provider_thread_id: "gmail-thread-1" },
+      nex: { records: { list: async () => ({ payload: { records: [record] } }) } },
+    } as never),
+    /observed mailbox/,
+  );
 });
 
 test("projects multiple independent reviewed loops over the same native conversation", async () => {

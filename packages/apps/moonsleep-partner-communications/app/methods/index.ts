@@ -20,6 +20,7 @@ type Row = Record<string, unknown>;
 const PAGE_SIZE = 1_000;
 const MAX_SCAN = 100_000;
 const SHA256 = /^[0-9a-f]{64}$/;
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function row(value: unknown): Row {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Row : {};
@@ -75,6 +76,68 @@ function attachmentCount(record: Row): number {
   return family === "orphan_attachment" ? 1 : 0;
 }
 
+function canonicalValue(value: unknown, field: string): unknown {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number") {
+    if (!Number.isSafeInteger(value)) throw new Error(`${field} contains an unsafe number`);
+    return value;
+  }
+  if (Array.isArray(value)) return value.map((entry, index) => canonicalValue(entry, `${field}[${index}]`));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Row)
+        .filter(([, nested]) => nested !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nested]) => [key, canonicalValue(nested, `${field}.${key}`)]),
+    );
+  }
+  throw new Error(`${field} contains unsupported data`);
+}
+
+function gmailConnectionAnchor(record: Row): string {
+  const metadata = row(record.metadata);
+  const explicit = text(metadata.source_connection_id);
+  if (explicit) return requireText(explicit.toLowerCase(), "metadata.source_connection_id", 256);
+  const direction = text(metadata.direction);
+  const observedMailbox = direction === "outbound" || direction === "outgoing"
+    ? text(record.sender_contact_id) || text(metadata.sender_contact_id)
+    : direction === "inbound" || direction === "incoming"
+      ? text(record.receiver_contact_id) || text(metadata.receiver_contact_id)
+      : "";
+  const normalized = requireText(observedMailbox.toLowerCase(), "Gmail observed mailbox", 256);
+  if (!EMAIL.test(normalized)) throw new Error("Gmail observed mailbox is not an email address");
+  return normalized;
+}
+
+function gmailSourceRevisionDigest(record: Row): string {
+  const metadata = { ...row(record.metadata) };
+  delete metadata._daemon;
+  const sourceObservation = {
+    id: record.id,
+    record_id: record.record_id,
+    platform: record.platform,
+    timestamp: record.timestamp,
+    content: record.content,
+    content_type: record.content_type,
+    attachments: record.attachments ?? null,
+    recipients: record.recipients ?? null,
+    sender_entity_id: record.sender_entity_id ?? null,
+    receiver_entity_id: record.receiver_entity_id ?? null,
+    sender_contact_id: record.sender_contact_id ?? null,
+    receiver_contact_id: record.receiver_contact_id ?? null,
+    space_id: record.space_id ?? null,
+    container_kind: record.container_kind ?? null,
+    container_id: record.container_id ?? null,
+    thread_id: record.thread_id,
+    reply_to_id: record.reply_to_id ?? null,
+    payload: record.payload ?? null,
+    metadata,
+  };
+  return createHash("sha256")
+    .update(JSON.stringify(canonicalValue(sourceObservation, "Gmail source observation")), "utf8")
+    .digest("hex");
+}
+
 function validateProviderDigest(record: Row): void {
   const opaque = row(record.payload);
   const family = text(row(record.metadata).family);
@@ -96,7 +159,9 @@ function toCommunicationRecord(record: Row): CommunicationRecord {
     throw new Error("record is not supported partner communication evidence");
   }
   if (provider === "alibaba") validateProviderDigest(record);
-  const sourceRevision = requireText(metadata.revision_hash, "metadata.revision_hash", 64);
+  const sourceRevision = provider === "gmail"
+    ? gmailSourceRevisionDigest(record)
+    : requireText(metadata.revision_hash, "metadata.revision_hash", 64);
   if (!SHA256.test(sourceRevision)) throw new Error("metadata.revision_hash is invalid");
   const timestampValue = record.timestamp;
   if (typeof timestampValue !== "number" || !Number.isSafeInteger(timestampValue) || timestampValue < 0) {
@@ -107,7 +172,9 @@ function toCommunicationRecord(record: Row): CommunicationRecord {
     source_record_id: requireText(record.id, "record.id", 512),
     source_revision_sha256: sourceRevision,
     provider,
-    connection_id: requireText(metadata.source_connection_id, "metadata.source_connection_id", 256),
+    connection_id: provider === "gmail"
+      ? gmailConnectionAnchor(record)
+      : requireText(metadata.source_connection_id, "metadata.source_connection_id", 256),
     provider_thread_id: requireText(record.thread_id, "record.thread_id", 512),
     provider_message_id: text(metadata.message_id) || requireText(record.id, "record.id", 512),
     observed_at: new Date(timestampValue).toISOString(),
@@ -141,7 +208,11 @@ async function listConversationRecords(params: {
     if (scanned > MAX_SCAN) throw new Error(`${params.provider} scan exceeds ${MAX_SCAN} rows`);
     for (const record of page) {
       if (text(record.platform) !== params.provider) throw new Error(`${params.provider} scan returned a foreign platform`);
-      if (text(row(record.metadata).source_connection_id) !== params.connectionId) {
+      const sourceConnectionId = params.provider === "gmail"
+        ? gmailConnectionAnchor(record)
+        : text(row(record.metadata).source_connection_id);
+      if (params.provider === "gmail" && sourceConnectionId !== params.connectionId.toLowerCase()) continue;
+      if (params.provider === "alibaba" && sourceConnectionId !== params.connectionId) {
         throw new Error(`${params.provider} scan returned a foreign connection`);
       }
       if (text(record.thread_id) === params.providerThreadId) result.push(record);
