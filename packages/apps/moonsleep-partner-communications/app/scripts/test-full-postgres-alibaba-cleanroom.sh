@@ -321,6 +321,7 @@ jq -e --argjson expected "${EXPECTED_RECORD_COUNT}" '.records==$expected and .re
 echo "[partner-cleanroom] replay counts stable; inspect complete native conversation"
 
 conversation_inspection="$(runtime_call moonsleep-partner-desk.alibaba.inspect-conversation "$(jq -nc --arg connection_id "${CONNECTION_ID}" --arg provider_thread_id "${NATIVE_THREAD_ID}" '{connection_id:$connection_id,provider_thread_id:$provider_thread_id}')")"
+printf '%s\n' "${conversation_inspection}" >&2
 jq -e --argjson records "${EXPECTED_NATIVE_RECORD_COUNT}" --argjson messages "${EXPECTED_NATIVE_MESSAGE_COUNT}" --argjson orphans "${EXPECTED_NATIVE_ORPHAN_COUNT}" --argjson attachments "${EXPECTED_NATIVE_ATTACHMENT_COUNT}" '.record_count==$records and .message_record_count==$messages and .orphan_attachment_record_count==$orphans and .attachment_row_count==$attachments and .provider_content_returned==false and .provider_write_authority==false' <<<"${conversation_inspection}" >/dev/null
 echo "[partner-cleanroom] native conversation exact; project reviewed open-loop cohort"
 
