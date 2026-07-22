@@ -1,68 +1,88 @@
-# MoonSleep Partner Communications
+# MoonSleep Partner Desk projection
 
 **Status:** CANONICAL
-**Last Updated:** 2026-07-21
+**Last updated:** 2026-07-22
 
----
+## Product decision
 
-## Operator experience
+Partner Desk tracks independent supplier and partner open loops. Provider-native
+threads are evidence containers, not task containers. Categories and labels are
+descriptive facets, not lifecycle state.
 
-MoonSleep operators have one place to see conversations with factories,
-fulfillment nodes, packaging suppliers, carriers, marketplace partners,
-professional services, and creator partners.
+The design is grounded in MoonSleep's Alibaba corpus: 55 conversations, 7,707
+messages, 1,148 attachment hints, and one Surewal conversation with more than
+6,000 messages. The Surewal thread simultaneously contains questions about
+product materials, pricing, purchase-order changes, production batches,
+shipment schedules, samples, payment follow-up, quality tests, and future
+factory capacity. A conversation-level awaiting-response flag cannot represent
+that work truthfully.
 
-The left queue shows conversations awaiting MoonSleep first, ordered by the
-oldest unanswered partner message. The center shows the provider-native thread.
-The right context panel shows the reviewed partner entity and links to relevant
-operational read models such as products, purchase orders, production batches,
-shipments, invoices, and attachments.
+## Source and identity boundaries
 
-Gmail and Alibaba conversations with the same reviewed partner appear on one
-entity timeline, but they are never rewritten into a fictional cross-provider
-thread. Every message keeps its immutable source record and revision digest.
+The projection consumes immutable communication records and exact revision
+digests from Nex. Every record retains its provider, connection, native thread,
+native message, timestamp, direction, bounded summary, and attachment count.
 
-## Inputs
+Canonical identity must come from an exact provider anchor or operator review.
+Names, addresses, message similarity, and model output are evidence only. A
+provider-native thread cannot silently resolve to several canonical entities.
 
-The projection consumes public Nex contracts only:
+## Partner open loops
 
-- immutable communication records and their exact source revision digest;
-- provider, connection, native thread, native message, timestamp, direction,
-  bounded summary, and attachment count;
-- canonical entity/contact resolution produced by an exact provider anchor or
-  explicit operator review;
-- a confirmed workspace classification assertion.
+A reviewed open loop contains:
 
-Names, email addresses, phone numbers, message similarity, and model output are
-evidence. They do not establish canonical identity.
+- a stable open-loop identifier and canonical partner entity;
+- a primary source record and one or more evidence source records;
+- a concise title and operational summary;
+- optional labels, owner, and follow-up time;
+- lifecycle state: open, waiting on MoonSleep, waiting on partner, blocked,
+  resolved, superseded, or dismissed;
+- exact closure evidence when resolved;
+- an explicit successor when superseded;
+- review state and assertion origin.
 
-## Projection
+An open loop may use evidence from Alibaba and Gmail when every record resolves
+to the same canonical partner. The provider-native threads remain separate.
+
+Model output may propose new loops, labels, splits, merges, lifecycle changes,
+or closure. A proposal never enters the operational queue until reviewed.
+
+## Coverage
+
+Every in-scope source record receives one explicit disposition:
+
+- evidence for one or more open loops;
+- informational;
+- provider system event;
+- attachment-only evidence; or
+- needs review.
+
+A source record may support several loops. Unclassified records remain visible
+in review; they are never silently dropped.
+
+## Operational projection
 
 The projection produces:
 
-- one chronological timeline per canonical partner entity;
-- one thread per provider, connection, and provider-native thread identifier;
-- deterministic `awaiting_moonsleep` or `awaiting_partner` state;
-- oldest-unanswered-first queue order;
-- an explicit review queue for unresolved, ambiguous, model-only, or
-  unconfirmed classifications.
-
-Model output may propose classifications, relationship links, purchase-order
-references, shipment references, dates, quantities, and other facts. A model
-proposal never enters canonical identity or operational truth without the
-owning domain's acceptance operation.
+- chronological entity timelines;
+- provider-native threads with linked open-loop identifiers;
+- all non-terminal open loops;
+- an attention queue for open, blocked, or waiting-on-MoonSleep loops;
+- a separate waiting-on-partner follow-up queue;
+- review items for identity, partner classification, source coverage, and loop
+  proposals.
 
 ## Authority boundaries
 
-This projection cannot:
+The projection cannot:
 
 - send or modify Gmail or Alibaba messages;
-- create, merge, split, or supersede canonical identities;
+- create, merge, split, or supersede canonical Nex identities;
 - create or mutate purchase orders, production batches, shipments, routing,
   inventory, payments, invoices, or customer promises;
-- convert extracted claims into Supply or Finance truth;
+- promote extracted claims into Supply or Finance truth;
+- close a loop without source-linked evidence;
 - hide an in-scope source record without an explicit disposition.
 
-The shared communications plane owns immutable messages, native threads,
-classifications, and coverage. Nex identity owns canonical entity/contact
-resolution. Supply and Finance own their operational records. The partner
-workspace is a read projection plus review surface across those boundaries.
+Reply drafting and sending are a later, separately authorized phase. Drafts
+must remain source-linked, operator-approved, provider-scoped, and auditable.

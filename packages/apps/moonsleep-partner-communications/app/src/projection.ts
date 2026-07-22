@@ -1,6 +1,6 @@
 export type CommunicationDirection = "inbound" | "outbound";
 
-export type WorkspaceCategory =
+export type PartnerRelationshipCategory =
   | "vendor"
   | "fulfillment_partner"
   | "logistics_partner"
@@ -32,15 +32,53 @@ export type IdentityResolution = {
 
 export type WorkspaceAssertion = {
   source_record_id: string;
-  category: WorkspaceCategory;
+  category: PartnerRelationshipCategory;
   status: "confirmed" | "proposed";
+  assertion_origin: "deterministic_rule" | "operator_review" | "model";
+};
+
+export type OpenLoopLifecycle =
+  | "open"
+  | "waiting_on_partner"
+  | "waiting_on_moonsleep"
+  | "blocked"
+  | "resolved"
+  | "superseded"
+  | "dismissed";
+
+export type OpenLoopAssertion = {
+  open_loop_id: string;
+  canonical_entity_id: string;
+  primary_source_record_id: string;
+  evidence_source_record_ids: string[];
+  closure_source_record_ids: string[];
+  title: string;
+  summary: string;
+  labels: string[];
+  lifecycle: OpenLoopLifecycle;
+  review_state: "proposed" | "confirmed" | "rejected";
+  assertion_origin: "deterministic_rule" | "operator_review" | "model";
+  owner?: string;
+  follow_up_at?: string;
+  superseded_by_open_loop_id?: string;
+};
+
+export type SourceCoverageAssertion = {
+  source_record_id: string;
+  disposition:
+    | "open_loop_evidence"
+    | "informational"
+    | "provider_system"
+    | "attachment_only"
+    | "needs_review";
+  open_loop_ids: string[];
   assertion_origin: "deterministic_rule" | "operator_review" | "model";
 };
 
 export type ProjectedMessage = CommunicationRecord & {
   canonical_entity_id: string;
   contact_id?: string;
-  category: WorkspaceCategory;
+  partner_category: PartnerRelationshipCategory;
 };
 
 export type NativeThread = {
@@ -49,38 +87,53 @@ export type NativeThread = {
   connection_id: string;
   provider_thread_id: string;
   canonical_entity_id: string;
-  categories: WorkspaceCategory[];
-  response_state: "awaiting_moonsleep" | "awaiting_partner";
-  oldest_unanswered_at: string | null;
+  partner_categories: PartnerRelationshipCategory[];
+  open_loop_ids: string[];
+  unclassified_record_count: number;
   latest_message_at: string;
   messages: ProjectedMessage[];
 };
 
+export type ProjectedOpenLoop = Omit<OpenLoopAssertion, "evidence_source_record_ids"> & {
+  evidence_source_record_ids: string[];
+  native_thread_keys: string[];
+  opened_at: string;
+  last_activity_at: string;
+};
+
 export type EntityTimeline = {
   canonical_entity_id: string;
-  categories: WorkspaceCategory[];
+  partner_categories: PartnerRelationshipCategory[];
   native_thread_keys: string[];
+  open_loop_ids: string[];
   messages: ProjectedMessage[];
 };
 
 export type ReviewItem = {
-  source_record_id: string;
+  subject_id: string;
+  subject_type: "source_record" | "open_loop";
   reason:
     | "identity_unresolved"
     | "identity_ambiguous"
     | "identity_model_only"
-    | "workspace_classification_unconfirmed";
+    | "workspace_classification_unconfirmed"
+    | "source_coverage_unconfirmed"
+    | "open_loop_unconfirmed";
 };
 
 export type PartnerWorkspaceProjection = {
   entity_timelines: EntityTimeline[];
   native_threads: NativeThread[];
-  awaiting_moonsleep: NativeThread[];
+  reviewed_loops: ProjectedOpenLoop[];
+  open_loops: ProjectedOpenLoop[];
+  attention_queue: ProjectedOpenLoop[];
+  waiting_on_partner: ProjectedOpenLoop[];
   review_queue: ReviewItem[];
 };
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9:._@/+\-$]{0,511}$/;
+const LABEL = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
 function requireText(value: string, field: string, maxBytes: number): string {
   if (!value || value !== value.trim() || Buffer.byteLength(value, "utf8") > maxBytes) {
@@ -89,26 +142,35 @@ function requireText(value: string, field: string, maxBytes: number): string {
   return value;
 }
 
-function timestamp(value: string): number {
+function timestamp(value: string, field = "observed_at"): number {
   const parsed = Date.parse(value);
   if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== value) {
-    throw new Error("observed_at must be an exact ISO-8601 UTC timestamp");
+    throw new Error(`${field} must be an exact ISO-8601 UTC timestamp`);
   }
   return parsed;
 }
 
+function requireIdentifier(value: string, field: string, maxBytes = 512): string {
+  requireText(value, field, maxBytes);
+  if (!IDENTIFIER.test(value)) throw new Error(`${field} contains unsupported characters`);
+  return value;
+}
+
+function unique(values: string[], field: string): string[] {
+  const result = [...new Set(values)];
+  if (result.length !== values.length) throw new Error(`${field} contains duplicates`);
+  return result;
+}
+
 function validateRecord(record: CommunicationRecord): void {
-  requireText(record.source_record_id, "source_record_id", 512);
-  if (!IDENTIFIER.test(record.source_record_id)) {
-    throw new Error("source_record_id contains unsupported characters");
-  }
+  requireIdentifier(record.source_record_id, "source_record_id");
   if (!SHA256.test(record.source_revision_sha256)) {
     throw new Error("source_revision_sha256 must be a lowercase SHA-256 digest");
   }
   requireText(record.provider, "provider", 64);
-  requireText(record.connection_id, "connection_id", 256);
-  requireText(record.provider_thread_id, "provider_thread_id", 512);
-  requireText(record.provider_message_id, "provider_message_id", 512);
+  requireIdentifier(record.connection_id, "connection_id", 256);
+  requireIdentifier(record.provider_thread_id, "provider_thread_id");
+  requireIdentifier(record.provider_message_id, "provider_message_id");
   requireText(record.summary, "summary", 16_384);
   timestamp(record.observed_at);
   if (!Number.isSafeInteger(record.attachment_count) || record.attachment_count < 0) {
@@ -124,7 +186,7 @@ function acceptedIdentity(resolution: IdentityResolution): boolean {
   );
 }
 
-function reviewReason(
+function identityReviewReason(
   resolution: IdentityResolution | undefined,
 ): ReviewItem["reason"] {
   if (!resolution || resolution.status === "unresolved") return "identity_unresolved";
@@ -132,15 +194,13 @@ function reviewReason(
   return "identity_model_only";
 }
 
-function nativeThreadKey(message: ProjectedMessage): string {
-  return JSON.stringify([
-    message.provider,
-    message.connection_id,
-    message.provider_thread_id,
-  ]);
+function nativeThreadKey(message: Pick<ProjectedMessage, "provider" | "connection_id" | "provider_thread_id">): string {
+  return JSON.stringify([message.provider, message.connection_id, message.provider_thread_id]);
 }
 
-function acceptedAssertion(assertion: WorkspaceAssertion | undefined): assertion is WorkspaceAssertion {
+function acceptedWorkspaceAssertion(
+  assertion: WorkspaceAssertion | undefined,
+): assertion is WorkspaceAssertion {
   if (!assertion || assertion.status !== "confirmed") return false;
   return (
     assertion.assertion_origin === "deterministic_rule" ||
@@ -148,71 +208,103 @@ function acceptedAssertion(assertion: WorkspaceAssertion | undefined): assertion
   );
 }
 
-function responseState(messages: ProjectedMessage[]): {
-  response_state: NativeThread["response_state"];
-  oldest_unanswered_at: string | null;
-} {
-  let latestOutbound = Number.NEGATIVE_INFINITY;
-  for (const message of messages) {
-    if (message.direction === "outbound") {
-      latestOutbound = Math.max(latestOutbound, timestamp(message.observed_at));
-    }
-  }
-  const unansweredInbound = messages.filter(
-    (message) =>
-      message.direction === "inbound" && timestamp(message.observed_at) > latestOutbound,
+function acceptedCoverage(assertion: SourceCoverageAssertion): boolean {
+  return (
+    assertion.assertion_origin === "deterministic_rule" ||
+    assertion.assertion_origin === "operator_review"
   );
-  if (unansweredInbound.length === 0) {
-    return { response_state: "awaiting_partner", oldest_unanswered_at: null };
+}
+
+function validateLoopShape(loop: OpenLoopAssertion): void {
+  requireIdentifier(loop.open_loop_id, "open_loop_id");
+  requireIdentifier(loop.canonical_entity_id, "canonical_entity_id", 256);
+  requireIdentifier(loop.primary_source_record_id, "primary_source_record_id");
+  requireText(loop.title, "open_loop.title", 256);
+  requireText(loop.summary, "open_loop.summary", 8_192);
+  if (loop.labels.length > 32) throw new Error("open_loop.labels exceeds 32 entries");
+  unique(loop.labels, "open_loop.labels");
+  for (const label of loop.labels) {
+    if (!LABEL.test(label)) throw new Error("open_loop label is invalid");
   }
-  return {
-    response_state: "awaiting_moonsleep",
-    oldest_unanswered_at: unansweredInbound[0]!.observed_at,
-  };
+  unique(loop.evidence_source_record_ids, "open_loop.evidence_source_record_ids");
+  unique(loop.closure_source_record_ids, "open_loop.closure_source_record_ids");
+  if (!loop.evidence_source_record_ids.includes(loop.primary_source_record_id)) {
+    throw new Error("open_loop primary source must be included in evidence");
+  }
+  if (loop.follow_up_at) timestamp(loop.follow_up_at, "follow_up_at");
+  if (loop.owner) requireIdentifier(loop.owner, "open_loop.owner", 128);
+
+  if (loop.lifecycle === "resolved" && loop.closure_source_record_ids.length === 0) {
+    throw new Error("resolved open_loop requires exact closure evidence");
+  }
+  if (loop.lifecycle !== "resolved" && loop.closure_source_record_ids.length > 0) {
+    throw new Error("only resolved open_loop may carry closure evidence");
+  }
+  if (loop.lifecycle === "superseded") {
+    requireIdentifier(
+      loop.superseded_by_open_loop_id ?? "",
+      "superseded_by_open_loop_id",
+    );
+  } else if (loop.superseded_by_open_loop_id) {
+    throw new Error("only superseded open_loop may identify a successor");
+  }
+}
+
+function queuePriority(loop: ProjectedOpenLoop): number {
+  switch (loop.lifecycle) {
+    case "waiting_on_moonsleep": return 0;
+    case "open": return 1;
+    case "blocked": return 2;
+    case "waiting_on_partner": return 3;
+    default: return 4;
+  }
 }
 
 export function projectPartnerWorkspace(input: {
   records: CommunicationRecord[];
   identity_resolutions: IdentityResolution[];
   workspace_assertions: WorkspaceAssertion[];
+  open_loop_assertions: OpenLoopAssertion[];
+  source_coverage_assertions: SourceCoverageAssertion[];
 }): PartnerWorkspaceProjection {
-  const recordIds = new Set<string>();
+  const records = new Map<string, CommunicationRecord>();
   for (const record of input.records) {
     validateRecord(record);
-    if (recordIds.has(record.source_record_id)) {
+    if (records.has(record.source_record_id)) {
       throw new Error(`duplicate source record: ${record.source_record_id}`);
     }
-    recordIds.add(record.source_record_id);
+    records.set(record.source_record_id, record);
   }
 
   const identities = new Map<string, IdentityResolution>();
   for (const resolution of input.identity_resolutions) {
-    if (!recordIds.has(resolution.source_record_id)) {
+    if (!records.has(resolution.source_record_id)) {
       throw new Error(`identity resolution references an unknown record: ${resolution.source_record_id}`);
     }
     if (identities.has(resolution.source_record_id)) {
       throw new Error(`duplicate identity resolution: ${resolution.source_record_id}`);
     }
     if (acceptedIdentity(resolution)) {
-      requireText(resolution.canonical_entity_id ?? "", "canonical_entity_id", 256);
+      requireIdentifier(resolution.canonical_entity_id ?? "", "canonical_entity_id", 256);
+      if (resolution.contact_id) requireIdentifier(resolution.contact_id, "contact_id", 256);
     }
     identities.set(resolution.source_record_id, resolution);
   }
 
-  const assertions = new Map<string, WorkspaceAssertion>();
+  const workspaceAssertions = new Map<string, WorkspaceAssertion>();
   for (const assertion of input.workspace_assertions) {
-    if (!recordIds.has(assertion.source_record_id)) {
+    if (!records.has(assertion.source_record_id)) {
       throw new Error(`workspace assertion references an unknown record: ${assertion.source_record_id}`);
     }
-    if (assertions.has(assertion.source_record_id)) {
+    if (workspaceAssertions.has(assertion.source_record_id)) {
       throw new Error(`duplicate workspace assertion: ${assertion.source_record_id}`);
     }
-    assertions.set(assertion.source_record_id, assertion);
+    workspaceAssertions.set(assertion.source_record_id, assertion);
   }
 
   const reviewQueue: ReviewItem[] = [];
-  const projected: ProjectedMessage[] = [];
-  const sortedRecords = [...input.records].sort(
+  const projectedMessages = new Map<string, ProjectedMessage>();
+  const sortedRecords = [...records.values()].sort(
     (left, right) =>
       timestamp(left.observed_at) - timestamp(right.observed_at) ||
       left.source_record_id.localeCompare(right.source_record_id),
@@ -222,36 +314,154 @@ export function projectPartnerWorkspace(input: {
     const identity = identities.get(record.source_record_id);
     if (!identity || !acceptedIdentity(identity)) {
       reviewQueue.push({
-        source_record_id: record.source_record_id,
-        reason: reviewReason(identity),
+        subject_id: record.source_record_id,
+        subject_type: "source_record",
+        reason: identityReviewReason(identity),
       });
       continue;
     }
-    const assertion = assertions.get(record.source_record_id);
-    if (!acceptedAssertion(assertion)) {
+    const assertion = workspaceAssertions.get(record.source_record_id);
+    if (!acceptedWorkspaceAssertion(assertion)) {
       reviewQueue.push({
-        source_record_id: record.source_record_id,
+        subject_id: record.source_record_id,
+        subject_type: "source_record",
         reason: "workspace_classification_unconfirmed",
       });
       continue;
     }
-    projected.push({
+    projectedMessages.set(record.source_record_id, {
       ...record,
       canonical_entity_id: identity.canonical_entity_id!,
       ...(identity.contact_id ? { contact_id: identity.contact_id } : {}),
-      category: assertion.category,
+      partner_category: assertion.category,
     });
   }
 
+  const openLoopAssertions = new Map<string, OpenLoopAssertion>();
+  for (const loop of input.open_loop_assertions) {
+    validateLoopShape(loop);
+    if (openLoopAssertions.has(loop.open_loop_id)) {
+      throw new Error(`duplicate open_loop: ${loop.open_loop_id}`);
+    }
+    for (const sourceRecordId of [
+      ...loop.evidence_source_record_ids,
+      ...loop.closure_source_record_ids,
+    ]) {
+      const message = projectedMessages.get(sourceRecordId);
+      if (!message) {
+        throw new Error(`open_loop references an unavailable source record: ${sourceRecordId}`);
+      }
+      if (message.canonical_entity_id !== loop.canonical_entity_id) {
+        throw new Error(`open_loop evidence crosses canonical entities: ${loop.open_loop_id}`);
+      }
+    }
+    openLoopAssertions.set(loop.open_loop_id, loop);
+  }
+  for (const loop of openLoopAssertions.values()) {
+    if (
+      loop.lifecycle === "superseded" &&
+      !openLoopAssertions.has(loop.superseded_by_open_loop_id!)
+    ) {
+      throw new Error(`open_loop successor does not exist: ${loop.open_loop_id}`);
+    }
+  }
+
+  const coverage = new Map<string, SourceCoverageAssertion>();
+  for (const assertion of input.source_coverage_assertions) {
+    if (!records.has(assertion.source_record_id)) {
+      throw new Error(`source coverage references an unknown record: ${assertion.source_record_id}`);
+    }
+    if (coverage.has(assertion.source_record_id)) {
+      throw new Error(`duplicate source coverage: ${assertion.source_record_id}`);
+    }
+    unique(assertion.open_loop_ids, "source_coverage.open_loop_ids");
+    for (const loopId of assertion.open_loop_ids) {
+      const loop = openLoopAssertions.get(loopId);
+      if (!loop) throw new Error(`source coverage references an unknown open_loop: ${loopId}`);
+      if (!loop.evidence_source_record_ids.includes(assertion.source_record_id)) {
+        throw new Error(`source coverage and open_loop evidence disagree: ${loopId}`);
+      }
+    }
+    if (
+      assertion.disposition === "open_loop_evidence" &&
+      assertion.open_loop_ids.length === 0
+    ) {
+      throw new Error("open_loop_evidence coverage requires at least one open_loop");
+    }
+    if (
+      assertion.disposition !== "open_loop_evidence" &&
+      assertion.open_loop_ids.length > 0
+    ) {
+      throw new Error("non-loop source coverage cannot reference open_loops");
+    }
+    coverage.set(assertion.source_record_id, assertion);
+  }
+
+  for (const loop of openLoopAssertions.values()) {
+    if (loop.review_state !== "confirmed" || loop.assertion_origin === "model") continue;
+    for (const sourceRecordId of loop.evidence_source_record_ids) {
+      const assertion = coverage.get(sourceRecordId);
+      if (
+        !assertion ||
+        !acceptedCoverage(assertion) ||
+        assertion.disposition !== "open_loop_evidence" ||
+        !assertion.open_loop_ids.includes(loop.open_loop_id)
+      ) {
+        throw new Error(`reviewed open_loop lacks matching source coverage: ${loop.open_loop_id}`);
+      }
+    }
+  }
+
+  for (const message of projectedMessages.values()) {
+    const assertion = coverage.get(message.source_record_id);
+    if (!assertion || !acceptedCoverage(assertion) || assertion.disposition === "needs_review") {
+      reviewQueue.push({
+        subject_id: message.source_record_id,
+        subject_type: "source_record",
+        reason: "source_coverage_unconfirmed",
+      });
+    }
+  }
+
+  const projectedLoops: ProjectedOpenLoop[] = [];
+  for (const loop of openLoopAssertions.values()) {
+    if (loop.review_state !== "confirmed" || loop.assertion_origin === "model") {
+      if (loop.review_state === "proposed") {
+        reviewQueue.push({
+          subject_id: loop.open_loop_id,
+          subject_type: "open_loop",
+          reason: "open_loop_unconfirmed",
+        });
+      }
+      continue;
+    }
+    const evidence = loop.evidence_source_record_ids
+      .map((sourceRecordId) => projectedMessages.get(sourceRecordId)!)
+      .sort(
+        (left, right) =>
+          timestamp(left.observed_at) - timestamp(right.observed_at) ||
+          left.source_record_id.localeCompare(right.source_record_id),
+      );
+    projectedLoops.push({
+      ...loop,
+      evidence_source_record_ids: [...loop.evidence_source_record_ids],
+      native_thread_keys: [...new Set(evidence.map(nativeThreadKey))].sort(),
+      opened_at: evidence[0]!.observed_at,
+      last_activity_at: evidence.at(-1)!.observed_at,
+    });
+  }
+
+  projectedLoops.sort(
+    (left, right) =>
+      timestamp(left.opened_at) - timestamp(right.opened_at) ||
+      left.open_loop_id.localeCompare(right.open_loop_id),
+  );
+
   const nativeThreadMessages = new Map<string, ProjectedMessage[]>();
-  for (const message of projected) {
+  for (const message of projectedMessages.values()) {
     const key = nativeThreadKey(message);
     const messages = nativeThreadMessages.get(key) ?? [];
-    if (
-      messages.some(
-        (candidate) => candidate.canonical_entity_id !== message.canonical_entity_id,
-      )
-    ) {
+    if (messages.some((candidate) => candidate.canonical_entity_id !== message.canonical_entity_id)) {
       throw new Error(`one provider-native thread resolved to multiple entities: ${key}`);
     }
     messages.push(message);
@@ -260,15 +470,24 @@ export function projectPartnerWorkspace(input: {
 
   const nativeThreads = [...nativeThreadMessages.entries()].map(([key, messages]) => {
     const first = messages[0]!;
-    const response = responseState(messages);
+    const threadRecordIds = new Set(messages.map((message) => message.source_record_id));
+    const openLoopIds = projectedLoops
+      .filter((loop) => loop.evidence_source_record_ids.some((id) => threadRecordIds.has(id)))
+      .map((loop) => loop.open_loop_id)
+      .sort();
+    const unclassifiedRecordCount = messages.filter((message) => {
+      const assertion = coverage.get(message.source_record_id);
+      return !assertion || !acceptedCoverage(assertion) || assertion.disposition === "needs_review";
+    }).length;
     return {
       native_thread_key: key,
       provider: first.provider,
       connection_id: first.connection_id,
       provider_thread_id: first.provider_thread_id,
       canonical_entity_id: first.canonical_entity_id,
-      categories: [...new Set(messages.map((message) => message.category))].sort(),
-      ...response,
+      partner_categories: [...new Set(messages.map((message) => message.partner_category))].sort(),
+      open_loop_ids: openLoopIds,
+      unclassified_record_count: unclassifiedRecordCount,
       latest_message_at: messages.at(-1)!.observed_at,
       messages,
     } satisfies NativeThread;
@@ -280,7 +499,7 @@ export function projectPartnerWorkspace(input: {
   );
 
   const entityMessages = new Map<string, ProjectedMessage[]>();
-  for (const message of projected) {
+  for (const message of projectedMessages.values()) {
     const messages = entityMessages.get(message.canonical_entity_id) ?? [];
     messages.push(message);
     entityMessages.set(message.canonical_entity_id, messages);
@@ -288,27 +507,47 @@ export function projectPartnerWorkspace(input: {
   const entityTimelines = [...entityMessages.entries()]
     .map(([canonicalEntityId, messages]) => ({
       canonical_entity_id: canonicalEntityId,
-      categories: [...new Set(messages.map((message) => message.category))].sort(),
-      native_thread_keys: [
-        ...new Set(messages.map((message) => nativeThreadKey(message))),
-      ].sort(),
+      partner_categories: [...new Set(messages.map((message) => message.partner_category))].sort(),
+      native_thread_keys: [...new Set(messages.map(nativeThreadKey))].sort(),
+      open_loop_ids: projectedLoops
+        .filter((loop) => loop.canonical_entity_id === canonicalEntityId)
+        .map((loop) => loop.open_loop_id)
+        .sort(),
       messages,
     }))
     .sort((left, right) => left.canonical_entity_id.localeCompare(right.canonical_entity_id));
 
-  const awaitingMoonSleep = nativeThreads
-    .filter((thread) => thread.response_state === "awaiting_moonsleep")
+  const terminalStates = new Set<OpenLoopLifecycle>(["resolved", "superseded", "dismissed"]);
+  const openLoops = projectedLoops.filter((loop) => !terminalStates.has(loop.lifecycle));
+  const attentionQueue = openLoops
+    .filter((loop) => loop.lifecycle !== "waiting_on_partner")
     .sort(
       (left, right) =>
-        timestamp(left.oldest_unanswered_at!) - timestamp(right.oldest_unanswered_at!) ||
-        left.native_thread_key.localeCompare(right.native_thread_key),
+        queuePriority(left) - queuePriority(right) ||
+        timestamp(left.last_activity_at) - timestamp(right.last_activity_at) ||
+        left.open_loop_id.localeCompare(right.open_loop_id),
+    );
+  const waitingOnPartner = openLoops
+    .filter((loop) => loop.lifecycle === "waiting_on_partner")
+    .sort(
+      (left, right) =>
+        timestamp(left.follow_up_at ?? left.last_activity_at) -
+          timestamp(right.follow_up_at ?? right.last_activity_at) ||
+        left.open_loop_id.localeCompare(right.open_loop_id),
     );
 
-  reviewQueue.sort((left, right) => left.source_record_id.localeCompare(right.source_record_id));
+  reviewQueue.sort(
+    (left, right) =>
+      left.subject_type.localeCompare(right.subject_type) ||
+      left.subject_id.localeCompare(right.subject_id),
+  );
   return {
     entity_timelines: entityTimelines,
     native_threads: nativeThreads,
-    awaiting_moonsleep: awaitingMoonSleep,
+    reviewed_loops: projectedLoops,
+    open_loops: openLoops,
+    attention_queue: attentionQueue,
+    waiting_on_partner: waitingOnPartner,
     review_queue: reviewQueue,
   };
 }
