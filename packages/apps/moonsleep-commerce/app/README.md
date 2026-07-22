@@ -40,7 +40,11 @@ Projection mode then drains that exact manifest in independently receipted
 batches, checks health, pause markers and Linux I/O pressure before every batch,
 and advances its durable checkpoint only after an exact Nex success receipt. A
 lost response retries only the uncheckpointed batch; replay-safe source
-observations prevent duplicate identities.
+observations prevent duplicate identities. Safe invocation defaults are one
+25-record batch, a one-second inter-batch delay, and an I/O full-pressure
+`avg60` ceiling of 1.0. An explicit invocation can run at most ten batches; a
+fresh invocation must re-read and validate the durable checkpoint before it can
+continue.
 
 Before ingest, `moonsleep-commerce.shopify-source.seed-identities` must run
 twice for the exact shop domain and connection ID. The first run creates the

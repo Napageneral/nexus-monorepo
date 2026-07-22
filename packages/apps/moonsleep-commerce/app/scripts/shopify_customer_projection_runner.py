@@ -30,6 +30,7 @@ MAX_MANIFEST_BYTES = 32 * 1024 * 1024
 MAX_TOKEN_BYTES = 16 * 1024
 MAX_RECORDS = 20_000
 MAX_BATCH_SIZE = 250
+MAX_BATCHES_PER_INVOCATION = 10
 CHECKPOINT_RECEIPT = "moonsleep_shopify_customer_projection_checkpoint"
 MANIFEST_RECEIPT = "moonsleep_shopify_customer_projection_manifest"
 OPERATION = "moonsleep-commerce.shopify-customers.project-backfill"
@@ -512,10 +513,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         raise ProjectionError("sleep interval is invalid")
     if not math.isfinite(args.timeout_seconds) or not 0 < args.timeout_seconds <= 300:
         raise ProjectionError("request timeout is invalid")
-    if args.max_batches is not None and (
-        isinstance(args.max_batches, bool) or args.max_batches < 1
+    if (
+        not isinstance(args.max_batches, int)
+        or isinstance(args.max_batches, bool)
+        or not 1 <= args.max_batches <= MAX_BATCHES_PER_INVOCATION
     ):
-        raise ProjectionError("max_batches must be a positive integer")
+        raise ProjectionError(
+            f"max_batches must be between 1 and {MAX_BATCHES_PER_INVOCATION}"
+        )
     if not math.isfinite(args.max_io_full_avg60) or args.max_io_full_avg60 < 0:
         raise ProjectionError("I/O pressure ceiling is invalid")
     runtime_url = _require_loopback_http_url(args.runtime_url, "runtime URL")
@@ -543,9 +548,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         return checkpoint
 
     batches_this_run = 0
-    while checkpoint["next_index"] < len(record_ids):
-        if args.max_batches is not None and batches_this_run >= args.max_batches:
-            break
+    while (
+        checkpoint["next_index"] < len(record_ids)
+        and batches_this_run < args.max_batches
+    ):
         _resource_gate(args, health_urls)
 
         start = checkpoint["next_index"]
@@ -611,14 +617,14 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--connection-id")
     value.add_argument("--manifest-sha256")
     value.add_argument("--checkpoint")
-    value.add_argument("--batch-size", type=int, default=100)
-    value.add_argument("--sleep-ms", type=int, default=250)
+    value.add_argument("--batch-size", type=int, default=25)
+    value.add_argument("--sleep-ms", type=int, default=1_000)
     value.add_argument("--timeout-seconds", type=float, default=30.0)
     value.add_argument("--health-url", action="append", default=[])
     value.add_argument("--pause-marker", action="append", default=[])
     value.add_argument("--io-pressure-file")
-    value.add_argument("--max-io-full-avg60", type=float, default=5.0)
-    value.add_argument("--max-batches", type=int)
+    value.add_argument("--max-io-full-avg60", type=float, default=1.0)
+    value.add_argument("--max-batches", type=int, default=1)
     return value
 
 

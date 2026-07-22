@@ -27,3 +27,8 @@ and `replayed == records_projected`.
 The service-shaped cleanroom also invokes the bounded runner through the public
 HTTP operation surface and proves its first-pass and replay checkpoints against
 PostgreSQL 17 while the continuous job and subscription remain inactive.
+
+The runner unit suite additionally models the exact 17,090-record production
+customer shape. It proves 69 batches at the hard 250-record ceiling, but the
+operator defaults remain one 25-record batch per invocation with the stricter
+resource gate.

@@ -156,9 +156,31 @@ class RunnerTest(unittest.TestCase):
             health_url=[f"{base}/health"],
             pause_marker=[],
             io_pressure_file=str(self.pressure),
-            max_io_full_avg60=5.0,
-            max_batches=None,
+            max_io_full_avg60=1.0,
+            max_batches=1,
         )
+
+    def drain(self, args: argparse.Namespace) -> dict[str, object]:
+        while True:
+            result = runner.run(args)
+            if result["completed"]:
+                return result
+
+    def test_defaults_are_one_small_resource_gated_batch(self) -> None:
+        parsed = runner.parser().parse_args(
+            [
+                "--runtime-url",
+                "http://127.0.0.1:18789",
+                "--runtime-token-file",
+                "/tmp/token",
+                "--manifest",
+                "/tmp/manifest",
+            ]
+        )
+        self.assertEqual(parsed.batch_size, 25)
+        self.assertEqual(parsed.max_batches, 1)
+        self.assertEqual(parsed.sleep_ms, 1_000)
+        self.assertEqual(parsed.max_io_full_avg60, 1.0)
 
     def test_builds_an_immutable_manifest_from_the_public_inspection(self) -> None:
         ProjectionHandler.inspection_ids = ["record-00001", "record-00002", "record-00003"]
@@ -183,13 +205,13 @@ class RunnerTest(unittest.TestCase):
 
     def test_first_and_second_pass_are_bounded_and_duplicate_free(self) -> None:
         manifest, digest = self.manifest()
-        first = runner.run(self.args(manifest, digest, "first.json"))
+        first = self.drain(self.args(manifest, digest, "first.json"))
         self.assertTrue(first["completed"])
         self.assertEqual(first["next_index"], 5)
         self.assertEqual(len(first["batches"]), 3)
         self.assertEqual(first["totals"]["created_entities"], 5)
         self.assertEqual(first["totals"]["replayed"], 0)
-        second = runner.run(self.args(manifest, digest, "second.json"))
+        second = self.drain(self.args(manifest, digest, "second.json"))
         self.assertTrue(second["completed"])
         self.assertEqual(second["totals"]["created_entities"], 0)
         self.assertEqual(second["totals"]["created_contacts"], 0)
@@ -200,7 +222,8 @@ class RunnerTest(unittest.TestCase):
         manifest, digest = self.manifest(17_090)
         args = self.args(manifest, digest, "production-shape.json")
         args.batch_size = 250
-        first = runner.run(args)
+        args.max_batches = 10
+        first = self.drain(args)
         self.assertTrue(first["completed"])
         self.assertEqual(first["next_index"], 17_090)
         self.assertEqual(len(first["batches"]), 69)
@@ -208,7 +231,8 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(first["totals"]["created_entities"], 17_090)
         replay_args = self.args(manifest, digest, "production-shape-replay.json")
         replay_args.batch_size = 250
-        replay = runner.run(replay_args)
+        replay_args.max_batches = 10
+        replay = self.drain(replay_args)
         self.assertTrue(replay["completed"])
         self.assertEqual(replay["totals"]["created_entities"], 0)
         self.assertEqual(replay["totals"]["replayed"], 17_090)
@@ -217,6 +241,7 @@ class RunnerTest(unittest.TestCase):
     def test_lost_response_retries_only_the_uncheckpointed_batch(self) -> None:
         manifest, digest = self.manifest()
         args = self.args(manifest, digest, "resume.json")
+        args.max_batches = 10
         ProjectionHandler.lose_response_on_call = 2
         with self.assertRaisesRegex(runner.ProjectionError, "projection request failed"):
             runner.run(args)
@@ -224,7 +249,7 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(checkpoint["next_index"], 2)
         self.assertEqual(len(checkpoint["batches"]), 1)
         ProjectionHandler.lose_response_on_call = None
-        resumed = runner.run(args)
+        resumed = self.drain(args)
         self.assertTrue(resumed["completed"])
         self.assertEqual(resumed["totals"]["created_entities"], 3)
         self.assertEqual(resumed["totals"]["replayed"], 2)
