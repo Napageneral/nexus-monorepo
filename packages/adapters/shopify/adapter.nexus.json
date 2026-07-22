@@ -1,6 +1,6 @@
 {
   "id": "shopify",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "displayName": "Shopify",
   "description": "Canonical Shopify adapter package for Nex with GraphQL-backed provider methods and additive projection.",
   "platform": "shopify",

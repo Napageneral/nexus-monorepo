@@ -96,6 +96,30 @@ function receipt(sourceRecordId: string) {
 }
 
 describe("Shopify order and line-item commerce projection", () => {
+  it("binds legacy 16-hex adapter revision tokens to a domain-separated SHA-256", () => {
+    const revisionToken = "d06a10a943d841b7";
+    const order = orderRecord();
+    (order.metadata as Record<string, unknown>).revision_hash = revisionToken;
+    const parsedOrder = parseShopifyOrderRecord(order);
+    expect(parsedOrder.input.source_revision_sha256).toBe(
+      sha256(`nex-commerce-source-revision-token-v1\0${revisionToken}`),
+    );
+
+    const lineItem = lineItemRecord();
+    (lineItem.metadata as Record<string, unknown>).revision_hash = revisionToken;
+    const parsedLineItem = parseShopifyLineItemRecord(lineItem);
+    if (parsedLineItem.family !== "line_item") throw new Error("expected line item");
+    expect(parsedLineItem.inputWithoutCurrency.source_revision_sha256).toBe(
+      sha256(`nex-commerce-source-revision-token-v1\0${revisionToken}`),
+    );
+
+    for (const malformed of ["d06a10a943d841b", "d06a10a943d841bg", "D06A10A943D841B7"]) {
+      const bad = orderRecord();
+      (bad.metadata as Record<string, unknown>).revision_hash = malformed;
+      expect(() => parseShopifyOrderRecord(bad)).toThrow("revision_hash is malformed");
+    }
+  });
+
   it("preserves lossless source binding, customer anchor, and immutable address snapshots", () => {
     const parsed = parseShopifyOrderRecord(orderRecord());
     expect(parsed).toMatchObject({

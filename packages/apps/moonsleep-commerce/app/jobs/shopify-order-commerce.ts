@@ -4,6 +4,8 @@ type RuntimeRow = Record<string, unknown>;
 
 const PROJECTOR_VERSION = "moonsleep-commerce-shopify-orders-v1";
 const SHA256_RE = /^[0-9a-f]{64}$/;
+const LEGACY_REVISION_TOKEN_RE = /^[0-9a-f]{16}$/;
+const LEGACY_REVISION_DIGEST_DOMAIN = "nex-commerce-source-revision-token-v1\0";
 const DECIMAL_RE = /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/;
 const NUMERIC_ID_RE = /^[1-9][0-9]*$/;
 
@@ -72,6 +74,17 @@ function requireSha256(row: RuntimeRow, field: string): string {
     throw new Error(`Shopify commerce ${field} is malformed`);
   }
   return value;
+}
+
+function sourceRevisionDigest(metadata: RuntimeRow): string {
+  const value = requireString(metadata, "revision_hash");
+  if (SHA256_RE.test(value)) {
+    return value;
+  }
+  if (!LEGACY_REVISION_TOKEN_RE.test(value)) {
+    throw new Error("Shopify commerce revision_hash is malformed");
+  }
+  return sha256(LEGACY_REVISION_DIGEST_DOMAIN + value);
 }
 
 function requireNumericId(value: unknown, field: string): string {
@@ -185,7 +198,7 @@ function commonRecord(record: RuntimeRow, expectedFamily: "order" | "line_item")
     throw new Error("Shopify commerce record space does not match its shop domain");
   }
   const sourceRecordId = requireString(record, "id");
-  const sourceRevisionSha256 = requireSha256(metadata, "revision_hash");
+  const sourceRevisionSha256 = sourceRevisionDigest(metadata);
   const { payloadSha256 } = exactProviderEnvelope(asRecord(record.payload));
   const observedAt = record.timestamp;
   if (typeof observedAt !== "number" || !Number.isSafeInteger(observedAt) || observedAt < 0) {
