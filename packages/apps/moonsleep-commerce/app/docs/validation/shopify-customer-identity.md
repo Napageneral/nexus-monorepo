@@ -3,9 +3,11 @@
 ## Cleanroom
 
 - Install a fresh MoonSleep-only Nex runtime using PostgreSQL.
-- Confirm zero records, contacts, entities, tags, observations, jobs, and runs.
-- Install MoonSleep Commerce and prove exactly one inactive Shopify subscription
-  and one inactive customer projector job.
+- Confirm zero records, contacts, observations, jobs, runs, commerce orders and
+  commerce line items; the three fresh MoonSleep seed entities remain present.
+- Install MoonSleep Commerce and prove exactly two inactive projector jobs plus
+  three disabled subscriptions scoped to the exact `customer`, `order`, and
+  `line_item` record families. Require zero queue rows and dispatch receipts.
 - Invoke `moonsleep-commerce.shopify-source.seed-identities` twice with the
   exact production shop domain and connection ID. Require the same contract
   hash, two stable canonical entity IDs, and zero new entities/contacts on the
@@ -57,6 +59,9 @@
 - First prove each committed PostgreSQL `record.ingested` event atomically
   reaches PostgreSQL-owned work with one dispatch receipt, one idempotency key,
   and crash/replay-safe lease recovery. SQLite work must remain empty.
+- Prove each `customer`, `order`, and `line_item` revision matches exactly one
+  subscription and schedules exactly one projector; broad Shopify fanout is
+  forbidden.
 - Enable the customer projector only after the bounded cohort, complete
   two-pass backfill, restart, replay, and rollback gates pass.
 - Create a new Shopify test customer through an approved provider path.
