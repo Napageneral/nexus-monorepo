@@ -16,6 +16,9 @@ APP_VERSION="$(jq -r '.version' "${ROOT_DIR}/app.nexus.json")"
 NATIVE_THREAD_ID='2215891521413-2216843498932#11011@icbu'
 SUPPLIER_CONTACT_ID='2215891521413'
 CONNECTION_ID='moonsleep-alibaba'
+GMAIL_CONNECTION_ID='tyler@intent-systems.com'
+GMAIL_THREAD_ID='gmail-partner-cleanroom-thread'
+GMAIL_RECORD_ID='gmail:message:partner-cleanroom-1'
 BACKFILL_SINCE="${BACKFILL_SINCE:-2024-01-01T00:00:00.000Z}"
 BACKFILL_TO="${BACKFILL_TO:-2026-07-18T00:00:00.000Z}"
 EXPECTED_RECORD_COUNT="${EXPECTED_RECORD_COUNT:-6325}"
@@ -75,6 +78,11 @@ runtime_role="nex_moonsleep_runtime"
 migrator_role="nex_moonsleep_migrator"
 runner_temp="$(mktemp -d /private/tmp/nex-partner-desk-cleanroom.XXXXXX)"
 chmod 0700 "${runner_temp}"
+
+jq -nc --arg connection_id "${GMAIL_CONNECTION_ID}" --arg thread_id "${GMAIL_THREAD_ID}" \
+  --arg record_id "${GMAIL_RECORD_ID}" \
+  '{operation:"record.ingest",routing:{adapter:"gog",platform:"gmail",connection_id:$connection_id,sender_id:"vendor@example.com",sender_name:"Example Vendor",receiver_id:$connection_id,receiver_name:"MoonSleep",container_kind:"direct",container_id:"vendor@example.com",thread_id:$thread_id,thread_name:"Example Vendor",metadata:{direction:"inbound"}},payload:{external_record_id:$record_id,timestamp:1784680300000,content:"Subject: Production schedule\n\nPlease confirm the reviewed production schedule.",content_type:"text",attachments:[{id:"gmail:attachment:partner-cleanroom-1",filename:"schedule.pdf",mime_type:"application/pdf",size:128,metadata:{thread_id:$thread_id,message_id:"partner-cleanroom-1",attachment_id:"attachment-1"}}],metadata:{message_id:"partner-cleanroom-1",thread_id:$thread_id,direction:"inbound",from:"Example Vendor <vendor@example.com>",to:$connection_id,subject:"Production schedule",body_text:"Please confirm the reviewed production schedule.",attachment_count:1,addressed_to_observed_mailbox:true}}}' \
+  > "${runner_temp}/gmail-record.jsonl"
 
 cleanup_resources() {
   docker rm -f "${runtime_container}" "${postgres_container}" >/dev/null 2>&1 || true
@@ -332,6 +340,26 @@ directory_after_second="$(sqlite_directory_counts)"
 jq -e --argjson expected "${EXPECTED_RECORD_COUNT}" '.records==$expected and .receipts==$expected and .events==$expected and .queue==0 and .dispatch_receipts==0 and .adapter_instances==0' <<<"${counts_after_second}" >/dev/null
 echo "[partner-cleanroom] replay counts stable; inspect complete native conversation"
 
+echo "[partner-cleanroom] ingest a production-shaped Gmail record twice and bind it to the observed mailbox"
+gmail_ingest_first="$(docker exec "${runtime_container}" sh -c '
+  token=$(cat /run/moonsleep-load-credentials/runtime-token)
+  exec node /proof/ingest-jsonl-cleanroom.mjs /evidence/gmail-record.jsonl "$token"
+')"
+jq -e '.completed==1 and .skipped==0 and .other==0 and .total==1' <<<"${gmail_ingest_first}" >/dev/null
+gmail_counts_after_first="$(runtime_counts)"
+gmail_directory_after_first="$(sqlite_directory_counts)"
+gmail_ingest_second="$(docker exec "${runtime_container}" sh -c '
+  token=$(cat /run/moonsleep-load-credentials/runtime-token)
+  exec node /proof/ingest-jsonl-cleanroom.mjs /evidence/gmail-record.jsonl "$token"
+')"
+jq -e '.completed==0 and .skipped==1 and .other==0 and .total==1' <<<"${gmail_ingest_second}" >/dev/null
+gmail_counts_after_second="$(runtime_counts)"
+gmail_directory_after_second="$(sqlite_directory_counts)"
+[[ "$(jq -S -c . <<<"${gmail_counts_after_first}")" = "$(jq -S -c . <<<"${gmail_counts_after_second}")" ]]
+[[ "$(jq -S -c . <<<"${gmail_directory_after_first}")" = "$(jq -S -c . <<<"${gmail_directory_after_second}")" ]]
+gmail_inspection="$(runtime_call moonsleep-partner-desk.gmail.inspect-conversation "$(jq -nc --arg connection_id "${GMAIL_CONNECTION_ID}" --arg provider_thread_id "${GMAIL_THREAD_ID}" '{connection_id:$connection_id,provider_thread_id:$provider_thread_id}')")"
+jq -e '.state=="committed_complete_native_conversation" and .provider=="gmail" and .record_count==1 and .attachment_row_count==1 and .provider_content_returned==false and .provider_write_authority==false' <<<"${gmail_inspection}" >/dev/null
+
 conversation_inspection="$(runtime_call moonsleep-partner-desk.alibaba.inspect-conversation "$(jq -nc --arg connection_id "${CONNECTION_ID}" --arg provider_thread_id "${NATIVE_THREAD_ID}" '{connection_id:$connection_id,provider_thread_id:$provider_thread_id}')")"
 printf '%s\n' "${conversation_inspection}" >&2
 jq -e --argjson records "${EXPECTED_NATIVE_RECORD_COUNT}" --argjson messages "${EXPECTED_NATIVE_MESSAGE_COUNT}" --argjson orphans "${EXPECTED_NATIVE_ORPHAN_COUNT}" --argjson attachments "${EXPECTED_NATIVE_ATTACHMENT_COUNT}" '.record_count==$records and .message_record_count==$messages and .orphan_attachment_record_count==$orphans and .attachment_row_count==$attachments and .provider_content_returned==false and .provider_write_authority==false' <<<"${conversation_inspection}" >/dev/null
@@ -345,6 +373,11 @@ projection_params="$(jq -nc --arg first "${sample_first}" --arg second "${sample
 projection="$(runtime_call moonsleep-partner-desk.project-reviewed-cohort "${projection_params}")"
 jq -e '.state=="reviewed_projection" and (.native_threads|length)==1 and (.open_loops|length)==2 and (.attention_queue|length)==1 and (.waiting_on_partner|length)==1 and (.review_queue|length)==0 and .provider_write_authority==false' <<<"${projection}" >/dev/null
 echo "[partner-cleanroom] reviewed projection exact"
+
+cross_channel_params="$(jq -nc --arg alibaba "${sample_first}" --arg gmail "${GMAIL_RECORD_ID}" --arg entity "${surewal_entity_id}" --arg contact "${surewal_contact_id}" '{record_ids:[$alibaba,$gmail],identity_resolutions:[{source_record_id:$alibaba,status:"confirmed",decision_origin:"operator_review",canonical_entity_id:$entity,contact_id:$contact},{source_record_id:$gmail,status:"confirmed",decision_origin:"operator_review",canonical_entity_id:$entity,contact_id:$contact}],workspace_assertions:[{source_record_id:$alibaba,category:"vendor",status:"confirmed",assertion_origin:"operator_review"},{source_record_id:$gmail,category:"vendor",status:"confirmed",assertion_origin:"operator_review"}],open_loop_assertions:[{open_loop_id:"surewal-cross-channel-review",canonical_entity_id:$entity,primary_source_record_id:$alibaba,evidence_source_record_ids:[$alibaba,$gmail],closure_source_record_ids:[],title:"Review cross-channel production schedule",summary:"One reviewed loop backed by Alibaba and Gmail evidence",labels:["production","schedule"],lifecycle:"waiting_on_partner",review_state:"confirmed",assertion_origin:"operator_review"}],source_coverage_assertions:[{source_record_id:$alibaba,disposition:"open_loop_evidence",open_loop_ids:["surewal-cross-channel-review"],assertion_origin:"operator_review"},{source_record_id:$gmail,disposition:"open_loop_evidence",open_loop_ids:["surewal-cross-channel-review"],assertion_origin:"operator_review"}]}')"
+cross_channel_projection="$(runtime_call moonsleep-partner-desk.project-reviewed-cohort "${cross_channel_params}")"
+jq -e '.state=="reviewed_projection" and (.native_threads|length)==2 and ([.native_threads[].provider]|sort)==["alibaba","gmail"] and (.open_loops|length)==1 and .open_loops[0].open_loop_id=="surewal-cross-channel-review" and (.open_loops[0].native_thread_keys|length)==2 and (.review_queue|length)==0 and .provider_write_authority==false' <<<"${cross_channel_projection}" >/dev/null
+echo "[partner-cleanroom] reviewed Gmail and Alibaba evidence share one loop while native threads remain separate"
 
 echo "[partner-cleanroom] commit immutable review revision and prove exact replay"
 review_params="$(jq -c --arg workspace_key "surewal-cleanroom" --arg entity "${surewal_entity_id}" '. + {workspace_key:$workspace_key,canonical_entity_id:$entity,review_note:"Cleanroom operator review",review_idempotency_key:"partner-desk-cleanroom-review-0001",previous_revision_sha256:null}' <<<"${projection_params}")"
@@ -360,7 +393,7 @@ review_workspaces="$(runtime_call moonsleep-partner-desk.review.workspaces '{}')
 jq -e --arg revision "${review_revision}" '.state=="review_workspace_index" and .workspace_count==1 and .workspaces[0].workspace_key=="surewal-cleanroom" and .workspaces[0].revision_sha256==$revision and .provider_write_authority==false' <<<"${review_workspaces}" >/dev/null
 counts_after_review="$(runtime_counts)"
 directory_after_review="$(sqlite_directory_counts)"
-jq -e --argjson expected "$((EXPECTED_RECORD_COUNT + 1))" '.records==$expected and .receipts==$expected and .events==$expected and .queue==0 and .dispatch_receipts==0 and .adapter_instances==0' <<<"${counts_after_review}" >/dev/null
+jq -e --argjson expected "$((EXPECTED_RECORD_COUNT + 2))" '.records==$expected and .receipts==$expected and .events==$expected and .queue==0 and .dispatch_receipts==0 and .adapter_instances==0' <<<"${counts_after_review}" >/dev/null
 
 echo "[partner-cleanroom] serve the packaged Partner Desk UI through the Nex app mount"
 ui_html="$(docker exec "${runtime_container}" sh -c '
@@ -408,12 +441,12 @@ jq -n --arg finished_at "${finished_at}" --arg source_revision "${source_revisio
   --arg nex_revision "${nex_revision}" --arg nex_image_id "${nex_image_id}" --arg postgres_image_id "${postgres_image_id}" \
   --arg postgres_version "${postgres_version}" --arg adapter_sha256 "${adapter_sha256}" --arg app_sha256 "${app_sha256}" \
   --arg record_output_sha256 "${record_output_sha256}" --arg account_entity_id "${account_entity_id}" --arg surewal_entity_id "${surewal_entity_id}" --arg surewal_contact_id "${surewal_contact_id}" \
-  --arg review_revision "${review_revision}" \
+  --arg review_revision "${review_revision}" --argjson gmail_inspection "${gmail_inspection}" \
   --argjson record_count "${EXPECTED_RECORD_COUNT}" --argjson corpus_message_count "${EXPECTED_CORPUS_MESSAGE_COUNT}" \
   --argjson corpus_orphan_count "${EXPECTED_CORPUS_ORPHAN_COUNT}" --argjson corpus_unique_attachment_count "${EXPECTED_CORPUS_UNIQUE_ATTACHMENT_COUNT}" \
   --argjson initial_counts "${initial_counts}" --argjson seed_counts "${seed_counts}" --argjson terminal_counts "${counts_after_restart}" \
   --argjson directory_counts "${directory_after_restart}" --argjson conversation "${conversation_inspection}" \
-  '{ok:true,finished_at:$finished_at,source:{revision:$source_revision,tree:$source_tree,clean:true},nex:{revision:$nex_revision,image_id:$nex_image_id,platform:"linux/amd64",storage_profile:"moonsleep-postgres-v1"},postgres:{image_id:$postgres_image_id,version:$postgres_version,platform:"linux/amd64"},packages:{alibaba_sha256:$adapter_sha256,partner_desk_sha256:$app_sha256,active_after_restart:true,ui_mount_served:true},connection:{connection_id:"moonsleep-alibaba",custom_setup_complete:true,automatic_activation:false,monitor_started:false,backfill_queued:false,provider_credentials_received:false},adapter:{output_sha256:$record_output_sha256,records:$record_count,message_records:$corpus_message_count,orphan_attachment_records:$corpus_orphan_count,unique_attachments:$corpus_unique_attachment_count,first_and_second_output_identical:true,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},identity:{account_entity_id:$account_entity_id,account_binding_preserved_after_setup:true,account_binding_preserved_after_restart:true,entity_id:$surewal_entity_id,contact_row_id:$surewal_contact_id,account_seed_first_created_entity:1,account_seed_replay_created_entity:0,first_created_entity:1,first_created_contact:1,second_created_entity:0,second_created_contact:0},conversation:$conversation,projection:{native_threads:1,reviewed_open_loops:2,review_queue:0},review_store:{revision_sha256:$review_revision,first_created:true,replay_created:false,current_after_restart:true,divergent_heads_auto_selected:false},work_boundary:{job_status:"inactive",subscription_count:2,subscription_enabled:false,queue_rows:0,dispatch_receipts:0,reply_authority:false},replay:{second_ingest_skipped:$record_count,restart_ingest_skipped:$record_count,postgres_counts_unchanged:true,directory_counts_unchanged:true},initial_counts:$initial_counts,seed_counts:$seed_counts,terminal_counts:$terminal_counts,directory_counts:$directory_counts,zero_residue:true}' > "${RECEIPT_PATH}"
+  '{ok:true,finished_at:$finished_at,source:{revision:$source_revision,tree:$source_tree,clean:true},nex:{revision:$nex_revision,image_id:$nex_image_id,platform:"linux/amd64",storage_profile:"moonsleep-postgres-v1"},postgres:{image_id:$postgres_image_id,version:$postgres_version,platform:"linux/amd64"},packages:{alibaba_sha256:$adapter_sha256,partner_desk_sha256:$app_sha256,active_after_restart:true,ui_mount_served:true},connection:{connection_id:"moonsleep-alibaba",custom_setup_complete:true,automatic_activation:false,monitor_started:false,backfill_queued:false,provider_credentials_received:false},adapter:{output_sha256:$record_output_sha256,records:$record_count,message_records:$corpus_message_count,orphan_attachment_records:$corpus_orphan_count,unique_attachments:$corpus_unique_attachment_count,first_and_second_output_identical:true,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},gmail:{inspection:$gmail_inspection,first_ingest_completed:1,replay_skipped:1,observed_mailbox_bound:true,source_revision_digest_bound:true,provider_calls:0,provider_write_authority:false},identity:{account_entity_id:$account_entity_id,account_binding_preserved_after_setup:true,account_binding_preserved_after_restart:true,entity_id:$surewal_entity_id,contact_row_id:$surewal_contact_id,account_seed_first_created_entity:1,account_seed_replay_created_entity:0,first_created_entity:1,first_created_contact:1,second_created_entity:0,second_created_contact:0},conversation:$conversation,projection:{native_threads:1,reviewed_open_loops:2,review_queue:0,cross_channel_native_threads:2,cross_channel_reviewed_open_loops:1},review_store:{revision_sha256:$review_revision,first_created:true,replay_created:false,current_after_restart:true,divergent_heads_auto_selected:false},work_boundary:{job_status:"inactive",subscription_count:2,subscription_enabled:false,queue_rows:0,dispatch_receipts:0,reply_authority:false},replay:{second_ingest_skipped:$record_count,gmail_replay_skipped:1,restart_ingest_skipped:$record_count,postgres_counts_unchanged:true,directory_counts_unchanged:true},initial_counts:$initial_counts,seed_counts:$seed_counts,terminal_counts:$terminal_counts,directory_counts:$directory_counts,zero_residue:true}' > "${RECEIPT_PATH}"
 chmod 0600 "${RECEIPT_PATH}"
 trap - EXIT
 rm -rf -- "${runner_temp}"
