@@ -103,7 +103,10 @@ function requireBackfillRecordIds(params: RuntimeRow): string[] {
 }
 
 function requireCommerceRecordIds(params: RuntimeRow): string[] {
-  const ids = requireRecordIds(params, MAX_COMMERCE_BATCH_RECORDS, true);
+  // Commerce manifests are dependency-ordered, not globally lexical: every
+  // order revision precedes line-item revisions. The exact ordered set remains
+  // hash-bound and unique.
+  const ids = requireRecordIds(params, MAX_COMMERCE_BATCH_RECORDS, false);
   const expectedSha256 = asString(params.record_set_sha256);
   if (!/^[0-9a-f]{64}$/.test(expectedSha256)) {
     throw new Error("record_set_sha256 must be a lowercase SHA-256 digest");

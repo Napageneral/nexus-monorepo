@@ -533,8 +533,8 @@ describe("Shopify order and line-item bounded backfill", () => {
 
   it("projects orders before line items and replays the same exact set without duplicates", async () => {
     const ctx = commerceContext({
-      "record-a-line": commerceRecord("record-a-line", "line_item"),
       "record-z-order": commerceRecord("record-z-order", "order"),
+      "record-a-line": commerceRecord("record-a-line", "line_item"),
     });
     const first = await projectShopifyCommerceBackfill(ctx as never);
     expect(first).toMatchObject({
