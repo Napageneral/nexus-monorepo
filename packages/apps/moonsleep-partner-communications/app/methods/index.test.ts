@@ -11,7 +11,7 @@ function fixture(id: string, timestamp: number, content: string) {
   return {
     id,
     platform: "alibaba",
-    connection_id: "alibaba-primary",
+    receiver_contact_id: "alibaba-primary",
     thread_id: "surewal-thread",
     timestamp,
     content,
@@ -36,6 +36,17 @@ test("inspects a complete native conversation without returning source content",
   assert.equal(result.message_record_count, 2);
   assert.equal(result.provider_content_returned, false);
   assert.equal(JSON.stringify(result).includes("MOQ question"), false);
+});
+
+test("rejects a record outside the requested Alibaba connection", async () => {
+  const foreign = { ...fixture("source-foreign", 1_785_000_000_000, "foreign"), receiver_contact_id: "alibaba-other" };
+  await assert.rejects(
+    inspectAlibabaConversation({
+      params: { connection_id: "alibaba-primary", provider_thread_id: "surewal-thread" },
+      nex: { records: { list: async () => ({ payload: { records: [foreign] } }) } },
+    } as never),
+    /foreign connection/,
+  );
 });
 
 test("projects multiple independent reviewed loops over the same native conversation", async () => {
