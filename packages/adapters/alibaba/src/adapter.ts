@@ -594,9 +594,53 @@ function readAttachmentText(
   if (!fileName) return "";
   const row = snapshot.textByFile.get(fileName);
   if (!row || row.status !== "extracted") return "";
-  const textPath = resolveEvidencePath(row.textPath, config, snapshot.ref);
+  const portableName = basename(textValue(row.textPath) ?? `${basename(fileName)}.txt`);
+  const textPath =
+    resolveEvidencePath(row.textPath, config, snapshot.ref) ??
+    resolveSnapshotEvidencePath(snapshot.ref, ["local-index", "attachment-text", portableName]) ??
+    resolveSnapshotEvidencePath(snapshot.ref, ["attachment-text", portableName]);
   if (!textPath || !existsSync(textPath)) return "";
   return readBoundFile(textPath, MAX_ATTACHMENT_TEXT_BYTES).toString("utf8").trim();
+}
+
+function resolveSnapshotEvidencePath(
+  snapshot: SnapshotRef,
+  pathParts: string[],
+): string | undefined {
+  const root = resolve(snapshot.path);
+  const candidate = resolve(root, ...pathParts);
+  if (!pathWithin(root, candidate) || !existsSync(candidate)) return undefined;
+  return candidate;
+}
+
+function resolveAttachmentPath(
+  attachment: AlibabaAttachment,
+  config: AlibabaRuntimeConfig,
+  snapshot: SnapshotRef,
+): string | undefined {
+  for (const sourcePath of [attachment.objectPath, attachment.localPath]) {
+    const resolved = resolveEvidencePath(sourcePath, config, snapshot);
+    if (resolved) return resolved;
+  }
+
+  const sealedContentHash = textValue(attachment.contentHash);
+  if (sealedContentHash && SHA256.test(sealedContentHash) && config.object_root) {
+    const objectRoot = resolve(config.object_root);
+    const candidate = resolve(
+      objectRoot,
+      "sha256",
+      sealedContentHash.slice(0, 2),
+      sealedContentHash,
+    );
+    if (pathWithin(objectRoot, candidate) && existsSync(candidate)) return candidate;
+  }
+
+  const fileName = textValue(attachment.fileName);
+  if (!fileName) return undefined;
+  return (
+    resolveSnapshotEvidencePath(snapshot, ["attachments", basename(fileName)]) ??
+    resolveSnapshotEvidencePath(snapshot, ["evidence", basename(fileName)])
+  );
 }
 
 function normalizeAttachment(
@@ -605,11 +649,7 @@ function normalizeAttachment(
   snapshot: LoadedSnapshot,
   config: AlibabaRuntimeConfig,
 ) {
-  const localPath = resolveEvidencePath(
-    attachment.objectPath ?? attachment.localPath,
-    config,
-    snapshot.ref,
-  );
+  const localPath = resolveAttachmentPath(attachment, config, snapshot.ref);
   const fileName = textValue(attachment.fileName) ?? `attachment-${index + 1}`;
   const contentHash = sha256File(localPath, MAX_ATTACHMENT_EVIDENCE_BYTES);
   const sealedContentHash = textValue(attachment.contentHash);
@@ -987,7 +1027,7 @@ export const __test__ = {
 export const alibabaAdapter = defineAdapter({
   platform: PLATFORM,
   name: "alibaba-messenger-adapter",
-  version: "0.2.1",
+  version: "0.2.2",
   multi_account: true,
   auth: {
     methods: [
