@@ -156,6 +156,7 @@ describe("Shopify order and line-item commerce projection", () => {
     });
     const client = {
       contacts: {
+        observe: vi.fn(),
         resolve: vi.fn(async () => ({
           found: true,
           contact: {
@@ -164,6 +165,7 @@ describe("Shopify order and line-item commerce projection", () => {
           },
         })),
       },
+      entities: { resolve: vi.fn(), tags: { list: vi.fn() } },
       commerce: {
         orders: { observe, get: vi.fn() },
         "line-items": { observe: vi.fn() },
@@ -176,23 +178,112 @@ describe("Shopify order and line-item commerce projection", () => {
       space_id: "moonsleepco.myshopify.com",
       contact_id: "gid://shopify/Customer/900719925474099312345",
     });
+    expect(client.contacts.observe).not.toHaveBeenCalled();
   });
 
-  it("fails before commerce mutation when a referenced customer is not projected", async () => {
-    const parsed = parseShopifyOrderRecord(orderRecord());
+  it("replay-safely observes a missing customer from the exact order snapshot", async () => {
+    const sourceJson =
+      '{"id":900719925474099312346,"name":"#SYNTH-1","customer":{"id":900719925474099312345,"first_name":"Ada","last_name":"Lovelace"},"total_price":"199.00"}';
+    const record = orderRecord({
+      payload: {
+        provider_object_json: sourceJson,
+        provider_object_sha256: sha256(sourceJson),
+      },
+    });
+    const parsed = parseShopifyOrderRecord(record);
     if (parsed.family !== "order") throw new Error("expected order");
-    const observe = vi.fn();
+    const orderObserve = vi
+      .fn()
+      .mockResolvedValueOnce(receipt("record-order-revision-1"))
+      .mockResolvedValueOnce({
+        ...receipt("record-order-revision-1"),
+        created: false,
+        replayed: true,
+        became_current: false,
+      });
+    const contactResolve = vi
+      .fn()
+      .mockResolvedValueOnce({ found: false, contact: null })
+      .mockResolvedValue({
+        found: true,
+        contact: {
+          id: "contact-shopify-customer",
+          canonical_entity_id: "entity-canonical-customer",
+        },
+      });
+    const contactObserve = vi.fn(async (input: Record<string, unknown>) => {
+      expect(input).toEqual({
+        platform: "shopify",
+        space_id: "moonsleepco.myshopify.com",
+        contact_id: "gid://shopify/Customer/900719925474099312345",
+        source_observation_id:
+          "moonsleep-commerce:shopify-order-customer:v1:record-order-revision-1",
+        observed_at: 1_784_640_001_000,
+        contact_name: "Ada Lovelace",
+        entity_name: "Ada Lovelace",
+        tags: ["Customer", "Shopify"],
+      });
+      return {
+        contact: {
+          id: "contact-shopify-customer",
+          platform: "shopify",
+          space_id: "moonsleepco.myshopify.com",
+          contact_id: "gid://shopify/Customer/900719925474099312345",
+        },
+        entity: { id: "entity-observed-customer" },
+        canonical_entity_id: "entity-canonical-customer",
+        observation: {
+          source_observation_id:
+            "moonsleep-commerce:shopify-order-customer:v1:record-order-revision-1",
+        },
+        created_contact: true,
+        created_entity: true,
+        replayed: false,
+      };
+    });
     const client = {
-      contacts: { resolve: vi.fn(async () => ({ found: false, contact: null })) },
+      contacts: { resolve: contactResolve, observe: contactObserve },
+      entities: {
+        resolve: vi.fn(async () => ({ canonical_id: "entity-canonical-customer" })),
+        tags: { list: vi.fn(async () => ({ tags: ["Shopify", "Customer"] })) },
+      },
       commerce: {
-        orders: { observe, get: vi.fn() },
+        orders: { observe: orderObserve, get: vi.fn() },
         "line-items": { observe: vi.fn() },
       },
     } as unknown as ShopifyCommerceClient;
-    await expect(projectParsedShopifyOrder(client, parsed)).rejects.toThrow(
-      "customer contact is not projected",
+    await expect(projectParsedShopifyOrder(client, parsed)).resolves.toMatchObject({
+      created: true,
+      source_record_id: "record-order-revision-1",
+    });
+    await expect(projectParsedShopifyOrder(client, parsed)).resolves.toMatchObject({
+      created: false,
+      replayed: true,
+      source_record_id: "record-order-revision-1",
+    });
+    expect(contactObserve).toHaveBeenCalledOnce();
+    expect(contactResolve).toHaveBeenCalledTimes(3);
+    expect(orderObserve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customer_contact_id: "contact-shopify-customer",
+        customer_entity_id: "entity-canonical-customer",
+      }),
     );
-    expect(observe).not.toHaveBeenCalled();
+  });
+
+  it("fails before commerce mutation when a customer anchor lacks embedded source evidence", () => {
+    const sourceJson =
+      '{"id":900719925474099312346,"name":"#SYNTH-1","customer":null,"total_price":"199.00"}';
+    expect(() =>
+      parseShopifyOrderRecord(
+        orderRecord({
+          payload: {
+            provider_object_json: sourceJson,
+            provider_object_sha256: sha256(sourceJson),
+          },
+        }),
+      ),
+    ).toThrow("requires an embedded customer object");
   });
 
   it("uses the committed parent order currency for line-item observation", async () => {
@@ -209,7 +300,8 @@ describe("Shopify order and line-item commerce projection", () => {
       return receipt("record-line-revision-1");
     });
     const client = {
-      contacts: { resolve: vi.fn() },
+      contacts: { resolve: vi.fn(), observe: vi.fn() },
+      entities: { resolve: vi.fn(), tags: { list: vi.fn() } },
       commerce: {
         orders: {
           observe: vi.fn(),
@@ -244,7 +336,8 @@ describe("Shopify order and line-item commerce projection", () => {
     if (parsed.family !== "line_item") throw new Error("expected line item");
     const lineObserve = vi.fn();
     const client = {
-      contacts: { resolve: vi.fn() },
+      contacts: { resolve: vi.fn(), observe: vi.fn() },
+      entities: { resolve: vi.fn(), tags: { list: vi.fn() } },
       commerce: {
         orders: { observe: vi.fn(), get: vi.fn(async () => ({ found: false })) },
         "line-items": { observe: lineObserve },

@@ -1,6 +1,6 @@
 {
   "id": "moonsleep-commerce",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "displayName": "MoonSleep Commerce",
   "description": "Project exact Shopify records into MoonSleep identity and typed commerce state through public Nex operations.",
   "skill": "./SKILL.md",
