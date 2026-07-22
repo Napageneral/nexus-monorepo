@@ -1,6 +1,6 @@
 {
   "id": "moonsleep-partner-desk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "displayName": "MoonSleep Partner Desk",
   "description": "Track reviewed supplier and partner open loops over immutable provider-native communications.",
   "skill": "./SKILL.md",
