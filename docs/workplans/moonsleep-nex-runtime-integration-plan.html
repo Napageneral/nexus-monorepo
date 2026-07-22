@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="The ratified MoonSleep and Nex runtime integration direction, current evidence, ownership boundaries, and implementation sequence.">
+  <title>MoonSleep × Nex — Cohesive Runtime Integration Plan</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d0c;
+      --panel: #121614;
+      --panel-2: #171d1a;
+      --ink: #f1f5ef;
+      --muted: #a5b0a8;
+      --line: #29332d;
+      --green: #9de7b0;
+      --green-2: #4fbf78;
+      --amber: #f2c66d;
+      --blue: #8fc7ff;
+      --red: #ff958f;
+      --max: 1160px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 92% 2%, rgba(79, 191, 120, .12), transparent 25rem),
+        radial-gradient(circle at 8% 28%, rgba(143, 199, 255, .07), transparent 28rem),
+        var(--bg);
+      color: var(--ink);
+      font: 16px/1.58 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    a { color: var(--green); text-underline-offset: 3px; }
+    code, .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .91em;
+    }
+    code {
+      color: #d7f5df;
+      background: rgba(157, 231, 176, .08);
+      border: 1px solid rgba(157, 231, 176, .13);
+      border-radius: 5px;
+      padding: .12rem .34rem;
+    }
+
+    .shell { width: min(var(--max), calc(100% - 36px)); margin: 0 auto; }
+    .hero { padding: 72px 0 42px; border-bottom: 1px solid var(--line); }
+    .eyebrow {
+      color: var(--green);
+      font: 700 .74rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    h1 {
+      max-width: 920px;
+      margin: 14px 0 18px;
+      font-size: clamp(2.6rem, 7vw, 5.8rem);
+      line-height: .96;
+      letter-spacing: -.065em;
+    }
+    .dek { max-width: 850px; margin: 0; color: #cbd4cd; font-size: clamp(1.08rem, 2vw, 1.35rem); }
+    .status-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+    .pill {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 7px 11px;
+      color: var(--muted);
+      background: rgba(255,255,255,.025);
+      font: 650 .76rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .pill.green { color: var(--green); border-color: rgba(79, 191, 120, .35); }
+
+    .layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 48px; padding: 44px 0 90px; }
+    nav { position: sticky; top: 20px; align-self: start; }
+    nav strong { display: block; color: var(--muted); font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 10px; }
+    nav a {
+      display: block;
+      padding: 6px 0;
+      color: #aeb8b1;
+      text-decoration: none;
+      font-size: .9rem;
+    }
+    nav a:hover { color: var(--ink); }
+
+    main { min-width: 0; }
+    section { scroll-margin-top: 24px; margin-bottom: 68px; }
+    h2 { margin: 0 0 18px; font-size: clamp(1.75rem, 3vw, 2.5rem); line-height: 1.08; letter-spacing: -.035em; }
+    h3 { margin: 28px 0 10px; font-size: 1.12rem; }
+    p { margin: 0 0 14px; }
+    .muted { color: var(--muted); }
+    .lead { color: #dbe4dd; font-size: 1.12rem; }
+    .rule { height: 1px; background: var(--line); margin: 28px 0; }
+
+    .decision {
+      border: 1px solid rgba(79, 191, 120, .38);
+      border-left: 4px solid var(--green-2);
+      border-radius: 10px;
+      padding: 22px 24px;
+      background: linear-gradient(135deg, rgba(79, 191, 120, .11), rgba(79, 191, 120, .025));
+      font-size: 1.08rem;
+    }
+    .decision strong { color: var(--green); }
+
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .card {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 20px;
+      background: linear-gradient(160deg, var(--panel-2), var(--panel));
+    }
+    .card h3 { margin-top: 0; }
+    .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+    .card .num { color: var(--green); font: 700 .78rem/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(105px, 1fr));
+      align-items: stretch;
+      gap: 8px;
+      margin: 26px 0;
+    }
+    .node {
+      min-width: 0;
+      min-height: 116px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      padding: 14px;
+    }
+    .node b { font-size: .9rem; }
+    .node span { color: var(--muted); font-size: .76rem; line-height: 1.35; }
+    .arrow { display: grid; place-items: center; color: var(--green-2); font-weight: 800; }
+    .flow .arrow { margin: 0 -5px; }
+
+    table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: .92rem; }
+    th, td { padding: 12px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; }
+    td:first-child { color: #dce5de; font-weight: 650; }
+
+    ul, ol { margin: 10px 0 18px; padding-left: 1.25rem; }
+    li { margin: 7px 0; }
+    li::marker { color: var(--green-2); }
+
+    .phase {
+      display: grid;
+      grid-template-columns: 74px minmax(0, 1fr) 130px;
+      gap: 18px;
+      align-items: start;
+      padding: 19px 0;
+      border-top: 1px solid var(--line);
+    }
+    .phase:last-child { border-bottom: 1px solid var(--line); }
+    .phase-id { color: var(--green); font: 800 .77rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .phase h3 { margin: 0 0 6px; }
+    .phase p { color: var(--muted); margin: 0; }
+    .state { justify-self: end; text-align: right; font: 700 .72rem/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; }
+    .state.done { color: var(--green); }
+    .state.ready { color: var(--blue); }
+    .state.next { color: var(--amber); }
+    .state.later { color: var(--muted); }
+
+    .checklist { list-style: none; padding: 0; }
+    .checklist li { position: relative; padding-left: 28px; margin: 11px 0; }
+    .checklist li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: .27em;
+      width: 15px;
+      height: 15px;
+      border: 1px solid #526158;
+      border-radius: 4px;
+      background: #0d100e;
+    }
+    .checklist li.complete::before { content: "✓"; color: #0b0d0c; background: var(--green); border-color: var(--green); text-align: center; line-height: 15px; font-weight: 900; }
+
+    .callout {
+      margin: 18px 0;
+      border: 1px solid rgba(242, 198, 109, .28);
+      border-radius: 10px;
+      padding: 17px 19px;
+      color: #e8dcc4;
+      background: rgba(242, 198, 109, .055);
+    }
+    .callout.red { border-color: rgba(255, 149, 143, .3); background: rgba(255, 149, 143, .05); color: #f3d3d0; }
+
+    .evidence { font-size: .84rem; }
+    .evidence td:nth-child(2) { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+    footer { padding: 30px 0 55px; color: var(--muted); border-top: 1px solid var(--line); font-size: .82rem; }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      nav { position: static; display: flex; flex-wrap: wrap; gap: 4px 14px; border-bottom: 1px solid var(--line); padding-bottom: 20px; }
+      nav strong { width: 100%; }
+      nav a { padding: 2px 0; }
+      .grid.three { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr; }
+      .flow .arrow { min-height: 18px; transform: rotate(90deg); }
+    }
+    @media (max-width: 640px) {
+      .shell { width: min(100% - 24px, var(--max)); }
+      .hero { padding-top: 46px; }
+      .grid { grid-template-columns: 1fr; }
+      .phase { grid-template-columns: 58px 1fr; }
+      .state { grid-column: 2; justify-self: start; text-align: left; }
+      .card { padding: 17px; }
+      th, td { padding: 9px 6px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="shell">
+      <div class="eyebrow">Ratified direction · governing production workplan</div>
+      <h1>MoonSleep × Nex</h1>
+      <p class="dek">One cohesive runtime: Nex supplies the adapter, record, identity, event, subscription and job framework; MoonSleep keeps its rich typed operational models and every capability that already works.</p>
+      <div class="status-row">
+        <span class="pill green">Direction locked</span>
+        <span class="pill">2026-07-22</span>
+        <span class="pill">Recovery-host bootstrap next</span>
+        <span class="pill green">Full PostgreSQL core proven</span>
+        <span class="pill">Shopify V1 next</span>
+        <span class="pill">Private operator access</span>
+        <span class="pill">Zero personal Nex imports</span>
+        <span class="pill">No capability regression</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="shell layout">
+    <nav aria-label="Document sections">
+      <strong>Contents</strong>
+      <a href="#decision">The decision</a>
+      <a href="#learned">What we learned</a>
+      <a href="#architecture">Target architecture</a>
+      <a href="#records">Record and evidence contract</a>
+      <a href="#identity">Identity and routing</a>
+      <a href="#events">Events, subscriptions and jobs</a>
+      <a href="#coexistence">How databases coexist</a>
+      <a href="#operator-access">Operator access</a>
+      <a href="#ownership">Lane ownership</a>
+      <a href="#status">What exists now</a>
+      <a href="#roadmap">Gameplan</a>
+      <a href="#gates">Acceptance gates</a>
+      <a href="#non-goals">Non-goals</a>
+      <a href="#evidence">Evidence boundary</a>
+    </nav>
+
+    <main>
+      <section id="decision">
+        <h2>The decision</h2>
+        <div class="decision">
+          <strong>Reuse Nex software, not Tyler's personal Nex state.</strong><br>
+          MoonSleep has a fresh Nex runtime on the Ops VPS. Nex is MoonSleep's horizontal integration and execution framework. One PostgreSQL database, separated by schemas and least-privilege roles, will store every Nex plane MoonSleep actively uses: records, search, identity, adapter state, subscriptions, schedules, jobs, queues and executor receipts. Existing MoonSleep domain systems remain the typed operational truth and are progressively fed by Nex records and jobs instead of being discarded or rebuilt.
+        </div>
+        <div class="grid three" style="margin-top: 16px;">
+          <article class="card">
+            <div class="num">01 · INGEST</div>
+            <h3>Nex owns the horizontal spine</h3>
+            <p>Connections, adapters, records, exact payload evidence, receipts, cursors, durable events, subscriptions, schedules, queues and job receipts.</p>
+          </article>
+          <article class="card">
+            <div class="num">02 · UNDERSTAND</div>
+            <h3>Nex owns shared identity</h3>
+            <p>People, organizations, facilities, mailboxes, stores, provider accounts and integrations resolve through one entity/contact graph.</p>
+          </article>
+          <article class="card">
+            <div class="num">03 · OPERATE</div>
+            <h3>MoonSleep keeps domain depth</h3>
+            <p>Commerce, Dispatch, inventory, finance, customer support and supply tables remain typed, reviewed and domain-owned.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="learned">
+        <h2>What we learned and resolved</h2>
+        <p class="lead">The important correction was not “extract a few Nex ideas.” It was “use the tested Nex framework for the exact horizontal problems it already solves, then make it a first-class MoonSleep runtime.”</p>
+        <table>
+          <thead><tr><th>Question</th><th>Final answer</th></tr></thead>
+          <tbody>
+            <tr><td>Separate Nex daemon?</td><td>One MoonSleep Nex runtime, not a shadow staging bus beside MoonSleep Ops. It runs on the Ops VPS and uses PostgreSQL.</td></tr>
+            <tr><td>Hybrid PostgreSQL + SQLite runtime?</td><td>No as the final MoonSleep architecture. The conservative records-only PostgreSQL profile proved the bedrock, but identity and the complete work plane must move to PostgreSQL before Shopify activation. No MoonSleep-active operation may silently fall back to SQLite.</td></tr>
+            <tr><td>One database or many?</td><td>One PostgreSQL database with separate Nex and MoonSleep schemas, owners, runtime roles and migrations. Protected credentials, release manifests and backup receipts remain files or credential pointers rather than ordinary application rows.</td></tr>
+            <tr><td>Personal Nex data?</td><td>Never imported. The new instance begins empty and accepts only explicitly MoonSleep-scoped data.</td></tr>
+            <tr><td>Reinvent records/search/jobs?</td><td>No. Extend the actual Nex runtime and APIs. The repository-corpus/search substrate was the wrong product and has been removed.</td></tr>
+            <tr><td>Turn records into events?</td><td>No wholesale rewrite. A record remains the immutable source observation. A separate durable ingest event announces its commitment and drives work.</td></tr>
+            <tr><td>Where does exact provider data live?</td><td>In the record's explicit payload object. Control metadata is not a hiding place for raw provider rows.</td></tr>
+            <tr><td>Sender and receiver?</td><td>They remain real entity/contact routing. They apply to humans, mailboxes, stores, provider accounts and integrations—not only chat messages.</td></tr>
+            <tr><td>Replace MoonSleep tables?</td><td>No. Projectors translate records into existing typed domain tables. Some deliberate duplication is useful: immutable evidence plus optimized current state.</td></tr>
+            <tr><td>Lose existing actions?</td><td>No. Email send, refunds, Shopify writes and other current capabilities stay available. Each migrates only after equivalent adapter methods, policy, idempotency and readback are proven.</td></tr>
+            <tr><td>First adapter?</td><td>Shopify. It gives us a large, verifiable business dataset and already has useful Nex and MoonSleep implementations to combine.</td></tr>
+            <tr><td>First job rewrite?</td><td>Not yet. Prove the runtime and first adapter vertical; then register and migrate jobs without reviving automated memory work.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="architecture">
+        <h2>Target architecture</h2>
+        <p>The adapter is the only provider-facing component. Records are immutable evidence. Events announce committed facts. Projectors and actions are jobs. Typed domain systems remain authoritative for their decisions and workflows.</p>
+        <div class="flow" aria-label="Provider to MoonSleep domain flow">
+          <div class="node"><b>Provider</b><span>Shopify, Gmail, Meta, Mercury…</span></div>
+          <div class="arrow">→</div>
+          <div class="node"><b>Nex adapter</b><span>Full provider API + backfill + monitor</span></div>
+          <div class="arrow">→</div>
+          <div class="node"><b>PostgreSQL record + receipt</b><span>Exact payload, revision, provenance</span></div>
+          <div class="arrow">→</div>
+          <div class="node"><b>Durable event</b><span>Committed once, replay-safe</span></div>
+        </div>
+        <div class="flow" aria-label="Event to job and domain projection flow">
+          <div class="node"><b>Subscription</b><span>Matches event family and policy</span></div>
+          <div class="arrow">→</div>
+          <div class="node"><b>PostgreSQL job queue</b><span>Idempotency, lease, retry, receipt</span></div>
+          <div class="arrow">→</div>
+          <div class="node"><b>Projector / action</b><span>Deterministic domain update or provider method</span></div>
+          <div class="arrow">→</div>
+          <div class="node"><b>MoonSleep domain</b><span>Typed tables, UI and operational truth</span></div>
+        </div>
+        <div class="callout"><strong>One provider read, many safe consumers.</strong> A Shopify order record can update the customer entity, commerce projection, support context and reconciliation counters without each subsystem polling Shopify independently.</div>
+      </section>
+
+      <section id="records">
+        <h2>Record and evidence contract</h2>
+        <p class="lead">Keep the existing Nex record model. Make one important addition: a first-class payload object for the complete provider observation.</p>
+        <div class="grid">
+          <article class="card">
+            <h3>Record</h3>
+            <ul>
+              <li>Provider/platform, account or connection, record family and stable external identity.</li>
+              <li>Observed, provider-created and provider-updated clocks where available.</li>
+              <li>Sender and receiver entity/contact routing.</li>
+              <li>Agent-readable <code>content</code> summary for ordinary search.</li>
+              <li>Exact <code>payload</code> object for projectors and evidence hydration.</li>
+              <li>Control <code>metadata</code> for adapter revision, request, cursor and derived provenance.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Receipt and event</h3>
+            <ul>
+              <li>The ingest receipt hashes the whole committed record, including payload.</li>
+              <li>Same identity + same payload is idempotent; changed replay under the same immutable identity fails closed.</li>
+              <li>Response-page, MIME or blob custody can have a separate receipt when one response yields many records.</li>
+              <li>The durable <code>record.ingested</code> event links to the committed record and is not the raw payload itself.</li>
+            </ul>
+          </article>
+        </div>
+        <h3>Indexing rule</h3>
+        <p>Payload is private and unindexed by default. Nex search indexes the safe, agent-readable record content plus approved structured facets. Authorized hydration can return payload to a projector or operator. This gives us central search without making every customer address, message body or financial row a global snippet.</p>
+        <h3>Shopify payload envelope</h3>
+        <p>The first adapter uses <code>provider_object</code>, <code>provider_object_json</code> and <code>provider_object_sha256</code> inside payload. This preserves both lossless JSON evidence and a decoded object without polluting control metadata.</p>
+      </section>
+
+      <section id="identity">
+        <h2>Identity and routing</h2>
+        <p>Nex identity is the shared graph. MoonSleep does not invent a second party/customer hierarchy.</p>
+        <div class="grid">
+          <article class="card">
+            <h3>Entity examples</h3>
+            <p>Tyler, Casey, Sean, MoonSleep, LA Pillow, Borden, a specific facility, a mailbox, the MoonSleep Shopify store, a Meta account and an installed integration can all be entities.</p>
+          </article>
+          <article class="card">
+            <h3>Contact anchors</h3>
+            <p>A provider contact is anchored by <code>platform + space_id + contact_id</code>. For Shopify customers, the contact ID is the customer GID inside the exact shop-domain space.</p>
+          </article>
+          <article class="card">
+            <h3>Routing versus subjects</h3>
+            <p>An email routes from Sean's contact to Tyler's MoonSleep mailbox contact. A Shopify order may route from the Shopify integration to MoonSleep while the customer is a separately referenced subject in payload and the typed order.</p>
+          </article>
+          <article class="card">
+            <h3>Conservative identity</h3>
+            <p>No automatic merge based on name, address, email or phone alone. Ambiguity stays separate and becomes an explicit merge candidate. Canonical resolution is a reviewed operation.</p>
+          </article>
+        </div>
+        <p style="margin-top: 16px;">The first production identity surface uses PostgreSQL-backed public Nex operations only: <code>contacts.observe</code>, <code>entities.resolve</code>, and tag list/add/remove. Direct adapter SQL is forbidden. Groups, relationships and structured entity locations are valuable follow-on primitives, but do not block the Shopify customer/order vertical.</p>
+      </section>
+
+      <section id="events">
+        <h2>Events, subscriptions and jobs</h2>
+        <p class="lead">This is the simplification payoff: adapters ingest once, durable events fan out, and jobs stop each inventing their own polling, state and retry mechanisms.</p>
+        <ol>
+          <li><strong>Adapter observes change.</strong> A monitor, webhook or reconciliation pull produces one or more immutable record revisions.</li>
+          <li><strong>One PostgreSQL transaction commits the spine.</strong> Record, ingest receipt, durable event, matching subscription work, queue row and dispatch receipt are stored atomically.</li>
+          <li><strong>Subscriptions decide interest.</strong> A customer projector, order projector, helpdesk context updater or alert job can subscribe to a bounded event family.</li>
+          <li><strong>The PostgreSQL executor provides delivery semantics.</strong> Idempotency, leases, retries, deadlines, terminal receipts and replay live in the common job system. Crash recovery must never require a SQLite event bridge.</li>
+          <li><strong>Projectors update typed truth.</strong> Each projector stores the source record ID, payload hash, projector revision and result/readback in its domain.</li>
+          <li><strong>Actions keep real capabilities.</strong> Provider writes use the same adapter package's explicit methods and the existing MoonSleep approval/policy boundaries.</li>
+        </ol>
+        <div class="callout red"><strong>Explicit exclusion:</strong> automated memory jobs are not part of this program. The work system is for operational adapters, projections, schedules and actions. Memory automation can be reconsidered later without blocking MoonSleep.</div>
+      </section>
+
+      <section id="coexistence">
+        <h2>How the central store and typed databases coexist</h2>
+        <p>Use the same PostgreSQL server on the Ops VPS and one governed MoonSleep operational database, with dedicated Nex schemas, roles and migrations beside the existing MoonSleep domain schemas. The fresh runtime boundary is defined by database roles, schema ownership, credentials and admitted MoonSleep data—not by another collection of SQLite ledgers.</p>
+        <table>
+          <thead><tr><th>Layer</th><th>Stores</th><th>Authority</th></tr></thead>
+          <tbody>
+            <tr><td>Nex operational schemas</td><td>Records, exact payloads, receipts, search, adapter cursors/state, identity, durable events, subscriptions, schedules, queues, runs, leases and access receipts.</td><td>Source evidence, identity binding and work delivery.</td></tr>
+            <tr><td>MoonSleep domain schemas</td><td>Typed customers, orders, fulfillment, inventory, supply, finance, helpdesk and read models.</td><td>Operational/domain truth and domain-specific invariants.</td></tr>
+            <tr><td>Provider</td><td>Upstream source objects and action state.</td><td>External source truth for its own surface.</td></tr>
+          </tbody>
+        </table>
+        <p>Duplication is intentional when it serves two different contracts: the Nex record preserves immutable provider evidence; the MoonSleep table provides validated, indexed current state. The link is explicit and auditable, never inferred from a loose text match.</p>
+      </section>
+
+      <section id="operator-access">
+        <h2>Private operator access without hiding public products</h2>
+        <p class="lead">Tailscale adds a private administrative lane. It does not replace or interrupt the public storefront, Cloudflare Access, Workers or narrowly authenticated webhook ingress.</p>
+        <div class="grid">
+          <article class="card">
+            <h3>Public product plane</h3>
+            <ul>
+              <li>The storefront and customer-facing APIs remain publicly reachable through their existing edge and authentication boundaries.</li>
+              <li>The Ops web application remains behind Cloudflare Access.</li>
+              <li>Shopify webhooks later enter through one narrow public HMAC-verified endpoint; Nex itself is never made public for them.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Private operator plane</h3>
+            <ul>
+              <li>Nex continues to listen only on loopback on the Ops VPS.</li>
+              <li>Tyler's Mac joins the same tailnet and reaches Nex through Tailscale SSH or a bounded SSH forward.</li>
+              <li>Local Codex uses an explicit MoonSleep production profile isolated from Tyler's personal Nex runtime.</li>
+              <li>No Tailscale Funnel and no direct public Nex listener.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="callout"><strong>Timing:</strong> Tailscale does not block the PostgreSQL work. Installation and configuration can proceed autonomously; Tyler is needed only once to authorize the Mac/VPS in the chosen tailnet or provide a short-lived tagged enrollment key.</div>
+      </section>
+
+      <section id="ownership">
+        <h2>What was hashed out with Unified Ops</h2>
+        <div class="grid">
+          <article class="card">
+            <h3>Core Nex lane</h3>
+            <ul>
+              <li>PostgreSQL operational store and migrations.</li>
+              <li>Record payload, receipts and durable ingest events.</li>
+              <li>Subscriptions, queues, jobs, schedules and idempotency.</li>
+              <li>PostgreSQL-backed identity public operations.</li>
+              <li>Runtime storage selection, search projection and fresh instance bootstrap.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Unified Ops / Shopify lane</h3>
+            <ul>
+              <li>Best-of-both-worlds Shopify adapter fidelity.</li>
+              <li>Complete customers, orders and line-item revisions.</li>
+              <li>Lossless provider JSON and revision hashes.</li>
+              <li>Resumable page staging and final manifests.</li>
+              <li>Identity and commerce projectors through public operations.</li>
+              <li>Shadow parity against Shopify and current MoonSleep tables.</li>
+            </ul>
+          </article>
+        </div>
+        <h3>Shared seam</h3>
+        <p>The two lanes meet only at public runtime operations: record ingest, durable ingest events, identity operations and registered projectors. The Shopify adapter does not depend on PostgreSQL internals. Core storage contains no Shopify business rules.</p>
+        <h3>Domain ownership that does not move</h3>
+        <p>Dispatch still owns actual fulfillment. MoonSleep/QBO retain accounting authority. Helpdesk owns customer communication state. Provider adapter ingestion does not silently acquire domain-write or financial authority. At the same time, this plan does not remove any existing functionality: current operational paths stay live until their Nex-backed replacement proves parity and cutover.</p>
+      </section>
+
+      <section id="status">
+        <h2>What exists now</h2>
+        <p class="lead">The full PostgreSQL core and the dormant Shopify integration now pass an exact Linux/AMD64 PostgreSQL 17 cleanroom. Production moved to the recovery VPS during the July 21 infrastructure incident; the old host is isolated, and the recovery host needs a fresh MoonSleep-only Nex database and runtime activation before Shopify admission.</p>
+        <div class="phase">
+          <div class="phase-id">HOST A</div>
+          <div><h3>Recovery production architecture</h3><p>Production runs on <code>5.78.134.249</code>. Root is reserved for the OS and releases; PostgreSQL uses its dedicated 1-TB volume; Docker, Nex, cleanrooms and restore scratch use <code>/var/lib/moonsleep-workloads</code> on the dedicated 2-TB volume. PgBouncer, resource guards, encrypted R2 backup/WAL archiving and Tailscale are live. The original host remains isolated. The capped physical restore rehearsal remains an off-hours production-safety item outside this Shopify program.</p></div>
+          <div class="state done">Live</div>
+        </div>
+        <div class="phase">
+          <div class="phase-id">CORE A</div>
+          <div><h3>Full PostgreSQL MoonSleep profile</h3><p>Core <code>974079b32b5e95d2e4bd62b8a2f0c70e798ca0c8</code> stores records, receipts, durable events, search, identity, contacts, tags, adapter state, subscriptions, schedules, jobs, queues, leases and executor receipts in PostgreSQL. Exact anchor grounding follows the selected PostgreSQL identity store and cannot fall back to SQLite.</p></div>
+          <div class="state done">Merged + cleanroom green</div>
+        </div>
+        <div class="phase">
+          <div class="phase-id">LIVE B</div>
+          <div><h3>Fresh recovery-host Nex activation</h3><p>The recovery host has no <code>moonsleep_nex</code> database to preserve. Provision a fresh database and least-privilege roles, run migrations directly against PostgreSQL, route bounded runtime traffic through PgBouncer where compatible, restore the three MoonSleep seed entities, and keep Nex loopback-only behind Tailscale SSH.</p></div>
+          <div class="state next">Do next</div>
+        </div>
+        <div class="phase">
+          <div class="phase-id">SHOP A</div>
+          <div><h3>Dormant Shopify packages</h3><p>Exact provider JSON, page/manifest closure, source identities, customer projector, immutable order/line-item observations, inactive PostgreSQL work and cohort/backfill tools pass the service-shaped cleanroom. No provider credentials or calls were present; restart and replay created zero duplicates.</p></div>
+          <div class="state ready">Ready after Nex activation</div>
+        </div>
+        <div class="phase">
+          <div class="phase-id">SHOP B</div>
+          <div><h3>Read-only Shopify proof</h3><p>Complete history: 11,293 orders and 16,686 customers in 459.31 seconds, exact source JSON and aggregate hashes, zero provider writes. A 24-hour staged run also passed with 203 orders, 298 customers and 930 total records over four pages.</p></div>
+          <div class="state done">Historical proof</div>
+        </div>
+        <div class="callout"><strong>Current boundary:</strong> no Shopify data has been admitted to production Nex. The next production mutation is the fresh recovery-host Nex bootstrap; the Shopify adapter and commerce app install immediately afterward with their job and subscription still inactive.</div>
+      </section>
+
+      <section id="roadmap">
+        <h2>Gameplan and TODO list</h2>
+        <div class="phase">
+          <div class="phase-id">P0</div>
+          <div><h3>Complete the full PostgreSQL runtime profile</h3><p>Move identity, contacts, tags, adapter state, subscriptions, schedules, jobs, queue, leases and executor to PostgreSQL. Preserve public operation contracts, eliminate active SQLite fallback and prove atomic record-to-work delivery.</p></div>
+          <div class="state done">Merged + cleanroom green</div>
+        </div>
+        <div class="phase">
+          <div class="phase-id">P1</div>
+          <div><h3>Bootstrap the recovery-host production bedrock</h3><p>Provision the fresh database and roles on the recovery VPS, deploy the exact Linux/AMD64 image from the workloads volume, preserve the disk-placement and resource-guard contract, seed Casey + MoonSleep Ops + Tyler, and prove no MoonSleep-active SQLite writes.</p></div>
+          <div class="state next">Do next</div>
+        </div>
+        <div class="phase">
+          <div class="phase-id">P2</div>
+          <div><h3>Install private operator access</h3><p>Join the Ops VPS and Tyler's Mac to Tailscale, keep Nex loopback-only, add an isolated MoonSleep production client profile and prove read/query access through Tailscale SSH without exposing Nex publicly.</p></div>
+          <div class="state done">Host and Mac joined</div>
+        </div>
+        <div class="phase">
+          <div class="phase-id">P3</div>
+          <div><h3>Rebase and install Shopify dormant</h3><p>Rebase the audited source-fidelity, V2 manifest, customer/order projector, dormant handoff and cohort slices onto exact core. Re-run package/reflection, source receipt, replay and no-write tests. Install without enabling subscriptions or ingestion.</p></div>
+          <div class="state ready">After P1</div>
+        </div>
+        <div class="phase">
+          <div class="phase-id">P4</div>
+          <div><h3>Run a bounded production cohort</h3><p>Admit 1–50 explicitly selected customer/order revisions only after validate-all-before-write. Inspect actual records, payloads, receipts, entities, contacts, tags, orders, line items, address snapshots and job receipts. Replay the cohort with zero duplicates.</p></div>
+          <div class="state ready">After P3</div>
+        </div>
+        <div class="phase">
+          <div class="phase-id">P5</div>
+          <div><h3>Backfill all customers, orders and line items twice</h3><p>Run complete historical staging and import. Reconcile counts, hashes, representative records, entity links and immutable address snapshots. Run the identical backfill again and require zero new records, entities, contacts, observations, orders, lines or jobs.</p></div>
+          <div class="state later">After cohort</div>
+        </div>
+        <div class="phase">
+          <div class="phase-id">P6</div>
+          <div><h3>Enable continuous synchronization</h3><p>Use reconciliation pulls as the source of completeness and Shopify webhooks as an acceleration signal. Prove cursor advancement, out-of-order delivery, missed webhook recovery, restart, replay, retry and rollback.</p></div>
+          <div class="state later">After backfill</div>
+        </div>
+        <div class="phase">
+          <div class="phase-id">P7</div>
+          <div><h3>Shadow, reconcile and retire only the redundant poller</h3><p>Run legacy and Nex paths together for a sustained window. Compare counts, revision hashes, updates and representative customers/orders; test restart, replay and rollback. Retire only the exact redundant legacy poller after parity remains green.</p></div>
+          <div class="state later">Final V1 gate</div>
+        </div>
+        <div class="phase">
+          <div class="phase-id">P8</div>
+          <div><h3>Grow products, channels and entities deliberately</h3><p>Only after V1 is terminal: expand product/catalog fidelity, TikTok Shop and Amazon sources, richer entity relationships/locations, and additional adapters. Each receives the same cohort, replay and parity treatment.</p></div>
+          <div class="state later">Post-V1</div>
+        </div>
+      </section>
+
+      <section id="gates">
+        <h2>Acceptance gates</h2>
+        <div class="grid">
+          <article class="card">
+            <h3>Core/runtime</h3>
+            <ul class="checklist">
+              <li>SQLite remains compatible for existing Nex deployments.</li>
+              <li>The MoonSleep production profile has zero active SQLite fallback.</li>
+              <li>PostgreSQL initialize/reapply/restart/backup/isolated-restore passes in cleanroom and production.</li>
+              <li>Record → receipt → event → subscription → queue is one atomic PostgreSQL transaction and is replay-safe.</li>
+              <li>Search, identity, adapter state, schedules, jobs, leases and executor use the selected PostgreSQL store.</li>
+              <li>Executor crash, lease expiry, retry, terminal failure and restart recovery are proven without duplicate work.</li>
+              <li>Fresh instance proves zero personal-state contamination.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Adapter</h3>
+            <ul class="checklist">
+              <li>Exact provider payload survives without numeric or unknown-field loss.</li>
+              <li>Full pagination, resume, replay and reconciliation are proven.</li>
+              <li>Rate-limit, retry, stale cursor, tamper and hostile-link cases fail safely.</li>
+              <li>Existing MoonSleep data richness and provider actions do not regress.</li>
+              <li>Install/connect, backfill/monitor and agent-use proof all pass.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Shopify vertical</h3>
+            <ul class="checklist">
+              <li>Each customer GID maps to at most one active Shopify contact anchor.</li>
+              <li>Backfill twice produces no duplicate records, entities, orders or jobs.</li>
+              <li>Customer updates create a record revision while preserving entity binding.</li>
+              <li>Orders and line items link to the correct entity and preserve immutable billing/shipping snapshots.</li>
+              <li>Counts, hashes and typed totals reconcile with source/current MoonSleep.</li>
+              <li>Reconciliation pulls recover missed or out-of-order webhooks.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Access and cutover</h3>
+            <ul class="checklist">
+              <li>Nex remains loopback-only and private operator access works from an isolated Mac profile over Tailscale SSH.</li>
+              <li>Storefront, Cloudflare Access Ops UI and public customer APIs remain independently reachable.</li>
+              <li>Webhook ingress is narrow, HMAC-verified and cannot expose the Nex operator surface.</li>
+              <li>Old functionality remains live throughout shadowing.</li>
+              <li>Rollback is tested before a duplicate path is retired.</li>
+              <li>Dispatch, accounting and other domain ownership boundaries remain intact.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section id="non-goals">
+        <h2>Explicit non-goals</h2>
+        <ul>
+          <li>No import of Tyler's or Casey's private/personal Nex corpus.</li>
+          <li>No revival of the repository-corpus/search substrate or dedicated substrate service.</li>
+          <li>No automated memory jobs in this program.</li>
+          <li>No active SQLite ledger for any operation used by the MoonSleep production profile.</li>
+          <li>No public Nex listener, no Tailscale Funnel and no storefront dependency on Tailscale.</li>
+          <li>No universal replacement for typed MoonSleep domain tables.</li>
+          <li>No direct provider adapter writes into domain tables.</li>
+          <li>No forced generic commerce abstraction before Shopify fidelity is proven.</li>
+          <li>No product/BOM/manufacturing expansion, partner portal, TikTok Shop or Amazon ingestion until Shopify V1 is terminal.</li>
+          <li>No schema field with the prohibited generic discriminator name.</li>
+          <li>No removal of a working capability merely because its implementation has not yet migrated to Nex.</li>
+        </ul>
+      </section>
+
+      <section id="evidence">
+        <h2>Current evidence boundary</h2>
+        <p class="muted">Production evidence is labeled separately from held source candidates. Historical Shopify counts must be refreshed before production admission.</p>
+        <table class="evidence">
+          <thead><tr><th>Slice</th><th>Commit / tree</th><th>Proof</th></tr></thead>
+          <tbody>
+            <tr><td>Recovery production host</td><td>5.78.134.249<br>handoff 2026-07-21</td><td>API and checkout-critical work healthy; PgBouncer and resource guards live; root, PostgreSQL and workload storage separated; encrypted R2 backup and WAL archiving active. Original host 5.78.191.186 remains isolated.</td></tr>
+            <tr><td>Full PostgreSQL Nex core</td><td>974079b32b5e95d2e4bd62b8a2f0c70e798ca0c8<br>image 67803af65c07122dd70b0c7544c6dcc6415d7a5b64dde4f0308db391fac9c661</td><td>Linux/AMD64 release-eligible cleanroom: PostgreSQL 17 records, identity and work planes; role isolation; restart; backup and isolated restore; zero personal state and zero residue.</td></tr>
+            <tr><td>Core + Shopify integration</td><td>9544f0478e8942c3f21342474183acbf22c282c2<br>tree bfa8cc2925ea846daa0a2e40c957aa58ef463281</td><td>Exact Linux/AMD64 package install into PostgreSQL 17; source identities seed 2 then create 0; customer/order/line-item record replay skips; customer identity replay creates 0; job inactive, subscription disabled, provider calls 0.</td></tr>
+            <tr><td>Shopify adapter artifact</td><td>0.1.1<br>SHA-256 c769d7bc740348af078ea13d714c240b54a54e790bb001c56d6f9aa01ef4ac90</td><td>Generated by the exact Nex release CLI after package-kit was rebound to the current core manifest contract.</td></tr>
+            <tr><td>MoonSleep commerce app artifact</td><td>0.1.0<br>SHA-256 b4fbf28bffd3f3fb4bc44d10e5a32829a7bb6321c844df712d657039a4acfa72</td><td>Installed and rehydrated after restart with dormant customer work and explicit manual replay methods.</td></tr>
+          </tbody>
+        </table>
+        <div class="rule"></div>
+        <h3>Definition of “done” for this program</h3>
+        <p>MoonSleep runs a fresh, backed-up, full-PostgreSQL Nex runtime on the Ops VPS with no active SQLite fallback; Tyler's local Codex can query it through a private Tailscale operator lane; Shopify continuously ingests exact customer, order and line-item revisions; durable PostgreSQL events drive canonical identity and commerce projections; two complete backfills are duplicate-free; reconciliation pulls recover missed webhooks; central search can find authorized operational records; existing MoonSleep functionality remains intact; and the exact redundant legacy poller is retired only after sustained parity and tested rollback.</p>
+      </section>
+    </main>
+  </div>
+
+  <footer>
+    <div class="shell">
+      <strong>Document posture:</strong> active cross-repo implementation workplan and decision reference. It summarizes ratified direction but does not replace provider, identity, runtime or MoonSleep domain canonical specs. Changes to the core boundaries require explicit review; implementation status must remain evidence-backed.
+    </div>
+  </footer>
+</body>
+</html>

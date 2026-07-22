@@ -6,6 +6,9 @@ UMBRELLA_ROOT="$(cd "${ROOT_DIR}/../../../.." && pwd)"
 NEX_IMAGE="${NEX_RELEASE_IMAGE:?set NEX_RELEASE_IMAGE to the exact Linux/AMD64 Nex release image}"
 POSTGRES_IMAGE="${POSTGRES_RELEASE_IMAGE:?set POSTGRES_RELEASE_IMAGE to the exact Linux/AMD64 PostgreSQL 17 image}"
 RECEIPT_PATH="${CLEANROOM_RECEIPT_PATH:-/private/tmp/moonsleep-shopify-full-postgres-cleanroom-receipt.json}"
+ADAPTER_ROOT="${UMBRELLA_ROOT}/packages/adapters/shopify"
+ADAPTER_VERSION="$(jq -r '.version' "${ADAPTER_ROOT}/adapter.nexus.json")"
+APP_VERSION="$(jq -r '.version' "${ROOT_DIR}/app.nexus.json")"
 
 source_revision="$(git -C "${UMBRELLA_ROOT}" rev-parse HEAD)"
 source_tree="$(git -C "${UMBRELLA_ROOT}" rev-parse 'HEAD^{tree}')"
@@ -101,8 +104,9 @@ install_package() {
   local package_class="$1"
   local package_id="$2"
   local release_id="$3"
-  local source_server_path="$4"
-  local host_path="$5"
+  local version="$4"
+  local source_server_path="$5"
+  local host_path="$6"
   local sha256 size_bytes operation_id staged_server_path body response
   sha256="$(shasum -a 256 "${host_path}" | awk '{print $1}')"
   size_bytes="$(stat -f '%z' "${host_path}")"
@@ -117,12 +121,13 @@ install_package() {
   body="$(jq -nc \
     --arg package_class "${package_class}" \
     --arg package_id "${package_id}" \
+    --arg version "${version}" \
     --arg release_id "${release_id}" \
     --arg operation_id "${operation_id}" \
     --arg server_path "${staged_server_path}" \
     --arg sha256 "${sha256}" \
     --argjson size_bytes "${size_bytes}" \
-    '{kind:$package_class,package_id:$package_id,version:"0.1.0",release_id:$release_id,operation_id:$operation_id,staged_artifact:{server_path:$server_path,sha256:$sha256,size_bytes:$size_bytes}}')"
+    '{kind:$package_class,package_id:$package_id,version:$version,release_id:$release_id,operation_id:$operation_id,staged_artifact:{server_path:$server_path,sha256:$sha256,size_bytes:$size_bytes}}')"
   response="$(docker exec "${runtime_container}" sh -c '
     token=$(cat /run/moonsleep-load-credentials/runtime-token)
     exec curl -sS \
@@ -228,8 +233,8 @@ if [[ "${CLEANROOM_SKIP_PACKAGE_BUILD:-0}" != "1" ]]; then
     "${ROOT_DIR}/scripts/test-package-release-linux-amd64.sh"
 fi
 
-adapter_artifact="${UMBRELLA_ROOT}/packages/adapters/shopify/dist/shopify-0.1.0.tar.gz"
-app_artifact="${ROOT_DIR}/dist/moonsleep-commerce-0.1.0.tar.gz"
+adapter_artifact="${ADAPTER_ROOT}/dist/shopify-${ADAPTER_VERSION}.tar.gz"
+app_artifact="${ROOT_DIR}/dist/moonsleep-commerce-${APP_VERSION}.tar.gz"
 [[ -f "${adapter_artifact}" && -f "${app_artifact}" ]]
 adapter_sha256="$(shasum -a 256 "${adapter_artifact}" | awk '{print $1}')"
 app_sha256="$(shasum -a 256 "${app_artifact}" | awk '{print $1}')"
@@ -350,14 +355,14 @@ wait_for_runtime
 
 echo "[cleanroom] install exact adapter and app while every trigger stays dormant"
 install_package adapter shopify "cleanroom-shopify-${adapter_sha256:0:16}" \
-  /artifacts/adapter/shopify-0.1.0.tar.gz "${adapter_artifact}"
+  "${ADAPTER_VERSION}" "/artifacts/adapter/shopify-${ADAPTER_VERSION}.tar.gz" "${adapter_artifact}"
 install_package app moonsleep-commerce "cleanroom-commerce-${app_sha256:0:16}" \
-  /artifacts/app/moonsleep-commerce-0.1.0.tar.gz "${app_artifact}"
+  "${APP_VERSION}" "/artifacts/app/moonsleep-commerce-${APP_VERSION}.tar.gz" "${app_artifact}"
 
 adapter_state="$(package_get adapter shopify)"
 app_state="$(package_get app moonsleep-commerce)"
-jq -e '.status == "active" and .active_version == "0.1.0"' <<<"${adapter_state}" >/dev/null
-jq -e '.status == "active" and .active_version == "0.1.0"' <<<"${app_state}" >/dev/null
+jq -e --arg version "${ADAPTER_VERSION}" '.status == "active" and .active_version == $version' <<<"${adapter_state}" >/dev/null
+jq -e --arg version "${APP_VERSION}" '.status == "active" and .active_version == $version' <<<"${app_state}" >/dev/null
 
 health_before="$(runtime_call moonsleep-commerce.healthcheck '{}')"
 jq -e '
@@ -473,8 +478,8 @@ app_state_after="$(package_get app moonsleep-commerce)"
 health_after="$(runtime_call moonsleep-commerce.healthcheck '{}')"
 jobs_after="$(runtime_call jobs.list '{}')"
 subscriptions_after="$(runtime_call events.subscriptions.list '{}')"
-jq -e '.status == "active" and .active_version == "0.1.0"' <<<"${adapter_state_after}" >/dev/null
-jq -e '.status == "active" and .active_version == "0.1.0"' <<<"${app_state_after}" >/dev/null
+jq -e --arg version "${ADAPTER_VERSION}" '.status == "active" and .active_version == $version' <<<"${adapter_state_after}" >/dev/null
+jq -e --arg version "${APP_VERSION}" '.status == "active" and .active_version == $version' <<<"${app_state_after}" >/dev/null
 jq -e '.status == "ok" and .provider_write_authority == false' <<<"${health_after}" >/dev/null
 jq -e '(.jobs | length) == 1 and .jobs[0].status == "inactive"' <<<"${jobs_after}" >/dev/null
 jq -e '(.subscriptions | length) == 1 and .subscriptions[0].enabled == 0' <<<"${subscriptions_after}" >/dev/null
