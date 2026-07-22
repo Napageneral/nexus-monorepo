@@ -884,6 +884,19 @@ export const alibabaAdapter = defineAdapter({
   name: "alibaba-messenger-adapter",
   version: "0.2.0",
   multi_account: true,
+  auth: {
+    methods: [
+      {
+        id: "alibaba_browser_snapshot",
+        type: "custom_flow",
+        label: "Attach sanitized Alibaba browser capture",
+        icon: "browser",
+        service: "alibaba",
+      },
+    ],
+    setupGuide:
+      "Stage a sanitized, hash-bound Alibaba Messenger browser capture outside Nex, then register its read-only snapshot root on the connection. This adapter never receives Alibaba login credentials.",
+  },
   capabilities: {
     text_limit: 0,
     supports_markdown: false,

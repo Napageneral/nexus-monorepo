@@ -18,6 +18,16 @@ test("adapter reflection is read-only and exposes only ingest operations", async
   });
   assert.equal(info.platform, "alibaba");
   assert.equal(info.version, "0.2.0");
+  assert.deepEqual(info.auth?.methods, [
+    {
+      id: "alibaba_browser_snapshot",
+      type: "custom_flow",
+      label: "Attach sanitized Alibaba browser capture",
+      icon: "browser",
+      service: "alibaba",
+    },
+  ]);
+  assert.match(info.auth?.setupGuide ?? "", /never receives Alibaba login credentials/u);
   assert.deepEqual(info.methods, []);
   assert.ok(info.operations.includes("records.backfill"));
   assert.ok(info.operations.includes("adapter.monitor.start"));
