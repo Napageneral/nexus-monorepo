@@ -526,7 +526,7 @@
         </div>
         <div class="phase">
           <div class="phase-id">P5</div>
-          <div><h3>Drain the committed corpus in safe batches</h3><p>Project customers, then orders and line items, from the existing 50,889 PostgreSQL records. Customer batches contain at most 250 IDs. Commerce batches contain at most 50 IDs and default to one 25-record batch per invocation. A batch advances one durable checkpoint only after an exact success receipt and yields whenever API health, pause markers or job-local I/O pressure are unsafe. Lost responses replay only the uncheckpointed batch. The second pass uses a fresh checkpoint and must create zero duplicate state.</p></div>
+          <div><h3>Drain the committed corpus in safe batches</h3><p>Project customers, then orders and line items, from the existing 50,889 PostgreSQL records. Customer batches contain at most 250 IDs. Commerce batches contain at most 50 IDs and default to one 25-record batch per invocation. The exact 33,799-record commerce shape has been simulated locally as 676 hard-ceiling batches across 68 bounded invocations and a complete duplicate-free replay. A batch advances one durable checkpoint only after an exact success receipt and yields whenever API health, pause markers or job-local I/O pressure are unsafe. Lost responses replay only the uncheckpointed batch. The second pass uses a fresh checkpoint and must create zero duplicate state.</p></div>
           <div class="state next">Source implementation now</div>
         </div>
         <div class="phase">

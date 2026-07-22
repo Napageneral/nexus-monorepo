@@ -145,6 +145,22 @@ class CommerceRunnerTest(unittest.TestCase):
         path.chmod(0o600)
         return path, hashlib.sha256(path.read_bytes()).hexdigest()
 
+    def production_shape_manifest(self) -> tuple[Path, str]:
+        ids = [f"source-order-{index:05d}" for index in range(11_548)]
+        ids.extend(f"source-line-{index:05d}" for index in range(22_251))
+        value = {
+            "receipt_type": runner.MANIFEST_RECEIPT,
+            "receipt_version": 1,
+            "shop_domain": "moonsleepco.myshopify.com",
+            "connection_id": "shopify-primary",
+            "record_ids": ids,
+            "record_set_sha256": runner._record_set_sha256(ids),
+        }
+        path = self.root / "production-shape-manifest.json"
+        path.write_bytes(compact(value) + b"\n")
+        path.chmod(0o600)
+        return path, hashlib.sha256(path.read_bytes()).hexdigest()
+
     def args(self, manifest: Path, digest: str, checkpoint: str) -> argparse.Namespace:
         base = f"http://127.0.0.1:{self.server.server_port}"
         return argparse.Namespace(
@@ -203,6 +219,39 @@ class CommerceRunnerTest(unittest.TestCase):
         self.assertTrue(replay["completed"])
         self.assertEqual(replay["totals"]["created"], 0)
         self.assertEqual(replay["totals"]["replayed"], 5)
+
+    def test_exact_production_shape_drains_and_replays_in_bounded_invocations(self) -> None:
+        manifest, digest = self.production_shape_manifest()
+        args = self.args(manifest, digest, "production-first.json")
+        args.batch_size = 50
+        args.max_batches = 10
+
+        invocations = 0
+        while True:
+            first = runner.run(args)
+            invocations += 1
+            if first["completed"]:
+                break
+        self.assertEqual(invocations, 68)
+        self.assertEqual(len(first["batches"]), 676)
+        self.assertEqual(first["totals"]["records_projected"], 33_799)
+        self.assertEqual(first["totals"]["orders_projected"], 11_548)
+        self.assertEqual(first["totals"]["line_items_projected"], 22_251)
+        self.assertEqual(first["totals"]["created"], 33_799)
+
+        replay_args = self.args(manifest, digest, "production-replay.json")
+        replay_args.batch_size = 50
+        replay_args.max_batches = 10
+        replay_invocations = 0
+        while True:
+            replay = runner.run(replay_args)
+            replay_invocations += 1
+            if replay["completed"]:
+                break
+        self.assertEqual(replay_invocations, 68)
+        self.assertEqual(len(replay["batches"]), 676)
+        self.assertEqual(replay["totals"]["created"], 0)
+        self.assertEqual(replay["totals"]["replayed"], 33_799)
 
     def test_lost_response_retries_only_the_uncheckpointed_batch(self) -> None:
         manifest, digest = self.manifest()
