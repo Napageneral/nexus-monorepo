@@ -16,6 +16,17 @@ APP_VERSION="$(jq -r '.version' "${ROOT_DIR}/app.nexus.json")"
 NATIVE_THREAD_ID='2215891521413-2216843498932#11011@icbu'
 SUPPLIER_CONTACT_ID='2215891521413'
 CONNECTION_ID='alibaba-primary'
+BACKFILL_SINCE="${BACKFILL_SINCE:-2024-01-01T00:00:00.000Z}"
+BACKFILL_TO="${BACKFILL_TO:-2026-07-18T00:00:00.000Z}"
+EXPECTED_RECORD_COUNT="${EXPECTED_RECORD_COUNT:-6325}"
+EXPECTED_NATIVE_RECORD_COUNT="${EXPECTED_NATIVE_RECORD_COUNT:-6325}"
+EXPECTED_NATIVE_MESSAGE_COUNT="${EXPECTED_NATIVE_MESSAGE_COUNT:-6132}"
+EXPECTED_NATIVE_ORPHAN_COUNT="${EXPECTED_NATIVE_ORPHAN_COUNT:-193}"
+EXPECTED_NATIVE_ATTACHMENT_COUNT="${EXPECTED_NATIVE_ATTACHMENT_COUNT:-1148}"
+
+for numeric_value in "${EXPECTED_RECORD_COUNT}" "${EXPECTED_NATIVE_RECORD_COUNT}" "${EXPECTED_NATIVE_MESSAGE_COUNT}" "${EXPECTED_NATIVE_ORPHAN_COUNT}" "${EXPECTED_NATIVE_ATTACHMENT_COUNT}"; do
+  [[ "${numeric_value}" =~ ^[0-9]+$ ]] || { echo "expected counts must be non-negative integers" >&2; exit 1; }
+done
 
 for command_name in docker jq openssl shasum; do
   command -v "${command_name}" >/dev/null || { echo "required command is unavailable: ${command_name}" >&2; exit 1; }
@@ -175,11 +186,11 @@ for pass in 1 2; do
     --env NEXUS_ADAPTER_CONTEXT_PATH=/evidence/context.json \
     --env NEXUS_ADAPTER_STATE_DIR=/tmp/adapter-state \
     --entrypoint sh "${NEX_IMAGE}" -c \
-    '/adapter/index.js records.backfill --connection alibaba-primary --since 2024-01-01T00:00:00.000Z --to 2026-07-18T00:00:00.000Z --format jsonl > "/output/records-'"${pass}"'.jsonl"'
+    '/adapter/index.js records.backfill --connection alibaba-primary --since '"${BACKFILL_SINCE}"' --to '"${BACKFILL_TO}"' --format jsonl > "/output/records-'"${pass}"'.jsonl"'
 done
 cmp "${runner_temp}/records-1.jsonl" "${runner_temp}/records-2.jsonl"
 record_count="$(LC_ALL=C grep -c '^{' "${runner_temp}/records-1.jsonl")"
-[[ "${record_count}" = "6325" ]] || { echo "unexpected Surewal record count: ${record_count}" >&2; exit 1; }
+[[ "${record_count}" = "${EXPECTED_RECORD_COUNT}" ]] || { echo "unexpected Alibaba record count: ${record_count}" >&2; exit 1; }
 record_output_sha256="$(shasum -a 256 "${runner_temp}/records-1.jsonl" | awk '{print $1}')"
 
 echo "[partner-cleanroom] create isolated PostgreSQL 17 and Nex runtime"
@@ -273,7 +284,7 @@ ingest_first="$(docker exec "${runtime_container}" sh -c '
   token=$(cat /run/moonsleep-load-credentials/runtime-token)
   exec node /proof/ingest-jsonl-cleanroom.mjs /evidence/records-1.jsonl "$token"
 ')"
-jq -e '.completed==6325 and .skipped==0 and .other==0 and .total==6325' <<<"${ingest_first}" >/dev/null
+jq -e --argjson expected "${EXPECTED_RECORD_COUNT}" '.completed==$expected and .skipped==0 and .other==0 and .total==$expected' <<<"${ingest_first}" >/dev/null
 counts_after_first="$(runtime_counts)"
 directory_after_first="$(sqlite_directory_counts)"
 
@@ -281,16 +292,16 @@ ingest_second="$(docker exec "${runtime_container}" sh -c '
   token=$(cat /run/moonsleep-load-credentials/runtime-token)
   exec node /proof/ingest-jsonl-cleanroom.mjs /evidence/records-1.jsonl "$token"
 ')"
-jq -e '.completed==0 and .skipped==6325 and .other==0 and .total==6325' <<<"${ingest_second}" >/dev/null
+jq -e --argjson expected "${EXPECTED_RECORD_COUNT}" '.completed==0 and .skipped==$expected and .other==0 and .total==$expected' <<<"${ingest_second}" >/dev/null
 counts_after_second="$(runtime_counts)"
 directory_after_second="$(sqlite_directory_counts)"
 [[ "$(jq -S -c . <<<"${counts_after_first}")" = "$(jq -S -c . <<<"${counts_after_second}")" ]]
 [[ "$(jq -S -c . <<<"${directory_after_first}")" = "$(jq -S -c . <<<"${directory_after_second}")" ]]
-jq -e '.records==6325 and .receipts==6325 and .events==6325 and .queue==0 and .dispatch_receipts==0 and .adapter_instances==0' <<<"${counts_after_second}" >/dev/null
+jq -e --argjson expected "${EXPECTED_RECORD_COUNT}" '.records==$expected and .receipts==$expected and .events==$expected and .queue==0 and .dispatch_receipts==0 and .adapter_instances==0' <<<"${counts_after_second}" >/dev/null
 echo "[partner-cleanroom] replay counts stable; inspect complete native conversation"
 
 conversation_inspection="$(runtime_call moonsleep-partner-desk.alibaba.inspect-conversation "$(jq -nc --arg connection_id "${CONNECTION_ID}" --arg provider_thread_id "${NATIVE_THREAD_ID}" '{connection_id:$connection_id,provider_thread_id:$provider_thread_id}')")"
-jq -e '.record_count==6325 and .message_record_count==6132 and .orphan_attachment_record_count==193 and .attachment_row_count==1148 and .provider_content_returned==false and .provider_write_authority==false' <<<"${conversation_inspection}" >/dev/null
+jq -e --argjson records "${EXPECTED_NATIVE_RECORD_COUNT}" --argjson messages "${EXPECTED_NATIVE_MESSAGE_COUNT}" --argjson orphans "${EXPECTED_NATIVE_ORPHAN_COUNT}" --argjson attachments "${EXPECTED_NATIVE_ATTACHMENT_COUNT}" '.record_count==$records and .message_record_count==$messages and .orphan_attachment_record_count==$orphans and .attachment_row_count==$attachments and .provider_content_returned==false and .provider_write_authority==false' <<<"${conversation_inspection}" >/dev/null
 echo "[partner-cleanroom] native conversation exact; project reviewed open-loop cohort"
 
 sample_ids="$(docker exec -u postgres "${postgres_container}" psql -X -d moonsleep_nex -Atqc "SELECT id FROM nex_runtime.records WHERE metadata->>'family'='message' ORDER BY timestamp,id LIMIT 2")"
@@ -312,7 +323,7 @@ ingest_after_restart="$(docker exec "${runtime_container}" sh -c '
   token=$(cat /run/moonsleep-load-credentials/runtime-token)
   exec node /proof/ingest-jsonl-cleanroom.mjs /evidence/records-1.jsonl "$token"
 ')"
-jq -e '.completed==0 and .skipped==6325 and .other==0' <<<"${ingest_after_restart}" >/dev/null
+jq -e --argjson expected "${EXPECTED_RECORD_COUNT}" '.completed==0 and .skipped==$expected and .other==0' <<<"${ingest_after_restart}" >/dev/null
 counts_after_restart="$(runtime_counts)"
 directory_after_restart="$(sqlite_directory_counts)"
 [[ "$(jq -S -c . <<<"${counts_after_second}")" = "$(jq -S -c . <<<"${counts_after_restart}")" ]]
@@ -331,9 +342,10 @@ jq -n --arg finished_at "${finished_at}" --arg source_revision "${source_revisio
   --arg nex_revision "${nex_revision}" --arg nex_image_id "${nex_image_id}" --arg postgres_image_id "${postgres_image_id}" \
   --arg postgres_version "${postgres_version}" --arg adapter_sha256 "${adapter_sha256}" --arg app_sha256 "${app_sha256}" \
   --arg record_output_sha256 "${record_output_sha256}" --arg surewal_entity_id "${surewal_entity_id}" --arg surewal_contact_id "${surewal_contact_id}" \
+  --argjson record_count "${EXPECTED_RECORD_COUNT}" \
   --argjson initial_counts "${initial_counts}" --argjson seed_counts "${seed_counts}" --argjson terminal_counts "${counts_after_restart}" \
   --argjson directory_counts "${directory_after_restart}" --argjson conversation "${conversation_inspection}" \
-  '{ok:true,finished_at:$finished_at,source:{revision:$source_revision,tree:$source_tree,clean:true},nex:{revision:$nex_revision,image_id:$nex_image_id,platform:"linux/amd64",storage_profile:"moonsleep-postgres-v1"},postgres:{image_id:$postgres_image_id,version:$postgres_version,platform:"linux/amd64"},packages:{alibaba_sha256:$adapter_sha256,partner_desk_sha256:$app_sha256,active_after_restart:true},adapter:{output_sha256:$record_output_sha256,records:6325,first_and_second_output_identical:true,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},identity:{entity_id:$surewal_entity_id,contact_row_id:$surewal_contact_id,first_created_entity:1,first_created_contact:1,second_created_entity:0,second_created_contact:0},conversation:$conversation,projection:{native_threads:1,reviewed_open_loops:2,review_queue:0},work_boundary:{job_status:"inactive",subscription_enabled:false,queue_rows:0,dispatch_receipts:0,reply_authority:false},replay:{second_ingest_skipped:6325,restart_ingest_skipped:6325,postgres_counts_unchanged:true,directory_counts_unchanged:true},initial_counts:$initial_counts,seed_counts:$seed_counts,terminal_counts:$terminal_counts,directory_counts:$directory_counts,zero_residue:true}' > "${RECEIPT_PATH}"
+  '{ok:true,finished_at:$finished_at,source:{revision:$source_revision,tree:$source_tree,clean:true},nex:{revision:$nex_revision,image_id:$nex_image_id,platform:"linux/amd64",storage_profile:"moonsleep-postgres-v1"},postgres:{image_id:$postgres_image_id,version:$postgres_version,platform:"linux/amd64"},packages:{alibaba_sha256:$adapter_sha256,partner_desk_sha256:$app_sha256,active_after_restart:true},adapter:{output_sha256:$record_output_sha256,records:$record_count,first_and_second_output_identical:true,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},identity:{entity_id:$surewal_entity_id,contact_row_id:$surewal_contact_id,first_created_entity:1,first_created_contact:1,second_created_entity:0,second_created_contact:0},conversation:$conversation,projection:{native_threads:1,reviewed_open_loops:2,review_queue:0},work_boundary:{job_status:"inactive",subscription_enabled:false,queue_rows:0,dispatch_receipts:0,reply_authority:false},replay:{second_ingest_skipped:$record_count,restart_ingest_skipped:$record_count,postgres_counts_unchanged:true,directory_counts_unchanged:true},initial_counts:$initial_counts,seed_counts:$seed_counts,terminal_counts:$terminal_counts,directory_counts:$directory_counts,zero_residue:true}' > "${RECEIPT_PATH}"
 chmod 0600 "${RECEIPT_PATH}"
 trap - EXIT
 rm -rf -- "${runner_temp}"
