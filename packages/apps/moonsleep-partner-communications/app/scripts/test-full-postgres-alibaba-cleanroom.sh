@@ -15,14 +15,14 @@ ADAPTER_VERSION="$(jq -r '.version' "${ADAPTER_ROOT}/adapter.nexus.json")"
 APP_VERSION="$(jq -r '.version' "${ROOT_DIR}/app.nexus.json")"
 NATIVE_THREAD_ID='2215891521413-2216843498932#11011@icbu'
 SUPPLIER_CONTACT_ID='2215891521413'
-CONNECTION_ID='alibaba-primary'
+CONNECTION_ID='moonsleep-alibaba'
 BACKFILL_SINCE="${BACKFILL_SINCE:-2024-01-01T00:00:00.000Z}"
 BACKFILL_TO="${BACKFILL_TO:-2026-07-18T00:00:00.000Z}"
 EXPECTED_RECORD_COUNT="${EXPECTED_RECORD_COUNT:-6325}"
-EXPECTED_NATIVE_RECORD_COUNT="${EXPECTED_NATIVE_RECORD_COUNT:-6325}"
+EXPECTED_NATIVE_RECORD_COUNT="${EXPECTED_NATIVE_RECORD_COUNT:-6132}"
 EXPECTED_NATIVE_MESSAGE_COUNT="${EXPECTED_NATIVE_MESSAGE_COUNT:-6132}"
-EXPECTED_NATIVE_ORPHAN_COUNT="${EXPECTED_NATIVE_ORPHAN_COUNT:-193}"
-EXPECTED_NATIVE_ATTACHMENT_COUNT="${EXPECTED_NATIVE_ATTACHMENT_COUNT:-1148}"
+EXPECTED_NATIVE_ORPHAN_COUNT="${EXPECTED_NATIVE_ORPHAN_COUNT:-0}"
+EXPECTED_NATIVE_ATTACHMENT_COUNT="${EXPECTED_NATIVE_ATTACHMENT_COUNT:-955}"
 
 for numeric_value in "${EXPECTED_RECORD_COUNT}" "${EXPECTED_NATIVE_RECORD_COUNT}" "${EXPECTED_NATIVE_MESSAGE_COUNT}" "${EXPECTED_NATIVE_ORPHAN_COUNT}" "${EXPECTED_NATIVE_ATTACHMENT_COUNT}"; do
   [[ "${numeric_value}" =~ ^[0-9]+$ ]] || { echo "expected counts must be non-negative integers" >&2; exit 1; }
@@ -186,7 +186,7 @@ for pass in 1 2; do
     --env NEXUS_ADAPTER_CONTEXT_PATH=/evidence/context.json \
     --env NEXUS_ADAPTER_STATE_DIR=/tmp/adapter-state \
     --entrypoint sh "${NEX_IMAGE}" -c \
-    '/adapter/index.js records.backfill --connection alibaba-primary --since '"${BACKFILL_SINCE}"' --to '"${BACKFILL_TO}"' --format jsonl > "/output/records-'"${pass}"'.jsonl"'
+    '/adapter/index.js records.backfill --connection '"${CONNECTION_ID}"' --since '"${BACKFILL_SINCE}"' --to '"${BACKFILL_TO}"' --format jsonl > "/output/records-'"${pass}"'.jsonl"'
 done
 cmp "${runner_temp}/records-1.jsonl" "${runner_temp}/records-2.jsonl"
 record_count="$(LC_ALL=C grep -c '^{' "${runner_temp}/records-1.jsonl")"
@@ -246,6 +246,7 @@ docker run -d --name "${runtime_container}" --platform linux/amd64 --network "${
   --mount "type=bind,src=$(dirname "${adapter_artifact}"),dst=/artifacts/adapter,readonly" \
   --mount "type=bind,src=$(dirname "${app_artifact}"),dst=/artifacts/app,readonly" \
   --mount "type=bind,src=${runner_temp},dst=/evidence,readonly" \
+  --mount "type=bind,src=${SNAPSHOT_ROOT},dst=${SNAPSHOT_ROOT},readonly" \
   --mount "type=bind,src=${OBJECT_ROOT},dst=${OBJECT_ROOT},readonly" \
   --mount "type=bind,src=${ROOT_DIR}/scripts,dst=/proof,readonly" \
   --tmpfs /tmp:rw,nosuid,nodev,mode=1777 --tmpfs /run/nex-credentials:rw,nosuid,nodev,noexec,mode=0700 \
@@ -269,6 +270,25 @@ jq -e '(.subscriptions|length)==2 and all(.subscriptions[]; .event_type=="record
 
 initial_counts="$(runtime_counts)"
 jq -e '.records==0 and .receipts==0 and .events==0 and .entities==3 and .contacts==0 and .observations==0 and .queue==0 and .dispatch_receipts==0 and .adapter_instances==0' <<<"${initial_counts}" >/dev/null
+
+echo "[partner-cleanroom] seed the local Alibaba account identity and attach the connection dormant"
+account_seed_params="$(jq -nc --arg contact_id "${CONNECTION_ID}" '{platform:"alibaba",space_id:"moonsleep-alibaba",contact_id:$contact_id,source_observation_id:"alibaba:moonsleep:routing-identity:v1",observed_at:1784680100000,contact_name:"MoonSleep Alibaba",entity_name:"MoonSleep Alibaba Integration",entity_type:"organization",tags:["MoonSleep","Integration","Alibaba"]}')"
+account_seed_first="$(runtime_call contacts.observe "${account_seed_params}")"
+account_seed_second="$(runtime_call contacts.observe "${account_seed_params}")"
+jq -e '.created_entity==true and .created_contact==true and .replayed==false and .canonical_entity_id != ""' <<<"${account_seed_first}" >/dev/null
+jq -e '.created_entity==false and .created_contact==false and .replayed==true and .canonical_entity_id != ""' <<<"${account_seed_second}" >/dev/null
+
+setup_start="$(runtime_call adapters.connections.custom.start '{"adapter":"alibaba","authMethodId":"alibaba_browser_snapshot","automaticActivation":false}')"
+setup_session="$(jq -r '.sessionId' <<<"${setup_start}")"
+[[ -n "${setup_session}" && "${setup_session}" != "null" ]]
+jq -e '.status=="requires_input" and .service=="alibaba" and .secretFieldsPresent==false' <<<"${setup_start}" >/dev/null
+setup_payload="$(jq -nc --arg snapshot_root "${SNAPSHOT_ROOT}" --arg object_root "${OBJECT_ROOT}" --arg account_id "${CONNECTION_ID}" '{snapshot_root:$snapshot_root,object_root:$object_root,account_id:$account_id,account_label:"MoonSleep Alibaba",confirm_read_only_capture:"ATTACH_SANITIZED_ALIBABA_CAPTURE"}')"
+setup_submit_params="$(jq -nc --arg session_id "${setup_session}" --argjson payload "${setup_payload}" '{adapter:"alibaba",sessionId:$session_id,payload:$payload,automaticActivation:false}')"
+setup_complete="$(runtime_call adapters.connections.custom.submit "${setup_submit_params}")"
+jq -e --arg connection_id "${CONNECTION_ID}" '.status=="completed" and .connectionId==$connection_id and .account==$connection_id and .service=="alibaba" and .secretFieldsPresent==false and .metadata.automatic_activation.monitor.started==false' <<<"${setup_complete}" >/dev/null
+connection_inventory="$(runtime_call adapters.connections.list '{}')"
+jq -e --arg connection_id "${CONNECTION_ID}" '([.connections[]|select(.connectionId==$connection_id and .adapter=="alibaba" and .status=="connected")]|length)==1' <<<"${connection_inventory}" >/dev/null
+jq -e '(.jobs|length)==1 and .jobs[0].name=="moonsleep-partner-desk.reviewed-open-loop-projection" and .jobs[0].status=="inactive"' <<<"$(runtime_call jobs.list '{}')" >/dev/null
 
 seed_params="$(jq -nc --arg contact_id "${SUPPLIER_CONTACT_ID}" '{platform:"alibaba",space_id:"moonsleep-alibaba",contact_id:$contact_id,source_observation_id:"alibaba:surewal:routing-identity:v1",observed_at:1784680200000,contact_name:"Surewal Alibaba",entity_name:"Surewal",entity_type:"organization",tags:["Partner","Supplier","Alibaba"]}')"
 seed_first="$(runtime_call contacts.observe "${seed_params}")"
@@ -377,7 +397,7 @@ jq -n --arg finished_at "${finished_at}" --arg source_revision "${source_revisio
   --argjson record_count "${EXPECTED_RECORD_COUNT}" \
   --argjson initial_counts "${initial_counts}" --argjson seed_counts "${seed_counts}" --argjson terminal_counts "${counts_after_restart}" \
   --argjson directory_counts "${directory_after_restart}" --argjson conversation "${conversation_inspection}" \
-  '{ok:true,finished_at:$finished_at,source:{revision:$source_revision,tree:$source_tree,clean:true},nex:{revision:$nex_revision,image_id:$nex_image_id,platform:"linux/amd64",storage_profile:"moonsleep-postgres-v1"},postgres:{image_id:$postgres_image_id,version:$postgres_version,platform:"linux/amd64"},packages:{alibaba_sha256:$adapter_sha256,partner_desk_sha256:$app_sha256,active_after_restart:true,ui_mount_served:true},adapter:{output_sha256:$record_output_sha256,records:$record_count,first_and_second_output_identical:true,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},identity:{entity_id:$surewal_entity_id,contact_row_id:$surewal_contact_id,first_created_entity:1,first_created_contact:1,second_created_entity:0,second_created_contact:0},conversation:$conversation,projection:{native_threads:1,reviewed_open_loops:2,review_queue:0},review_store:{revision_sha256:$review_revision,first_created:true,replay_created:false,current_after_restart:true,divergent_heads_auto_selected:false},work_boundary:{job_status:"inactive",subscription_count:2,subscription_enabled:false,queue_rows:0,dispatch_receipts:0,reply_authority:false},replay:{second_ingest_skipped:$record_count,restart_ingest_skipped:$record_count,postgres_counts_unchanged:true,directory_counts_unchanged:true},initial_counts:$initial_counts,seed_counts:$seed_counts,terminal_counts:$terminal_counts,directory_counts:$directory_counts,zero_residue:true}' > "${RECEIPT_PATH}"
+  '{ok:true,finished_at:$finished_at,source:{revision:$source_revision,tree:$source_tree,clean:true},nex:{revision:$nex_revision,image_id:$nex_image_id,platform:"linux/amd64",storage_profile:"moonsleep-postgres-v1"},postgres:{image_id:$postgres_image_id,version:$postgres_version,platform:"linux/amd64"},packages:{alibaba_sha256:$adapter_sha256,partner_desk_sha256:$app_sha256,active_after_restart:true,ui_mount_served:true},connection:{connection_id:"moonsleep-alibaba",custom_setup_complete:true,automatic_activation:false,monitor_started:false,backfill_queued:false,provider_credentials_received:false},adapter:{output_sha256:$record_output_sha256,records:$record_count,first_and_second_output_identical:true,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},identity:{entity_id:$surewal_entity_id,contact_row_id:$surewal_contact_id,account_seed_first_created_entity:1,account_seed_replay_created_entity:0,first_created_entity:1,first_created_contact:1,second_created_entity:0,second_created_contact:0},conversation:$conversation,projection:{native_threads:1,reviewed_open_loops:2,review_queue:0},review_store:{revision_sha256:$review_revision,first_created:true,replay_created:false,current_after_restart:true,divergent_heads_auto_selected:false},work_boundary:{job_status:"inactive",subscription_count:2,subscription_enabled:false,queue_rows:0,dispatch_receipts:0,reply_authority:false},replay:{second_ingest_skipped:$record_count,restart_ingest_skipped:$record_count,postgres_counts_unchanged:true,directory_counts_unchanged:true},initial_counts:$initial_counts,seed_counts:$seed_counts,terminal_counts:$terminal_counts,directory_counts:$directory_counts,zero_residue:true}' > "${RECEIPT_PATH}"
 chmod 0600 "${RECEIPT_PATH}"
 trap - EXIT
 rm -rf -- "${runner_temp}"
