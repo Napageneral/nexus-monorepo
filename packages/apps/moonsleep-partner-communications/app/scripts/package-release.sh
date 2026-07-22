@@ -9,5 +9,6 @@ else
   PACKAGE_CLI=(node "${ROOT_DIR}/../../../../nex/dist/entry.js" package)
 fi
 
+npm --prefix "${ROOT_DIR}" run build
 "${PACKAGE_CLI[@]}" validate "${ROOT_DIR}"
 "${PACKAGE_CLI[@]}" release "${ROOT_DIR}"

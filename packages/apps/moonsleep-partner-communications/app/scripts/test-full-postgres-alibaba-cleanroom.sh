@@ -313,6 +313,35 @@ projection="$(runtime_call moonsleep-partner-desk.project-reviewed-cohort "${pro
 jq -e '.state=="reviewed_projection" and (.native_threads|length)==1 and (.open_loops|length)==2 and (.attention_queue|length)==1 and (.waiting_on_partner|length)==1 and (.review_queue|length)==0 and .provider_write_authority==false' <<<"${projection}" >/dev/null
 echo "[partner-cleanroom] reviewed projection exact"
 
+echo "[partner-cleanroom] commit immutable review revision and prove exact replay"
+review_params="$(jq -c --arg workspace_key "surewal-cleanroom" --arg entity "${surewal_entity_id}" '. + {workspace_key:$workspace_key,canonical_entity_id:$entity,review_note:"Cleanroom operator review",review_idempotency_key:"partner-desk-cleanroom-review-0001",previous_revision_sha256:null}' <<<"${projection_params}")"
+review_first="$(runtime_call moonsleep-partner-desk.review.commit "${review_params}")"
+jq -e '.state=="review_committed" and .created==true and .review.workspace_key=="surewal-cleanroom" and (.projection.open_loops|length)==2 and .provider_write_authority==false' <<<"${review_first}" >/dev/null
+review_revision="$(jq -r '.review.revision_sha256' <<<"${review_first}")"
+[[ "${review_revision}" =~ ^[0-9a-f]{64}$ ]]
+review_replay="$(runtime_call moonsleep-partner-desk.review.commit "${review_params}")"
+jq -e --arg revision "${review_revision}" '.state=="review_replayed" and .created==false and .review.revision_sha256==$revision and .provider_write_authority==false' <<<"${review_replay}" >/dev/null
+review_current="$(runtime_call moonsleep-partner-desk.review.current '{"workspace_key":"surewal-cleanroom"}')"
+jq -e --arg revision "${review_revision}" '.state=="current_review" and .history_count==1 and .review.revision_sha256==$revision and (.projection.open_loops|length)==2 and (.projection.native_threads|length)==1 and .provider_write_authority==false' <<<"${review_current}" >/dev/null
+review_workspaces="$(runtime_call moonsleep-partner-desk.review.workspaces '{}')"
+jq -e --arg revision "${review_revision}" '.state=="review_workspace_index" and .workspace_count==1 and .workspaces[0].workspace_key=="surewal-cleanroom" and .workspaces[0].revision_sha256==$revision and .provider_write_authority==false' <<<"${review_workspaces}" >/dev/null
+counts_after_review="$(runtime_counts)"
+directory_after_review="$(sqlite_directory_counts)"
+jq -e --argjson expected "$((EXPECTED_RECORD_COUNT + 1))" '.records==$expected and .receipts==$expected and .events==$expected and .queue==0 and .dispatch_receipts==0 and .adapter_instances==0' <<<"${counts_after_review}" >/dev/null
+
+echo "[partner-cleanroom] serve the packaged Partner Desk UI through the Nex app mount"
+ui_html="$(docker exec "${runtime_container}" sh -c '
+  token=$(cat /run/moonsleep-load-credentials/runtime-token)
+  exec curl -fsS -H "Authorization: Bearer ${token}" http://127.0.0.1:18789/app/moonsleep-partner-desk/
+')"
+grep -F '<title>MoonSleep Partner Desk</title>' <<<"${ui_html}" >/dev/null
+ui_asset="$(grep -oE '\./assets/index-[A-Za-z0-9_-]+\.js' <<<"${ui_html}" | head -1)"
+[[ -n "${ui_asset}" ]]
+docker exec "${runtime_container}" sh -c '
+  token=$(cat /run/moonsleep-load-credentials/runtime-token)
+  exec curl -fsS -H "Authorization: Bearer ${token}" "http://127.0.0.1:18789/app/moonsleep-partner-desk/${1#./}" >/dev/null
+' sh "${ui_asset}"
+
 echo "[partner-cleanroom] restart and prove package and replay durability"
 docker restart "${runtime_container}" >/dev/null
 wait_for_runtime
@@ -326,8 +355,10 @@ ingest_after_restart="$(docker exec "${runtime_container}" sh -c '
 jq -e --argjson expected "${EXPECTED_RECORD_COUNT}" '.completed==0 and .skipped==$expected and .other==0' <<<"${ingest_after_restart}" >/dev/null
 counts_after_restart="$(runtime_counts)"
 directory_after_restart="$(sqlite_directory_counts)"
-[[ "$(jq -S -c . <<<"${counts_after_second}")" = "$(jq -S -c . <<<"${counts_after_restart}")" ]]
-[[ "$(jq -S -c . <<<"${directory_after_second}")" = "$(jq -S -c . <<<"${directory_after_restart}")" ]]
+[[ "$(jq -S -c . <<<"${counts_after_review}")" = "$(jq -S -c . <<<"${counts_after_restart}")" ]]
+[[ "$(jq -S -c . <<<"${directory_after_review}")" = "$(jq -S -c . <<<"${directory_after_restart}")" ]]
+review_after_restart="$(runtime_call moonsleep-partner-desk.review.current '{"workspace_key":"surewal-cleanroom"}')"
+jq -e --arg revision "${review_revision}" '.state=="current_review" and .review.revision_sha256==$revision and (.projection.open_loops|length)==2' <<<"${review_after_restart}" >/dev/null
 
 postgres_image_id="$(docker image inspect "${POSTGRES_IMAGE}" --format '{{.Id}}')"
 nex_image_id="$(docker image inspect "${NEX_IMAGE}" --format '{{.Id}}')"
@@ -342,10 +373,11 @@ jq -n --arg finished_at "${finished_at}" --arg source_revision "${source_revisio
   --arg nex_revision "${nex_revision}" --arg nex_image_id "${nex_image_id}" --arg postgres_image_id "${postgres_image_id}" \
   --arg postgres_version "${postgres_version}" --arg adapter_sha256 "${adapter_sha256}" --arg app_sha256 "${app_sha256}" \
   --arg record_output_sha256 "${record_output_sha256}" --arg surewal_entity_id "${surewal_entity_id}" --arg surewal_contact_id "${surewal_contact_id}" \
+  --arg review_revision "${review_revision}" \
   --argjson record_count "${EXPECTED_RECORD_COUNT}" \
   --argjson initial_counts "${initial_counts}" --argjson seed_counts "${seed_counts}" --argjson terminal_counts "${counts_after_restart}" \
   --argjson directory_counts "${directory_after_restart}" --argjson conversation "${conversation_inspection}" \
-  '{ok:true,finished_at:$finished_at,source:{revision:$source_revision,tree:$source_tree,clean:true},nex:{revision:$nex_revision,image_id:$nex_image_id,platform:"linux/amd64",storage_profile:"moonsleep-postgres-v1"},postgres:{image_id:$postgres_image_id,version:$postgres_version,platform:"linux/amd64"},packages:{alibaba_sha256:$adapter_sha256,partner_desk_sha256:$app_sha256,active_after_restart:true},adapter:{output_sha256:$record_output_sha256,records:$record_count,first_and_second_output_identical:true,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},identity:{entity_id:$surewal_entity_id,contact_row_id:$surewal_contact_id,first_created_entity:1,first_created_contact:1,second_created_entity:0,second_created_contact:0},conversation:$conversation,projection:{native_threads:1,reviewed_open_loops:2,review_queue:0},work_boundary:{job_status:"inactive",subscription_count:2,subscription_enabled:false,queue_rows:0,dispatch_receipts:0,reply_authority:false},replay:{second_ingest_skipped:$record_count,restart_ingest_skipped:$record_count,postgres_counts_unchanged:true,directory_counts_unchanged:true},initial_counts:$initial_counts,seed_counts:$seed_counts,terminal_counts:$terminal_counts,directory_counts:$directory_counts,zero_residue:true}' > "${RECEIPT_PATH}"
+  '{ok:true,finished_at:$finished_at,source:{revision:$source_revision,tree:$source_tree,clean:true},nex:{revision:$nex_revision,image_id:$nex_image_id,platform:"linux/amd64",storage_profile:"moonsleep-postgres-v1"},postgres:{image_id:$postgres_image_id,version:$postgres_version,platform:"linux/amd64"},packages:{alibaba_sha256:$adapter_sha256,partner_desk_sha256:$app_sha256,active_after_restart:true,ui_mount_served:true},adapter:{output_sha256:$record_output_sha256,records:$record_count,first_and_second_output_identical:true,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},identity:{entity_id:$surewal_entity_id,contact_row_id:$surewal_contact_id,first_created_entity:1,first_created_contact:1,second_created_entity:0,second_created_contact:0},conversation:$conversation,projection:{native_threads:1,reviewed_open_loops:2,review_queue:0},review_store:{revision_sha256:$review_revision,first_created:true,replay_created:false,current_after_restart:true,divergent_heads_auto_selected:false},work_boundary:{job_status:"inactive",subscription_count:2,subscription_enabled:false,queue_rows:0,dispatch_receipts:0,reply_authority:false},replay:{second_ingest_skipped:$record_count,restart_ingest_skipped:$record_count,postgres_counts_unchanged:true,directory_counts_unchanged:true},initial_counts:$initial_counts,seed_counts:$seed_counts,terminal_counts:$terminal_counts,directory_counts:$directory_counts,zero_residue:true}' > "${RECEIPT_PATH}"
 chmod 0600 "${RECEIPT_PATH}"
 trap - EXIT
 rm -rf -- "${runner_temp}"

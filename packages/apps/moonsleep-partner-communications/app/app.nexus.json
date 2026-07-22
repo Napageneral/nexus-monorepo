@@ -5,6 +5,11 @@
   "description": "Track reviewed supplier and partner open loops over immutable provider-native communications.",
   "skill": "./SKILL.md",
   "handler": "./methods/index.ts",
+  "ui": {
+    "root": "./ui/dist",
+    "entryPath": "/app/moonsleep-partner-desk/",
+    "spa": true
+  },
   "hooks": {
     "onInstall": "./hooks/install.ts",
     "onActivate": "./hooks/activate.ts",
@@ -109,6 +114,13 @@
         "required": ["workspace_key"],
         "additionalProperties": false
       },
+      "response": {"type": "object"}
+    },
+    "moonsleep-partner-desk.review.workspaces": {
+      "description": "List the immutable current review heads available to the Partner Desk UI.",
+      "action": "read",
+      "access": "authenticated",
+      "params": {"type": "object", "properties": {}, "additionalProperties": false},
       "response": {"type": "object"}
     },
     "moonsleep-partner-desk.review.commit": {

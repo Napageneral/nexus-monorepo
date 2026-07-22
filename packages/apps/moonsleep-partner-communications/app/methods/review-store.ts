@@ -40,7 +40,7 @@ type StoredReview = ReviewRequestBody & {
   review_idempotency_key: string;
   reviewed_at: string;
   reviewed_by_user_id: string;
-  reviewed_by_email: string;
+  reviewed_by_email: string | null;
 };
 
 function row(value: unknown): Row {
@@ -140,6 +140,12 @@ function parseStoredReview(record: Row): StoredReview {
   if (!IDEMPOTENCY_KEY.test(text(stored.review_idempotency_key))) {
     throw new Error("review history idempotency key is invalid");
   }
+  if (
+    stored.reviewed_by_email !== null &&
+    (!text(stored.reviewed_by_email) || Buffer.byteLength(stored.reviewed_by_email, "utf8") > 320)
+  ) {
+    throw new Error("review history reviewer email is invalid");
+  }
   if (!stored.reviewed_at || new Date(stored.reviewed_at).toISOString() !== stored.reviewed_at) {
     throw new Error("review history timestamp is invalid");
   }
@@ -195,6 +201,35 @@ async function listReviewHistory(ctx: NexAppMethodContext, workspaceKey: string)
   });
 }
 
+async function listAllReviewHistory(ctx: NexAppMethodContext): Promise<Array<{ record: Row; review: StoredReview }>> {
+  const records: Row[] = [];
+  for (let offset = 0; offset < MAX_HISTORY; offset += PAGE_SIZE) {
+    const response = unwrap(await ctx.nex.records.list({
+      platform: REVIEW_PLATFORM,
+      limit: PAGE_SIZE,
+      offset,
+    }));
+    if (!Array.isArray(response.records)) throw new Error("records.list did not return records");
+    const page = response.records.map(row);
+    records.push(...page);
+    if (records.length > MAX_HISTORY) throw new Error(`review history exceeds ${MAX_HISTORY} rows`);
+    if (page.length < PAGE_SIZE) break;
+  }
+  return records
+    .filter((record) => text(row(record.metadata).family) === REVIEW_FAMILY)
+    .map((record) => {
+      const review = parseStoredReview(record);
+      if (
+        text(record.thread_id) !== reviewThreadId(review.workspace_key) ||
+        text(row(record.metadata).source_connection_id) !== REVIEW_CONNECTION ||
+        text(row(record.metadata).revision_hash) !== review.revision_sha256
+      ) {
+        throw new Error("review history binding is invalid");
+      }
+      return { record, review };
+    });
+}
+
 function currentHeads(history: Array<{ record: Row; review: StoredReview }>): Array<{ record: Row; review: StoredReview }> {
   const referenced = new Set(
     history.map(({ review }) => review.previous_revision_sha256).filter((value): value is string => value !== null),
@@ -246,6 +281,48 @@ export async function readCurrentReview(ctx: NexAppMethodContext, workspaceKey: 
   };
 }
 
+export async function listReviewWorkspaces(ctx: NexAppMethodContext): Promise<Row> {
+  const history = await listAllReviewHistory(ctx);
+  const grouped = new Map<string, Array<{ record: Row; review: StoredReview }>>();
+  for (const entry of history) {
+    const existing = grouped.get(entry.review.workspace_key) ?? [];
+    existing.push(entry);
+    grouped.set(entry.review.workspace_key, existing);
+  }
+  const workspaces = [...grouped.entries()].map(([workspaceKey, entries]) => {
+    const heads = currentHeads(entries);
+    if (heads.length !== 1) {
+      return {
+        workspace_key: workspaceKey,
+        state: "review_conflict",
+        history_count: entries.length,
+        head_revisions: heads.map(({ review }) => review.revision_sha256).sort(),
+      };
+    }
+    const review = heads[0].review;
+    return {
+      workspace_key: workspaceKey,
+      state: "current_review",
+      history_count: entries.length,
+      canonical_entity_id: review.canonical_entity_id,
+      revision_sha256: review.revision_sha256,
+      reviewed_at: review.reviewed_at,
+      open_loop_count: review.open_loop_assertions.length,
+      source_record_count: review.record_ids.length,
+    };
+  });
+  workspaces.sort((left, right) => {
+    const observed = text(right.reviewed_at).localeCompare(text(left.reviewed_at));
+    return observed || text(left.workspace_key).localeCompare(text(right.workspace_key));
+  });
+  return {
+    state: "review_workspace_index",
+    workspace_count: workspaces.length,
+    workspaces,
+    provider_write_authority: false,
+  };
+}
+
 export async function commitReview(params: {
   ctx: NexAppMethodContext;
   request: ReviewRequestBody;
@@ -259,7 +336,7 @@ export async function commitReview(params: {
     throw new Error("previous_revision_sha256 is invalid");
   }
   const reviewerId = requireIdentifier(ctx.user.userId, "authenticated reviewer user id", 256);
-  const reviewerEmail = requireText(ctx.user.email, "authenticated reviewer email", 320).toLowerCase();
+  const reviewerEmail = text(ctx.user.email).toLowerCase() || null;
   const requestBodySha256 = digest({ request, reviewer_id: reviewerId, reviewer_email: reviewerEmail });
   const history = await listReviewHistory(ctx, request.workspace_key);
   const replay = history.find(({ review }) => review.review_idempotency_key === params.reviewIdempotencyKey);

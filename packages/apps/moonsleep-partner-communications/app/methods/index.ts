@@ -10,6 +10,7 @@ import {
 } from "../src/projection.js";
 import {
   commitReview,
+  listReviewWorkspaces,
   parseReviewRequest,
   readCurrentReview,
 } from "./review-store.js";
@@ -259,8 +260,29 @@ export const projectReviewedCohort: NexAppMethodHandler = async (ctx) => {
 
 export const getCurrentReview: NexAppMethodHandler = async (ctx) => {
   const workspaceKey = requireText(ctx.params.workspace_key, "workspace_key", 128);
-  return await readCurrentReview(ctx, workspaceKey);
+  const current = await readCurrentReview(ctx, workspaceKey);
+  if (current.state !== "current_review") return current;
+  const review = row(current.review);
+  const assertions = row(current.assertions);
+  const ids = requireRecordIds(review.record_ids);
+  const records: CommunicationRecord[] = [];
+  for (const id of ids) {
+    const response = unwrap(await ctx.nex.records.get({ id }));
+    records.push(toCommunicationRecord(row(response.record)));
+  }
+  return {
+    ...current,
+    projection: projectPartnerWorkspace({
+      records,
+      identity_resolutions: objectArray<IdentityResolution>(assertions.identity_resolutions, "identity_resolutions", 50),
+      workspace_assertions: objectArray<WorkspaceAssertion>(assertions.workspace_assertions, "workspace_assertions", 50),
+      open_loop_assertions: objectArray<OpenLoopAssertion>(assertions.open_loop_assertions, "open_loop_assertions", 100),
+      source_coverage_assertions: objectArray<SourceCoverageAssertion>(assertions.source_coverage_assertions, "source_coverage_assertions", 50),
+    }),
+  };
 };
+
+export const listReviewedWorkspaces: NexAppMethodHandler = async (ctx) => await listReviewWorkspaces(ctx);
 
 export const commitReviewedCohort: NexAppMethodHandler = async (ctx) => {
   const request = parseReviewRequest(ctx.params);
@@ -294,5 +316,6 @@ export default {
   "moonsleep-partner-desk.gmail.inspect-conversation": inspectGmailConversation,
   "moonsleep-partner-desk.project-reviewed-cohort": projectReviewedCohort,
   "moonsleep-partner-desk.review.current": getCurrentReview,
+  "moonsleep-partner-desk.review.workspaces": listReviewedWorkspaces,
   "moonsleep-partner-desk.review.commit": commitReviewedCohort,
 };

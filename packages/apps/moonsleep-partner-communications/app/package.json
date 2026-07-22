@@ -4,11 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test --experimental-strip-types src/*.test.ts && vitest run methods/*.test.ts hooks/*.test.ts"
+    "build": "vite build --config ui/vite.config.ts",
+    "test": "node --test --experimental-strip-types src/*.test.ts && vitest run methods/*.test.ts hooks/*.test.ts ui/src/*.test.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "typescript": "^5.9.0",
-    "vitest": "3.2.4"
+    "vite": "7.3.6",
+    "vitest": "^3.2.7"
   }
 }

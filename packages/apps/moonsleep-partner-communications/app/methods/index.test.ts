@@ -7,6 +7,7 @@ import {
   inspectAlibabaConversation,
   inspectGmailConversation,
   projectReviewedCohort,
+  listReviewedWorkspaces,
 } from "./index.ts";
 
 function source(json: string) {
@@ -191,8 +192,8 @@ function reviewContext(sourceRecord: ReturnType<typeof fixture>) {
           if (!review) throw new Error("record not found");
           return { record: review };
         },
-        list: async ({ platform, thread_id }: { platform: string; thread_id: string }) => ({
-          records: reviewRecords.filter((entry) => entry.platform === platform && entry.thread_id === thread_id),
+        list: async ({ platform, thread_id }: { platform: string; thread_id?: string }) => ({
+          records: reviewRecords.filter((entry) => entry.platform === platform && (!thread_id || entry.thread_id === thread_id)),
         }),
       },
       record: {
@@ -235,6 +236,11 @@ test("commits an immutable reviewed workspace and replays the same operator requ
   assert.equal(current.state, "current_review");
   assert.equal(current.history_count, 1);
   assert.equal((current.review as Record<string, unknown>).canonical_entity_id, "entity-surewal");
+  assert.equal(((current.projection as Record<string, unknown>).open_loops as unknown[]).length, 1);
+
+  const index = await listReviewedWorkspaces({ ...memory.ctx, params: {} } as never) as Record<string, unknown>;
+  assert.equal(index.workspace_count, 1);
+  assert.equal(((index.workspaces as Array<Record<string, unknown>>)[0]).workspace_key, "surewal-commercial");
 });
 
 test("requires the exact current review head and exposes divergent revisions instead of choosing one", async () => {
