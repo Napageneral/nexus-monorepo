@@ -304,9 +304,27 @@ type shopifyCodeDiscountNodeConnection struct {
 }
 
 type shopifyGraphQLCodeDiscountNode struct {
-	ID           string                         `json:"id"`
-	Events       shopifyDiscountEventConnection `json:"events"`
-	CodeDiscount shopifyGraphQLDiscountDetails  `json:"codeDiscount"`
+	ID                 string                         `json:"id"`
+	Events             shopifyDiscountEventConnection `json:"events"`
+	CodeDiscount       shopifyGraphQLDiscountDetails  `json:"codeDiscount"`
+	rawProviderJSON    json.RawMessage
+	rawProviderPayload map[string]any
+}
+
+func (node *shopifyGraphQLCodeDiscountNode) UnmarshalJSON(data []byte) error {
+	type decodedNode shopifyGraphQLCodeDiscountNode
+	var decoded decodedNode
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	raw, err := decodeProviderJSONObject(data)
+	if err != nil {
+		return err
+	}
+	*node = shopifyGraphQLCodeDiscountNode(decoded)
+	node.rawProviderJSON = append(json.RawMessage(nil), data...)
+	node.rawProviderPayload = raw
+	return nil
 }
 
 type shopifyAutomaticDiscountNodeEdge struct {
@@ -320,19 +338,39 @@ type shopifyAutomaticDiscountNodeConnection struct {
 }
 
 type shopifyGraphQLAutomaticDiscountNode struct {
-	ID                string                         `json:"id"`
-	Events            shopifyDiscountEventConnection `json:"events"`
-	AutomaticDiscount shopifyGraphQLDiscountDetails  `json:"automaticDiscount"`
+	ID                 string                         `json:"id"`
+	Events             shopifyDiscountEventConnection `json:"events"`
+	AutomaticDiscount  shopifyGraphQLDiscountDetails  `json:"automaticDiscount"`
+	rawProviderJSON    json.RawMessage
+	rawProviderPayload map[string]any
+}
+
+func (node *shopifyGraphQLAutomaticDiscountNode) UnmarshalJSON(data []byte) error {
+	type decodedNode shopifyGraphQLAutomaticDiscountNode
+	var decoded decodedNode
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	raw, err := decodeProviderJSONObject(data)
+	if err != nil {
+		return err
+	}
+	*node = shopifyGraphQLAutomaticDiscountNode(decoded)
+	node.rawProviderJSON = append(json.RawMessage(nil), data...)
+	node.rawProviderPayload = raw
+	return nil
 }
 
 type shopifyGraphQLDiscountRecord struct {
-	NodeGID      string
-	DiscountType string
-	Title        string
-	Status       string
-	StartsAt     string
-	EndsAt       string
-	UpdatedAt    string
+	NodeGID            string
+	DiscountType       string
+	Title              string
+	Status             string
+	StartsAt           string
+	EndsAt             string
+	UpdatedAt          string
+	rawProviderJSON    json.RawMessage
+	rawProviderPayload map[string]any
 }
 
 type shopifyMarketingActivityEdge struct {
@@ -346,12 +384,30 @@ type shopifyMarketingActivityConnection struct {
 }
 
 type shopifyGraphQLMarketingActivity struct {
-	ID               string `json:"id"`
-	Title            string `json:"title"`
-	Status           string `json:"status"`
-	UpdatedAt        string `json:"updatedAt"`
-	MarketingChannel string `json:"marketingChannel"`
-	Tactic           string `json:"tactic"`
+	ID                 string `json:"id"`
+	Title              string `json:"title"`
+	Status             string `json:"status"`
+	UpdatedAt          string `json:"updatedAt"`
+	MarketingChannel   string `json:"marketingChannel"`
+	Tactic             string `json:"tactic"`
+	rawProviderJSON    json.RawMessage
+	rawProviderPayload map[string]any
+}
+
+func (activity *shopifyGraphQLMarketingActivity) UnmarshalJSON(data []byte) error {
+	type decodedActivity shopifyGraphQLMarketingActivity
+	var decoded decodedActivity
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	raw, err := decodeProviderJSONObject(data)
+	if err != nil {
+		return err
+	}
+	*activity = shopifyGraphQLMarketingActivity(decoded)
+	activity.rawProviderJSON = append(json.RawMessage(nil), data...)
+	activity.rawProviderPayload = raw
+	return nil
 }
 
 type shopifyCustomerPage struct {
@@ -1037,13 +1093,15 @@ func fetchDiscountsSince(ctx context.Context, state *shopifyState, since time.Ti
 				continue
 			}
 			record := shopifyGraphQLDiscountRecord{
-				NodeGID:      node.ID,
-				DiscountType: node.CodeDiscount.TypeName,
-				Title:        node.CodeDiscount.Title,
-				Status:       node.CodeDiscount.Status,
-				StartsAt:     node.CodeDiscount.StartsAt,
-				EndsAt:       node.CodeDiscount.EndsAt,
-				UpdatedAt:    discountUpdatedAt(node.CodeDiscount.UpdatedAt, node.Events, node.CodeDiscount.StartsAt, node.CodeDiscount.EndsAt),
+				NodeGID:            node.ID,
+				DiscountType:       node.CodeDiscount.TypeName,
+				Title:              node.CodeDiscount.Title,
+				Status:             node.CodeDiscount.Status,
+				StartsAt:           node.CodeDiscount.StartsAt,
+				EndsAt:             node.CodeDiscount.EndsAt,
+				UpdatedAt:          discountUpdatedAt(node.CodeDiscount.UpdatedAt, node.Events, node.CodeDiscount.StartsAt, node.CodeDiscount.EndsAt),
+				rawProviderJSON:    node.rawProviderJSON,
+				rawProviderPayload: node.rawProviderPayload,
 			}
 			records = append(records, record)
 			if parsed := parseShopifyUpdatedAt(record.UpdatedAt); !parsed.IsZero() && parsed.After(latestUpdatedAt) {
@@ -1078,13 +1136,15 @@ func fetchDiscountsSince(ctx context.Context, state *shopifyState, since time.Ti
 				continue
 			}
 			record := shopifyGraphQLDiscountRecord{
-				NodeGID:      node.ID,
-				DiscountType: node.AutomaticDiscount.TypeName,
-				Title:        node.AutomaticDiscount.Title,
-				Status:       node.AutomaticDiscount.Status,
-				StartsAt:     node.AutomaticDiscount.StartsAt,
-				EndsAt:       node.AutomaticDiscount.EndsAt,
-				UpdatedAt:    discountUpdatedAt(node.AutomaticDiscount.UpdatedAt, node.Events, node.AutomaticDiscount.StartsAt, node.AutomaticDiscount.EndsAt),
+				NodeGID:            node.ID,
+				DiscountType:       node.AutomaticDiscount.TypeName,
+				Title:              node.AutomaticDiscount.Title,
+				Status:             node.AutomaticDiscount.Status,
+				StartsAt:           node.AutomaticDiscount.StartsAt,
+				EndsAt:             node.AutomaticDiscount.EndsAt,
+				UpdatedAt:          discountUpdatedAt(node.AutomaticDiscount.UpdatedAt, node.Events, node.AutomaticDiscount.StartsAt, node.AutomaticDiscount.EndsAt),
+				rawProviderJSON:    node.rawProviderJSON,
+				rawProviderPayload: node.rawProviderPayload,
 			}
 			records = append(records, record)
 			if parsed := parseShopifyUpdatedAt(record.UpdatedAt); !parsed.IsZero() && parsed.After(latestUpdatedAt) {
@@ -1539,7 +1599,7 @@ func buildDiscountRecord(state *shopifyState, discount shopifyGraphQLDiscountRec
 	}
 	discountID := shopifyGIDIdentityToken(discountGID)
 	row := normalizedDiscountRow(state.ShopDomain, discount)
-	revision := revisionHash(row)
+	revision := revisionHash(providerRevisionInput(discount.rawProviderPayload, row))
 	logicalRowID := fmt.Sprintf("%s:%s", state.ShopDomain, discountGID)
 	threadID := fmt.Sprintf("%s:discount:%s", state.ShopDomain, discountID)
 	threadName := firstNonBlank(discount.Title, discountID)
@@ -1578,17 +1638,17 @@ func buildDiscountRecord(state *shopifyState, discount shopifyGraphQLDiscountRec
 			Timestamp:        shopifyUpdatedAtOrNow(discount.UpdatedAt).UnixMilli(),
 			Content:          fmt.Sprintf("discount %s status=%s class=%s", threadName, firstNonBlank(discount.Status, "unknown"), firstNonBlank(discount.DiscountType, "unknown")),
 			ContentType:      "text",
+			Payload:          providerPayloadEnvelope(discount.rawProviderJSON, discount.rawProviderPayload, discount),
 			Metadata: map[string]any{
-				"connection_id":        connectionID,
-				"adapter_id":           platformID,
-				"family":               "discount",
-				"logical_row_id":       logicalRowID,
-				"revision_hash":        revision,
-				"provider_ids":         providerIDs,
-				"row":                  row,
-				"bridge_attributes":    map[string]any{},
-				"raw_provider_payload": mustJSONObject(discount),
-				"source_request":       sourceRequest.metadata(),
+				"connection_id":     connectionID,
+				"adapter_id":        platformID,
+				"family":            "discount",
+				"logical_row_id":    logicalRowID,
+				"revision_hash":     revision,
+				"provider_ids":      providerIDs,
+				"row":               row,
+				"bridge_attributes": map[string]any{},
+				"source_request":    sourceRequest.metadata(),
 			},
 		},
 	}
@@ -1607,7 +1667,7 @@ func buildMarketingRecord(state *shopifyState, activity shopifyGraphQLMarketingA
 	}
 	activityID := shopifyGIDIdentityToken(activityGID)
 	row := normalizedMarketingRow(state.ShopDomain, activity)
-	revision := revisionHash(row)
+	revision := revisionHash(providerRevisionInput(activity.rawProviderPayload, row))
 	logicalRowID := fmt.Sprintf("%s:%s", state.ShopDomain, activityGID)
 	threadID := fmt.Sprintf("%s:marketing:%s", state.ShopDomain, activityID)
 	threadName := firstNonBlank(activity.Title, activityID)
@@ -1646,17 +1706,17 @@ func buildMarketingRecord(state *shopifyState, activity shopifyGraphQLMarketingA
 			Timestamp:        shopifyUpdatedAtOrNow(activity.UpdatedAt).UnixMilli(),
 			Content:          fmt.Sprintf("marketing %s status=%s channel=%s tactic=%s", threadName, firstNonBlank(activity.Status, "unknown"), firstNonBlank(activity.MarketingChannel, "unknown"), firstNonBlank(activity.Tactic, "unknown")),
 			ContentType:      "text",
+			Payload:          providerPayloadEnvelope(activity.rawProviderJSON, activity.rawProviderPayload, activity),
 			Metadata: map[string]any{
-				"connection_id":        connectionID,
-				"adapter_id":           platformID,
-				"family":               "marketing",
-				"logical_row_id":       logicalRowID,
-				"revision_hash":        revision,
-				"provider_ids":         providerIDs,
-				"row":                  row,
-				"bridge_attributes":    map[string]any{},
-				"raw_provider_payload": mustJSONObject(activity),
-				"source_request":       sourceRequest.metadata(),
+				"connection_id":     connectionID,
+				"adapter_id":        platformID,
+				"family":            "marketing",
+				"logical_row_id":    logicalRowID,
+				"revision_hash":     revision,
+				"provider_ids":      providerIDs,
+				"row":               row,
+				"bridge_attributes": map[string]any{},
+				"source_request":    sourceRequest.metadata(),
 			},
 		},
 	}

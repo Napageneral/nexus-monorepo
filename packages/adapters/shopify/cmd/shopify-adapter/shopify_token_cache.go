@@ -42,17 +42,10 @@ func sharedShopifyTokenCachePaths(connectionID string) (string, string, error) {
 
 func readSharedShopifyTokenCache(path string) (shopifySharedTokenCache, error) {
 	var cache shopifySharedTokenCache
-	info, err := os.Lstat(path)
+	raw, err := readShopifyPrivateFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return cache, nil
 	}
-	if err != nil {
-		return cache, fmt.Errorf("inspect Shopify token cache: %w", err)
-	}
-	if !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 {
-		return cache, errors.New("Shopify token cache metadata is unsafe")
-	}
-	raw, err := os.ReadFile(path)
 	if err != nil {
 		return cache, fmt.Errorf("read Shopify token cache: %w", err)
 	}
@@ -70,36 +63,7 @@ func writeSharedShopifyTokenCache(path string, cache shopifySharedTokenCache) er
 	if err != nil {
 		return err
 	}
-	temp, err := os.CreateTemp(filepath.Dir(path), ".token-cache-*")
-	if err != nil {
-		return fmt.Errorf("create Shopify token cache: %w", err)
-	}
-	tempPath := temp.Name()
-	defer os.Remove(tempPath) //nolint:errcheck
-	if err := temp.Chmod(0o600); err != nil {
-		_ = temp.Close()
-		return err
-	}
-	if _, err := temp.Write(append(raw, '\n')); err != nil {
-		_ = temp.Close()
-		return err
-	}
-	if err := temp.Sync(); err != nil {
-		_ = temp.Close()
-		return err
-	}
-	if err := temp.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tempPath, path); err != nil {
-		return fmt.Errorf("replace Shopify token cache: %w", err)
-	}
-	dir, err := os.Open(filepath.Dir(path))
-	if err != nil {
-		return err
-	}
-	defer dir.Close()
-	return dir.Sync()
+	return writeShopifyPrivateFileAtomic(path, append(raw, '\n'))
 }
 
 func sharedShopifyAccessToken(
@@ -114,7 +78,7 @@ func sharedShopifyAccessToken(
 	if err != nil {
 		return "", err
 	}
-	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	lock, err := openShopifyPrivateFile(lockPath, syscall.O_RDWR, true)
 	if err != nil {
 		return "", fmt.Errorf("open Shopify token cache lock: %w", err)
 	}

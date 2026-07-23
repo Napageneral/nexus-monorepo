@@ -115,6 +115,60 @@
         "type": "object"
       }
     },
+    "moonsleep-commerce.shopify-source.configure-schedules": {
+      "description": "Plan or apply the exact connection binding and independently enabled Shopify source schedules without making a Shopify provider request.",
+      "action": "write",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["plan", "apply"]
+          },
+          "connection_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$",
+            "maxLength": 128
+          },
+          "enabled_families": {
+            "type": "array",
+            "uniqueItems": true,
+            "maxItems": 12,
+            "items": {
+              "type": "string",
+              "enum": [
+                "orders.delta",
+                "customers.delta",
+                "inventory.hot",
+                "inventory.reconcile",
+                "fulfillment.delta",
+                "discounts.delta",
+                "finance.transactions",
+                "disputes.delta",
+                "products.delta",
+                "catalog.delta",
+                "marketing.delta",
+                "payouts.delta"
+              ]
+            }
+          },
+          "expected_plan_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "confirmation": {
+            "type": "string",
+            "enum": ["CONFIGURE_MOONSLEEP_SHOPIFY_SOURCE_SCHEDULES"]
+          }
+        },
+        "required": ["mode", "connection_id", "enabled_families"],
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object"
+      }
+    },
     "moonsleep-commerce.shopify-customers.project-cohort": {
       "description": "Project an explicit bounded cohort of committed Shopify customer records into Nex identity using replay-safe public operations.",
       "action": "write",

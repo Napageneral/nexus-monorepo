@@ -58,11 +58,8 @@ func shopifyGovernorDir(connectionID string) (string, error) {
 		return "", err
 	}
 	dir := filepath.Join(filepath.Dir(statePath), "request-governor")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := secureShopifyStateDirectory(dir); err != nil {
 		return "", fmt.Errorf("create Shopify request governor directory: %w", err)
-	}
-	if err := os.Chmod(dir, 0o700); err != nil {
-		return "", fmt.Errorf("secure Shopify request governor directory: %w", err)
 	}
 	return dir, nil
 }
@@ -71,7 +68,7 @@ func acquireShopifyGovernorSlot(ctx context.Context, dir string) (*shopifyGovern
 	for {
 		for slot := 0; slot < shopifyGovernorSlots; slot++ {
 			path := filepath.Join(dir, fmt.Sprintf("slot-%d.lock", slot))
-			file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+			file, err := openShopifyPrivateFile(path, syscall.O_RDWR, true)
 			if err != nil {
 				return nil, fmt.Errorf("open Shopify request governor slot: %w", err)
 			}
@@ -102,7 +99,7 @@ func reserveShopifyRequest(ctx context.Context, dir string, now func() time.Time
 	lockPath := filepath.Join(dir, "state.lock")
 	statePath := filepath.Join(dir, "state.json")
 	for {
-		lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+		lock, err := openShopifyPrivateFile(lockPath, syscall.O_RDWR, true)
 		if err != nil {
 			return fmt.Errorf("open Shopify request governor lock: %w", err)
 		}
@@ -111,7 +108,7 @@ func reserveShopifyRequest(ctx context.Context, dir string, now func() time.Time
 			return fmt.Errorf("lock Shopify request governor: %w", err)
 		}
 		state := shopifyGovernorState{Version: 1}
-		if raw, readErr := os.ReadFile(statePath); readErr == nil {
+		if raw, readErr := readShopifyPrivateFile(statePath); readErr == nil {
 			if err := json.Unmarshal(raw, &state); err != nil || state.Version != 1 {
 				_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 				_ = lock.Close()
@@ -144,7 +141,7 @@ func reserveShopifyRequest(ctx context.Context, dir string, now func() time.Time
 		state.NextRequestAt = current.Add(shopifyGovernorRequestSpacing).Format(time.RFC3339Nano)
 		encoded, err := json.Marshal(state)
 		if err == nil {
-			err = os.WriteFile(statePath, append(encoded, '\n'), 0o600)
+			err = writeShopifyPrivateFileAtomic(statePath, append(encoded, '\n'))
 		}
 		_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 		_ = lock.Close()
@@ -158,7 +155,7 @@ func reserveShopifyRequest(ctx context.Context, dir string, now func() time.Time
 func updateShopifyGovernorBackoff(dir string, until time.Time) error {
 	lockPath := filepath.Join(dir, "state.lock")
 	statePath := filepath.Join(dir, "state.json")
-	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	lock, err := openShopifyPrivateFile(lockPath, syscall.O_RDWR, true)
 	if err != nil {
 		return err
 	}
@@ -168,10 +165,12 @@ func updateShopifyGovernorBackoff(dir string, until time.Time) error {
 	}
 	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) //nolint:errcheck
 	state := shopifyGovernorState{Version: 1}
-	if raw, readErr := os.ReadFile(statePath); readErr == nil {
+	if raw, readErr := readShopifyPrivateFile(statePath); readErr == nil {
 		if err := json.Unmarshal(raw, &state); err != nil || state.Version != 1 {
 			return errors.New("Shopify request governor state is invalid")
 		}
+	} else if !errors.Is(readErr, os.ErrNotExist) {
+		return fmt.Errorf("read Shopify request governor state: %w", readErr)
 	}
 	if until.After(parseGovernorTime(state.BackoffUntil)) {
 		state.BackoffUntil = until.UTC().Format(time.RFC3339Nano)
@@ -180,7 +179,7 @@ func updateShopifyGovernorBackoff(dir string, until time.Time) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(statePath, append(encoded, '\n'), 0o600)
+	return writeShopifyPrivateFileAtomic(statePath, append(encoded, '\n'))
 }
 
 func shopifyRetryAfter(response *http.Response, now time.Time) time.Time {

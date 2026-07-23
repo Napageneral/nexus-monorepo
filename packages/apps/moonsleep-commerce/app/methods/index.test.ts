@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildShopifySourceIdentityObservations,
+  configureShopifySourceSchedules,
   inspectShopifyCustomerBackfill,
   inspectShopifyCommerceBackfill,
   projectShopifyCommerceBackfill,
@@ -12,6 +13,119 @@ import {
   shopifyCommerceRecordSetSha256,
   triggerShopifySource,
 } from "./index.js";
+
+const SHOPIFY_SOURCE_FAMILIES = [
+  "orders.delta",
+  "customers.delta",
+  "inventory.hot",
+  "inventory.reconcile",
+  "fulfillment.delta",
+  "discounts.delta",
+  "finance.transactions",
+  "disputes.delta",
+  "products.delta",
+  "catalog.delta",
+  "marketing.delta",
+  "payouts.delta",
+] as const;
+
+function sourceJobName(family: string): string {
+  return `moonsleep-commerce.shopify-source.${family.replaceAll(".", "-")}`;
+}
+
+describe("Shopify source schedule configuration", () => {
+  it("plans without mutation and applies only an exact hash-bound family set", async () => {
+    const jobs = SHOPIFY_SOURCE_FAMILIES.map((family, index) => ({
+      id: `job-${index}`,
+      name: sourceJobName(family),
+      status: "active",
+      config_json: JSON.stringify({ family }),
+    }));
+    const schedules = SHOPIFY_SOURCE_FAMILIES.map((family, index) => ({
+      id: `schedule-${index}`,
+      job_definition_id: `job-${index}`,
+      name: sourceJobName(family),
+      expression: "0 0 1 1 *",
+      timezone: "UTC",
+      enabled: 0,
+    }));
+    let failingJobId = "";
+    const jobsUpdate = vi.fn(async (input: Record<string, unknown>) => {
+      if (input.id === failingJobId) {
+        throw new Error("injected job update failure");
+      }
+      const row = jobs.find((entry) => entry.id === input.id)!;
+      row.config_json = String(input.config_json);
+      return { payload: { job: row } };
+    });
+    const schedulesUpdate = vi.fn(async (input: Record<string, unknown>) => {
+      const row = schedules.find((entry) => entry.id === input.id)!;
+      if (input.expression !== undefined) row.expression = String(input.expression);
+      if (input.timezone !== undefined) row.timezone = String(input.timezone);
+      if (input.enabled !== undefined) row.enabled = input.enabled === true ? 1 : 0;
+      return { payload: { schedule: row } };
+    });
+    const nex = {
+      jobs: { list: vi.fn(async () => ({ payload: { jobs } })), update: jobsUpdate },
+      schedules: {
+        list: vi.fn(async () => ({ payload: { schedules } })),
+        update: schedulesUpdate,
+      },
+    };
+    const enabledFamilies = ["orders.delta", "customers.delta", "inventory.hot"];
+    const planned = await configureShopifySourceSchedules({
+      params: { mode: "plan", connection_id: "shopify-primary", enabled_families: enabledFamilies },
+      nex,
+    } as never) as Record<string, unknown>;
+    expect(planned).toMatchObject({ state: "planned", provider_write_authority: false });
+    expect(planned.plan_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(jobsUpdate).not.toHaveBeenCalled();
+    expect(schedulesUpdate).not.toHaveBeenCalled();
+
+    await expect(configureShopifySourceSchedules({
+      params: {
+        mode: "apply",
+        connection_id: "shopify-primary",
+        enabled_families: enabledFamilies,
+        expected_plan_sha256: "0".repeat(64),
+        confirmation: "CONFIGURE_MOONSLEEP_SHOPIFY_SOURCE_SCHEDULES",
+      },
+      nex,
+    } as never)).rejects.toThrow("does not match");
+    expect(jobsUpdate).not.toHaveBeenCalled();
+
+    const applied = await configureShopifySourceSchedules({
+      params: {
+        mode: "apply",
+        connection_id: "shopify-primary",
+        enabled_families: enabledFamilies,
+        expected_plan_sha256: planned.plan_sha256,
+        confirmation: "CONFIGURE_MOONSLEEP_SHOPIFY_SOURCE_SCHEDULES",
+      },
+      nex,
+    } as never);
+    expect(applied).toMatchObject({ state: "applied", plan_sha256: planned.plan_sha256 });
+    expect(jobsUpdate).toHaveBeenCalledTimes(12);
+    expect(schedulesUpdate).toHaveBeenCalledTimes(27);
+    expect(schedules.filter((row) => row.enabled === 1).map((row) => row.name).sort()).toEqual(
+      enabledFamilies.map(sourceJobName).sort(),
+    );
+    expect(jobs.every((row) => row.config_json.includes('"connection_id":"shopify-primary"'))).toBe(true);
+
+    failingJobId = "job-5";
+    await expect(configureShopifySourceSchedules({
+      params: {
+        mode: "apply",
+        connection_id: "shopify-primary",
+        enabled_families: enabledFamilies,
+        expected_plan_sha256: planned.plan_sha256,
+        confirmation: "CONFIGURE_MOONSLEEP_SHOPIFY_SOURCE_SCHEDULES",
+      },
+      nex,
+    } as never)).rejects.toThrow("injected job update failure");
+    expect(schedules.every((row) => row.enabled === 0)).toBe(true);
+  });
+});
 
 describe("Shopify source manual trigger", () => {
   it("queues only the exact installed active family job with a caller-bound idempotency key", async () => {

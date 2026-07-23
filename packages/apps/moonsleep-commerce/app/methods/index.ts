@@ -37,6 +37,21 @@ const SOURCE_JOB_NAMES = Object.freeze({
   "marketing.delta": "moonsleep-commerce.shopify-source.marketing-delta",
   "payouts.delta": "moonsleep-commerce.shopify-source.payouts-delta",
 });
+const SOURCE_JOB_SCHEDULES = Object.freeze({
+  "orders.delta": "* * * * *",
+  "customers.delta": "* * * * *",
+  "inventory.hot": "* * * * *",
+  "inventory.reconcile": "*/5 * * * *",
+  "fulfillment.delta": "*/5 * * * *",
+  "discounts.delta": "*/5 * * * *",
+  "finance.transactions": "*/5 * * * *",
+  "disputes.delta": "*/5 * * * *",
+  "products.delta": "*/15 * * * *",
+  "catalog.delta": "*/15 * * * *",
+  "marketing.delta": "13 * * * *",
+  "payouts.delta": "17 */6 * * *",
+});
+const SOURCE_SCHEDULE_CONFIRMATION = "CONFIGURE_MOONSLEEP_SHOPIFY_SOURCE_SCHEDULES";
 const SOURCE_REQUEST_ID_RE = /^[a-zA-Z0-9._:-]{1,128}$/;
 const SOURCE_CONNECTION_ID_RE = /^[a-zA-Z0-9._-]{1,128}$/;
 
@@ -535,6 +550,164 @@ export const triggerShopifySource: NexAppMethodHandler = async (ctx) => {
   };
 };
 
+type ShopifySourceFamily = keyof typeof SOURCE_JOB_NAMES;
+
+function requireSourceFamilies(value: unknown): ShopifySourceFamily[] {
+  if (!Array.isArray(value)) {
+    throw new Error("enabled_families must be an array");
+  }
+  const families = value.map((entry, index) => {
+    const family = asString(entry) as ShopifySourceFamily;
+    if (entry !== family || !SOURCE_JOB_NAMES[family]) {
+      throw new Error(`enabled_families[${index}] is not an installed Shopify source family`);
+    }
+    return family;
+  });
+  if (new Set(families).size !== families.length) {
+    throw new Error("enabled_families must be unique");
+  }
+  return [...families].sort();
+}
+
+function sourceSchedulePlan(connectionId: string, enabledFamilies: ShopifySourceFamily[]) {
+  const enabled = new Set(enabledFamilies);
+  const schedules = (Object.keys(SOURCE_JOB_NAMES) as ShopifySourceFamily[])
+    .sort()
+    .map((family) => ({
+      family,
+      job_name: SOURCE_JOB_NAMES[family],
+      schedule_name: SOURCE_JOB_NAMES[family],
+      expression: SOURCE_JOB_SCHEDULES[family],
+      timezone: "UTC",
+      enabled: enabled.has(family),
+    }));
+  const plan = {
+    version: 1,
+    connection_id: connectionId,
+    enabled_families: enabledFamilies,
+    schedules,
+    provider_write_authority: false,
+  };
+  return {
+    ...plan,
+    plan_sha256: createHash("sha256").update(JSON.stringify(plan), "utf8").digest("hex"),
+  };
+}
+
+export const configureShopifySourceSchedules: NexAppMethodHandler = async (ctx) => {
+  const mode = asString(ctx.params.mode);
+  if (mode !== "plan" && mode !== "apply") {
+    throw new Error("mode must be plan or apply");
+  }
+  const connectionId = requireConnectionId(ctx.params.connection_id);
+  const enabledFamilies = requireSourceFamilies(ctx.params.enabled_families);
+  const plan = sourceSchedulePlan(connectionId, enabledFamilies);
+  if (mode === "plan") {
+    return { state: "planned", ...plan };
+  }
+  if (asString(ctx.params.expected_plan_sha256) !== plan.plan_sha256) {
+    throw new Error("expected_plan_sha256 does not match the exact Shopify source schedule plan");
+  }
+  if (asString(ctx.params.confirmation) !== SOURCE_SCHEDULE_CONFIRMATION) {
+    throw new Error("confirmation does not authorize Shopify source schedule configuration");
+  }
+
+  const listedJobs = unwrapPayload(await ctx.nex.jobs.list({}));
+  const jobs = Array.isArray(listedJobs.jobs) ? listedJobs.jobs.map(asRecord) : [];
+  const listedSchedules = unwrapPayload(await ctx.nex.schedules.list({}));
+  const schedules = Array.isArray(listedSchedules.schedules)
+    ? listedSchedules.schedules.map(asRecord)
+    : [];
+
+  for (const target of plan.schedules) {
+    const jobMatches = jobs.filter((job) => asString(job.name) === target.job_name);
+    if (jobMatches.length !== 1) {
+      throw new Error(`Shopify source job ${target.family} is missing or duplicated`);
+    }
+    const job = jobMatches[0]!;
+    const jobId = asString(job.id);
+    if (!jobId || asString(job.status) !== "active") {
+      throw new Error(`Shopify source job ${target.family} is not active`);
+    }
+    const scheduleMatches = schedules.filter(
+      (schedule) => asString(schedule.name) === target.schedule_name,
+    );
+    if (scheduleMatches.length !== 1) {
+      throw new Error(`Shopify source schedule ${target.family} is missing or duplicated`);
+    }
+    const schedule = scheduleMatches[0]!;
+    if (asString(schedule.job_definition_id) !== jobId) {
+      throw new Error(`Shopify source schedule ${target.family} is bound to another job`);
+    }
+  }
+
+  try {
+    // Disable every schedule first. A failed reconfiguration can leave updated
+    // job metadata, but it can never leave a partially activated family set.
+    for (const schedule of schedules) {
+      await ctx.nex.schedules.update({ id: asString(schedule.id), enabled: false });
+    }
+    for (const target of plan.schedules) {
+      const job = jobs.find((entry) => asString(entry.name) === target.job_name)!;
+      const schedule = schedules.find(
+        (entry) => asString(entry.name) === target.schedule_name,
+      )!;
+      await ctx.nex.jobs.update({
+        id: asString(job.id),
+        config_json: JSON.stringify({ family: target.family, connection_id: connectionId }),
+      });
+      await ctx.nex.schedules.update({
+        id: asString(schedule.id),
+        expression: target.expression,
+        timezone: target.timezone,
+        enabled: false,
+      });
+    }
+    for (const target of plan.schedules.filter((entry) => entry.enabled)) {
+      const schedule = schedules.find(
+        (entry) => asString(entry.name) === target.schedule_name,
+      )!;
+      await ctx.nex.schedules.update({ id: asString(schedule.id), enabled: true });
+    }
+  } catch (error) {
+    const rollbackErrors: string[] = [];
+    for (const schedule of schedules) {
+      try {
+        await ctx.nex.schedules.update({ id: asString(schedule.id), enabled: false });
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
+      }
+    }
+    if (rollbackErrors.length > 0) {
+      throw new Error(`Shopify source schedule configuration failed and disable rollback failed: ${rollbackErrors.join("; ")}`, { cause: error });
+    }
+    throw error;
+  }
+
+  const verifiedJobs = unwrapPayload(await ctx.nex.jobs.list({}));
+  const verifiedSchedules = unwrapPayload(await ctx.nex.schedules.list({}));
+  const jobRows = Array.isArray(verifiedJobs.jobs) ? verifiedJobs.jobs.map(asRecord) : [];
+  const scheduleRows = Array.isArray(verifiedSchedules.schedules)
+    ? verifiedSchedules.schedules.map(asRecord)
+    : [];
+  for (const target of plan.schedules) {
+    const job = jobRows.find((entry) => asString(entry.name) === target.job_name);
+    const schedule = scheduleRows.find((entry) => asString(entry.name) === target.schedule_name);
+    if (
+      !job ||
+      asString(job.config_json) !==
+        JSON.stringify({ family: target.family, connection_id: connectionId }) ||
+      !schedule ||
+      asString(schedule.expression) !== target.expression ||
+      asString(schedule.timezone) !== target.timezone ||
+      (schedule.enabled === true || schedule.enabled === 1) !== target.enabled
+    ) {
+      throw new Error(`Shopify source schedule ${target.family} failed exact readback`);
+    }
+  }
+  return { state: "applied", ...plan };
+};
+
 export const projectShopifyCustomerCohort: NexAppMethodHandler = async (ctx) => {
   const recordIds = requireCohortRecordIds(ctx.params);
 
@@ -706,6 +879,7 @@ export default {
   "moonsleep-commerce.healthcheck": healthcheck,
   "moonsleep-commerce.shopify-source.seed-identities": seedShopifySourceIdentities,
   "moonsleep-commerce.shopify-source.trigger": triggerShopifySource,
+  "moonsleep-commerce.shopify-source.configure-schedules": configureShopifySourceSchedules,
   "moonsleep-commerce.shopify-customers.inspect-backfill": inspectShopifyCustomerBackfill,
   "moonsleep-commerce.shopify-customers.project-cohort": projectShopifyCustomerCohort,
   "moonsleep-commerce.shopify-customers.project-backfill": projectShopifyCustomerBackfill,

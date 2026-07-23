@@ -201,11 +201,8 @@ func sourceStatePaths(connectionID string) (statePath string, lockPath string, e
 		return "", "", err
 	}
 	dir := filepath.Join(root, "source-observation", connectionID)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := secureShopifyStateDirectory(dir); err != nil {
 		return "", "", fmt.Errorf("create Shopify source state directory: %w", err)
-	}
-	if err := os.Chmod(dir, 0o700); err != nil {
-		return "", "", fmt.Errorf("secure Shopify source state directory: %w", err)
 	}
 	return filepath.Join(dir, "state.json"), filepath.Join(dir, "state.lock"), nil
 }
@@ -216,7 +213,7 @@ func withLockedSourceState[T any](connectionID string, fn func(*shopifySourceSta
 	if err != nil {
 		return zero, err
 	}
-	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	lock, err := openShopifyPrivateFile(lockPath, syscall.O_RDWR, true)
 	if err != nil {
 		return zero, fmt.Errorf("open Shopify source state lock: %w", err)
 	}
@@ -227,7 +224,7 @@ func withLockedSourceState[T any](connectionID string, fn func(*shopifySourceSta
 	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) //nolint:errcheck
 
 	state := &shopifySourceState{Version: shopifySourceStateVersion, Families: map[string]shopifySourceFamilyState{}}
-	if raw, readErr := os.ReadFile(statePath); readErr == nil {
+	if raw, readErr := readShopifyPrivateFile(statePath); readErr == nil {
 		if err := json.Unmarshal(raw, state); err != nil {
 			return zero, fmt.Errorf("parse Shopify source state: %w", err)
 		}
@@ -246,33 +243,8 @@ func withLockedSourceState[T any](connectionID string, fn func(*shopifySourceSta
 	if err != nil {
 		return zero, fmt.Errorf("encode Shopify source state: %w", err)
 	}
-	tmp, err := os.OpenFile(statePath+".tmp", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
-	if err != nil {
-		return zero, fmt.Errorf("stage Shopify source state: %w", err)
-	}
-	if _, err = tmp.Write(append(encoded, '\n')); err == nil {
-		err = tmp.Sync()
-	}
-	closeErr := tmp.Close()
-	if err != nil {
-		_ = os.Remove(statePath + ".tmp")
-		return zero, fmt.Errorf("write Shopify source state: %w", err)
-	}
-	if closeErr != nil {
-		_ = os.Remove(statePath + ".tmp")
-		return zero, fmt.Errorf("close Shopify source state: %w", closeErr)
-	}
-	if err := os.Rename(statePath+".tmp", statePath); err != nil {
+	if err := writeShopifyPrivateFileAtomic(statePath, append(encoded, '\n')); err != nil {
 		return zero, fmt.Errorf("commit Shopify source state: %w", err)
-	}
-	dir, err := os.Open(filepath.Dir(statePath))
-	if err != nil {
-		return zero, fmt.Errorf("open Shopify source state directory: %w", err)
-	}
-	err = dir.Sync()
-	_ = dir.Close()
-	if err != nil {
-		return zero, fmt.Errorf("sync Shopify source state directory: %w", err)
 	}
 	return result, nil
 }
@@ -473,30 +445,10 @@ func captureShopifySource(ctx context.Context, state *shopifyState, spec shopify
 		return captureShopifyInventoryPage(ctx, state, since, through, lease.PageCursor, true)
 
 	case "fulfillment.delta":
-		rows, sourceRequest, _, err := fetchFulfillmentOrdersSince(ctx, state, since)
-		if err != nil {
-			return nil, "", false, err
-		}
-		records := make([]nexadapter.AdapterInboundRecord, 0, len(rows))
-		for _, row := range rows {
-			if record := buildFulfillmentRecord(state, row, sourceRequest); record.Operation != "" {
-				records = append(records, record)
-			}
-		}
-		return boundedCompleteSourceRecords(spec.Name, records)
+		return captureShopifyFulfillmentsPage(ctx, state, since, through, lease.PageCursor)
 
 	case "discounts.delta":
-		rows, sourceRequest, _, err := fetchDiscountsSince(ctx, state, since)
-		if err != nil {
-			return nil, "", false, err
-		}
-		records := make([]nexadapter.AdapterInboundRecord, 0, len(rows))
-		for _, row := range rows {
-			if record := buildDiscountRecord(state, row, sourceRequest); record.Operation != "" {
-				records = append(records, record)
-			}
-		}
-		return boundedCompleteSourceRecords(spec.Name, records)
+		return captureShopifyDiscountsPage(ctx, state, since, through, lease.PageCursor)
 
 	case "finance.transactions":
 		return captureShopifyPaymentsPage(ctx, state, shopifyPaymentsPageRequest{
@@ -521,43 +473,13 @@ func captureShopifySource(ctx context.Context, state *shopifyState, spec shopify
 		}, since, through, lease.PageCursor)
 
 	case "products.delta":
-		rows, sourceRequest, _, err := fetchProductsSince(ctx, state, since, shopifySyncModeMonitor)
-		if err != nil {
-			return nil, "", false, err
-		}
-		records := make([]nexadapter.AdapterInboundRecord, 0, len(rows))
-		for _, row := range rows {
-			if record := buildProductRecord(state, row, sourceRequest); record.Operation != "" {
-				records = append(records, record)
-			}
-		}
-		return boundedCompleteSourceRecords(spec.Name, records)
+		return captureShopifyProductsPage(ctx, state, since, through, lease.PageCursor)
 
 	case "catalog.delta":
-		rows, sourceRequest, _, err := fetchCollectionsSince(ctx, state, since, shopifySyncModeMonitor)
-		if err != nil {
-			return nil, "", false, err
-		}
-		records := make([]nexadapter.AdapterInboundRecord, 0, len(rows))
-		for _, row := range rows {
-			if record := buildCollectionRecord(state, row, sourceRequest); record.Operation != "" {
-				records = append(records, record)
-			}
-		}
-		return boundedCompleteSourceRecords(spec.Name, records)
+		return captureShopifyCollectionsPage(ctx, state, since, through, lease.PageCursor)
 
 	case "marketing.delta":
-		rows, sourceRequest, _, err := fetchMarketingActivitiesSince(ctx, state, since)
-		if err != nil {
-			return nil, "", false, err
-		}
-		records := make([]nexadapter.AdapterInboundRecord, 0, len(rows))
-		for _, row := range rows {
-			if record := buildMarketingRecord(state, row, sourceRequest); record.Operation != "" {
-				records = append(records, record)
-			}
-		}
-		return boundedCompleteSourceRecords(spec.Name, records)
+		return captureShopifyMarketingPage(ctx, state, since, through, lease.PageCursor)
 
 	case "payouts.delta":
 		return captureShopifyPaymentsPage(ctx, state, shopifyPaymentsPageRequest{
@@ -572,13 +494,6 @@ func captureShopifySource(ctx context.Context, state *shopifyState, spec shopify
 	default:
 		return nil, "", false, fmt.Errorf("Shopify source family %s is not implemented", spec.Name)
 	}
-}
-
-func boundedCompleteSourceRecords(family string, records []nexadapter.AdapterInboundRecord) ([]nexadapter.AdapterInboundRecord, string, bool, error) {
-	if len(records) > shopifySourceMaxRecords {
-		return nil, "", false, fmt.Errorf("Shopify source family %s exceeded the bounded %d-record capture", family, shopifySourceMaxRecords)
-	}
-	return records, "", true, nil
 }
 
 func handleShopifySourceCapture(ctx nexadapter.AdapterContext[struct{}], payload map[string]any) (any, error) {
