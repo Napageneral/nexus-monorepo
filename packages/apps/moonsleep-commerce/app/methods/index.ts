@@ -23,6 +23,7 @@ const MAX_INSPECTED_COMMERCE_RECORDS = 40_000;
 const RECORD_SCAN_PAGE_SIZE = 1_000;
 const MAX_RECORDS_SCANNED = 100_000;
 const SHOPIFY_SOURCE_IDENTITY_OBSERVED_AT = Date.UTC(2026, 6, 20);
+const MOONSLEEP_OPS_ENTITY_ID = "entity_moonsleep_ops";
 const SOURCE_JOB_NAMES = Object.freeze({
   "orders.delta": "moonsleep-commerce.shopify-source.orders-delta",
   "customers.delta": "moonsleep-commerce.shopify-source.customers-delta",
@@ -69,9 +70,7 @@ type ShopifySourceIdentityObservation = {
 };
 
 function asRecord(value: unknown): RuntimeRow {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as RuntimeRow)
-    : {};
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as RuntimeRow) : {};
 }
 
 function asString(value: unknown): string {
@@ -102,7 +101,9 @@ function requireRecordIds(params: RuntimeRow, maximum: number, requireSorted: bo
   const ids = params.record_ids.map((value, index) => {
     const id = asString(value);
     if (!id || Buffer.byteLength(id, "utf8") > 512 || value !== id) {
-      throw new Error(`record_ids[${index}] must be a trimmed non-empty string of at most 512 bytes`);
+      throw new Error(
+        `record_ids[${index}] must be a trimmed non-empty string of at most 512 bytes`,
+      );
     }
     return id;
   });
@@ -162,10 +163,7 @@ function requireShopDomain(value: unknown): string {
 
 function requireConnectionId(value: unknown): string {
   const connectionId = asString(value);
-  if (
-    value !== connectionId ||
-    !/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/.test(connectionId)
-  ) {
+  if (value !== connectionId || !/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/.test(connectionId)) {
     throw new Error("connection_id must be an exact lowercase Nex connection identifier");
   }
   return connectionId;
@@ -176,16 +174,18 @@ async function discoverShopifyCustomerRecordIds(params: {
   shopDomain: string;
   connectionId: string;
 }): Promise<string[]> {
-  const recordsClient = (params.nex as {
-    records: {
-      list: (input: {
-        platform: "shopify";
-        connection_id: string;
-        limit: number;
-        offset: number;
-      }) => Promise<unknown>;
-    };
-  }).records;
+  const recordsClient = (
+    params.nex as {
+      records: {
+        list: (input: {
+          platform: "shopify";
+          connection_id: string;
+          limit: number;
+          offset: number;
+        }) => Promise<unknown>;
+      };
+    }
+  ).records;
   const customerIds: string[] = [];
   let scanned = 0;
 
@@ -249,16 +249,18 @@ async function discoverShopifyCommerceRecordIds(params: {
   shopDomain: string;
   connectionId: string;
 }): Promise<string[]> {
-  const recordsClient = (params.nex as {
-    records: {
-      list: (input: {
-        platform: "shopify";
-        connection_id: string;
-        limit: number;
-        offset: number;
-      }) => Promise<unknown>;
-    };
-  }).records;
+  const recordsClient = (
+    params.nex as {
+      records: {
+        list: (input: {
+          platform: "shopify";
+          connection_id: string;
+          limit: number;
+          offset: number;
+        }) => Promise<unknown>;
+      };
+    }
+  ).records;
   const orderRecordIds: string[] = [];
   const lineItemRecordIds: string[] = [];
   let scanned = 0;
@@ -395,9 +397,9 @@ export function buildShopifySourceIdentityObservations(
     {
       role: "integration",
       platform: "shopify",
-      space_id: "",
+      space_id: shopDomain,
       contact_id: connectionId,
-      source_observation_id: `moonsleep-commerce:shopify-source:integration:v1:${connectionId}`,
+      source_observation_id: `moonsleep-commerce:shopify-source:integration:v2:${shopDomain}:${connectionId}`,
       observed_at: SHOPIFY_SOURCE_IDENTITY_OBSERVED_AT,
       contact_name: "MoonSleep Shopify Integration",
       entity_name: "MoonSleep Shopify Integration",
@@ -413,11 +415,109 @@ function shopifySourceIdentityContractSha256(
   return createHash("sha256").update(JSON.stringify(observations), "utf8").digest("hex");
 }
 
+async function ensureShopifyReceiverGrounding(params: {
+  client: {
+    contacts: {
+      resolve: (input: RuntimeRow) => Promise<unknown>;
+      create: (input: RuntimeRow) => Promise<unknown>;
+      update: (input: RuntimeRow) => Promise<unknown>;
+    };
+    entities: {
+      get: (input: { id: string }) => Promise<unknown>;
+      resolve: (input: { entity_id: string }) => Promise<unknown>;
+    };
+  };
+  connectionId: string;
+}): Promise<RuntimeRow> {
+  const resolution = unwrapPayload(
+    await params.client.entities.resolve({ entity_id: MOONSLEEP_OPS_ENTITY_ID }),
+  );
+  if (asString(resolution.canonical_id) !== MOONSLEEP_OPS_ENTITY_ID) {
+    throw new Error("MoonSleep Ops receiver entity is not canonical");
+  }
+  const entityResult = unwrapPayload(
+    await params.client.entities.get({ id: MOONSLEEP_OPS_ENTITY_ID }),
+  );
+  const entity = asRecord(entityResult.entity);
+  if (
+    asString(entity.id) !== MOONSLEEP_OPS_ENTITY_ID ||
+    entity.is_agent !== true ||
+    entity.deleted_at != null
+  ) {
+    throw new Error("MoonSleep Ops receiver entity is not active");
+  }
+
+  const anchor = {
+    platform: "shopify",
+    space_id: "",
+    contact_id: params.connectionId,
+  };
+  const before = unwrapPayload(await params.client.contacts.resolve(anchor));
+  const beforeContact = asRecord(before.contact);
+  let outcome = "unchanged";
+  if (before.found !== true) {
+    const created = unwrapPayload(
+      await params.client.contacts.create({
+        entity_id: MOONSLEEP_OPS_ENTITY_ID,
+        ...anchor,
+        contact_name: "MoonSleep Ops",
+        origin: "moonsleep-commerce",
+      }),
+    );
+    if (asString(asRecord(created.contact).id) === "") {
+      throw new Error("MoonSleep Ops receiver contact was not created");
+    }
+    outcome = "created";
+  } else if (asString(beforeContact.canonical_entity_id) !== MOONSLEEP_OPS_ENTITY_ID) {
+    const contactId = asString(beforeContact.id);
+    if (!contactId) {
+      throw new Error("Shopify receiver contact is missing its row id");
+    }
+    const updated = unwrapPayload(
+      await params.client.contacts.update({
+        id: contactId,
+        entity_id: MOONSLEEP_OPS_ENTITY_ID,
+        contact_name: "MoonSleep Ops",
+      }),
+    );
+    if (asString(asRecord(updated.contact).id) === "") {
+      throw new Error("Shopify receiver contact was not updated");
+    }
+    outcome = "updated";
+  }
+
+  const after = unwrapPayload(await params.client.contacts.resolve(anchor));
+  const afterContact = asRecord(after.contact);
+  if (
+    after.found !== true ||
+    asString(afterContact.platform) !== anchor.platform ||
+    asString(afterContact.space_id) !== anchor.space_id ||
+    asString(afterContact.contact_id) !== anchor.contact_id ||
+    asString(afterContact.canonical_entity_id) !== MOONSLEEP_OPS_ENTITY_ID
+  ) {
+    throw new Error("Shopify receiver contact is not grounded to MoonSleep Ops");
+  }
+  return {
+    outcome,
+    platform: anchor.platform,
+    space_id: anchor.space_id,
+    contact_id: anchor.contact_id,
+    canonical_entity_id: MOONSLEEP_OPS_ENTITY_ID,
+  };
+}
+
 export const seedShopifySourceIdentities: NexAppMethodHandler = async (ctx) => {
   const observations = buildShopifySourceIdentityObservations(ctx.params);
+  const connectionId = requireConnectionId(ctx.params.connection_id);
   const identityClient = ctx.nex as unknown as {
-    contacts: { observe: (input: RuntimeRow) => Promise<unknown> };
+    contacts: {
+      observe: (input: RuntimeRow) => Promise<unknown>;
+      resolve: (input: RuntimeRow) => Promise<unknown>;
+      create: (input: RuntimeRow) => Promise<unknown>;
+      update: (input: RuntimeRow) => Promise<unknown>;
+    };
     entities: {
+      get: (input: { id: string }) => Promise<unknown>;
       resolve: (input: { entity_id: string }) => Promise<unknown>;
       tags: { list: (input: { entity_id: string }) => Promise<unknown> };
     };
@@ -468,6 +568,11 @@ export const seedShopifySourceIdentities: NexAppMethodHandler = async (ctx) => {
     });
   }
 
+  const receiverGrounding = await ensureShopifyReceiverGrounding({
+    client: identityClient,
+    connectionId,
+  });
+
   return {
     state: "succeeded",
     source_identity_contract_sha256: shopifySourceIdentityContractSha256(observations),
@@ -476,6 +581,7 @@ export const seedShopifySourceIdentities: NexAppMethodHandler = async (ctx) => {
     created_contacts: results.filter((row) => row.created_contact === true).length,
     replayed: results.filter((row) => row.replayed === true).length,
     results,
+    receiver_grounding: receiverGrounding,
     provider_write_authority: false,
   };
 };
@@ -649,9 +755,7 @@ export const configureShopifySourceSchedules: NexAppMethodHandler = async (ctx) 
     }
     for (const target of plan.schedules) {
       const job = jobs.find((entry) => asString(entry.name) === target.job_name)!;
-      const schedule = schedules.find(
-        (entry) => asString(entry.name) === target.schedule_name,
-      )!;
+      const schedule = schedules.find((entry) => asString(entry.name) === target.schedule_name)!;
       await ctx.nex.jobs.update({
         id: asString(job.id),
         config_json: JSON.stringify({ family: target.family, connection_id: connectionId }),
@@ -664,9 +768,7 @@ export const configureShopifySourceSchedules: NexAppMethodHandler = async (ctx) 
       });
     }
     for (const target of plan.schedules.filter((entry) => entry.enabled)) {
-      const schedule = schedules.find(
-        (entry) => asString(entry.name) === target.schedule_name,
-      )!;
+      const schedule = schedules.find((entry) => asString(entry.name) === target.schedule_name)!;
       await ctx.nex.schedules.update({ id: asString(schedule.id), enabled: true });
     }
   } catch (error) {
@@ -675,11 +777,16 @@ export const configureShopifySourceSchedules: NexAppMethodHandler = async (ctx) 
       try {
         await ctx.nex.schedules.update({ id: asString(schedule.id), enabled: false });
       } catch (rollbackError) {
-        rollbackErrors.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
+        rollbackErrors.push(
+          rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+        );
       }
     }
     if (rollbackErrors.length > 0) {
-      throw new Error(`Shopify source schedule configuration failed and disable rollback failed: ${rollbackErrors.join("; ")}`, { cause: error });
+      throw new Error(
+        `Shopify source schedule configuration failed and disable rollback failed: ${rollbackErrors.join("; ")}`,
+        { cause: error },
+      );
     }
     throw error;
   }
@@ -836,8 +943,11 @@ export const projectShopifyCommerceBackfill: NexAppMethodHandler = async (ctx) =
     becameCurrent += result.became_current === true ? 1 : 0;
     ordersProjected += 1;
     resultHash.update(
-      [entry.sourceRecordId, asString(result.revision_id), asString(result.projection_payload_sha256)]
-        .join("\u0000") + "\n",
+      [
+        entry.sourceRecordId,
+        asString(result.revision_id),
+        asString(result.projection_payload_sha256),
+      ].join("\u0000") + "\n",
       "utf8",
     );
   }
@@ -851,8 +961,11 @@ export const projectShopifyCommerceBackfill: NexAppMethodHandler = async (ctx) =
     becameCurrent += result.became_current === true ? 1 : 0;
     lineItemsProjected += 1;
     resultHash.update(
-      [entry.sourceRecordId, asString(result.revision_id), asString(result.projection_payload_sha256)]
-        .join("\u0000") + "\n",
+      [
+        entry.sourceRecordId,
+        asString(result.revision_id),
+        asString(result.projection_payload_sha256),
+      ].join("\u0000") + "\n",
       "utf8",
     );
   }

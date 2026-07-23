@@ -1,6 +1,6 @@
 {
   "id": "moonsleep-commerce",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "displayName": "MoonSleep Commerce",
   "description": "Project exact Shopify records into MoonSleep identity and typed commerce state through public Nex operations.",
   "skill": "./SKILL.md",
@@ -43,7 +43,7 @@
       }
     },
     "moonsleep-commerce.shopify-source.seed-identities": {
-      "description": "Replay-safely seed the Shopify store and integration routing identities through public Nex identity operations.",
+      "description": "Replay-safely seed distinct Shopify store and integration identities and ground the local receiver to MoonSleep Ops through public Nex identity operations.",
       "action": "write",
       "access": "authenticated",
       "params": {
