@@ -355,7 +355,7 @@
         <h3>Indexing rule</h3>
         <p>Payload is private and unindexed by default. Nex search indexes the safe, agent-readable record content plus approved structured facets. Authorized hydration can return payload to a projector or operator. This gives us central search without making every customer address, message body or financial row a global snippet.</p>
         <h3>Shopify payload envelope</h3>
-        <p>The first adapter uses <code>provider_object</code>, <code>provider_object_json</code> and <code>provider_object_sha256</code> inside payload. This preserves both lossless JSON evidence and a decoded object without polluting control metadata.</p>
+        <p>The first adapter uses <code>provider_object_json</code> and <code>provider_object_sha256</code> inside payload. The exact JSON text is authoritative and is parsed only by bounded typed projectors; no decoded JavaScript object crosses the adapter boundary, so large Shopify identifiers cannot be rounded. Provider fields never enter Nex control metadata.</p>
       </section>
 
       <section id="identity">
@@ -532,6 +532,7 @@
         <div class="phase">
           <div class="phase-id">P6</div>
           <div><h3>Enable bounded continuous synchronization</h3><p>Use small reconciliation windows as the source of completeness and Shopify webhooks as an acceleration signal. Exact customer, order and line-item subscriptions route each committed revision to one projector only. Stage one bounded page at a time on the workloads volume; ingest and project through capped single-worker microbatches; enforce connection, transaction, queue and I/O ceilings; and prove cursor advancement, out-of-order delivery, missed-webhook recovery, restart, replay, retry and rollback.</p></div>
+          <div><h3>Run independent source families</h3><p>Nex schedules each Shopify family as its own durable job and separate process so a slow family cannot hold the rest. Orders, customers and hot inventory target one-minute observation; inventory reconciliation, fulfillment, discounts, settlement transactions and disputes target five minutes; products and catalog target fifteen minutes; marketing is hourly; payouts are low-priority every six hours. Each family has its own cursor, capture lease, commit or abort receipt, force-now trigger and disabled-first schedule. A shared store-wide governor caps provider concurrency at two, paces calls and persists 429 backoff across processes. Webhooks only wake these jobs sooner; reconciliation pulls remain the completeness authority.</p></div>
           <div class="state later">After backfill</div>
         </div>
         <div class="phase">

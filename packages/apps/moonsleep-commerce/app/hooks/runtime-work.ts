@@ -17,21 +17,165 @@ const COMMERCE_JOB_DESCRIPTION =
 const COMMERCE_JOB_SCRIPT_PATH = fileURLToPath(
   new URL("../jobs/shopify-order-commerce.ts", import.meta.url),
 );
+const SOURCE_JOB_SCRIPT_PATH = fileURLToPath(
+  new URL("../jobs/shopify-source-observation.ts", import.meta.url),
+);
 const JOB_SPECS = Object.freeze([
   {
     name: CUSTOMER_JOB_NAME,
     description: CUSTOMER_JOB_DESCRIPTION,
     scriptPath: CUSTOMER_JOB_SCRIPT_PATH,
+    status: DORMANT_JOB_STATUS,
     matches: [{ platform: "shopify", container_id: "customer" }],
   },
   {
     name: COMMERCE_JOB_NAME,
     description: COMMERCE_JOB_DESCRIPTION,
     scriptPath: COMMERCE_JOB_SCRIPT_PATH,
+    status: DORMANT_JOB_STATUS,
     matches: [
       { platform: "shopify", container_id: "order" },
       { platform: "shopify", container_id: "line_item" },
     ],
+  },
+  {
+    name: "moonsleep-commerce.shopify-source.orders-delta",
+    description: "Capture one bounded Shopify order delta page and durably ingest its exact records",
+    scriptPath: SOURCE_JOB_SCRIPT_PATH,
+    status: "active",
+    config: { family: "orders.delta" },
+    schedule: { name: "moonsleep-commerce.shopify-source.orders-delta", expression: "* * * * *" },
+    matches: [],
+  },
+  {
+    name: "moonsleep-commerce.shopify-source.customers-delta",
+    description:
+      "Capture one bounded Shopify customer delta page and durably ingest its exact records",
+    scriptPath: SOURCE_JOB_SCRIPT_PATH,
+    status: "active",
+    config: { family: "customers.delta" },
+    schedule: {
+      name: "moonsleep-commerce.shopify-source.customers-delta",
+      expression: "* * * * *",
+    },
+    matches: [],
+  },
+  {
+    name: "moonsleep-commerce.shopify-source.inventory-hot",
+    description: "Capture bounded current Shopify inventory observations",
+    scriptPath: SOURCE_JOB_SCRIPT_PATH,
+    status: "active",
+    config: { family: "inventory.hot" },
+    schedule: { name: "moonsleep-commerce.shopify-source.inventory-hot", expression: "* * * * *" },
+    matches: [],
+  },
+  {
+    name: "moonsleep-commerce.shopify-source.inventory-reconcile",
+    description: "Reconcile the complete Shopify inventory snapshot in bounded provider pages",
+    scriptPath: SOURCE_JOB_SCRIPT_PATH,
+    status: "active",
+    config: { family: "inventory.reconcile" },
+    schedule: {
+      name: "moonsleep-commerce.shopify-source.inventory-reconcile",
+      expression: "*/5 * * * *",
+    },
+    matches: [],
+  },
+  {
+    name: "moonsleep-commerce.shopify-source.fulfillment-delta",
+    description: "Capture bounded Shopify fulfillment observations",
+    scriptPath: SOURCE_JOB_SCRIPT_PATH,
+    status: "active",
+    config: { family: "fulfillment.delta" },
+    schedule: {
+      name: "moonsleep-commerce.shopify-source.fulfillment-delta",
+      expression: "*/5 * * * *",
+    },
+    matches: [],
+  },
+  {
+    name: "moonsleep-commerce.shopify-source.discounts-delta",
+    description: "Capture bounded Shopify discount observations",
+    scriptPath: SOURCE_JOB_SCRIPT_PATH,
+    status: "active",
+    config: { family: "discounts.delta" },
+    schedule: {
+      name: "moonsleep-commerce.shopify-source.discounts-delta",
+      expression: "*/5 * * * *",
+    },
+    matches: [],
+  },
+  {
+    name: "moonsleep-commerce.shopify-source.finance-transactions",
+    description: "Capture bounded Shopify Payments balance transaction observations",
+    scriptPath: SOURCE_JOB_SCRIPT_PATH,
+    status: "active",
+    config: { family: "finance.transactions" },
+    schedule: {
+      name: "moonsleep-commerce.shopify-source.finance-transactions",
+      expression: "*/5 * * * *",
+    },
+    matches: [],
+  },
+  {
+    name: "moonsleep-commerce.shopify-source.disputes-delta",
+    description: "Capture bounded Shopify Payments dispute observations",
+    scriptPath: SOURCE_JOB_SCRIPT_PATH,
+    status: "active",
+    config: { family: "disputes.delta" },
+    schedule: {
+      name: "moonsleep-commerce.shopify-source.disputes-delta",
+      expression: "*/5 * * * *",
+    },
+    matches: [],
+  },
+  {
+    name: "moonsleep-commerce.shopify-source.products-delta",
+    description: "Capture bounded Shopify product observations",
+    scriptPath: SOURCE_JOB_SCRIPT_PATH,
+    status: "active",
+    config: { family: "products.delta" },
+    schedule: {
+      name: "moonsleep-commerce.shopify-source.products-delta",
+      expression: "*/15 * * * *",
+    },
+    matches: [],
+  },
+  {
+    name: "moonsleep-commerce.shopify-source.catalog-delta",
+    description: "Capture bounded Shopify collection and catalog observations",
+    scriptPath: SOURCE_JOB_SCRIPT_PATH,
+    status: "active",
+    config: { family: "catalog.delta" },
+    schedule: {
+      name: "moonsleep-commerce.shopify-source.catalog-delta",
+      expression: "*/15 * * * *",
+    },
+    matches: [],
+  },
+  {
+    name: "moonsleep-commerce.shopify-source.marketing-delta",
+    description: "Capture bounded low-priority Shopify marketing observations",
+    scriptPath: SOURCE_JOB_SCRIPT_PATH,
+    status: "active",
+    config: { family: "marketing.delta" },
+    schedule: {
+      name: "moonsleep-commerce.shopify-source.marketing-delta",
+      expression: "13 * * * *",
+    },
+    matches: [],
+  },
+  {
+    name: "moonsleep-commerce.shopify-source.payouts-delta",
+    description: "Capture bounded low-priority Shopify Payments payout observations",
+    scriptPath: SOURCE_JOB_SCRIPT_PATH,
+    status: "active",
+    config: { family: "payouts.delta" },
+    schedule: {
+      name: "moonsleep-commerce.shopify-source.payouts-delta",
+      expression: "17 */6 * * *",
+    },
+    matches: [],
   },
 ]);
 const LEGACY_SHOPIFY_MATCH_JSON = JSON.stringify({ platform: "shopify" });
@@ -77,18 +221,24 @@ async function listSubscriptions(runtime: NexClient, jobDefinitionId: string): P
   );
 }
 
+async function listSchedules(runtime: NexClient): Promise<RuntimeRow[]> {
+  return asArray(unwrapPayload(await runtime.schedules.list({})).schedules);
+}
+
 async function ensureJob(
   runtime: NexClient,
   appId: string,
   spec: (typeof JOB_SPECS)[number],
 ): Promise<string> {
   const existing = (await listJobs(runtime)).find((row) => asString(row.name) === spec.name);
+  const configJson = "config" in spec ? JSON.stringify(spec.config) : "";
   if (existing) {
     const id = asString(existing.id);
     const needsUpdate =
       asString(existing.description) !== spec.description ||
       asString(existing.script_path) !== spec.scriptPath ||
-      asString(existing.status) !== DORMANT_JOB_STATUS;
+      (configJson !== "" && asString(existing.config_json) !== configJson) ||
+      asString(existing.status) !== spec.status;
     if (!needsUpdate) {
       return id;
     }
@@ -97,7 +247,8 @@ async function ensureJob(
         id,
         description: spec.description,
         script_path: spec.scriptPath,
-        status: DORMANT_JOB_STATUS,
+        ...(configJson ? { config_json: configJson } : {}),
+        status: spec.status,
         created_by: appId,
       }),
     );
@@ -109,13 +260,64 @@ async function ensureJob(
       name: spec.name,
       description: spec.description,
       script_path: spec.scriptPath,
-      status: DORMANT_JOB_STATUS,
+      ...(configJson ? { config_json: configJson } : {}),
+      status: spec.status,
       created_by: appId,
     }),
   );
   const id = asString(asRecord(created.job).id);
   if (!id) {
     throw new Error("MoonSleep commerce job creation did not return an id");
+  }
+  return id;
+}
+
+async function ensureDisabledSchedule(
+  runtime: NexClient,
+  jobDefinitionId: string,
+  scheduleSpec: { name: string; expression: string },
+): Promise<string> {
+  const matches = (await listSchedules(runtime)).filter(
+    (row) => asString(row.name) === scheduleSpec.name,
+  );
+  if (matches.length > 1) {
+    throw new Error("MoonSleep commerce source job has duplicate schedules");
+  }
+  const existing = matches[0];
+  if (existing) {
+    if (asString(existing.job_definition_id) !== jobDefinitionId) {
+      throw new Error("MoonSleep commerce source schedule is bound to a different job");
+    }
+    const id = asString(existing.id);
+    if (
+      asString(existing.expression) !== scheduleSpec.expression ||
+      asString(existing.timezone) !== "UTC" ||
+      asInteger(existing.enabled) !== 0
+    ) {
+      const updated = unwrapPayload(
+        await runtime.schedules.update({
+          id,
+          expression: scheduleSpec.expression,
+          timezone: "UTC",
+          enabled: false,
+        }),
+      );
+      return asString(asRecord(updated.schedule).id) || id;
+    }
+    return id;
+  }
+  const created = unwrapPayload(
+    await runtime.schedules.create({
+      job_definition_id: jobDefinitionId,
+      name: scheduleSpec.name,
+      expression: scheduleSpec.expression,
+      timezone: "UTC",
+      enabled: false,
+    }),
+  );
+  const id = asString(asRecord(created.schedule).id);
+  if (!id) {
+    throw new Error("MoonSleep commerce source schedule creation did not return an id");
   }
   return id;
 }
@@ -187,6 +389,8 @@ export async function ensureMoonSleepCommerceRuntimeWork(params: {
   subscriptionIds: string[];
   commerceJobDefinitionId: string;
   commerceSubscriptionIds: string[];
+  sourceJobDefinitionIds: string[];
+  sourceScheduleIds: string[];
 }> {
   const jobDefinitionId = await ensureJob(params.runtime, params.appId, JOB_SPECS[0]!);
   const subscriptionIds = await ensureSubscriptions(
@@ -200,22 +404,44 @@ export async function ensureMoonSleepCommerceRuntimeWork(params: {
     commerceJobDefinitionId,
     JOB_SPECS[1]!.matches,
   );
+  const sourceJobDefinitionIds: string[] = [];
+  const sourceScheduleIds: string[] = [];
+  for (const spec of JOB_SPECS.slice(2)) {
+    const jobId = await ensureJob(params.runtime, params.appId, spec);
+    sourceJobDefinitionIds.push(jobId);
+    if ("schedule" in spec) {
+      sourceScheduleIds.push(
+        await ensureDisabledSchedule(params.runtime, jobId, spec.schedule),
+      );
+    }
+  }
   return {
     jobDefinitionId,
     subscriptionIds,
     commerceJobDefinitionId,
     commerceSubscriptionIds,
+    sourceJobDefinitionIds,
+    sourceScheduleIds,
   };
 }
 
 export async function disableMoonSleepCommerceRuntimeWork(runtime: NexClient): Promise<void> {
   const jobs = await listJobs(runtime);
+  const schedules = await listSchedules(runtime);
   for (const spec of JOB_SPECS) {
     const job = jobs.find((row) => asString(row.name) === spec.name);
     if (!job) {
       continue;
     }
     const jobId = asString(job.id);
+    for (const schedule of schedules) {
+      if (
+        asString(schedule.job_definition_id) === jobId &&
+        asInteger(schedule.enabled) !== 0
+      ) {
+        await runtime.schedules.update({ id: asString(schedule.id), enabled: false });
+      }
+    }
     for (const subscription of await listSubscriptions(runtime, jobId)) {
       if (asInteger(subscription.enabled) !== 0) {
         await runtime.events.subscriptions.update({
@@ -232,12 +458,18 @@ export async function disableMoonSleepCommerceRuntimeWork(runtime: NexClient): P
 
 export async function removeMoonSleepCommerceRuntimeWork(runtime: NexClient): Promise<void> {
   const jobs = await listJobs(runtime);
+  const schedules = await listSchedules(runtime);
   for (const spec of JOB_SPECS) {
     const job = jobs.find((row) => asString(row.name) === spec.name);
     if (!job) {
       continue;
     }
     const jobId = asString(job.id);
+    for (const schedule of schedules) {
+      if (asString(schedule.job_definition_id) === jobId) {
+        await runtime.schedules.delete({ id: asString(schedule.id) });
+      }
+    }
     for (const subscription of await listSubscriptions(runtime, jobId)) {
       await runtime.events.subscriptions.delete({ id: asString(subscription.id) });
     }

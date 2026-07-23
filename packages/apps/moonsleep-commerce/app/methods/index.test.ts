@@ -10,7 +10,82 @@ import {
   seedShopifySourceIdentities,
   shopifyCustomerRecordSetSha256,
   shopifyCommerceRecordSetSha256,
+  triggerShopifySource,
 } from "./index.js";
+
+describe("Shopify source manual trigger", () => {
+  it("queues only the exact installed active family job with a caller-bound idempotency key", async () => {
+    const invoke = vi.fn(async () => ({ payload: { run: { id: "run-1" } } }));
+    const ctx = {
+      params: {
+        family: "orders.delta",
+        connection_id: "shopify-primary",
+        request_id: "operator:orders:20260722T120000Z",
+      },
+      nex: {
+        jobs: {
+          list: vi.fn(async () => ({
+            payload: {
+              jobs: [
+                {
+                  id: "job-orders",
+                  name: "moonsleep-commerce.shopify-source.orders-delta",
+                  status: "active",
+                },
+              ],
+            },
+          })),
+          invoke,
+        },
+      },
+    };
+    await expect(triggerShopifySource(ctx as never)).resolves.toMatchObject({
+      queued: true,
+      family: "orders.delta",
+      run_id: "run-1",
+      provider_write_authority: false,
+    });
+    expect(invoke).toHaveBeenCalledWith({
+      job_id: "job-orders",
+      input: { family: "orders.delta", connection_id: "shopify-primary" },
+      trigger_source: "moonsleep-commerce-manual",
+      max_attempts: 3,
+      idempotency_key: "shopify-source:orders.delta:operator:orders:20260722T120000Z",
+    });
+  });
+
+  it("rejects malformed requests and inactive jobs before queue mutation", async () => {
+    const invoke = vi.fn();
+    const base = {
+      params: {
+        family: "customers.delta",
+        connection_id: "shopify-primary",
+        request_id: "manual-1",
+      },
+      nex: {
+        jobs: {
+          list: vi.fn(async () => ({
+            payload: {
+              jobs: [
+                {
+                  id: "job-customers",
+                  name: "moonsleep-commerce.shopify-source.customers-delta",
+                  status: "inactive",
+                },
+              ],
+            },
+          })),
+          invoke,
+        },
+      },
+    };
+    await expect(triggerShopifySource(base as never)).rejects.toThrow("not active");
+    await expect(
+      triggerShopifySource({ ...base, params: { ...base.params, family: "themes.delta" } } as never),
+    ).rejects.toThrow("not an installed");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+});
 
 describe("Shopify source identity seed", () => {
   function sourceIdentityContext() {

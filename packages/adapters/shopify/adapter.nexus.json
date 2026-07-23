@@ -1,12 +1,287 @@
 {
   "id": "shopify",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "displayName": "Shopify",
   "description": "Canonical Shopify adapter package for Nex with GraphQL-backed provider methods and additive projection.",
   "platform": "shopify",
   "command": "./bin/shopify-adapter",
   "skill": "./SKILL.md",
   "methods": {
+    "shopify.source.capture": {
+      "description": "Capture one bounded page for one Shopify source family without advancing its durable cursor.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": [
+              "orders.delta",
+              "customers.delta",
+              "inventory.hot",
+              "inventory.reconcile",
+              "fulfillment.delta",
+              "discounts.delta",
+              "finance.transactions",
+              "disputes.delta",
+              "products.delta",
+              "catalog.delta",
+              "marketing.delta",
+              "payouts.delta"
+            ]
+          }
+        },
+        "required": [
+          "family"
+        ],
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "orders.delta",
+              "customers.delta",
+              "inventory.hot",
+              "inventory.reconcile",
+              "fulfillment.delta",
+              "discounts.delta",
+              "finance.transactions",
+              "disputes.delta",
+              "products.delta",
+              "catalog.delta",
+              "marketing.delta",
+              "payouts.delta"
+            ]
+          },
+          "connection_id": {
+            "type": "string"
+          },
+          "shop_domain": {
+            "type": "string"
+          },
+          "capture_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "request_since": {
+            "type": "string"
+          },
+          "window_through": {
+            "type": "string"
+          },
+          "page_cursor": {
+            "type": "string"
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "complete": {
+            "type": "boolean"
+          },
+          "records": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "version",
+          "family",
+          "connection_id",
+          "shop_domain",
+          "capture_id",
+          "request_since",
+          "window_through",
+          "complete",
+          "records"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "shopify.source.commit": {
+      "description": "Advance one Shopify source-family cursor only after every captured Nex record was durably ingested.",
+      "action": "write",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": [
+              "orders.delta",
+              "customers.delta",
+              "inventory.hot",
+              "inventory.reconcile",
+              "fulfillment.delta",
+              "discounts.delta",
+              "finance.transactions",
+              "disputes.delta",
+              "products.delta",
+              "catalog.delta",
+              "marketing.delta",
+              "payouts.delta"
+            ]
+          },
+          "capture_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          }
+        },
+        "required": [
+          "family",
+          "capture_id"
+        ],
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "orders.delta",
+              "customers.delta",
+              "inventory.hot",
+              "inventory.reconcile",
+              "fulfillment.delta",
+              "discounts.delta",
+              "finance.transactions",
+              "disputes.delta",
+              "products.delta",
+              "catalog.delta",
+              "marketing.delta",
+              "payouts.delta"
+            ]
+          },
+          "capture_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "cursor_iso": {
+            "type": "string"
+          },
+          "page_cursor": {
+            "type": "string"
+          },
+          "window_through": {
+            "type": "string"
+          },
+          "complete": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "version",
+          "family",
+          "capture_id",
+          "cursor_iso",
+          "complete"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "shopify.source.abort": {
+      "description": "Release one exact Shopify source capture after a downstream Nex ingest failure without advancing its cursor.",
+      "action": "write",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": [
+              "orders.delta",
+              "customers.delta",
+              "inventory.hot",
+              "inventory.reconcile",
+              "fulfillment.delta",
+              "discounts.delta",
+              "finance.transactions",
+              "disputes.delta",
+              "products.delta",
+              "catalog.delta",
+              "marketing.delta",
+              "payouts.delta"
+            ]
+          },
+          "capture_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          }
+        },
+        "required": [
+          "family",
+          "capture_id"
+        ],
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "orders.delta",
+              "customers.delta",
+              "inventory.hot",
+              "inventory.reconcile",
+              "fulfillment.delta",
+              "discounts.delta",
+              "finance.transactions",
+              "disputes.delta",
+              "products.delta",
+              "catalog.delta",
+              "marketing.delta",
+              "payouts.delta"
+            ]
+          },
+          "capture_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "aborted": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "version",
+          "family",
+          "capture_id",
+          "aborted"
+        ],
+        "additionalProperties": false
+      }
+    },
     "records.backfill.stage": {
       "description": "Stage and export an exact fixed-window Shopify customer/order snapshot for Nex historical import.",
       "action": "read",

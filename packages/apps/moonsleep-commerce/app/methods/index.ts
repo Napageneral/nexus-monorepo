@@ -23,6 +23,22 @@ const MAX_INSPECTED_COMMERCE_RECORDS = 40_000;
 const RECORD_SCAN_PAGE_SIZE = 1_000;
 const MAX_RECORDS_SCANNED = 100_000;
 const SHOPIFY_SOURCE_IDENTITY_OBSERVED_AT = Date.UTC(2026, 6, 20);
+const SOURCE_JOB_NAMES = Object.freeze({
+  "orders.delta": "moonsleep-commerce.shopify-source.orders-delta",
+  "customers.delta": "moonsleep-commerce.shopify-source.customers-delta",
+  "inventory.hot": "moonsleep-commerce.shopify-source.inventory-hot",
+  "inventory.reconcile": "moonsleep-commerce.shopify-source.inventory-reconcile",
+  "fulfillment.delta": "moonsleep-commerce.shopify-source.fulfillment-delta",
+  "discounts.delta": "moonsleep-commerce.shopify-source.discounts-delta",
+  "finance.transactions": "moonsleep-commerce.shopify-source.finance-transactions",
+  "disputes.delta": "moonsleep-commerce.shopify-source.disputes-delta",
+  "products.delta": "moonsleep-commerce.shopify-source.products-delta",
+  "catalog.delta": "moonsleep-commerce.shopify-source.catalog-delta",
+  "marketing.delta": "moonsleep-commerce.shopify-source.marketing-delta",
+  "payouts.delta": "moonsleep-commerce.shopify-source.payouts-delta",
+});
+const SOURCE_REQUEST_ID_RE = /^[a-zA-Z0-9._:-]{1,128}$/;
+const SOURCE_CONNECTION_ID_RE = /^[a-zA-Z0-9._-]{1,128}$/;
 
 type ShopifySourceIdentityObservation = {
   role: "store" | "integration";
@@ -466,6 +482,59 @@ const healthcheck: NexAppMethodHandler = async (ctx) => ({
   provider_write_authority: false,
 });
 
+export const triggerShopifySource: NexAppMethodHandler = async (ctx) => {
+  const family = asString(ctx.params.family) as keyof typeof SOURCE_JOB_NAMES;
+  const connectionId = asString(ctx.params.connection_id);
+  const requestId = asString(ctx.params.request_id);
+  const jobName = SOURCE_JOB_NAMES[family];
+  if (!jobName) {
+    throw new Error("family is not an installed Shopify source job");
+  }
+  if (!SOURCE_CONNECTION_ID_RE.test(connectionId)) {
+    throw new Error("connection_id is malformed");
+  }
+  if (!SOURCE_REQUEST_ID_RE.test(requestId)) {
+    throw new Error("request_id is malformed");
+  }
+  const listed = unwrapPayload(await ctx.nex.jobs.list({}));
+  const jobs = Array.isArray(listed.jobs) ? listed.jobs.map(asRecord) : [];
+  const matches = jobs.filter((job) => asString(job.name) === jobName);
+  if (matches.length !== 1) {
+    throw new Error("Shopify source job is missing or duplicated");
+  }
+  const job = matches[0]!;
+  if (asString(job.status) !== "active") {
+    throw new Error("Shopify source job is not active for manual invocation");
+  }
+  const jobId = asString(job.id);
+  if (!jobId) {
+    throw new Error("Shopify source job is missing its id");
+  }
+  const invoked = unwrapPayload(
+    await ctx.nex.jobs.invoke({
+      job_id: jobId,
+      input: { family, connection_id: connectionId },
+      trigger_source: "moonsleep-commerce-manual",
+      max_attempts: 3,
+      idempotency_key: `shopify-source:${family}:${requestId}`,
+    }),
+  );
+  const run = asRecord(invoked.run);
+  const runId = asString(run.id);
+  if (!runId) {
+    throw new Error("Shopify source job invocation did not return a run id");
+  }
+  return {
+    queued: true,
+    family,
+    connection_id: connectionId,
+    request_id: requestId,
+    job_definition_id: jobId,
+    run_id: runId,
+    provider_write_authority: false,
+  };
+};
+
 export const projectShopifyCustomerCohort: NexAppMethodHandler = async (ctx) => {
   const recordIds = requireCohortRecordIds(ctx.params);
 
@@ -636,6 +705,7 @@ export const projectShopifyCommerceBackfill: NexAppMethodHandler = async (ctx) =
 export default {
   "moonsleep-commerce.healthcheck": healthcheck,
   "moonsleep-commerce.shopify-source.seed-identities": seedShopifySourceIdentities,
+  "moonsleep-commerce.shopify-source.trigger": triggerShopifySource,
   "moonsleep-commerce.shopify-customers.inspect-backfill": inspectShopifyCustomerBackfill,
   "moonsleep-commerce.shopify-customers.project-cohort": projectShopifyCustomerCohort,
   "moonsleep-commerce.shopify-customers.project-backfill": projectShopifyCustomerBackfill,

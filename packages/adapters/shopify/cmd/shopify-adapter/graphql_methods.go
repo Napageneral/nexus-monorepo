@@ -214,6 +214,115 @@ func declaredShopifyMethods() map[string]nexadapter.DeclaredMethod[struct{}] {
 	for name, method := range graphQLQueryMethods() {
 		methods[name] = method
 	}
+	methods["shopify.source.capture"] = nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
+		Description: "Capture one bounded page for one Shopify source family without advancing its durable cursor.",
+		Action:      "read",
+		Params: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"family": map[string]any{
+					"type": "string",
+					"enum": shopifySourceFamilyValues,
+				},
+			},
+			"required":             []string{"family"},
+			"additionalProperties": false,
+		},
+		Response: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"version":        map[string]any{"type": "integer", "enum": []int{1}},
+				"family":         map[string]any{"type": "string", "enum": shopifySourceFamilyValues},
+				"connection_id":  map[string]any{"type": "string"},
+				"shop_domain":    map[string]any{"type": "string"},
+				"capture_id":     map[string]any{"type": "string", "pattern": "^[0-9a-f]{32}$"},
+				"request_since":  map[string]any{"type": "string"},
+				"window_through": map[string]any{"type": "string"},
+				"page_cursor":    map[string]any{"type": "string"},
+				"next_cursor":    map[string]any{"type": "string"},
+				"complete":       map[string]any{"type": "boolean"},
+				"records": map[string]any{
+					"type":     "array",
+					"maxItems": shopifySourceMaxRecords,
+					"items":    map[string]any{"type": "object"},
+				},
+			},
+			"required":             []string{"version", "family", "connection_id", "shop_domain", "capture_id", "request_since", "window_through", "complete", "records"},
+			"additionalProperties": false,
+		},
+		ConnectionRequired: boolPtr(true),
+		MutatesRemote:      boolPtr(false),
+		Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
+			return handleShopifySourceCapture(ctx, req.Payload)
+		},
+	})
+	methods["shopify.source.commit"] = nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
+		Description: "Advance one Shopify source-family cursor only after every captured Nex record was durably ingested.",
+		Action:      "write",
+		Params: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"family": map[string]any{
+					"type": "string",
+					"enum": shopifySourceFamilyValues,
+				},
+				"capture_id": map[string]any{"type": "string", "pattern": "^[0-9a-f]{32}$"},
+			},
+			"required":             []string{"family", "capture_id"},
+			"additionalProperties": false,
+		},
+		Response: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"version":        map[string]any{"type": "integer", "enum": []int{1}},
+				"family":         map[string]any{"type": "string", "enum": shopifySourceFamilyValues},
+				"capture_id":     map[string]any{"type": "string", "pattern": "^[0-9a-f]{32}$"},
+				"cursor_iso":     map[string]any{"type": "string"},
+				"page_cursor":    map[string]any{"type": "string"},
+				"window_through": map[string]any{"type": "string"},
+				"complete":       map[string]any{"type": "boolean"},
+			},
+			"required":             []string{"version", "family", "capture_id", "cursor_iso", "complete"},
+			"additionalProperties": false,
+		},
+		ConnectionRequired: boolPtr(true),
+		MutatesRemote:      boolPtr(false),
+		Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
+			return handleShopifySourceCommit(ctx, req.Payload)
+		},
+	})
+	methods["shopify.source.abort"] = nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
+		Description: "Release one exact Shopify source capture after a downstream Nex ingest failure without advancing its cursor.",
+		Action:      "write",
+		Params: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"family": map[string]any{
+					"type": "string",
+					"enum": shopifySourceFamilyValues,
+				},
+				"capture_id": map[string]any{"type": "string", "pattern": "^[0-9a-f]{32}$"},
+			},
+			"required":             []string{"family", "capture_id"},
+			"additionalProperties": false,
+		},
+		Response: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"version":    map[string]any{"type": "integer", "enum": []int{1}},
+				"family":     map[string]any{"type": "string", "enum": shopifySourceFamilyValues},
+				"capture_id": map[string]any{"type": "string", "pattern": "^[0-9a-f]{32}$"},
+				"aborted":    map[string]any{"type": "boolean", "enum": []bool{true}},
+			},
+			"required":             []string{"version", "family", "capture_id", "aborted"},
+			"additionalProperties": false,
+		},
+		ConnectionRequired: boolPtr(true),
+		MutatesRemote:      boolPtr(false),
+		Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
+			return handleShopifySourceAbort(ctx, req.Payload)
+		},
+	})
 	methods["records.backfill.stage"] = nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
 		Description: "Stage and export an exact fixed-window Shopify customer/order snapshot for Nex historical import.",
 		Action:      "read",
@@ -817,7 +926,7 @@ func executeShopifyGraphQL(
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Shopify-Access-Token", accessToken)
 
-	res, err := shopifyHTTPClient.Do(req)
+	res, err := doShopifyRequest(ctx, state, req)
 	if err != nil {
 		return nil, fmt.Errorf("Shopify graphql request failed: %w", err)
 	}

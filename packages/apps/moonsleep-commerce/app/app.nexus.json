@@ -1,6 +1,6 @@
 {
   "id": "moonsleep-commerce",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "displayName": "MoonSleep Commerce",
   "description": "Project exact Shopify records into MoonSleep identity and typed commerce state through public Nex operations.",
   "skill": "./SKILL.md",
@@ -61,6 +61,54 @@
           }
         },
         "required": ["shop_domain", "connection_id"],
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object"
+      }
+    },
+    "moonsleep-commerce.shopify-source.trigger": {
+      "description": "Queue one exact Shopify source family immediately through its durable Nex job without enabling the recurring schedule.",
+      "action": "write",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": [
+              "orders.delta",
+              "customers.delta",
+              "inventory.hot",
+              "inventory.reconcile",
+              "fulfillment.delta",
+              "discounts.delta",
+              "finance.transactions",
+              "disputes.delta",
+              "products.delta",
+              "catalog.delta",
+              "marketing.delta",
+              "payouts.delta"
+            ]
+          },
+          "connection_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-zA-Z0-9._-]+$"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-zA-Z0-9._:-]+$"
+          }
+        },
+        "required": [
+          "family",
+          "connection_id",
+          "request_id"
+        ],
         "additionalProperties": false
       },
       "response": {
