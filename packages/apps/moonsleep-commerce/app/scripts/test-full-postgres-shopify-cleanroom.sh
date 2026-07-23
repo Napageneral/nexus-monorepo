@@ -89,6 +89,22 @@ runtime_call() {
   ' sh "${method}" "${params}" 2>/dev/null
 }
 
+runtime_call_verbose() {
+  local method="$1"
+  local params="{}"
+  if [[ $# -ge 2 ]]; then
+    params="$2"
+  fi
+  docker exec "${runtime_container}" sh -c '
+    token=$(cat /run/moonsleep-load-credentials/runtime-token)
+    exec /opt/nex/nexus.mjs runtime call "$1" \
+      --params "$2" \
+      --json \
+      --url ws://127.0.0.1:18789 \
+      --token "$token"
+  ' sh "${method}" "${params}"
+}
+
 package_get() {
   local package_class="$1"
   local package_id="$2"
@@ -522,7 +538,7 @@ commerce_direct_params="$(jq -nc \
   --arg record_set_sha256 "${commerce_record_set_sha256}" \
   '{record_ids:[$order_id,$line_id],record_set_sha256:$record_set_sha256}')"
 set +e
-commerce_direct_first="$(runtime_call moonsleep-commerce.shopify-commerce.project-backfill "${commerce_direct_params}")"
+commerce_direct_first="$(runtime_call_verbose moonsleep-commerce.shopify-commerce.project-backfill "${commerce_direct_params}")"
 commerce_direct_status=$?
 set -e
 if [[ "${commerce_direct_status}" -ne 0 ]]; then
