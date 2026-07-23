@@ -515,6 +515,26 @@ jq -e '
   .provider_read_authority == false and .provider_write_authority == false
 ' <<<"${commerce_manifest_result}" >/dev/null
 commerce_manifest_sha256="$(jq -r '.manifest_sha256' <<<"${commerce_manifest_result}")"
+commerce_record_set_sha256="$(jq -r '.record_set_sha256' <<<"${commerce_manifest_result}")"
+commerce_direct_params="$(jq -nc \
+  --arg order_id "${ORDER_SOURCE_ID}" \
+  --arg line_id "${LINE_SOURCE_ID}" \
+  --arg record_set_sha256 "${commerce_record_set_sha256}" \
+  '{record_ids:[$order_id,$line_id],record_set_sha256:$record_set_sha256}')"
+set +e
+commerce_direct_first="$(runtime_call moonsleep-commerce.shopify-commerce.project-backfill "${commerce_direct_params}")"
+commerce_direct_status=$?
+set -e
+if [[ "${commerce_direct_status}" -ne 0 ]]; then
+  printf 'direct commerce projection failed: %s\n' "${commerce_direct_first}" >&2
+  exit "${commerce_direct_status}"
+fi
+jq -e '
+  .state == "succeeded" and .records_projected == 2 and
+  .orders_projected == 1 and .line_items_projected == 1 and
+  .created == 2 and .replayed == 0 and
+  .provider_read_authority == false and .provider_write_authority == false
+' <<<"${commerce_direct_first}" >/dev/null
 
 set +e
 commerce_first="$(docker exec --user 20042:20042 "${runtime_container}" \
@@ -545,7 +565,7 @@ commerce_second="$(docker exec --user 20042:20042 "${runtime_container}" \
 jq -e '
   .ok == true and .completed == true and .batch_count == 1 and
   .totals.records_projected == 2 and .totals.orders_projected == 1 and
-  .totals.line_items_projected == 1 and .totals.created == 2 and .totals.replayed == 0
+  .totals.line_items_projected == 1 and .totals.created == 0 and .totals.replayed == 2
 ' <<<"${commerce_first}" >/dev/null
 jq -e '
   .ok == true and .completed == true and .batch_count == 1 and
