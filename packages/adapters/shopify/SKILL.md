@@ -45,6 +45,7 @@ literal full Shopify Admin API coverage or cleanup-safe write proof.
 - `shopify.query.product`
 - `shopify.query.customers`
 - `shopify.query.customer`
+- `shopify.source.project-captured-page`
 - `adapter.monitor.start`
 - `records.backfill`
 
@@ -100,6 +101,15 @@ Run bounded backfill:
   --since 2026-01-01T00:00:00Z
 ```
 
+Project one exact orders response already captured by an approved source owner
+without making another Shopify request or advancing a Nex source cursor:
+
+```bash
+./bin/shopify-adapter shopify.source.project-captured-page \
+  --connection shopify-primary \
+  --payload '{"family":"orders.delta","observation_id":"legacy-live-sync:20260723T150000Z:page-0001","provider_response_json":"{\"orders\":[]}","provider_response_sha256":"<sha256-of-exact-json>","request_url":"https://<shop>.myshopify.com/admin/api/2026-01/orders.json?status=any&limit=100","request_since":"2026-07-23T14:50:00Z","window_through":"2026-07-23T15:00:00Z"}'
+```
+
 Start monitor:
 
 ```bash
@@ -151,6 +161,8 @@ Normal Shopify flow:
 - do not overclaim the current GraphQL slice as literal full Shopify Admin API
   coverage
 - backfill and monitor should not diverge into different record shapes
+- dual-processing parity must reuse exact captured response bytes; it must not
+  double Shopify traffic by polling the same family from two schedulers
 
 ## Related Docs
 

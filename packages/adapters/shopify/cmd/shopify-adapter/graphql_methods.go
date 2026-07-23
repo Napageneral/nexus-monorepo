@@ -256,6 +256,90 @@ func declaredShopifyMethods() map[string]nexadapter.DeclaredMethod[struct{}] {
 			return handleShopifySourceCapture(ctx, req.Payload)
 		},
 	})
+	methods["shopify.source.project-captured-page"] = nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
+		Description: "Project one exact previously captured Shopify orders page into canonical Nex records without a Shopify request or cursor advancement.",
+		Action:      "read",
+		Params: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"family": map[string]any{
+					"type": "string",
+					"enum": []string{"orders.delta"},
+				},
+				"observation_id": map[string]any{
+					"type":      "string",
+					"minLength": 1,
+					"maxLength": 128,
+					"pattern":   "^[a-zA-Z0-9._:-]+$",
+				},
+				"provider_response_json": map[string]any{
+					"type":      "string",
+					"minLength": 1,
+					"maxLength": capturedPageMaxBytes,
+				},
+				"provider_response_sha256": map[string]any{
+					"type":    "string",
+					"pattern": "^[0-9a-f]{64}$",
+				},
+				"request_url": map[string]any{
+					"type":      "string",
+					"minLength": 1,
+					"maxLength": 4096,
+				},
+				"request_since":  map[string]any{"type": "string"},
+				"window_through": map[string]any{"type": "string"},
+			},
+			"required": []string{
+				"family",
+				"observation_id",
+				"provider_response_json",
+				"provider_response_sha256",
+				"request_url",
+				"request_since",
+				"window_through",
+			},
+			"additionalProperties": false,
+		},
+		Response: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"version":                  map[string]any{"type": "integer", "enum": []int{1}},
+				"family":                   map[string]any{"type": "string", "enum": []string{"orders.delta"}},
+				"connection_id":            map[string]any{"type": "string"},
+				"shop_domain":              map[string]any{"type": "string"},
+				"observation_id":           map[string]any{"type": "string"},
+				"provider_response_sha256": map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+				"source_rows":              map[string]any{"type": "integer", "minimum": 0},
+				"records": map[string]any{
+					"type":     "array",
+					"maxItems": shopifySourceMaxRecords,
+					"items":    map[string]any{"type": "object"},
+				},
+				"provider_calls":           map[string]any{"type": "integer", "enum": []int{0}},
+				"provider_write_authority": map[string]any{"type": "boolean", "enum": []bool{false}},
+				"cursor_advanced":           map[string]any{"type": "boolean", "enum": []bool{false}},
+			},
+			"required": []string{
+				"version",
+				"family",
+				"connection_id",
+				"shop_domain",
+				"observation_id",
+				"provider_response_sha256",
+				"source_rows",
+				"records",
+				"provider_calls",
+				"provider_write_authority",
+				"cursor_advanced",
+			},
+			"additionalProperties": false,
+		},
+		ConnectionRequired: boolPtr(true),
+		MutatesRemote:      boolPtr(false),
+		Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
+			return handleShopifySourceProjectCaptured(ctx, req.Payload)
+		},
+	})
 	methods["shopify.source.commit"] = nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
 		Description: "Advance one Shopify source-family cursor only after every captured Nex record was durably ingested.",
 		Action:      "write",

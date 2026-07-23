@@ -22,6 +22,8 @@ Current validated behavior:
 - connection activation backfill and incremental monitor behavior
 - resumable customer/order history staging over an immutable `[since, through]`
   updated-time window, with cursor-bound page receipts and a hash-bound manifest
+- provider-call-free projection of an exact captured orders page, bound to the
+  configured shop, observation id, request-window metadata, and response SHA-256
 - mounted-capability agent-use proof for representative `shopify.graphql.query`
   use in cleanroom
 - cleanroom proof against MoonSleep Shopify credentials
@@ -90,6 +92,7 @@ go test ./...
 ./bin/shopify-adapter shopify.query.product --connection <connection-id> --payload '{"id":"gid://shopify/Product/<product-id>"}'
 ./bin/shopify-adapter shopify.query.customers --connection <connection-id> --payload '{"first":1}'
 ./bin/shopify-adapter shopify.query.customer --connection <connection-id> --payload '{"id":"gid://shopify/Customer/<customer-id>"}'
+./bin/shopify-adapter shopify.source.project-captured-page --connection <connection-id> --payload '{"family":"orders.delta","observation_id":"legacy-live-sync:20260723T150000Z:page-0001","provider_response_json":"{\"orders\":[]}","provider_response_sha256":"<sha256-of-exact-json>","request_url":"https://<shop>.myshopify.com/admin/api/2026-01/orders.json?status=any&limit=100","request_since":"2026-07-23T14:50:00Z","window_through":"2026-07-23T15:00:00Z"}'
 ./bin/shopify-adapter adapter.monitor.start --connection <connection-id>
 ./bin/shopify-adapter records.backfill --connection <connection-id> --since 2026-01-01T00:00:00Z
 ./bin/shopify-adapter records.backfill.stage --connection <connection-id> --payload '{"since":"2020-01-01T00:00:00Z","to":"2026-07-20T18:00:00Z","stage_dir":"/private/nex-owned/shopify-customer-orders"}'
