@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -29,7 +30,8 @@ type shopifyGovernorState struct {
 }
 
 type shopifyGovernorLease struct {
-	file *os.File
+	file         *os.File
+	localRelease func()
 }
 
 func (lease *shopifyGovernorLease) release() {
@@ -39,6 +41,31 @@ func (lease *shopifyGovernorLease) release() {
 	_ = syscall.Flock(int(lease.file.Fd()), syscall.LOCK_UN)
 	_ = lease.file.Close()
 	lease.file = nil
+	if lease.localRelease != nil {
+		lease.localRelease()
+		lease.localRelease = nil
+	}
+}
+
+var shopifyLocalGovernor = struct {
+	sync.Mutex
+	slots map[string]chan struct{}
+}{slots: map[string]chan struct{}{}}
+
+func acquireShopifyLocalGovernorSlot(ctx context.Context, dir string) (func(), error) {
+	shopifyLocalGovernor.Lock()
+	slots := shopifyLocalGovernor.slots[dir]
+	if slots == nil {
+		slots = make(chan struct{}, shopifyGovernorSlots)
+		shopifyLocalGovernor.slots[dir] = slots
+	}
+	shopifyLocalGovernor.Unlock()
+	select {
+	case slots <- struct{}{}:
+		return func() { <-slots }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 type shopifyGovernedBody struct {
@@ -65,15 +92,20 @@ func shopifyGovernorDir(connectionID string) (string, error) {
 }
 
 func acquireShopifyGovernorSlot(ctx context.Context, dir string) (*shopifyGovernorLease, error) {
+	localRelease, err := acquireShopifyLocalGovernorSlot(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
 	for {
 		for slot := 0; slot < shopifyGovernorSlots; slot++ {
 			path := filepath.Join(dir, fmt.Sprintf("slot-%d.lock", slot))
 			file, err := openShopifyPrivateFile(path, syscall.O_RDWR, true)
 			if err != nil {
+				localRelease()
 				return nil, fmt.Errorf("open Shopify request governor slot: %w", err)
 			}
 			if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err == nil {
-				return &shopifyGovernorLease{file: file}, nil
+				return &shopifyGovernorLease{file: file, localRelease: localRelease}, nil
 			}
 			_ = file.Close()
 		}
@@ -81,6 +113,7 @@ func acquireShopifyGovernorSlot(ctx context.Context, dir string) (*shopifyGovern
 		select {
 		case <-ctx.Done():
 			timer.Stop()
+			localRelease()
 			return nil, ctx.Err()
 		case <-timer.C:
 		}
