@@ -1,12 +1,138 @@
 {
   "id": "shopify",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "displayName": "Shopify",
   "description": "Canonical Shopify adapter package for Nex with GraphQL-backed provider methods and additive projection.",
   "platform": "shopify",
   "command": "./bin/shopify-adapter",
   "skill": "./SKILL.md",
   "methods": {
+    "shopify.source.project-captured-page": {
+      "description": "Project one exact previously captured Shopify orders page into canonical Nex records without a Shopify request or cursor advancement.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": [
+              "orders.delta"
+            ]
+          },
+          "observation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-zA-Z0-9._:-]+$"
+          },
+          "provider_response_json": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8388608
+          },
+          "provider_response_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "request_url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "request_since": {
+            "type": "string"
+          },
+          "window_through": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "family",
+          "observation_id",
+          "provider_response_json",
+          "provider_response_sha256",
+          "request_url",
+          "request_since",
+          "window_through"
+        ],
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "orders.delta"
+            ]
+          },
+          "connection_id": {
+            "type": "string"
+          },
+          "shop_domain": {
+            "type": "string"
+          },
+          "observation_id": {
+            "type": "string"
+          },
+          "provider_response_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "source_rows": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "records": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "type": "object"
+            }
+          },
+          "provider_calls": {
+            "type": "integer",
+            "enum": [
+              0
+            ]
+          },
+          "provider_write_authority": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "cursor_advanced": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          }
+        },
+        "required": [
+          "version",
+          "family",
+          "connection_id",
+          "shop_domain",
+          "observation_id",
+          "provider_response_sha256",
+          "source_rows",
+          "records",
+          "provider_calls",
+          "provider_write_authority",
+          "cursor_advanced"
+        ],
+        "additionalProperties": false
+      }
+    },
     "shopify.source.capture": {
       "description": "Capture one bounded page for one Shopify source family without advancing its durable cursor.",
       "action": "read",
