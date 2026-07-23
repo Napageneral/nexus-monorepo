@@ -516,6 +516,7 @@ jq -e '
 ' <<<"${commerce_manifest_result}" >/dev/null
 commerce_manifest_sha256="$(jq -r '.manifest_sha256' <<<"${commerce_manifest_result}")"
 
+set +e
 commerce_first="$(docker exec --user 20042:20042 "${runtime_container}" \
   python3 /proof-scripts/shopify_commerce_projection_runner.py \
   --runtime-url "http://127.0.0.1:18789" \
@@ -525,6 +526,13 @@ commerce_first="$(docker exec --user 20042:20042 "${runtime_container}" \
   --checkpoint /var/lib/nex/state/projection-proof/commerce-first.json \
   --batch-size 2 --max-batches 1 --sleep-ms 0 \
   --io-pressure-file /var/lib/nex/state/projection-proof/io-pressure)"
+commerce_first_status=$?
+set -e
+if [[ "${commerce_first_status}" -ne 0 ]]; then
+  printf 'commerce projection failed: %s\n' "${commerce_first}" >&2
+  docker logs --since 2m "${runtime_container}" >&2 || true
+  exit "${commerce_first_status}"
+fi
 commerce_second="$(docker exec --user 20042:20042 "${runtime_container}" \
   python3 /proof-scripts/shopify_commerce_projection_runner.py \
   --runtime-url "http://127.0.0.1:18789" \
