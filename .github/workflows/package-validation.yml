@@ -27,6 +27,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout Nex runtime
+        run: git submodule update --init --depth 1 nex
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
