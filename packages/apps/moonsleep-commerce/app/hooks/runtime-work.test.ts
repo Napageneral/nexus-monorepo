@@ -5,12 +5,29 @@ import {
   removeMoonSleepCommerceRuntimeWork,
 } from "./runtime-work.js";
 
+const SOURCE_FIXTURES = [
+  ["orders-delta", "orders.delta", "Capture one bounded Shopify order delta page and durably ingest its exact records", "* * * * *"],
+  ["customers-delta", "customers.delta", "Capture one bounded Shopify customer delta page and durably ingest its exact records", "* * * * *"],
+  ["inventory-hot", "inventory.hot", "Capture bounded current Shopify inventory observations", "* * * * *"],
+  ["inventory-reconcile", "inventory.reconcile", "Reconcile the complete Shopify inventory snapshot in bounded provider pages", "*/5 * * * *"],
+  ["fulfillment-delta", "fulfillment.delta", "Capture bounded Shopify fulfillment observations", "*/5 * * * *"],
+  ["discounts-delta", "discounts.delta", "Capture bounded Shopify discount observations", "*/5 * * * *"],
+  ["finance-transactions", "finance.transactions", "Capture bounded Shopify Payments balance transaction observations", "*/5 * * * *"],
+  ["disputes-delta", "disputes.delta", "Capture bounded Shopify Payments dispute observations", "*/5 * * * *"],
+  ["products-delta", "products.delta", "Capture bounded Shopify product observations", "*/15 * * * *"],
+  ["catalog-delta", "catalog.delta", "Capture bounded Shopify collection and catalog observations", "*/15 * * * *"],
+  ["marketing-delta", "marketing.delta", "Capture bounded low-priority Shopify marketing observations", "13 * * * *"],
+  ["payouts-delta", "payouts.delta", "Capture bounded low-priority Shopify Payments payout observations", "17 */6 * * *"],
+] as const;
+
 function runtimeFixture(initial: {
   jobs?: Array<Record<string, unknown>>;
   subscriptions?: Array<Record<string, unknown>>;
+  schedules?: Array<Record<string, unknown>>;
 } = {}) {
   const jobs = [...(initial.jobs ?? [])];
   const subscriptions = [...(initial.subscriptions ?? [])];
+  const schedules = [...(initial.schedules ?? [])];
   const runtime = {
     jobs: {
       list: vi.fn(async () => ({ payload: { jobs } })),
@@ -57,8 +74,32 @@ function runtimeFixture(initial: {
         }),
       },
     },
+    schedules: {
+      list: vi.fn(async () => ({ payload: { schedules } })),
+      create: vi.fn(async (params: Record<string, unknown>) => {
+        const schedule = {
+          id: `schedule-${schedules.length + 1}`,
+          ...params,
+          enabled: params.enabled === true ? 1 : 0,
+        };
+        schedules.push(schedule);
+        return { payload: { schedule } };
+      }),
+      update: vi.fn(async (params: Record<string, unknown>) => {
+        const schedule = schedules.find((entry) => entry.id === params.id) ?? { id: params.id };
+        Object.assign(schedule, params, {
+          enabled: params.enabled === undefined ? schedule.enabled : params.enabled === true ? 1 : 0,
+        });
+        return { payload: { schedule } };
+      }),
+      delete: vi.fn(async (params: Record<string, unknown>) => {
+        const index = schedules.findIndex((entry) => entry.id === params.id);
+        if (index >= 0) schedules.splice(index, 1);
+        return { payload: { deleted: true } };
+      }),
+    },
   };
-  return { runtime, jobs, subscriptions };
+  return { runtime, jobs, subscriptions, schedules };
 }
 
 describe("MoonSleep commerce runtime work", () => {
@@ -71,8 +112,17 @@ describe("MoonSleep commerce runtime work", () => {
       subscriptionIds: ["subscription-1"],
       commerceJobDefinitionId: "job-2",
       commerceSubscriptionIds: ["subscription-2", "subscription-3"],
+      sourceJobDefinitionIds: Array.from({ length: 12 }, (_, index) => `job-${index + 3}`),
+      sourceScheduleIds: Array.from({ length: 12 }, (_, index) => `schedule-${index + 1}`),
     });
-    expect(fixture.runtime.jobs.create).toHaveBeenCalledTimes(2);
+    expect(fixture.runtime.jobs.create).toHaveBeenCalledTimes(14);
+    expect(fixture.runtime.schedules.create).toHaveBeenCalledTimes(12);
+    for (const call of fixture.runtime.schedules.create.mock.calls) {
+      expect(call[0]).toMatchObject({ enabled: false, timezone: "UTC" });
+    }
+    expect(fixture.runtime.schedules.create.mock.calls.map((call) => call[0].expression)).toEqual(
+      SOURCE_FIXTURES.map((fixture) => fixture[3]),
+    );
     expect(fixture.runtime.events.subscriptions.create).toHaveBeenCalledTimes(3);
     expect(fixture.runtime.events.subscriptions.create).toHaveBeenCalledWith({
       job_definition_id: "job-1",
@@ -93,6 +143,7 @@ describe("MoonSleep commerce runtime work", () => {
   it("is idempotent when the exact dormant job and subscription already exist", async () => {
     const expectedScript = new URL("../jobs/shopify-customer-identity.ts", import.meta.url).pathname;
     const expectedCommerceScript = new URL("../jobs/shopify-order-commerce.ts", import.meta.url).pathname;
+    const expectedSourceScript = new URL("../jobs/shopify-source-observation.ts", import.meta.url).pathname;
     const fixture = runtimeFixture({
       jobs: [
         {
@@ -102,6 +153,14 @@ describe("MoonSleep commerce runtime work", () => {
           script_path: expectedScript,
           status: "inactive",
         },
+        ...SOURCE_FIXTURES.map(([suffix, family, description], index) => ({
+          id: `job-${index + 3}`,
+          name: `moonsleep-commerce.shopify-source.${suffix}`,
+          description,
+          script_path: expectedSourceScript,
+          config_json: JSON.stringify({ family }),
+          status: "active",
+        })),
         {
           id: "job-2",
           name: "moonsleep-commerce.shopify-order-commerce",
@@ -110,6 +169,14 @@ describe("MoonSleep commerce runtime work", () => {
           status: "inactive",
         },
       ],
+      schedules: SOURCE_FIXTURES.map(([suffix, , , expression], index) => ({
+        id: `schedule-${index + 1}`,
+        name: `moonsleep-commerce.shopify-source.${suffix}`,
+        job_definition_id: `job-${index + 3}`,
+        expression,
+        timezone: "UTC",
+        enabled: 0,
+      })),
       subscriptions: [
         {
           id: "subscription-1",
@@ -138,6 +205,8 @@ describe("MoonSleep commerce runtime work", () => {
     expect(fixture.runtime.jobs.create).not.toHaveBeenCalled();
     expect(fixture.runtime.jobs.update).not.toHaveBeenCalled();
     expect(fixture.runtime.events.subscriptions.create).not.toHaveBeenCalled();
+    expect(fixture.runtime.schedules.create).not.toHaveBeenCalled();
+    expect(fixture.runtime.schedules.update).not.toHaveBeenCalled();
   });
 
   it("replaces only the disabled legacy broad subscriptions", async () => {
@@ -227,6 +296,14 @@ describe("MoonSleep commerce runtime work", () => {
         match_json: JSON.stringify({ platform: "shopify" }),
         enabled: 1,
       }],
+      schedules: [{
+        id: "schedule-1",
+        name: "moonsleep-commerce.shopify-source.orders-delta",
+        job_definition_id: "job-1",
+        expression: "* * * * *",
+        timezone: "UTC",
+        enabled: 1,
+      }],
     });
     await disableMoonSleepCommerceRuntimeWork(fixture.runtime);
     expect(fixture.runtime.events.subscriptions.update).toHaveBeenCalledWith({
@@ -234,9 +311,14 @@ describe("MoonSleep commerce runtime work", () => {
       enabled: false,
     });
     expect(fixture.runtime.jobs.update).toHaveBeenCalledWith({ id: "job-1", status: "inactive" });
+    expect(fixture.runtime.schedules.update).toHaveBeenCalledWith({
+      id: "schedule-1",
+      enabled: false,
+    });
 
     await removeMoonSleepCommerceRuntimeWork(fixture.runtime);
     expect(fixture.runtime.events.subscriptions.delete).toHaveBeenCalledWith({ id: "subscription-1" });
+    expect(fixture.runtime.schedules.delete).toHaveBeenCalledWith({ id: "schedule-1" });
     expect(fixture.runtime.jobs.delete).toHaveBeenCalledWith({ id: "job-1" });
   });
 });

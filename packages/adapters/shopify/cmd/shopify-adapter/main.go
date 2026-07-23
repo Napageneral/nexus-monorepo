@@ -23,7 +23,7 @@ import (
 
 const (
 	adapterName                = "shopify-adapter"
-	adapterVersion             = "0.1.2"
+	adapterVersion             = "0.2.0"
 	platformID                 = "shopify"
 	defaultAPIVersion          = "2026-01"
 	defaultHTTPTimeout         = 30 * time.Second
@@ -887,6 +887,13 @@ func shopifyOrdersRequest(state *shopifyState, since time.Time, useUpdatedAt boo
 }
 
 func shopifyOrdersWindowRequest(state *shopifyState, since time.Time, useUpdatedAt bool, through *time.Time) (shopifySourceRequest, string) {
+	return shopifyOrdersWindowRequestWithLimit(state, since, useUpdatedAt, through, 250)
+}
+
+func shopifyOrdersWindowRequestWithLimit(state *shopifyState, since time.Time, useUpdatedAt bool, through *time.Time, limit int) (shopifySourceRequest, string) {
+	if limit < 1 || limit > 250 {
+		limit = 250
+	}
 	windowField := "created_at_min"
 	windowMaximumField := "created_at_max"
 	orderField := "created_at"
@@ -900,7 +907,7 @@ func shopifyOrdersWindowRequest(state *shopifyState, since time.Time, useUpdated
 	path := "/orders.json"
 	params := url.Values{}
 	params.Set("status", "any")
-	params.Set("limit", "250")
+	params.Set("limit", strconv.Itoa(limit))
 	params.Set("order", orderField+" asc")
 	params.Set(windowField, since.Format(time.RFC3339))
 	if through != nil {
@@ -908,7 +915,7 @@ func shopifyOrdersWindowRequest(state *shopifyState, since time.Time, useUpdated
 	}
 	request := map[string]any{
 		"status":         "any",
-		"limit":          250,
+		"limit":          limit,
 		"order":          orderField + " asc",
 		windowField:      since.Format(time.RFC3339),
 		"api_version":    state.APIVersion,
@@ -935,7 +942,7 @@ func fetchOrderPage(ctx context.Context, state *shopifyState, accessToken string
 	}
 	req.Header.Set("X-Shopify-Access-Token", accessToken)
 
-	res, err := shopifyHTTPClient.Do(req)
+	res, err := doShopifyRequest(ctx, state, req)
 	if err != nil {
 		return shopifyOrderPage{}, fmt.Errorf("Shopify orders request failed: %w", err)
 	}
@@ -993,7 +1000,7 @@ func fetchShopInfo(ctx context.Context, state *shopifyState) (*shopifyShop, erro
 	}
 	req.Header.Set("X-Shopify-Access-Token", accessToken)
 
-	res, err := shopifyHTTPClient.Do(req)
+	res, err := doShopifyRequest(ctx, state, req)
 	if err != nil {
 		return nil, fmt.Errorf("Shopify shop request failed: %w", err)
 	}
@@ -1020,6 +1027,10 @@ func fetchShopifyAccessToken(ctx context.Context, state *shopifyState) (string, 
 		time.Now().Before(tokenCache.ExpiresAt) {
 		return tokenCache.AccessToken, nil
 	}
+	return sharedShopifyAccessToken(ctx, state, fetchFreshShopifyAccessToken)
+}
+
+func fetchFreshShopifyAccessToken(ctx context.Context, state *shopifyState) (string, error) {
 
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
@@ -1033,7 +1044,7 @@ func fetchShopifyAccessToken(ctx context.Context, state *shopifyState) (string, 
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	res, err := shopifyHTTPClient.Do(req)
+	res, err := doShopifyRequest(ctx, state, req)
 	if err != nil {
 		return "", fmt.Errorf("Shopify token exchange failed: %w", err)
 	}

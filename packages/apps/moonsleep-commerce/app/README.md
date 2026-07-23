@@ -31,6 +31,12 @@ Current scope:
 - exact provider JSON hash verification
 - zero Shopify calls during projection: backfill drains immutable records that
   are already committed to the MoonSleep Nex database
+- twelve independent Shopify source-observation jobs with one bounded provider
+  page per invocation, independent cursors and commit/abort capture receipts
+- disabled-first UTC schedules plus a force-now operation; recurring schedules
+  cannot run until an exact connection-bound plan is hash-confirmed and applied
+- a cross-process per-store governor with two request slots, request pacing,
+  proactive REST-pressure delay, durable 429 backoff, and a shared token cache
 - conservative identity behavior with no email, phone, or name merge
 
 The cohort method accepts 1-50 exact committed record IDs. It validates the
@@ -71,6 +77,15 @@ twice for the exact shop domain and connection ID. The first run creates the
 store and integration entity/contact anchors. The second must report zero new
 entities and contacts and two replayed observations. These are routing
 identities; customers remain separately observed subject entities.
+
+Recurring source observation is configured through
+`moonsleep-commerce.shopify-source.configure-schedules`. First call it in
+`plan` mode with the exact connection ID and explicitly enabled family set.
+Only an `apply` call with that exact `plan_sha256` and the literal confirmation
+`CONFIGURE_MOONSLEEP_SHOPIFY_SOURCE_SCHEDULES` binds the jobs and enables that
+set. An empty set safely binds the connection while leaving every schedule
+disabled. `moonsleep-commerce.shopify-source.trigger` can queue one exact
+family without enabling any recurring schedule.
 
 Still held from production activation:
 

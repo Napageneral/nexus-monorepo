@@ -92,14 +92,32 @@ type shopifyProductConnection struct {
 }
 
 type shopifyGraphQLProduct struct {
-	ID          string   `json:"id"`
-	Title       string   `json:"title"`
-	Handle      string   `json:"handle"`
-	UpdatedAt   string   `json:"updatedAt"`
-	Tags        []string `json:"tags"`
-	Status      string   `json:"status"`
-	Vendor      string   `json:"vendor"`
-	ProductType string   `json:"productType"`
+	ID                 string   `json:"id"`
+	Title              string   `json:"title"`
+	Handle             string   `json:"handle"`
+	UpdatedAt          string   `json:"updatedAt"`
+	Tags               []string `json:"tags"`
+	Status             string   `json:"status"`
+	Vendor             string   `json:"vendor"`
+	ProductType        string   `json:"productType"`
+	rawProviderJSON    json.RawMessage
+	rawProviderPayload map[string]any
+}
+
+func (product *shopifyGraphQLProduct) UnmarshalJSON(data []byte) error {
+	type decodedProduct shopifyGraphQLProduct
+	var decoded decodedProduct
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	raw, err := decodeProviderJSONObject(data)
+	if err != nil {
+		return err
+	}
+	*product = shopifyGraphQLProduct(decoded)
+	product.rawProviderJSON = append(json.RawMessage(nil), data...)
+	product.rawProviderPayload = raw
+	return nil
 }
 
 type shopifyCollectionEdge struct {
@@ -128,13 +146,31 @@ type shopifyGraphQLCollectionRuleSet struct {
 }
 
 type shopifyGraphQLCollection struct {
-	ID             string                           `json:"id"`
-	Title          string                           `json:"title"`
-	Handle         string                           `json:"handle"`
-	UpdatedAt      string                           `json:"updatedAt"`
-	TemplateSuffix string                           `json:"templateSuffix"`
-	ProductsCount  shopifyGraphQLCollectionCount    `json:"productsCount"`
-	RuleSet        *shopifyGraphQLCollectionRuleSet `json:"ruleSet"`
+	ID                 string                           `json:"id"`
+	Title              string                           `json:"title"`
+	Handle             string                           `json:"handle"`
+	UpdatedAt          string                           `json:"updatedAt"`
+	TemplateSuffix     string                           `json:"templateSuffix"`
+	ProductsCount      shopifyGraphQLCollectionCount    `json:"productsCount"`
+	RuleSet            *shopifyGraphQLCollectionRuleSet `json:"ruleSet"`
+	rawProviderJSON    json.RawMessage
+	rawProviderPayload map[string]any
+}
+
+func (collection *shopifyGraphQLCollection) UnmarshalJSON(data []byte) error {
+	type decodedCollection shopifyGraphQLCollection
+	var decoded decodedCollection
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	raw, err := decodeProviderJSONObject(data)
+	if err != nil {
+		return err
+	}
+	*collection = shopifyGraphQLCollection(decoded)
+	collection.rawProviderJSON = append(json.RawMessage(nil), data...)
+	collection.rawProviderPayload = raw
+	return nil
 }
 
 type shopifyInventoryItemEdge struct {
@@ -173,11 +209,29 @@ type shopifyGraphQLInventoryLevel struct {
 }
 
 type shopifyGraphQLInventoryItem struct {
-	ID              string                          `json:"id"`
-	SKU             string                          `json:"sku"`
-	UpdatedAt       string                          `json:"updatedAt"`
-	Tracked         bool                            `json:"tracked"`
-	InventoryLevels shopifyInventoryLevelConnection `json:"inventoryLevels"`
+	ID                 string                          `json:"id"`
+	SKU                string                          `json:"sku"`
+	UpdatedAt          string                          `json:"updatedAt"`
+	Tracked            bool                            `json:"tracked"`
+	InventoryLevels    shopifyInventoryLevelConnection `json:"inventoryLevels"`
+	rawProviderJSON    json.RawMessage
+	rawProviderPayload map[string]any
+}
+
+func (item *shopifyGraphQLInventoryItem) UnmarshalJSON(data []byte) error {
+	type decodedInventoryItem shopifyGraphQLInventoryItem
+	var decoded decodedInventoryItem
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	raw, err := decodeProviderJSONObject(data)
+	if err != nil {
+		return err
+	}
+	*item = shopifyGraphQLInventoryItem(decoded)
+	item.rawProviderJSON = append(json.RawMessage(nil), data...)
+	item.rawProviderPayload = raw
+	return nil
 }
 
 type shopifyFulfillmentOrderEdge struct {
@@ -191,13 +245,31 @@ type shopifyFulfillmentOrderConnection struct {
 }
 
 type shopifyGraphQLFulfillmentOrder struct {
-	ID            string `json:"id"`
-	UpdatedAt     string `json:"updatedAt"`
-	Status        string `json:"status"`
-	RequestStatus string `json:"requestStatus"`
-	FulfillAt     string `json:"fulfillAt"`
-	OrderName     string `json:"orderName"`
-	OrderID       string `json:"orderId"`
+	ID                 string `json:"id"`
+	UpdatedAt          string `json:"updatedAt"`
+	Status             string `json:"status"`
+	RequestStatus      string `json:"requestStatus"`
+	FulfillAt          string `json:"fulfillAt"`
+	OrderName          string `json:"orderName"`
+	OrderID            string `json:"orderId"`
+	rawProviderJSON    json.RawMessage
+	rawProviderPayload map[string]any
+}
+
+func (fulfillment *shopifyGraphQLFulfillmentOrder) UnmarshalJSON(data []byte) error {
+	type decodedFulfillment shopifyGraphQLFulfillmentOrder
+	var decoded decodedFulfillment
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	raw, err := decodeProviderJSONObject(data)
+	if err != nil {
+		return err
+	}
+	*fulfillment = shopifyGraphQLFulfillmentOrder(decoded)
+	fulfillment.rawProviderJSON = append(json.RawMessage(nil), data...)
+	fulfillment.rawProviderPayload = raw
+	return nil
 }
 
 type shopifyDiscountEventEdge struct {
@@ -232,9 +304,27 @@ type shopifyCodeDiscountNodeConnection struct {
 }
 
 type shopifyGraphQLCodeDiscountNode struct {
-	ID           string                         `json:"id"`
-	Events       shopifyDiscountEventConnection `json:"events"`
-	CodeDiscount shopifyGraphQLDiscountDetails  `json:"codeDiscount"`
+	ID                 string                         `json:"id"`
+	Events             shopifyDiscountEventConnection `json:"events"`
+	CodeDiscount       shopifyGraphQLDiscountDetails  `json:"codeDiscount"`
+	rawProviderJSON    json.RawMessage
+	rawProviderPayload map[string]any
+}
+
+func (node *shopifyGraphQLCodeDiscountNode) UnmarshalJSON(data []byte) error {
+	type decodedNode shopifyGraphQLCodeDiscountNode
+	var decoded decodedNode
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	raw, err := decodeProviderJSONObject(data)
+	if err != nil {
+		return err
+	}
+	*node = shopifyGraphQLCodeDiscountNode(decoded)
+	node.rawProviderJSON = append(json.RawMessage(nil), data...)
+	node.rawProviderPayload = raw
+	return nil
 }
 
 type shopifyAutomaticDiscountNodeEdge struct {
@@ -248,19 +338,39 @@ type shopifyAutomaticDiscountNodeConnection struct {
 }
 
 type shopifyGraphQLAutomaticDiscountNode struct {
-	ID                string                         `json:"id"`
-	Events            shopifyDiscountEventConnection `json:"events"`
-	AutomaticDiscount shopifyGraphQLDiscountDetails  `json:"automaticDiscount"`
+	ID                 string                         `json:"id"`
+	Events             shopifyDiscountEventConnection `json:"events"`
+	AutomaticDiscount  shopifyGraphQLDiscountDetails  `json:"automaticDiscount"`
+	rawProviderJSON    json.RawMessage
+	rawProviderPayload map[string]any
+}
+
+func (node *shopifyGraphQLAutomaticDiscountNode) UnmarshalJSON(data []byte) error {
+	type decodedNode shopifyGraphQLAutomaticDiscountNode
+	var decoded decodedNode
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	raw, err := decodeProviderJSONObject(data)
+	if err != nil {
+		return err
+	}
+	*node = shopifyGraphQLAutomaticDiscountNode(decoded)
+	node.rawProviderJSON = append(json.RawMessage(nil), data...)
+	node.rawProviderPayload = raw
+	return nil
 }
 
 type shopifyGraphQLDiscountRecord struct {
-	NodeGID      string
-	DiscountType string
-	Title        string
-	Status       string
-	StartsAt     string
-	EndsAt       string
-	UpdatedAt    string
+	NodeGID            string
+	DiscountType       string
+	Title              string
+	Status             string
+	StartsAt           string
+	EndsAt             string
+	UpdatedAt          string
+	rawProviderJSON    json.RawMessage
+	rawProviderPayload map[string]any
 }
 
 type shopifyMarketingActivityEdge struct {
@@ -274,12 +384,30 @@ type shopifyMarketingActivityConnection struct {
 }
 
 type shopifyGraphQLMarketingActivity struct {
-	ID               string `json:"id"`
-	Title            string `json:"title"`
-	Status           string `json:"status"`
-	UpdatedAt        string `json:"updatedAt"`
-	MarketingChannel string `json:"marketingChannel"`
-	Tactic           string `json:"tactic"`
+	ID                 string `json:"id"`
+	Title              string `json:"title"`
+	Status             string `json:"status"`
+	UpdatedAt          string `json:"updatedAt"`
+	MarketingChannel   string `json:"marketingChannel"`
+	Tactic             string `json:"tactic"`
+	rawProviderJSON    json.RawMessage
+	rawProviderPayload map[string]any
+}
+
+func (activity *shopifyGraphQLMarketingActivity) UnmarshalJSON(data []byte) error {
+	type decodedActivity shopifyGraphQLMarketingActivity
+	var decoded decodedActivity
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	raw, err := decodeProviderJSONObject(data)
+	if err != nil {
+		return err
+	}
+	*activity = shopifyGraphQLMarketingActivity(decoded)
+	activity.rawProviderJSON = append(json.RawMessage(nil), data...)
+	activity.rawProviderPayload = raw
+	return nil
 }
 
 type shopifyCustomerPage struct {
@@ -965,13 +1093,15 @@ func fetchDiscountsSince(ctx context.Context, state *shopifyState, since time.Ti
 				continue
 			}
 			record := shopifyGraphQLDiscountRecord{
-				NodeGID:      node.ID,
-				DiscountType: node.CodeDiscount.TypeName,
-				Title:        node.CodeDiscount.Title,
-				Status:       node.CodeDiscount.Status,
-				StartsAt:     node.CodeDiscount.StartsAt,
-				EndsAt:       node.CodeDiscount.EndsAt,
-				UpdatedAt:    discountUpdatedAt(node.CodeDiscount.UpdatedAt, node.Events, node.CodeDiscount.StartsAt, node.CodeDiscount.EndsAt),
+				NodeGID:            node.ID,
+				DiscountType:       node.CodeDiscount.TypeName,
+				Title:              node.CodeDiscount.Title,
+				Status:             node.CodeDiscount.Status,
+				StartsAt:           node.CodeDiscount.StartsAt,
+				EndsAt:             node.CodeDiscount.EndsAt,
+				UpdatedAt:          discountUpdatedAt(node.CodeDiscount.UpdatedAt, node.Events, node.CodeDiscount.StartsAt, node.CodeDiscount.EndsAt),
+				rawProviderJSON:    node.rawProviderJSON,
+				rawProviderPayload: node.rawProviderPayload,
 			}
 			records = append(records, record)
 			if parsed := parseShopifyUpdatedAt(record.UpdatedAt); !parsed.IsZero() && parsed.After(latestUpdatedAt) {
@@ -1006,13 +1136,15 @@ func fetchDiscountsSince(ctx context.Context, state *shopifyState, since time.Ti
 				continue
 			}
 			record := shopifyGraphQLDiscountRecord{
-				NodeGID:      node.ID,
-				DiscountType: node.AutomaticDiscount.TypeName,
-				Title:        node.AutomaticDiscount.Title,
-				Status:       node.AutomaticDiscount.Status,
-				StartsAt:     node.AutomaticDiscount.StartsAt,
-				EndsAt:       node.AutomaticDiscount.EndsAt,
-				UpdatedAt:    discountUpdatedAt(node.AutomaticDiscount.UpdatedAt, node.Events, node.AutomaticDiscount.StartsAt, node.AutomaticDiscount.EndsAt),
+				NodeGID:            node.ID,
+				DiscountType:       node.AutomaticDiscount.TypeName,
+				Title:              node.AutomaticDiscount.Title,
+				Status:             node.AutomaticDiscount.Status,
+				StartsAt:           node.AutomaticDiscount.StartsAt,
+				EndsAt:             node.AutomaticDiscount.EndsAt,
+				UpdatedAt:          discountUpdatedAt(node.AutomaticDiscount.UpdatedAt, node.Events, node.AutomaticDiscount.StartsAt, node.AutomaticDiscount.EndsAt),
+				rawProviderJSON:    node.rawProviderJSON,
+				rawProviderPayload: node.rawProviderPayload,
 			}
 			records = append(records, record)
 			if parsed := parseShopifyUpdatedAt(record.UpdatedAt); !parsed.IsZero() && parsed.After(latestUpdatedAt) {
@@ -1183,7 +1315,7 @@ func buildProductRecord(state *shopifyState, product shopifyGraphQLProduct, sour
 	}
 	productID := shopifyGIDIdentityToken(productGID)
 	row := normalizedProductRow(state.ShopDomain, product)
-	revision := revisionHash(row)
+	revision := revisionHash(providerRevisionInput(product.rawProviderPayload, row))
 	logicalRowID := fmt.Sprintf("%s:%s", state.ShopDomain, productGID)
 	threadID := fmt.Sprintf("%s:product:%s", state.ShopDomain, productID)
 	threadName := firstNonBlank(product.Title, product.Handle, productID)
@@ -1222,17 +1354,17 @@ func buildProductRecord(state *shopifyState, product shopifyGraphQLProduct, sour
 			Timestamp:        shopifyUpdatedAtOrNow(product.UpdatedAt).UnixMilli(),
 			Content:          fmt.Sprintf("product %s handle=%s status=%s", threadName, firstNonBlank(product.Handle, "unknown"), firstNonBlank(product.Status, "unknown")),
 			ContentType:      "text",
+			Payload:          providerPayloadEnvelope(product.rawProviderJSON, product.rawProviderPayload, product),
 			Metadata: map[string]any{
-				"connection_id":        connectionID,
-				"adapter_id":           platformID,
-				"family":               "product",
-				"logical_row_id":       logicalRowID,
-				"revision_hash":        revision,
-				"provider_ids":         providerIDs,
-				"row":                  row,
-				"bridge_attributes":    map[string]any{},
-				"raw_provider_payload": mustJSONObject(product),
-				"source_request":       sourceRequest.metadata(),
+				"connection_id":     connectionID,
+				"adapter_id":        platformID,
+				"family":            "product",
+				"logical_row_id":    logicalRowID,
+				"revision_hash":     revision,
+				"provider_ids":      providerIDs,
+				"row":               row,
+				"bridge_attributes": map[string]any{},
+				"source_request":    sourceRequest.metadata(),
 			},
 		},
 	}
@@ -1251,7 +1383,7 @@ func buildCollectionRecord(state *shopifyState, collection shopifyGraphQLCollect
 	}
 	collectionID := shopifyGIDIdentityToken(collectionGID)
 	row := normalizedCollectionRow(state.ShopDomain, collection)
-	revision := revisionHash(row)
+	revision := revisionHash(providerRevisionInput(collection.rawProviderPayload, row))
 	logicalRowID := fmt.Sprintf("%s:%s", state.ShopDomain, collectionGID)
 	threadID := fmt.Sprintf("%s:collection:%s", state.ShopDomain, collectionID)
 	threadName := firstNonBlank(collection.Title, collection.Handle, collectionID)
@@ -1290,17 +1422,17 @@ func buildCollectionRecord(state *shopifyState, collection shopifyGraphQLCollect
 			Timestamp:        shopifyUpdatedAtOrNow(collection.UpdatedAt).UnixMilli(),
 			Content:          fmt.Sprintf("collection %s handle=%s products=%d", threadName, firstNonBlank(collection.Handle, "unknown"), collection.ProductsCount.Count),
 			ContentType:      "text",
+			Payload:          providerPayloadEnvelope(collection.rawProviderJSON, collection.rawProviderPayload, collection),
 			Metadata: map[string]any{
-				"connection_id":        connectionID,
-				"adapter_id":           platformID,
-				"family":               "collection",
-				"logical_row_id":       logicalRowID,
-				"revision_hash":        revision,
-				"provider_ids":         providerIDs,
-				"row":                  row,
-				"bridge_attributes":    map[string]any{},
-				"raw_provider_payload": mustJSONObject(collection),
-				"source_request":       sourceRequest.metadata(),
+				"connection_id":     connectionID,
+				"adapter_id":        platformID,
+				"family":            "collection",
+				"logical_row_id":    logicalRowID,
+				"revision_hash":     revision,
+				"provider_ids":      providerIDs,
+				"row":               row,
+				"bridge_attributes": map[string]any{},
+				"source_request":    sourceRequest.metadata(),
 			},
 		},
 	}
@@ -1328,7 +1460,7 @@ func buildInventoryRecords(state *shopifyState, item shopifyGraphQLInventoryItem
 			continue
 		}
 		row := normalizedInventoryRow(state.ShopDomain, item, level)
-		revision := revisionHash(row)
+		revision := revisionHash(providerRevisionInput(item.rawProviderPayload, row))
 		logicalRowID := fmt.Sprintf("%s:%s:%s", state.ShopDomain, itemGID, levelGID)
 		providerIDs := map[string]any{
 			"shop_domain":         state.ShopDomain,
@@ -1366,17 +1498,17 @@ func buildInventoryRecords(state *shopifyState, item shopifyGraphQLInventoryItem
 				Timestamp:        shopifyUpdatedAtOrNow(firstNonBlank(level.UpdatedAt, item.UpdatedAt)).UnixMilli(),
 				Content:          fmt.Sprintf("inventory item=%s location=%s available=%d tracked=%t", threadName, firstNonBlank(level.Location.Name, "unknown"), inventoryQuantity(level, "available"), item.Tracked),
 				ContentType:      "text",
+				Payload:          providerPayloadEnvelope(item.rawProviderJSON, item.rawProviderPayload, item),
 				Metadata: map[string]any{
-					"connection_id":        connectionID,
-					"adapter_id":           platformID,
-					"family":               "inventory",
-					"logical_row_id":       logicalRowID,
-					"revision_hash":        revision,
-					"provider_ids":         providerIDs,
-					"row":                  row,
-					"bridge_attributes":    map[string]any{},
-					"raw_provider_payload": mustJSONObject(map[string]any{"item": item, "level": level}),
-					"source_request":       sourceRequest.metadata(),
+					"connection_id":     connectionID,
+					"adapter_id":        platformID,
+					"family":            "inventory",
+					"logical_row_id":    logicalRowID,
+					"revision_hash":     revision,
+					"provider_ids":      providerIDs,
+					"row":               row,
+					"bridge_attributes": map[string]any{},
+					"source_request":    sourceRequest.metadata(),
 				},
 			},
 		}
@@ -1398,7 +1530,7 @@ func buildFulfillmentRecord(state *shopifyState, fulfillment shopifyGraphQLFulfi
 	}
 	fulfillmentID := shopifyGIDIdentityToken(fulfillmentGID)
 	row := normalizedFulfillmentRow(state.ShopDomain, fulfillment)
-	revision := revisionHash(row)
+	revision := revisionHash(providerRevisionInput(fulfillment.rawProviderPayload, row))
 	logicalRowID := fmt.Sprintf("%s:%s", state.ShopDomain, fulfillmentGID)
 	threadID := fmt.Sprintf("%s:fulfillment:%s", state.ShopDomain, fulfillmentID)
 	threadName := firstNonBlank(fulfillment.OrderName, fulfillmentID)
@@ -1438,17 +1570,17 @@ func buildFulfillmentRecord(state *shopifyState, fulfillment shopifyGraphQLFulfi
 			Timestamp:        shopifyUpdatedAtOrNow(fulfillment.UpdatedAt).UnixMilli(),
 			Content:          fmt.Sprintf("fulfillment %s status=%s request_status=%s", threadName, firstNonBlank(fulfillment.Status, "unknown"), firstNonBlank(fulfillment.RequestStatus, "unknown")),
 			ContentType:      "text",
+			Payload:          providerPayloadEnvelope(fulfillment.rawProviderJSON, fulfillment.rawProviderPayload, fulfillment),
 			Metadata: map[string]any{
-				"connection_id":        connectionID,
-				"adapter_id":           platformID,
-				"family":               "fulfillment",
-				"logical_row_id":       logicalRowID,
-				"revision_hash":        revision,
-				"provider_ids":         providerIDs,
-				"row":                  row,
-				"bridge_attributes":    map[string]any{},
-				"raw_provider_payload": mustJSONObject(fulfillment),
-				"source_request":       sourceRequest.metadata(),
+				"connection_id":     connectionID,
+				"adapter_id":        platformID,
+				"family":            "fulfillment",
+				"logical_row_id":    logicalRowID,
+				"revision_hash":     revision,
+				"provider_ids":      providerIDs,
+				"row":               row,
+				"bridge_attributes": map[string]any{},
+				"source_request":    sourceRequest.metadata(),
 			},
 		},
 	}
@@ -1467,7 +1599,7 @@ func buildDiscountRecord(state *shopifyState, discount shopifyGraphQLDiscountRec
 	}
 	discountID := shopifyGIDIdentityToken(discountGID)
 	row := normalizedDiscountRow(state.ShopDomain, discount)
-	revision := revisionHash(row)
+	revision := revisionHash(providerRevisionInput(discount.rawProviderPayload, row))
 	logicalRowID := fmt.Sprintf("%s:%s", state.ShopDomain, discountGID)
 	threadID := fmt.Sprintf("%s:discount:%s", state.ShopDomain, discountID)
 	threadName := firstNonBlank(discount.Title, discountID)
@@ -1506,17 +1638,17 @@ func buildDiscountRecord(state *shopifyState, discount shopifyGraphQLDiscountRec
 			Timestamp:        shopifyUpdatedAtOrNow(discount.UpdatedAt).UnixMilli(),
 			Content:          fmt.Sprintf("discount %s status=%s class=%s", threadName, firstNonBlank(discount.Status, "unknown"), firstNonBlank(discount.DiscountType, "unknown")),
 			ContentType:      "text",
+			Payload:          providerPayloadEnvelope(discount.rawProviderJSON, discount.rawProviderPayload, discount),
 			Metadata: map[string]any{
-				"connection_id":        connectionID,
-				"adapter_id":           platformID,
-				"family":               "discount",
-				"logical_row_id":       logicalRowID,
-				"revision_hash":        revision,
-				"provider_ids":         providerIDs,
-				"row":                  row,
-				"bridge_attributes":    map[string]any{},
-				"raw_provider_payload": mustJSONObject(discount),
-				"source_request":       sourceRequest.metadata(),
+				"connection_id":     connectionID,
+				"adapter_id":        platformID,
+				"family":            "discount",
+				"logical_row_id":    logicalRowID,
+				"revision_hash":     revision,
+				"provider_ids":      providerIDs,
+				"row":               row,
+				"bridge_attributes": map[string]any{},
+				"source_request":    sourceRequest.metadata(),
 			},
 		},
 	}
@@ -1535,7 +1667,7 @@ func buildMarketingRecord(state *shopifyState, activity shopifyGraphQLMarketingA
 	}
 	activityID := shopifyGIDIdentityToken(activityGID)
 	row := normalizedMarketingRow(state.ShopDomain, activity)
-	revision := revisionHash(row)
+	revision := revisionHash(providerRevisionInput(activity.rawProviderPayload, row))
 	logicalRowID := fmt.Sprintf("%s:%s", state.ShopDomain, activityGID)
 	threadID := fmt.Sprintf("%s:marketing:%s", state.ShopDomain, activityID)
 	threadName := firstNonBlank(activity.Title, activityID)
@@ -1574,17 +1706,17 @@ func buildMarketingRecord(state *shopifyState, activity shopifyGraphQLMarketingA
 			Timestamp:        shopifyUpdatedAtOrNow(activity.UpdatedAt).UnixMilli(),
 			Content:          fmt.Sprintf("marketing %s status=%s channel=%s tactic=%s", threadName, firstNonBlank(activity.Status, "unknown"), firstNonBlank(activity.MarketingChannel, "unknown"), firstNonBlank(activity.Tactic, "unknown")),
 			ContentType:      "text",
+			Payload:          providerPayloadEnvelope(activity.rawProviderJSON, activity.rawProviderPayload, activity),
 			Metadata: map[string]any{
-				"connection_id":        connectionID,
-				"adapter_id":           platformID,
-				"family":               "marketing",
-				"logical_row_id":       logicalRowID,
-				"revision_hash":        revision,
-				"provider_ids":         providerIDs,
-				"row":                  row,
-				"bridge_attributes":    map[string]any{},
-				"raw_provider_payload": mustJSONObject(activity),
-				"source_request":       sourceRequest.metadata(),
+				"connection_id":     connectionID,
+				"adapter_id":        platformID,
+				"family":            "marketing",
+				"logical_row_id":    logicalRowID,
+				"revision_hash":     revision,
+				"provider_ids":      providerIDs,
+				"row":               row,
+				"bridge_attributes": map[string]any{},
+				"source_request":    sourceRequest.metadata(),
 			},
 		},
 	}
