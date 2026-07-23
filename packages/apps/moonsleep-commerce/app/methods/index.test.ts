@@ -73,25 +73,27 @@ describe("Shopify source schedule configuration", () => {
       },
     };
     const enabledFamilies = ["orders.delta", "customers.delta", "inventory.hot"];
-    const planned = await configureShopifySourceSchedules({
+    const planned = (await configureShopifySourceSchedules({
       params: { mode: "plan", connection_id: "shopify-primary", enabled_families: enabledFamilies },
       nex,
-    } as never) as Record<string, unknown>;
+    } as never)) as Record<string, unknown>;
     expect(planned).toMatchObject({ state: "planned", provider_write_authority: false });
     expect(planned.plan_sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(jobsUpdate).not.toHaveBeenCalled();
     expect(schedulesUpdate).not.toHaveBeenCalled();
 
-    await expect(configureShopifySourceSchedules({
-      params: {
-        mode: "apply",
-        connection_id: "shopify-primary",
-        enabled_families: enabledFamilies,
-        expected_plan_sha256: "0".repeat(64),
-        confirmation: "CONFIGURE_MOONSLEEP_SHOPIFY_SOURCE_SCHEDULES",
-      },
-      nex,
-    } as never)).rejects.toThrow("does not match");
+    await expect(
+      configureShopifySourceSchedules({
+        params: {
+          mode: "apply",
+          connection_id: "shopify-primary",
+          enabled_families: enabledFamilies,
+          expected_plan_sha256: "0".repeat(64),
+          confirmation: "CONFIGURE_MOONSLEEP_SHOPIFY_SOURCE_SCHEDULES",
+        },
+        nex,
+      } as never),
+    ).rejects.toThrow("does not match");
     expect(jobsUpdate).not.toHaveBeenCalled();
 
     const applied = await configureShopifySourceSchedules({
@@ -107,22 +109,29 @@ describe("Shopify source schedule configuration", () => {
     expect(applied).toMatchObject({ state: "applied", plan_sha256: planned.plan_sha256 });
     expect(jobsUpdate).toHaveBeenCalledTimes(12);
     expect(schedulesUpdate).toHaveBeenCalledTimes(27);
-    expect(schedules.filter((row) => row.enabled === 1).map((row) => row.name).sort()).toEqual(
-      enabledFamilies.map(sourceJobName).sort(),
+    expect(
+      schedules
+        .filter((row) => row.enabled === 1)
+        .map((row) => row.name)
+        .sort(),
+    ).toEqual(enabledFamilies.map(sourceJobName).sort());
+    expect(jobs.every((row) => row.config_json.includes('"connection_id":"shopify-primary"'))).toBe(
+      true,
     );
-    expect(jobs.every((row) => row.config_json.includes('"connection_id":"shopify-primary"'))).toBe(true);
 
     failingJobId = "job-5";
-    await expect(configureShopifySourceSchedules({
-      params: {
-        mode: "apply",
-        connection_id: "shopify-primary",
-        enabled_families: enabledFamilies,
-        expected_plan_sha256: planned.plan_sha256,
-        confirmation: "CONFIGURE_MOONSLEEP_SHOPIFY_SOURCE_SCHEDULES",
-      },
-      nex,
-    } as never)).rejects.toThrow("injected job update failure");
+    await expect(
+      configureShopifySourceSchedules({
+        params: {
+          mode: "apply",
+          connection_id: "shopify-primary",
+          enabled_families: enabledFamilies,
+          expected_plan_sha256: planned.plan_sha256,
+          confirmation: "CONFIGURE_MOONSLEEP_SHOPIFY_SOURCE_SCHEDULES",
+        },
+        nex,
+      } as never),
+    ).rejects.toThrow("injected job update failure");
     expect(schedules.every((row) => row.enabled === 0)).toBe(true);
   });
 });
@@ -195,15 +204,39 @@ describe("Shopify source manual trigger", () => {
     };
     await expect(triggerShopifySource(base as never)).rejects.toThrow("not active");
     await expect(
-      triggerShopifySource({ ...base, params: { ...base.params, family: "themes.delta" } } as never),
+      triggerShopifySource({
+        ...base,
+        params: { ...base.params, family: "themes.delta" },
+      } as never),
     ).rejects.toThrow("not an installed");
     expect(invoke).not.toHaveBeenCalled();
   });
 });
 
 describe("Shopify source identity seed", () => {
-  function sourceIdentityContext() {
+  function sourceIdentityContext(options?: { legacyReceiverEntityId?: string }) {
     const seen = new Set<string>();
+    const contactsByAnchor = new Map<
+      string,
+      {
+        id: string;
+        platform: string;
+        space_id: string;
+        contact_id: string;
+        canonical_entity_id: string;
+      }
+    >();
+    const anchor = (platform: string, spaceId: string, contactId: string) =>
+      `${platform}\n${spaceId}\n${contactId}`;
+    if (options?.legacyReceiverEntityId) {
+      contactsByAnchor.set(anchor("shopify", "", "shopify-primary"), {
+        id: "contact-legacy-shopify-primary",
+        platform: "shopify",
+        space_id: "",
+        contact_id: "shopify-primary",
+        canonical_entity_id: options.legacyReceiverEntityId,
+      });
+    }
     const observe = vi.fn(async (input: Record<string, unknown>) => {
       const observationId = String(input.source_observation_id);
       const role = String(input.entity_type);
@@ -222,8 +255,15 @@ describe("Shopify source identity seed", () => {
         replayed,
       };
     });
-    const resolve = vi.fn(async ({ entity_id }: { entity_id: string }) => ({
+    const resolveEntity = vi.fn(async ({ entity_id }: { entity_id: string }) => ({
       canonical_id: entity_id,
+    }));
+    const getEntity = vi.fn(async ({ id }: { id: string }) => ({
+      entity: {
+        id,
+        is_agent: id === "entity_moonsleep_ops",
+        deleted_at: null,
+      },
     }));
     const list = vi.fn(async ({ entity_id }: { entity_id: string }) => ({
       tags:
@@ -231,13 +271,60 @@ describe("Shopify source identity seed", () => {
           ? ["Store", "Shopify", "MoonSleep", "Reviewed"]
           : ["Shopify", "Integration", "MoonSleep"],
     }));
+    const resolveContact = vi.fn(
+      async ({
+        platform,
+        space_id,
+        contact_id,
+      }: {
+        platform: string;
+        space_id: string;
+        contact_id: string;
+      }) => {
+        const contact = contactsByAnchor.get(anchor(platform, space_id, contact_id)) ?? null;
+        return { found: contact !== null, contact };
+      },
+    );
+    const createContact = vi.fn(async (input: Record<string, unknown>) => {
+      const contact = {
+        id: `contact-${contactsByAnchor.size + 1}`,
+        platform: String(input.platform),
+        space_id: String(input.space_id ?? ""),
+        contact_id: String(input.contact_id),
+        canonical_entity_id: String(input.entity_id),
+      };
+      contactsByAnchor.set(anchor(contact.platform, contact.space_id, contact.contact_id), contact);
+      return { contact };
+    });
+    const updateContact = vi.fn(async (input: Record<string, unknown>) => {
+      const existing = [...contactsByAnchor.values()].find((contact) => contact.id === input.id);
+      if (!existing) throw new Error("missing fixture contact");
+      const updated = {
+        ...existing,
+        id: `${existing.id}-updated`,
+        canonical_entity_id: String(input.entity_id),
+      };
+      contactsByAnchor.set(anchor(updated.platform, updated.space_id, updated.contact_id), updated);
+      return { contact: updated };
+    });
     return {
       params: {
         shop_domain: "moonsleepco.myshopify.com",
         connection_id: "shopify-primary",
       },
-      nex: { contacts: { observe }, entities: { resolve, tags: { list } } },
+      nex: {
+        contacts: {
+          observe,
+          resolve: resolveContact,
+          create: createContact,
+          update: updateContact,
+        },
+        entities: { get: getEntity, resolve: resolveEntity, tags: { list } },
+      },
       observe,
+      resolveContact,
+      createContact,
+      updateContact,
     };
   }
 
@@ -250,6 +337,10 @@ describe("Shopify source identity seed", () => {
       created_entities: 2,
       created_contacts: 2,
       replayed: 0,
+      receiver_grounding: {
+        outcome: "created",
+        canonical_entity_id: "entity_moonsleep_ops",
+      },
       provider_write_authority: false,
     });
     const second = await seedShopifySourceIdentities(ctx as never);
@@ -260,6 +351,10 @@ describe("Shopify source identity seed", () => {
       created_entities: 0,
       created_contacts: 0,
       replayed: 2,
+      receiver_grounding: {
+        outcome: "unchanged",
+        canonical_entity_id: "entity_moonsleep_ops",
+      },
       provider_write_authority: false,
     });
     expect(ctx.observe).toHaveBeenCalledTimes(4);
@@ -271,9 +366,39 @@ describe("Shopify source identity seed", () => {
     });
     expect(ctx.observe.mock.calls[1]?.[0]).toMatchObject({
       platform: "shopify",
-      space_id: "",
+      space_id: "moonsleepco.myshopify.com",
       contact_id: "shopify-primary",
       entity_type: "integration",
+    });
+    expect(ctx.createContact).toHaveBeenCalledTimes(1);
+    expect(ctx.updateContact).not.toHaveBeenCalled();
+  });
+
+  it("moves only the legacy local receiver anchor to MoonSleep Ops and replays unchanged", async () => {
+    const ctx = sourceIdentityContext({
+      legacyReceiverEntityId: "entity-integration",
+    });
+    await expect(seedShopifySourceIdentities(ctx as never)).resolves.toMatchObject({
+      receiver_grounding: {
+        outcome: "updated",
+        platform: "shopify",
+        space_id: "",
+        contact_id: "shopify-primary",
+        canonical_entity_id: "entity_moonsleep_ops",
+      },
+    });
+    await expect(seedShopifySourceIdentities(ctx as never)).resolves.toMatchObject({
+      receiver_grounding: {
+        outcome: "unchanged",
+        canonical_entity_id: "entity_moonsleep_ops",
+      },
+    });
+    expect(ctx.createContact).not.toHaveBeenCalled();
+    expect(ctx.updateContact).toHaveBeenCalledTimes(1);
+    expect(ctx.updateContact).toHaveBeenCalledWith({
+      id: "contact-legacy-shopify-primary",
+      entity_id: "entity_moonsleep_ops",
+      contact_name: "MoonSleep Ops",
     });
   });
 
@@ -306,8 +431,9 @@ describe("Shopify source identity seed", () => {
       }),
       expect.objectContaining({
         role: "integration",
+        space_id: "moonsleepco.myshopify.com",
         source_observation_id:
-          "moonsleep-commerce:shopify-source:integration:v1:shopify-primary",
+          "moonsleep-commerce:shopify-source:integration:v2:moonsleepco.myshopify.com:shopify-primary",
         observed_at: Date.UTC(2026, 6, 20),
         tags: ["Integration", "MoonSleep", "Shopify"],
       }),
@@ -316,7 +442,10 @@ describe("Shopify source identity seed", () => {
 });
 
 function customerRecord(recordId: string, customerId: string) {
-  const providerObjectJson = JSON.stringify({ id: customerId, displayName: `Customer ${customerId}` });
+  const providerObjectJson = JSON.stringify({
+    id: customerId,
+    displayName: `Customer ${customerId}`,
+  });
   return {
     id: recordId,
     record_id: recordId,
@@ -381,7 +510,10 @@ function context(recordById: Record<string, ReturnType<typeof customerRecord>>) 
 describe("Shopify customer cohort projector", () => {
   it("validates every record before creating identity observations", async () => {
     const first = customerRecord("record-1", "gid://shopify/Customer/1");
-    const invalid = { ...customerRecord("record-2", "gid://shopify/Customer/2"), platform: "other" };
+    const invalid = {
+      ...customerRecord("record-2", "gid://shopify/Customer/2"),
+      platform: "other",
+    };
     const ctx = context({ "record-1": first, "record-2": invalid });
 
     await expect(projectShopifyCustomerCohort(ctx as never)).rejects.toThrow(
@@ -428,18 +560,14 @@ describe("Shopify customer cohort projector", () => {
 });
 
 describe("Complete Shopify customer record-set discovery", () => {
-  function completeContext(
-    recordById: Record<string, ReturnType<typeof customerRecord>>,
-  ) {
+  function completeContext(recordById: Record<string, ReturnType<typeof customerRecord>>) {
     const ctx = context(recordById);
     const ordered = Object.values(recordById);
-    const list = vi.fn(
-      async ({ limit, offset }: { limit: number; offset: number }) => ({
-        records: ordered.slice(offset, offset + limit),
-        limit,
-        offset,
-      }),
-    );
+    const list = vi.fn(async ({ limit, offset }: { limit: number; offset: number }) => ({
+      records: ordered.slice(offset, offset + limit),
+      limit,
+      offset,
+    }));
     return {
       ...ctx,
       params: {
@@ -462,11 +590,7 @@ describe("Complete Shopify customer record-set discovery", () => {
       state: "ready",
       record_count: 3,
       record_ids: ["record-1", "record-2", "record-3"],
-      record_set_sha256: shopifyCustomerRecordSetSha256([
-        "record-1",
-        "record-2",
-        "record-3",
-      ]),
+      record_set_sha256: shopifyCustomerRecordSetSha256(["record-1", "record-2", "record-3"]),
       first_record_id: "record-1",
       last_record_id: "record-3",
       provider_write_authority: false,
@@ -587,17 +711,16 @@ describe("Shopify customer full backfill projector", () => {
       },
       { record_ids: ["record-1", "record-2"], record_set_sha256: "INVALID" },
       {
-        record_ids: Array.from({ length: 251 }, (_, index) =>
-          `record-${String(index).padStart(4, "0")}`,
+        record_ids: Array.from(
+          { length: 251 },
+          (_, index) => `record-${String(index).padStart(4, "0")}`,
         ),
         record_set_sha256: "0".repeat(64),
       },
     ];
 
     for (const params of cases) {
-      await expect(
-        projectShopifyCustomerBackfill({ ...ctx, params } as never),
-      ).rejects.toThrow();
+      await expect(projectShopifyCustomerBackfill({ ...ctx, params } as never)).rejects.toThrow();
     }
     expect(ctx.recordsGet).not.toHaveBeenCalled();
     expect(ctx.observe).not.toHaveBeenCalled();
@@ -623,7 +746,9 @@ function commerceRecord(
     timestamp: 1_784_640_000_000 + (family === "order" ? 1 : 2),
     payload: {
       provider_object_json: raw,
-      provider_object_sha256: options.invalidHash ? "0".repeat(64) : createHash("sha256").update(raw).digest("hex"),
+      provider_object_sha256: options.invalidHash
+        ? "0".repeat(64)
+        : createHash("sha256").update(raw).digest("hex"),
     },
     metadata: {
       family,
