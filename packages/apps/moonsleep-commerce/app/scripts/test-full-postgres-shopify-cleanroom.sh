@@ -383,10 +383,13 @@ jq -e '
 
 jobs_before="$(runtime_call jobs.list '{}')"
 subscriptions_before="$(runtime_call events.subscriptions.list '{}')"
+schedules_before="$(runtime_call schedules.list '{}')"
 jq -e '
-  (.jobs | length) == 2 and
-  ([.jobs[].name] | sort) == ["moonsleep-commerce.shopify-customer-identity","moonsleep-commerce.shopify-order-commerce"] and
-  all(.jobs[]; .status == "inactive")
+  (.jobs | length) == 14 and
+  ([.jobs[] | select(.name == "moonsleep-commerce.shopify-customer-identity" or .name == "moonsleep-commerce.shopify-order-commerce")] | length) == 2 and
+  all(.jobs[] | select(.name == "moonsleep-commerce.shopify-customer-identity" or .name == "moonsleep-commerce.shopify-order-commerce"); .status == "inactive") and
+  ([.jobs[] | select(.name | startswith("moonsleep-commerce.shopify-source."))] | length) == 12 and
+  all(.jobs[] | select(.name | startswith("moonsleep-commerce.shopify-source.")); .status == "active" and (.config_json | fromjson | has("connection_id") | not))
 ' <<<"${jobs_before}" >/dev/null
 jq -e '
   (.subscriptions | length) == 3 and
@@ -397,6 +400,21 @@ jq -e '
   ] and
   all(.subscriptions[]; .event_type == "record.ingested" and .enabled == 0)
 ' <<<"${subscriptions_before}" >/dev/null
+jq -e '
+  (.schedules | length) == 12 and
+  all(.schedules[]; .enabled == 0 and .timezone == "UTC" and (.name | startswith("moonsleep-commerce.shopify-source.")))
+' <<<"${schedules_before}" >/dev/null
+
+schedule_plan_params="$(jq -nc --arg connection_id "${CONNECTION_ID}" '{mode:"plan",connection_id:$connection_id,enabled_families:[]}')"
+schedule_plan="$(runtime_call moonsleep-commerce.shopify-source.configure-schedules "${schedule_plan_params}")"
+jq -e '
+  .state == "planned" and .connection_id == "shopify-primary" and
+  (.enabled_families | length) == 0 and (.schedules | length) == 12 and
+  all(.schedules[]; .enabled == false and .timezone == "UTC") and
+  (.plan_sha256 | test("^[0-9a-f]{64}$")) and .provider_write_authority == false
+' <<<"${schedule_plan}" >/dev/null
+[[ "$(jq -S -c . <<<"$(runtime_call jobs.list '{}')")" == "$(jq -S -c . <<<"${jobs_before}")" ]]
+[[ "$(jq -S -c . <<<"$(runtime_call schedules.list '{}')")" == "$(jq -S -c . <<<"${schedules_before}")" ]]
 
 initial_counts="$(runtime_counts)"
 jq -e '
@@ -613,10 +631,15 @@ app_state_after="$(package_get app moonsleep-commerce)"
 health_after="$(runtime_call moonsleep-commerce.healthcheck '{}')"
 jobs_after="$(runtime_call jobs.list '{}')"
 subscriptions_after="$(runtime_call events.subscriptions.list '{}')"
+schedules_after="$(runtime_call schedules.list '{}')"
 jq -e --arg version "${ADAPTER_VERSION}" '.status == "active" and .active_version == $version' <<<"${adapter_state_after}" >/dev/null
 jq -e --arg version "${APP_VERSION}" '.status == "active" and .active_version == $version' <<<"${app_state_after}" >/dev/null
 jq -e '.status == "ok" and .provider_write_authority == false' <<<"${health_after}" >/dev/null
-jq -e '(.jobs | length) == 2 and all(.jobs[]; .status == "inactive")' <<<"${jobs_after}" >/dev/null
+jq -e '
+  (.jobs | length) == 14 and
+  all(.jobs[] | select(.name == "moonsleep-commerce.shopify-customer-identity" or .name == "moonsleep-commerce.shopify-order-commerce"); .status == "inactive") and
+  all(.jobs[] | select(.name | startswith("moonsleep-commerce.shopify-source.")); .status == "active")
+' <<<"${jobs_after}" >/dev/null
 jq -e '
   (.subscriptions | length) == 3 and
   ([.subscriptions[].match_json] | sort) == [
@@ -626,6 +649,7 @@ jq -e '
   ] and
   all(.subscriptions[]; .enabled == 0)
 ' <<<"${subscriptions_after}" >/dev/null
+jq -e '(.schedules | length) == 12 and all(.schedules[]; .enabled == 0 and .timezone == "UTC")' <<<"${schedules_after}" >/dev/null
 
 customer_ingest_after_restart="$(runtime_call record.ingest "${customer_params}")"
 order_ingest_after_restart="$(runtime_call record.ingest "${order_params}")"
@@ -689,7 +713,7 @@ jq -n \
     synthetic_ingest:{families:["customer","line_item","order"],exact_payload_sha256_verified:true,first_commit_count:3,replay_status:"skipped",event_contract:$event_contract},
     customer_projection:{runner:"bounded_checkpointed_http",batch_limit:250,first_created_entities:1,first_created_contacts:1,replay_created_entities:0,replay_created_contacts:0,replay_observations:1},
     commerce_projection:{runner:"bounded_checkpointed_http",batch_limit:50,default_batch_size:25,default_batches_per_invocation:1,orders:1,line_items:1,first_created:2,replay_created:0,replay_observations:2,canonical_customer_link:true,address_snapshots_sha256_bound:true},
-    work_boundary:{job_count:2,job_status:"inactive",subscription_count:3,subscription_scope:"exact_record_family",subscription_enabled:false,queue_rows:0,dispatch_receipts:0,provider_credentials_mounted:false,provider_calls:0,provider_read_authority:false,provider_write_authority:false},
+    work_boundary:{projector_job_count:2,projector_job_status:"inactive",source_job_count:12,source_job_status:"active_for_explicit_invocation",source_schedule_count:12,source_schedules_enabled:0,source_schedule_plan_only:true,subscription_count:3,subscription_scope:"exact_record_family",subscription_enabled:false,queue_rows:0,dispatch_receipts:0,provider_credentials_mounted:false,provider_calls:0,provider_read_authority:false,provider_write_authority:false},
     restart:{app_rehydrated:true,adapter_active:true,record_replay_idempotent:true,identity_replay_idempotent:true,commerce_replay_idempotent:true},
     initial_counts:$initial_counts,
     terminal_counts:$terminal_counts,
