@@ -14,7 +14,7 @@ import (
 
 const (
 	adapterName    = "mercury-adapter"
-	adapterVersion = "0.1.0"
+	adapterVersion = "0.2.0"
 	platformID     = "mercury"
 )
 
@@ -41,6 +41,10 @@ func adapterConfig() nexadapter.DefineAdapterConfig[*mercuryClient] {
 		Connection: nexadapter.ConnectionHandlers[*mercuryClient]{
 			Connections: mercuryConnections,
 			Health:      mercuryHealth,
+		},
+		Ingest: nexadapter.IngestHandlers[*mercuryClient]{
+			Monitor:  mercuryMonitor,
+			Backfill: mercuryBackfill,
 		},
 		Methods: mercuryMethods(),
 		Auth: &nexadapter.AdapterAuthManifest{
@@ -108,14 +112,14 @@ func mercuryProjection() *nexadapter.AdapterProjection {
 			{Name: "api_capture_receipt", Description: "Hash-bound provider capture receipts"},
 		},
 		Backfill: &nexadapter.AdapterProjectionSync{
-			Supported: false,
-			Strategy:  "MAP-003",
-			Cursor:    "not active in MAP-002",
+			Supported: true,
+			Strategy:  "bounded provider API pages projected as immutable record revisions",
+			Cursor:    "provider-created timestamp for transactions; exact-content replay for state snapshots",
 		},
 		Monitor: &nexadapter.AdapterProjectionSync{
-			Supported: false,
-			Strategy:  "MAP-003",
-			Cursor:    "not active in MAP-002",
+			Supported: true,
+			Strategy:  "five-minute bounded polling with a 24-hour replay window and content-addressed idempotency",
+			Cursor:    "successful capture time with transaction replay from the prior cursor",
 		},
 		Routing: &nexadapter.AdapterProjectionRouting{
 			Space:            "organization",
@@ -129,7 +133,7 @@ func mercuryProjection() *nexadapter.AdapterProjection {
 			Thread:    "provider_object_id",
 		},
 		Normalization: &nexadapter.AdapterProjectionNormalize{
-			Content:     "exact provider JSON retained as a hash-bound string; typed extraction starts in MAP-004",
+			Content:     "exact provider page retained with SHA-256 receipt; object revisions use deterministic canonical JSON",
 			Attachments: true,
 		},
 	}

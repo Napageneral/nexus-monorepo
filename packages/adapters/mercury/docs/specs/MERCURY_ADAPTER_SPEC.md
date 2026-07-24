@@ -15,7 +15,10 @@ payment preparation.
 - 41 GET operations executable under exact role rules;
 - card-PAN reveal excluded;
 - 30 public non-GET operations reflected but physically disabled;
-- no provider write in the `0.1.0` build.
+- no provider write in the `0.2.0` build;
+- immutable records for nine declared families;
+- bounded backfill and five-minute incremental monitoring;
+- exact page capture receipts plus deterministic object revision identities.
 
 ## Connection matrix
 
@@ -57,8 +60,29 @@ the original provider evidence.
 - automatic pagination capped at 100 pages;
 - repeated cursors fail closed.
 
+## Record projection
+
+- `account_snapshot` from Mercury account pages;
+- `transaction_revision` from transaction pages;
+- `recipient_revision` from recipient pages;
+- `approval_request_revision` from approval-request pages;
+- `payment_revision` when a transaction binds a request id;
+- `scheduled_payment_observation` when an approval request has a scheduled date;
+- `statement_revision` for each discovered Mercury account;
+- `attachment_revision` from embedded transaction and recipient attachments;
+- `api_capture_receipt` for every exact provider response page.
+
+Provider object revisions use deterministic canonical JSON and content-addressed
+external record ids. Capture receipts retain the exact page body and SHA-256.
+Repeated content therefore reuses the same revision identity while changed
+provider content creates a new immutable revision.
+
+Backfill uses the requested transaction/statement start date. Monitoring polls
+every five minutes, replays the prior 24 hours on start, and advances only after
+a complete successful capture.
+
 ## Deferred work
 
-MAP-003 implements immutable record revisions, backfill and monitor. MAP-004
-implements deterministic facts and observations. MAP-012 is the only ticket
-that may introduce an approval-request actuator after separate authorization.
+MAP-004 implements deterministic facts and observations. MAP-012 is the only
+ticket that may introduce an approval-request actuator after separate
+authorization.

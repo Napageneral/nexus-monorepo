@@ -50,16 +50,20 @@ func TestAdapterReflectionMatchesReviewedCatalog(t *testing.T) {
 	}
 }
 
-func TestProjectionDeclaresNineInactiveFamilies(t *testing.T) {
+func TestProjectionDeclaresNineActiveFamilies(t *testing.T) {
 	projection := mercuryProjection()
 	if len(projection.Families) != 9 {
 		t.Fatalf("families = %d, want 9", len(projection.Families))
 	}
-	if projection.Backfill == nil || projection.Backfill.Supported {
-		t.Fatal("MAP-002 backfill must remain inactive")
+	if projection.Backfill == nil || !projection.Backfill.Supported {
+		t.Fatal("MAP-003 backfill must be active")
 	}
-	if projection.Monitor == nil || projection.Monitor.Supported {
-		t.Fatal("MAP-002 monitor must remain inactive")
+	if projection.Monitor == nil || !projection.Monitor.Supported {
+		t.Fatal("MAP-003 monitor must be active")
+	}
+	config := adapterConfig()
+	if config.Ingest.Backfill == nil || config.Ingest.Monitor == nil {
+		t.Fatal("MAP-003 ingest handlers must be installed")
 	}
 }
 

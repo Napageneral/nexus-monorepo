@@ -9,7 +9,7 @@ The package has two explicit logical connection roles:
 - `ap_request` for recipient and approval-request reads and a future,
   separately authorized payment-preparation actuator.
 
-The current `0.1.0` build is read-only. It reflects all 72 public operations so
+The current `0.2.0` build is read-only. It reflects all 72 public operations so
 the provider contract is inspectable, but:
 
 - only reviewed public GET operations can reach Mercury;
@@ -59,7 +59,13 @@ The fake-provider suite covers:
 - bounded retry;
 - binary evidence encoding;
 - secret-safe errors;
-- base-URL and redirect boundaries.
+- base-URL and redirect boundaries;
+- deterministic immutable record identity;
+- exact capture-receipt binding;
+- accounts, transactions, recipients, approval requests and statements;
+- payment, scheduled-payment and attachment revision projection;
+- incomplete, tampered and inconsistent capture rejection;
+- primary/AP role-specific backfill scope.
 
 ## Runtime Context
 
@@ -86,8 +92,9 @@ package configuration.
 ```
 
 Successful reads retain exact provider response bytes as either UTF-8 JSON or
-base64, plus SHA-256. Structured fact extraction begins in the next tranche;
-MAP-002 does not normalize accounting facts or emit records.
+base64, plus SHA-256. `records.backfill` and `adapter.monitor.start` now emit
+content-addressed immutable record revisions and page-level capture receipts.
+Structured accounting fact extraction remains a separate MAP-004 layer.
 
 ## Authority
 

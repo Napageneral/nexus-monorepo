@@ -1,6 +1,6 @@
 # Mercury Adapter Workplan
 
-**Status:** MAP-002 IMPLEMENTED; MAP-003 THROUGH MAP-012 PENDING
+**Status:** MAP-002 AND MAP-003 IMPLEMENTED; MAP-004 THROUGH MAP-012 PENDING
 **Spec:** `docs/specs/MERCURY_ADAPTER_SPEC.md`
 **Validation:** `docs/validation/MERCURY_ADAPTER_VALIDATION.md`
 
@@ -39,6 +39,8 @@ tax, distribution, or cutover authority.
 - keep provider object identity distinct from content revision identity
 - support idempotent backfill and incremental monitor adoption
 
+Status: implemented in `0.2.0`.
+
 ### MAP-004 through MAP-006: facts and finance bridge
 
 - derive typed observations from immutable records
@@ -62,7 +64,7 @@ tax, distribution, or cutover authority.
   terminal provider readback
 - never approve or release a payment on Tyler's behalf
 
-## MAP-002 Acceptance
+## MAP-002 and MAP-003 Acceptance
 
 - `go test ./... -count=1` passes
 - `go vet ./...` passes
@@ -74,10 +76,16 @@ tax, distribution, or cutover authority.
 - GET retry and pagination behavior is bounded and tested
 - the package contains no credential material
 - provider-write and accounting authority remain false
+- nine exact record families are reflected and emitted
+- unchanged provider objects retain the same external revision id
+- changed provider objects create a new external revision id
+- every page is bound to an exact capture receipt
+- tampered, incomplete or internally inconsistent captures fail closed
+- the AP connection cannot escape recipient and approval-request reads
+- backfill and monitor handlers are exposed through the normal Nex runtime
 
 ## Production Boundary
 
-MAP-002 is source-only. It authorizes neither installation nor a live provider
-call. Production shadow ingestion begins only after MAP-003 has cleanroom proof,
-an exact release artifact, credential-pointer validation, and a serialized
-deployment window.
+MAP-002 and MAP-003 are source-only until the cleanroom and release artifact
+gates pass. Production shadow ingestion then remains read-only and requires
+credential-pointer validation plus a serialized deployment window.
