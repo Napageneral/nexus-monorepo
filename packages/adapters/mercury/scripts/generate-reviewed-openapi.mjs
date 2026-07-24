@@ -37,6 +37,7 @@ for (const operation of operations) {
     publicCount += 1;
   } else {
     internalCount += 1;
+    continue;
   }
 
   paths[path] ??= {};
@@ -44,7 +45,7 @@ for (const operation of operations) {
     throw new Error(`duplicate Mercury path and method: ${method.toUpperCase()} ${path}`);
   }
   paths[path][method] = {
-    operationId,
+    operationId: `mercury.api.${operationId}`,
     responses: {
       200: {
         description:
@@ -52,7 +53,7 @@ for (const operation of operations) {
       },
     },
     summary: `${method.toUpperCase()} ${path}`,
-    "x-mercury-visibility": visibility,
+    "x-mercury-provider-operation-id": operationId,
   };
 }
 
@@ -68,7 +69,7 @@ const document = {
     title: "Mercury reviewed operation index",
     version: "1.0.0",
     description:
-      "Exact operation identity index for the read-only Nex adapter. Provider payload schemas are deliberately excluded.",
+      "Exact public runtime method index for the read-only Nex adapter. Internal provider operations and provider payload schemas are deliberately excluded.",
   },
   servers: [{ url: "https://api.mercury.com/api/v1" }],
   security: [{ bearerAuth: [] }],
