@@ -288,20 +288,20 @@ docker exec --user 20042:20042 "${runtime_container}" sh -c '
   chmod 0600 "$2"
 ' sh "/artifacts/mercury-${PACKAGE_VERSION}.tar.gz" "${tamper_path}"
 tamper_body="$(jq -nc \
-  --arg version "${PACKAGE_VERSION}" \
+  --arg target_version "${PACKAGE_VERSION}" \
   --arg release_id "${release_id}-tampered" \
   --arg operation_id "${tamper_operation}" \
   --arg server_path "${tamper_path}" \
   --arg sha256 "${artifact_sha256}" \
   --argjson size_bytes "${artifact_size}" \
-  '{kind:"adapter",package_id:"mercury",version:$version,release_id:$release_id,operation_id:$operation_id,staged_artifact:{server_path:$server_path,sha256:$sha256,size_bytes:$size_bytes}}')"
+  '{kind:"adapter",package_id:"mercury",target_version:$target_version,release_id:$release_id,operation_id:$operation_id,staged_artifact:{server_path:$server_path,sha256:$sha256,size_bytes:$size_bytes}}')"
 tamper_response="$(docker exec "${runtime_container}" sh -c '
   token=$(cat /run/moonsleep-load-credentials/runtime-token)
   curl -sS -w "\n%{http_code}" \
     -H "Authorization: Bearer ${token}" \
     -H "Content-Type: application/json" \
     --data "$1" \
-    http://127.0.0.1:18789/api/operator/packages/install
+    http://127.0.0.1:18789/api/operator/packages/upgrade
 ' sh "${tamper_body}")"
 tamper_status="${tamper_response##*$'\n'}"
 tamper_body_response="${tamper_response%$'\n'*}"
