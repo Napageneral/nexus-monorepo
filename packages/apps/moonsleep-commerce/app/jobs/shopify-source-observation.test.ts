@@ -21,7 +21,9 @@ function record(id: string) {
   };
 }
 
-function fixture(params: { failAt?: number; replayAt?: number } = {}) {
+function fixture(
+  params: { failAt?: number; replayAt?: number; skippedAt?: number; statusAt?: string } = {},
+) {
   const capture = vi.fn(async () => ({
     payload: {
       version: 1,
@@ -36,7 +38,12 @@ function fixture(params: { failAt?: number; replayAt?: number } = {}) {
     if (params.failAt === call) throw new Error("synthetic ingest failure");
     return {
       payload: {
-        status: "completed",
+        status:
+          params.statusAt && call === 1
+            ? params.statusAt
+            : params.skippedAt === call
+              ? "skipped"
+              : "completed",
         inserted: params.replayAt !== call,
         replayed: params.replayAt === call,
       },
@@ -66,7 +73,7 @@ function fixture(params: { failAt?: number; replayAt?: number } = {}) {
 
 describe("Shopify source observation job", () => {
   it("ingests the full page before advancing the family cursor", async () => {
-    const test = fixture({ replayAt: 2 });
+    const test = fixture({ skippedAt: 2 });
     await expect(shopifySourceObservationJob(test.ctx)).resolves.toMatchObject({
       ok: true,
       family: "orders.delta",
@@ -86,6 +93,19 @@ describe("Shopify source observation job", () => {
     expect(test.ingest.mock.invocationCallOrder[1]).toBeLessThan(
       test.commit.mock.invocationCallOrder[0]!,
     );
+  });
+
+  it("aborts without advancing the cursor for an unexpected ingest status", async () => {
+    const test = fixture({ statusAt: "denied" });
+    await expect(shopifySourceObservationJob(test.ctx)).rejects.toThrow(
+      "Shopify record ingest returned denied",
+    );
+    expect(test.commit).not.toHaveBeenCalled();
+    expect(test.abort).toHaveBeenCalledWith({
+      connection_id: "shopify-production",
+      family: "orders.delta",
+      capture_id: "0123456789abcdef0123456789abcdef",
+    });
   });
 
   it("releases the exact capture and leaves the cursor uncommitted after ingest failure", async () => {

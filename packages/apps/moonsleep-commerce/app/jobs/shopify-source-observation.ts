@@ -128,10 +128,10 @@ export default async function shopifySourceObservationJob(
       }
       const result = unwrap(await ctx.nex.record.ingest({ routing, payload }));
       const status = asString(result.status) || asString(asRecord(result.result).status);
-      if (status && status !== "completed") {
+      if (status && status !== "completed" && status !== "skipped") {
         throw new Error(`Shopify record ingest returned ${status}`);
       }
-      if (result.inserted === false || result.replayed === true) {
+      if (status === "skipped" || result.inserted === false || result.replayed === true) {
         replayed += 1;
       } else {
         inserted += 1;
