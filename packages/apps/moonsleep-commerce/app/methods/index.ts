@@ -53,6 +53,20 @@ const SOURCE_JOB_SCHEDULES = Object.freeze({
   "payouts.delta": "17 */6 * * *",
 });
 const SOURCE_SCHEDULE_CONFIRMATION = "CONFIGURE_MOONSLEEP_SHOPIFY_SOURCE_SCHEDULES";
+const PROJECTION_CONFIRMATION = "CONFIGURE_MOONSLEEP_SHOPIFY_PROJECTIONS";
+const PROJECTION_SPECS = Object.freeze({
+  customer_identity: {
+    job_name: "moonsleep-commerce.shopify-customer-identity",
+    matches: [{ platform: "shopify", container_id: "customer" }],
+  },
+  order_commerce: {
+    job_name: "moonsleep-commerce.shopify-order-commerce",
+    matches: [
+      { platform: "shopify", container_id: "order" },
+      { platform: "shopify", container_id: "line_item" },
+    ],
+  },
+});
 const SOURCE_REQUEST_ID_RE = /^[a-zA-Z0-9._:-]{1,128}$/;
 const SOURCE_CONNECTION_ID_RE = /^[a-zA-Z0-9._-]{1,128}$/;
 
@@ -815,6 +829,183 @@ export const configureShopifySourceSchedules: NexAppMethodHandler = async (ctx) 
   return { state: "applied", ...plan };
 };
 
+type ShopifyProjection = keyof typeof PROJECTION_SPECS;
+
+function requireProjections(value: unknown): ShopifyProjection[] {
+  if (!Array.isArray(value)) {
+    throw new Error("enabled_projections must be an array");
+  }
+  const projections = value.map((entry, index) => {
+    const projection = asString(entry) as ShopifyProjection;
+    if (entry !== projection || !PROJECTION_SPECS[projection]) {
+      throw new Error(`enabled_projections[${index}] is not an installed Shopify projection`);
+    }
+    return projection;
+  });
+  if (new Set(projections).size !== projections.length) {
+    throw new Error("enabled_projections must be unique");
+  }
+  return [...projections].sort();
+}
+
+function projectionPlan(enabledProjections: ShopifyProjection[]) {
+  const enabled = new Set(enabledProjections);
+  const projections = (Object.keys(PROJECTION_SPECS) as ShopifyProjection[])
+    .sort()
+    .map((projection) => ({
+      projection,
+      job_name: PROJECTION_SPECS[projection].job_name,
+      matches: PROJECTION_SPECS[projection].matches,
+      enabled: enabled.has(projection),
+    }));
+  const plan = {
+    version: 1,
+    enabled_projections: enabledProjections,
+    projections,
+    provider_read_authority: false,
+    provider_write_authority: false,
+  };
+  return {
+    ...plan,
+    plan_sha256: createHash("sha256").update(JSON.stringify(plan), "utf8").digest("hex"),
+  };
+}
+
+export const configureShopifyProjections: NexAppMethodHandler = async (ctx) => {
+  const mode = asString(ctx.params.mode);
+  if (mode !== "plan" && mode !== "apply") {
+    throw new Error("mode must be plan or apply");
+  }
+  const enabledProjections = requireProjections(ctx.params.enabled_projections);
+  const plan = projectionPlan(enabledProjections);
+  if (mode === "plan") {
+    return { state: "planned", ...plan };
+  }
+  if (asString(ctx.params.expected_plan_sha256) !== plan.plan_sha256) {
+    throw new Error("expected_plan_sha256 does not match the exact Shopify projection plan");
+  }
+  if (asString(ctx.params.confirmation) !== PROJECTION_CONFIRMATION) {
+    throw new Error("confirmation does not authorize Shopify projection configuration");
+  }
+
+  const listedJobs = unwrapPayload(await ctx.nex.jobs.list({}));
+  const jobs = Array.isArray(listedJobs.jobs) ? listedJobs.jobs.map(asRecord) : [];
+  const bound: Array<{
+    projection: ShopifyProjection;
+    job: RuntimeRow;
+    subscriptions: RuntimeRow[];
+  }> = [];
+  for (const target of plan.projections) {
+    const jobMatches = jobs.filter((job) => asString(job.name) === target.job_name);
+    if (jobMatches.length !== 1) {
+      throw new Error(`Shopify projection ${target.projection} job is missing or duplicated`);
+    }
+    const job = jobMatches[0]!;
+    const jobId = asString(job.id);
+    if (!jobId) {
+      throw new Error(`Shopify projection ${target.projection} job is missing its id`);
+    }
+    const listedSubscriptions = unwrapPayload(
+      await ctx.nex.events.subscriptions.list({
+        event_type: "record.ingested",
+        job_definition_id: jobId,
+      }),
+    );
+    const subscriptions = Array.isArray(listedSubscriptions.subscriptions)
+      ? listedSubscriptions.subscriptions.map(asRecord)
+      : [];
+    const expectedMatches = target.matches.map((match) => JSON.stringify(match)).sort();
+    const actualMatches = subscriptions.map((row) => asString(row.match_json)).sort();
+    if (
+      subscriptions.length !== expectedMatches.length ||
+      actualMatches.some((value, index) => value !== expectedMatches[index])
+    ) {
+      throw new Error(`Shopify projection ${target.projection} subscription contract drifted`);
+    }
+    bound.push({ projection: target.projection, job, subscriptions });
+  }
+
+  try {
+    for (const target of bound) {
+      for (const subscription of target.subscriptions) {
+        await ctx.nex.events.subscriptions.update({
+          id: asString(subscription.id),
+          enabled: false,
+        });
+      }
+      await ctx.nex.jobs.update({ id: asString(target.job.id), status: "inactive" });
+    }
+    for (const target of bound.filter((entry) => enabledProjections.includes(entry.projection))) {
+      await ctx.nex.jobs.update({ id: asString(target.job.id), status: "active" });
+      for (const subscription of target.subscriptions) {
+        await ctx.nex.events.subscriptions.update({
+          id: asString(subscription.id),
+          enabled: true,
+        });
+      }
+    }
+  } catch (error) {
+    const rollbackErrors: string[] = [];
+    for (const target of bound) {
+      for (const subscription of target.subscriptions) {
+        try {
+          await ctx.nex.events.subscriptions.update({
+            id: asString(subscription.id),
+            enabled: false,
+          });
+        } catch (rollbackError) {
+          rollbackErrors.push(
+            rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+          );
+        }
+      }
+      try {
+        await ctx.nex.jobs.update({ id: asString(target.job.id), status: "inactive" });
+      } catch (rollbackError) {
+        rollbackErrors.push(
+          rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+        );
+      }
+    }
+    if (rollbackErrors.length > 0) {
+      throw new Error(
+        `Shopify projection configuration failed and disable rollback failed: ${rollbackErrors.join("; ")}`,
+        { cause: error },
+      );
+    }
+    throw error;
+  }
+
+  const verifiedJobs = unwrapPayload(await ctx.nex.jobs.list({}));
+  const jobRows = Array.isArray(verifiedJobs.jobs) ? verifiedJobs.jobs.map(asRecord) : [];
+  for (const target of plan.projections) {
+    const enabled = target.enabled;
+    const job = jobRows.find((row) => asString(row.name) === target.job_name);
+    if (!job || (asString(job.status) === "active") !== enabled) {
+      throw new Error(`Shopify projection ${target.projection} job failed exact readback`);
+    }
+    const listedSubscriptions = unwrapPayload(
+      await ctx.nex.events.subscriptions.list({
+        event_type: "record.ingested",
+        job_definition_id: asString(job.id),
+      }),
+    );
+    const subscriptions = Array.isArray(listedSubscriptions.subscriptions)
+      ? listedSubscriptions.subscriptions.map(asRecord)
+      : [];
+    if (
+      subscriptions.length !== target.matches.length ||
+      subscriptions.some(
+        (subscription) =>
+          (subscription.enabled === true || subscription.enabled === 1) !== enabled,
+      )
+    ) {
+      throw new Error(`Shopify projection ${target.projection} subscriptions failed exact readback`);
+    }
+  }
+  return { state: "applied", ...plan };
+};
+
 export const projectShopifyCustomerCohort: NexAppMethodHandler = async (ctx) => {
   const recordIds = requireCohortRecordIds(ctx.params);
 
@@ -993,6 +1184,7 @@ export default {
   "moonsleep-commerce.shopify-source.seed-identities": seedShopifySourceIdentities,
   "moonsleep-commerce.shopify-source.trigger": triggerShopifySource,
   "moonsleep-commerce.shopify-source.configure-schedules": configureShopifySourceSchedules,
+  "moonsleep-commerce.shopify-projections.configure": configureShopifyProjections,
   "moonsleep-commerce.shopify-customers.inspect-backfill": inspectShopifyCustomerBackfill,
   "moonsleep-commerce.shopify-customers.project-cohort": projectShopifyCustomerCohort,
   "moonsleep-commerce.shopify-customers.project-backfill": projectShopifyCustomerBackfill,

@@ -1,6 +1,6 @@
 {
   "id": "moonsleep-commerce",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "displayName": "MoonSleep Commerce",
   "description": "Project exact Shopify records into MoonSleep identity and typed commerce state through public Nex operations.",
   "skill": "./SKILL.md",
@@ -163,6 +163,42 @@
           }
         },
         "required": ["mode", "connection_id", "enabled_families"],
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object"
+      }
+    },
+    "moonsleep-commerce.shopify-projections.configure": {
+      "description": "Plan or apply the exact durable record.ingested customer and commerce projections without Shopify provider access.",
+      "action": "write",
+      "access": "authenticated",
+      "params": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["plan", "apply"]
+          },
+          "enabled_projections": {
+            "type": "array",
+            "uniqueItems": true,
+            "maxItems": 2,
+            "items": {
+              "type": "string",
+              "enum": ["customer_identity", "order_commerce"]
+            }
+          },
+          "expected_plan_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "confirmation": {
+            "type": "string",
+            "enum": ["CONFIGURE_MOONSLEEP_SHOPIFY_PROJECTIONS"]
+          }
+        },
+        "required": ["mode", "enabled_projections"],
         "additionalProperties": false
       },
       "response": {
