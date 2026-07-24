@@ -49,6 +49,13 @@ var mercuryProjectionSources = map[string]mercuryProjectionSource{
 		IDField:      "id",
 		TimestampKey: []string{"createdAt"},
 	},
+	"listCredit": {
+		OperationID:  "listCredit",
+		Family:       "account_snapshot",
+		ArrayField:   "accounts",
+		IDField:      "id",
+		TimestampKey: []string{"createdAt"},
+	},
 	"listTransactions": {
 		OperationID:  "listTransactions",
 		Family:       "transaction_revision",
@@ -120,6 +127,13 @@ func fetchMercuryProjection(
 		fetches = append(fetches,
 			mercuryProjectionFetch{
 				Source: mercuryProjectionSources["getAccounts"],
+				Query: map[string]any{
+					"limit": mercuryProjectionPageSize,
+					"order": "asc",
+				},
+			},
+			mercuryProjectionFetch{
+				Source: mercuryProjectionSources["listCredit"],
 				Query: map[string]any{
 					"limit": mercuryProjectionPageSize,
 					"order": "asc",

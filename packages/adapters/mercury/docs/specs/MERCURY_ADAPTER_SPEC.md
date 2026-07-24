@@ -65,6 +65,7 @@ the original provider evidence.
 ## Record projection
 
 - `account_snapshot` from Mercury account pages;
+- `account_snapshot` from Mercury credit-account pages;
 - `transaction_revision` from transaction pages;
 - `recipient_revision` from recipient pages;
 - `approval_request_revision` from approval-request pages;

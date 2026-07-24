@@ -268,6 +268,8 @@ func TestPrimaryProjectionFetchesAllCanonicalReadFamilies(t *testing.T) {
 		switch request.URL.Path {
 		case "/accounts":
 			_, _ = writer.Write([]byte(`{"accounts":[{"id":"acct_1","createdAt":"2026-07-20T00:00:00Z"}],"page":{"nextPage":null}}`))
+		case "/credit":
+			_, _ = writer.Write([]byte(`{"accounts":[{"id":"credit_1","createdAt":"2026-07-20T00:00:00Z"}],"page":{"nextPage":null}}`))
 		case "/transactions":
 			if request.URL.Query().Get("start") != "2026-07-21T00:00:00Z" {
 				t.Fatalf("transaction start = %q", request.URL.Query().Get("start"))
@@ -301,6 +303,7 @@ func TestPrimaryProjectionFetchesAllCanonicalReadFamilies(t *testing.T) {
 	}
 	for _, path := range []string{
 		"/accounts",
+		"/credit",
 		"/transactions",
 		"/recipients",
 		"/request-send-money",
@@ -310,8 +313,8 @@ func TestPrimaryProjectionFetchesAllCanonicalReadFamilies(t *testing.T) {
 			t.Fatalf("seen = %#v", seen)
 		}
 	}
-	if len(records) != 10 {
-		t.Fatalf("records = %d, want five revisions and five receipts", len(records))
+	if len(records) != 12 {
+		t.Fatalf("records = %d, want six revisions and six receipts", len(records))
 	}
 }
 
@@ -387,6 +390,8 @@ func TestExecutableBackfillEmitsJSONLThroughRuntimeContext(t *testing.T) {
 		switch request.URL.Path {
 		case "/accounts":
 			_, _ = writer.Write([]byte(`{"accounts":[{"id":"acct_1","createdAt":"2026-07-20T00:00:00Z"}],"page":{"nextPage":null}}`))
+		case "/credit":
+			_, _ = writer.Write([]byte(`{"accounts":[{"id":"credit_1","createdAt":"2026-07-20T00:00:00Z"}],"page":{"nextPage":null}}`))
 		case "/transactions":
 			_, _ = writer.Write([]byte(`{"transactions":[{"id":"txn_1","createdAt":"2026-07-22T00:00:00Z"}],"page":{"nextPage":null}}`))
 		case "/recipients":
@@ -452,8 +457,8 @@ func TestExecutableBackfillEmitsJSONLThroughRuntimeContext(t *testing.T) {
 	if err := scanner.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if count != 10 {
-		t.Fatalf("record count = %d, want 10", count)
+	if count != 12 {
+		t.Fatalf("record count = %d, want 12", count)
 	}
 }
 

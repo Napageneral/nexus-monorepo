@@ -64,6 +64,7 @@ The fake-provider suite covers:
 - deterministic immutable record identity;
 - exact capture-receipt binding;
 - accounts, transactions, recipients, approval requests and statements;
+- deposit and credit-account indexes needed for exact account binding;
 - payment, scheduled-payment and attachment revision projection;
 - incomplete, tampered and inconsistent capture rejection;
 - primary/AP role-specific backfill scope.
