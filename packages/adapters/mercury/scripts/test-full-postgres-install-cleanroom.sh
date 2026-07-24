@@ -190,7 +190,9 @@ docker run --rm \
         "owner:" \
         "  name: Tyler" \
         "assistant:" \
-        "  name: MoonSleep Ops" > /target/bootstrap-seed.yaml
+        "  name: MoonSleep Ops" \
+        "operators:" \
+        "  - name: Casey" > /target/bootstrap-seed.yaml
       chown root:root /target/postgres-dsn /target/runtime-token /target/bootstrap-seed.yaml
       chmod 0400 /target/postgres-dsn /target/runtime-token /target/bootstrap-seed.yaml'
 
