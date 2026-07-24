@@ -295,15 +295,18 @@ tamper_body="$(jq -nc \
   --arg sha256 "${artifact_sha256}" \
   --argjson size_bytes "${artifact_size}" \
   '{kind:"adapter",package_id:"mercury",version:$version,release_id:$release_id,operation_id:$operation_id,staged_artifact:{server_path:$server_path,sha256:$sha256,size_bytes:$size_bytes}}')"
-tamper_status="$(docker exec "${runtime_container}" sh -c '
+tamper_response="$(docker exec "${runtime_container}" sh -c '
   token=$(cat /run/moonsleep-load-credentials/runtime-token)
-  curl -sS -o /tmp/tamper-response -w "%{http_code}" \
+  curl -sS -w "\n%{http_code}" \
     -H "Authorization: Bearer ${token}" \
     -H "Content-Type: application/json" \
     --data "$1" \
     http://127.0.0.1:18789/api/operator/packages/install
 ' sh "${tamper_body}")"
-[[ "${tamper_status}" =~ ^4 ]]
+tamper_status="${tamper_response##*$'\n'}"
+tamper_body_response="${tamper_response%$'\n'*}"
+[[ ! "${tamper_status}" =~ ^2 ]]
+jq -e '.ok == false and (.error | type == "string")' <<<"${tamper_body_response}" >/dev/null
 jq -e --arg version "${PACKAGE_VERSION}" '
   .status == "active" and .active_version == $version
 ' <<<"$(package_request /api/operator/packages/adapter/mercury)" >/dev/null
@@ -339,6 +342,7 @@ jq -n \
   --arg postgres_version "${postgres_version}" \
   --arg package_version "${PACKAGE_VERSION}" \
   --arg artifact_sha256 "${artifact_sha256}" \
+  --arg tamper_http_status "${tamper_status}" \
   --argjson artifact_size_bytes "${artifact_size}" \
   --argjson runtime_counts "${runtime_counts}" \
   '{
@@ -351,7 +355,7 @@ jq -n \
     install:"active",
     health_before_restart:"healthy",
     health_after_restart:"healthy",
-    tampered_stage:"rejected",
+    tampered_stage:{result:"rejected",http_status:$tamper_http_status},
     runtime_counts:$runtime_counts,
     authorities:{
       provider_write:false,
