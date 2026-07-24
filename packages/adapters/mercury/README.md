@@ -34,6 +34,15 @@ approval-request GETs. It cannot invoke provider mutations.
 See `api/openapi.lock.json` and
 `internal/catalog/operations.catalog.json`.
 
+The package does not redistribute Mercury's provider payload schemas. Its
+generated `api/openapi.yaml` is the reviewed Nex package contract containing
+the exact 72 public runtime method names, HTTP methods, and paths. The locked
+catalog separately retains all 84 provider operation identities and their
+public/internal visibility classifications. Internal provider operations and
+provider payload schemas are excluded from the installable package contract.
+The lockfile binds both projections to the exact upstream provider-document
+SHA.
+
 ## Build
 
 ```bash
