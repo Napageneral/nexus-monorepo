@@ -7,7 +7,8 @@ NEX_IMAGE="${NEX_RELEASE_IMAGE:?set NEX_RELEASE_IMAGE to the exact Linux/AMD64 N
 GO_MODULE_CACHE="${GO_MODULE_CACHE:-$(go env GOMODCACHE)}"
 suffix="${PPID}-$$"
 cleanroom_image="shopify-release-cleanroom:${suffix}"
-runner_temp="$(mktemp -d /private/tmp/shopify-release-cleanroom.XXXXXX)"
+runner_temp_root="$(cd "${TMPDIR:-/tmp}" && pwd -P)"
+runner_temp="$(mktemp -d "${runner_temp_root}/shopify-release-cleanroom.XXXXXX")"
 chmod 0700 "${runner_temp}"
 
 cleanup() {
