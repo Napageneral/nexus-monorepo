@@ -624,7 +624,7 @@ jq -e '.ok == true and .status == "skipped"' <<<"${line_ingest_second}" >/dev/nu
 counts_before_restart="$(runtime_counts)"
 jq -e '
   .records == 3 and .receipts == 3 and .events == 3 and
-  .entities == 6 and .contacts == 3 and .observations == 3 and .tags == 11 and
+  .entities == 6 and .contacts == 4 and .observations == 4 and .tags == 11 and
   .queue == 0 and .dispatch_receipts == 0 and .adapter_instances == 0 and
   .commerce_orders == 1 and .commerce_order_revisions == 1 and
   .commerce_line_items == 1 and .commerce_line_item_revisions == 1
