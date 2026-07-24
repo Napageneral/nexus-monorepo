@@ -586,7 +586,16 @@ func buildMercuryCaptureReceipt(
 	if strings.TrimSpace(page.BodySHA256) == "" {
 		return nexadapter.AdapterInboundRecord{}, errors.New("Mercury capture receipt requires page SHA-256")
 	}
-	receiptID := fmt.Sprintf("%s:%03d:%s", source.OperationID, pageNumber, page.BodySHA256)
+	// A response body may be byte-identical on consecutive polls.  The capture
+	// receipt represents an observation occurrence, so its immutable external
+	// identity must bind the capture clock as well as operation, page and body.
+	receiptID := fmt.Sprintf(
+		"%s:%s:%03d:%s",
+		capturedAt.UTC().Format(time.RFC3339Nano),
+		source.OperationID,
+		pageNumber,
+		page.BodySHA256,
+	)
 	safeConnection := nexadapter.SafeIDToken(client.connectionID)
 	evidenceMetadata := map[string]any{
 		"contract":                 mercuryCaptureContract,

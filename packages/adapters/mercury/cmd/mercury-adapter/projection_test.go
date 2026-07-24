@@ -124,6 +124,55 @@ func TestProjectionRevisionIdentityIsContentAddressed(t *testing.T) {
 	}
 }
 
+func TestCaptureReceiptIdentityBindsObservationOccurrence(t *testing.T) {
+	client := &mercuryClient{
+		connectionID:  "mercury-primary",
+		credentialRef: "mercury/test",
+		role:          rolePrimaryRead,
+	}
+	source := mercuryProjectionSources["getAccounts"]
+	response := projectionResponse(
+		"getAccounts",
+		`{"accounts":[{"id":"acct_1"}],"page":{"nextPage":null}}`,
+	)
+	first, err := projectMercuryResponse(
+		client,
+		source,
+		response,
+		time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := projectMercuryResponse(
+		client,
+		source,
+		response,
+		time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := projectMercuryResponse(
+		client,
+		source,
+		response,
+		time.Date(2026, 7, 24, 12, 5, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first[1].Payload.ExternalRecordID != replay[1].Payload.ExternalRecordID {
+		t.Fatal("same capture occurrence did not replay exactly")
+	}
+	if first[1].Payload.ExternalRecordID == next[1].Payload.ExternalRecordID {
+		t.Fatal("later identical capture reused the prior occurrence identity")
+	}
+	if first[0].Payload.ExternalRecordID != next[0].Payload.ExternalRecordID {
+		t.Fatal("unchanged provider revision did not preserve content identity")
+	}
+}
+
 func TestTransactionCreatesPaymentAndAttachmentRevisions(t *testing.T) {
 	body := `{"transactions":[{"id":"txn_1","requestId":"request_1","createdAt":"2026-07-24T09:00:00Z","attachments":[{"id":"attachment_1","filename":"invoice.pdf"}]}],"page":{"nextPage":null}}`
 	records, err := projectMercuryResponse(
