@@ -352,8 +352,8 @@ func verifyRevisionRecord(record StoredRecord) (verifiedRecord, error) {
 	if !bytes.Equal(payloadCanonical, canonical) {
 		return verifiedRecord{}, fmt.Errorf("record %s provider payload differs from canonical bytes", record.ID)
 	}
-	if optionalID(payload["id"]) == "" && optionalID(payload["requestId"]) == "" {
-		return verifiedRecord{}, fmt.Errorf("record %s provider payload lacks stable identity", record.ID)
+	if err := verifyProviderPayloadIdentity(family, providerID, payload, metadata); err != nil {
+		return verifiedRecord{}, fmt.Errorf("record %s: %w", record.ID, err)
 	}
 	observedAt, err := normalizeTimestamp(stringValue(metadata["captured_at"]))
 	if err != nil {
@@ -390,6 +390,64 @@ func verifyRevisionRecord(record StoredRecord) (verifiedRecord, error) {
 	}, nil
 }
 
+func verifyProviderPayloadIdentity(
+	family string,
+	providerID string,
+	payload map[string]any,
+	metadata map[string]any,
+) error {
+	switch family {
+	case "approval_request_revision", "scheduled_payment_observation", "payment_revision":
+		if optionalID(payload["requestId"]) != providerID {
+			return errors.New("provider payload request identity mismatch")
+		}
+		return nil
+	case "attachment_revision":
+		if attachmentID := optionalID(payload["id"]); attachmentID != "" {
+			if attachmentID != providerID {
+				return errors.New("provider payload attachment identity mismatch")
+			}
+			return nil
+		}
+		if stringValue(metadata["provider_object_identity_contract"]) != "nex_mercury_derived_attachment_identity_v1" {
+			return errors.New("derived attachment identity contract mismatch")
+		}
+		parentProviderID := stringValue(metadata["parent_provider_object_id"])
+		if parentProviderID == "" {
+			return errors.New("derived attachment identity omitted parent provider id")
+		}
+		occurrence, err := integerValue(metadata["attachment_occurrence"])
+		if err != nil || occurrence < 1 {
+			return errors.New("derived attachment identity has invalid occurrence")
+		}
+		fileName := firstNonBlank(
+			stringValue(payload["fileName"]),
+			stringValue(payload["filename"]),
+		)
+		attachmentType := stringValue(payload["attachmentType"])
+		if fileName == "" && attachmentType == "" {
+			return errors.New("derived attachment payload omitted filename and attachmentType")
+		}
+		identityBasis := strings.Join([]string{
+			parentProviderID,
+			attachmentType,
+			fileName,
+		}, "\x00")
+		expected := "derived_attachment_" + sha256Hex(
+			[]byte(fmt.Sprintf("%s\x00%d", identityBasis, occurrence)),
+		)
+		if providerID != expected {
+			return errors.New("derived attachment identity mismatch")
+		}
+		return nil
+	default:
+		if optionalID(payload["id"]) != providerID {
+			return errors.New("provider payload identity mismatch")
+		}
+		return nil
+	}
+}
+
 func verifyCaptureRecord(record StoredRecord) (verifiedRecord, error) {
 	metadata := record.Metadata
 	if record.ContainerID != "api_capture_receipt" ||
@@ -412,12 +470,14 @@ func verifyCaptureRecord(record StoredRecord) (verifiedRecord, error) {
 		return verifiedRecord{}, fmt.Errorf("record %s: %w", record.ID, err)
 	}
 	operation := stringValue(metadata["provider_operation_id"])
+	captureScopeSHA256 := stringValue(metadata["capture_scope_sha256"])
 	page, err := integerValue(metadata["page_number"])
-	if operation == "" || err != nil {
+	if operation == "" || !isSHA256(captureScopeSHA256) || err != nil {
 		return verifiedRecord{}, fmt.Errorf("record %s has invalid capture identity", record.ID)
 	}
 	payload := map[string]any{
 		"provider_operation_id":    operation,
+		"capture_scope_sha256":     captureScopeSHA256,
 		"page_number":              page,
 		"row_count":                metadata["row_count"],
 		"http_status":              metadata["http_status"],
@@ -432,7 +492,7 @@ func verifyCaptureRecord(record StoredRecord) (verifiedRecord, error) {
 	if externalID == "" {
 		externalID = record.ID
 	}
-	subject := fmt.Sprintf("mercury:capture:%s:%d", operation, page)
+	subject := fmt.Sprintf("mercury:capture:%s:%s:%d", operation, captureScopeSHA256, page)
 	receiptID := "mextract_" + sha256Hex([]byte(
 		record.ID+"\x00"+contentSHA+"\x00"+ExtractorName+"\x00"+ExtractorRevision,
 	))
@@ -516,12 +576,18 @@ func extractVerifiedRecord(record verifiedRecord) ([]Fact, error) {
 		builder.addLastFour("/accountNumber", "account_suffix")
 		builder.addIntegerCount("/transactions", "statement_transaction_count")
 	case "attachment_revision":
-		builder.addString("/filename", "sanitized_filename")
+		if _, exists := topLevelValue(builder.record.ProviderPayload, "/fileName"); exists {
+			builder.addString("/fileName", "sanitized_filename")
+		} else {
+			builder.addString("/filename", "sanitized_filename")
+		}
+		builder.addString("/attachmentType", "attachment_type")
 		builder.addString("/contentType", "media_type")
 		builder.addString("/contentHash", "content_sha256")
 		builder.addInteger("/sizeBytes", "byte_count")
 	case "api_capture_receipt":
 		builder.addString("/provider_operation_id", "provider_operation_id")
+		builder.addString("/capture_scope_sha256", "capture_scope_sha256")
 		builder.addInteger("/page_number", "page_number")
 		builder.addInteger("/row_count", "row_count")
 		builder.addInteger("/http_status", "http_status")
@@ -1294,6 +1360,15 @@ func metadataID(params map[string]any, key string) string {
 func stringValue(value any) string {
 	text, _ := value.(string)
 	return strings.TrimSpace(text)
+}
+
+func firstNonBlank(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func allDigits(value string) bool {

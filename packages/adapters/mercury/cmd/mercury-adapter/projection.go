@@ -24,6 +24,7 @@ const (
 	mercuryProjectionPageSize   = 1000
 	mercuryCaptureContract      = "nex_mercury_api_capture_v1"
 	mercuryRecordContract       = "nex_mercury_record_revision_v1"
+	mercuryAttachmentIDContract = "nex_mercury_derived_attachment_identity_v1"
 	mercuryProjectionRecordText = "Mercury immutable provider revision"
 )
 
@@ -172,7 +173,17 @@ func fetchMercuryProjection(
 		if err != nil {
 			return nil, time.Time{}, err
 		}
-		projected, err := projectMercuryResponse(client, fetch.Source, response, capturedAt)
+		captureScopeSHA256, scopeErr := mercuryCaptureScopeSHA256(fetch.PathParameters)
+		if scopeErr != nil {
+			return nil, time.Time{}, scopeErr
+		}
+		projected, err := projectMercuryResponse(
+			client,
+			fetch.Source,
+			response,
+			capturedAt,
+			captureScopeSHA256,
+		)
 		if err != nil {
 			return nil, time.Time{}, err
 		}
@@ -202,7 +213,17 @@ func fetchMercuryProjection(
 			if err != nil {
 				return nil, time.Time{}, err
 			}
-			projected, err := projectMercuryResponse(client, fetch.Source, response, capturedAt)
+			captureScopeSHA256, scopeErr := mercuryCaptureScopeSHA256(fetch.PathParameters)
+			if scopeErr != nil {
+				return nil, time.Time{}, scopeErr
+			}
+			projected, err := projectMercuryResponse(
+				client,
+				fetch.Source,
+				response,
+				capturedAt,
+				captureScopeSHA256,
+			)
 			if err != nil {
 				return nil, time.Time{}, err
 			}
@@ -258,6 +279,7 @@ func projectMercuryResponse(
 	source mercuryProjectionSource,
 	response *mercuryMethodResponse,
 	capturedAt time.Time,
+	captureScopeSHA256Values ...string,
 ) ([]nexadapter.AdapterInboundRecord, error) {
 	if client == nil || response == nil {
 		return nil, errors.New("Mercury projection requires client and response")
@@ -276,6 +298,19 @@ func projectMercuryResponse(
 	}
 	if response.PageCount != len(response.Pages) || response.ProviderCalls < len(response.Pages) {
 		return nil, errors.New("Mercury response page inventory is inconsistent")
+	}
+	captureScopeSHA256, err := mercuryCaptureScopeSHA256(nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(captureScopeSHA256Values) > 0 {
+		captureScopeSHA256 = strings.TrimSpace(captureScopeSHA256Values[0])
+	}
+	if len(captureScopeSHA256Values) > 1 || len(captureScopeSHA256) != 64 {
+		return nil, errors.New("Mercury capture scope SHA-256 is invalid")
+	}
+	if _, err := hex.DecodeString(captureScopeSHA256); err != nil {
+		return nil, errors.New("Mercury capture scope SHA-256 is invalid")
 	}
 	records := []nexadapter.AdapterInboundRecord{}
 	for pageIndex, page := range response.Pages {
@@ -307,13 +342,32 @@ func projectMercuryResponse(
 			}
 			records = append(records, rowRecords...)
 		}
-		receipt, err := buildMercuryCaptureReceipt(client, source, page, pageIndex+1, len(rows), capturedAt)
+		receipt, err := buildMercuryCaptureReceipt(
+			client,
+			source,
+			page,
+			pageIndex+1,
+			len(rows),
+			capturedAt,
+			captureScopeSHA256,
+		)
 		if err != nil {
 			return nil, err
 		}
 		records = append(records, receipt)
 	}
 	return records, nil
+}
+
+func mercuryCaptureScopeSHA256(pathParameters map[string]any) (string, error) {
+	if pathParameters == nil {
+		pathParameters = map[string]any{}
+	}
+	canonical, err := json.Marshal(pathParameters)
+	if err != nil {
+		return "", fmt.Errorf("canonicalize Mercury capture scope: %w", err)
+	}
+	return sha256Hex(canonical), nil
 }
 
 func projectionRows(body []byte, arrayField string) ([]json.RawMessage, error) {
@@ -373,7 +427,7 @@ func buildMercuryRevisionRecords(
 	}
 	occurredAt := providerTimestamp(object, source.TimestampKey, capturedAt)
 	records := []nexadapter.AdapterInboundRecord{
-		newMercuryRevisionRecord(client, source.Family, providerID, canonical, object, source.OperationID, occurredAt, capturedAt),
+		newMercuryRevisionRecord(client, source.Family, providerID, canonical, object, source.OperationID, occurredAt, capturedAt, nil),
 	}
 	if source.Family == "transaction_revision" {
 		if requestID := optionalProviderID(object, "requestId"); requestID != "" {
@@ -386,6 +440,7 @@ func buildMercuryRevisionRecords(
 				source.OperationID,
 				occurredAt,
 				capturedAt,
+				nil,
 			))
 		}
 	}
@@ -400,15 +455,21 @@ func buildMercuryRevisionRecords(
 				source.OperationID,
 				occurredAt,
 				capturedAt,
+				nil,
 			))
 		}
 	}
+	attachmentOccurrences := map[string]int{}
 	for _, attachment := range embeddedAttachments(object) {
 		attachmentObject, attachmentCanonical, err := canonicalProviderObject(attachment)
 		if err != nil {
 			return nil, err
 		}
-		attachmentID, err := requiredProviderID(attachmentObject, "id")
+		attachmentID, identityMetadata, err := mercuryAttachmentProviderID(
+			providerID,
+			attachmentObject,
+			attachmentOccurrences,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -421,9 +482,44 @@ func buildMercuryRevisionRecords(
 			source.OperationID,
 			occurredAt,
 			capturedAt,
+			identityMetadata,
 		))
 	}
 	return records, nil
+}
+
+func mercuryAttachmentProviderID(
+	parentProviderID string,
+	attachment map[string]any,
+	occurrences map[string]int,
+) (string, map[string]any, error) {
+	if providerID := optionalProviderID(attachment, "id"); providerID != "" {
+		return providerID, nil, nil
+	}
+	fileName := firstNonBlank(
+		stringValue(attachment["fileName"]),
+		stringValue(attachment["filename"]),
+	)
+	attachmentType := stringValue(attachment["attachmentType"])
+	if fileName == "" && attachmentType == "" {
+		return "", nil, errors.New("embedded Mercury attachment omitted id, filename, and attachmentType")
+	}
+	if strings.TrimSpace(parentProviderID) == "" {
+		return "", nil, errors.New("embedded Mercury attachment requires its parent provider id")
+	}
+	identityBasis := strings.Join([]string{
+		strings.TrimSpace(parentProviderID),
+		strings.TrimSpace(attachmentType),
+		strings.TrimSpace(fileName),
+	}, "\x00")
+	occurrences[identityBasis]++
+	occurrence := occurrences[identityBasis]
+	identityDigest := sha256Hex([]byte(fmt.Sprintf("%s\x00%d", identityBasis, occurrence)))
+	return "derived_attachment_" + identityDigest, map[string]any{
+		"provider_object_identity_contract": mercuryAttachmentIDContract,
+		"parent_provider_object_id":         strings.TrimSpace(parentProviderID),
+		"attachment_occurrence":             occurrence,
+	}, nil
 }
 
 func canonicalProviderObject(raw json.RawMessage) (map[string]any, []byte, error) {
@@ -510,6 +606,7 @@ func newMercuryRevisionRecord(
 	operationID string,
 	occurredAt time.Time,
 	capturedAt time.Time,
+	identityMetadata map[string]any,
 ) nexadapter.AdapterInboundRecord {
 	digest := sha256.Sum256(canonical)
 	revision := hex.EncodeToString(digest[:])
@@ -538,6 +635,9 @@ func newMercuryRevisionRecord(
 		"credential_ref":                  client.credentialRef,
 		"logical_row_id":                  providerID,
 		"revision_hash":                   revision,
+	}
+	for key, value := range identityMetadata {
+		evidenceMetadata[key] = value
 	}
 	return nexadapter.AdapterInboundRecord{
 		Operation: "record.ingest",
@@ -582,17 +682,25 @@ func buildMercuryCaptureReceipt(
 	pageNumber int,
 	rowCount int,
 	capturedAt time.Time,
+	captureScopeSHA256 string,
 ) (nexadapter.AdapterInboundRecord, error) {
 	if strings.TrimSpace(page.BodySHA256) == "" {
 		return nexadapter.AdapterInboundRecord{}, errors.New("Mercury capture receipt requires page SHA-256")
+	}
+	if len(strings.TrimSpace(captureScopeSHA256)) != 64 {
+		return nexadapter.AdapterInboundRecord{}, errors.New("Mercury capture receipt requires scope SHA-256")
+	}
+	if _, err := hex.DecodeString(captureScopeSHA256); err != nil {
+		return nexadapter.AdapterInboundRecord{}, errors.New("Mercury capture receipt requires scope SHA-256")
 	}
 	// A response body may be byte-identical on consecutive polls.  The capture
 	// receipt represents an observation occurrence, so its immutable external
 	// identity must bind the capture clock as well as operation, page and body.
 	receiptID := fmt.Sprintf(
-		"%s:%s:%03d:%s",
+		"%s:%s:%s:%03d:%s",
 		capturedAt.UTC().Format(time.RFC3339Nano),
 		source.OperationID,
+		captureScopeSHA256,
 		pageNumber,
 		page.BodySHA256,
 	)
@@ -604,6 +712,7 @@ func buildMercuryCaptureReceipt(
 		"connection_role":          string(client.role),
 		"record_family":            "api_capture_receipt",
 		"provider_operation_id":    source.OperationID,
+		"capture_scope_sha256":     captureScopeSHA256,
 		"page_number":              pageNumber,
 		"row_count":                rowCount,
 		"http_status":              page.HTTPStatus,
@@ -639,8 +748,12 @@ func buildMercuryCaptureReceipt(
 			ContainerKind: "group",
 			ContainerID:   "api_capture_receipt",
 			ContainerName: "API capture receipts",
-			ThreadID:      fmt.Sprintf("mercury:api_capture_receipt:%s", source.OperationID),
-			ThreadName:    source.OperationID,
+			ThreadID: fmt.Sprintf(
+				"mercury:api_capture_receipt:%s:%s",
+				source.OperationID,
+				captureScopeSHA256,
+			),
+			ThreadName: source.OperationID,
 			Metadata: map[string]any{
 				"family":                "api_capture_receipt",
 				"provider_operation_id": source.OperationID,

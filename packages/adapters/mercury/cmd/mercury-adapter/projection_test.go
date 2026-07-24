@@ -173,6 +173,51 @@ func TestCaptureReceiptIdentityBindsObservationOccurrence(t *testing.T) {
 	}
 }
 
+func TestCaptureReceiptIdentitySeparatesRequestScopes(t *testing.T) {
+	client := &mercuryClient{
+		connectionID:  "mercury-primary",
+		credentialRef: "mercury/test",
+		role:          rolePrimaryRead,
+	}
+	source := mercuryProjectionSources["getAccountStatements"]
+	response := projectionResponse(
+		"getAccountStatements",
+		`{"statements":[],"page":{"nextPage":null}}`,
+	)
+	firstScope, err := mercuryCaptureScopeSHA256(map[string]any{"accountId": "acct_1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondScope, err := mercuryCaptureScopeSHA256(map[string]any{"accountId": "acct_2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	capturedAt := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+	first, err := projectMercuryResponse(client, source, response, capturedAt, firstScope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := projectMercuryResponse(client, source, response, capturedAt, secondScope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first[0].Payload.ExternalRecordID == second[0].Payload.ExternalRecordID {
+		t.Fatal("distinct request scopes reused one capture receipt identity")
+	}
+	if first[0].Routing.ThreadID == second[0].Routing.ThreadID {
+		t.Fatal("distinct request scopes reused one capture receipt thread")
+	}
+	if _, err := projectMercuryResponse(
+		client,
+		source,
+		response,
+		capturedAt,
+		strings.Repeat("z", 64),
+	); err == nil || !strings.Contains(err.Error(), "capture scope SHA-256 is invalid") {
+		t.Fatalf("invalid capture scope error = %v", err)
+	}
+}
+
 func TestTransactionCreatesPaymentAndAttachmentRevisions(t *testing.T) {
 	body := `{"transactions":[{"id":"txn_1","requestId":"request_1","createdAt":"2026-07-24T09:00:00Z","attachments":[{"id":"attachment_1","filename":"invoice.pdf"}]}],"page":{"nextPage":null}}`
 	records, err := projectMercuryResponse(
@@ -194,6 +239,58 @@ func TestTransactionCreatesPaymentAndAttachmentRevisions(t *testing.T) {
 		if families[expected] != 1 {
 			t.Fatalf("families = %#v", families)
 		}
+	}
+}
+
+func TestTransactionDerivesStableIdentityForLiveAttachmentShape(t *testing.T) {
+	client := &mercuryClient{connectionID: "primary", credentialRef: "mercury/test", role: rolePrimaryRead}
+	body := `{"transactions":[{"id":"txn_1","createdAt":"2026-07-24T09:00:00Z","attachments":[{"attachmentType":"receipt","fileName":"invoice.pdf","url":"https://example.test/first"},{"attachmentType":"receipt","fileName":"invoice.pdf","url":"https://example.test/second"}]}],"page":{"nextPage":null}}`
+	first, err := projectMercuryResponse(
+		client,
+		mercuryProjectionSources["listTransactions"],
+		projectionResponse("listTransactions", body),
+		time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attachments := recordsForFamily(first, "attachment_revision")
+	if len(attachments) != 2 {
+		t.Fatalf("attachment revisions = %d", len(attachments))
+	}
+	if attachments[0].Routing.ThreadID == attachments[1].Routing.ThreadID {
+		t.Fatal("duplicate live-shaped attachments reused one identity")
+	}
+
+	changedURL := strings.Replace(body, "https://example.test/first", "https://example.test/rotated", 1)
+	next, err := projectMercuryResponse(
+		client,
+		mercuryProjectionSources["listTransactions"],
+		projectionResponse("listTransactions", changedURL),
+		time.Date(2026, 7, 24, 12, 5, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextAttachments := recordsForFamily(next, "attachment_revision")
+	if attachments[0].Routing.ThreadID != nextAttachments[0].Routing.ThreadID {
+		t.Fatal("rotating attachment URL changed the stable attachment identity")
+	}
+	if attachments[0].Payload.ExternalRecordID == nextAttachments[0].Payload.ExternalRecordID {
+		t.Fatal("rotating attachment URL did not create an immutable successor revision")
+	}
+}
+
+func TestTransactionRejectsUnidentifiableEmbeddedAttachment(t *testing.T) {
+	body := `{"transactions":[{"id":"txn_1","createdAt":"2026-07-24T09:00:00Z","attachments":[{"url":"https://example.test/only"}]}],"page":{"nextPage":null}}`
+	_, err := projectMercuryResponse(
+		&mercuryClient{connectionID: "primary", credentialRef: "mercury/test", role: rolePrimaryRead},
+		mercuryProjectionSources["listTransactions"],
+		projectionResponse("listTransactions", body),
+		time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC),
+	)
+	if err == nil || !strings.Contains(err.Error(), "omitted id, filename, and attachmentType") {
+		t.Fatalf("error = %v", err)
 	}
 }
 
@@ -537,6 +634,19 @@ func recordFamilies(records []nexadapter.AdapterInboundRecord) map[string]int {
 	result := map[string]int{}
 	for _, record := range records {
 		result[record.Routing.ContainerID]++
+	}
+	return result
+}
+
+func recordsForFamily(
+	records []nexadapter.AdapterInboundRecord,
+	family string,
+) []nexadapter.AdapterInboundRecord {
+	result := []nexadapter.AdapterInboundRecord{}
+	for _, record := range records {
+		if record.Routing.ContainerID == family {
+			result = append(result, record)
+		}
 	}
 	return result
 }
