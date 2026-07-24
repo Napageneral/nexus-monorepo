@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import type { NexClient } from "../../../../../nex/src/runtime/internal-runtime-client.js";
+import { SHOPIFY_SOURCE_SCHEDULES } from "../jobs/shopify-source-schedules.js";
 
 type RuntimeRow = Record<string, unknown>;
 
@@ -45,7 +46,10 @@ const JOB_SPECS = Object.freeze([
     scriptPath: SOURCE_JOB_SCRIPT_PATH,
     status: "active",
     config: { family: "orders.delta" },
-    schedule: { name: "moonsleep-commerce.shopify-source.orders-delta", expression: "0 * * * * *" },
+    schedule: {
+      name: "moonsleep-commerce.shopify-source.orders-delta",
+      expression: SHOPIFY_SOURCE_SCHEDULES["orders.delta"],
+    },
     matches: [],
   },
   {
@@ -57,7 +61,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "customers.delta" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.customers-delta",
-      expression: "20 * * * * *",
+      expression: SHOPIFY_SOURCE_SCHEDULES["customers.delta"],
     },
     matches: [],
   },
@@ -69,7 +73,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "inventory.hot" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.inventory-hot",
-      expression: "40 * * * * *",
+      expression: SHOPIFY_SOURCE_SCHEDULES["inventory.hot"],
     },
     matches: [],
   },
@@ -81,7 +85,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "inventory.reconcile" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.inventory-reconcile",
-      expression: "5 1-59/5 * * * *",
+      expression: SHOPIFY_SOURCE_SCHEDULES["inventory.reconcile"],
     },
     matches: [],
   },
@@ -93,7 +97,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "fulfillment.delta" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.fulfillment-delta",
-      expression: "15 2-59/5 * * * *",
+      expression: SHOPIFY_SOURCE_SCHEDULES["fulfillment.delta"],
     },
     matches: [],
   },
@@ -105,7 +109,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "discounts.delta" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.discounts-delta",
-      expression: "25 3-59/5 * * * *",
+      expression: SHOPIFY_SOURCE_SCHEDULES["discounts.delta"],
     },
     matches: [],
   },
@@ -117,7 +121,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "finance.transactions" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.finance-transactions",
-      expression: "35 4-59/5 * * * *",
+      expression: SHOPIFY_SOURCE_SCHEDULES["finance.transactions"],
     },
     matches: [],
   },
@@ -129,7 +133,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "disputes.delta" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.disputes-delta",
-      expression: "45 0-59/5 * * * *",
+      expression: SHOPIFY_SOURCE_SCHEDULES["disputes.delta"],
     },
     matches: [],
   },
@@ -141,7 +145,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "products.delta" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.products-delta",
-      expression: "10 2-59/15 * * * *",
+      expression: SHOPIFY_SOURCE_SCHEDULES["products.delta"],
     },
     matches: [],
   },
@@ -153,7 +157,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "catalog.delta" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.catalog-delta",
-      expression: "50 7-59/15 * * * *",
+      expression: SHOPIFY_SOURCE_SCHEDULES["catalog.delta"],
     },
     matches: [],
   },
@@ -165,7 +169,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "marketing.delta" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.marketing-delta",
-      expression: "13 13 * * * *",
+      expression: SHOPIFY_SOURCE_SCHEDULES["marketing.delta"],
     },
     matches: [],
   },
@@ -177,7 +181,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "payouts.delta" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.payouts-delta",
-      expression: "17 17 */6 * * *",
+      expression: SHOPIFY_SOURCE_SCHEDULES["payouts.delta"],
     },
     matches: [],
   },

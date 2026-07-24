@@ -14,6 +14,7 @@ import {
   shopifyCommerceRecordSetSha256,
   triggerShopifySource,
 } from "./index.js";
+import { SHOPIFY_SOURCE_SCHEDULES } from "../jobs/shopify-source-schedules.js";
 
 const SHOPIFY_SOURCE_FAMILIES = [
   "orders.delta",
@@ -79,6 +80,14 @@ describe("Shopify source schedule configuration", () => {
       nex,
     } as never)) as Record<string, unknown>;
     expect(planned).toMatchObject({ state: "planned", provider_write_authority: false });
+    expect(
+      Object.fromEntries(
+        (planned.schedules as Array<{ family: string; expression: string }>).map((row) => [
+          row.family,
+          row.expression,
+        ]),
+      ),
+    ).toEqual(SHOPIFY_SOURCE_SCHEDULES);
     expect(planned.plan_sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(jobsUpdate).not.toHaveBeenCalled();
     expect(schedulesUpdate).not.toHaveBeenCalled();
