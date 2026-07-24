@@ -261,15 +261,21 @@ fi
 
 package_state="$(package_request /api/operator/packages/adapter/mercury)"
 health_before="$(package_request /api/operator/packages/adapter/mercury/health)"
-jq -e --arg version "${PACKAGE_VERSION}" '
+if ! jq -e --arg version "${PACKAGE_VERSION}" '
   .status == "active" and .active_version == $version
-' <<<"${package_state}" >/dev/null
-jq -e '
+' <<<"${package_state}" >/dev/null; then
+  echo "unexpected Mercury package state: ${package_state}" >&2
+  exit 1
+fi
+if ! jq -e '
   .healthy == true and
-  .adapter.name == "mercury" and
+  .adapter.name == "mercury-adapter" and
   .adapter.platform == "mercury" and
   .adapter.version == "0.3.0"
-' <<<"${health_before}" >/dev/null
+' <<<"${health_before}" >/dev/null; then
+  echo "unexpected Mercury package health: ${health_before}" >&2
+  exit 1
+fi
 
 echo "[cleanroom] prove tampered staged bytes fail without replacing the active release"
 tamper_operation="${release_id}-tamper"
@@ -310,7 +316,7 @@ health_after="$(package_request /api/operator/packages/adapter/mercury/health)"
 jq -e --arg version "${PACKAGE_VERSION}" '
   .status == "active" and .active_version == $version
 ' <<<"${package_state_after}" >/dev/null
-jq -e '.healthy == true and .adapter.name == "mercury"' <<<"${health_after}" >/dev/null
+jq -e '.healthy == true and .adapter.name == "mercury-adapter"' <<<"${health_after}" >/dev/null
 
 runtime_counts="$(docker exec -u postgres "${postgres_container}" \
   psql -X -d moonsleep_nex -Atqc "
