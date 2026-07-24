@@ -34,6 +34,11 @@ approval-request GETs. It cannot invoke provider mutations.
 See `api/openapi.lock.json` and
 `internal/catalog/operations.catalog.json`.
 
+The package does not redistribute Mercury's provider payload schemas. Its
+generated `api/openapi.yaml` is a reviewed operation index containing the exact
+84 operation identities, methods, paths and visibility classifications. The
+lockfile binds that projection to the exact upstream provider-document SHA.
+
 ## Build
 
 ```bash
