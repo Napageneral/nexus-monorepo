@@ -1,11 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"math"
 	"net/url"
 	"regexp"
 	"strings"
@@ -17,6 +22,8 @@ import (
 const (
 	capturedPageProjectionVersion = 1
 	capturedPageMaxBytes          = maxResponseBodyBytes
+	capturedPageMaxGzipBytes      = 700 * 1024
+	capturedPageMaxBase64Bytes    = 950_000
 )
 
 var capturedPageObservationID = regexp.MustCompile(`^[a-zA-Z0-9._:-]{1,128}$`)
@@ -29,10 +36,102 @@ type capturedPageProjectionResult struct {
 	ObservationID          string                            `json:"observation_id"`
 	ProviderResponseSHA256 string                            `json:"provider_response_sha256"`
 	SourceRows             int                               `json:"source_rows"`
+	RecordOffset           int                               `json:"record_offset"`
+	RecordLimit            int                               `json:"record_limit"`
+	TotalRecords           int                               `json:"total_records"`
+	NextRecordOffset       int                               `json:"next_record_offset"`
+	Complete               bool                              `json:"complete"`
 	Records                []nexadapter.AdapterInboundRecord `json:"records"`
 	ProviderCalls          int                               `json:"provider_calls"`
 	ProviderWriteAuthority bool                              `json:"provider_write_authority"`
 	CursorAdvanced         bool                              `json:"cursor_advanced"`
+}
+
+func capturedPageInteger(
+	payload map[string]any,
+	field string,
+	fallback int,
+	minimum int,
+	maximum int,
+) (int, error) {
+	raw, present := payload[field]
+	if !present {
+		return fallback, nil
+	}
+	var value int
+	switch typed := raw.(type) {
+	case int:
+		value = typed
+	case int64:
+		if typed < int64(minimum) || typed > int64(maximum) {
+			return 0, fmt.Errorf("captured Shopify page %s is outside its bound", field)
+		}
+		value = int(typed)
+	case float64:
+		if math.IsNaN(typed) || math.IsInf(typed, 0) || math.Trunc(typed) != typed {
+			return 0, fmt.Errorf("captured Shopify page %s must be an integer", field)
+		}
+		if typed < float64(minimum) || typed > float64(maximum) {
+			return 0, fmt.Errorf("captured Shopify page %s is outside its bound", field)
+		}
+		value = int(typed)
+	case json.Number:
+		parsed, err := typed.Int64()
+		if err != nil || parsed < int64(minimum) || parsed > int64(maximum) {
+			return 0, fmt.Errorf("captured Shopify page %s must be a bounded integer", field)
+		}
+		value = int(parsed)
+	default:
+		return 0, fmt.Errorf("captured Shopify page %s must be an integer", field)
+	}
+	if value < minimum || value > maximum {
+		return 0, fmt.Errorf("captured Shopify page %s is outside its bound", field)
+	}
+	return value, nil
+}
+
+func capturedPageResponseBytes(payload map[string]any) ([]byte, error) {
+	responseText, hasText := payload["provider_response_json"].(string)
+	encodedGzip, hasGzip := payload["provider_response_gzip_base64"].(string)
+	hasText = hasText && responseText != ""
+	hasGzip = hasGzip && encodedGzip != ""
+	if hasText == hasGzip {
+		return nil, errors.New(
+			"captured Shopify page requires exactly one provider response encoding",
+		)
+	}
+	if hasText {
+		responseBytes := []byte(responseText)
+		if len(responseBytes) > capturedPageMaxBytes {
+			return nil, fmt.Errorf(
+				"captured Shopify page exceeds %d bytes",
+				capturedPageMaxBytes,
+			)
+		}
+		return responseBytes, nil
+	}
+	if len(encodedGzip) > capturedPageMaxBase64Bytes {
+		return nil, errors.New("captured Shopify page gzip envelope exceeds its byte limit")
+	}
+	compressed, err := base64.StdEncoding.Strict().DecodeString(encodedGzip)
+	if err != nil || len(compressed) < 1 || len(compressed) > capturedPageMaxGzipBytes {
+		return nil, errors.New("captured Shopify page gzip envelope is invalid")
+	}
+	source := bytes.NewReader(compressed)
+	reader, err := gzip.NewReader(source)
+	if err != nil {
+		return nil, errors.New("captured Shopify page gzip envelope is invalid")
+	}
+	reader.Multistream(false)
+	responseBytes, readErr := io.ReadAll(io.LimitReader(reader, capturedPageMaxBytes+1))
+	closeErr := reader.Close()
+	if readErr != nil || closeErr != nil || len(responseBytes) > capturedPageMaxBytes {
+		return nil, errors.New("captured Shopify page gzip payload exceeds its byte limit")
+	}
+	if source.Len() != 0 {
+		return nil, errors.New("captured Shopify page gzip envelope has trailing bytes")
+	}
+	return responseBytes, nil
 }
 
 func parseCapturedWindow(payload map[string]any) (time.Time, time.Time, error) {
@@ -89,16 +188,9 @@ func projectCapturedOrdersPage(
 	if !capturedPageObservationID.MatchString(observationID) {
 		return capturedPageProjectionResult{}, errors.New("captured Shopify page requires a safe observation_id")
 	}
-	responseText, ok := payload["provider_response_json"].(string)
-	if !ok || responseText == "" {
-		return capturedPageProjectionResult{}, errors.New("captured Shopify page requires provider_response_json")
-	}
-	responseBytes := []byte(responseText)
-	if len(responseBytes) > capturedPageMaxBytes {
-		return capturedPageProjectionResult{}, fmt.Errorf(
-			"captured Shopify page exceeds %d bytes",
-			capturedPageMaxBytes,
-		)
+	responseBytes, err := capturedPageResponseBytes(payload)
+	if err != nil {
+		return capturedPageProjectionResult{}, err
 	}
 	expectedSHA, _ := payload["provider_response_sha256"].(string)
 	expectedSHA = strings.TrimSpace(expectedSHA)
@@ -131,6 +223,20 @@ func projectCapturedOrdersPage(
 	if err != nil {
 		return capturedPageProjectionResult{}, err
 	}
+	recordOffset, err := capturedPageInteger(payload, "record_offset", 0, 0, 1_000_000)
+	if err != nil {
+		return capturedPageProjectionResult{}, err
+	}
+	recordLimit, err := capturedPageInteger(
+		payload,
+		"record_limit",
+		shopifySourceMaxRecords,
+		1,
+		shopifySourceMaxRecords,
+	)
+	if err != nil {
+		return capturedPageProjectionResult{}, err
+	}
 	sourceRequest := shopifySourceRequest{
 		APIBaseURL: fmt.Sprintf(defaultShopifyBaseURL, state.ShopDomain, state.APIVersion),
 		Path:       "/orders.json",
@@ -144,23 +250,29 @@ func projectCapturedOrdersPage(
 			"api_version":              state.APIVersion,
 		},
 	}
-	records := make([]nexadapter.AdapterInboundRecord, 0, len(page.Orders)*2)
-	for _, order := range page.Orders {
-		if record := buildOrderRecord(state, order, sourceRequest); record.Operation != "" {
+	records := make([]nexadapter.AdapterInboundRecord, 0, recordLimit)
+	totalRecords := 0
+	appendRecord := func(record nexadapter.AdapterInboundRecord) {
+		if record.Operation == "" {
+			return
+		}
+		if totalRecords >= recordOffset && len(records) < recordLimit {
 			records = append(records, record)
 		}
+		totalRecords++
+	}
+	for _, order := range page.Orders {
+		appendRecord(buildOrderRecord(state, order, sourceRequest))
 		for _, lineItem := range order.LineItems {
-			if record := buildLineItemRecord(state, order, lineItem, sourceRequest); record.Operation != "" {
-				records = append(records, record)
-			}
+			appendRecord(buildLineItemRecord(state, order, lineItem, sourceRequest))
 		}
 	}
-	if len(records) > shopifySourceMaxRecords {
-		return capturedPageProjectionResult{}, fmt.Errorf(
-			"captured Shopify order page expanded beyond %d source records",
-			shopifySourceMaxRecords,
+	if recordOffset > totalRecords {
+		return capturedPageProjectionResult{}, errors.New(
+			"captured Shopify page record_offset exceeds the projected record count",
 		)
 	}
+	nextRecordOffset := recordOffset + len(records)
 	return capturedPageProjectionResult{
 		Version:                capturedPageProjectionVersion,
 		Family:                 family,
@@ -169,6 +281,11 @@ func projectCapturedOrdersPage(
 		ObservationID:          observationID,
 		ProviderResponseSHA256: actualSHA,
 		SourceRows:             len(page.Orders),
+		RecordOffset:           recordOffset,
+		RecordLimit:            recordLimit,
+		TotalRecords:           totalRecords,
+		NextRecordOffset:       nextRecordOffset,
+		Complete:               nextRecordOffset >= totalRecords,
 		Records:                records,
 		ProviderCalls:          0,
 		ProviderWriteAuthority: false,
