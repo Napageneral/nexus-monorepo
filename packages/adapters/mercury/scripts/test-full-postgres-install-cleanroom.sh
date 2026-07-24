@@ -305,11 +305,21 @@ tamper_response="$(docker exec "${runtime_container}" sh -c '
 ' sh "${tamper_body}")"
 tamper_status="${tamper_response##*$'\n'}"
 tamper_body_response="${tamper_response%$'\n'*}"
-[[ ! "${tamper_status}" =~ ^2 ]]
-jq -e '.ok == false and (.error | type == "string")' <<<"${tamper_body_response}" >/dev/null
-jq -e --arg version "${PACKAGE_VERSION}" '
+if [[ "${tamper_status}" =~ ^2 ]]; then
+  echo "tampered Mercury package unexpectedly returned HTTP ${tamper_status}: ${tamper_body_response}" >&2
+  exit 1
+fi
+if ! jq -e '.ok == false and (.error | type == "string")' <<<"${tamper_body_response}" >/dev/null; then
+  echo "tampered Mercury package returned an invalid error body (HTTP ${tamper_status}): ${tamper_body_response}" >&2
+  exit 1
+fi
+post_tamper_state="$(package_request /api/operator/packages/adapter/mercury)"
+if ! jq -e --arg version "${PACKAGE_VERSION}" '
   .status == "active" and .active_version == $version
-' <<<"$(package_request /api/operator/packages/adapter/mercury)" >/dev/null
+' <<<"${post_tamper_state}" >/dev/null; then
+  echo "tampered Mercury package changed active state: ${post_tamper_state}" >&2
+  exit 1
+fi
 
 echo "[cleanroom] restart Nex and verify exact package rehydration"
 docker restart "${runtime_container}" >/dev/null
