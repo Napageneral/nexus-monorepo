@@ -133,7 +133,7 @@ install_package() {
 
   docker exec "${runtime_container}" sh -c '
     token=$(cat /run/moonsleep-load-credentials/runtime-token)
-    exec curl -fsS \
+    exec curl -sS \
       -H "Authorization: Bearer ${token}" \
       -H "Content-Type: application/json" \
       --data "$1" \
@@ -254,7 +254,10 @@ wait_for_runtime
 echo "[cleanroom] install exact Mercury artifact and verify active health"
 release_id="cleanroom-mercury-${artifact_sha256:0:16}"
 install_response="$(install_package "${release_id}")"
-jq -e '.ok == true and .package_id == "mercury" and .status == "active"' <<<"${install_response}" >/dev/null
+if ! jq -e '.ok == true and .package_id == "mercury" and .status == "active"' <<<"${install_response}" >/dev/null; then
+  echo "Mercury package install failed: ${install_response}" >&2
+  exit 1
+fi
 
 package_state="$(package_request /api/operator/packages/adapter/mercury)"
 health_before="$(package_request /api/operator/packages/adapter/mercury/health)"
