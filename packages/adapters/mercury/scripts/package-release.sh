@@ -23,7 +23,7 @@ mkdir -p "${ROOT_DIR}/bin"
 (
   cd "${ROOT_DIR}"
   CGO_ENABLED=0 GOOS="${PACKAGE_TARGET_OS}" GOARCH="${PACKAGE_TARGET_ARCH}" \
-    go build -trimpath -o "./bin/${COMMAND_NAME}" "./cmd/${COMMAND_NAME}"
+    go build -trimpath -buildvcs=false -o "./bin/${COMMAND_NAME}" "./cmd/${COMMAND_NAME}"
 )
 
 "${PACKAGE_CLI[@]}" validate "${ROOT_DIR}"

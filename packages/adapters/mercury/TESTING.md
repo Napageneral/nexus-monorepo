@@ -6,7 +6,7 @@ Run from this package:
 go test ./... -count=1
 go vet ./...
 mkdir -p ./bin
-go build -trimpath -o ./bin/mercury-adapter ./cmd/mercury-adapter
+go build -trimpath -buildvcs=false -o ./bin/mercury-adapter ./cmd/mercury-adapter
 ./bin/mercury-adapter adapter.info
 ```
 

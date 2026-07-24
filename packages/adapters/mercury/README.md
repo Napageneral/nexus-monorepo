@@ -38,7 +38,7 @@ See `api/openapi.lock.json` and
 
 ```bash
 mkdir -p ./bin
-go build -o ./bin/mercury-adapter ./cmd/mercury-adapter
+go build -trimpath -buildvcs=false -o ./bin/mercury-adapter ./cmd/mercury-adapter
 ```
 
 ## Test
