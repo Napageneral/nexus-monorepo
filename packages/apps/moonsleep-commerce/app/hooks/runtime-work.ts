@@ -40,11 +40,12 @@ const JOB_SPECS = Object.freeze([
   },
   {
     name: "moonsleep-commerce.shopify-source.orders-delta",
-    description: "Capture one bounded Shopify order delta page and durably ingest its exact records",
+    description:
+      "Capture one bounded Shopify order delta page and durably ingest its exact records",
     scriptPath: SOURCE_JOB_SCRIPT_PATH,
     status: "active",
     config: { family: "orders.delta" },
-    schedule: { name: "moonsleep-commerce.shopify-source.orders-delta", expression: "* * * * *" },
+    schedule: { name: "moonsleep-commerce.shopify-source.orders-delta", expression: "0 * * * * *" },
     matches: [],
   },
   {
@@ -56,7 +57,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "customers.delta" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.customers-delta",
-      expression: "* * * * *",
+      expression: "20 * * * * *",
     },
     matches: [],
   },
@@ -66,7 +67,10 @@ const JOB_SPECS = Object.freeze([
     scriptPath: SOURCE_JOB_SCRIPT_PATH,
     status: "active",
     config: { family: "inventory.hot" },
-    schedule: { name: "moonsleep-commerce.shopify-source.inventory-hot", expression: "* * * * *" },
+    schedule: {
+      name: "moonsleep-commerce.shopify-source.inventory-hot",
+      expression: "40 * * * * *",
+    },
     matches: [],
   },
   {
@@ -77,7 +81,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "inventory.reconcile" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.inventory-reconcile",
-      expression: "*/5 * * * *",
+      expression: "5 1-59/5 * * * *",
     },
     matches: [],
   },
@@ -89,7 +93,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "fulfillment.delta" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.fulfillment-delta",
-      expression: "*/5 * * * *",
+      expression: "15 2-59/5 * * * *",
     },
     matches: [],
   },
@@ -101,7 +105,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "discounts.delta" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.discounts-delta",
-      expression: "*/5 * * * *",
+      expression: "25 3-59/5 * * * *",
     },
     matches: [],
   },
@@ -113,7 +117,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "finance.transactions" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.finance-transactions",
-      expression: "*/5 * * * *",
+      expression: "35 4-59/5 * * * *",
     },
     matches: [],
   },
@@ -125,7 +129,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "disputes.delta" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.disputes-delta",
-      expression: "*/5 * * * *",
+      expression: "45 0-59/5 * * * *",
     },
     matches: [],
   },
@@ -137,7 +141,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "products.delta" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.products-delta",
-      expression: "*/15 * * * *",
+      expression: "10 2-59/15 * * * *",
     },
     matches: [],
   },
@@ -149,7 +153,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "catalog.delta" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.catalog-delta",
-      expression: "*/15 * * * *",
+      expression: "50 7-59/15 * * * *",
     },
     matches: [],
   },
@@ -161,7 +165,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "marketing.delta" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.marketing-delta",
-      expression: "13 * * * *",
+      expression: "13 13 * * * *",
     },
     matches: [],
   },
@@ -173,7 +177,7 @@ const JOB_SPECS = Object.freeze([
     config: { family: "payouts.delta" },
     schedule: {
       name: "moonsleep-commerce.shopify-source.payouts-delta",
-      expression: "17 */6 * * *",
+      expression: "17 17 */6 * * *",
     },
     matches: [],
   },
@@ -181,14 +185,14 @@ const JOB_SPECS = Object.freeze([
 const LEGACY_SHOPIFY_MATCH_JSON = JSON.stringify({ platform: "shopify" });
 
 function asRecord(value: unknown): RuntimeRow {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as RuntimeRow)
-    : {};
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as RuntimeRow) : {};
 }
 
 function asArray(value: unknown): RuntimeRow[] {
   return Array.isArray(value)
-    ? value.filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry)) as RuntimeRow[]
+    ? (value.filter(
+        (entry) => entry && typeof entry === "object" && !Array.isArray(entry),
+      ) as RuntimeRow[])
     : [];
 }
 
@@ -210,7 +214,10 @@ async function listJobs(runtime: NexClient): Promise<RuntimeRow[]> {
   return asArray(unwrapPayload(await runtime.jobs.list({})).jobs);
 }
 
-async function listSubscriptions(runtime: NexClient, jobDefinitionId: string): Promise<RuntimeRow[]> {
+async function listSubscriptions(
+  runtime: NexClient,
+  jobDefinitionId: string,
+): Promise<RuntimeRow[]> {
   return asArray(
     unwrapPayload(
       await runtime.events.subscriptions.list({
@@ -410,9 +417,7 @@ export async function ensureMoonSleepCommerceRuntimeWork(params: {
     const jobId = await ensureJob(params.runtime, params.appId, spec);
     sourceJobDefinitionIds.push(jobId);
     if ("schedule" in spec) {
-      sourceScheduleIds.push(
-        await ensureDisabledSchedule(params.runtime, jobId, spec.schedule),
-      );
+      sourceScheduleIds.push(await ensureDisabledSchedule(params.runtime, jobId, spec.schedule));
     }
   }
   return {
@@ -435,10 +440,7 @@ export async function disableMoonSleepCommerceRuntimeWork(runtime: NexClient): P
     }
     const jobId = asString(job.id);
     for (const schedule of schedules) {
-      if (
-        asString(schedule.job_definition_id) === jobId &&
-        asInteger(schedule.enabled) !== 0
-      ) {
+      if (asString(schedule.job_definition_id) === jobId && asInteger(schedule.enabled) !== 0) {
         await runtime.schedules.update({ id: asString(schedule.id), enabled: false });
       }
     }

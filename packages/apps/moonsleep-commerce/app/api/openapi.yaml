@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MoonSleep Commerce App API
-  version: 0.3.4
+  version: 0.3.5
   description: Project exact Shopify records into MoonSleep identity and typed
     commerce state through public Nex operations.
 servers:
@@ -724,6 +724,138 @@ paths:
                       - type: object
                         additionalProperties: true
                       - type: "null"
+  /runtime/operations/moonsleep-commerce.shopify-projections.configure:
+    post:
+      operationId: moonsleep-commerce.shopify-projections.configure
+      summary: Plan or apply the exact durable record.ingested customer and commerce
+        projections without Shopify provider access.
+      tags:
+        - MoonSleep Commerce
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mode:
+                  type: string
+                  enum:
+                    - plan
+                    - apply
+                enabled_projections:
+                  type: array
+                  uniqueItems: true
+                  maxItems: 2
+                  items:
+                    type: string
+                    enum:
+                      - customer_identity
+                      - order_commerce
+                expected_plan_sha256:
+                  type: string
+                  pattern: ^[0-9a-f]{64}$
+                confirmation:
+                  type: string
+                  enum:
+                    - CONFIGURE_MOONSLEEP_SHOPIFY_PROJECTIONS
+              required:
+                - mode
+                - enabled_projections
+              additionalProperties: false
+      responses:
+        "200":
+          description: Successful MoonSleep Commerce method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
   /runtime/operations/moonsleep-commerce.shopify-source.configure-schedules:
     post:
       operationId: moonsleep-commerce.shopify-source.configure-schedules
@@ -874,8 +1006,9 @@ paths:
   /runtime/operations/moonsleep-commerce.shopify-source.seed-identities:
     post:
       operationId: moonsleep-commerce.shopify-source.seed-identities
-      summary: Replay-safely seed the Shopify store and integration routing identities
-        through public Nex identity operations.
+      summary: Replay-safely seed distinct Shopify store and integration identities
+        and ground the local receiver to MoonSleep Ops through public Nex
+        identity operations.
       tags:
         - MoonSleep Commerce
       security:
