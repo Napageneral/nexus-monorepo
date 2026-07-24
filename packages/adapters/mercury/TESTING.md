@@ -7,6 +7,7 @@ go test ./... -count=1
 go vet ./...
 mkdir -p ./bin
 go build -trimpath -buildvcs=false -o ./bin/mercury-adapter ./cmd/mercury-adapter
+go build -trimpath -buildvcs=false -o ./bin/mercury-provenance ./cmd/mercury-provenance
 ./bin/mercury-adapter adapter.info
 ```
 

@@ -9,7 +9,7 @@ The package has two explicit logical connection roles:
 - `ap_request` for recipient and approval-request reads and a future,
   separately authorized payment-preparation actuator.
 
-The current `0.2.0` build is read-only. It reflects all 72 public operations so
+The current `0.3.0` build is read-only. It reflects all 72 public operations so
 the provider contract is inspectable, but:
 
 - only reviewed public GET operations can reach Mercury;
@@ -39,6 +39,7 @@ See `api/openapi.lock.json` and
 ```bash
 mkdir -p ./bin
 go build -trimpath -buildvcs=false -o ./bin/mercury-adapter ./cmd/mercury-adapter
+go build -trimpath -buildvcs=false -o ./bin/mercury-provenance ./cmd/mercury-provenance
 ```
 
 ## Test
@@ -66,6 +67,11 @@ The fake-provider suite covers:
 - payment, scheduled-payment and attachment revision projection;
 - incomplete, tampered and inconsistent capture rejection;
 - primary/AP role-specific backfill scope.
+- exact record metadata persistence across the canonical Nex ingest boundary;
+- typed structured facts with exact JSON-pointer evidence locations;
+- missing, contradictory and superseding fact resolution;
+- deterministic fact and observation replay;
+- numeric, boolean and string type-confusion rejection.
 
 ## Runtime Context
 
@@ -94,7 +100,25 @@ package configuration.
 Successful reads retain exact provider response bytes as either UTF-8 JSON or
 base64, plus SHA-256. `records.backfill` and `adapter.monitor.start` now emit
 content-addressed immutable record revisions and page-level capture receipts.
-Structured accounting fact extraction remains a separate MAP-004 layer.
+The companion `mercury-provenance` binary verifies those stored record hashes,
+extracts atomic typed facts, resolves current versioned observations, and emits
+idempotent parameter objects for Nex `memory.facts.create` and
+`memory.elements.create`. The result also emits executable observation
+operations: create a first head, get an unchanged head on replay, or update an
+existing head to create an immutable successor.
+
+```bash
+nexus records list \
+  --params '{"platform":"mercury","limit":1000}' \
+  --json |
+  ./bin/mercury-provenance project
+```
+
+Production orchestration provides the explicit resolution timestamp and writes
+the emitted memory parameters through the normal Nex runtime API. It also
+re-supplies current observations with their `nex_element_id` values so replay
+and successor creation remain deterministic. The binary does not connect to
+Mercury or mutate Nex by itself.
 
 ## Authority
 

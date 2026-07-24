@@ -501,6 +501,30 @@ func newMercuryRevisionRecord(
 	revision := hex.EncodeToString(digest[:])
 	safeConnection := nexadapter.SafeIDToken(client.connectionID)
 	safeProviderID := nexadapter.SafeIDToken(providerID)
+	evidenceMetadata := map[string]any{
+		"contract":                        mercuryRecordContract,
+		"provider":                        "mercury",
+		"environment":                     "production",
+		"connection_role":                 string(client.role),
+		"record_family":                   family,
+		"provider_object_id":              providerID,
+		"provider_object_id_sha256":       sha256Hex([]byte(providerID)),
+		"provider_operation_id":           operationID,
+		"provider_payload":                object,
+		"provider_payload_canonical_json": string(canonical),
+		"provider_payload_sha256":         revision,
+		"captured_at":                     capturedAt.Format(time.RFC3339Nano),
+		"provider_write_authority":        false,
+		"journal_authority":               false,
+		"payment_authority":               false,
+		"tax_authority":                   false,
+		"distribution_authority":          false,
+		"cutover_authority":               false,
+		"connection_id":                   client.connectionID,
+		"credential_ref":                  client.credentialRef,
+		"logical_row_id":                  providerID,
+		"revision_hash":                   revision,
+	}
 	return nexadapter.AdapterInboundRecord{
 		Operation: "record.ingest",
 		Routing: nexadapter.AdapterInboundRouting{
@@ -528,33 +552,11 @@ func newMercuryRevisionRecord(
 			Timestamp:        occurredAt.UnixMilli(),
 			Content:          fmt.Sprintf("%s family=%s provider_id=%s", mercuryProjectionRecordText, family, providerID),
 			ContentType:      "text",
-			Payload: map[string]any{
-				"contract":                        mercuryRecordContract,
-				"provider":                        "mercury",
-				"environment":                     "production",
-				"connection_role":                 string(client.role),
-				"family":                          family,
-				"provider_object_id":              providerID,
-				"provider_operation_id":           operationID,
-				"provider_payload":                object,
-				"provider_payload_canonical_json": string(canonical),
-				"provider_payload_sha256":         revision,
-				"captured_at":                     capturedAt.Format(time.RFC3339Nano),
-				"provider_write_authority":        false,
-				"journal_authority":               false,
-				"payment_authority":               false,
-				"tax_authority":                   false,
-				"distribution_authority":          false,
-				"cutover_authority":               false,
-			},
-			Metadata: map[string]any{
-				"connection_id":      client.connectionID,
-				"credential_ref":     client.credentialRef,
-				"family":             family,
-				"logical_row_id":     providerID,
-				"revision_hash":      revision,
-				"provider_object_id": providerID,
-			},
+			// Payload is retained for direct adapter consumers. Metadata carries
+			// the same hash-bound evidence through the canonical record.ingest
+			// boundary, whose public record row persists payload metadata.
+			Payload:  evidenceMetadata,
+			Metadata: evidenceMetadata,
 		},
 	}
 }
@@ -572,6 +574,34 @@ func buildMercuryCaptureReceipt(
 	}
 	receiptID := fmt.Sprintf("%s:%03d:%s", source.OperationID, pageNumber, page.BodySHA256)
 	safeConnection := nexadapter.SafeIDToken(client.connectionID)
+	evidenceMetadata := map[string]any{
+		"contract":                 mercuryCaptureContract,
+		"provider":                 "mercury",
+		"environment":              "production",
+		"connection_role":          string(client.role),
+		"record_family":            "api_capture_receipt",
+		"provider_operation_id":    source.OperationID,
+		"page_number":              pageNumber,
+		"row_count":                rowCount,
+		"http_status":              page.HTTPStatus,
+		"content_type":             page.ContentType,
+		"body_encoding":            page.BodyEncoding,
+		"provider_response_body":   page.Body,
+		"provider_response_sha256": page.BodySHA256,
+		"next_page":                page.NextPage,
+		"request_attempts":         page.RequestAttempts,
+		"captured_at":              capturedAt.Format(time.RFC3339Nano),
+		"provider_write_attempted": false,
+		"provider_write_authority": false,
+		"journal_authority":        false,
+		"payment_authority":        false,
+		"tax_authority":            false,
+		"distribution_authority":   false,
+		"cutover_authority":        false,
+		"connection_id":            client.connectionID,
+		"credential_ref":           client.credentialRef,
+		"revision_hash":            page.BodySHA256,
+	}
 	return nexadapter.AdapterInboundRecord{
 		Operation: "record.ingest",
 		Routing: nexadapter.AdapterInboundRouting{
@@ -599,36 +629,13 @@ func buildMercuryCaptureReceipt(
 			Timestamp:        capturedAt.UnixMilli(),
 			Content:          fmt.Sprintf("Mercury API capture operation=%s page=%d rows=%d", source.OperationID, pageNumber, rowCount),
 			ContentType:      "text",
-			Payload: map[string]any{
-				"contract":                 mercuryCaptureContract,
-				"provider":                 "mercury",
-				"environment":              "production",
-				"connection_role":          string(client.role),
-				"provider_operation_id":    source.OperationID,
-				"page_number":              pageNumber,
-				"row_count":                rowCount,
-				"http_status":              page.HTTPStatus,
-				"content_type":             page.ContentType,
-				"body_encoding":            page.BodyEncoding,
-				"provider_response_body":   page.Body,
-				"provider_response_sha256": page.BodySHA256,
-				"next_page":                page.NextPage,
-				"request_attempts":         page.RequestAttempts,
-				"captured_at":              capturedAt.Format(time.RFC3339Nano),
-				"provider_write_attempted": false,
-				"provider_write_authority": false,
-				"journal_authority":        false,
-				"payment_authority":        false,
-				"tax_authority":            false,
-				"distribution_authority":   false,
-				"cutover_authority":        false,
-			},
-			Metadata: map[string]any{
-				"connection_id":  client.connectionID,
-				"credential_ref": client.credentialRef,
-				"family":         "api_capture_receipt",
-				"revision_hash":  page.BodySHA256,
-			},
+			Payload:          evidenceMetadata,
+			Metadata:         evidenceMetadata,
 		},
 	}, nil
+}
+
+func sha256Hex(value []byte) string {
+	digest := sha256.Sum256(value)
+	return hex.EncodeToString(digest[:])
 }

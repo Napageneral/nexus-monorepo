@@ -15,10 +15,12 @@ payment preparation.
 - 41 GET operations executable under exact role rules;
 - card-PAN reveal excluded;
 - 30 public non-GET operations reflected but physically disabled;
-- no provider write in the `0.2.0` build;
+- no provider write in the `0.3.0` build;
 - immutable records for nine declared families;
 - bounded backfill and five-minute incremental monitoring;
 - exact page capture receipts plus deterministic object revision identities.
+- deterministic atomic facts bound to JSON-pointer evidence locations;
+- versioned current observations written only through Nex memory APIs.
 
 ## Connection matrix
 
@@ -81,8 +83,42 @@ Backfill uses the requested transaction/statement start date. Monitoring polls
 every five minutes, replays the prior 24 hours on start, and advances only after
 a complete successful capture.
 
+## Fact and observation projection
+
+The companion `mercury-provenance` binary consumes only rows returned by Nex
+`records.list`. It re-hashes the canonical provider payload before extracting
+facts. Each fact binds:
+
+- one typed value;
+- one hashed provider subject;
+- one exact source Nex record;
+- one provider payload SHA-256;
+- one JSON-pointer evidence location;
+- deterministic extractor identity;
+- all authority fields false.
+
+Supported facts cover account balances and lifecycle, transactions, recipients,
+approval and scheduled-payment state, payments, statements, attachments and
+page-level capture receipts. Decimal money becomes exact integer minor units.
+Provider transaction classification is projected as
+`transaction_classification`.
+
+The resolver selects the latest effective and observed fact. Older differing
+facts remain explicit contradictions. Equal-time conflicting values and missing
+required facts produce unresolved observations rather than guesses.
+
+Facts use `memory.facts.create` with content-addressed retention keys.
+Observations use:
+
+- `memory.elements.create` when no prior head exists;
+- `memory.elements.get` when the logical observation is unchanged;
+- `memory.elements.update` when new evidence creates an immutable successor.
+
+The orchestration layer must supply the current Nex element id with each prior
+observation. No code writes directly to `records.db` or `memory.db`.
+
 ## Deferred work
 
-MAP-004 implements deterministic facts and observations. MAP-012 is the only
+MAP-005 implements MoonSleep's read-only finance bridge. MAP-012 is the only
 ticket that may introduce an approval-request actuator after separate
 authorization.

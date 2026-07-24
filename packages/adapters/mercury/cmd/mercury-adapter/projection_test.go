@@ -69,6 +69,12 @@ func TestProjectionCreatesImmutableRevisionAndExactCaptureReceipt(t *testing.T) 
 	if payload["provider_payload_sha256"] != hex.EncodeToString(digest[:]) {
 		t.Fatal("revision digest does not bind canonical provider object")
 	}
+	if revision.Payload.Metadata["contract"] != mercuryRecordContract ||
+		revision.Payload.Metadata["provider_payload_sha256"] != payload["provider_payload_sha256"] ||
+		revision.Payload.Metadata["provider_object_id_sha256"] == "" ||
+		revision.Payload.Metadata["provider_write_authority"] != false {
+		t.Fatalf("persisted revision metadata = %#v", revision.Payload.Metadata)
+	}
 
 	receipt := records[1]
 	if receipt.Routing.ContainerID != "api_capture_receipt" {
@@ -79,6 +85,11 @@ func TestProjectionCreatesImmutableRevisionAndExactCaptureReceipt(t *testing.T) 
 		receiptPayload["provider_response_sha256"] != response.Pages[0].BodySHA256 ||
 		receiptPayload["provider_write_attempted"] != false {
 		t.Fatalf("receipt payload = %#v", receiptPayload)
+	}
+	if receipt.Payload.Metadata["contract"] != mercuryCaptureContract ||
+		receipt.Payload.Metadata["provider_response_sha256"] != response.Pages[0].BodySHA256 ||
+		receipt.Payload.Metadata["provider_write_attempted"] != false {
+		t.Fatalf("persisted receipt metadata = %#v", receipt.Payload.Metadata)
 	}
 }
 

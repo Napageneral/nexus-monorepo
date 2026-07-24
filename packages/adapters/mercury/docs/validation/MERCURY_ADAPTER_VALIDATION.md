@@ -1,6 +1,6 @@
 # Mercury Adapter Validation
 
-## MAP-002 and MAP-003 gates
+## MAP-002 through MAP-004 gates
 
 - official operation catalog binding;
 - runtime reflection parity;
@@ -20,5 +20,13 @@
 - primary/AP backfill scope;
 - incomplete, tampered and inconsistent envelope rejection;
 - all authority flags false.
+- persisted record metadata contains the full hash-bound provider evidence;
+- atomic fact ids recompute exactly from typed value and evidence identity;
+- money has exact integer minor units and never float-derived rounding;
+- equal-time contradiction and missing requirement resolution fails closed;
+- normal Nex runtime calls create, reuse and version observation heads;
+- repeated projection creates no duplicate facts or observation rows;
+- changed evidence creates immutable successor observations;
+- tampered stored-record metadata is rejected before any memory write.
 
 No live provider write is permitted.

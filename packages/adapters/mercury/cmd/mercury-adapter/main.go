@@ -14,7 +14,7 @@ import (
 
 const (
 	adapterName    = "mercury-adapter"
-	adapterVersion = "0.2.0"
+	adapterVersion = "0.3.0"
 	platformID     = "mercury"
 )
 

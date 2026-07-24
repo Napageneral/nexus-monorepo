@@ -1,6 +1,6 @@
 # Mercury Adapter Workplan
 
-**Status:** MAP-002 AND MAP-003 IMPLEMENTED; MAP-004 THROUGH MAP-012 PENDING
+**Status:** MAP-002 THROUGH MAP-004 IMPLEMENTED; MAP-005 THROUGH MAP-012 PENDING
 **Spec:** `docs/specs/MERCURY_ADAPTER_SPEC.md`
 **Validation:** `docs/validation/MERCURY_ADAPTER_VALIDATION.md`
 
@@ -41,11 +41,19 @@ tax, distribution, or cutover authority.
 
 Status: implemented in `0.2.0`.
 
-### MAP-004 through MAP-006: facts and finance bridge
+### MAP-004: deterministic facts and observations
 
-- derive typed observations from immutable records
-- reconcile transactions, balances, recipients, approval states, and scheduled
-  payments
+- derive typed atomic facts from immutable records
+- bind every value to an exact record hash and JSON-pointer evidence location
+- resolve transactions, balances, recipients, approval states and scheduled
+  payments without discarding missing or contradictory evidence
+- persist facts and versioned observations only through Nex runtime APIs
+- prove deterministic replay, immutable successor creation and tamper rejection
+
+Status: implemented in `0.3.0`.
+
+### MAP-005 and MAP-006: finance bridge
+
 - publish read-only finance projections with exact record references
 - retain disagreement and missing-data states rather than guessing
 
@@ -64,7 +72,7 @@ Status: implemented in `0.2.0`.
   terminal provider readback
 - never approve or release a payment on Tyler's behalf
 
-## MAP-002 and MAP-003 Acceptance
+## MAP-002 through MAP-004 Acceptance
 
 - `go test ./... -count=1` passes
 - `go vet ./...` passes
@@ -83,9 +91,16 @@ Status: implemented in `0.2.0`.
 - tampered, incomplete or internally inconsistent captures fail closed
 - the AP connection cannot escape recipient and approval-request reads
 - backfill and monitor handlers are exposed through the normal Nex runtime
+- provider payload metadata survives the canonical Nex record-ingest boundary
+- facts use exact types, minor units and JSON-pointer evidence locations
+- type confusion, hash tamper and malformed source records fail closed
+- observation replay reuses current Nex heads without duplicate rows
+- changed evidence creates immutable observation children linked to prior heads
+- contradictory and missing facts remain visible as unresolved states
 
 ## Production Boundary
 
-MAP-002 and MAP-003 are source-only until the cleanroom and release artifact
-gates pass. Production shadow ingestion then remains read-only and requires
-credential-pointer validation plus a serialized deployment window.
+MAP-002 through MAP-004 remain read-only. Production shadow ingestion requires
+credential-pointer validation, exact release artifacts, a serialized deployment
+window and record/fact/observation count and fingerprint proof before MAP-005
+may expose any MoonSleep finance projection.

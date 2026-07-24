@@ -21,6 +21,13 @@ accounting mutations.
 5. Preserve the response body and SHA-256 together.
 6. Treat provider data as evidence, never as journal or payment authority.
 
+## Provenance projection
+
+Use `mercury-provenance project` only with records returned by the Nex
+`records.list` API. It verifies exact stored record hashes before producing
+typed fact and observation payloads. Persist the emitted params through the
+normal Nex memory methods; do not write the memory database directly.
+
 The package reflects provider writes for contract visibility, but the
 read-only build rejects them before any provider request. Do not work around
 that boundary.
