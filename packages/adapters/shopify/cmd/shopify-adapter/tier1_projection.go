@@ -191,6 +191,21 @@ type shopifyInventoryLevelConnection struct {
 	Edges []shopifyInventoryLevelEdge `json:"edges"`
 }
 
+type shopifyInventoryVariant struct {
+	ID                string `json:"id"`
+	InventoryPolicy   string `json:"inventoryPolicy"`
+	InventoryQuantity int    `json:"inventoryQuantity"`
+}
+
+type shopifyInventoryVariantEdge struct {
+	Node shopifyInventoryVariant `json:"node"`
+}
+
+type shopifyInventoryVariantConnection struct {
+	Edges    []shopifyInventoryVariantEdge `json:"edges"`
+	PageInfo shopifyGraphQLPageInfo        `json:"pageInfo"`
+}
+
 type shopifyGraphQLLocation struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
@@ -209,11 +224,12 @@ type shopifyGraphQLInventoryLevel struct {
 }
 
 type shopifyGraphQLInventoryItem struct {
-	ID                 string                          `json:"id"`
-	SKU                string                          `json:"sku"`
-	UpdatedAt          string                          `json:"updatedAt"`
-	Tracked            bool                            `json:"tracked"`
-	InventoryLevels    shopifyInventoryLevelConnection `json:"inventoryLevels"`
+	ID                 string                            `json:"id"`
+	SKU                string                            `json:"sku"`
+	UpdatedAt          string                            `json:"updatedAt"`
+	Tracked            bool                              `json:"tracked"`
+	Variants           shopifyInventoryVariantConnection `json:"variants"`
+	InventoryLevels    shopifyInventoryLevelConnection   `json:"inventoryLevels"`
 	rawProviderJSON    json.RawMessage
 	rawProviderPayload map[string]any
 }
@@ -1452,6 +1468,18 @@ func buildInventoryRecords(state *shopifyState, item shopifyGraphQLInventoryItem
 	itemID := shopifyGIDIdentityToken(itemGID)
 	threadID := fmt.Sprintf("%s:inventory:%s", state.ShopDomain, itemID)
 	threadName := firstNonBlank(item.SKU, itemID)
+	variantGIDs := make([]string, 0, len(item.Variants.Edges))
+	variantIDs := make([]string, 0, len(item.Variants.Edges))
+	for _, variantEdge := range item.Variants.Edges {
+		variantGID := strings.TrimSpace(variantEdge.Node.ID)
+		if variantGID == "" {
+			continue
+		}
+		variantGIDs = append(variantGIDs, variantGID)
+		if variantID := shopifyNumericGID(variantGID); variantID != "" {
+			variantIDs = append(variantIDs, variantID)
+		}
+	}
 	records := make([]nexadapter.AdapterInboundRecord, 0, len(item.InventoryLevels.Edges))
 	for _, levelEdge := range item.InventoryLevels.Edges {
 		level := levelEdge.Node
@@ -1469,6 +1497,8 @@ func buildInventoryRecords(state *shopifyState, item shopifyGraphQLInventoryItem
 			"inventory_level_gid": levelGID,
 			"location_gid":        emptyToNil(level.Location.ID),
 			"location_id":         emptyToNil(shopifyNumericGID(level.Location.ID)),
+			"variant_gids":        variantGIDs,
+			"variant_ids":         variantIDs,
 		}
 		record := nexadapter.AdapterInboundRecord{
 			Operation: "record.ingest",
@@ -1825,6 +1855,19 @@ func normalizedCollectionRuleSet(ruleSet *shopifyGraphQLCollectionRuleSet) any {
 }
 
 func normalizedInventoryRow(shopDomain string, item shopifyGraphQLInventoryItem, level shopifyGraphQLInventoryLevel) map[string]any {
+	variantBindings := make([]map[string]any, 0, len(item.Variants.Edges))
+	for _, edge := range item.Variants.Edges {
+		variantGID := strings.TrimSpace(edge.Node.ID)
+		if variantGID == "" {
+			continue
+		}
+		variantBindings = append(variantBindings, compactMap(map[string]any{
+			"variant_gid":        variantGID,
+			"variant_id":         shopifyNumericGID(variantGID),
+			"inventory_policy":   strings.ToLower(strings.TrimSpace(edge.Node.InventoryPolicy)),
+			"inventory_quantity": edge.Node.InventoryQuantity,
+		}))
+	}
 	row := map[string]any{
 		"shop_domain":         shopDomain,
 		"inventory_item_gid":  item.ID,
@@ -1838,6 +1881,7 @@ func normalizedInventoryRow(shopDomain string, item shopifyGraphQLInventoryItem,
 		"location_id":         shopifyNumericGID(level.Location.ID),
 		"location_name":       level.Location.Name,
 		"available":           inventoryQuantity(level, "available"),
+		"variant_bindings":    variantBindings,
 	}
 	return compactMap(row)
 }
