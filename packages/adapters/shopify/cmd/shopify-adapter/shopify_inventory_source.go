@@ -18,6 +18,16 @@ const shopifyInventorySourceDocument = `query SourceInventory($first: Int!, $aft
         sku
         updatedAt
         tracked
+        variants(first: 10) {
+          edges {
+            node {
+              id
+              inventoryPolicy
+              inventoryQuantity
+            }
+          }
+          pageInfo { hasNextPage endCursor }
+        }
         inventoryLevels(first: 20) {
           edges {
             node {
@@ -74,6 +84,9 @@ func captureShopifyInventoryPage(
 		item := edge.Node
 		if strings.TrimSpace(item.ID) == "" {
 			continue
+		}
+		if item.Variants.PageInfo.HasNextPage {
+			return nil, "", false, fmt.Errorf("Shopify inventory item %s has more than 10 variant bindings", item.ID)
 		}
 		include := includeAll
 		if updated := parseShopifyUpdatedAt(item.UpdatedAt); updated.After(since) && !updated.After(through) {

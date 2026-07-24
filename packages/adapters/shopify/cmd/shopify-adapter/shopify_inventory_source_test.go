@@ -30,7 +30,7 @@ func TestCaptureShopifyInventoryPageIsOneProviderPageAndExact(t *testing.T) {
 				http.Error(response, "wrong page size", http.StatusBadRequest)
 				return
 			}
-			_, _ = response.Write([]byte(`{"data":{"inventoryItems":{"edges":[{"cursor":"inventory-1","node":{"id":"gid://shopify/InventoryItem/900719925474099312345","sku":"MOON-1","updatedAt":"2026-07-22T11:00:00Z","tracked":true,"inventoryLevels":{"edges":[{"node":{"id":"gid://shopify/InventoryLevel/2","updatedAt":"2026-07-22T11:01:00Z","location":{"id":"gid://shopify/Location/3","name":"Borden"},"quantities":[{"name":"available","quantity":7}]}}]}}}],"pageInfo":{"hasNextPage":true,"endCursor":"inventory-next"}}}}`))
+			_, _ = response.Write([]byte(`{"data":{"inventoryItems":{"edges":[{"cursor":"inventory-1","node":{"id":"gid://shopify/InventoryItem/900719925474099312345","sku":"MOON-1","updatedAt":"2026-07-22T11:00:00Z","tracked":true,"variants":{"edges":[{"node":{"id":"gid://shopify/ProductVariant/900719925474099399999","inventoryPolicy":"CONTINUE","inventoryQuantity":7}}],"pageInfo":{"hasNextPage":false,"endCursor":"variant-1"}},"inventoryLevels":{"edges":[{"node":{"id":"gid://shopify/InventoryLevel/2","updatedAt":"2026-07-22T11:01:00Z","location":{"id":"gid://shopify/Location/3","name":"Borden"},"quantities":[{"name":"available","quantity":7}]}}]}}}],"pageInfo":{"hasNextPage":true,"endCursor":"inventory-next"}}}}`))
 		default:
 			http.NotFound(response, request)
 		}
@@ -61,6 +61,11 @@ func TestCaptureShopifyInventoryPageIsOneProviderPageAndExact(t *testing.T) {
 	if _, present := records[0].Payload.Metadata["raw_provider_payload"]; present {
 		t.Fatal("provider object leaked into Nex control metadata")
 	}
+	row, _ := records[0].Payload.Metadata["row"].(map[string]any)
+	bindings, _ := row["variant_bindings"].([]map[string]any)
+	if len(bindings) != 1 || bindings[0]["variant_id"] != "900719925474099399999" || bindings[0]["inventory_policy"] != "continue" || bindings[0]["inventory_quantity"] != 7 {
+		t.Fatalf("unexpected variant binding: %#v", bindings)
+	}
 }
 
 func TestCaptureShopifyInventoryReconcileIncludesUnchangedRows(t *testing.T) {
@@ -82,5 +87,31 @@ func TestCaptureShopifyInventoryReconcileIncludesUnchangedRows(t *testing.T) {
 	}
 	if len(records) != 1 || !complete {
 		t.Fatalf("reconcile records=%d complete=%v", len(records), complete)
+	}
+}
+
+func TestCaptureShopifyInventoryPageRejectsTruncatedVariantBindings(t *testing.T) {
+	t.Cleanup(resetShopifyGlobals)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/admin/oauth/access_token":
+			_, _ = response.Write([]byte(`{"access_token":"token"}`))
+		case "/admin/api/2026-01/graphql.json":
+			_, _ = response.Write([]byte(`{"data":{"inventoryItems":{"edges":[{"cursor":"inventory-1","node":{"id":"gid://shopify/InventoryItem/1","sku":"MOON-1","updatedAt":"2026-07-22T11:00:00Z","tracked":true,"variants":{"edges":[],"pageInfo":{"hasNextPage":true,"endCursor":"variant-10"}},"inventoryLevels":{"edges":[]}}}],"pageInfo":{"hasNextPage":false,"endCursor":"inventory-1"}}}}`))
+		default:
+			http.NotFound(response, request)
+		}
+	}))
+	defer server.Close()
+	shopifyHTTPClient = server.Client()
+	state := &shopifyState{ConnectionID: "shopify-primary", ShopDomain: strings.TrimPrefix(server.URL, "https://"), ClientID: "client", ClientSecret: "secret", APIVersion: "2026-01"}
+	_, _, _, err := captureShopifyInventoryPage(
+		context.Background(), state,
+		time.Date(2026, 7, 22, 10, 0, 0, 0, time.UTC),
+		time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC),
+		"", false,
+	)
+	if err == nil || !strings.Contains(err.Error(), "more than 10 variant bindings") {
+		t.Fatalf("expected truncated binding rejection, got %v", err)
 	}
 }
