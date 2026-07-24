@@ -35,6 +35,8 @@ Current scope:
   page per invocation, independent cursors and commit/abort capture receipts
 - disabled-first UTC schedules plus a force-now operation; recurring schedules
   cannot run until an exact connection-bound plan is hash-confirmed and applied
+- second-granularity UTC schedule staggering so the three minute-level families
+  and every slower family start in separate slots instead of bursting together
 - a cross-process per-store governor with two request slots, request pacing,
   proactive REST-pressure delay, durable 429 backoff, and a shared token cache
 - conservative identity behavior with no email, phone, or name merge

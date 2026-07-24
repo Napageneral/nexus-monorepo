@@ -26,7 +26,9 @@ recurring schedules are disabled on install and upgrade. Use
 `moonsleep-commerce.shopify-source.trigger` for one force-now family run, or
 plan and hash-confirm an explicit connection-bound family set through
 `moonsleep-commerce.shopify-source.configure-schedules`. Never enable a
-schedule by editing its row directly.
+schedule by editing its row directly. The installed UTC expressions stagger
+each family into its own second/minute slot so activation does not create a
+provider-call burst.
 
 For a full customer run, invoke
 `scripts/shopify_customer_projection_runner.py --build-manifest`. The runner

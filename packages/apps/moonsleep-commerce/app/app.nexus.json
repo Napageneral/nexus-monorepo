@@ -1,6 +1,6 @@
 {
   "id": "moonsleep-commerce",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "displayName": "MoonSleep Commerce",
   "description": "Project exact Shopify records into MoonSleep identity and typed commerce state through public Nex operations.",
   "skill": "./SKILL.md",
@@ -104,11 +104,7 @@
             "pattern": "^[a-zA-Z0-9._:-]+$"
           }
         },
-        "required": [
-          "family",
-          "connection_id",
-          "request_id"
-        ],
+        "required": ["family", "connection_id", "request_id"],
         "additionalProperties": false
       },
       "response": {
