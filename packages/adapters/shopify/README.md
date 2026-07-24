@@ -98,6 +98,14 @@ go test ./...
 ./bin/shopify-adapter records.backfill.stage --connection <connection-id> --payload '{"since":"2020-01-01T00:00:00Z","to":"2026-07-20T18:00:00Z","stage_dir":"/private/nex-owned/shopify-customer-orders"}'
 ```
 
+`shopify.source.project-captured-page` never contacts Shopify or advances a
+cursor. For a large exact provider response, use deterministic
+`record_offset`/`record_limit` slices until `complete` is true; every slice is
+bound to the same response digest and observation. Loopback HTTP clients may
+send the exact response as bounded deterministic gzip bytes in
+`provider_response_gzip_base64`; the adapter restores the original bytes before
+verifying the same SHA-256.
+
 ## Active Docs
 
 - [docs/README.md](/Users/tyler/nexus/home/projects/nexus/packages/adapters/shopify/docs/README.md)

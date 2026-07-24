@@ -2,13 +2,33 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
+
+func gzipBase64(t *testing.T, value string) string {
+	t.Helper()
+	var compressed bytes.Buffer
+	writer, err := gzip.NewWriterLevel(&compressed, gzip.BestCompression)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer.Header.ModTime = time.Unix(0, 0)
+	if _, err := writer.Write([]byte(value)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return base64.StdEncoding.EncodeToString(compressed.Bytes())
+}
 
 func capturedOrdersPayload(t *testing.T, body string) map[string]any {
 	t.Helper()
@@ -41,6 +61,10 @@ func TestProjectCapturedOrdersPageUsesExactBytesWithoutProviderCall(t *testing.T
 	if result.SourceRows != 1 || len(result.Records) != 2 {
 		t.Fatalf("unexpected captured projection counts: %#v", result)
 	}
+	if result.RecordOffset != 0 || result.RecordLimit != shopifySourceMaxRecords ||
+		result.TotalRecords != 2 || result.NextRecordOffset != 2 || !result.Complete {
+		t.Fatalf("unexpected captured projection cursor: %#v", result)
+	}
 	if result.ProviderCalls != 0 || result.ProviderWriteAuthority || result.CursorAdvanced {
 		t.Fatalf("captured projection crossed its read-only boundary: %#v", result)
 	}
@@ -67,6 +91,84 @@ func TestProjectCapturedOrdersPageUsesExactBytesWithoutProviderCall(t *testing.T
 	lineRaw, _ := result.Records[1].Payload.Payload["provider_object_json"].(string)
 	if !strings.Contains(lineRaw, `"provider_line_extension":{"exact":"yes"}`) {
 		t.Fatalf("line provider extension was not preserved: %s", lineRaw)
+	}
+}
+
+func TestProjectCapturedOrdersPageSlicesOneExactResponseWithoutProviderCalls(t *testing.T) {
+	body := `{"orders":[{"id":101,"name":"#101","created_at":"2026-07-23T14:00:00Z","updated_at":"2026-07-23T14:59:00Z","currency":"USD","line_items":[{"id":1001},{"id":1002}]},{"id":102,"name":"#102","created_at":"2026-07-23T14:00:00Z","updated_at":"2026-07-23T14:59:00Z","currency":"USD","line_items":[{"id":2001}]}]}`
+	firstPayload := capturedOrdersPayload(t, body)
+	firstPayload["record_offset"] = 0
+	firstPayload["record_limit"] = 2
+	first, err := projectCapturedOrdersPage(capturedOrdersState(), firstPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.TotalRecords != 5 || first.NextRecordOffset != 2 || first.Complete ||
+		len(first.Records) != 2 || first.ProviderCalls != 0 {
+		t.Fatalf("unexpected first projection slice: %#v", first)
+	}
+
+	secondPayload := capturedOrdersPayload(t, body)
+	secondPayload["record_offset"] = first.NextRecordOffset
+	secondPayload["record_limit"] = 2
+	second, err := projectCapturedOrdersPage(capturedOrdersState(), secondPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.TotalRecords != 5 || second.NextRecordOffset != 4 || second.Complete ||
+		len(second.Records) != 2 || second.ProviderResponseSHA256 != first.ProviderResponseSHA256 {
+		t.Fatalf("unexpected second projection slice: %#v", second)
+	}
+
+	thirdPayload := capturedOrdersPayload(t, body)
+	thirdPayload["record_offset"] = second.NextRecordOffset
+	thirdPayload["record_limit"] = 2
+	third, err := projectCapturedOrdersPage(capturedOrdersState(), thirdPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third.TotalRecords != 5 || third.NextRecordOffset != 5 || !third.Complete ||
+		len(third.Records) != 1 || third.ProviderCalls != 0 {
+		t.Fatalf("unexpected terminal projection slice: %#v", third)
+	}
+}
+
+func TestProjectCapturedOrdersPageRestoresExactGzipEnvelope(t *testing.T) {
+	body := `{"orders":[{"id":101,"name":"#101","created_at":"2026-07-23T14:00:00Z","updated_at":"2026-07-23T14:59:00Z","currency":"USD","provider_extension":{"exact":true},"line_items":[]}]}`
+	payload := capturedOrdersPayload(t, body)
+	delete(payload, "provider_response_json")
+	payload["provider_response_gzip_base64"] = gzipBase64(t, body)
+	result, err := projectCapturedOrdersPage(capturedOrdersState(), payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.TotalRecords != 1 || len(result.Records) != 1 || result.ProviderCalls != 0 {
+		t.Fatalf("unexpected gzip projection: %#v", result)
+	}
+	raw, _ := result.Records[0].Payload.Payload["provider_object_json"].(string)
+	if !strings.Contains(raw, `"provider_extension":{"exact":true}`) {
+		t.Fatalf("gzip projection lost exact provider extension: %s", raw)
+	}
+}
+
+func TestCapturedPageGzipEnvelopeRejectsExpansionAndTrailingBytes(t *testing.T) {
+	oversized := strings.Repeat("x", capturedPageMaxBytes+1)
+	if _, err := capturedPageResponseBytes(map[string]any{
+		"provider_response_gzip_base64": gzipBase64(t, oversized),
+	}); err == nil || !strings.Contains(err.Error(), "exceeds its byte limit") {
+		t.Fatalf("expected decompressed byte-limit refusal, got %v", err)
+	}
+
+	valid := gzipBase64(t, `{"orders":[]}`)
+	compressed, err := base64.StdEncoding.DecodeString(valid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compressed = append(compressed, []byte("trailing")...)
+	if _, err := capturedPageResponseBytes(map[string]any{
+		"provider_response_gzip_base64": base64.StdEncoding.EncodeToString(compressed),
+	}); err == nil || !strings.Contains(err.Error(), "trailing bytes") {
+		t.Fatalf("expected trailing-byte refusal, got %v", err)
 	}
 }
 
@@ -131,6 +233,27 @@ func TestProjectCapturedOrdersPageRejectsMalformedContract(t *testing.T) {
 				payload["window_through"] = payload["request_since"]
 			},
 			match: "must be after",
+		},
+		{
+			name: "fractional record offset",
+			mutate: func(payload map[string]any) {
+				payload["record_offset"] = 1.5
+			},
+			match: "must be an integer",
+		},
+		{
+			name: "oversized record limit",
+			mutate: func(payload map[string]any) {
+				payload["record_limit"] = shopifySourceMaxRecords + 1
+			},
+			match: "outside its bound",
+		},
+		{
+			name: "ambiguous response encoding",
+			mutate: func(payload map[string]any) {
+				payload["provider_response_gzip_base64"] = gzipBase64(t, body)
+			},
+			match: "exactly one provider response encoding",
 		},
 	}
 	for _, test := range tests {
