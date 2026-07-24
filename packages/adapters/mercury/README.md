@@ -9,7 +9,7 @@ The package has two explicit logical connection roles:
 - `ap_request` for recipient and approval-request reads and a future,
   separately authorized payment-preparation actuator.
 
-The current `0.3.0` build is read-only. It reflects all 72 public operations so
+The current `0.3.1` build is read-only. It reflects all 72 public operations so
 the provider contract is inspectable, but:
 
 - only reviewed public GET operations can reach Mercury;

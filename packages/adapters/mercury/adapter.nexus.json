@@ -1,6 +1,6 @@
 {
   "id": "mercury",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "displayName": "Mercury",
   "description": "Canonical read-only Mercury adapter for immutable Nex financial evidence.",
   "platform": "mercury",

@@ -65,6 +65,69 @@ func TestExtractsTypedAccountAndPaymentFacts(t *testing.T) {
 	}
 }
 
+func TestExtractsLiveShapedAttachmentFacts(t *testing.T) {
+	parentProviderID := "txn_1"
+	identityBasis := strings.Join([]string{parentProviderID, "receipt", "invoice.pdf"}, "\x00")
+	providerID := "derived_attachment_" + sha256Hex([]byte(identityBasis+"\x001"))
+	record := testRevisionRecord(t, "attachment_revision", providerID, map[string]any{
+		"attachmentType": "receipt",
+		"fileName":       "invoice.pdf",
+		"url":            "https://example.test/private",
+	})
+	record.Metadata["provider_object_identity_contract"] = "nex_mercury_derived_attachment_identity_v1"
+	record.Metadata["parent_provider_object_id"] = parentProviderID
+	record.Metadata["attachment_occurrence"] = 1
+	result, err := Extract([]StoredRecord{record})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFactValue(t, result.Facts, "sanitized_filename", "invoice.pdf")
+	assertFactValue(t, result.Facts, "attachment_type", "receipt")
+	for _, fact := range result.Facts {
+		if fact.Value == "https://example.test/private" {
+			t.Fatal("attachment URL escaped into typed facts")
+		}
+	}
+	tampered := record
+	tampered.Metadata = map[string]any{}
+	for key, value := range record.Metadata {
+		tampered.Metadata[key] = value
+	}
+	tampered.Metadata["attachment_occurrence"] = 2
+	if _, err := Extract([]StoredRecord{tampered}); err == nil ||
+		!strings.Contains(err.Error(), "derived attachment identity mismatch") {
+		t.Fatalf("tampered attachment identity error = %v", err)
+	}
+}
+
+func TestCaptureFactsRemainScopedPerAccountRequest(t *testing.T) {
+	firstScope := sha256Hex([]byte(`{"accountId":"acct_1"}`))
+	secondScope := sha256Hex([]byte(`{"accountId":"acct_2"}`))
+	result, err := Project(ProjectInput{
+		Records: []StoredRecord{
+			testCaptureRecord(t, firstScope, `{"statements":[],"page":{"nextPage":null}}`),
+			testCaptureRecord(t, secondScope, `{"statements":[],"page":{"nextPage":null}}`),
+		},
+		ResolutionAt: "2026-07-24T12:05:00Z",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, observation := range result.Resolution.Observations {
+		if observation.FieldName != "provider_response_sha256" {
+			continue
+		}
+		count++
+		if observation.ResolutionState != "resolved" {
+			t.Fatalf("capture observation = %#v", observation)
+		}
+	}
+	if count != 2 {
+		t.Fatalf("provider response observations = %d", count)
+	}
+}
+
 func TestExtractReplayIsByteStable(t *testing.T) {
 	record := testRevisionRecord(t, "transaction_revision", "txn_1", map[string]any{
 		"id":                         "txn_1",
@@ -353,6 +416,39 @@ func TestProjectReplayIsDeterministic(t *testing.T) {
 func testRevisionRecord(t *testing.T, family, providerID string, payload map[string]any) StoredRecord {
 	t.Helper()
 	return testRevisionRecordAt(t, family, providerID, "2026-07-24T12:00:00Z", payload)
+}
+
+func testCaptureRecord(t *testing.T, scopeSHA256 string, body string) StoredRecord {
+	t.Helper()
+	digest := sha256.Sum256([]byte(body))
+	hash := hex.EncodeToString(digest[:])
+	return StoredRecord{
+		ID:          "capture-" + scopeSHA256,
+		RecordID:    "mercury:capture:" + scopeSHA256,
+		Timestamp:   1784900000000,
+		Platform:    "mercury",
+		ContainerID: "api_capture_receipt",
+		Metadata: map[string]any{
+			"external_record_id":       "mercury:capture:" + scopeSHA256,
+			"contract":                 CaptureContract,
+			"record_family":            "api_capture_receipt",
+			"provider_operation_id":    "getAccountStatements",
+			"capture_scope_sha256":     scopeSHA256,
+			"page_number":              1,
+			"row_count":                0,
+			"http_status":              200,
+			"provider_response_body":   body,
+			"provider_response_sha256": hash,
+			"captured_at":              "2026-07-24T12:00:00Z",
+			"provider_write_attempted": false,
+			"provider_write_authority": false,
+			"journal_authority":        false,
+			"payment_authority":        false,
+			"tax_authority":            false,
+			"distribution_authority":   false,
+			"cutover_authority":        false,
+		},
+	}
 }
 
 func testRevisionRecordAt(

@@ -271,7 +271,7 @@ if ! jq -e '
   .healthy == true and
   .adapter.name == "mercury-adapter" and
   .adapter.platform == "mercury" and
-  .adapter.version == "0.3.0"
+  .adapter.version == "0.3.1"
 ' <<<"${health_before}" >/dev/null; then
   echo "unexpected Mercury package health: ${health_before}" >&2
   exit 1
