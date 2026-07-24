@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildShopifySourceIdentityObservations,
+  configureShopifyProjections,
   configureShopifySourceSchedules,
   inspectShopifyCustomerBackfill,
   inspectShopifyCommerceBackfill,
@@ -133,6 +134,180 @@ describe("Shopify source schedule configuration", () => {
       } as never),
     ).rejects.toThrow("injected job update failure");
     expect(schedules.every((row) => row.enabled === 0)).toBe(true);
+  });
+});
+
+describe("Shopify durable projection configuration", () => {
+  it("plans without mutation and atomically enables exact customer and commerce subscriptions", async () => {
+    const jobs = [
+      {
+        id: "job-customer",
+        name: "moonsleep-commerce.shopify-customer-identity",
+        status: "inactive",
+      },
+      {
+        id: "job-commerce",
+        name: "moonsleep-commerce.shopify-order-commerce",
+        status: "inactive",
+      },
+    ];
+    const subscriptions = [
+      {
+        id: "sub-customer",
+        job_definition_id: "job-customer",
+        event_type: "record.ingested",
+        match_json: JSON.stringify({ platform: "shopify", container_id: "customer" }),
+        enabled: 0,
+      },
+      {
+        id: "sub-order",
+        job_definition_id: "job-commerce",
+        event_type: "record.ingested",
+        match_json: JSON.stringify({ platform: "shopify", container_id: "order" }),
+        enabled: 0,
+      },
+      {
+        id: "sub-line",
+        job_definition_id: "job-commerce",
+        event_type: "record.ingested",
+        match_json: JSON.stringify({ platform: "shopify", container_id: "line_item" }),
+        enabled: 0,
+      },
+    ];
+    let failSubscription = "";
+    const jobsUpdate = vi.fn(async (input: Record<string, unknown>) => {
+      const row = jobs.find((entry) => entry.id === input.id)!;
+      row.status = String(input.status);
+      return { payload: { job: row } };
+    });
+    const subscriptionsUpdate = vi.fn(async (input: Record<string, unknown>) => {
+      if (input.id === failSubscription && input.enabled === true) {
+        throw new Error("injected subscription update failure");
+      }
+      const row = subscriptions.find((entry) => entry.id === input.id)!;
+      row.enabled = input.enabled === true ? 1 : 0;
+      return { payload: { subscription: row } };
+    });
+    const nex = {
+      jobs: { list: vi.fn(async () => ({ payload: { jobs } })), update: jobsUpdate },
+      events: {
+        subscriptions: {
+          list: vi.fn(async (input: Record<string, unknown>) => ({
+            payload: {
+              subscriptions: subscriptions.filter(
+                (row) => row.job_definition_id === input.job_definition_id,
+              ),
+            },
+          })),
+          update: subscriptionsUpdate,
+        },
+      },
+    };
+
+    const planned = (await configureShopifyProjections({
+      params: {
+        mode: "plan",
+        enabled_projections: ["customer_identity", "order_commerce"],
+      },
+      nex,
+    } as never)) as Record<string, unknown>;
+    expect(planned).toMatchObject({
+      state: "planned",
+      provider_read_authority: false,
+      provider_write_authority: false,
+    });
+    expect(planned.plan_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(jobsUpdate).not.toHaveBeenCalled();
+    expect(subscriptionsUpdate).not.toHaveBeenCalled();
+
+    await configureShopifyProjections({
+      params: {
+        mode: "apply",
+        enabled_projections: ["customer_identity", "order_commerce"],
+        expected_plan_sha256: planned.plan_sha256,
+        confirmation: "CONFIGURE_MOONSLEEP_SHOPIFY_PROJECTIONS",
+      },
+      nex,
+    } as never);
+    expect(jobs.every((row) => row.status === "active")).toBe(true);
+    expect(subscriptions.every((row) => row.enabled === 1)).toBe(true);
+
+    failSubscription = "sub-line";
+    await expect(
+      configureShopifyProjections({
+        params: {
+          mode: "apply",
+          enabled_projections: ["customer_identity", "order_commerce"],
+          expected_plan_sha256: planned.plan_sha256,
+          confirmation: "CONFIGURE_MOONSLEEP_SHOPIFY_PROJECTIONS",
+        },
+        nex,
+      } as never),
+    ).rejects.toThrow("injected subscription update failure");
+    expect(jobs.every((row) => row.status === "inactive")).toBe(true);
+    expect(subscriptions.every((row) => row.enabled === 0)).toBe(true);
+  });
+
+  it("rejects drifted subscriptions before mutating jobs", async () => {
+    const update = vi.fn();
+    const nex = {
+      jobs: {
+        list: vi.fn(async () => ({
+          payload: {
+            jobs: [
+              {
+                id: "job-customer",
+                name: "moonsleep-commerce.shopify-customer-identity",
+                status: "inactive",
+              },
+              {
+                id: "job-commerce",
+                name: "moonsleep-commerce.shopify-order-commerce",
+                status: "inactive",
+              },
+            ],
+          },
+        })),
+        update,
+      },
+      events: {
+        subscriptions: {
+          list: vi.fn(async (input: Record<string, unknown>) => ({
+            payload: {
+              subscriptions:
+                input.job_definition_id === "job-customer"
+                  ? [
+                      {
+                        id: "sub-customer",
+                        job_definition_id: "job-customer",
+                        event_type: "record.ingested",
+                        match_json: JSON.stringify({ platform: "shopify" }),
+                        enabled: 0,
+                      },
+                    ]
+                  : [],
+            },
+          })),
+          update: vi.fn(),
+        },
+      },
+    };
+    const planned = (await configureShopifyProjections({
+      params: { mode: "plan", enabled_projections: ["customer_identity"] },
+      nex,
+    } as never)) as Record<string, unknown>;
+    await expect(
+      configureShopifyProjections({
+        params: {
+          mode: "apply",
+          enabled_projections: ["customer_identity"],
+          expected_plan_sha256: planned.plan_sha256,
+          confirmation: "CONFIGURE_MOONSLEEP_SHOPIFY_PROJECTIONS",
+        },
+        nex,
+      } as never),
+    ).rejects.toThrow("subscription contract drifted");
+    expect(update).not.toHaveBeenCalled();
   });
 });
 
