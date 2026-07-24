@@ -1,0 +1,9 @@
+{
+  "id": "mercury",
+  "version": "0.3.0",
+  "displayName": "Mercury",
+  "description": "Canonical read-only Mercury adapter for immutable Nex financial evidence.",
+  "platform": "mercury",
+  "command": "./bin/mercury-adapter",
+  "skill": "./SKILL.md"
+}
