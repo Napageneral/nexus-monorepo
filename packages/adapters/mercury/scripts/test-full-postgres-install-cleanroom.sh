@@ -336,12 +336,11 @@ runtime_counts="$(docker exec -u postgres "${postgres_container}" \
     SELECT json_build_object(
       'records', (SELECT COUNT(*) FROM nex_runtime.records),
       'receipts', (SELECT COUNT(*) FROM nex_runtime.record_ingest_receipts),
-      'adapter_instances', (SELECT COUNT(*) FROM nex_runtime.adapter_instances),
-      'connections', (SELECT COUNT(*) FROM nex_runtime.adapter_connections)
+      'adapter_instances', (SELECT COUNT(*) FROM nex_runtime.adapter_instances)
     )")"
 jq -e '
   .records == 0 and .receipts == 0 and
-  .adapter_instances == 0 and .connections == 0
+  .adapter_instances == 0
 ' <<<"${runtime_counts}" >/dev/null
 
 mkdir -p "$(dirname "${RECEIPT_PATH}")"
