@@ -12,6 +12,10 @@ import {
   type ParsedShopifyCommerceRecord,
   type ShopifyCommerceClient,
 } from "../jobs/shopify-order-commerce.js";
+import {
+  SHOPIFY_SOURCE_SCHEDULES,
+  type ShopifySourceFamily,
+} from "../jobs/shopify-source-schedules.js";
 
 type RuntimeRow = Record<string, unknown>;
 
@@ -37,20 +41,6 @@ const SOURCE_JOB_NAMES = Object.freeze({
   "catalog.delta": "moonsleep-commerce.shopify-source.catalog-delta",
   "marketing.delta": "moonsleep-commerce.shopify-source.marketing-delta",
   "payouts.delta": "moonsleep-commerce.shopify-source.payouts-delta",
-});
-const SOURCE_JOB_SCHEDULES = Object.freeze({
-  "orders.delta": "* * * * *",
-  "customers.delta": "* * * * *",
-  "inventory.hot": "* * * * *",
-  "inventory.reconcile": "*/5 * * * *",
-  "fulfillment.delta": "*/5 * * * *",
-  "discounts.delta": "*/5 * * * *",
-  "finance.transactions": "*/5 * * * *",
-  "disputes.delta": "*/5 * * * *",
-  "products.delta": "*/15 * * * *",
-  "catalog.delta": "*/15 * * * *",
-  "marketing.delta": "13 * * * *",
-  "payouts.delta": "17 */6 * * *",
 });
 const SOURCE_SCHEDULE_CONFIRMATION = "CONFIGURE_MOONSLEEP_SHOPIFY_SOURCE_SCHEDULES";
 const PROJECTION_CONFIRMATION = "CONFIGURE_MOONSLEEP_SHOPIFY_PROJECTIONS";
@@ -670,8 +660,6 @@ export const triggerShopifySource: NexAppMethodHandler = async (ctx) => {
   };
 };
 
-type ShopifySourceFamily = keyof typeof SOURCE_JOB_NAMES;
-
 function requireSourceFamilies(value: unknown): ShopifySourceFamily[] {
   if (!Array.isArray(value)) {
     throw new Error("enabled_families must be an array");
@@ -697,7 +685,7 @@ function sourceSchedulePlan(connectionId: string, enabledFamilies: ShopifySource
       family,
       job_name: SOURCE_JOB_NAMES[family],
       schedule_name: SOURCE_JOB_NAMES[family],
-      expression: SOURCE_JOB_SCHEDULES[family],
+      expression: SHOPIFY_SOURCE_SCHEDULES[family],
       timezone: "UTC",
       enabled: enabled.has(family),
     }));
