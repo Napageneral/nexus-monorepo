@@ -1,0 +1,14 @@
+{
+  "provider": "mercury",
+  "registry_id": "gn5944jmrvahbit",
+  "source_url": "https://dash.readme.com/api/v1/api-registry/gn5944jmrvahbit",
+  "openapi_version": "3.0.0",
+  "provider_api_version": "1.0.0",
+  "source_sha256": "73c6d6d9183a930f9411d44ebdacecde4b1c3bdcce558efdfd07160e140e1fc9",
+  "operation_catalog_path": "internal/catalog/operations.catalog.json",
+  "operation_catalog_sha256": "25df4e91a03876e9ca431fa01a0bd45e56925673976b54446ab6104f3ef1303e",
+  "path_count": 59,
+  "operation_count": 84,
+  "public_operation_count": 72,
+  "internal_operation_count": 12
+}
