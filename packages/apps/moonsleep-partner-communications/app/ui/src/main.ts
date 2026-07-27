@@ -1,5 +1,11 @@
 import "./styles.css";
-import { compactDate, lifecycleLabel, queueSections, type LoopRow } from "./view-model.js";
+import {
+  compactDate,
+  coverageLabel,
+  lifecycleLabel,
+  queueSections,
+  type LoopRow,
+} from "./view-model.js";
 
 type Row = Record<string, unknown>;
 type RuntimeBridge = {
@@ -41,6 +47,38 @@ type NativeThread = {
   messages: NativeMessage[];
 };
 
+type ProposalIndexEntry = {
+  proposal_batch_sha256: string;
+  workspace_key: string;
+  classifier_id: string;
+  proposed_at: string;
+  disposition: string;
+  open_loop_ids: string[];
+};
+
+type SourceInboxRecord = NativeMessage & {
+  logical_record_id: string;
+  source_revision_sha256: string;
+  revision_count: number;
+  revision_observed_at: string;
+  connection_id: string;
+  provider_thread_id: string;
+  provider_message_id: string;
+  coverage_state: "unreviewed" | "proposed" | "proposal_conflict" | "reviewed";
+  proposal_batches: ProposalIndexEntry[];
+};
+
+type SourceInbox = {
+  state: string;
+  total_source_records: number;
+  total_source_revisions: number;
+  filtered_source_records: number;
+  offset: number;
+  limit: number;
+  coverage_counts: Record<string, number>;
+  records: SourceInboxRecord[];
+};
+
 const root = document.querySelector<HTMLDivElement>("#app");
 if (!root) throw new Error("Partner Desk root is missing");
 
@@ -49,6 +87,11 @@ let selectedWorkspace = "";
 let selectedLoop = "";
 let selectedThread = "";
 let current: Row | null = null;
+let inbox: SourceInbox | null = null;
+let selectedSourceRecord = "";
+let inboxOffset = 0;
+let coverageFilter = "";
+let activeView = new URL(location.href).searchParams.get("view") === "inbox" ? "inbox" : "reviewed";
 let busy = false;
 let notice = "";
 
@@ -79,7 +122,7 @@ async function bridge(): Promise<RuntimeBridge> {
 
 async function call(method: string, params: Row): Promise<Row> {
   const runtime = await bridge();
-  return asRow(await runtime.rpcCall(method, params, { clientVersion: "partner-desk-0.1.0" }));
+  return asRow(await runtime.rpcCall(method, params, { clientVersion: "partner-desk-0.2.0" }));
 }
 
 function workspaceTitle(value: string): string {
@@ -107,6 +150,11 @@ function renderShell(content: string): void {
           <span><i class="dot locked"></i> Replies locked</span>
         </div>
       </header>
+      <nav class="desk-switcher" aria-label="Partner Desk views">
+        <button class="${activeView === "reviewed" ? "active" : ""}" data-view="reviewed" aria-current="${activeView === "reviewed" ? "page" : "false"}">Reviewed work</button>
+        <button class="${activeView === "inbox" ? "active" : ""}" data-view="inbox" aria-current="${activeView === "inbox" ? "page" : "false"}">Coverage inbox</button>
+        <span>Proposals never become operational tasks without review.</span>
+      </nav>
       ${notice ? `<div class="notice" role="status">${escapeHtml(notice)}</div>` : ""}
       ${content}
     </div>`;
@@ -158,6 +206,112 @@ function messageRow(message: NativeMessage): string {
         <div class="message-foot"><code>${escapeHtml(message.source_record_id)}</code>${message.attachment_count ? `<span>${message.attachment_count} attachment${message.attachment_count === 1 ? "" : "s"}</span>` : ""}</div>
       </div>
     </article>`;
+}
+
+function coverageTone(value: SourceInboxRecord["coverage_state"]): string {
+  if (value === "proposal_conflict") return "urgent";
+  if (value === "proposed") return "waiting";
+  if (value === "reviewed") return "quiet";
+  return "open";
+}
+
+function sourceRecordRow(record: SourceInboxRecord, active: boolean): string {
+  const actor = record.direction === "outbound" ? "MoonSleep" : "Partner";
+  return `
+    <button class="source-record-row ${active ? "active" : ""}" data-source-record="${escapeHtml(record.source_record_id)}">
+      <span class="source-record-top">
+        <span class="status-pill ${coverageTone(record.coverage_state)}">${escapeHtml(coverageLabel(record.coverage_state))}</span>
+        <time>${escapeHtml(compactDate(record.observed_at))}</time>
+      </span>
+      <strong>${escapeHtml(actor)}</strong>
+      <span class="source-record-summary">${escapeHtml(record.summary)}</span>
+      <span class="source-record-meta">${record.attachment_count} attachment${record.attachment_count === 1 ? "" : "s"} · ${record.revision_count} captured revision${record.revision_count === 1 ? "" : "s"}</span>
+    </button>`;
+}
+
+function renderInbox(): void {
+  if (!inbox) return renderLoading("Loading source coverage");
+  const records = inbox.records;
+  if (!selectedSourceRecord || !records.some((record) => record.source_record_id === selectedSourceRecord)) {
+    selectedSourceRecord = records[0]?.source_record_id ?? "";
+  }
+  const selected = records.find((record) => record.source_record_id === selectedSourceRecord);
+  const counts = inbox.coverage_counts;
+  const filters = [
+    ["", "All records", inbox.total_source_records],
+    ["unreviewed", "Unreviewed", counts.unreviewed ?? 0],
+    ["proposed", "Proposal ready", counts.proposed ?? 0],
+    ["proposal_conflict", "Conflicts", counts.proposal_conflict ?? 0],
+    ["reviewed", "Reviewed", counts.reviewed ?? 0],
+  ];
+  const filterButtons = filters.map(([value, label, count]) => `
+    <button class="coverage-filter ${coverageFilter === value ? "active" : ""}" data-coverage-filter="${escapeHtml(value)}">
+      <span>${escapeHtml(label)}</span><strong>${escapeHtml(count)}</strong>
+    </button>`).join("");
+  const proposalRows = selected?.proposal_batches.map((batch) => `
+    <article class="proposal-receipt">
+      <div><span class="status-pill waiting">${escapeHtml(batch.disposition.replaceAll("_", " "))}</span><time>${escapeHtml(compactDate(batch.proposed_at))}</time></div>
+      <strong>${escapeHtml(workspaceTitle(batch.workspace_key))}</strong>
+      <p>${batch.open_loop_ids.length ? `${batch.open_loop_ids.length} proposed open-loop link${batch.open_loop_ids.length === 1 ? "" : "s"}` : "No open-loop link proposed"}</p>
+      <code>${escapeHtml(batch.proposal_batch_sha256)}</code>
+      <small>${escapeHtml(batch.classifier_id)}</small>
+    </article>`).join("") ?? "";
+  const start = inbox.filtered_source_records === 0 ? 0 : inbox.offset + 1;
+  const end = Math.min(inbox.offset + inbox.limit, inbox.filtered_source_records);
+  const hasPrevious = inbox.offset > 0;
+  const hasNext = end < inbox.filtered_source_records;
+
+  renderShell(`
+    <main class="inbox-grid">
+      <aside class="coverage-panel" aria-label="Coverage filters">
+        <div class="panel-heading"><span>Coverage</span><strong>${inbox.total_source_records}</strong></div>
+        <div class="coverage-summary">
+          <p>${inbox.total_source_revisions} immutable revisions collapse into ${inbox.total_source_records} current source records. Each current record stays visible until it has reviewed coverage.</p>
+          ${filterButtons}
+        </div>
+        <div class="authority-card">
+          <strong>Read-only proposal boundary</strong>
+          <p>Classifier output can suggest coverage and open loops. It cannot send messages, resolve identities, or create queue work.</p>
+        </div>
+      </aside>
+      <section class="source-list-panel" aria-label="Partner source records">
+        <div class="source-list-head">
+          <div><div class="eyebrow">Alibaba records</div><h2>Source coverage inbox</h2></div>
+          <span>${start}-${end} of ${inbox.filtered_source_records}</span>
+        </div>
+        <div class="source-record-list">
+          ${records.length ? records.map((record) => sourceRecordRow(record, record.source_record_id === selectedSourceRecord)).join("") : `<div class="quiet-copy padded">No records match this coverage filter.</div>`}
+        </div>
+        <div class="pager" aria-label="Source record pages">
+          <button data-page="previous" ${hasPrevious ? "" : "disabled"}>Previous</button>
+          <button data-page="next" ${hasNext ? "" : "disabled"}>Next</button>
+        </div>
+      </section>
+      <section class="source-detail-panel" aria-label="Selected source record">
+        ${selected ? `
+          <div class="source-detail-head">
+            <span class="status-pill ${coverageTone(selected.coverage_state)}">${escapeHtml(coverageLabel(selected.coverage_state))}</span>
+            <h2>${selected.direction === "outbound" ? "MoonSleep message" : "Partner message"}</h2>
+            <time>${escapeHtml(compactDate(selected.observed_at))}</time>
+          </div>
+          <p class="source-detail-summary">${escapeHtml(selected.summary)}</p>
+          <dl class="fact-list">
+            <div><dt>Provider</dt><dd>${escapeHtml(selected.provider)}</dd></div>
+            <div><dt>Thread</dt><dd><code>${escapeHtml(selected.provider_thread_id)}</code></dd></div>
+            <div><dt>Message</dt><dd><code>${escapeHtml(selected.provider_message_id)}</code></dd></div>
+            <div><dt>Logical record</dt><dd><code>${escapeHtml(selected.logical_record_id)}</code></dd></div>
+            <div><dt>Captured revisions</dt><dd>${selected.revision_count}</dd></div>
+            <div><dt>Current revision observed</dt><dd>${escapeHtml(compactDate(selected.revision_observed_at))}</dd></div>
+            <div><dt>Attachments</dt><dd>${selected.attachment_count}</dd></div>
+            <div><dt>Source receipt</dt><dd><code>${escapeHtml(selected.source_revision_sha256)}</code></dd></div>
+          </dl>
+          <div class="proposal-section">
+            <div class="section-heading"><h3>Immutable proposals</h3><span>${selected.proposal_batches.length}</span></div>
+            ${proposalRows || `<p class="quiet-copy">No classifier proposal has been committed for this record.</p>`}
+          </div>
+        ` : `<div class="quiet-copy padded">Select a source record.</div>`}
+      </section>
+    </main>`);
 }
 
 function renderWorkspace(): void {
@@ -248,6 +402,22 @@ async function loadCurrent(): Promise<void> {
   renderWorkspace();
 }
 
+async function loadInbox(): Promise<void> {
+  renderLoading("Loading source coverage");
+  inbox = await call("moonsleep-partner-desk.source.inbox", {
+    provider: "alibaba",
+    ...(coverageFilter ? { coverage_state: coverageFilter } : {}),
+    offset: inboxOffset,
+    limit: 50,
+  }) as unknown as SourceInbox;
+  renderInbox();
+}
+
+async function loadView(): Promise<void> {
+  if (activeView === "inbox") return await loadInbox();
+  return await loadCurrent();
+}
+
 async function loadAll(): Promise<void> {
   renderLoading("Opening Partner Desk");
   const index = await call("moonsleep-partner-desk.review.workspaces", {});
@@ -255,7 +425,7 @@ async function loadAll(): Promise<void> {
   if (!selectedWorkspace || !workspaces.some((entry) => entry.workspace_key === selectedWorkspace)) {
     selectedWorkspace = new URL(location.href).searchParams.get("workspace") || workspaces[0]?.workspace_key || "";
   }
-  await loadCurrent();
+  await loadView();
 }
 
 async function commitLifecycle(form: HTMLFormElement): Promise<void> {
@@ -302,6 +472,39 @@ root.addEventListener("click", (event) => {
   const target = event.target as HTMLElement;
   const retry = target.closest<HTMLElement>("[data-action='retry']");
   if (retry) void loadAll().catch(renderError);
+  const view = target.closest<HTMLElement>("[data-view]")?.dataset.view;
+  if ((view === "reviewed" || view === "inbox") && view !== activeView) {
+    activeView = view;
+    notice = "";
+    const url = new URL(location.href);
+    if (activeView === "inbox") url.searchParams.set("view", "inbox");
+    else url.searchParams.delete("view");
+    history.replaceState(null, "", url);
+    void loadView().catch(renderError);
+  }
+  const nextCoverageFilter = target.closest<HTMLElement>("[data-coverage-filter]")?.dataset.coverageFilter;
+  if (nextCoverageFilter !== undefined && nextCoverageFilter !== coverageFilter) {
+    coverageFilter = nextCoverageFilter;
+    inboxOffset = 0;
+    selectedSourceRecord = "";
+    void loadInbox().catch(renderError);
+  }
+  const sourceRecord = target.closest<HTMLElement>("[data-source-record]")?.dataset.sourceRecord;
+  if (sourceRecord) {
+    selectedSourceRecord = sourceRecord;
+    renderInbox();
+  }
+  const page = target.closest<HTMLElement>("[data-page]")?.dataset.page;
+  if (page === "previous" && inbox) {
+    inboxOffset = Math.max(0, inboxOffset - inbox.limit);
+    selectedSourceRecord = "";
+    void loadInbox().catch(renderError);
+  }
+  if (page === "next" && inbox) {
+    inboxOffset += inbox.limit;
+    selectedSourceRecord = "";
+    void loadInbox().catch(renderError);
+  }
   const workspace = target.closest<HTMLElement>("[data-workspace]")?.dataset.workspace;
   if (workspace && workspace !== selectedWorkspace) {
     selectedWorkspace = workspace;

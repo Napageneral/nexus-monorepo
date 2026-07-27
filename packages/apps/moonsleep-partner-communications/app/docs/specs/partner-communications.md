@@ -23,6 +23,14 @@ The projection consumes immutable communication records and exact revision
 digests from Nex. Every record retains its provider, connection, native thread,
 native message, timestamp, direction, bounded summary, and attachment count.
 
+Nex may retain more than one immutable revision for the same provider message.
+The source inbox groups only revisions with the same provider, connection,
+thread, message, and logical-record identity, then selects the newest
+source-observed revision as the current row. Equal-time competing heads or
+cross-thread lineage fail closed. Historical revisions remain auditable but do
+not render as duplicate messages, and reviewed or proposal coverage applies
+only to the selected source-record revision.
+
 Canonical identity must come from an exact provider anchor or operator review.
 Names, addresses, message similarity, and model output are evidence only. A
 provider-native thread cannot silently resolve to several canonical entities.
@@ -47,6 +55,12 @@ to the same canonical partner. The provider-native threads remain separate.
 Model output may propose new loops, labels, splits, merges, lifecycle changes,
 or closure. A proposal never enters the operational queue until reviewed.
 
+Proposal batches are immutable Nex records. Each batch is limited to 50 source
+records, binds every exact source revision, carries exactly one proposed
+coverage disposition per source record, and has a replay-safe idempotency key.
+If more than one proposal batch covers the same unreviewed record, Partner Desk
+shows a conflict and chooses neither.
+
 ## Coverage
 
 Every in-scope source record receives one explicit disposition:
@@ -59,6 +73,11 @@ Every in-scope source record receives one explicit disposition:
 
 A source record may support several loops. Unclassified records remain visible
 in review; they are never silently dropped.
+
+The source coverage inbox is the canonical operator list. It reads committed
+Alibaba or Gmail records directly from Nex and labels each record as reviewed,
+proposed, conflicting, or unreviewed. It returns bounded summaries and receipt
+identities, never raw provider payloads.
 
 ## Operational projection
 
@@ -83,6 +102,9 @@ The projection cannot:
 - promote extracted claims into Supply or Finance truth;
 - close a loop without source-linked evidence;
 - hide an in-scope source record without an explicit disposition.
+
+The proposal ledger additionally cannot promote its proposed canonical entity,
+contact, relationship category, coverage, or open loops into reviewed truth.
 
 Reply drafting and sending are a later, separately authorized phase. Drafts
 must remain source-linked, operator-approved, provider-scoped, and auditable.

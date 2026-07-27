@@ -138,8 +138,16 @@ install_package() {
 }
 
 wait_for_postgres() {
+  local consecutive=0
   for attempt in $(seq 1 90); do
-    docker exec "${postgres_container}" psql -X -U postgres -d moonsleep_nex -Atqc 'SELECT 1' >/dev/null 2>&1 && return 0
+    if docker exec "${postgres_container}" psql -X -U postgres -d moonsleep_nex -Atqc 'SELECT 1' >/dev/null 2>&1; then
+      consecutive=$((consecutive + 1))
+      if [[ "${consecutive}" -ge 3 ]]; then
+        return 0
+      fi
+    else
+      consecutive=0
+    fi
     sleep 1
   done
   docker logs "${postgres_container}" >&2 || true
@@ -320,25 +328,87 @@ surewal_contact_id="$(jq -r '.contact.id' <<<"${seed_first}")"
 seed_counts="$(runtime_counts)"
 
 echo "[partner-cleanroom] ingest the complete adapter corpus twice"
+set +e
 ingest_first="$(docker exec "${runtime_container}" sh -c '
   token=$(cat /run/moonsleep-load-credentials/runtime-token)
   exec node /proof/ingest-jsonl-cleanroom.mjs /evidence/records-1.jsonl "$token"
 ')"
-jq -e --argjson expected "${EXPECTED_RECORD_COUNT}" '.completed==$expected and .skipped==0 and .other==0 and .total==$expected' <<<"${ingest_first}" >/dev/null
+ingest_first_status=$?
+set -e
+if [[ "${ingest_first_status}" -ne 0 ]] || ! jq -e --argjson expected "${EXPECTED_RECORD_COUNT}" '.completed==$expected and .skipped==0 and .other==0 and .total==$expected' <<<"${ingest_first}" >/dev/null; then
+  printf '[partner-cleanroom] first ingest failed: %s\n' "${ingest_first}" >&2
+  exit 1
+fi
 counts_after_first="$(runtime_counts)"
 directory_after_first="$(sqlite_directory_counts)"
 
+set +e
 ingest_second="$(docker exec "${runtime_container}" sh -c '
   token=$(cat /run/moonsleep-load-credentials/runtime-token)
   exec node /proof/ingest-jsonl-cleanroom.mjs /evidence/records-1.jsonl "$token"
 ')"
-jq -e --argjson expected "${EXPECTED_RECORD_COUNT}" '.completed==0 and .skipped==$expected and .other==0 and .total==$expected' <<<"${ingest_second}" >/dev/null
+ingest_second_status=$?
+set -e
+if [[ "${ingest_second_status}" -ne 0 ]] || ! jq -e --argjson expected "${EXPECTED_RECORD_COUNT}" '.completed==0 and .skipped==$expected and .other==0 and .total==$expected' <<<"${ingest_second}" >/dev/null; then
+  printf '[partner-cleanroom] replay ingest failed: %s\n' "${ingest_second}" >&2
+  exit 1
+fi
 counts_after_second="$(runtime_counts)"
 directory_after_second="$(sqlite_directory_counts)"
 [[ "$(jq -S -c . <<<"${counts_after_first}")" = "$(jq -S -c . <<<"${counts_after_second}")" ]]
 [[ "$(jq -S -c . <<<"${directory_after_first}")" = "$(jq -S -c . <<<"${directory_after_second}")" ]]
 jq -e --argjson expected "${EXPECTED_RECORD_COUNT}" '.records==$expected and .receipts==$expected and .events==$expected and .queue==0 and .dispatch_receipts==0 and .adapter_instances==0' <<<"${counts_after_second}" >/dev/null
 echo "[partner-cleanroom] replay counts stable; inspect complete native conversation"
+
+echo "[partner-cleanroom] commit one bounded immutable proposal batch without operational promotion"
+proposal_ids="$(docker exec -u postgres "${postgres_container}" psql -X -d moonsleep_nex -Atqc "SELECT id FROM nex_runtime.records WHERE platform='alibaba' AND thread_id='${NATIVE_THREAD_ID}' ORDER BY timestamp,id LIMIT 50")"
+proposal_record_ids="$(jq -Rsc 'split("\n") | map(select(length > 0))' <<<"${proposal_ids}")"
+[[ "$(jq 'length' <<<"${proposal_record_ids}")" = "50" ]]
+proposal_params="$(jq -nc \
+  --arg workspace_key "surewal-cleanroom-proposals" \
+  --arg entity "${surewal_entity_id}" \
+  --arg contact "${surewal_contact_id}" \
+  --argjson record_ids "${proposal_record_ids}" \
+  '{
+    workspace_key:$workspace_key,
+    proposed_canonical_entity_id:$entity,
+    proposed_contact_id:$contact,
+    partner_category:"vendor",
+    record_ids:$record_ids,
+    open_loop_proposals:[],
+    source_coverage_proposals:($record_ids | map({
+      source_record_id: .,
+      disposition:"informational",
+      open_loop_ids:[],
+      assertion_origin:"model"
+    })),
+    classifier_id:"cleanroom-partner-classifier-v1",
+    classifier_prompt_sha256:"6eeb986b79bb4290d13fa747184016fd32f60e73f2eefb00af21dd49ba3960e6",
+    proposal_note:"Bounded production-shaped proposal cleanroom proof.",
+    proposal_idempotency_key:"partner-desk-cleanroom-proposal-0001"
+  }')"
+set +e
+proposal_first="$(runtime_call moonsleep-partner-desk.proposal.commit "${proposal_params}")"
+proposal_status=$?
+set -e
+if [[ "${proposal_status}" -ne 0 ]]; then
+  printf '[partner-cleanroom] proposal commit failed: %s\n' "${proposal_first}" >&2
+  exit "${proposal_status}"
+fi
+proposal_revision="$(jq -r '.proposal.proposal_batch_sha256' <<<"${proposal_first}")"
+jq -e '.state=="proposal_committed" and .created==true and .validation.source_record_count==50 and .validation.open_loop_proposal_count==0 and .validation.source_coverage_proposal_count==50 and .model_output_operational_authority==false and .provider_write_authority==false' <<<"${proposal_first}" >/dev/null
+[[ "${proposal_revision}" =~ ^[0-9a-f]{64}$ ]]
+proposal_counts_after_first="$(runtime_counts)"
+proposal_replay="$(runtime_call moonsleep-partner-desk.proposal.commit "${proposal_params}")"
+jq -e --arg revision "${proposal_revision}" '.state=="proposal_replayed" and .created==false and .proposal.proposal_batch_sha256==$revision and .model_output_operational_authority==false and .provider_write_authority==false' <<<"${proposal_replay}" >/dev/null
+proposal_counts_after_replay="$(runtime_counts)"
+[[ "$(jq -S -c . <<<"${proposal_counts_after_first}")" = "$(jq -S -c . <<<"${proposal_counts_after_replay}")" ]]
+proposal_index="$(runtime_call moonsleep-partner-desk.proposal.list '{}')"
+jq -e --arg revision "${proposal_revision}" '.state=="proposal_batch_index" and .proposal_batch_count==1 and .batches[0].proposal_batch_sha256==$revision and (.batches[0].record_ids|length)==50 and .model_output_operational_authority==false and .provider_write_authority==false' <<<"${proposal_index}" >/dev/null
+proposal_inbox="$(runtime_call moonsleep-partner-desk.source.inbox "$(jq -nc --arg connection_id "${CONNECTION_ID}" --arg provider_thread_id "${NATIVE_THREAD_ID}" '{provider:"alibaba",connection_id:$connection_id,provider_thread_id:$provider_thread_id,coverage_state:"proposed",limit:50,offset:0}')")"
+jq -e --argjson total "${EXPECTED_NATIVE_RECORD_COUNT}" '.state=="partner_source_inbox" and .total_source_records==$total and .filtered_source_records==50 and .coverage_counts.proposed==50 and .coverage_counts.proposal_conflict==0 and .coverage_counts.reviewed==0 and (.records|length)==50 and all(.records[];.coverage_state=="proposed" and (.proposal_batches|length)==1) and .raw_provider_payload_returned==false and .model_output_operational_authority==false and .provider_write_authority==false' <<<"${proposal_inbox}" >/dev/null
+jq -e --argjson expected "$((EXPECTED_RECORD_COUNT + 1))" '.records==$expected and .receipts==$expected and .events==$expected and .queue==0 and .dispatch_receipts==0 and .adapter_instances==0' <<<"${proposal_counts_after_replay}" >/dev/null
+echo "[partner-cleanroom] proposal batch is durable, replay-safe, and queue-inert"
 
 echo "[partner-cleanroom] ingest a production-shaped Gmail record twice and bind it to the observed mailbox"
 gmail_ingest_first="$(docker exec "${runtime_container}" sh -c '
@@ -393,7 +463,7 @@ review_workspaces="$(runtime_call moonsleep-partner-desk.review.workspaces '{}')
 jq -e --arg revision "${review_revision}" '.state=="review_workspace_index" and .workspace_count==1 and .workspaces[0].workspace_key=="surewal-cleanroom" and .workspaces[0].revision_sha256==$revision and .provider_write_authority==false' <<<"${review_workspaces}" >/dev/null
 counts_after_review="$(runtime_counts)"
 directory_after_review="$(sqlite_directory_counts)"
-jq -e --argjson expected "$((EXPECTED_RECORD_COUNT + 2))" '.records==$expected and .receipts==$expected and .events==$expected and .queue==0 and .dispatch_receipts==0 and .adapter_instances==0' <<<"${counts_after_review}" >/dev/null
+jq -e --argjson expected "$((EXPECTED_RECORD_COUNT + 3))" '.records==$expected and .receipts==$expected and .events==$expected and .queue==0 and .dispatch_receipts==0 and .adapter_instances==0' <<<"${counts_after_review}" >/dev/null
 
 echo "[partner-cleanroom] serve the packaged Partner Desk UI through the Nex app mount"
 ui_html="$(docker exec "${runtime_container}" sh -c '
@@ -416,17 +486,31 @@ jq -e '(.jobs|length)==1 and .jobs[0].status=="inactive"' <<<"$(runtime_call job
 jq -e '(.subscriptions|length)==2 and all(.subscriptions[]; .enabled==0)' <<<"$(runtime_call events.subscriptions.list '{}')" >/dev/null
 account_contacts_after_restart="$(runtime_call contacts.list '{"platform":"alibaba","limit":100,"offset":0}')"
 jq -e --arg connection_id "${CONNECTION_ID}" --arg entity_id "${account_entity_id}" '([.contacts[]|select(.space_id=="moonsleep-alibaba" and .contact_id==$connection_id and .observed_entity_id==$entity_id and .canonical_entity_id==$entity_id)]|length)==1' <<<"${account_contacts_after_restart}" >/dev/null
+set +e
 ingest_after_restart="$(docker exec "${runtime_container}" sh -c '
   token=$(cat /run/moonsleep-load-credentials/runtime-token)
   exec node /proof/ingest-jsonl-cleanroom.mjs /evidence/records-1.jsonl "$token"
 ')"
-jq -e --argjson expected "${EXPECTED_RECORD_COUNT}" '.completed==0 and .skipped==$expected and .other==0' <<<"${ingest_after_restart}" >/dev/null
+ingest_after_restart_status=$?
+set -e
+if [[ "${ingest_after_restart_status}" -ne 0 ]] || ! jq -e --argjson expected "${EXPECTED_RECORD_COUNT}" '.completed==0 and .skipped==$expected and .other==0' <<<"${ingest_after_restart}" >/dev/null; then
+  printf '[partner-cleanroom] restart replay failed: %s\n' "${ingest_after_restart}" >&2
+  exit 1
+fi
 counts_after_restart="$(runtime_counts)"
 directory_after_restart="$(sqlite_directory_counts)"
-[[ "$(jq -S -c . <<<"${counts_after_review}")" = "$(jq -S -c . <<<"${counts_after_restart}")" ]]
-[[ "$(jq -S -c . <<<"${directory_after_review}")" = "$(jq -S -c . <<<"${directory_after_restart}")" ]]
+if [[ "$(jq -S -c . <<<"${counts_after_review}")" != "$(jq -S -c . <<<"${counts_after_restart}")" ]]; then
+  printf '[partner-cleanroom] restart PostgreSQL counts changed: before=%s after=%s\n' "${counts_after_review}" "${counts_after_restart}" >&2
+  exit 1
+fi
+if [[ "$(jq -S -c . <<<"${directory_after_review}")" != "$(jq -S -c . <<<"${directory_after_restart}")" ]]; then
+  printf '[partner-cleanroom] restart directory counts changed: before=%s after=%s\n' "${directory_after_review}" "${directory_after_restart}" >&2
+  exit 1
+fi
 review_after_restart="$(runtime_call moonsleep-partner-desk.review.current '{"workspace_key":"surewal-cleanroom"}')"
 jq -e --arg revision "${review_revision}" '.state=="current_review" and .review.revision_sha256==$revision and (.projection.open_loops|length)==2' <<<"${review_after_restart}" >/dev/null
+proposal_after_restart="$(runtime_call moonsleep-partner-desk.proposal.list '{}')"
+jq -e --arg revision "${proposal_revision}" '.state=="proposal_batch_index" and .proposal_batch_count==1 and .batches[0].proposal_batch_sha256==$revision and (.batches[0].record_ids|length)==50' <<<"${proposal_after_restart}" >/dev/null
 
 postgres_image_id="$(docker image inspect "${POSTGRES_IMAGE}" --format '{{.Id}}')"
 nex_image_id="$(docker image inspect "${NEX_IMAGE}" --format '{{.Id}}')"
@@ -441,12 +525,12 @@ jq -n --arg finished_at "${finished_at}" --arg source_revision "${source_revisio
   --arg nex_revision "${nex_revision}" --arg nex_image_id "${nex_image_id}" --arg postgres_image_id "${postgres_image_id}" \
   --arg postgres_version "${postgres_version}" --arg adapter_sha256 "${adapter_sha256}" --arg app_sha256 "${app_sha256}" \
   --arg record_output_sha256 "${record_output_sha256}" --arg account_entity_id "${account_entity_id}" --arg surewal_entity_id "${surewal_entity_id}" --arg surewal_contact_id "${surewal_contact_id}" \
-  --arg review_revision "${review_revision}" --argjson gmail_inspection "${gmail_inspection}" \
+  --arg review_revision "${review_revision}" --arg proposal_revision "${proposal_revision}" --argjson gmail_inspection "${gmail_inspection}" \
   --argjson record_count "${EXPECTED_RECORD_COUNT}" --argjson corpus_message_count "${EXPECTED_CORPUS_MESSAGE_COUNT}" \
   --argjson corpus_orphan_count "${EXPECTED_CORPUS_ORPHAN_COUNT}" --argjson corpus_unique_attachment_count "${EXPECTED_CORPUS_UNIQUE_ATTACHMENT_COUNT}" \
   --argjson initial_counts "${initial_counts}" --argjson seed_counts "${seed_counts}" --argjson terminal_counts "${counts_after_restart}" \
   --argjson directory_counts "${directory_after_restart}" --argjson conversation "${conversation_inspection}" \
-  '{ok:true,finished_at:$finished_at,source:{revision:$source_revision,tree:$source_tree,clean:true},nex:{revision:$nex_revision,image_id:$nex_image_id,platform:"linux/amd64",storage_profile:"moonsleep-postgres-v1"},postgres:{image_id:$postgres_image_id,version:$postgres_version,platform:"linux/amd64"},packages:{alibaba_sha256:$adapter_sha256,partner_desk_sha256:$app_sha256,active_after_restart:true,ui_mount_served:true},connection:{connection_id:"moonsleep-alibaba",custom_setup_complete:true,automatic_activation:false,monitor_started:false,backfill_queued:false,provider_credentials_received:false},adapter:{output_sha256:$record_output_sha256,records:$record_count,message_records:$corpus_message_count,orphan_attachment_records:$corpus_orphan_count,unique_attachments:$corpus_unique_attachment_count,first_and_second_output_identical:true,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},gmail:{inspection:$gmail_inspection,first_ingest_completed:1,replay_skipped:1,observed_mailbox_bound:true,source_revision_digest_bound:true,provider_calls:0,provider_write_authority:false},identity:{account_entity_id:$account_entity_id,account_binding_preserved_after_setup:true,account_binding_preserved_after_restart:true,entity_id:$surewal_entity_id,contact_row_id:$surewal_contact_id,account_seed_first_created_entity:1,account_seed_replay_created_entity:0,first_created_entity:1,first_created_contact:1,second_created_entity:0,second_created_contact:0},conversation:$conversation,projection:{native_threads:1,reviewed_open_loops:2,review_queue:0,cross_channel_native_threads:2,cross_channel_reviewed_open_loops:1},review_store:{revision_sha256:$review_revision,first_created:true,replay_created:false,current_after_restart:true,divergent_heads_auto_selected:false},work_boundary:{job_status:"inactive",subscription_count:2,subscription_enabled:false,queue_rows:0,dispatch_receipts:0,reply_authority:false},replay:{second_ingest_skipped:$record_count,gmail_replay_skipped:1,restart_ingest_skipped:$record_count,postgres_counts_unchanged:true,directory_counts_unchanged:true},initial_counts:$initial_counts,seed_counts:$seed_counts,terminal_counts:$terminal_counts,directory_counts:$directory_counts,zero_residue:true}' > "${RECEIPT_PATH}"
+  '{ok:true,finished_at:$finished_at,source:{revision:$source_revision,tree:$source_tree,clean:true},nex:{revision:$nex_revision,image_id:$nex_image_id,platform:"linux/amd64",storage_profile:"moonsleep-postgres-v1"},postgres:{image_id:$postgres_image_id,version:$postgres_version,platform:"linux/amd64"},packages:{alibaba_sha256:$adapter_sha256,partner_desk_sha256:$app_sha256,active_after_restart:true,ui_mount_served:true},connection:{connection_id:"moonsleep-alibaba",custom_setup_complete:true,automatic_activation:false,monitor_started:false,backfill_queued:false,provider_credentials_received:false},adapter:{output_sha256:$record_output_sha256,records:$record_count,message_records:$corpus_message_count,orphan_attachment_records:$corpus_orphan_count,unique_attachments:$corpus_unique_attachment_count,first_and_second_output_identical:true,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},gmail:{inspection:$gmail_inspection,first_ingest_completed:1,replay_skipped:1,observed_mailbox_bound:true,source_revision_digest_bound:true,provider_calls:0,provider_write_authority:false},identity:{account_entity_id:$account_entity_id,account_binding_preserved_after_setup:true,account_binding_preserved_after_restart:true,entity_id:$surewal_entity_id,contact_row_id:$surewal_contact_id,account_seed_first_created_entity:1,account_seed_replay_created_entity:0,first_created_entity:1,first_created_contact:1,second_created_entity:0,second_created_contact:0},conversation:$conversation,proposal_store:{revision_sha256:$proposal_revision,source_records:50,first_created:true,replay_created:false,current_after_restart:true,operational_authority:false,provider_write_authority:false},projection:{native_threads:1,reviewed_open_loops:2,review_queue:0,cross_channel_native_threads:2,cross_channel_reviewed_open_loops:1},review_store:{revision_sha256:$review_revision,first_created:true,replay_created:false,current_after_restart:true,divergent_heads_auto_selected:false},work_boundary:{job_status:"inactive",subscription_count:2,subscription_enabled:false,queue_rows:0,dispatch_receipts:0,reply_authority:false},replay:{second_ingest_skipped:$record_count,gmail_replay_skipped:1,restart_ingest_skipped:$record_count,postgres_counts_unchanged:true,directory_counts_unchanged:true},initial_counts:$initial_counts,seed_counts:$seed_counts,terminal_counts:$terminal_counts,directory_counts:$directory_counts,zero_residue:true}' > "${RECEIPT_PATH}"
 chmod 0600 "${RECEIPT_PATH}"
 trap - EXIT
 rm -rf -- "${runner_temp}"

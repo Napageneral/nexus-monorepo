@@ -10,10 +10,17 @@ import {
 } from "../src/projection.js";
 import {
   commitReview,
+  currentReviewedRecordIds,
   listReviewWorkspaces,
   parseReviewRequest,
   readCurrentReview,
 } from "./review-store.js";
+import {
+  commitProposalBatch,
+  listProposalBatches,
+  parseProposalRequest,
+  proposalRecordIndex,
+} from "./proposal-store.js";
 
 type Row = Record<string, unknown>;
 
@@ -52,6 +59,20 @@ function requireRecordIds(value: unknown): string[] {
   const ids = value.map((entry, index) => requireText(entry, `record_ids[${index}]`, 512));
   if (new Set(ids).size !== ids.length) throw new Error("record_ids must be unique");
   return ids;
+}
+
+function boundedInteger(
+  value: unknown,
+  field: string,
+  minimum: number,
+  maximum: number,
+  fallback: number,
+): number {
+  if (value === undefined) return fallback;
+  if (!Number.isSafeInteger(value) || Number(value) < minimum || Number(value) > maximum) {
+    throw new Error(`${field} is invalid`);
+  }
+  return Number(value);
 }
 
 function objectArray<T>(value: unknown, field: string, maximum: number): T[] {
@@ -184,6 +205,102 @@ function toCommunicationRecord(record: Row): CommunicationRecord {
   };
 }
 
+type CurrentCommunicationRecord = CommunicationRecord & {
+  logical_record_id: string;
+  revision_count: number;
+  revision_observed_at: string;
+};
+
+function sourceLogicalRecordId(record: Row, provider: "alibaba" | "gmail"): string {
+  const metadata = row(record.metadata);
+  const explicit = text(metadata.logical_record_id);
+  if (explicit) return requireText(explicit, "metadata.logical_record_id", 512);
+  const connectionId = provider === "gmail"
+    ? gmailConnectionAnchor(record)
+    : requireText(metadata.source_connection_id, "metadata.source_connection_id", 256);
+  const threadId = requireText(record.thread_id, "record.thread_id", 512);
+  const messageId = text(metadata.message_id) || requireText(record.id, "record.id", 512);
+  return `${provider}:${connectionId}:${threadId}:${messageId}`;
+}
+
+function sourceRevisionObservedAt(record: Row, provider: "alibaba" | "gmail"): string {
+  const metadata = row(record.metadata);
+  const candidate = provider === "alibaba"
+    ? text(metadata.snapshot_captured_at)
+    : text(metadata.source_observed_at);
+  if (candidate) {
+    const parsed = Date.parse(candidate);
+    if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== candidate) {
+      throw new Error("source revision observation timestamp is invalid");
+    }
+    return candidate;
+  }
+  const fallback = record.received_at ?? record.timestamp;
+  if (!Number.isSafeInteger(fallback) || Number(fallback) < 0) {
+    throw new Error("source revision observation timestamp is unavailable");
+  }
+  return new Date(Number(fallback)).toISOString();
+}
+
+function currentSourceHeads(
+  records: Row[],
+  provider: "alibaba" | "gmail",
+): CurrentCommunicationRecord[] {
+  const grouped = new Map<string, Array<{
+    record: Row;
+    communication: CommunicationRecord;
+    revision_observed_at: string;
+  }>>();
+  for (const record of records) {
+    const logicalRecordId = sourceLogicalRecordId(record, provider);
+    const entry = {
+      record,
+      communication: toCommunicationRecord(record),
+      revision_observed_at: sourceRevisionObservedAt(record, provider),
+    };
+    const existing = grouped.get(logicalRecordId) ?? [];
+    existing.push(entry);
+    grouped.set(logicalRecordId, existing);
+  }
+  const heads: CurrentCommunicationRecord[] = [];
+  for (const [logicalRecordId, revisions] of grouped) {
+    revisions.sort((left, right) =>
+      right.revision_observed_at.localeCompare(left.revision_observed_at) ||
+      right.communication.source_record_id.localeCompare(left.communication.source_record_id)
+    );
+    const head = revisions[0];
+    const competing = revisions[1];
+    if (
+      competing &&
+      competing.revision_observed_at === head.revision_observed_at &&
+      competing.communication.source_revision_sha256 !== head.communication.source_revision_sha256
+    ) {
+      throw new Error(`source revision head is ambiguous: ${logicalRecordId}`);
+    }
+    for (const revision of revisions) {
+      if (
+        revision.communication.provider !== head.communication.provider ||
+        revision.communication.connection_id !== head.communication.connection_id ||
+        revision.communication.provider_thread_id !== head.communication.provider_thread_id ||
+        revision.communication.provider_message_id !== head.communication.provider_message_id
+      ) {
+        throw new Error(`source revision lineage is inconsistent: ${logicalRecordId}`);
+      }
+    }
+    heads.push({
+      ...head.communication,
+      logical_record_id: logicalRecordId,
+      revision_count: revisions.length,
+      revision_observed_at: head.revision_observed_at,
+    });
+  }
+  heads.sort((left, right) =>
+    right.observed_at.localeCompare(left.observed_at) ||
+    right.logical_record_id.localeCompare(left.logical_record_id)
+  );
+  return heads;
+}
+
 async function listConversationRecords(params: {
   nex: unknown;
   provider: "alibaba" | "gmail";
@@ -221,6 +338,49 @@ async function listConversationRecords(params: {
   }
   result.sort((left, right) => text(left.id).localeCompare(text(right.id)));
   return result;
+}
+
+async function listPartnerSourceRecords(params: {
+  nex: unknown;
+  provider: "alibaba" | "gmail";
+  connectionId?: string;
+  providerThreadId?: string;
+}): Promise<{ records: CurrentCommunicationRecord[]; scannedRevisions: number }> {
+  const recordsClient = (params.nex as {
+    records: { list: (input: Row) => Promise<unknown> };
+  }).records;
+  const records: Row[] = [];
+  let scanned = 0;
+  let matchedRevisions = 0;
+  for (let offset = 0; offset < MAX_SCAN; offset += PAGE_SIZE) {
+    const response = unwrap(await recordsClient.list({
+      platform: params.provider,
+      ...(params.providerThreadId ? { thread_id: params.providerThreadId } : {}),
+      limit: PAGE_SIZE,
+      offset,
+    }));
+    if (!Array.isArray(response.records)) throw new Error("records.list did not return records");
+    const page = response.records.map(row);
+    scanned += page.length;
+    if (scanned > MAX_SCAN) throw new Error(`${params.provider} scan exceeds ${MAX_SCAN} rows`);
+    for (const record of page) {
+      if (text(record.platform) !== params.provider) {
+        throw new Error(`${params.provider} scan returned a foreign platform`);
+      }
+      const communication = toCommunicationRecord(record);
+      if (params.connectionId && communication.connection_id !== params.connectionId) continue;
+      if (params.providerThreadId && communication.provider_thread_id !== params.providerThreadId) {
+        throw new Error(`${params.provider} scan returned a foreign thread`);
+      }
+      records.push(record);
+      matchedRevisions += 1;
+    }
+    if (page.length < PAGE_SIZE) break;
+  }
+  return {
+    records: currentSourceHeads(records, params.provider),
+    scannedRevisions: matchedRevisions,
+  };
 }
 
 const healthcheck: NexAppMethodHandler = async (ctx) => ({
@@ -355,6 +515,114 @@ export const getCurrentReview: NexAppMethodHandler = async (ctx) => {
 
 export const listReviewedWorkspaces: NexAppMethodHandler = async (ctx) => await listReviewWorkspaces(ctx);
 
+export const listSourceInbox: NexAppMethodHandler = async (ctx) => {
+  const provider = requireText(ctx.params.provider, "provider", 16);
+  if (provider !== "alibaba" && provider !== "gmail") {
+    throw new Error("provider must be alibaba or gmail");
+  }
+  const requestedConnectionId = ctx.params.connection_id === undefined
+    ? undefined
+    : requireText(ctx.params.connection_id, "connection_id", 256);
+  const connectionId = requestedConnectionId === undefined
+    ? undefined
+    : provider === "gmail"
+      ? requestedConnectionId.toLowerCase()
+      : requestedConnectionId;
+  const providerThreadId = ctx.params.provider_thread_id === undefined
+    ? undefined
+    : requireText(ctx.params.provider_thread_id, "provider_thread_id", 512);
+  const offset = boundedInteger(ctx.params.offset, "offset", 0, MAX_SCAN - 1, 0);
+  const limit = boundedInteger(ctx.params.limit, "limit", 1, 100, 50);
+  const requestedState = ctx.params.coverage_state === undefined
+    ? ""
+    : requireText(ctx.params.coverage_state, "coverage_state", 32);
+  if (requestedState && !["unreviewed", "proposed", "proposal_conflict", "reviewed"].includes(requestedState)) {
+    throw new Error("coverage_state is invalid");
+  }
+  const source = await listPartnerSourceRecords({
+    nex: ctx.nex,
+    provider,
+    connectionId,
+    providerThreadId,
+  });
+  const records = source.records;
+  const reviewed = await currentReviewedRecordIds(ctx);
+  const proposals = await proposalRecordIndex(ctx);
+  const hydrated = records.map((record) => {
+    const batches = proposals.get(record.source_record_id) ?? [];
+    const coverageState = reviewed.has(record.source_record_id)
+      ? "reviewed"
+      : batches.length > 1
+        ? "proposal_conflict"
+        : batches.length === 1
+          ? "proposed"
+          : "unreviewed";
+    return {
+      source_record_id: record.source_record_id,
+      logical_record_id: record.logical_record_id,
+      source_revision_sha256: record.source_revision_sha256,
+      revision_count: record.revision_count,
+      revision_observed_at: record.revision_observed_at,
+      provider: record.provider,
+      connection_id: record.connection_id,
+      provider_thread_id: record.provider_thread_id,
+      provider_message_id: record.provider_message_id,
+      observed_at: record.observed_at,
+      direction: record.direction,
+      summary: record.summary.slice(0, 2_048),
+      attachment_count: record.attachment_count,
+      coverage_state: coverageState,
+      proposal_batches: batches,
+    };
+  });
+  const counts = {
+    unreviewed: hydrated.filter((record) => record.coverage_state === "unreviewed").length,
+    proposed: hydrated.filter((record) => record.coverage_state === "proposed").length,
+    proposal_conflict: hydrated.filter((record) => record.coverage_state === "proposal_conflict").length,
+    reviewed: hydrated.filter((record) => record.coverage_state === "reviewed").length,
+  };
+  const filtered = requestedState
+    ? hydrated.filter((record) => record.coverage_state === requestedState)
+    : hydrated;
+  return {
+    state: "partner_source_inbox",
+    provider,
+    connection_id: connectionId ?? null,
+    provider_thread_id: providerThreadId ?? null,
+    total_source_records: hydrated.length,
+    total_source_revisions: source.scannedRevisions,
+    filtered_source_records: filtered.length,
+    offset,
+    limit,
+    coverage_counts: counts,
+    records: filtered.slice(offset, offset + limit),
+    raw_provider_payload_returned: false,
+    model_output_operational_authority: false,
+    provider_write_authority: false,
+  };
+};
+
+export const listCoverageProposals: NexAppMethodHandler = async (ctx) => await listProposalBatches(ctx);
+
+export const commitCoverageProposal: NexAppMethodHandler = async (ctx) => {
+  const request = parseProposalRequest(ctx.params);
+  const records: CommunicationRecord[] = [];
+  for (const id of request.record_ids) {
+    const response = unwrap(await ctx.nex.records.get({ id }));
+    records.push(toCommunicationRecord(row(response.record)));
+  }
+  return await commitProposalBatch({
+    ctx,
+    request,
+    proposalIdempotencyKey: requireText(
+      ctx.params.proposal_idempotency_key,
+      "proposal_idempotency_key",
+      128,
+    ),
+    records,
+  });
+};
+
 export const commitReviewedCohort: NexAppMethodHandler = async (ctx) => {
   const request = parseReviewRequest(ctx.params);
   const records: CommunicationRecord[] = [];
@@ -386,6 +654,9 @@ export default {
   "moonsleep-partner-desk.alibaba.inspect-conversation": inspectAlibabaConversation,
   "moonsleep-partner-desk.gmail.inspect-conversation": inspectGmailConversation,
   "moonsleep-partner-desk.project-reviewed-cohort": projectReviewedCohort,
+  "moonsleep-partner-desk.source.inbox": listSourceInbox,
+  "moonsleep-partner-desk.proposal.list": listCoverageProposals,
+  "moonsleep-partner-desk.proposal.commit": commitCoverageProposal,
   "moonsleep-partner-desk.review.current": getCurrentReview,
   "moonsleep-partner-desk.review.workspaces": listReviewedWorkspaces,
   "moonsleep-partner-desk.review.commit": commitReviewedCohort,

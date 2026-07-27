@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { compactDate, lifecycleLabel, queueSections } from "./view-model.js";
+import { compactDate, coverageLabel, lifecycleLabel, queueSections } from "./view-model.js";
 
 test("preserves independent queue facets instead of collapsing loop lifecycle", () => {
   const attention = { open_loop_id: "eta", lifecycle: "waiting_on_moonsleep" };
@@ -15,6 +15,7 @@ test("preserves independent queue facets instead of collapsing loop lifecycle", 
 
 test("renders lifecycle and review dates in operator language", () => {
   assert.equal(lifecycleLabel("waiting_on_moonsleep"), "MoonSleep action");
+  assert.equal(coverageLabel("proposal_conflict"), "Proposal conflict");
   assert.equal(compactDate("2026-07-22T15:00:00.000Z"), "Jul 22, 2026");
   assert.equal(compactDate(undefined), "No follow-up date");
 });
