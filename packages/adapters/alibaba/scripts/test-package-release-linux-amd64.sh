@@ -19,10 +19,10 @@ docker image inspect "${NEX_IMAGE}" >/dev/null
   exit 1
 }
 
-# The bundled adapter is platform-neutral JavaScript. Build it once from the
-# reviewed host source, then validate, test, and package those exact bytes in
-# the isolated Linux/AMD64 release environment.
-(cd "${ROOT_DIR}" && npm run build)
+# Build, test, validate, and package inside the exact Linux/AMD64 environment.
+# The bundled output is platform-neutral JavaScript, but esbuild's executable
+# is host-specific; invoking a host-installed binary would make the release
+# proof depend on the operator machine's architecture.
 
 docker run --rm \
   --platform linux/amd64 \
