@@ -41,6 +41,14 @@ docker run --rm \
   "${NEX_IMAGE}" \
   -c 'export HOME=/runner-temp/home XDG_CONFIG_HOME=/runner-temp/xdg NEXUS_STATE_DIR=/runner-temp/nex-state &&
       mkdir -p "${HOME}" "${XDG_CONFIG_HOME}" "${NEXUS_STATE_DIR}" &&
+      mkdir -p /runner-temp/workspace/packages/adapters/nexus-adapter-sdks &&
+      cp -a /workspace/packages/adapters/alibaba /runner-temp/workspace/packages/adapters/alibaba &&
+      cp -a /workspace/packages/adapters/nexus-adapter-sdks/nexus-adapter-sdk-ts /runner-temp/workspace/packages/adapters/nexus-adapter-sdks/nexus-adapter-sdk-ts &&
+      cp /opt/nex/node_modules/.pnpm/@esbuild+linux-x64@0.27.3/node_modules/@esbuild/linux-x64/bin/esbuild /runner-temp/workspace/packages/adapters/alibaba/node_modules/esbuild/bin/esbuild &&
+      chmod 0500 /runner-temp/workspace/packages/adapters/alibaba/node_modules/esbuild/bin/esbuild &&
+      cd /runner-temp/workspace/packages/adapters/alibaba &&
       npm test && npm run lint &&
       node /opt/nex/nexus.mjs package validate . &&
-      node /opt/nex/nexus.mjs package release .'
+      node /opt/nex/nexus.mjs package release . &&
+      mkdir -p /workspace/packages/adapters/alibaba/dist &&
+      cp dist/alibaba-0.2.5.tar.gz dist/alibaba-0.2.5.tar.gz.sha256 /workspace/packages/adapters/alibaba/dist/'

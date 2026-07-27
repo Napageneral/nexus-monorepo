@@ -239,7 +239,7 @@ test("record preserves exact sanitized source JSON and excludes raw credentials"
     config(root),
     "conn-alibaba",
   );
-  assert.match(record.payload.external_record_id, /^alibaba:conn-alibaba:message:m-1:[a-f0-9]{64}$/);
+  assert.match(record.payload.external_record_id, /^alibaba:conn-alibaba:message-v2:m-1:[a-f0-9]{64}$/);
   assert.equal(record.routing.container_id, "surewal-thread");
   assert.equal(record.routing.receiver_id, "conn-alibaba");
   assert.equal(record.payload.recipients, undefined);
@@ -252,6 +252,11 @@ test("record preserves exact sanitized source JSON and excludes raw credentials"
     record.payload.payload?.provider_object_sha256,
     createHash("sha256").update(sourceLine).digest("hex"),
   );
+  assert.equal(record.payload.payload?.source_snapshot_id, undefined);
+  assert.equal(record.payload.payload?.source_snapshot_receipt_sha256, undefined);
+  assert.equal(record.payload.payload?.source_projection_messages_sha256, undefined);
+  assert.equal(record.payload.metadata?.snapshot_id, snapshot.ref.id);
+  assert.equal(record.payload.metadata?.snapshot_receipt_sha256, snapshot.ref.complete_sha256);
   const sourceAttachments = record.payload.payload?.source_attachments as Array<{
     provider_object_json: string;
     provider_object_sha256: string;
@@ -264,6 +269,45 @@ test("record preserves exact sanitized source JSON and excludes raw credentials"
   assert.equal(AdapterInboundRecordSchema.parse(record).payload.payload?.provider_object_json, sourceLine);
   assert.doesNotMatch(JSON.stringify(record), /must-not-leak|chatToken|encryptedAccount/);
   assert.doesNotMatch(JSON.stringify(record), /clouddisk\.alibaba\.com/);
+});
+
+test("capture-level provenance cannot change immutable message identity or payload", () => {
+  const { root } = fixture();
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const original = __test__.buildRecord(
+    snapshot.messages[0]!,
+    snapshot,
+    config(root),
+    "conn-alibaba",
+  );
+  const refreshed = __test__.buildRecord(
+    snapshot.messages[0]!,
+    {
+      ...snapshot,
+      ref: {
+        ...snapshot.ref,
+        id: "new-browser-capture",
+        complete_sha256: "f".repeat(64),
+        captured_at: snapshot.ref.captured_at + 1_000,
+        complete: {
+          ...snapshot.ref.complete,
+          adapterProjection: {
+            ...snapshot.ref.complete.adapterProjection,
+            messagesSha256: "e".repeat(64),
+          },
+        },
+      },
+    },
+    config(root),
+    "conn-alibaba",
+  );
+  assert.equal(refreshed.payload.external_record_id, original.payload.external_record_id);
+  assert.deepEqual(refreshed.payload.payload, original.payload.payload);
+  assert.notEqual(refreshed.payload.metadata?.snapshot_id, original.payload.metadata?.snapshot_id);
+  assert.notEqual(
+    refreshed.payload.metadata?.snapshot_receipt_sha256,
+    original.payload.metadata?.snapshot_receipt_sha256,
+  );
 });
 
 test("bounded projection keeps temporal window, directionality, and replay identity", () => {
@@ -292,7 +336,10 @@ test("provider attachment rows without a captured parent message remain explicit
   const rows = __test__.recordsForWindow(snapshot, config(root), "conn-alibaba", 0);
   const orphan = rows.find((row) => row.payload.metadata?.family === "orphan_attachment");
   assert.ok(orphan);
-  assert.match(orphan.payload.external_record_id, /^alibaba:conn-alibaba:attachment-orphan:/);
+  assert.match(orphan.payload.external_record_id, /^alibaba:conn-alibaba:attachment-orphan-v2:/);
+  assert.equal(orphan.payload.payload?.source_snapshot_id, undefined);
+  assert.equal(orphan.payload.payload?.source_snapshot_receipt_sha256, undefined);
+  assert.equal(orphan.payload.payload?.source_projection_attachments_sha256, undefined);
   assert.match(orphan.payload.content, /Unlinked sample evidence/);
   assert.equal(orphan.routing.metadata?.source_attribution, "unresolved_attachment_evidence");
   assert.equal(orphan.payload.metadata?.source_connection_id, "conn-alibaba");
