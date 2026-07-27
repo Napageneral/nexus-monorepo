@@ -258,7 +258,8 @@ function reviewParams(sourceRecord: ReturnType<typeof fixture>, overrides: Recor
   };
 }
 
-function reviewContext(sourceRecord: ReturnType<typeof fixture>) {
+function reviewContext(sourceInput: ReturnType<typeof fixture> | Array<ReturnType<typeof fixture>>) {
+  const sourceRecords = Array.isArray(sourceInput) ? sourceInput : [sourceInput];
   const reviewRecords: Array<Record<string, unknown>> = [];
   let ingestCalls = 0;
   const ctx = {
@@ -273,13 +274,15 @@ function reviewContext(sourceRecord: ReturnType<typeof fixture>) {
     nex: {
       records: {
         get: async ({ id }: { id: string }) => {
-          if (id === sourceRecord.id) return { record: sourceRecord };
+          const sourceRecord = sourceRecords.find((entry) => entry.id === id);
+          if (sourceRecord) return { record: sourceRecord };
           const review = reviewRecords.find((entry) => entry.id === id);
           if (!review) throw new Error("record not found");
           return { record: review };
         },
         list: async ({ platform, thread_id }: { platform: string; thread_id?: string }) => ({
-          records: reviewRecords.filter((entry) => entry.platform === platform && (!thread_id || entry.thread_id === thread_id)),
+          records: [...sourceRecords, ...reviewRecords]
+            .filter((entry) => entry.platform === platform && (!thread_id || entry.thread_id === thread_id)),
         }),
       },
       record: {
@@ -301,6 +304,43 @@ function reviewContext(sourceRecord: ReturnType<typeof fixture>) {
   };
   return { ctx, reviewRecords, ingestCalls: () => ingestCalls };
 }
+
+test("preserves reviewed coverage across exact-digest aliases without duplicating the current source row", async () => {
+  const logicalRecordId = "alibaba-primary:message:reviewed-alias";
+  const legacy = fixture("source-reviewed-legacy", 1_785_000_000_000, "Exact supplier wording", {
+    logicalRecordId,
+    messageId: "reviewed-alias",
+    snapshotCapturedAt: "2026-07-20T12:00:00.000Z",
+  });
+  const current = fixture("source-reviewed-v2", 1_785_000_000_000, "Exact supplier wording", {
+    logicalRecordId,
+    messageId: "reviewed-alias",
+    snapshotCapturedAt: "2026-07-27T12:00:00.000Z",
+  });
+  const memory = reviewContext([legacy, current]);
+  await commitReviewedCohort({
+    ...memory.ctx,
+    params: reviewParams(legacy),
+  } as never);
+
+  const inbox = await listSourceInbox({
+    ...memory.ctx,
+    params: { provider: "alibaba", limit: 50, offset: 0 },
+  } as never) as Record<string, unknown>;
+  assert.equal(inbox.total_source_records, 1);
+  assert.equal(inbox.total_source_revisions, 2);
+  assert.deepEqual(inbox.coverage_counts, {
+    unreviewed: 0,
+    proposed: 0,
+    proposal_conflict: 0,
+    reviewed: 1,
+  });
+  const record = (inbox.records as Array<Record<string, unknown>>)[0];
+  assert.equal(record.source_record_id, current.id);
+  assert.equal(record.logical_record_id, logicalRecordId);
+  assert.equal(record.coverage_state, "reviewed");
+  assert.equal(inbox.raw_provider_payload_returned, false);
+});
 
 test("commits an immutable reviewed workspace and replays the same operator request without duplication", async () => {
   const sourceRecord = fixture("source-review-1", 1_785_000_000_000, "MOQ question");
@@ -581,6 +621,54 @@ test("collapses historical snapshots into one current source row and requires re
   assert.equal(row.revision_count, 2);
   assert.equal(row.revision_observed_at, "2026-07-27T12:00:00.000Z");
   assert.equal(row.coverage_state, "unreviewed");
+});
+
+test("preserves proposal coverage across exact-digest aliases but never exposes duplicate source rows", async () => {
+  const logicalRecordId = "alibaba-primary:message:proposed-alias";
+  const legacy = fixture("source-proposed-legacy", 1_785_000_000_000, "Exact supplier wording", {
+    logicalRecordId,
+    messageId: "proposed-alias",
+    snapshotCapturedAt: "2026-07-20T12:00:00.000Z",
+  });
+  const current = fixture("source-proposed-v2", 1_785_000_000_000, "Exact supplier wording", {
+    logicalRecordId,
+    messageId: "proposed-alias",
+    snapshotCapturedAt: "2026-07-27T12:00:00.000Z",
+  });
+  const memory = proposalContext([legacy, current]);
+  await commitCoverageProposal({
+    ...memory.ctx,
+    params: {
+      ...proposalParams([legacy, legacy]),
+      record_ids: [legacy.id],
+      open_loop_proposals: [],
+      source_coverage_proposals: [{
+        source_record_id: legacy.id,
+        disposition: "informational",
+        open_loop_ids: [],
+        assertion_origin: "model",
+      }],
+      proposal_idempotency_key: "partner-proposal-exact-alias-0001",
+    },
+  } as never);
+
+  const inbox = await listSourceInbox({
+    ...memory.ctx,
+    params: { provider: "alibaba", limit: 50, offset: 0 },
+  } as never) as Record<string, unknown>;
+  assert.equal(inbox.total_source_records, 1);
+  assert.equal(inbox.total_source_revisions, 2);
+  assert.deepEqual(inbox.coverage_counts, {
+    unreviewed: 0,
+    proposed: 1,
+    proposal_conflict: 0,
+    reviewed: 0,
+  });
+  const record = (inbox.records as Array<Record<string, unknown>>)[0];
+  assert.equal(record.source_record_id, current.id);
+  assert.equal(record.coverage_state, "proposed");
+  assert.equal((record.proposal_batches as unknown[]).length, 1);
+  assert.equal(inbox.raw_provider_payload_returned, false);
 });
 
 test("fails closed when one logical message has competing heads or crosses native lineage", async () => {

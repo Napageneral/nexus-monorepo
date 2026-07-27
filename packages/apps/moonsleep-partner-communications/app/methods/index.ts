@@ -209,6 +209,7 @@ type CurrentCommunicationRecord = CommunicationRecord & {
   logical_record_id: string;
   revision_count: number;
   revision_observed_at: string;
+  equivalent_source_record_ids: string[];
 };
 
 function sourceLogicalRecordId(record: Row, provider: "alibaba" | "gmail"): string {
@@ -292,6 +293,14 @@ function currentSourceHeads(
       logical_record_id: logicalRecordId,
       revision_count: revisions.length,
       revision_observed_at: head.revision_observed_at,
+      equivalent_source_record_ids: [...new Set(
+        revisions
+          .filter((revision) =>
+            revision.communication.source_revision_sha256 ===
+            head.communication.source_revision_sha256
+          )
+          .map((revision) => revision.communication.source_record_id),
+      )].sort(),
     });
   }
   heads.sort((left, right) =>
@@ -549,8 +558,15 @@ export const listSourceInbox: NexAppMethodHandler = async (ctx) => {
   const reviewed = await currentReviewedRecordIds(ctx);
   const proposals = await proposalRecordIndex(ctx);
   const hydrated = records.map((record) => {
-    const batches = proposals.get(record.source_record_id) ?? [];
-    const coverageState = reviewed.has(record.source_record_id)
+    const batches = [...new Map(
+      record.equivalent_source_record_ids
+        .flatMap((recordId) => proposals.get(recordId) ?? [])
+        .map((batch) => [batch.proposal_batch_sha256, batch]),
+    ).values()].sort((left, right) =>
+      right.proposed_at.localeCompare(left.proposed_at) ||
+      left.proposal_batch_sha256.localeCompare(right.proposal_batch_sha256)
+    );
+    const coverageState = record.equivalent_source_record_ids.some((recordId) => reviewed.has(recordId))
       ? "reviewed"
       : batches.length > 1
         ? "proposal_conflict"
