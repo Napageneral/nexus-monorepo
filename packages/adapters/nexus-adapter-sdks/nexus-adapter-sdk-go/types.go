@@ -1,5 +1,7 @@
 package nexadapter
 
+import "time"
+
 // --- Adapter Identity & Registration ---
 
 // AdapterInfo is returned by the `adapter.info` operation. Describes the
@@ -208,6 +210,13 @@ type AdapterInboundRecord struct {
 	Operation string                `json:"operation"`
 	Routing   AdapterInboundRouting `json:"routing"`
 	Payload   AdapterInboundPayload `json:"payload"`
+}
+
+// BackfillWindow is the exact provider-history interval requested by Nex.
+// To is optional and represented by the zero value when absent.
+type BackfillWindow struct {
+	Since time.Time
+	To    time.Time
 }
 
 type AdapterInboundRouting struct {

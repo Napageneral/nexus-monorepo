@@ -51,6 +51,10 @@ type AdapterOperations struct {
 	// RecordsBackfill emits historical records and exits when history is exhausted.
 	RecordsBackfill func(ctx context.Context, connectionID string, since time.Time, emit EmitFunc) error
 
+	// RecordsBackfillWindow emits records within an exact optional upper bound.
+	// Adapters that declare this handler must enforce To when it is nonzero.
+	RecordsBackfillWindow func(ctx context.Context, connectionID string, window BackfillWindow, emit EmitFunc) error
+
 	// AdapterHealth reports connection health.
 	AdapterHealth func(ctx context.Context, connectionID string) (*AdapterHealth, error)
 
@@ -162,7 +166,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  adapter.info\n")
 	fmt.Fprintf(os.Stderr, "  adapter.monitor.start --connection <id>\n")
 	fmt.Fprintf(os.Stderr, "  adapter.serve.start --connection <id>\n")
-	fmt.Fprintf(os.Stderr, "  records.backfill --connection <id> --since <date>\n")
+	fmt.Fprintf(os.Stderr, "  records.backfill --connection <id> --since <date> [--to <date>]\n")
 	fmt.Fprintf(os.Stderr, "  adapter.health --connection <id>\n")
 	fmt.Fprintf(os.Stderr, "  adapter.connections.list\n")
 	fmt.Fprintf(os.Stderr, "  adapter.setup.start [--connection <id>] [--session-id <id>] [--payload-json <json>]\n")
@@ -213,13 +217,14 @@ func runMonitor(adapter Adapter, args []string) error {
 }
 
 func runBackfill(adapter Adapter, args []string) error {
-	if adapter.Operations.RecordsBackfill == nil {
+	if adapter.Operations.RecordsBackfill == nil && adapter.Operations.RecordsBackfillWindow == nil {
 		return fmt.Errorf("records.backfill not supported by this adapter")
 	}
 
 	fs := flag.NewFlagSet("records.backfill", flag.ContinueOnError)
 	connection := fs.String("connection", "", "Connection ID")
 	since := fs.String("since", "", "Backfill start date (ISO 8601 or YYYY-MM-DD)")
+	to := fs.String("to", "", "Optional backfill end date (ISO 8601 or YYYY-MM-DD)")
 	_ = fs.String("format", "jsonl", "Output format (always jsonl)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -229,12 +234,29 @@ func runBackfill(adapter Adapter, args []string) error {
 	if err != nil {
 		return fmt.Errorf("invalid --since date %q: %w", *since, err)
 	}
+	toTime := time.Time{}
+	if strings.TrimSpace(*to) != "" {
+		toTime, err = parseDate(*to)
+		if err != nil {
+			return fmt.Errorf("invalid --to date %q: %w", *to, err)
+		}
+		if toTime.Before(sinceTime) {
+			return fmt.Errorf("--to must be greater than or equal to --since")
+		}
+	}
 
 	ctx := signalContext()
 	emit := makeEmitFunc()
 
 	LogInfo("backfill starting for connection %q since %s", *connection, sinceTime.Format(time.RFC3339))
-	err = adapter.Operations.RecordsBackfill(ctx, *connection, sinceTime, emit)
+	if adapter.Operations.RecordsBackfillWindow != nil {
+		err = adapter.Operations.RecordsBackfillWindow(ctx, *connection, BackfillWindow{Since: sinceTime, To: toTime}, emit)
+	} else {
+		if !toTime.IsZero() {
+			return fmt.Errorf("records.backfill adapter does not support an exact --to boundary")
+		}
+		err = adapter.Operations.RecordsBackfill(ctx, *connection, sinceTime, emit)
+	}
 	if err != nil {
 		return fmt.Errorf("records.backfill: %w", err)
 	}
