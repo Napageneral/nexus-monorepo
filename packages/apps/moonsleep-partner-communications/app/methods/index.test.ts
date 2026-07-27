@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "vitest";
 import {
+  commitCoverageProposal,
   commitReviewedCohort,
   getCurrentReview,
   inspectAlibabaConversation,
   inspectGmailConversation,
+  listCoverageProposals,
+  listSourceInbox,
   projectReviewedCohort,
   listReviewedWorkspaces,
 } from "./index.ts";
@@ -62,7 +65,12 @@ function gmailFixture(
   };
 }
 
-function fixture(id: string, timestamp: number, content: string) {
+function fixture(
+  id: string,
+  timestamp: number,
+  content: string,
+  options: { logicalRecordId?: string; messageId?: string; snapshotCapturedAt?: string } = {},
+) {
   return {
     id,
     platform: "alibaba",
@@ -75,8 +83,10 @@ function fixture(id: string, timestamp: number, content: string) {
     metadata: {
       family: "message",
       source_connection_id: "alibaba-primary",
-      message_id: id,
+      message_id: options.messageId ?? id,
+      logical_record_id: options.logicalRecordId ?? `alibaba-primary:message:${id}`,
       revision_hash: createHash("sha256").update(content).digest("hex"),
+      snapshot_captured_at: options.snapshotCapturedAt ?? new Date(timestamp).toISOString(),
       direction: "incoming",
     },
   };
@@ -374,4 +384,330 @@ test("requires the exact current review head and exposes divergent revisions ins
   const conflicted = await getCurrentReview({ ...memory.ctx, params: { workspace_key: "surewal-commercial" } } as never) as Record<string, unknown>;
   assert.equal(conflicted.state, "review_conflict");
   assert.equal((conflicted.head_revisions as unknown[]).length, 2);
+});
+
+function proposalParams(records: Array<ReturnType<typeof fixture>>, overrides: Record<string, unknown> = {}) {
+  const [first, second] = records;
+  return {
+    workspace_key: "surewal-alibaba",
+    proposed_canonical_entity_id: "entity-surewal",
+    proposed_contact_id: "contact-surewal",
+    partner_category: "vendor",
+    record_ids: records.map((record) => record.id),
+    open_loop_proposals: [{
+      open_loop_id: "loop-surewal-production-date",
+      canonical_entity_id: "entity-surewal",
+      primary_source_record_id: first.id,
+      evidence_source_record_ids: [first.id],
+      closure_source_record_ids: [],
+      title: "Confirm production completion date",
+      summary: "The supplier asked MoonSleep to confirm the remaining production schedule.",
+      labels: ["production"],
+      lifecycle: "waiting_on_moonsleep",
+      review_state: "proposed",
+      assertion_origin: "model",
+    }],
+    source_coverage_proposals: [
+      {
+        source_record_id: first.id,
+        disposition: "open_loop_evidence",
+        open_loop_ids: ["loop-surewal-production-date"],
+        assertion_origin: "model",
+      },
+      {
+        source_record_id: second.id,
+        disposition: "informational",
+        open_loop_ids: [],
+        assertion_origin: "model",
+      },
+    ],
+    classifier_id: "codex-gpt-5.6-low",
+    classifier_prompt_sha256: "a".repeat(64),
+    proposal_note: "Bounded production-shaped classifier proof.",
+    proposal_idempotency_key: "partner-proposal-surewal-0001",
+    ...overrides,
+  };
+}
+
+function proposalContext(sourceRecords: Array<ReturnType<typeof fixture>>) {
+  const committedRecords: Array<Record<string, unknown>> = [...sourceRecords];
+  let ingestCalls = 0;
+  const ctx = {
+    user: {
+      userId: "entity-tyler",
+      email: "tyler@example.com",
+      displayName: "Tyler",
+      role: "operator",
+      accountId: "moonsleep",
+    },
+    app: { config: {}, id: "moonsleep-partner-desk", version: "0.2.0" },
+    nex: {
+      records: {
+        get: async ({ id }: { id: string }) => {
+          const record = committedRecords.find((entry) => entry.id === id);
+          if (!record) throw new Error("record not found");
+          return { record };
+        },
+        list: async ({
+          platform,
+          thread_id,
+          limit = 1_000,
+          offset = 0,
+        }: {
+          platform: string;
+          thread_id?: string;
+          limit?: number;
+          offset?: number;
+        }) => ({
+          records: committedRecords
+            .filter((entry) =>
+              entry.platform === platform &&
+              (!thread_id || entry.thread_id === thread_id)
+            )
+            .slice(offset, offset + limit),
+        }),
+      },
+      record: {
+        ingest: async ({ routing, payload }: { routing: Record<string, unknown>; payload: Record<string, unknown> }) => {
+          ingestCalls += 1;
+          committedRecords.push({
+            id: payload.external_record_id,
+            platform: routing.platform,
+            thread_id: routing.thread_id,
+            timestamp: payload.timestamp,
+            content: payload.content,
+            payload: payload.payload,
+            metadata: payload.metadata,
+          });
+          return { status: "completed" };
+        },
+      },
+    },
+  };
+  return { ctx, committedRecords, ingestCalls: () => ingestCalls };
+}
+
+test("commits and replays an immutable proposal batch without promoting model output", async () => {
+  const records = [
+    fixture("source-proposal-1", 1_785_000_000_000, "Please confirm the production date"),
+    fixture("source-proposal-2", 1_785_000_001_000, "Factory photos attached"),
+  ];
+  const memory = proposalContext(records);
+  const params = proposalParams(records);
+  const first = await commitCoverageProposal({ ...memory.ctx, params } as never) as Record<string, unknown>;
+  assert.equal(first.state, "proposal_committed");
+  assert.equal(first.created, true);
+  assert.equal(first.model_output_operational_authority, false);
+  assert.equal(first.provider_write_authority, false);
+  assert.equal(memory.ingestCalls(), 1);
+
+  const replay = await commitCoverageProposal({ ...memory.ctx, params } as never) as Record<string, unknown>;
+  assert.equal(replay.state, "proposal_replayed");
+  assert.equal(replay.created, false);
+  assert.equal(memory.ingestCalls(), 1);
+
+  const listed = await listCoverageProposals({ ...memory.ctx, params: {} } as never) as Record<string, unknown>;
+  assert.equal(listed.proposal_batch_count, 1);
+  assert.equal(listed.model_output_operational_authority, false);
+
+  const inbox = await listSourceInbox({
+    ...memory.ctx,
+    params: { provider: "alibaba", limit: 50, offset: 0 },
+  } as never) as Record<string, unknown>;
+  assert.deepEqual(inbox.coverage_counts, {
+    unreviewed: 0,
+    proposed: 2,
+    proposal_conflict: 0,
+    reviewed: 0,
+  });
+  assert.equal((inbox.records as Array<Record<string, unknown>>)[0]?.coverage_state, "proposed");
+  assert.equal(inbox.raw_provider_payload_returned, false);
+});
+
+test("collapses historical snapshots into one current source row and requires review of the current revision", async () => {
+  const logicalRecordId = "alibaba-primary:message:shared-source-message";
+  const older = fixture(
+    "source-snapshot-older",
+    1_785_000_000_000,
+    "Original supplier wording",
+    {
+      logicalRecordId,
+      messageId: "shared-source-message",
+      snapshotCapturedAt: "2026-07-20T12:00:00.000Z",
+    },
+  );
+  const current = fixture(
+    "source-snapshot-current",
+    1_785_000_000_000,
+    "Current supplier wording",
+    {
+      logicalRecordId,
+      messageId: "shared-source-message",
+      snapshotCapturedAt: "2026-07-27T12:00:00.000Z",
+    },
+  );
+  const memory = proposalContext([older, current]);
+  await commitCoverageProposal({
+    ...memory.ctx,
+    params: {
+      ...proposalParams([older, current]),
+      record_ids: [older.id],
+      open_loop_proposals: [],
+      source_coverage_proposals: [{
+        source_record_id: older.id,
+        disposition: "informational",
+        open_loop_ids: [],
+        assertion_origin: "model",
+      }],
+      proposal_idempotency_key: "partner-proposal-superseded-revision-0001",
+    },
+  } as never);
+
+  const inbox = await listSourceInbox({
+    ...memory.ctx,
+    params: { provider: "alibaba", limit: 50, offset: 0 },
+  } as never) as Record<string, unknown>;
+  assert.equal(inbox.total_source_records, 1);
+  assert.equal(inbox.total_source_revisions, 2);
+  assert.deepEqual(inbox.coverage_counts, {
+    unreviewed: 1,
+    proposed: 0,
+    proposal_conflict: 0,
+    reviewed: 0,
+  });
+  const row = (inbox.records as Array<Record<string, unknown>>)[0];
+  assert.equal(row.source_record_id, current.id);
+  assert.equal(row.logical_record_id, logicalRecordId);
+  assert.equal(row.revision_count, 2);
+  assert.equal(row.revision_observed_at, "2026-07-27T12:00:00.000Z");
+  assert.equal(row.coverage_state, "unreviewed");
+});
+
+test("fails closed when one logical message has competing heads or crosses native lineage", async () => {
+  const logicalRecordId = "alibaba-primary:message:ambiguous-source-message";
+  const first = fixture("source-ambiguous-1", 1_785_000_000_000, "First wording", {
+    logicalRecordId,
+    messageId: "ambiguous-source-message",
+    snapshotCapturedAt: "2026-07-27T12:00:00.000Z",
+  });
+  const competing = fixture("source-ambiguous-2", 1_785_000_000_000, "Competing wording", {
+    logicalRecordId,
+      messageId: "ambiguous-source-message",
+      snapshotCapturedAt: "2026-07-27T12:00:00.000Z",
+  });
+  await assert.rejects(
+    listSourceInbox({
+      ...proposalContext([first, competing]).ctx,
+      params: { provider: "alibaba", limit: 50, offset: 0 },
+    } as never),
+    /source revision head is ambiguous/,
+  );
+
+  const foreignThread = {
+    ...fixture("source-lineage-2", 1_785_000_000_000, "Later wording", {
+      logicalRecordId,
+      messageId: "ambiguous-source-message",
+      snapshotCapturedAt: "2026-07-28T12:00:00.000Z",
+    }),
+    thread_id: "different-native-thread",
+  };
+  await assert.rejects(
+    listSourceInbox({
+      ...proposalContext([first, foreignThread]).ctx,
+      params: { provider: "alibaba", limit: 50, offset: 0 },
+    } as never),
+    /source revision lineage is inconsistent/,
+  );
+});
+
+test("surfaces overlapping proposal batches as a conflict instead of choosing one", async () => {
+  const records = [
+    fixture("source-proposal-conflict-1", 1_785_000_000_000, "Please confirm the production date"),
+    fixture("source-proposal-conflict-2", 1_785_000_001_000, "Factory photos attached"),
+  ];
+  const memory = proposalContext(records);
+  await commitCoverageProposal({
+    ...memory.ctx,
+    params: proposalParams(records),
+  } as never);
+  await commitCoverageProposal({
+    ...memory.ctx,
+    params: proposalParams(records, {
+      proposal_idempotency_key: "partner-proposal-surewal-0002",
+      proposal_note: "Independent second proposal for conflict proof.",
+    }),
+  } as never);
+  const inbox = await listSourceInbox({
+    ...memory.ctx,
+    params: { provider: "alibaba", coverage_state: "proposal_conflict", limit: 50, offset: 0 },
+  } as never) as Record<string, unknown>;
+  assert.equal((inbox.coverage_counts as Record<string, unknown>).proposal_conflict, 2);
+  assert.equal(inbox.filtered_source_records, 2);
+  assert.equal((inbox.records as Array<Record<string, unknown>>).length, 2);
+});
+
+test("rejects proposal batches that omit source coverage or claim reviewed authority", async () => {
+  const records = [
+    fixture("source-proposal-invalid-1", 1_785_000_000_000, "Please confirm the production date"),
+    fixture("source-proposal-invalid-2", 1_785_000_001_000, "Factory photos attached"),
+  ];
+  const memory = proposalContext(records);
+  const missingCoverage = proposalParams(records);
+  missingCoverage.source_coverage_proposals = missingCoverage.source_coverage_proposals.slice(0, 1);
+  await assert.rejects(
+    commitCoverageProposal({ ...memory.ctx, params: missingCoverage } as never),
+    /exactly one coverage assertion/,
+  );
+  const promoted = proposalParams(records);
+  promoted.open_loop_proposals[0].review_state = "confirmed";
+  await assert.rejects(
+    commitCoverageProposal({ ...memory.ctx, params: promoted } as never),
+    /must remain proposed/,
+  );
+  assert.equal(memory.ingestCalls(), 0);
+});
+
+test("lists the exact production-shaped 7,992-record corpus through stable bounded pages", async () => {
+  const records = Array.from({ length: 7_992 }, (_, index) =>
+    fixture(
+      `source-production-shaped-${String(index).padStart(5, "0")}`,
+      1_785_000_000_000 + index,
+      `Committed supplier message ${index}`,
+    )
+  );
+  const memory = proposalContext(records);
+  const cohort = records.slice(0, 50);
+  await commitCoverageProposal({
+    ...memory.ctx,
+    params: {
+      ...proposalParams(cohort),
+      open_loop_proposals: [],
+      source_coverage_proposals: cohort.map((record) => ({
+        source_record_id: record.id,
+        disposition: "informational",
+        open_loop_ids: [],
+        assertion_origin: "model",
+      })),
+      proposal_idempotency_key: "partner-proposal-production-shape-0001",
+    },
+  } as never);
+  const firstPage = await listSourceInbox({
+    ...memory.ctx,
+    params: { provider: "alibaba", limit: 50, offset: 0 },
+  } as never) as Record<string, unknown>;
+  assert.equal(firstPage.total_source_records, 7_992);
+  assert.equal(firstPage.total_source_revisions, 7_992);
+  assert.equal((firstPage.records as unknown[]).length, 50);
+  assert.deepEqual(firstPage.coverage_counts, {
+    unreviewed: 7_942,
+    proposed: 50,
+    proposal_conflict: 0,
+    reviewed: 0,
+  });
+  const lastPage = await listSourceInbox({
+    ...memory.ctx,
+    params: { provider: "alibaba", limit: 50, offset: 7_950 },
+  } as never) as Record<string, unknown>;
+  assert.equal((lastPage.records as unknown[]).length, 42);
+  assert.equal(lastPage.offset, 7_950);
 });

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MoonSleep Partner Desk App API
-  version: 0.1.0
+  version: 0.2.0
   description: Track reviewed supplier and partner open loops over immutable
     provider-native communications.
 servers:
@@ -408,6 +408,818 @@ paths:
                 - workspace_assertions
                 - open_loop_assertions
                 - source_coverage_assertions
+              additionalProperties: false
+      responses:
+        "200":
+          description: Successful MoonSleep Partner Desk method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/moonsleep-partner-desk.proposal.commit:
+    post:
+      operationId: moonsleep-partner-desk.proposal.commit
+      summary: Commit one replay-safe immutable coverage and open-loop proposal batch
+        bound to exact source revisions.
+      tags:
+        - MoonSleep Partner Desk
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                workspace_key:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                proposed_canonical_entity_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 256
+                proposed_contact_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 256
+                partner_category:
+                  type: string
+                  enum:
+                    - vendor
+                    - fulfillment_partner
+                    - logistics_partner
+                    - packaging_partner
+                    - marketplace_partner
+                    - professional_service
+                    - creator_partner
+                record_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  uniqueItems: true
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 512
+                open_loop_proposals:
+                  type: array
+                  maxItems: 100
+                  items:
+                    type: object
+                source_coverage_proposals:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    type: object
+                classifier_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                classifier_prompt_sha256:
+                  type: string
+                  minLength: 64
+                  maxLength: 64
+                proposal_note:
+                  type: string
+                  minLength: 1
+                  maxLength: 2048
+                proposal_idempotency_key:
+                  type: string
+                  minLength: 16
+                  maxLength: 128
+              required:
+                - workspace_key
+                - proposed_canonical_entity_id
+                - partner_category
+                - record_ids
+                - open_loop_proposals
+                - source_coverage_proposals
+                - classifier_id
+                - classifier_prompt_sha256
+                - proposal_idempotency_key
+              additionalProperties: false
+      responses:
+        "200":
+          description: Successful MoonSleep Partner Desk method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/moonsleep-partner-desk.proposal.list:
+    post:
+      operationId: moonsleep-partner-desk.proposal.list
+      summary: List immutable Partner Desk proposal batches without promoting them
+        into reviewed operational state.
+      tags:
+        - MoonSleep Partner Desk
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
+      responses:
+        "200":
+          description: Successful MoonSleep Partner Desk method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/moonsleep-partner-desk.review.commit:
+    post:
+      operationId: moonsleep-partner-desk.review.commit
+      summary: Commit one replay-safe immutable operator review revision through
+        canonical Nex record ingress.
+      tags:
+        - MoonSleep Partner Desk
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                workspace_key:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                canonical_entity_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 256
+                record_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  uniqueItems: true
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 512
+                identity_resolutions:
+                  type: array
+                  maxItems: 50
+                  items:
+                    type: object
+                workspace_assertions:
+                  type: array
+                  maxItems: 50
+                  items:
+                    type: object
+                open_loop_assertions:
+                  type: array
+                  maxItems: 100
+                  items:
+                    type: object
+                source_coverage_assertions:
+                  type: array
+                  maxItems: 50
+                  items:
+                    type: object
+                review_note:
+                  type: string
+                  minLength: 1
+                  maxLength: 2048
+                review_idempotency_key:
+                  type: string
+                  minLength: 16
+                  maxLength: 128
+                previous_revision_sha256:
+                  type:
+                    - string
+                    - "null"
+                  minLength: 64
+                  maxLength: 64
+              required:
+                - workspace_key
+                - canonical_entity_id
+                - record_ids
+                - identity_resolutions
+                - workspace_assertions
+                - open_loop_assertions
+                - source_coverage_assertions
+                - review_idempotency_key
+                - previous_revision_sha256
+              additionalProperties: false
+      responses:
+        "200":
+          description: Successful MoonSleep Partner Desk method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/moonsleep-partner-desk.review.current:
+    post:
+      operationId: moonsleep-partner-desk.review.current
+      summary: Read the unique current immutable review head for one Partner Desk
+        workspace.
+      tags:
+        - MoonSleep Partner Desk
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                workspace_key:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+              required:
+                - workspace_key
+              additionalProperties: false
+      responses:
+        "200":
+          description: Successful MoonSleep Partner Desk method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/moonsleep-partner-desk.review.workspaces:
+    post:
+      operationId: moonsleep-partner-desk.review.workspaces
+      summary: List the immutable current review heads available to the Partner Desk UI.
+      tags:
+        - MoonSleep Partner Desk
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
+      responses:
+        "200":
+          description: Successful MoonSleep Partner Desk method response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  payload:
+                    type: object
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+                      details:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type: string
+                    required:
+                      - message
+                    additionalProperties: true
+                  meta:
+                    anyOf:
+                      - type: object
+                        additionalProperties: true
+                      - type: "null"
+  /runtime/operations/moonsleep-partner-desk.source.inbox:
+    post:
+      operationId: moonsleep-partner-desk.source.inbox
+      summary: List one bounded page of committed partner communication records with
+        reviewed and proposal coverage state.
+      tags:
+        - MoonSleep Partner Desk
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider:
+                  type: string
+                  enum:
+                    - alibaba
+                    - gmail
+                connection_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 256
+                provider_thread_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 512
+                coverage_state:
+                  type: string
+                  enum:
+                    - unreviewed
+                    - proposed
+                    - proposal_conflict
+                    - reviewed
+                offset:
+                  type: integer
+                  minimum: 0
+                  maximum: 99999
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+              required:
+                - provider
               additionalProperties: false
       responses:
         "200":
