@@ -14,7 +14,7 @@ import (
 
 const (
 	adapterName    = "mercury-adapter"
-	adapterVersion = "0.3.1"
+	adapterVersion = "0.3.2"
 	platformID     = "mercury"
 )
 
@@ -43,8 +43,8 @@ func adapterConfig() nexadapter.DefineAdapterConfig[*mercuryClient] {
 			Health:      mercuryHealth,
 		},
 		Ingest: nexadapter.IngestHandlers[*mercuryClient]{
-			Monitor:  mercuryMonitor,
-			Backfill: mercuryBackfill,
+			Monitor:        mercuryMonitor,
+			BackfillWindow: mercuryBackfill,
 		},
 		Methods: mercuryMethods(),
 		Auth: &nexadapter.AdapterAuthManifest{

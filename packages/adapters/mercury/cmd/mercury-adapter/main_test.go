@@ -62,7 +62,7 @@ func TestProjectionDeclaresNineActiveFamilies(t *testing.T) {
 		t.Fatal("MAP-003 monitor must be active")
 	}
 	config := adapterConfig()
-	if config.Ingest.Backfill == nil || config.Ingest.Monitor == nil {
+	if config.Ingest.BackfillWindow == nil || config.Ingest.Monitor == nil {
 		t.Fatal("MAP-003 ingest handlers must be installed")
 	}
 }

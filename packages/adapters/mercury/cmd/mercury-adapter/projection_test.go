@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -440,6 +441,7 @@ func TestPrimaryProjectionFetchesAllCanonicalReadFamilies(t *testing.T) {
 		context.Background(),
 		testMercuryClient(server, rolePrimaryRead),
 		time.Date(2026, 7, 21, 0, 0, 0, 0, time.UTC),
+		time.Time{},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -483,6 +485,7 @@ func TestAPProjectionCannotEscapeAPReadFamilies(t *testing.T) {
 		context.Background(),
 		testMercuryClient(server, roleAPRequest),
 		time.Date(2026, 7, 21, 0, 0, 0, 0, time.UTC),
+		time.Time{},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -517,7 +520,10 @@ func TestBackfillEmitsProjectionRecords(t *testing.T) {
 			ConnectionID: "ap",
 			Client:       testMercuryClient(server, roleAPRequest),
 		},
-		time.Date(2026, 7, 21, 0, 0, 0, 0, time.UTC),
+		nexadapter.BackfillWindow{
+			Since: time.Date(2026, 7, 21, 0, 0, 0, 0, time.UTC),
+			To:    time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC),
+		},
 		func(record any) {
 			emitted = append(emitted, record.(nexadapter.AdapterInboundRecord))
 		},
@@ -530,6 +536,30 @@ func TestBackfillEmitsProjectionRecords(t *testing.T) {
 	}
 }
 
+func TestStatementDateWindowsStayWithinMercuryLimit(t *testing.T) {
+	windows := mercuryStatementDateWindows(
+		time.Date(2024, 1, 15, 19, 0, 0, 0, time.UTC),
+		time.Date(2024, 8, 3, 23, 59, 0, 0, time.UTC),
+	)
+	want := []mercuryDateWindow{
+		{
+			Start: time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
+			End:   time.Date(2024, 4, 14, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			Start: time.Date(2024, 4, 15, 0, 0, 0, 0, time.UTC),
+			End:   time.Date(2024, 7, 14, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			Start: time.Date(2024, 7, 15, 0, 0, 0, 0, time.UTC),
+			End:   time.Date(2024, 8, 3, 0, 0, 0, 0, time.UTC),
+		},
+	}
+	if !reflect.DeepEqual(windows, want) {
+		t.Fatalf("windows = %#v, want %#v", windows, want)
+	}
+}
+
 func TestExecutableBackfillEmitsJSONLThroughRuntimeContext(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
@@ -539,12 +569,24 @@ func TestExecutableBackfillEmitsJSONLThroughRuntimeContext(t *testing.T) {
 		case "/credit":
 			_, _ = writer.Write([]byte(`{"accounts":[{"id":"credit_1","createdAt":"2026-07-20T00:00:00Z"}],"page":{"nextPage":null}}`))
 		case "/transactions":
+			if got := request.URL.Query().Get("start"); got != "2026-07-21T00:00:00Z" {
+				t.Fatalf("transaction start = %q", got)
+			}
+			if got := request.URL.Query().Get("end"); got != "2026-07-23T12:34:56Z" {
+				t.Fatalf("transaction end = %q", got)
+			}
 			_, _ = writer.Write([]byte(`{"transactions":[{"id":"txn_1","createdAt":"2026-07-22T00:00:00Z"}],"page":{"nextPage":null}}`))
 		case "/recipients":
 			_, _ = writer.Write([]byte(`{"recipients":[{"id":"recipient_1","name":"Borden"}],"page":{"nextPage":null}}`))
 		case "/request-send-money":
 			_, _ = writer.Write([]byte(`{"requests":[{"requestId":"request_1","createdAt":"2026-07-22T01:00:00Z"}],"page":{"nextPage":null}}`))
 		case "/account/acct_1/statements":
+			if got := request.URL.Query().Get("start"); got != "2026-07-21" {
+				t.Fatalf("statement start = %q", got)
+			}
+			if got := request.URL.Query().Get("end"); got != "2026-07-23" {
+				t.Fatalf("statement end = %q", got)
+			}
 			_, _ = writer.Write([]byte(`{"statements":[{"id":"statement_1","endDate":"2026-07-22T00:00:00Z"}],"page":{"nextPage":null}}`))
 		default:
 			t.Fatalf("unexpected path %s", request.URL.Path)
@@ -576,7 +618,12 @@ func TestExecutableBackfillEmitsJSONLThroughRuntimeContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	command := exec.Command("go", "run", ".", "records.backfill", "--connection", "primary", "--since", "2026-07-21")
+	command := exec.Command(
+		"go", "run", ".", "records.backfill",
+		"--connection", "primary",
+		"--since", "2026-07-21T00:00:00Z",
+		"--to", "2026-07-23T12:34:56Z",
+	)
 	command.Env = append(
 		os.Environ(),
 		"NEXUS_ADAPTER_CONTEXT_PATH="+contextPath,

@@ -42,6 +42,11 @@ type mercuryProjectionFetch struct {
 	Query          map[string]any
 }
 
+type mercuryDateWindow struct {
+	Start time.Time
+	End   time.Time
+}
+
 var mercuryProjectionSources = map[string]mercuryProjectionSource{
 	"getAccounts": {
 		OperationID:  "getAccounts",
@@ -87,8 +92,14 @@ var mercuryProjectionSources = map[string]mercuryProjectionSource{
 	},
 }
 
-func mercuryBackfill(ctx nexadapter.AdapterContext[*mercuryClient], since time.Time, emit nexadapter.EmitFunc) error {
-	records, _, err := fetchMercuryProjection(ctx.Context, ctx.Client, since.UTC())
+func mercuryBackfill(ctx nexadapter.AdapterContext[*mercuryClient], window nexadapter.BackfillWindow, emit nexadapter.EmitFunc) error {
+	if window.Since.IsZero() {
+		return errors.New("Mercury backfill requires a nonzero start boundary")
+	}
+	if !window.To.IsZero() && window.To.Before(window.Since) {
+		return errors.New("Mercury backfill end boundary precedes start boundary")
+	}
+	records, _, err := fetchMercuryProjection(ctx.Context, ctx.Client, window.Since.UTC(), window.To.UTC())
 	if err != nil {
 		return err
 	}
@@ -104,7 +115,7 @@ func mercuryMonitor(ctx nexadapter.AdapterContext[*mercuryClient], emit nexadapt
 		ErrorBackoff:  mercuryMonitorErrorBackoff,
 		InitialCursor: time.Now().UTC().Add(-mercuryMonitorReplayWindow),
 		Fetch: func(fetchContext context.Context, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
-			return fetchMercuryProjection(fetchContext, ctx.Client, since.UTC())
+			return fetchMercuryProjection(fetchContext, ctx.Client, since.UTC(), time.Time{})
 		},
 		MaxConsecutiveErrors: 5,
 	})
@@ -115,12 +126,16 @@ func fetchMercuryProjection(
 	ctx context.Context,
 	client *mercuryClient,
 	since time.Time,
+	to time.Time,
 ) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 	if client == nil {
 		return nil, time.Time{}, errors.New("missing Mercury client")
 	}
 	if since.IsZero() {
 		return nil, time.Time{}, errors.New("Mercury projection requires a nonzero cursor")
+	}
+	if !to.IsZero() && to.Before(since) {
+		return nil, time.Time{}, errors.New("Mercury projection end boundary precedes cursor")
 	}
 	capturedAt := time.Now().UTC()
 	fetches := []mercuryProjectionFetch{}
@@ -149,6 +164,9 @@ func fetchMercuryProjection(
 				},
 			},
 		)
+		if !to.IsZero() {
+			fetches[len(fetches)-1].Query["end"] = to.UTC().Format(time.RFC3339)
+		}
 	}
 	fetches = append(fetches,
 		mercuryProjectionFetch{
@@ -168,6 +186,7 @@ func fetchMercuryProjection(
 
 	records := []nexadapter.AdapterInboundRecord{}
 	accountIDs := []string{}
+	accountStatementStarts := map[string]time.Time{}
 	for _, fetch := range fetches {
 		response, err := invokeProjectionSource(ctx, client, fetch)
 		if err != nil {
@@ -193,45 +212,78 @@ func fetchMercuryProjection(
 			if err != nil {
 				return nil, time.Time{}, err
 			}
+			accountStatementStarts, err = projectionProviderTimestamps(response, fetch.Source, "createdAt", since)
+			if err != nil {
+				return nil, time.Time{}, err
+			}
 		}
 	}
 
 	if client.role == rolePrimaryRead {
+		statementEnd := capturedAt
+		if !to.IsZero() {
+			statementEnd = to
+		}
 		for _, accountID := range accountIDs {
-			fetch := mercuryProjectionFetch{
-				Source: mercuryProjectionSources["getAccountStatements"],
-				PathParameters: map[string]any{
-					"accountId": accountID,
-				},
-				Query: map[string]any{
-					"start": since.UTC().Format("2006-01-02"),
-					"limit": mercuryProjectionPageSize,
-					"order": "asc",
-				},
+			statementStart := since
+			if createdAt := accountStatementStarts[accountID]; createdAt.After(statementStart) {
+				statementStart = createdAt
 			}
-			response, err := invokeProjectionSource(ctx, client, fetch)
-			if err != nil {
-				return nil, time.Time{}, err
+			for _, statementWindow := range mercuryStatementDateWindows(statementStart, statementEnd) {
+				fetch := mercuryProjectionFetch{
+					Source: mercuryProjectionSources["getAccountStatements"],
+					PathParameters: map[string]any{
+						"accountId": accountID,
+					},
+					Query: map[string]any{
+						"start": statementWindow.Start.Format("2006-01-02"),
+						"end":   statementWindow.End.Format("2006-01-02"),
+						"limit": mercuryProjectionPageSize,
+						"order": "asc",
+					},
+				}
+				response, err := invokeProjectionSource(ctx, client, fetch)
+				if err != nil {
+					return nil, time.Time{}, err
+				}
+				captureScopeSHA256, scopeErr := mercuryCaptureScopeSHA256(fetch.PathParameters)
+				if scopeErr != nil {
+					return nil, time.Time{}, scopeErr
+				}
+				projected, err := projectMercuryResponse(
+					client,
+					fetch.Source,
+					response,
+					capturedAt,
+					captureScopeSHA256,
+				)
+				if err != nil {
+					return nil, time.Time{}, err
+				}
+				records = append(records, projected...)
 			}
-			captureScopeSHA256, scopeErr := mercuryCaptureScopeSHA256(fetch.PathParameters)
-			if scopeErr != nil {
-				return nil, time.Time{}, scopeErr
-			}
-			projected, err := projectMercuryResponse(
-				client,
-				fetch.Source,
-				response,
-				capturedAt,
-				captureScopeSHA256,
-			)
-			if err != nil {
-				return nil, time.Time{}, err
-			}
-			records = append(records, projected...)
 		}
 	}
 
 	return records, capturedAt, nil
+}
+
+func mercuryStatementDateWindows(start, end time.Time) []mercuryDateWindow {
+	start = time.Date(start.UTC().Year(), start.UTC().Month(), start.UTC().Day(), 0, 0, 0, 0, time.UTC)
+	end = time.Date(end.UTC().Year(), end.UTC().Month(), end.UTC().Day(), 0, 0, 0, 0, time.UTC)
+	if start.After(end) {
+		return nil
+	}
+	windows := []mercuryDateWindow{}
+	for !start.After(end) {
+		windowEnd := start.AddDate(0, 3, -1)
+		if windowEnd.After(end) {
+			windowEnd = end
+		}
+		windows = append(windows, mercuryDateWindow{Start: start, End: windowEnd})
+		start = windowEnd.AddDate(0, 0, 1)
+	}
+	return windows
 }
 
 func invokeProjectionSource(
@@ -409,6 +461,36 @@ func projectionProviderIDs(response *mercuryMethodResponse, source mercuryProjec
 		}
 	}
 	return ids, nil
+}
+
+func projectionProviderTimestamps(
+	response *mercuryMethodResponse,
+	source mercuryProjectionSource,
+	timestampField string,
+	fallback time.Time,
+) (map[string]time.Time, error) {
+	result := map[string]time.Time{}
+	for _, page := range response.Pages {
+		if page.BodyEncoding != "utf8_json" {
+			return nil, errors.New("provider timestamps require JSON UTF-8")
+		}
+		rows, err := projectionRows([]byte(page.Body), source.ArrayField)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			object, _, err := canonicalProviderObject(row)
+			if err != nil {
+				return nil, err
+			}
+			id, err := requiredProviderID(object, source.IDField)
+			if err != nil {
+				return nil, err
+			}
+			result[id] = providerTimestamp(object, []string{timestampField}, fallback)
+		}
+	}
+	return result, nil
 }
 
 func buildMercuryRevisionRecords(

@@ -2,6 +2,7 @@ package nexadapter
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -29,8 +30,9 @@ type ConnectionHandlers[T any] struct {
 }
 
 type IngestHandlers[T any] struct {
-	Monitor  func(ctx AdapterContext[T], emit EmitFunc) error
-	Backfill func(ctx AdapterContext[T], since time.Time, emit EmitFunc) error
+	Monitor        func(ctx AdapterContext[T], emit EmitFunc) error
+	Backfill       func(ctx AdapterContext[T], since time.Time, emit EmitFunc) error
+	BackfillWindow func(ctx AdapterContext[T], window BackfillWindow, emit EmitFunc) error
 }
 
 type SetupHandlers[T any] struct {
@@ -140,6 +142,22 @@ func DefineAdapter[T any](config DefineAdapterConfig[T]) Adapter {
 					return err
 				}
 				return config.Ingest.Backfill(adapterCtx, since, emit)
+			},
+			RecordsBackfillWindow: func(ctx context.Context, connectionID string, window BackfillWindow, emit EmitFunc) error {
+				adapterCtx, err := createAdapterContext(ctx, connectionID, config.Client)
+				if err != nil {
+					return err
+				}
+				if config.Ingest.BackfillWindow != nil {
+					return config.Ingest.BackfillWindow(adapterCtx, window, emit)
+				}
+				if !window.To.IsZero() {
+					return fmt.Errorf("records.backfill adapter does not support an exact --to boundary")
+				}
+				if config.Ingest.Backfill != nil {
+					return config.Ingest.Backfill(adapterCtx, window.Since, emit)
+				}
+				return nil
 			},
 			AdapterSetupStart: func(ctx context.Context, req AdapterSetupRequest) (*AdapterSetupResult, error) {
 				if config.Setup.Start == nil {
@@ -278,7 +296,7 @@ func buildAdapterInfo[T any](config DefineAdapterConfig[T], methods map[string]D
 	if config.Ingest.Monitor != nil {
 		operations = append(operations, OpAdapterMonitorStart)
 	}
-	if config.Ingest.Backfill != nil {
+	if config.Ingest.Backfill != nil || config.Ingest.BackfillWindow != nil {
 		operations = append(operations, OpRecordsBackfill)
 	}
 	if config.Setup.Start != nil {
