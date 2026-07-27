@@ -768,7 +768,7 @@ function buildRecord(
       },
     },
     payload: {
-      external_record_id: `alibaba:${safeIdToken(connectionId)}:message:${safeIdToken(message.messageId)}:${revisionHash}`,
+      external_record_id: `alibaba:${safeIdToken(connectionId)}:message-v2:${safeIdToken(message.messageId)}:${revisionHash}`,
       timestamp,
       content,
       content_type: "text",
@@ -776,9 +776,6 @@ function buildRecord(
       payload: {
         provider_object_json: message.provider_object_json,
         provider_object_sha256: message.provider_object_sha256,
-        source_snapshot_id: snapshot.ref.id,
-        source_snapshot_receipt_sha256: snapshot.ref.complete_sha256,
-        source_projection_messages_sha256: snapshot.ref.complete.adapterProjection!.messagesSha256!,
         source_attachments: attachments.map((attachment) => ({
           provider_object_json: attachment.provider_object_json,
           provider_object_sha256: attachment.provider_object_sha256,
@@ -860,16 +857,13 @@ function buildOrphanAttachmentRecord(
       },
     },
     payload: {
-      external_record_id: `alibaba:${safeIdToken(connectionId)}:attachment-orphan:${safeIdToken(sourceIdentity)}:${revisionHash}`,
+      external_record_id: `alibaba:${safeIdToken(connectionId)}:attachment-orphan-v2:${safeIdToken(sourceIdentity)}:${revisionHash}`,
       timestamp,
       content,
       content_type: "text",
       payload: {
         provider_attachment_json: attachment.provider_object_json,
         provider_attachment_sha256: attachment.provider_object_sha256,
-        source_snapshot_id: snapshot.ref.id,
-        source_snapshot_receipt_sha256: snapshot.ref.complete_sha256,
-        source_projection_attachments_sha256: snapshot.ref.complete.adapterProjection!.attachmentsSha256!,
         source_message_id: textValue(attachment.messageId) ?? null,
         source_conversation_id: textValue(attachment.cid) ?? null,
         source_coverage_disposition: "orphan_attachment_evidence",
@@ -1034,7 +1028,7 @@ export const __test__ = {
 export const alibabaAdapter = defineAdapter({
   platform: PLATFORM,
   name: "alibaba-messenger-adapter",
-  version: "0.2.4",
+  version: "0.2.5",
   multi_account: true,
   auth: {
     methods: [
