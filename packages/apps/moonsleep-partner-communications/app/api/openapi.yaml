@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MoonSleep Partner Desk App API
-  version: 0.2.0
+  version: 0.2.1
   description: Track reviewed supplier and partner open loops over immutable
     provider-native communications.
 servers:
