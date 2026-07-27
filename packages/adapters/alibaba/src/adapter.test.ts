@@ -266,6 +266,8 @@ test("record preserves exact sanitized source JSON and excludes raw credentials"
     createHash("sha256").update(sourceAttachments[0]!.provider_object_json).digest("hex"),
     sourceAttachments[0]!.provider_object_sha256,
   );
+  assert.doesNotMatch(sourceAttachments[0]!.provider_object_json, /localPath|objectPath/);
+  assert.doesNotMatch(sourceAttachments[0]!.provider_object_json, /retired-capture-root/);
   assert.equal(AdapterInboundRecordSchema.parse(record).payload.payload?.provider_object_json, sourceLine);
   assert.doesNotMatch(JSON.stringify(record), /must-not-leak|chatToken|encryptedAccount/);
   assert.doesNotMatch(JSON.stringify(record), /clouddisk\.alibaba\.com/);
@@ -308,6 +310,29 @@ test("capture-level provenance cannot change immutable message identity or paylo
     refreshed.payload.metadata?.snapshot_receipt_sha256,
     original.payload.metadata?.snapshot_receipt_sha256,
   );
+});
+
+test("capture-local attachment paths cannot change immutable message identity or payload", () => {
+  const { root } = fixture();
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const original = __test__.buildRecord(
+    snapshot.messages[0]!,
+    snapshot,
+    config(root),
+    "conn-alibaba",
+  );
+  const attachment = snapshot.attachmentsByMessage.get("m-1")?.[0];
+  assert.ok(attachment);
+  attachment.localPath = "/another-capture/attachments/shipping-schedule.pdf";
+  attachment.objectPath = "/another-capture/objects/e4/e465";
+  const relocated = __test__.buildRecord(
+    snapshot.messages[0]!,
+    snapshot,
+    config(root),
+    "conn-alibaba",
+  );
+  assert.equal(relocated.payload.external_record_id, original.payload.external_record_id);
+  assert.deepEqual(relocated.payload.payload, original.payload.payload);
 });
 
 test("bounded projection keeps temporal window, directionality, and replay identity", () => {
