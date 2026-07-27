@@ -351,14 +351,26 @@ function parseAttachmentJsonl(bytes: Buffer): AlibabaAttachment[] {
     .toString("utf8")
     .split(/\n+/)
     .filter(Boolean)
-    .map((line) => ({
-      ...(JSON.parse(line) as Omit<
+    .map((line) => {
+      const parsed = JSON.parse(line) as Omit<
         AlibabaAttachment,
         "provider_object_json" | "provider_object_sha256"
-      >),
-      provider_object_json: line,
-      provider_object_sha256: sha256Bytes(Buffer.from(line, "utf8")),
-    }));
+      >;
+      const {
+        // Capture-local filesystem coordinates are transport metadata, not
+        // Alibaba provider evidence. They remain available to the bounded
+        // attachment resolver but must never enter an immutable record payload.
+        localPath: _localPath,
+        objectPath: _objectPath,
+        ...portableProviderObject
+      } = parsed;
+      const providerObjectJson = stableJson(portableProviderObject);
+      return {
+        ...parsed,
+        provider_object_json: providerObjectJson,
+        provider_object_sha256: sha256Bytes(Buffer.from(providerObjectJson, "utf8")),
+      };
+    });
 }
 
 function sha256Bytes(bytes: Uint8Array): string {
@@ -1028,7 +1040,7 @@ export const __test__ = {
 export const alibabaAdapter = defineAdapter({
   platform: PLATFORM,
   name: "alibaba-messenger-adapter",
-  version: "0.2.5",
+  version: "0.2.6",
   multi_account: true,
   auth: {
     methods: [
