@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,9 @@ const (
 )
 
 var safeShopifyStateToken = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+var shopifyProviderCursorPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)$`)
+
+const shopifyFinanceCheckpointConfirmation = "ADOPT_SHOPIFY_FINANCE_SINCE_ID_V1"
 
 type shopifySourceFamilySpec struct {
 	Name            string
@@ -136,22 +140,26 @@ var shopifySourceFamilyValues = []string{
 }
 
 type shopifySourceLease struct {
-	CaptureID     string `json:"capture_id"`
-	StartedAt     string `json:"started_at"`
-	ExpiresAt     string `json:"expires_at"`
-	RequestSince  string `json:"request_since"`
-	WindowThrough string `json:"window_through"`
-	PageCursor    string `json:"page_cursor,omitempty"`
-	NextCursor    string `json:"next_cursor,omitempty"`
-	Complete      bool   `json:"complete"`
+	CaptureID          string `json:"capture_id"`
+	StartedAt          string `json:"started_at"`
+	ExpiresAt          string `json:"expires_at"`
+	RequestSince       string `json:"request_since"`
+	WindowThrough      string `json:"window_through"`
+	ProviderCursor     string `json:"provider_cursor,omitempty"`
+	PageCursor         string `json:"page_cursor,omitempty"`
+	NextCursor         string `json:"next_cursor,omitempty"`
+	NextProviderCursor string `json:"next_provider_cursor,omitempty"`
+	Complete           bool   `json:"complete"`
 }
 
 type shopifySourceFamilyState struct {
-	CursorISO     string              `json:"cursor_iso,omitempty"`
-	WindowSince   string              `json:"window_since,omitempty"`
-	WindowThrough string              `json:"window_through,omitempty"`
-	PageCursor    string              `json:"page_cursor,omitempty"`
-	Lease         *shopifySourceLease `json:"lease,omitempty"`
+	CursorISO            string              `json:"cursor_iso,omitempty"`
+	ProviderCursor       string              `json:"provider_cursor,omitempty"`
+	WindowSince          string              `json:"window_since,omitempty"`
+	WindowThrough        string              `json:"window_through,omitempty"`
+	WindowProviderCursor string              `json:"window_provider_cursor,omitempty"`
+	PageCursor           string              `json:"page_cursor,omitempty"`
+	Lease                *shopifySourceLease `json:"lease,omitempty"`
 }
 
 type shopifySourceState struct {
@@ -160,27 +168,42 @@ type shopifySourceState struct {
 }
 
 type shopifySourceCaptureResult struct {
-	Version       int                               `json:"version"`
-	Family        string                            `json:"family"`
-	ConnectionID  string                            `json:"connection_id"`
-	ShopDomain    string                            `json:"shop_domain"`
-	CaptureID     string                            `json:"capture_id"`
-	RequestSince  string                            `json:"request_since"`
-	WindowThrough string                            `json:"window_through"`
-	PageCursor    string                            `json:"page_cursor,omitempty"`
-	NextCursor    string                            `json:"next_cursor,omitempty"`
-	Complete      bool                              `json:"complete"`
-	Records       []nexadapter.AdapterInboundRecord `json:"records"`
+	Version            int                               `json:"version"`
+	Family             string                            `json:"family"`
+	ConnectionID       string                            `json:"connection_id"`
+	ShopDomain         string                            `json:"shop_domain"`
+	CaptureID          string                            `json:"capture_id"`
+	RequestSince       string                            `json:"request_since"`
+	WindowThrough      string                            `json:"window_through"`
+	ProviderCursor     string                            `json:"provider_cursor,omitempty"`
+	PageCursor         string                            `json:"page_cursor,omitempty"`
+	NextCursor         string                            `json:"next_cursor,omitempty"`
+	NextProviderCursor string                            `json:"next_provider_cursor,omitempty"`
+	Complete           bool                              `json:"complete"`
+	Records            []nexadapter.AdapterInboundRecord `json:"records"`
 }
 
 type shopifySourceCommitResult struct {
-	Version       int    `json:"version"`
-	Family        string `json:"family"`
-	CaptureID     string `json:"capture_id"`
-	CursorISO     string `json:"cursor_iso"`
-	PageCursor    string `json:"page_cursor,omitempty"`
-	WindowThrough string `json:"window_through,omitempty"`
-	Complete      bool   `json:"complete"`
+	Version        int    `json:"version"`
+	Family         string `json:"family"`
+	CaptureID      string `json:"capture_id"`
+	CursorISO      string `json:"cursor_iso"`
+	ProviderCursor string `json:"provider_cursor,omitempty"`
+	PageCursor     string `json:"page_cursor,omitempty"`
+	WindowThrough  string `json:"window_through,omitempty"`
+	Complete       bool   `json:"complete"`
+}
+
+type shopifySourceCheckpointAdoptionResult struct {
+	Version                int    `json:"version"`
+	Family                 string `json:"family"`
+	PreviousStateSHA256    string `json:"previous_state_sha256"`
+	CurrentStateSHA256     string `json:"current_state_sha256"`
+	PreviousProviderCursor string `json:"previous_provider_cursor"`
+	ProviderCursor         string `json:"provider_cursor"`
+	ClearedInProgress      bool   `json:"cleared_in_progress"`
+	ProviderCalls          int    `json:"provider_calls"`
+	ProviderWriteAuthority bool   `json:"provider_write_authority"`
 }
 
 func sourceFamilySpec(name string) (shopifySourceFamilySpec, error) {
@@ -257,6 +280,64 @@ func newCaptureID() (string, error) {
 	return hex.EncodeToString(raw), nil
 }
 
+func sourceFamilyStateSHA256(state shopifySourceFamilyState) (string, error) {
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		return "", fmt.Errorf("encode Shopify source family state: %w", err)
+	}
+	digest := sha256.Sum256(encoded)
+	return hex.EncodeToString(digest[:]), nil
+}
+
+func normalizeShopifyProviderCursor(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if !shopifyProviderCursorPattern.MatchString(value) {
+		return "", errors.New("Shopify provider cursor must be a canonical unsigned decimal integer")
+	}
+	return value, nil
+}
+
+func laterShopifyProviderCursor(left, right string) (string, error) {
+	if strings.TrimSpace(left) == "" {
+		return normalizeShopifyProviderCursor(right)
+	}
+	if strings.TrimSpace(right) == "" {
+		return normalizeShopifyProviderCursor(left)
+	}
+	left, err := normalizeShopifyProviderCursor(left)
+	if err != nil {
+		return "", err
+	}
+	right, err = normalizeShopifyProviderCursor(right)
+	if err != nil {
+		return "", err
+	}
+	if len(right) > len(left) || (len(right) == len(left) && right > left) {
+		return right, nil
+	}
+	return left, nil
+}
+
+func highestShopifyProviderCursor(records []nexadapter.AdapterInboundRecord) (string, error) {
+	highest := ""
+	for _, record := range records {
+		providerIDs, ok := record.Payload.Metadata["provider_ids"].(map[string]any)
+		if !ok {
+			return "", errors.New("Shopify finance record omitted provider_ids metadata")
+		}
+		providerID, ok := providerIDs["provider_id"].(string)
+		if !ok {
+			return "", errors.New("Shopify finance record omitted provider_id metadata")
+		}
+		var err error
+		highest, err = laterShopifyProviderCursor(highest, providerID)
+		if err != nil {
+			return "", err
+		}
+	}
+	return highest, nil
+}
+
 func beginSourceCapture(connectionID string, spec shopifySourceFamilySpec, now time.Time) (shopifySourceLease, error) {
 	return withLockedSourceState(connectionID, func(state *shopifySourceState) (shopifySourceLease, error) {
 		familyState := state.Families[spec.Name]
@@ -268,6 +349,7 @@ func beginSourceCapture(connectionID string, spec shopifySourceFamilySpec, now t
 			familyState.WindowSince = familyState.Lease.RequestSince
 			familyState.WindowThrough = familyState.Lease.WindowThrough
 			familyState.PageCursor = familyState.Lease.PageCursor
+			familyState.WindowProviderCursor = familyState.Lease.NextProviderCursor
 			familyState.Lease = nil
 		}
 
@@ -298,12 +380,14 @@ func beginSourceCapture(connectionID string, spec shopifySourceFamilySpec, now t
 			return shopifySourceLease{}, err
 		}
 		lease := shopifySourceLease{
-			CaptureID:     captureID,
-			StartedAt:     now.UTC().Format(time.RFC3339Nano),
-			ExpiresAt:     now.UTC().Add(shopifySourceLeaseTTL).Format(time.RFC3339Nano),
-			RequestSince:  requestSince.UTC().Format(time.RFC3339Nano),
-			WindowThrough: through.Format(time.RFC3339Nano),
-			PageCursor:    familyState.PageCursor,
+			CaptureID:          captureID,
+			StartedAt:          now.UTC().Format(time.RFC3339Nano),
+			ExpiresAt:          now.UTC().Add(shopifySourceLeaseTTL).Format(time.RFC3339Nano),
+			RequestSince:       requestSince.UTC().Format(time.RFC3339Nano),
+			WindowThrough:      through.Format(time.RFC3339Nano),
+			ProviderCursor:     familyState.ProviderCursor,
+			PageCursor:         familyState.PageCursor,
+			NextProviderCursor: familyState.WindowProviderCursor,
 		}
 		familyState.WindowSince = lease.RequestSince
 		familyState.WindowThrough = lease.WindowThrough
@@ -313,13 +397,21 @@ func beginSourceCapture(connectionID string, spec shopifySourceFamilySpec, now t
 	})
 }
 
-func finishSourceCapture(connectionID, family, captureID, nextCursor string, complete bool) error {
+func finishSourceCapture(connectionID, family, captureID, nextCursor, nextProviderCursor string, complete bool) error {
 	_, err := withLockedSourceState(connectionID, func(state *shopifySourceState) (struct{}, error) {
 		familyState := state.Families[family]
 		if familyState.Lease == nil || familyState.Lease.CaptureID != captureID {
 			return struct{}{}, errors.New("Shopify source capture lease changed before result staging")
 		}
+		if family == "finance.transactions" {
+			var err error
+			nextProviderCursor, err = laterShopifyProviderCursor(familyState.Lease.ProviderCursor, nextProviderCursor)
+			if err != nil {
+				return struct{}{}, err
+			}
+		}
 		familyState.Lease.NextCursor = strings.TrimSpace(nextCursor)
+		familyState.Lease.NextProviderCursor = strings.TrimSpace(nextProviderCursor)
 		familyState.Lease.Complete = complete
 		state.Families[family] = familyState
 		return struct{}{}, nil
@@ -347,26 +439,32 @@ func commitSourceCapture(connectionID, family, captureID string) (shopifySourceC
 		}
 		if lease.Complete {
 			familyState.CursorISO = lease.WindowThrough
+			if lease.NextProviderCursor != "" {
+				familyState.ProviderCursor = lease.NextProviderCursor
+			}
 			familyState.WindowSince = ""
 			familyState.PageCursor = ""
 			familyState.WindowThrough = ""
+			familyState.WindowProviderCursor = ""
 		} else {
 			if strings.TrimSpace(lease.NextCursor) == "" {
 				return shopifySourceCommitResult{}, errors.New("incomplete Shopify source capture is missing next cursor")
 			}
 			familyState.PageCursor = lease.NextCursor
 			familyState.WindowThrough = lease.WindowThrough
+			familyState.WindowProviderCursor = lease.NextProviderCursor
 		}
 		familyState.Lease = nil
 		state.Families[family] = familyState
 		return shopifySourceCommitResult{
-			Version:       shopifySourceStateVersion,
-			Family:        family,
-			CaptureID:     captureID,
-			CursorISO:     familyState.CursorISO,
-			PageCursor:    familyState.PageCursor,
-			WindowThrough: familyState.WindowThrough,
-			Complete:      lease.Complete,
+			Version:        shopifySourceStateVersion,
+			Family:         family,
+			CaptureID:      captureID,
+			CursorISO:      familyState.CursorISO,
+			ProviderCursor: familyState.ProviderCursor,
+			PageCursor:     familyState.PageCursor,
+			WindowThrough:  familyState.WindowThrough,
+			Complete:       lease.Complete,
 		}, nil
 	})
 }
@@ -451,15 +549,17 @@ func captureShopifySource(ctx context.Context, state *shopifyState, spec shopify
 		return captureShopifyDiscountsPage(ctx, state, since, through, lease.PageCursor)
 
 	case "finance.transactions":
+		if lease.ProviderCursor == "" {
+			return nil, "", false, errors.New("Shopify finance source requires an adopted provider cursor before capture")
+		}
 		return captureShopifyPaymentsPage(ctx, state, shopifyPaymentsPageRequest{
-			Family:        spec.Name,
-			ContainerID:   "balance_transaction",
-			Path:          "/shopify_payments/balance/transactions.json",
-			ResponseField: "transactions",
-			SinceParam:    "payout_date_min",
-			ThroughParam:  "payout_date_max",
-			TimestampKeys: []string{"processed_at", "payout_date"},
-		}, since, through, lease.PageCursor)
+			Family:              spec.Name,
+			ContainerID:         "balance_transaction",
+			Path:                "/shopify_payments/balance/transactions.json",
+			ResponseField:       "transactions",
+			ProviderCursorParam: "since_id",
+			TimestampKeys:       []string{"processed_at", "payout_date"},
+		}, since, through, lease.ProviderCursor, lease.PageCursor)
 
 	case "disputes.delta":
 		return captureShopifyPaymentsPage(ctx, state, shopifyPaymentsPageRequest{
@@ -470,7 +570,7 @@ func captureShopifySource(ctx context.Context, state *shopifyState, spec shopify
 			SinceParam:    "initiated_at_min",
 			ThroughParam:  "initiated_at_max",
 			TimestampKeys: []string{"initiated_at", "finalized_on"},
-		}, since, through, lease.PageCursor)
+		}, since, through, "", lease.PageCursor)
 
 	case "products.delta":
 		return captureShopifyProductsPage(ctx, state, since, through, lease.PageCursor)
@@ -490,7 +590,7 @@ func captureShopifySource(ctx context.Context, state *shopifyState, spec shopify
 			SinceParam:    "date_min",
 			ThroughParam:  "date_max",
 			TimestampKeys: []string{"date"},
-		}, since, through, lease.PageCursor)
+		}, since, through, "", lease.PageCursor)
 	default:
 		return nil, "", false, fmt.Errorf("Shopify source family %s is not implemented", spec.Name)
 	}
@@ -515,21 +615,43 @@ func handleShopifySourceCapture(ctx nexadapter.AdapterContext[struct{}], payload
 		abandonSourceCapture(state.ConnectionID, spec.Name, lease.CaptureID)
 		return nil, err
 	}
-	if err := finishSourceCapture(state.ConnectionID, spec.Name, lease.CaptureID, nextCursor, complete); err != nil {
+	nextProviderCursor := lease.NextProviderCursor
+	if spec.Name == "finance.transactions" && len(records) > 0 {
+		pageProviderCursor, err := highestShopifyProviderCursor(records)
+		if err != nil {
+			abandonSourceCapture(state.ConnectionID, spec.Name, lease.CaptureID)
+			return nil, err
+		}
+		nextProviderCursor, err = laterShopifyProviderCursor(nextProviderCursor, pageProviderCursor)
+		if err != nil {
+			abandonSourceCapture(state.ConnectionID, spec.Name, lease.CaptureID)
+			return nil, err
+		}
+	}
+	if spec.Name == "finance.transactions" {
+		nextProviderCursor, err = laterShopifyProviderCursor(lease.ProviderCursor, nextProviderCursor)
+		if err != nil {
+			abandonSourceCapture(state.ConnectionID, spec.Name, lease.CaptureID)
+			return nil, err
+		}
+	}
+	if err := finishSourceCapture(state.ConnectionID, spec.Name, lease.CaptureID, nextCursor, nextProviderCursor, complete); err != nil {
 		return nil, err
 	}
 	return shopifySourceCaptureResult{
-		Version:       shopifySourceStateVersion,
-		Family:        spec.Name,
-		ConnectionID:  state.ConnectionID,
-		ShopDomain:    state.ShopDomain,
-		CaptureID:     lease.CaptureID,
-		RequestSince:  lease.RequestSince,
-		WindowThrough: lease.WindowThrough,
-		PageCursor:    lease.PageCursor,
-		NextCursor:    nextCursor,
-		Complete:      complete,
-		Records:       records,
+		Version:            shopifySourceStateVersion,
+		Family:             spec.Name,
+		ConnectionID:       state.ConnectionID,
+		ShopDomain:         state.ShopDomain,
+		CaptureID:          lease.CaptureID,
+		RequestSince:       lease.RequestSince,
+		WindowThrough:      lease.WindowThrough,
+		ProviderCursor:     lease.ProviderCursor,
+		PageCursor:         lease.PageCursor,
+		NextCursor:         nextCursor,
+		NextProviderCursor: nextProviderCursor,
+		Complete:           complete,
+		Records:            records,
 	}, nil
 }
 
@@ -569,4 +691,73 @@ func handleShopifySourceAbort(ctx nexadapter.AdapterContext[struct{}], payload m
 		"capture_id": captureID,
 		"aborted":    true,
 	}, nil
+}
+
+func adoptShopifyFinanceCheckpoint(connectionID, providerCursor, expectedStateSHA256 string) (shopifySourceCheckpointAdoptionResult, error) {
+	providerCursor, err := normalizeShopifyProviderCursor(providerCursor)
+	if err != nil {
+		return shopifySourceCheckpointAdoptionResult{}, err
+	}
+	expectedStateSHA256 = strings.TrimSpace(expectedStateSHA256)
+	if !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(expectedStateSHA256) {
+		return shopifySourceCheckpointAdoptionResult{}, errors.New("Shopify checkpoint adoption requires an exact state SHA-256")
+	}
+	return withLockedSourceState(connectionID, func(state *shopifySourceState) (shopifySourceCheckpointAdoptionResult, error) {
+		const family = "finance.transactions"
+		familyState := state.Families[family]
+		if familyState.Lease != nil {
+			return shopifySourceCheckpointAdoptionResult{}, errors.New("Shopify finance checkpoint cannot be adopted during an active capture")
+		}
+		previousStateSHA256, err := sourceFamilyStateSHA256(familyState)
+		if err != nil {
+			return shopifySourceCheckpointAdoptionResult{}, err
+		}
+		if previousStateSHA256 != expectedStateSHA256 {
+			return shopifySourceCheckpointAdoptionResult{}, errors.New("Shopify finance checkpoint state changed before adoption")
+		}
+		previousProviderCursor := familyState.ProviderCursor
+		clearedInProgress := familyState.WindowSince != "" ||
+			familyState.WindowThrough != "" ||
+			familyState.WindowProviderCursor != "" ||
+			familyState.PageCursor != ""
+		familyState.ProviderCursor = providerCursor
+		familyState.WindowSince = ""
+		familyState.WindowThrough = ""
+		familyState.WindowProviderCursor = ""
+		familyState.PageCursor = ""
+		state.Families[family] = familyState
+		currentStateSHA256, err := sourceFamilyStateSHA256(familyState)
+		if err != nil {
+			return shopifySourceCheckpointAdoptionResult{}, err
+		}
+		return shopifySourceCheckpointAdoptionResult{
+			Version:                shopifySourceStateVersion,
+			Family:                 family,
+			PreviousStateSHA256:    previousStateSHA256,
+			CurrentStateSHA256:     currentStateSHA256,
+			PreviousProviderCursor: previousProviderCursor,
+			ProviderCursor:         providerCursor,
+			ClearedInProgress:      clearedInProgress,
+			ProviderCalls:          0,
+			ProviderWriteAuthority: false,
+		}, nil
+	})
+}
+
+func handleShopifySourceCheckpointAdopt(ctx nexadapter.AdapterContext[struct{}], payload map[string]any) (any, error) {
+	state, err := loadShopifyState(ctx)
+	if err != nil {
+		return nil, err
+	}
+	family, _ := payload["family"].(string)
+	if strings.TrimSpace(family) != "finance.transactions" {
+		return nil, errors.New("Shopify checkpoint adoption supports only finance.transactions")
+	}
+	confirmation, _ := payload["confirmation"].(string)
+	if confirmation != shopifyFinanceCheckpointConfirmation {
+		return nil, errors.New("Shopify finance checkpoint confirmation is invalid")
+	}
+	providerCursor, _ := payload["provider_cursor"].(string)
+	expectedStateSHA256, _ := payload["expected_state_sha256"].(string)
+	return adoptShopifyFinanceCheckpoint(state.ConnectionID, providerCursor, expectedStateSHA256)
 }
