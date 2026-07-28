@@ -20,13 +20,14 @@ import (
 const shopifyPaymentsPageSize = 250
 
 type shopifyPaymentsPageRequest struct {
-	Family        string
-	ContainerID   string
-	Path          string
-	ResponseField string
-	SinceParam    string
-	ThroughParam  string
-	TimestampKeys []string
+	Family              string
+	ContainerID         string
+	Path                string
+	ResponseField       string
+	ProviderCursorParam string
+	SinceParam          string
+	ThroughParam        string
+	TimestampKeys       []string
 }
 
 func shopifyPaymentsWindowValue(value time.Time, timestamp bool) string {
@@ -42,6 +43,7 @@ func captureShopifyPaymentsPage(
 	spec shopifyPaymentsPageRequest,
 	since time.Time,
 	through time.Time,
+	providerCursor string,
 	pageCursor string,
 ) ([]nexadapter.AdapterInboundRecord, string, bool, error) {
 	accessToken, err := fetchShopifyAccessToken(ctx, state)
@@ -57,9 +59,17 @@ func captureShopifyPaymentsPage(
 		}
 		query := parsed.Query()
 		query.Set("limit", fmt.Sprintf("%d", shopifyPaymentsPageSize))
-		isTimestamp := spec.Family == "disputes.delta"
-		query.Set(spec.SinceParam, shopifyPaymentsWindowValue(since, isTimestamp))
-		query.Set(spec.ThroughParam, shopifyPaymentsWindowValue(through, isTimestamp))
+		if spec.ProviderCursorParam != "" {
+			providerCursor, err = normalizeShopifyProviderCursor(providerCursor)
+			if err != nil {
+				return nil, "", false, err
+			}
+			query.Set(spec.ProviderCursorParam, providerCursor)
+		} else {
+			isTimestamp := spec.Family == "disputes.delta"
+			query.Set(spec.SinceParam, shopifyPaymentsWindowValue(since, isTimestamp))
+			query.Set(spec.ThroughParam, shopifyPaymentsWindowValue(through, isTimestamp))
+		}
 		parsed.RawQuery = query.Encode()
 		requestURL = parsed.String()
 	}
@@ -106,12 +116,13 @@ func captureShopifyPaymentsPage(
 		APIBaseURL: fmt.Sprintf(defaultShopifyBaseURL, state.ShopDomain, state.APIVersion),
 		Path:       spec.Path,
 		Request: map[string]any{
-			"operation":      spec.Family,
-			"page_size":      shopifyPaymentsPageSize,
-			"api_version":    state.APIVersion,
-			"request_since":  since.UTC().Format(time.RFC3339Nano),
-			"window_through": through.UTC().Format(time.RFC3339Nano),
-			"request_cursor": emptyToNil(pageCursor),
+			"operation":       spec.Family,
+			"page_size":       shopifyPaymentsPageSize,
+			"api_version":     state.APIVersion,
+			"request_since":   since.UTC().Format(time.RFC3339Nano),
+			"window_through":  through.UTC().Format(time.RFC3339Nano),
+			"provider_cursor": emptyToNil(providerCursor),
+			"request_cursor":  emptyToNil(pageCursor),
 		},
 	}
 	records := make([]nexadapter.AdapterInboundRecord, 0, len(rows))

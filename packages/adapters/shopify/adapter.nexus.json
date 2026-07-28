@@ -1,6 +1,6 @@
 {
   "id": "shopify",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "displayName": "Shopify",
   "description": "Canonical Shopify adapter package for Nex with GraphQL-backed provider methods and additive projection.",
   "platform": "shopify",
@@ -245,11 +245,19 @@
           "window_through": {
             "type": "string"
           },
+          "provider_cursor": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
           "page_cursor": {
             "type": "string"
           },
           "next_cursor": {
             "type": "string"
+          },
+          "next_provider_cursor": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
           },
           "complete": {
             "type": "boolean"
@@ -345,6 +353,10 @@
           "cursor_iso": {
             "type": "string"
           },
+          "provider_cursor": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
           "page_cursor": {
             "type": "string"
           },
@@ -361,6 +373,103 @@
           "capture_id",
           "cursor_iso",
           "complete"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "shopify.source.checkpoint.adopt": {
+      "description": "Adopt one exact local Shopify Finance since_id checkpoint after binding it to the current durable source state.",
+      "action": "write",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": [
+              "finance.transactions"
+            ]
+          },
+          "provider_cursor": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
+          "expected_state_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "confirmation": {
+            "type": "string",
+            "enum": [
+              "ADOPT_SHOPIFY_FINANCE_SINCE_ID_V1"
+            ]
+          }
+        },
+        "required": [
+          "family",
+          "provider_cursor",
+          "expected_state_sha256",
+          "confirmation"
+        ],
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "finance.transactions"
+            ]
+          },
+          "previous_state_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "current_state_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "previous_provider_cursor": {
+            "type": "string"
+          },
+          "provider_cursor": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
+          "cleared_in_progress": {
+            "type": "boolean"
+          },
+          "provider_calls": {
+            "type": "integer",
+            "enum": [
+              0
+            ]
+          },
+          "provider_write_authority": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          }
+        },
+        "required": [
+          "version",
+          "family",
+          "previous_state_sha256",
+          "current_state_sha256",
+          "previous_provider_cursor",
+          "provider_cursor",
+          "cleared_in_progress",
+          "provider_calls",
+          "provider_write_authority"
         ],
         "additionalProperties": false
       }
