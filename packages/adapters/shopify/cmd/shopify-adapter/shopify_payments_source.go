@@ -17,6 +17,8 @@ import (
 	nexadapter "github.com/nexus-project/adapter-sdk-go"
 )
 
+const shopifyPaymentsPageSize = 250
+
 type shopifyPaymentsPageRequest struct {
 	Family        string
 	ContainerID   string
@@ -54,7 +56,7 @@ func captureShopifyPaymentsPage(
 			return nil, "", false, err
 		}
 		query := parsed.Query()
-		query.Set("limit", "100")
+		query.Set("limit", fmt.Sprintf("%d", shopifyPaymentsPageSize))
 		isTimestamp := spec.Family == "disputes.delta"
 		query.Set(spec.SinceParam, shopifyPaymentsWindowValue(since, isTimestamp))
 		query.Set(spec.ThroughParam, shopifyPaymentsWindowValue(through, isTimestamp))
@@ -93,15 +95,19 @@ func captureShopifyPaymentsPage(
 	if err := json.Unmarshal(rawRows, &rows); err != nil {
 		return nil, "", false, fmt.Errorf("decode Shopify %s rows: %w", spec.Family, err)
 	}
-	if len(rows) > 100 {
-		return nil, "", false, fmt.Errorf("Shopify %s response exceeded the 100-row provider page", spec.Family)
+	if len(rows) > shopifyPaymentsPageSize {
+		return nil, "", false, fmt.Errorf(
+			"Shopify %s response exceeded the %d-row provider page",
+			spec.Family,
+			shopifyPaymentsPageSize,
+		)
 	}
 	sourceRequest := shopifySourceRequest{
 		APIBaseURL: fmt.Sprintf(defaultShopifyBaseURL, state.ShopDomain, state.APIVersion),
 		Path:       spec.Path,
 		Request: map[string]any{
 			"operation":      spec.Family,
-			"page_size":      100,
+			"page_size":      shopifyPaymentsPageSize,
 			"api_version":    state.APIVersion,
 			"request_since":  since.UTC().Format(time.RFC3339Nano),
 			"window_through": through.UTC().Format(time.RFC3339Nano),
