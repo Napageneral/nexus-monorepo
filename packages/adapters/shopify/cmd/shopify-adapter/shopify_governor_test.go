@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -77,6 +79,34 @@ func TestShopifyGovernorPersists429Backoff(t *testing.T) {
 	defer cancel()
 	if err := reserveShopifyRequest(ctx, dir, time.Now); err == nil {
 		t.Fatal("429 backoff was not shared with the next request")
+	}
+}
+
+func TestShopifyGovernorReservesCapacityBelowProviderLeakRate(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(nexadapter.AdapterStateDirEnvVar, root)
+	dir, err := shopifyGovernorDir("shopify-production")
+	if err != nil {
+		t.Fatalf("governor dir: %v", err)
+	}
+	now := time.Date(2026, 7, 28, 18, 0, 0, 0, time.UTC)
+	if err := reserveShopifyRequest(context.Background(), dir, func() time.Time { return now }); err != nil {
+		t.Fatalf("reserve request: %v", err)
+	}
+	raw, err := readShopifyPrivateFile(filepath.Join(dir, "state.json"))
+	if err != nil {
+		t.Fatalf("read governor state: %v", err)
+	}
+	var state shopifyGovernorState
+	if err := json.Unmarshal(raw, &state); err != nil {
+		t.Fatalf("decode governor state: %v", err)
+	}
+	next := parseGovernorTime(state.NextRequestAt)
+	if got := next.Sub(now); got != shopifyGovernorRequestSpacing {
+		t.Fatalf("request spacing = %s, want %s", got, shopifyGovernorRequestSpacing)
+	}
+	if shopifyGovernorRequestSpacing < time.Second {
+		t.Fatalf("request spacing %s does not reserve capacity below the two-per-second provider leak rate", shopifyGovernorRequestSpacing)
 	}
 }
 

@@ -18,7 +18,7 @@ import (
 
 const (
 	shopifyGovernorSlots          = 2
-	shopifyGovernorRequestSpacing = 125 * time.Millisecond
+	shopifyGovernorRequestSpacing = time.Second
 	shopifyGovernorPollInterval   = 25 * time.Millisecond
 	shopifyGovernorDefaultBackoff = 30 * time.Second
 )
