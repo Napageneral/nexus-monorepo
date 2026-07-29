@@ -41,10 +41,16 @@ remains false.
 
 ## Governing Identities
 
+- merged Wave 1 Nex publication:
+  `7e83ed75da31bab776c41b806fb87488085548e7`
 - terminal Wave 1 Nex core:
   `5e8076352ad1c9c77fb72a79ee32805c5a5ef6a8`
 - terminal Wave 1 Nex tree:
   `0b84d89b4094ec72557e4890848c4d41182aa08f`
+- publication comparison:
+  `5e8076352ad1c9c77fb72a79ee32805c5a5ef6a8..7e83ed75da31bab776c41b806fb87488085548e7`
+  is one merge commit with zero changed files, so the tested tree and exact
+  Linux/AMD64 image label remain the executable proof identity
 - PostgreSQL continuous-evidence backend:
   `903d7be2fca4a12d22a7868cc403dd0cef8f312f`
 - continuous-evidence program and model checkpoint:

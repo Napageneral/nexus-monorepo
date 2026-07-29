@@ -209,12 +209,17 @@ runtime_token="nex_rt_$(openssl rand -hex 24)"
 postgres_dsn="postgresql://${runtime_role}@postgres:5432/moonsleep_nex"
 
 docker run --rm --platform linux/amd64 --network none --read-only --user 0:0 \
-  --mount "type=volume,src=${state_volume},dst=/target" --entrypoint sh "${NEX_IMAGE}" -c '
+  --mount "type=volume,src=${state_volume},dst=/var/lib/nex" --entrypoint sh "${NEX_IMAGE}" -c '
     set -eu
-    install -d -m 0700 -o nex-moonsleep -g nex-moonsleep /target/state
-    printf "%s\n" "{" "  \"runtime\": {\"port\":18789,\"bind\":\"loopback\",\"auth\":{\"mode\":\"token\",\"token\":\"\${NEXUS_RUNTIME_TOKEN}\"}}" "}" > /target/state/config.json
-    chown nex-moonsleep:nex-moonsleep /target/state/config.json
-    chmod 0600 /target/state/config.json
+    install -d -m 0700 -o 20042 -g 20042 \
+      /var/lib/nex /var/lib/nex/state /var/lib/nex/state/data
+    printf "%s\n" "{" "  \"runtime\": {\"port\":18789,\"bind\":\"loopback\",\"auth\":{\"mode\":\"token\",\"token\":\"\${NEXUS_RUNTIME_TOKEN}\"}}" "}" > /var/lib/nex/state/config.json
+    chown 20042:20042 /var/lib/nex/state/config.json
+    chmod 0600 /var/lib/nex/state/config.json
+    test "$(stat -c "%u:%g:%a" /var/lib/nex)" = "20042:20042:700"
+    test "$(stat -c "%u:%g:%a" /var/lib/nex/state)" = "20042:20042:700"
+    test "$(stat -c "%u:%g:%a" /var/lib/nex/state/data)" = "20042:20042:700"
+    test "$(stat -c "%u:%g:%a" /var/lib/nex/state/config.json)" = "20042:20042:600"
   '
 docker run --rm --platform linux/amd64 --network none --read-only --user 0:0 \
   --env "POSTGRES_DSN=${postgres_dsn}" --env "RUNTIME_TOKEN=${runtime_token}" \
