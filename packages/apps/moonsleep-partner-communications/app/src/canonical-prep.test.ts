@@ -47,7 +47,19 @@ test("canonical manifest binds exactly five fact and three observation profiles"
     manifest.core_contract_requirements.map((entry) => entry.requirement_id),
     ["CORE-01", "CORE-02", "CORE-03", "CORE-04", "CORE-05", "CORE-06"],
   );
-  assert.equal(manifest.activation_state, "awaiting_wave_1_core_contract");
+  assert.equal(manifest.activation_state, "dormant_source_registration");
+  assert.ok(
+    [...manifest.fact_profiles, ...manifest.observation_profiles].every(
+      (profile) => profile.profile_version === "1.0.0",
+    ),
+  );
+  assert.ok(
+    manifest.sealed_set_profiles.every(
+      (profile) =>
+        profile.core_definition_id === "evidence_set_v1" &&
+        profile.member_type === "fact_element",
+    ),
+  );
   assert.equal(manifest.authority_ceiling.provider_write, false);
   assert.equal(manifest.authority_ceiling.identity_merge, false);
   assert.equal(manifest.authority_ceiling.external_domain_write, false);

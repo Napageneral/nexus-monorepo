@@ -17,6 +17,7 @@ mkdir -p \
 cp "$app_dir/contracts/partner-canonical-profiles.v1.json" "$cleanroom/app/contracts/"
 cp "$app_dir/fixtures/canonical/surewal-cross-channel-golden.v1.json" "$cleanroom/app/fixtures/canonical/"
 cp "$app_dir/scripts/prepare-canonical-migration.mjs" "$cleanroom/app/scripts/"
+cp "$app_dir/scripts/build-synthetic-surewal-records.mjs" "$cleanroom/app/scripts/"
 cp "$app_dir/src/"*.ts "$cleanroom/app/src/"
 
 chmod -R u=rwX,go= "$cleanroom"
@@ -72,7 +73,7 @@ process.stdout.write(`${JSON.stringify({
   ok: true,
   proof: "partner-canonical-prep-cleanroom-v1",
   replay_equal: true,
-  source_record_count: plan.extraction_source_set.member_count,
+  source_bound_fact_count: plan.extraction_source_set.member_count,
   fact_count: plan.facts.length,
   observation_candidate_count: plan.observation_candidates.length,
   plan_sha256: plan.plan_sha256,

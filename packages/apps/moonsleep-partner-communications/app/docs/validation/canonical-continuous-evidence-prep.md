@@ -1,6 +1,6 @@
 # Partner Desk Canonical Continuous-Evidence Preparation
 
-**Status:** SOURCE-BUILT PREPARATION
+**Status:** SOURCE-BUILT DORMANT INTEGRATION
 
 **Owner:** MoonSleep Partner Desk
 
@@ -10,31 +10,43 @@
 
 ## Purpose
 
-This checkpoint prepares Partner Desk 0.2.1 for the canonical Nex
-continuous-evidence contract without implementing or duplicating shared core
-primitives.
+This checkpoint migrates Partner Desk 0.2.1 into a dormant 0.3.0 consumer of
+the canonical Nex continuous-evidence contract without implementing or
+duplicating shared core primitives.
 
 The source preparation provides:
 
 - one exact package-owned profile manifest;
 - five fact profile schemas;
 - three observation profile schemas and canonical head-key fields;
-- three sealed-set identities;
+- three Partner-owned sealed-set scopes over the core `evidence_set_v1`
+  primitive;
 - stable Partner subject families;
 - deterministic canonical serialization and candidate identities;
 - a pure 0.2.1 legacy-to-candidate migration adapter;
 - one sanitized Surewal Alibaba and Gmail golden fixture;
 - focused, replay, hostile, and expected-head concurrency tests;
-- a dependency-free temporary cleanroom.
+- exact profile registration and health readback through public Nex
+  operations;
+- a provider-free synthetic record builder;
+- a core-backed dormant runtime plan and replay-safe applicator;
+- a bounded PostgreSQL 17 cleanroom runner with exactly 22 required checks;
+- a dependency-free temporary source cleanroom.
 
-It does not register profiles, ingest provider data, write Nex elements,
-advance observation heads, publish projections, call providers, or touch
-production.
+It does not read providers, advance observation heads, publish projections,
+call providers, or touch production. The runtime applicator may create
+synthetic source revisions, facts, sealed sets, and staged observation
+candidates only inside a disposable cleanroom. Canonical promotion authority
+remains false.
 
 ## Governing Identities
 
-- current Wave 1 Nex source baseline:
-  `869bf016fbd58d32c93fcde8c2b157dbacfaeb21`
+- terminal Wave 1 Nex core:
+  `5e8076352ad1c9c77fb72a79ee32805c5a5ef6a8`
+- terminal Wave 1 Nex tree:
+  `0b84d89b4094ec72557e4890848c4d41182aa08f`
+- PostgreSQL continuous-evidence backend:
+  `903d7be2fca4a12d22a7868cc403dd0cef8f312f`
 - continuous-evidence program and model checkpoint:
   `411e8ce89d21834544f3b534902e9f676e8222ea`
 - canonical model embedded by the sealed Partner design:
@@ -46,8 +58,9 @@ production.
 - Partner design specification SHA-256:
   `d93e1ce4f7fcd4222ccd6b98c89e49fe372a8515b711e0673141b1a2e0e62c2c`
 
-The source preparation awaits the published Wave 1 operation and receipt
-contract before any integration binding.
+The package is rebound to the published terminal Wave 1 operations. The
+remaining release gate is execution of the exact 22-check PostgreSQL 17
+cleanroom on a runtime that can access Docker.
 
 ## Canonical Package Manifest
 
@@ -56,11 +69,12 @@ contract before any integration binding.
 - domain `moonsleep.partner`;
 - owner package `moonsleep-partner-desk`;
 - baseline package version `0.2.1`;
-- activation state `awaiting_wave_1_core_contract`;
+- activation state `dormant_source_registration`;
 - exact stable subject identity fields;
 - exact fact and observation schemas;
 - exact observation head-key fields;
-- exact sealed-set profile identities;
+- exact sealed-set scope, resolver, target profile, and allowed-fact
+  identities;
 - all six shared core requirements;
 - provider write, identity merge, external-domain write, and draft-or-send
   authority false.
@@ -125,15 +139,17 @@ It fails closed when:
 - a structured claim references a foreign source;
 - two candidate observations produce the same canonical head key.
 
-The adapter creates only:
+The adapter and runtime-plan builder create only:
 
 - deterministic immutable fact candidates;
-- sealed-set descriptors;
+- core-compatible sealed-set scopes and member plans;
 - shadow observation candidates with `expected_head_id` null;
 - one shadow projection candidate;
 - an exact plan digest.
 
-It performs no runtime operation.
+The migration adapter performs no runtime operation. The separate runtime
+applicator invokes only fact create, evidence-set create/add/seal, and
+observation-candidate stage operations. It never invokes promotion.
 
 ## Replay And Concurrency
 
@@ -167,89 +183,79 @@ Command:
 
 Current result:
 
-- Node contract tests: 27 passed, 0 failed, 0 skipped;
+- Node contract tests: 33 passed, 0 failed, 0 skipped;
 - source records: 6;
 - fact candidates: 26;
 - observation candidates: 9;
 - replay plans: byte-identical;
 - replay receipts: byte-identical;
 - plan SHA-256:
-  `6f109ea4c55887e7376121516401c033341ba52a6ddef2d6463fc39dbdbf2588`;
+  `f861d83ada5b319ff6deada2458db7d91be643e14268473a0d91a0e98199babe`;
 - plan file SHA-256:
-  `fd5a4e882884cdd84cf76d31716f240a8ce000ee6b30a51d988b72491286b62b`;
+  `1195d3f7baac2e0879fa4ddddaabf6a0045bcb89819c19586cc1fecf78fa6322`;
 - provider write authority: false;
 - identity merge authority: false;
 - external-domain write authority: false;
 - draft-or-send authority: false;
 - temporary cleanroom residue: zero.
 
-The full dependency-backed package suite also passes:
+The full dependency-backed package suite passes:
 
-- Node tests: 27 passed;
-- Vitest tests: 21 passed;
-- total: 48 passed;
+- Node tests: 33 passed;
+- Vitest tests: 26 passed;
+- total: 59 passed;
 - UI production build: passed.
+- Nex package validation: passed with zero errors and zero warnings.
+- package version: `0.3.0`.
 
-## True Contract Mismatches Awaiting Core Handoff
+## Terminal Core Binding
 
-### Source Revision Hydration
+The previously identified source-revision, profile-registration, sealed-set,
+expected-head, identity, and outbox gaps are closed by the terminal Wave 1
+core. This package consumes those core operations and does not create a
+parallel observation store.
 
-Partner Desk 0.2.1 records expose a logical record ID and revision digest, but
-the canonical fact contract also requires the complete shared source-revision
-reference: provider account, payload digest, source and capture times,
-fragments, attachments, source-run receipt, and authority declarations.
+The package registers exactly five fact and three observation profiles. Its
+three set profiles remain Partner-owned semantic scopes, implemented through
+the core generic evidence-set definition. The synthetic cohort supplies six
+exact PostgreSQL-backed source revisions, then stages nine candidates across
+all three scopes.
 
-The migration adapter requires that complete reference as input. It does not
-invent missing evidence.
+The runtime plan fails closed on missing, extra, duplicate, malformed, or
+digest-mismatched source revision bindings. It also fails before a request is
+emitted if a set resolver or target profile does not match the sealed
+manifest.
 
-### Profile Registration
+## PostgreSQL 17 Proof Gate
 
-The Partner package now owns exact schemas and identities, but the Wave 1
-registration operation, canonical profile receipt, and compatibility readback
-have not been published. The manifest remains dormant until those exact core
-operations are available.
+Run:
 
-### Sealed Sets
+```bash
+NEX_RELEASE_IMAGE=<exact-5e807635-linux-amd64-image> \
+POSTGRES_RELEASE_IMAGE=<exact-postgresql-17-linux-amd64-image> \
+CLEANROOM_RECEIPT_PATH=/private/tmp/moonsleep-partner-canonical-surewal-pg17-receipt.json \
+./scripts/test-canonical-surewal-postgres-cleanroom.sh
+```
 
-The preparation code computes deterministic set descriptors. Only the shared
-core may persist, seal, revalidate, and enforce immutable membership inside
-an atomic resolver commit.
+The runner requires 22 of 22 checks: exact synthetic source output, terminal
+core image identity, PostgreSQL 17 migration, runtime health, package install,
+five fact profiles, three observation profiles, three set profiles, dormant
+job and subscriptions, zero provider state, identity create and replay,
+six-record ingest and replay, exact PostgreSQL revision binding, 26 facts,
+nine sealed sets and staged candidates, full replay with unchanged counts,
+zero promotion/head/outbox, restart durability, and zero container/volume/
+network residue.
 
-### Observation Heads
-
-The 0.2.1 review ledger detects divergent app-local heads but does not perform
-the canonical atomic expected-head commit. The migration produces shadow
-candidates only. Core must own compare-and-swap head advancement.
-
-### Ingress Identity Receipt
-
-The fixture binds reviewed identity, but production extraction requires the
-shared atomic source, connection, provider-account, contact, entity, subject,
-and dispatch receipt. Partner Desk will consume it rather than introduce an
-app-local identity transaction.
-
-### Projection Outbox And Health
-
-The preparation computes a deterministic projection candidate identity. Core
-must publish the promotion-bound outbox event and health receipt before a
-Partner projection can become active.
-
-These are expected Wave 1 dependencies. They are not a conflict with the
-canonical model.
+This task's managed shell cannot access the local Docker socket and cannot
+reach the Ops host over SSH. Therefore no PostgreSQL receipt is claimed in
+this source document until the exact runner completes in an authorized
+cleanroom.
 
 ## Promotion Gate
 
-This checkpoint may advance from source-built preparation only after the
-published Wave 1 handoff supplies:
-
-- exact operation names and request and response schemas;
-- migrations and public transport availability;
-- profile registration receipt;
-- source-revision validation receipt;
-- sealed-set creation and seal receipt;
-- atomic observation commit and stale-head behavior;
-- ingress identity receipt;
-- projection outbox and health receipt;
-- focused, cleanroom, hostile, replay, and concurrency proof.
-
-Until then, all Partner canonical work remains source-only and shadow-only.
+This checkpoint may advance from dormant source registration only after the
+exact PostgreSQL 17 runner produces its 22 of 22 receipt, an independent
+source review reports no P0/P1/P2 defects, and a separate production
+activation packet is reviewed. Provider reads, historical backfill,
+production pointer changes, observation promotion, and projection delivery
+remain out of scope.

@@ -70,7 +70,7 @@ export type LegacyPartnerMigrationInput = {
 export type ShadowObservationCandidate = {
   candidate_id: string;
   observation_profile_id: string;
-  observation_profile_version: 1;
+  observation_profile_version: "1.0.0";
   observation_type: string;
   head_key: string;
   expected_head_id: null;
@@ -452,7 +452,7 @@ function observationCandidate(input: {
   const payloadSha256 = sha256(canonicalJson(input.typedPayload));
   const identity = {
     observation_profile_id: input.observationProfileId,
-    observation_profile_version: 1,
+    observation_profile_version: "1.0.0",
     observation_type: input.observationType,
     head_key: headKey,
     expected_head_id: null,
@@ -467,7 +467,7 @@ function observationCandidate(input: {
   return {
     candidate_id: `partner-observation-candidate:${sha256(canonicalJson(identity))}`,
     observation_profile_id: input.observationProfileId,
-    observation_profile_version: 1,
+    observation_profile_version: "1.0.0",
     observation_type: input.observationType,
     head_key: headKey,
     expected_head_id: null,
@@ -659,19 +659,12 @@ export function prepareLegacyPartnerMigration(
   input: LegacyPartnerMigrationInput,
 ): LegacyPartnerMigrationPlan {
   const maps = assertMigrationInput(input);
+  const facts = createLegacyFacts(manifest, input, maps);
   const extractionSourceSet = sealMemberSet(
     manifest,
     "moonsleep.partner.extraction-source-set.v1",
-    [...maps.records.values()].map((record) =>
-      canonicalJson({
-        provider: record.source_revision_ref.provider,
-        connection_id: record.source_revision_ref.connection_id,
-        source_logical_record_id: record.source_record_id,
-        source_revision_sha256: record.source_revision_sha256,
-      })
-    ),
+    facts.map((fact) => fact.fact_id),
   );
-  const facts = createLegacyFacts(manifest, input, maps);
   const observationCandidates = createObservationCandidates(
     manifest,
     input,

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { NexAppMethodHandler } from "../../../../../nex/src/runtime/domains/apps/context.js";
+import { readPartnerCanonicalEvidenceHealth } from "../hooks/canonical-evidence.js";
 import {
   projectPartnerWorkspace,
   type CommunicationRecord,
@@ -392,20 +393,24 @@ async function listPartnerSourceRecords(params: {
   };
 }
 
-const healthcheck: NexAppMethodHandler = async (ctx) => ({
-  status: "ok",
-  app: { id: ctx.app.id, version: ctx.app.version },
-  model: {
-    primary_work_object: "independent_partner_open_loop",
-    native_provider_conversations_preserved: true,
-    categories_are_facets: true,
-    model_proposals_require_review: true,
-    exact_closure_evidence_required: true,
-  },
-  continuous_projection: "dormant_pending_backfill_parity_and_activation_receipt",
-  reply_authority: false,
-  provider_write_authority: false,
-});
+const healthcheck: NexAppMethodHandler = async (ctx) => {
+  const canonicalEvidence = await readPartnerCanonicalEvidenceHealth(ctx.nex);
+  return {
+    status: "ok",
+    app: { id: ctx.app.id, version: ctx.app.version },
+    model: {
+      primary_work_object: "independent_partner_open_loop",
+      native_provider_conversations_preserved: true,
+      categories_are_facets: true,
+      model_proposals_require_review: true,
+      exact_closure_evidence_required: true,
+    },
+    canonical_evidence: canonicalEvidence,
+    continuous_projection: "dormant_pending_backfill_parity_and_activation_receipt",
+    reply_authority: false,
+    provider_write_authority: false,
+  };
+};
 
 export const inspectAlibabaConversation: NexAppMethodHandler = async (ctx) => {
   const connectionId = requireText(ctx.params.connection_id, "connection_id", 128);

@@ -5,8 +5,9 @@
   "owner_package": "moonsleep-partner-desk",
   "owner_package_baseline_version": "0.2.1",
   "governing_core": {
-    "commit": "0d1abf1b99c35c17cbed4cc5f0d539fdb657b5e8",
-    "tree": "d01746ebe755b12054de88fc34a3a65888d1a924",
+    "commit": "5e8076352ad1c9c77fb72a79ee32805c5a5ef6a8",
+    "tree": "0b84d89b4094ec72557e4890848c4d41182aa08f",
+    "postgres_backend_commit": "903d7be2fca4a12d22a7868cc403dd0cef8f312f",
     "specification_sha256": "3c91f28fbda0754e295e51f1d3060ebec479cf08d57c54c867aca5608ba8c40b"
   },
   "governing_partner_design": {
@@ -14,7 +15,7 @@
     "tree": "8860b194ec1913e3fc8661dcff7533d8f156c7d6",
     "specification_sha256": "d93e1ce4f7fcd4222ccd6b98c89e49fe372a8515b711e0673141b1a2e0e62c2c"
   },
-  "activation_state": "awaiting_wave_1_core_contract",
+  "activation_state": "dormant_source_registration",
   "authority_ceiling": {
     "source_record_read": true,
     "fact_candidate_create": true,
@@ -79,7 +80,7 @@
   "fact_profiles": [
     {
       "profile_id": "moonsleep.partner.communication-classification.v1",
-      "profile_version": 1,
+      "profile_version": "1.0.0",
       "profile_class": "fact",
       "fact_type": "partner_communication_classification",
       "subject_type": "source_message_revision",
@@ -167,7 +168,7 @@
     },
     {
       "profile_id": "moonsleep.partner.open-loop-signal.v1",
-      "profile_version": 1,
+      "profile_version": "1.0.0",
       "profile_class": "fact",
       "fact_type": "partner_open_loop_signal",
       "subject_type": "source_message_revision",
@@ -276,7 +277,7 @@
     },
     {
       "profile_id": "moonsleep.partner.structured-claim.v1",
-      "profile_version": 1,
+      "profile_version": "1.0.0",
       "profile_class": "fact",
       "fact_type": "partner_structured_claim",
       "subject_type": "source_message_revision",
@@ -369,7 +370,7 @@
     },
     {
       "profile_id": "moonsleep.partner.source-coverage.v1",
-      "profile_version": 1,
+      "profile_version": "1.0.0",
       "profile_class": "fact",
       "fact_type": "partner_source_coverage",
       "subject_type": "source_message_revision",
@@ -434,7 +435,7 @@
     },
     {
       "profile_id": "moonsleep.partner.workspace-admission.v1",
-      "profile_version": 1,
+      "profile_version": "1.0.0",
       "profile_class": "fact",
       "fact_type": "partner_workspace_admission",
       "subject_type": "source_message_revision",
@@ -513,7 +514,7 @@
   "observation_profiles": [
     {
       "profile_id": "moonsleep.partner.workspace-state.v1",
-      "profile_version": 1,
+      "profile_version": "1.0.0",
       "profile_class": "observation",
       "observation_type": "partner_workspace_state",
       "subject_type": "partner_workspace",
@@ -620,7 +621,7 @@
     },
     {
       "profile_id": "moonsleep.partner.open-loop-state.v1",
-      "profile_version": 1,
+      "profile_version": "1.0.0",
       "profile_class": "observation",
       "observation_type": "partner_open_loop_state",
       "subject_type": "partner_open_loop",
@@ -782,7 +783,7 @@
     },
     {
       "profile_id": "moonsleep.partner.source-coverage-state.v1",
-      "profile_version": 1,
+      "profile_version": "1.0.0",
       "profile_class": "observation",
       "observation_type": "partner_source_coverage_state",
       "subject_type": "source_message_revision",
@@ -881,35 +882,74 @@
   "sealed_set_profiles": [
     {
       "set_profile_id": "moonsleep.partner.extraction-source-set.v1",
-      "member_type": "source_revision",
+      "core_definition_id": "evidence_set_v1",
+      "member_type": "fact_element",
+      "purpose": "partner_extraction_source_review",
+      "resolver_id": "moonsleep.partner.workspace-resolver.v1",
+      "resolver_policy_version": "1.0.0",
+      "allowed_fact_profiles": [
+        "moonsleep.partner.communication-classification.v1",
+        "moonsleep.partner.structured-claim.v1",
+        "moonsleep.partner.workspace-admission.v1"
+      ],
+      "target_observation_profiles": [
+        "moonsleep.partner.workspace-state.v1"
+      ],
       "identity_fields": [
-        "provider",
-        "connection_id",
+        "workspace_id",
         "member_digest",
-        "extractor_profile_id",
-        "producer_version"
+        "resolver_policy_version",
+        "target_observation_profile_id",
+        "expected_head_id"
       ]
     },
     {
       "set_profile_id": "moonsleep.partner.resolver-fact-set.v1",
+      "core_definition_id": "evidence_set_v1",
       "member_type": "fact_element",
+      "purpose": "partner_open_loop_resolution",
+      "resolver_id": "moonsleep.partner.open-loop-state-resolver.v1",
+      "resolver_policy_version": "1.0.0",
+      "allowed_fact_profiles": [
+        "moonsleep.partner.communication-classification.v1",
+        "moonsleep.partner.open-loop-signal.v1",
+        "moonsleep.partner.structured-claim.v1",
+        "moonsleep.partner.source-coverage.v1",
+        "moonsleep.partner.workspace-admission.v1"
+      ],
+      "target_observation_profiles": [
+        "moonsleep.partner.open-loop-state.v1"
+      ],
       "identity_fields": [
         "workspace_id",
         "subject_reference",
         "member_digest",
-        "resolver_profile_id",
         "resolver_policy_version",
+        "target_observation_profile_id",
         "expected_head_id"
       ]
     },
     {
       "set_profile_id": "moonsleep.partner.comparison-set.v1",
-      "member_type": "observation_or_projection",
+      "core_definition_id": "evidence_set_v1",
+      "member_type": "fact_element",
+      "purpose": "partner_source_coverage_comparison",
+      "resolver_id": "moonsleep.partner.source-coverage-resolver.v1",
+      "resolver_policy_version": "1.0.0",
+      "allowed_fact_profiles": [
+        "moonsleep.partner.communication-classification.v1",
+        "moonsleep.partner.source-coverage.v1"
+      ],
+      "target_observation_profiles": [
+        "moonsleep.partner.source-coverage-state.v1"
+      ],
       "identity_fields": [
-        "baseline_profile_id",
-        "candidate_profile_id",
+        "workspace_id",
+        "subject_reference",
         "member_digest",
-        "comparison_policy_version"
+        "resolver_policy_version",
+        "target_observation_profile_id",
+        "expected_head_id"
       ]
     }
   ],

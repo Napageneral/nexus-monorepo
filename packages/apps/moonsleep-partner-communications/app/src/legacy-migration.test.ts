@@ -98,7 +98,7 @@ test("Surewal golden fixture creates exact canonical fact and observation candid
   assert.equal(plan.facts.length, 26);
   assert.equal(plan.observation_candidates.length, 9);
   assert.equal(new Set(plan.observation_candidates.map((row) => row.head_key)).size, 9);
-  assert.equal(plan.extraction_source_set.member_count, 6);
+  assert.equal(plan.extraction_source_set.member_count, 26);
   assert.equal(plan.projection_candidate.observation_candidate_ids.length, 9);
   assert.equal(plan.authority.provider_write, false);
   assert.equal(plan.authority.identity_merge, false);
@@ -149,7 +149,7 @@ test("golden workspace preserves two native channels and two independent open lo
 test("existing 0.2.1 Surewal baseline maps completely into canonical shadow candidates", () => {
   const input = existingSurewalBaselineFixture();
   const plan = prepareLegacyPartnerMigration(manifest, input);
-  assert.equal(plan.extraction_source_set.member_count, 22);
+  assert.equal(plan.extraction_source_set.member_count, plan.facts.length);
   assert.equal(
     plan.observation_candidates.filter(
       (candidate) =>

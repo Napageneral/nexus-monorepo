@@ -30,7 +30,7 @@ export type CanonicalPartnerManifest = {
   domain_id: "moonsleep.partner";
   owner_package: "moonsleep-partner-desk";
   owner_package_baseline_version: "0.2.1";
-  activation_state: "awaiting_wave_1_core_contract";
+  activation_state: "dormant_source_registration";
   authority_ceiling: JsonObject;
   stable_subjects: Array<{
     subject_type: string;
@@ -38,7 +38,7 @@ export type CanonicalPartnerManifest = {
   }>;
   fact_profiles: Array<{
     profile_id: string;
-    profile_version: 1;
+    profile_version: "1.0.0";
     profile_class: "fact";
     fact_type: string;
     subject_type: string;
@@ -47,7 +47,7 @@ export type CanonicalPartnerManifest = {
   }>;
   observation_profiles: Array<{
     profile_id: string;
-    profile_version: 1;
+    profile_version: "1.0.0";
     profile_class: "observation";
     observation_type: string;
     subject_type: string;
@@ -56,7 +56,13 @@ export type CanonicalPartnerManifest = {
   }>;
   sealed_set_profiles: Array<{
     set_profile_id: string;
-    member_type: string;
+    core_definition_id: "evidence_set_v1";
+    member_type: "fact_element";
+    purpose: string;
+    resolver_id: string;
+    resolver_policy_version: string;
+    allowed_fact_profiles: string[];
+    target_observation_profiles: string[];
     identity_fields: string[];
   }>;
   core_contract_requirements: Array<{
@@ -76,7 +82,7 @@ export type SealedSetDescriptor = {
 export type CanonicalFactCandidate = {
   fact_id: string;
   fact_profile_id: string;
-  fact_profile_version: 1;
+  fact_profile_version: "1.0.0";
   fact_type: string;
   subject_reference: string;
   typed_payload: JsonObject;
@@ -231,7 +237,7 @@ export function validateCanonicalPartnerManifest(
     manifest.domain_id !== "moonsleep.partner" ||
     manifest.owner_package !== "moonsleep-partner-desk" ||
     manifest.owner_package_baseline_version !== "0.2.1" ||
-    manifest.activation_state !== "awaiting_wave_1_core_contract"
+    manifest.activation_state !== "dormant_source_registration"
   ) {
     throw new Error("canonical manifest identity is invalid");
   }
@@ -273,7 +279,7 @@ export function validateCanonicalPartnerManifest(
   for (const profile of manifest.fact_profiles) {
     if (
       profile.profile_class !== "fact" ||
-      profile.profile_version !== 1 ||
+      profile.profile_version !== "1.0.0" ||
       profile.required_source_revision_refs < 1
     ) {
       throw new Error(`${profile.profile_id} fact profile identity is invalid`);
@@ -283,7 +289,7 @@ export function validateCanonicalPartnerManifest(
   for (const profile of manifest.observation_profiles) {
     if (
       profile.profile_class !== "observation" ||
-      profile.profile_version !== 1 ||
+      profile.profile_version !== "1.0.0" ||
       profile.head_key_fields.length < 3 ||
       new Set(profile.head_key_fields).size !== profile.head_key_fields.length ||
       !profile.head_key_fields.includes("workspace_id") ||
@@ -292,6 +298,27 @@ export function validateCanonicalPartnerManifest(
       throw new Error(`${profile.profile_id} observation profile identity is invalid`);
     }
     assertNoProhibitedSchemaField(profile.schema, `${profile.profile_id}.schema`);
+  }
+  const factProfileIds = new Set(manifest.fact_profiles.map((profile) => profile.profile_id));
+  const observationProfileIds = new Set(
+    manifest.observation_profiles.map((profile) => profile.profile_id),
+  );
+  for (const profile of manifest.sealed_set_profiles) {
+    if (
+      profile.core_definition_id !== "evidence_set_v1" ||
+      profile.member_type !== "fact_element" ||
+      !profile.purpose ||
+      !profile.resolver_id ||
+      profile.resolver_policy_version !== "1.0.0" ||
+      profile.allowed_fact_profiles.length === 0 ||
+      profile.target_observation_profiles.length === 0 ||
+      profile.allowed_fact_profiles.some((profileId) => !factProfileIds.has(profileId)) ||
+      profile.target_observation_profiles.some(
+        (profileId) => !observationProfileIds.has(profileId),
+      )
+    ) {
+      throw new Error(`${profile.set_profile_id} sealed-set profile identity is invalid`);
+    }
   }
 }
 
@@ -565,7 +592,7 @@ export function createFactCandidate(input: {
   return {
     fact_id: `partner-fact:${sha256(canonicalJson(factIdentity))}`,
     fact_profile_id: profile.profile_id,
-    fact_profile_version: 1,
+    fact_profile_version: "1.0.0",
     fact_type: profile.fact_type,
     subject_reference: input.subject_reference,
     typed_payload: canonicalize(input.typed_payload) as JsonObject,
