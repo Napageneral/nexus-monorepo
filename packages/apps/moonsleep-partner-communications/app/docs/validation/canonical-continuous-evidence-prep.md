@@ -33,24 +33,30 @@ The source preparation provides:
 - a bounded PostgreSQL 17 cleanroom runner with exactly 22 required checks;
 - a dependency-free temporary source cleanroom.
 
-It does not read providers, advance observation heads, publish projections,
-call providers, or touch production. The runtime applicator may create
-synthetic source revisions, facts, sealed sets, and staged observation
-candidates only inside a disposable cleanroom. Canonical promotion authority
-remains false.
+It does not read providers, activate Partner projection, call providers, or
+touch production. The runtime applicator may create synthetic source
+revisions, facts, sealed sets, and staged observation candidates only inside a
+disposable cleanroom. The cleanroom additionally commits one synthetic
+joined-store observation on a cleanroom-only head and delivers one
+cleanroom-only outbox row to prove CAS refusal, lease fencing, restart, and
+delivery. It does not promote a staged Partner candidate, grant live
+canonical-promotion authority, or deliver to a production domain.
 
 ## Governing Identities
 
 - merged Wave 1 Nex publication:
   `7e83ed75da31bab776c41b806fb87488085548e7`
-- terminal Wave 1 Nex core:
-  `5e8076352ad1c9c77fb72a79ee32805c5a5ef6a8`
-- terminal Wave 1 Nex tree:
-  `0b84d89b4094ec72557e4890848c4d41182aa08f`
-- publication comparison:
-  `5e8076352ad1c9c77fb72a79ee32805c5a5ef6a8..7e83ed75da31bab776c41b806fb87488085548e7`
-  is one merge commit with zero changed files, so the tested tree and exact
-  Linux/AMD64 image label remain the executable proof identity
+- corrected shared-core checkpoint:
+  `5b09aa16746b08e455a10eb0f789b990efd2cf2e`
+- corrected shared-core tree:
+  `51fa415054c1857ea8c63594923ded8ce020d29b`
+- corrected shared-core proof:
+  PostgreSQL 17.10 43 of 43 passed with zero skipped checks, failures, or
+  residue; independent audit reported P0/P1/P2 equal to 0/0/0
+- publication state:
+  the corrected checkpoint is not yet merged because its owner's local GitHub
+  authentication is invalid; `7e83ed75da31bab776c41b806fb87488085548e7`
+  remains the last merged publication recorded by the manifest
 - PostgreSQL continuous-evidence backend:
   `903d7be2fca4a12d22a7868cc403dd0cef8f312f`
 - continuous-evidence program and model checkpoint:
@@ -64,9 +70,10 @@ remains false.
 - Partner design specification SHA-256:
   `d93e1ce4f7fcd4222ccd6b98c89e49fe372a8515b711e0673141b1a2e0e62c2c`
 
-The package is rebound to the published terminal Wave 1 operations. The
-remaining release gate is execution of the exact 22-check PostgreSQL 17
-cleanroom on a runtime that can access Docker.
+The package is rebound to the corrected shared-core checkpoint. The remaining
+source gate is execution of the exact 22-check PostgreSQL 17 cleanroom on a
+runtime that can access Docker. Publication, merge, and activation remain
+held until the corrected core is merged.
 
 ## Canonical Package Manifest
 
@@ -237,20 +244,23 @@ manifest.
 Run:
 
 ```bash
-NEX_RELEASE_IMAGE=<exact-5e807635-linux-amd64-image> \
+NEX_RELEASE_IMAGE=<exact-5b09aa16-linux-amd64-image> \
 POSTGRES_RELEASE_IMAGE=<exact-postgresql-17-linux-amd64-image> \
 CLEANROOM_RECEIPT_PATH=/private/tmp/moonsleep-partner-canonical-surewal-pg17-receipt.json \
 ./scripts/test-canonical-surewal-postgres-cleanroom.sh
 ```
 
-The runner requires 22 of 22 checks: exact synthetic source output, terminal
+The runner requires 22 of 22 checks: exact synthetic source output, corrected
 core image identity, PostgreSQL 17 migration, runtime health, package install,
 five fact profiles, three observation profiles, three set profiles, dormant
 job and subscriptions, zero provider state, identity create and replay,
 six-record ingest and replay, exact PostgreSQL revision binding, 26 facts,
 nine sealed sets and staged candidates, full replay with unchanged counts,
-zero promotion/head/outbox, restart durability, and zero container/volume/
-network residue.
+exact PostgreSQL-revision-to-memory-fact joining, one synthetic cleanroom-only
+CAS head commit and idempotent replay, stale-head refusal with no residue,
+outbox lease-conflict refusal and delivery, restart durability, and zero
+container, volume, or network residue. Partner candidate promotions remain
+zero and every live authority remains false.
 
 This task's managed shell cannot access the local Docker socket and cannot
 reach the Ops host over SSH. Therefore no PostgreSQL receipt is claimed in
@@ -260,8 +270,8 @@ cleanroom.
 ## Promotion Gate
 
 This checkpoint may advance from dormant source registration only after the
-exact PostgreSQL 17 runner produces its 22 of 22 receipt, an independent
-source review reports no P0/P1/P2 defects, and a separate production
-activation packet is reviewed. Provider reads, historical backfill,
-production pointer changes, observation promotion, and projection delivery
-remain out of scope.
+corrected core is merged, the exact PostgreSQL 17 runner produces its 22 of 22
+receipt, an independent source review reports no P0/P1/P2 defects, and a
+separate production activation packet is reviewed. Provider reads, historical
+backfill, production pointer changes, live observation promotion, and
+production projection delivery remain out of scope.

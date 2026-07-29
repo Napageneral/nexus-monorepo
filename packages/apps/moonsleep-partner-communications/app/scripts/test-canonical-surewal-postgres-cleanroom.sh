@@ -226,6 +226,7 @@ memory_counts() {
       promotions: count("observation_promotion_receipts"),
       heads: count("canonical_observation_heads"),
       outbox: count("projection_outbox"),
+      outbox_delivered: count("projection_outbox", "WHERE status = '\''delivered'\''"),
     };
     db.close();
     process.stdout.write(JSON.stringify(value));
@@ -471,7 +472,46 @@ jq -e '
 ' "${runner_temp}/runtime-plan.json" >/dev/null
 jq -e '.promotions == 0 and .heads == 0 and .outbox == 0 and .observations == 0' \
   <<<"${memory_after_replay}" >/dev/null
-pass_check "21_dormant_authority_ceiling"
+joined_evidence="$(docker exec "${runtime_container}" node \
+  /proof/prove-canonical-joined-evidence.mjs \
+  --bindings /evidence/revision-bindings.json \
+  --token_file /run/moonsleep-load-credentials/runtime-token)"
+jq -e '
+  .ok == true and
+  .joined.fact_count == 26 and
+  .joined.source_revision_count == 6 and
+  .joined.source_reference_count >= 26 and
+  .observation_replay_reused == true and
+  .stale_head.refused == true and
+  .stale_head.receipt_count_unchanged == true and
+  .stale_head.outbox_count_unchanged == true and
+  .outbox.lease_conflict_refused == true and
+  .outbox.status == "delivered" and
+  .outbox.reclaimed_after_delivery == 0 and
+  .authority.provider_calls == 0 and
+  .authority.provider_write == false and
+  .authority.identity_merge == false and
+  .authority.external_domain_write == false and
+  .authority.draft_or_send == false and
+  .authority.live_canonical_promotion == false
+' <<<"${joined_evidence}" >/dev/null
+memory_after_joined="$(memory_counts)"
+jq -e '
+  .profiles == 8 and
+  .fact_profiles == 5 and
+  .observation_profiles == 3 and
+  .facts == 26 and
+  .fact_receipts == 26 and
+  .sets == 9 and
+  .set_seals == 9 and
+  .candidates == 9 and
+  .promotions == 0 and
+  .observations == 1 and
+  .heads == 1 and
+  .outbox == 1 and
+  .outbox_delivered == 1
+' <<<"${memory_after_joined}" >/dev/null
+pass_check "21_joined_pg_memory_stale_head_outbox_zero_authority"
 
 docker restart "${runtime_container}" >/dev/null
 wait_for_runtime
@@ -479,7 +519,7 @@ health_after_restart="$(runtime_call moonsleep-partner-desk.healthcheck '{}')"
 jq -e '.status == "ok" and .canonical_evidence.registration_complete == true and .canonical_evidence.canonical_promotion_enabled == false and .provider_write_authority == false and .reply_authority == false' \
   <<<"${health_after_restart}" >/dev/null
 [[ "$(jq -S -c . <<<"${counts_after_replay}")" = "$(jq -S -c . <<<"$(postgres_counts)")" ]]
-[[ "$(jq -S -c . <<<"${memory_after_replay}")" = "$(jq -S -c . <<<"$(memory_counts)")" ]]
+[[ "$(jq -S -c . <<<"${memory_after_joined}")" = "$(jq -S -c . <<<"$(memory_counts)")" ]]
 pass_check "22_restart_durability"
 
 [[ "${#checks[@]}" -eq 22 ]]
@@ -512,9 +552,10 @@ jq -n \
   --arg record_output_sha256 "${record_output_sha256}" \
   --arg surewal_entity_id "${surewal_entity_id}" \
   --arg surewal_contact_id "${surewal_contact_id}" \
+  --argjson joined_evidence "${joined_evidence}" \
   --argjson checks "${checks_json}" \
   --argjson postgres_counts "${counts_after_replay}" \
-  --argjson memory_counts "${memory_after_replay}" \
+  --argjson memory_counts "${memory_after_joined}" \
   '{
     ok:true,
     proof:"moonsleep-partner-canonical-surewal-postgres-cleanroom-v1",
@@ -536,9 +577,19 @@ jq -n \
     package:{id:"moonsleep-partner-desk",version:$app_version,sha256:$app_sha256},
     synthetic_cohort:{records:6,alibaba_records:5,gmail_records:1,record_output_sha256:$record_output_sha256,provider_calls:0},
     identity:{entity_id:$surewal_entity_id,contact_id:$surewal_contact_id,first_created:true,replay_created:false},
-    canonical_evidence:{fact_profiles:5,observation_profiles:3,set_profiles:3,facts:26,staged_candidates:9,promotions:0,projection_events:0},
+    canonical_evidence:{
+      fact_profiles:5,
+      observation_profiles:3,
+      set_profiles:3,
+      facts:26,
+      staged_candidates:9,
+      promotions:0,
+      synthetic_joined_core_seam_observations:1,
+      synthetic_joined_core_seam_projection_events:1,
+      joined_proof:$joined_evidence
+    },
     work_boundary:{job_status:"inactive",subscriptions:2,subscriptions_enabled:false},
-    authority:{provider_write:false,identity_merge:false,external_domain_write:false,draft_or_send:false,canonical_promotion:false},
+    authority:{provider_write:false,identity_merge:false,external_domain_write:false,draft_or_send:false,canonical_promotion:false,live_canonical_promotion:false},
     replay:{records_reused:6,facts_reused:26,sets_reused:9,candidates_reused:9,counts_unchanged:true},
     postgres_counts:$postgres_counts,
     memory_counts:$memory_counts,
