@@ -6,6 +6,7 @@ UMBRELLA_ROOT="$(cd "${ROOT_DIR}/../../../.." && pwd -P)"
 NEX_IMAGE="${NEX_RELEASE_IMAGE:?set NEX_RELEASE_IMAGE to the exact Linux/AMD64 Nex release image}"
 POSTGRES_IMAGE="${POSTGRES_RELEASE_IMAGE:?set POSTGRES_RELEASE_IMAGE to a Linux/AMD64 PostgreSQL 17 image}"
 RECEIPT_PATH="${CLEANROOM_RECEIPT_PATH:-/private/tmp/moonsleep-partner-canonical-surewal-pg17-receipt.json}"
+FAILURE_STATE_PATH="${RECEIPT_PATH}.failure-state-stat.txt"
 APP_VERSION="$(jq -r '.version' "${ROOT_DIR}/app.nexus.json")"
 CORE_REVISION="$(jq -r '.governing_core.commit' "${ROOT_DIR}/contracts/partner-canonical-profiles.v1.json")"
 CORE_TREE="$(jq -r '.governing_core.tree' "${ROOT_DIR}/contracts/partner-canonical-profiles.v1.json")"
@@ -70,6 +71,8 @@ runtime_role="nex_moonsleep_runtime"
 migrator_role="nex_moonsleep_migrator"
 runner_temp="$(mktemp -d /private/tmp/nex-partner-canonical.XXXXXX)"
 chmod 0700 "${runner_temp}"
+[[ ! -L "${FAILURE_STATE_PATH}" ]]
+rm -f -- "${FAILURE_STATE_PATH}"
 
 cleanup_resources() {
   docker rm -f "${runtime_container}" "${postgres_container}" >/dev/null 2>&1 || true
@@ -108,8 +111,41 @@ wait_for_postgres() {
   return 1
 }
 
+capture_runtime_state_failure() {
+  local temporary="${FAILURE_STATE_PATH}.tmp.$$"
+  umask 077
+  {
+    printf 'image_id=%s\n' "$(docker image inspect "${NEX_IMAGE}" --format '{{.Id}}')"
+    printf 'image_user=%s\n' "${nex_config_user}"
+    printf 'image_entrypoint=%s\n' "${nex_entrypoint}"
+    printf 'serving_identity=%s:%s:%s\n' "${runtime_user}" "${runtime_uid}" "${runtime_gid}"
+    printf 'container_state=%s\n' \
+      "$(docker inspect "${runtime_container}" --format '{{json .State}}' 2>/dev/null || printf unavailable)"
+    docker run --rm --platform linux/amd64 --network none --read-only --user 0:0 \
+      --mount "type=volume,src=${state_volume},dst=/var/lib/nex,readonly" \
+      --entrypoint sh "${NEX_IMAGE}" -c '
+        for path in /var/lib/nex /var/lib/nex/state /var/lib/nex/state/data /var/lib/nex/state/config.json; do
+          if [ -e "$path" ] || [ -L "$path" ]; then
+            stat -c "path=%n type=%F uid=%u gid=%g mode=%a links=%h inode=%i device=%d size=%s" "$path"
+          else
+            printf "path=%s missing=true\n" "$path"
+          fi
+        done
+      ' 2>&1 || true
+  } > "${temporary}"
+  chmod 0600 "${temporary}"
+  mv -f -- "${temporary}" "${FAILURE_STATE_PATH}"
+}
+
 wait_for_runtime() {
   for _attempt in $(seq 1 90); do
+    local state
+    state="$(docker inspect "${runtime_container}" --format '{{.State.Status}}' 2>/dev/null || true)"
+    if [[ -n "${state}" && "${state}" != "created" && "${state}" != "running" ]]; then
+      capture_runtime_state_failure
+      docker logs "${runtime_container}" >&2 || true
+      return 1
+    fi
     if docker exec "${runtime_container}" sh -c '
       token=$(cat /run/moonsleep-load-credentials/runtime-token)
       curl -fsS -H "Authorization: Bearer ${token}" \
@@ -119,6 +155,7 @@ wait_for_runtime() {
     fi
     sleep 1
   done
+  capture_runtime_state_failure
   docker logs "${runtime_container}" >&2 || true
   return 1
 }
@@ -233,37 +270,6 @@ docker run --rm --platform linux/amd64 --network none --read-only --user 0:0 \
     chown root:root /target/*
     chmod 0400 /target/*
   '
-runtime_state_contract="$(docker run --rm --platform linux/amd64 --network none \
-  --read-only --cap-drop ALL --cap-add CHOWN --cap-add SETUID --cap-add SETGID \
-  --security-opt no-new-privileges \
-  --tmpfs "/tmp:rw,noexec,nosuid,nodev,uid=${runtime_uid},gid=${runtime_gid},mode=0700" \
-  --tmpfs /run/nex-credentials:rw,noexec,nosuid,nodev,mode=0700 \
-  --mount "type=volume,src=${credential_volume},dst=/run/moonsleep-load-credentials,readonly" \
-  --mount "type=volume,src=${state_volume},dst=/var/lib/nex" \
-  "${NEX_IMAGE}" sh -c '
-    set -eu
-    expected_identity="$1:$2"
-    test "$(id -u):$(id -g)" = "$expected_identity"
-    test "$(id -un)" = "nex-moonsleep"
-    test "$(stat -c "%u:%g:%a" /var/lib/nex)" = "$expected_identity:700"
-    test "$(stat -c "%u:%g:%a" /var/lib/nex/state)" = "$expected_identity:700"
-    test "$(stat -c "%u:%g:%a" /var/lib/nex/state/data)" = "$expected_identity:700"
-    test "$(stat -c "%u:%g:%a" /var/lib/nex/state/config.json)" = "$expected_identity:600"
-    probe="/var/lib/nex/state/data/.partner-cleanroom-write-probe"
-    (umask 077; : > "$probe")
-    test "$(stat -c "%u:%g:%a" "$probe")" = "$expected_identity:600"
-    rm "$probe"
-    printf "{\"user\":\"%s\",\"uid\":%s,\"gid\":%s,\"mount\":\"/var/lib/nex\",\"state\":\"/var/lib/nex/state\",\"data\":\"/var/lib/nex/state/data\"}\\n" \
-      "$(id -un)" "$(id -u)" "$(id -g)"
-  ' sh "${runtime_uid}" "${runtime_gid}")"
-jq -e \
-  --arg user "${runtime_user}" \
-  --argjson uid "${runtime_uid}" \
-  --argjson gid "${runtime_gid}" \
-  '.user == $user and .uid == $uid and .gid == $gid and
-   .mount == "/var/lib/nex" and .state == "/var/lib/nex/state" and
-   .data == "/var/lib/nex/state/data"' \
-  <<<"${runtime_state_contract}" >/dev/null
 docker run -d --name "${postgres_container}" --platform linux/amd64 \
   --network "${network}" --network-alias postgres \
   --security-opt no-new-privileges \
@@ -307,6 +313,31 @@ docker run -d --name "${runtime_container}" --platform linux/amd64 \
   --tmpfs /run/nex-credentials:rw,nosuid,nodev,noexec,mode=0700 \
   "${NEX_IMAGE}" >/dev/null
 wait_for_runtime
+runtime_state_contract="$(docker exec --user "${runtime_uid}:${runtime_gid}" \
+  "${runtime_container}" sh -c '
+    set -eu
+    expected_identity="$1:$2"
+    test "$(id -u):$(id -g)" = "$expected_identity"
+    test "$(id -un)" = "nex-moonsleep"
+    test "$(stat -c "%u:%g:%a" /var/lib/nex)" = "$expected_identity:700"
+    test "$(stat -c "%u:%g:%a" /var/lib/nex/state)" = "$expected_identity:700"
+    test "$(stat -c "%u:%g:%a" /var/lib/nex/state/data)" = "$expected_identity:700"
+    test "$(stat -c "%u:%g:%a" /var/lib/nex/state/config.json)" = "$expected_identity:600"
+    probe="/var/lib/nex/state/data/.partner-cleanroom-write-probe"
+    (umask 077; : > "$probe")
+    test "$(stat -c "%u:%g:%a" "$probe")" = "$expected_identity:600"
+    rm "$probe"
+    printf "{\"user\":\"%s\",\"uid\":%s,\"gid\":%s,\"mount\":\"/var/lib/nex\",\"state\":\"/var/lib/nex/state\",\"data\":\"/var/lib/nex/state/data\"}\\n" \
+      "$(id -un)" "$(id -u)" "$(id -g)"
+  ' sh "${runtime_uid}" "${runtime_gid}")"
+jq -e \
+  --arg user "${runtime_user}" \
+  --argjson uid "${runtime_uid}" \
+  --argjson gid "${runtime_gid}" \
+  '.user == $user and .uid == $uid and .gid == $gid and
+   .mount == "/var/lib/nex" and .state == "/var/lib/nex/state" and
+   .data == "/var/lib/nex/state/data"' \
+  <<<"${runtime_state_contract}" >/dev/null
 pass_check "04_runtime_health"
 install_app
 pass_check "05_app_install"
