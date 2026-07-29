@@ -37,6 +37,19 @@ done
 docker image inspect "${NEX_IMAGE}" "${POSTGRES_IMAGE}" >/dev/null
 [[ "$(docker image inspect "${NEX_IMAGE}" --format '{{.Os}}/{{.Architecture}}')" = "linux/amd64" ]]
 [[ "$(docker image inspect "${POSTGRES_IMAGE}" --format '{{.Os}}/{{.Architecture}}')" = "linux/amd64" ]]
+nex_config_user="$(docker image inspect "${NEX_IMAGE}" --format '{{.Config.User}}')"
+nex_entrypoint="$(docker image inspect "${NEX_IMAGE}" --format '{{json .Config.Entrypoint}}')"
+[[ -z "${nex_config_user}" ]]
+[[ "${nex_entrypoint}" = '["/usr/local/bin/moonsleep-nex-entrypoint"]' ]]
+runtime_passwd="$(docker run --rm --platform linux/amd64 --network none --read-only \
+  --entrypoint getent "${NEX_IMAGE}" passwd nex-moonsleep)"
+IFS=: read -r runtime_user _runtime_password runtime_uid runtime_gid _runtime_gecos \
+  runtime_home runtime_shell <<<"${runtime_passwd}"
+[[ "${runtime_user}" = "nex-moonsleep" ]]
+[[ "${runtime_uid}" =~ ^[1-9][0-9]*$ ]]
+[[ "${runtime_gid}" =~ ^[1-9][0-9]*$ ]]
+[[ "${runtime_home}" = "/var/lib/nex" ]]
+[[ "${runtime_shell}" = "/usr/sbin/nologin" ]]
 nex_revision="$(docker image inspect "${NEX_IMAGE}" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
 [[ "${nex_revision}" = "${CORE_REVISION}" ]] || {
   echo "Nex image revision does not match the terminal core" >&2
@@ -116,7 +129,7 @@ install_app() {
   local staged_path="/var/lib/nex/state/packages/staging/${operation_id}/artifact.tar.gz"
   local size_bytes body response
   size_bytes="$(LC_ALL=C wc -c < "${APP_ARTIFACT}" | tr -d '[:space:]')"
-  docker exec --user 20042:20042 "${runtime_container}" sh -c '
+  docker exec --user "${runtime_uid}:${runtime_gid}" "${runtime_container}" sh -c '
     set -eu
     install -d -m 0700 "$(dirname "$2")"
     cp "$1" "$2"
@@ -156,7 +169,7 @@ postgres_counts() {
 }
 
 memory_counts() {
-  docker exec --user 20042:20042 "${runtime_container}" node --input-type=module -e '
+  docker exec --user "${runtime_uid}:${runtime_gid}" "${runtime_container}" node --input-type=module -e '
     import { DatabaseSync } from "node:sqlite";
     const db = new DatabaseSync("/var/lib/nex/state/data/memory.db", { readOnly: true });
     const count = (table, where = "") =>
@@ -209,19 +222,6 @@ runtime_token="nex_rt_$(openssl rand -hex 24)"
 postgres_dsn="postgresql://${runtime_role}@postgres:5432/moonsleep_nex"
 
 docker run --rm --platform linux/amd64 --network none --read-only --user 0:0 \
-  --mount "type=volume,src=${state_volume},dst=/var/lib/nex" --entrypoint sh "${NEX_IMAGE}" -c '
-    set -eu
-    install -d -m 0700 -o 20042 -g 20042 \
-      /var/lib/nex /var/lib/nex/state /var/lib/nex/state/data
-    printf "%s\n" "{" "  \"runtime\": {\"port\":18789,\"bind\":\"loopback\",\"auth\":{\"mode\":\"token\",\"token\":\"\${NEXUS_RUNTIME_TOKEN}\"}}" "}" > /var/lib/nex/state/config.json
-    chown 20042:20042 /var/lib/nex/state/config.json
-    chmod 0600 /var/lib/nex/state/config.json
-    test "$(stat -c "%u:%g:%a" /var/lib/nex)" = "20042:20042:700"
-    test "$(stat -c "%u:%g:%a" /var/lib/nex/state)" = "20042:20042:700"
-    test "$(stat -c "%u:%g:%a" /var/lib/nex/state/data)" = "20042:20042:700"
-    test "$(stat -c "%u:%g:%a" /var/lib/nex/state/config.json)" = "20042:20042:600"
-  '
-docker run --rm --platform linux/amd64 --network none --read-only --user 0:0 \
   --env "POSTGRES_DSN=${postgres_dsn}" --env "RUNTIME_TOKEN=${runtime_token}" \
   --mount "type=volume,src=${credential_volume},dst=/target" --entrypoint sh "${NEX_IMAGE}" -c '
     set -eu
@@ -233,6 +233,37 @@ docker run --rm --platform linux/amd64 --network none --read-only --user 0:0 \
     chown root:root /target/*
     chmod 0400 /target/*
   '
+runtime_state_contract="$(docker run --rm --platform linux/amd64 --network none \
+  --read-only --cap-drop ALL --cap-add CHOWN --cap-add SETUID --cap-add SETGID \
+  --security-opt no-new-privileges \
+  --tmpfs "/tmp:rw,noexec,nosuid,nodev,uid=${runtime_uid},gid=${runtime_gid},mode=0700" \
+  --tmpfs /run/nex-credentials:rw,noexec,nosuid,nodev,mode=0700 \
+  --mount "type=volume,src=${credential_volume},dst=/run/moonsleep-load-credentials,readonly" \
+  --mount "type=volume,src=${state_volume},dst=/var/lib/nex" \
+  "${NEX_IMAGE}" sh -c '
+    set -eu
+    expected_identity="$1:$2"
+    test "$(id -u):$(id -g)" = "$expected_identity"
+    test "$(id -un)" = "nex-moonsleep"
+    test "$(stat -c "%u:%g:%a" /var/lib/nex)" = "$expected_identity:700"
+    test "$(stat -c "%u:%g:%a" /var/lib/nex/state)" = "$expected_identity:700"
+    test "$(stat -c "%u:%g:%a" /var/lib/nex/state/data)" = "$expected_identity:700"
+    test "$(stat -c "%u:%g:%a" /var/lib/nex/state/config.json)" = "$expected_identity:600"
+    probe="/var/lib/nex/state/data/.partner-cleanroom-write-probe"
+    (umask 077; : > "$probe")
+    test "$(stat -c "%u:%g:%a" "$probe")" = "$expected_identity:600"
+    rm "$probe"
+    printf "{\"user\":\"%s\",\"uid\":%s,\"gid\":%s,\"mount\":\"/var/lib/nex\",\"state\":\"/var/lib/nex/state\",\"data\":\"/var/lib/nex/state/data\"}\\n" \
+      "$(id -un)" "$(id -u)" "$(id -g)"
+  ' sh "${runtime_uid}" "${runtime_gid}")"
+jq -e \
+  --arg user "${runtime_user}" \
+  --argjson uid "${runtime_uid}" \
+  --argjson gid "${runtime_gid}" \
+  '.user == $user and .uid == $uid and .gid == $gid and
+   .mount == "/var/lib/nex" and .state == "/var/lib/nex/state" and
+   .data == "/var/lib/nex/state/data"' \
+  <<<"${runtime_state_contract}" >/dev/null
 docker run -d --name "${postgres_container}" --platform linux/amd64 \
   --network "${network}" --network-alias postgres \
   --security-opt no-new-privileges \
@@ -438,6 +469,11 @@ jq -n \
   --arg core_revision "${CORE_REVISION}" \
   --arg core_tree "${CORE_TREE}" \
   --arg nex_image_id "${nex_image_id}" \
+  --arg nex_config_user "${nex_config_user}" \
+  --arg nex_entrypoint "${nex_entrypoint}" \
+  --arg runtime_user "${runtime_user}" \
+  --argjson runtime_uid "${runtime_uid}" \
+  --argjson runtime_gid "${runtime_gid}" \
   --arg postgres_image_id "${postgres_image_id}" \
   --arg postgres_version "${postgres_version}" \
   --arg app_version "${APP_VERSION}" \
@@ -453,7 +489,18 @@ jq -n \
     proof:"moonsleep-partner-canonical-surewal-postgres-cleanroom-v1",
     finished_at:$finished_at,
     source:{revision:$source_revision,tree:$source_tree,clean:true},
-    core:{revision:$core_revision,tree:$core_tree,image_id:$nex_image_id,platform:"linux/amd64"},
+    core:{
+      revision:$core_revision,
+      tree:$core_tree,
+      image_id:$nex_image_id,
+      platform:"linux/amd64",
+      image_config_user:$nex_config_user,
+      image_entrypoint:$nex_entrypoint,
+      serving_identity:{user:$runtime_user,uid:$runtime_uid,gid:$runtime_gid},
+      state_mount:"/var/lib/nex",
+      state_dir:"/var/lib/nex/state",
+      data_dir:"/var/lib/nex/state/data"
+    },
     postgres:{version:$postgres_version,image_id:$postgres_image_id,platform:"linux/amd64"},
     package:{id:"moonsleep-partner-desk",version:$app_version,sha256:$app_sha256},
     synthetic_cohort:{records:6,alibaba_records:5,gmail_records:1,record_output_sha256:$record_output_sha256,provider_calls:0},
