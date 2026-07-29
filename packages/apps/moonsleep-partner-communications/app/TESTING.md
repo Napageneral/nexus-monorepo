@@ -6,6 +6,34 @@ Run the focused contract suite:
 npm test
 ```
 
+Run the dependency-free canonical preparation cleanroom:
+
+```bash
+./scripts/test-canonical-prep-cleanroom.sh
+```
+
+The canonical preparation cleanroom copies only the Partner package contracts,
+fixtures, scripts, and TypeScript source into a private temporary directory.
+It runs the complete Node contract suite, prepares the sanitized Surewal
+cross-channel migration plan twice, requires byte-identical plans and receipts,
+and verifies that provider write, identity merge, external-domain write, and
+draft-or-send authority all remain false. It does not call Nex, a provider, a
+database, or production.
+
+Prepare one reviewable shadow migration plan directly:
+
+```bash
+node --experimental-strip-types scripts/prepare-canonical-migration.mjs \
+  --manifest contracts/partner-canonical-profiles.v1.json \
+  --fixture fixtures/canonical/surewal-cross-channel-golden.v1.json \
+  --out /tmp/partner-canonical-plan.json
+```
+
+The command creates a source-only candidate plan. It does not register
+profiles, create Nex elements, advance observation heads, publish projections,
+or grant authority. Those operations remain blocked until the shared Wave 1
+core contract is published and consumed.
+
 The production-shaped Linux/AMD64 PostgreSQL proof is run through
 `scripts/test-full-postgres-alibaba-cleanroom.sh` after packaging the app and
 Alibaba adapter against an exact Nex release image.
