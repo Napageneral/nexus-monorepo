@@ -88,7 +88,11 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 runtime_call() {
-  local method="$1" params="${2:-{}}"
+  local method="$1"
+  local params="{}"
+  if [[ "$#" -ge 2 ]]; then
+    params="$2"
+  fi
   docker exec "${runtime_container}" sh -c '
     set -eu
     token=$(cat /run/moonsleep-load-credentials/runtime-token)

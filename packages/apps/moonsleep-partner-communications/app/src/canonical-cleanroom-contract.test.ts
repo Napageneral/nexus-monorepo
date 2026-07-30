@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
@@ -6,6 +7,40 @@ const harness = readFileSync(
   new URL("../scripts/test-canonical-surewal-postgres-cleanroom.sh", import.meta.url),
   "utf8",
 );
+
+const runtimeCall = harness.slice(
+  harness.indexOf("runtime_call()"),
+  harness.indexOf("prove_joined_evidence()"),
+);
+
+function captureRuntimeCallParams(args: string[]): Buffer {
+  const result = spawnSync(
+    "bash",
+    [
+      "-c",
+      `
+        set -eu
+        runtime_container=fixture-runtime
+        runtime_uid=20042
+        runtime_gid=20042
+        docker() {
+          last=""
+          for argument in "$@"; do
+            last="$argument"
+          done
+          printf %s "$last"
+        }
+        ${runtimeCall}
+        runtime_call "$@"
+      `,
+      "runtime-call-contract",
+      ...args,
+    ],
+    { encoding: "buffer" },
+  );
+  assert.equal(result.status, 0, result.stderr.toString("utf8"));
+  return result.stdout;
+}
 
 test("bootstraps the state volume with the image-discovered serving identity", () => {
   assert.match(
@@ -65,10 +100,6 @@ test("binds the bootstrap receipt into the terminal cleanroom receipt", () => {
 });
 
 test("drops to the discovered serving identity before invoking the Nex CLI", () => {
-  const runtimeCall = harness.slice(
-    harness.indexOf("runtime_call()"),
-    harness.indexOf("prove_joined_evidence()"),
-  );
   assert.match(
     runtimeCall,
     /token=\$\(cat \/run\/moonsleep-load-credentials\/runtime-token\)[\s\S]*export NEXUS_RUNTIME_TOKEN="\$token"[\s\S]*exec setpriv/,
@@ -90,6 +121,14 @@ test("drops to the discovered serving identity before invoking the Nex CLI", () 
   assert.doesNotMatch(runtimeCall, /env\s+NEXUS_RUNTIME_TOKEN=/);
   assert.doesNotMatch(runtimeCall, /(?:echo|printf)\s+["']?\$token/);
   assert.doesNotMatch(runtimeCall, /set\s+-[^\\n]*x/);
+});
+
+test("preserves runtime call parameter bytes for omitted, empty-object, and nonempty JSON", () => {
+  assert.deepEqual(captureRuntimeCallParams(["healthcheck"]), Buffer.from([0x7b, 0x7d]));
+  assert.deepEqual(captureRuntimeCallParams(["healthcheck", "{}"]), Buffer.from([0x7b, 0x7d]));
+  const nonempty = '{"supplier":"Surewal","amount":22834.95}';
+  assert.deepEqual(captureRuntimeCallParams(["contacts.observe", nonempty]), Buffer.from(nonempty));
+  assert.doesNotMatch(runtimeCall, /\$\{2:-\{\}\}/);
 });
 
 test("stages the root-custodied token before running joined memory proof as the serving identity", () => {
